@@ -303,7 +303,7 @@ private:
     //
     // Immutable once published: m_bvh is a shared_ptr<const BvhData> and is
     // only ever replaced wholesale — by the build swap, or by
-    // invalidatePublishedSlot copying-on-write a fresh BvhData with one slot
+    // applyPublishedDelta copying-on-write a fresh BvhData with one slot
     // nulled. No published BvhData is edited in place, so snapshotForQuery can
     // hand the whole shared_ptr to another thread safely: the copy is
     // O(objects) shared_ptr/array bumps and the heavy sub-BVHs and point
@@ -323,7 +323,7 @@ private:
         // it stops contributing to picks the instant its cache entry is
         // invalidated — without dropping the rest of the BVH while a
         // rebuild is in flight. A null entry in subBvhs is the in-flight
-        // marker; traversal skips it. See invalidatePublishedSlot().
+        // marker; traversal skips it. See PublishedDelta::RemoveSlot.
         //
         // No visibility lives here: every query pairs this geometry snapshot
         // with a cwVisibilitySnapshot captured at entry, so a toggle needs
@@ -463,25 +463,34 @@ private:
                                    const cwGeometry& geometry,
                                    const Primitive& prim);
 
-    // Release the published sub-BVH for one Key while a rebuild is in
-    // flight. Leaves the rest of m_bvh intact so unrelated Objects keep
-    // serving picks — without holding a second copy of the dirty Key's
-    // sub-BVH alongside the worker's new one (critical when that sub-BVH
-    // is a multi-GB point cloud). No-op if m_bvh is null or doesn't
-    // contain key. Safe to call from the main thread alongside picks.
-    void invalidatePublishedSlot(const Key& key);
+    // Synchronous mutations applyPublishedDelta can apply to one Key's slot
+    // in the published BVH.
+    enum class PublishedDelta {
+        // Null the Key's sub-BVH slot so it stops serving picks the instant
+        // its cache entry is invalidated — without holding a second copy of
+        // the sub-BVH alongside the worker's new one (critical when it's a
+        // multi-GB point cloud). The top level is left stale on purpose:
+        // traversal skips null slots, so the stale leaf box is harmless.
+        RemoveSlot,
+        // Replace the slot's world transform (modelMatrix payload) and
+        // rebuild the top level, so picks reflect a move/rotation
+        // immediately instead of waiting for the async worker to reinstall
+        // (issue #505). Sub-BVHs are model-space and unaffected, so this is
+        // O(objects), not O(vertices).
+        SetMatrix,
+    };
 
-    // Apply an Object's new modelMatrix to the published BVH synchronously, so
-    // picks reflect a move/rotation immediately instead of waiting for the
-    // async worker to reinstall (issue #505: a rotate-then-pick must not hit
-    // the pre-rotation position). Sub-BVHs are model-space and reused by
-    // shared_ptr; only this Object's world transform and the small top-level
-    // change, so this is O(objects), not O(vertices). Copy-on-write like
-    // invalidatePublishedSlot, so in-flight query snapshots stay consistent.
-    // Returns false (no-op) if m_bvh is null or doesn't yet contain key — the
-    // Object's first build is still in flight and will pick up the new matrix
-    // from Nodes when it lands. Main thread only.
-    bool refreshPublishedModelMatrix(const Key& key, const QMatrix4x4& modelMatrix);
+    // The single synchronous mutation door for the published BVH. m_bvh may
+    // be shared with in-flight query snapshots or worker threads, so the
+    // delta is applied copy-on-write to a fresh BvhData that replaces m_bvh
+    // wholesale — readers holding the old snapshot keep seeing consistent
+    // data, and the copy is O(objects) (heavy sub-BVHs stay shared by
+    // shared_ptr). modelMatrix is read by SetMatrix only. No-op if m_bvh is
+    // null or doesn't contain key — the Key's first build is still in
+    // flight and will pick up the change from Nodes when it lands. Main
+    // thread only.
+    void applyPublishedDelta(const Key& key, PublishedDelta delta,
+                             const QMatrix4x4& modelMatrix = QMatrix4x4());
 
     QFuture<void> launchBuildJob();
 

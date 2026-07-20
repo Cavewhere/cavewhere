@@ -114,7 +114,7 @@ TEST_CASE("setModelMatrix updates picks before the async rebuild lands",
     // "old position" symptom.
     //
     // The top-level refresh is cheap (it does not touch the model-space sub-BVHs),
-    // so setModelMatrix applies it synchronously (refreshPublishedModelMatrix) and
+    // so setModelMatrix applies it synchronously (applyPublishedDelta SetMatrix) and
     // a moved Object is pickable at its new world position WITHOUT spinning the
     // event loop. This test omits waitForFinish/processEvents after setModelMatrix
     // on purpose to sit in the pre-async-install window and pin that the pick is
@@ -404,7 +404,7 @@ TEST_CASE("Stale install: a re-dirtied Key never reaches picks via a late instal
     // Setup: A worker that has just finished computing (resultSlot populated)
     // has a queued .context() install callback. If the UI thread mutates the
     // same Key BEFORE that callback fires, the in-mutator
-    // invalidatePublishedSlot finds an empty m_bvh (or the previous
+    // RemoveSlot delta finds an empty m_bvh (or the previous
     // generation's BvhData, which doesn't contain the just-rebuilt Key).
     // When the queued install then runs, it swaps in a BvhData whose
     // subBvhs slot for the now-dirty Key is populated with *stale*

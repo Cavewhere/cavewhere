@@ -624,7 +624,7 @@ bool cwGeometryItersecter::eraseNodeIfPresent(const Key& key)
     Nodes.erase(iter);
     m_subBvhs.remove(key);
     m_dirtyKeys.remove(key);
-    invalidatePublishedSlot(key);
+    applyPublishedDelta(key, PublishedDelta::RemoveSlot);
     return true;
 }
 
@@ -670,7 +670,7 @@ void cwGeometryItersecter::clear(cwRenderObjectId parentId)
         if(key.parentId == parentId) {
             m_subBvhs.remove(key);
             m_dirtyKeys.remove(key);
-            invalidatePublishedSlot(key);
+            applyPublishedDelta(key, PublishedDelta::RemoveSlot);
             iter = Nodes.erase(iter);
             ++erased;
         } else {
@@ -736,7 +736,7 @@ void cwGeometryItersecter::setModelMatrix(const Key &objectKey, const QMatrix4x4
     // eventual source of truth (a stale install from an older competing build
     // can't leave the matrix wrong because the restarted build re-snapshots the
     // now-updated Nodes).
-    refreshPublishedModelMatrix(objectKey, modelMatrix);
+    applyPublishedDelta(objectKey, PublishedDelta::SetMatrix, modelMatrix);
     scheduleTopLevelRebuild();
 }
 
@@ -1164,7 +1164,7 @@ void cwGeometryItersecter::traverseBvh(const BvhData& bvh,
         // Top-level leaf — descend the Object's sub-BVH in model space.
         const uint32_t slot = bn.left;
         const std::shared_ptr<const SubBvh>& subPtr = subBvhs.at(slot);
-        // Slot nulled mid-rebuild — see invalidatePublishedSlot.
+        // Slot nulled mid-rebuild — see PublishedDelta::RemoveSlot.
         if (!subPtr) {
             continue;
         }
@@ -1640,7 +1640,7 @@ cwRayHit cwGeometryItersecter::intersectsDetailed(const QRay3D &ray, const cwPic
             for (qsizetype i = 0; i < subBvhs.size(); ++i) {
                 const std::shared_ptr<const SubBvh>& subPtr = subBvhs.at(i);
                 if (!subPtr) {
-                    // Slot nulled mid-rebuild — see invalidatePublishedSlot.
+                    // Slot nulled mid-rebuild — see PublishedDelta::RemoveSlot.
                     qCDebug(lcPick).nospace() << "    [" << i << "] <rebuilding>";
                     continue;
                 }
@@ -1984,7 +1984,7 @@ void cwGeometryItersecter::scheduleObjectRebuild(const Key& key)
     // a build that snapshotted *before* this invalidation — that callback
     // would otherwise re-populate m_subBvhs[key] with the stale sub-BVH.
     m_dirtyKeys.insert(key);
-    invalidatePublishedSlot(key);
+    applyPublishedDelta(key, PublishedDelta::RemoveSlot);
     qCDebug(lcPick).nospace()
         << "scheduleObjectRebuild {parent=" << key.parentId
         << ", id=" << key.id << "} — sub-BVH invalidated; "
@@ -2005,53 +2005,38 @@ void cwGeometryItersecter::scheduleTopLevelRebuild()
     // moved or whose entry was removed, but picks against the
     // unaffected Keys remain correct and the rebuild is fast (top-
     // level only). Callers that need a Key gone from picks instantly
-    // (removeObject, clear) call invalidatePublishedSlot first.
+    // (removeObject, clear) apply a RemoveSlot delta first.
     m_bvhRestarter.restart([this]() { return launchBuildJob(); });
 }
 
-void cwGeometryItersecter::invalidatePublishedSlot(const Key& key)
+void cwGeometryItersecter::applyPublishedDelta(const Key& key,
+                                               PublishedDelta delta,
+                                               const QMatrix4x4& modelMatrix)
 {
     if (!m_bvh) {
         return;
-    }
-    auto it = m_bvh->keyToSlot.constFind(key);
-    if (it == m_bvh->keyToSlot.constEnd()) {
-        return;
-    }
-    // m_bvh is immutable and may be shared with in-flight query snapshots or
-    // worker threads, so don't edit it in place: copy-on-write a fresh
-    // BvhData with the dirty Key's slot nulled, then publish it. The copy is
-    // cheap (O(objects) — the heavy sub-BVHs stay shared by shared_ptr), and
-    // readers holding the old snapshot keep seeing consistent old data.
-    auto next = std::make_shared<BvhData>(*m_bvh);
-    next->subBvhs[*it].reset();
-    m_bvh = std::move(next);
-}
-
-bool cwGeometryItersecter::refreshPublishedModelMatrix(const Key& key,
-                                                       const QMatrix4x4& modelMatrix)
-{
-    if (!m_bvh) {
-        return false;
     }
     const auto slotIt = m_bvh->keyToSlot.constFind(key);
     if (slotIt == m_bvh->keyToSlot.constEnd()) {
-        return false;
+        return;
     }
     const int slot = *slotIt;
+    Q_ASSERT(m_bvh->subBvhs.size() == m_bvh->modelMatrices.size());
+    Q_ASSERT(m_bvh->subBvhs.size() == m_bvh->inverseModelMatrices.size());
+    Q_ASSERT(slot >= 0 && slot < m_bvh->subBvhs.size());
 
-    // Copy-on-write: m_bvh is immutable and may be shared with in-flight query
-    // snapshots, so build a fresh BvhData rather than editing in place. The
-    // sub-BVHs are model-space and reused by shared_ptr; only this Object's
-    // world transform and the small top-level change.
     auto next = std::make_shared<BvhData>(*m_bvh);
-    next->modelMatrices[slot] = modelMatrix;
-    next->inverseModelMatrices[slot] = modelMatrix.inverted();
-
-    next->topLevel = next->rebuildTopLevel();
-
+    switch (delta) {
+    case PublishedDelta::RemoveSlot:
+        next->subBvhs[slot].reset();
+        break;
+    case PublishedDelta::SetMatrix:
+        next->modelMatrices[slot] = modelMatrix;
+        next->inverseModelMatrices[slot] = modelMatrix.inverted();
+        next->topLevel = next->rebuildTopLevel();
+        break;
+    }
     m_bvh = std::move(next);
-    return true;
 }
 
 bool cwGeometryItersecter::isPrimitiveVisible(const QVector<quint8>& mask,
@@ -2635,8 +2620,8 @@ QFuture<void> cwGeometryItersecter::launchBuildJob()
         //
         // A worker that finished computing just before cancel still publishes
         // here, so re-apply two filters on this side of the swap. The dirty
-        // filter catches Keys mutated mid-build (mutator-site
-        // invalidatePublishedSlot was a no-op against the old m_bvh). The
+        // filter catches Keys mutated mid-build (the mutator-site RemoveSlot
+        // delta was a no-op against the old m_bvh). The
         // live-Nodes filter catches Keys *removed* mid-build — removal strips
         // its Key from m_dirtyKeys, so the dirty filter alone would republish
         // the removed slot (picks hitting freed geometry) and promote its
@@ -2654,7 +2639,7 @@ QFuture<void> cwGeometryItersecter::launchBuildJob()
         };
         // The built BvhData isn't published yet, so nulling slots in place
         // here doesn't violate the immutable-once-published rule on m_bvh —
-        // and avoids invalidatePublishedSlot's per-Key copy-on-write.
+        // and avoids applyPublishedDelta's per-Key copy-on-write.
         std::shared_ptr<BvhData> built = *resultSlot;
         for (auto it = built->keyToSlot.cbegin(); it != built->keyToSlot.cend(); ++it) {
             if (!shouldPublish(it.key())) {

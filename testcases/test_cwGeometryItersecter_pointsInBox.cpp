@@ -208,7 +208,7 @@ TEST_CASE("a snapshot stays stable and safe to read while the BVH is rebuilt",
     });
 
     // Hammer the live BVH on the main thread: each addObject copy-swaps m_bvh
-    // (invalidatePublishedSlot) and waitForFinish publishes a freshly built
+    // (a RemoveSlot delta via applyPublishedDelta) and waitForFinish publishes a freshly built
     // one — neither must disturb the worker's snapshot.
     for (int i = 0; i < 20; ++i) {
         intersector.addObject(makePointCloud(1, grid));
