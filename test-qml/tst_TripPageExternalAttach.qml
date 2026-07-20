@@ -54,21 +54,20 @@ MainWindowTest {
             return RootData.pageView.currentPageItem
         }
 
-        // Opens the two-item Add Trip menu on the cave page and returns
-        // the requested item.
+        // Opens the split button's chevron menu on the cave page and
+        // returns the requested item.
         function openAddTripMenu(cavePage, itemObjectName) {
             const addBar = findChild(cavePage, "addTrip")
             verify(addBar !== null, "addTrip bar must exist")
-            const addButton = findChild(addBar, "addButton")
-            verify(addButton !== null, "add button must exist")
-            mouseClick(addButton)
+            const menuButton = findChild(addBar, "menuButton")
+            verify(menuButton !== null, "split-button chevron must exist")
+            mouseClick(menuButton)
 
             const menu = findChild(cavePage, "addTripMenu")
             verify(menu !== null, "addTripMenu must exist")
-            tryVerify(() => menu.visible, 5000, "menu opens on click")
-            compare(menu.count, 2, "menu shows exactly two items")
-            compare(menu.itemAt(0).objectName, "addNativeTripMenuItem")
-            compare(menu.itemAt(1).objectName, "addExternalTripMenuItem")
+            tryVerify(() => menu.visible, 5000, "menu opens on chevron click")
+            compare(menu.count, 1, "menu shows exactly one item")
+            compare(menu.itemAt(0).objectName, "addExternalTripMenuItem")
 
             for (let i = 0; i < menu.count; ++i) {
                 if (menu.itemAt(i).objectName === itemObjectName) {
@@ -104,16 +103,22 @@ MainWindowTest {
             addTripViaFileMenu(cavePage, "attachButton")
         }
 
-        function test_addTripMenuNativeItemAddsTrip() {
-            makeSavedTrip("trip-page-menu-native")
+        function test_addTripPrimaryClickAddsTripWithoutMenu() {
+            makeSavedTrip("trip-page-primary-add")
             const cavePage = gotoCavePage()
             compare(currentCave().rowCount(), 1)
 
-            const nativeItem = openAddTripMenu(cavePage, "addNativeTripMenuItem")
-            mouseClick(nativeItem)
+            const addBar = findChild(cavePage, "addTrip")
+            verify(addBar !== null, "addTrip bar must exist")
+            const addButton = findChild(addBar, "addButton")
+            verify(addButton !== null, "add button must exist")
+            const menu = findChild(cavePage, "addTripMenu")
+            verify(menu !== null, "addTripMenu must exist")
+            mouseClick(addButton)
 
+            verify(!menu.visible, "primary click never opens the menu")
             tryVerify(() => currentCave().rowCount() === 2, 5000,
-                      "Native trip adds a trip like the old plain button")
+                      "primary click adds a trip in one click")
             tryVerify(() => RootData.pageView.currentPageItem.objectName === "tripPage",
                       10000, "and navigates to the new trip")
             compare(currentCave().trip(1).externalCenterline.entryFile, "",

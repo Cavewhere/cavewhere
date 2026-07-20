@@ -5,17 +5,22 @@ import QtQuick.Controls as QC
 RowLayout {
     id: controlBarId
 
-    property alias addButtonText: addButtonId.text
+    // Optional split-button menu: when set, a chevron appears next to
+    // the add button and clicking it pops this menu. The add button
+    // itself always fires add() directly.
+    property QC.Menu menu: null
+
+    property alias addButtonText: splitButtonId.text
+    property alias menuToolTip: splitButtonId.menuToolTip
 
     signal add();
 
-    QC.Button {
-        id: addButtonId
-        objectName: "addButton"
+    SplitButton {
+        id: splitButtonId
 
-        icon.source: "qrc:/twbs-icons/icons/plus.svg"
-        icon.width: Theme.iconSizeButton
-        icon.height: Theme.iconSizeButton
+        buttonObjectName: "addButton"
+        iconSource: "qrc:/twbs-icons/icons/plus.svg"
+        menu: controlBarId.menu
 
         Layout.alignment: Qt.AlignLeft
 

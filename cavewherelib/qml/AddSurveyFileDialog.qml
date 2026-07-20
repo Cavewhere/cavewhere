@@ -141,9 +141,22 @@ QQ.Item {
         id: dialogId
         objectName: "attachDialog"
 
+        // The two choice group boxes sit side by side when the window
+        // has room and stack when it doesn't.
+        readonly property QQ.Item overlayItem: QC.Overlay.overlay
+        readonly property bool compact: overlayItem !== null
+                                        && overlayItem.width < Theme.breakpointPanelCollapse
+        readonly property int wideWidth: 640
+        readonly property int compactWidth: 400
+
         anchors.centerIn: QC.Overlay.overlay
         modal: true
-        implicitWidth: 480
+        implicitWidth: {
+            let target = compact ? compactWidth : wideWidth
+            return overlayItem !== null
+                    ? Math.min(target, overlayItem.width - 2 * Theme.actionBarSpacing)
+                    : target
+        }
         title: qsTr("Add trip from survey file")
         closePolicy: QC.Popup.NoAutoClose
 
@@ -175,6 +188,17 @@ QQ.Item {
                     text: qsTr("Browse…")
                     onClicked: fileDialogId.open()
                 }
+            }
+
+            QC.Label {
+                objectName: "supportedFormatsLabel"
+                Layout.fillWidth: true
+                visible: previewId.formatName.length === 0
+                wrapMode: QC.Label.WordWrap
+                color: Theme.textSubtle
+                font.pixelSize: Theme.fontSizeSmall
+                text: qsTr("You can open Survex (.svx), Compass (.dat, .mak), "
+                         + "or Walls (.wpj, .srv) files.")
             }
 
             QC.Label {
@@ -217,74 +241,120 @@ QQ.Item {
             }
 
             QC.Label {
+                Layout.topMargin: Theme.sectionSpacing
                 text: qsTr("How should CaveWhere use this file?")
                 font.bold: true
             }
 
-            RowLayout {
+            GridLayout {
                 Layout.fillWidth: true
-                spacing: Theme.tightSpacing
+                columns: dialogId.compact ? 1 : 2
+                columnSpacing: Theme.flowSpacing
+                rowSpacing: Theme.flowSpacing
 
-                QC.Button {
-                    id: attachButtonId
-                    objectName: "attachButton"
-                    text: qsTr("Attach")
-                    enabled: root.trip !== null && previewId.valid && !root.busy
-                    onClicked: {
-                        root.attachError = ""
-                        root.attachingTrip = root.trip
-                        root.attachingTripId = String(root.trip.id)
-                        root.attaching = true
-                        RootData.attachTripCenterline(root.attachingTrip,
-                                                      previewId.sourcePath)
+                QC.GroupBox {
+                    Layout.fillWidth: true
+                    // Equalize heights only side by side; stacked boxes
+                    // keep their natural height.
+                    Layout.fillHeight: !dialogId.compact
+                    // Equal columns: let the grid split the width instead
+                    // of following each box's implicit (unwrapped) width.
+                    Layout.preferredWidth: 1
+                    Layout.alignment: Qt.AlignTop
+
+                    contentItem: ColumnLayout {
+                        spacing: Theme.tightSpacing
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: Theme.tightSpacing
+
+                            QC.Button {
+                                id: attachButtonId
+                                objectName: "attachButton"
+                                text: qsTr("Attach")
+                                enabled: root.trip !== null && previewId.valid
+                                         && !root.busy
+                                onClicked: {
+                                    root.attachError = ""
+                                    root.attachingTrip = root.trip
+                                    root.attachingTripId = String(root.trip.id)
+                                    root.attaching = true
+                                    RootData.attachTripCenterline(root.attachingTrip,
+                                                                  previewId.sourcePath)
+                                }
+                            }
+
+                            QC.Label {
+                                objectName: "recommendedLabel"
+                                text: qsTr("Recommended")
+                                font.bold: true
+                                color: Theme.accent
+                            }
+                        }
+
+                        BodyText {
+                            objectName: "attachExplainerText"
+                            Layout.fillWidth: true
+                            wrapMode: QC.Label.WordWrap
+                            text: qsTr("The file stays the source of truth — keep "
+                                     + "editing it in your survey tool and CaveWhere "
+                                     + "stays in sync. A copy travels with your "
+                                     + "project for git sync, backups, and sharing; "
+                                     + "CaveWhere never writes to your original "
+                                     + "files. Survey data is read-only in "
+                                     + "CaveWhere.")
+                        }
+
+                        QQ.Item { Layout.fillHeight: true }
                     }
                 }
 
-                QC.Label {
-                    objectName: "recommendedLabel"
-                    text: qsTr("Recommended")
-                    font.bold: true
-                    color: Theme.accent
+                QC.GroupBox {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: !dialogId.compact
+                    Layout.preferredWidth: 1
+                    Layout.alignment: Qt.AlignTop
+
+                    contentItem: ColumnLayout {
+                        spacing: Theme.tightSpacing
+
+                        QC.Button {
+                            id: importButtonId
+                            objectName: "importButton"
+                            text: qsTr("Import a copy")
+                            enabled: root.trip !== null && previewId.valid
+                                     && !root.busy && previewId.importSupported
+                            onClicked: {
+                                root.attachError = ""
+                                root.importingTrip = root.trip
+                                root.importing = true
+                                RootData.surveyImportManager.importSurvexToTrip(
+                                    previewId.sourcePath, root.importingTrip)
+                            }
+                        }
+
+                        BodyText {
+                            objectName: "importExplainerText"
+                            Layout.fillWidth: true
+                            wrapMode: QC.Label.WordWrap
+                            text: qsTr("Copies the data into CaveWhere. You edit "
+                                     + "it here; the original file is never read "
+                                     + "again.")
+                        }
+
+                        QC.Label {
+                            objectName: "importFormatNote"
+                            Layout.fillWidth: true
+                            visible: previewId.valid && !previewId.importSupported
+                            wrapMode: QC.Label.WordWrap
+                            color: Theme.textSubtle
+                            text: qsTr("Import supports Survex files only.")
+                        }
+
+                        QQ.Item { Layout.fillHeight: true }
+                    }
                 }
-            }
-
-            BodyText {
-                objectName: "attachExplainerText"
-                Layout.fillWidth: true
-                text: qsTr("The file stays the source of truth — keep editing it "
-                         + "in your survey tool and CaveWhere stays in sync. A "
-                         + "copy travels with your project for git sync, backups, "
-                         + "and sharing; CaveWhere never writes to your original "
-                         + "files. Survey data is read-only in CaveWhere.")
-            }
-
-            QC.Button {
-                id: importButtonId
-                objectName: "importButton"
-                text: qsTr("Import a copy")
-                enabled: root.trip !== null && previewId.valid && !root.busy
-                         && previewId.importSupported
-                onClicked: {
-                    root.attachError = ""
-                    root.importingTrip = root.trip
-                    root.importing = true
-                    RootData.surveyImportManager.importSurvexToTrip(
-                        previewId.sourcePath, root.importingTrip)
-                }
-            }
-
-            BodyText {
-                objectName: "importExplainerText"
-                Layout.fillWidth: true
-                text: qsTr("Copies the data into CaveWhere. You edit it here; "
-                         + "the original file is never read again.")
-            }
-
-            QC.Label {
-                objectName: "importFormatNote"
-                visible: previewId.valid && !previewId.importSupported
-                color: Theme.textSubtle
-                text: qsTr("Import supports Survex files only.")
             }
 
             RowLayout {

@@ -238,7 +238,9 @@ StandardPage {
             id: addTripBarWideId
             objectName: "addTrip"
             addButtonText: "Add Trip"
-            onAdd: addTripMenuId.popup(addTripBarWideId, 0, addTripBarWideId.height)
+            menu: addTripMenuId
+            menuToolTip: qsTr("More ways to add a trip")
+            onAdd: cavePageArea.addTripAndNavigate()
         }
 
         ExportImportButtons {
@@ -261,12 +263,6 @@ StandardPage {
     QC.Menu {
         id: addTripMenuId
         objectName: "addTripMenu"
-
-        QC.MenuItem {
-            objectName: "addNativeTripMenuItem"
-            text: qsTr("Native trip")
-            onTriggered: cavePageArea.addTripAndNavigate()
-        }
 
         QC.MenuItem {
             objectName: "addExternalTripMenuItem"
@@ -799,7 +795,9 @@ StandardPage {
                         id: addTripBarNarrowId
                         objectName: "addTrip"
                         addButtonText: "Add Trip"
-                        onAdd: addTripMenuId.popup(addTripBarNarrowId, 0, addTripBarNarrowId.height)
+                        menu: addTripMenuId
+                        menuToolTip: qsTr("More ways to add a trip")
+                        onAdd: cavePageArea.addTripAndNavigate()
                     }
 
                     RowLayout {
