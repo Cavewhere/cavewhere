@@ -71,8 +71,8 @@ QtObject {
     readonly property real fontScale: RootData.settings.fontSettings.fontBaseSize / 16.0
     readonly property string fontFamily: RootData.settings.fontSettings.fontFamily !== ""
         ? RootData.settings.fontSettings.fontFamily
-        : Qt.application.font.family
-    readonly property string fontFamilyBody: Qt.application.font.family
+        : RootData.settings.fontSettings.systemFontFamily
+    readonly property string fontFamilyBody: RootData.settings.fontSettings.systemFontFamily
     readonly property string fontFamilyMono: "Courier Prime"
 
     // A fixed display+body pairing for long-form reading (the manual), independent
