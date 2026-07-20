@@ -144,6 +144,52 @@ MainWindowTest {
                               })
         }
 
+        // Regression test for issue #593: "Can't remove station in LiDAR Note".
+        // Add a station, select it, then press Delete — the station should be
+        // removed. It isn't, because NoteLiDARStationItem's Keys handler
+        // references an undefined `ponitIndex` (typo for `pointIndex`).
+        function test_removeStationWithDelete() {
+            let noteGallery = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery")
+
+            let carpetButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->mainButtonArea->carpetButtonId")
+            mouseClick(carpetButton)
+
+            let addStationButton = null
+            tryVerify(() => {
+                          addStationButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->addScrapStation")
+                          return addStationButton !== null && addStationButton.visible
+                      })
+            mouseClick(addStationButton)
+
+            let addStation = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARAddStationInteraction")
+            mouseClick(addStation, 387, 257)
+
+            let stationNameInput = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARStation_0->coreTextInput")
+            stationNameInput.openEditor();
+            keyClick(54, 0) //6
+            keyClick(16777220, 0) //Return
+
+            let note = noteGallery.currentNoteLiDAR
+            verify(note !== null)
+            tryVerify(() => { return note.count === 1 }, 2000, "One station should be added")
+
+            //Switch to selection mode and select the station
+            let selection = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->selectButton")
+            mouseClick(selection)
+
+            let stationItem = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARStation_0")
+            verify(stationItem !== null)
+
+            mouseClick(stationItem, stationItem.width / 2.0, stationItem.height / 2.0)
+            tryVerify(() => { return stationItem.selected }, 2000, "Station should be selected after clicking it")
+
+            //Selecting the station must give it keyboard focus so Delete reaches it
+            tryVerify(() => { return stationItem.activeFocus }, 2000, "Selected station item should have keyboard focus")
+            keyClick(Qt.Key_Delete)
+
+            tryVerify(() => { return note.count === 0 }, 2000, "Delete should remove the selected LiDAR station")
+        }
+
         function test_northInteraction() {
             //Turn off auto calculate
             let _obj1 = null
