@@ -6,6 +6,7 @@
 
 //Qt includes
 #include <QString>
+#include <QVariantMap>
 
 namespace {
     const cwManualIndex::Article* findBySlug(const cwManualIndex& index, const QString& slug)
@@ -73,42 +74,59 @@ TEST_CASE("cwManualIndex parses the embedded manual", "[cwManualIndex]") {
         const QString landing = index.landingBody();
         REQUIRE(!landing.isEmpty());
         CHECK(landing.contains(QStringLiteral("CaveWhere User Manual")));
+        //An empty slug is the landing page, so the viewer can bind body(slug)
+        //unconditionally instead of branching on the empty case.
+        CHECK(index.body(QString()) == landing);
     }
 
     SECTION("an unknown slug returns empty without crashing") {
         CHECK(index.body(QStringLiteral("no-such-page")).isEmpty());
-        CHECK(index.title(QStringLiteral("no-such-page")).isEmpty());
     }
 
-    SECTION("slugForLink resolves relative .md links to article slugs") {
-        //A cross-reference from one article to a sibling directory resolves
-        //against the source page's location (settings/ -> scraps/).
-        CHECK(index.slugForLink(QStringLiteral("settings-change-settings"),
-                                QStringLiteral("../scraps/carpeting.md"))
-              == QStringLiteral("scraps-carpeting"));
+    SECTION("resolveLink classifies every way a link can be followed") {
+        //An in-app article carries its slug. A cross-reference from one article to
+        //a sibling directory resolves against the source page's location
+        //(settings/ -> scraps/).
+        const QVariantMap article = index.resolveLink(QStringLiteral("settings-change-settings"),
+                                                      QStringLiteral("../scraps/carpeting.md"));
+        CHECK(article.value(QStringLiteral("kind")).toString() == QStringLiteral("article"));
+        CHECK(article.value(QStringLiteral("slug")).toString() == QStringLiteral("scraps-carpeting"));
 
         //The landing page (empty slug) resolves links against the manual root.
-        CHECK(index.slugForLink(QString(),
-                                QStringLiteral("scraps/carpeting.md"))
-              == QStringLiteral("scraps-carpeting"));
+        CHECK(index.resolveLink(QString(), QStringLiteral("scraps/carpeting.md"))
+              .value(QStringLiteral("slug")).toString() == QStringLiteral("scraps-carpeting"));
 
-        //A trailing #anchor on an article link is dropped before slugging.
-        CHECK(index.slugForLink(QStringLiteral("settings-change-settings"),
-                                QStringLiteral("../scraps/carpeting.md#warping"))
-              == QStringLiteral("scraps-carpeting"));
-    }
+        //A trailing #anchor on an article link is dropped: it still resolves to
+        //the target article, not treated as a same-page anchor.
+        const QVariantMap articleWithAnchor =
+                index.resolveLink(QStringLiteral("settings-change-settings"),
+                                  QStringLiteral("../scraps/carpeting.md#warping"));
+        CHECK(articleWithAnchor.value(QStringLiteral("kind")).toString() == QStringLiteral("article"));
+        CHECK(articleWithAnchor.value(QStringLiteral("slug")).toString() == QStringLiteral("scraps-carpeting"));
 
-    SECTION("slugForLink rejects non-article links") {
-        //External links, same-page anchors, and empties are not in-app pages.
-        CHECK(index.slugForLink(QString(), QStringLiteral("https://cavewhere.com")).isEmpty());
-        CHECK(index.slugForLink(QString(), QStringLiteral("mailto:a@b.com")).isEmpty());
-        CHECK(index.slugForLink(QStringLiteral("scraps-carpeting"),
-                                QStringLiteral("#warping")).isEmpty());
-        CHECK(index.slugForLink(QString(), QString()).isEmpty());
-        //A .md path that is not a registered article resolves to nothing.
-        CHECK(index.slugForLink(QString(), QStringLiteral("does/not-exist.md")).isEmpty());
-        //index.md is the landing, excluded from the article list.
-        CHECK(index.slugForLink(QString(), QStringLiteral("index.md")).isEmpty());
+        //A same-page anchor is distinct from external, and preserves the fragment
+        //so the viewer can scroll to the heading.
+        const QVariantMap anchor = index.resolveLink(QStringLiteral("scraps-carpeting"),
+                                                     QStringLiteral("#warping"));
+        CHECK(anchor.value(QStringLiteral("kind")).toString() == QStringLiteral("anchor"));
+        CHECK(anchor.value(QStringLiteral("anchor")).toString() == QStringLiteral("#warping"));
+
+        //Scheme links leave the app; so does an empty href.
+        CHECK(index.resolveLink(QString(), QStringLiteral("https://cavewhere.com"))
+              .value(QStringLiteral("kind")).toString() == QStringLiteral("external"));
+        CHECK(index.resolveLink(QString(), QStringLiteral("mailto:a@b.com"))
+              .value(QStringLiteral("kind")).toString() == QStringLiteral("external"));
+        CHECK(index.resolveLink(QString(), QString())
+              .value(QStringLiteral("kind")).toString() == QStringLiteral("external"));
+
+        //A link resolving inside the manual but not to a registered article is
+        //"missing" — not external — so the viewer ignores it instead of handing a
+        //bare relative path to the browser.
+        CHECK(index.resolveLink(QString(), QStringLiteral("does/not-exist.md"))
+              .value(QStringLiteral("kind")).toString() == QStringLiteral("missing"));
+        //index.md resolves inside the manual but is the landing, not an article.
+        CHECK(index.resolveLink(QString(), QStringLiteral("index.md"))
+              .value(QStringLiteral("kind")).toString() == QStringLiteral("missing"));
     }
 }
 

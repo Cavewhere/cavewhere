@@ -38,6 +38,11 @@ MainWindowTest {
         function init() {
             // Every test starts wide (persistent sidebar) unless it resizes.
             rootId.width = 1200
+            // This DocsPage is instantiated standalone (not hosted by the page
+            // model), so give it the real Docs page as its article-hop parent.
+            let model = RootData.pageSelectionModel
+            model.gotoPageByName(null, "Docs")
+            docsPageId.docsRootPage = model.currentPage
             docsPageId.slug = ""
             docsPageId.closeFind()
             let field = findByName("docsSearchField")
@@ -74,8 +79,8 @@ MainWindowTest {
         }
 
         // Each manual article is registered as a child page of Docs, reachable by
-        // its title through the page model — proving the MainContent loop wired
-        // cwManualIndex.articles into real, navigable pages.
+        // its stable slug through the page model — proving the MainContent loop
+        // wired cwManualIndex.articles into real, navigable pages.
         function test_manualArticlesRegistered() {
             let model = RootData.pageSelectionModel
             let articles = RootData.manualIndex.articles
@@ -86,9 +91,9 @@ MainWindowTest {
             verify(docsPage !== null, "Docs landing page is not registered")
 
             let article = articles[0]
-            model.gotoPageByName(docsPage, article.title)
-            tryVerify(function() { return model.currentPageAddress.endsWith(article.title) },
-                      2000, "manual article '" + article.title + "' is not a reachable child page")
+            model.gotoPageByName(docsPage, article.slug)
+            tryVerify(function() { return model.currentPageAddress.endsWith(article.slug) },
+                      2000, "manual article '" + article.slug + "' is not a reachable child page")
         }
 
         // A relative .md link in the body navigates in-app through the page
@@ -108,7 +113,7 @@ MainWindowTest {
 
             body.linkActivated("../scraps/carpeting.md")
             tryVerify(function() {
-                return model.currentPageAddress.endsWith("Scraps and Carpeting")
+                return model.currentPageAddress.endsWith("scraps-carpeting")
             }, 2000, "a relative .md link did not navigate to the target article page")
 
             model.back()
@@ -190,7 +195,7 @@ MainWindowTest {
             model.gotoPageByName(null, "Docs")
             docsPageId.selectSlug("scraps-carpeting")
             tryVerify(function() {
-                return model.currentPageAddress.endsWith("Scraps and Carpeting")
+                return model.currentPageAddress.endsWith("scraps-carpeting")
             }, 2000, "selecting an article in compact mode did not navigate")
 
             rootId.width = 1200
@@ -216,7 +221,7 @@ MainWindowTest {
 
             docsPageId.navigateToSlug("scraps-carpeting")
             tryVerify(function() {
-                return model.currentPageAddress.endsWith("Scraps and Carpeting")
+                return model.currentPageAddress.endsWith("scraps-carpeting")
             }, 2000, "navigateToSlug did not open the target article")
 
             model.back()

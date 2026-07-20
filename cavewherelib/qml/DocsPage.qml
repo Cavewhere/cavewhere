@@ -47,24 +47,25 @@ StandardPage {
                                     ? sidebarToggleId.height + 2 * docsPageId.topBarMargin
                                     : 0
 
-    // Top-level page under which every article is registered (see MainContent);
-    // article addresses are "Docs/<article title>".
-    readonly property string docsRootName: "Docs"
+    // The Docs landing page — the parent under which every article registers as
+    // a child keyed by its slug (see MainContent). Injected for article pages;
+    // the landing page falls back to its own hosting page, and the standalone
+    // test sets it explicitly.
+    property Page docsRootPage: docsPageId.PageView.page
 
     property string slug: ""
 
     property bool findVisible: false
 
-    property string markdownText: docsPageId.slug === ""
-                                  ? RootData.manualIndex.landingBody()
-                                  : RootData.manualIndex.body(docsPageId.slug)
+    // An empty slug is the landing page; cwManualIndex.body() handles that case,
+    // so this is a single unconditional call.
+    property string markdownText: RootData.manualIndex.body(docsPageId.slug)
 
-    // Navigate to a manual article by its stable slug. Articles register under
-    // their human title, so the address is "Docs/<title>"; going through
-    // currentPageAddress makes each hop an ordinary history navigation.
+    // Navigate to a manual article by its stable slug. Each article is a child
+    // of the Docs page registered under its slug, so this is one ordinary
+    // history navigation to that child — no address strings, no title round-trip.
     function navigateToSlug(slug: string) {
-        RootData.pageSelectionModel.currentPageAddress =
-            docsPageId.docsRootName + "/" + RootData.manualIndex.title(slug)
+        RootData.pageSelectionModel.gotoPageByName(docsPageId.docsRootPage, slug)
     }
 
     // The reader picked an article from the sidebar: dismiss the drawer (a no-op
@@ -269,24 +270,27 @@ StandardPage {
                 font.family: Theme.fontFamilyReading
                 font.pixelSize: Theme.fontSizeUI
 
-                // Relative .md links (the landing index and inter-article
-                // cross-references) navigate in-app through the page model; a
-                // same-page anchor scrolls to its heading; everything else
-                // (http(s), mailto) opens in the browser.
+                // cwManualIndex classifies the link so the viewer never has to
+                // guess from the raw href: a same-page anchor scrolls to its
+                // heading, an in-app article navigates through the page model,
+                // an external link opens in the browser, and a dead in-manual
+                // link is ignored rather than handed to the browser.
                 onLinkActivated: function(link) {
-                    if (link.startsWith("#")) {
-                        let position = finderId.headingPosition(link)
+                    let action = RootData.manualIndex.resolveLink(docsPageId.slug, link)
+                    switch (action.kind) {
+                    case "anchor": {
+                        let position = finderId.headingPosition(action.anchor)
                         if (position >= 0) {
                             docsPageId.scrollToDocumentPosition(position)
                         }
-                        return
+                        break
                     }
-
-                    let targetSlug = RootData.manualIndex.slugForLink(docsPageId.slug, link)
-                    if (targetSlug.length > 0) {
-                        docsPageId.navigateToSlug(targetSlug)
-                    } else {
+                    case "article":
+                        docsPageId.navigateToSlug(action.slug)
+                        break
+                    case "external":
                         Qt.openUrlExternally(link)
+                        break
                     }
                 }
             }

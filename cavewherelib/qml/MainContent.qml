@@ -225,7 +225,8 @@ QQ.Item {
         let manualArticles = RootData.manualIndex.articles
         for (let i = 0; i < manualArticles.length; i++) {
             let article = manualArticles[i]
-            RootData.pageSelectionModel.registerPage(docsPage, article.title, docsPageComponent, {slug: article.slug})
+            RootData.pageSelectionModel.registerPage(docsPage, article.slug, docsPageComponent,
+                                                     {slug: article.slug, docsRootPage: docsPage})
         }
 
         mainSideBar.viewPage = viewPage;

@@ -16,6 +16,17 @@ namespace {
     const QString kLandingPage = QStringLiteral("index.md");
     const QString kLlmsIndex = QStringLiteral("llms.txt");
 
+    //resolveLink() result vocabulary. "kind" is always present; "slug"/"anchor"
+    //are payload keys carried by the matching kind. The "anchor" kind value and
+    //the "anchor" payload key deliberately share a spelling.
+    const QString kLinkKindKey = QStringLiteral("kind");
+    const QString kLinkSlugKey = QStringLiteral("slug");
+    const QString kLinkAnchorKey = QStringLiteral("anchor");
+    const QString kLinkKindAnchor = QStringLiteral("anchor");
+    const QString kLinkKindArticle = QStringLiteral("article");
+    const QString kLinkKindExternal = QStringLiteral("external");
+    const QString kLinkKindMissing = QStringLiteral("missing");
+
     //Title-case a chapter directory the way Python's str.title() does, so the
     //grouping labels match the website build (e.g. "point-clouds" -> "Point Clouds").
     QString titleCase(QString text)
@@ -117,6 +128,9 @@ const QList<cwManualIndex::Article>& cwManualIndex::articleList() const
 
 QString cwManualIndex::body(const QString& slug) const
 {
+    if (slug.isEmpty()) {
+        return landingBody();
+    }
     const int index = m_slugToIndex.value(slug, -1);
     if (index < 0) {
         qWarning() << "cwManualIndex: unknown manual slug" << slug;
@@ -130,24 +144,28 @@ QString cwManualIndex::landingBody() const
     return renderMarkdown(kLandingPage);
 }
 
-QString cwManualIndex::title(const QString& slug) const
+QVariantMap cwManualIndex::resolveLink(const QString& fromSlug, const QString& href) const
 {
-    const int index = m_slugToIndex.value(slug, -1);
-    return index < 0 ? QString() : m_articles.at(index).title;
-}
-
-QString cwManualIndex::slugForLink(const QString& fromSlug, const QString& href) const
-{
+    QVariantMap result;
     const QString trimmed = href.trimmed();
-    if (trimmed.isEmpty() || trimmed.startsWith(QLatin1Char('#'))) {
-        //Empty, or a same-page anchor the caller handles itself.
-        return QString();
+
+    if (trimmed.startsWith(QLatin1Char('#'))) {
+        //A same-page anchor the viewer scrolls to itself.
+        result.insert(kLinkKindKey, kLinkKindAnchor);
+        result.insert(kLinkAnchorKey, trimmed);
+        return result;
+    }
+
+    if (trimmed.isEmpty()) {
+        result.insert(kLinkKindKey, kLinkKindExternal);
+        return result;
     }
 
     const QUrl target(trimmed);
     if (!target.scheme().isEmpty()) {
-        //Absolute link (http, https, mailto, …) — not an in-app page.
-        return QString();
+        //Absolute link (http, https, mailto, …) — leaves the app.
+        result.insert(kLinkKindKey, kLinkKindExternal);
+        return result;
     }
 
     //Resolve the (possibly relative) link against the current page's location
@@ -157,8 +175,9 @@ QString cwManualIndex::slugForLink(const QString& fromSlug, const QString& href)
                                             : kLandingPage;
     const QString resolved = QUrl(kResourceUrlRoot + fromPath).resolved(target).toString();
     if (!resolved.startsWith(kResourceUrlRoot)) {
-        //The link resolved outside the manual tree.
-        return QString();
+        //The link resolved outside the manual tree — treat as external.
+        result.insert(kLinkKindKey, kLinkKindExternal);
+        return result;
     }
 
     QString relativePath = resolved.mid(kResourceUrlRoot.size());
@@ -166,12 +185,19 @@ QString cwManualIndex::slugForLink(const QString& fromSlug, const QString& href)
     if (hash >= 0) {
         relativePath = relativePath.left(hash);
     }
-    if (!relativePath.endsWith(kMarkdownSuffix)) {
-        return QString();
+    if (relativePath.endsWith(kMarkdownSuffix)) {
+        const QString slug = slugForPath(relativePath);
+        if (m_slugToIndex.contains(slug)) {
+            result.insert(kLinkKindKey, kLinkKindArticle);
+            result.insert(kLinkSlugKey, slug);
+            return result;
+        }
     }
 
-    const QString slug = slugForPath(relativePath);
-    return m_slugToIndex.contains(slug) ? slug : QString();
+    //Inside the manual tree but not a registered article (a dead in-manual link
+    //or a non-page resource); don't hand a bare relative path to the browser.
+    result.insert(kLinkKindKey, kLinkKindMissing);
+    return result;
 }
 
 QString cwManualIndex::searchText(const QString& slug) const
