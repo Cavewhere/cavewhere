@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Detect Outlier Fix-Station Coordinates — Implementation Plan (#596)</title>
+<style>
+  :root {
+    --bg: #1a1d21; --panel: #23272e; --panel2: #2b3038; --ink: #e6e9ee;
+    --muted: #9aa4b2; --accent: #5aa9e6; --accent2: #7ddc8f; --warn: #e6b35a;
+    --bad: #e66a6a; --line: #3a414b; --code-bg: #15181c;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 48px 28px 120px; }
+  h1 { font-size: 30px; margin: 0 0 6px; letter-spacing: -0.3px; }
+  h2 { font-size: 22px; margin: 52px 0 14px; padding-bottom: 8px;
+    border-bottom: 1px solid var(--line); letter-spacing: -0.2px; }
+  h3 { font-size: 17px; margin: 28px 0 8px; color: var(--accent); }
+  .sub { color: var(--muted); margin: 0 0 8px; }
+  p { margin: 10px 0; }
+  code { font-family: var(--mono); font-size: 13.5px; background: var(--code-bg);
+    padding: 1.5px 6px; border-radius: 4px; color: #d8e0ea; }
+  pre { background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px;
+    padding: 14px 16px; overflow-x: auto; font-family: var(--mono); font-size: 13px; line-height: 1.5; }
+  pre code { background: none; padding: 0; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 18px 20px; margin: 18px 0; }
+  .fig { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 18px; margin: 22px 0; text-align: center; }
+  .fig svg { max-width: 100%; height: auto; }
+  .figcap { color: var(--muted); font-size: 13.5px; margin-top: 12px; text-align: center; }
+  .figcap b { color: var(--ink); }
+  .pill { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 9px;
+    border-radius: 999px; vertical-align: middle; }
+  .pill.ok { background: rgba(125,220,143,.16); color: var(--accent2); }
+  .pill.new { background: rgba(90,169,230,.16); color: var(--accent); }
+  .pill.edit { background: rgba(230,179,90,.16); color: var(--warn); }
+  .pill.del { background: rgba(230,106,106,.16); color: var(--bad); }
+  table { border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 14px; }
+  th, td { border: 1px solid var(--line); padding: 9px 12px; text-align: left; vertical-align: top; }
+  th { background: var(--panel2); font-weight: 600; }
+  td code { font-size: 12.5px; }
+  ul, ol { margin: 10px 0; padding-left: 24px; }
+  li { margin: 5px 0; }
+  .callout { border-left: 3px solid var(--accent); background: var(--panel2);
+    padding: 12px 16px; margin: 16px 0; border-radius: 0 8px 8px 0; }
+  .callout.warn { border-color: var(--warn); }
+  .callout.bad { border-color: var(--bad); }
+  .callout.ok { border-color: var(--accent2); }
+  .toc { columns: 2; column-gap: 32px; font-size: 14px; }
+  .toc a { color: var(--accent); text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+  .commit { display:inline-block; font-family:var(--mono); font-size:12px; font-weight:700;
+    padding:3px 10px; border-radius:6px; background:rgba(90,169,230,.16); color:var(--accent);
+    border:1px solid rgba(90,169,230,.35); }
+  hr { border: none; border-top: 1px solid var(--line); margin: 36px 0; }
+  .mono-note { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .files code { display:block; margin:2px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Detect Outlier Fix-Station Coordinates</h1>
+<p class="sub">Find fix stations whose coordinate is a data-entry error (wrong CS, wrong UTM zone,
+transposed digits) — the class of mistake that silently blows up the whole 3D render — and surface it
+where the user can act on it. Grows out of <a href="https://github.com/Cavewhere/cavewhere/issues/596" style="color:var(--accent)">#596</a>
+(removing the confusing "Recenter world origin" button).</p>
+
+<div class="callout">
+  <b>Origin of this work.</b> #596 asked "what does <i>Recenter world origin</i> do, and should we remove
+  it?" It manually recentered the <b>world origin</b> — an internal float-precision offset — with no visible
+  effect, so it was removed (<span class="pill del">done</span> menu item deleted from
+  <code>DataMainPage.qml</code>, test renamed). That button was a manual knob for a problem the app should
+  detect on its own: a coordinate so wrong it breaks rendering. This plan builds that detection.
+</div>
+
+<h2>1. Contents</h2>
+<div class="toc">
+  <a href="#problem">2. Problem &amp; precision math</a><br>
+  <a href="#altitude">3. Altitude: detect at region, attribute at cave</a><br>
+  <a href="#algo">4. Detection algorithm</a><br>
+  <a href="#robust">5. Robust world origin</a><br>
+  <a href="#surfaces">6. The three UX surfaces</a><br>
+  <a href="#phases">7. Phased delivery (commits)</a><br>
+  <a href="#constants">8. Constants</a><br>
+  <a href="#tests">9. Test plan</a><br>
+  <a href="#risks">10. Risks &amp; open decisions</a><br>
+  <a href="#scope">11. Out of scope (v2)</a><br>
+</div>
+
+<h2 id="problem">2. Problem &amp; precision math</h2>
+<p>CaveWhere subtracts a <b>world origin</b> from every coordinate before it reaches the GPU, so that survey
+data (UTM coordinates in the millions) fits inside <code>float</code> (32-bit) precision in the shaders. The
+origin is auto-computed on the first line-plot solve as the centroid of all fix stations
+(<code>cwLinePlotManager.cpp:691</code> → <code>cwCavingRegion::recomputeWorldOrigin()</code>).</p>
+
+<p>A <code>float</code> has a 23-bit mantissa → relative precision <code>2⁻²³ ≈ 1.19e-7</code>. Absolute error at
+coordinate magnitude <code>d</code> is <code>d × 1.19e-7</code>. Choosing a <b>1 cm</b> budget:</p>
+<pre><code>d_max = 0.01 m / 1.19e-7 ≈ 84,000 m  ≈ 84 km</code></pre>
+<p>So any rendered vertex more than ~84 km from the origin has &gt;1 cm of jitter. A single typo'd fix — wrong
+UTM zone or a transposed digit — lands hundreds of km out. Because the origin is the <b>mean</b>, that one
+point drags the origin off the real data <i>and</i> inflates the scene bounding box, so the auto-framed 3D
+view shows the real cave as a sub-pixel dot. The user sees an empty or garbage render with no explanation.</p>
+
+<div class="callout warn">
+  <b>Not a generic "your survey is too big" warning.</b> A region that legitimately spans &gt;84 km can't be
+  helped by recentering, and warning about it on every solve is unactionable noise. We detect only the
+  <b>isolated outlier</b> — a fix far from the cluster of every other fix — which is almost always a typo and
+  <i>is</i> fixable. The relative test (§4) naturally ignores legitimately spread-out surveys.
+</div>
+
+<h2 id="altitude">3. Altitude: a dedicated validator, owned by the region</h2>
+<p>"Outlier" is defined relative to the whole survey, so detection needs every cave's fixes at once — a
+<b>region-scoped</b> computation. But <code>cwCavingRegion</code> is already the app's busy root model, and this
+work is a distinct responsibility (gather + reproject, median math, per-cave <code>cwError</code> lifecycle, a
+summary property, signal wiring). So it lives in a new class, <code>cwFixStationValidator</code>, <b>owned by</b>
+the region rather than baked into it.</p>
+
+<p>The region keeps only what is genuinely its own state — writing the world origin to
+<code>geoReference</code> — and delegates everything else. The validator gathers each cave's fixes, reprojects
+into the region's global CS (the reprojection logic that <code>recomputeWorldOrigin()</code> does today moves
+here), classifies, and attributes any flag back down to the owning <b>cave's</b> existing
+<code>errorModel()</code>.</p>
+
+<div class="panel">
+<h3 style="margin-top:0">New class — <code>cwFixStationValidator</code> <span class="pill new">QObject</span></h3>
+<pre><code>class cwFixStationValidator : public QObject {
+    Q_OBJECT
+    Q_PROPERTY(QString warningMessage READ warningMessage NOTIFY warningMessageChanged)
+    Q_PROPERTY(int outlierCount READ outlierCount NOTIFY outlierCountChanged)
+public:
+    explicit cwFixStationValidator(cwCavingRegion* region);   // owned by the region
+
+    struct FixCandidate  { cwCave* cave; QUuid fixId; cwGeoPoint global; };
+    struct Classification { QList&lt;FixCandidate&gt; inliers; QList&lt;FixCandidate&gt; outliers; };
+
+    // Pure math — unit-testable with hand-built candidates, no region needed.
+    static Classification classifyCandidates(const QList&lt;FixCandidate&gt;&amp; candidates);
+
+    Classification currentClassification() const;      // gather + reproject + classifyCandidates
+    std::optional&lt;cwGeoPoint&gt; robustWorldOrigin() const;// inlier centroid; consumed by the region
+
+    QString warningMessage() const;                    // render-view summary ("" when clean)
+    int outlierCount() const;
+
+public slots:
+    void revalidate();          // recompute + append/remove cwError on each cave
+
+signals:
+    void warningMessageChanged();
+    void outlierCountChanged();
+
+private:
+    cwCavingRegion* m_region;
+    QHash&lt;cwCave*, cwError&gt; m_caveWarnings;   // stored per-cave error → remove/update in place
+    // owns its own connections to caves' fixStations signals + geoReference CS changes
+};</code></pre>
+<p style="margin-bottom:0">Region side stays tiny:</p>
+<pre><code>// cwCavingRegion
+cwFixStationValidator* fixStationValidator() const { return m_fixStationValidator; }
+
+void cwCavingRegion::recomputeWorldOrigin() {                 // thin consumer, unchanged signature
+    if (auto origin = m_fixStationValidator-&gt;robustWorldOrigin())
+        m_geoReference-&gt;setWorldOrigin(*origin);
+}</code></pre>
+</div>
+
+<div class="fig">
+<svg viewBox="0 0 900 300" role="img" aria-label="Data flow from fix stations through region detection to three UX surfaces">
+  <defs>
+    <marker id="ar" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L7,3 L0,6 Z" fill="#5aa9e6"/>
+    </marker>
+  </defs>
+  <!-- inputs -->
+  <rect x="20" y="30" width="150" height="90" rx="8" fill="#2b3038" stroke="#3a414b"/>
+  <text x="95" y="58" fill="#e6e9ee" font-size="13" text-anchor="middle" font-weight="600">cwCave · fixStations</text>
+  <text x="95" y="80" fill="#9aa4b2" font-size="11.5" text-anchor="middle">every cave, every fix</text>
+  <text x="95" y="98" fill="#9aa4b2" font-size="11.5" text-anchor="middle">(easting/northing/CS)</text>
+  <!-- region owns validator -->
+  <rect x="240" y="14" width="222" height="124" rx="8" fill="#23272e" stroke="#3a414b" stroke-dasharray="4 3"/>
+  <text x="351" y="30" fill="#9aa4b2" font-size="10.5" text-anchor="middle">cwCavingRegion owns ▾</text>
+  <rect x="252" y="38" width="198" height="92" rx="7" fill="#23272e" stroke="#5aa9e6"/>
+  <text x="351" y="59" fill="#5aa9e6" font-size="12.5" text-anchor="middle" font-weight="700">cwFixStationValidator</text>
+  <text x="351" y="79" fill="#e6e9ee" font-size="11" text-anchor="middle">gather + reproject</text>
+  <text x="351" y="96" fill="#e6e9ee" font-size="11" text-anchor="middle">median center + spread</text>
+  <text x="351" y="113" fill="#e6e9ee" font-size="11" text-anchor="middle">flag outliers · robust origin</text>
+  <!-- cave errorModel -->
+  <rect x="530" y="30" width="150" height="90" rx="8" fill="#2b3038" stroke="#3a414b"/>
+  <text x="605" y="58" fill="#e6e9ee" font-size="13" text-anchor="middle" font-weight="600">cave.errorModel()</text>
+  <text x="605" y="80" fill="#9aa4b2" font-size="11.5" text-anchor="middle">cwError (Warning)</text>
+  <text x="605" y="98" fill="#9aa4b2" font-size="11.5" text-anchor="middle">append / remove / update</text>
+  <!-- surfaces -->
+  <rect x="740" y="15" width="140" height="40" rx="7" fill="#2b3038" stroke="#3a414b"/>
+  <text x="810" y="39" fill="#e6e9ee" font-size="11.5" text-anchor="middle">Cave-list badge</text>
+  <rect x="740" y="70" width="140" height="40" rx="7" fill="#2b3038" stroke="#3a414b"/>
+  <text x="810" y="94" fill="#e6e9ee" font-size="11.5" text-anchor="middle">CavePage banner</text>
+  <rect x="740" y="125" width="140" height="40" rx="7" fill="#2b3038" stroke="#3a414b"/>
+  <text x="810" y="149" fill="#e6e9ee" font-size="11.5" text-anchor="middle">Render-view overlay</text>
+  <!-- arrows -->
+  <line x1="170" y1="75" x2="238" y2="75" stroke="#5aa9e6" stroke-width="1.6" marker-end="url(#ar)"/>
+  <line x1="464" y1="80" x2="528" y2="78" stroke="#5aa9e6" stroke-width="1.6" marker-end="url(#ar)"/>
+  <line x1="680" y1="63" x2="738" y2="38" stroke="#5aa9e6" stroke-width="1.6" marker-end="url(#ar)"/>
+  <line x1="680" y1="75" x2="738" y2="90" stroke="#5aa9e6" stroke-width="1.6" marker-end="url(#ar)"/>
+  <text x="352" y="158" fill="#9aa4b2" font-size="11" text-anchor="middle">validator.warningMessage →</text>
+  <line x1="464" y1="150" x2="738" y2="146" stroke="#5aa9e6" stroke-width="1.6" marker-end="url(#ar)"/>
+</svg>
+<div class="figcap"><b>One validator pass</b> feeds a per-cave <code>cwError</code>; the cave-list badge and
+CavePage read that model directly, the render overlay reads the validator's summary property.</div>
+</div>
+
+<p>The per-cave <code>cwError</code> lifecycle copies the proven pattern from
+<code>cwTripCalibration.cpp:329-360</code> (the declination warning): keep the current <code>cwError</code> per
+flagged cave, <code>append()</code> it, <code>setData(MessageRole)</code> for in-place text updates, and
+<code>remove()</code> when the coordinate is corrected — with a stable <code>errorTypeId</code> so it is
+identifiable and user-suppressible. Severity is <b>Warning</b> (survex still runs; warnings are suppressible —
+the escape hatch for a genuinely remote fix).</p>
+
+<h2 id="algo">4. Detection algorithm</h2>
+<p>Working in the region's global CS, on the reprojected candidate points:</p>
+<ol>
+  <li><b>Robust center</b> <code>c</code> = component-wise <b>median</b> of all candidates.</li>
+  <li><b>Robust scale</b> <code>s</code> = median of the distances <code>|pᵢ − c|</code> (a typo-proof cluster radius).</li>
+  <li><b>Flag</b> candidate <code>i</code> when <code>|pᵢ − c| &gt; max(kOutlierFloorMeters, kMadMultiplier × s)</code>.</li>
+  <li>Run only when there are <code>≥ kMinFixesForDetection</code> fixes (need a cluster to be an outlier from).</li>
+</ol>
+
+<div class="callout">
+  <b>Why the <code>max()</code> of two thresholds.</b> A flagged point must exceed <i>both</i>:
+  <ul>
+    <li><b>the precision floor</b> (~84 km) — below it, rendering is fine, so nothing to flag; and</li>
+    <li><b>k × cluster-radius</b> — in a legitimately spread survey the radius <code>s</code> is large, the
+    threshold rises, and nothing is flagged. Only a point far from an otherwise tight cluster trips it.</li>
+  </ul>
+  This is precisely the discriminator that separates "typo" from "big survey."
+</div>
+
+<div class="fig">
+<svg viewBox="0 0 900 240" role="img" aria-label="A tight cluster of good fixes with one distant outlier">
+  <!-- cluster -->
+  <circle cx="200" cy="130" r="70" fill="none" stroke="#7ddc8f" stroke-dasharray="4 4" stroke-width="1.3"/>
+  <text x="200" y="55" fill="#7ddc8f" font-size="12" text-anchor="middle">cluster radius s (median dist)</text>
+  <circle cx="180" cy="120" r="4" fill="#7ddc8f"/><circle cx="210" cy="140" r="4" fill="#7ddc8f"/>
+  <circle cx="195" cy="150" r="4" fill="#7ddc8f"/><circle cx="225" cy="115" r="4" fill="#7ddc8f"/>
+  <circle cx="165" cy="145" r="4" fill="#7ddc8f"/><circle cx="215" cy="160" r="4" fill="#7ddc8f"/>
+  <circle cx="200" cy="130" r="5" fill="#e6e9ee"/>
+  <text x="200" y="205" fill="#9aa4b2" font-size="11.5" text-anchor="middle">median center c · good fixes</text>
+  <!-- outlier -->
+  <circle cx="760" cy="90" r="6" fill="#e66a6a"/>
+  <text x="760" y="70" fill="#e66a6a" font-size="12" text-anchor="middle" font-weight="600">typo'd fix</text>
+  <text x="760" y="112" fill="#9aa4b2" font-size="11.5" text-anchor="middle">|p − c| &gt; 84 km</text>
+  <!-- distance line -->
+  <line x1="270" y1="126" x2="748" y2="94" stroke="#e66a6a" stroke-width="1.4" stroke-dasharray="6 4"/>
+  <text x="510" y="100" fill="#e6b35a" font-size="11.5" text-anchor="middle">flagged → warning on its cave</text>
+</svg>
+<div class="figcap">The outlier trips <b>both</b> thresholds; the good cluster trips neither. Two legitimate
+caves 100 km apart would form two clusters — a large <code>s</code>, nothing flagged.</div>
+</div>
+
+<p>This math is the <b>pure static</b> <code>cwFixStationValidator::classifyCandidates()</code> from §3 — no
+region, no side effects, so the threshold logic is unit-testable with hand-built candidates.
+<code>currentClassification()</code> wraps it with the gather/reproject step. Both
+<code>recomputeWorldOrigin()</code> (via <code>robustWorldOrigin()</code>) and the per-cave attribution consume
+the same classification — one gather, two readers.</p>
+
+<h2 id="robust">5. Robust world origin <span class="pill edit">behavior change</span></h2>
+<p>Today <code>recomputeWorldOrigin()</code> sets the origin to the <b>mean</b> of all fixes. The mean is not
+robust — one outlier drags it, so the <i>good</i> geometry ends up far from the origin and the whole scene
+jitters / frames wrong. Fix: compute the centroid from <b>inliers only</b> (equivalently, the median). Then the
+origin sits in the real cluster, the good geometry renders crisp and centered, and only the bad station flies
+off — which is the behavior we <i>want</i> for diagnosis, and what makes the render-view banner meaningful.</p>
+
+<div class="fig">
+<svg viewBox="0 0 900 210" role="img" aria-label="Mean origin dragged toward outlier versus robust origin staying in the cluster">
+  <!-- left: mean -->
+  <text x="230" y="28" fill="#e66a6a" font-size="13" text-anchor="middle" font-weight="700">mean origin (today)</text>
+  <circle cx="150" cy="120" r="4" fill="#7ddc8f"/><circle cx="175" cy="135" r="4" fill="#7ddc8f"/>
+  <circle cx="160" cy="105" r="4" fill="#7ddc8f"/><circle cx="185" cy="118" r="4" fill="#7ddc8f"/>
+  <circle cx="400" cy="70" r="6" fill="#e66a6a"/>
+  <text x="400" y="58" fill="#e66a6a" font-size="11" text-anchor="middle">outlier</text>
+  <circle cx="255" cy="103" r="6" fill="#e6b35a"/>
+  <text x="255" y="160" fill="#e6b35a" font-size="11" text-anchor="middle">origin dragged out</text>
+  <text x="168" y="165" fill="#9aa4b2" font-size="10.5" text-anchor="middle">good data now far from origin → jitter</text>
+  <line x1="450" y1="20" x2="450" y2="190" stroke="#3a414b"/>
+  <!-- right: robust -->
+  <text x="680" y="28" fill="#7ddc8f" font-size="13" text-anchor="middle" font-weight="700">robust origin (planned)</text>
+  <circle cx="600" cy="120" r="4" fill="#7ddc8f"/><circle cx="625" cy="135" r="4" fill="#7ddc8f"/>
+  <circle cx="610" cy="105" r="4" fill="#7ddc8f"/><circle cx="635" cy="118" r="4" fill="#7ddc8f"/>
+  <circle cx="617" cy="119" r="6" fill="#e6b35a"/>
+  <text x="617" y="160" fill="#e6b35a" font-size="11" text-anchor="middle">origin in the cluster</text>
+  <circle cx="850" cy="70" r="6" fill="#e66a6a"/>
+  <text x="850" y="58" fill="#e66a6a" font-size="11" text-anchor="middle">outlier flies off alone</text>
+  <text x="640" y="180" fill="#9aa4b2" font-size="10.5" text-anchor="middle">good data renders crisp</text>
+</svg>
+</div>
+
+<div class="callout warn">
+  <b>Touches tested behavior.</b> <code>test_cwCavingRegion_worldOrigin.cpp</code> has "averages multiple fixes"
+  asserting the mean. For clusters with no outlier the inlier-centroid equals the old centroid, so that test is
+  expected to still pass; a new test asserts an outlier no longer drags the origin. Isolated as its own commit so
+  it can be dropped if you'd rather keep mean semantics — at the cost of the render-view banner being far less
+  useful (scene stays garbage rather than showing one station flown off).
+</div>
+
+<h2 id="surfaces">6. The three UX surfaces</h2>
+<p>Two of the three are almost free because the attribution target — <code>cave.errorModel()</code> — is already
+wired into existing components.</p>
+
+<table>
+  <tr><th>Surface</th><th>What the user sees</th><th>How</th><th>Cost</th></tr>
+  <tr>
+    <td><b>Cave list</b><br><span class="mono-note">DataMainPage.qml:295</span></td>
+    <td>The cave's row badge lights up (warning icon).</td>
+    <td><code>ErrorIconBar</code> is <i>already</i> bound to <code>cave.errorModel</code> here.</td>
+    <td><span class="pill ok">free</span></td>
+  </tr>
+  <tr>
+    <td><b>CavePage</b><br><span class="mono-note">CavePage.qml:306</span></td>
+    <td>Inline red banner naming the station + how far off it is + "check its CS/value".</td>
+    <td>Add an <code>ErrorHelpArea</code> in the info column after <code>caveNameText</code>, bound to
+    <code>currentCave.errorModel</code>. Matches the existing grid-convergence <code>HelpArea</code> on this page.</td>
+    <td><span class="pill new">small</span></td>
+  </tr>
+  <tr>
+    <td><b>Render view</b><br><span class="mono-note">GLTerrainRenderer.qml</span></td>
+    <td>Top-anchored banner over the 3D view: "Part of your survey is off-screen — a fix-station coordinate
+    in <i>[Cave]</i> looks wrong." Directly answers "why isn't my data rendering?"</td>
+    <td>New overlay copying <code>LazClipInteractionView.qml:182-199</code> (top-anchored <code>ErrorHelpBox</code>
+    bound to a string), reading a new <code>cwCavingRegion</code> summary property.</td>
+    <td><span class="pill edit">medium</span></td>
+  </tr>
+</table>
+
+<h2 id="phases">7. Phased delivery (commits)</h2>
+
+<h3><span class="commit">Commit 1</span> — <code>cwFixStationValidator</code> detection core (C++, no UI)</h3>
+<ul class="files">
+  <li><span class="pill new">new</span> <code>cavewherelib/src/cwFixStationValidator.h/.cpp</code> — the class from
+  §3, registered in <code>CMakeLists.txt</code>. This commit lands the pure parts: <code>FixCandidate</code>,
+  <code>Classification</code>, static <code>classifyCandidates()</code> (median center + scale + threshold), and
+  <code>currentClassification()</code> (gather + reproject, copied from <code>recomputeWorldOrigin</code> — the
+  region's own copy is deleted in Commit 2, so the loop is duplicated for exactly this one commit). No
+  attribution, no property, no signal wiring yet.</li>
+  <li><span class="pill new">new</span> constants in an anonymous namespace in the <code>.cpp</code> (see §8).</li>
+  <li><span class="pill edit">edit</span> <code>cwCavingRegion.h/.cpp</code> — own the validator
+  (<code>new cwFixStationValidator(this)</code>), expose <code>fixStationValidator()</code> +
+  <code>Q_PROPERTY</code>. <code>recomputeWorldOrigin()</code> untouched this commit (still its own centroid).</li>
+  <li><span class="pill new">new</span> <code>testcases/test_cwFixStationValidator.cpp</code> — tight cluster →
+  no outlier; one typo → flagged with correct cave/fix; two legit clusters → none; &lt; min fixes → none;
+  reprojection across differing CS. Pure-math cases hit <code>classifyCandidates()</code> directly.</li>
+</ul>
+
+<h3><span class="commit">Commit 2</span> — Robust world origin (C++) <span class="pill edit">behavior change</span></h3>
+<ul class="files">
+  <li><span class="pill new">new</span> <code>cwFixStationValidator::robustWorldOrigin()</code> — inlier centroid
+  (<code>std::optional</code>, empty when no candidates).</li>
+  <li><span class="pill edit">edit</span> <code>cwCavingRegion::recomputeWorldOrigin()</code> — collapses to the
+  thin consumer from §3; its old gather/centroid is deleted (now lives in the validator).</li>
+  <li><span class="pill edit">edit</span> <code>test_cwCavingRegion_worldOrigin.cpp</code> — confirm no-outlier
+  cases unchanged; add "outlier does not drag origin".</li>
+</ul>
+
+<h3><span class="commit">Commit 3</span> — Attribute warnings to cave errorModel (C++)</h3>
+<ul class="files">
+  <li><span class="pill new">new</span> <code>cwFixStationValidator::revalidate()</code> — run
+  <code>currentClassification()</code>, then per cave <code>append</code>/<code>remove</code>/<code>setData</code>
+  a <code>cwError(Warning)</code> with a stable <code>errorTypeId</code> and a message naming the station and its
+  distance. Store the current <code>cwError</code> per cave in <code>m_caveWarnings</code> (cwTripCalibration
+  pattern).</li>
+  <li><span class="pill new">new</span> self-owned trigger wiring in the validator — connect to each cave's
+  <code>fixStations</code> <code>dataChanged/countChanged/modelReset</code> and the region's cave add/remove +
+  <code>geoReference</code> CS-change signals, calling <code>revalidate()</code>. Region-independent of the
+  origin gate, so it re-runs on any fix-coordinate edit.</li>
+  <li><span class="pill new">new</span> tests — <code>SignalSpy</code> on <code>cave.errorModel().warningCount</code>;
+  warning appears on typo, clears on correction, updates in place on edit. Lights up the cave-list badge for free.</li>
+</ul>
+<div class="callout warn">
+  <b>Review before implementing — empty global CS.</b> When <code>geoReference()-&gt;globalCoordinateSystem()</code>
+  is empty, <code>gatherCandidates()</code> takes every fix's <i>raw</i> coordinate with no reprojection target
+  (<code>cwFixStationValidator.cpp:151-153</code>), so two caves whose fixes use <i>different</i> input CSs would be
+  compared as raw eastings and a legitimate station could be flagged. It mirrors today's
+  <code>recomputeWorldOrigin()</code> behavior and is harmless while nothing triggers classification without a
+  global CS — but Commit 3 wires the self-owned triggers, which is exactly where that assumption stops holding.
+  Decide here: skip classification when the global CS is empty (recommended), or require a global CS before
+  gathering. Add a test for the empty-global-CS + mixed-input-CS case.
+</div>
+
+<h3><span class="commit">Commit 4</span> — CavePage banner (QML)</h3>
+<ul class="files">
+  <li><span class="pill edit">edit</span> <code>CavePage.qml</code> — <code>ErrorHelpArea</code> in the info column
+  bound to <code>currentCave.errorModel</code>, standalone + two <code>LayoutItemProxy</code>s so it shows in both
+  wide and narrow layouts.</li>
+  <li><span class="pill new">new</span> <code>test-qml/tst_CavePage_outlierWarning.qml</code> — banner visible
+  when the cave carries the warning; hidden otherwise.</li>
+</ul>
+
+<h3><span class="commit">Commit 5</span> — Render-view overlay (QML + validator summary)</h3>
+<ul class="files">
+  <li><span class="pill new">new</span> <code>cwFixStationValidator::warningMessage()</code> /
+  <code>outlierCount()</code> — the <code>Q_PROPERTY</code>s from §3, summarizing across caves (empty when none),
+  naming the first offending cave. Updated inside <code>revalidate()</code>.</li>
+  <li><span class="pill edit">edit</span> <code>GLTerrainRenderer.qml</code> — top-anchored <code>ErrorHelpBox</code>
+  overlay <code>visible: RootData.region.fixStationValidator.warningMessage !== ""</code>, copying the LazClip
+  pattern.</li>
+  <li><span class="pill new">new</span> QML test — overlay visible when a cave has an outlier; a link/hint routes
+  the user toward the cave's fix stations.</li>
+</ul>
+
+<div class="callout ok">
+  <b>Each commit is independently green.</b> 1 adds dormant pure code; 2 is a self-contained behavior change; 3
+  lights up the cave list with no new QML; 4 and 5 are additive QML surfaces. Commit 2 is the only cuttable one.
+</div>
+
+<h2 id="constants">8. Constants <span class="pill new">anon namespace, cwFixStationValidator.cpp</span></h2>
+<table>
+  <tr><th>Constant</th><th>Value</th><th>Meaning</th></tr>
+  <tr><td><code>kFloatPrecisionBudgetMeters</code></td><td><code>0.01</code></td><td>Acceptable render jitter (1 cm).</td></tr>
+  <tr><td><code>kFloatMantissaRelPrecision</code></td><td><code>1.0 / (1 &lt;&lt; 23)</code></td><td>float32 relative precision.</td></tr>
+  <tr><td><code>kOutlierFloorMeters</code></td><td><code>budget / relPrecision ≈ 84e3</code></td><td>Absolute distance where jitter exceeds budget.</td></tr>
+  <tr><td><code>kMadMultiplier</code></td><td><code>6.0</code> (tunable)</td><td>Cluster-radius multiple a fix must exceed to be an outlier.</td></tr>
+  <tr><td><code>kMinFixesForDetection</code></td><td><code>4</code></td><td>Below this there is no cluster to judge against.</td></tr>
+</table>
+<p class="mono-note">No magic numbers in the body — all derived at compile time per the C++ conventions.</p>
+
+<h2 id="tests">9. Test plan</h2>
+<ul>
+  <li><b>C++</b> (<code>cavewhere-test</code>): new <code>test_cwFixStationValidator.cpp</code> (Commit 1, incl.
+  cross-CS reprojection, empty/invalid-CS handling, and an elevation-only outlier); extend
+  <code>test_cwCavingRegion_worldOrigin.cpp</code> (Commit 2). Concurrent-safe (PID-scoped temp dirs / in-memory region).
+  Run under <code>ASAN_OPTIONS=detect_container_overflow=0</code>.</li>
+  <li><b>QML</b> (<code>cavewhere-qml-test --platform offscreen</code>): CavePage banner test; render-overlay test;
+  the existing renamed <code>tst_DataMainPage_globalCS.qml</code> stays green.</li>
+  <li>Run both suites before pushing (repo rule). Logs to <code>/tmp/</code>.</li>
+</ul>
+
+<h2 id="risks">10. Risks &amp; open decisions</h2>
+<table>
+  <tr><th>Item</th><th>Note</th></tr>
+  <tr><td><b>Trigger timing</b></td><td>The validator owns its own connections to each cave's
+  <code>fixStations</code> signals, so it re-runs on a coordinate <i>edit</i> independent of the solve/origin
+  gate. Resolved by design in Commit 3 — no reliance on the line-plot re-firing.</td></tr>
+  <tr><td><b>Ownership / lifetime</b></td><td>Region constructs the validator after <code>geoReference</code> and
+  <code>caves</code> exist; validator holds a raw <code>cwCavingRegion*</code> parent back-pointer (it is a child
+  QObject, dies with the region). It must rewire per-cave connections as caves are added/removed.</td></tr>
+  <tr><td><b>False positives</b></td><td>A real, remote fix (e.g. a distant tie-in) would flag. Mitigated by
+  Warning severity + suppression via <code>errorTypeId</code>. <code>kMadMultiplier</code> tunable.</td></tr>
+  <tr><td><b>Few fixes</b></td><td>1–3 fixes → no cluster → detection off (by design). A two-fix survey with one
+  typo won't be caught; acceptable (nothing to compare against).</td></tr>
+  <tr><td><b>cwCave child aggregation</b></td><td>cwCave's errorModel does <i>not</i> roll up trip children today
+  (wiring commented out). We append directly to the cave list, so no dependence on aggregation.</td></tr>
+  <tr><td class="pill-cell"><b>Decision — Commit 2</b></td><td>Include robust origin? Recommended <b>yes</b> (it's
+  what makes the render banner meaningful). Cuttable.</td></tr>
+</table>
+
+<h2 id="scope">11. Out of scope (v2)</h2>
+<ul>
+  <li><b>Per-fix-station-row flagging</b> on the Fix Stations subpage. <code>cwFixStationModel</code> has zero error
+  state today; per-row needs a <code>QMap&lt;QUuid, cwErrorModel*&gt;</code> + <code>setParentModel</code> roll-up
+  (the cwSurveyChunk cell pattern). Cave-level attribution in v1 already lights up the list badge, CavePage, and
+  the render overlay — row-level is a refinement.</li>
+  <li><b>Bad-shot blowups</b> (e.g. a 99999 distance) — a different, harder attribution problem; separate issue.</li>
+  <li><b>Auto-fix / "did you mean zone 13?"</b> suggestions — future nicety.</li>
+  <li><b>Reproject primitive on <code>cwGeoReference</code></b> (post-Commit 2 refactor). The "resolve inputCS →
+  validate → same-CS shortcut → transform into global" logic lives inline in both <code>recomputeWorldOrigin()</code>
+  and the validator; Commit 2 collapses it to a single copy inside the validator, but its natural home is a tested
+  <code>cwGeoReference::reproject(cwGeoPoint, inputCS) → std::optional&lt;cwGeoPoint&gt;</code> on the CS authority
+  itself (blast radius: one method + 1–2 callers). Deferred because the duplication self-resolves in Commit 2; this
+  is a further consolidation, and routing everything through the validator is a defensible alternative.</li>
+</ul>
+
+<hr>
+<p class="mono-note">#596 · fix-station outlier detection · 5 commits (Commit 2 optional) · dev_3</p>
+
+</div>
+</body>
+</html>

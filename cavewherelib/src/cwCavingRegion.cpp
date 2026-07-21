@@ -12,6 +12,7 @@
 #include "cwDebug.h"
 #include "cwFixStation.h"
 #include "cwFixStationModel.h"
+#include "cwFixStationValidator.h"
 #include "cwLazLayerModel.h"
 #include "cwProject.h"
 #include "cwData.h"
@@ -24,7 +25,8 @@
 cwCavingRegion::cwCavingRegion(QObject *parent) :
     QAbstractListModel(parent),
     m_geoReference(new cwGeoReference(this)),
-    m_lazLayers(new cwLazLayerModel(this))
+    m_lazLayers(new cwLazLayerModel(this)),
+    m_fixStationValidator(new cwFixStationValidator(this))
 {
     // geoReference owns the CS + worldOrigin; the region only mirrors each change
     // into the LAZ layer model (it owns lazLayers). Consumers that react to CS /

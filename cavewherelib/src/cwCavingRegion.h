@@ -23,6 +23,7 @@
 class cwCave;
 class cwProject;
 #include "cwCavingRegionData.h"
+#include "cwFixStationValidator.h"
 #include "cwGeoReference.h"
 #include "cwLazLayerModel.h"
 #include "cwSanitizedNameSet.h"
@@ -41,6 +42,7 @@ class CAVEWHERE_LIB_EXPORT cwCavingRegion : public QAbstractListModel, public cw
     Q_PROPERTY(QString name READ name WRITE setName NOTIFY nameChanged BINDABLE bindableName)
     Q_PROPERTY(int caveCount READ caveCount NOTIFY caveCountChanged)
     Q_PROPERTY(cwGeoReference* geoReference READ geoReference CONSTANT)
+    Q_PROPERTY(cwFixStationValidator* fixStationValidator READ fixStationValidator CONSTANT)
     Q_PROPERTY(cwLazLayerModel* lazLayers READ lazLayers CONSTANT)
     Q_PROPERTY(cwUnits::UnitSystem unitSystem READ unitSystem WRITE setUnitSystem NOTIFY unitSystemChanged)
 
@@ -69,6 +71,11 @@ public:
     //! Recompute the worldOrigin from the caves' fix stations and write it into
     //! geoReference(). Lives here because it reads the region's caves.
     Q_INVOKABLE void recomputeWorldOrigin();
+
+    //! Detects fix stations whose coordinate is a data-entry error (far from the
+    //! rest of the survey). Owned here because the check is region-scoped, but
+    //! the geometry/attribution logic lives in the validator, not the region.
+    cwFixStationValidator* fixStationValidator() const { return m_fixStationValidator; }
 
     cwLazLayerModel* lazLayers() const { return m_lazLayers; }
     void setFutureManagerToken(const cwFutureManagerToken& token);
@@ -134,6 +141,8 @@ private:
     cwGeoReference* m_geoReference = nullptr;
 
     cwLazLayerModel* m_lazLayers = nullptr;
+
+    cwFixStationValidator* m_fixStationValidator = nullptr;
 
     cwUnits::UnitSystem m_unitSystem = cwUnits::Metric;
 
