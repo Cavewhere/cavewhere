@@ -15,7 +15,7 @@ MainWindowTest {
         // the picker via InteractionManager, which disables the turn-table; toggling
         // off restores the turn-table and clears the current pick.
         //
-        // The ray-cast itself (cwCamera::frustrumRay → cwGeometryItersecter →
+        // The ray-cast itself (cwCamera::frustumRay → cwGeometryItersecter →
         // cwGeoPoint → cwCoordinateTransform) is covered by the C++ unit tests
         // for those classes plus the manual smoke test in the plan file.
         function test_lifecycle() {

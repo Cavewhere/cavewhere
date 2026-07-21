@@ -232,7 +232,7 @@ QVector3D unprojectClickOntoGrid(const cwCamera& cam, QPoint qtViewportPoint)
     return ray.point(t);
 }
 
-// The cursor ray for a Qt-viewport click, built the same way cwCamera::frustrumRay
+// The cursor ray for a Qt-viewport click, built the same way cwCamera::frustumRay
 // does (front/back unproject), so a test can measure how far a pick sits off it.
 QRay3D clickRay(const cwCamera& cam, QPoint qtViewportPoint)
 {

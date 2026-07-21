@@ -235,6 +235,10 @@ static QQmlComponent* makeDelegateComponent(QQmlEngine& engine, QObject* parent)
         "  required property string displayName\n"
         "  required property real lengthMeters\n"
         "  property int row\n"
+        //Every item the repeater feeds to cwTransformUpdater carries this, so the
+        //delegate under test looks like a real one
+        "  property bool inFrustum: true\n"
+        "  visible: root.inFrustum\n"
         "}\n";
 
     auto* comp = new QQmlComponent(&engine, parent); // parent for cleanup with 'root'

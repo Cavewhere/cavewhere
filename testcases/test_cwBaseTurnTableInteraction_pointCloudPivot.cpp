@@ -128,7 +128,7 @@ void addCloudPointOnRay(cwScene& scene, float z, uint64_t id = 2)
 // Guards the sign convention every depth claim in this file rests on.
 void requireLookingDownNegativeZ(const Fixture& f)
 {
-    const QRay3D ray = f.camera.frustrumRay(f.camera.mapToGLViewport(screenCenter()));
+    const QRay3D ray = f.camera.frustumRay(f.camera.mapToGLViewport(screenCenter()));
     REQUIRE(ray.direction().z() < 0.0f);
 }
 
@@ -204,7 +204,7 @@ TEST_CASE("cwGeometryItersecter does not pick through a point wall to a far poin
     addPointWall(f.scene, kNearZ, pickRadius);
     addCloudPointOnRay(f.scene, kFarZ);
 
-    const QRay3D ray = f.camera.frustrumRay(f.camera.mapToGLViewport(screenCenter()));
+    const QRay3D ray = f.camera.frustumRay(f.camera.mapToGLViewport(screenCenter()));
 
     // Pin the premise, not just the sign of the ray. Everything here rests on
     // the ray threading a CELL CENTRE — the worst case, sqrt(2)/2 spacings from

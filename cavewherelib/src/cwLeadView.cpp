@@ -561,7 +561,7 @@ bool cwLeadView::isOccluded(const QVector3D& worldPosition,
     if(qFuzzyIsNull(denom)) {
         return false;
     }
-    // ray.direction() is unit length (cwCamera::frustrumRay normalizes it), so
+    // ray.direction() is unit length (cwCamera::frustumRay normalizes it), so
     // this parameter is a world distance comparable to cwRayHit::tWorld(). The
     // - kLeadDepthBias slack mirrors the eye-ward shift the billboard renders
     // with (cwRenderBillboards::buildModelMatrix).

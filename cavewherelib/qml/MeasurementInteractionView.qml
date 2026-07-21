@@ -82,7 +82,8 @@ MeasurementInteraction {
         QQ.Item {
             id: firstMarkerId
             property QQ.vector3d position3D: measurementId.firstPoint
-            visible: measurementId.hasFirst
+            property bool inFrustum: true
+            visible: firstMarkerId.inFrustum && measurementId.hasFirst
 
             QQ.Rectangle {
                 x: -width / 2
@@ -102,7 +103,8 @@ MeasurementInteraction {
         QQ.Item {
             id: secondMarkerId
             property QQ.vector3d position3D: measurementId.secondPoint
-            visible: measurementId.hasMeasurement
+            property bool inFrustum: true
+            visible: secondMarkerId.inFrustum && measurementId.hasMeasurement
 
             QQ.Rectangle {
                 x: -width / 2
@@ -124,7 +126,9 @@ MeasurementInteraction {
         QQ.Item {
             id: hoverMarkerId
             property QQ.vector3d position3D: measurementId.hoverPoint
-            visible: measurementId.hoverValid && !measurementId.hasMeasurement
+            property bool inFrustum: true
+            visible: hoverMarkerId.inFrustum
+                     && measurementId.hoverValid && !measurementId.hasMeasurement
 
             QQ.Rectangle {
                 x: -width / 2
@@ -145,11 +149,14 @@ MeasurementInteraction {
         // cursor while awaiting B, then freezes on the placed segment.
         QQ.Item {
             id: midpointMarkerId
+            objectName: "measurementMidpointMarker"
             property QQ.vector3d _otherPoint: measurementId.hasMeasurement
                                               ? measurementId.secondPoint
                                               : measurementId.hoverPoint
             property QQ.vector3d position3D: measurementId.firstPoint.plus(midpointMarkerId._otherPoint).times(0.5)
-            visible: measurementId.hasFirst
+            property bool inFrustum: true
+            visible: midpointMarkerId.inFrustum
+                     && measurementId.hasFirst
                      && (measurementId.hasMeasurement || measurementId.hoverValid)
             z: 1
 

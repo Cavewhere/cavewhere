@@ -277,6 +277,34 @@ MainWindowTest {
                    + " vs contentWidth " + chip.contentWidth)
         }
 
+        // cwTransformUpdater publishes `inFrustum` and no longer writes the marker's
+        // visible, so each marker has to compose the two itself as
+        // `visible: inFrustum && <ownerCondition>`. A marker that binds visible to its
+        // owner condition alone stays on screen when its point leaves the frustum,
+        // drawing at the mirrored position an off-screen projection produces. This
+        // guards the composition: with the owner condition (hasMeasurement) satisfied,
+        // toggling inFrustum must still drive the marker's visibility. Dropping the
+        // inFrustum term would leave it stuck visible.
+        function test_outOfFrustumMarkerStaysHidden() {
+            let renderer = _setupCompletedMeasurement()
+            let measurement = renderer.measurementInteraction
+
+            let midpoint = _findByObjectName(renderer, "measurementMidpointMarker")
+            verify(midpoint !== null, "Midpoint marker found")
+
+            // The owner's own condition is satisfied, so visible tracks inFrustum
+            verify(measurement.hasMeasurement, "Measurement is complete")
+            tryCompare(midpoint, "visible", true, 1000,
+                       "An in-frustum marker with a completed measurement should show")
+
+            midpoint.inFrustum = false
+            tryCompare(midpoint, "visible", false, 1000,
+                       "An out-of-frustum marker must hide even though hasMeasurement is true")
+
+            midpoint.inFrustum = true
+            tryCompare(midpoint, "visible", true, 1000, "Returning to the frustum restores the marker")
+        }
+
         // The azimuth row carries a north-reference selector whose value tracks
         // the resolved bearing, and the Copy text reflects the selection. The
         // resolve numerics are covered by the [cwMeasurementInteraction] and

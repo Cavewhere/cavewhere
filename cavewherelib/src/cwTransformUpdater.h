@@ -73,14 +73,21 @@ private slots:
     void handlePointItemDataChanged();
 
 private:
-    QSet<QQuickItem*> PointItems;
+    //! Metaobject indices resolved once per item, so update() reprojects without
+    //! re-resolving `position3D`/`inFrustum` by name every frame. -1 means absent.
+    struct PointIndices {
+        int position3D = -1;
+        int inFrustum = -1;
+    };
+
+    QHash<QQuickItem*, PointIndices> PointItems;
     QPointer<cwCamera> Camera;
     QMatrix4x4 ModelMatrix;
 
     QMatrix4x4 TransformMatrix; //!< The total matrix that converts a object's position into qt coordinates
     bool Enabled = true; //!<
 
-    void updatePoint(QQuickItem* object);
+    void updatePoint(QQuickItem* object, PointIndices indices);
 
     void updateTransformMatrix();
 

@@ -18,7 +18,14 @@ Positioner {
     property int pointIndex; //The index in the item list
     property bool selected: false
 
+    //Written by cwTransformUpdater: false once the point falls outside the view
+    //frustum. A subclass that overrides visible has to keep this term, or the point
+    //renders at the garbage position an off-screen projection produces.
+    property bool inFrustum: true
+
     focus: selected //A selected point takes keyboard focus so its Keys handlers fire
+
+    visible: inFrustum
 
     onSelectedChanged: {
         if(parentView.selectedItemIndex === pointIndex && !selected) {

@@ -11,7 +11,33 @@
 
 //Qt includes
 #include <QDebug>
+#include <QMetaProperty>
 #include <QSGTransformNode>
+
+namespace {
+    //The 3D position the updater reprojects into Qt view coordinates every frame.
+    constexpr auto kPosition3DProperty = "position3D";
+
+    //Managed items compose this into their own visible binding. The updater used to
+    //write visible directly, which silently fought any binding the item's owner put
+    //on it: a C++ setter does not remove a QML binding, so the two writers raced and
+    //the binding won every time it re-evaluated, defeating the cull.
+    constexpr auto kInFrustumProperty = "inFrustum";
+
+    //! The metaobject index of a named property, or -1 when absent (or, if
+    //! requireWritable, present but read-only). Resolved once per item so the hot
+    //! per-frame path reads/writes by index instead of by name.
+    int propertyIndex(const QQuickItem* object, const char* name, bool requireWritable) {
+        const int index = object->metaObject()->indexOfProperty(name);
+        if(index < 0) {
+            return -1;
+        }
+        if(requireWritable && !object->metaObject()->property(index).isWritable()) {
+            return -1;
+        }
+        return index;
+    }
+}
 
 cwTransformUpdater::cwTransformUpdater(QObject *parent) :
     QObject(parent),
@@ -62,12 +88,23 @@ void cwTransformUpdater::addPointItem(QQuickItem *object) {
         return;
     }
 
-    PointItems.insert(object);
+    //Resolved once here rather than per frame in updatePoint, which runs for every
+    //point on every camera change.
+    const PointIndices indices {
+        propertyIndex(object, kPosition3DProperty, false),
+        propertyIndex(object, kInFrustumProperty, true)
+    };
+    if(indices.inFrustum < 0) {
+        qWarning() << object << "has no writable `inFrustum` property, so it won't be hidden"
+                   << "when it leaves the viewport" << LOCATION;
+    }
+
+    PointItems.insert(object, indices);
     connect(object, &QQuickItem::destroyed, this, &cwTransformUpdater::pointItemDeleted);
     connect(object, SIGNAL(position3DChanged()), this, SLOT(handlePointItemDataChanged()));
 
     if(Camera) {
-        updatePoint(object);
+        updatePoint(object, indices);
     }
 }
 
@@ -100,9 +137,14 @@ void cwTransformUpdater::update() {
         //Update transformation object
         updateTransformMatrix();
 
-        //Update all the point objects
-        foreach(QQuickItem* object, PointItems) {
-            updatePoint(object);
+        //Update all the point objects. Iterate a copy: updatePoint writes properties
+        //that can synchronously run QML handlers, and one that adds or removes a managed
+        //item would invalidate a live iterator. QHash is implicitly shared, so this is a
+        //refcount bump unless a mutation actually happens mid-iteration - the safety the
+        //old foreach provided for free.
+        const auto pointItems = PointItems;
+        for(auto it = pointItems.cbegin(); it != pointItems.cend(); ++it) {
+            updatePoint(it.key(), it.value());
         }
 
         emit updated();
@@ -114,13 +156,24 @@ void cwTransformUpdater::update() {
   position using setPos.  This doesn't scale the object like updateTransform does.  This is
   useful for billboarded points.
   */
-void cwTransformUpdater::updatePoint(QQuickItem *object) {
+void cwTransformUpdater::updatePoint(QQuickItem *object, PointIndices indices) {
     Q_ASSERT(Camera != nullptr);
     Q_ASSERT(object != nullptr);
 
-    QVector3D position = object->property("position3D").value<QVector3D>();
-    QVector3D position2D = TransformMatrix.map(position);
-    object->setVisible(!Camera->isQtViewportCoordinateClipped(position2D));
+    const QVector3D position = indices.position3D >= 0
+            ? object->metaObject()->property(indices.position3D).read(object).value<QVector3D>()
+            : QVector3D();
+    const QVector3D position2D = TransformMatrix.map(position);
+
+    //Publish frustum membership instead of writing visible: the item's owner decides
+    //what to do with it, so a delegate can have its own reasons to be hidden without
+    //the two writers overwriting each other. Positive polarity keeps owner bindings
+    //an AND (`visible: inFrustum && ...`) rather than a negation.
+    if(indices.inFrustum >= 0) {
+        const bool inFrustum = !Camera->isQtViewportCoordinateClipped(position2D);
+        object->metaObject()->property(indices.inFrustum).write(object, inFrustum);
+    }
+
     object->setPosition(QPointF(position2D.x(), position2D.y()));
 }
 
@@ -161,8 +214,9 @@ void cwTransformUpdater::handlePointItemDataChanged() {
     }
 
     QQuickItem* item = qobject_cast<QQuickItem*>(sender());
-    if(PointItems.contains(item)) {
-        updatePoint(item);
+    auto it = PointItems.constFind(item);
+    if(it != PointItems.cend()) {
+        updatePoint(it.key(), it.value());
     }
 }
 

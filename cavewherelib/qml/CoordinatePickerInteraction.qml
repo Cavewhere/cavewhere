@@ -60,6 +60,8 @@ CoordinatePicker {
         QQ.Item {
             id: markerAnchorId
             property QQ.vector3d position3D: pickerId.scenePoint
+            property bool inFrustum: true
+            visible: markerAnchorId.inFrustum
 
             QQ.Rectangle {
                 x: -width / 2
