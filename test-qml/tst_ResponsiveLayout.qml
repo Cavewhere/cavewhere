@@ -90,15 +90,15 @@ Item {
         function test_autoUpdateLabelVisibleInWide() {
             sidebarId.layoutSize = Theme.LayoutSize.Wide
             waitForRendering(sidebarId)
-            let label = ObjectFinder.findObjectByChain(rootId, "rootId->testSidebar->autoUpdateLabel")
+            let label = ObjectFinder.findObjectByChain(rootId, "rootId->testSidebar->autoUpdateContainer->autoUpdateLabel")
             verify(label !== null, "autoUpdateLabel not found")
             verify(label.visible, "Auto-update label should be visible in wide layout")
 
-            let checkbox = ObjectFinder.findObjectByChain(rootId, "rootId->testSidebar->autoUpdateCheckbox")
+            let checkbox = ObjectFinder.findObjectByChain(rootId, "rootId->testSidebar->autoUpdateContainer->autoUpdateCheckbox")
             verify(checkbox !== null, "autoUpdateCheckbox not found")
             verify(checkbox.visible, "Checkbox should be visible in wide layout")
 
-            let toggle = ObjectFinder.findObjectByChain(rootId, "rootId->testSidebar->autoUpdateToggle")
+            let toggle = ObjectFinder.findObjectByChain(rootId, "rootId->testSidebar->autoUpdateContainer->autoUpdateToggle")
             verify(toggle !== null, "autoUpdateToggle not found")
             verify(!toggle.visible, "Toggle button should be hidden in wide layout")
         }
@@ -106,15 +106,15 @@ Item {
         function test_autoUpdateToggleVisibleInMedium() {
             sidebarId.layoutSize = Theme.LayoutSize.Medium
             waitForRendering(sidebarId)
-            let label = ObjectFinder.findObjectByChain(rootId, "rootId->testSidebar->autoUpdateLabel")
+            let label = ObjectFinder.findObjectByChain(rootId, "rootId->testSidebar->autoUpdateContainer->autoUpdateLabel")
             verify(label !== null, "autoUpdateLabel not found")
             verify(!label.visible, "Auto-update label should be hidden in medium layout")
 
-            let checkbox = ObjectFinder.findObjectByChain(rootId, "rootId->testSidebar->autoUpdateCheckbox")
+            let checkbox = ObjectFinder.findObjectByChain(rootId, "rootId->testSidebar->autoUpdateContainer->autoUpdateCheckbox")
             verify(checkbox !== null, "autoUpdateCheckbox not found")
             verify(!checkbox.visible, "Checkbox should be hidden in medium layout")
 
-            let toggle = ObjectFinder.findObjectByChain(rootId, "rootId->testSidebar->autoUpdateToggle")
+            let toggle = ObjectFinder.findObjectByChain(rootId, "rootId->testSidebar->autoUpdateContainer->autoUpdateToggle")
             verify(toggle !== null, "autoUpdateToggle not found")
             verify(toggle.visible, "Toggle button should be visible in medium layout")
         }
