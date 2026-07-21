@@ -344,15 +344,6 @@ StandardPage {
         id: regionContextMenuComponent
         QC.Menu {
             QC.MenuItem {
-                objectName: "recenterWorldOriginAction"
-                text: qsTr("Recenter world origin")
-                enabled: RootData.region.geoReference.hasCoordinateSystem
-                onTriggered: RootData.region.recomputeWorldOrigin()
-            }
-
-            QC.MenuSeparator {}
-
-            QC.MenuItem {
                 objectName: "cavernOutputMenuItem"
                 text: RootData.linePlotManager.hasSolveError
                       ? qsTr("Cavern Output (solve error)")

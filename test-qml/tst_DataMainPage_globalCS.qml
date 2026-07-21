@@ -70,7 +70,7 @@ MainWindowTest {
                     "Local / UTM / Custom (3 modes) when allowGeographic === false")
         }
 
-        function test_recenterMenuItemReachable() {
+        function test_regionContextMenuReachable() {
             gotoDataMainPage()
 
             const ctxButton = findChild(RootData.pageView.currentPageItem, "regionContextMenu")
