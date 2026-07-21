@@ -30,6 +30,14 @@
 //Std include
 #include "math.h"
 
+namespace {
+// Survex uses "-" as a "no measurement" sentinel in data fields. Treat it as
+// empty so the reading lands in State::Empty rather than State::Invalid.
+QString stripSurvexSentinel(const QString& value) {
+    return value.trimmed() == QLatin1String("-") ? QString() : value;
+}
+}
+
 cwSurvexImporter::cwSurvexImporter(QObject* parent) :
     cwTreeDataImporter(parent),
     RootBlock(new cwTreeImportDataNode()),
@@ -568,11 +576,11 @@ void cwSurvexImporter::parseNormalData(QString line) {
     cwStation toStation(toStationName);
 
     cwShot shot;
-    shot.setDistance(extractData(data, Distance));
-    shot.setCompass(extractData(data, Compass));
-    shot.setBackCompass(extractData(data, BackCompass));
-    shot.setClino(extractData(data, Clino));
-    shot.setBackClino(extractData(data, BackClino));
+    shot.setDistance(stripSurvexSentinel(extractData(data, Distance)));
+    shot.setCompass(stripSurvexSentinel(extractData(data, Compass)));
+    shot.setBackCompass(stripSurvexSentinel(extractData(data, BackCompass)));
+    shot.setClino(stripSurvexSentinel(extractData(data, Clino)));
+    shot.setBackClino(stripSurvexSentinel(extractData(data, BackClino)));
     shot.setDistanceIncluded(CurrentBlock->isDistanceInclude());
 
     addShotToCurrentChunk(fromStation, toStation, shot);
@@ -666,19 +674,12 @@ void cwSurvexImporter::parsePassageData(QString line) {
         return;
     }
 
-    // Survex uses "-" as a "no measurement" sentinel in passage data.
-    // Treat it as empty so cwDistanceReading lands in State::Empty
-    // rather than State::Invalid.
-    auto cleanLrud = [](QString v) -> QString {
-        return v.trimmed() == QLatin1String("-") ? QString() : v;
-    };
-
     //Create or find a station from the name
     cwStation station(stationName);
-    station.setLeft(cleanLrud(extractData(data, Left)));
-    station.setRight(cleanLrud(extractData(data, Right)));
-    station.setUp(cleanLrud(extractData(data, Up)));
-    station.setDown(cleanLrud(extractData(data, Down)));
+    station.setLeft(stripSurvexSentinel(extractData(data, Left)));
+    station.setRight(stripSurvexSentinel(extractData(data, Right)));
+    station.setUp(stripSurvexSentinel(extractData(data, Up)));
+    station.setDown(stripSurvexSentinel(extractData(data, Down)));
 
     //Add the station to the current LRUD chunk
     nodeData(CurrentBlock)->LRUDChunks.last().Stations.append(station);
