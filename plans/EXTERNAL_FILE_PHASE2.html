@@ -2774,9 +2774,24 @@ public:
     the exporter's <code>*begin</code> wrapping &mdash; with
     <code>cwScopeStationListModel</code> consuming the result as a
     string contract. A small free-function header would give the
-    grammar one home. Pure move, three consumers, no new coupling
-    added by commit 11 (the manager already included
-    <code>cwLinePlotTask.h</code>), so no urgency.
+    grammar one home.
+    <em>Promoted 2026-07-21 (B1/B1b review): no longer "no urgency."
+    The render fixes pushed the grammar into two more files as
+    <strong>three divergent prefix slices</strong> &mdash;
+    <code>scopePrefixForTrip</code> builds the full
+    <code>cave_.trip_.</code> (network space);
+    <code>cwLinePlotGeometry</code> rebuilds the full prefix then
+    strips the cave half back off to reach the cave-local lookup;
+    <code>cwLinePlotLabelView</code> uses the trip-only
+    <code>trip_&lt;hex&gt;.</code> &mdash; none sharing a symbol. Worse,
+    <code>cwLinePlotGeometry.cpp</code> and
+    <code>cwLinePlotLabelView.cpp</code> now
+    <code>#include "cwLinePlotTask.h"</code> purely to borrow the naming
+    statics, so a geometry/view unit depends on a Task class for string
+    grammar (a boundary smell a free-function header erases). Now five
+    consumers with three encodings; the move is still pure but should
+    happen before the next consumer. Folds naturally into the uniform
+    external-station accessor entry below.</em>
   </li>
   <li>
     <strong>State-managed pane width in <code>TripPage</code></strong>
@@ -2810,6 +2825,36 @@ public:
     stay strict with today's per-trip checks. Do this with (or just
     before) Phase 3's cave-level attach. Blast radius: cwTrip API +
     the QML consumer sites.
+    <em>Update 2026-07-21 (B1/B1b review): the predicate now has
+    <strong>C++ consumers</strong> too &mdash;
+    <code>cwLinePlotGeometry.cpp</code> and
+    <code>cwLinePlotLabelView.cpp</code> both added raw
+    <code>!trip-&gt;externalCenterline().isEmpty()</code> branch guards,
+    joining <code>scopePrefixForTrip</code>'s null/empty guard. Whatever
+    form the predicate takes must serve the C++ enumeration guards, not
+    just QML.</em>
+  </li>
+  <li>
+    <strong>Uniform external-station accessor on <code>cwTrip</code></strong>
+    <em>(B1/B1b review A1, 2026-07-21)</em>. Root cause of the whole
+    B1/B1b/B4 family: <code>cwTrip::uniqueStations()</code> is defined as
+    "walk my chunks," so it silently returns empty for an
+    externally-backed trip &mdash; and <em>every</em> consumer then
+    rediscovers the trip's real stations by prefix-scanning
+    <code>cave-&gt;stationPositionLookup()</code>: the B1 geometry emit,
+    the B1b label scan, and (broken) the B4 scrap trigger
+    (<code>MapStationToTrip</code> is chunk-only) and morph
+    (<code>computeStations</code> exact-key). That is a leaking boundary
+    &mdash; the trip can't answer "what are my stations" honestly. A
+    single authoritative accessor (e.g.
+    <code>cwTrip::solvedStations()</code> yielding
+    <code>(name, position)</code> for native <em>and</em> external
+    trips) would give geometry, labels, scrap-trigger, and morph one
+    contract instead of four bespoke scans, and would fix B4's Layer-1
+    trigger for free. Pairs with the <code>externallyBacked</code>
+    predicate above and the <code>cwCavernNaming</code> move; best landed
+    with (or just before) the B4 fix. Blast radius: <code>cwTrip</code>
+    API + ~4 consumers.
   </li>
   <li>
     <strong><code>cwCave::addTrip</code> should return the new
@@ -2904,6 +2949,297 @@ public:
     <a href="https://github.com/Cavewhere/cavewhere/issues/603">#603</a>.
   </li>
 </ul>
+
+<h2 id="phase2-bugs">16. Remaining Phase-2 bugs (blocking completion)</h2>
+
+<p>
+  Functional defects found while manually exercising the shipped
+  commits (9&ndash;13). Unlike the &sect;15 follow-ups (deliberate
+  out-of-scope refactors), each of these is a real defect in the
+  Phase-2 UX and <strong>must be fixed &mdash; with a regression
+  test &mdash; before Phase 2 is called complete</strong>. Ordered by
+  severity. Filed 2026-07-21.
+</p>
+
+<h3 id="bug-b1">B1 &mdash; Attach produces no centerline in the 3D renderer <em>(FIXED 2026-07-21)</em></h3>
+
+<p>
+  Attaching a Survex file ran the cavern solve and the attach
+  orchestrator reported success (the trip appeared in
+  <code>attachedCenterlinesModel</code>, the panel populated), but
+  <strong>no line plot for the external stations appeared in the 3D
+  view</strong>.
+</p>
+<p>
+  <strong>Root cause:</strong> the drop was entirely in geometry
+  generation, not the scene/renderer (both are passthroughs).
+  <code>cwLinePlotGeometry::generate()</code> built the renderable
+  line list by walking each trip's <strong>native
+  <code>cwSurveyChunk</code> topology only</strong>. An attached trip
+  owns no chunk &mdash; its shots live solely in the solved survey
+  network parsed from cavern's <code>.3d</code> &mdash; so the
+  generator emitted zero vertices for it, even though its stations
+  were present in the cave position lookup and the published
+  <code>regionNetwork</code> (which is why the station-list panel
+  worked but nothing drew).
+</p>
+<p>
+  <strong>Fix:</strong> <code>generate()</code> now takes the solved
+  <code>cwSurveyNetwork</code>; for a trip whose
+  <code>externalCenterline</code> is set it emits segments from the
+  network's shot topology (scope prefix
+  <code>cave_&lt;hex&gt;.trip_&lt;hex&gt;.</code>), resolving
+  coordinates through the cave-local position lookup so external and
+  native geometry share the world-origin-relative space. The worker
+  (<code>cwLinePlotTask::generateGeometry</code>) passes
+  <code>parsed.network</code> through. External vertices land in the
+  trip's contiguous <code>tripVertexRanges</code> span, so per-trip
+  keyword visibility keeps working. Files:
+  <code>cwLinePlotGeometry.{h,cpp}</code>,
+  <code>cwLinePlotTask.cpp</code>.
+</p>
+<p>
+  <strong>Test (proves the bug, red&rarr;green):</strong>
+  <code>test_cwLinePlotTask_AttachInclude.cpp</code> &mdash; "Trip-attached
+  centerline emits renderable line geometry" (<code>[Attach][Geometry]</code>).
+  Attaches <code>survex_simple.svx</code> to a trip, drives a real
+  <code>cwLinePlotManager</code> + <code>cwRenderLinePlot</code>
+  offscreen, and asserts the render object's <code>points()</code>
+  contain the two solved shots (4 vertices) at the external stations'
+  looked-up positions. Failed on the old code (0 vertices), passes now;
+  the full <code>[Attach],[LinePlot],[Geometry]</code> set stays green,
+  including the Mixed native+external case (no double-emit of native
+  geometry). <em>(Aggregate assertion counts intentionally omitted &mdash;
+  they drift every time a case is added under these tags, e.g. the B4
+  <code>[!shouldfail]</code> tests below; treat "green" as the gate, not
+  a number.)</em>
+</p>
+<p>
+  <strong>Not covered (deferred to Phase 3):</strong> a
+  <em>cave-level</em> attach (<code>cwCaveData::externalCenterline</code>,
+  stations directly under <code>cave_&lt;hex&gt;.</code> with no trip)
+  still emits no geometry &mdash; the same network-scope emission
+  generalizes to it, but cave-level attach is a Phase-3 affordance
+  (master &sect;8.7) and has no UI entry point yet.
+</p>
+
+<h3 id="bug-b1b">B1b &mdash; External station labels not visible in 3D <em>(FIXED 2026-07-21)</em></h3>
+
+<p>
+  Surfaced right after B1: with the line plot now drawing, its
+  <strong>station labels were still missing</strong> for an attached
+  trip. Same root-cause shape as B1 in a different code path.
+  <code>cwLinePlotLabelView::labels()</code> enumerated a trip's
+  labels from <code>cwTrip::uniqueStations()</code>, which walks the
+  trip's survey chunks &mdash; an attached trip has none, so it
+  produced an empty label list (and, because the view registers a
+  per-trip label keyword item only when the trip has &ge;1 label, no
+  keyword row either).
+</p>
+<p>
+  <strong>Fix:</strong> for a trip whose
+  <code>externalCenterline</code> is set,
+  <code>cwLinePlotLabelView::labels()</code> now reads the solved
+  stations straight from the cave lookup, selecting keys under the
+  trip's cave-local scope prefix (<code>trip_&lt;hex&gt;.</code>) and
+  labelling each with the scope-relative tail (e.g.
+  <code>simple.a1</code>) &mdash; the same name
+  <code>cwScopeStationListModel</code> shows in the trip's station-list
+  panel. File: <code>cwLinePlotLabelView.cpp</code>.
+</p>
+<p>
+  <strong>Test (red&rarr;green):</strong>
+  <code>test_cwLinePlotLabelView.cpp</code> &mdash; "cwLinePlotLabelView
+  shows station labels for an externally attached trip"
+  (<code>[cwLinePlotLabelView][Attach]</code>). Attaches
+  <code>survex_simple.svx</code>, solves, and asserts the view
+  registers one label keyword item whose group carries the three
+  scope-named labels. Failed on the old code (0 label groups), passes
+  now; the <code>[Attach],[LinePlot],[Geometry],[cwLinePlotLabelView],[keyword]</code>
+  set stays green (exact counts omitted &mdash; they drift as cases are
+  added under these tags).
+</p>
+
+<h3 id="bug-b4">B4 &mdash; Scrap &amp; carpet do not render for an externally attached trip <em>(diagnosed 2026-07-21)</em></h3>
+
+<p>
+  A note+scrap (or LiDAR scan) on an attached trip does not appear as
+  carpet over the 3D plot. <strong>Unlike B1/B1b this is NOT an
+  enumeration bug</strong> &mdash; the scrap/LiDAR pipelines correctly
+  walk <code>trip&rarr;notes()&rarr;scraps()</code> (never chunks). It
+  is a <strong>name/scope mismatch</strong>: an external trip's solved
+  positions live in <code>cave&rarr;stationPositionLookup()</code> under
+  keys that <em>retain</em> the trip scope prefix
+  (<code>trip_&lt;hex&gt;.simple.a1</code>), but a note station carries
+  the scope-<em>stripped</em> user-facing name the panel shows
+  (<code>simple.a1</code>, allowed by the external station validator's
+  dot grammar). Exact-key resolution therefore misses. Same underlying
+  asymmetry the B1b label fix bridged, but here it bites in
+  <strong>two layers</strong> across <strong>two subsystems</strong>
+  (scrap carpet + LiDAR carpet):
+</p>
+<ul>
+  <li>
+    <strong>Layer 1 &mdash; recompute trigger never fires.</strong>
+    <code>cwLinePlotTask::StationTripScrapLookup</code> keys
+    <code>MapStationToScrap</code> by the bare note-station name
+    (<code>cwLinePlotTask.cpp:152-154</code>) but
+    <code>setStationAsChanged</code> matches cavern's scoped name
+    <code>TRIP_&lt;HEX&gt;.SIMPLE.A1</code>
+    (<code>cwLinePlotTask.cpp:479,498</code>) &rarr; miss &rarr; the
+    scrap never enters <code>result.Scraps</code>, so
+    <code>stationPositionInScrapsChanged</code> omits it and
+    <code>cwScrapManager</code> never remorphs. Additionally
+    <code>MapStationToTrip</code> is built <em>chunk-only</em>
+    (<code>cwLinePlotTask.cpp:141-144</code>) &mdash; the one genuine
+    enumeration sub-bug &mdash; so an external trip is absent from
+    <code>result.Trips</code>, which also gates
+    <code>stationPositionInTripsChanged</code> and thus the
+    <strong>LiDAR carpet</strong> recompute
+    (<code>cwNoteLiDARManager.cpp:214</code>).
+  </li>
+  <li>
+    <strong>Layer 2 &mdash; morph resolves nothing even if reached.</strong>
+    <code>cwTriangulateInData::computeStations()</code>
+    (<code>cwTriangulateInData.cpp:118</code>) resolves each note-station
+    name by exact canonical key against the prefixed lookup &rarr; zero
+    anchor stations &rarr; empty geometry. LiDAR's
+    <code>buildStationsWithInterpolatedShots</code>
+    (<code>cwTriangulateLiDARTask.cpp:29</code>, lookup set at
+    <code>cwNoteLiDARManager.cpp:533</code>) has the identical failure.
+  </li>
+</ul>
+<p>
+  <strong>Proposed fix (bridge the scope prefix at both boundaries; keep
+  the shared triangulator/lookup untouched):</strong> a single helper
+  <code>scopedStationName(trip, name)</code> that prepends
+  <code>cwLinePlotTask::cavernTripNameFor(trip-&gt;id()) + "."</code> for
+  an externally-backed trip (empty for native). Apply it (a) in the
+  <code>StationTripScrapLookup</code> ctor so the trigger maps key on the
+  scoped name (fixing both <code>MapStationToScrap</code> and, by adding
+  external-trip note/scrap stations, <code>MapStationToTrip</code>); and
+  (b) at the morph boundary &mdash; either scope the note-station names or
+  hand the triangulator a scope-local lookup (keys re-stripped) in
+  <code>cwScrapManager::mapScrapToTriangulateInData</code> and the LiDAR
+  equivalent. Files: <code>cwLinePlotTask.cpp</code>,
+  <code>cwScrapManager.cpp</code>, <code>cwNoteLiDARManager.cpp</code>
+  (+ possibly <code>cwTriangulateInData</code>). Dead code to drop while
+  here: <code>cwScrapManager::mapNoteStationsToTriangulateStation</code>
+  (defined, never called).
+</p>
+<p>
+  <strong>Proving tests written (2026-07-21, committed as
+  <code>[!shouldfail]</code> so they document the bug while the suite
+  stays green &mdash; drop the tag when B4 lands):</strong>
+</p>
+<ul>
+  <li>
+    <strong>Layer 2 (morph):</strong>
+    <code>test_cwTriangulateTask.cpp</code> &mdash; "cwTriangulateInData
+    resolves an external-scoped note station against the cave lookup"
+    (<code>[cwTriangulateInData][Attach][!shouldfail]</code>). Note
+    station <code>simple.a1</code> vs lookup key
+    <code>trip_&lt;hex&gt;.simple.a1</code> &rarr;
+    <code>computeStations()</code> returns 0 (should be 1).
+  </li>
+  <li>
+    <strong>Layer 1 (trigger):</strong>
+    <code>test_cwLinePlotTask_AttachInclude.cpp</code> &mdash;
+    "Externally attached scrap is flagged for remorph after a solve"
+    (<code>[Attach][Scrap][!shouldfail]</code>). Attaches an external
+    trip + note/scrap named <code>simple.a1</code>, solves, and asserts
+    the scrap appears in <code>stationPositionInScrapsChanged</code>;
+    today it never does.
+  </li>
+</ul>
+<p>
+  <strong>Still to write when B4 is fixed:</strong> end-to-end
+  <code>cwScrapManager</code> non-empty scrap geometry
+  (<code>test_cwScrapManager.cpp</code>) and the LiDAR parallel
+  (<code>test_cwNoteLiDARManager.cpp</code> /
+  <code>test_cwTriangulateLiDARTask.cpp</code>). Flip both
+  <code>[!shouldfail]</code> tags off at that point.
+</p>
+
+<h3 id="bug-b2">B2 &mdash; Trip page layout for attached survey data (split into testable commits)</h3>
+
+<p>
+  The <code>ExternalCenterlineTripPanel</code> content is mis-ordered,
+  over-decorated, and doesn't scroll. Target the ordering below and
+  split the work into independently-testable commits &mdash; each
+  sub-item lands as its own commit with its own QML (or C++) gate so a
+  regression in one doesn't block the others.
+</p>
+<p><strong>Target content order</strong> (top &rarr; bottom):</p>
+<pre><code>Cunchhold_cave.svx   Survex     [Reload now]  [Detach…]   &larr; header row
+24 stations
+View cavern output
+Date            &larr; label bold
+Declination
+Team            &larr; no "+" add affordance
+Stations list   &larr; denser rows; consider abbreviated UsedStations view</code></pre>
+<ul>
+  <li>
+    <strong>B2a &mdash; Element order + header row.</strong> Reorder
+    the panel so the file name, <code>Survex</code> format tag, and
+    <code>[Reload now]</code>/<code>[Detach…]</code> actions sit on
+    the header row, followed by the station count, the "View cavern
+    output" affordance, then Date / Declination / Team, then the
+    station list. Make the <strong>Date label bold</strong>. QML test:
+    assert relative <code>y</code> order of the objectName'd rows and
+    the Date label's <code>font.bold</code>.
+  </li>
+  <li>
+    <strong>B2b &mdash; Team without the "+".</strong> The external
+    trip's Team section still shows the add ("+") affordance; an
+    externally-backed trip's team is read-only. Hide/remove the add
+    control when the trip is externally backed. QML test: "+" not
+    visible for an attached trip. (Natural consumer of the &sect;15
+    <code>externallyBacked</code> predicate follow-up.)
+  </li>
+  <li>
+    <strong>B2c &mdash; Denser station list / abbreviated view.</strong>
+    The station <code>ListView</code> rows have too much vertical
+    spacing. Tighten row height/spacing, and evaluate reusing the
+    <code>UsedStations</code> abbreviated presentation instead of the
+    full per-row <code>ListView</code>. QML test: row spacing/height
+    within the tightened bound (or the abbreviated component present).
+  </li>
+  <li>
+    <strong>B2d &mdash; Wrap panel content in a ScrollView.</strong>
+    All panel content must live in a <code>ScrollView</code> so the
+    whole page scrolls on small/mobile viewports. QML test: with a
+    short panel height the content is reachable via scroll (contentY
+    range &gt; 0).
+  </li>
+  <li>
+    <strong>B2e &mdash; Right-click the file path to open it.</strong>
+    A context menu on the entry-file path with "Show in Finder /
+    Explorer" (reveal in the system file manager) and "Open" (system
+    default handler). Needs a small C++ invokable
+    (<code>QDesktopServices</code>/platform reveal); keep it on a
+    focused helper rather than in QML. Test: the invokable is called
+    with the resolved absolute path (C++), plus a QML test that the
+    menu exposes both actions.
+  </li>
+</ul>
+
+<h3 id="bug-b3">B3 &mdash; Detach confirm popover is clipped</h3>
+
+<p>
+  Clicking <code>[Detach…]</code> in the trip panel opens the
+  <code>RemoveAskBox</code> confirm popover, but it is
+  <strong>clipped</strong> by its container's bounds instead of
+  floating above the panel. Fix the popover's layering so it renders
+  fully within the window (a true <code>Popup</code>/overlay layer, or
+  re-parenting/z so it escapes the clipping ancestor &mdash; the panel
+  or its <code>ScrollView</code> from B2d is the likely clipper). QML
+  test: after opening the detach confirm, its bounds lie inside the
+  window and are not clipped by the panel. Relates to the &sect;15
+  "Split <code>RemoveAskBox</code> into a generic ConfirmPopover"
+  follow-up &mdash; fix the clipping here regardless of whether that
+  extraction happens.
+</p>
 
 </body>
 </html>

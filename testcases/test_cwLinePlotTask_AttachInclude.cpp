@@ -20,7 +20,12 @@
 #include "cwGeoReference.h"
 #include "cwLinePlotManager.h"
 #include "cwLinePlotTask.h"
+#include "cwNote.h"
+#include "cwNoteStation.h"
+#include "cwRenderLinePlot.h"
+#include "cwScrap.h"
 #include "cwShot.h"
+#include "cwSurveyNoteModel.h"
 #include "cwStation.h"
 #include "cwStationPositionLookup.h"
 #include "cwSurveyChunk.h"
@@ -218,6 +223,120 @@ TEST_CASE("Trip-attached centerline resolves stations under cave_<uuid>.trip_<uu
         INFO("expected key: " << key.toStdString());
         CHECK(lookup.hasPosition(key));
     }
+}
+
+TEST_CASE("Trip-attached centerline emits renderable line geometry",
+          "[Attach][Geometry]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    const QString attachDir = seedAttachment(tempSubdir(tempRoot, QStringLiteral("geom-attach")),
+                                             fixturePath(QStringLiteral("survex_simple.svx")));
+
+    cwCavingRegion region;
+    cwCave* cave = addEmptyCave(region, QStringLiteral("Alpha"));
+    cwTrip* attached = addEmptyTrip(cave, QStringLiteral("Attached"));
+    attached->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_simple.svx")));
+
+    // linePlot must outlive manager: the manager holds a raw pointer to it and
+    // its destructor drain can push geometry, so declare it first.
+    cwRenderLinePlot linePlot;
+    cwLinePlotManager manager;
+    manager.setRenderLinePlot(&linePlot);
+
+    QHash<QUuid, QString> tripDirs;
+    tripDirs.insert(attached->id(), attachDir);
+    manager.externalCenterlineManager()->setTripAttachmentDirs(tripDirs);
+    manager.setRegion(&region);
+    manager.waitToFinish();
+
+    REQUIRE_FALSE(manager.hasSolveError());
+
+    // The external stations solved and reached the cave lookup — this half
+    // works today (it is why the trip's station-list panel populates).
+    const cwStationPositionLookup& lookup = cave->stationPositionLookup();
+    const QString tripPrefix = QStringLiteral("trip_%1").arg(attached->id().toString(QUuid::Id128));
+    const QString a1Key = tripPrefix + QStringLiteral(".simple.a1");
+    const QString a2Key = tripPrefix + QStringLiteral(".simple.a2");
+    const QString a3Key = tripPrefix + QStringLiteral(".simple.a3");
+    REQUIRE(lookup.hasPosition(a1Key));
+    REQUIRE(lookup.hasPosition(a2Key));
+    REQUIRE(lookup.hasPosition(a3Key));
+
+    // The attached trip has no survey chunk, so its geometry is emitted from the
+    // solved network (cwLinePlotGeometry::emitNetworkScopeGeometry). Assert the
+    // external centerline reaches the render object as line-list vertices.
+    const QVector<QVector3D> points = linePlot.points();
+
+    // Two shots (a1->a2, a2->a3) => 4 non-indexed line-list vertices.
+    CHECK(points.size() == 4);
+
+    // Every solved external station appears as a geometry vertex, in the same
+    // world-origin-relative space as the lookup.
+    const auto containsPoint = [&](const QVector3D& p) {
+        for (const QVector3D& v : points) {
+            if ((v - p).lengthSquared() < 1e-6f) {
+                return true;
+            }
+        }
+        return false;
+    };
+    CHECK(containsPoint(lookup.position(a1Key)));
+    CHECK(containsPoint(lookup.position(a2Key)));
+    CHECK(containsPoint(lookup.position(a3Key)));
+}
+
+// B4 / Layer 1 — recompute trigger. A note+scrap on an externally attached trip,
+// anchored to an external station by its scope-stripped panel name ("simple.a1").
+// After a solve the manager should announce the scrap as changed so cwScrapManager
+// remorphs it, but the changed-scrap set is keyed on the bare note-station name
+// while cavern reports the scoped name ("TRIP_<HEX>.SIMPLE.A1"), so the scrap is
+// never flagged. [!shouldfail]: expected red until B4 is fixed (plan §16).
+TEST_CASE("Externally attached scrap is flagged for remorph after a solve",
+          "[Attach][Scrap][!shouldfail]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    const QString attachDir = seedAttachment(tempSubdir(tempRoot, QStringLiteral("scrap-attach")),
+                                             fixturePath(QStringLiteral("survex_simple.svx")));
+
+    cwCavingRegion region;
+    cwCave* cave = addEmptyCave(region, QStringLiteral("Alpha"));
+    cwTrip* attached = addEmptyTrip(cave, QStringLiteral("Attached"));
+    attached->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_simple.svx")));
+
+    cwNote* note = new cwNote(attached->notes());
+    attached->notes()->addNotes({note});
+    cwScrap* scrap = new cwScrap();
+    note->addScrap(scrap);
+
+    cwNoteStation noteStation;
+    noteStation.setName(QStringLiteral("simple.a1"));
+    noteStation.setPositionOnNote(QPointF(0.5, 0.5));
+    scrap->addStation(noteStation);
+
+    // changedScraps must outlive manager: the lambda captures it by reference
+    // and the manager's destructor drain can still emit, so declare it first.
+    QList<cwScrap*> changedScraps;
+
+    cwLinePlotManager manager;
+    QHash<QUuid, QString> tripDirs;
+    tripDirs.insert(attached->id(), attachDir);
+    manager.externalCenterlineManager()->setTripAttachmentDirs(tripDirs);
+
+    QObject::connect(&manager, &cwLinePlotManager::stationPositionInScrapsChanged,
+                     [&changedScraps](const QList<cwScrap*>& scraps) {
+                         changedScraps.append(scraps);
+                     });
+
+    manager.setRegion(&region);
+    manager.waitToFinish();
+
+    REQUIRE_FALSE(manager.hasSolveError());
+
+    CHECK(changedScraps.contains(scrap));
 }
 
 TEST_CASE("Cave-attached centerline skips trip loop and resolves under cave_<uuid>.*",

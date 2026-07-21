@@ -216,9 +216,12 @@ struct cwLinePlotTask::LinePlotWorker {
         }
         applyWorldOriginOffset(parsed.lookup, InputData.regionData.worldOrigin);
         updateStationPositionForCaves(parsed.lookup, result);
-        result.setRegionNetwork(std::move(parsed.network));
+        result.setRegionNetwork(parsed.network);
 
-        cwLinePlotGeometry::Result geometry = generateGeometry();
+        // The network carries the shot topology for externally-attached scopes,
+        // which have no cwSurveyChunk of their own. cwSurveyNetwork is
+        // implicitly shared, so this is a refcount bump, not a deep copy.
+        cwLinePlotGeometry::Result geometry = generateGeometry(parsed.network);
         result.setPositions(geometry.points);
         result.setTripVertexRanges(geometry.tripVertexRanges);
         result.setTripUuids(geometry.tripUuids);
@@ -339,10 +342,10 @@ private:
         return true;
     }
 
-    cwLinePlotGeometry::Result generateGeometry()
+    cwLinePlotGeometry::Result generateGeometry(const cwSurveyNetwork& network)
     {
         const Monad::Result<cwLinePlotGeometry::Result> result =
-            cwLinePlotGeometry::generate(Region.data());
+            cwLinePlotGeometry::generate(Region.data(), network);
         if (result.hasError()) {
             return cwLinePlotGeometry::Result();
         }

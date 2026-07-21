@@ -6,13 +6,16 @@
 **************************************************************************/
 
 #include "cwLinePlotGeometry.h"
+#include "cwLinePlotTask.h"
 #include "cwStation.h"
 
 #include <QHash>
 #include <QLineF>
 #include <QMap>
+#include <QSet>
 #include <QString>
 
+#include <algorithm>
 #include <limits>
 
 namespace {
@@ -30,10 +33,94 @@ QHash<QString, QVector3D> caveStationPositions(const cwCaveData& cave)
     return out;
 }
 
+// Depth/length extent for one emitted scope, folded back into the cave totals
+// by the caller.
+struct ScopeExtent {
+    double minDepth = std::numeric_limits<double>::max();
+    double maxDepth = -std::numeric_limits<double>::max();
+    double length = 0.0;
+    bool hasDepth = false;
+};
+
+// Emit line segments for an external-centerline scope (a trip or cave attached
+// to an external file), whose shot topology lives only in the solved survey
+// network. `scopePrefix` selects the scope's stations from the region-wide
+// network (e.g. "cave_<hex>.trip_<hex>."); coordinates are resolved through the
+// cave-local position lookup — network keys carry the "cave_<hex>." prefix that
+// the lookup strips, so `cavePrefix` bridges the two.
+ScopeExtent emitNetworkScopeGeometry(const cwSurveyNetwork& network,
+                                     const QString& cavePrefix,
+                                     const QString& scopePrefix,
+                                     const QHash<QString, QVector3D>& stationPositions,
+                                     QVector<QVector3D>& points)
+{
+    ScopeExtent extent;
+
+    const auto resolveNetworkStation = [&](const QString& networkKey, QVector3D* out) -> bool {
+        QString local = networkKey;
+        if (local.startsWith(cavePrefix)) {
+            local = local.sliced(cavePrefix.size());
+        }
+        const auto it = stationPositions.constFind(cwStation::canonicalKey(local));
+        if (it == stationPositions.constEnd()) {
+            return false;
+        }
+        *out = it.value();
+        return true;
+    };
+
+    // Undirected de-dup: each in-scope station lists its neighbours, so every
+    // internal leg would otherwise be emitted twice (once from each endpoint).
+    QSet<QString> emitted;
+    // network.stations() comes from a QHash (per-process-randomised order);
+    // sort so the emitted vertex buffer is reproducible run to run, matching
+    // the deterministic native chunk path.
+    QStringList stations = network.stations();
+    std::sort(stations.begin(), stations.end());
+    for (const QString& station : stations) {
+        if (!station.startsWith(scopePrefix)) {
+            continue;
+        }
+        QVector3D from;
+        if (!resolveNetworkStation(station, &from)) {
+            continue;
+        }
+
+        const QStringList neighbors = network.neighbors(station);
+        for (const QString& neighbor : neighbors) {
+            const QString undirectedKey = (station < neighbor)
+                ? station + QLatin1Char('\n') + neighbor
+                : neighbor + QLatin1Char('\n') + station;
+            if (emitted.contains(undirectedKey)) {
+                continue;
+            }
+            QVector3D to;
+            if (!resolveNetworkStation(neighbor, &to)) {
+                continue;
+            }
+            emitted.insert(undirectedKey);
+
+            extent.minDepth = qMin(extent.minDepth, qMin((double)from.z(), (double)to.z()));
+            extent.maxDepth = qMax(extent.maxDepth, qMax((double)from.z(), (double)to.z()));
+            extent.hasDepth = true;
+            // The solved network carries no per-shot distance-included flag, so
+            // every leg counts toward length (unlike the native chunk path,
+            // which honors shot.isDistanceIncluded()).
+            extent.length += QVector3D(to - from).length();
+
+            points.append(from);
+            points.append(to);
+        }
+    }
+
+    return extent;
+}
+
 } // namespace
 
 Monad::Result<cwLinePlotGeometry::Result>
-cwLinePlotGeometry::generate(const cwCavingRegionData& region)
+cwLinePlotGeometry::generate(const cwCavingRegionData& region,
+                             const cwSurveyNetwork& network)
 {
     Result result;
 
@@ -43,6 +130,13 @@ cwLinePlotGeometry::generate(const cwCavingRegionData& region)
     for (int caveIndex = 0; caveIndex < caveCount; caveIndex++) {
         const cwCaveData& cave = region.caves.at(caveIndex);
         const QHash<QString, QVector3D> stationPositions = caveStationPositions(cave);
+
+        // Network keys are region-wide ("cave_<hex>.trip_<hex>.<tail>"); the
+        // cave-local lookup strips this cave prefix, so external scopes bridge
+        // through it. cave.name has already been rewritten to cave_<hex> by the
+        // worker, so cavernCaveNameFor(cave.id) reproduces the network prefix.
+        const QString cavePrefix =
+            cwLinePlotTask::cavernCaveNameFor(cave.id) + QLatin1Char('.');
 
         double minDepth = std::numeric_limits<double>::max();
         double maxDepth = -std::numeric_limits<double>::max();
@@ -66,6 +160,26 @@ cwLinePlotGeometry::generate(const cwCavingRegionData& region)
                 *out = posIt.value();
                 return true;
             };
+
+            // An externally-attached trip has no chunk topology of its own; its
+            // shots live only in the solved network. Emit those segments and
+            // skip the chunk walk entirely.
+            if (!trip.externalCenterline.isEmpty()) {
+                const QString scopePrefix =
+                    cavePrefix + cwLinePlotTask::cavernTripNameFor(trip.id) + QLatin1Char('.');
+                const ScopeExtent extent = emitNetworkScopeGeometry(
+                    network, cavePrefix, scopePrefix, stationPositions, result.points);
+                if (extent.hasDepth) {
+                    minDepth = qMin(minDepth, extent.minDepth);
+                    maxDepth = qMax(maxDepth, extent.maxDepth);
+                    length += extent.length;
+                    hasDepth = true;
+                }
+
+                const int vertexCount = result.points.size() - vertexStart;
+                result.tripVertexRanges.append(VertexRange{vertexStart, vertexCount});
+                continue;
+            }
 
             for (const cwSurveyChunkData& chunk : trip.chunks) {
                 if (chunk.stations.size() < 2) {

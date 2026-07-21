@@ -8,6 +8,7 @@
 #include "cwTrip.h"
 #include "cwSurveyChunk.h"
 #include "cwLinePlotManager.h"
+#include "cwExternalCenterlineManager.h"
 #include "cwStationPositionLookup.h"
 #include "cwLabel3dGroup.h"
 #include "cwLabel3dItem.h"
@@ -16,11 +17,18 @@
 #include "cwKeywordModel.h"
 #include "cwKeyword.h"
 
+//Test helpers
+#include "ExternalCenterlineTestHelpers.h"
+
 //Qt includes
 #include <QCoreApplication>
+#include <QHash>
 #include <QQmlComponent>
 #include <QQmlEngine>
 #include <QMetaObject>
+#include <QStringList>
+#include <QTemporaryDir>
+#include <QUuid>
 #include <memory>
 
 // Regression: issue #434 — removing an empty cave used to crash with a
@@ -231,4 +239,76 @@ TEST_CASE("cwLinePlotLabelView registers per-trip station label keyword visibili
 
         CHECK(keywordModel.rowCount() == 1);
     }
+}
+
+// An externally-attached trip owns no cwSurveyChunk, so trip->uniqueStations()
+// is empty and the view produced no station labels — the line plot drew but its
+// stations were unlabeled. The labels must instead come from the solved cave
+// lookup (scope prefix trip_<uuid>.), named with the scope-relative tail that
+// cwScopeStationListModel's panel shows.
+TEST_CASE("cwLinePlotLabelView shows station labels for an externally attached trip",
+          "[cwLinePlotLabelView][Attach]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    const QString attachDir = tempSubdir(tempRoot, QStringLiteral("labels-attach"));
+    seedAttachment(attachDir, fixturePath(QStringLiteral("survex_simple.svx")));
+
+    cwCavingRegion region;
+    cwCave* cave = addEmptyCave(region, QStringLiteral("Alpha"));
+    cwTrip* attached = addAttachedTrip(cave, QStringLiteral("Attached"));
+
+    cwLinePlotManager manager;
+    QHash<QUuid, QString> tripDirs;
+    tripDirs.insert(attached->id(), attachDir);
+    manager.externalCenterlineManager()->setTripAttachmentDirs(tripDirs);
+    manager.setRegion(&region);
+    manager.waitToFinish();
+
+    REQUIRE_FALSE(manager.hasSolveError());
+
+    // The label view builds label data from a QQmlComponent, so it must live in
+    // a QML context (as in the fixtures above).
+    cwKeywordItemModel keywordModel;
+
+    QQmlEngine engine;
+    const char* rootQml =
+        "import QtQuick\n"
+        "import cavewherelib\n"
+        "Item {\n"
+        "  width: 200; height: 200\n"
+        "  LinePlotLabelView { objectName: \"labelView\" }\n"
+        "}\n";
+
+    QQmlComponent component(&engine);
+    component.setData(QByteArray(rootQml), QUrl());
+    std::unique_ptr<QObject> root(component.create());
+    REQUIRE(root != nullptr);
+
+    auto labelView = root->findChild<cwLinePlotLabelView*>("labelView");
+    REQUIRE(labelView != nullptr);
+
+    labelView->setKeywordItemModel(&keywordModel);
+    labelView->setRegion(&region);
+
+    // The attached trip is the region's only trip; the view registers a label
+    // keyword item only when the trip has labels, so its external stations must
+    // produce exactly one row.
+    REQUIRE(keywordModel.rowCount() == 1);
+
+    cwLabel3dGroup* group = groupForKeywordItem(keywordModel.item(0));
+    REQUIRE(group != nullptr);
+
+    QStringList labelTexts;
+    for (const cwLabel3dItem& label : group->labels()) {
+        labelTexts.append(label.text());
+    }
+
+    // survex_simple.svx: *begin Simple with a1, a2, a3, named with the
+    // scope-relative tail (matching the trip's station-list panel).
+    CHECK(labelTexts.size() == 3);
+    CHECK(labelTexts.contains(QStringLiteral("simple.a1")));
+    CHECK(labelTexts.contains(QStringLiteral("simple.a2")));
+    CHECK(labelTexts.contains(QStringLiteral("simple.a3")));
 }

@@ -11,6 +11,7 @@
 #include "CaveWhereLibExport.h"
 #include "Monad/Result.h"
 #include "cwCavingRegionData.h"
+#include "cwSurveyNetwork.h"
 
 #include <QVector>
 #include <QVector3D>
@@ -22,6 +23,12 @@
  * Iterates the region's caves, trips and survey chunks; produces a vector of
  * station positions laid out as a non-indexed line list and per-cave
  * length/depth values.
+ *
+ * A trip attached to an external centerline owns no cwSurveyChunk — its shot
+ * topology exists only in the solved survey network. For those scopes the
+ * segments are read from `network` instead (coordinates still come from the
+ * cave's position lookup, so both paths share the world-origin-relative
+ * space). Pass an empty network when there are no external scopes.
  *
  * Vertices are de-shared per shot: each drawn shot owns its own two endpoint
  * vertices (points[2i] = from, points[2i+1] = to), so a station reused by
@@ -72,7 +79,8 @@ public:
         QVector<CaveLengthAndDepth> cavesLengthAndDepths;
     };
 
-    static Monad::Result<Result> generate(const cwCavingRegionData& region);
+    static Monad::Result<Result> generate(const cwCavingRegionData& region,
+                                          const cwSurveyNetwork& network = cwSurveyNetwork());
 };
 
 #endif // CWLINEPLOTGEOMETRY_H
