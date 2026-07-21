@@ -11,6 +11,7 @@
 //Qt includes
 #include <QObject>
 #include <QList>
+#include <QSet>
 #include <QUuid>
 #include <QQmlEngine>
 
@@ -82,7 +83,26 @@ public:
 private:
     QList<FixCandidate> gatherCandidates() const;
 
+    //! Reclassify and push a Warning onto each offending cave's errorModel (and
+    //! clear it from caves that no longer offend). Driven entirely by this
+    //! object's own connections to the caves' fix stations and the region's CS,
+    //! so a fix-coordinate edit re-attributes without an external trigger.
+    void revalidate();
+
+    void syncCaveConnections();
+    void setCaveWarning(cwCave* cave, const QString& message);
+
     cwCavingRegion* m_region = nullptr;
+
+    //! Caves whose fixStations we hold live connections to, so a cave leaving the
+    //! region can be torn down (and its warning cleared) before it is destroyed.
+    QSet<cwCave*> m_connectedCaves;
+
+    //! Caves that currently carry our outlier Warning. The row itself is located
+    //! in the cave's errorModel by its stable errorTypeId, so no cwError copy is
+    //! mirrored here — a copy would stop matching the row once the user suppresses
+    //! it (cwError equality includes the suppressed flag).
+    QSet<cwCave*> m_cavesWithWarning;
 };
 
 #endif // CWFIXSTATIONVALIDATOR_H

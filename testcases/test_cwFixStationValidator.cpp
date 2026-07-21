@@ -8,6 +8,9 @@
 //Our includes
 #include "cwCave.h"
 #include "cwCavingRegion.h"
+#include "cwError.h"
+#include "cwErrorListModel.h"
+#include "cwErrorModel.h"
 #include "cwFixStation.h"
 #include "cwFixStationModel.h"
 #include "cwFixStationValidator.h"
@@ -18,6 +21,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 //Qt includes
+#include <QSignalSpy>
 #include <QUuid>
 
 namespace {
@@ -44,6 +48,20 @@ cwFixStation makeFix(const QString& name,
     fix.setNorthing(northing);
     fix.setElevation(elevation);
     return fix;
+}
+
+// Append four fixes in a tight EPSG:32612 cluster — enough to establish a
+// cluster so a fifth straggler can be judged an outlier.
+void appendGoodCluster(cwCave* cave)
+{
+    cave->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("A1"), QStringLiteral("EPSG:32612"), 500000.0, 4194000.0, 2700.0));
+    cave->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("A2"), QStringLiteral("EPSG:32612"), 500200.0, 4194100.0, 2710.0));
+    cave->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("A3"), QStringLiteral("EPSG:32612"), 499900.0, 4193900.0, 2705.0));
+    cave->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("A4"), QStringLiteral("EPSG:32612"), 500100.0, 4193950.0, 2708.0));
 }
 
 } // namespace
@@ -254,6 +272,177 @@ TEST_CASE("currentClassification drops invalid-CS fixes and falls back for empty
 
     CHECK(result.outliers.isEmpty());
     CHECK(result.inliers.size() == 5);
+}
+
+TEST_CASE("revalidate attributes an outlier warning to its cave",
+          "[cwFixStationValidator]")
+{
+    cwCavingRegion region;
+    region.geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32612"));
+
+    region.addCave();
+    auto* cave = region.cave(0);
+    REQUIRE(cave != nullptr);
+    appendGoodCluster(cave);
+
+    // No outlier yet — the four-fix cluster is clean.
+    CHECK(cave->errorModel()->warningCount() == 0);
+
+    // Editing the model fires the validator's own connections, so appending the
+    // typo re-attributes with no manual revalidate() call.
+    cave->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("Bad"), QStringLiteral("EPSG:32612"), 500150.0, 5194000.0, 2708.0));
+
+    REQUIRE(cave->errorModel()->warningCount() == 1);
+    CHECK(cave->errorModel()->toStringList().join(QChar(' ')).contains(QStringLiteral("Bad")));
+}
+
+TEST_CASE("revalidate clears the warning when the outlier is corrected",
+          "[cwFixStationValidator]")
+{
+    cwCavingRegion region;
+    region.geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32612"));
+
+    region.addCave();
+    auto* cave = region.cave(0);
+    REQUIRE(cave != nullptr);
+    appendGoodCluster(cave);
+    cave->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("Bad"), QStringLiteral("EPSG:32612"), 500150.0, 5194000.0, 2708.0));
+    REQUIRE(cave->errorModel()->warningCount() == 1);
+
+    // Correct the typo in place — the northing back into the cluster.
+    const int badRow = cave->fixStations()->count() - 1;
+    cave->fixStations()->setData(cave->fixStations()->index(badRow),
+                                 4194050.0,
+                                 cwFixStationModel::NorthingRole);
+
+    CHECK(cave->errorModel()->warningCount() == 0);
+}
+
+TEST_CASE("revalidate updates an existing warning in place without re-adding",
+          "[cwFixStationValidator]")
+{
+    cwCavingRegion region;
+    region.geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32612"));
+
+    region.addCave();
+    auto* cave = region.cave(0);
+    REQUIRE(cave != nullptr);
+    appendGoodCluster(cave);
+    cave->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("Bad"), QStringLiteral("EPSG:32612"), 500150.0, 5194000.0, 2708.0));
+    REQUIRE(cave->errorModel()->warningCount() == 1);
+
+    const QString firstMessage = cave->errorModel()->toStringList().join(QChar(' '));
+
+    // Moving the outlier to a different far coordinate should update the same
+    // warning row (new distance) rather than remove-and-append a new one.
+    QSignalSpy warningSpy(cave->errorModel(), &cwErrorModel::warningCountChanged);
+    const int badRow = cave->fixStations()->count() - 1;
+    cave->fixStations()->setData(cave->fixStations()->index(badRow),
+                                 6194000.0,
+                                 cwFixStationModel::NorthingRole);
+
+    CHECK(cave->errorModel()->warningCount() == 1);
+    CHECK(warningSpy.size() == 0);
+    CHECK(cave->errorModel()->toStringList().join(QChar(' ')) != firstMessage);
+}
+
+TEST_CASE("revalidate preserves a suppressed outlier warning across edits",
+          "[cwFixStationValidator]")
+{
+    cwCavingRegion region;
+    region.geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32612"));
+
+    region.addCave();
+    auto* cave = region.cave(0);
+    REQUIRE(cave != nullptr);
+    appendGoodCluster(cave);
+    cave->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("Bad"), QStringLiteral("EPSG:32612"), 500150.0, 5194000.0, 2708.0));
+
+    cwErrorListModel* errors = cave->errorModel()->errors();
+    REQUIRE(errors->size() == 1);
+
+    // The user suppresses the outlier warning.
+    errors->setData(errors->index(0), true,
+                    static_cast<int>(cwErrorListModel::ErrorRoles::SuppressedRole));
+    REQUIRE(errors->at(0).suppressed());
+    REQUIRE(cave->errorModel()->warningCount() == 0);
+
+    // Moving the outlier changes the warning text: the validator must update the
+    // SAME (still-suppressed) row, not orphan it and append a fresh unsuppressed
+    // duplicate. Locating the row by value would fail once suppressed.
+    const int badRow = cave->fixStations()->count() - 1;
+    cave->fixStations()->setData(cave->fixStations()->index(badRow),
+                                 6194000.0,
+                                 cwFixStationModel::NorthingRole);
+
+    CHECK(errors->size() == 1);
+    CHECK(errors->at(0).suppressed());
+    CHECK(cave->errorModel()->warningCount() == 0);
+
+    // Correcting the outlier clears the suppressed warning rather than leaving it
+    // stuck on a row the validator can no longer find.
+    cave->fixStations()->setData(cave->fixStations()->index(badRow),
+                                 4194050.0,
+                                 cwFixStationModel::NorthingRole);
+    CHECK(errors->size() == 0);
+}
+
+TEST_CASE("revalidate clears the warning when its cave leaves the region",
+          "[cwFixStationValidator]")
+{
+    cwCavingRegion region;
+    region.geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32612"));
+
+    // Cave 0 stays clean; cave 1 carries an outlier warning.
+    region.addCave();
+    auto* keepCave = region.cave(0);
+    REQUIRE(keepCave != nullptr);
+    appendGoodCluster(keepCave);
+
+    region.addCave();
+    auto* doomedCave = region.cave(1);
+    REQUIRE(doomedCave != nullptr);
+    appendGoodCluster(doomedCave);
+    doomedCave->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("Bad"), QStringLiteral("EPSG:32612"), 500150.0, 5194000.0, 2708.0));
+    REQUIRE(doomedCave->errorModel()->warningCount() == 1);
+
+    // Removing the offending cave must tear down its fix-station connection and
+    // clear its warning while the cave is still alive (it outlives removal via the
+    // undo command's deleteLater), without disturbing the surviving cave.
+    region.removeCave(1);
+
+    CHECK(doomedCave->errorModel()->warningCount() == 0);
+    CHECK(keepCave->errorModel()->warningCount() == 0);
+}
+
+TEST_CASE("revalidate raises no warning without a region global CS",
+          "[cwFixStationValidator]")
+{
+    // No region global CS: two caves whose fixes are entered in different input
+    // CSs would, compared as raw coordinates, look wildly far apart. Skipping
+    // classification until a global CS exists keeps a legitimate station from
+    // being flagged as an outlier.
+    cwCavingRegion region;
+
+    region.addCave();
+    auto* utmCave = region.cave(0);
+    REQUIRE(utmCave != nullptr);
+    appendGoodCluster(utmCave);
+
+    region.addCave();
+    auto* wgsCave = region.cave(1);
+    REQUIRE(wgsCave != nullptr);
+    // Raw WGS84 degrees sit ~4000 km from the UTM eastings/northings above.
+    wgsCave->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("W1"), QStringLiteral("EPSG:4326"), -111.0, 37.871, 2700.0));
+
+    CHECK(utmCave->errorModel()->warningCount() == 0);
+    CHECK(wgsCave->errorModel()->warningCount() == 0);
 }
 
 TEST_CASE("classifyCandidates flags an elevation-only outlier",

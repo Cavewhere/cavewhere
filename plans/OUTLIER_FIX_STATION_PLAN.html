@@ -147,7 +147,10 @@ public:
     QString warningMessage() const;                    // render-view summary ("" when clean)
     int outlierCount() const;
 
-public slots:
+private:
+    // Landed private (not a public slot): the self-owned connections — each cave's
+    // fix stations + the region CS — invoke it; no external caller. Tracks offending
+    // caves in QSet&lt;cwCave*&gt; m_cavesWithWarning (rows found by stable errorTypeId).
     void revalidate();          // recompute + append/remove cwError on each cave
 
 signals:
@@ -382,15 +385,14 @@ wired into existing components.</p>
   <li><span class="pill new">new</span> tests — <code>SignalSpy</code> on <code>cave.errorModel().warningCount</code>;
   warning appears on typo, clears on correction, updates in place on edit. Lights up the cave-list badge for free.</li>
 </ul>
-<div class="callout warn">
-  <b>Review before implementing — empty global CS.</b> When <code>geoReference()-&gt;globalCoordinateSystem()</code>
-  is empty, <code>gatherCandidates()</code> takes every fix's <i>raw</i> coordinate with no reprojection target
-  (<code>cwFixStationValidator.cpp:151-153</code>), so two caves whose fixes use <i>different</i> input CSs would be
-  compared as raw eastings and a legitimate station could be flagged. It mirrors today's
-  <code>recomputeWorldOrigin()</code> behavior and is harmless while nothing triggers classification without a
-  global CS — but Commit 3 wires the self-owned triggers, which is exactly where that assumption stops holding.
-  Decide here: skip classification when the global CS is empty (recommended), or require a global CS before
-  gathering. Add a test for the empty-global-CS + mixed-input-CS case.
+<div class="callout ok">
+  <b>Decided (implemented) — empty global CS ⇒ skip classification.</b> When
+  <code>geoReference()-&gt;globalCoordinateSystem()</code> is empty there is no common frame to reproject into, so
+  <code>currentClassification()</code> now short-circuits to an empty result and the old <i>raw</i>-coordinate
+  fallback branch was <b>removed</b> from <code>gatherCandidates()</code> (its sole caller now guarantees a
+  non-empty CS). This also means <code>robustWorldOrigin()</code> returns <code>nullopt</code> with no global CS,
+  so <code>recomputeWorldOrigin()</code> leaves the origin untouched — the intended behavior. Covered by the test
+  "revalidate raises no warning without a region global CS" (empty-global-CS + mixed-input-CS).
 </div>
 
 <h3><span class="commit">Commit 4</span> — CavePage banner (QML)</h3>
@@ -474,6 +476,19 @@ wired into existing components.</p>
   <code>cwGeoReference::reproject(cwGeoPoint, inputCS) → std::optional&lt;cwGeoPoint&gt;</code> on the CS authority
   itself (blast radius: one method + 1–2 callers). Deferred because the duplication self-resolves in Commit 2; this
   is a further consolidation, and routing everything through the validator is a defensible alternative.</li>
+  <li><b>Shared <code>cwError</code> lifecycle helper</b> (surfaced by the Commit 3 review). <code>setCaveWarning()</code>
+  is now the <i>second</i> hand-rolled copy of the "own one suppressible <code>cwError</code> against an
+  <code>errorModel</code>, reconcile on text change (append / <code>setData(MessageRole)</code> in place / remove)"
+  pattern; the first is <code>cwTripCalibration</code>'s declination warning, and the two have already diverged
+  (this one sets an <code>errorTypeId</code>, the trip one doesn't). A shared <code>cwManagedError</code> (owns a
+  <code>cwError</code> + target <code>cwErrorModel*</code>; <code>set(message,type,typeId)</code> / <code>clear()</code>,
+  finding its row by stable <code>errorTypeId</code>) would collapse both. Blast radius: new small helper + 2 callers
+  (touches <code>cwTripCalibration</code>, unrelated to #596, so its own commit + tests).</li>
+  <li><b>Central <code>errorTypeId</code> registry</b> (surfaced by the Commit 3 review). <code>kOutlierErrorTypeId = 596</code>
+  is the codebase's <i>only</i> <code>setErrorTypeId()</code> call and silently establishes an issue-number-as-id
+  convention that the suppression-serialization layer keys on. The moment a second id appears (e.g. the trip
+  declination warning growing a stable id), an <code>enum class cwErrorTypeId</code> prevents collision. Premature
+  with exactly one id.</li>
 </ul>
 
 <hr>
