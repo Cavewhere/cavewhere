@@ -113,6 +113,19 @@ StandardPage {
                             }
     }
 
+    ErrorHelpArea {
+        id: outlierWarningBanner
+        objectName: "outlierWarningBanner"
+
+        // The cave's own non-suppressed warnings (the fix-station outlier among
+        // them), joined for the banner. Read straight off the cave's errorModel
+        // list — trip warnings live in child models, so they never leak in here.
+        text: cavePageArea.currentCave
+              ? cavePageArea.currentCave.errorModel.errors.warningMessages.join("<br>")
+              : ""
+        visible: text.length > 0
+    }
+
     SelectableCaveStat {
         id: lengthStat
         label: "Length:"
@@ -304,6 +317,11 @@ StandardPage {
                 spacing: Theme.flowSpacing
 
                 LayoutItemProxy { target: caveNameText }
+
+                LayoutItemProxy {
+                    target: cavePageArea.isNarrow ? null : outlierWarningBanner
+                    Layout.fillWidth: true
+                }
 
                 QQ.Rectangle {
                     Layout.fillWidth: true
@@ -684,6 +702,11 @@ StandardPage {
                     onFinishedEditting: (newText) => {
                                             cavePageArea.currentCave.name = newText
                                         }
+                }
+
+                LayoutItemProxy {
+                    target: cavePageArea.isNarrow ? outlierWarningBanner : null
+                    Layout.fillWidth: true
                 }
 
                 QQ.Flow {

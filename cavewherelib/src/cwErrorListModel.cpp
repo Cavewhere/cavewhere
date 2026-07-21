@@ -25,6 +25,17 @@ int cwErrorListModel::count() const
     return m_errors.size();
 }
 
+QStringList cwErrorListModel::warningMessages() const
+{
+    QStringList messages;
+    for (const cwError& error : m_errors) {
+        if (error.type() == cwError::Warning && !error.suppressed()) {
+            messages.append(error.message());
+        }
+    }
+    return messages;
+}
+
 cwError cwErrorListModel::at(int index) const
 {
     if (index >= 0 && index < m_errors.size()) {
@@ -49,6 +60,7 @@ void cwErrorListModel::clear()
     endRemoveRows();
 
     emit countChanged();
+    emit warningMessagesChanged();
 }
 
 void cwErrorListModel::remove(int index)
@@ -62,6 +74,7 @@ void cwErrorListModel::remove(int index)
     endRemoveRows();
 
     emit countChanged();
+    emit warningMessagesChanged();
 }
 
 void cwErrorListModel::remove(const cwError &error)
@@ -80,6 +93,7 @@ void cwErrorListModel::insert(int index, const cwError &error)
     endInsertRows();
 
     emit countChanged();
+    emit warningMessagesChanged();
 }
 
 void cwErrorListModel::insert(int index, const QList<cwError> &errors)
@@ -95,6 +109,7 @@ void cwErrorListModel::insert(int index, const QList<cwError> &errors)
     endInsertRows();
 
     emit countChanged();
+    emit warningMessagesChanged();
 }
 
 
@@ -143,6 +158,7 @@ bool cwErrorListModel::setData(const QModelIndex &index, const QVariant &value, 
         }
         error.setSupressed(newValue);
         emit dataChanged(index, index, {static_cast<int>(ErrorRoles::SuppressedRole)});
+        emit warningMessagesChanged();
         return true;
     }
     case static_cast<int>(ErrorRoles::MessageRole): {
@@ -153,6 +169,7 @@ bool cwErrorListModel::setData(const QModelIndex &index, const QVariant &value, 
         }
         error.setMessage(newValue);
         emit dataChanged(index, index, {static_cast<int>(ErrorRoles::MessageRole)});
+        emit warningMessagesChanged();
         return true;
     }
     default:
@@ -167,6 +184,7 @@ void cwErrorListModel::append(const cwError &error)
     endInsertRows();
 
     emit countChanged();
+    emit warningMessagesChanged();
 }
 
 void cwErrorListModel::append(const QList<cwError> &errors)
@@ -180,6 +198,7 @@ void cwErrorListModel::append(const QList<cwError> &errors)
     endInsertRows();
 
     emit countChanged();
+    emit warningMessagesChanged();
 }
 
 QString cwErrorListModel::allMessagesAsText() const

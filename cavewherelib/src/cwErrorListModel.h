@@ -12,6 +12,7 @@
 //Qt includes
 #include <QQmlEngine>
 #include <QAbstractListModel>
+#include <QStringList>
 
 //Our inculdes
 #include "cwError.h"
@@ -23,6 +24,7 @@ class CAVEWHERE_LIB_EXPORT cwErrorListModel : public QAbstractListModel {
     QML_NAMED_ELEMENT(ErrorListModel)
 
     Q_PROPERTY(int count READ count NOTIFY countChanged FINAL)
+    Q_PROPERTY(QStringList warningMessages READ warningMessages NOTIFY warningMessagesChanged FINAL)
 
     Q_ENUMS(ErrorRoles)
 
@@ -38,6 +40,7 @@ public:
 
     int roleForName(const QByteArray& roleName) const;
     int count() const;
+    QStringList warningMessages() const;
     cwError at(int index) const;
     int indexOf(const cwError& error) const;
     QList<cwError> toList() const { return m_errors; }
@@ -67,6 +70,7 @@ public slots:
 
 signals:
     void countChanged();
+    void warningMessagesChanged();
 
 
 private:

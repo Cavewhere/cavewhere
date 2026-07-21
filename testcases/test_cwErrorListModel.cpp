@@ -205,3 +205,56 @@ TEST_CASE("Basic QML Gadget List operations") {
     }
 }
 
+TEST_CASE("warningMessages lists only active warnings") {
+    cwErrorListModel model;
+
+    cwError warning;
+    warning.setMessage("watch out");
+    warning.setType(cwError::Warning);
+
+    cwError fatal;
+    fatal.setMessage("kaboom");
+    fatal.setType(cwError::Fatal);
+
+    SECTION("empty model has no warning messages") {
+        CHECK(model.warningMessages().isEmpty());
+    }
+
+    SECTION("only non-suppressed warnings are listed") {
+        model.append(warning);
+        model.append(fatal);
+
+        //Fatal errors are excluded — the list is warnings only
+        CHECK(model.warningMessages() == QStringList{QStringLiteral("watch out")});
+    }
+
+    SECTION("warningMessagesChanged fires and content updates across the lifecycle") {
+        cwSignalSpy changedSpy(&model, SIGNAL(warningMessagesChanged()));
+
+        model.append(warning);
+        CHECK(changedSpy.count() == 1);
+        CHECK(model.warningMessages() == QStringList{QStringLiteral("watch out")});
+
+        //Suppressing the warning drops it from the list and notifies
+        model.setData(model.index(0), true, static_cast<int>(cwErrorListModel::ErrorRoles::SuppressedRole));
+        CHECK(changedSpy.count() == 2);
+        CHECK(model.warningMessages().isEmpty());
+
+        //Un-suppressing brings it back
+        model.setData(model.index(0), false, static_cast<int>(cwErrorListModel::ErrorRoles::SuppressedRole));
+        CHECK(changedSpy.count() == 3);
+        CHECK(model.warningMessages() == QStringList{QStringLiteral("watch out")});
+
+        //A message edit re-notifies and updates the text
+        model.setData(model.index(0), QStringLiteral("watch out more"),
+                      static_cast<int>(cwErrorListModel::ErrorRoles::MessageRole));
+        CHECK(changedSpy.count() == 4);
+        CHECK(model.warningMessages() == QStringList{QStringLiteral("watch out more")});
+
+        //Removing the warning empties the list and notifies
+        model.remove(0);
+        CHECK(changedSpy.count() == 5);
+        CHECK(model.warningMessages().isEmpty());
+    }
+}
+
