@@ -20,7 +20,7 @@ class cwSketch;
 #include "cwSurveyNoteLiDARModel.h"
 #include "cwSurveyNoteSketchModel.h"
 #include "cwGlobals.h"
-#include "cwUniqueConnectionChecker.h"
+#include "cwConnectionRegistry.h"
 
 //Qt includes
 #include <QAbstractItemModel>
@@ -183,8 +183,9 @@ private:
 
     QPointer<cwCavingRegion> Region;
 
-    //For debugging connections, this will no-op in release mode
-    cwUniqueConnectionChecker m_connectionChecker;
+    //Couples the debug connection-checker with connect/disconnect; no-ops the checker
+    //in release mode. Receiver is this model.
+    cwConnectionRegistry m_connectionRegistry{this};
 
     void addCaveConnections(int beginIndex, int endIndex, bool recusive = true);
     void removeCaveConnections(int beginIndex, int endIndex, bool recursive = true);
@@ -195,13 +196,34 @@ private:
     void addNoteConnections(cwTrip* parentTrip, int beginIndex, int endIndex);
     void removeNoteConnections(cwTrip* parentTrip, int beginIndex, int endIndex);
 
-    void beginRemoveTrips(cwCave* parentCave, int begin, int end);
-    void beginRemoveNotes(cwTrip* parentTrip, int begin, int end);
-    void beginRemoveScraps(cwNote* parentNote, int  begin, int end);
+    // Single source of truth for the per-trip objects the model observes. Both
+    // addTripConnections and removeTripConnections iterate this same list, so the
+    // connect set and the disconnect set cannot drift apart (issue #576).
+    static QList<QObject*> tripConnectionObjects(cwTrip* trip);
 
-    void insertedTrips(cwCave* parentCave, int begin, int end);
-    void insertedNotes(cwTrip* parentTrip, int begin, int end);
-    void insertedScraps(cwNote* parentNote, int begin, int end);
+    // connectObject() records the object in m_connectionRegistry and, if newly recorded,
+    // wires its row signals via wireObjectSignals(); disconnectObject() unrecords it and
+    // tears every connection to this model down. Routing both through the registry keeps
+    // the connect and disconnect sets from drifting (issue #576).
+    bool connectObject(QObject* object);
+    void disconnectObject(QObject* object);
+    void wireObjectSignals(QObject* object);
+
+    // Wires a flat (non-recursive) note model's row signals straight through to this
+    // model's begin/end rows. Shared by the LiDAR and sketch containers, which differ
+    // only in type; index(model) resolves to the matching overload per instantiation.
+    template <typename Model>
+    void connectFlatModel(Model* model);
+
+    // Named distinctly from the same-purpose slots above so callers and connect()
+    // sites need no qOverload<> disambiguation.
+    void beginRemoveTripsForCave(cwCave* parentCave, int begin, int end);
+    void beginRemoveNotesForTrip(cwTrip* parentTrip, int begin, int end);
+    void beginRemoveScrapsForNote(cwNote* parentNote, int  begin, int end);
+
+    void insertedTripsForCave(cwCave* parentCave, int begin, int end);
+    void insertedNotesForTrip(cwTrip* parentTrip, int begin, int end);
+    void insertedScrapsForNote(cwNote* parentNote, int begin, int end);
 
     template <typename ReturnType, typename GetFunc>
     ReturnType get(const QModelIndex& rowIndex, GetFunc func) const {

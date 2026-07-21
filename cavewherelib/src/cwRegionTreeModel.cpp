@@ -79,7 +79,7 @@ void cwRegionTreeModel::insertedCaves(QModelIndex parent, int begin, int end)
         if(cave->tripCount() > 0) {
             QModelIndex parentCaveIndex = index(cave);
             beginInsertRows(parentCaveIndex, 0, cave->tripCount() - 1);
-            insertedTrips(cave, 0, cave->tripCount() - 1);
+            insertedTripsForCave(cave, 0, cave->tripCount() - 1);
         }
     }
 }
@@ -100,7 +100,7 @@ void cwRegionTreeModel::beginRemoveCaves(QModelIndex parent, int begin, int end)
     for(int i = begin; i <= end; i++) {
         cwCave* cave = index(i, 0, QModelIndex()).data(ObjectRole).value<cwCave*>();
         if(cave->hasTrips()) {
-            beginRemoveTrips(cave, 0, cave->trips().size() - 1);
+            beginRemoveTripsForCave(cave, 0, cave->trips().size() - 1);
             endRemoveRows(); //beginRemoveTrips() starts the endRemoveRows
         }
     }
@@ -159,7 +159,7 @@ void cwRegionTreeModel::insertedTrips(QModelIndex parent, int begin, int end)
     Q_ASSERT(qobject_cast<cwCave*>(sender()) != nullptr);
     cwCave* parentCave = static_cast<cwCave*>(sender());
 
-    insertedTrips(parentCave, begin, end);
+    insertedTripsForCave(parentCave, begin, end);
 }
 
 /**
@@ -177,7 +177,7 @@ void cwRegionTreeModel::beginRemoveTrips(QModelIndex parent, int begin, int end)
     Q_ASSERT(qobject_cast<cwCave*>(sender()) != nullptr);
     cwCave* parentCave = static_cast<cwCave*>(sender());
 
-    beginRemoveTrips(parentCave, begin, end);
+    beginRemoveTripsForCave(parentCave, begin, end);
 }
 
 /**
@@ -231,7 +231,7 @@ void cwRegionTreeModel::insertedNotes(QModelIndex parent, int begin, int end)
     Q_ASSERT(qobject_cast<cwSurveyNoteModel*>(sender()) != nullptr);
     cwSurveyNoteModel* parentNoteModel = static_cast<cwSurveyNoteModel*>(sender());
 
-    insertedNotes(parentNoteModel->parentTrip(), begin, end);
+    insertedNotesForTrip(parentNoteModel->parentTrip(), begin, end);
 }
 
 /**
@@ -249,7 +249,7 @@ void cwRegionTreeModel::beginRemoveNotes(QModelIndex parent, int begin, int end)
     Q_ASSERT(qobject_cast<cwSurveyNoteModel*>(sender()) != nullptr);
     cwSurveyNoteModel* noteModel = static_cast<cwSurveyNoteModel*>(sender());
 
-    beginRemoveNotes(noteModel->parentTrip(), begin, end);
+    beginRemoveNotesForTrip(noteModel->parentTrip(), begin, end);
 }
 
 /**
@@ -296,7 +296,7 @@ void cwRegionTreeModel::insertedScraps(int begin, int end)
     Q_ASSERT(qobject_cast<cwNote*>(sender()) != nullptr);
     Q_ASSERT(begin <= end);
 
-    insertedScraps(qobject_cast<cwNote*>(sender()), begin, end);
+    insertedScrapsForNote(qobject_cast<cwNote*>(sender()), begin, end);
 }
 
 /**
@@ -349,10 +349,10 @@ void cwRegionTreeModel::setCavingRegion(cwCavingRegion* region) {
     Region = region;
 
     if(Region) {
-        connect(Region, SIGNAL(rowsAboutToBeInserted(QModelIndex,int,int)), SLOT(beginInsertCaves(QModelIndex,int,int)));
-        connect(Region, SIGNAL(rowsInserted(QModelIndex,int,int)), SLOT(insertedCaves(QModelIndex,int,int)));
-        connect(Region, SIGNAL(rowsAboutToBeRemoved(QModelIndex,int,int)), SLOT(beginRemoveCaves(QModelIndex,int,int)));
-        connect(Region, SIGNAL(rowsRemoved(QModelIndex,int,int)), SLOT(removedCaves(QModelIndex,int,int)));
+        connect(Region, &cwCavingRegion::rowsAboutToBeInserted, this, &cwRegionTreeModel::beginInsertCaves);
+        connect(Region, &cwCavingRegion::rowsInserted, this, &cwRegionTreeModel::insertedCaves);
+        connect(Region, &cwCavingRegion::rowsAboutToBeRemoved, this, &cwRegionTreeModel::beginRemoveCaves);
+        connect(Region, &cwCavingRegion::rowsRemoved, this, &cwRegionTreeModel::removedCaves);
     }
 
     endResetModel();
@@ -979,24 +979,151 @@ QObject *cwRegionTreeModel::object(const QModelIndex &index) const
 }
 
 /**
+  \brief The per-trip objects the model observes, in the order they are wired.
+
+  addTripConnections() and removeTripConnections() both drive off this single list,
+  so the set of objects the model connects can never diverge from the set it
+  disconnects. The trip is first: it carries no row signals itself, but its record in
+  the connection checker gates the whole trip (issue #576).
+  */
+QList<QObject*> cwRegionTreeModel::tripConnectionObjects(cwTrip* trip) {
+    return {
+        trip,
+        trip->notes(),
+        trip->notesLiDAR(),
+        trip->notesSketch()
+    };
+}
+
+/**
+  \brief Wires \a model's flat row signals through to this model's begin/end rows.
+  */
+template <typename Model>
+void cwRegionTreeModel::connectFlatModel(Model* model) {
+    connect(model, &Model::rowsAboutToBeInserted,
+            this, [this, model](const QModelIndex& parent, int first, int last) {
+                Q_UNUSED(parent);
+                beginInsertRows(index(model), first, last);
+            });
+    connect(model, &Model::rowsInserted,
+            this, [this](const QModelIndex& parent, int first, int last) {
+                Q_UNUSED(parent); Q_UNUSED(first); Q_UNUSED(last);
+                endInsertRows();
+            });
+    connect(model, &Model::rowsAboutToBeRemoved,
+            this, [this, model](const QModelIndex& parent, int first, int last) {
+                Q_UNUSED(parent);
+                beginRemoveRows(index(model), first, last);
+            });
+    connect(model, &Model::rowsRemoved,
+            this, [this](const QModelIndex& parent, int first, int last) {
+                Q_UNUSED(parent); Q_UNUSED(first); Q_UNUSED(last);
+                endRemoveRows();
+            });
+}
+
+/**
+  \brief Records \a object in the registry and wires its row signals if newly recorded.
+
+  Returns false (wiring nothing) if the object was already recorded — the checker
+  emits the duplicate-connection warning in that case.
+  */
+bool cwRegionTreeModel::connectObject(QObject* object) {
+    return m_connectionRegistry.add(object, [this, object]{ wireObjectSignals(object); });
+}
+
+/**
+  \brief Wires \a object's row signals to this model, selected by its concrete type.
+  A cwTrip carries no row signals and is recorded for bookkeeping only.
+  */
+void cwRegionTreeModel::wireObjectSignals(QObject* object) {
+    if(auto* cave = qobject_cast<cwCave*>(object)) {
+        connect(cave, &cwCave::rowsAboutToBeInserted,
+                this, &cwRegionTreeModel::beginInsertTrips, Qt::UniqueConnection);
+        connect(cave, &cwCave::rowsInserted,
+                this, &cwRegionTreeModel::insertedTrips, Qt::UniqueConnection);
+        connect(cave, &cwCave::rowsAboutToBeRemoved,
+                this, &cwRegionTreeModel::beginRemoveTrips, Qt::UniqueConnection);
+        connect(cave, &cwCave::rowsRemoved,
+                this, &cwRegionTreeModel::removedTrips, Qt::UniqueConnection);
+    } else if(auto* notes = qobject_cast<cwSurveyNoteModel*>(object)) {
+        connect(notes, &cwSurveyNoteModel::rowsAboutToBeInserted,
+                this, &cwRegionTreeModel::beginInsertNotes, Qt::UniqueConnection);
+        connect(notes, &cwSurveyNoteModel::rowsInserted,
+                this, &cwRegionTreeModel::insertedNotes, Qt::UniqueConnection);
+        connect(notes, &cwSurveyNoteModel::rowsAboutToBeRemoved,
+                this, &cwRegionTreeModel::beginRemoveNotes, Qt::UniqueConnection);
+        connect(notes, &cwSurveyNoteModel::rowsRemoved,
+                this, &cwRegionTreeModel::removeNotes, Qt::UniqueConnection);
+    } else if(auto* lidars = qobject_cast<cwSurveyNoteLiDARModel*>(object)) {
+        connect(lidars, &cwSurveyNoteLiDARModel::rowsAboutToBeInserted,
+                this, [this, lidars](const QModelIndex& parent, int first, int last) {
+                    Q_UNUSED(parent);
+                    QModelIndex parentIndex = index(lidars);
+                    beginInsertRows(parentIndex, first, last);
+                });
+        connect(lidars, &cwSurveyNoteLiDARModel::rowsInserted,
+                this, [this](const QModelIndex& parent, int first, int last) {
+                    Q_UNUSED(parent); Q_UNUSED(first); Q_UNUSED(last);
+                    endInsertRows();
+                });
+        connect(lidars, &cwSurveyNoteLiDARModel::rowsAboutToBeRemoved,
+                this, [this, lidars](const QModelIndex& parent, int first, int last) {
+                    Q_UNUSED(parent);
+                    QModelIndex parentIndex = index(lidars);
+                    beginRemoveRows(parentIndex, first, last);
+                });
+        connect(lidars, &cwSurveyNoteLiDARModel::rowsRemoved,
+                this, [this](const QModelIndex& parent, int first, int last) {
+                    Q_UNUSED(parent); Q_UNUSED(first); Q_UNUSED(last);
+                    endRemoveRows();
+                });
+    } else if(auto* sketches = qobject_cast<cwSurveyNoteSketchModel*>(object)) {
+        connect(sketches, &cwSurveyNoteSketchModel::rowsAboutToBeInserted,
+                this, [this, sketches](const QModelIndex& parent, int first, int last) {
+                    Q_UNUSED(parent);
+                    QModelIndex parentIndex = index(sketches);
+                    beginInsertRows(parentIndex, first, last);
+                });
+        connect(sketches, &cwSurveyNoteSketchModel::rowsInserted,
+                this, [this](const QModelIndex& parent, int first, int last) {
+                    Q_UNUSED(parent); Q_UNUSED(first); Q_UNUSED(last);
+                    endInsertRows();
+                });
+        connect(sketches, &cwSurveyNoteSketchModel::rowsAboutToBeRemoved,
+                this, [this, sketches](const QModelIndex& parent, int first, int last) {
+                    Q_UNUSED(parent);
+                    QModelIndex parentIndex = index(sketches);
+                    beginRemoveRows(parentIndex, first, last);
+                });
+        connect(sketches, &cwSurveyNoteSketchModel::rowsRemoved,
+                this, [this](const QModelIndex& parent, int first, int last) {
+                    Q_UNUSED(parent); Q_UNUSED(first); Q_UNUSED(last);
+                    endRemoveRows();
+                });
+    }
+    //cwTrip and anything else: recorded for bookkeeping only, no row signals.
+}
+
+/**
+  \brief Unrecords \a object from the registry and tears down every connection it has
+  to this model. The wholesale disconnect is a no-op for objects (e.g. a cwTrip) that
+  were recorded but never wired.
+  */
+void cwRegionTreeModel::disconnectObject(QObject* object) {
+    m_connectionRegistry.remove(object);
+}
+
+/**
   \brief Adds all the connection for a cave
   */
 void cwRegionTreeModel::addCaveConnections(int beginIndex, int endIndex, bool recusive) {
     for(int i = beginIndex; i <= endIndex; i++) {
         cwCave* cave = Region->cave(i);
 
-        if(!m_connectionChecker.add(cave)) {
+        if(!connectObject(cave)) {
             continue;
         }
-
-        connect(cave, SIGNAL(rowsAboutToBeInserted(QModelIndex,int,int)),
-                this, SLOT(beginInsertTrips(QModelIndex,int,int)), Qt::UniqueConnection);
-        connect(cave, SIGNAL(rowsInserted(QModelIndex,int,int)),
-                this, SLOT(insertedTrips(QModelIndex,int,int)), Qt::UniqueConnection);
-        connect(cave, SIGNAL(rowsAboutToBeRemoved(QModelIndex,int,int)),
-                this, SLOT(beginRemoveTrips(QModelIndex,int,int)), Qt::UniqueConnection);
-        connect(cave, SIGNAL(rowsRemoved(QModelIndex,int,int)),
-                this, SLOT(removedTrips(QModelIndex,int,int)), Qt::UniqueConnection);
 
         if(recusive) {
             addTripConnections(cave, 0, cave->tripCount() - 1);
@@ -1018,8 +1145,7 @@ void cwRegionTreeModel::removeCaveConnections(int beginIndex, int endIndex, bool
             removeTripConnections(cave, 0, cave->tripCount() - 1);
         }
 
-        m_connectionChecker.remove(cave);
-        disconnect(cave, 0, this, 0); //disconnect signals and slots to this object
+        disconnectObject(cave);
     }
 }
 
@@ -1030,101 +1156,22 @@ void cwRegionTreeModel::addTripConnections(cwCave* parentCave, int beginIndex, i
     for(int i = beginIndex; i <= endIndex; i++) {
         cwTrip* currentTrip = parentCave->trip(i);
 
-        if(!m_connectionChecker.add(currentTrip)) {
+        const auto objects = tripConnectionObjects(currentTrip);
+        Q_ASSERT(!objects.isEmpty() && objects.first() == currentTrip);
+
+        // The trip's own record gates the whole set: if it is already recorded the
+        // trip (and its sub-models) was wired on a previous pass, so skip it.
+        if(!connectObject(objects.first())) {
             continue;
         }
 
-        { //Add the notes
-            auto notes = currentTrip->notes();
-
-            if(!m_connectionChecker.add(notes)) {
-                continue;
-            }
-
-            connect(notes, SIGNAL(rowsAboutToBeInserted(QModelIndex,int,int)),
-                    this, SLOT(beginInsertNotes(QModelIndex,int,int)), Qt::UniqueConnection);
-            connect(notes, SIGNAL(rowsInserted(QModelIndex,int,int)),
-                    this, SLOT(insertedNotes(QModelIndex,int,int)), Qt::UniqueConnection);
-            connect(notes, SIGNAL(rowsAboutToBeRemoved(QModelIndex,int,int)),
-                    this, SLOT(beginRemoveNotes(QModelIndex,int,int)), Qt::UniqueConnection);
-            connect(notes, SIGNAL(rowsRemoved(QModelIndex,int,int)),
-                    this, SLOT(removeNotes(QModelIndex,int,int)), Qt::UniqueConnection);
-
-            if(recursive) {
-                addNoteConnections(currentTrip, 0, notes->notes().size() - 1);
-            }
+        for(int j = 1; j < objects.size(); j++) {
+            connectObject(objects.at(j));
         }
 
-        { // --- LiDAR notes (flat model) ---
-            auto* lidars = currentTrip->notesLiDAR();
-
-            if(!m_connectionChecker.add(lidars)) {
-                continue;
-            }
-
-            Q_ASSERT(lidars);
-            connect(lidars, &cwSurveyNoteLiDARModel::rowsAboutToBeInserted,
-                    this, [this, lidars](const QModelIndex& parent, int first, int last) {
-                        Q_UNUSED(parent);
-                        QModelIndex parentIndex = index(lidars);
-                        beginInsertRows(parentIndex, first, last);
-                    });
-
-            connect(lidars, &cwSurveyNoteLiDARModel::rowsInserted,
-                    this, [this](const QModelIndex& parent, int first, int last) {
-                        Q_UNUSED(parent); Q_UNUSED(first); Q_UNUSED(last);
-                        endInsertRows();
-                    });
-
-            connect(lidars, &cwSurveyNoteLiDARModel::rowsAboutToBeRemoved,
-                    this, [this, lidars](const QModelIndex& parent, int first, int last) {
-                        Q_UNUSED(parent);
-                        QModelIndex parentIndex = index(lidars);
-                        beginRemoveRows(parentIndex, first, last);
-                    });
-
-            connect(lidars, &cwSurveyNoteLiDARModel::rowsRemoved,
-                    this, [this, lidars](const QModelIndex& parent, int first, int last) {
-                        Q_UNUSED(parent); Q_UNUSED(first); Q_UNUSED(last);
-                        endRemoveRows();
-                    });
+        if(recursive) {
+            addNoteConnections(currentTrip, 0, currentTrip->notes()->notes().size() - 1);
         }
-
-        { // --- Sketches (flat model) ---
-            auto* sketches = currentTrip->notesSketch();
-
-            if(!m_connectionChecker.add(sketches)) {
-                continue;
-            }
-
-            Q_ASSERT(sketches);
-            connect(sketches, &cwSurveyNoteSketchModel::rowsAboutToBeInserted,
-                    this, [this, sketches](const QModelIndex& parent, int first, int last) {
-                        Q_UNUSED(parent);
-                        QModelIndex parentIndex = index(sketches);
-                        beginInsertRows(parentIndex, first, last);
-                    });
-
-            connect(sketches, &cwSurveyNoteSketchModel::rowsInserted,
-                    this, [this](const QModelIndex& parent, int first, int last) {
-                        Q_UNUSED(parent); Q_UNUSED(first); Q_UNUSED(last);
-                        endInsertRows();
-                    });
-
-            connect(sketches, &cwSurveyNoteSketchModel::rowsAboutToBeRemoved,
-                    this, [this, sketches](const QModelIndex& parent, int first, int last) {
-                        Q_UNUSED(parent);
-                        QModelIndex parentIndex = index(sketches);
-                        beginRemoveRows(parentIndex, first, last);
-                    });
-
-            connect(sketches, &cwSurveyNoteSketchModel::rowsRemoved,
-                    this, [this, sketches](const QModelIndex& parent, int first, int last) {
-                        Q_UNUSED(parent); Q_UNUSED(first); Q_UNUSED(last);
-                        endRemoveRows();
-                    });
-        }
-
     }
 }
 
@@ -1146,20 +1193,13 @@ void cwRegionTreeModel::removeTripConnections(cwCave* parentCave, int beginIndex
             }
         }
 
-        // addTripConnections registers the trip AND its note/lidar/sketch models in
-        // the connection checker, so all four must be removed here. Removing only the
-        // trip (issue #576) left the models recorded as connected, so re-adding the
-        // same trip (sync checkout / undo) tripped the "already connected" guard and
-        // skipped re-wiring the models.
-        m_connectionChecker.remove(trip);
-        m_connectionChecker.remove(trip->notes());
-        m_connectionChecker.remove(trip->notesLiDAR());
-        m_connectionChecker.remove(trip->notesSketch());
-
-        disconnect(trip, nullptr, this, nullptr); //disconnect signals and slots to this object
-        disconnect(trip->notes(), nullptr, this, nullptr);
-        disconnect(trip->notesLiDAR(), nullptr, this, nullptr);
-        disconnect(trip->notesSketch(), nullptr, this, nullptr);
+        // Tear down exactly what addTripConnections wired, driven off the same list.
+        // Removing only a subset (issue #576) left models recorded as connected, so
+        // re-adding the same trip (sync checkout / undo) tripped the "already
+        // connected" guard and skipped re-wiring the models.
+        for(QObject* object : tripConnectionObjects(trip)) {
+            disconnectObject(object);
+        }
     }
 }
 
@@ -1174,18 +1214,16 @@ void cwRegionTreeModel::addNoteConnections(cwTrip *parentTrip, int beginIndex, i
     for(int i = beginIndex; i <= endIndex; i++) {
         cwNote* note = parentTrip->notes()->notes().at(i);
 
-        if(!m_connectionChecker.add(note)) {
-            continue;
-        }
-
-        connect(note, SIGNAL(beginInsertingScraps(int,int)),
-                this, SLOT(beginInsertScraps(int,int)), Qt::UniqueConnection);
-        connect(note, SIGNAL(insertedScraps(int,int)),
-                this, SLOT(insertedScraps(int,int)), Qt::UniqueConnection);
-        connect(note, SIGNAL(beginRemovingScraps(int,int)),
-                this, SLOT(beginRemoveScraps(int,int)), Qt::UniqueConnection);
-        connect(note, SIGNAL(removedScraps(int,int)),
-                this, SLOT(removedScraps(int,int)), Qt::UniqueConnection);
+        m_connectionRegistry.add(note, [this, note]{
+            connect(note, &cwNote::beginInsertingScraps,
+                    this, &cwRegionTreeModel::beginInsertScraps, Qt::UniqueConnection);
+            connect(note, &cwNote::insertedScraps,
+                    this, &cwRegionTreeModel::insertedScraps, Qt::UniqueConnection);
+            connect(note, &cwNote::beginRemovingScraps,
+                    this, &cwRegionTreeModel::beginRemoveScraps, Qt::UniqueConnection);
+            connect(note, &cwNote::removedScraps,
+                    this, &cwRegionTreeModel::removedScraps, Qt::UniqueConnection);
+        });
     }
 }
 
@@ -1200,19 +1238,17 @@ void cwRegionTreeModel::removeNoteConnections(cwTrip *parentTrip, int beginIndex
     for(int i = beginIndex; i <= endIndex; i++) {
         cwNote* note = parentTrip->notes()->notes().at(i);
 
-        m_connectionChecker.remove(note);
-
-        disconnect(note, 0, this, 0);
+        m_connectionRegistry.remove(note);
     }
 }
 
 /**
- * @brief cwRegionTreeModel::beginRemoveTrips
+ * @brief cwRegionTreeModel::beginRemoveTripsForCave
  * @param parentCave
  * @param begin
  * @param end
  */
-void cwRegionTreeModel::beginRemoveTrips(cwCave *parentCave, int begin, int end)
+void cwRegionTreeModel::beginRemoveTripsForCave(cwCave *parentCave, int begin, int end)
 {
     Q_ASSERT(begin <= end);
     QModelIndex parentIndex = index(parentCave);
@@ -1220,7 +1256,7 @@ void cwRegionTreeModel::beginRemoveTrips(cwCave *parentCave, int begin, int end)
     for(int i = begin; i <= end; i++) {
         cwTrip* trip = index(i, 0, parentIndex).data(ObjectRole).value<cwTrip*>();
         if(trip->notes()->rowCount() > 0) {
-            beginRemoveNotes(trip, 0, trip->notes()->rowCount() - 1);
+            beginRemoveNotesForTrip(trip, 0, trip->notes()->rowCount() - 1);
             endRemoveRows(); //beginRemoveTrips() starts the endRemoveRows
         }
     }
@@ -1230,12 +1266,12 @@ void cwRegionTreeModel::beginRemoveTrips(cwCave *parentCave, int begin, int end)
 }
 
 /**
- * @brief cwRegionTreeModel::beginRemoveNotes
+ * @brief cwRegionTreeModel::beginRemoveNotesForTrip
  * @param parentTrip
  * @param begin
  * @param end
  */
-void cwRegionTreeModel::beginRemoveNotes(cwTrip *parentTrip, int begin, int end)
+void cwRegionTreeModel::beginRemoveNotesForTrip(cwTrip *parentTrip, int begin, int end)
 {
     Q_ASSERT(begin <= end);
     QModelIndex parentIndex = index(parentTrip->notes());
@@ -1243,7 +1279,7 @@ void cwRegionTreeModel::beginRemoveNotes(cwTrip *parentTrip, int begin, int end)
     for(int i = begin; i <= end; i++) {
         cwNote* note = index(i, 0, parentIndex).data(ObjectRole).value<cwNote*>();
         if(note->hasScraps()) {
-            beginRemoveScraps(note, 0, note->scraps().size() - 1);
+            beginRemoveScrapsForNote(note, 0, note->scraps().size() - 1);
             endRemoveRows();
         }
     }
@@ -1253,12 +1289,12 @@ void cwRegionTreeModel::beginRemoveNotes(cwTrip *parentTrip, int begin, int end)
 }
 
 /**
- * @brief cwRegionTreeModel::beginRemoveScraps
+ * @brief cwRegionTreeModel::beginRemoveScrapsForNote
  * @param parentNote
  * @param begin
  * @param end
  */
-void cwRegionTreeModel::beginRemoveScraps(cwNote *parentNote, int begin, int end)
+void cwRegionTreeModel::beginRemoveScrapsForNote(cwNote *parentNote, int begin, int end)
 {
     Q_ASSERT(begin <= end);
     QModelIndex parentIndex = index(parentNote);
@@ -1267,12 +1303,12 @@ void cwRegionTreeModel::beginRemoveScraps(cwNote *parentNote, int begin, int end
 }
 
 /**
- * @brief cwRegionTreeModel::insertedTrips
+ * @brief cwRegionTreeModel::insertedTripsForCave
  * @param parentCave
  * @param begin
  * @param end
  */
-void cwRegionTreeModel::insertedTrips(cwCave *parentCave, int begin, int end)
+void cwRegionTreeModel::insertedTripsForCave(cwCave *parentCave, int begin, int end)
 {
     Q_ASSERT(begin <= end);
     addTripConnections(parentCave, begin, end, false);
@@ -1284,7 +1320,7 @@ void cwRegionTreeModel::insertedTrips(cwCave *parentCave, int begin, int end)
         if(lastIndex >= 0) {
             QModelIndex parenIndex = index(trip->notes());
             beginInsertRows(parenIndex, 0, lastIndex);
-            insertedNotes(trip, 0, lastIndex);
+            insertedNotesForTrip(trip, 0, lastIndex);
         }
 
         // Sketches loaded into a pre-existing trip (on project reload) must
@@ -1305,12 +1341,12 @@ void cwRegionTreeModel::insertedTrips(cwCave *parentCave, int begin, int end)
 }
 
 /**
- * @brief cwRegionTreeModel::insertedNotes
+ * @brief cwRegionTreeModel::insertedNotesForTrip
  * @param parentTrip
  * @param begin
  * @param end
  */
-void cwRegionTreeModel::insertedNotes(cwTrip *parentTrip, int begin, int end)
+void cwRegionTreeModel::insertedNotesForTrip(cwTrip *parentTrip, int begin, int end)
 {
     Q_ASSERT(begin <= end);
 
@@ -1323,19 +1359,19 @@ void cwRegionTreeModel::insertedNotes(cwTrip *parentTrip, int begin, int end)
         if(lastIndex >= 0) {
             QModelIndex parentNoteIndex = index(note);
             beginInsertRows(parentNoteIndex, 0, lastIndex);
-            insertedScraps(note, 0, lastIndex);
+            insertedScrapsForNote(note, 0, lastIndex);
         }
     }
 
 }
 
 /**
- * @brief cwRegionTreeModel::insertedScraps
+ * @brief cwRegionTreeModel::insertedScrapsForNote
  * @param parentNote
  * @param begin
  * @param end
  */
-void cwRegionTreeModel::insertedScraps(cwNote *parentNote, int begin, int end)
+void cwRegionTreeModel::insertedScrapsForNote(cwNote *parentNote, int begin, int end)
 {
     Q_UNUSED(parentNote);
     Q_UNUSED(begin);

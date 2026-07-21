@@ -177,7 +177,8 @@ QImage cwSketchManager::renderIcon(const cwSketch* sketch, int edgePixels)
 // --------------------------------------------------------------------------
 
 cwSketchManager::cwSketchManager(QObject* parent)
-    : QObject(parent)
+    : QObject(parent),
+      m_connectionRegistry(this)
 {
 }
 
@@ -531,23 +532,21 @@ void cwSketchManager::connectTrip(cwTrip* trip)
         return;
     }
 
-    if (!m_connectionChecker.add(model)) {
-        return;
-    }
+    m_connectionRegistry.add(model, [this, model]{
+        connect(model, &QAbstractItemModel::rowsInserted,
+                this, &cwSketchManager::sketchRowsInserted);
+        connect(model, &QAbstractItemModel::rowsAboutToBeRemoved,
+                this, &cwSketchManager::sketchRowsAboutToBeRemoved);
 
-    connect(model, &QAbstractItemModel::rowsInserted,
-            this, &cwSketchManager::sketchRowsInserted);
-    connect(model, &QAbstractItemModel::rowsAboutToBeRemoved,
-            this, &cwSketchManager::sketchRowsAboutToBeRemoved);
-
-    const int rows = model->rowCount();
-    for (int row = 0; row < rows; ++row) {
-        const QModelIndex idx = model->index(row, 0);
-        QObject* obj = model->data(idx, cwSurveyNoteModelBase::NoteObjectRole).value<QObject*>();
-        if (auto* sketch = qobject_cast<cwSketch*>(obj)) {
-            connectSketch(sketch);
+        const int rows = model->rowCount();
+        for (int row = 0; row < rows; ++row) {
+            const QModelIndex idx = model->index(row, 0);
+            QObject* obj = model->data(idx, cwSurveyNoteModelBase::NoteObjectRole).value<QObject*>();
+            if (auto* sketch = qobject_cast<cwSketch*>(obj)) {
+                connectSketch(sketch);
+            }
         }
-    }
+    });
 }
 
 void cwSketchManager::disconnectTrip(cwTrip* trip)
@@ -561,11 +560,9 @@ void cwSketchManager::disconnectTrip(cwTrip* trip)
         return;
     }
 
-    m_connectionChecker.remove(model);
-    disconnect(model, &QAbstractItemModel::rowsInserted,
-               this, &cwSketchManager::sketchRowsInserted);
-    disconnect(model, &QAbstractItemModel::rowsAboutToBeRemoved,
-               this, &cwSketchManager::sketchRowsAboutToBeRemoved);
+    // remove() tears down the model↔this row connections wholesale (equivalent to the
+    // two specific disconnects this replaced).
+    m_connectionRegistry.remove(model);
 
     const int rows = model->rowCount();
     for (int row = 0; row < rows; ++row) {
@@ -625,10 +622,22 @@ void cwSketchManager::sketchRowsAboutToBeRemoved(const QModelIndex& parent, int 
 
 void cwSketchManager::connectSketch(cwSketch* sketch)
 {
-    if (sketch == nullptr || !m_connectionChecker.add(sketch)) {
+    if (sketch == nullptr) {
         return;
     }
 
+    if (!m_connectionRegistry.add(sketch, [this, sketch]{ wireSketch(sketch); })) {
+        return;
+    }
+
+    updateIconFromCache(sketch);
+}
+
+/**
+ * @brief Creates the per-sketch pipeline and wires the sketch's signals to this manager.
+ */
+void cwSketchManager::wireSketch(cwSketch* sketch)
+{
     // Create the per-sketch pipeline BEFORE wiring signals so slot callbacks
     // can assume it exists.
     auto pipeline = std::make_unique<SketchPipeline>();
@@ -692,10 +701,8 @@ void cwSketchManager::connectSketch(cwSketch* sketch)
         connect(model, &QAbstractItemModel::rowsRemoved, this,
                 [this, sketch]() { markDirty(sketch); });
     } else {
-        qCWarning(lcSketchManager) << "connectSketch: sketch has no strokeModel" << sketch;
+        qCWarning(lcSketchManager) << "wireSketch: sketch has no strokeModel" << sketch;
     }
-
-    updateIconFromCache(sketch);
 }
 
 void cwSketchManager::disconnectSketch(cwSketch* sketch)
@@ -703,9 +710,11 @@ void cwSketchManager::disconnectSketch(cwSketch* sketch)
     if (sketch == nullptr) {
         return;
     }
-    m_connectionChecker.remove(sketch);
-    disconnect(sketch, nullptr, this, nullptr);
+    // remove() unrecords the sketch and tears down every sketch↔this connection.
+    m_connectionRegistry.remove(sketch);
     if (auto* model = sketch->strokeModel()) {
+        // strokeModel is a second source object, not covered by the sketch's own
+        // wholesale disconnect above.
         disconnect(model, nullptr, this, nullptr);
     }
     m_sketchPipelines.erase(sketch); // restarter cancels in-flight in its dtor

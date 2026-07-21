@@ -33,7 +33,6 @@
 #include "cwLinePlotManager.h"
 #include "cwProject.h"
 #include "asyncfuture.h"
-#include "cwUniqueConnectionChecker.h"
 #include "cwDiskCacher.h"
 #include "cwCacheImageProvider.h"
 #include "cwKeywordItemModel.h"
@@ -120,7 +119,8 @@ QString cacheUrlForKey(const cwDiskCacher::Key& key)
 
 cwNoteLiDARManager::cwNoteLiDARManager(QObject* parent) :
     QObject(parent),
-    m_restarter(this)
+    m_restarter(this),
+    m_connectionRegistry(this)
 {
     cwTrackRestarter(m_futureManagerToken, m_restarter, QStringLiteral("Triangulating LiDAR notes"));
 }
@@ -674,23 +674,21 @@ void cwNoteLiDARManager::connectTrip(cwTrip* trip)
     }
 
     if (auto* model = trip->notesLiDAR()) {
-        if(!m_connectionChecker.add(model)) {
-            return;
+        const bool added = m_connectionRegistry.add(model, [this, model]{
+            connect(model, &QAbstractItemModel::rowsInserted,
+                    this, &cwNoteLiDARManager::liDARRowsInserted);
+            connect(model, &QAbstractItemModel::rowsAboutToBeRemoved,
+                    this, &cwNoteLiDARManager::liDARRowsAboutToBeRemoved);
+
+            // Existing notes
+            for (cwNoteLiDAR* note : notesFromModel(model)) {
+                connectNote(note);
+            }
+        });
+
+        if (added) {
+            runIfNeeded();
         }
-
-
-        connect(model, &QAbstractItemModel::rowsInserted,
-                this, &cwNoteLiDARManager::liDARRowsInserted);
-        connect(model, &QAbstractItemModel::rowsAboutToBeRemoved,
-                this, &cwNoteLiDARManager::liDARRowsAboutToBeRemoved);
-
-        // Existing notes
-        const auto notes = notesFromModel(model);
-        for (cwNoteLiDAR* note : notes) {
-            connectNote(note);
-        }
-
-        runIfNeeded();
     }
 }
 
@@ -701,18 +699,15 @@ void cwNoteLiDARManager::disconnectTrip(cwTrip* trip)
     }
 
     if (auto* model = trip->notesLiDAR()) {
-        m_connectionChecker.remove(model);
-        disconnect(model, &QAbstractItemModel::rowsInserted,
-                   this, &cwNoteLiDARManager::liDARRowsInserted);
-        disconnect(model, &QAbstractItemModel::rowsAboutToBeRemoved,
-                   this, &cwNoteLiDARManager::liDARRowsAboutToBeRemoved);
+        // remove() tears down the model↔this row connections wholesale (equivalent to
+        // the two specific disconnects this replaced).
+        m_connectionRegistry.remove(model);
 
         for (cwNoteLiDAR* note : notesFromModel(model)) {
-            m_connectionChecker.remove(note);
-
-            disconnect(note, &QObject::destroyed, this, &cwNoteLiDARManager::noteDestroyed);
+            m_connectionRegistry.remove(note);
+            // The note's transformation is a second source object, so it isn't covered
+            // by the note's own wholesale disconnect above.
             disconnect(note->noteTransformation(), nullptr, this, nullptr);
-            disconnect(note, nullptr, this, nullptr);
             m_deletedNotes.insert(note);
             m_dirtyNotes.remove(note);
             removeKeywordItemForNote(note);
@@ -723,24 +718,26 @@ void cwNoteLiDARManager::disconnectTrip(cwTrip* trip)
 
 void cwNoteLiDARManager::connectNote(cwNoteLiDAR *note)
 {
-    if(!m_connectionChecker.add(note)) {
+    const bool added = m_connectionRegistry.add(note, [this, note]{
+        auto handleNoteChange = [note, this]() {
+            markDirty(note);
+            runIfNeeded();
+        };
+
+        connect(note, &QObject::destroyed, this, &cwNoteLiDARManager::noteDestroyed, Qt::UniqueConnection);
+        connect(note->noteTransformation(), &cwNoteLiDARTransformation::matrixChanged, this, handleNoteChange);
+        connect(note, &cwNoteLiDAR::dataChanged, this, [handleNoteChange](QModelIndex, QModelIndex, QVector<int>) { handleNoteChange(); });
+        connect(note, &cwNoteLiDAR::rowsInserted, this, handleNoteChange);
+        connect(note, &cwNoteLiDAR::rowsRemoved, this, handleNoteChange);
+        connect(note, &cwNoteLiDAR::filenameChanged, this, [this, note, handleNoteChange]() {
+            updateIconFromCache(note);
+            handleNoteChange();
+        });
+    });
+
+    if (!added) {
         return;
     }
-
-    auto handleNoteChange = [note, this]() {
-        markDirty(note);
-        runIfNeeded();
-    };
-
-    connect(note, &QObject::destroyed, this, &cwNoteLiDARManager::noteDestroyed, Qt::UniqueConnection);
-    connect(note->noteTransformation(), &cwNoteLiDARTransformation::matrixChanged, this, handleNoteChange);
-    bool connected = connect(note, &cwNoteLiDAR::dataChanged, this, [handleNoteChange](QModelIndex, QModelIndex, QVector<int>) { handleNoteChange(); });
-    connect(note, &cwNoteLiDAR::rowsInserted, this, handleNoteChange);
-    connect(note, &cwNoteLiDAR::rowsRemoved, this, handleNoteChange);
-    connect(note, &cwNoteLiDAR::filenameChanged, this, [this, note, handleNoteChange]() {
-        updateIconFromCache(note);
-        handleNoteChange();
-    });
 
     addKeywordItemForNote(note);
     markDirty(note);

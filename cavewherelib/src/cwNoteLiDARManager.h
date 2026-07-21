@@ -34,7 +34,7 @@ class cwNoteLiDAR;
 #include "asyncfuture.h"
 #include "cwTriangulateLiDARInData.h"
 #include "cwRenderTexturedItems.h"
-#include "cwUniqueConnectionChecker.h"
+#include "cwConnectionRegistry.h"
 #include "cwKeywordItemRegistry.h"
 class cwKeywordItemModel;
 class cwRenderTexturedItemsVisibilityGroup;
@@ -149,8 +149,8 @@ private:
     bool m_keepRenderGeometry = false;
     QMetaObject::Connection m_pathReadyConnection;
 
-    //For checking duplicate connections
-    cwUniqueConnectionChecker m_connectionChecker;
+    //Couples duplicate-connection checking with connect/disconnect (receiver = this)
+    cwConnectionRegistry m_connectionRegistry;
 };
 
 #endif // CWNOTELIDARMANAGER_H
