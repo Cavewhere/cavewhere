@@ -14,6 +14,9 @@
 #include <QUuid>
 #include <QQmlEngine>
 
+//Std includes
+#include <optional>
+
 //Our includes
 #include "cwGlobals.h"
 #include "cwGeoPoint.h"
@@ -69,6 +72,12 @@ public:
     //! Gather every cave's fix stations, reproject into the region's global CS,
     //! and classify. The region-bound wrapper over classifyCandidates().
     Classification currentClassification() const;
+
+    //! The centroid of the inlier fix stations, in the region's global CS — the
+    //! world origin to render around. Excluding outliers keeps a single typo'd
+    //! fix from dragging the origin off the real data. Empty when there are no
+    //! usable candidates, so the caller can leave the origin untouched.
+    std::optional<cwGeoPoint> robustWorldOrigin() const;
 
 private:
     QList<FixCandidate> gatherCandidates() const;

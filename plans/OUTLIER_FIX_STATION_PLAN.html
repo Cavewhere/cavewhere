@@ -264,8 +264,12 @@ caves 100 km apart would form two clusters — a large <code>s</code>, nothing f
 <p>This math is the <b>pure static</b> <code>cwFixStationValidator::classifyCandidates()</code> from §3 — no
 region, no side effects, so the threshold logic is unit-testable with hand-built candidates.
 <code>currentClassification()</code> wraps it with the gather/reproject step. Both
-<code>recomputeWorldOrigin()</code> (via <code>robustWorldOrigin()</code>) and the per-cave attribution consume
-the same classification — one gather, two readers.</p>
+<code>recomputeWorldOrigin()</code> (via <code>robustWorldOrigin()</code>) and the per-cave attribution run the
+<i>same</i> classification logic. Note they do <b>not</b> share a single gather: each call to
+<code>currentClassification()</code> re-runs <code>gatherCandidates()</code>, so a solve that recomputes the
+origin and then revalidates (Commit 3) gathers twice. That is acceptable at solve-time (not per-frame);
+if Commit 3 wants one gather per solve, cache <code>currentClassification()</code>'s result and invalidate it
+on the same triggers that drive <code>revalidate()</code>.</p>
 
 <h2 id="robust">5. Robust world origin <span class="pill edit">behavior change</span></h2>
 <p>Today <code>recomputeWorldOrigin()</code> sets the origin to the <b>mean</b> of all fixes. The mean is not

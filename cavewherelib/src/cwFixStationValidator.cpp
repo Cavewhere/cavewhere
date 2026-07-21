@@ -122,6 +122,23 @@ cwFixStationValidator::currentClassification() const
     return classifyCandidates(gatherCandidates());
 }
 
+std::optional<cwGeoPoint> cwFixStationValidator::robustWorldOrigin() const
+{
+    const QList<FixCandidate> inliers = currentClassification().inliers;
+    if (inliers.isEmpty()) {
+        return std::nullopt;
+    }
+
+    cwGeoPoint sum;
+    for (const auto& c : inliers) {
+        sum.x += c.global.x;
+        sum.y += c.global.y;
+        sum.z += c.global.z;
+    }
+    const double n = double(inliers.size());
+    return cwGeoPoint{sum.x / n, sum.y / n, sum.z / n};
+}
+
 QList<cwFixStationValidator::FixCandidate>
 cwFixStationValidator::gatherCandidates() const
 {

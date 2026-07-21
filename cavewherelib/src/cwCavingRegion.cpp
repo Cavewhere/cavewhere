@@ -8,10 +8,7 @@
 //Our includes
 #include "cwCavingRegion.h"
 #include "cwCave.h"
-#include "cwCoordinateTransform.h"
 #include "cwDebug.h"
-#include "cwFixStation.h"
-#include "cwFixStationModel.h"
 #include "cwFixStationValidator.h"
 #include "cwLazLayerModel.h"
 #include "cwProject.h"
@@ -294,49 +291,12 @@ cwProject *cwCavingRegion::parentProject() const
 
 void cwCavingRegion::recomputeWorldOrigin()
 {
-    const QString globalCSTrimmed = m_geoReference->globalCoordinateSystem().trimmed();
-
-    QList<cwGeoPoint> candidates;
-    for (cwCave* cave : m_caves) {
-        if (cave == nullptr || cave->fixStations() == nullptr) {
-            continue;
-        }
-        for (const cwFixStation& fix : cave->fixStations()->fixStations()) {
-            QString inputCS = fix.inputCS().trimmed();
-            if (inputCS.isEmpty()) {
-                inputCS = globalCSTrimmed;
-            }
-            if (inputCS.isEmpty() || !cwCoordinateTransform::isValidCS(inputCS)) {
-                continue;
-            }
-
-            const cwGeoPoint p(fix.easting(), fix.northing(), fix.elevation());
-
-            if (globalCSTrimmed.isEmpty()
-                || inputCS.compare(globalCSTrimmed, Qt::CaseInsensitive) == 0) {
-                candidates.append(p);
-            } else {
-                cwCoordinateTransform t(inputCS, globalCSTrimmed);
-                if (!t.isValid()) {
-                    continue;
-                }
-                candidates.append(t.transform(p));
-            }
-        }
+    // The gather + reproject + robust-centroid logic lives in the validator so
+    // the outlier check and the origin share one definition of the cluster. An
+    // empty result (no usable fixes) leaves the origin untouched.
+    if (const auto origin = m_fixStationValidator->robustWorldOrigin()) {
+        m_geoReference->setWorldOrigin(*origin);
     }
-
-    if (candidates.isEmpty()) {
-        return;
-    }
-
-    cwGeoPoint sum;
-    for (const auto& p : candidates) {
-        sum.x += p.x;
-        sum.y += p.y;
-        sum.z += p.z;
-    }
-    const double n = double(candidates.size());
-    m_geoReference->setWorldOrigin(cwGeoPoint{sum.x / n, sum.y / n, sum.z / n});
 }
 
 void cwCavingRegion::setData(const cwCavingRegionData &data)

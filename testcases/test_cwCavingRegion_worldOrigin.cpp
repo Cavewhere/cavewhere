@@ -93,6 +93,45 @@ TEST_CASE("recomputeWorldOrigin averages multiple fixes",
     CHECK_THAT(origin.z, WithinAbs(2725.0, 1e-6));
 }
 
+TEST_CASE("recomputeWorldOrigin ignores an outlier fix when centering",
+          "[cwCavingRegion][worldOrigin]")
+{
+    // Four good fixes in a tight cluster plus one typo'd fix ~1000 km north
+    // (a mistyped leading digit in the northing). The origin must be the
+    // centroid of the four inliers only — averaging the outlier in would drag
+    // it hundreds of km off the real data and render the cave as a sub-pixel dot.
+    cwCavingRegion region;
+    region.geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32612"));
+
+    region.addCave();
+    auto* cave = region.cave(0);
+    REQUIRE(cave != nullptr);
+    cave->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("A1"), QStringLiteral("EPSG:32612"),
+                500000.0, 4194000.0, 2700.0));
+    cave->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("A2"), QStringLiteral("EPSG:32612"),
+                500200.0, 4194100.0, 2710.0));
+    cave->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("A3"), QStringLiteral("EPSG:32612"),
+                499900.0, 4193900.0, 2705.0));
+    cave->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("A4"), QStringLiteral("EPSG:32612"),
+                500100.0, 4193950.0, 2708.0));
+    // The typo: northing's leading 4 mistyped as 5 → ~5.19 million, ~1000 km away.
+    cave->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("Bad"), QStringLiteral("EPSG:32612"),
+                500150.0, 5194000.0, 2708.0));
+
+    region.recomputeWorldOrigin();
+
+    const cwGeoPoint origin = region.geoReference()->worldOrigin();
+    // Centroid of the four inliers only (the outlier's 5.19M northing is absent).
+    CHECK_THAT(origin.x, WithinAbs(500050.0, 1e-6));
+    CHECK_THAT(origin.y, WithinAbs(4193987.5, 1e-6));
+    CHECK_THAT(origin.z, WithinAbs(2705.75, 1e-6));
+}
+
 TEST_CASE("recomputeWorldOrigin falls back to globalCS when fix inputCS is empty",
           "[cwCavingRegion][worldOrigin]")
 {
