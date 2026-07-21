@@ -14,6 +14,7 @@
 
 //Our includes
 #include "cwGlobals.h"
+#include "cwVisibilityProxy.h"
 class cwRenderLinePlot;
 class cwTrip;
 
@@ -26,33 +27,27 @@ class cwTrip;
  * scraps. The manager re-points the proxy (setTarget) after every solve,
  * because the vertex range shifts each time the geometry is rebuilt.
  */
-class CAVEWHERE_LIB_EXPORT cwLinePlotTripVisibility : public QObject
+class CAVEWHERE_LIB_EXPORT cwLinePlotTripVisibility : public cwVisibilityProxy
 {
     Q_OBJECT
-    Q_PROPERTY(bool visible READ isVisible WRITE setVisible NOTIFY visibleChanged FINAL)
 
 public:
     cwLinePlotTripVisibility(cwTrip* trip,
                              QObject* parent = nullptr);
 
-    bool isVisible() const { return m_visible; }
     cwTrip* trip() const { return m_trip; }
 
     // Re-binds the proxy to the render object and the trip's current vertex span.
     void setTarget(cwRenderLinePlot* linePlot, int vertexStart, int vertexCount);
 
-public slots:
-    void setVisible(bool visible);
-
-signals:
-    void visibleChanged();
+protected:
+    void applyVisible(bool visible) override;
 
 private:
     QPointer<cwRenderLinePlot> m_linePlot;
     QPointer<cwTrip> m_trip;
     int m_vertexStart = 0;
     int m_vertexCount = 0;
-    bool m_visible = true;
 };
 
 #endif // CWLINEPLOTTRIPVISIBILITY_H
