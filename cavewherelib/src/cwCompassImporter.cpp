@@ -8,6 +8,7 @@
 //Our includes
 #include "cwCompassImporter.h"
 #include "cwConcurrent.h"
+#include "cwProgressReporter.h"
 #include "cwStationRenamer.h"
 #include "cwTrip.h"
 #include "cwTeam.h"
@@ -24,16 +25,13 @@
 #include <QPromise>
 #include <QRegularExpression>
 
+//Std includes
+#include <optional>
+
 namespace {
     //Compass only stores measurements to 1/100 of a unit, so metric values are
     //rounded to the nearest centimeter.
     constexpr double CentimetersPerMeter = 100.0;
-
-    //The progress bar advances over a fixed number of steps rather than raw
-    //byte counts: byte totals would make setProgressValue churn on every line.
-    //Bytes parsed are mapped onto this range so the determinate bar moves
-    //smoothly regardless of file size.
-    constexpr int kProgressSteps = 1000;
 
     //In a 15-char Compass FORMAT string the 14th character controls the
     //redundant backsight columns: 'B' (raw) or 'C' (corrected) means AZM2/INC2
@@ -77,10 +75,12 @@ private:
     cwTrip* m_currentTrip = nullptr;
     bool m_currentFileGood = true;
 
-    //Progress tracking (byte based)
+    //Progress tracking (byte based). The reporter sizes the range to the real
+    //byte total and throttles the pushes; an empty/unreadable set gives a total
+    //of 0, which the reporter treats as an indeterminate bar.
     qint64 m_totalBytes = 0;
     qint64 m_bytesFromCompletedFiles = 0;
-    int m_lastProgressStep = -1;
+    std::optional<cwProgressReporter<QPromise<Result>>> m_progress;
 
     //Regex
     QRegularExpression m_surveyNameRegExp;
@@ -135,11 +135,7 @@ cwCompassImporter::Result cwCompassImporter::Worker::run()
         m_totalBytes += QFileInfo(filename).size();
     }
 
-    if(m_totalBytes > 0) {
-        m_promise.setProgressRange(0, kProgressSteps);
-    } else {
-        m_promise.setProgressRange(0, 0);
-    }
+    m_progress.emplace(m_promise, m_totalBytes);
 
     for(int i = 0; i < m_compassDataFiles.size(); i++) {
         if(m_promise.isCanceled()) { break; }
@@ -180,6 +176,9 @@ cwCompassImporter::Result cwCompassImporter::Worker::run()
         return result;
     }
 
+    //progress completes structurally: the reporter snaps the bar to full when
+    //the worker is destroyed, unless the promise was cancelled (handled above).
+
     //Copy all the cave data
     result.caves.reserve(m_caves.size());
     for(auto cave : m_caves) {
@@ -196,18 +195,14 @@ cwCompassImporter::Result cwCompassImporter::Worker::run()
  * @brief cwCompassImporter::Worker::updateProgress
  * @param bytesProcessed - Total bytes parsed so far across all files
  *
- * Maps the bytes parsed onto kProgressSteps and only pushes a new value when
- * the mapped step actually changes, so the future watcher isn't spammed.
+ * Reports absolute bytes parsed; the reporter maps that onto the range and
+ * only pushes a new value when the reported unit changes, so the future
+ * watcher isn't spammed.
  */
 void cwCompassImporter::Worker::updateProgress(qint64 bytesProcessed)
 {
-    if(m_totalBytes <= 0) { return; }
-
-    const int step = qRound(kProgressSteps *
-                            (static_cast<double>(bytesProcessed) / static_cast<double>(m_totalBytes)));
-    if(step != m_lastProgressStep) {
-        m_lastProgressStep = step;
-        m_promise.setProgressValue(step);
+    if(m_progress) {
+        m_progress->report(bytesProcessed);
     }
 }
 

@@ -23,6 +23,7 @@
 //Our includes
 #include "cwConcurrent.h"
 #include "cwCoordinateTransform.h"
+#include "cwProgressReporter.h"
 #include "cwTask.h"
 
 // LAStools / LASlib
@@ -280,14 +281,10 @@ QFuture<cwLazLoadResult> cwLazLoader::load(const Request& request)
                                          ? qsizetype(totalPoints)
                                          : std::min(qsizetype(totalPoints), maxPoints);
 
-            // QProgressRange takes int. Clamp the *progress reporting* (not
-            // the load itself) to INT_MAX — for files larger than that the
-            // bar just looks "stuck" near full but the load still completes.
-            const int progressMax = effectiveMax > qsizetype(std::numeric_limits<int>::max())
-                                        ? std::numeric_limits<int>::max()
-                                        : int(effectiveMax > 0 ? effectiveMax : 1);
-            promise.setProgressRange(0, progressMax);
-            promise.setProgressValue(0);
+            // The reporter sizes the range to the real point count, scaling it
+            // down (never clamping to INT_MAX) so the bar keeps advancing even
+            // for files past ~1B points. effectiveMax <= 0 sets it indeterminate.
+            cwProgressReporter<QPromise<cwLazLoadResult>> progress(promise, effectiveMax);
 
             if (effectiveMax <= 0) {
                 promise.addResult(std::move(result));
@@ -360,9 +357,7 @@ QFuture<cwLazLoadResult> cwLazLoader::load(const Request& request)
                         cancelFlag.store(true, std::memory_order_relaxed);
                         mapFuture.cancel();
                     }
-                    const qsizetype done = pointsDone.load(std::memory_order_relaxed);
-                    const qsizetype scaled = std::min<qsizetype>(done, progressMax);
-                    promise.setProgressValue(int(scaled));
+                    progress.report(pointsDone.load(std::memory_order_relaxed));
                     QThread::msleep(30);
                 }
 
@@ -430,8 +425,8 @@ QFuture<cwLazLoadResult> cwLazLoader::load(const Request& request)
                 result.meanSpacingXY = float(std::sqrt(dx * dy / double(totalWritten)));
             }
 
-            promise.setProgressValue(progressMax);
-
+            // progress completes structurally: the reporter snaps the bar to
+            // full on scope exit unless the promise was cancelled.
             promise.addResult(std::move(result));
         });
 }

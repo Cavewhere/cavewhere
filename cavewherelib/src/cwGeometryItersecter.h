@@ -31,6 +31,7 @@
 class cwRenderObject;
 class cwSceneVisibility;
 class cwVisibilitySnapshot;
+template <typename Promise> class cwProgressReporter;
 
 class CAVEWHERE_LIB_EXPORT cwGeometryItersecter : public QObject
 {
@@ -467,10 +468,10 @@ private:
     AsyncFuture::Restarter<void> m_bvhRestarter;
     cwFutureManagerToken m_futureManagerToken;
 
-    // BuildPrim, SplitProgress, and BuildContext are defined in the .cpp;
-    // declared here so recursive helpers can take them by reference.
+    // BuildPrim and BuildContext are defined in the .cpp; declared here so
+    // recursive helpers can take them by reference. Async BVH builds report
+    // progress through the shared cwProgressReporter (defined in its header).
     struct BuildPrim;
-    struct SplitProgress;
     struct BuildContext;
 
     // Per-pick rejection counters used by the cw.picking logging category.
@@ -582,7 +583,8 @@ private:
     // serialSplitToFanout + parallel buildBvhSubtree pipeline. Returns
     // nullptr for Objects that contribute no primitives.
     static std::shared_ptr<SubBvh> buildSubBvh(const Object& object,
-                                               QPromise<void>& promise);
+                                               QPromise<void>& promise,
+                                               cwProgressReporter<QPromise<void>>& progress);
 
     // Build the world-space top-level BVH over the per-Object root boxes.
     // Sequenced after all sub-BVHs are present.

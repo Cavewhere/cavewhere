@@ -12,6 +12,7 @@
 #include "cwRenderObject.h"
 #include "cwSceneVisibility.h"
 #include "cwConcurrent.h"
+#include "cwProgressReporter.h"
 #include "cwTask.h"
 
 //Std limits
@@ -169,29 +170,6 @@ namespace {
     constexpr int kCornerMaskX = 1;
     constexpr int kCornerMaskY = 2;
     constexpr int kCornerMaskZ = 4;
-
-    // Fixed progress resolution: per-mille (0..1000). Decouples the
-    // setProgressValue range (int) from absolute primitive counts so
-    // multi-billion-point clouds can still report monotonic progress
-    // without saturating at INT_MAX.
-    constexpr int kProgressResolution = 1000;
-
-    // Per-phase progress reporter. `base` and `total` are constant for
-    // the lifetime of a phase; only `done` is the running count passed
-    // in at each call. Scales (base + done) into [0, kProgressResolution]
-    // and pushes to the promise.
-    struct ProgressScaler {
-        QPromise<void>& promise;
-        qsizetype base;
-        qsizetype total;
-
-        void report(qsizetype done) const
-        {
-            Q_ASSERT(total > 0);
-            promise.setProgressValue(static_cast<int>(
-                ((base + done) * kProgressResolution) / total));
-        }
-    };
 
     // Per-vertex mask byte convention: masks are written by their owners
     // into cwSceneVisibility (cwRenderLinePlot::kVisible is 0xFF) — every
@@ -435,25 +413,17 @@ struct cwGeometryItersecter::BuildPrim {
     cwGeometryItersecter::Primitive prim;
 };
 
-// Per-call progress accounting for the serial Phase B-1 split. Phase B-1
-// runs single-threaded so `done` is a plain counter, not atomic.
-struct cwGeometryItersecter::SplitProgress {
-    ProgressScaler scaler;
-    qsizetype done = 0;
-};
-
 // Bundle of references the recursive Phase B helpers all need. Saves
-// passing six parameters through every recursive call.
+// passing several parameters through every recursive call.
 struct cwGeometryItersecter::BuildContext {
     const Object& object;
     QVector<BuildPrim>& prims;
     QVector<BvhNode>& outNodes;
     std::atomic<uint32_t>& nextNode;
-    // Only set during the parallel Phase B pass; serialSplitToFanout
-    // leaves it null because the serial split doesn't create leaves.
-    std::atomic<qsizetype>* leafPrimCounter = nullptr;
-    // Non-null only during Phase B-1 (see launchBuildJob).
-    SplitProgress* splitProgress = nullptr;
+    // Only set during the parallel Phase B-2 pass; serialSplitToFanout leaves
+    // it null because the serial split creates no leaves. Each finished leaf
+    // reports its primitive count so the meter advances as the tree fills.
+    cwProgressReporter<QPromise<void>>* progress = nullptr;
 };
 
 namespace {
@@ -1854,14 +1824,6 @@ uint32_t cwGeometryItersecter::serialSplitToFanout(BuildContext& ctx,
         return selfIndex;
     }
 
-    // medianSplit's nth_element on `count` items dominates this recursion
-    // level, so attribute `count` units after it returns. Sum across all
-    // calls equals the phaseB1Budget reserved in launchBuildJob().
-    if (ctx.splitProgress != nullptr) {
-        ctx.splitProgress->done += count;
-        ctx.splitProgress->scaler.report(ctx.splitProgress->done);
-    }
-
     // Track this as an upper inner node so the bottom-up bbox pass picks
     // it up. Recording before recursion gives us pre-order; iterating in
     // reverse later yields children-before-parents.
@@ -1900,8 +1862,8 @@ void cwGeometryItersecter::buildBvhSubtree(BuildContext& ctx,
         self.left = static_cast<uint32_t>(begin);
         self.right = static_cast<uint32_t>(count);
         self.isLeaf = true;
-        if (ctx.leafPrimCounter != nullptr) {
-            ctx.leafPrimCounter->fetch_add(count, std::memory_order_relaxed);
+        if (ctx.progress != nullptr) {
+            ctx.progress->complete(count);
         }
     };
 
@@ -2178,7 +2140,8 @@ QList<QVector3D> cwGeometryItersecter::pointsInBox(const QuerySnapshot& snapshot
 
 std::shared_ptr<cwGeometryItersecter::SubBvh>
 cwGeometryItersecter::buildSubBvh(const Object& object,
-                                  QPromise<void>& promise)
+                                  QPromise<void>& promise,
+                                  cwProgressReporter<QPromise<void>>& progress)
 {
     const qsizetype primCount = countNodePrimitives(object);
     if (primCount <= 0) {
@@ -2236,10 +2199,12 @@ cwGeometryItersecter::buildSubBvh(const Object& object,
                 return;
             }
             enumerateChunk(chunk);
+            progress.complete(chunk.count);
         });
         waitOnPool(enumFuture);
     } else {
         enumerateChunk(chunks.at(0));
+        progress.complete(chunks.at(0).count);
     }
 
     if (promise.isCanceled()) {
@@ -2258,8 +2223,7 @@ cwGeometryItersecter::buildSubBvh(const Object& object,
     QVector<uint32_t> upperInnerNodes;
 
     BuildContext serialCtx{object, prims, bvhNodes, nextNode,
-                           /*leafPrimCounter=*/nullptr,
-                           /*splitProgress=*/nullptr};
+                           /*progress=*/nullptr};
     serialSplitToFanout(serialCtx, 0, prims.size(),
                         kParallelFanoutDepth,
                         subRanges, upperInnerNodes);
@@ -2269,8 +2233,7 @@ cwGeometryItersecter::buildSubBvh(const Object& object,
     }
 
     if (!subRanges.isEmpty()) {
-        std::atomic<qsizetype> phaseBPrims{0};
-        BuildContext parallelCtx{object, prims, bvhNodes, nextNode, &phaseBPrims};
+        BuildContext parallelCtx{object, prims, bvhNodes, nextNode, &progress};
 
         auto buildFuture = cwConcurrent::map(subRanges,
             [&parallelCtx, &promise](SubRange& r) {
@@ -2496,9 +2459,11 @@ QFuture<void> cwGeometryItersecter::launchBuildJob()
             Key key;
         };
         QVector<Task> tasks;
+        qsizetype primsTotal = 0;
         for (qsizetype i = 0; i < nodesSnapshot.size(); ++i) {
             const Node& n = nodesSnapshot.at(i);
-            if (countNodePrimitives(n.Object) <= 0) {
+            const qsizetype primCount = countNodePrimitives(n.Object);
+            if (primCount <= 0) {
                 continue;
             }
             const Key key = n.Object.key();
@@ -2506,6 +2471,7 @@ QFuture<void> cwGeometryItersecter::launchBuildJob()
             const bool dirty = dirtyKeysSnapshot.contains(key);
             if (missing || dirty) {
                 tasks.append({static_cast<uint32_t>(i), key});
+                primsTotal += primCount;
             }
         }
 
@@ -2513,8 +2479,15 @@ QFuture<void> cwGeometryItersecter::launchBuildJob()
             return;
         }
 
-        promise.setProgressRange(0, kProgressResolution);
-        promise.setProgressValue(0);
+        // Each primitive is worked once per reporting phase — Phase A enumerate,
+        // then Phase B-2 leaf build — and both report, so the raw total is the
+        // primitive count times the number of phases. The reporter turns that
+        // real count into the promise range (scaling down only past ~1B
+        // primitives), so the meter moves through a single huge object instead
+        // of pinning until the one build task ends.
+        constexpr qsizetype kProgressPassesPerPrim = 2;
+        const qsizetype rawMax = kProgressPassesPerPrim * primsTotal;
+        cwProgressReporter<QPromise<void>> progress(promise, rawMax);
 
         const bool debug = lcPick().isDebugEnabled();
         if (debug) {
@@ -2545,22 +2518,23 @@ QFuture<void> cwGeometryItersecter::launchBuildJob()
         QVector<std::shared_ptr<SubBvh>> built(tasks.size());
         QVector<double> taskMs(tasks.size(), 0.0);
         if (!tasks.isEmpty()) {
-            std::atomic<qsizetype> done{0};
             auto fut = cwConcurrent::map(tasks, [&](Task& t) {
                 if (promise.isCanceled()) {
                     return;
                 }
                 const qsizetype slot = &t - tasks.constData();
                 const auto t0 = std::chrono::steady_clock::now();
-                built[slot] = buildSubBvh(nodesSnapshot.at(t.snapshotIndex).Object, promise);
+                built[slot] = buildSubBvh(nodesSnapshot.at(t.snapshotIndex).Object,
+                                          promise, progress);
                 taskMs[slot] = std::chrono::duration<double, std::milli>(
                     std::chrono::steady_clock::now() - t0).count();
-                const qsizetype d = done.fetch_add(1, std::memory_order_relaxed) + 1;
-                promise.setProgressValue(static_cast<int>(
-                    (d * kProgressResolution) / std::max<qsizetype>(tasks.size(), 1)));
             });
             waitOnPool(fut);
         }
+        // The throttle can leave the last reported value a stride short of the
+        // max; the reporter's destructor snaps it to full on scope exit (unless
+        // the promise was cancelled), covering the fast top-level pass that
+        // still follows.
 
         if (debug && !tasks.isEmpty()) {
             // Cap per-task dump so a many-Objects rebuild doesn't blast

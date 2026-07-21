@@ -29,6 +29,7 @@
 #include "cwConcurrent.h"
 #include "cwCoordinateTransform.h"
 #include "cwLazLoader.h"
+#include "cwProgressReporter.h"
 
 // LAStools / LASlib
 #include <LASlib/lasreader.hpp>
@@ -203,7 +204,7 @@ Monad::Result<qint64> clipOneSource(const cwLazClipSource& src,
                                     LASpoint& outPoint,
                                     std::atomic<qint64>& pointsDone,
                                     QPromise<cwLazClipOperation::Result>& promise,
-                                    int progressMax)
+                                    cwProgressReporter<QPromise<cwLazClipOperation::Result>>& progress)
 {
     const QByteArray pathBytes = src.sourcePath.toUtf8();
     LASreadOpener opener;
@@ -235,11 +236,8 @@ Monad::Result<qint64> clipOneSource(const cwLazClipSource& src,
         if (delta <= 0) {
             return;
         }
-        const qint64 done = pointsDone.fetch_add(qint64(delta),
-                                                 std::memory_order_relaxed)
-                            + qint64(delta);
-        // Extra parens defeat the min/max macros from windows.h.
-        promise.setProgressValue(int((std::min<qint64>)(done, qint64(progressMax))));
+        progress.report(pointsDone.fetch_add(qint64(delta), std::memory_order_relaxed)
+                        + qint64(delta));
     };
 
     // global == output-CS coords (post-transform); writes the kept point.
@@ -447,15 +445,10 @@ QFuture<cwLazClipOperation::Result> cwLazClipOperation::run(const Request& reque
             const SourceProbe& probe = probeResult.value();
 
             const qint64 totalPoints = probe.totalPoints;
-            // Progress range is int. For sources >INT_MAX the bar caps at full
-            // before the run actually finishes; the clip itself still
-            // completes.
-            const int progressMax =
-                totalPoints > qint64((std::numeric_limits<int>::max)())
-                    ? (std::numeric_limits<int>::max)()
-                    : int(totalPoints > 0 ? totalPoints : 1);
-            promise.setProgressRange(0, progressMax);
-            promise.setProgressValue(0);
+            // The reporter sizes the range to the real point count, scaling it
+            // down (never clamping to INT_MAX) so the bar keeps advancing even
+            // for sources past ~1B points.
+            cwProgressReporter<QPromise<Result>> progress(promise, totalPoints);
 
             const OutputFormat outputFormat =
                 chooseOutputFormat(probe.formats, probe.recordLengths);
@@ -497,6 +490,7 @@ QFuture<cwLazClipOperation::Result> cwLazClipOperation::run(const Request& reque
             writeOpener.set_file_name(outPathBytes.constData());
             LASwriter* writer = writeOpener.open(&header);
             if (writer == nullptr) {
+                progress.dismiss();
                 promise.addResult(Result(
                     QStringLiteral("Could not open output for write: %1")
                         .arg(request.outputPath),
@@ -521,7 +515,7 @@ QFuture<cwLazClipOperation::Result> cwLazClipOperation::run(const Request& reque
                 Monad::Result<qint64> sliceResult =
                     clipOneSource(request.sources.at(i), i, request.sources.size(),
                                   request, polygonEyeXY, polygonBBox, writer,
-                                  pointTemplate, pointsDone, promise, progressMax);
+                                  pointTemplate, pointsDone, promise, progress);
                 if (sliceResult.hasError()) {
                     failureMessage = sliceResult.errorMessage();
                     failureCode = sliceResult.errorCode();
@@ -556,11 +550,13 @@ QFuture<cwLazClipOperation::Result> cwLazClipOperation::run(const Request& reque
                 return;
             }
             if (failureCode != Monad::ResultBase::NoError) {
+                progress.dismiss();
                 QFile::remove(request.outputPath);
                 promise.addResult(Result(failureMessage, failureCode));
                 return;
             }
             if (finalizeFailed) {
+                progress.dismiss();
                 QFile::remove(request.outputPath);
                 promise.addResult(Result(
                     QStringLiteral("Could not finalize output LAZ (disk full or I/O error)."),
@@ -568,7 +564,8 @@ QFuture<cwLazClipOperation::Result> cwLazClipOperation::run(const Request& reque
                 return;
             }
 
-            promise.setProgressValue(progressMax);
+            // progress completes structurally: the reporter's destructor snaps
+            // the bar to full on scope exit (the promise isn't cancelled here).
             promise.addResult(Result(success));
         });
 }
