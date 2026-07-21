@@ -24,6 +24,16 @@ Item {
     property alias projectionTransition: projectionTransitionId
     property alias scene: rendererId.scene
 
+    // Explicit overlay stacking so order is deterministic instead of
+    // declaration-order dependent. Bottom to top: the 3D scene, interaction
+    // graphics drawn over it, survey labels/leads, then the floating chrome
+    // (compass, scale bar, tool buttons). The readout popups are QC.Popup and
+    // render in the window overlay above all of these, so they need no z.
+    readonly property int zScene: 0
+    readonly property int zInteraction: 1
+    readonly property int zLabels: 2
+    readonly property int zFloatingTools: 3
+
     clip: true
 
     // Keys handlers fire only when this item has active focus.
@@ -55,6 +65,7 @@ Item {
     RegionViewer {
         id: rendererId
         anchors.fill: parent
+        z: rootId.zScene
         camera.devicePixelRatio: Screen.devicePixelRatio
         // Don't set sampleCount; cwRenderingSettings drives it.
     }
@@ -81,6 +92,7 @@ Item {
         id: turnTableInteractionId
         objectName: "turnTableInteraction"
         anchors.fill: parent
+        z: rootId.zInteraction
         camera: rendererId.camera
         scene: rendererId.scene
         gridPlane: RootData.regionSceneManager.gridPlane.plane
@@ -101,6 +113,7 @@ Item {
     CoordinatePickerInteraction {
         id: coordinatePickerId
         objectName: "coordinatePicker"
+        z: rootId.zInteraction
         camera: rendererId.camera
         scene: rendererId.scene
         geoReference: RootData.region.geoReference
@@ -110,6 +123,7 @@ Item {
     LazClipInteractionView {
         id: lazClipInteractionId
         objectName: "lazClipInteraction"
+        z: rootId.zInteraction
         camera: rendererId.camera
         region: RootData.region
         lazLayersSceneNode: RootData.regionSceneManager.lazLayersSceneNode
@@ -119,6 +133,7 @@ Item {
     MeasurementInteractionView {
         id: measurementInteractionId
         objectName: "measurementInteraction"
+        z: rootId.zInteraction
         camera: rendererId.camera
         scene: rendererId.scene
         geoReference: RootData.region.geoReference
@@ -139,6 +154,7 @@ Item {
     LinePlotLabelView {
         id: labelView
         anchors.fill: parent
+        z: rootId.zLabels
         camera: rendererId.camera
         scene: rendererId.scene
         region: RootData.region
@@ -149,6 +165,7 @@ Item {
     LeadView {
         id: leadViewId
         anchors.fill: parent
+        z: rootId.zLabels
         regionModel: RootData.regionTreeModel
         camera: rendererId.camera
         scene: rendererId.scene
@@ -167,6 +184,7 @@ Item {
         anchors.bottomMargin: 20
         anchors.right: parent.right
         anchors.rightMargin: 20
+        z: rootId.zFloatingTools
         spacing: 10
 
         ScaleBar {
@@ -198,6 +216,7 @@ Item {
             bottom: parent.bottom
             margins: 20
         }
+        z: rootId.zFloatingTools
         width: bottomToolbarRowId.implicitWidth + Theme.floatingToolbarPadding
         height: bottomToolbarRowId.implicitHeight + Theme.floatingToolbarPadding
         color: Theme.surface
