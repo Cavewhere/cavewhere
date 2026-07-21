@@ -19,6 +19,7 @@
 #include "cwKeywordItemModel.h"
 #include "cwKeywordModel.h"
 #include "cwLeadVisibility.h"
+#include "cwPositionItem.h"
 #include "cwDebug.h"
 
 //Qt includes
@@ -106,7 +107,10 @@ void cwLeadView::addScrap(cwScrap *scrap)
 
     auto updatePosition = [scrap](QQuickItem* item, int i) {
         auto position = scrap->leadData(cwScrap::LeadPosition, i).value<QVector3D>();
-        item->setProperty("position3D", position);
+        auto positionItem = qobject_cast<cwPositionItem*>(item);
+        if(positionItem != nullptr) {
+            positionItem->setPosition3D(position);
+        }
     };
 
     auto updatePositions = [scrap, this, updatePosition, itemAt](int begin, int end) {
@@ -490,12 +494,12 @@ void cwLeadView::updateItemPositions() {
     for(auto it = m_leadItems.begin(); it != m_leadItems.end(); ++it) {
         ScrapEntry& entry = it->second;
         for(int i = 0; i < entry.items.size(); i++) {
-            QQuickItem* item = entry.items.at(i);
+            cwPositionItem* item = qobject_cast<cwPositionItem*>(entry.items.at(i));
             if(item == nullptr) {
                 continue;
             }
 
-            const QVector3D world = item->property("position3D").value<QVector3D>();
+            const QVector3D world = item->position3D();
             const QVector3D screen = matrix.map(world);
             item->setPosition(QPointF(screen.x(), screen.y()));
 

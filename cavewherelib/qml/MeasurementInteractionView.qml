@@ -79,10 +79,9 @@ MeasurementInteraction {
         z: 2
 
         // Point A
-        QQ.Item {
+        PositionItem {
             id: firstMarkerId
-            property QQ.vector3d position3D: measurementId.firstPoint
-            property bool inFrustum: true
+            position3D: measurementId.firstPoint
             visible: firstMarkerId.inFrustum && measurementId.hasFirst
 
             QQ.Rectangle {
@@ -100,10 +99,9 @@ MeasurementInteraction {
         }
 
         // Point B
-        QQ.Item {
+        PositionItem {
             id: secondMarkerId
-            property QQ.vector3d position3D: measurementId.secondPoint
-            property bool inFrustum: true
+            position3D: measurementId.secondPoint
             visible: secondMarkerId.inFrustum && measurementId.hasMeasurement
 
             QQ.Rectangle {
@@ -123,10 +121,9 @@ MeasurementInteraction {
         // Hover indicator: an accent ring when snapped to a station, a smaller
         // dot for a free point. Hidden when a click here wouldn't place a point
         // (Station-only over empty space), per hoverValid.
-        QQ.Item {
+        PositionItem {
             id: hoverMarkerId
-            property QQ.vector3d position3D: measurementId.hoverPoint
-            property bool inFrustum: true
+            position3D: measurementId.hoverPoint
             visible: hoverMarkerId.inFrustum
                      && measurementId.hoverValid && !measurementId.hasMeasurement
 
@@ -147,14 +144,15 @@ MeasurementInteraction {
 
         // Live distance chip pinned to the middle of the line — tracks the
         // cursor while awaiting B, then freezes on the placed segment.
-        QQ.Item {
+        PositionItem {
             id: midpointMarkerId
             objectName: "measurementMidpointMarker"
+
             property QQ.vector3d _otherPoint: measurementId.hasMeasurement
                                               ? measurementId.secondPoint
                                               : measurementId.hoverPoint
-            property QQ.vector3d position3D: measurementId.firstPoint.plus(midpointMarkerId._otherPoint).times(0.5)
-            property bool inFrustum: true
+
+            position3D: measurementId.firstPoint.plus(midpointMarkerId._otherPoint).times(0.5)
             visible: midpointMarkerId.inFrustum
                      && measurementId.hasFirst
                      && (measurementId.hasMeasurement || measurementId.hoverValid)

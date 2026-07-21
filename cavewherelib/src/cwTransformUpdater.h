@@ -13,10 +13,13 @@
 #include <QMatrix4x4>
 #include <QQuickItem>
 #include <QQmlEngine>
+#include <QSet>
+#include <QPointer>
 
 //Our includes
 #include "cwCamera.h"
 #include "cwGlobals.h"
+#include "cwPositionItem.h"
 
 /**
   \brief This class will watch a cwCamera
@@ -26,7 +29,8 @@
   coordinates) into Qt view coordinates.  This class is extremely useful for mapping 3d positions into
   2D qt view coordinates.  This class will automatically, update the child graphics object positions.
 
-  All items that are added to the transform need to have "position" property that's QVector3D.
+  Items added to the transform are cwPositionItems; the updater reads their position3D
+  and writes their inFrustum membership flag and item position.
   */
 class CAVEWHERE_LIB_EXPORT cwTransformUpdater : public QObject
 {
@@ -47,8 +51,8 @@ public:
     void setModelMatrix(QMatrix4x4 matrix);
     QMatrix4x4 modelMatrix() const;
 
-    Q_INVOKABLE void addPointItem(QQuickItem* object);
-    Q_INVOKABLE void removePointItem(QQuickItem* object);
+    Q_INVOKABLE void addPointItem(cwPositionItem* object);
+    Q_INVOKABLE void removePointItem(cwPositionItem* object);
 
     QMatrix4x4 matrix() const;
 
@@ -73,21 +77,14 @@ private slots:
     void handlePointItemDataChanged();
 
 private:
-    //! Metaobject indices resolved once per item, so update() reprojects without
-    //! re-resolving `position3D`/`inFrustum` by name every frame. -1 means absent.
-    struct PointIndices {
-        int position3D = -1;
-        int inFrustum = -1;
-    };
-
-    QHash<QQuickItem*, PointIndices> PointItems;
+    QSet<cwPositionItem*> PointItems;
     QPointer<cwCamera> Camera;
     QMatrix4x4 ModelMatrix;
 
     QMatrix4x4 TransformMatrix; //!< The total matrix that converts a object's position into qt coordinates
     bool Enabled = true; //!<
 
-    void updatePoint(QQuickItem* object, PointIndices indices);
+    void updatePoint(cwPositionItem* object);
 
     void updateTransformMatrix();
 

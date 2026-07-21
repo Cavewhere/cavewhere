@@ -3,6 +3,7 @@
 
 //Our includes
 #include "cwTransformUpdater.h"
+#include "cwPositionItem.h"
 #include "cwCamera.h"
 
 //Qt includes
@@ -18,73 +19,21 @@ namespace {
     constexpr qreal kPanDistance = 1.0;
 
     /**
-     * Minimal stand-in for a station delegate. cwTransformUpdater reads
-     * "position3D" off the item, connects to position3DChanged(), and writes
-     * "inFrustum" (false once the point leaves the view frustum). Real delegates
-     * compose inFrustum into their own visible binding; this one just records it.
+     * Minimal stand-in for a station delegate: a cwPositionItem with a convenience
+     * constructor that seeds its starting position3D. cwTransformUpdater reads
+     * position3D, connects to position3DChanged(), and writes inFrustum (false once
+     * the point leaves the view frustum). Real delegates compose inFrustum into
+     * their own visible binding; the tests read it back directly.
      */
-    class TestPositionItem : public QQuickItem
+    class TestPositionItem : public cwPositionItem
     {
         Q_OBJECT
-        Q_PROPERTY(QVector3D position3D READ position3D WRITE setPosition3D NOTIFY position3DChanged)
-        Q_PROPERTY(bool inFrustum READ inFrustum WRITE setInFrustum NOTIFY inFrustumChanged)
 
     public:
         explicit TestPositionItem(const QVector3D& position3D = QVector3D())
-            : m_position3D(position3D)
         {
+            setPosition3D(position3D);
         }
-
-        QVector3D position3D() const { return m_position3D; }
-
-        void setPosition3D(const QVector3D& position3D)
-        {
-            if(m_position3D == position3D) {
-                return;
-            }
-            m_position3D = position3D;
-            emit position3DChanged();
-        }
-
-        bool inFrustum() const { return m_inFrustum; }
-
-        void setInFrustum(bool inFrustum)
-        {
-            if(m_inFrustum == inFrustum) {
-                return;
-            }
-            m_inFrustum = inFrustum;
-            emit inFrustumChanged();
-        }
-
-    signals:
-        void position3DChanged();
-        void inFrustumChanged();
-
-    private:
-        QVector3D m_position3D;
-        bool m_inFrustum = true;
-    };
-
-    /**
-     * A delegate that never declares `inFrustum` - the updater has to tolerate it
-     * rather than crash, and warn that the point won't be hidden.
-     */
-    class TestPositionItemNoInFrustum : public QQuickItem
-    {
-        Q_OBJECT
-        Q_PROPERTY(QVector3D position3D READ position3D CONSTANT)
-
-    public:
-        explicit TestPositionItemNoInFrustum(const QVector3D& position3D)
-            : m_position3D(position3D)
-        {
-        }
-
-        QVector3D position3D() const { return m_position3D; }
-
-    private:
-        QVector3D m_position3D;
     };
 
     /**
@@ -165,21 +114,6 @@ TEST_CASE("cwTransformUpdater never writes a point's visible", "[cwTransformUpda
     panned.translate(kPanDistance, 0.0, 0.0);
     camera->setViewMatrix(panned);
     CHECK(behind->isVisible() == true);
-}
-
-TEST_CASE("cwTransformUpdater still positions a point that has no inFrustum property", "[cwTransformUpdater]") {
-    QObject parent;
-    cwTransformUpdater updater;
-    updater.setCamera(makeCenteredCamera(&parent));
-
-    TestItemRoot root;
-    //Off to one side so the projection lands somewhere other than the origin
-    TestPositionItemNoInFrustum item(QVector3D(1, 0, -10));
-    item.setParentItem(&root);
-
-    updater.addPointItem(&item); //Warns, but must not crash or skip positioning
-
-    CHECK(item.position() != QPointF(0, 0));
 }
 
 TEST_CASE("cwTransformUpdater stops following the camera while disabled", "[cwTransformUpdater]") {

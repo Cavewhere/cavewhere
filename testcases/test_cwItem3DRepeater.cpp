@@ -18,6 +18,7 @@ using namespace Catch;
 
 // Under test
 #include "cwItem3DRepeater.h"
+#include "cwPositionItem.h"
 #include "cwCamera.h"
 #include "cwSignalSpy.h"
 
@@ -227,18 +228,21 @@ static QObject* makeRootWithRepeater(QQmlEngine& engine) {
 // ----------------------------
 static QQmlComponent* makeDelegateComponent(QQmlEngine& engine, QObject* parent)
 {
+    //The repeater feeds delegates to cwTransformUpdater, which now takes a
+    //cwPositionItem - so the delegate roots on PositionItem, which supplies
+    //position3D and inFrustum. Registered under the same "Test" module as the
+    //repeater so the C++ test engine can resolve it without the cavewherelib
+    //QML module on its import path.
+    qmlRegisterType<cwPositionItem>("Test", 1, 0, "PositionItem");
+
     static const char* kDelegateQml =
         "import QtQuick 2.15\n"
-        "Item {\n"
+        "import Test 1.0\n"
+        "PositionItem {\n"
         "  id: root\n"
-        "  required property vector3d position3D\n"
         "  required property string displayName\n"
         "  required property real lengthMeters\n"
         "  property int row\n"
-        //Every item the repeater feeds to cwTransformUpdater carries this, so the
-        //delegate under test looks like a real one
-        "  property bool inFrustum: true\n"
-        "  visible: root.inFrustum\n"
         "}\n";
 
     auto* comp = new QQmlComponent(&engine, parent); // parent for cleanup with 'root'

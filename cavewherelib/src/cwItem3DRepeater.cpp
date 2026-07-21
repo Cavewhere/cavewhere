@@ -6,6 +6,7 @@
 
 #include "cwItem3DRepeater.h"
 #include "cwTransformUpdater.h"
+#include "cwPositionItem.h"
 #include "cwSelectionManager.h"
 #include "cwCamera.h"
 #include "cwDebug.h"
@@ -269,7 +270,10 @@ void cwItem3DRepeater::updateItemPosition(QQuickItem* item, int pointIndex)
     }
 
     const QVector3D position = postionVar.value<QVector3D>();
-    item->setProperty("position3D", position);
+    auto positionItem = qobject_cast<cwPositionItem*>(item);
+    if(positionItem != nullptr) {
+        positionItem->setPosition3D(position);
+    }
 }
 
 /* ===== Hooks to attach/detach transform updater ===== */
@@ -277,19 +281,23 @@ void cwItem3DRepeater::updateItemPosition(QQuickItem* item, int pointIndex)
 void cwItem3DRepeater::onItemCreated(QQuickItem* item, int index)
 {
     Q_UNUSED(index);
-    if(item == nullptr) {
+    auto positionItem = qobject_cast<cwPositionItem*>(item);
+    if(positionItem == nullptr) {
+        qWarning() << "Item3DRepeater delegate isn't a PositionItem, so it won't be"
+                   << "projected into the view" << LOCATION;
         return;
     }
-    m_transformUpdater->addPointItem(item);
+    m_transformUpdater->addPointItem(positionItem);
 }
 
 void cwItem3DRepeater::onItemAboutToBeDestroyed(QQuickItem* item, int index)
 {
     Q_UNUSED(index);
-    if(item == nullptr) {
+    auto positionItem = qobject_cast<cwPositionItem*>(item);
+    if(positionItem == nullptr) {
         return;
     }
-    m_transformUpdater->removePointItem(item);
+    m_transformUpdater->removePointItem(positionItem);
 }
 
 QVariantMap cwItem3DRepeater::initialItemProperties(QQuickItem *item, int index) const

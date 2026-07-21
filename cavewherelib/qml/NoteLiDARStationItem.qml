@@ -6,7 +6,6 @@ PointItem {
 
     required property NoteLiDAR note
     required property string name
-    property QQ.vector3d position3D: Qt.vector3d(0, 0, 0)
 
     width: 2
     height: 2
