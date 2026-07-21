@@ -43,6 +43,7 @@
 #include "cwSketchManager.h"
 #include "cwScale.h"
 #include "cwTripLinePlotTask.h"
+#include "cwLinePlotTask.h"
 #include "cwStation.h"
 #include "cwNoteStation.h"
 #include "cwImage.h"
@@ -1219,13 +1220,25 @@ cwTriangulateInData cwScrapManager::mapScrapToTriangulateInData(cwScrap *scrap) 
         return data;
     }
 
-    cwCave* cave = scrap->parentNote()->parentTrip()->parentCave();
+    cwTrip* trip = scrap->parentNote()->parentTrip();
+    cwCave* cave = trip->parentCave();
 
     cwImage noteImage = scrap->parentNote()->image();
     if (Project) {
         data.setNoteImage(Project->absolutePathNoteImage(scrap->parentNote()));
     }
-    data.setNoteStation(scrap->stations());
+
+    // An externally-attached trip's solved positions are keyed with the trip
+    // scope, but the scrap's note stations carry only the scope-relative tail;
+    // qualify them so the triangulator resolves against the cave lookup and
+    // network (a no-op for a native trip).
+    QList<cwNoteStation> noteStations = scrap->stations();
+    if(!trip->externalCenterline().isEmpty()) {
+        for(cwNoteStation& noteStation : noteStations) {
+            noteStation.setName(cwLinePlotTask::scopedStationName(trip, noteStation.name()));
+        }
+    }
+    data.setNoteStation(noteStations);
     data.setStationLookup(cave->stationPositionLookup());
     data.setSurveyNetwork(cave->network());
     data.setNoteTransform(scrap->noteTransformAdjustedDeclination());
@@ -1234,24 +1247,6 @@ cwTriangulateInData cwScrapManager::mapScrapToTriangulateInData(cwScrap *scrap) 
     data.setNoteImageResolution(dotsPerMeter);
 
     return data;
-}
-
-/**
-  Extracts the note station's position and note position
-  */
-QList<cwTriangulateStation> cwScrapManager::mapNoteStationsToTriangulateStation(QList<cwNoteStation> noteStations,
-                                                                                const cwStationPositionLookup& positionLookup) {
-    QList<cwTriangulateStation> stations;
-    foreach(cwNoteStation noteStation, noteStations) {
-        if(positionLookup.hasPosition(noteStation.name())) {
-            cwTriangulateStation station;
-            station.setName(noteStation.name());
-            station.setNotePosition(QVector3D(noteStation.positionOnNote()));
-            station.setPosition(positionLookup.position(noteStation.name()));
-            stations.append(cwTriangulateStation(station));
-        }
-    }
-    return stations;
 }
 
 /**

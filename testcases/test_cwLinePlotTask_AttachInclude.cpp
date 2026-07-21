@@ -21,8 +21,11 @@
 #include "cwLinePlotManager.h"
 #include "cwLinePlotTask.h"
 #include "cwNote.h"
+#include "cwNoteLiDAR.h"
+#include "cwNoteLiDARStation.h"
 #include "cwNoteStation.h"
 #include "cwRenderLinePlot.h"
+#include "cwSurveyNoteLiDARModel.h"
 #include "cwScrap.h"
 #include "cwShot.h"
 #include "cwSurveyNoteModel.h"
@@ -289,12 +292,12 @@ TEST_CASE("Trip-attached centerline emits renderable line geometry",
 
 // B4 / Layer 1 — recompute trigger. A note+scrap on an externally attached trip,
 // anchored to an external station by its scope-stripped panel name ("simple.a1").
-// After a solve the manager should announce the scrap as changed so cwScrapManager
-// remorphs it, but the changed-scrap set is keyed on the bare note-station name
-// while cavern reports the scoped name ("TRIP_<HEX>.SIMPLE.A1"), so the scrap is
-// never flagged. [!shouldfail]: expected red until B4 is fixed (plan §16).
+// After a solve the manager announces the scrap as changed so cwScrapManager
+// remorphs it. The changed-scrap set keys on the scoped station name
+// ("TRIP_<HEX>.SIMPLE.A1", via cwLinePlotTask::scopedStationName), which is the
+// name cavern reports for the solved position — so the scrap is flagged.
 TEST_CASE("Externally attached scrap is flagged for remorph after a solve",
-          "[Attach][Scrap][!shouldfail]")
+          "[Attach][Scrap]")
 {
     QTemporaryDir tempRoot;
     REQUIRE(tempRoot.isValid());
@@ -337,6 +340,53 @@ TEST_CASE("Externally attached scrap is flagged for remorph after a solve",
     REQUIRE_FALSE(manager.hasSolveError());
 
     CHECK(changedScraps.contains(scrap));
+}
+
+// B4 / Layer 1 (LiDAR) — an external trip owns no chunk, so nothing maps it into
+// the changed-trip set from chunk topology. Its LiDAR-carpet notes must still get
+// the trip flagged when their tie-in stations move, so cwNoteLiDARManager remorphs
+// the carpet. The trigger keys on the scoped station name, matching cavern's report.
+TEST_CASE("Externally attached trip with a LiDAR note is flagged after a solve",
+          "[Attach][LiDAR]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    const QString attachDir = seedAttachment(tempSubdir(tempRoot, QStringLiteral("lidar-attach")),
+                                             fixturePath(QStringLiteral("survex_simple.svx")));
+
+    cwCavingRegion region;
+    cwCave* cave = addEmptyCave(region, QStringLiteral("Alpha"));
+    cwTrip* attached = addEmptyTrip(cave, QStringLiteral("Attached"));
+    attached->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_simple.svx")));
+
+    cwNoteLiDAR* lidarNote = new cwNoteLiDAR();
+    cwNoteLiDARStation lidarStation;
+    lidarStation.setName(QStringLiteral("simple.a1"));
+    lidarStation.setPositionOnNote(QVector3D(0.5f, 0.5f, 0.0f));
+    lidarNote->addStation(lidarStation);
+    attached->notesLiDAR()->addNotes({lidarNote});
+
+    // changedTrips must outlive manager: the lambda captures it by reference and
+    // the manager's destructor drain can still emit, so declare it first.
+    QList<cwTrip*> changedTrips;
+
+    cwLinePlotManager manager;
+    QHash<QUuid, QString> tripDirs;
+    tripDirs.insert(attached->id(), attachDir);
+    manager.externalCenterlineManager()->setTripAttachmentDirs(tripDirs);
+
+    QObject::connect(&manager, &cwLinePlotManager::stationPositionInTripsChanged,
+                     [&changedTrips](const QList<cwTrip*>& trips) {
+                         changedTrips.append(trips);
+                     });
+
+    manager.setRegion(&region);
+    manager.waitToFinish();
+
+    REQUIRE_FALSE(manager.hasSolveError());
+
+    CHECK(changedTrips.contains(attached));
 }
 
 TEST_CASE("Cave-attached centerline skips trip loop and resolves under cave_<uuid>.*",

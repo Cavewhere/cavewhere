@@ -19,6 +19,8 @@
 #include "cwTripCalibration.h"
 #include "cwNote.h"
 #include "cwSurveyNoteModel.h"
+#include "cwSurveyNoteLiDARModel.h"
+#include "cwNoteLiDAR.h"
 #include "cwScrap.h"
 #include "cwSurveyChunk.h"
 #include "cwDebug.h"
@@ -88,6 +90,14 @@ QString cwLinePlotTask::cavernTripNameFor(const QUuid& tripId)
     return kTripNamePrefix + tripId.toString(QUuid::Id128);
 }
 
+QString cwLinePlotTask::scopedStationName(const cwTrip* trip, const QString& stationName)
+{
+    if (trip == nullptr || trip->externalCenterline().isEmpty()) {
+        return stationName;
+    }
+    return cavernTripNameFor(trip->id()) + QLatin1Char('.') + stationName;
+}
+
 QRegularExpression cwLinePlotTask::cavernStationRegex()
 {
     // ^cave_<32 hex>\.(\S.*)$ — the tail is intentionally permissive
@@ -135,12 +145,19 @@ void cwLinePlotTask::LinePlotResultData::clear()
 
 cwLinePlotTask::StationTripScrapLookup::StationTripScrapLookup(cwCave *cave)
 {
+    // Keys are matched against the changed-station names reported by
+    // setStationAsChanged, which are the cave-local lookup keys. For an
+    // externally-attached trip those retain the trip scope (trip_<hex>.<tail>)
+    // while chunk / note / scrap stations carry only the tail, so every key
+    // inserted here is scoped to match (a no-op for a native trip).
     for(int tripIndex = 0; tripIndex < cave->tripCount(); tripIndex++) {
         cwTrip* trip = cave->trip(tripIndex);
         const QUuid tripId = trip->id();
+        const bool external = !trip->externalCenterline().isEmpty();
+
         foreach(cwSurveyChunk* surveyChunk, trip->chunks()) {
             foreach(cwStation station, surveyChunk->stations()) {
-                MapStationToTrip.insert(station.name().toUpper(), tripId);
+                MapStationToTrip.insert(scopedStationName(trip, station.name()).toUpper(), tripId);
             }
         }
 
@@ -150,8 +167,24 @@ cwLinePlotTask::StationTripScrapLookup::StationTripScrapLookup(cwCave *cave)
                 const QUuid scrapId = scrap->id();
 
                 foreach(cwNoteStation noteStation, scrap->stations()) {
-                    MapStationToScrap.insert(noteStation.name().toUpper(),
+                    MapStationToScrap.insert(scopedStationName(trip, noteStation.name()).toUpper(),
                                              std::make_pair(tripId, scrapId));
+                }
+            }
+        }
+
+        // An external trip owns no chunk, so nothing above mapped it into
+        // MapStationToTrip. Its LiDAR-carpet notes still need the trip flagged
+        // when their tie-in stations move (a scrap already propagates to its
+        // parent trip in setStationAsChanged, so scraps need no extra mapping).
+        if(external) {
+            foreach(QObject* obj, trip->notesLiDAR()->notes()) {
+                auto* lidarNote = qobject_cast<cwNoteLiDAR*>(obj);
+                if(lidarNote == nullptr) {
+                    continue;
+                }
+                foreach(const cwNoteLiDARStation& noteStation, lidarNote->stations()) {
+                    MapStationToTrip.insert(scopedStationName(trip, noteStation.name()).toUpper(), tripId);
                 }
             }
         }

@@ -211,8 +211,6 @@ private:
     void updateScrapGeometry(QList<cwScrap *> scraps = QList<cwScrap*>());
     void updateScrapGeometryHelper(QList<cwScrap *> scraps);
     cwTriangulateInData mapScrapToTriangulateInData(cwScrap *scrap) const;
-    static QList<cwTriangulateStation> mapNoteStationsToTriangulateStation(QList<cwNoteStation> noteStations,
-                                                                           const cwStationPositionLookup& positionLookup);
 
     void scrapInsertedHelper(cwNote* parentNote, int begin, int end);
     void scrapRemovedHelper(cwNote* parentNote, int begin, int end);

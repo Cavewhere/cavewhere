@@ -21,6 +21,7 @@
 #include "cwTriangulateStation.h"
 #include "cwTriangulatedData.h"
 #include "cwLinePlotTask.h"
+#include "cwExternalCenterline.h"
 #include "cwImageUtils.h"
 #include "cwNoteStation.h"
 #include "cwStationPositionLookup.h"
@@ -65,25 +66,43 @@ static QSizeF geometryBoundsSize(const cwGeometry& geometry)
     return QSizeF(max.x() - min.x(), max.y() - min.y());
 }
 
-// B4 / Layer 2 — morph resolution. Proves the scrap/carpet scope mismatch for an
-// externally attached trip: the note station carries the scope-stripped name the
-// station-list panel shows ("simple.a1"), but the solved cave lookup keeps the
-// trip scope prefix ("trip_<hex>.simple.a1"). cwTriangulateInData resolves by
-// exact canonical key, so it anchors nothing and the scrap carpet morphs empty.
-// [!shouldfail]: expected red until B4 is fixed (see plan EXTERNAL_FILE_PHASE2 §16).
-TEST_CASE("cwTriangulateInData resolves an external-scoped note station against the cave lookup",
-          "[cwTriangulateInData][Attach][!shouldfail]") {
+// B4 / Layer 2 — morph resolution. An externally attached trip's solved
+// positions are keyed with the trip scope ("trip_<hex>.simple.a1"), while the
+// scrap's note station carries only the scope-relative tail the station-list
+// panel shows ("simple.a1"). The fix qualifies the note station with
+// cwLinePlotTask::scopedStationName at the morph boundary (cwScrapManager /
+// cwNoteLiDARManager); the shared triangulator is left resolving by exact
+// canonical key, so the two namespaces must agree.
+TEST_CASE("scopedStationName qualifies external-trip stations and no-ops native ones",
+          "[cwLinePlotTask][Attach]") {
+    cwTrip nativeTrip;
+    CHECK(cwLinePlotTask::scopedStationName(&nativeTrip, QStringLiteral("a1"))
+          == QStringLiteral("a1"));
+    CHECK(cwLinePlotTask::scopedStationName(nullptr, QStringLiteral("a1"))
+          == QStringLiteral("a1"));
+
+    cwTrip externalTrip;
+    externalTrip.setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_simple.svx")));
+    CHECK(cwLinePlotTask::scopedStationName(&externalTrip, QStringLiteral("simple.a1"))
+          == cwLinePlotTask::cavernTripNameFor(externalTrip.id()) + QStringLiteral(".simple.a1"));
+}
+
+TEST_CASE("A boundary-scoped external note station resolves against the cave lookup",
+          "[cwTriangulateInData][Attach]") {
+    cwTrip externalTrip;
+    externalTrip.setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_simple.svx")));
+
+    // The morph boundary scopes the note station name; the cave lookup keys its
+    // solved positions the same way — so a scoped name anchors a solved point.
+    const QString scopedName =
+        cwLinePlotTask::scopedStationName(&externalTrip, QStringLiteral("simple.a1"));
+
     cwNoteStation noteStation;
-    noteStation.setName(QStringLiteral("simple.a1"));
+    noteStation.setName(scopedName);
     noteStation.setPositionOnNote(QPointF(0.5, 0.5));
 
-    const QUuid tripId =
-        QUuid::fromString(QStringLiteral("{11111111-2222-3333-4444-555555555555}"));
-    const QString scopedKey =
-        cwLinePlotTask::cavernTripNameFor(tripId) + QStringLiteral(".simple.a1");
-
     cwStationPositionLookup lookup;
-    lookup.setPosition(scopedKey, QVector3D(1.0f, 2.0f, 3.0f));
+    lookup.setPosition(scopedName, QVector3D(1.0f, 2.0f, 3.0f));
 
     cwTriangulateInData data;
     data.setNoteStation({noteStation});

@@ -30,6 +30,7 @@
 #include "cwSurveyNoteLiDARModel.h"
 #include "cwNoteLiDAR.h"
 #include "cwLinePlotManager.h"
+#include "cwLinePlotTask.h"
 #include "cwProject.h"
 #include "asyncfuture.h"
 #include "cwUniqueConnectionChecker.h"
@@ -513,8 +514,17 @@ cwTriangulateLiDARInData cwNoteLiDARManager::mapNoteToInData(const cwNoteLiDAR* 
     const cwTrip* trip = note->parentTrip();
     const cwCave* cave = trip ? trip->parentCave() : nullptr;
 
-    // Note stations
-    in.setNoteStations(note->stations());
+    // Note stations. An externally-attached trip's solved positions are keyed
+    // with the trip scope, but the LiDAR note's stations carry only the
+    // scope-relative tail; qualify them so the morph resolves against the cave
+    // lookup and network (a no-op for a native trip).
+    QList<cwNoteLiDARStation> noteStations = note->stations();
+    if(trip != nullptr && !trip->externalCenterline().isEmpty()) {
+        for(cwNoteLiDARStation& noteStation : noteStations) {
+            noteStation.setName(cwLinePlotTask::scopedStationName(trip, noteStation.name()));
+        }
+    }
+    in.setNoteStations(noteStations);
 
     // Model matrix for lidar
     QMatrix4x4 modelMatrix = note->noteTransformation()->matrix();

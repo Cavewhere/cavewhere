@@ -2788,10 +2788,15 @@ public:
     <code>cwLinePlotLabelView.cpp</code> now
     <code>#include "cwLinePlotTask.h"</code> purely to borrow the naming
     statics, so a geometry/view unit depends on a Task class for string
-    grammar (a boundary smell a free-function header erases). Now five
-    consumers with three encodings; the move is still pure but should
-    happen before the next consumer. Folds naturally into the uniform
-    external-station accessor entry below.</em>
+    grammar (a boundary smell a free-function header erases).
+    <strong>Update 2026-07-21 (B4 review):</strong> the B4 fix added
+    <code>cwLinePlotTask::scopedStationName</code> as a sixth consumer
+    (a fifth cave-local scope site) and pulled the same
+    <code>#include "cwLinePlotTask.h"</code> boundary smell into
+    <code>cwScrapManager.cpp</code> and <code>cwNoteLiDARManager.cpp</code>.
+    Now six consumers with three encodings; the move is still pure but
+    should happen before the next consumer. Folds naturally into the
+    uniform external-station accessor entry below.</em>
   </li>
   <li>
     <strong>State-managed pane width in <code>TripPage</code></strong>
@@ -2842,19 +2847,46 @@ public:
     externally-backed trip &mdash; and <em>every</em> consumer then
     rediscovers the trip's real stations by prefix-scanning
     <code>cave-&gt;stationPositionLookup()</code>: the B1 geometry emit,
-    the B1b label scan, and (broken) the B4 scrap trigger
-    (<code>MapStationToTrip</code> is chunk-only) and morph
-    (<code>computeStations</code> exact-key). That is a leaking boundary
-    &mdash; the trip can't answer "what are my stations" honestly. A
-    single authoritative accessor (e.g.
+    the B1b label scan, and the B4 scrap trigger and morph. That is a
+    leaking boundary &mdash; the trip can't answer "what are my stations"
+    honestly. A single authoritative accessor (e.g.
     <code>cwTrip::solvedStations()</code> yielding
     <code>(name, position)</code> for native <em>and</em> external
     trips) would give geometry, labels, scrap-trigger, and morph one
-    contract instead of four bespoke scans, and would fix B4's Layer-1
-    trigger for free. Pairs with the <code>externallyBacked</code>
-    predicate above and the <code>cwCavernNaming</code> move; best landed
-    with (or just before) the B4 fix. Blast radius: <code>cwTrip</code>
+    contract instead of four bespoke scans.
+    <em>Update 2026-07-21 (B4 review): B4 shipped a bespoke bridge
+    instead &mdash; <code>cwLinePlotTask::scopedStationName</code>
+    qualifies the note/scrap/LiDAR name at the trigger
+    (<code>StationTripScrapLookup</code>) and morph
+    (<code>cwScrapManager</code>/<code>cwNoteLiDARManager</code>)
+    boundaries, and external-trip LiDAR stations are now inserted into
+    <code>MapStationToTrip</code> (so it is <strong>no longer
+    chunk-only</strong>). The scrap trigger and morph are therefore no
+    longer broken, but at the cost of a fourth bespoke scan. The "land it
+    with B4" window has now closed; this accessor is a pure post-hoc
+    consolidation that would collapse <code>scopedStationName</code> plus
+    the four scans into one contract &mdash; and it would also resolve a
+    related external-trip note-editing gap the B4 review surfaced (the
+    same root cause reaches the auto-transform / station-guide /
+    name-autocomplete / lead-distance paths, which resolve tail-only
+    note-station names against the scope-prefixed cave lookup/network).</em>
+    Pairs with the <code>externallyBacked</code> predicate above and the
+    <code>cwCavernNaming</code> move. Blast radius: <code>cwTrip</code>
     API + ~4 consumers.
+  </li>
+  <li>
+    <strong>End-to-end scrap/LiDAR carpet render test for an external
+    trip</strong> <em>(B4 review, 2026-07-21)</em>. B4's fix is covered
+    piecewise &mdash; the Layer-1 trigger (<code>[Attach][Scrap]</code>,
+    <code>[Attach][LiDAR]</code>), the <code>scopedStationName</code> unit,
+    and the Layer-2 boundary-scoped round-trip
+    (<code>[cwTriangulateInData][Attach]</code>) &mdash; but no single test
+    drives <code>cwScrapManager</code> all the way to non-empty scrap
+    geometry (or the LiDAR carpet) for an externally-attached trip. That
+    heavier fixture (on-disk note image + a digitized outline) was
+    deferred as belt-and-suspenders, not a gate. Left untracked it would
+    be lost, so it lives here. Blast radius: one C++ test + a small image
+    fixture.
   </li>
   <li>
     <strong><code>cwCave::addTrip</code> should return the new
@@ -3060,7 +3092,7 @@ public:
   added under these tags).
 </p>
 
-<h3 id="bug-b4">B4 &mdash; Scrap &amp; carpet do not render for an externally attached trip <em>(diagnosed 2026-07-21)</em></h3>
+<h3 id="bug-b4">B4 &mdash; Scrap &amp; carpet do not render for an externally attached trip <em>(FIXED 2026-07-21)</em></h3>
 
 <p>
   A note+scrap (or LiDAR scan) on an attached trip does not appear as
@@ -3110,55 +3142,148 @@ public:
   </li>
 </ul>
 <p>
-  <strong>Proposed fix (bridge the scope prefix at both boundaries; keep
-  the shared triangulator/lookup untouched):</strong> a single helper
-  <code>scopedStationName(trip, name)</code> that prepends
-  <code>cwLinePlotTask::cavernTripNameFor(trip-&gt;id()) + "."</code> for
-  an externally-backed trip (empty for native). Apply it (a) in the
-  <code>StationTripScrapLookup</code> ctor so the trigger maps key on the
-  scoped name (fixing both <code>MapStationToScrap</code> and, by adding
-  external-trip note/scrap stations, <code>MapStationToTrip</code>); and
-  (b) at the morph boundary &mdash; either scope the note-station names or
-  hand the triangulator a scope-local lookup (keys re-stripped) in
-  <code>cwScrapManager::mapScrapToTriangulateInData</code> and the LiDAR
-  equivalent. Files: <code>cwLinePlotTask.cpp</code>,
-  <code>cwScrapManager.cpp</code>, <code>cwNoteLiDARManager.cpp</code>
-  (+ possibly <code>cwTriangulateInData</code>). Dead code to drop while
-  here: <code>cwScrapManager::mapNoteStationsToTriangulateStation</code>
-  (defined, never called).
-</p>
-<p>
-  <strong>Proving tests written (2026-07-21, committed as
-  <code>[!shouldfail]</code> so they document the bug while the suite
-  stays green &mdash; drop the tag when B4 lands):</strong>
+  <strong>Fix landed (bridge the scope prefix at both boundaries; keep the
+  shared triangulator/lookup untouched):</strong> a single static helper
+  <code>cwLinePlotTask::scopedStationName(trip, name)</code> prepends
+  <code>cavernTripNameFor(trip-&gt;id()) + "."</code> for an
+  externally-backed trip (returns the name unchanged for a native or null
+  trip). Applied at:
 </p>
 <ul>
   <li>
-    <strong>Layer 2 (morph):</strong>
-    <code>test_cwTriangulateTask.cpp</code> &mdash; "cwTriangulateInData
-    resolves an external-scoped note station against the cave lookup"
-    (<code>[cwTriangulateInData][Attach][!shouldfail]</code>). Note
-    station <code>simple.a1</code> vs lookup key
-    <code>trip_&lt;hex&gt;.simple.a1</code> &rarr;
-    <code>computeStations()</code> returns 0 (should be 1).
+    <strong>Layer 1 (trigger)</strong> &mdash; the
+    <code>StationTripScrapLookup</code> ctor now keys
+    <code>MapStationToScrap</code> and the native chunk entries of
+    <code>MapStationToTrip</code> on the scoped name. For an external trip
+    (no chunk), its <em>LiDAR</em> note stations are additionally mapped
+    into <code>MapStationToTrip</code> so a LiDAR-only trip is still flagged
+    (a scrap already propagates to its parent trip in
+    <code>setStationAsChanged</code>, so scraps need no extra trip mapping).
   </li>
   <li>
-    <strong>Layer 1 (trigger):</strong>
-    <code>test_cwLinePlotTask_AttachInclude.cpp</code> &mdash;
-    "Externally attached scrap is flagged for remorph after a solve"
-    (<code>[Attach][Scrap][!shouldfail]</code>). Attaches an external
-    trip + note/scrap named <code>simple.a1</code>, solves, and asserts
-    the scrap appears in <code>stationPositionInScrapsChanged</code>;
-    today it never does.
+    <strong>Layer 2 (morph boundary)</strong> &mdash; the note-station names
+    are scoped just before they enter the triangulator, in
+    <code>cwScrapManager::mapScrapToTriangulateInData</code> and
+    <code>cwNoteLiDARManager::mapNoteToInData</code>. The shared
+    <code>computeStations()</code> /
+    <code>buildStationsWithInterpolatedShots</code> resolvers stay untouched
+    (exact canonical key), so the scoped name now matches both the cave
+    lookup and the cave network keys.
   </li>
 </ul>
 <p>
-  <strong>Still to write when B4 is fixed:</strong> end-to-end
-  <code>cwScrapManager</code> non-empty scrap geometry
-  (<code>test_cwScrapManager.cpp</code>) and the LiDAR parallel
-  (<code>test_cwNoteLiDARManager.cpp</code> /
-  <code>test_cwTriangulateLiDARTask.cpp</code>). Flip both
-  <code>[!shouldfail]</code> tags off at that point.
+  Files: <code>cwLinePlotTask.{h,cpp}</code>,
+  <code>cwScrapManager.{h,cpp}</code>, <code>cwNoteLiDARManager.cpp</code>.
+  Dead code dropped: <code>cwScrapManager::mapNoteStationsToTriangulateStation</code>
+  (defined, never called).
+</p>
+<p>
+  <strong>Tests (all green):</strong>
+</p>
+<ul>
+  <li>
+    <strong>Layer 1 (scrap trigger):</strong>
+    <code>test_cwLinePlotTask_AttachInclude.cpp</code> &mdash; "Externally
+    attached scrap is flagged for remorph after a solve"
+    (<code>[Attach][Scrap]</code>, <code>[!shouldfail]</code> tag dropped).
+  </li>
+  <li>
+    <strong>Layer 1 (LiDAR trigger):</strong> same file &mdash; "Externally
+    attached trip with a LiDAR note is flagged after a solve"
+    (<code>[Attach][LiDAR]</code>). Proves the external-trip LiDAR mapping
+    into <code>result.Trips</code> that drives
+    <code>stationPositionInTripsChanged</code>.
+  </li>
+  <li>
+    <strong>Helper + Layer 2 (morph):</strong>
+    <code>test_cwTriangulateTask.cpp</code> &mdash; "scopedStationName
+    qualifies external-trip stations and no-ops native ones"
+    (<code>[cwLinePlotTask][Attach]</code>) and "A boundary-scoped external
+    note station resolves against the cave lookup"
+    (<code>[cwTriangulateInData][Attach]</code>). The original
+    <code>[!shouldfail]</code> test that expected the triangulator itself to
+    strip the scope was replaced &mdash; the fix scopes at the boundary and
+    leaves the triangulator exact-key, so the regression guard is the
+    boundary-scoped-name round-trip instead.
+  </li>
+</ul>
+<p>
+  <strong>Deferred follow-up (not blocking):</strong> a full end-to-end
+  render test that drives <code>cwScrapManager</code> to non-empty scrap
+  geometry (and the LiDAR parallel through
+  <code>cwTriangulateLiDARTask</code>) &mdash; heavier fixture work (note
+  image + outline on disk). The flagged-trigger + scoped-anchor chain above
+  is covered piecewise; the render test is belt-and-suspenders.
+</p>
+
+<h3 id="bug-b5">B5 &mdash; External-trip note <em>editing</em> resolves tail-only names against the scoped lookup <em>(surfaced by the B4 review, 2026-07-21; own commit)</em></h3>
+
+<p>
+  <strong>Same name/scope mismatch as B4, different subsystem.</strong> B4
+  fixed the <em>render/morph</em> path (trigger + triangulator boundary). The
+  main-thread note-<em>editing</em> paths were left untouched and hit the
+  identical asymmetry: they resolve a note/lead station's scope-stripped
+  user-facing name (<code>simple.a1</code>) against the live
+  <code>cave&rarr;stationPositionLookup()</code> / <code>cave&rarr;network()</code>,
+  whose external-trip keys retain the trip scope
+  (<code>trip_&lt;hex&gt;.simple.a1</code>) &mdash; so
+  <code>hasPosition</code>/<code>position</code>/<code>neighbors</code> return
+  nothing for an externally-attached trip. User-visible fallout: auto
+  scale/north silently no-ops (scrap renders at an identity transform,
+  <em>misaligned</em>); the station-guide overlay never draws while editing;
+  station-name autocomplete fails; lead distance reads 0. Deliberately
+  <strong>not folded into B4</strong> to keep that change reviewable; this is
+  its own commit.
+</p>
+<p><strong>Sites (all main-thread, against the live cave lookup):</strong></p>
+<ul>
+  <li>
+    <strong>Auto-transform (scrap):</strong>
+    <code>cwScrap::noteShots()</code> (<code>cwScrap.cpp:689</code>) and
+    <code>profileTransform()</code> (<code>cwScrap.cpp:700</code>). Feed
+    <code>updateNoteTransformation</code>. <em>Input-scope only</em> &mdash;
+    scope the note-station names before <code>cwNoteTransformCalculator</code>;
+    output is transform data (no name leak).
+  </li>
+  <li>
+    <strong>Auto-north (LiDAR):</strong> <code>cwNoteLiDAR.cpp:300-305</code>
+    &mdash; same <code>noteShots</code> + lookup path. Input-scope only.
+  </li>
+  <li>
+    <strong>Lead distance:</strong> <code>cwLeadModel::leadDistance</code>
+    (<code>cwLeadModel.cpp:484-485</code>) resolves
+    <code>referanceStation()</code> against the scoped lookup. Input-scope only.
+  </li>
+  <li>
+    <strong>Name autocomplete &mdash; OUTPUT-LEAK TRAP:</strong>
+    <code>cwScrap::guessNeighborStationName</code> (<code>cwScrap.cpp:840</code>,
+    neighbors via <code>allNeighborStations</code>&rarr;<code>network.neighbors</code>
+    at <code>:1215</code>). Scoping the query makes neighbors come back
+    scoped, and the function <strong>returns the chosen name to the UI</strong>
+    (it becomes the note-station name) &mdash; the return value must be
+    <strong>stripped back to the tail</strong> or it corrupts what the user
+    sees/sets.
+  </li>
+  <li>
+    <strong>Station-guide overlay &mdash; NEEDS A REDESIGN, not just scoping:</strong>
+    <code>cwScrapStationView::updateShotLines</code>
+    (<code>cwScrapStationView.cpp:176-214</code>) sources neighbors from
+    <code>trip&rarr;neighboringStations()</code>, which is
+    <strong>chunk-based</strong> (<code>cwTrip.cpp:396-403</code>) and returns
+    <em>empty</em> for a chunk-less external trip regardless of scoping. This
+    site must switch to the survey <em>network</em> (as
+    <code>allNeighborStations</code> already does) <em>and</em> scope.
+  </li>
+</ul>
+<p>
+  <strong>Implementation choice at commit time:</strong> either per-site
+  scoping (reusing <code>cwLinePlotTask::scopedStationName</code>, with the two
+  traps above handled), or &mdash; cleaner &mdash; route these sites through the
+  &sect;15 <strong>uniform <code>cwTrip::solvedStations()</code> accessor</strong>,
+  which resolves the same root cause for the whole B1/B1b/B4/B5 family at once.
+  Each fixed site needs its own test (auto-transform produces a non-identity
+  transform; guide lines draw; autocomplete returns the tail name; lead
+  distance is non-zero) &mdash; all for an externally-attached trip.
 </p>
 
 <h3 id="bug-b2">B2 &mdash; Trip page layout for attached survey data (split into testable commits)</h3>
