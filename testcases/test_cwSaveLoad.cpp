@@ -3556,6 +3556,147 @@ TEST_CASE("Bundle saveAs preserves note image for existing trip", "[cwProject][c
     }
 }
 
+TEST_CASE("Bundle saveAs clears the cwSaveLoad temporary flag like a reopen does", "[cwSaveLoad][cwProject]") {
+    // Issue #597: Save As to a bundled .cw used to leave cwSaveLoad's
+    // temporary flag stale (true) until the bundle was closed and
+    // reopened, while load() cleared it. Identical project on disk, two
+    // different answers, and the flag gates the project-rename and
+    // cleanup jobs — so a rename inside a saved-as bundle silently took
+    // a different path than the same rename after a reopen.
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+    rootData->settings()->jobSettings()->setAutomaticUpdate(false);
+
+    auto region = project->cavingRegion();
+    region->addCave();
+    region->cave(0)->setName(QStringLiteral("Issue597Cave"));
+
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    const QString bundlePath = QDir(tempDir.path()).filePath(QStringLiteral("issue597-parity.cw"));
+
+    REQUIRE(project->saveAs(bundlePath));
+    project->waitSaveToFinish();
+    rootData->futureManagerModel()->waitForFinished();
+
+    // The archive is now the project's durable home, so both layers
+    // must agree — this is what load() reports for the same file.
+    CHECK_FALSE(project->saveLoad()->isTemporaryProject());
+    CHECK_FALSE(project->isTemporaryProject());
+
+    auto reopenedRoot = std::make_unique<cwRootData>();
+    reopenedRoot->settings()->jobSettings()->setAutomaticUpdate(false);
+    reopenedRoot->project()->loadOrConvert(bundlePath);
+    reopenedRoot->project()->waitLoadToFinish();
+    REQUIRE(reopenedRoot->project()->errorModel()->size() == 0);
+
+    CHECK_FALSE(reopenedRoot->project()->saveLoad()->isTemporaryProject());
+    CHECK_FALSE(reopenedRoot->project()->isTemporaryProject());
+}
+
+TEST_CASE("Region rename after bundle saveAs updates the descriptor and dataRoot", "[cwSaveLoad][cwProject]") {
+    // The user-visible half of issue #597. The region-nameChanged
+    // handler early-outs on the temporary flag, so while the flag was
+    // stale a rename made right after Save As to a bundle left the
+    // .cwproj descriptor and dataRoot directory under their old names
+    // inside the archive. The same rename after close-and-reopen moved
+    // both. This pins the reopen behavior for the saved-this-session
+    // case too.
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+    rootData->settings()->jobSettings()->setAutomaticUpdate(false);
+
+    auto region = project->cavingRegion();
+    region->addCave();
+    auto cave = region->cave(0);
+    cave->setName(QStringLiteral("Issue597RenameCave"));
+    cave->addTrip();
+    cave->trip(0)->setName(QStringLiteral("Issue597Trip"));
+
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    const QString bundlePath = QDir(tempDir.path()).filePath(QStringLiteral("issue597-rename.cw"));
+
+    REQUIRE(project->saveAs(bundlePath));
+    project->waitSaveToFinish();
+    rootData->futureManagerModel()->waitForFinished();
+
+    // prepareBundleStage names the region and dataRoot after the bundle.
+    REQUIRE(region->name() == QStringLiteral("issue597-rename"));
+    REQUIRE(project->dataRootDir().dirName() == QStringLiteral("issue597-rename"));
+
+    const QString oldDescriptorPath = project->saveLoad()->fileName();
+    const QString oldDataRootPath = project->dataRootDir().absolutePath();
+
+    const QString renamed = QStringLiteral("RenamedRegion597");
+    region->setName(renamed);
+    project->saveLoad()->waitForFinished();
+
+    const QString descriptorPath = project->saveLoad()->fileName();
+    CHECK(QFileInfo(descriptorPath).fileName() == renamed + QStringLiteral(".cwproj"));
+    CHECK(QFileInfo::exists(descriptorPath));
+    CHECK(project->dataRootDir().dirName() == renamed);
+    CHECK(project->dataRootDir().exists());
+
+    // The old names must be renamed away, not duplicated — a second
+    // .cwproj or dataRoot left inside the bundle makes a reopen pick
+    // between them.
+    CHECK_FALSE(QFileInfo::exists(oldDescriptorPath));
+    CHECK_FALSE(QFileInfo::exists(oldDataRootPath));
+
+    REQUIRE(project->save());
+    project->waitSaveToFinish();
+    rootData->futureManagerModel()->waitForFinished();
+
+    // The re-zip must capture the renamed layout, and a reopen must
+    // come back with the same descriptor and dataRoot names — not the
+    // stale pre-rename ones.
+    auto reopenedRoot = std::make_unique<cwRootData>();
+    reopenedRoot->settings()->jobSettings()->setAutomaticUpdate(false);
+    cwProject* reopened = reopenedRoot->project();
+    reopened->loadOrConvert(bundlePath);
+    reopened->waitLoadToFinish();
+    REQUIRE(reopened->errorModel()->size() == 0);
+
+    CHECK(reopened->cavingRegion()->name() == renamed);
+    REQUIRE(reopened->cavingRegion()->caveCount() == 1);
+    CHECK(reopened->cavingRegion()->cave(0)->name() == QStringLiteral("Issue597RenameCave"));
+    REQUIRE(reopened->cavingRegion()->cave(0)->tripCount() == 1);
+    CHECK(reopened->cavingRegion()->cave(0)->trip(0)->name() == QStringLiteral("Issue597Trip"));
+
+    CHECK(QFileInfo(reopened->saveLoad()->fileName()).fileName() == renamed + QStringLiteral(".cwproj"));
+    CHECK(reopened->dataRootDir().dirName() == renamed);
+
+    // A second Save As under an unrelated name must not re-derive the
+    // internal identity: the descriptor and dataRoot stay keyed to the
+    // region name, never the archive filename. That decoupling is what
+    // keeps differently-named bundle copies of one project git-identical
+    // inside, so they can still sync against each other.
+    const QString v1Path = QDir(tempDir.path()).filePath(QStringLiteral("issue597-rename-v1.cw"));
+    REQUIRE(project->saveAs(v1Path));
+    project->waitSaveToFinish();
+    rootData->futureManagerModel()->waitForFinished();
+
+    CHECK(project->filename() == v1Path);
+    CHECK(QFileInfo(project->saveLoad()->fileName()).fileName() == renamed + QStringLiteral(".cwproj"));
+    CHECK(project->dataRootDir().dirName() == renamed);
+
+    auto v1Root = std::make_unique<cwRootData>();
+    v1Root->settings()->jobSettings()->setAutomaticUpdate(false);
+    cwProject* v1Reopened = v1Root->project();
+    v1Reopened->loadOrConvert(v1Path);
+    v1Reopened->waitLoadToFinish();
+    REQUIRE(v1Reopened->errorModel()->size() == 0);
+
+    CHECK(v1Reopened->cavingRegion()->name() == renamed);
+    CHECK(QFileInfo(v1Reopened->saveLoad()->fileName()).fileName() == renamed + QStringLiteral(".cwproj"));
+    CHECK(v1Reopened->dataRootDir().dirName() == renamed);
+    REQUIRE(v1Reopened->cavingRegion()->caveCount() == 1);
+    CHECK(v1Reopened->cavingRegion()->cave(0)->name() == QStringLiteral("Issue597RenameCave"));
+    REQUIRE(v1Reopened->cavingRegion()->cave(0)->tripCount() == 1);
+    CHECK(v1Reopened->cavingRegion()->cave(0)->trip(0)->name() == QStringLiteral("Issue597Trip"));
+}
+
 TEST_CASE("v6 conversion zero-pads note filenames to preserve ordering", "[cwSaveLoad]") {
     auto rootData = std::make_unique<cwRootData>();
     auto project = rootData->project();

@@ -2859,24 +2859,49 @@ public:
     of the same flow.
   </li>
   <li>
-    <strong>Rename <code>cwSaveLoad::isTemporaryProject()</code> to name
-    what it asks.</strong> <em>(From the 2026-07-21 attach-on-temporary
-    review.)</em> The method returns the raw "is the working tree a
-    <code>QTemporaryDir</code>?" flag, but its name reads as "is there a
-    durable home?" &mdash; which is what the <em>other</em>
-    <code>isTemporaryProject()</code> (on <code>cwProject</code>, masking
-    bundles via <code>LoadedFromBundledArchive</code>) answers. That gap
-    is the root cause behind two bugs: the original "save before attach"
-    guard (removed here) and issue #597 (Save-As-to-bundle leaves the
-    <code>cwSaveLoad</code> flag stale until reopen). A name like
-    <code>hasTemporaryWorkingTree()</code> would make the wrong call site
-    self-evident. Out of scope here: pure rename across many call sites
-    plus a <code>Q_PROPERTY</code>/signal, and it risks colliding with the
-    QML binding on <code>cwProject</code>'s same-named property. Blast
-    radius: <code>cwSaveLoad.{h,cpp}</code>, the four
-    <code>d-&gt;isTemporary</code> guards, and callers in
-    <code>cwProject.cpp</code>. Tie to the #597 fix, which lives at the
-    same seam.
+    <strong>Resolved by the #597 fix (2026-07-21) &mdash; rename no longer
+    applicable.</strong> <em>(Was: rename
+    <code>cwSaveLoad::isTemporaryProject()</code> to
+    <code>hasTemporaryWorkingTree()</code>.)</em> The rename was proposed
+    while the flag meant "is the working tree a
+    <code>QTemporaryDir</code>?" and therefore stayed stale-true after
+    Save As to a bundle. The #597 fix (clear the flag in
+    <code>saveBundledArchive</code>'s completion, matching
+    <code>load()</code> and <code>transferProjectTo()</code>) converged
+    the semantics instead: both layers now answer "is there a durable
+    home yet?", and a saved-as bundle keeps its temp working tree while
+    correctly reporting not-temporary. Renaming to
+    <code>hasTemporaryWorkingTree()</code> would now describe the flag
+    <em>wrongly</em>. Parity is pinned by
+    "Bundle saveAs clears the cwSaveLoad temporary flag like a reopen
+    does" and the rename-inside-a-bundle test in
+    <code>test_cwSaveLoad.cpp</code>. <strong>Caveat:</strong> the
+    <em>cwSaveLoad</em> layer converged, but <code>cwProject</code> is
+    not yet fully clean &mdash; the
+    <code>LoadedFromBundledArchive</code> early-out mask in
+    <code>cwProject::isTemporaryProject()</code>
+    (<code>cwProject.cpp:1752</code>) that existed only to bridge the old
+    divergence is now vestigial but still present. See the follow-up
+    below.
+  </li>
+  <li>
+    <strong>Remove the vestigial bundle mask and unify durable-home
+    state.</strong> <em>(From the 2026-07-21 #597 review.)</em> The
+    <code>LoadedFromBundledArchive &amp;&amp; !BundledArchivePath.isEmpty()
+    &amp;&amp; !ConvertedFromSqlite &rarr; return false</code> mask in
+    <code>cwProject::isTemporaryProject()</code> now returns
+    <code>false</code> exactly where the fallthrough would too, so it is
+    redundant &mdash; but removing it needs a
+    <code>ConvertedFromSqlite</code>/<code>SQLiteTempProject</code> audit
+    (the third signal the #597 fix did not touch) and touches the
+    QML-bound property. Tracked as
+    <a href="https://github.com/Cavewhere/cavewhere/issues/602">#602</a>.
+    The larger design &mdash; make <code>cwSaveLoad</code> the single
+    authority for durable-home state (a small enum) and have
+    <code>cwProject</code> delegate instead of blending three signals,
+    folding the three <code>setTemporary(false)</code> sites into one
+    transition &mdash; is tracked as
+    <a href="https://github.com/Cavewhere/cavewhere/issues/603">#603</a>.
   </li>
 </ul>
 

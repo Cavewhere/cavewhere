@@ -2276,7 +2276,19 @@ QFuture<ResultBase> cwSaveLoad::saveBundledArchive(const QString& targetArchiveP
             d->futureToken.addJob(cwFuture(QFuture<void>(packageFuture), QStringLiteral("Bundling project")));
         }
 
-        return packageFuture;
+        // A written archive is a durable home, so clear the temporary
+        // flag just like load() and transferProjectTo() do. Leaving it
+        // stale after Save As to a bundle (issue #597) suppressed the
+        // region-rename handler, which silently dropped a post-Save-As
+        // rename from the next re-zip.
+        return AsyncFuture::observe(packageFuture)
+                .context(this, [this, packageFuture]() -> ResultBase {
+            const auto packageResult = packageFuture.result();
+            if (!packageResult.hasError()) {
+                setTemporary(false);
+            }
+            return packageResult;
+        }).future();
     });
 }
 
