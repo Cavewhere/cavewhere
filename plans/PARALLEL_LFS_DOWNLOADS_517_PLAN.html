@@ -523,16 +523,23 @@ GitFuture asyncPumpBounded(tasks, maxInFlight, perItem);</code></pre>
   </div>
 
   <div class="panel">
-    <h3>2A — Parallelize the upload path &amp; surface pull/merge progress (#545) <span class="pill s1">approved</span></h3>
+    <h3>2A — Parallelize the upload path &amp; surface pull/merge progress (#545) <span class="pill s1">#545 pull/merge done · upload open</span></h3>
     <p>
       <code>runLfsUploadActions</code> still uploads <strong>serially</strong>; push of a large LFS set
-      is the symmetric slow case this change's pump model directly applies to. Separately,
-      <strong>#545</strong>: <code>pull()</code> / <code>pullRebaseOrMerge()</code> route hydration
-      through <code>runMergeHydrationForDirectory</code> with an empty progress callback, so they show
-      no LFS download progress. The aggregate-progress model added here
-      (<code>formatLfsAggregateProgressText</code>, <code>LfsDownloadRun</code>) is exactly what's
-      needed — the remaining work is threading a callback down through the merge/checkout/reset
-      hydration call sites. Each is its own ticket with its own tests.
+      is the symmetric slow case this change's pump model directly applies to. <strong>Still open.</strong>
+    </p>
+    <p>
+      <strong>#545 pull/merge progress — DONE.</strong> <code>pull()</code> and
+      <code>pullRebaseOrMerge()</code> previously routed hydration through
+      <code>runMergeHydrationForDirectory</code> with an empty progress callback and showed no LFS
+      download progress. <code>runMergeHydrationForDirectory</code> now takes an optional
+      <code>LfsHydrationProgress</code>, and both callers pass the shared
+      <code>makeLfsHydrationProgress(progressInterface)</code> lambda (also used by
+      <code>clone()</code>/<code>fetch()</code>), so pull/rebase now surface the same aggregate byte
+      progress. Covered by two <code>[LFS]</code> tests: fast-forward <code>pull()</code> and
+      diverged-history <code>pullRebaseOrMerge()</code> rebase. The broader <code>checkout()</code>
+      and <code>reset()</code> hydration call sites still hydrate with no progress and remain open
+      under 2A.
     </p>
   </div>
 
