@@ -7,6 +7,7 @@
 
 // This header
 #include "cwNoteLiDARManager.h"
+#include "cwRestarterTracking.h"
 
 // Qt
 #include <QAbstractItemModel>
@@ -121,9 +122,7 @@ cwNoteLiDARManager::cwNoteLiDARManager(QObject* parent) :
     QObject(parent),
     m_restarter(this)
 {
-    m_restarter.onFutureChanged([this]() {
-        m_futureManagerToken.addJob({ m_restarter.future(), "Triangulating LiDAR notes" });
-    });
+    cwTrackRestarter(m_futureManagerToken, m_restarter, QStringLiteral("Triangulating LiDAR notes"));
 }
 
 cwNoteLiDARManager::~cwNoteLiDARManager()

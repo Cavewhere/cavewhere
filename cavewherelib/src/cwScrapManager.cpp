@@ -7,6 +7,7 @@
 
 //Our includes
 #include "cwScrapManager.h"
+#include "cwRestarterTracking.h"
 #include "cwCavingRegion.h"
 #include "cwCave.h"
 #include "cwTrip.h"
@@ -74,9 +75,7 @@ cwScrapManager::cwScrapManager(QObject *parent) :
     AutomaticUpdate(true),
     m_warpingSettings(new cwTriangulateWarping(this))
 {
-    TriangulateRestarter.onFutureChanged([this](){
-        FutureManagerToken.addJob({TriangulateRestarter.future(), "Updating Scaps"});
-    });
+    cwTrackRestarter(FutureManagerToken, TriangulateRestarter, QStringLiteral("Updating Scaps"));
 
     auto notifyWarpingChanged = [this]() {
         updateAllScraps();

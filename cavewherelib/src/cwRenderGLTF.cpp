@@ -1,5 +1,6 @@
 //Our includes
 #include "cwRenderGLTF.h"
+#include "cwRestarterTracking.h"
 #include "cwRhiTexturedItems.h"
 #include "cwConcurrent.h"
 #include "cwTriangulateLiDARTask.h"
@@ -24,9 +25,7 @@ cwRenderGLTF::cwRenderGLTF(QObject *parent)
 
     m_modelMatrix.setValue(m_modelMatrixProperty.value());
 
-    m_loadRestarter.onFutureChanged([this]() {
-        m_futureManagerToken.addJob(cwFuture(m_loadRestarter.future(), QStringLiteral("Loading glTF")));
-    });
+    cwTrackRestarter(m_futureManagerToken, m_loadRestarter, QStringLiteral("Loading glTF"));
 
 }
 

@@ -7,6 +7,7 @@
 
 //Our includes
 #include "cwLinePlotManager.h"
+#include "cwRestarterTracking.h"
 #include "cwCavingRegion.h"
 #include "cwGeoReference.h"
 #include "cwCave.h"
@@ -126,11 +127,7 @@ cwLinePlotManager::cwLinePlotManager(QObject *parent) :
     SurveySignaler->addConnectionToChunks(SIGNAL(stationsRemoved(int,int)), this, SLOT(runSurvex()));
     SurveySignaler->addConnectionToChunks(SIGNAL(dataChanged(cwSurveyChunk::DataRole,int)), this, SLOT(runSurvex()));
 
-    m_restarter.onFutureChanged([this]() {
-        if (m_futureManagerToken.isValid()) {
-            m_futureManagerToken.addJob({ QFuture<void>(m_restarter.future()), QStringLiteral("Line plot") });
-        }
-    });
+    cwTrackRestarter(m_futureManagerToken, m_restarter, QStringLiteral("Line plot"));
 }
 
 cwLinePlotManager::~cwLinePlotManager() {

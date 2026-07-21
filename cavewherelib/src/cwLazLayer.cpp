@@ -6,6 +6,7 @@
 **************************************************************************/
 
 #include "cwLazLayer.h"
+#include "cwRestarterTracking.h"
 
 //Qt includes
 #include <QDebug>
@@ -40,13 +41,8 @@ cwLazLayer::cwLazLayer(QObject* parent) :
     // Register each load run with the global future manager. onResult() below
     // handles result delivery; the two compose (both fire when a fresh future
     // is installed).
-    m_loadRestarter.onFutureChanged([this]() {
-        if (m_futureManagerToken.isValid()) {
-            m_futureManagerToken.addJob(cwFuture(
-                QFuture<void>(m_loadRestarter.future()),
-                QStringLiteral("Loading %1.laz").arg(m_name)));
-        }
-    });
+    cwTrackRestarter(m_futureManagerToken, m_loadRestarter,
+        [this]() { return QStringLiteral("Loading %1.laz").arg(m_name); });
 
     // Fires once per load run, only for a completed (non-cancelled, non-empty)
     // future. cwLazLoader always addResult()s except on cancellation — a header

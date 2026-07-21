@@ -448,7 +448,7 @@ bool cwProject::save()
                              QMetaObject::invokeMethod(this, [this]() { emit fileSaved(); }, Qt::QueuedConnection);
                          })
                          .future();
-        FutureToken.addJob(cwFuture(QFuture<void>(SaveFuture), QStringLiteral("Saving")));
+        FutureToken.addJob(SaveFuture, QStringLiteral("Saving"));
         return true;
     }
 
@@ -463,7 +463,7 @@ bool cwProject::save()
             QMetaObject::invokeMethod(this, [this]() { emit fileSaved(); }, Qt::QueuedConnection);
         })
         .future();
-    FutureToken.addJob(cwFuture(QFuture<void>(SaveFuture), QStringLiteral("Saving")));
+    FutureToken.addJob(SaveFuture, QStringLiteral("Saving"));
     return true;
 }
 
@@ -474,7 +474,7 @@ bool cwProject::beginSyncOperation(const QFuture<Monad::ResultBase>& operationFu
             completeSyncOperation(operationFuture.result());
         }).future();
 
-    FutureToken.addJob(cwFuture(QFuture<void>(SyncFuture), QStringLiteral("Syncing")));
+    FutureToken.addJob(SyncFuture, QStringLiteral("Syncing"));
 
     AsyncFuture::observe(SyncFuture).context(this, [this]() {
         emit syncInProgressChanged();
@@ -512,7 +512,7 @@ bool cwProject::sync()
     if (provider && !credsLoaded && (needsCreds || remoteUnknown)) {
         auto deferredSync = std::make_shared<AsyncFuture::Deferred<void>>();
         SyncFuture = deferredSync->future();
-        FutureToken.addJob(cwFuture(QFuture<void>(SyncFuture), QStringLiteral("Syncing")));
+        FutureToken.addJob(SyncFuture, QStringLiteral("Syncing"));
         emit syncInProgressChanged();
         connect(provider, &cwRemoteAuthProvider::credentialsLoaded,
                 this, [this, deferredSync]() {
@@ -545,7 +545,7 @@ bool cwProject::continueSyncAfterGates()
         auto* saveLoad = m_saveLoad;
         auto deferredSync = std::make_shared<AsyncFuture::Deferred<void>>();
         SyncFuture = deferredSync->future();
-        FutureToken.addJob(cwFuture(QFuture<void>(SyncFuture), QStringLiteral("Syncing")));
+        FutureToken.addJob(SyncFuture, QStringLiteral("Syncing"));
         emit syncInProgressChanged();
 
         connect(provider, &cwRemoteAuthProvider::installationVerified,
@@ -751,7 +751,7 @@ bool cwProject::saveAs(QString newFilename)
                              QMetaObject::invokeMethod(this, [this]() { emit fileSaved(); }, Qt::QueuedConnection);
                          })
                          .future();
-        FutureToken.addJob(cwFuture(QFuture<void>(SaveFuture), QStringLiteral("Saving")));
+        FutureToken.addJob(SaveFuture, QStringLiteral("Saving"));
         return true;
     }
 
@@ -807,7 +807,7 @@ bool cwProject::saveAs(QString newFilename)
             QMetaObject::invokeMethod(this, [this]() { emit fileSaved(); }, Qt::QueuedConnection);
         })
         .future();
-    FutureToken.addJob(cwFuture(QFuture<void>(SaveFuture), QStringLiteral("Saving")));
+    FutureToken.addJob(SaveFuture, QStringLiteral("Saving"));
     return true;
 }
 
@@ -898,7 +898,7 @@ QFuture<ResultBase> cwProject::loadHelperImpl(const QString& filename, LoadParam
             return loadTask.load();
         });
 
-        FutureToken.addJob({QFuture<void>(loadFuture), QStringLiteral("Loading")});
+        FutureToken.addJob(loadFuture, QStringLiteral("Loading"));
 
         auto updateRegion = [this, filename](const cwRegionLoadResult& result) {
             ScopedProjectStateNotifier stateGuard(this);
@@ -1043,7 +1043,7 @@ QFuture<ResultBase> cwProject::loadHelperImpl(const QString& filename, LoadParam
                 ResultBase::Unknown);
         });
 
-        FutureToken.addJob({QFuture<void>(loadBundleFuture), QStringLiteral("Extracting bundled project")});
+        FutureToken.addJob(loadBundleFuture, QStringLiteral("Extracting bundled project"));
 
         return AsyncFuture::observe(loadBundleFuture)
             .context(this, [this, loadBundleFuture, bundleSourcePath]() -> QFuture<ResultBase> {
@@ -1122,7 +1122,7 @@ QFuture<ResultBase> cwProject::convertFromProjectV6Helper(QString oldProjectFile
                                   });
                               }).future();
 
-                    FutureToken.addJob(cwFuture(QFuture<void>(loadFuture), QStringLiteral("Converting")));
+                    FutureToken.addJob(loadFuture, QStringLiteral("Converting"));
                     return loadFuture;
                 });
             }).future();
@@ -1153,7 +1153,7 @@ QFuture<ResultBase> cwProject::convertFromProjectV6Helper(QString oldProjectFile
                     // because git reset --hard HEAD requires at least one commit.
                     // (See issue #418.)
                     auto commitFuture = m_saveLoad->enqueueFlushAndCommit();
-                    FutureToken.addJob(cwFuture(QFuture<void>(commitFuture), QStringLiteral("Initial commit")));
+                    FutureToken.addJob(commitFuture, QStringLiteral("Initial commit"));
                 } else if (tempProject->errorModel()->isEmpty()) {
                     // Only add the result error when tempProject didn't already report it,
                     // to avoid adding the same error twice.
@@ -1172,7 +1172,7 @@ QFuture<ResultBase> cwProject::convertFromProjectV6Helper(QString oldProjectFile
             }).future();
 
 
-    FutureToken.addJob(cwFuture(QFuture<void>(finalFuture), QStringLiteral("Loading")));
+    FutureToken.addJob(finalFuture, QStringLiteral("Loading"));
 
 
     return finalFuture;
@@ -1617,11 +1617,11 @@ void cwProject::convertFromProjectV6(QString oldProjectFilename,
                                                                    }
                                                                }).future();
 
-                                         FutureToken.addJob(cwFuture(QFuture<void>(loadFuture), QStringLiteral("Converting")));
+                                         FutureToken.addJob(loadFuture, QStringLiteral("Converting"));
                                          return loadFuture;
                                      }).future();
 
-    FutureToken.addJob(cwFuture(QFuture<void>(loadTempProjectFuture), QStringLiteral("Loading")));
+    FutureToken.addJob(loadTempProjectFuture, QStringLiteral("Loading"));
 
     //Load the old project into the temp project
     tempProject->loadFile(oldProjectFilename);

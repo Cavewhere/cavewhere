@@ -204,6 +204,6 @@ void cwLeadCSVExporter::exportToFile(const QUrl &fileUrl)
     });
 
     if(mFutureToken.isValid()) {
-        mFutureToken.addJob(cwFuture(future, jobName));
+        mFutureToken.addJob(future, jobName);
     }
 }

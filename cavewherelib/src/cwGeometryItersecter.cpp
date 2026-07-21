@@ -8,6 +8,7 @@
 //Our includes
 #include "cwDebug.h"
 #include "cwGeometryItersecter.h"
+#include "cwRestarterTracking.h"
 #include "cwPickingLog.h"
 #include "cwRenderObject.h"
 #include "cwSceneVisibility.h"
@@ -494,11 +495,7 @@ cwGeometryItersecter::cwGeometryItersecter(QObject* parent) :
     QObject(parent),
     m_bvhRestarter(this)
 {
-    m_bvhRestarter.onFutureChanged([this]() {
-        if (m_futureManagerToken.isValid()) {
-            m_futureManagerToken.addJob({m_bvhRestarter.future(), kAcceleratingPickingJobName});
-        }
-    });
+    cwTrackRestarter(m_futureManagerToken, m_bvhRestarter, QString(kAcceleratingPickingJobName));
 }
 
 void cwGeometryItersecter::setFutureManagerToken(cwFutureManagerToken token)

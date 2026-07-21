@@ -241,7 +241,7 @@ void cwLazClipInteraction::commit(Mode mode)
         const QString jobName = (mode == Mode::Keep)
                                     ? tr("Cropping %1 LAZ layer(s)").arg(visible.size())
                                     : tr("Erasing from %1 LAZ layer(s)").arg(visible.size());
-        token.addJob(cwFuture(QFuture<void>(m_currentClip), jobName));
+        token.addJob(m_currentClip, jobName);
     }
 
     AsyncFuture::observe(m_currentClip).context(this,

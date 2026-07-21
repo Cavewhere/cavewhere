@@ -223,7 +223,7 @@ void cwSurveyImportManager::importCompassDataFile(QList<QUrl> filenames)
     m_compassFutures.append(future);
 
     if(m_futureManagerToken.isValid()) {
-        m_futureManagerToken.addJob({ QFuture<void>(future), QStringLiteral("Compass import") });
+        m_futureManagerToken.addJob(future, QStringLiteral("Compass import"));
     }
 
     //.context(this, ...) delivers the result on the main thread and is

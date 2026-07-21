@@ -1404,7 +1404,7 @@ QFuture<ResultBase> cwSaveLoad::loadImpl(const QString &filename)
 
             auto projectDataFuture = cwSaveLoad::loadAll(filename);
 
-            d->futureToken.addJob({QFuture<void>(projectDataFuture), QStringLiteral("Loading")});
+            d->futureToken.addJob(projectDataFuture, QStringLiteral("Loading"));
 
             return AsyncFuture::observe(projectDataFuture)
                     .context(this, [this, projectDataFuture, filename, loadGeneration, canceledResult]() {
@@ -2229,7 +2229,7 @@ void cwSaveLoad::addImages(QList<QUrl> noteImagePaths,
     });
 
     if (d->futureToken.isValid()) {
-        d->futureToken.addJob(cwFuture(QFuture<void>(queuedFuture), QStringLiteral("Adding images")));
+        d->futureToken.addJob(queuedFuture, QStringLiteral("Adding images"));
     }
 }
 
@@ -2273,7 +2273,7 @@ QFuture<ResultBase> cwSaveLoad::saveBundledArchive(const QString& targetArchiveP
         });
 
         if (d->futureToken.isValid()) {
-            d->futureToken.addJob(cwFuture(QFuture<void>(packageFuture), QStringLiteral("Bundling project")));
+            d->futureToken.addJob(packageFuture, QStringLiteral("Bundling project"));
         }
 
         return packageFuture;
@@ -2366,7 +2366,7 @@ void cwSaveLoad::addFiles(QList<QUrl> files,
     });
 
     if (d->futureToken.isValid()) {
-        d->futureToken.addJob(cwFuture(QFuture<void>(queuedFuture), QStringLiteral("Adding files")));
+        d->futureToken.addJob(queuedFuture, QStringLiteral("Adding files"));
     }
 }
 
@@ -3233,8 +3233,8 @@ void cwSaveLoad::discardChanges()
                      })
             .future();
 
-    d->futureToken.addJob(cwFuture(QFuture<void>(resetFuture),
-                                   QStringLiteral("Discarding changes")));
+    d->futureToken.addJob(resetFuture,
+                          QStringLiteral("Discarding changes"));
 
     AsyncFuture::observe(resetFuture).context(this, [this, repo, resetFuture]() {
         const auto result = resetFuture.result();
@@ -5180,8 +5180,8 @@ QFuture<Monad::ResultBase> cwSaveLoad::gitOperationAndReconcile(const QString& o
     });
 
     if (d->futureToken.isValid()) {
-        d->futureToken.addJob(cwFuture(QFuture<void>(checkoutDeferred->future()),
-                                       operationLabel));
+        d->futureToken.addJob(checkoutDeferred->future(),
+                              operationLabel);
     }
 
     return checkoutDeferred->future();
@@ -5447,8 +5447,8 @@ QFuture<void> cwSaveLoad::retire()
     }
 
     d->retireFuture = retireFuture;
-    d->futureToken.addJob(cwFuture(QFuture<void>(d->retireFuture),
-                                   QStringLiteral("Finishing saves")));
+    d->futureToken.addJob(d->retireFuture,
+                          QStringLiteral("Finishing saves"));
 
     AsyncFuture::observe(d->retireFuture)
             .context(this, [this]() {
