@@ -103,6 +103,11 @@ public:
 
     cwCavingRegion* parentRegion() const;
 
+    //! The unit system in effect for this cave: its region's, or Metric when the
+    //! cave has no region yet. The single conduit for the project default that
+    //! new trips/sketches/scraps seed from (mirrors ProjectUnits.qml in QML).
+    cwUnits::UnitSystem unitSystem() const;
+
     Q_INVOKABLE int rowCount(const QModelIndex &parent = QModelIndex()) const;
 
     Q_INVOKABLE QVariant data(const QModelIndex &index, int role) const;

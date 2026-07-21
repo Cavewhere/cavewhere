@@ -61,10 +61,28 @@ public:
     // animator pointer on the public API.
     static constexpr const char* stateAnimationObjectName = "stateAnimation";
 
-    // Margin multiplier applied by zoomTo() so the framed box doesn't sit
-    // flush against the viewport edges. Exposed so tests can use the same
-    // value without duplicating the literal.
+    // Margin multiplier applied by framingViewState() (and thus zoomTo(),
+    // which delegates to it) so the framed box doesn't sit flush against the
+    // viewport edges. Exposed so tests can use the same value without
+    // duplicating the literal.
     static constexpr float FramingPad = 1.08f;
+
+    // Screen-space radius (physical millimeters) of the pivot's exact pick. A
+    // tolerance is what lets the otherwise infinitely-thin centerline be picked,
+    // so the view can orbit the line plot when the solid geometry is hidden.
+    // Millimeters (not pixels) so the grab feels the same size on every display.
+    // Exposed so tests can derive the same world-space radius through
+    // cwCamera::pickQuery.
+    static constexpr double PivotPickRadiusMillimeters = 4.0;
+
+    // Screen-space reach (physical millimeters) of the rotation pivot's
+    // nearest-geometry anchor (issue #562): when a rotation click misses the
+    // exact pick, the pivot snaps to the closest geometry point within this
+    // radius of the cursor; farther clicks keep the current pivot. Much wider
+    // than the exact pick radius — it's a "grab what I'm looking at" reach,
+    // not a selection. Exposed so tests can derive the same world-space
+    // radius through cwCamera::pickQuery.
+    static constexpr double PivotAnchorRadiusMillimeters = 20.0;
 
     explicit cwBaseTurnTableInteraction(QQuickItem *parent = 0);
 
@@ -124,14 +142,15 @@ public:
     void reconcileZoomForProjection(bool toPerspective, double fovRadians);
 
     // Returns the 5-channel viewState that frames @a box at the supplied
-    // @a azimuth / @a pitch (degrees). Unlike zoomTo() this is const, does
-    // NOT reset the view, and uses the supplied orientation for BOTH the
-    // fit math AND the returned target — so the AABB is sized against the
-    // post-rotation view, not the current one. Lets callers snap to a
+    // @a azimuth / @a pitch (degrees). Pure and const — it reads no live
+    // camera pose and mutates nothing — using the supplied orientation for
+    // BOTH the fit math AND the returned target, so the AABB is sized against
+    // the post-rotation view, not the current one. Lets callers snap to a
     // canonical orientation (e.g. pitch=0 profile view for a sink) and
     // still get a tight fit. Box-null, camera-null, or non-finite box
-    // falls through to the current viewState() unchanged. Caller routes
-    // the result through animateToViewState() / setViewState().
+    // falls through to the current viewState() unchanged. Caller applies the
+    // result via animateToViewState() / setViewState() (zoomTo() is the
+    // default-pose caller).
     Q_INVOKABLE cwTurnTableViewState framingViewState(const QBox3D& box,
                                                       double azimuth,
                                                       double pitch) const;
@@ -208,7 +227,7 @@ private:
 
     //For zoom perspective
     QProperty<QPoint> m_perspectiveMappedPos;
-    QProperty<QVector3D> m_perspectiveIntersection; //The intersection with geometry under the mouse
+    QProperty<QVector3D> m_perspectiveIntersection; //Zoom target: nearest geometry under the mouse, else the pivot
 
     QPointer<cwCamera> Camera; //!<
     QPointer<cwScene> Scene; //!<
@@ -222,9 +241,8 @@ private:
     cwTurnTableViewState m_stateAnimTarget;
 
     //! Instantaneously restores the default orientation and a fixed eye pose
-    //! (no scene framing). Used for initial setup (constructor, setCamera),
-    //! as the orientation reset inside zoomTo(), and as resetView()'s
-    //! empty-scene fallback.
+    //! (no scene framing). Used for initial setup (constructor, setCamera) and
+    //! as resetView()'s empty-scene fallback.
     void resetViewImmediate();
 
     void zoomPerspective();
@@ -240,11 +258,42 @@ private:
     double clampAzimuth(double azimuth) const;
     double clampPitch(double pitch) const;
 
-    //! Picks a world point under @a point (in GL viewport coords). Returns
-    //! a geometry hit, else a grid-plane hit that lies near the scene's
-    //! bounding box. Returns nullopt when nothing usable is under the cursor
-    //! so callers keep the current pivot instead of teleporting (issue #527).
-    std::optional<QVector3D> unProject(QPoint point) const;
+    //! Picks a world point under @a point (in GL viewport coords), else a
+    //! grid-plane hit (only when the scene has no geometry), else nullopt so
+    //! callers keep the current pivot instead of teleporting (issues #527,
+    //! #562).
+    //!
+    //! With @a anchorToNearestGeometry false (pan) this is the nearest exact
+    //! hit of any kind: the caller tracks whatever is under the cursor.
+    //!
+    //! With it true (rotation, zoom) the pick sorts by kind, because a user orbits
+    //! what they authored, not the LiDAR cloud that happens to be behind it.
+    //! Survey geometry (scraps, LiDAR notes, centerline) competes with BOTH an
+    //! exact hit and a near-miss anchor within PivotAnchorRadiusMillimeters.
+    //! The cloud competes with an exact hit only — its pick spheres are sized
+    //! to be watertight (cwRenderPointCloud::PointPickRadiusScale), so a cloud
+    //! surface the user is actually over always yields one. Depth then decides
+    //! between the two winners: a near-missed scrap beats a far cloud point,
+    //! while a cloud genuinely occluding the scrap still takes the pivot —
+    //! orbiting geometry hidden behind a LiDAR wall would just trade one
+    //! teleport for another.
+    //!
+    //! If BOTH miss, the cloud gets the wide anchor too, as a last rung. A
+    //! LiDAR-only project has no survey geometry to lose to and still has to be
+    //! orbitable (#562's "can't rotate around a point cloud point").
+    //!
+    //! Only a triangle hit is strictly on the cursor ray. A line hit returns
+    //! the closest point on the segment and a point hit returns the vertex
+    //! center, so an exact hit can sit off-ray by up to the pick radius
+    //! (~PivotPickRadiusMillimeters of screen). The false path (pan) does delta
+    //! math against the result, so it projects the exact hit back onto the
+    //! cursor ray before returning — an off-ray anchor would lurch the first pan
+    //! tick. The true path returns the raw off-ray point: rotation orbits it
+    //! directly (an off-ray pivot orbits fine), and zoom (issue #578) uses only
+    //! its depth along the cursor ray, so the off-ray offset never reaches the
+    //! view.
+    std::optional<QVector3D> unProject(QPoint point,
+                                       bool anchorToNearestGeometry = false) const;
 
     //! World point on the cursor ray at the depth of the current orbit center.
     //! Used as the pan anchor when unProject misses, so panning stays attached

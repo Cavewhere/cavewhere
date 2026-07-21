@@ -11,14 +11,14 @@
 
 //Our includes
 #include "cwScaleBarItem.h"
+#include "cwScaleBarSelector.h"
 #include "cwUnits.h"
 
-#include <array>
 #include <algorithm>
 #include <cmath>
+#include <vector>
 
 namespace {
-    constexpr std::array<double, 7> kScaleLengthsMeters = {1.0, 5.0, 10.0, 50.0, 100.0, 500.0, 1000.0};
     constexpr double kMinWidthInches = 0.75;
     constexpr double kPaddingInches = 0.25;
     constexpr double kLabelSpacingInches = 0.05;
@@ -53,6 +53,15 @@ void cwScaleBarItem::setScaleRatio(double ratio)
     }
 
     m_scaleRatio = ratio;
+    updateLayout();
+}
+
+void cwScaleBarItem::setUnitSystem(cwUnits::UnitSystem system)
+{
+    if(m_unitSystem == system) {
+        return;
+    }
+    m_unitSystem = system;
     updateLayout();
 }
 
@@ -103,6 +112,59 @@ void cwScaleBarItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *, 
     painter->restore();
 }
 
+cwScaleBarItem::ScaleSelection cwScaleBarItem::selectScale(double scaleRatio,
+                                                          double availableWidthInches,
+                                                          cwUnits::UnitSystem system)
+{
+    ScaleSelection result;
+    if(scaleRatio <= 0.0 || availableWidthInches <= 0.0) {
+        return result;
+    }
+
+    auto paperWidthFromMeters = [scaleRatio](double meters) {
+        return cwUnits::convert(scaleRatio * meters, cwUnits::Meters, cwUnits::Inches);
+    };
+
+    const std::vector<cwScaleBarSelector::Candidate>& candidates =
+            cwScaleBarSelector::niceCandidates(system);
+
+    const cwScaleBarSelector::Candidate* selected = nullptr;
+    const cwScaleBarSelector::Candidate* fallback = nullptr;
+
+    for(const cwScaleBarSelector::Candidate& candidate : candidates) {
+        double candidateWidth = paperWidthFromMeters(candidate.meters);
+        if(candidateWidth > availableWidthInches) {
+            break;
+        }
+
+        fallback = &candidate;
+
+        if(candidateWidth >= kMinWidthInches) {
+            selected = &candidate;
+            break;
+        }
+    }
+
+    if(fallback == nullptr) {
+        return result;
+    }
+
+    if(selected == nullptr) {
+        selected = fallback;
+    }
+
+    const double width = paperWidthFromMeters(selected->meters);
+    if(width <= 0.0) {
+        return result;
+    }
+
+    result.valid = true;
+    result.value = selected->value;
+    result.unit = selected->unit;
+    result.widthInches = width;
+    return result;
+}
+
 void cwScaleBarItem::updateLayout()
 {
     auto hideScale = [this]() {
@@ -128,55 +190,17 @@ void cwScaleBarItem::updateLayout()
         return;
     }
 
-    auto paperWidthFromMeters = [this](double meters) {
-        double paperMeters = m_scaleRatio * meters;
-        return cwUnits::convert(paperMeters, cwUnits::Meters, cwUnits::Inches);
-    };
-
-    double selectedMeters = -1.0;
-    double selectedWidth = 0.0;
-    double fallbackMeters = kScaleLengthsMeters.front();
-    double fallbackWidth = 0.0;
-    bool hasWidthCandidate = false;
-
-    for(double candidate : kScaleLengthsMeters) {
-        double candidateWidth = paperWidthFromMeters(candidate);
-        if(candidateWidth > availableWidth) {
-            break;
-        }
-
-        hasWidthCandidate = true;
-        fallbackMeters = candidate;
-        fallbackWidth = candidateWidth;
-
-        if(candidateWidth >= kMinWidthInches) {
-            selectedMeters = candidate;
-            selectedWidth = candidateWidth;
-            break;
-        }
-    }
-
-    if(!hasWidthCandidate) {
+    const ScaleSelection selection = selectScale(m_scaleRatio, availableWidth, m_unitSystem);
+    if(!selection.valid) {
         hideScale();
         return;
     }
 
-    if(selectedMeters < 0.0) {
-        selectedMeters = fallbackMeters;
-        selectedWidth = fallbackWidth;
-    }
-
-    if(selectedWidth <= 0.0) {
-        hideScale();
-        return;
-    }
-
-    QString labelText;
-    if(qFuzzyCompare(selectedMeters, 1000.0)) {
-        labelText = tr("1 km");
-    } else {
-        labelText = tr("%1 m").arg(QString::number(static_cast<int>(selectedMeters)));
-    }
+    double selectedWidth = selection.widthInches;
+    // No space between number and unit ("10m", "2000ft") to match the on-screen
+    // view scale bar (ScaleBar.qml).
+    QString labelText = QStringLiteral("%1%2")
+            .arg(QString::number(selection.value), cwUnits::unitName(selection.unit));
 
     QFontMetricsF metrics(m_labelFont);
     const double pointSize = m_labelFont.pointSizeF();

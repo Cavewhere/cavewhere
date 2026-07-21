@@ -15,24 +15,41 @@
 //
 // Regression guard: after reusing the address, exactly one cwRHIObject stays
 // alive and the two render objects carry distinct ids.
+//
+// The stub scene/backend pair built here is the cheapest way to drive that
+// handoff, so this file has since become the home for cwScene's RHI-object
+// lifetime coverage generally — not just #512: a plain steady-state removal, the
+// real LAZ-layer removal path, and — since the single-map handoff refactor — that
+// Adds register in add order (draw order), that a removed object cannot be
+// resurrected by a late updateItem(), and — since the destructor-scrub hardening
+// (follow-up 8, phase 2) — that deleting a render object directly (no
+// setScene(nullptr)) and tearing a scene down over its still-attached children are
+// both safe. Only the two named #512 cases are about address reuse.
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <new>
 
+#include "cwGeometry.h"
+#include "cwLazLayer.h"
+#include "cwLazLayerModel.h"
+#include "cwLazLayersSceneNode.h"
 #include "cwRHIObject.h"
 #include "cwRenderObject.h"
+#include "cwRenderPointCloud.h"
 #include "cwRhiScene.h"
 #include "cwScene.h"
 
-// Friend accessor (declared friend in cwRhiScene.h) so the test can drive the
-// backend's private apply step — normally called only by cwRhiItemRenderer —
-// without putting test scaffolding on the production API.
-struct CwRhiSceneTestAccess {
-    static void synchroize(cwRhiScene& rhiScene, cwScene* scene) {
-        rhiScene.synchroize(scene, nullptr);
-    }
-};
+#include "CwRhiSceneTestAccess.h"
+
+#include <QCoreApplication>
+#include <QDir>
+#include <QList>
+#include <QPointer>
+#include <QTemporaryDir>
+#include <QVector3D>
+
+#include "LazFixtureHelper.h"
 
 namespace {
 
@@ -40,6 +57,11 @@ namespace {
 // cwRHIObject that outlives its render object, so a simple alive-count is the
 // fix-agnostic observable: any correct add/remove path leaves exactly one.
 int g_aliveRhiObjects = 0;
+
+// Records the label of each stub render object as its cwRHIObject is created, i.e.
+// in the order synchroize() registers Adds — which is the order they draw. Used to
+// pin that Adds register in add order, not construction order.
+QVector<char> g_registrationOrder;
 
 class StubRhiObject : public cwRHIObject
 {
@@ -51,7 +73,6 @@ public:
     void initialize(const ResourceUpdateData&) override {}
     void synchronize(const SynchronizeData&) override {}
     void updateResources(const ResourceUpdateData&) override {}
-    void render(const RenderData&) override {}
 };
 
 class StubRenderObject : public cwRenderObject
@@ -59,9 +80,43 @@ class StubRenderObject : public cwRenderObject
 public:
     using cwRenderObject::cwRenderObject;
 
+    void setLabel(char label) { m_label = label; }
+
 protected:
-    cwRHIObject* createRHIObject() override { return new StubRhiObject(); }
+    cwRHIObject* createRHIObject() override
+    {
+        if (m_label != '\0') {
+            g_registrationOrder.append(m_label);
+        }
+        return new StubRhiObject();
+    }
+
+private:
+    char m_label = '\0';
 };
+
+// A 3x3 grid in the z = 0 plane, one unit apart — the smallest cloud that still
+// loads through the real LAZ pipeline.
+constexpr float kGridSpacing = 1.0f;
+constexpr int kGridSide = 3;
+
+QVector<QVector3D> gridPoints()
+{
+    QVector<QVector3D> points;
+    for (int x = 0; x < kGridSide; ++x) {
+        for (int y = 0; y < kGridSide; ++y) {
+            points.append(QVector3D((x - 1) * kGridSpacing, (y - 1) * kGridSpacing, 0.0f));
+        }
+    }
+    return points;
+}
+
+QDir prepareGisLayersDir(const QTemporaryDir& tempDir)
+{
+    const QString path = QDir(tempDir.path()).filePath(cwLazLayerModel::folderName());
+    QDir().mkpath(path);
+    return QDir(path);
+}
 
 } // namespace
 
@@ -87,8 +142,9 @@ TEST_CASE("issue #512: reusing a deleted render object's address must not orphan
     REQUIRE(g_aliveRhiObjects == 1);
 
     // A visibility toggle re-queues #1 for update (as the real LAZ visibility
-    // thrash does); synchroize() leaves a synced object in none of the live
-    // queues, so removeItem() would otherwise have nothing to move to delete.
+    // thrash does), so removeItem() has a live queue entry to scrub. #1 is
+    // destroyed below before the next sync, so if that scrub ever regressed,
+    // synchroize()'s update loop would dereference freed memory (issue #491).
     first->setVisible(false);
     scene.removeItem(first);                // queues #1 for delete; RHI #1 still live
 
@@ -118,6 +174,92 @@ TEST_CASE("issue #512: reusing a deleted render object's address must not orphan
     ::operator delete(storage);
 }
 
+// The plain steady-state removal: an object that has been synced sits in neither
+// queue, because synchroize() drains both every frame. removeItem() used to read
+// that emptiness as "nothing to do" and return before queueing the delete, so the
+// backend kept the cwRHIObject — and, for a LAZ layer, its multi-gigabyte vertex
+// buffer — for the life of the scene. Every removal the running app performs takes
+// this path, yet nothing covered it: the test above dodges it by toggling
+// visibility first, which puts the object back in a queue.
+TEST_CASE("removing a synced render object frees its cwRHIObject",
+          "[cwScene][cwRhiScene]")
+{
+    g_aliveRhiObjects = 0;
+
+    cwScene scene;
+    cwRhiScene rhiScene;
+
+    auto* object = new StubRenderObject();
+    object->setScene(&scene);
+    object->setParent(nullptr);   // we manage its lifetime, not the scene
+
+    CwRhiSceneTestAccess::synchroize(rhiScene, &scene);   // creates RHI object #1
+    REQUIRE(g_aliveRhiObjects == 1);
+
+    // No visibility toggle: this is a bare removal of a synced object, so both
+    // of removeItem()'s queues are empty when it runs.
+    scene.removeItem(object);
+    delete object;
+
+    CwRhiSceneTestAccess::synchroize(rhiScene, &scene);   // must free RHI #1
+
+    REQUIRE(g_aliveRhiObjects == 0);        // 1 would mean RHI #1 was stranded
+}
+
+// The same steady-state removal as above, driven through the real path a user
+// takes: removing a LAZ layer. cwLazLayersSceneNode::dematerialize() does
+// setScene(nullptr) then delete, with no visibility toggle anywhere — so this is
+// what the running app actually did every time a layer was removed, and what
+// stranded a cwRHIPointCloud holding the layer's whole vertex buffer.
+//
+// Real render objects here, not stubs: the tests must not instrument production
+// classes, so the observable is the backend's own registry — an id that still
+// resolves to a cwRHIObject after the object is gone is the leak.
+TEST_CASE("removing a LAZ layer frees its point cloud's cwRHIObject",
+          "[cwScene][cwRhiScene][cwLazLayersSceneNode]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    cwScene scene;
+    cwRhiScene rhiScene;
+
+    cwLazLayersSceneNode node;
+    node.setScene(&scene);
+
+    cwLazLayerModel model;
+    node.setLazLayerModel(&model);
+
+    const QDir gisLayersDir = prepareGisLayersDir(tempDir);
+    const QString filePath = gisLayersDir.filePath(QStringLiteral("rhi-lifetime-%1.laz")
+                                                       .arg(QCoreApplication::applicationPid()));
+    REQUIRE(writeSyntheticLazFile(filePath, gridPoints()));
+    model.setGisLayersDir(gisLayersDir);
+    model.rescan();
+
+    cwLazLayer* layer = model.layerAt(model.count() - 1);
+    REQUIRE(layer != nullptr);
+    REQUIRE(waitForLazLayerLoaded(layer));
+
+    cwRenderPointCloud* cloud = node.pointCloudForLayer(layer);
+    REQUIRE(cloud != nullptr);
+
+    // Captured while the cloud is alive; the id outlives it by design, which is
+    // exactly what lets the delete be queued without dereferencing the pointer.
+    const cwRenderObjectId id = cloud->renderObjectId();
+
+    CwRhiSceneTestAccess::synchroize(rhiScene, &scene);   // creates the cwRHIPointCloud
+    REQUIRE(CwRhiSceneTestAccess::renderObjectForId(rhiScene, id) != nullptr);
+
+    QPointer<cwRenderPointCloud> guard(cloud);
+    model.removeAt(0);
+    REQUIRE(guard.isNull());
+
+    CwRhiSceneTestAccess::synchroize(rhiScene, &scene);   // must destroy it
+
+    REQUIRE(CwRhiSceneTestAccess::renderObjectForId(rhiScene, id) == nullptr);
+}
+
 TEST_CASE("issue #512: re-adding the same render object before a sync must free "
           "its previous cwRHIObject",
           "[cwScene][cwRhiScene][issue512]")
@@ -140,9 +282,7 @@ TEST_CASE("issue #512: re-adding the same render object before a sync must free 
     CwRhiSceneTestAccess::synchroize(rhiScene, &scene);   // creates RHI object #1
     REQUIRE(g_aliveRhiObjects == 1);
 
-    // Toggle visibility so the synced object lands back in a live queue, then
-    // remove it — queuing its id while RHI #1 stays mapped under that id.
-    object->setVisible(false);
+    // Remove it, queuing its id while RHI #1 stays mapped under that id.
     scene.removeItem(object);
 
     // Re-add the *same* object before syncing: addItem() cancels the pending
@@ -155,4 +295,164 @@ TEST_CASE("issue #512: re-adding the same render object before a sync must free 
     REQUIRE(g_aliveRhiObjects == 1);        // 2 would mean RHI #1 was orphaned
 
     delete object;
+}
+
+// Draw order follows add order, not construction order. gatherScene() walks the
+// backend's render list in registration order and bakes that index into the sort
+// key, so the sync drain must register Adds in the order addItem() ran — even when
+// the objects were constructed in a different order. The pending map is keyed on the
+// render-object id, which is a construction-order counter; a drain that leaned on
+// that key order would silently swap these two and change what draws on top. The
+// queued sequence is what holds add order, and this test is its guard.
+TEST_CASE("added render objects register in add order, not construction order",
+          "[cwScene][cwRhiScene]")
+{
+    g_aliveRhiObjects = 0;
+    g_registrationOrder.clear();
+
+    cwScene scene;
+    cwRhiScene rhiScene;
+
+    // Construct A before B (so A's id < B's id), then add B before A.
+    auto* a = new StubRenderObject();
+    auto* b = new StubRenderObject();
+    a->setLabel('A');
+    b->setLabel('B');
+    REQUIRE(a->renderObjectId() < b->renderObjectId());
+
+    b->setScene(&scene);
+    b->setParent(nullptr);   // we manage lifetime, not the scene
+    a->setScene(&scene);
+    a->setParent(nullptr);
+
+    CwRhiSceneTestAccess::synchroize(rhiScene, &scene);
+
+    // Registration (== draw) order is the add order B, A — not the id order A, B.
+    REQUIRE(g_registrationOrder == QVector<char>({'B', 'A'}));
+
+    delete a;
+    delete b;
+}
+
+// A removed object stays removed even if updateItem() arrives for it before the next
+// sync. The transition model records {Delete}, and updateItem() must not resurrect it
+// into a live-pointer entry that the next synchroize() would then re-register — the
+// #491 failure mode, now unrepresentable. A resurrected Update would re-sync the object
+// and leave its cwRHIObject alive; the recorded {Delete} instead destroys it, so the
+// surviving-RHI count after the drain is the observable.
+TEST_CASE("updateItem on a removed render object does not resurrect it",
+          "[cwScene][cwRhiScene]")
+{
+    g_aliveRhiObjects = 0;
+
+    cwScene scene;
+    cwRhiScene rhiScene;
+
+    auto* object = new StubRenderObject();
+    object->setScene(&scene);
+    object->setParent(nullptr);   // we manage its lifetime, not the scene
+
+    CwRhiSceneTestAccess::synchroize(rhiScene, &scene);   // creates RHI object #1
+    REQUIRE(g_aliveRhiObjects == 1);
+
+    scene.removeItem(object);     // {Delete}
+    scene.updateItem(object);     // must not overwrite the Delete with a live Update
+
+    // Drain with the object still alive: the recorded {Delete} must destroy RHI #1. A
+    // resurrected Update would instead re-sync it and leave the count at 1.
+    CwRhiSceneTestAccess::synchroize(rhiScene, &scene);
+    REQUIRE(g_aliveRhiObjects == 0);
+
+    delete object;
+}
+
+// Deleting a render object directly — no setScene(nullptr) first — while its Add is
+// still pending. The pending entry holds the object's live pointer, so without the
+// destructor scrub the next synchroize() would dereference freed memory (issue #491
+// through the direct-delete path this time). ~cwRenderObject() must convert that entry
+// to a {Delete}, dropping the pointer, so the drain touches nothing and registers no
+// cwRHIObject for the dead id.
+TEST_CASE("deleting an attached render object before its Add is synced does not dangle",
+          "[cwScene][cwRhiScene]")
+{
+    g_aliveRhiObjects = 0;
+
+    cwScene scene;
+    cwRhiScene rhiScene;
+
+    auto* object = new StubRenderObject();
+    // Captured while alive; the id outlives the object so the drain can drop the dead
+    // entry without dereferencing the freed pointer.
+    const cwRenderObjectId id = object->renderObjectId();
+    object->setScene(&scene);     // queues an Add holding object's live pointer
+    object->setParent(nullptr);   // we manage its lifetime, not the scene
+
+    delete object;                // ~cwRenderObject() must scrub the pending Add to a Delete
+
+    // The scrubbed {Delete} holds no pointer, so the drain neither dereferences the
+    // freed object (a no-scrub bug would create an RHI object from freed memory) nor
+    // registers anything under its id.
+    CwRhiSceneTestAccess::synchroize(rhiScene, &scene);
+
+    REQUIRE(g_aliveRhiObjects == 0);
+    REQUIRE(CwRhiSceneTestAccess::renderObjectForId(rhiScene, id) == nullptr);
+}
+
+// The same direct delete, but after the object has been synced: a real caller that
+// does `delete cloud` without setScene(nullptr) first. The object's cwRHIObject is
+// live and mapped under its id; ~cwRenderObject() must queue the {Delete} so the next
+// sync frees it rather than stranding it for the life of the scene.
+TEST_CASE("deleting a synced render object directly frees its cwRHIObject",
+          "[cwScene][cwRhiScene]")
+{
+    g_aliveRhiObjects = 0;
+
+    cwScene scene;
+    cwRhiScene rhiScene;
+
+    auto* object = new StubRenderObject();
+    object->setScene(&scene);
+    object->setParent(nullptr);   // we manage its lifetime, not the scene
+
+    CwRhiSceneTestAccess::synchroize(rhiScene, &scene);   // creates RHI object #1
+    REQUIRE(g_aliveRhiObjects == 1);
+
+    delete object;                // no removeItem(); the destructor must queue the Delete
+
+    CwRhiSceneTestAccess::synchroize(rhiScene, &scene);   // must free RHI #1
+
+    REQUIRE(g_aliveRhiObjects == 0);        // 1 would mean RHI #1 was stranded
+}
+
+// Tearing a scene down while it still owns render-object children. addItem() parents
+// each object to the scene, so ~QObject deletes them *after* ~cwScene's body runs, by
+// which point the value member m_pending is already destroyed. Without ~cwScene()
+// detaching them first, each ~cwRenderObject() would call removeItem() and insert into
+// that dead QMap — a use-after-free ASAN catches. The detach nulls their back-pointers
+// so those destructors no-op. The real observable is the clean teardown under ASAN
+// (this test crashes without the fix); no synchroize() runs here, so no StubRhiObject
+// is ever created and the closing g_aliveRhiObjects check is only a reached-the-end
+// sanity anchor.
+TEST_CASE("destroying a scene severs its render-object children before they are deleted",
+          "[cwScene][cwRhiScene]")
+{
+    g_aliveRhiObjects = 0;
+
+    {
+        cwScene scene;
+
+        // Scene-owned: no setParent(nullptr), so the scene deletes these on teardown.
+        auto* first = new StubRenderObject();
+        auto* second = new StubRenderObject();
+        first->setScene(&scene);
+        second->setScene(&scene);
+
+        // addItem() parents each object to the scene; assert it so the test can't pass
+        // vacuously — the sever path must actually have children to sever. No sync runs
+        // here, so there is no RHI object to observe; parent() is the honest precondition.
+        REQUIRE(first->parent() == &scene);
+        REQUIRE(second->parent() == &scene);
+    }   // scene destroyed; its children deleted via ~QObject, must not touch the scene
+
+    REQUIRE(g_aliveRhiObjects == 0);
 }

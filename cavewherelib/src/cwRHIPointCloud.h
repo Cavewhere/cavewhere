@@ -29,7 +29,6 @@ public:
     void initialize(const ResourceUpdateData& data) override;
     void synchronize(const SynchronizeData& data) override;
     void updateResources(const ResourceUpdateData& data) override;
-    void render(const RenderData& data) override;
     bool gather(const GatherContext& context, QVector<PipelineBatch>& batches) override;
     bool usesPointCloudPass() const override;
     cwAppearanceSlotted* appearanceSlots() override { return this; }
@@ -84,7 +83,6 @@ private:
     QRhiBuffer* m_perCloudUBO = nullptr;
     quint32 m_perCloudStride = 0;
     QRhiShaderResourceBindings* m_srb = nullptr;
-    cwRhiFrameRenderer* m_frame = nullptr;
 
     // Geometry and render-state tracked independently so a uniform-only
     // change (world radius / point size) never re-stages the vertex buffer —

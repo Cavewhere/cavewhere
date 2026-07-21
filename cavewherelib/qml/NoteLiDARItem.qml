@@ -8,6 +8,22 @@ RegionViewer {
     property NoteLiDAR note
     property bool isNarrow: false
 
+    //Set by NotesGallery's CARPET state. Named the same on NoteItem so the
+    //gallery sets one property on every note editor it drives. Stations are
+    //only shown while editing, so they can't be accidentally selected, moved,
+    //or deleted when just viewing the note.
+    property bool editingOverlaysVisible: false
+
+    //The gallery's tool state, pulled rather than pushed. This editor's tools are
+    //driven by PropertyChanges, which revert on any mode it declares no State for,
+    //so an unhandled mode leaves every tool off without needing a teardown
+    //transition (NoteItem drives its tools from transitions and does need one).
+    property string toolMode: NoteToolMode.none
+
+    //Icon capture overrides the tool state without assigning to state, which
+    //would destroy the binding below and strand the viewer on the last mode.
+    property bool capturingIcon: false
+
     function captureIconIfNeeded() {
         if (!note || !RootData.noteLiDARManager) {
             return
@@ -22,17 +38,23 @@ RegionViewer {
         }
 
         const targetNote = note
-        const previousState = state
 
-        state = "CAPTURE_ICON"
+        rhiViewerId.capturingIcon = true
 
-        rhiViewerId.grabToImage(function(result) {
-            rhiViewerId.state = previousState
+        //grabToImage returns false without ever calling back when the viewer has
+        //no window or no size, which gltf Ready can beat. Unhandled, capturingIcon
+        //latches on and pins state to CAPTURE_ICON for the life of the item.
+        let grabStarted = rhiViewerId.grabToImage(function(result) {
+            rhiViewerId.capturingIcon = false
             if (!targetNote || !result || !result.image) {
                 return
             }
             RootData.noteLiDARManager.saveIcon(result.image, targetNote)
         })
+
+        if (!grabStarted) {
+            rhiViewerId.capturingIcon = false
+        }
     }
 
     scene: GltfScene {
@@ -58,7 +80,7 @@ RegionViewer {
     orthoProjection.enabled: true
     perspectiveProjection.enabled: false
 
-    state: "SELECT"
+    state: capturingIcon ? NoteToolMode.captureIcon : toolMode
 
     TurnTableInteraction {
         id: turnTableInteractionId
@@ -113,13 +135,23 @@ RegionViewer {
         defaultInteraction: turnTableInteractionId
     }
 
+    //Stations are added to this container so hiding them is one property, and
+    //doesn't fight the transform updater's per-station viewport clipping.
+    //Mirrors NoteItem's scrapPointsContainer.
+    Item {
+        id: stationContainerId
+        anchors.fill: parent
+        visible: rhiViewerId.editingOverlaysVisible
+    }
+
     Item3DRepeater {
         id: noteStationRepeaterId
         anchors.fill: parent
+
+        targetItem: stationContainerId
         camera: rhiViewerId.camera
         model: note
         positionRole: NoteLiDAR.UpPositionRole
-        visible: true
         selectionManager: SelectionManager {
             id: selectionManagerId
         }
@@ -161,32 +193,28 @@ RegionViewer {
         anchors.topMargin: 5
     }
 
+    //No State for NoteToolMode.none: QQuickStateGroup treats the empty name as
+    //the base state and never looks up a State object by it, so such a State is
+    //never applied and extending it inherits nothing. Base-state values belong
+    //inline on the item instead (see transformEditorId.visible above).
     states: [
         State {
-            name: ""
-            PropertyChanges {
-                transformEditorId.visible: true
-                noteStationRepeaterId.visible: true
-            }
-        },
-
-        State {
-            name: "SELECT"
-            extend: ""
+            name: NoteToolMode.select
             PropertyChanges { target: lidarAddStationInteraction; enabled: false; visible: false }
         },
 
         State {
-            name: "ADD-STATION"
-            extend: ""
+            name: NoteToolMode.addStation
             PropertyChanges { target: lidarAddStationInteraction; enabled: true; visible: true }
         },
 
         State {
-            name: "CAPTURE_ICON"
+            name: NoteToolMode.captureIcon
+            //The icon is a picture of the model alone, so keep the editing
+            //overlays out of the grab even when captured from carpet mode.
             PropertyChanges {
                 transformEditorId.visible: false
-                noteStationRepeaterId.visible: false
+                stationContainerId.visible: false
             }
         }
     ]

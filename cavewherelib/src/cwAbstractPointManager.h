@@ -37,12 +37,18 @@ class CAVEWHERE_LIB_EXPORT cwAbstractPointManager : public QQuickItem
     Q_PROPERTY(cwSelectionManager* selectionManager READ selectionManager WRITE setSelectionManager NOTIFY selectionManagerChanged)
     Q_PROPERTY(QQmlComponent* component READ component WRITE setComponent NOTIFY componentChanged)
     Q_PROPERTY(QUrl qmlSource READ qmlSource WRITE setQmlSource NOTIFY qmlSourceChanged)
+    Q_PROPERTY(QQuickItem* targetItem READ targetItem WRITE setTargetItem NOTIFY targetItemChanged)
 
 public:
     explicit cwAbstractPointManager(QQuickItem *parent = 0);
 
     void updateItemParents();
-    
+
+    QQuickItem* targetItem() const;
+    void setTargetItem(QQuickItem* targetItem);
+
+    QQuickItem* pointParentItem();
+
     void clearSelection();
     int count() const;
     int selectedItemIndex() const;
@@ -70,6 +76,7 @@ signals:
     void pointParentItemChanged();
     void componentChanged();
     void qmlSourceChanged();
+    void targetItemChanged();
     
 protected:
     // virtual QString qmlSource() const = 0;
@@ -100,8 +107,7 @@ private slots:
     void updateSelection();
 
 private:
-    //The new points will have the parent of this
-    QQuickItem* m_pointParentItem = nullptr;
+    QPointer<QQuickItem> m_targetItem;
 
     //All the point items
     QPointer<QQmlComponent> m_component;

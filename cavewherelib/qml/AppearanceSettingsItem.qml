@@ -37,7 +37,7 @@ ColumnLayout {
                         QC.Label {
                             Layout.alignment: Qt.AlignHCenter
                             text: "Aa"
-                            font.family: modelData.family !== "" ? modelData.family : Qt.application.font.family
+                            font.family: modelData.family !== "" ? modelData.family : RootData.settings.fontSettings.systemFontFamily
                             font.pixelSize: Theme.fontSizeTitle  // intentionally not scaled — always show at a readable preview size
                         }
 
@@ -81,7 +81,7 @@ ColumnLayout {
                     QC.Label {
                         Layout.alignment: Qt.AlignHCenter
                         text: "Aa"
-                        font.family: RootData.settings.fontSettings.fontFamily
+                        font.family: Theme.fontFamily
                         font.pixelSize: Math.max(RootData.settings.fontSettings.minFontBaseSize, RootData.settings.fontSettings.fontBaseSize - 2)
                     }
 
@@ -116,7 +116,7 @@ ColumnLayout {
                     QC.Label {
                         Layout.alignment: Qt.AlignHCenter
                         text: "Aa"
-                        font.family: RootData.settings.fontSettings.fontFamily
+                        font.family: Theme.fontFamily
                         font.pixelSize: RootData.settings.fontSettings.defaultFontBaseSize
                     }
 
@@ -148,7 +148,7 @@ ColumnLayout {
                     QC.Label {
                         Layout.alignment: Qt.AlignHCenter
                         text: "Aa"
-                        font.family: RootData.settings.fontSettings.fontFamily
+                        font.family: Theme.fontFamily
                         font.pixelSize: Math.min(RootData.settings.fontSettings.maxFontBaseSize, RootData.settings.fontSettings.fontBaseSize + 2)
                     }
 

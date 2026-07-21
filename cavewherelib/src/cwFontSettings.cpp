@@ -4,6 +4,7 @@
 //Qt includes
 #include <QSettings>
 #include <QCoreApplication>
+#include <QFontDatabase>
 
 cwFontSettings* cwFontSettings::Settings = nullptr;
 
@@ -23,6 +24,11 @@ const QList<cwFontEntry>& cwFontSettings::fontEntries()
         { QStringLiteral("System"),     QString(),                              14 },
     };
     return entries;
+}
+
+QString cwFontSettings::systemFontFamily()
+{
+    return QFontDatabase::systemFont(QFontDatabase::GeneralFont).family();
 }
 
 int cwFontSettings::defaultBaseSizeForFamily(const QString& family)

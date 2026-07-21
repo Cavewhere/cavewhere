@@ -9,6 +9,7 @@
 #include <QFont>
 #include <QQuickStyle>
 #include <QStyleFactory>
+#include <QStyleHints>
 
 //Our inculdes
 #include "cwQmlImageProviderBinder.h"
@@ -19,6 +20,7 @@
 
 //QuickGit includes
 #include "GitRepository.h"
+#include "GitCommitImageProvider.h"
 
 class Setup : public QObject
 {
@@ -48,6 +50,8 @@ public slots:
 
         if(rootData) {
             new cwQmlImageProviderBinder(engine, rootData, engine);
+            //Enables image://gitcommit/ URLs in QML for viewing images at any commit
+            QQuickGit::GitCommitImageProvider::registerOn(engine);
         } else {
             qFatal("RootData didn't load correctly, check qml import path / build setup");
         }
@@ -67,6 +71,15 @@ int main(int argc, char **argv) \
     // required forcing the Basic style here.
     QApplication::setStyle(QStyleFactory::create("Fusion")); // Qt Widgets
     QQuickStyle::setStyle("Fusion");                          // Qt Quick Controls
+
+    // Manual-screenshot generation (CW_MANUAL_IMAGE_DIR set by
+    // scripts/gen-manual-screenshots.sh): pin a light color scheme so the images
+    // are deterministic and match CaveWhere's paper-first look regardless of the
+    // host's system appearance. Only when generating images — normal test runs
+    // keep the system scheme.
+    if (qEnvironmentVariableIsSet("CW_MANUAL_IMAGE_DIR")) {
+        QGuiApplication::styleHints()->setColorScheme(Qt::ColorScheme::Light);
+    }
 
     cwMetaTypeSystem::registerTypes();
 

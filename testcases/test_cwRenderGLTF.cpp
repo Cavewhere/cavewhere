@@ -14,6 +14,7 @@
 #include <QFileInfo>
 #include <QBox3D>
 #include <QVector4D>
+#include <QtTest/QSignalSpy>
 
 using Catch::Matchers::WithinAbs;
 
@@ -93,4 +94,43 @@ TEST_CASE("GLTF file should be loaded correctly", "[cwRenderGLTF]") {
     CHECK_THAT(actual.maximum().z(), WithinAbs(expected.maximum().z(), 1e-4f));
 
 
+}
+
+// Regression for issue #505: cwRenderGLTF::setGLTFFilePath must record the path
+// it loaded. The bug never assigned m_gltfFilePath, so the getter stayed empty,
+// gltfFilePathChanged() never fired, and the `m_gltfFilePath != filePath` guard
+// re-launched a full async reload every time the same path was set (restarter
+// thrash that aggravates the picker "goes on and off" symptom).
+TEST_CASE("cwRenderGLTF records the gltf file path it loaded", "[cwRenderGLTF][Issue505]") {
+    cwFutureManagerModel futureModel;
+
+    // Declared before the render object so the scene outlives it (the render
+    // object detaches from the scene in its destructor).
+    cwScene scene;
+    cwRenderGLTF render;
+    render.setFutureManagerToken(futureModel.token());
+    render.setScene(&scene);
+
+    const QString gltfPath = copyToTempFolder(testcasesDatasetPath("test_cwSurveyNotesConcatModel/bones.glb"));
+    REQUIRE_FALSE(gltfPath.isEmpty());
+    REQUIRE(QFileInfo::exists(gltfPath));
+
+    REQUIRE(render.gltfFilePath().isEmpty());
+
+    QSignalSpy pathChangedSpy(&render, &cwRenderGLTF::gltfFilePathChanged);
+
+    render.setGLTFFilePath(gltfPath);
+
+    // The path is recorded synchronously by the setter, independent of the load.
+    CHECK(render.gltfFilePath() == gltfPath);
+    CHECK(pathChangedSpy.count() == 1);
+
+    // Setting the identical path again must be a no-op: no extra reload, no
+    // extra change signal. (With the bug, m_gltfFilePath stayed empty so this
+    // re-triggered another load.)
+    render.setGLTFFilePath(gltfPath);
+    CHECK(pathChangedSpy.count() == 1);
+
+    futureModel.waitForFinished();
+    CHECK(render.status() == cwRenderGLTF::Status::Ready);
 }

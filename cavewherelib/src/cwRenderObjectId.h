@@ -10,6 +10,7 @@
 
 //Qt includes
 #include <QtGlobal>
+#include <QDebug>
 
 // Strong, opaque render-object identity. A quint64 at runtime (zero overhead),
 // but a distinct type so it can't be confused with other quint64s or used in
@@ -18,5 +19,10 @@
 //
 // Qt provides qHash() for scoped enums, so this works directly as a QHash key.
 enum class cwRenderObjectId : quint64 {};
+
+inline QDebug operator<<(QDebug debug, cwRenderObjectId id)
+{
+    return debug << static_cast<quint64>(id);
+}
 
 #endif // CWRENDEROBJECTID_H

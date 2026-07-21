@@ -176,6 +176,11 @@ public:
     cwNoteTranformation* noteTransformation() const;
     cwNoteTransformationData noteTransformAdjustedDeclination() const;
 
+    // Seed the note-transformation scale's display units from a project unit
+    // system (metric cm/m, imperial in/ft) for a new scrap. The scale's value is
+    // still driven by auto-calculation; this only sets the units it reads in.
+    void seedDefaultScale(cwUnits::UnitSystem system);
+
     bool calculateNoteTransform() const;
     void setCalculateNoteTransform(bool calculateNoteTransform);
 

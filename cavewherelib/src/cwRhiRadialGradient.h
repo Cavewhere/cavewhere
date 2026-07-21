@@ -20,7 +20,6 @@ public:
     void initialize(const ResourceUpdateData& data) override;
     void synchronize(const SynchronizeData& data) override;
     void updateResources(const ResourceUpdateData& data) override;
-    void render(const RenderData& data) override;
     bool gather(const GatherContext& context, QVector<PipelineBatch>& batches) override;
 
 private:
@@ -32,7 +31,6 @@ private:
     QRhiBuffer* m_uniformBuffer = nullptr;
     QRhiShaderResourceBindings* m_srb = nullptr;
 
-    cwRhiFrameRenderer* m_frame = nullptr;
     bool m_resourcesInitialized = false;
 
     struct UniformData {

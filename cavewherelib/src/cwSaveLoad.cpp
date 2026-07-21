@@ -1835,6 +1835,9 @@ std::unique_ptr<CavewhereProto::Project> cwSaveLoad::toProtoProject(const cwCavi
     protoMetadata->set_syncenabled(metadata.syncEnabled);
 
     if (region != nullptr) {
+        protoMetadata->set_unitsystem(
+            static_cast<CavewhereProto::Units_UnitSystem>(region->unitSystem()));
+
         if (region->geoReference()->hasCoordinateSystem()) {
             cwProtoUtils::saveString(protoMetadata->mutable_globalcoordinatesystem(),
                                      region->geoReference()->globalCoordinateSystem());
@@ -2919,6 +2922,10 @@ Monad::Result<cwSaveLoad::ProjectLoadData> cwSaveLoad::loadProject(const QString
                 loadData.region.globalCoordinateSystem =
                     QString::fromStdString(metadataProto.globalcoordinatesystem());
             }
+            if (metadataProto.has_unitsystem()) {
+                loadData.region.unitSystem =
+                    static_cast<cwUnits::UnitSystem>(metadataProto.unitsystem());
+            }
         }
 
         if (loadData.metadata.dataRoot.isEmpty()) {
@@ -3504,6 +3511,11 @@ void cwSaveLoad::connectTreeModel()
             saveProject(projectRootDir(), region);
         };
         connect(region->geoReference(), &cwGeoReference::globalCoordinateSystemChanged, this, saveMetadata);
+
+        // The project's default unitSystem lives in the same metadata file, so it
+        // needs the same handler — without it a units change made in the UI never
+        // reaches disk or flips the dirty bit, and is dropped on close.
+        connect(region, &cwCavingRegion::unitSystemChanged, this, saveMetadata);
 
         // LAZ layers live in "GIS Layers/" inside the project root and are
         // discovered by directory scan, so adds go through cwProject::addFiles

@@ -23,10 +23,6 @@ void cwRHIGridPlane::initialize(const ResourceUpdateData& data)
         return;
     }
 
-    if (!m_frame && data.renderData.renderer) {
-        m_frame = data.renderData.renderer->frameRenderer();
-    }
-
     initializeResources(data);
     m_resourcesInitialized = true;
 }
@@ -124,29 +120,8 @@ void cwRHIGridPlane::updateResources(const ResourceUpdateData & data)
     }
 }
 
-void cwRHIGridPlane::render(const RenderData& data)
-{
-    // if (!ensurePipeline(data)) {
-    //     return;
-    // }
-
-    // if (!m_pipelineRecord || !m_pipelineRecord->pipeline) {
-    //     return;
-    // }
-
-    // data.cb->setGraphicsPipeline(m_pipelineRecord->pipeline);
-    // data.cb->setShaderResources(m_srb);
-    // const QRhiCommandBuffer::VertexInput vertexInput(m_vertexBuffer, 0);
-    // data.cb->setVertexInput(0, 1, &vertexInput);
-    // data.cb->draw(4);
-}
-
 bool cwRHIGridPlane::gather(const GatherContext& context, QVector<PipelineBatch>& batches)
 {
-    if (!isVisible()) {
-        return false;
-    }
-
     // The grid is a semi-transparent reference overlay: it must draw *after* the
     // point cloud (and the EDL composite), depth-testing against the combined
     // scene+cloud depth but never writing its own full-plane depth — otherwise
@@ -187,11 +162,7 @@ bool cwRHIGridPlane::ensurePipeline(const RenderData& data)
         return false;
     }
 
-    if (!m_frame && data.renderer) {
-        m_frame = data.renderer->frameRenderer();
-    }
-
-    if (!m_frame || !data.renderer) {
+    if (!data.renderer) {
         return false;
     }
 

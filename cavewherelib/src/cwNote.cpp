@@ -190,6 +190,12 @@ void cwNote::setParentTrip(cwTrip* trip) {
     }
 }
 
+cwUnits::UnitSystem cwNote::unitSystem() const
+{
+    const cwTrip* trip = parentTrip();
+    return trip ? trip->unitSystem() : cwUnits::Metric;
+}
+
 /**
   \brief Gets the scaling matrix for the orignial size of the notes
   */

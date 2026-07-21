@@ -19,11 +19,7 @@ cwItem3DRepeater::cwItem3DRepeater(QQuickItem* parent) :
     m_transformUpdater(new cwTransformUpdater(this))
 {
     connect(m_transformUpdater, &cwTransformUpdater::cameraChanged, this, &cwItem3DRepeater::cameraChanged);
-    connect(this, &QQuickItem::visibleChanged, this, [this]() {
-        if(m_transformUpdater != nullptr) {
-            m_transformUpdater->setEnabled(isVisible());
-        }
-    });
+    connect(this, &cwAbstractPointManager::pointParentItemChanged, this, &cwItem3DRepeater::updatePointParentItem);
 }
 
 cwItem3DRepeater::~cwItem3DRepeater()
@@ -34,9 +30,42 @@ cwItem3DRepeater::~cwItem3DRepeater()
 void cwItem3DRepeater::componentComplete()
 {
     cwAbstractPointManager::componentComplete();
-    if(m_transformUpdater != nullptr) {
-        m_transformUpdater->setEnabled(isVisible());
+    updatePointParentItem();
+}
+
+/**
+  Follows the item the points are parented into, so the updater can stop working
+  when that container is hidden.
+  */
+void cwItem3DRepeater::updatePointParentItem()
+{
+    QQuickItem* newParentItem = pointParentItem();
+    if(m_pointParentItem == newParentItem) {
+        return;
     }
+
+    if(m_pointParentItem != nullptr) {
+        disconnect(m_pointParentItem, &QQuickItem::visibleChanged,
+                   this, &cwItem3DRepeater::updateTransformUpdaterEnabled);
+    }
+
+    m_pointParentItem = newParentItem;
+
+    if(m_pointParentItem != nullptr) {
+        connect(m_pointParentItem, &QQuickItem::visibleChanged,
+                this, &cwItem3DRepeater::updateTransformUpdaterEnabled);
+    }
+
+    updateTransformUpdaterEnabled();
+}
+
+/**
+  Projecting points nobody can see is wasted work, so the updater runs only while
+  the container holding the points is visible.
+  */
+void cwItem3DRepeater::updateTransformUpdaterEnabled()
+{
+    m_transformUpdater->setEnabled(m_pointParentItem != nullptr && m_pointParentItem->isVisible());
 }
 
 QAbstractItemModel* cwItem3DRepeater::model() const
@@ -98,17 +127,12 @@ void cwItem3DRepeater::setPositionRole(int role)
 
 cwCamera* cwItem3DRepeater::camera() const
 {
-    if(m_transformUpdater == nullptr) {
-        return nullptr;
-    }
     return m_transformUpdater->camera();
 }
 
 void cwItem3DRepeater::setCamera(cwCamera* camera)
 {
-    if(m_transformUpdater != nullptr) {
-        m_transformUpdater->setCamera(camera);
-    }
+    m_transformUpdater->setCamera(camera);
     emit cameraChanged();
 }
 
@@ -256,9 +280,7 @@ void cwItem3DRepeater::onItemCreated(QQuickItem* item, int index)
     if(item == nullptr) {
         return;
     }
-    if(m_transformUpdater != nullptr) {
-        m_transformUpdater->addPointItem(item);
-    }
+    m_transformUpdater->addPointItem(item);
 }
 
 void cwItem3DRepeater::onItemAboutToBeDestroyed(QQuickItem* item, int index)
@@ -267,9 +289,7 @@ void cwItem3DRepeater::onItemAboutToBeDestroyed(QQuickItem* item, int index)
     if(item == nullptr) {
         return;
     }
-    if(m_transformUpdater != nullptr) {
-        m_transformUpdater->removePointItem(item);
-    }
+    m_transformUpdater->removePointItem(item);
 }
 
 QVariantMap cwItem3DRepeater::initialItemProperties(QQuickItem *item, int index) const

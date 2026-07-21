@@ -65,6 +65,10 @@ public:
     void setParentTrip(cwTrip* trip);
     Q_INVOKABLE cwTrip* parentTrip() const;
 
+    //! The unit system in effect for this note: its trip's, or Metric with no
+    //! trip yet. Delegates up to cwTrip::unitSystem() — the project default.
+    cwUnits::UnitSystem unitSystem() const;
+
     // void setParentCave(cwCave* cave);
     cwCave* parentCave() const;
 

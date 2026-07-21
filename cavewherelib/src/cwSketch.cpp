@@ -277,6 +277,11 @@ cwSketch::cwSketch(QObject *parent)
 
 cwSketch::~cwSketch() = default;
 
+void cwSketch::seedDefaultScale(cwUnits::UnitSystem system)
+{
+    m_mapScale->setData(cwScale::defaultData(system));
+}
+
 void cwSketch::setParentTrip(cwTrip *trip)
 {
     m_parentTrip = trip;

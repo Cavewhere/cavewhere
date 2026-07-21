@@ -235,6 +235,10 @@ private:
     bool beginSyncOperation(const QFuture<Monad::ResultBase>& operationFuture);
     void setModified(bool modified);
 
+    //! Seed the region's unitSystem from the app-level default. Runs only at
+    //! new-project creation on the main thread; a load overrides it via setData().
+    void seedRegionUnitSystem();
+
      // QDir m_projectDir;
     cwSaveLoad* m_saveLoad;
 

@@ -50,6 +50,14 @@ cwSketch* cwSurveyNoteSketchModel::addSketch(cwSketch::ViewType viewType)
 {
     auto* sketch = new cwSketch();
     sketch->setViewType(viewType);
+
+    // Seed the new sketch's paper scale units from the project default, the same
+    // way cwCave seeds a new trip's survey unit. cwTrip::unitSystem() resolves the
+    // region, falling back to Metric when the trip has no cave/region yet. Loaded
+    // sketches keep their stored scale (setData), so only new sketches are seeded.
+    const cwTrip* trip = parentTrip();
+    sketch->seedDefaultScale(trip ? trip->unitSystem() : cwUnits::Metric);
+
     addSketches({ sketch });
     return sketch;
 }

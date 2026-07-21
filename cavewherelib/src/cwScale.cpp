@@ -9,6 +9,20 @@
 #include "cwScale.h"
 #include "cwLength.h"
 
+namespace {
+    // The default paper scale a new sketch/scrap is seeded with, per unit system.
+    // Each is a round sketching scale in that system's natural paper/cave unit
+    // pair (metric 1 cm = 2.5 m, 1:250; imperial 1 in = 20 ft, 1:240).
+    struct DefaultScale {
+        cwUnits::LengthUnit paperUnit;
+        double paperValue;
+        cwUnits::LengthUnit caveUnit;
+        double caveValue;
+    };
+    constexpr DefaultScale kMetricDefaultScale   { cwUnits::Centimeters, 1.0, cwUnits::Meters, 2.5 };
+    constexpr DefaultScale kImperialDefaultScale { cwUnits::Inches,      1.0, cwUnits::Feet,  20.0 };
+}
+
 cwScale::cwScale(QObject *parent) :
     QObject(parent),
     ScaleNumerator(new cwLength(this)),
@@ -60,6 +74,16 @@ cwScale::Data cwScale::data() const
     return {
         ScaleNumerator->data(),
         ScaleDenominator->data()
+    };
+}
+
+cwScale::Data cwScale::defaultData(cwUnits::UnitSystem system)
+{
+    const DefaultScale& scale = system == cwUnits::Imperial ? kImperialDefaultScale
+                                                            : kMetricDefaultScale;
+    return {
+        { scale.paperUnit, scale.paperValue, false },
+        { scale.caveUnit,  scale.caveValue,  false }
     };
 }
 

@@ -12,6 +12,8 @@ git submodule update --init --recursive
 
 Packaging scripts are found in `installer/`. Conan configuration lives in `conan/` and `conanfile.py`.
 
+The end-user manual is in `docs/manual/`. When answering questions about how CaveWhere is used, read `docs/manual/llms.txt` first — it is the machine-readable index of every manual page. Manual pages follow the conventions in `docs/manual/AUTHORING.md` (problem-first structure, YAML front matter, relative links).
+
 ## Build, Test, and Development Commands
 
 From a fresh checkout:

@@ -11,6 +11,7 @@ class QRhiCommandBuffer;
 #include "cwRhiPipelineTypes.h"
 #include "cwEdlParametersData.h"
 #include "cwRenderObjectId.h"
+#include "cwSceneVisibility.h"
 #include <QHash>
 #include <QList>
 #include <QSet>
@@ -26,7 +27,7 @@ class cwRhiItemRenderer;
 // fields rather than as more gatherScene() arguments.
 struct cwSceneGatherOptions {
     // Render objects to suppress for this gather only, by stable id (per-job
-    // visibility override); empty = honor each object's live isVisible().
+    // visibility override); empty = honor the frame's visibility snapshot alone.
     QSet<cwRenderObjectId> hiddenObjectIds;
     // Per-object appearance slot stamped into each object's GatherContext, by
     // cwRHIObject pointer. Empty (the live frame) = every object gathers at slot 0
@@ -202,6 +203,15 @@ public:
                           const QMatrix4x4& projectionMatrix);
     void setEdlParameters(const EdlParametersData& parameters);
 
+    // The frame's visibility truth: one immutable snapshot of the scene's
+    // visibility store, captured per sync at the barrier (the GUI thread is
+    // blocked, so the read is race-free) and read by every render-side gate —
+    // gatherScene's object gate, the cloud/atlas checks, and per-object readers
+    // (cwRhiTexturedItems item gating, cwRHILinePlot's mask upload). A default
+    // snapshot (never synced) reads as everything-visible.
+    void setVisibilitySnapshot(cwVisibilitySnapshot snapshot) { m_visibility = std::move(snapshot); }
+    const cwVisibilitySnapshot& visibilitySnapshot() const { return m_visibility; }
+
     // Render-object registry mutation, driven by cwRhiScene::synchroize from the
     // front-end cwScene's add/remove/update queues. registerRenderObject frees any
     // cwRHIObject already mapped under @a id before remapping (the issue #512 re-add
@@ -366,6 +376,7 @@ private:
     QHash<cwRenderObjectId, cwRHIObject*> m_rhiObjectLookup;
 
     cwSceneUpdate::Flag m_updateFlags = cwSceneUpdate::Flag::None;
+    cwVisibilitySnapshot m_visibility;
     QMatrix4x4 m_projectionMatrix;
     QMatrix4x4 m_viewMatrix;
     float m_devicePixelRatio = 1.0f;

@@ -85,7 +85,6 @@ class cwRHIBillboards : public cwRHIObject
 public:
     void initialize(const ResourceUpdateData&) override {}
     void updateResources(const ResourceUpdateData&) override {}
-    void render(const RenderData&) override {}
 
     // The inline 2D renderers reuse one MVP UBO per gather, so the offscreen
     // renderer must not atlas-batch a scene that draws billboards (every tile would

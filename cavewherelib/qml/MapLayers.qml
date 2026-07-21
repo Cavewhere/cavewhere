@@ -285,6 +285,22 @@ ColumnLayout {
                 checked: true
             }
 
+            RowLayout {
+                enabled: scaleBarCheckBoxId.checked
+
+                QC.Label {
+                    text: "Units:"
+                }
+
+                UnitSystemComboBox {
+                    id: scaleBarUnitComboId
+                    objectName: "scaleBarUnitComboBox"
+                    // Index maps to Units.ScaleBarUnitMode:
+                    // 0 = FollowProject, 1 = ForceMetric, 2 = ForceImperial.
+                    includeFollowProject: true
+                }
+            }
+
             QC.CheckBox {
                 id: leadsCheckBoxId
                 objectName: "leadsCheckBox"
@@ -349,6 +365,13 @@ ColumnLayout {
                         checked: layerProperties.layerObject.scaleBarVisible
                         onCheckedChanged: {
                             layerProperties.layerObject.scaleBarVisible = scaleBarCheckBoxId.checked
+                        }
+                    }
+
+                    scaleBarUnitComboId {
+                        currentIndex: layerProperties.layerObject.scaleBarUnitMode
+                        onActivated: {
+                            layerProperties.layerObject.scaleBarUnitMode = scaleBarUnitComboId.currentIndex
                         }
                     }
 

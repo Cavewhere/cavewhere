@@ -75,12 +75,16 @@ private slots:
     void onDataChanged(const QModelIndex& topLeft, const QModelIndex& bottomRight, const QList<int>& roles);
     void onModelReset();
 
+    void updatePointParentItem();
+    void updateTransformUpdaterEnabled();
+
 private:
     bool isFlatListModel(const QModelIndex& parent) const;
     QModelIndex indexForRow(int row) const;
 
     QPointer<QAbstractItemModel> m_model;
-    cwTransformUpdater* m_transformUpdater = nullptr;
+    cwTransformUpdater* m_transformUpdater; //Created in the ctor, never null
+    QPointer<QQuickItem> m_pointParentItem;
     int m_positionRole = -1;
 
     bool m_removingItems = false;

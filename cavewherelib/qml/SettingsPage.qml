@@ -11,12 +11,13 @@ StandardPage {
 
         TabViewVertical {
             id: tabBarId
+            objectName: "settingsTabBar"
 
             Layout.fillHeight: true
             Layout.maximumWidth: 200
             implicitWidth: 200
 
-            model: ["Jobs", "Warping", "PDF / SVG", "Git", "Appearance", "Rendering", "Sketch"]
+            model: ["Jobs", "Warping", "PDF / SVG", "Git", "Appearance", "Rendering", "Sketch", "Units"]
         }
 
         QC.ScrollView {
@@ -28,10 +29,11 @@ StandardPage {
 
 
                 JobSettingsItem {
-
+                    objectName: "jobSettingsItem"
                 }
 
                 WarpingSettingsItem {
+                    objectName: "warpingSettingsItem"
                     warpingSettings: RootData.scrapManager.warpingSettings
                 }
 
@@ -40,7 +42,7 @@ StandardPage {
                 // }
 
                 PDFSettingsItem {
-
+                    objectName: "pdfSettingsItem"
                 }
 
                 GitSettingsItem {
@@ -48,14 +50,18 @@ StandardPage {
                 }
 
                 AppearanceSettingsItem {
-
+                    objectName: "appearanceSettingsItem"
                 }
 
                 RenderingSettingsItem {
-
+                    objectName: "renderingSettingsItem"
                 }
 
                 SketchSettingsItem {
+
+                }
+
+                UnitsSettingsItem {
 
                 }
             }

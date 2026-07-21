@@ -30,8 +30,8 @@
  * drive the choice by `index`. When `settingsKey` is set, the choice is loaded
  * from and saved to that QSettings key, so it persists across sessions.
  *
- * This is the single source of truth for the curated length-unit set;
- * UnitDefaults.lengthModel derives its model from unitNames().
+ * This is the single source of truth for the curated length-unit set that
+ * feeds an index-based selector's model via unitNames().
  */
 class CAVEWHERE_LIB_EXPORT cwLengthUnitSelection : public QObject
 {
@@ -55,7 +55,7 @@ public:
 
     //! The curated set of selectable units, in menu order: m, km, ft, mi.
     static QList<cwUnits::LengthUnit> curatedUnits();
-    //! The curated set's names, in menu order (single source for UnitDefaults).
+    //! The curated set's names, in menu order (the selector's model source).
     static QStringList unitNames();
 
     cwUnits::LengthUnit unit() const { return m_unit; }
@@ -69,6 +69,11 @@ public:
 
     QString settingsKey() const { return m_settingsKey; }
     void setSettingsKey(const QString& key);
+
+    //! The unit used when nothing is persisted yet — the owner sets it from the
+    //! project's unit system so a fresh selection follows Metric/Imperial. A
+    //! persisted choice always wins, so this never overrides the user.
+    void setDefaultUnit(cwUnits::LengthUnit unit);
 
     //! The magnitude converted from canonical metres into the selected unit.
     Q_INVOKABLE double fromMeters(double meters) const;
@@ -91,9 +96,14 @@ private:
     //! Clamp a unit to the curated set, falling back to Meters — so a future or
     //! corrupt settings value can't wedge the selection on an unlisted unit.
     static cwUnits::LengthUnit coerceToSet(cwUnits::LengthUnit unit);
+    //! Set the unit without persisting — the path for seeds (setDefaultUnit) and
+    //! loads. Only setUnit() writes the settings key, so a stored value always
+    //! marks a deliberate user choice.
+    void applyUnit(cwUnits::LengthUnit unit);
     void loadFromSettings();
 
     cwUnits::LengthUnit m_unit = cwUnits::Meters;
+    cwUnits::LengthUnit m_defaultUnit = cwUnits::Meters;
     QString m_settingsKey;
 };
 

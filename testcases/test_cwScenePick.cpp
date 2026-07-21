@@ -16,6 +16,7 @@
 #include "cwCamera.h"
 #include "cwGeometry.h"
 #include "cwGeometryItersecter.h"
+#include "TestGeometryBuilders.h"
 #include "cwProjection.h"
 #include "cwRenderLinePlot.h"
 #include "cwScene.h"
@@ -47,17 +48,7 @@ void configureCamera(cwCamera& camera)
 cwGeometryItersecter::Object makeLineObjectFor(cwRenderObject* owner,
                                                const QVector<QVector3D>& points)
 {
-    cwGeometry geometry {
-        {cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3}
-    };
-    geometry.set(cwGeometry::Semantic::Position, points);
-
-    QVector<uint32_t> indices(points.size());
-    std::iota(indices.begin(), indices.end(), 0u);
-    geometry.setIndices(std::move(indices));
-    geometry.setType(cwGeometry::Type::Lines);
-
-    return cwGeometryItersecter::Object({owner, 0}, geometry);
+    return cwGeometryItersecter::Object(owner, 0, cwTestGeometry::lines(points));
 }
 
 }

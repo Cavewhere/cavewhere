@@ -8,13 +8,17 @@
 
 // Qt
 #include <QCoreApplication>
+#include <QElapsedTimer>
+#include <QEventLoop>
 #include <QMatrix4x4>
+#include <QThread>
 #include <QThreadPool>
 #include <QVector3D>
 #include <QRay3D>
 
 // SUT
 #include "cwGeometryItersecter.h"
+#include "TestGeometryBuilders.h"
 #include "cwRayHit.h"
 #include "cwTask.h"
 
@@ -29,14 +33,8 @@ cwGeometryItersecter::Object makePointObject(uint64_t id,
                                              const QMatrix4x4& modelMatrix = QMatrix4x4(),
                                              float pickRadius = kPickRadius)
 {
-    cwGeometry geometry {
-        {cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3}
-    };
-    geometry.set(cwGeometry::Semantic::Position, points);
-    geometry.setType(cwGeometry::Type::Points);
-
-    return cwGeometryItersecter::Object({nullptr, id},
-                                        geometry,
+    return cwGeometryItersecter::Object(nullptr, id,
+                                        cwTestGeometry::points(points),
                                         modelMatrix,
                                         pickRadius);
 }
@@ -47,21 +45,8 @@ cwGeometryItersecter::Object makeTriangleObject(uint64_t id,
                                                 const QVector3D& c,
                                                 const QMatrix4x4& modelMatrix = QMatrix4x4())
 {
-    QVector<QVector3D> points;
-    points << a << b << c;
-
-    QVector<uint32_t> indexes;
-    indexes << 0u << 1u << 2u;
-
-    cwGeometry geometry {
-        {cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3}
-    };
-    geometry.set(cwGeometry::Semantic::Position, points);
-    geometry.setIndices(indexes);
-    geometry.setType(cwGeometry::Type::Triangles);
-
-    return cwGeometryItersecter::Object({nullptr, id},
-                                        geometry,
+    return cwGeometryItersecter::Object(nullptr, id,
+                                        cwTestGeometry::triangles({a, b, c}, {0u, 1u, 2u}),
                                         modelMatrix);
 }
 
@@ -79,6 +64,27 @@ QVector<QVector3D> deterministicCloud(int count, float range, const QVector3D& t
     }
     points.last() = target;
     return points;
+}
+
+// Warm-up shared by the Phase 4a banking tests: a one-point Object (id 1 at the
+// origin) plus a slow ~500k cloud (id 2) in a single build, pumped just long
+// enough that the microsecond point sub-BVH finishes while the cloud is still
+// building. Leaves the build in flight, ready to be cancelled.
+void seedPointAndSlowCloud(cwGeometryItersecter& intersector,
+                           const QVector3D& cloudTarget, uint32_t cloudSeed)
+{
+    constexpr int kSlowCloudCount = 500'000;
+    constexpr float kSlowCloudRange = 500.0f;
+    constexpr int kPointCompletesMs = 100;
+
+    intersector.addObject(makePointObject(1, {QVector3D(0.0f, 0.0f, 0.0f)}));
+    intersector.addObject(makePointObject(
+        2,
+        deterministicCloud(kSlowCloudCount, kSlowCloudRange, cloudTarget,
+                           cloudSeed)));
+
+    QCoreApplication::processEvents();
+    QThread::msleep(kPointCompletesMs);
 }
 
 } // namespace
@@ -104,7 +110,7 @@ TEST_CASE("setModelMatrix translates pick without invalidating sub-BVH",
     // world (5, 0, 0). Ray at the new world position should hit.
     QMatrix4x4 translation;
     translation.translate(5.0f, 0.0f, 0.0f);
-    intersector.setModelMatrix(nullptr, 1, translation);
+    intersector.setModelMatrix(cwRenderObjectId{}, 1, translation);
     intersector.waitForFinish();
 
     const QRay3D rayAtFive(QVector3D(5.0f, 0.0f, 100.0f),
@@ -112,6 +118,101 @@ TEST_CASE("setModelMatrix translates pick without invalidating sub-BVH",
     REQUIRE(intersector.intersectsDetailed(rayAtFive).hit());
 
     // The old position no longer hits.
+    REQUIRE_FALSE(intersector.intersectsDetailed(rayAtOrigin).hit());
+}
+
+TEST_CASE("setModelMatrix updates picks before the async rebuild lands",
+          "[cwGeometryItersecter][twoLevel][Issue505]")
+{
+    // Regression for issue #505 ("New GLB doesn't get added to
+    // cwGeometryIntersector ... if the lidar file rotates a bunch, it might
+    // have an old position that doesn't insersect correct").
+    //
+    // Rotating/moving a LiDAR note changes its Object modelMatrix. setModelMatrix
+    // only schedules a top-level rebuild on a worker thread (scheduleTopLevelRebuild
+    // -> m_bvhRestarter). Until that install callback lands, the published BVH
+    // still carries the OLD transform, so a pick hits where the geometry USED to
+    // be and misses where it now is. In the running app the event loop is spinning
+    // and a large mesh's rebuild can still be in flight when the user picks
+    // (e.g. NoteLiDARItem's onFinishedMoving -> pick), which is the reported
+    // "old position" symptom.
+    //
+    // The top-level refresh is cheap (it does not touch the model-space sub-BVHs),
+    // so setModelMatrix applies it synchronously (applyPublishedDelta SetMatrix) and
+    // a moved Object is pickable at its new world position WITHOUT spinning the
+    // event loop. This test omits waitForFinish/processEvents after setModelMatrix
+    // on purpose to sit in the pre-async-install window and pin that the pick is
+    // already correct there.
+    //
+    // Note this does not regress "picks keep working during an in-flight rebuild":
+    // that case is about ADDING a new Object (a sub-BVH build), which stays async.
+
+    cwGeometryItersecter intersector;
+
+    // A triangle in the z=0 plane, identity matrix (same winding as the
+    // two-level traversal test, which a downward ray hits).
+    intersector.addObject(makeTriangleObject(
+        1,
+        QVector3D(-1.0f, -1.0f, 0.0f),
+        QVector3D( 1.0f, -1.0f, 0.0f),
+        QVector3D( 0.0f,  1.0f, 0.0f)));
+    intersector.waitForFinish();
+
+    const QRay3D rayAtOrigin(QVector3D(0.0f, 0.0f, 100.0f),
+                             QVector3D(0.0f, 0.0f, -1.0f));
+    REQUIRE(intersector.intersectsDetailed(rayAtOrigin).hit());
+
+    // Move the object +50 in x. Do NOT waitForFinish / processEvents: we are in
+    // the window right after a rotation, before the worker's install callback
+    // has replaced the published BVH.
+    QMatrix4x4 translation;
+    translation.translate(50.0f, 0.0f, 0.0f);
+    intersector.setModelMatrix(cwRenderObjectId{}, 1, translation);
+
+    const QRay3D rayAtFifty(QVector3D(50.0f, 0.0f, 100.0f),
+                            QVector3D(0.0f, 0.0f, -1.0f));
+
+    // Desired: the pick already reflects the new transform.
+    CHECK(intersector.intersectsDetailed(rayAtFifty).hit());        // stale window: currently misses
+    CHECK_FALSE(intersector.intersectsDetailed(rayAtOrigin).hit()); // stale window: currently a stale hit
+
+    // After the async rebuild lands the state is of course correct — this pins
+    // that the eventual result is right regardless of the fix.
+    intersector.waitForFinish();
+    CHECK(intersector.intersectsDetailed(rayAtFifty).hit());
+    CHECK_FALSE(intersector.intersectsDetailed(rayAtOrigin).hit());
+}
+
+TEST_CASE("addObject is not pickable until its async build installs",
+          "[cwGeometryItersecter][twoLevel][Issue505]")
+{
+    // Pins addObject's not-ready contract (issue #505; see the header doc).
+    // The install callback fires via a queued connection, so picking without
+    // spinning the event loop sits in the pre-install window
+    // deterministically (same trick as the in-flight-rebuild tests above).
+
+    cwGeometryItersecter intersector;
+
+    const QRay3D rayAtOrigin(QVector3D(0.0f, 0.0f, 100.0f),
+                             QVector3D(0.0f, 0.0f, -1.0f));
+
+    // Fresh add: not pickable inside the window, pickable after install.
+    intersector.addObject(makePointObject(1, {QVector3D(0.0f, 0.0f, 0.0f)}));
+    CHECK_FALSE(intersector.intersectsDetailed(rayAtOrigin).hit());
+
+    intersector.waitForFinish();
+    REQUIRE(intersector.intersectsDetailed(rayAtOrigin).hit());
+
+    // Same-Key replacement: the old geometry stops picking immediately (no
+    // stale hits) and the new geometry waits for its build like a fresh add.
+    intersector.addObject(makePointObject(1, {QVector3D(30.0f, 0.0f, 0.0f)}));
+    const QRay3D rayAtThirty(QVector3D(30.0f, 0.0f, 100.0f),
+                             QVector3D(0.0f, 0.0f, -1.0f));
+    CHECK_FALSE(intersector.intersectsDetailed(rayAtOrigin).hit());
+    CHECK_FALSE(intersector.intersectsDetailed(rayAtThirty).hit());
+
+    intersector.waitForFinish();
+    REQUIRE(intersector.intersectsDetailed(rayAtThirty).hit());
     REQUIRE_FALSE(intersector.intersectsDetailed(rayAtOrigin).hit());
 }
 
@@ -155,7 +256,7 @@ TEST_CASE("Remove + add same Key produces fresh sub-BVH",
                              QVector3D(0.0f, 0.0f, -1.0f));
     REQUIRE(intersector.intersectsDetailed(rayAtOrigin).hit());
 
-    intersector.removeObject(nullptr, 42);
+    intersector.removeObject(cwRenderObjectId{}, 42);
     intersector.waitForFinish();
     REQUIRE_FALSE(intersector.intersectsDetailed(rayAtOrigin).hit());
 
@@ -219,7 +320,7 @@ TEST_CASE("boundingBox() returns the world-space union of all objects",
     // A modelMatrix translation must show up in the world-space union.
     QMatrix4x4 translation;
     translation.translate(100.0f, 0.0f, 0.0f);
-    intersector.setModelMatrix(nullptr, 2, translation);
+    intersector.setModelMatrix(cwRenderObjectId{}, 2, translation);
     intersector.waitForFinish();
 
     const QBox3D moved = intersector.boundingBox();
@@ -249,28 +350,60 @@ TEST_CASE("Two-level traversal returns closest hit across mixed types",
     REQUIRE(hit.objectId() == 2);
 }
 
-TEST_CASE("Tube-pick fallback works through the two-level path",
+TEST_CASE("A point's pick sphere is honoured exactly through the two-level path",
           "[cwGeometryItersecter][twoLevel]")
 {
+    // Nothing pads the box tests for points: the sub-BVH's leaf boxes are baked
+    // with a pickRadius pad at build time (primitiveModelBox), which is what
+    // lets an unpadded traversal still reach the leaf of a sphere the ray only
+    // grazes. Pin both sides of that boundary through the two-level path, so a
+    // regression in the baked pad shows up as a lost grazing hit rather than as
+    // a cloud that quietly stops picking near its silhouette.
     cwGeometryItersecter intersector;
 
-    // A point at (1, 0, 0) with pickRadius=0.1; the ray's X offset of 0.3
-    // is outside the strict sphere (0.3 > 0.1) but within tube range
-    // (kTubeFactor * pickRadius = 5 * 0.1 = 0.5).
+    // A point at (1, 0, 0) with pickRadius=0.1 (makePointObject's default).
     intersector.addObject(makePointObject(1, {QVector3D(1.0f, 0.0f, 0.0f)}));
     intersector.waitForFinish();
 
-    const QRay3D ray(QVector3D(1.3f, 0.0f, 100.0f),
-                     QVector3D(0.0f, 0.0f, -1.0f));
+    SECTION("a ray just inside the sphere hits") {
+        // 0.09 < 0.1: grazing, and the leaf box is only padded by 0.1, so this
+        // is the case a missing baked pad would break.
+        const QRay3D ray(QVector3D(1.09f, 0.0f, 100.0f),
+                         QVector3D(0.0f, 0.0f, -1.0f));
+        const cwRayHit hit = intersector.intersectsDetailed(ray);
+        CHECK(hit.hit());
+    }
 
-    // With tube-pick on (default), the pick should land on the point.
-    cwRayHit hit = intersector.intersectsDetailed(ray);
-    REQUIRE(hit.hit());
+    SECTION("a ray inside the padded box but outside the sphere misses") {
+        // The only case here that reaches the sphere test at all, and so the
+        // only one pinning that the reject boundary is a SPHERE of pickRadius
+        // rather than the padded BOX around it. addPoints pads the object's
+        // broad-phase AABB by a full pickRadius (kPointAabbPadScale), so a ray
+        // offset in x alone by more than that is rejected by the box long
+        // before testPrimitive — which is why the x=1.2 case below proves less
+        // than it looks.
+        //
+        // (1.08, 0.08) is 0.113 from the centre — a true miss — yet lands
+        // inside the padded box [0.9,1.1]x[-0.1,0.1], so only the ray/sphere
+        // test can reject it. Verified by mutation: widening the accept region
+        // to the box's corner distance (sqrt(3)*r) fails HERE and nowhere in
+        // the two-level file.
+        const QRay3D ray(QVector3D(1.08f, 0.08f, 100.0f),
+                         QVector3D(0.0f, 0.0f, -1.0f));
+        const cwRayHit hit = intersector.intersectsDetailed(ray);
+        CHECK_FALSE(hit.hit());
+    }
 
-    // Disable tube-pick — pick should now miss.
-    intersector.setTubePickEnabled(false);
-    cwRayHit hitStrict = intersector.intersectsDetailed(ray);
-    REQUIRE_FALSE(hitStrict.hit());
+    SECTION("a ray beyond the deleted fallback's reach misses") {
+        // 0.2 = 2x the radius: inside the 2.5x reach the near-miss fallback
+        // used to snap from, so this HIT before that fallback was deleted.
+        // Rejected by the padded box rather than by the sphere, so it guards
+        // the fallback's absence and nothing more.
+        const QRay3D ray(QVector3D(1.2f, 0.0f, 100.0f),
+                         QVector3D(0.0f, 0.0f, -1.0f));
+        const cwRayHit hit = intersector.intersectsDetailed(ray);
+        CHECK_FALSE(hit.hit());
+    }
 }
 
 TEST_CASE("Picks against previously-built objects keep working during an in-flight rebuild",
@@ -328,7 +461,7 @@ TEST_CASE("Stale install: a re-dirtied Key never reaches picks via a late instal
     // Setup: A worker that has just finished computing (resultSlot populated)
     // has a queued .context() install callback. If the UI thread mutates the
     // same Key BEFORE that callback fires, the in-mutator
-    // invalidatePublishedSlot finds an empty m_bvh (or the previous
+    // RemoveSlot delta finds an empty m_bvh (or the previous
     // generation's BvhData, which doesn't contain the just-rebuilt Key).
     // When the queued install then runs, it swaps in a BvhData whose
     // subBvhs slot for the now-dirty Key is populated with *stale*
@@ -412,6 +545,131 @@ TEST_CASE("Stale install: a re-dirtied Key never reaches picks via a late instal
     }
 }
 
+TEST_CASE("A cancelled build banks its completed sub-BVHs for reuse",
+          "[cwGeometryItersecter][twoLevel][Issue505]")
+{
+    // Phase 4a — readiness starvation. One restarter serves every build, so
+    // each mutation cancels the build in flight. If a cancelled build discarded
+    // the sub-BVHs it had already finished, a large first build repeatedly
+    // interrupted by interaction churn (a rotation drag restarts per mouse-move)
+    // would never make progress. The fix banks completed sub-BVHs across a
+    // cancel so the eventual uncancelled build starts warm.
+    //
+    // Here a one-point Object and a slow cloud share a single build. The build
+    // is cancelled while the cloud is still building, and the point's finished
+    // sub-BVH must land in the cache even though this build never publishes a
+    // BVH. Before the fix the cache stays empty on the cancel path.
+    //
+    // Timing: the point sub-BVH is microseconds and the cloud is far slower, so
+    // a short beat after the worker launches guarantees the point is done while
+    // the cloud is not — the same large-ratio assumption the stale-install test
+    // above relies on. cachedSubBvhCount is read through the debug-panel
+    // introspection API (debugStatistics), not test-only scaffolding.
+
+    cwGeometryItersecter intersector;
+    seedPointAndSlowCloud(intersector, QVector3D(0.0f, 0.0f, 80.0f), 11);
+
+    // Cancel the in-flight build. setModelMatrix on the cloud restarts the
+    // worker without dirtying Object 1, so its banked sub-BVH survives the
+    // install-time dirty/live filter.
+    QMatrix4x4 nudge;
+    nudge.translate(1.0f, 0.0f, 0.0f);
+    intersector.setModelMatrix(cwRenderObjectId{}, 2, nudge);
+
+    // Pump until the cancelled build's finished callback banks Object 1. The
+    // replacement build rebuilds both Objects from a cold snapshot and takes
+    // far longer, so the cache passes through exactly one banked sub-BVH
+    // (0 -> 1 -> 2) and dwells there for the whole cloud rebuild. Before the
+    // fix the cancel path banks nothing, so the cache jumps straight from 0 to
+    // 2 when the replacement lands and this window (cachedSubBvhCount == 1)
+    // never appears — the poll times out and the CHECK fails.
+    constexpr int kBankPollTimeoutMs = 10000;
+    QElapsedTimer pollTimer;
+    pollTimer.start();
+    int cachedInWindow = 0;
+    while (pollTimer.elapsed() < kBankPollTimeoutMs) {
+        QCoreApplication::processEvents(QEventLoop::WaitForMoreEvents, 100);
+        cachedInWindow = intersector.debugStatistics().cachedSubBvhCount;
+        if (cachedInWindow >= 1) {
+            break;
+        }
+    }
+    INFO("cachedInWindow=" << cachedInWindow
+         << " pollElapsedMs=" << pollTimer.elapsed());
+    CHECK(cachedInWindow == 1);
+
+    // Settle: the eventual build reuses the banked sub-BVH and publishes both
+    // Objects, so the point is pickable.
+    intersector.waitForFinish();
+    const QRay3D rayAtOne(QVector3D(0.0f, 0.0f, 100.0f),
+                          QVector3D(0.0f, 0.0f, -1.0f));
+    CHECK(intersector.intersectsDetailed(rayAtOne).hit());
+}
+
+TEST_CASE("A cancelled build does not bank a sub-BVH re-dirtied mid-build",
+          "[cwGeometryItersecter][twoLevel][Issue505]")
+{
+    // Phase 4a corner: banking must NOT resurrect stale geometry. If a key is
+    // geometry-replaced (re-dirtied) while its build is in flight, the sub-BVH
+    // that build already finished is now stale, and the cancelled build must
+    // not promote it into the cache. The hazard is subtle: the replacement
+    // build's launch clears m_dirtyKeys before the cancelled build's finished
+    // callback runs, so an install that filters only on the live dirty set
+    // would see the key "clean" and bank the stale sub-BVH — which a later
+    // build could then reuse and publish, serving picks stale geometry (the
+    // #505 symptom).
+    //
+    // Mirror of the banking test above, but the cancel is triggered by
+    // re-adding the point with new geometry (re-dirtying it). The point's stale
+    // sub-BVH must be dropped, so the cache goes 0 -> 2 (the replacement builds
+    // both fresh) and never dwells at 1. If the stale sub-BVH is wrongly banked
+    // it sits in the cache at count 1 for the whole cloud rebuild, which the
+    // poll below reliably samples.
+
+    cwGeometryItersecter intersector;
+    // The cloud target sits off the x=y=0 and x=50,y=0 axes so it can't be hit
+    // by either settle ray below (which would confound the point-position
+    // checks).
+    seedPointAndSlowCloud(intersector, QVector3D(300.0f, 300.0f, 80.0f), 13);
+
+    // Re-dirty Object 1 with new geometry. This cancels the in-flight build
+    // and makes the point's just-finished sub-BVH stale.
+    intersector.addObject(makePointObject(1, {QVector3D(50.0f, 0.0f, 0.0f)}));
+
+    // Poll across the replacement build's cloud rebuild. A wrongly-banked stale
+    // point sub-BVH sits in the cache at count 1 for that whole window; a
+    // correct run promotes nothing until the replacement lands both fresh
+    // (0 -> 2). Sample until both are cached (count 2) or timeout.
+    constexpr int kPollTimeoutMs = 10000;
+    QElapsedTimer pollTimer;
+    pollTimer.start();
+    bool sawStalePromotion = false;
+    int cached = 0;
+    while (pollTimer.elapsed() < kPollTimeoutMs) {
+        QCoreApplication::processEvents(QEventLoop::WaitForMoreEvents, 100);
+        cached = intersector.debugStatistics().cachedSubBvhCount;
+        if (cached == 1) {
+            sawStalePromotion = true;
+        }
+        if (cached >= 2) {
+            break;
+        }
+    }
+    INFO("cached=" << cached << " sawStalePromotion=" << sawStalePromotion
+         << " pollElapsedMs=" << pollTimer.elapsed());
+    CHECK_FALSE(sawStalePromotion);
+
+    // Settle: the replacement publishes the new geometry, so the point is
+    // pickable at its new position and not at the old one.
+    intersector.waitForFinish();
+    const QRay3D rayAtFifty(QVector3D(50.0f, 0.0f, 100.0f),
+                            QVector3D(0.0f, 0.0f, -1.0f));
+    const QRay3D rayAtZero(QVector3D(0.0f, 0.0f, 100.0f),
+                           QVector3D(0.0f, 0.0f, -1.0f));
+    CHECK(intersector.intersectsDetailed(rayAtFifty).hit());
+    CHECK_FALSE(intersector.intersectsDetailed(rayAtZero).hit());
+}
+
 // ============================================================================
 // Performance — opt-in via the .perf tag
 //
@@ -479,7 +737,7 @@ TEST_CASE("perf: setModelMatrix on small object is near-instant",
     for (int i = 0; i < kIterations; ++i) {
         QMatrix4x4 m;
         m.translate(float(i), 0.0f, 0.0f);
-        intersector.setModelMatrix(nullptr, 2, m);
+        intersector.setModelMatrix(cwRenderObjectId{}, 2, m);
         intersector.waitForFinish();
     }
     const auto elapsed = std::chrono::steady_clock::now() - start;

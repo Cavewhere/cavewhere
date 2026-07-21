@@ -192,6 +192,13 @@ QQ.Item {
         }
     }
 
+    QQ.Component {
+        id: docsPageComponent
+        DocsPage {
+            anchors.fill: parent
+        }
+    }
+
     QQ.Component.onCompleted: {
         GlobalShadowTextInput.parent = overlay;
         RootPopupItem.parent = overlay
@@ -210,6 +217,17 @@ QQ.Item {
         RootData.pageSelectionModel.registerPage(null, "Remote Settings", remoteManagementPageComponent)
         RootData.pageSelectionModel.registerPage(null, "History", gitHistoryPageComponent)
         RootData.pageSelectionModel.registerPage(null, "Cavern", cavernOutputPageComponent)
+
+        // The Docs landing page (empty slug shows the manual index); every manual
+        // article is a child page sharing the one DocsPage component, selected by
+        // its slug. Explicit component + props — never registerSubPage.
+        let docsPage = RootData.pageSelectionModel.registerPage(null, "Docs", docsPageComponent, {slug: ""})
+        let manualArticles = RootData.manualIndex.articles
+        for (let i = 0; i < manualArticles.length; i++) {
+            let article = manualArticles[i]
+            RootData.pageSelectionModel.registerPage(docsPage, article.slug, docsPageComponent,
+                                                     {slug: article.slug, docsRootPage: docsPage})
+        }
 
         mainSideBar.viewPage = viewPage;
         mainSideBar.dataPage = dataPage;

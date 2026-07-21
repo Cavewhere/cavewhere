@@ -111,6 +111,10 @@ cwLinePlotManager::cwLinePlotManager(QObject *parent) :
     SurveySignaler->addConnectionToTrips(SIGNAL(chunksRemoved(int,int)), this, SLOT(runSurvex()));
     SurveySignaler->addConnectionToTrips(SIGNAL(nameChanged()), this, SLOT(runSurvex()));
     SurveySignaler->addConnectionToTripCalibrations(SIGNAL(calibrationsChanged()), this, SLOT(runSurvex()));
+    // declinationChanged covers external inputs that don't dirty stored
+    // calibration data — trip date and fix-station edits re-resolve the auto
+    // declination (bug #581); calibrationsChanged alone would miss them.
+    SurveySignaler->addConnectionToTripCalibrations(SIGNAL(declinationChanged(double)), this, SLOT(runSurvex()));
 
     SurveySignaler->addConnectionToChunks(SIGNAL(shotsAdded(int,int)), this, SLOT(runSurvex()));
     SurveySignaler->addConnectionToChunks(SIGNAL(shotsRemoved(int,int)), this, SLOT(runSurvex()));

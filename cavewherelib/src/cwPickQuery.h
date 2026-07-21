@@ -12,7 +12,7 @@
 #include <QtGlobal>
 #include <QFlags>
 
-//! Screen-space pick tolerance for ray-vs-line picking.
+//! Screen-space pick tolerance, expressed as a world radius at a ray-depth.
 /*!
     A ray almost never exactly intersects a 1-D line, so line picking is a
     proximity test: accept when the closest distance between the ray and the
@@ -21,8 +21,26 @@
     the camera. The model radius(t) = constant + slope*t is exact for the
     central ray in both perspective (slope > 0) and ortho (constant only).
 
+    Which primitives consult it depends on the entry point, and the two
+    deliberately disagree:
+
+      - intersectsDetailed — LINES ONLY. Triangles intersect exactly, and
+        points use their own world-space sphere, Object::pickRadius().
+        Widening this does not widen a point or triangle pick.
+      - nearestGeometryPoint — every kind, points included. That path asks
+        "what lies nearest the ray?" rather than "what did the ray hit?", so
+        the reach is the caller's to set and pickRadius is not consulted.
+
+    Points staying out of the exact path is the whole point, not an oversight.
+    A cloud stands in for a surface, so its radius belongs in world space
+    where it is view-independent and watertight (cwRenderPointCloud::
+    PointPickRadiusScale). Letting points widen with a screen-space tolerance
+    re-creates the near-miss snap deleted from this picker: picks landing on
+    points the ray never touched, which made leads silently unclickable (see
+    test_cwLeadView_occlusion).
+
     The intersecter is deliberately camera-agnostic; the caller fills this
-    from the camera (see cwCoordinatePicker).
+    from the camera (see cwCamera::pickQuery).
 */
 struct cwPickTolerance {
     double slope = 0.0;    //!< perspective: world radius per unit ray-depth
@@ -65,9 +83,11 @@ struct cwPickQuery {
     //! Solid scene geometry — surfaces and point clouds, but not the centerline
     //! overlay. Occlusion tests (cwLeadView lead visibility) use this: a lead
     //! behind only the centerline is still visible, so a line must not occlude
-    //! it. Note this is deliberately NOT used for the turntable pivot, which
-    //! orbits the centerline when the solid geometry is hidden and so keeps
-    //! cwPickQuery::All.
+    //! it. Note this is deliberately NOT used for the turntable pivot, whose
+    //! rotation path wants the opposite split — it picks Triangles|Lines and
+    //! Points separately and ranks the two by depth, so that a near-missed
+    //! scrap outranks the cloud unless the cloud occludes it (see
+    //! cwBaseTurnTableInteraction::unProject).
     static constexpr Kinds Solid = Kinds(Kind::Triangles) | Kind::Points;
 
     Kinds kinds = All;

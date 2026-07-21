@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Picker Mutation Pipeline — cwGeometryItersecter (A1 + R1 + R3)</title>
+<style>
+  :root {
+    --bg: #f7f8fa; --fg: #1c2128; --muted: #57606a; --card: #ffffff;
+    --border: #d0d7de; --accent: #0969da; --accent2: #8250df;
+    --sync: #1a7f37; --async: #bf8700; --gap: #cf222e;
+    --code-bg: #f0f2f5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117; --fg: #e6edf3; --muted: #8b949e; --card: #161b22;
+      --border: #30363d; --accent: #58a6ff; --accent2: #bc8cff;
+      --sync: #3fb950; --async: #d29922; --gap: #f85149;
+      --code-bg: #1c2128;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0 1.25rem 5rem; background: var(--bg); color: var(--fg);
+    font: 15px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+  .wrap { max-width: 960px; margin: 0 auto; }
+  header { padding: 2.5rem 0 1rem; border-bottom: 1px solid var(--border); margin-bottom: 1.5rem; }
+  h1 { font-size: 1.7rem; margin: 0 0 .4rem; line-height: 1.25; }
+  h2 { font-size: 1.25rem; margin: 2.2rem 0 .6rem; padding-top: .6rem; border-top: 1px solid var(--border); }
+  h3 { font-size: 1.02rem; margin: 1.4rem 0 .4rem; }
+  .sub { color: var(--muted); font-size: .95rem; }
+  code { background: var(--code-bg); padding: .12em .38em; border-radius: 5px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .86em; }
+  pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: .85rem 1rem; overflow-x: auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .82rem; line-height: 1.5; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 1rem 1.2rem; margin: 1rem 0; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: .9rem; }
+  th, td { text-align: left; padding: .5rem .6rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; }
+  .tag { display: inline-block; font-size: .72rem; font-weight: 700; padding: .12em .5em; border-radius: 999px; vertical-align: middle; }
+  .t-sync { background: color-mix(in srgb, var(--sync) 18%, transparent); color: var(--sync); }
+  .t-async { background: color-mix(in srgb, var(--async) 18%, transparent); color: var(--async); }
+  .t-gap { background: color-mix(in srgb, var(--gap) 18%, transparent); color: var(--gap); }
+  .phase { border-left: 4px solid var(--accent); }
+  .phase.p2 { border-left-color: var(--accent2); }
+  .phase.p3 { border-left-color: var(--async); }
+  .pill { font-size: .7rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+  ul { margin: .4rem 0 .4rem; padding-left: 1.3rem; }
+  li { margin: .25rem 0; }
+  .diagram { margin: 1.2rem 0; overflow-x: auto; }
+  .note { font-size: .88rem; color: var(--muted); }
+  .kbd { font-family: ui-monospace, monospace; font-size: .82em; }
+  a { color: var(--accent); }
+  .legend span { margin-right: 1.1rem; font-size: .82rem; white-space: nowrap; }
+  .dot { display: inline-block; width: .7em; height: .7em; border-radius: 2px; margin-right: .3em; vertical-align: middle; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Picker Mutation Pipeline</h1>
+  <div class="sub"><code>cwGeometryItersecter</code> · consolidates review items <strong>R1 + A1 + R3</strong> from the issue&nbsp;#505 review, expanded with <strong>hidden-until-pick-ready</strong> (Phase&nbsp;4) · no governing plan predates this · <em>status: proposed · R3 decided = Option&nbsp;A (2026-07-19)</em></div>
+</header>
+
+<p>The issue&nbsp;#505 fix added a <strong>fourth</strong> way to keep the published pick BVH
+(<code>m_bvh</code>) consistent under a mutation. That crossed the threshold where the pattern
+is worth naming: the intersecter has no single model for <em>"apply a mutation to the published
+BVH synchronously, then reconcile the heavy work asynchronously."</em> Each mutation path
+improvises the sync/async split, one recompute helper is now duplicated verbatim, and one
+mutation (<code>addObject</code>) has no synchronous story at all.</p>
+
+<div class="card">
+  <strong>The three review items, and why they are one refactor</strong>
+  <ul>
+    <li><strong>A1</strong> — the structure: unify all published-BVH mutations behind one
+        <code>applyPublishedDelta</code> + async-recompute pipeline.</li>
+    <li><strong>R1</strong> — A1's first, free step: the world-box loop + <code>buildTopLevel</code>
+        sequence is now duplicated between <code>refreshPublishedModelMatrix</code> and
+        <code>launchBuildJob</code>. Factoring it is the shared core A1 is built around.</li>
+    <li><strong>R3</strong> — the acceptance question A1 must answer: <code>addObject</code> needs an
+        O(vertices) sub-BVH build, so it is the one mutation that can't refresh synchronously.
+        A uniform pipeline turns "new object invisible to picks until the worker lands" from a
+        silent hole into a designed case.</li>
+  </ul>
+  <p class="note">Out of scope: <strong>R2</strong> (migrate <code>cwRenderGLTF</code>'s remaining
+  <code>Q_OBJECT_BINDABLE_PROPERTY</code> + <code>cwTracked</code> dual-store to plain members) —
+  that's a QML-object idiom cleanup, unrelated to intersecter architecture. Track it separately.</p>
+</div>
+
+<h2>Current state — four ad-hoc consistency paths</h2>
+
+<p>Every mutation must leave <code>m_bvh</code> internally consistent (parallel arrays
+<code>subBvhs</code> / <code>modelMatrices</code> / <code>inverseModelMatrices</code> aligned,
+<code>keyToSlot</code> valid, <code>topLevel</code> leaves indexing live slots) while in-flight
+query snapshots keep reading the old immutable copy. Today each site does that its own way:</p>
+
+<table>
+  <thead><tr><th>Mutation</th><th>Sync effect on <code>m_bvh</code> today</th><th>Async follow-up</th><th></th></tr></thead>
+  <tbody>
+    <tr>
+      <td><code>removeObject</code> / <code>clear(id)</code></td>
+      <td>Copy-on-write, null the slot via <code>invalidatePublishedSlot</code></td>
+      <td><code>scheduleObjectRebuild</code> → worker drops the key</td>
+      <td><span class="tag t-sync">sync</span></td>
+    </tr>
+    <tr>
+      <td><code>setModelMatrix</code></td>
+      <td>Copy-on-write, update matrices + rebuild top-level via <code>refreshPublishedModelMatrix</code> <span class="note">(added for #505)</span></td>
+      <td><code>scheduleTopLevelRebuild</code> re-snapshots Nodes</td>
+      <td><span class="tag t-sync">sync</span></td>
+    </tr>
+    <tr>
+      <td><code>addObject</code> (triangles/lines/points)</td>
+      <td><strong>none</strong> — the object is unpickable until the worker installs</td>
+      <td><code>scheduleObjectRebuild</code> builds the sub-BVH (O(vertices))</td>
+      <td><span class="tag t-gap">gap (R3)</span></td>
+    </tr>
+    <tr>
+      <td>worker install (<code>installBuildResult</code>, on <code>QFutureWatcher::finished</code>)</td>
+      <td>Banks completed sub-BVHs into <code>m_subBvhs</code> (cancelled + completed runs), and on a completed run swaps in the fresh <code>BvhData</code>; <code>shouldPublish</code> re-applies the staleness (<code>launchSeq</code> vs <code>m_keyDirtySeq</code>) + live-Nodes filters — see Phase 4a</td>
+      <td>—</td>
+      <td><span class="tag t-async">async</span></td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="diagram">
+<svg viewBox="0 0 900 300" width="100%" role="img" aria-label="Current: four mutation paths each edit m_bvh their own way">
+  <style>
+    .box{fill:var(--card);stroke:var(--border);stroke-width:1.5;rx:8}
+    .lbl{fill:var(--fg);font:600 13px -apple-system,sans-serif}
+    .sm{fill:var(--muted);font:11px ui-monospace,monospace}
+    .arrow{stroke:var(--muted);stroke-width:1.5;fill:none;marker-end:url(#ah)}
+    .bvh{fill:color-mix(in srgb,var(--accent) 12%,transparent);stroke:var(--accent);stroke-width:2}
+  </style>
+  <defs><marker id="ah" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="var(--muted)"/></marker></defs>
+
+  <rect class="box" x="20" y="20" width="180" height="46" rx="8"/>
+  <text class="lbl" x="34" y="40">removeObject / clear</text>
+  <text class="sm" x="34" y="56">invalidatePublishedSlot</text>
+
+  <rect class="box" x="20" y="86" width="180" height="46" rx="8"/>
+  <text class="lbl" x="34" y="106">setModelMatrix</text>
+  <text class="sm" x="34" y="122">refreshPublishedModelMatrix</text>
+
+  <rect class="box" x="20" y="152" width="180" height="46" rx="8" style="stroke:var(--gap)"/>
+  <text class="lbl" x="34" y="172">addObject</text>
+  <text class="sm" x="34" y="188" style="fill:var(--gap)">(no sync path)</text>
+
+  <rect class="box" x="20" y="218" width="180" height="46" rx="8"/>
+  <text class="lbl" x="34" y="238">worker install</text>
+  <text class="sm" x="34" y="254">shouldPublish filters</text>
+
+  <rect class="bvh" x="470" y="112" width="150" height="70" rx="10"/>
+  <text class="lbl" x="500" y="142" style="fill:var(--accent)">m_bvh</text>
+  <text class="sm" x="486" y="162">(published BVH)</text>
+
+  <path class="arrow" d="M200,43 C340,43 360,130 468,138"/>
+  <path class="arrow" d="M200,109 C330,109 360,140 468,145"/>
+  <path class="arrow" d="M200,175 C330,175 360,152 468,152" style="stroke:var(--gap)"/>
+  <path class="arrow" d="M200,241 C340,241 360,165 468,160"/>
+
+  <text class="sm" x="250" y="30" style="fill:var(--gap)">4 hand-rolled</text>
+  <text class="sm" x="250" y="46" style="fill:var(--gap)">CoW variants</text>
+
+  <rect class="box" x="700" y="112" width="170" height="70" rx="8"/>
+  <text class="lbl" x="716" y="140">buildTopLevel loop</text>
+  <text class="sm" x="716" y="158" style="fill:var(--gap)">duplicated in 2 sites</text>
+  <text class="sm" x="716" y="172">(R1)</text>
+  <path class="arrow" d="M620,150 L698,150"/>
+</svg>
+</div>
+
+<h2>Target state — one delta pipeline</h2>
+
+<p>Collapse the four variants into a single main-thread primitive that applies a typed delta to
+<code>m_bvh</code> copy-on-write, plus the existing async recompute for the heavy sub-BVH work.
+The published-BVH invariants are then enforced in exactly one place.</p>
+
+<pre>// main thread only; copy-on-write, never edits a published BvhData in place
+enum class PublishedDelta { RemoveSlot, SetMatrix, InsertCoarse /* R3 */ };
+void applyPublishedDelta(const Key&amp; key, PublishedDelta, /* payload */ ...);
+
+// the shared core R1 extracts — used by applyPublishedDelta AND launchBuildJob
+static QVector&lt;BvhNode&gt; BvhData::rebuildTopLevel(const BvhData&amp;);   // world boxes ⇐ modelRootBox·matrix</pre>
+
+<div class="diagram">
+<svg viewBox="0 0 900 260" width="100%" role="img" aria-label="Target: all mutations funnel through applyPublishedDelta + shared rebuildTopLevel">
+  <style>
+    .box2{fill:var(--card);stroke:var(--border);stroke-width:1.5}
+    .lbl2{fill:var(--fg);font:600 13px -apple-system,sans-serif}
+    .sm2{fill:var(--muted);font:11px ui-monospace,monospace}
+    .arrow2{stroke:var(--muted);stroke-width:1.5;fill:none;marker-end:url(#ah2)}
+    .hub{fill:color-mix(in srgb,var(--accent2) 14%,transparent);stroke:var(--accent2);stroke-width:2}
+    .bvh2{fill:color-mix(in srgb,var(--accent) 12%,transparent);stroke:var(--accent);stroke-width:2}
+  </style>
+  <defs><marker id="ah2" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="var(--muted)"/></marker></defs>
+
+  <rect class="box2" x="20" y="18" width="150" height="34" rx="7"/><text class="lbl2" x="32" y="39">removeObject</text>
+  <rect class="box2" x="20" y="66" width="150" height="34" rx="7"/><text class="lbl2" x="32" y="87">setModelMatrix</text>
+  <rect class="box2" x="20" y="114" width="150" height="34" rx="7" style="stroke:var(--gap)"/><text class="lbl2" x="32" y="135">addObject (R3)</text>
+  <rect class="box2" x="20" y="162" width="150" height="34" rx="7"/><text class="lbl2" x="32" y="183">worker install</text>
+
+  <rect class="hub" x="330" y="78" width="180" height="66" rx="10"/>
+  <text class="lbl2" x="348" y="106" style="fill:var(--accent2)">applyPublishedDelta</text>
+  <text class="sm2" x="348" y="124">CoW + invariant checks</text>
+
+  <path class="arrow2" d="M170,35 C260,35 270,92 328,98"/>
+  <path class="arrow2" d="M170,83 C250,83 270,104 328,107"/>
+  <path class="arrow2" d="M170,131 C250,131 270,118 328,116" style="stroke:var(--gap)"/>
+  <path class="arrow2" d="M170,179 C260,179 270,132 328,128"/>
+
+  <rect class="box2" x="330" y="176" width="180" height="40" rx="8"/>
+  <text class="lbl2" x="346" y="200">BvhData::rebuildTopLevel</text>
+  <text class="sm2" x="346" y="214" style="font-size:10px">(R1 — single copy)</text>
+  <path class="arrow2" d="M420,144 L420,174"/>
+
+  <rect class="bvh2" x="620" y="82" width="140" height="58" rx="10"/>
+  <text class="lbl2" x="656" y="108" style="fill:var(--accent)">m_bvh</text>
+  <text class="sm2" x="636" y="126">one writer</text>
+  <path class="arrow2" d="M510,111 L618,111"/>
+
+  <rect class="box2" x="620" y="176" width="240" height="40" rx="8" style="stroke:var(--async)"/>
+  <text class="lbl2" x="636" y="200" style="fill:var(--async)">async worker (O(vertices) sub-BVH)</text>
+  <path class="arrow2" d="M510,196 L618,196" style="stroke:var(--async)"/>
+</svg>
+</div>
+
+<h2>Phases</h2>
+
+<div class="card phase">
+  <div class="pill">Phase 1 · R1 · low risk, pure dedup</div>
+  <h3>Extract <code>BvhData::rebuildTopLevel()</code></h3>
+  <p>Factor the world-box loop + <code>buildTopLevel</code> call — currently identical in
+  <code>refreshPublishedModelMatrix</code> and the tail of <code>launchBuildJob</code> — into one
+  function. World box for a slot = <code>subBvhs[i]-&gt;modelRootBox.transformed(modelMatrices[i])</code>,
+  null slots contribute a null box (<code>buildTopLevel</code> already skips nulls and keys leaves by
+  slot index).</p>
+  <ul>
+    <li>Both call sites must produce byte-identical top-levels — that equivalence is the whole
+        correctness argument for the synchronous refresh, so a shared function makes it true by
+        construction rather than by comment.</li>
+    <li>Mind the thread boundary: <code>launchBuildJob</code>'s tail runs on the <strong>worker
+        thread</strong> building a fresh <code>BvhData</code>; <code>refreshPublishedModelMatrix</code>
+        runs on the <strong>main thread</strong> over a CoW copy. The extracted helper must be a pure
+        function of a <code>BvhData</code> (no <code>this</code>, no member state) so it's safe on both —
+        like the existing <code>static buildTopLevel</code>.</li>
+  </ul>
+  <p class="note"><strong>Gate:</strong> no behavior change. Existing
+  <code>[cwGeometryItersecter][twoLevel]</code> suite + the #505 regression
+  (<code>setModelMatrix updates picks before the async rebuild lands</code>) stay green.</p>
+</div>
+
+<div class="card phase p2">
+  <div class="pill">Phase 2 · A1 · the structure</div>
+  <h3>Route <code>removeObject</code> / <code>setModelMatrix</code> through one <code>applyPublishedDelta</code></h3>
+  <p>Fold <code>invalidatePublishedSlot</code> and <code>refreshPublishedModelMatrix</code> into a single
+  copy-on-write entry point that takes a typed delta, applies it, calls
+  <code>rebuildTopLevel</code> where needed, and publishes. One place asserts the parallel-array /
+  <code>keyToSlot</code> / slot-index invariants.</p>
+  <ul>
+    <li>Keep it purely mechanical first: same two behaviors, one door. No semantic change to picks.</li>
+    <li>Leave the async recompute (<code>scheduleTopLevelRebuild</code> / <code>scheduleObjectRebuild</code>
+        + the <code>shouldPublish</code> install filters) exactly as is — A1 is about the <em>sync</em>
+        delta, not the worker reconciliation.</li>
+    <li>Preserves the documented "eventually correct + usually-immediate" guarantee: a stale competing
+        build can still transiently re-install, and the last restarted build (re-snapshotting the
+        updated <code>Nodes</code>) remains the source of truth.</li>
+  </ul>
+  <p class="note"><strong>Gate:</strong> full intersecter suite green; the removal-race test
+  (<code>a28ff96f</code>) and stale-install test still pass; no new sync path for <code>addObject</code>
+  yet.</p>
+</div>
+
+<div class="card phase p3">
+  <div class="pill">Phase 3 · R3 · decided: Option A</div>
+  <h3>Decide <code>addObject</code>'s pre-build pick policy</h3>
+  <p><strong>Decision (2026-07-19): Option A — the not-ready contract.</strong> Picks ignore an
+  object until its async build lands; the engine documents that, and Phase 4 (below) makes the
+  window invisible to the user by keeping heavy objects render-hidden until they are pick-ready.
+  Options B and C are kept here for the record:</p>
+  <p>A new object's sub-BVH is O(vertices) and can't be built synchronously the way an O(objects)
+  transform refresh can, so between <code>addObject</code> and the worker install a pick can't test
+  its primitives. The candidate policies were:</p>
+  <table>
+    <thead><tr><th>Option</th><th>Behavior</th><th>Cost / caveat</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>A. Not-ready contract</strong></td>
+        <td>Document that picks ignore an object until its build lands; callers gate on readiness
+            (e.g. <code>NoteLiDARItem</code> already checks <code>gltf.status===Ready</code>).</td>
+        <td>Zero engine cost; pushes the burden to every caller. Simplest, honest.</td>
+      </tr>
+      <tr>
+        <td><strong>B. Coarse-box broad phase</strong></td>
+        <td><code>applyPublishedDelta(InsertCoarse)</code> inserts a top-level leaf with the object's
+            world AABB and a null sub-BVH; a pick against it returns a broad-phase / bounding hit
+            until the exact sub-BVH installs.</td>
+        <td>The object's box is already computed synchronously in <code>addTriangles</code>. But a box
+            hit isn't a triangle hit — only acceptable where approximate is better than nothing;
+            must not report false-exact hits.</td>
+      </tr>
+      <tr>
+        <td><strong>C. Sync sub-BVH for small objects</strong></td>
+        <td>Build the sub-BVH inline when vertex count is under a threshold (<code>k</code>-constant);
+            fall back to async above it.</td>
+        <td>Helps small notes, not large LiDAR scans — which are exactly the #505 case. Weakest payoff.</td>
+      </tr>
+    </tbody>
+  </table>
+  <p class="note"><strong>Why A won:</strong> C helps small notes but not large LiDAR scans —
+  which are exactly the #505 case — and B's box-hit-isn't-a-triangle-hit caveat pushes complexity
+  into every pick consumer. A is honest and zero-cost in the engine; Phase 4 then closes the UX
+  hole A leaves open (a visible-but-unpickable object) by inverting it: nothing is visible until
+  it is pickable. The <code>InsertCoarse</code> delta stays reserved as a follow-up if a real
+  caller ever needs pre-build broad-phase picks.</p>
+</div>
+
+<div class="card phase">
+  <div class="pill">Phase 4 · scope expansion · hidden-until-pick-ready</div>
+  <h3>Keep heavy objects render-hidden until their BVH lands</h3>
+  <p>Option A leaves a window where an object renders but can't be picked. For huge geometry —
+  LAZ point clouds above all, plus large note GLBs — that window is long enough for the user to
+  see the object and click it. Instead of teaching every caller about readiness, establish the
+  invariant the other way around: <strong>rendered ⇒ pickable</strong>. An object registered with
+  the intersecter stays render-hidden until its sub-BVH is published, then appears — already
+  pickable on its first visible frame.</p>
+
+  <h3 style="font-size:.95rem">Mechanism</h3>
+  <ul>
+    <li><strong>Per-key readiness query</strong> on the intersecter:
+        <code>bool isObjectPickReady(const Key&amp;) const</code> — true when the published
+        <code>m_bvh</code> has the key in <code>keyToSlot</code> with a non-null sub-BVH slot.
+        Cheap: both structures already exist. <code>bvhReady()</code> (emitted on every install)
+        is the notification edge; owners re-check on it.</li>
+    <li><strong>Owner-level gating</strong>, not store-level: owners publish <em>effective</em>
+        visibility = <span class="kbd">userVisible &amp;&amp; pickReady</span> into the scene
+        visibility store. The store and RHI backend stay dumb readers (preserves the #579
+        architecture — no store→intersecter coupling), and user hide/show toggles keep working
+        unchanged.</li>
+    <li><strong>Centralized in <code>cwRenderObject</code>, not per-type.</strong> Only three
+        render types register with the intersecter (four <code>addObject</code> sites:
+        <code>cwRenderPointCloud.cpp:36</code>; <code>cwRenderTexturedItems.cpp:145</code>,
+        <code>:214</code> — covers GLTF + scraps; <code>cwRenderLinePlot.cpp:59</code>). The base
+        class already owns the store-publish path (<code>setVisible</code> /
+        <code>publishVisibility</code>) and can reach the intersecter, so it carries the shared
+        machinery once: the pending-key set, the single <code>bvhReady()</code> connection, the
+        <code>isObjectPickReady</code> re-check, and the AND into the publish. Each subclass only
+        reports "registered key X" / "removed key X" at its existing call sites; the
+        <code>publishVisibility()</code> overrides (line plot, textured items) compose the gate
+        into the sub-item state they already publish.</li>
+    <li><strong>Verified precondition (no deadlock):</strong> the BVH build is
+        visibility-independent — visibility filters queries via the snapshot at traversal time
+        (<code>cwGeometryItersecter.cpp:1173</code>, <code>visibleBoundingBox</code>), never the
+        build's input Nodes. A hidden object still gets its sub-BVH built, so the gate always
+        releases.</li>
+  </ul>
+
+  <h3 style="font-size:.95rem">Traps to design around</h3>
+  <ul>
+    <li><strong>Silent <code>addObject</code> rejection must not mean permanently invisible.</strong>
+        <code>addObject</code> drops geometry it can't index (layout reject in
+        <code>cwRenderTexturedItems::addItem</code>; <code>Type::None</code> from
+        <code>cwGltfLoader</code> for strip/fan GLBs). Gate only the span
+        <em>accepted-by-addObject → published</em>; a rejected or never-registered object renders
+        under plain <span class="kbd">userVisible</span> as today. Concretely: the gate arms when
+        <code>addObject</code> accepts and disarms on readiness — it is never armed by default.</li>
+    <li><strong>Mutations that re-dirty an already-visible object must not re-hide it.</strong>
+        <code>setModelMatrix</code> and visibility churn schedule rebuilds constantly; the gate is
+        first-publish-only per key, not "hidden whenever a build is in flight" — otherwise every
+        rotation blinks the note. Once ready, always ready (until the key is removed). This
+        includes <strong>same-key geometry replacement</strong>: <code>updateGeometry</code>
+        (<code>cwRenderTexturedItems.cpp:214</code>) and the line plot re-call
+        <code>addObject</code> with the same key on every geometry update — re-arming there would
+        blink the line plot on every survey edit. Old geometry stays rendered and pickable until
+        the new build installs (the eventual-consistency model), so replacement needs no hiding.
+        Arm only when the key is not already published.</li>
+    <li><strong>Removal + re-add of the same key</strong> (LAZ reload, GLB path change) re-arms the
+        gate — it's a fresh sub-BVH.</li>
+    <li><strong>Prerequisite — fix readiness starvation first (Phase 4a). ✅ DONE (uncommitted,
+        dev_3).</strong> One restarter serves all build work, every mutation cancels the in-flight
+        build, and the pre-4a code discarded everything a cancelled build had finished: the worker
+        returned <em>before</em> banking its built sub-BVHs, and cache promotion lived in the
+        AsyncFuture install callback, which never fires on cancel. A multi-second LAZ sub-BVH build
+        repeatedly cancelled by unrelated churn (a rotation drag restarts per mouse-move) restarted
+        from scratch each time. Today that means "unpickable during interaction" — mild; under the
+        gate it would mean <em>invisible</em> during interaction — severe.
+        <br><br>
+        <strong>What shipped.</strong> The worker now deposits each completed sub-BVH into
+        <code>builtSlot</code> <em>before</em> the cancel check (single-threaded, after the map's
+        <code>waitOnPool</code> join). The install body moved into
+        <code>installBuildResult(built, banked, launchSeq)</code>, which promotes the banked
+        sub-BVHs into <code>m_subBvhs</code> on <em>both</em> the completed and cancelled paths, and
+        publishes a new <code>m_bvh</code> + emits <code>bvhReady()</code> only when the run produced
+        a <code>BvhData</code> (non-cancelled).
+        <br><br>
+        <strong>Delivery uses a raw <code>QFutureWatcher&lt;void&gt;</code> on the worker's
+        <code>finished</code> signal, not AsyncFuture — deliberately.</strong> Banking must read
+        <code>*builtSlot</code>, which the worker writes at the very end of its run, so the callback
+        has to fire <em>after</em> the worker function returns — for a cancelled run too.
+        AsyncFuture cannot express that: <code>.context(this, body)</code> routes a cancelled run to
+        a no-op (banking never runs on the path that needs it), and
+        <code>.context(this, body, canceledBody)</code> wires its canceled callback to
+        <code>QFutureWatcher::canceled</code>, which fires at cancel-<em>request</em> time while the
+        worker is still running and <code>*builtSlot</code> is empty/being written — a data race
+        (verified empirically: the canceled callback observes <code>builtSlot</code> size 0 and
+        banks nothing). <code>QFutureWatcher::finished</code> is the only signal that fires strictly
+        after the worker returns, cancelled or not. The watcher is parented to <code>this</code>, so
+        it auto-disconnects on destruction, matching the guarantee the old <code>.context</code>
+        install relied on. <em>(Possible follow-up: wrap this as an AsyncFuture
+        <code>onSettled(ctx, cb)</code> primitive in the submodule so the picker reads idiomatically
+        and other side-channel-on-cancel cases can reuse it — a feature addition, not a bug fix.)</em>
+        <br><br>
+        <strong>Stale-bank hazard (found + fixed in review).</strong> Banking on the cancel path
+        reopened a staleness hole the pre-4a code was immune to (it never promoted on cancel).
+        <code>shouldPublish</code> originally filtered on <code>!m_dirtyKeys.contains(key)</code>,
+        but on the cancel path the Restarter launches the <em>replacement</em> build — which clears
+        <code>m_dirtyKeys</code> — <em>before</em> the cancelled build's <code>finished</code>
+        callback runs. A key geometry-replaced mid-build therefore looked "clean" at install time,
+        so its now-stale sub-BVH was banked and could later be reused and published → stale picks
+        (the #505 symptom). Fixed with a monotonic per-key invalidation stamp
+        (<code>m_keyDirtySeq</code> bumped by <code>scheduleObjectRebuild</code>): a build records
+        <code>launchSeq = m_mutationSeq</code> at launch, and <code>installBuildResult</code>
+        publishes/banks a key only when its stamp is <code>&lt;= launchSeq</code> (not re-dirtied
+        since the build started) and it is still live in <code>Nodes</code>. This is
+        ordering-independent — it does not depend on when the replacement build clears
+        <code>m_dirtyKeys</code>. Mirrors the <code>entryVersion</code> pattern already on
+        <code>m_maskedBoxCache</code>.
+        <br><br>
+        <strong>Convergence caveat.</strong> Banking is per-sub-BVH: <code>buildSubBvh</code>
+        returns <code>nullptr</code> on cancel, so a partially-built object banks nothing. This makes
+        readiness converge for <em>multi-object</em> scenes (line plot + scraps + several clouds —
+        completed objects stop being rebuilt every restart), but a <em>single monolithic</em> LAZ
+        cloud whose one sub-BVH never finishes before the next cancel still restarts from scratch.
+        Fully bounding that case needs intra-sub-BVH resumable builds — out of scope here.
+        <br><br>
+        <strong>Tests.</strong> "A cancelled build banks its completed sub-BVHs for reuse"
+        (banking works) and "A cancelled build does not bank a sub-BVH re-dirtied mid-build" (the
+        stale-bank fix; failed 10/10 pre-fix), both in
+        <code>test_cwGeometryItersecter_twoLevel.cpp</code>. They rely on a two-sided
+        <code>msleep</code> timing window (one-point sub-BVH finishes, a 500k cloud does not) — safe
+        under Debug+ASAN, watch-listed for Release/parallel CI.</li>
+  </ul>
+
+  <p class="note"><strong>Gate:</strong> test-pinned invariant — after <code>addObject</code>
+  accepts, the effective visibility published to the store stays false until
+  <code>bvhReady()</code> installs the key, then flips true without further owner calls; a
+  rotation of a ready object never un-publishes visibility; a layout-rejected item renders under
+  <code>userVisible</code> alone. Existing <code>[cwGeometryItersecter]</code> and visibility-store
+  suites stay green.</p>
+</div>
+
+<h2>Performance</h2>
+<ul>
+  <li><span class="tag t-gap">real</span> <strong>Readiness starvation under churn</strong> — see
+      the Phase 4a prerequisite above (now ✅ done for multi-object scenes; a single monolithic
+      cloud is still unbounded — see the convergence caveat there). The only build-path issue with
+      teeth, because the gate escalates it from "unpickable while interacting" to "invisible while
+      interacting".</li>
+  <li><span class="tag t-async">trade</span> <strong>Delayed first pixels for huge clouds</strong> —
+      time-to-visible becomes max(GPU upload, sub-BVH build); for millions of points the build is
+      the long pole (seconds). Deliberate (nothing visible-but-dead), but worth a busy indicator
+      on the LAZ layer. Phase 4a bounds the wait for multi-object scenes; for a single monolithic
+      cloud repeatedly cancelled it does not (per-sub-BVH banking can't checkpoint one in-progress
+      sub-BVH).</li>
+  <li><span class="tag t-sync">fine</span> <strong>Per-mutation CoW refresh</strong> (landed with
+      #505, kept by Phases 1–2) — O(objects) copy + top-level rebuild per
+      <code>setModelMatrix</code>; object count is hundreds at most → microseconds per mouse-move.
+      Phase 2 consolidates paths without adding cost.</li>
+  <li><span class="tag t-sync">fine</span> <strong><code>bvhReady()</code> fan-out</strong> —
+      owners connect only while they have pending keys and disconnect when drained; the re-check
+      is a hash lookup per pending key per install.</li>
+  <li><span class="tag t-sync">fine</span> <strong>Gate flips</strong> — ordinary visibility-store
+      writes, identical in cost to a user hide/show toggle; the RHI backend stays a snapshot
+      reader. Steady-state rebuild churn already reuses cached sub-BVHs
+      (<code>cwGeometryItersecter.cpp:2519</code>) — starvation is exclusively a
+      first-build-of-a-new-heavy-object problem.</li>
+</ul>
+
+<h2>Blast radius</h2>
+<ul>
+  <li><strong>Phase 1:</strong> <code>cwGeometryItersecter.cpp/.h</code> only — one new static/pure
+      helper, two call sites. Contained.</li>
+  <li><strong>Phase 2:</strong> <code>cwGeometryItersecter</code> mutators + the private helpers they
+      call; no header API change visible to <code>cwRenderObject</code> subclasses. The worker install
+      callback (<code>shouldPublish</code>) is read but not restructured.</li>
+  <li><strong>Phase 3:</strong> Option A — docs + a comment on <code>addObject</code>; no code
+      change beyond what Phase 4 delivers.</li>
+  <li><strong>Phase 4:</strong> <code>cwGeometryItersecter.h/.cpp</code> (one const query +
+      doc on <code>bvhReady()</code>); <code>cwRenderObject</code> (the shared gate machinery);
+      a couple of lines each at the four <code>addObject</code>/removal sites in
+      <code>cwRenderPointCloud</code>, <code>cwRenderTexturedItems</code>,
+      <code>cwRenderLinePlot</code>, plus their <code>publishVisibility()</code> overrides;
+      tests for the gate lifecycle. The visibility store, RHI backend, and QML surface are
+      untouched — the gate rides the existing owner→store publish path.</li>
+</ul>
+
+<h2>Acceptance criteria</h2>
+<ul>
+  <li>Zero behavior change through Phases 1–2: the entire <code>[cwGeometryItersecter]</code> suite,
+      the #505 regression test, the removal-race test, and the stale-install test all stay green.</li>
+  <li>Exactly one function computes a published top-level from slots + matrices (R1 done).</li>
+  <li>Exactly one function mutates <code>m_bvh</code> synchronously (A1 done);
+      <code>invalidatePublishedSlot</code> / <code>refreshPublishedModelMatrix</code> are gone or become
+      thin wrappers.</li>
+  <li>The <code>addObject</code> pre-build pick behavior is documented and test-pinned (R3 done):
+      Option A, the not-ready contract.</li>
+  <li><strong>Rendered ⇒ pickable</strong> (Phase 4 done): an intersecter-registered heavy object
+      is never visible before its sub-BVH is published; first-publish-only gating (no re-hide on
+      rebuilds); rejected geometry falls back to plain <code>userVisible</code>.</li>
+</ul>
+
+<h2>Not in this plan</h2>
+<ul>
+  <li><strong>R2</strong> — <code>cwRenderGLTF</code> bindable-property → plain-member migration
+      (separate idiom cleanup).</li>
+  <li>The two #505 <code>cwRenderGLTF::setGLTFFilePath</code> follow-ups (empty-path deselect dispatches
+      a benign spurious load; no same-path retry after a failed load) — those live with R2 in the
+      GLTF-object cleanup, not here.</li>
+  <li>Any change to the async worker's split heuristics, BVH quality, or the visibility-snapshot
+      pairing — orthogonal.</li>
+</ul>
+
+<p class="sub" style="margin-top:2rem;border-top:1px solid var(--border);padding-top:1rem">
+Origin: issue&nbsp;#505 pre-commit review (2026-07-19). The #505 fix itself
+(<code>refreshPublishedModelMatrix</code> + <code>setGLTFFilePath</code> path recording) is landed
+separately and is the concrete instance that motivated this consolidation.</p>
+
+</div>
+</body>
+</html>

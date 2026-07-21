@@ -17,7 +17,15 @@ ImageItem {
     objectName: "noteArea"
 
     property Note note;
-    property bool scrapsVisible: false
+    //Set by NotesGallery's CARPET state. Named the same on NoteLiDARItem so
+    //the gallery sets one property on every note editor it drives.
+    property bool editingOverlaysVisible: false
+
+    //The gallery's tool state, pulled rather than pushed. Modes this editor
+    //declares no State for are torn down by the catch-all transition below —
+    //QML keeps the unknown name rather than reverting to the base state, so
+    //without it the previous tool would stay active.
+    property string toolMode: NoteToolMode.none
     property bool isNarrow: false
     property alias scrapCount: scrapViewId.count
 
@@ -45,6 +53,8 @@ ImageItem {
 
     clip: true
 
+    state: toolMode
+
     onVisibleChanged: {
         if(!visible) {
             interactionManagerId.active(null)
@@ -69,7 +79,7 @@ ImageItem {
         rotation: noteArea.targetItem.rotation
         width: noteArea.targetItem.width
         height: noteArea.targetItem.height
-        visible: noteArea.scrapsVisible
+        visible: noteArea.editingOverlaysVisible
     }
 
     ImageBusyIndicator {
@@ -160,16 +170,16 @@ ImageItem {
         onActiveInteractionChanged: {
             if(activeInteraction == defaultInteraction) {
                 switch(noteArea.state) {
-                case "ADD-SCRAP":
+                case NoteToolMode.addScrap:
                     addScrapInteraction.activate();
                     break;
-                case "ADD-STATION":
+                case NoteToolMode.addStation:
                     addStationInteraction.activate();
                     break;
-                case "ADD-LEAD":
+                case NoteToolMode.addLead:
                     addLeadInteraction.activate();
                     break;
-                case "SELECT":
+                case NoteToolMode.select:
                     noteSelectionInteraction.activate();
                     break;
                 }
@@ -189,8 +199,9 @@ ImageItem {
             id: noteResolutionId
             note: noteArea.note
             collapsed: noteArea.isNarrow
+            visible: noteArea.editingOverlaysVisible
+
             onActivateDPIInteraction: interactionManagerId.active(noteDPIInteraction)
-            visible: noteArea.scrapsVisible
         }
 
         NoteTransformEditor {
@@ -221,31 +232,31 @@ ImageItem {
         note: noteArea.note
 
         zoom: noteArea.targetItem.scale //Zoom is needed for keep the line width constant
-        visible: noteArea.scrapsVisible
+        visible: noteArea.editingOverlaysVisible
         targetItem: scrapPointsContainer
     }
 
     states: [
         QQ.State {
-            name: "ADD-STATION"
+            name: NoteToolMode.addStation
         },
 
         QQ.State {
-            name: "ADD-SCRAP"
+            name: NoteToolMode.addScrap
         },
 
         QQ.State {
-            name: "ADD-LEAD"
+            name: NoteToolMode.addLead
         },
 
         QQ.State {
-            name: "SELECT"
+            name: NoteToolMode.select
         }
     ]
 
     transitions: [
          QQ.Transition {
-            to: "ADD-SCRAP"
+            to: NoteToolMode.addScrap
             QQ.ScriptAction {
                 script: {
                     interactionManagerId.active(addScrapInteraction)
@@ -255,21 +266,21 @@ ImageItem {
         },
 
          QQ.Transition {
-            to: "ADD-STATION"
+            to: NoteToolMode.addStation
             QQ.ScriptAction {
                 script: interactionManagerId.active(addStationInteraction)
             }
         },
 
          QQ.Transition {
-            to: "ADD-LEAD"
+            to: NoteToolMode.addLead
             QQ.ScriptAction {
                 script: interactionManagerId.active(addLeadInteraction)
             }
         },
 
          QQ.Transition {
-            to: ""
+            to: NoteToolMode.none
             QQ.ScriptAction {
                 script: {
                     scrapViewId.clearSelection();
@@ -279,14 +290,27 @@ ImageItem {
         },
 
          QQ.Transition {
-            to: "SELECT"
+            to: NoteToolMode.select
             QQ.ScriptAction {
                 script: {
                     interactionManagerId.active(noteSelectionInteraction)
                 }
             }
-        }
+        },
 
+        //Runs only for modes no transition above names (CARPET, NO_NOTES, the
+        //sketch tools): Qt picks the most specific matching transition, so this
+        //one loses to every `to:` above it regardless of declaration order.
+        //Tearing down here keeps an unhandled mode tool-free instead of leaving
+        //whichever tool was active still running.
+        QQ.Transition {
+            QQ.ScriptAction {
+                script: {
+                    scrapViewId.clearSelection();
+                    interactionManagerId.active(panZoomInteraction)
+                }
+            }
+        }
     ]
 
 }

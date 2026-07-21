@@ -134,6 +134,13 @@ QC.Menu {
         }
     }
 
+    QC.MenuItem {
+        text: "Docs..."
+        onTriggered: {
+            RootData.pageSelectionModel.gotoPageByName(null, "Docs");
+        }
+    }
+
     QC.MenuSeparator {}
 
     QC.Menu {

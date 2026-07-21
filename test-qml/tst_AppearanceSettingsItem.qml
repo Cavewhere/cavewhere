@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls as QC
 import QtTest
 import cavewherelib
 import QmlTestRecorder
@@ -10,6 +11,15 @@ MainWindowTest {
         objectName: "appearanceSettings"
         width: 600
         height: 500
+    }
+
+    // Mirrors how real UI text resolves its family, so tests can observe the
+    // family the app actually renders with (not just the stored setting).
+    QC.Label {
+        id: probeLabel
+        objectName: "probeLabel"
+        text: "Aa"
+        font.family: Theme.fontFamily
     }
 
     TestCase {
@@ -54,6 +64,28 @@ MainWindowTest {
             verify(btn !== null, "SystemRadioButton not found")
             mouseClick(btn)
             compare(RootData.settings.fontSettings.fontFamily, "")
+        }
+
+        // Regression for cavewhere#595: each font option must render as a
+        // distinct family. "System" previously resolved to the frozen
+        // Qt.application.font snapshot and rendered identically to whichever
+        // family was active at startup, so switching to it did nothing.
+        function selectFamily(label) {
+            mouseClick(ObjectFinder.findObjectByChain(rootId,
+                "rootId->appearanceSettings->GroupBox->" + label + "RadioButton"))
+            waitForRendering(rootId)
+            return probeLabel.font.family
+        }
+
+        function test_eachFontOptionRendersADistinctFamily() {
+            let caveWhere = selectFamily("CaveWhere")
+            let fira = selectFamily("FiraSans")
+            let system = selectFamily("System")
+
+            verify(system !== caveWhere,
+                "System renders identically to CaveWhere ('" + system + "') — switching does nothing")
+            verify(system !== fira,
+                "System renders identically to Fira Sans ('" + system + "') — switching does nothing")
         }
 
         function test_selectCaveWhereFont() {

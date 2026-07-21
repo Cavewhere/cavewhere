@@ -23,12 +23,12 @@ PointItem {
     }
 
     QQ.Keys.onDeletePressed: {
-        note.removeStation(ponitIndex)
+        note.removeStation(pointIndex)
     }
 
     QQ.Keys.onPressed: (event) => {
                            if(event.key === Qt.Key_Backspace) {
-                               note.removeStation(ponitIndex)
+                               note.removeStation(pointIndex)
                            }
     }
 

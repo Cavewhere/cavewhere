@@ -19,9 +19,9 @@ class cwGeometryItersecter;
 /*!
     Ray-casts a Qt-viewport screen point against the intersecter, then clamps
     the hit to the nearest survey station when it lands on the centerline and
-    the cursor is within pixelRadius of a station vertex. Occlusion is handled
-    for free by the depth-ordered BVH: a station hidden behind geometry yields a
-    triangle hit first, so it never snaps.
+    the cursor is within linePixelRadius of a station vertex. Occlusion is
+    handled for free by the depth-ordered BVH: a station hidden behind geometry
+    yields a triangle hit first, so it never snaps.
 
     The coordinate picker and the measurement tool both pick the same way, so
     this is the single seam they share.
@@ -36,10 +36,18 @@ struct Result {
 };
 
 //! Picks screenPoint (Qt viewport pixels) against intersecter through camera.
+/*!
+    linePixelRadius is a screen-space radius in PIXELS — callers convert it
+    from physical millimeters (see cwScenePicker). It governs the centerline
+    alone: it sets both the ray-vs-line tolerance and the clamp-to-station
+    reach. Triangles pick exactly and points pick against their own world-space
+    radius, so raising this widens station snapping and nothing else. See
+    cwPickTolerance for why points keep a separate radius.
+*/
 Result snappedPoint(QPointF screenPoint,
                     const cwCamera& camera,
                     cwGeometryItersecter& intersecter,
-                    double pixelRadius);
+                    double linePixelRadius);
 
 }
 

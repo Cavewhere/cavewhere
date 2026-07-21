@@ -58,8 +58,8 @@ struct VisibilityBugFixture {
     }
 
     ~VisibilityBugFixture() {
-        // setScene(nullptr) lets the scene tear down its queue entries
-        // before delete; otherwise pendingItemCount holds a dangling ptr.
+        // setScene(nullptr) lets the scene drop its pending queue entry for this
+        // render object before delete; otherwise the queue holds a dangling ptr.
         renderObject->setScene(nullptr);
         delete renderObject;
     }

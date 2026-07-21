@@ -102,7 +102,8 @@ TEST_CASE("Point picking is stable at world-magnitude coordinates",
 
     cwGeometryItersecter picker;
     picker.addObject(cwGeometryItersecter::Object(
-        cwGeometryItersecter::Key{nullptr, /*id=*/1},
+        nullptr,
+        /*id=*/1,
         geometry,
         QMatrix4x4(),
         kPickRadius));

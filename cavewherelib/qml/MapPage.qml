@@ -83,31 +83,36 @@ QQ.Item {
         }
 
 
-        QC.ScrollView {
-            padding: 5
+        QQ.Item {
+            QC.SplitView.fillWidth: true
 
-            RowLayout {
-                spacing: 10
-                MapLayers {
-                    id: mapLayersId
-                    Layout.alignment: Qt.AlignTop
-                    view: mapPageId.view
-                    screenCaptureManager: screenCaptureManagerId
-                    captureItemManiputlor: captureItemManiputalorId
-                    z: 1
-                }
+            QC.ScrollView {
+                anchors.fill: parent
+                padding: 5
 
-                QQ.Rectangle {
-                    Layout.fillHeight: true
-                    width: 1
-                    color: Theme.divider
-                }
+                RowLayout {
+                    spacing: 10
+                    MapLayers {
+                        id: mapLayersId
+                        Layout.alignment: Qt.AlignTop
+                        view: mapPageId.view
+                        screenCaptureManager: screenCaptureManagerId
+                        captureItemManiputlor: captureItemManiputalorId
+                        z: 1
+                    }
 
-                MapOptions {
-                    id: mapOptionsId
-                    view: mapPageId.view
-                    screenCaptureManager: screenCaptureManagerId
-                    paperSizeInteraction: paperSizeInteractionId
+                    QQ.Rectangle {
+                        Layout.fillHeight: true
+                        width: 1
+                        color: Theme.divider
+                    }
+
+                    MapOptions {
+                        id: mapOptionsId
+                        view: mapPageId.view
+                        screenCaptureManager: screenCaptureManagerId
+                        paperSizeInteraction: paperSizeInteractionId
+                    }
                 }
             }
         }

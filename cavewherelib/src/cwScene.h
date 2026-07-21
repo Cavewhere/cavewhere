@@ -15,8 +15,10 @@
 #include <QQueue>
 #include <QQmlEngine>
 #include <QHash>
+#include <QMap>
 #include <QFuture>
 #include <QImage>
+#include <QBox3D>
 
 //Std includes
 #include <memory>
@@ -33,6 +35,7 @@ class cwSceneCommand;
 class cwGeometryItersecter;
 class cwRhiItemRenderer;
 class cwEDLSettings;
+class cwSceneVisibility;
 struct cwOffscreenRenderParameters;
 struct cwOffscreenRenderJob;
 
@@ -77,12 +80,20 @@ public:
     //For doing intersection tests
     cwGeometryItersecter* geometryItersecter() const;
 
+    // The scene's published visibility truth (issue #579). Render objects
+    // publish into it through their facades; consumers read snapshots. During
+    // the store migration it runs alongside the legacy per-consumer twins
+    // (dual-publish) — see plans/SCENE_VISIBILITY_STORE_PLAN.html.
+    cwSceneVisibility* visibility() const;
+
+    // The world-space box a camera should frame: the union of the scene's
+    // visible geometry. "What should reset/capture frame" is a scene concern;
+    // callers use this seam rather than reading the pick structure directly,
+    // so the answer can evolve (per-id visibility, masks) without touching
+    // camera code. Null box when nothing is visible. GUI thread only.
+    QBox3D visibleFramingBounds() const;
+
     void update();
-
-    void releaseResources();
-
-    // Live pointers held in queues that cwRhiScene::synchroize() dereferences.
-    int pendingItemCount() const;
 
     // Render the resident scene from an arbitrary camera into an offscreen image,
     // returning a QFuture that resolves to the result. A GUI-thread consumer
@@ -108,17 +119,44 @@ signals:
     void needsRendering();
 
 private:
-    //Items to render
-    QList<cwRenderObject*> m_newRenderObjects;
-    // Render-object ids (not pointers) queued for delete. The render object is
-    // already deleted by the caller by the time synchroize() drains this, so we
-    // key on the stable id — a reused address must not masquerade as a still-live
-    // entry (issue #512).
-    QList<cwRenderObjectId> m_toDeleteRenderObjects;
-    QSet<cwRenderObject*> m_toUpdateRenderObjects;
+    // What synchroize() must do with a render object on the next sync. Recording the
+    // transition — rather than inferring it from which queue an object sits in — is
+    // what collapses three historical bugs into one representation (see m_pending).
+    enum class PendingOp {
+        Add,     // create the cwRHIObject, then synchronize it into the frame
+        Update,  // re-synchronize an already-registered cwRHIObject
+        Delete   // destroy the cwRHIObject; `object` is null (the caller freed it)
+    };
+
+    struct PendingChange {
+        PendingOp op = PendingOp::Update;
+        // Null for Delete by construction — the caller deletes the render object
+        // right after removeItem(), so no drain may dereference it (issue #491).
+        cwRenderObject* object = nullptr;
+        // Queue order. Adds must reach the frame's render list in the order they
+        // were added or draw order changes (gatherScene bakes registration order
+        // into the sort key); the map's own order is by id, which is *construction*
+        // order, not add order — so the add order is carried explicitly.
+        quint64 sequence = 0;
+    };
+
+    // The single GUI→render handoff: one pending transition per render object, keyed
+    // on the stable id. cwRhiScene::synchroize() (a friend) drains it on the render
+    // thread while the GUI thread is blocked at the scene-graph sync barrier. One
+    // entry per id — a later change overwrites the earlier — makes all three failure
+    // modes unrepresentable rather than guarded: removeItem() writes {Delete, null},
+    // which drops the soon-to-be-freed pointer (#491) and, being keyed on the id,
+    // cannot collide with a recycled address (#512); and because the entry names the
+    // transition, "is it queued?" is no longer misread as "does it exist?" (7).
+    QMap<cwRenderObjectId, PendingChange> m_pending;
+    quint64 m_pendingSequence = 0;
 
     //For interaction
     cwGeometryItersecter* GeometryItersecter;
+
+    // Published visibility store; seeded by addItem() via updateVisibility(),
+    // scrubbed by removeItem().
+    cwSceneVisibility* m_visibility;
 
     //The main camera for the viewer
     cwCamera* Camera;

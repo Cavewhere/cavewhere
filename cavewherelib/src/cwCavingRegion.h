@@ -30,6 +30,7 @@ class cwProject;
 #include "cwGlobals.h"
 #include "cwGeoPoint.h"
 #include "cwFutureManagerToken.h"
+#include "cwUnits.h"
 
 
 class CAVEWHERE_LIB_EXPORT cwCavingRegion : public QAbstractListModel, public cwUndoer
@@ -41,6 +42,7 @@ class CAVEWHERE_LIB_EXPORT cwCavingRegion : public QAbstractListModel, public cw
     Q_PROPERTY(int caveCount READ caveCount NOTIFY caveCountChanged)
     Q_PROPERTY(cwGeoReference* geoReference READ geoReference CONSTANT)
     Q_PROPERTY(cwLazLayerModel* lazLayers READ lazLayers CONSTANT)
+    Q_PROPERTY(cwUnits::UnitSystem unitSystem READ unitSystem WRITE setUnitSystem NOTIFY unitSystemChanged)
 
 public:
     enum Roles {
@@ -71,6 +73,13 @@ public:
     cwLazLayerModel* lazLayers() const { return m_lazLayers; }
     void setFutureManagerToken(const cwFutureManagerToken& token);
 
+    //! The project-wide default unit system, persisted with the project. It
+    //! seeds the entry unit of new trips but never reinterprets existing ones.
+    //! Defaults to Metric; cwProject seeds it from the app-level cwUnitSettings
+    //! when creating a new project (a load overrides it via setData()).
+    cwUnits::UnitSystem unitSystem() const { return m_unitSystem; }
+    void setUnitSystem(cwUnits::UnitSystem system);
+
     bool hasCaves() const;
     Q_INVOKABLE int caveCount() const;
     Q_INVOKABLE cwCave* cave(int index) const;
@@ -100,6 +109,7 @@ public:
 
 signals:
     void nameChanged();
+    void unitSystemChanged();
 
     void beginInsertCaves(int begin, int end);
     void insertedCaves(int begin, int end);
@@ -124,6 +134,8 @@ private:
     cwGeoReference* m_geoReference = nullptr;
 
     cwLazLayerModel* m_lazLayers = nullptr;
+
+    cwUnits::UnitSystem m_unitSystem = cwUnits::Metric;
 
     // cwCavingRegion& copy(const cwCavingRegion& object);
 

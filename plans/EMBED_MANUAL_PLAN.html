@@ -1,0 +1,686 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Embed the User Manual into CaveWhere — Plan</title>
+<style>
+  :root {
+    --paper:#eceff3; --surface:#ffffff; --surface-2:#e6ebf0;
+    --ink:#1f2b38; --heading:#16202b; --muted:#566472; --border:#d4d9df;
+    --accent:#1d4d77; --accent-soft:#dbe6f0; --mark:#e0662f;
+    --good:#2f7d4f; --good-soft:#dcefe3; --warn:#8a5a12; --warn-soft:#f4e7cf;
+    --code-bg:#e6ebf0;
+    --shadow:0 1px 2px rgba(20,30,45,.06),0 8px 24px rgba(20,30,45,.07);
+    --font-body:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --font-head:"Oswald","Segoe UI",system-ui,sans-serif;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root{
+      --paper:#10161e; --surface:#182029; --surface-2:#1f2833;
+      --ink:#d7dfe8; --heading:#eef3f8; --muted:#93a1b0; --border:#2c3742;
+      --accent:#85c1f4; --accent-soft:#1c3346; --mark:#ff8a5c;
+      --good:#6fd196; --good-soft:#173726; --warn:#e2b667; --warn-soft:#3a2f16;
+      --code-bg:#1f2833;
+      --shadow:0 1px 2px rgba(0,0,0,.45),0 10px 30px rgba(0,0,0,.4);
+    }
+  }
+  :root[data-theme="light"]{
+    --paper:#eceff3; --surface:#ffffff; --surface-2:#e6ebf0;
+    --ink:#1f2b38; --heading:#16202b; --muted:#566472; --border:#d4d9df;
+    --accent:#1d4d77; --accent-soft:#dbe6f0; --mark:#e0662f;
+    --good:#2f7d4f; --good-soft:#dcefe3; --warn:#8a5a12; --warn-soft:#f4e7cf;
+    --code-bg:#e6ebf0;
+  }
+  :root[data-theme="dark"]{
+    --paper:#10161e; --surface:#182029; --surface-2:#1f2833;
+    --ink:#d7dfe8; --heading:#eef3f8; --muted:#93a1b0; --border:#2c3742;
+    --accent:#85c1f4; --accent-soft:#1c3346; --mark:#ff8a5c;
+    --good:#6fd196; --good-soft:#173726; --warn:#e2b667; --warn-soft:#3a2f16;
+    --code-bg:#1f2833;
+  }
+
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--paper);color:var(--ink);
+    font:16px/1.65 var(--font-body);-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:80ch;margin:0 auto;padding:0 26px 96px;}
+
+  header.masthead{
+    max-width:80ch;margin:0 auto;padding:56px 26px 20px;
+  }
+  .eyebrow{font-family:var(--font-head);text-transform:uppercase;letter-spacing:.14em;
+    font-size:.78rem;font-weight:600;color:var(--mark);margin:0 0 10px;}
+  h1{font-family:var(--font-head);font-weight:700;line-height:1.05;
+    font-size:2.7rem;margin:0 0 .3em;color:var(--heading);text-wrap:balance;letter-spacing:.01em;}
+  .lede{font-size:1.12rem;color:var(--muted);margin:0;max-width:64ch;}
+
+  .meta{display:flex;flex-wrap:wrap;gap:8px;margin:22px 0 0;}
+  .chip{font-size:.8rem;background:var(--surface);border:1px solid var(--border);
+    border-radius:999px;padding:5px 12px;color:var(--muted);}
+  .chip b{color:var(--ink);font-weight:600;}
+
+  h2{font-family:var(--font-head);font-weight:600;font-size:1.62rem;
+    color:var(--heading);margin:2.4em 0 .5em;padding-top:.3em;
+    border-top:1px solid var(--border);}
+  h2:first-of-type{border-top:0;}
+  h3{font-family:var(--font-head);font-weight:600;font-size:1.2rem;
+    color:var(--heading);margin:1.7em 0 .4em;}
+  p{margin:.7em 0;}
+  a{color:var(--accent);text-underline-offset:2px;}
+  strong{color:var(--heading);font-weight:600;}
+  code{font-family:var(--mono);font-size:.86em;background:var(--code-bg);
+    padding:.12em .4em;border-radius:5px;}
+  ul,ol{padding-left:1.3em;}
+  li{margin:.32em 0;}
+  li::marker{color:var(--mark);}
+
+  .callout{border:1px solid var(--border);border-left:4px solid var(--accent);
+    background:var(--surface);border-radius:0 10px 10px 0;padding:2px 20px;
+    margin:1.4em 0;box-shadow:var(--shadow);}
+  .callout.decision{border-left-color:var(--mark);}
+  .callout .k{font-family:var(--font-head);text-transform:uppercase;letter-spacing:.08em;
+    font-size:.74rem;font-weight:700;color:var(--mark);margin:14px 0 0;}
+
+  table{border-collapse:collapse;width:100%;margin:1.3em 0;font-size:.93rem;
+    display:block;overflow-x:auto;}
+  th,td{border:1px solid var(--border);padding:9px 13px;text-align:left;vertical-align:top;}
+  th{background:var(--surface-2);font-weight:600;font-family:var(--font-head);
+    letter-spacing:.02em;}
+  td code{white-space:nowrap;}
+
+  .verdict{background:var(--good-soft);color:var(--good);font-weight:600;
+    border-radius:6px;padding:2px 8px;font-size:.82rem;white-space:nowrap;}
+  .verdict.no{background:var(--warn-soft);color:var(--warn);}
+
+  .cp{background:var(--surface);border:1px solid var(--border);border-radius:12px;
+    padding:4px 22px 18px;margin:1.1em 0;box-shadow:var(--shadow);}
+  .cp .tag{display:inline-block;font-family:var(--font-head);font-weight:700;
+    font-size:.76rem;letter-spacing:.06em;text-transform:uppercase;
+    background:var(--accent-soft);color:var(--accent);border-radius:999px;
+    padding:4px 12px;margin:18px 0 2px;}
+  .cp h3{margin:.35em 0 .3em;}
+  .cp .files{font-family:var(--mono);font-size:.8rem;color:var(--muted);
+    background:var(--code-bg);border-radius:7px;padding:9px 12px;margin:.6em 0;}
+
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:1.3em 0;}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;
+    padding:6px 20px 16px;box-shadow:var(--shadow);}
+  .card h3{font-size:1.05rem;}
+  .card .rec{font-size:.82rem;color:var(--good);font-weight:600;}
+  @media (max-width:720px){.grid{grid-template-columns:1fr;}}
+
+  .flow{font-family:var(--mono);font-size:.82rem;background:var(--surface);
+    border:1px solid var(--border);border-radius:10px;padding:16px 18px;
+    overflow-x:auto;line-height:1.7;color:var(--ink);box-shadow:var(--shadow);}
+  .flow .c{color:var(--muted);}
+  footer{color:var(--muted);font-size:.85rem;margin-top:3em;padding-top:1.2em;
+    border-top:1px solid var(--border);}
+</style>
+</head>
+<body>
+<header class="masthead">
+  <p class="eyebrow">CaveWhere · Implementation Plan</p>
+  <h1>Embed the User Manual into CaveWhere</h1>
+  <p class="lede">A File&nbsp;→&nbsp;Docs viewer that renders the manual's Markdown natively,
+    turns every article into a real navigable page, and is searchable — with no web-engine
+    dependency and no break for the mobile build.</p>
+  <div class="meta">
+    <span class="chip"><b>Branch</b> manual (app code)</span>
+    <span class="chip"><b>Source of truth</b> docs/manual/*.md</span>
+    <span class="chip"><b>Renderer</b> Qt TextFormat.MarkdownText</span>
+    <span class="chip"><b>Nav</b> cwPageSelectionModel, page per article</span>
+    <span class="chip"><b>Status</b> CP1–CP4 + CP6 done · CP5 mostly implemented (styling pass + themed links + tests, uncommitted) · remaining: dark-mode visual pass + drawer test gap</span>
+  </div>
+</header>
+
+<div class="wrap">
+
+<h2>Goal</h2>
+<p>Let a user open the manual <em>inside</em> CaveWhere (File&nbsp;→&nbsp;Docs) and read it
+the way they read any other part of the app: the same breadcrumb, the same
+back/forward, a search box that finds a topic, and cross-reference links that
+navigate in place. The Markdown files under <code>docs/manual/</code> stay the single
+source of truth — the same source that already builds the web page for cavewhere.com.</p>
+
+<h2>The decision that drives everything: no web view</h2>
+<p>CaveWhere ships <strong>no web-rendering module today</strong> — there is no QtWebEngine or
+QtWebView anywhere in <code>conanfile.py</code> (the Qt modules requested are only
+<code>qtshadertools, qtdeclarative, qtsvg, qttools, qttranslations, qtimageformats</code>),
+in the submodules, or in CMake. Rendering the built <code>manual.html</code> would mean
+<em>adding</em> one:</p>
+<ul>
+  <li><strong>QtWebEngine</strong> — Chromium; hundreds of MB, and it does not ship on iOS.</li>
+  <li><strong>QtWebView</strong> — lighter (system webview), but still a new module with
+    per-platform quirks.</li>
+</ul>
+<p>Both bring their <em>own</em> navigation history and their <em>own</em> find-in-page — exactly
+what we don't want, since the goal is to reach into the content with <em>CaveWhere's</em>
+back/forward and search. A web view fights both goals and costs the mobile build.</p>
+
+<div class="callout decision">
+  <p class="k">Decision — confirmed</p>
+  <p><strong>Render the Markdown natively</strong> with Qt&nbsp;6's <code>TextFormat.MarkdownText</code>
+  (zero new dependencies; keeps iOS/mobile alive), and make <strong>each article its own
+  registered page</strong> so the existing history stack carries back/forward and the breadcrumb.
+  We rebuild the <em>chrome</em> (sidebar, search, header) natively — which is what makes the
+  integration work — and theme the reading column through <code>Theme.qml</code>.
+  <br><em>Update (CP5):</em> the original "honest cost is fidelity — article bodies use Qt's default
+  Markdown styling" is now largely bought back. <code>cwDocumentStyler</code> post-processes the parsed
+  <code>QTextDocument</code> to match <code>manual.html</code>'s scale (heading sizes, block spacing,
+  line-height, responsive images) and recolors links to the theme — so the render is close to the web
+  manual, not Qt's raw defaults.</p>
+</div>
+
+<h3>Why this fits what's already there</h3>
+<table>
+  <thead><tr><th>Capability we need</th><th>Already in the codebase</th><th></th></tr></thead>
+  <tbody>
+    <tr><td>Discrete pages with a route string</td>
+        <td><code>cwPageSelectionModel</code> — a page tree, addresses joined by <code>/</code>; <code>registerPage</code> / <code>registerSubPage</code></td>
+        <td><span class="verdict">reuse</span></td></tr>
+    <tr><td>Back / forward with a history stack</td>
+        <td><code>PageHistory</code> + <code>back()</code>/<code>forward()</code>, <code>hasBackward</code>/<code>hasForward</code></td>
+        <td><span class="verdict">reuse</span></td></tr>
+    <tr><td>Breadcrumb + nav buttons</td>
+        <td><code>LinkBar.qml</code> (back :97, forward :107, breadcrumb model :27)</td>
+        <td><span class="verdict">reuse</span></td></tr>
+    <tr><td>Show a QML view for a page</td>
+        <td><code>cwPageView</code> lazy-instantiates &amp; caches a page's component; one <code>PageView</code> in <code>MainContent.qml:69</code></td>
+        <td><span class="verdict">reuse</span></td></tr>
+    <tr><td>Markdown → rich text</td>
+        <td><code>Text.MarkdownText</code> (native Qt 6); RichText + <code>onLinkActivated</code> precedent in <code>HelpArea.qml:74</code></td>
+        <td><span class="verdict">reuse</span></td></tr>
+    <tr><td>Open external links</td>
+        <td><code>Qt.openUrlExternally(link)</code> — <code>CloneArea.qml:140</code></td>
+        <td><span class="verdict">reuse</span></td></tr>
+    <tr><td>Render HTML with full CSS fidelity</td>
+        <td>—</td>
+        <td><span class="verdict no">would add QtWebEngine</span></td></tr>
+  </tbody>
+</table>
+
+<h2>Architecture</h2>
+<div class="flow">
+File → Docs  ──▶  gotoPageByName(null,"Docs")
+                        │
+        ┌───────────────┴────────────────┐
+        │        <span class="c">DocsPage.qml (shared)</span>       │   ← root: StandardPage
+        │  ┌──────────┬──────────────────┐│
+        │  │ sidebar/ │  reading column  ││   ← Flickable + Label(MarkdownText),
+        │  │ TOC +    │  renders slug's  ││     images → qrc: absolute (rewritten in C++)
+        │  │ search   │  .md body        ││
+        │  └──────────┴──────────────────┘│
+        └─────────────────────────────────┘
+                        │
+   registerPage(Docs, "Enter Survey Data", docsPageComponent, {slug:…})  <span class="c"># × ~48</span>
+                        │
+   back() / forward() / breadcrumb  ◀── all free via cwPageSelectionModel
+</div>
+
+<h3>Pieces</h3>
+<ul>
+  <li><strong><code>DocsPage.qml</code></strong> — root <code>StandardPage</code> (same trivial wrapper
+    <code>AboutPage.qml</code> uses). One shared component with a <code>slug</code> property; a
+    themed reading column (<code>Flickable</code> + a read-only <code>QC.TextArea</code> with
+    <code>textFormat: MarkdownText</code>, since CP6 — was a <code>QC.Label</code> in CP1–CP5), post-processed
+    by <code>cwDocumentStyler</code>, plus a native sidebar/TOC and search box as chrome.</li>
+  <li><strong>Registration loop</strong> in <code>MainContent.qml</code>'s
+    <code>Component.onCompleted</code> (alongside the existing About/Settings/Cavern
+    registrations at <code>:200–212</code>): register a <code>"Docs"</code> landing page, then loop the
+    <code>llms.txt</code> manifest calling <code>registerPage(docsRoot, title, docsPageComponent, {slug})</code> for each article.</li>
+  <li><strong>Link interceptor</strong> — articles link to each other by relative path
+    (<code>../survey-data/enter-survey-data.md#anchor</code>). On <code>onLinkActivated</code>: map a
+    <code>.md</code> path → its slug and <code>gotoPageByName</code> (in-app, enters history);
+    <code>http(s)</code> → <code>Qt.openUrlExternally</code>.</li>
+  <li><strong>Search index + filter model</strong> — a small model backed by
+    <code>cwManualIndex</code>'s in-memory <code>title</code>/<code>summary</code>/<code>keywords</code>
+    (front matter it already parsed). Typing filters; selecting jumps to that article's page.</li>
+  <li><strong>File-menu item</strong> — copy the About item (<code>FileMenu.qml:130–135</code>):
+    <code>text: "Docs…"; onTriggered: RootData.pageSelectionModel.gotoPageByName(null, "Docs")</code>.</li>
+  <li><strong>Content staging</strong> — CMake's <code>qt_add_resources</code> globs the
+    <code>.md</code> + images + <code>llms.txt</code> into the binary (<code>:/manual/…</code>); the
+    runtime <code>cwManualIndex</code> C++ class rewrites each body's relative image links to absolute
+    <code>qrc:</code> URLs, so no Markdown base URL is needed (Qt's <code>Text</code> has none anyway).</li>
+</ul>
+
+<h2>Content pipeline — no build-time codegen</h2>
+<div class="flow">
+docs/manual/**/*.md  ─┐
+docs/manual/images/  ─┼─ CMake file(GLOB) + qt_add_resources ─▶  :/manual/…  compiled into the app
+docs/manual/llms.txt ─┘
+                                   │  (at runtime)
+                                   ▼
+   cwManualIndex (C++)  ── parses llms.txt → ordered (title, slug); chapter from the path
+                           strips front matter + rewrites image links → qrc: absolute
+                           (front-matter summary/keywords for search — deferred to CP4)
+                                   │
+                    ┌──────────────┴───────────────┐
+                    ▼                               ▼
+   RootData.manualIndex.articles          RootData.manualIndex.body(slug)
+   ──▶ registration loop + TOC + search   ──▶ DocsPage reading column
+</div>
+<p>No Python, no pandoc, no generated <code>manifest.json</code>/<code>search-index.json</code>.
+The app renders Markdown <em>natively</em>, so the HTML conversion pandoc did for the website
+is never needed here — the only work is embedding the raw <code>.md</code> + images and parsing a
+little front matter. Embedding is CMake's existing <code>qt_add_resources</code> mechanism
+(already used at <code>cavewherelib/CMakeLists.txt:217</code>); the parsing lives in a small
+<code>cwManualIndex</code> C++ class covered by <code>cavewhere-test</code>. <code>llms.txt</code>
+stays the single ordered index — the same file the website build reads — so there is no second
+manifest to keep in sync. <code>scripts/build-manual-html.py</code> is unaffected: Python stays a
+docs-website tool, never a CaveWhere build dependency.</p>
+
+<h2>Decisions — resolved</h2>
+<div class="grid">
+  <div class="card">
+    <h3>1 · How to ship the content</h3>
+    <p><strong>Compile into the app, via CMake's <code>qt_add_resources</code>.</strong> Single
+      binary, offline, simple — and no build script (see Decision&nbsp;6). If the PNGs push the
+      binary too far, the fallback is down-sampling the in-app image copies before ever reaching
+      for a data dir.</p>
+    <p class="rec">✓ <code>qt_add_resources</code> (no codegen)</p>
+  </div>
+  <div class="card">
+    <h3>2 · The sketch app</h3>
+    <p><strong>Ignore it entirely — it's a dead prototype.</strong> Docs is registered only in the
+      main app (<code>MainContent.qml</code>). Do not touch <code>sketch/qml/Main.qml</code>.</p>
+    <p class="rec">✓ Main app only</p>
+  </div>
+  <div class="card">
+    <h3>3 · Landing page</h3>
+    <p><strong>Mirror <code>index.md</code>'s chapter grouping</strong> as the TOC, search box on top.
+      It already reads as the table of contents.</p>
+    <p class="rec">✓ Chapter-grouped TOC</p>
+  </div>
+  <div class="card">
+    <h3>4 · Intra-page anchors</h3>
+    <p><strong>Cross-page navigation first;</strong> land intra-page heading scroll in CP3 if the
+      anchor→y glue is cheap, otherwise fast-follow. Not a blocker for shipping the viewer.</p>
+    <p class="rec">✓ Cross-page first, anchors fast-follow</p>
+  </div>
+</div>
+
+<div class="callout decision">
+  <p class="k">Decision 5 — the CP2 content seam (added after the CP1 review)</p>
+  <p>Register each article by a <strong><code>slug</code></strong>, not by pushing a Markdown
+  string. CP1 shipped a placeholder <code>markdownText</code> string to prove the render path;
+  CP2 replaces it with a <code>slug</code> property that <code>DocsPage</code> resolves — via
+  <code>markdownText: RootData.manualIndex.body(slug)</code> — into the article's Markdown body with
+  its image links already rewritten to absolute <code>qrc:</code> URLs. A raw pushed string couldn't
+  carry the per-article image base, and Qt's <code>Text</code>/<code>Label</code> has <em>no</em>
+  settable Markdown base URL, so the C++ index resolves images to absolute resource paths rather
+  than relying on a <code>baseUrl</code> that doesn't exist.</p>
+  <p><strong>Use <code>registerPage</code>, not <code>registerSubPage</code>.</strong>
+  <code>registerSubPage</code> is a little funny — it implicitly reuses the <em>parent page's</em>
+  <code>QQmlComponent</code> and merges the new properties over the parent's
+  (<code>cwPageSelectionModel.cpp:111-122</code>) — so we avoid it. Register each article with an
+  explicit component and explicit properties instead:
+  <code>registerPage(docsRoot, title, docsPageComponent, {slug})</code> (the <code>CavePage</code>
+  idiom, <code>CavePage.qml:55</code>). <code>DocsPage</code> stays <strong>one slug-driven
+  component</strong> reused for every article — the <code>"Docs"</code> landing page is that same
+  component with the slug unset (it shows the chapter-grouped TOC), and each article passes its own
+  <code>{slug}</code>. Passing the component explicitly keeps the registration readable and free of
+  the parent-property inheritance <code>registerSubPage</code> would splice in.</p>
+</div>
+
+<div class="callout decision">
+  <p class="k">Decision 6 — build the resource with CMake, parse at runtime in C++ (no Python in the app build)</p>
+  <p>CaveWhere must build without Python — it is a moving target across build platforms, and the app
+  build already has CMake. So CP2 does <strong>no build-time codegen</strong>: CMake's
+  <code>qt_add_resources</code> globs the manual's <code>.md</code> + images + <code>llms.txt</code>
+  into the binary, and a runtime <code>cwManualIndex</code> C++ class does the parsing (order/titles
+  from <code>llms.txt</code>, chapter grouping from the file path, front-matter stripping, and
+  image-link rewriting). Front-matter summary/keywords for search are read in CP4, not CP2.</p>
+  <p>This is <em>better</em> than the earlier <code>build-manual-resource.py</code> idea on every axis
+  that matters: zero new build dependency; the parsing is unit-tested in <code>cavewhere-test</code>
+  instead of an un-tested script or fragile CMake regex; there is no generated
+  <code>manifest.json</code>/<code>search-index.json</code> to check in or regenerate; and
+  <code>llms.txt</code> stays the single ordered index shared with the website build. Editing a page
+  is just a rebuild (rcc re-embeds). Python remains fine for the website HTML build, which is not part
+  of building CaveWhere. The pandoc/Markdown→HTML conversion the website needs never applied here —
+  the app renders Markdown natively.</p>
+</div>
+
+<h2>Implementation checkpoints</h2>
+
+<div class="cp">
+  <span class="tag">CP1 · Skeleton page + menu</span>
+  <h3>A Docs page you can open, showing one article</h3>
+  <p>Create <code>DocsPage.qml</code> (root <code>StandardPage</code>) rendering a single hard-coded
+    <code>.md</code> via <code>MarkdownText</code>. Register <code>"Docs"</code> in <code>MainContent.qml</code>,
+    add the File-menu item. Proves the render path, theming, and that the page shows through
+    <code>cwPageView</code>.</p>
+  <div class="files">+ cavewherelib/qml/DocsPage.qml · ~ MainContent.qml · ~ FileMenu.qml</div>
+  <p class="rec">✓ Done — implemented &amp; verified, 6/6 smoke tests green
+    (<code>tst_DocsPage.qml</code>, brought forward from CP5). Its <code>markdownText</code>
+    placeholder is superseded by the <code>slug</code> seam in CP2 (Decision&nbsp;5).</p>
+</div>
+
+<div class="cp">
+  <span class="tag">CP2 · Content resource + runtime index</span>
+  <h3>All articles staged and addressable — no Python, no codegen</h3>
+  <p>Embed the manual with CMake and parse it at runtime (Decision&nbsp;6). CMake
+    <code>qt_add_resources</code> globs <code>docs/manual/**/*.md</code> + images + <code>llms.txt</code>
+    into <code>:/manual/…</code> (exclude <code>_site/</code>). New <code>cwManualIndex</code> C++ class
+    parses <code>llms.txt</code> (ordered chapter/title/slug), strips front matter, and rewrites image
+    links to absolute <code>qrc:</code> URLs; exposed as <code>RootData.manualIndex</code> with
+    <code>articles</code> + <code>body(slug)</code>. Give <code>DocsPage</code> the <code>slug</code>
+    seam binding <code>markdownText: RootData.manualIndex.body(slug)</code> (Decision&nbsp;5). Loop
+    <code>RootData.manualIndex.articles</code> in <code>MainContent.qml</code> calling
+    <code>registerPage(docsRoot, title, docsPageComponent, {slug})</code> for every article (explicit
+    component + props — <em>not</em> <code>registerSubPage</code>). The landing page is that same
+    <code>DocsPage</code> with slug unset. Cover the parser with a <code>cavewhere-test</code> case.</p>
+  <div class="files">+ cwManualIndex.{h,cpp} · + testcases/&hellip; (index unit test) · ~ cavewherelib/CMakeLists.txt (qt_add_resources) · ~ cwRootData · ~ MainContent.qml · ~ DocsPage.qml</div>
+  <p class="rec">✓ Done — 22 <code>[cwManualIndex]</code> assertions + 7 <code>tst_DocsPage</code> cases green; app +
+    both test binaries link clean. <code>index.md</code>/<code>AUTHORING.md</code> excluded from article
+    registration (root-level, no chapter dir). Image optimization <strong>skipped</strong> by decision:
+    qrc is demand-paged (the 34&nbsp;MB is binary size only, zero runtime cost) and local lossless gave
+    just ~4%; revisit only if download size matters.</p>
+</div>
+
+<div class="cp">
+  <span class="tag">CP3 · Navigation &amp; links</span>
+  <h3>Back/forward, breadcrumb, and cross-links work</h3>
+  <p class="rec">✓ Done — cross-page nav via relative <code>.md</code> links; 31 <code>[cwManualIndex]</code>
+    assertions + 9 <code>tst_DocsPage</code> cases green.</p>
+  <p>Added the <code>onLinkActivated</code> interceptor: relative <code>.md</code> paths (the landing
+    index TOC and inter-article cross-references) → in-app nav, external → <code>openUrlExternally</code>,
+    same-page <code>#anchor</code> ignored (intra-page scroll deferred). Path→slug resolution lives in C++
+    (<code>cwManualIndex::slugForLink(fromSlug, href)</code>): it needs <code>QUrl</code> relative
+    resolution against the source page's location plus the article map, so QML stays dumb (resolve →
+    navigate by <code>Docs/&lt;title&gt;</code> address, or hand the link to the browser). Back/forward
+    and the breadcrumb carry for free because each hop is an ordinary <code>currentPageAddress</code>
+    navigation.</p>
+  <div class="files">~ cavewherelib/qml/DocsPage.qml · ~ cwManualIndex.{h,cpp} (slugForLink) ·
+    ~ test_cwManualIndex.cpp · ~ tst_DocsPage.qml</div>
+</div>
+
+<div class="cp">
+  <span class="tag">CP4 · Sidebar TOC + search</span>
+  <h3>Find a topic and jump to it</h3>
+  <p class="rec">✓ Done — 83 <code>[cwManualIndex]</code>+<code>[cwManualSearchModel]</code> assertions +
+    13 <code>tst_DocsPage</code> cases green; app + both test binaries link clean.</p>
+  <p>Added a persistent left sidebar to <code>DocsPage</code>: a search <code>TextField</code> over a
+    chapter-grouped <code>ListView</code> TOC (<code>ListView.section</code> keyed on the article's
+    <code>chapter</code>, so the model's index order groups for free). The TOC is driven by a new
+    <code>cwManualSearchModel</code> (<code>QAbstractListModel</code>, <code>QML_NAMED_ELEMENT</code>):
+    an empty <code>query</code> lists every article in order; a non-empty one keeps rows whose haystack
+    contains every whitespace term (AND). Selecting a row calls a shared
+    <code>DocsPage.navigateToSlug()</code> — the same helper <code>onLinkActivated</code> now uses, so
+    sidebar and cross-link navigation share one path.</p>
+  <p><strong>Responsive (compact mode):</strong> the sidebar content lives in a reusable
+    <code>DocsSidebar.qml</code> hosted by whichever container the width calls for — a pinned left panel
+    above <code>Theme.breakpointPanelCollapse</code> (600, the same breakpoint the other pages collapse
+    at) and, below it, a left-edge <code>QC.Drawer</code> opened by a <code>list.svg</code>
+    <code>RoundButton</code>. Only one instance is live at a time (<code>active:</code> Loaders keyed on
+    <code>isNarrow</code>); picking an article routes through <code>selectSlug()</code> which dismisses
+    the drawer then navigates. The reading column takes the full width in compact mode.</p>
+  <p><strong>Parser (the A1/R1 "summaries for free" piece):</strong> <code>cwManualIndex</code> now
+    captures the <code>llms.txt</code> trailing summary (the text after <code>):</code>) into
+    <code>Article.summary</code> at construction — zero new I/O — and adds
+    <code>searchText(slug)</code>, a lowercased <code>title + summary + keywords</code> haystack.
+    Keywords are read from each article's front matter lazily and cached on first search, so app
+    startup still touches only <code>llms.txt</code>.</p>
+  <div class="callout" style="border-left-color:var(--warn)">
+    <p class="k" style="color:var(--warn)">Plan drift — "sections → chapters" is stale</p>
+    <p>The A1/R1 follow-up proposed deriving chapters from <code>llms.txt</code>'s <code>##</code>
+    sections. That doesn't hold: <code>llms.txt</code>'s only sections are <em>Start here / Chapters /
+    Meta</em> (every article sits under one <code>## Chapters</code>), and the website build
+    (<code>build-manual-html.py</code>) itself derives the sidebar chapter from the <strong>directory
+    path</strong> (<code>chapter_title(relpath)</code>), not from those sections. So C++
+    <code>chapterForPath</code> is already a faithful port of the Python, and the two can't be collapsed
+    <em>through llms.txt</em>. The genuinely duplicated chapter table is left as-is (correct, tiny,
+    curated); only the <em>summary</em> half of A1/R1 was single-sourced from <code>llms.txt</code>, which
+    is where the real CP4 payoff was.</p>
+  </div>
+  <div class="files">+ cwManualSearchModel.{h,cpp} · + testcases/test_cwManualSearchModel.cpp ·
+    + DocsSidebar.qml (extracted, responsive host) · ~ cwManualIndex.{h,cpp} (summary + searchText) ·
+    ~ DocsPage.qml (sidebar panel/drawer) · ~ test_cwManualIndex.cpp · ~ tst_DocsPage.qml (14 cases)</div>
+</div>
+
+<div class="cp">
+  <span class="tag">CP5 · Reading polish &amp; tests</span>
+  <h3>Reading typography, themed links, dark-mode verification, tests</h3>
+  <p class="rec">◑ Mostly implemented (not yet committed). The scope grew past "dark-mode verification":
+    a user observed the native Markdown render was too tightly spaced, too small, over-large images, and a
+    hard-to-read body font. That is now handled by a new C++ post-processor, <code>cwDocumentStyler</code>
+    (<code>DocumentStyler</code>, <code>QML_NAMED_ELEMENT</code>), which restyles the parsed
+    <code>QTextDocument</code> to match the web manual: heading sizes (2.6 / 1.9 / 1.45 rem over the body),
+    per-block margins and proportional line-height, a muted lead paragraph and image captions, and — the one
+    thing no stylesheet can do for Markdown — images clamped to the reading width so figures shrink on a
+    narrow window instead of overflowing. Wired in <code>DocsPage.qml</code> as a <code>DocumentStyler</code>
+    bound to the body's <code>textDocument</code>.</p>
+  <p><strong>Reading font.</strong> The body was rendering in the app's default UI font (Yanone Kaffeesatz,
+    a condensed display face) which is tiring as body copy. Added two <code>Theme.qml</code> tokens for a
+    <em>fixed</em> manual pairing independent of the user's chrome font: <code>fontFamilyReading</code>
+    ("Fira Sans", the readable body) and <code>fontFamilyHeading</code> ("Yanone Kaffeesatz", the display
+    heads); the styler sets headings to <code>fontFamilyHeading</code> while the body uses
+    <code>fontFamilyReading</code>. Both are bundled/registered fonts, mirroring the existing
+    <code>fontFamilyMono</code> token.</p>
+  <p><strong>Themed link color — done, via the post-processing route this checkpoint predicted.</strong>
+    <code>cwDocumentStyler</code> gained a <code>linkColor</code> property (<code>Theme.textLink</code>) and
+    recolors anchor char-formats in its fragment pass, so links track the theme (fixing dark-mode link
+    readability) instead of QTextDocument's default anchor color. This confirms the "post-processing anchor
+    char-formats" option over <code>setDefaultStyleSheet</code> (which is HTML-only).</p>
+  <p><strong>Tests.</strong> New <code>testcases/test_cwDocumentStyler.cpp</code> (<code>[cwDocumentStyler]</code>,
+    54 assertions) drives a real <code>TextEdit</code> (MarkdownText) to get a live
+    <code>QQuickTextDocument</code>, then asserts heading sizing + heading font family, the muted/larger lead
+    paragraph, link recoloring, body proportional line-height, and image clamp (only-shrink) — the C++ unit
+    coverage the styler needs beyond the transitive 25-case <code>tst_DocsPage</code> suite.</p>
+  <p><strong>Remaining before CP5 is done:</strong> a visual dark-mode pass over the sidebar/drawer (CP4) and
+    the styled body (CP6); the drawer <em>open → pick-from-inside</em> test gap (the Popup interior is
+    unreachable via the page-chain ObjectFinder); and confirm the offscreen/mobile build still links (no web
+    module pulled in).</p>
+  <div class="files">+ cavewherelib/src/cwDocumentStyler.{h,cpp} · ~ DocsPage.qml · ~ Theme.qml
+    (fontFamilyReading / fontFamilyHeading) · + testcases/test_cwDocumentStyler.cpp · ~ test-qml/tst_DocsPage.qml</div>
+</div>
+
+<div class="cp">
+  <span class="tag">CP6 · Find on page + intra-page anchors</span>
+  <h3>Search within the current article, and jump to headings</h3>
+  <p class="rec">✓ Done — 23 <code>tst_DocsPage</code> cases green (25 QtTest incl. init/cleanup; 11 new: find open/close, find-button-opens-find, enter/shift-enter walk, compact-bar-shares-hamburger-row, reserves-space-above-document, highlight+count,
+    next/previous, no-match "None", close-clears-selection, <code>#anchor</code> scroll, navigation
+    resets find); app + both test binaries link clean. The reading column is now a read-only
+    <code>QC.TextArea</code> (MarkdownText) inside a plain <code>QQ.Flickable</code>; a new
+    <code>cwDocumentFinder</code> (<code>DocumentFinder</code>, <code>QML_NAMED_ELEMENT</code>) runs
+    <code>QTextDocument::find()</code> over the body's <code>QQuickTextDocument</code> for the find bar and
+    resolves GitHub-style heading slugs (matching <code>build-manual-html.py</code>) for
+    <code>#anchor</code> scroll. Four <code>twbs-icons</code> (search, chevron-up/-down, x) were added to
+    <code>cwResources.qrc</code>. The find bar is a <strong>full-width toolbar</strong> docked in a
+    <em>reserved</em> band above the reading column (in wide mode the column always reserves this band —
+    it holds the search button when find is closed and the bar when open, so opening find never shifts or
+    covers the text), sitting flush above the document with only a 1px separator line — per user request, neither an
+    overlay nor a content-hugging pill. In <strong>compact mode</strong> the bar instead shares the
+    drawer-toggle (hamburger) row, starting just right of it, so it costs no extra vertical space (anchors
+    align to the toggle's row — no LayoutItemProxy needed). The query field stretches; the count and
+    prev/next/close sit
+    right. A top-left <code>search.svg</code> <code>RoundButton</code> (hidden while the bar is open; sits
+    right of the drawer toggle in compact mode) opens find and carries a tooltip with the platform
+    shortcut via <code>Shortcut.nativeText</code> (⌘F on macOS). Match navigation uses the standard keys —
+    <code>StandardKey.FindNext</code> (F3 / ⌘G) and <code>FindPrevious</code> (Shift+F3 / ⌘⇧G), plus
+    Enter / Shift+Enter in the field — and the next/prev buttons carry those shortcuts in their
+    tooltips.</p>
+  <p><strong>Two conscious deviations from the scope below.</strong> (1) <em>Highlight-all</em> is
+    deferred: QML's <code>TextEdit</code> exposes no extra-selection API, and true simultaneous highlight
+    would mean mutating the document's char formats (invasive for a read-only viewer). The current match
+    is highlighted via the selection and the bar shows a running <code>"3/12"</code> count — the standard
+    find affordance (ship-simplest-first). (2) <em>Themed link color</em> is lost in the swap:
+    <code>TextEdit</code> has no <code>linkColor</code> (only <code>Label</code> did), so links rendered in
+    QTextDocument's default anchor color. <em>Resolved in CP5:</em> <code>cwDocumentStyler</code> now recolors
+    anchor char-formats to <code>Theme.textLink</code> (the "another approach" — <code>setDefaultStyleSheet</code>
+    is HTML-only), so links track the theme in both modes.</p>
+  <p>The CP4 search box finds <em>which article</em> to open (it filters the TOC across the manual). This
+    checkpoint adds the other axis: <strong>find-on-page</strong> — a Ctrl+F bar that locates, highlights,
+    and scrolls to text matches <em>inside</em> the article you're reading — and lands the
+    <strong>same-page <code>#anchor</code> scroll</strong> that CP3 deferred (decision&nbsp;4), since both
+    need the same foundation.</p>
+  <p><strong>Why it's not a toggle.</strong> Before CP6 the reading column was a <code>QC.Label</code> with
+    <code>textFormat: MarkdownText</code>, and Qt's <code>Text</code>/<code>Label</code> has no built-in
+    find or highlight and exposes no document handle. The move (done in CP6) was to render the body through a
+    document-backed read-only text view (a read-only <code>QC.TextArea</code>, or a <code>Label</code>
+    whose <code>QQuickTextDocument</code> we reach) so we can call <code>QTextDocument::find()</code> to
+    locate a match, select it, and scroll it into view. That <em>same</em> <code>QTextDocument</code> is
+    what anchor→y resolution needs, so <code>#anchor</code> links (landing-page TOC jumps and heading
+    cross-refs) fall out of the same plumbing — the CP3 <code>onLinkActivated</code> early-return on
+    <code>#</code> becomes a real scroll.</p>
+  <p><strong>Scope:</strong> swap the reading column to the document-backed view (keep the qrc image
+    rewriting and <code>Theme</code> styling); a small find bar (text field + next/prev + match count +
+    highlight-all + Esc-to-close), opened by Ctrl+F; wire <code>#anchor</code> clicks to scroll to the
+    heading's document position. <strong>Not in scope:</strong> cross-article "find in all pages" (that's
+    what CP4's TOC search already covers a different way).</p>
+  <div class="files">~ DocsPage.qml (document-backed body + find bar) · + a find controller (QTextDocument::find
+    over the body's QQuickTextDocument) · ~ tst_DocsPage.qml</div>
+</div>
+
+<h2>Risks &amp; nuances</h2>
+<ul>
+  <li><strong>Markdown fidelity.</strong> Qt renders GitHub-flavored Markdown including tables,
+    but with default styling and no per-element CSS. Captions (our <code>img</code>+<code>em</code>
+    pattern) render as plain italic under the image — acceptable. Anything that leaned on the
+    HTML's CSS won't carry; the text must (and, per the authoring rules, already does) stand
+    on its own.</li>
+  <li><strong>Front-matter stripping at load.</strong> The renderer must drop the leading
+    <code>---&nbsp;…&nbsp;---</code> block, same as <code>build-manual-html.py</code> does.</li>
+  <li><strong>Intra-page anchors</strong> need anchor→y-position glue (decision&nbsp;4) — now folded into
+    CP6, which brings in the document-backed body that makes both anchor-scroll and find-on-page possible.</li>
+  <li><strong>Binary size</strong> from compiled images (decision&nbsp;1).</li>
+  <li><strong>Two renderers, one source.</strong> Keep the web (<code>manual.html</code>) and in-app
+    (native) paths as separate renderers over the same <code>.md</code> — don't try to make one
+    artifact serve both.</li>
+</ul>
+
+<h2>Follow-ups (from the CP2 &amp; CP3 reviews — not blocking)</h2>
+<p>Deferred improvements surfaced reviewing CP2 and CP3. None is a correctness bug against today's
+manual; each is worth doing before or alongside CP4, where the payoffs land.</p>
+<ul>
+  <li><strong>A1/R1 · Make <code>llms.txt</code> the one source; stop duplicating the website build.</strong>
+    <code>cwManualIndex::slugForPath</code>/<code>chapterForPath</code> (<code>cwManualIndex.cpp:136,156</code>)
+    re-implement <code>scripts/build-manual-html.py</code>'s slug scheme and chapter table as a second
+    hardcoded source of truth — add a chapter directory and you must edit both, or C++ silently falls
+    back to <code>titleCase()</code> (<code>view-3d</code> → "View 3d", not "3D View"). Meanwhile
+    <code>llms.txt</code> already carries the ordering, its own <code>##</code> section grouping, <em>and</em>
+    a per-page summary that the parser captures up to <code>):</code> and then discards. Generalize the
+    parser to consume <code>llms.txt</code>'s structure (sections → chapters, trailing text → summary):
+    it becomes the single ordered index the plan promises and hands <strong>CP4 search its summaries
+    for free</strong>. Blast radius: the parser only. Best done at the start of CP4.
+    <br><strong>Partially resolved in CP4 — closed.</strong> The <em>summary</em> half shipped: the parser
+    reads the <code>llms.txt</code> trailing text into <code>Article.summary</code> and CP4 search uses it.
+    The <em>chapters</em> half was dropped as unworkable — <code>llms.txt</code> has no per-chapter
+    sections (only <em>Start here / Chapters / Meta</em>) and the website build derives chapters from the
+    directory anyway, so <code>chapterForPath</code> is already the single faithful port (see the CP4
+    plan-drift note).</li>
+  <li><strong>R1 (from the CP6 review) · Unify the <em>heading</em>-slug scheme; stop hand-porting it a third time.</strong>
+    CP6 added <code>cwDocumentFinder::headingSlug</code> (<code>cwDocumentFinder.cpp:16</code>) — a third,
+    independent slug implementation (after <code>slugForPath</code> and the Python), used to resolve same-page
+    <code>#anchor</code> links to a heading's document position. Its comment now honestly notes it is <em>not</em>
+    byte-identical to the website: <code>scripts/build-manual-html.py</code> slugs headings with
+    <strong>pandoc's GFM auto-identifiers</strong> plus a per-page <code>--id-prefix key--</code>, a different
+    algorithm and namespace. The two coincide only for the plain-ASCII headings the manual currently uses;
+    they can diverge on numbers-leading headings, <code>&amp;</code>/unicode, and the page prefix — and
+    <strong>nothing tests the two against each other</strong>. Every in-app <code>#anchor</code> now rides on this
+    regex matching whatever the author wrote. This extends the A1/R1 debt (which covered only <em>path</em> slugs)
+    to <em>heading</em> slugs: the real fix is a shared slug contract (one function both the app and the build call)
+    or generating an anchor table from the build. Blast radius: <code>cwDocumentFinder</code> + a cross-check test.
+    Not a live bug against today's ASCII-only headings; do it before headings gain punctuation/unicode.</li>
+  <li><strong>R1 (from the CP5 styling review) · Shared <code>QQuickTextDocument</code>-observer base for the two doc wrappers.</strong>
+    <code>cwDocumentFinder</code> and <code>cwDocumentStyler</code> are the only two <code>QQuickTextDocument</code>
+    wrappers in the tree and now duplicate an identical block verbatim: the <code>QPointer&lt;QQuickTextDocument&gt; m_document</code>
+    (with the same word-for-word "Held by QPointer… auto-nulls" comment), the
+    <code>Q_PROPERTY(QQuickTextDocument* document …)</code>, the identical <code>textDocument()</code> helper, and the
+    <code>setDocument</code> guard shape. A small <code>cwTextDocumentObserver</code> base (holds <code>m_document</code>,
+    <code>textDocument()</code>, <code>setDocument()</code> + a virtual <code>onDocumentChanged()</code>) would remove the
+    copy. Blast radius: both classes + their tests. Borderline (only two consumers today) — do it if a third consumer
+    appears or when either class is next touched. <strong>Also record the invariant it should enforce:</strong> a document
+    post-processor must only change <em>formats</em>, never insert/remove text, or <code>cwDocumentFinder</code>'s cached
+    character positions corrupt (the styler is format-only today; a comment on <code>apply()</code> notes this).</li>
+  <li><strong>A3 · Move the "empty slug = landing" rule into C++.</strong> The routing lives in QML today
+    (<code>DocsPage.qml:19</code>: <code>slug === "" ? landingBody() : body(slug)</code>). Folding it into
+    <code>body("")</code> returning the landing keeps the QML seam a single dumb call and puts the routing
+    next to the data. Minor; do it if CP3/CP4 touch the seam anyway.</li>
+  <li><strong>A2 · <code>cwManualIndex</code> as a <code>QML_SINGLETON</code> — considered, rejected.</strong>
+    It's a stateless read-only service (a textbook singleton, and <code>RootData</code> is already a
+    god-object hub), but every subsystem is reached through <code>RootData.*</code> and this plan
+    deliberately chose <code>RootData.manualIndex</code>. Consistency wins; <strong>keep it on RootData</strong>.
+    Recorded so it isn't re-litigated.</li>
+  <li><strong>Body/render memo (nice-to-have).</strong> <code>renderMarkdown</code> (<code>cwManualIndex.cpp:193</code>)
+    re-reads the resource and re-runs the regex on every <code>body()</code> call. A trivial
+    <code>QHash&lt;slug,QString&gt;</code> memo if it ever matters; negligible for a viewer today.</li>
+</ul>
+
+<p>From the CP3 review — three <code>🟢</code> coupling notes, none a live bug, all latent given today's
+curated manual. A1 below naturally pairs with CP4 (it builds the TOC/search over the same index).</p>
+<ul>
+  <li><strong>R1 · Navigate by page handle, not a reconstructed address string.</strong>
+    <code>DocsPage.qml:19,70</code> hardcodes <code>docsRootName: "Docs"</code> and builds
+    <code>"Docs/" + title</code>, restating both the registration name at <code>MainContent.qml:224</code>
+    and <code>cwPageSelectionModel::seperator()</code> (<code>"/"</code>). The model already exposes
+    <code>gotoPageByName(parentPage, subPage)</code>, which navigates a child by name with no string-building
+    or separator knowledge in QML. Needs the Docs parent <code>cwPage*</code> threaded into <code>DocsPage</code>
+    (or a slug-nav helper on the model). Tiny/harmless today; the string form works.</li>
+  <li><strong>R2 · <code>slugForLink</code>'s empty return conflates three outcomes.</strong>
+    <code>cwManualIndex.cpp:141,167,171</code> return <code>QString()</code> for same-page anchor,
+    external link, <em>and</em> not-a-registered-article. The caller can't tell them apart, so
+    <code>DocsPage.qml:64</code>'s <code>startsWith("#")</code> guard is load-bearing (removing it sends
+    anchors to <code>openUrlExternally</code>), and an in-manual relative link to a non-article page would
+    also be handed to the browser as a bare relative path. A small result type or split
+    <code>isExternal</code>/<code>isAnchor</code> predicates would make the contract precise. Not reachable
+    from the link-checked manual today.</li>
+  <li><strong>A1 · In-app doc nav is keyed by human title, not the stable slug.</strong> Articles register
+    under <code>article.title</code> as the page name (<code>MainContent.qml:228</code>) and addresses resolve
+    by name, so CP3 round-trips <em>slug → <code>title(slug)</code> → <code>"Docs/&lt;title&gt;"</code> → page-by-name</em>.
+    Correctness depends on titles staying unique and never reworded; the stable id (slug) never appears in the
+    address space. A slug-addressed docs sub-space (a model/index helper that navigates the Docs child by slug)
+    would be robust and give stable deep-links. Blast radius: registration loop + a small nav helper + the
+    DocsPage seam. Best folded into CP4's TOC/search work over the same index.
+    <br><strong>CP4 status:</strong> still open, but CP4 routed all in-app hops (sidebar taps, TOC, and
+    <code>onLinkActivated</code>) through one <code>DocsPage.navigateToSlug(slug)</code> helper, so the
+    slug→<code>"Docs/"+title</code>→page-by-name round-trip now lives in exactly one place — swapping it
+    for a slug-addressed nav helper is a one-function change when someone does R1/A1.</li>
+</ul>
+
+<p><strong>Group 1 shipped (commit <code>5f66d30f</code>, 2026-07-20).</strong> The three CP3-review
+coupling notes above (<em>R1</em> navigate by page handle, <em>R2</em> precise link classification,
+<em>A1</em> slug-addressed nav) plus the <em>A3</em> empty-slug→landing move landed together:
+<code>body("")</code> returns the landing; new <code>resolveLink()</code> returns a
+<code>{kind}</code> map (anchor/article/external/missing) so the viewer never guesses from the raw
+href; articles register under their <em>slug</em> and <code>navigateToSlug()</code> is a single
+<code>gotoPageByName(docsRootPage, slug)</code>. Article addresses now read as slugs (stable
+deep-links). The refactor stranded <code>slugForLink()</code> and the <code>title()</code> invokable
+(no production callers left) — both removed in the same commit.</p>
+
+<h2>Viewer polish — open (surfaced 2026-07-20)</h2>
+<ul>
+  <li><strong>Pointing-hand cursor over document links.</strong> Links in the rendered Markdown body
+    (<code>DocsPage.qml</code>'s <code>bodyId</code> <code>QC.TextArea</code>) don't show a
+    <code>Qt.PointingHandCursor</code> on hover, so they don't read as clickable. Add hover-cursor
+    feedback over anchor spans. Note the body is a read-only <code>TextArea</code> rendering
+    <code>MarkdownText</code>; <code>hoveredLink</code> / a <code>HoverHandler</code> gated on the
+    link region is the likely hook. Blast radius: <code>DocsPage.qml</code> only.</li>
+  <li><strong>Reset the scroll position to the top on page switch.</strong> Switching articles keeps
+    the reading column (<code>scrollId</code> <code>QQ.Flickable</code>) at its previous
+    <code>contentY</code>, which lands the new page mid-scroll and causes a rendering glitch. On
+    <code>slug</code> change (alongside the existing <code>onSlugChanged</code> that closes find),
+    reset <code>scrollId.contentY = 0</code>. Watch for ordering vs. the document re-layout — the
+    reset must apply after the new body's height is known, or it can clamp against the old
+    <code>contentHeight</code>. Blast radius: <code>DocsPage.qml</code> only.</li>
+</ul>
+
+<h2>Out of scope (this plan)</h2>
+<ul>
+  <li>Publishing the manual to <strong>cavewhere.com</strong> — same source, separate task; the
+    web build already exists.</li>
+  <li>Any change to the manual's <em>content</em> — this is viewer plumbing only.</li>
+  <li>Rewriting <code>Theme.qml</code> or the page framework — we consume both as-is.</li>
+</ul>
+
+<footer>
+  CP1–CP4 + CP6 done, CP5 mostly implemented (styling pass + themed links + tests; not yet committed)
+  (83 <code>[cwManualIndex]</code>+<code>[cwManualSearchModel]</code> + 54 <code>[cwDocumentStyler]</code>
+  assertions + 25 <code>tst_DocsPage</code> cases green; app + both test binaries link clean) · CaveWhere ·
+  renders natively, no web engine · all file:line references verified against the current tree. Decisions 1–6
+  resolved — CP5 remaining: dark-mode visual verification + the drawer open→pick-inside test gap.
+</footer>
+
+</div>
+</body>
+</html>

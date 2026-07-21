@@ -3,6 +3,7 @@
 
 #include "cwCaveData.h"
 #include "cwGeoPoint.h"
+#include "cwUnits.h"
 
 #include <QStringList>
 
@@ -12,6 +13,7 @@ struct cwCavingRegionData {
     QList<cwCaveData> caves;
     QString globalCoordinateSystem;
     cwGeoPoint worldOrigin;
+    cwUnits::UnitSystem unitSystem = cwUnits::Metric;
 };
 
 

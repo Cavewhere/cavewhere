@@ -212,6 +212,7 @@ if(BUILD_TESTING)
             testlib/cwSketchTestHelpers.h
             testlib/LazFixtureHelper.cpp
             testlib/LazFixtureHelper.h
+            testlib/CwRhiSceneTestAccess.h
             testlib/BoulderFixtureHelper.cpp
             testlib/BoulderFixtureHelper.h
             testlib/MockAuthProvider.cpp
@@ -220,6 +221,8 @@ if(BUILD_TESTING)
             testlib/SvgOverlapAnalyzer.h
             testlib/OffscreenRenderTester.cpp
             testlib/OffscreenRenderTester.h
+            testlib/WindowGrabber.cpp
+            testlib/WindowGrabber.h
             QQuickGit/tests/lfs/LfsServer.cpp
             QQuickGit/tests/lfs/LfsServer.h
         QML_FILES

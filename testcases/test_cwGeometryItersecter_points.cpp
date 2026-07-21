@@ -9,8 +9,10 @@
 
 // SUT
 #include "cwGeometryItersecter.h"
+#include "TestGeometryBuilders.h"
 #include "cwRayHit.h"
 #include "cwRenderObject.h"
+#include "cwScene.h"
 
 using namespace Catch;
 
@@ -24,14 +26,8 @@ cwGeometryItersecter::Object makePointObject(cwRenderObject* parent,
                                              const QMatrix4x4& modelMatrix = QMatrix4x4(),
                                              float pickRadius = kPickRadius)
 {
-    cwGeometry geometry {
-        {cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3}
-    };
-    geometry.set(cwGeometry::Semantic::Position, points);
-    geometry.setType(cwGeometry::Type::Points);
-
-    return cwGeometryItersecter::Object({parent, id},
-                                        geometry,
+    return cwGeometryItersecter::Object(parent, id,
+                                        cwTestGeometry::points(points),
                                         modelMatrix,
                                         pickRadius);
 }
@@ -52,19 +48,11 @@ cwGeometryItersecter::Object makeTriangleAtZ(uint64_t id, float worldZ)
            << QVector3D( 1.0f, -1.0f, 0.0f)
            << QVector3D( 0.0f,  1.0f, 0.0f);
 
-    QVector<uint32_t> indexes;
-    indexes << 0u << 1u << 2u;
-
-    cwGeometry geometry {
-        {cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3}
-    };
-    geometry.set(cwGeometry::Semantic::Position, points);
-    geometry.setIndices(indexes);
-    geometry.setType(cwGeometry::Type::Triangles);
-
     QMatrix4x4 modelMatrix;
     modelMatrix.translate(0.0f, 0.0f, worldZ);
-    return cwGeometryItersecter::Object({nullptr, id}, geometry, modelMatrix);
+    return cwGeometryItersecter::Object(nullptr, id,
+                                        cwTestGeometry::triangles(points, {0u, 1u, 2u}),
+                                        modelMatrix);
 }
 
 } // namespace
@@ -109,14 +97,22 @@ TEST_CASE("Ray within pickRadius of a point still hits", "[cwGeometryItersecter]
     REQUIRE(hit.hit());
 }
 
-TEST_CASE("Ray well beyond the tube range does not hit the point", "[cwGeometryItersecter][points]")
+TEST_CASE("Ray outside the pick radius does not hit the point", "[cwGeometryItersecter][points]")
 {
-    // Offset well past the tube-pick range (kTubeFactor=5 * pickRadius)
-    // so neither the sphere intersection nor the near-miss fallback
-    // fires. Rays in the (1x, 5x) band are expected to snap to the
-    // point via the tube fallback (see test_cwGeometryItersecter_tubePick).
-    const float offset = kPickRadius * 10.0f;
-    const QVector3D origin(offset, 0.0f, 10.0f);
+    // The pick sphere is the whole rule: outside it is a miss.
+    //
+    // Offset DIAGONALLY, and by only ~1.13x the radius, so this single case
+    // pins two things a comfortable axis-aligned 10x would miss:
+    //   - addPoints pads the object's broad-phase AABB by a full pickRadius,
+    //     so an x-only offset above 1x is rejected by the BOX and never
+    //     reaches the sphere test. (0.08, 0.08) is 0.113 from the centre — a
+    //     true miss — yet sits inside that padded box, so only the ray/sphere
+    //     test can reject it. That makes this the case that pins the reject
+    //     boundary as a sphere rather than the box around it.
+    //   - 1.13x is inside the 2.5x reach of the deleted near-miss fallback, so
+    //     this hit before that fallback was removed.
+    const float offset = kPickRadius * 0.8f;
+    const QVector3D origin(offset, offset, 10.0f);
     const QRay3D ray(origin, QVector3D(0.0f, 0.0f, -1.0f));
 
     cwGeometryItersecter intersector;
@@ -196,25 +192,31 @@ TEST_CASE("Mixed triangle and point — closer one wins regardless of type", "[c
 
 TEST_CASE("Hidden render object is skipped during picking", "[cwGeometryItersecter][points]")
 {
-    cwRenderObject hiddenOwner;
-    hiddenOwner.setVisible(false);
+    // The intersecter reads visibility from the scene's store, so the owners
+    // must be attached — setVisible then publishes through the facade.
+    cwScene scene;
+    auto* intersector = scene.geometryItersecter();
 
-    cwRenderObject visibleOwner;
-    REQUIRE(visibleOwner.isVisible());
+    auto* hiddenOwner = new cwRenderObject();
+    hiddenOwner->setScene(&scene);
+    hiddenOwner->setVisible(false);
+
+    auto* visibleOwner = new cwRenderObject();
+    visibleOwner->setScene(&scene);
+    REQUIRE(visibleOwner->isVisible());
 
     const QVector3D origin(0.0f, 0.0f, 100.0f);
     const QRay3D ray(origin, QVector3D(0.0f, 0.0f, -1.0f));
 
-    cwGeometryItersecter intersector;
     // Hidden cloud is closer (z=50), visible cloud is further (z=10).
     // If visibility is honored, the visible (further) cloud wins.
-    intersector.addObject(makeSinglePointObject(&hiddenOwner, 1, QVector3D(0.0f, 0.0f, 50.0f)));
-    intersector.addObject(makeSinglePointObject(&visibleOwner, 2, QVector3D(0.0f, 0.0f, 10.0f)));
-    intersector.waitForFinish();
+    intersector->addObject(makeSinglePointObject(hiddenOwner, 1, QVector3D(0.0f, 0.0f, 50.0f)));
+    intersector->addObject(makeSinglePointObject(visibleOwner, 2, QVector3D(0.0f, 0.0f, 10.0f)));
+    intersector->waitForFinish();
 
-    const cwRayHit hit = intersector.intersectsDetailed(ray);
+    const cwRayHit hit = intersector->intersectsDetailed(ray);
     REQUIRE(hit.hit());
-    REQUIRE(hit.object() == &visibleOwner);
+    REQUIRE(hit.object() == visibleOwner);
 }
 
 TEST_CASE("Ray with origin inside a point's sphere does not produce a hit", "[cwGeometryItersecter][points]")

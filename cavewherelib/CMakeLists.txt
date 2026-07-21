@@ -220,6 +220,25 @@ qt_add_resources(QT_RESOURCES
 )
 target_sources(cavewherelib PRIVATE ${QT_RESOURCES})
 
+# Embed the user manual (docs/manual) for the in-app Docs viewer. Qt resources
+# are memory-mapped and demand-paged, so the images cost nothing until a page is
+# opened. _site is the website build output and must never be embedded.
+set(cavewhere_manual_dir ${CMAKE_SOURCE_DIR}/docs/manual)
+file(GLOB_RECURSE cavewhere_manual_files CONFIGURE_DEPENDS
+    "${cavewhere_manual_dir}/*.md"
+    "${cavewhere_manual_dir}/*.png"
+    "${cavewhere_manual_dir}/*.jpg"
+    "${cavewhere_manual_dir}/*.gif"
+    "${cavewhere_manual_dir}/*.svg"
+    "${cavewhere_manual_dir}/llms.txt"
+)
+list(FILTER cavewhere_manual_files EXCLUDE REGEX "/_site/")
+qt_add_resources(cavewherelib "cavewhere_manual"
+    PREFIX "/manual"
+    BASE "${cavewhere_manual_dir}"
+    FILES ${cavewhere_manual_files}
+)
+
 # Generate the export header
 generate_export_header(cavewherelib
     BASE_NAME CAVEWHERE_LIB
@@ -267,8 +286,9 @@ file(GLOB cavewhere_QML_FILES CONFIGURE_DEPENDS "qml/*.qml" "qml/*.js")
 
 # Define the list of QML singletons
 set(qml_singletons
-    "qml/UnitDefaults.qml"
     "qml/GlobalShadowTextInput.qml"
+    "qml/NoteToolMode.qml"
+    "qml/ProjectUnits.qml"
     "qml/RootPopupItem.qml"
 	"qml/Theme.qml"
     "qml/SelectableValueGroup.qml"

@@ -106,6 +106,16 @@ TEST_CASE("cwFontSettings should initialize correctly and persist settings", "[c
         CHECK(settings->fontBaseSize() == cwFontSettings::MinFontBaseSize);
     }
 
+    SECTION("systemFontFamily resolves to a concrete OS font") {
+        // The "System" entry stores an empty family; systemFontFamily() must
+        // resolve it to a real, non-empty OS font distinct from the bundled
+        // families so the option is visibly different (cavewhere#595).
+        const QString systemFamily = cwFontSettings::systemFontFamily();
+        CHECK_FALSE(systemFamily.isEmpty());
+        CHECK(systemFamily != QStringLiteral("Yanone Kaffeesatz"));
+        CHECK(systemFamily != QStringLiteral("Fira Sans"));
+    }
+
     SECTION("min and max font size constants") {
         CHECK(settings->minFontBaseSize() == 10);
         CHECK(settings->maxFontBaseSize() == 28);

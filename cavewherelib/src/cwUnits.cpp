@@ -63,6 +63,23 @@ QString cwUnits::unitName(cwUnits::LengthUnit unit)
     }
 }
 
+QString cwUnits::unitName(cwUnits::UnitSystem system)
+{
+    switch(system) {
+    case Metric:
+        return QStringLiteral("Metric");
+    case Imperial:
+        return QStringLiteral("Imperial");
+    default:
+        return QStringLiteral("error");
+    }
+}
+
+QStringList cwUnits::unitSystemNames()
+{
+    return {unitName(Metric), unitName(Imperial)};
+}
+
 QString cwUnits::formatLength(double meters, cwUnits::LengthUnit unit,
                               bool signedValue, int decimals)
 {

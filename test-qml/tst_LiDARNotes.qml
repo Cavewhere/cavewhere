@@ -47,6 +47,13 @@ MainWindowTest {
         }
 
         function cleanup() {
+            //Reset before navigating: _exitCarpetMode() deliberately skips the
+            //bare CARPET state, so a test that fails while parked there would
+            //otherwise leak carpet mode into the next one.
+            let noteGallery = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery")
+            if (noteGallery !== null) {
+                noteGallery.state = ""
+            }
             RootData.pageSelectionModel.currentPageAddress = "View"
         }
 
@@ -142,6 +149,197 @@ MainWindowTest {
                                           let transform = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARTransformEditor")
                                           return transform.visible === true
                               })
+        }
+
+        // Regression test for issue #593: "Can't remove station in LiDAR Note".
+        // Add a station, select it, then press Delete — the station should be
+        // removed. It isn't, because NoteLiDARStationItem's Keys handler
+        // references an undefined `ponitIndex` (typo for `pointIndex`).
+        function test_removeStationWithDelete() {
+            let noteGallery = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery")
+
+            let carpetButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->mainButtonArea->carpetButtonId")
+            mouseClick(carpetButton)
+
+            let addStationButton = null
+            tryVerify(() => {
+                          addStationButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->addScrapStation")
+                          return addStationButton !== null && addStationButton.visible
+                      })
+            mouseClick(addStationButton)
+
+            let addStation = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARAddStationInteraction")
+            mouseClick(addStation, 387, 257)
+
+            let stationNameInput = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARStation_0->coreTextInput")
+            stationNameInput.openEditor();
+            keyClick(54, 0) //6
+            keyClick(16777220, 0) //Return
+
+            let note = noteGallery.currentNoteLiDAR
+            verify(note !== null)
+            tryVerify(() => { return note.count === 1 }, 2000, "One station should be added")
+
+            //Switch to selection mode and select the station
+            let selection = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->selectButton")
+            mouseClick(selection)
+
+            let stationItem = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARStation_0")
+            verify(stationItem !== null)
+
+            mouseClick(stationItem, stationItem.width / 2.0, stationItem.height / 2.0)
+            tryVerify(() => { return stationItem.selected }, 2000, "Station should be selected after clicking it")
+
+            //Selecting the station must give it keyboard focus so Delete reaches it
+            tryVerify(() => { return stationItem.activeFocus }, 2000, "Selected station item should have keyboard focus")
+            keyClick(Qt.Key_Delete)
+
+            tryVerify(() => { return note.count === 0 }, 2000, "Delete should remove the selected LiDAR station")
+        }
+
+        // LiDAR stations must be hidden outside carpet mode so they can't be
+        // accidentally selected, moved, or deleted.
+        function test_stationsHiddenOutsideCarpetMode() {
+            let noteGallery = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery")
+
+            //When the note first opens (not in carpet mode) stations stay hidden
+            let lidarViewer = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId")
+            //compare, not verify — verify(!undefined) would pass if the property were renamed away
+            compare(lidarViewer.editingOverlaysVisible, false, "Stations should be hidden when the note first opens")
+
+            //Enter carpet mode and add a station
+            let carpetButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->mainButtonArea->carpetButtonId")
+            mouseClick(carpetButton)
+
+            let addStationButton = null
+            tryVerify(() => {
+                          addStationButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->addScrapStation")
+                          return addStationButton !== null && addStationButton.visible
+                      })
+            mouseClick(addStationButton)
+
+            let addStation = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARAddStationInteraction")
+            mouseClick(addStation, 387, 257)
+
+            let stationNameInput = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARStation_0->coreTextInput")
+            stationNameInput.openEditor();
+            keyClick(54, 0) //6
+            keyClick(16777220, 0) //Return
+
+            let note = noteGallery.currentNoteLiDAR
+            verify(note !== null, "The LiDAR note should be selected")
+            tryVerify(() => { return note.count === 1 }, 2000, "One station should be added")
+
+            //Hold the station item — it survives (hidden) after leaving carpet mode
+            let stationItem = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARStation_0")
+            verify(stationItem !== null, "The station item should exist")
+
+            //In carpet mode the station is shown for editing
+            tryVerify(() => { return stationItem.visible }, 2000, "Station should be visible in carpet mode")
+
+            //Leave carpet mode — the station must stay in the note but hide from view
+            let back = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->backButton")
+            mouseClick(back)
+
+            tryVerify(() => { return !stationItem.visible }, 2000, "Station should hide after leaving carpet mode")
+            compare(note.count, 1, "Leaving carpet mode must not remove the station")
+
+            //Let the exit transition finish — carpetButtonArea stays visible and on
+            //top while it shrinks, and would otherwise swallow the click below.
+            //Fixed wait per plans/WAIT_AUDIT_PLAN.md (carpet animations).
+            wait(500)
+
+            //Re-entering carpet mode shows the station again
+            mouseClick(carpetButton)
+            tryVerify(() => { return stationItem.visible }, 2000, "Station should reappear when re-entering carpet mode")
+        }
+
+        // Station visibility follows the gallery's CARPET state, which every
+        // carpet sub-tool extends — it is not a list of tool names the viewer
+        // recognises. A sub-tool NoteLiDARItem knows nothing about (here the
+        // bare CARPET state, which the viewer declares no State for) must
+        // still show stations rather than silently hiding them.
+        function test_stationsVisibleInUnrecognizedCarpetState() {
+            let noteGallery = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery")
+            let lidarViewer = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId")
+
+            //This pins the gallery->viewer contract only. Rendered station
+            //visibility is covered by test_stationsHiddenOutsideCarpetMode; it
+            //can't be asserted here without giving the station container an
+            //objectName, which would insert a link into every station's
+            //ObjectFinder chain and break the lookups in the other tests.
+            compare(lidarViewer.editingOverlaysVisible, false, "Stations should start hidden")
+
+            noteGallery.state = "CARPET"
+            //The viewer pulls the gallery's mode verbatim and declares no
+            //CARPET State, so it sits in the base state with every tool off.
+            tryCompare(lidarViewer, "toolMode", "CARPET", 2000,
+                       "The viewer should pull the gallery's mode, recognised or not")
+            tryCompare(lidarViewer, "editingOverlaysVisible", true, 2000,
+                       "Stations should show in any carpet state, not just the ones the viewer names")
+
+            noteGallery.state = ""
+            tryCompare(lidarViewer, "editingOverlaysVisible", false, 2000,
+                       "Stations should hide again on leaving carpet mode")
+        }
+
+        // NoteItem and NoteLiDARItem implement the same editor contract by
+        // convention — QML has no interface to enforce it, so this test is the
+        // enforcement. It walks the whole tool vocabulary and pins both editors
+        // to the gallery's published mode.
+        //
+        // The two sides are computed by independent mechanisms: mode comes from
+        // the denylist ternary on NotesGallery.state, while the overlays come
+        // from the CARPET state and every sub-tool's extend chain. Adding a
+        // sub-tool that forgets `extend: NoteToolMode.carpet` breaks one and
+        // not the other, which is exactly the regression this catches.
+        //
+        // The vocabulary is read off the gallery's own declared States rather
+        // than hardcoded, so a sub-tool added later is covered the day it lands.
+        // A hardcoded list would only ever re-check the states someone already
+        // thought about, which is the opposite of what this guards.
+        function test_editorsAgreeOnOverlayVisibility() {
+            let noteGallery = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery")
+            let noteArea = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea")
+            let lidarViewer = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId")
+
+            verify(noteArea !== null, "The raster note editor should exist")
+            verify(lidarViewer !== null, "The LiDAR note editor should exist")
+
+            //"" is the base state and has no State object, so it is not in
+            //noteGallery.states — add it explicitly.
+            let toolStates = [""]
+            for (let i = 0; i < noteGallery.states.length; i++) {
+                toolStates.push(noteGallery.states[i].name)
+            }
+            verify(toolStates.length > 2, "The gallery should declare its tool states")
+
+            let sawCarpet = false
+            let sawDefault = false
+
+            for (let i = 0; i < toolStates.length; i++) {
+                let toolState = toolStates[i]
+                noteGallery.state = toolState
+
+                let editing = noteGallery.mode === "CARPET"
+                sawCarpet = sawCarpet || editing
+                sawDefault = sawDefault || !editing
+
+                tryCompare(noteArea, "editingOverlaysVisible", editing, 2000,
+                           `noteArea overlays should follow the gallery mode in state "${toolState}"`)
+                tryCompare(lidarViewer, "editingOverlaysVisible", editing, 2000,
+                           `lidarViewer overlays should follow the gallery mode in state "${toolState}"`)
+            }
+
+            //Guards against a vacuous pass: if the overlays were stuck at one
+            //value, or `mode` never reported CARPET, every compare above would
+            //still agree with itself.
+            verify(sawCarpet, "The vocabulary should include a carpet-editing state")
+            verify(sawDefault, "The vocabulary should include a non-editing state")
+
+            //The loop ends parked in whichever state came last; NO_NOTES and the
+            //carpet states hide mainButtonArea, which the next test clicks.
+            noteGallery.state = ""
         }
 
         function test_northInteraction() {

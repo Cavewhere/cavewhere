@@ -37,12 +37,17 @@ public:
     void setGeometry(QVector<QVector3D> pointData);
 
     // Per-vertex visibility, one byte per vertex (255 = visible, 0 = hidden;
-    // both vertices of a shot share the value). Read directly as a vertex
-    // attribute in the shader, which collapses hidden vertices off-clip.
-    // Tracked independently of the geometry so a keyword toggle re-uploads only
-    // the small visibility buffer, not the position buffer. setRangeVisible
-    // flips a contiguous span (one trip's vertices); the manager ANDs
-    // overlapping groups CPU-side. Mirrors cwRenderTexturedItems::setVisible.
+    // both vertices of a shot share the value). setRangeVisible flips a
+    // contiguous span (one trip's vertices); the manager ANDs overlapping
+    // groups CPU-side. Mirrors cwRenderTexturedItems::setItemVisible.
+    //
+    // The buffer is published to the scene visibility store
+    // (cwSceneVisibility::setMask), which is the single consumer-facing truth:
+    // the intersecter reads it per pick query, and cwRHILinePlot uploads the
+    // GPU vertex attribute from the frame's snapshot, gated on the entry's
+    // store version. The store shares this buffer rather than deriving its
+    // own — so it is immutable once published: write to a copy and replace
+    // it, never mutate it in place.
     void setRangeVisible(int start, int count, bool visible);
 
     float maxZValue() const;
@@ -66,6 +71,7 @@ signals:
 
 protected:
     virtual cwRHIObject* createRHIObject() override;
+    void updateVisibility() override;
 
 private:
     struct Data {
@@ -79,14 +85,23 @@ private:
     };
 
     cwTracked<Data> m_data;
-    cwTracked<QVector<quint8>> m_visibility;
+
+    // Authoring copy of the per-vertex mask — the source for setRangeVisible's
+    // range-flip math and for updateVisibility's re-seed. Consumers read the
+    // published store entry, never this member.
+    QVector<quint8> m_visibility;
 
 public:
     // Per-vertex visibility sentinels: one byte per vertex, read as a vertex
-    // attribute in the shader. Shared with cwRHILinePlot (its empty-geometry
+    // attribute in the shader. Shared with cwRHILinePlot (its all-visible
     // fallback must agree on which value means "visible").
     static constexpr quint8 kVisible = 0xFF;
     static constexpr quint8 kHidden = 0x00;
+
+    // The plot is one geometry blob, so it occupies a single sub-slot in both
+    // the intersecter and the visibility store. Shared with cwRHILinePlot's
+    // snapshot reads.
+    static constexpr uint64_t kSubId = 0;
 };
 
 inline float cwRenderLinePlot::maxZValue() const
@@ -106,7 +121,7 @@ inline QVector<QVector3D> cwRenderLinePlot::points() const
 
 inline QVector<quint8> cwRenderLinePlot::visibility() const
 {
-    return m_visibility.value();
+    return m_visibility;
 }
 
 #endif // CWRENDERLINEPLOT_H

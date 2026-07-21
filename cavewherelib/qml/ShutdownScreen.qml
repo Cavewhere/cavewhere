@@ -13,11 +13,6 @@ import cavewherelib
 QQ.Item {
     anchors.fill: parent
 
-    TaskFutureCombineModel {
-        id: taskModelId
-        models: [RootData.taskManagerModel, RootData.futureManagerModel]
-    }
-
     QQ.Rectangle {
         anchors.fill: parent
         color: Theme.background

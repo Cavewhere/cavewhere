@@ -30,6 +30,7 @@ class CAVEWHERE_LIB_EXPORT cwFontSettings : public QObject
     Q_PROPERTY(int fontBaseSize READ fontBaseSize WRITE setFontBaseSize NOTIFY fontBaseSizeChanged)
     Q_PROPERTY(int defaultFontBaseSize READ defaultFontBaseSize NOTIFY fontFamilyChanged)
     Q_PROPERTY(QString fontFamily READ fontFamily WRITE setFontFamily NOTIFY fontFamilyChanged)
+    Q_PROPERTY(QString systemFontFamily READ systemFontFamily CONSTANT)
     Q_PROPERTY(QList<cwFontEntry> fontEntries READ fontEntries CONSTANT)
     Q_PROPERTY(int minFontBaseSize READ minFontBaseSize CONSTANT)
     Q_PROPERTY(int maxFontBaseSize READ maxFontBaseSize CONSTANT)
@@ -50,6 +51,11 @@ public:
 
     QString fontFamily() const;
     void setFontFamily(const QString& family);
+
+    // Resolved family for the "System" option: the OS general-purpose UI font.
+    // Read from QFontDatabase so it reflects the real system font rather than
+    // QApplication::font(), which main.cpp overwrites at runtime.
+    static QString systemFontFamily();
 
     bool isAtDefaults() const;
     Q_INVOKABLE void resetToDefaults();

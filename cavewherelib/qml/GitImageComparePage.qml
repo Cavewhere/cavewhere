@@ -152,6 +152,7 @@ StandardPage {
 
                 QQ.Image {
                     id: beforeImage
+                    objectName: "beforeImage"
                     width: primaryImage.width
                     height: primaryImage.height
                     asynchronous: true

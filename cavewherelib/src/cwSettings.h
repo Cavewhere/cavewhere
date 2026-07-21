@@ -11,6 +11,10 @@ class cwPDFSettings;
 class cwFontSettings;
 class cwRenderingSettings;
 #include "cwSketchSettings.h"
+// Included (not forward-declared) so the unitSettings pointer property has a
+// complete type in the concatenated moc TU, where moc_cwSettings precedes
+// moc_cwUnitSettings alphabetically.
+#include "cwUnitSettings.h"
 #include "cwGlobals.h"
 
 class CAVEWHERE_LIB_EXPORT cwSettings : public QObject
@@ -24,6 +28,7 @@ class CAVEWHERE_LIB_EXPORT cwSettings : public QObject
     Q_PROPERTY(cwFontSettings* fontSettings READ fontSettings CONSTANT)
     Q_PROPERTY(cwSketchSettings* sketchSettings READ sketchSettings CONSTANT)
     Q_PROPERTY(cwRenderingSettings* renderingSettings READ renderingSettings CONSTANT)
+    Q_PROPERTY(cwUnitSettings* unitSettings READ unitSettings CONSTANT)
 
 public:
     cwJobSettings* jobSettings() const;
@@ -31,6 +36,7 @@ public:
     cwFontSettings* fontSettings() const;
     cwSketchSettings* sketchSettings() const;
     cwRenderingSettings* renderingSettings() const;
+    cwUnitSettings* unitSettings() const;
 
     static void initialize();
     static cwSettings* instance();

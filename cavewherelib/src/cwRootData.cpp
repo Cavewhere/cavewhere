@@ -31,6 +31,7 @@
 #include "cwSettings.h"
 #include "cwRemoteServices.h"
 #include "cwDeepLinkHandler.h"
+#include "cwManualIndex.h"
 // #include "cwImageCompressionUpdater.h"
 #include "cwJobSettings.h"
 #include "cwSketchSettings.h"
@@ -204,6 +205,10 @@ cwRootData::cwRootData(QObject *parent) :
     NoteLiDARManager->setRender(RegionSceneManager->items());
 
     PageSelectionModel = new cwPageSelectionModel(this);
+
+    //Index of the embedded user manual for the in-app Docs viewer. Construction
+    //only parses the small llms.txt; article bodies and images load on demand.
+    m_manualIndex = new cwManualIndex(this);
 
     // cwImageCompressionUpdater* imageUpdater = new cwImageCompressionUpdater(this);
     // imageUpdater->setFutureToken(FutureManagerModel->token());

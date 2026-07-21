@@ -137,6 +137,7 @@ QQ.Item {
 
             QC.Menu {
                 id: exportContextMenu
+                objectName: "exportMenu"
 
                 QC.Menu {
                     title: "Survex"
@@ -227,6 +228,7 @@ QQ.Item {
 
             QC.Menu {
                 id: importContextMenu
+                objectName: "importMenu"
 
                 QC.MenuItem {
                     text: "Survex (.svx)"

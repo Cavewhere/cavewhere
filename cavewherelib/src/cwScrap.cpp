@@ -19,6 +19,7 @@
 #include "cwGlobals.h"
 #include "cwTrip.h"
 #include "cwTripCalibration.h"
+#include "cwScale.h"
 #include "cwKeywordModel.h"
 #include "cwPlanScrapViewMatrix.h"
 #include "cwRunningProfileScrapViewMatrix.h"
@@ -34,6 +35,29 @@
 #include <limits>
 #include <cmath>
 #include <functional>
+
+namespace {
+    // Re-express an auto-computed note transform (produced by the calculator in
+    // raw inches) in the given display units, preserving the scale ratio. Shared
+    // by the load path and the live recompute so an auto-scaled scrap keeps its
+    // display units instead of snapping back to inches. A unitless display unit
+    // leaves the value untouched (cwUnits::convert is a no-op through unitless).
+    cwNoteTransformationData scaleInDisplayUnits(cwNoteTransformationData transform,
+                                                 cwUnits::LengthUnit numeratorUnit,
+                                                 cwUnits::LengthUnit denominatorUnit)
+    {
+        const auto currentNumeratorUnit = static_cast<cwUnits::LengthUnit>(transform.scale.scaleNumerator.unit);
+        const auto currentDenominatorUnit = static_cast<cwUnits::LengthUnit>(transform.scale.scaleDenominator.unit);
+
+        transform.scale.scaleNumerator.value = cwUnits::convert(transform.scale.scaleNumerator.value,
+                                                                currentNumeratorUnit, numeratorUnit);
+        transform.scale.scaleNumerator.unit = numeratorUnit;
+        transform.scale.scaleDenominator.value = cwUnits::convert(transform.scale.scaleDenominator.value,
+                                                                  currentDenominatorUnit, denominatorUnit);
+        transform.scale.scaleDenominator.unit = denominatorUnit;
+        return transform;
+    }
+}
 
 cwScrap::cwScrap(QObject *parent) :
     QObject(parent),
@@ -590,7 +614,21 @@ void cwScrap::updateNoteTransformation() {
     averageTransformation.north =
         cwWrapDegrees360(averageTransformation.north - autoDeclinationGridConvergence());
 
+    // The calculator emits the scale in raw inches; re-express it in the units
+    // the scrap currently shows (seeded from the project unit system for new
+    // scraps) so a live recompute doesn't snap the display back to inches. This
+    // is a no-op when those units are already inches — the existing default.
+    averageTransformation = scaleInDisplayUnits(
+        averageTransformation,
+        static_cast<cwUnits::LengthUnit>(NoteTransformation->scaleNumerator()->unit()),
+        static_cast<cwUnits::LengthUnit>(NoteTransformation->scaleDenominator()->unit()));
+
     NoteTransformation->setData(averageTransformation);
+}
+
+void cwScrap::seedDefaultScale(cwUnits::UnitSystem system)
+{
+    NoteTransformation->scaleObject()->setData(cwScale::defaultData(system));
 }
 
 cwTripCalibration* cwScrap::tripCalibration() const {
@@ -1233,20 +1271,13 @@ void cwScrap::setData(const cwScrapData &data)
     setCalculateNoteTransform(data.calculateNoteTransform);
 
     if(calculateNoteTransform()) {
-        cwNoteTransformationData computedTransform = NoteTransformation->data();
-        const auto desiredNumeratorUnit = static_cast<cwUnits::LengthUnit>(data.noteTransformation.scale.scaleNumerator.unit);
-        const auto desiredDenominatorUnit = static_cast<cwUnits::LengthUnit>(data.noteTransformation.scale.scaleDenominator.unit);
-        const auto currentNumeratorUnit = static_cast<cwUnits::LengthUnit>(computedTransform.scale.scaleNumerator.unit);
-        const auto currentDenominatorUnit = static_cast<cwUnits::LengthUnit>(computedTransform.scale.scaleDenominator.unit);
-
-        computedTransform.scale.scaleNumerator.value = cwUnits::convert(computedTransform.scale.scaleNumerator.value,
-                                                                        currentNumeratorUnit,
-                                                                        desiredNumeratorUnit);
-        computedTransform.scale.scaleNumerator.unit = data.noteTransformation.scale.scaleNumerator.unit;
-        computedTransform.scale.scaleDenominator.value = cwUnits::convert(computedTransform.scale.scaleDenominator.value,
-                                                                          currentDenominatorUnit,
-                                                                          desiredDenominatorUnit);
-        computedTransform.scale.scaleDenominator.unit = data.noteTransformation.scale.scaleDenominator.unit;
+        // Re-express the freshly computed transform (raw inches) in the saved
+        // display units, so a loaded auto-scaled scrap keeps the units it was
+        // saved with.
+        const cwNoteTransformationData computedTransform = scaleInDisplayUnits(
+            NoteTransformation->data(),
+            static_cast<cwUnits::LengthUnit>(data.noteTransformation.scale.scaleNumerator.unit),
+            static_cast<cwUnits::LengthUnit>(data.noteTransformation.scale.scaleDenominator.unit));
 
         NoteTransformation->setData(computedTransform);
         return;

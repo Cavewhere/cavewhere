@@ -71,9 +71,16 @@ QtObject {
     readonly property real fontScale: RootData.settings.fontSettings.fontBaseSize / 16.0
     readonly property string fontFamily: RootData.settings.fontSettings.fontFamily !== ""
         ? RootData.settings.fontSettings.fontFamily
-        : Qt.application.font.family
-    readonly property string fontFamilyBody: Qt.application.font.family
+        : RootData.settings.fontSettings.systemFontFamily
+    readonly property string fontFamilyBody: RootData.settings.fontSettings.systemFontFamily
     readonly property string fontFamilyMono: "Courier Prime"
+
+    // A fixed display+body pairing for long-form reading (the manual), independent
+    // of the user-configurable UI chrome font: condensed Yanone Kaffeesatz heads
+    // over a readable Fira Sans body, so the reading typography stays consistent
+    // whichever family the chrome uses.
+    readonly property string fontFamilyHeading: "Yanone Kaffeesatz"
+    readonly property string fontFamilyReading: "Fira Sans"
 
     readonly property int fontSizeCaption: Math.round(11 * fontScale)
     readonly property int fontSizeSmall:   Math.round(12 * fontScale)
@@ -116,6 +123,9 @@ QtObject {
     readonly property int statsPadding: 10
     readonly property int floatingToolbarPadding: 12
     readonly property int infoColumnMaxWidth: 200
+    // The info column grows while its settings are being edited so the wider
+    // coordinate-system editor (mode + UTM zone + hemisphere) isn't clipped.
+    readonly property int infoColumnEditMaxWidth: 320
 
     // Wrap width for help callouts. Font-scaled so a larger base size keeps
     // roughly the same words per line instead of wrapping sooner.

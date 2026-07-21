@@ -47,6 +47,7 @@ class cwCaptureViewport : public cwCaptureItem
     Q_PROPERTY(double cameraPitch READ cameraPitch WRITE setCameraPitch NOTIFY cameraPitchChanged)
     Q_PROPERTY(bool scaleBarVisible READ scaleBarVisible WRITE setScaleBarVisible NOTIFY scaleBarVisibleChanged)
     Q_PROPERTY(bool leadsVisible READ leadsVisible WRITE setLeadsVisible NOTIFY leadsVisibleChanged)
+    Q_PROPERTY(cwUnits::ScaleBarUnitMode scaleBarUnitMode READ scaleBarUnitMode WRITE setScaleBarUnitMode NOTIFY scaleBarUnitModeChanged)
 
 public:
 
@@ -97,6 +98,13 @@ public:
     bool leadsVisible() const;
     void setLeadsVisible(bool visible);
 
+    cwUnits::ScaleBarUnitMode scaleBarUnitMode() const;
+    void setScaleBarUnitMode(cwUnits::ScaleBarUnitMode mode);
+
+    //! The unit system the export scale bar actually draws in: the project's
+    //! system when FollowProject, else the pinned Metric/Imperial choice.
+    cwUnits::UnitSystem effectiveScaleBarUnitSystem() const;
+
 signals:
     void resolutionChanged();
     void viewportChanged();
@@ -110,6 +118,7 @@ signals:
     void positionAfterScaleChanged();
     void scaleBarVisibleChanged();
     void leadsVisibleChanged();
+    void scaleBarUnitModeChanged();
 
     void sceneManagerChanged();
 
@@ -128,6 +137,7 @@ private:
     double CameraPitch; //!<
 
     bool CapturingImages;
+    bool CaptureRequested; //A capture() arrived while one was in flight; re-run when it finishes
     QSize TileSize;
 
     //Scene state information
@@ -137,6 +147,9 @@ private:
     QGraphicsItemGroup* Item; //This is the full resultion item
     cwScaleBarItem* m_scaleBar;
     bool m_scaleBarVisible = true;
+    cwUnits::ScaleBarUnitMode m_scaleBarUnitMode = cwUnits::FollowProject;
+    QMetaObject::Connection m_sceneManagerConnection;
+    QMetaObject::Connection m_regionUnitSystemConnection;
 
     cwProjection tileProjection(QRectF tileViewport,
                                 QSizeF imageSize,
@@ -145,9 +158,13 @@ private:
     QSize calcCroppedTileSize(QSize tileSize, QSize imageSize, int row, int column) const;
 
     void setImageScale(double scale);
+    void finishCapture();
     void updateTransformForItem(QGraphicsItem* item, double scale) const;
     void updateBoundingBox();
     void deleteSceneItems();
+    //! Re-hook the export scale bar to the current project's unitSystemChanged
+    //! (so FollowProject refreshes live, #470/R3) and refresh it now.
+    void updateScaleBarForRegion();
     cwSurveyNetwork buildCenterlineNetwork() const;
     cwCaptureCenterline* createCenterlineItem(QGraphicsItemGroup* parent, double imageScale) const;
     cwCaptureLeads* createLeadsItem(QGraphicsItemGroup* parent, double imageScale) const;
@@ -236,6 +253,10 @@ inline bool cwCaptureViewport::scaleBarVisible() const {
 
 inline bool cwCaptureViewport::leadsVisible() const {
     return m_leadsVisible;
+}
+
+inline cwUnits::ScaleBarUnitMode cwCaptureViewport::scaleBarUnitMode() const {
+    return m_scaleBarUnitMode;
 }
 
 /**

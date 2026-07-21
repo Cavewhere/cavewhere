@@ -18,6 +18,8 @@ using namespace Catch;
 
 // Under test
 #include "cwItem3DRepeater.h"
+#include "cwCamera.h"
+#include "cwSignalSpy.h"
 
 
 
@@ -176,6 +178,26 @@ private:
 //     return QUrl(QStringLiteral("data:text/plain,") + QString::fromLatin1(encoded));
 // }
 
+namespace {
+
+    constexpr int kViewportWidth = 400;
+    constexpr int kViewportHeight = 300;
+
+    //One model unit sideways - moves the projection well past a pixel without
+    //pushing the point off screen
+    constexpr qreal kPanDistance = 1.0;
+
+    //Callers keep the camera on the stack so deleting the QML root can't free it
+    void configureCenteredCamera(cwCamera& camera) {
+        cwProjection projection;
+        projection.setPerspective(55, 1.0, 1.0, 10000);
+
+        camera.setProjection(projection);
+        camera.setViewport(QRect(0, 0, kViewportWidth, kViewportHeight));
+        camera.setViewMatrix(QMatrix4x4()); //Looking down the -z axis
+    }
+}
+
 // ----------------------------
 // Root QML that hosts repeater
 // ----------------------------
@@ -187,10 +209,11 @@ static QObject* makeRootWithRepeater(QQmlEngine& engine) {
         "import QtQuick 2.15\n"
         "import Test 1.0\n"
         "Item {\n"
-        "  width: 400; height: 300\n"
+        "  width: %1; height: %2\n"
+        "  Item { id: container; objectName: \"container\"; anchors.fill: parent }\n"
         "  Item3DRepeater { id: rep; objectName: \"rep\"; anchors.fill: parent }\n"
         "}\n"
-        );
+        ).arg(kViewportWidth).arg(kViewportHeight);
 
     QQmlComponent comp(&engine);
     comp.setData(rootQml.toUtf8(), QUrl());
@@ -226,6 +249,12 @@ static cwItem3DRepeater* findRepeater(QObject* root) {
     auto* rep = qobject_cast<cwItem3DRepeater*>(repObj);
     REQUIRE(rep != nullptr);
     return rep;
+}
+
+static QQuickItem* findContainer(QObject* root) {
+    auto* container = root->findChild<QQuickItem*>(QStringLiteral("container"));
+    REQUIRE(container != nullptr);
+    return container;
 }
 
 static QVector<QQuickItem*> repeaterChildren(cwItem3DRepeater* rep) {
@@ -403,5 +432,150 @@ TEST_CASE("Item3DRepeater updates position when positionRole changes", "[cwItem3
     delete root;
 }
 
+TEST_CASE("Item3DRepeater parents delegates to its own parent by default", "[cwItem3DRepeater]") {
+    QQmlEngine engine;
+    QObject* root = makeRootWithRepeater(engine);
+    auto* rep = findRepeater(root);
+    rep->setComponent(makeDelegateComponent(engine, root));
+
+    REQUIRE(rep->targetItem() == nullptr);
+    REQUIRE(rep->pointParentItem() == rep->parentItem());
+
+    TestListModel model;
+    model.resetWith({
+        { QVector3D(1,2,3), QStringLiteral("A"), 10.0, QVector3D(0,0,0), true }
+    });
+    rep->setModel(&model);
+
+    auto items = repeaterChildren(rep);
+    REQUIRE(items.size() == 1);
+    CHECK(items[0]->parentItem() == rep->parentItem());
+
+    delete root;
+}
+
+TEST_CASE("Item3DRepeater moves delegates into targetItem", "[cwItem3DRepeater]") {
+    QQmlEngine engine;
+    QObject* root = makeRootWithRepeater(engine);
+    auto* rep = findRepeater(root);
+    auto* container = findContainer(root);
+    rep->setComponent(makeDelegateComponent(engine, root));
+
+    TestListModel model;
+    model.resetWith({
+        { QVector3D(1,2,3), QStringLiteral("A"), 10.0, QVector3D(0,0,0), true },
+        { QVector3D(4,5,6), QStringLiteral("B"), 20.0, QVector3D(0,0,0), true }
+    });
+    rep->setModel(&model);
+
+    cwSignalSpy targetSpy(rep, &cwItem3DRepeater::targetItemChanged);
+
+    //Delegates that already exist have to follow the new container
+    rep->setTargetItem(container);
+    REQUIRE(targetSpy.size() == 1);
+    REQUIRE(rep->pointParentItem() == container);
+
+    auto items = repeaterChildren(rep);
+    REQUIRE(items.size() == 2);
+    for(QQuickItem* item : std::as_const(items)) {
+        CHECK(item->parentItem() == container);
+    }
+
+    //Delegates created afterwards go straight into the container
+    model.insertRowAt(2, { QVector3D(7,8,9), QStringLiteral("C"), 30.0, QVector3D(0,0,0), true });
+    items = repeaterChildren(rep);
+    REQUIRE(items.size() == 3);
+    CHECK(items[2]->parentItem() == container);
+
+    //Setting the same target again must not re-notify
+    rep->setTargetItem(container);
+    CHECK(targetSpy.size() == 1);
+
+    delete root;
+}
+
+TEST_CASE("Item3DRepeater hides delegates when targetItem is hidden", "[cwItem3DRepeater]") {
+    QQmlEngine engine;
+    QObject* root = makeRootWithRepeater(engine);
+    auto* rep = findRepeater(root);
+    auto* container = findContainer(root);
+    rep->setComponent(makeDelegateComponent(engine, root));
+    rep->setTargetItem(container);
+
+    cwCamera camera;
+    configureCenteredCamera(camera);
+    rep->setCamera(&camera);
+
+    TestListModel model;
+    model.resetWith({
+        { QVector3D(0, 0, -10), QStringLiteral("A"), 1.0, QVector3D(0,0,0), true },
+        { QVector3D(0, 0, -20), QStringLiteral("B"), 2.0, QVector3D(0,0,0), true }
+    });
+    rep->setModel(&model);
+    rep->setPositionRole(TestListModel::PositionRole);
+
+    auto items = repeaterChildren(rep);
+    REQUIRE(items.size() == 2);
+    REQUIRE(items[0]->isVisible() == true);
+    REQUIRE(items[1]->isVisible() == true);
+
+    container->setVisible(false);
+    CHECK(items[0]->isVisible() == false);
+    CHECK(items[1]->isVisible() == false);
+
+    //Hiding the container must also stop the transform updater, so moving the
+    //camera past points nobody can see costs no reprojection.
+    const QPointF hiddenPosition = items[0]->position();
+    QMatrix4x4 panned;
+    panned.translate(kPanDistance, 0.0, 0.0);
+    camera.setViewMatrix(panned);
+    CHECK(items[0]->position() == hiddenPosition);
+
+    //A row added while hidden must not pop into view
+    model.insertRowAt(2, { QVector3D(0, 0, -30), QStringLiteral("C"), 3.0, QVector3D(0,0,0), true });
+    items = repeaterChildren(rep);
+    REQUIRE(items.size() == 3);
+    CHECK(items[2]->isVisible() == false);
+
+    //Showing the container restarts the updater, which resyncs every point to
+    //where the camera moved to while they were hidden
+    container->setVisible(true);
+    CHECK(items[0]->position() != hiddenPosition);
+    for(QQuickItem* item : std::as_const(items)) {
+        CHECK(item->isVisible() == true);
+    }
+
+    delete root;
+}
+
+TEST_CASE("Item3DRepeater keeps positioning points while it is itself hidden", "[cwItem3DRepeater]") {
+    QQmlEngine engine;
+    QObject* root = makeRootWithRepeater(engine);
+    auto* rep = findRepeater(root);
+    auto* container = findContainer(root);
+    rep->setComponent(makeDelegateComponent(engine, root));
+    rep->setTargetItem(container);
+
+    cwCamera camera;
+    configureCenteredCamera(camera);
+    rep->setCamera(&camera);
+
+    TestListModel model;
+    model.resetWith({
+        { QVector3D(0, 0, -10), QStringLiteral("A"), 1.0, QVector3D(0,0,0), true }
+    });
+    rep->setModel(&model);
+    rep->setPositionRole(TestListModel::PositionRole);
+
+    auto items = repeaterChildren(rep);
+    REQUIRE(items.size() == 1);
+
+    //The repeater is only a controller - its own visibility says nothing about
+    //the points, which live in the container.
+    rep->setVisible(false);
+    CHECK(items[0]->isVisible() == true);
+
+    delete root;
+}
 
 #include "test_cwItem3DRepeater.moc"

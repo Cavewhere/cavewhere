@@ -375,11 +375,12 @@ MainWindowTest {
         }
 
         function selectedLiDARStationUiState() {
+            //Don't filter on visible: stations are only shown in carpet mode, and
+            //these tests assert the synced name/position data, not the tool state.
             let stationItems = findDescendantsWhere(noteLiDARViewer(), (child) => {
                 return child !== null
                        && child.objectName !== undefined
                        && String(child.objectName).startsWith("noteLiDARStation_")
-                       && child.visible === true
             })
 
             stationItems.sort((lhs, rhs) => {

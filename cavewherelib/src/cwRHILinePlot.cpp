@@ -24,10 +24,6 @@ void cwRHILinePlot::initialize(const ResourceUpdateData& data)
     if (m_resourcesInitialized)
         return;
 
-    if (!m_frame && data.renderData.renderer) {
-        m_frame = data.renderData.renderer->frameRenderer();
-    }
-
     initializeResources(data);
     m_resourcesInitialized = true;
 }
@@ -66,9 +62,6 @@ void cwRHILinePlot::synchronize(const SynchronizeData& data)
 
     m_data = linePlot->m_data;
     linePlot->m_data.resetChanged();
-
-    m_visibility = linePlot->m_visibility;
-    linePlot->m_visibility.resetChanged();
 }
 
 void cwRHILinePlot::updateResources(const ResourceUpdateData& data)
@@ -95,70 +88,55 @@ void cwRHILinePlot::updateResources(const ResourceUpdateData& data)
     updateVisibilityBuffer(batch);
 }
 
-// Uploads the per-vertex visibility buffer when it changed. The render object
-// keeps visibility as one byte per vertex; the GPU attribute is a uint (4-byte
-// aligned on every backend), so expand on upload. Only runs on a toggle or a
-// new solve, so the small expansion cost is off the hot path.
+// Uploads the per-vertex visibility attribute from the frame's snapshot of the
+// scene visibility store, gated on the entry's store version so unrelated
+// visibility churn never re-uploads. The store mask is sparse — null means all
+// visible — so that case synthesizes a full buffer (the shader reads one uint
+// per vertex unconditionally). The mask is one byte per vertex; the GPU
+// attribute is a uint (4-byte aligned on every backend), so expand on upload.
+// Only runs on a toggle or a new solve, so the expansion cost is off the hot
+// path. A geometry replacement changes the vertex count and resets the store
+// entry, so both feed the gate.
+//
+// This reads the frame-global snapshot, not a GatherContext: updateResources
+// has no gather context, and the mask buffer is one shared GPU resource — so
+// the per-vertex mask is per-frame by construction. Per-job overlays
+// (cwSceneGatherOptions) hide whole objects only; that split is by design.
 void cwRHILinePlot::updateVisibilityBuffer(QRhiResourceUpdateBatch* batch)
 {
     if (!m_visibilityBuffer) {
         return;
     }
 
-    if (m_visibility.isChanged()) {
-        const QVector<quint8>& flags = m_visibility.value();
+    const cwVisibilitySnapshot& visibility = m_frame->visibilitySnapshot();
+    const cwRenderObjectId id = renderObjectId();
+    const quint64 entryVersion = visibility.entryVersion(id, cwRenderLinePlot::kSubId);
+    const qsizetype vertexCount = m_data.value().points.size();
+    if (entryVersion == m_uploadedMaskVersion
+        && vertexCount == m_uploadedMaskVertexCount) {
+        return;
+    }
 
-        // Expand to the 4-byte-aligned uint attribute the shader reads; the
-        // range constructor widens each quint8 to quint32.
-        const QVector<quint32> expanded(flags.cbegin(), flags.cend());
+    const QVector<quint8>* mask = visibility.mask(id, cwRenderLinePlot::kSubId);
+    const QVector<quint32> expanded = mask
+        ? QVector<quint32>(mask->cbegin(), mask->cend())
+        : QVector<quint32>(vertexCount, cwRenderLinePlot::kVisible);
 
-        const int bufferSize = expanded.size() * sizeof(quint32);
-        if (bufferSize > 0) {
-            if (m_visibilityBuffer->size() != bufferSize) {
-                m_visibilityBuffer->setSize(bufferSize);
-                m_visibilityBuffer->create();
-            }
-            batch->updateDynamicBuffer(m_visibilityBuffer, 0, bufferSize, expanded.constData());
+    const int bufferSize = expanded.size() * int(sizeof(quint32));
+    if (bufferSize > 0) {
+        if (m_visibilityBuffer->size() != bufferSize) {
+            m_visibilityBuffer->setSize(bufferSize);
+            m_visibilityBuffer->create();
         }
+        batch->updateDynamicBuffer(m_visibilityBuffer, 0, bufferSize, expanded.constData());
     }
 
-    m_visibility.resetChanged();
-}
-
-void cwRHILinePlot::render(const RenderData& data)
-{
-    const int vertexCount = m_data.value().points.size();
-    if (vertexCount == 0) {
-        return;
-    }
-
-    if (!ensurePipeline(data)) {
-        return;
-    }
-
-    if (!m_pipelineRecord || !m_pipelineRecord->pipeline) {
-        return;
-    }
-
-    data.cb->setGraphicsPipeline(m_pipelineRecord->pipeline);
-    // The global camera UBO at binding 0 is dynamic-offset; this legacy path only
-    // ever draws the live frame, so it reads slot 0 (offset 0).
-    const QRhiCommandBuffer::DynamicOffset cameraOffset(0, 0);
-    data.cb->setShaderResources(m_srb, 1, &cameraOffset);
-    const QRhiCommandBuffer::VertexInput vertexInputs[2] = {
-        QRhiCommandBuffer::VertexInput(m_vertexBuffer, 0),
-        QRhiCommandBuffer::VertexInput(m_visibilityBuffer, 0)
-    };
-    data.cb->setVertexInput(0, 2, vertexInputs);
-    data.cb->draw(vertexCount);
+    m_uploadedMaskVersion = entryVersion;
+    m_uploadedMaskVertexCount = vertexCount;
 }
 
 bool cwRHILinePlot::gather(const GatherContext& context, QVector<PipelineBatch>& batches)
 {
-    if (!isVisible()) {
-        return false;
-    }
-
     if (context.renderPass != RenderPass::Opaque) {
         return false;
     }
@@ -201,11 +179,7 @@ bool cwRHILinePlot::ensurePipeline(const RenderData& data)
         return false;
     }
 
-    if (!m_frame && data.renderer) {
-        m_frame = data.renderer->frameRenderer();
-    }
-
-    if (!m_frame || !data.renderer) {
+    if (!data.renderer) {
         return false;
     }
 

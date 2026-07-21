@@ -20,46 +20,81 @@ QQ.Item {
     property real maxTotalWidth: itemId.parent.width * 0.75
     property real minTotalWidth: itemId.parent.width * 0.2
 
-    QQ.QtObject {
-        id: privateData
-        property real meterPerCell: {
-            if(itemId.visible) {
-                //Go through the exponents
-                var bestCellSizeWidth = 0.0 //In pixels
-                var labelIncrement = 0.0 //In meters
-                var nearestToBest = 10000.0 //In pixels
+    // A session-only, in-memory unit choice for THIS bar, set from the right-click
+    // menu. FollowProject tracks the project (or app default) live;
+    // ForceMetric/ForceImperial pin just this bar without writing the project.
+    // Units.ScaleBarUnitMode is the shared enum the export bar (cwCaptureViewport)
+    // uses too.
+    property int unitMode: Units.FollowProject
 
-                var numberOfLargeCells = 5; //Number of cells in the scale bar
-                var increments = [1.0, 2.5, 5.0];
+    // The unit system the bar reads in, resolved from unitMode. The concrete
+    // unit (m/km or ft/mi) is then chosen by magnitude.
+    readonly property int unitSystem: {
+        switch (itemId.unitMode) {
+        case Units.ForceMetric:
+            return Units.Metric;
+        case Units.ForceImperial:
+            return Units.Imperial;
+        default:
+            return ProjectUnits.unitSystem;
+        }
+    }
 
-                var bestWidth = itemId.maxTotalWidth - itemId.minTotalWidth / 2.0;
+    QC.Menu {
+        id: unitMenuId
 
-                //Search for the best label incement
-                for(var i = 0; i < increments.length; i++) {
-                    for(var ii = -5; ii < 10; ii++) {
-                        var currentLabelIncrement = increments[i] * Math.pow(10.0, ii); //In meters
-                        var currentCellWidth = currentLabelIncrement * itemId.camera.pixelsPerMeter;
-                        var currentTotalWidth = currentCellWidth * numberOfLargeCells;
+        // One item per unit system. The item matching the project default is
+        // annotated and, when chosen, returns the bar to following the project
+        // (live) rather than pinning; the other item pins its system for this
+        // bar. The item for the unit already shown is disabled (a no-op).
+        QC.MenuItem {
+            objectName: "scaleBarMetricMenuItem"
+            readonly property bool isProjectDefault: ProjectUnits.unitSystem === Units.Metric
 
-                        if(currentTotalWidth >= itemId.minTotalWidth && currentTotalWidth <= itemId.maxTotalWidth) {
-                            var currentNearest = Math.abs(bestWidth - currentTotalWidth);
-                            if(currentNearest < nearestToBest) {
-                                bestCellSizeWidth = currentCellWidth;
-                                labelIncrement = currentLabelIncrement;
-                                nearestToBest = currentNearest;
-                            }
-                        }
-                    }
-                }
-
-                return labelIncrement;
-            }
-
-            return 10.0;
+            text: Units.unitSystemName(Units.Metric)
+                  + (isProjectDefault ? " - " + qsTr("Project Default") : "")
+            enabled: itemId.unitSystem !== Units.Metric
+            onTriggered: itemId.unitMode = isProjectDefault
+                ? Units.FollowProject
+                : Units.ForceMetric
         }
 
+        QC.MenuItem {
+            objectName: "scaleBarImperialMenuItem"
+            readonly property bool isProjectDefault: ProjectUnits.unitSystem === Units.Imperial
+
+            text: Units.unitSystemName(Units.Imperial)
+                  + (isProjectDefault ? " - " + qsTr("Project Default") : "")
+            enabled: itemId.unitSystem !== Units.Imperial
+            onTriggered: itemId.unitMode = isProjectDefault
+                ? Units.FollowProject
+                : Units.ForceImperial
+        }
+    }
+
+    QQ.QtObject {
+        id: privateData
+
+        // The round per-cell increment and its unit, chosen by the shared C++
+        // producer so this on-screen bar rounds to the same nice numbers as the
+        // printed export bar (cwScaleBarItem). The whole bar spans one
+        // subdivided small cell plus largeGrid.columns large cells.
+        readonly property scaleBarSelection selection: ScaleBarSelector.selectViewScale(
+            itemId.camera.pixelsPerMeter,
+            itemId.minTotalWidth,
+            itemId.maxTotalWidth,
+            1 + largeGrid.columns,
+            itemId.unitSystem)
+
+        property int displayUnit: selection.unit
+        property real metersPerUnit: Units.convertLength(1.0, displayUnit, Units.Meters)
+        property real pixelsPerUnit: itemId.camera.pixelsPerMeter * metersPerUnit
+        property string unitName: Units.lengthUnitName(displayUnit)
+
+        property real unitsPerCell: selection.value
+
         property real smallCellWidth: cellWidth / smallGrid.columns
-        property real cellWidth: itemId.camera.pixelsPerMeter * meterPerCell
+        property real cellWidth: pixelsPerUnit * unitsPerCell
         property real cellHeight: 8
     }
 
@@ -77,7 +112,7 @@ QQ.Item {
             radius: 3
 
             QC.Label {
-                text: rect2Id.index * privateData.meterPerCell / 2
+                text: rect2Id.index * privateData.unitsPerCell / 2
                 anchors.centerIn: parent
 
                 onTextChanged:  {
@@ -108,9 +143,9 @@ QQ.Item {
 
             QC.Label {
                 text: {
-                    var text = (rect1Id.index + 1) * privateData.meterPerCell;
+                    var text = (rect1Id.index + 1) * privateData.unitsPerCell;
                     if(rect1Id.index == 4) {
-                        return text + "m";
+                        return text + privateData.unitName;
                     }
                     return text
                 }
@@ -184,5 +219,11 @@ QQ.Item {
 
         border.width: 1
         color: Theme.transparent
+
+        QQ.TapHandler {
+            objectName: "scaleBarUnitTapHandler"
+            acceptedButtons: Qt.RightButton
+            onTapped: unitMenuId.popup()
+        }
     }
 }

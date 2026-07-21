@@ -199,10 +199,36 @@ MainWindowTest {
 
             let noteItem = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea")
 
-            tryVerify(() => { return noteItem.scrapsVisible === false });
+            tryVerify(() => { return noteItem.editingOverlaysVisible === false });
 
             let scrapView = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea->scrapViewId")
             tryVerify(() => { return scrapView.visible === false });
+        }
+
+        // NoteItem activates and tears down its tools from transitions, and QML
+        // runs no transition for a state name it declares no State for — the
+        // unknown name just sticks. So a gallery mode NoteItem doesn't handle
+        // has to be caught by the catch-all transition, or the previous tool
+        // stays live with its selection intact. ADD-SKETCH-WALL is such a mode:
+        // it extends CARPET, so the gallery stays in carpet mode and nothing
+        // else resets the editor.
+        function test_unhandledToolModeTearsDown() {
+            addScrapOutline();
+
+            let noteGallery = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery")
+            let noteArea = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea")
+            let scrapView = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea->scrapViewId")
+
+            noteGallery.state = "SELECT"
+            tryVerify(() => { return scrapView.selectedScrapItem !== null }, 2000,
+                      "A scrap should still be selected while a tool is active")
+
+            noteGallery.state = "ADD-SKETCH-WALL"
+
+            compare(noteArea.state, "ADD-SKETCH-WALL",
+                    "An unhandled mode should stick rather than revert to the base state")
+            tryVerify(() => { return scrapView.selectedScrapItem === null }, 2000,
+                      "The catch-all transition should tear down the tool for a mode NoteItem does not handle")
         }
 
         function test_addLeadInteraction() {
