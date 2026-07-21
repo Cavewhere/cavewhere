@@ -686,7 +686,7 @@ QList< QPair <cwNoteStation, cwNoteStation> > cwScrap::noteShots() const {
     if(parentNote() == nullptr || parentNote()->parentTrip() == nullptr) { return {}; }
     if(parentCave() == nullptr) { return {}; }
 
-    return cwNoteTransformCalculator::noteShots(stations(), parentCave()->network());
+    return cwNoteTransformCalculator::noteShots(stations(), parentTrip()->solvedNetwork());
 }
 
 cwNoteTransformCalculator::ProfileTransform cwScrap::profileTransform() const
@@ -697,7 +697,7 @@ cwNoteTransformCalculator::ProfileTransform cwScrap::profileTransform() const
                                                        QMatrix4x4(),
                                                        viewMatrix()->matrix(), //View matrix
                                                        parentNote()->metersOnPageMatrix(), //Scaling matrix
-                                                       parentCave()->stationPositionLookup()};
+                                                       parentTrip()->solvedStationPositions()};
 }
 
 /**
@@ -842,8 +842,7 @@ QString cwScrap::guessNeighborStationName(const cwNoteStation& previousStation, 
     if(parentNote()->parentTrip() == nullptr) { return QString(); }
     if(parentNote()->parentTrip()->parentCave() == nullptr) { return QString(); }
 
-    cwCave* parentCave = parentNote()->parentTrip()->parentCave();
-    cwStationPositionLookup stationLookup = parentCave->stationPositionLookup();
+    cwStationPositionLookup stationLookup = parentNote()->parentTrip()->solvedStationPositions();
 
     auto neigborStations = allNeighborStations(previousStation.name());
 
@@ -936,11 +935,14 @@ QString cwScrap::guessNeighborStationName(const cwNoteStation& previousStation, 
         break;
     }
 
-    //Calculate the error each station
-    foreach(cwStation station, neigborStations) {
-        if(stationLookup.hasPosition(station.name())) {
-            QVector3D stationPosition = stationLookup.position(station.name());
-            calcError(station.name(), stationPosition);
+    //Calculate the error each station. Iterate the neighbor names as raw
+    //strings, not cwStation: an external trip's tails carry dots (simple.a2),
+    //which cwStation's name validator rejects — wrapping them would blank the
+    //name. Native names are unaffected.
+    for(const QString& neighborName : std::as_const(neigborStations)) {
+        if(stationLookup.hasPosition(neighborName)) {
+            QVector3D stationPosition = stationLookup.position(neighborName);
+            calcError(neighborName, stationPosition);
         }
     }
 
@@ -1210,17 +1212,10 @@ bool cwScrap::pointOnLine(QLineF line, QPointF point) {
  */
 QStringList cwScrap::allNeighborStations(const QString &stationName) const
 {
-    //If this is slow, could replace this with cwSurveyNetwork found in the parent cave
-    //The survey network is calculate in a seperate thread
-    return parentCave()->network().neighbors(stationName);
-
-//Below is a slower but doesn't require the threading to run
-//    QSet<cwStation> neigborStations;
-//    foreach(cwTrip* trip, parentCave()->trips()) {
-//        QSet<cwStation> tripStations = trip->neighboringStations(stationName);
-//        neigborStations.unite(tripStations);
-//    }
-    //    return neigborStations;
+    //solvedNetwork() speaks this trip's local namespace, so an external trip's
+    //bare note-station names resolve and the returned neighbors come back as
+    //local tails (no scope leaks out to the caller).
+    return parentTrip()->solvedNetwork().neighbors(stationName);
 }
 
 /**

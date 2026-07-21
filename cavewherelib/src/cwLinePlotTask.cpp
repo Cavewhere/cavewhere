@@ -631,7 +631,12 @@ private:
 
     void updateCaveNetworks(cwLinePlotTask::LinePlotResultData& result)
     {
-        auto createNetwork = [](cwCave* cave) {
+        // The solved region network carries every scope's topology, including
+        // externally-attached trips that own no cwSurveyChunk. Keyed
+        // cave_<hex>.<tail> (native) and cave_<hex>.trip_<hex>.<tail> (external).
+        const cwSurveyNetwork regionNetwork = result.regionNetwork();
+
+        auto createNetwork = [&regionNetwork](cwCave* cave) {
             cwSurveyNetwork network;
 
             for (cwTrip* trip : cave->trips()) {
@@ -640,6 +645,31 @@ private:
                     for (int i = 0; i < stations.size() - 1; i++) {
                         network.addShot(stations.at(i).name(), stations.at(i + 1).name());
                     }
+                }
+            }
+
+            // An externally-attached trip owns no chunk, so the loop above adds
+            // none of its adjacency. Its solved topology exists only in the
+            // region network; copy each edge that touches a trip scope into the
+            // cave network under the cave-local scope (trip_<hex>.<tail>, the
+            // same keying splitLookupByCave gives the position lookup) so the
+            // note-editing sites can resolve external neighbors. Native-to-native
+            // edges are left to the chunk loop above.
+            const QString cavePrefix = cwLinePlotTask::cavernCaveNameFor(cave->id())
+                    + QLatin1Char('.');
+            for (const QString& scopedStation : regionNetwork.stations()) {
+                if (!scopedStation.startsWith(cavePrefix)) {
+                    continue;
+                }
+                const QString caveLocalStation = scopedStation.mid(cavePrefix.size());
+                if (!caveLocalStation.startsWith(kTripNamePrefix)) {
+                    continue; //native station, already covered by the chunk loop
+                }
+                for (const QString& scopedNeighbor : regionNetwork.neighbors(scopedStation)) {
+                    const QString caveLocalNeighbor = scopedNeighbor.startsWith(cavePrefix)
+                            ? scopedNeighbor.mid(cavePrefix.size())
+                            : scopedNeighbor;
+                    network.addShot(caveLocalStation, caveLocalNeighbor);
                 }
             }
 

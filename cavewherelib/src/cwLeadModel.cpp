@@ -481,8 +481,14 @@ QPair<cwScrap *, int> cwLeadModel::scrapAndIndex(QModelIndex index) const
  */
 double cwLeadModel::leadDistance(cwScrap *scrap, int leadIndex) const
 {
-    if(cave()->stationPositionLookup().hasPosition(referanceStation())) {
-        QVector3D stationPosition = cave()->stationPositionLookup().position(referanceStation());
+    cwTrip* trip = scrap->parentTrip();
+    if(trip == nullptr) { return 0.0; }
+
+    //Resolve the reference station in the scrap trip's local namespace so an
+    //externally-attached trip's tail-only names resolve.
+    const cwStationPositionLookup lookup = trip->solvedStationPositions();
+    if(lookup.hasPosition(referanceStation())) {
+        QVector3D stationPosition = lookup.position(referanceStation());
         QVector3D leadPosition = scrap->leadData(cwScrap::LeadPosition, leadIndex).value<QVector3D>();
         QVector3D diff = stationPosition - leadPosition;
         return diff.length();

@@ -18,6 +18,7 @@
 #include "cwData.h"
 #include "cwKeywordModel.h"
 #include "cwNameUtils.h"
+#include "cwLinePlotTask.h"
 
 //Qt includes
 #include <QDebug>
@@ -400,6 +401,70 @@ QSet<cwStation> cwTrip::neighboringStations(QString stationName) const {
         neighbors.unite(chunkNeighbors);
     }
     return neighbors;
+}
+
+cwStationPositionLookup cwTrip::solvedStationPositions() const {
+    cwCave* cave = parentCave();
+    if(cave == nullptr) {
+        return cwStationPositionLookup();
+    }
+
+    cwStationPositionLookup lookup = cave->stationPositionLookup();
+    if(m_externalCenterline.isEmpty()) {
+        //Native trip: the cave keys already speak this trip's namespace.
+        return lookup;
+    }
+
+    //External trip: the cave keys retain the trip scope (trip_<hex>.<tail>) but
+    //note/scrap/lead stations carry only the tail. Add a stripped-tail alias for
+    //each scoped entry so bare names resolve, keeping the full cave data so a
+    //cross-trip tie-in neighbor still carries a position.
+    const QString scopePrefix = cwLinePlotTask::cavernTripNameFor(id()) + QLatin1Char('.');
+    const QMap<QString, QVector3D> positions = lookup.positions();
+    for(auto it = positions.constBegin(); it != positions.constEnd(); ++it) {
+        if(it.key().startsWith(scopePrefix)) {
+            lookup.setPosition(it.key().mid(scopePrefix.size()), it.value());
+        }
+    }
+    return lookup;
+}
+
+cwSurveyNetwork cwTrip::solvedNetwork() const {
+    cwCave* cave = parentCave();
+    if(cave == nullptr) {
+        return cwSurveyNetwork();
+    }
+
+    cwSurveyNetwork network = cave->network();
+    if(m_externalCenterline.isEmpty()) {
+        //Native trip: pass through, cross-trip junction neighbors intact.
+        return network;
+    }
+
+    //External trip: alias each scoped station to its stripped tail so bare note
+    //names resolve. Neighbors that live in another scope (native tie-ins) keep
+    //their names so their positions still resolve in solvedStationPositions().
+    const QString scopePrefix = cwLinePlotTask::cavernTripNameFor(id()) + QLatin1Char('.');
+    const QStringList stations = network.stations();
+    for(const QString& station : stations) {
+        if(!station.startsWith(scopePrefix)) {
+            continue;
+        }
+
+        const QString localStation = station.mid(scopePrefix.size());
+        const QStringList neighbors = network.neighbors(station);
+        for(const QString& neighbor : neighbors) {
+            const QString localNeighbor = neighbor.startsWith(scopePrefix)
+                    ? neighbor.mid(scopePrefix.size())
+                    : neighbor;
+            network.addShot(localStation, localNeighbor);
+        }
+
+        if(network.hasPosition(station)) {
+            network.setPosition(localStation, network.position(station));
+        }
+    }
+    return network;
 }
 
 /**

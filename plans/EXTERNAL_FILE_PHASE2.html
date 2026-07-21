@@ -2797,6 +2797,22 @@ public:
     Now six consumers with three encodings; the move is still pure but
     should happen before the next consumer. Folds naturally into the
     uniform external-station accessor entry below.</em>
+    <em><strong>Update 2026-07-21 (B5 Commit 1 review):</strong> the accessor
+    fix <strong>added the next consumer anyway</strong> &mdash;
+    <code>cwTrip::solvedStationPositions()</code>/<code>solvedNetwork()</code>
+    hand-slice <code>trip_&lt;hex&gt;.</code>, <code>updateCaveNetworks</code>
+    hand-slices <code>cave_&lt;hex&gt;.</code>, and (worst instance yet)
+    <code>cwTrip.cpp</code> now <code>#include</code>s
+    <code>cwLinePlotTask.h</code> purely to borrow <code>cavernTripNameFor</code>
+    &mdash; a <em>data-model</em> class taking a dependency on a
+    <em>task/worker</em> class, and <code>cwTrip</code> sits upstream of nearly
+    everything. The "before the next consumer" gate is now overtaken by events;
+    treat centralization (the encode/decode pair, so the main-thread accessors
+    and the worker encoder provably agree) as the required first step of Commit
+    2, not an optional follow-up. Two concrete moves: (R1) put the scope
+    encode/decode grammar in one home; (R2) relocate
+    <code>cavernCaveNameFor</code>/<code>cavernTripNameFor</code> to a low-level
+    naming header so no data-model class includes a Task header.</em>
   </li>
   <li>
     <strong>State-managed pane width in <code>TripPage</code></strong>
@@ -2870,6 +2886,12 @@ public:
     same root cause reaches the auto-transform / station-guide /
     name-autocomplete / lead-distance paths, which resolve tail-only
     note-station names against the scope-prefixed cave lookup/network).</em>
+    <em>Update 2026-07-21 (B5 scheduling): this accessor is now committed
+    work, not a someday item &mdash; it lands as
+    <code>cwTrip::solvedStationPositions()</code> /
+    <code>solvedNetwork()</code> in <a href="#bug-b5">B5 Commit 1</a> (fixing
+    the note-editing gap), and B5 Commit 2 folds the B1/B1b/B4 scans onto it
+    and deletes them. Retire this entry when B5 Commit 2 lands.</em>
     Pairs with the <code>externallyBacked</code> predicate above and the
     <code>cwCavernNaming</code> move. Blast radius: <code>cwTrip</code>
     API + ~4 consumers.
@@ -3236,6 +3258,14 @@ public:
   its own commit.
 </p>
 <p><strong>Sites (all main-thread, against the live cave lookup):</strong></p>
+<p><em>Superseded 2026-07-21 (B5 Commit 1): the per-site prescriptions in the
+  bullets below &mdash; "strip the return back to the tail" (autocomplete) and
+  "switch to the network <em>and</em> scope" (guide overlay) &mdash; describe the
+  rejected per-site-scoping approach. The <strong>Resolution</strong> and
+  <strong>Commit 1</strong> sections that follow are authoritative: every site
+  routes through <code>cwTrip::solvedStationPositions()</code> /
+  <code>solvedNetwork()</code>, which speak the trip's local namespace, so no
+  site strips or scopes anything. Kept below as the original diagnosis.</em></p>
 <ul>
   <li>
     <strong>Auto-transform (scrap):</strong>
@@ -3276,15 +3306,140 @@ public:
   </li>
 </ul>
 <p>
-  <strong>Implementation choice at commit time:</strong> either per-site
-  scoping (reusing <code>cwLinePlotTask::scopedStationName</code>, with the two
-  traps above handled), or &mdash; cleaner &mdash; route these sites through the
-  &sect;15 <strong>uniform <code>cwTrip::solvedStations()</code> accessor</strong>,
-  which resolves the same root cause for the whole B1/B1b/B4/B5 family at once.
-  Each fixed site needs its own test (auto-transform produces a non-identity
-  transform; guide lines draw; autocomplete returns the tail name; lead
-  distance is non-zero) &mdash; all for an externally-attached trip.
+  <strong>Resolution (decided 2026-07-21): the accessor route, split into two
+  commits.</strong> Rather than sprinkle <code>scopedStationName</code> across
+  six editing sites (two of which then need extra strip-back logic), give
+  <code>cwTrip</code> its solved centerline <em>in the trip's own local
+  namespace</em> and point every consumer at it. The root cause &mdash; note
+  names are tails, the cave lookup/network is scoped &mdash; is translated once,
+  centrally, so no call site mentions scope again. This is the &sect;15
+  <code>solvedStations()</code> idea, realized as two value-returning accessors
+  that hand back <em>the same types the sites already consume</em>:
 </p>
+<pre><code>cwStationPositionLookup cwTrip::solvedStationPositions() const;
+cwSurveyNetwork         cwTrip::solvedNetwork() const;</code></pre>
+<ul>
+  <li>
+    <strong>Native trip</strong> &rarr; returns
+    <code>parentCave()-&gt;stationPositionLookup()</code> /
+    <code>network()</code> <strong>unchanged</strong>. Byte-identical behavior on
+    the common path (provably safe refactor); cross-trip junction neighbors stay
+    intact.
+  </li>
+  <li>
+    <strong>External trip</strong> &rarr; builds the view once from the
+    <em>full</em> cave lookup/network (so tie-in neighbors in other trips still
+    resolve) and adds stripped-tail aliases for this trip's scoped entries, so
+    bare note names resolve.
+  </li>
+</ul>
+
+<p><strong>Commit 1 &mdash; B5 fix via the accessor (this commit).</strong>
+  Add the two accessors to <code>cwTrip</code>; convert the six editing sites to
+  call them and drop all scope/external awareness:</p>
+<ul>
+  <li><code>noteShots</code> &rarr; <code>trip-&gt;solvedNetwork()</code>.</li>
+  <li><code>profileTransform</code> &rarr; <code>trip-&gt;solvedStationPositions()</code>.</li>
+  <li><code>guessNeighborStationName</code>/<code>allNeighborStations</code> &rarr;
+    both accessors. <strong>Output-leak trap dissolves</strong>: the returned
+    name is already a local tail because the view speaks local &mdash; no
+    strip-back.</li>
+  <li><code>updateShotLines</code> &rarr; switch from chunk-based
+    <code>trip-&gt;neighboringStations()</code> to
+    <code>trip-&gt;solvedNetwork().neighbors()</code>. <strong>Redesign trap
+    dissolves</strong>, and this also closes a latent <em>native</em> gap (chunk
+    neighbors miss cross-trip junctions the network has).</li>
+  <li><code>leadDistance</code> &rarr; <code>trip-&gt;solvedStationPositions()</code>.</li>
+  <li><code>cwNoteLiDAR</code> auto-north &rarr; rides the converted
+    <code>noteShots</code> path.</li>
+</ul>
+<p>
+  <strong>Tests delivered (Commit 1):</strong> a unit test for the accessors
+  themselves (native = pass-through identity; external = local-tail resolution +
+  local-tail neighbors + scoped-key superset) and a real-editing-site test
+  &mdash; <code>guessNeighborStationName</code> against an externally-attached
+  trip, a genuine red&rarr;green that exercises <em>both</em> accessors
+  (<code>solvedNetwork().neighbors()</code> for the candidate list and
+  <code>solvedStationPositions().hasPosition()/position()</code> for the error
+  fit) and asserts the returned name is the bare tail.
+</p>
+<p>
+  <strong>Per-site tests for the other three sites are deferred, not skipped by
+  choice.</strong> The original plan promised a test per site (non-identity
+  auto-transform; guide lines draw; lead distance non-zero). On implementation
+  each of those seams turned out to be either <em>private</em>
+  (<code>cwScrap::noteShots()</code>/<code>profileTransform()</code>;
+  <code>cwScrapStationView::updateShotLines()</code>/<code>ShotLines</code>;
+  <code>cwLeadModel::leadDistance()</code>) or reachable only through a heavy
+  fixture (a note image supplying <code>metersOnPageMatrix</code> for a
+  non-degenerate transform; triangulation-computed <code>LeadPosition</code> for
+  a non-zero lead distance; a live <code>QQuickItem</code> view for guide-line
+  geometry). Testing them at the public surface would require adding
+  <code>*ForTesting</code> API, which CLAUDE.md forbids. All three are thin
+  consumers of the same two accessors the delivered tests already cover, so the
+  regression risk is a one-line revert of the accessor call &mdash; caught by
+  the accessor unit test. Full end-to-end coverage lands with the same
+  heavy-fixture bucket as the deferred B4 end-to-end render test (&sect;16 B4).
+</p>
+
+<p><strong>Commit 2 &mdash; unify (next commit).</strong> Re-point the already-green
+  B1/B1b/B4 paths onto the same accessors and delete the bespoke prefix-scan
+  code they carry today:</p>
+<ul>
+  <li><code>cwLinePlotGeometry::generate()</code> (B1) &mdash; scope-prefix scan of
+    the cave lookup.</li>
+  <li><code>cwLinePlotLabelView::labels()</code> (B1b) &mdash; prefix scan +
+    tail relabel.</li>
+  <li><code>cwLinePlotTask::StationTripScrapLookup</code> and the L2 morph
+    boundary (<code>cwScrapManager::mapScrapToTriangulateInData</code>,
+    <code>cwNoteLiDARManager::mapNoteToInData</code>) &mdash; B4's
+    <code>scopedStationName</code> applications. NB: the L1 trigger runs on the
+    <em>worker</em>-owned <code>cwCavingRegion</code> snapshot, so any accessor it
+    uses must stay a pure value read with no main-thread reach &mdash; verify
+    before folding it in.</li>
+</ul>
+<p>
+  Pure refactor, no behavior change; kept out of Commit 1 so the B5 fix stays
+  reviewable and the accessor proves itself on B5 first. When it lands, retire
+  the &sect;15 <code>solvedStations()</code> follow-up entry &mdash; this
+  <em>is</em> that work.
+</p>
+<p>
+  <strong>Known edge (document, don't block):</strong> an external tail that
+  literally collides with a native station name elsewhere in the cave resolves
+  ambiguously; and <code>solvedStationPositions()</code> rebuilds per call for
+  external trips &mdash; memoize only if a profiler demands it.
+</p>
+<p>
+  <strong>What Commit 1 actually uncovered (2026-07-21) &mdash; the plan's
+  "just re-key the names" framing was incomplete on two counts:</strong>
+</p>
+<ol>
+  <li>
+    <strong>The cave <em>network</em> had no external adjacency at all.</strong>
+    <code>splitLookupByCave</code> plumbs external <em>positions</em> into
+    <code>cave-&gt;stationPositionLookup()</code> (keyed trip_&lt;hex&gt;.tail),
+    but <code>updateCaveNetworks</code> rebuilt <code>cave-&gt;network()</code>
+    <em>from chunks only</em> &mdash; a chunk-less external trip contributed zero
+    edges. So the network-dependent sites (noteShots, guessNeighborStationName,
+    updateShotLines) had nothing to resolve, re-keying or not. Fix: mirror
+    <code>splitLookupByCave</code> for the network &mdash;
+    <code>updateCaveNetworks</code> now copies each trip-scoped edge from the
+    solved region network into the cave network under the cave-local scope.
+    Native-to-native edges stay chunk-derived (no native behavior change).
+  </li>
+  <li>
+    <strong>The <code>cwStation</code> name validator blanks dotted tails.</strong>
+    <code>guessNeighborStationName</code> and <code>updateShotLines</code> wrapped
+    neighbor names in <code>cwStation</code>, whose ctor runs
+    <code>cwStationValidator</code>; an external tail (<code>simple.a2</code>)
+    contains a dot the validator rejects, so the name silently blanked and the
+    site found nothing even with correct data. Fixed by iterating the neighbor
+    names as raw <code>QString</code> (native names unaffected). Any future site
+    that round-trips an external station name through <code>cwStation</code> hits
+    the same trap.
+  </li>
+</ol>
 
 <h3 id="bug-b2">B2 &mdash; Trip page layout for attached survey data (split into testable commits)</h3>
 

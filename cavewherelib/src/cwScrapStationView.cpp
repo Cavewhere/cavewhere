@@ -168,14 +168,17 @@ void cwScrapStationView::updateShotLines() {
     cwCave* cave = trip->parentCave();
     if(cave == nullptr) { return; }
 
-    cwStationPositionLookup stationPositionLookup = cave->stationPositionLookup();
+    cwStationPositionLookup stationPositionLookup = trip->solvedStationPositions();
 
     //Clear all the lines
     ShotLines.clear();
 
     if(noteStation.isValid() && stationPositionLookup.hasPosition(noteStation.name())) {
         QString stationName = noteStation.name();
-        QSet<cwStation> neighboringStations = trip->neighboringStations(stationName);
+        //Use the solved network, not chunk-based neighboringStations(): the
+        //latter is empty for a chunk-less external trip and misses cross-trip
+        //junctions. solvedNetwork() speaks this trip's local namespace.
+        QStringList neighboringStations = trip->solvedNetwork().neighbors(stationName);
 
         //The position of the selected station
         QVector3D selectedStationPos = stationPositionLookup.position(noteStation.name());
@@ -208,15 +211,17 @@ void cwScrapStationView::updateShotLines() {
         //Converts to qml view
         QTransform toImageTransform = cwScrapView::toImage(note);
 
-        //Go through all the neighboring stations and add the position to the line
-        foreach(cwStation station, neighboringStations) {
+        //Go through all the neighboring stations and add the position to the
+        //line. Iterate raw names, not cwStation: external tails carry dots that
+        //cwStation's validator would blank (native names are unaffected).
+        foreach(const QString& neighborName, neighboringStations) {
 
-            QVector3D currentPos = stationPositionLookup.position(station.name());
+            QVector3D currentPos = stationPositionLookup.position(neighborName);
 
             if(scrap()->type() == cwScrap::RunningProfile) {
                 bool foundStation = false;
                 foreach(cwNoteStation currentNoteStation, scrap()->stations()) {
-                    if(cwStation::canonicalKey(currentNoteStation.name()) == cwStation::canonicalKey(station.name())) {
+                    if(cwStation::canonicalKey(currentNoteStation.name()) == cwStation::canonicalKey(neighborName)) {
                         foundStation = true;
                     }
                 }

@@ -297,11 +297,11 @@ void cwNoteLiDAR::updateNoteTransformion()
                                                                  QMatrix4x4(),
                                                                  QMatrix4x4(), //View matrix on the real survey data
                                                                  upMatrix, //Up matrix
-                                                                 parentCave()->stationPositionLookup()};
+                                                                 m_parentTrip->solvedStationPositions()};
 
 
 
-    auto shotStations = cwNoteTransformCalculator::noteShots(stations(), parentCave()->network());
+    auto shotStations = cwNoteTransformCalculator::noteShots(stations(), m_parentTrip->solvedNetwork());
     auto transform = cwNoteTransformCalculator::projectedAverageTransform(shotStations, profileTransform);
 
     double north = cwNoteTranformation::northAdjustedForDeclination(transform.north,

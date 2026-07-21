@@ -14,6 +14,8 @@
 #include "cwStation.h"
 #include "cwGlobals.h"
 #include "cwExternalCenterline.h"
+#include "cwStationPositionLookup.h"
+#include "cwSurveyNetwork.h"
 #include "cwTripData.h"
 // #include "cwTripCalibration.h"
 class cwTripCalibration;
@@ -120,6 +122,23 @@ public:
     int numberOfStations() const;
     bool hasStation(QString stationName) const;
     QSet<cwStation> neighboringStations(QString stationName) const;
+
+    //! This trip's solved station positions, keyed in the trip's own local
+    //! namespace. A native trip returns the cave lookup unchanged. An
+    //! externally-attached trip (whose solved stations are keyed
+    //! trip_<hex>.<tail> in the cave) gets a stripped-tail alias for each of
+    //! its scoped entries so bare note/scrap/lead station names resolve, while
+    //! the full cave data is retained so a cross-trip tie-in neighbor still
+    //! carries a position. Consumers never need to know the trip is external.
+    cwStationPositionLookup solvedStationPositions() const;
+
+    //! This trip's solved survey network in the trip's own local namespace,
+    //! with the same native pass-through / external re-key contract as
+    //! solvedStationPositions(). Prefer this over the chunk-based
+    //! neighboringStations() when resolving solved data: it is non-empty for
+    //! an externally-attached (chunk-less) trip and includes cross-trip
+    //! junction neighbors.
+    cwSurveyNetwork solvedNetwork() const;
 
     // void stationPositionModelUpdated();
 

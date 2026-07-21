@@ -31,6 +31,7 @@
 #include "cwSurveyNoteModel.h"
 #include "cwStation.h"
 #include "cwStationPositionLookup.h"
+#include "cwSurveyNetwork.h"
 #include "cwSurveyChunk.h"
 #include "cwSurvexExporterRegion.h"
 #include "cwTrip.h"
@@ -732,6 +733,138 @@ TEST_CASE("File-owned declination wins over the trip's CaveWhere setting",
     const QVector3D a2 = lookup.position(a2Key);
     CHECK(a2.x() == Catch::Approx(-1.2533).margin(0.01));
     CHECK(a2.y() == Catch::Approx(9.9211).margin(0.01));
+}
+
+// B5 — the accessor at the heart of the note-editing fix. After a solve the
+// cave lookup/network key an externally-attached trip's stations with the trip
+// scope (trip_<hex>.simple.a1), but the trip's note/scrap/lead stations carry
+// only the tail (simple.a1). solvedStationPositions()/solvedNetwork() present
+// the solved data in the trip's own local namespace so every editing consumer
+// resolves without knowing the trip is external.
+TEST_CASE("Solved accessors resolve an external trip's local tail names",
+          "[Attach][SolvedStations]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    const QString attachDir = seedAttachment(tempSubdir(tempRoot, QStringLiteral("solved-attach")),
+                                             fixturePath(QStringLiteral("survex_simple.svx")));
+
+    cwCavingRegion region;
+    cwCave* cave = addEmptyCave(region, QStringLiteral("Alpha"));
+    cwTrip* attached = addEmptyTrip(cave, QStringLiteral("Attached"));
+    attached->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_simple.svx")));
+
+    cwLinePlotManager manager;
+    QHash<QUuid, QString> tripDirs;
+    tripDirs.insert(attached->id(), attachDir);
+    manager.externalCenterlineManager()->setTripAttachmentDirs(tripDirs);
+    manager.setRegion(&region);
+    manager.waitToFinish();
+
+    REQUIRE_FALSE(manager.hasSolveError());
+
+    const QString tripPrefix = QStringLiteral("trip_%1").arg(attached->id().toString(QUuid::Id128));
+    const QString a1Scoped = tripPrefix + QStringLiteral(".simple.a1");
+
+    // Precondition — the exact mismatch B5 fixes: the cave lookup keys are
+    // scoped, so a bare tail misses it.
+    REQUIRE(cave->stationPositionLookup().hasPosition(a1Scoped));
+    REQUIRE_FALSE(cave->stationPositionLookup().hasPosition(QStringLiteral("simple.a1")));
+
+    const cwStationPositionLookup solvedPositions = attached->solvedStationPositions();
+    // The trip resolves its own stations by their bare panel names...
+    CHECK(solvedPositions.hasPosition(QStringLiteral("simple.a1")));
+    CHECK(solvedPositions.hasPosition(QStringLiteral("simple.a2")));
+    CHECK(solvedPositions.hasPosition(QStringLiteral("simple.a3")));
+    // ...at the same world position the scoped key carries.
+    CHECK(solvedPositions.position(QStringLiteral("simple.a1"))
+          == cave->stationPositionLookup().position(a1Scoped));
+    // The scoped key still resolves too — the view is a superset of the cave
+    // data, so a cross-trip tie-in neighbor keeps its position.
+    CHECK(solvedPositions.hasPosition(a1Scoped));
+
+    const cwSurveyNetwork solvedNetwork = attached->solvedNetwork();
+    const QStringList a1Neighbors = solvedNetwork.neighbors(QStringLiteral("simple.a1"));
+    // Neighbors come back as local tails, never scoped — so a name the view
+    // hands to the UI (autocomplete) is already the user-facing tail.
+    CHECK(a1Neighbors.contains(QStringLiteral("simple.a2")));
+    CHECK_FALSE(a1Neighbors.contains(tripPrefix + QStringLiteral(".simple.a2")));
+}
+
+TEST_CASE("Native trip solved accessors pass through the cave data unchanged",
+          "[Attach][SolvedStations]")
+{
+    cwCavingRegion region;
+    cwCave* cave = addEmptyCave(region, QStringLiteral("Native"));
+    cwTrip* nativeTrip = addTripWithShot(cave,
+                                         QStringLiteral("Native"),
+                                         QStringLiteral("N1"),
+                                         QStringLiteral("N2"),
+                                         15.0);
+
+    cwLinePlotManager manager;
+    manager.setRegion(&region);
+    manager.waitToFinish();
+
+    REQUIRE_FALSE(manager.hasSolveError());
+
+    // A native trip's names already speak the cave's namespace, so the accessor
+    // returns the cave data verbatim (a byte-identical, provably safe path).
+    const cwStationPositionLookup solvedPositions = nativeTrip->solvedStationPositions();
+    CHECK(solvedPositions.hasPosition(QStringLiteral("n1")));
+    CHECK(solvedPositions.hasPosition(QStringLiteral("n2")));
+    CHECK(solvedPositions.positions() == cave->stationPositionLookup().positions());
+
+    const cwSurveyNetwork solvedNetwork = nativeTrip->solvedNetwork();
+    CHECK(solvedNetwork.neighbors(QStringLiteral("n1")).contains(QStringLiteral("n2")));
+    CHECK(solvedNetwork == cave->network());
+}
+
+// B5 site — the name-autocomplete trap. guessNeighborStationName resolves a
+// note station's neighbors and its own position, then returns the best match
+// name straight to the UI (it becomes the note-station name). For an external
+// trip both the neighbor lookup and the position lookup must speak the tail
+// namespace, AND the returned name must be a tail (not scoped) or it corrupts
+// what the user sets. Routing through solvedNetwork()/solvedStationPositions()
+// satisfies all three at once. a1's only survey neighbor is a2, so the answer
+// is geometry-independent.
+TEST_CASE("External scrap guessNeighborStationName returns the tail name",
+          "[Attach][Scrap]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    const QString attachDir = seedAttachment(tempSubdir(tempRoot, QStringLiteral("guess-attach")),
+                                             fixturePath(QStringLiteral("survex_simple.svx")));
+
+    cwCavingRegion region;
+    cwCave* cave = addEmptyCave(region, QStringLiteral("Alpha"));
+    cwTrip* attached = addEmptyTrip(cave, QStringLiteral("Attached"));
+    attached->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_simple.svx")));
+
+    cwNote* note = new cwNote(attached->notes());
+    attached->notes()->addNotes({note});
+    cwScrap* scrap = new cwScrap();
+    note->addScrap(scrap);
+
+    cwLinePlotManager manager;
+    QHash<QUuid, QString> tripDirs;
+    tripDirs.insert(attached->id(), attachDir);
+    manager.externalCenterlineManager()->setTripAttachmentDirs(tripDirs);
+    manager.setRegion(&region);
+    manager.waitToFinish();
+
+    REQUIRE_FALSE(manager.hasSolveError());
+
+    cwNoteStation previous;
+    previous.setName(QStringLiteral("simple.a1"));
+    previous.setPositionOnNote(QPointF(0.5, 0.5));
+
+    const QString guessed = scrap->guessNeighborStationName(previous, QPointF(0.6, 0.5));
+    // a2 is a1's sole neighbor, so it is the guess — and it comes back as the
+    // user-facing tail, never the scoped trip_<hex>.simple.a2.
+    CHECK(guessed == QStringLiteral("simple.a2"));
 }
 
 TEST_CASE("Broken external centerline surfaces SolveError with Step::Cavern",
