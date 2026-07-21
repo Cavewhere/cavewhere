@@ -3669,6 +3669,12 @@ void cwSaveLoad::connectTreeModel()
 void cwSaveLoad::enqueueProjectRenameJobs(const QString& oldDescriptorPath,
                                           const QString& newDescriptorPath)
 {
+    // Still gated on isTemporary, unlike the enqueueExternalCenterline* jobs.
+    // These mutate the project's durable on-disk identity (the .cwproj
+    // descriptor and dataRoot directory name), which doesn't exist until the
+    // first save - Save As renames it as part of the move. The external-
+    // centerline jobs write inside the dataRoot tree, which a temp project
+    // already has, so they don't wait. Same reasoning at the two cleanups below.
     if (d->isTemporary) {
         return;
     }
@@ -3728,6 +3734,8 @@ void cwSaveLoad::enqueueProjectRenameJobs(const QString& oldDescriptorPath,
 
 void cwSaveLoad::enqueueConflictingProjectCleanup(const QString& conflictingDescriptorRelPath)
 {
+    // Temp-gated - see enqueueProjectRenameJobs for why the durable-identity
+    // jobs wait for the first save while the external-centerline jobs don't.
     if (d->isTemporary || conflictingDescriptorRelPath.isEmpty()) {
         return;
     }
@@ -3773,6 +3781,7 @@ void cwSaveLoad::enqueueConflictingProjectCleanup(const QString& conflictingDesc
 
 void cwSaveLoad::enqueueOrphanDirectoryCleanup(const QString& orphanDirRelPath)
 {
+    // Temp-gated - see enqueueProjectRenameJobs.
     if (d->isTemporary || orphanDirRelPath.isEmpty()) {
         return;
     }
@@ -3808,7 +3817,11 @@ void cwSaveLoad::enqueueOrphanDirectoryCleanup(const QString& orphanDirRelPath)
 void cwSaveLoad::enqueueExternalCenterlineCopyIfNewer(const QString& sourcePath,
                                                       const QString& destinationPath)
 {
-    if (d->isTemporary || sourcePath.isEmpty() || destinationPath.isEmpty()) {
+    // Deliberately not gated on d->isTemporary, unlike the project-rename
+    // and cleanup jobs above. A temporary project already has a real root
+    // dir, and Save As moves or re-zips that whole tree, so an attachment
+    // copied in before the first save travels with it.
+    if (sourcePath.isEmpty() || destinationPath.isEmpty()) {
         return;
     }
 
@@ -3876,12 +3889,13 @@ void cwSaveLoad::enqueueExternalCenterlineCopyIfNewer(const QString& sourcePath,
 
 void cwSaveLoad::enqueueExternalCenterlineRemoveFile(const QString& path)
 {
-    if (d->isTemporary || path.isEmpty()) {
+    if (path.isEmpty()) {
         return;
     }
 
     // GC of a stranded attachment file is a project mutation too; see
-    // enqueueExternalCenterlineCopyIfNewer.
+    // enqueueExternalCenterlineCopyIfNewer (including why this runs on
+    // temporary projects).
     if (!d->suppressLocalMutationTracking) {
         emit localMutationOccurred();
     }
@@ -3895,12 +3909,13 @@ void cwSaveLoad::enqueueExternalCenterlineRemoveFile(const QString& path)
 
 void cwSaveLoad::enqueueExternalCenterlineRemoveTree(const QString& path)
 {
-    if (d->isTemporary || path.isEmpty()) {
+    if (path.isEmpty()) {
         return;
     }
 
     // Removing an attachment dir (detach) is a project mutation too; see
-    // enqueueExternalCenterlineCopyIfNewer.
+    // enqueueExternalCenterlineCopyIfNewer (including why this runs on
+    // temporary projects).
     if (!d->suppressLocalMutationTracking) {
         emit localMutationOccurred();
     }

@@ -113,12 +113,6 @@ QFuture<Monad::Result<AttachReport>> attach(cwTrip* trip,
         return AsyncFuture::completed(
             ReportResult(QStringLiteral("attach: trip is not part of a cave yet")));
     }
-    if (saveLoad->isTemporaryProject()) {
-        // The reconcile job queue no-ops on unsaved projects, so the
-        // copies would silently never land.
-        return AsyncFuture::completed(
-            ReportResult(QStringLiteral("attach: save the project before attaching an external file")));
-    }
 
     // The Deferred is a cancellation firewall, not just a completion
     // handle. AsyncFuture propagates cancel() UPSTREAM through context

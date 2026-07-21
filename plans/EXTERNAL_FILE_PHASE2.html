@@ -1110,6 +1110,19 @@ public:
       of a user click &mdash; no surprise save prompts.</td>
   </tr>
   <tr>
+    <td>Attach on a never-saved or bundled-this-session project (before
+      the first Save)</td>
+    <td><em>(Added 2026-07-21; the "must save first" guard was removed.)</em>
+      Supported. A temporary project already has a real working
+      <code>dataRoot</code> tree, so the reconcile copies land there and
+      travel through Save / Save As (the bundle re-zips the tree; a
+      <code>.cwproj</code> move carries it). The copy flips
+      <code>cwProject::modified()</code> so an unsaved project prompts on
+      close, same as the [Update]-on-bundle row. Pinned by
+      <code>test_cwExternalCenterlineAttachTemporary.cpp</code>
+      (<code>[Attach][Temporary]</code>).</td>
+  </tr>
+  <tr>
     <td>Source changes on disk mid-git-sync in a <code>.cwproj</code></td>
     <td><em>(Moot under the direction change &mdash; superseded the
       fold-in semantics decided earlier at commit 4.)</em> The watcher
@@ -2844,6 +2857,26 @@ public:
     enable-gate, orchestrator, CavePage, tests. Revisit alongside
     Phase 3's cave-level attach, which needs a create-a-cave variant
     of the same flow.
+  </li>
+  <li>
+    <strong>Rename <code>cwSaveLoad::isTemporaryProject()</code> to name
+    what it asks.</strong> <em>(From the 2026-07-21 attach-on-temporary
+    review.)</em> The method returns the raw "is the working tree a
+    <code>QTemporaryDir</code>?" flag, but its name reads as "is there a
+    durable home?" &mdash; which is what the <em>other</em>
+    <code>isTemporaryProject()</code> (on <code>cwProject</code>, masking
+    bundles via <code>LoadedFromBundledArchive</code>) answers. That gap
+    is the root cause behind two bugs: the original "save before attach"
+    guard (removed here) and issue #597 (Save-As-to-bundle leaves the
+    <code>cwSaveLoad</code> flag stale until reopen). A name like
+    <code>hasTemporaryWorkingTree()</code> would make the wrong call site
+    self-evident. Out of scope here: pure rename across many call sites
+    plus a <code>Q_PROPERTY</code>/signal, and it risks colliding with the
+    QML binding on <code>cwProject</code>'s same-named property. Blast
+    radius: <code>cwSaveLoad.{h,cpp}</code>, the four
+    <code>d-&gt;isTemporary</code> guards, and callers in
+    <code>cwProject.cpp</code>. Tie to the #597 fix, which lives at the
+    same seam.
   </li>
 </ul>
 

@@ -115,9 +115,9 @@ CAVEWHERE_LIB_EXPORT ReconcilePlan computePlan(
  * Enqueues one copyIfNewer job per plan.copies entry and one
  * removeFile job per plan.removes entry; returns a future that
  * completes when the project's queued jobs drain (matching the
- * existing saveFlush primitive). On temporary / unsaved projects
- * the helper still returns a completed future - the underlying
- * enqueue methods are no-ops in that case.
+ * existing saveFlush primitive). Temporary / unsaved projects are
+ * reconciled like any other - they already have a real root dir, and
+ * Save As carries the attachment dir with it.
  *
  * Errors raised by individual filesystem jobs surface through the
  * existing cwSaveLoad error-collection channel; the returned

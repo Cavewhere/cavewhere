@@ -475,7 +475,7 @@ TEST_CASE("detach on a Native trip is a no-op that completes Ok",
     CHECK_FALSE(fixture->project->modified());
 }
 
-TEST_CASE("attach refuses null inputs and unsaved projects with a clear error",
+TEST_CASE("attach refuses null inputs with a clear error",
           "[Attach][Orchestrator]")
 {
     auto fixture = makeSavedProject(QStringLiteral("attach-guards"));
@@ -499,23 +499,10 @@ TEST_CASE("attach refuses null inputs and unsaved projects with a clear error",
         REQUIRE(future.isFinished());
         CHECK(future.result().hasError());
     }
-    {
-        // A never-saved project can't receive the copies - the job
-        // queue no-ops on temporary projects.
-        auto tempRoot = std::make_unique<cwRootData>();
-        auto region = tempRoot->project()->cavingRegion();
-        region->addCave();
-        region->cave(0)->addTrip();
-        auto future = cwExternalCenterlineAttach::attach(
-            region->cave(0)->trip(0), source,
-            tempRoot->project()->saveLoad(),
-            tempRoot->externalSourceSettings());
-        REQUIRE(future.isFinished());
-        REQUIRE(future.result().hasError());
-        // Pin which guard fired - a reconcile failure would also
-        // produce hasError() but with a confusing message.
-        CHECK(future.result().errorMessage().contains(QStringLiteral("save the project")));
-    }
+    // A never-saved project used to be refused here as well. It is now
+    // a supported case - a temporary project already has a real root
+    // dir, and Save As carries the attachment with it. See
+    // "[Attach][Temporary]" in test_cwExternalCenterlineAttachTemporary.
 }
 
 // ---------------------------------------------------------------------
