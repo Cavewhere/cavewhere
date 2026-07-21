@@ -187,10 +187,10 @@ private:
     cwUniqueConnectionChecker m_connectionChecker;
 
     void addCaveConnections(int beginIndex, int endIndex, bool recusive = true);
-    void removeCaveConnections(int beginIndex, int endIndex);
+    void removeCaveConnections(int beginIndex, int endIndex, bool recursive = true);
 
     void addTripConnections(cwCave* parentCave, int beginIndex, int endIndex, bool recursive = true);
-    void removeTripConnections(cwCave* parentCave, int beginIndex, int endIndex);
+    void removeTripConnections(cwCave* parentCave, int beginIndex, int endIndex, bool recursive = true);
 
     void addNoteConnections(cwTrip* parentTrip, int beginIndex, int endIndex);
     void removeNoteConnections(cwTrip* parentTrip, int beginIndex, int endIndex);

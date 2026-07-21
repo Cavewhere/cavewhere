@@ -105,7 +105,7 @@ void cwRegionTreeModel::beginRemoveCaves(QModelIndex parent, int begin, int end)
         }
     }
 
-    removeCaveConnections(begin, end);
+    removeCaveConnections(begin, end, false); //trips already unwound above
     beginRemoveRows(QModelIndex(), begin, end);
 }
 
@@ -1007,9 +1007,17 @@ void cwRegionTreeModel::addCaveConnections(int beginIndex, int endIndex, bool re
 /**
   \brief Removes all the connection for a cave
   */
-void cwRegionTreeModel::removeCaveConnections(int beginIndex, int endIndex) {
+void cwRegionTreeModel::removeCaveConnections(int beginIndex, int endIndex, bool recursive) {
     for(int i = beginIndex; i <= endIndex; i++) {
         cwCave* cave = Region->cave(i);
+
+        // Mirror addCaveConnections' recursion so a whole-cave teardown (e.g.
+        // setCavingRegion) unwinds the trips it added. Callers that already
+        // unwound the trips per-row (beginRemoveCaves) pass recursive = false.
+        if(recursive && cave->hasTrips()) {
+            removeTripConnections(cave, 0, cave->tripCount() - 1);
+        }
+
         m_connectionChecker.remove(cave);
         disconnect(cave, 0, this, 0); //disconnect signals and slots to this object
     }
@@ -1124,11 +1132,29 @@ void cwRegionTreeModel::addTripConnections(cwCave* parentCave, int beginIndex, i
 /**
   \brief Removes the connections for a trips between beginIndex and endIndex
   */
-void cwRegionTreeModel::removeTripConnections(cwCave* parentCave, int beginIndex, int endIndex) {
+void cwRegionTreeModel::removeTripConnections(cwCave* parentCave, int beginIndex, int endIndex, bool recursive) {
     for(int i = beginIndex; i <= endIndex; i++) {
         cwTrip* trip = parentCave->trip(i);
 
+        // Mirror addTripConnections' recursion so a whole-trip teardown unwinds the
+        // paper-note rows it added. Callers that already unwound the notes per-row
+        // (beginRemoveTrips) pass recursive = false.
+        if(recursive) {
+            const int noteCount = trip->notes()->notes().size();
+            if(noteCount > 0) {
+                removeNoteConnections(trip, 0, noteCount - 1);
+            }
+        }
+
+        // addTripConnections registers the trip AND its note/lidar/sketch models in
+        // the connection checker, so all four must be removed here. Removing only the
+        // trip (issue #576) left the models recorded as connected, so re-adding the
+        // same trip (sync checkout / undo) tripped the "already connected" guard and
+        // skipped re-wiring the models.
         m_connectionChecker.remove(trip);
+        m_connectionChecker.remove(trip->notes());
+        m_connectionChecker.remove(trip->notesLiDAR());
+        m_connectionChecker.remove(trip->notesSketch());
 
         disconnect(trip, nullptr, this, nullptr); //disconnect signals and slots to this object
         disconnect(trip->notes(), nullptr, this, nullptr);
@@ -1199,7 +1225,7 @@ void cwRegionTreeModel::beginRemoveTrips(cwCave *parentCave, int begin, int end)
         }
     }
 
-    removeTripConnections(parentCave, begin, end);
+    removeTripConnections(parentCave, begin, end, false); //notes already unwound above
     beginRemoveRows(parentIndex, begin, end);
 }
 

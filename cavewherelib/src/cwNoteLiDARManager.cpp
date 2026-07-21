@@ -179,6 +179,8 @@ void cwNoteLiDARManager::setRegionTreeModel(cwRegionTreeModel* regionTreeModel)
                    this, &cwNoteLiDARManager::regionRowsInserted);
         disconnect(m_regionModel.data(), &cwRegionTreeModel::rowsAboutToBeRemoved,
                    this, &cwNoteLiDARManager::regionRowsAboutToBeRemoved);
+        disconnect(m_regionModel.data(), &cwRegionTreeModel::modelReset,
+                   this, &cwNoteLiDARManager::handleRegionReset);
     }
 
     m_regionModel = regionTreeModel;
@@ -188,6 +190,10 @@ void cwNoteLiDARManager::setRegionTreeModel(cwRegionTreeModel* regionTreeModel)
                 this, &cwNoteLiDARManager::regionRowsInserted);
         connect(m_regionModel.data(), &cwRegionTreeModel::rowsAboutToBeRemoved,
                 this, &cwNoteLiDARManager::regionRowsAboutToBeRemoved);
+        // A model reset (project load / git checkout) replaces every row without
+        // per-row signals, so re-walk the reloaded trips. Mirrors cwScrapManager.
+        connect(m_regionModel.data(), &cwRegionTreeModel::modelReset,
+                this, &cwNoteLiDARManager::handleRegionReset);
         handleRegionReset();
     }
 }

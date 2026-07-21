@@ -64,23 +64,63 @@ void cwLeadView::setRegionModel(cwRegionTreeModel* regionModel) {
         if(!RegionModel.isNull()) {
             disconnect(RegionModel.data(), &cwRegionTreeModel::rowsInserted, this, &cwLeadView::scrapsAdded);
             disconnect(RegionModel.data(), &cwRegionTreeModel::rowsAboutToBeRemoved, this, &cwLeadView::scrapsRemoved);
+            disconnect(RegionModel.data(), &QAbstractItemModel::modelAboutToBeReset, this, &cwLeadView::clearAllScraps);
+            disconnect(RegionModel.data(), &QAbstractItemModel::modelReset, this, &cwLeadView::addAllScraps);
         }
+
+        //Drop any scraps tracked from the previous model before switching.
+        clearAllScraps();
 
         RegionModel = regionModel;
 
         if(!RegionModel.isNull()) {
-            m_currentScrapId = 0; //Reset the scrap id, this is useful for the qml testcase to work correctly
-
             connect(RegionModel.data(), &cwRegionTreeModel::rowsInserted, this, &cwLeadView::scrapsAdded);
             connect(RegionModel.data(), &cwRegionTreeModel::rowsAboutToBeRemoved, this, &cwLeadView::scrapsRemoved);
+            connect(RegionModel.data(), &QAbstractItemModel::modelAboutToBeReset, this, &cwLeadView::clearAllScraps);
+            connect(RegionModel.data(), &QAbstractItemModel::modelReset, this, &cwLeadView::addAllScraps);
 
-            QList<cwScrap*> scraps = RegionModel->all<cwScrap*>(QModelIndex(), &cwRegionTreeModel::scrap);
-            for(auto scrap : std::as_const(scraps)) {
-                addScrap(scrap);
-            }
+            addAllScraps();
         }
 
         emit regionModelChanged();
+    }
+}
+
+/**
+ * @brief cwLeadView::clearAllScraps
+ *
+ * Removes every tracked scrap. Used when the region model resets or is replaced,
+ * where per-row remove signals never fire.
+ */
+void cwLeadView::clearAllScraps() {
+    //removeScrap mutates m_leadItems, so snapshot the keys before iterating.
+    QList<cwScrap*> scraps;
+    scraps.reserve(static_cast<int>(m_leadItems.size()));
+    for(const auto& [scrap, entry] : m_leadItems) {
+        scraps.append(scrap);
+    }
+
+    for(auto scrap : std::as_const(scraps)) {
+        removeScrap(scrap);
+    }
+}
+
+/**
+ * @brief cwLeadView::addAllScraps
+ *
+ * (Re)populates the view from the region model. Used on initial model set and
+ * after a model reset.
+ */
+void cwLeadView::addAllScraps() {
+    if(RegionModel.isNull()) {
+        return;
+    }
+
+    m_currentScrapId = 0; //Reset the scrap id, this is useful for the qml testcase to work correctly
+
+    const QList<cwScrap*> scraps = RegionModel->all<cwScrap*>(QModelIndex(), &cwRegionTreeModel::scrap);
+    for(auto scrap : std::as_const(scraps)) {
+        addScrap(scrap);
     }
 }
 
@@ -92,13 +132,11 @@ void cwLeadView::addScrap(cwScrap *scrap)
 {
     Q_ASSERT(scrap != nullptr);
 
-    // A region-model reset (project load/checkout) emits beginResetModel/
-    // endResetModel rather than per-row removals, so a scrap can still be tracked
-    // here when its slot is reused or the scrap is re-added. Rebuild cleanly
-    // instead of double-inserting (which previously hit an assert).
-    if(m_leadItems.contains(scrap)) {
-        removeScrap(scrap);
-    }
+    // A scrap must never already be tracked here. A region-model reset (project
+    // load/checkout) is handled by clearAllScraps()/addAllScraps() around the
+    // reset signals, so this stays a strict invariant (issue #576) rather than a
+    // defensive rebuild that would hide a regression of that class.
+    Q_ASSERT(!m_leadItems.contains(scrap));
 
     auto itemAt = [scrap](const auto& items, int i) {
         Q_ASSERT(dynamic_cast<QQuickItem*>(items[i]));

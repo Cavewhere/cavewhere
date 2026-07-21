@@ -202,6 +202,8 @@ void cwSketchManager::setRegionTreeModel(cwRegionTreeModel* regionTreeModel)
                    this, &cwSketchManager::regionRowsInserted);
         disconnect(m_regionModel.data(), &cwRegionTreeModel::rowsAboutToBeRemoved,
                    this, &cwSketchManager::regionRowsAboutToBeRemoved);
+        disconnect(m_regionModel.data(), &cwRegionTreeModel::modelReset,
+                   this, &cwSketchManager::handleRegionReset);
     }
 
     m_regionModel = regionTreeModel;
@@ -211,6 +213,10 @@ void cwSketchManager::setRegionTreeModel(cwRegionTreeModel* regionTreeModel)
                 this, &cwSketchManager::regionRowsInserted);
         connect(m_regionModel.data(), &cwRegionTreeModel::rowsAboutToBeRemoved,
                 this, &cwSketchManager::regionRowsAboutToBeRemoved);
+        // A model reset (project load / git checkout) replaces every row without
+        // per-row signals, so re-walk the reloaded trips. Mirrors cwScrapManager.
+        connect(m_regionModel.data(), &cwRegionTreeModel::modelReset,
+                this, &cwSketchManager::handleRegionReset);
         handleRegionReset();
     }
 }

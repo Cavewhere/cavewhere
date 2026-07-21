@@ -115,6 +115,12 @@ private:
     void addScrap(cwScrap* scrap);
     void removeScrap(cwScrap* scrap);
 
+    // A model reset (project load / git checkout) replaces every row without per-row
+    // remove/insert signals, so the view must clear its tracked scraps before the
+    // reset and repopulate after it.
+    void clearAllScraps();
+    void addAllScraps();
+
     void updateKeywordItem(cwScrap* scrap);
 
     QQuickItem *createItem();
