@@ -337,7 +337,7 @@ wired into existing components.</p>
     <td>Top-anchored banner over the 3D view: "Part of your survey is off-screen — a fix-station coordinate
     in <i>[Cave]</i> looks wrong." Directly answers "why isn't my data rendering?"</td>
     <td>New overlay copying <code>LazClipInteractionView.qml:182-199</code> (top-anchored <code>ErrorHelpBox</code>
-    bound to a string), reading a new <code>cwCavingRegion</code> summary property.</td>
+    bound to a string), reading a new <code>cwFixStationValidator</code> summary property.</td>
     <td><span class="pill edit">medium</span></td>
   </tr>
 </table>
@@ -416,6 +416,15 @@ wired into existing components.</p>
   the user toward the cave's fix stations.</li>
 </ul>
 
+<div class="callout warn">
+  <b>Follow-up (review, out of scope for Commit 5) — banners can overlap.</b> The outlier overlay takes the same
+  top-center <code>topMargin:20</code> slot as the LazClip help/error boxes (<code>LazClipInteractionView.qml</code>),
+  and the two visibility conditions are independent, so an active Clip tool plus a live outlier stack both banners on
+  the same pixels. The right fix is a shared <b>banner manager</b> (a <code>ListView</code>/<code>Repeater</code> that
+  owns and lays out the render-view banners) so overlays queue instead of overlapping — a broader render-view UI change,
+  not a Commit-5 concern.
+</div>
+
 <div class="callout ok">
   <b>Each commit is independently green.</b> 1 adds dormant pure code; 2 is a self-contained behavior change; 3
   lights up the cave list with no new QML; 4 and 5 are additive QML surfaces. Commit 2 is the only cuttable one.
@@ -454,8 +463,11 @@ wired into existing components.</p>
   QObject, dies with the region). It must rewire per-cave connections as caves are added/removed.</td></tr>
   <tr><td><b>False positives</b></td><td>A real, remote fix (e.g. a distant tie-in) would flag. Mitigated by
   Warning severity + suppression via <code>errorTypeId</code>. <code>kMadMultiplier</code> tunable.</td></tr>
-  <tr><td><b>Few fixes</b></td><td>1–3 fixes → no cluster → detection off (by design). A two-fix survey with one
-  typo won't be caught; acceptable (nothing to compare against).</td></tr>
+  <tr><td><b>Few fixes</b></td><td><s>1–3 fixes → no cluster → detection off (by design); a two-fix survey with one
+  typo won't be caught; acceptable.</s> <b>Revised — this is the <i>common</i> case, not an edge.</b> "2–3 caves, one
+  with bad coordinates" is more likely than one survey with five clustered fixes, and the pooled-cluster rule catches
+  almost none of it (below the min, or a balanced split with no majority). Addressed in <b>Commit 6</b> (§12): a
+  neighbor-free per-fix CS-domain check as the primary signal, with the cluster rule relaxed to a secondary one.</td></tr>
   <tr><td><b>cwCave child aggregation</b></td><td>cwCave's errorModel does <i>not</i> roll up trip children today
   (wiring commented out). We append directly to the cave list, so no dependence on aggregation.</td></tr>
   <tr><td class="pill-cell"><b>Decision — Commit 2</b></td><td>Include robust origin? Recommended <b>yes</b> (it's
@@ -490,6 +502,81 @@ wired into existing components.</p>
   declination warning growing a stable id), an <code>enum class cwErrorTypeId</code> prevents collision. Premature
   with exactly one id.</li>
 </ul>
+
+<h2 id="fewcaves">12. Commit 6 — Detecting the few-caves case <span class="pill new">post-Commit-5 follow-up</span></h2>
+
+<p>Commits 1–5 flag an outlier only when a <b>majority</b> of the pooled fix stations form one tight cluster and a
+<b>minority</b> stray from it. The realistic data shape is the opposite: <b>2–3 caves, one with a typo</b>, each cave
+carrying only one or two fixes. The pooled-cluster rule catches almost none of it, because the component-wise median
+center only sits on the real data when a majority is clustered there.</p>
+
+<table>
+  <tr><th>Real-world setup</th><th>Total fixes</th><th>Current behavior</th></tr>
+  <tr><td>2 caves, 1 fix each, one bad</td><td>2</td><td><b>Nothing</b> — below the min-4 floor</td></tr>
+  <tr><td>3 caves, 1 fix each, one bad</td><td>3</td><td><b>Nothing</b> — below the min-4 floor</td></tr>
+  <tr><td>2 caves, 2 fixes each, one cave bad</td><td>4</td><td><b>Nothing</b> — median center sits <i>midway</i>
+    between the two clusters, so the bad cave is only half the gap from center and the 6× threshold is enormous</td></tr>
+  <tr><td>1 cave w/ 4 good fixes + 1 cave w/ 1 bad fix</td><td>5</td><td><b>Caught</b> ✓ (the demo case: a clear
+    majority + one straggler)</td></tr>
+  <tr><td>2 caves legitimately ~300 km apart, minority has fewer fixes</td><td>≥4</td><td>Risk of a <b>false positive</b>
+    on the legitimate distant cave</td></tr>
+</table>
+
+<div class="callout warn">
+  <b>Key insight.</b> "Outlier relative to a cluster of <i>other</i> fixes" is the wrong question when there are only
+  2–3 caves. A fix-station coordinate is wrong in ways that need <b>no neighbors</b> to prove. So make a per-fix check
+  the primary signal (Part A), and demote the cluster rule to a complementary secondary signal (Part B).
+</div>
+
+<h3><span class="commit">Part A</span> — Per-fix CS-domain check <span class="pill new">primary signal</span></h3>
+<ul class="files">
+  <li>For each gathered fix, independent of clustering, test whether its coordinate is <b>plausible for its declared
+  input CS</b>. A transposed-digit UTM easting (<code>1478000</code> in UTM 13N) falls outside the projection's valid
+  domain; a fix that inverse-projects to a geographic location outside the CRS's area-of-use — or that makes PROJ error
+  outright — is almost certainly a typo. This catches the <b>single-cave, single-fix</b> case, which is the whole point.</li>
+  <li><b>Open decision — how to bound the domain.</b> (a) PROJ area-of-use via <code>proj_get_area_of_use()</code>
+  (needs a small accessor on <code>cwCoordinateTransform</code>), then bounds-check the reprojected lon/lat against it;
+  or (b) round-trip inverse-project to <code>EPSG:4326</code> and flag <code>NaN</code> / <code>|lat|&gt;90</code> /
+  <code>|lon|&gt;180</code> / gross out-of-zone. Prefer (a) if the accessor is cheap; (b) is the fallback. Both are
+  CS-agnostic — no hardcoded UTM ranges.</li>
+  <li><b>Attribution.</b> Same per-cave <code>errorModel</code> Warning as Commit 3, but a distinct message, e.g.
+  <i>"Fix station "X" has a coordinate outside the valid range for its coordinate system — check for a transposed digit
+  or the wrong CS/zone."</i> Open decision: a distinct <code>errorTypeId</code> vs. reusing <code>596</code> (affects
+  independent suppression of the two warning kinds — lean toward a distinct id, which also motivates the §11
+  <code>errorTypeId</code> registry).</li>
+  <li><b>Origin coupling.</b> A domain-bad fix must also be excluded from <code>robustWorldOrigin()</code> — fold it
+  into <code>Classification.outliers</code> so the inlier centroid ignores it, otherwise the typo still blows up the
+  world origin even though it's now flagged.</li>
+</ul>
+
+<h3><span class="commit">Part B</span> — Relax the cluster rule <span class="pill edit">secondary signal</span></h3>
+<ul class="files">
+  <li>Lower <code>kMinFixesForDetection</code> (4 → 3, possibly 2). With an <b>odd</b> count the component-wise median
+  lands on the majority, so "2 good + 1 bad" <i>is</i> caught; the pathological case is the <b>even balanced split</b>
+  (2 vs 2), which Part A's domain check covers instead.</li>
+  <li>Keep the ~84 km float-precision floor (<code>kOutlierFloorMeters</code>) and <code>kMadMultiplier</code>. Document
+  in the code that the cluster rule is <b>best-effort for small N</b> — the domain check is the reliable path; the
+  cluster check adds the wrong-CS-but-in-domain typo (declared the wrong zone, numbers are in-range) when a majority
+  reference exists.</li>
+  <li><b>Ordering.</b> Run Part A first and drop provably-bad fixes before computing the cluster's median center, so a
+  wild typo doesn't pull the center off the real data and mask a second, subtler outlier.</li>
+</ul>
+
+<h3>Tests (extend <code>test_cwFixStationValidator.cpp</code>)</h3>
+<ul>
+  <li>2 caves, 1 fix each, one out-of-domain → flagged (Part A; the cluster rule alone can't, N&lt;min and no majority).</li>
+  <li>3 caves, 1 fix each, one in-domain-but-wrong-CS → flagged via the relaxed cluster rule (Part B; odd count lands
+  the median on the majority).</li>
+  <li>2 caves, 2 fixes each, one cave out-of-domain → flagged (Part A); assert the balanced split alone would not.</li>
+  <li>Two caves legitimately ~300 km apart, all in-domain → <b>not</b> flagged (no false positive).</li>
+  <li>A domain-bad fix is excluded from <code>robustWorldOrigin()</code> (origin unmoved by the typo).</li>
+</ul>
+
+<div class="callout ok">
+  <b>Net.</b> Part A makes the feature work for the common 2–3-cave typo with no cluster required; Part B keeps the
+  original cross-cave signal as a bonus where a majority exists. The two together replace the "few fixes → acceptable"
+  concession in §10.
+</div>
 
 <hr>
 <p class="mono-note">#596 · fix-station outlier detection · 5 commits (Commit 2 optional) · dev_3</p>

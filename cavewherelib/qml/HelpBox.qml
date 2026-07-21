@@ -16,6 +16,8 @@ ShadowRectangle {
     property alias font: textId.font
     property alias animateHide: hideTransitionId.enabled
 
+    signal linkActivated(string link)
+
     width: textId.width + 10
     height: textId.height + 10
 
@@ -34,6 +36,8 @@ ShadowRectangle {
 
         font.pixelSize: Theme.fontSizeUI
         horizontalAlignment: QC.Label.AlignHCenter
+
+        onLinkActivated: (link) => helpBox.linkActivated(link)
     }
 
     onVisibleChanged: {

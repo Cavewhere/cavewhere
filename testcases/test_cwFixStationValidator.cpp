@@ -465,3 +465,81 @@ TEST_CASE("classifyCandidates flags an elevation-only outlier",
     CHECK(result.inliers.size() == 4);
     CHECK(result.outliers.first().global.z == 500000.0);
 }
+
+TEST_CASE("revalidate summarizes outliers for the render-view overlay",
+          "[cwFixStationValidator]")
+{
+    cwCavingRegion region;
+    region.geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32612"));
+
+    region.addCave();
+    auto* cave = region.cave(0);
+    REQUIRE(cave != nullptr);
+    cave->setName(QStringLiteral("Deep Hole"));
+    appendGoodCluster(cave);
+
+    auto* validator = region.fixStationValidator();
+    REQUIRE(validator != nullptr);
+
+    // A clean cluster leaves the summary empty so the overlay stays hidden.
+    CHECK(validator->property("warningMessage").toString().isEmpty());
+    CHECK(validator->property("outlierCount").toInt() == 0);
+    CHECK(validator->property("firstOutlierCave").value<cwCave*>() == nullptr);
+
+    QSignalSpy messageSpy(validator, &cwFixStationValidator::warningMessageChanged);
+    QSignalSpy countSpy(validator, &cwFixStationValidator::outlierCountChanged);
+    QSignalSpy caveSpy(validator, &cwFixStationValidator::firstOutlierCaveChanged);
+
+    cave->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("Bad"), QStringLiteral("EPSG:32612"), 500150.0, 5194000.0, 2708.0));
+
+    const QString message = validator->property("warningMessage").toString();
+    CHECK_FALSE(message.isEmpty());
+    CHECK(message.contains(QStringLiteral("Deep Hole")));
+    CHECK(validator->property("outlierCount").toInt() == 1);
+    // The routing handle points at the offending cave so the overlay can link to it.
+    CHECK(validator->property("firstOutlierCave").value<cwCave*>() == cave);
+    CHECK(messageSpy.size() == 1);
+    CHECK(countSpy.size() == 1);
+    CHECK(caveSpy.size() == 1);
+
+    // Correcting the coordinate empties the summary and fires the change once more.
+    const int badRow = cave->fixStations()->count() - 1;
+    cave->fixStations()->setData(cave->fixStations()->index(badRow),
+                                 4194050.0,
+                                 cwFixStationModel::NorthingRole);
+
+    CHECK(validator->property("warningMessage").toString().isEmpty());
+    CHECK(validator->property("outlierCount").toInt() == 0);
+    CHECK(validator->property("firstOutlierCave").value<cwCave*>() == nullptr);
+    CHECK(messageSpy.size() == 2);
+    CHECK(countSpy.size() == 2);
+    CHECK(caveSpy.size() == 2);
+}
+
+TEST_CASE("revalidate refreshes the summary when the offending cave is renamed",
+          "[cwFixStationValidator]")
+{
+    cwCavingRegion region;
+    region.geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32612"));
+
+    region.addCave();
+    auto* cave = region.cave(0);
+    REQUIRE(cave != nullptr);
+    cave->setName(QStringLiteral("Deep Hole"));
+    appendGoodCluster(cave);
+    cave->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("Bad"), QStringLiteral("EPSG:32612"), 500150.0, 5194000.0, 2708.0));
+
+    auto* validator = region.fixStationValidator();
+    REQUIRE(validator != nullptr);
+    REQUIRE(validator->property("warningMessage").toString().contains(QStringLiteral("Deep Hole")));
+
+    // Renaming the flagged cave must re-run so the banner names the new cave,
+    // not the stale one.
+    cave->setName(QStringLiteral("Old Sink"));
+
+    const QString message = validator->property("warningMessage").toString();
+    CHECK(message.contains(QStringLiteral("Old Sink")));
+    CHECK_FALSE(message.contains(QStringLiteral("Deep Hole")));
+}

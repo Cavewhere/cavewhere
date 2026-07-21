@@ -43,6 +43,15 @@ class CAVEWHERE_LIB_EXPORT cwFixStationValidator : public QObject
     QML_NAMED_ELEMENT(FixStationValidator)
     QML_UNCREATABLE("Owned by CavingRegion; access via region.fixStationValidator")
 
+    //! Region-wide summary of the current outliers, for the render-view overlay:
+    //! empty when nothing is flagged, otherwise a one-line message naming the
+    //! first offending cave. outlierCount is the total across all caves, and
+    //! firstOutlierCave is that named cave — a routing handle so the overlay can
+    //! link the user to its fix stations (null when nothing is flagged).
+    Q_PROPERTY(QString warningMessage READ warningMessage NOTIFY warningMessageChanged FINAL)
+    Q_PROPERTY(int outlierCount READ outlierCount NOTIFY outlierCountChanged FINAL)
+    Q_PROPERTY(cwCave* firstOutlierCave READ firstOutlierCave NOTIFY firstOutlierCaveChanged FINAL)
+
 public:
     //! One reprojected fix station plus the provenance needed to attribute a
     //! warning back to the owning cave and row.
@@ -80,6 +89,15 @@ public:
     //! usable candidates, so the caller can leave the origin untouched.
     std::optional<cwGeoPoint> robustWorldOrigin() const;
 
+    QString warningMessage() const { return m_warningMessage; }
+    int outlierCount() const { return m_outlierCount; }
+    cwCave* firstOutlierCave() const { return m_firstOutlierCave; }
+
+signals:
+    void warningMessageChanged();
+    void outlierCountChanged();
+    void firstOutlierCaveChanged();
+
 private:
     QList<FixCandidate> gatherCandidates() const;
 
@@ -91,8 +109,17 @@ private:
 
     void syncCaveConnections();
     void setCaveWarning(cwCave* cave, const QString& message);
+    void setSummary(const QString& message, int count, cwCave* cave);
 
     cwCavingRegion* m_region = nullptr;
+
+    QString m_warningMessage;
+    int m_outlierCount = 0;
+
+    //! The cave named in m_warningMessage. Raw pointer, kept consistent by
+    //! revalidate() running synchronously whenever caves change — QML never
+    //! observes it between a cave's removal and the refresh.
+    cwCave* m_firstOutlierCave = nullptr;
 
     //! Caves whose fixStations we hold live connections to, so a cave leaving the
     //! region can be torn down (and its warning cleared) before it is destroyed.

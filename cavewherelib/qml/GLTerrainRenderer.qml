@@ -162,6 +162,36 @@ Item {
         }
     }
 
+    // cwLinkGenerator owns the page-address scheme, so the banner's link doesn't
+    // hardcode the page tree.
+    LinkGenerator {
+        id: outlierLinkGeneratorId
+        pageSelectionModel: RootData.pageSelectionModel
+    }
+
+    // A fix-station coordinate typo drags the world origin off the real data and
+    // blows the scene bounds up until the cave is a sub-pixel dot — the 3D view
+    // just looks empty. This top banner names the culprit so an empty render has
+    // a cause the user can act on, instead of looking like a bug, and links
+    // straight to the offending cave's fix stations to fix it.
+    ErrorHelpBox {
+        id: fixStationOutlierBox
+        objectName: "fixStationOutlierBox"
+        anchors.top: parent.top
+        anchors.topMargin: 20
+        anchors.bottom: undefined
+        visible: RootData.region.fixStationValidator.warningMessage !== ""
+        text: RootData.region.fixStationValidator.warningMessage
+              + qsTr("<br>Open the cave's <a href=\"fixStations\">Fix Stations</a> to correct the coordinate.")
+
+        onLinkActivated: {
+            let cave = RootData.region.fixStationValidator.firstOutlierCave
+            if (cave !== null) {
+                RootData.pageSelectionModel.currentPageAddress = outlierLinkGeneratorId.caveLink(cave)
+            }
+        }
+    }
+
     Row {
         anchors.bottom: parent.bottom
         anchors.bottomMargin: 20

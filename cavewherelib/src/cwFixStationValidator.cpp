@@ -279,6 +279,24 @@ void cwFixStationValidator::revalidate()
     for (cwCave* cave : caves) {
         setCaveWarning(cave, messages.value(cave));
     }
+
+    // Region-wide summary for the render-view overlay. Name the first offending
+    // cave in region order (classification.outliers follows caves() order), so
+    // the message is deterministic when more than one cave has an outlier.
+    cwCave* firstOffender = nullptr;
+    for (const auto& c : classification.outliers) {
+        if (c.cave != nullptr) {
+            firstOffender = c.cave;
+            break;
+        }
+    }
+    QString summary;
+    if (firstOffender != nullptr) {
+        summary = QStringLiteral("Part of your survey is off-screen — a fix-station "
+                                 "coordinate in \"%1\" looks wrong.")
+                      .arg(firstOffender->name());
+    }
+    setSummary(summary, classification.outliers.size(), firstOffender);
 }
 
 void cwFixStationValidator::syncCaveConnections()
@@ -292,8 +310,11 @@ void cwFixStationValidator::syncCaveConnections()
     for (auto it = m_connectedCaves.begin(); it != m_connectedCaves.end();) {
         cwCave* cave = *it;
         if (!currentSet.contains(cave)) {
-            if (cave != nullptr && cave->fixStations() != nullptr) {
-                disconnect(cave->fixStations(), nullptr, this, nullptr);
+            if (cave != nullptr) {
+                disconnect(cave, nullptr, this, nullptr);
+                if (cave->fixStations() != nullptr) {
+                    disconnect(cave->fixStations(), nullptr, this, nullptr);
+                }
             }
             setCaveWarning(cave, QString());
             it = m_connectedCaves.erase(it);
@@ -314,6 +335,12 @@ void cwFixStationValidator::syncCaveConnections()
         connect(model, &cwFixStationModel::dataChanged,
                 this, &cwFixStationValidator::revalidate, Qt::UniqueConnection);
         connect(model, &cwFixStationModel::modelReset,
+                this, &cwFixStationValidator::revalidate, Qt::UniqueConnection);
+
+        // The render-view summary interpolates the offending cave's name, so a
+        // rename must re-run to refresh the banner (the per-cave errorModel
+        // message carries no name and is unaffected).
+        connect(cave, &cwCave::nameChanged,
                 this, &cwFixStationValidator::revalidate, Qt::UniqueConnection);
         m_connectedCaves.insert(cave);
     }
@@ -360,4 +387,20 @@ void cwFixStationValidator::setCaveWarning(cwCave* cave, const QString& message)
     error.setErrorTypeId(kOutlierErrorTypeId);
     errors->append(error);
     m_cavesWithWarning.insert(cave);
+}
+
+void cwFixStationValidator::setSummary(const QString& message, int count, cwCave* cave)
+{
+    if (m_warningMessage != message) {
+        m_warningMessage = message;
+        emit warningMessageChanged();
+    }
+    if (m_outlierCount != count) {
+        m_outlierCount = count;
+        emit outlierCountChanged();
+    }
+    if (m_firstOutlierCave != cave) {
+        m_firstOutlierCave = cave;
+        emit firstOutlierCaveChanged();
+    }
 }
