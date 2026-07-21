@@ -16,6 +16,7 @@ Item {
 
     property alias turnTableInteraction: turnTableInteractionId
     property alias coordinatePickerInteraction: coordinatePickerId
+    property alias lazClipInteraction: lazClipInteractionId
     property alias measurementInteraction: measurementInteractionId
     property alias measurementReadoutPopup: measurementPopupId
     property alias interactionManager: interactionManagerId
@@ -23,6 +24,32 @@ Item {
     property alias renderer: rendererId
     property alias projectionTransition: projectionTransitionId
     property alias scene: rendererId.scene
+
+    // The View page's tool model (per-page tool contract). The sidebar tool rail
+    // renders this; grouping and order here drive the rail's grouping and order.
+    property list<ToolItem> tools: [
+        ToolItem {
+            interaction: coordinatePickerId
+            iconSource: "qrc:/twbs-icons/icons/crosshair.svg"
+            text: qsTr("Pick")
+            toolTip: qsTr("Pick coordinates")
+            group: qsTr("Measure & Pick")
+        },
+        ToolItem {
+            interaction: measurementInteractionId
+            iconSource: "qrc:/twbs-icons/icons/rulers.svg"
+            text: qsTr("Measure")
+            toolTip: qsTr("Measure distance and bearing")
+            group: qsTr("Measure & Pick")
+        },
+        ToolItem {
+            interaction: lazClipInteractionId
+            iconSource: "qrc:/twbs-icons/icons/scissors.svg"
+            text: qsTr("Clip")
+            toolTip: qsTr("Clip point cloud")
+            group: qsTr("Point Cloud")
+        }
+    ]
 
     // Explicit overlay stacking so order is deterministic instead of
     // declaration-order dependent. Bottom to top: the 3D scene, interaction

@@ -16,6 +16,10 @@ QQ.Item {
     property alias renderer: rendererId
     property alias viewDrawer: drawerId
 
+    // Per-page tool contract: the View page publishes the 3D tools; the sidebar
+    // tool rail (CP3) renders whatever the active page exposes here.
+    property alias tools: rendererId.tools
+
     SplitView {
         id: splitViewId
         anchors.fill: parent
