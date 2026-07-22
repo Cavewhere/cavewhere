@@ -37,6 +37,11 @@ private:
 
     void writeFixStations(QTextStream& stream, const cwCaveData& cave, const QString& globalCS);
 
+    // Emits one `*equate` line per cave-local tie (cwCaveData::equates),
+    // after the trip loop so both operands are in scope. Operands are
+    // rendered cave-relative; invalid or out-of-cave ties are dropped.
+    void writeEquates(QTextStream& stream, const cwCaveData& cave) const;
+
     // Emits *include "<abs>" for the cave/trip's externalCenterline by
     // joining the owner's attachment dir with the project-relative
     // entry file. Returns false (and appends an error) when the owner's

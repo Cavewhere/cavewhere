@@ -520,7 +520,37 @@ bool cwTrip::isScoped() const { return !scopePrefix().isEmpty(); }</code></pre>
   onto a base would touch its QML consumers and tests mid-feature.
 </p>
 
-<h3 id="c4">Commit 4 &mdash; Cave-level equate emission + decode consumption</h3>
+<h3 id="c4">Commit 4 &mdash; Cave-level equate emission + decode consumption &mdash; DONE, GREEN (uncommitted)</h3>
+<p class="note">
+  <strong>Done 2026-07-22 (uncommitted, branch externalFiles).</strong>
+  <code>cwSurvexExporterCaveTask::writeEquates</code> emits one bare
+  <code>*equate</code> per <code>cwCaveData::equates</code> entry, right after
+  the trip loop and before <code>*end&nbsp;cave</code>. Operands render
+  cave-relative via the anonymous-namespace <code>equateOperand</code>: a
+  <code>NativeCave</code> handle &rarr; its tail (native trips use an anonymous
+  <code>*begin</code>, which adds no naming level, so native stations sit at
+  cave scope); a <code>Trip</code> handle &rarr;
+  <code>cwTrip::scopePrefix(tripData) + tail</code>
+  (<code>trip_&lt;hex&gt;.</code> for an externally-attached trip). Invalid
+  equates and any whose <code>Trip</code> handle names a trip absent from this
+  cave are dropped silently; station <em>existence</em> is not checked here
+  (deferred to &sect;1.2 / commit&nbsp;6), mirroring the fix-station path which
+  also trusts the snapshot. <strong>Decode is automatic:</strong> cavern merges
+  the tied stations to one coordinate and still emits both names, so
+  <code>splitLookupByCave</code> keys both cave-local names to the shared point
+  &mdash; no consumer change was needed. The cave network holds two nodes at
+  one position, as predicted. Tests: <code>test_cwEquateEmission.cpp</code>
+  (<code>[Equate][Emission]</code>) &mdash; exact-operand emission (cross-scope
+  + within-native), out-of-cave/invalid drop, and a real cavern solve proving
+  a native station and an external <code>simple.a1</code> resolve coincident.
+  Full C++ suite green (1677 cases). The exporter-fallback
+  <code>*fix&nbsp;&lt;firstStation&gt;&nbsp;0&nbsp;0&nbsp;0</code> means the
+  &ldquo;deliberate pre-tie gap&rdquo; is a same-coordinate consistent tie, not
+  a floating component; the precise operand strings are pinned by the
+  deterministic driver-text test, so the solve test guards cavern-acceptance
+  rather than the exact geometry. The <code>[EquateSpike]</code> file stays
+  until C5 lands its region-scope emission (its own delete note).
+</p>
 <p>
   Emit each <code>cwCave</code> equate as a <code>*equate</code> at cave scope
   &mdash; the natural slot is <strong>after the trip loop closes, before
@@ -553,6 +583,24 @@ bool cwTrip::isScoped() const { return !scopePrefix().isEmpty(); }</code></pre>
   cross-cave equate lands as two position-aliased keys, one in <em>each</em>
   cave's lookup. Test: red&rarr;green &mdash; a station in cave A equated to one
   in cave B solves coincident across the cave boundary.
+</p>
+<p class="note">
+  <strong>From the C4 review &mdash; do these here.</strong>
+  (1) <strong>Share the operand renderer.</strong> C4 left
+  <code>equateOperand()</code> as a file-local anonymous-namespace helper in
+  <code>cwSurvexExporterCaveTask.cpp</code>. C5's fully-qualified rendering is
+  the same NativeCave&rarr;tail / Trip&rarr;<code>scopePrefix+tail</code> logic
+  with a <code>cave_&lt;hex&gt;.</code> prefix, so lift the renderer into a
+  shared home &mdash; <code>cwCavernNaming</code> already owns
+  <code>caveName</code>/<code>tripName</code>/<code>tripScopePrefix</code> and is
+  the natural authority for driver naming &mdash; and have both exporters plus
+  decode key off it, so encode and <code>splitLookupByCave</code> can't drift.
+  (2) <strong>De-duplicate rendered operands.</strong> Two distinct handles can
+  render to the same string (e.g. two trips sharing a <code>stationPrefix</code>),
+  and the current <code>operands.size() &lt; 2</code> guard counts entries, not
+  distinct strings, so <code>*equate&nbsp;X&nbsp;X</code> can be emitted (cavern
+  rejects a self-equate). Skip the line when fewer than two <em>distinct</em>
+  operands survive &mdash; belongs with the equate-UX/validation hardening.
 </p>
 
 <h3 id="c6">Commit 6 &mdash; Equate UX (the pain-point payoff)</h3>

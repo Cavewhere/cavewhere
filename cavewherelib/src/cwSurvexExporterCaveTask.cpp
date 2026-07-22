@@ -16,6 +16,7 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QSet>
+#include <QStringList>
 
 namespace {
 
@@ -27,6 +28,37 @@ QString driverIncludePathFor(const QString& attachmentDir, const QString& entryF
 {
     const QString joined = QDir(attachmentDir).filePath(entryFile);
     return QFileInfo(joined).absoluteFilePath();
+}
+
+// Render one equate handle as a station name relative to the enclosing
+// "*begin <cave>" block, so a bare "*equate" at cave scope resolves it.
+// A NativeCave station sits directly at cave scope — the native trip's
+// "*begin" is anonymous, adding no naming level — so the operand is the
+// bare tail. A Trip station carries its trip's scope prefix
+// (trip_<hex>. for an externally-attached trip, "<stationPrefix>." for a
+// native-prefixed trip), matching how the trip loop names those stations.
+// Returns an empty string when a handle names a container that is not this
+// cave — a Trip handle whose trip is absent, or a NativeCave handle whose
+// containerId is another cave — so the caller can drop the malformed equate
+// rather than emit a name that silently mis-ties to a like-named local
+// station (the same membership check cwCave::validate performs).
+QString equateOperand(const cwStationHandle& handle, const cwCaveData& cave)
+{
+    switch (handle.scope()) {
+    case cwStationHandle::NativeCave:
+        if (handle.containerId() != cave.id) {
+            return QString();
+        }
+        return handle.tail();
+    case cwStationHandle::Trip:
+        for (const cwTripData& trip : cave.trips) {
+            if (trip.id == handle.containerId()) {
+                return cwTrip::scopePrefix(trip) + handle.tail();
+            }
+        }
+        return QString();
+    }
+    return QString();
 }
 
 } // namespace
@@ -132,9 +164,52 @@ bool cwSurvexExporterCaveTask::writeCave(QTextStream& stream, const cwCaveData& 
         stream << Qt::endl;
     }
 
+    // Cave-level ties emit here, after every native station and every
+    // *begin trip_<hex> sibling is declared, so both operands are in scope
+    // (master plan §C4). Cavern merges the tied stations to one position;
+    // the decode side then keys both cave-local names to that shared point.
+    writeEquates(stream, cave);
+
     stream << "*end " << caveName << " ; End of " << cave.name << Qt::endl;
 
     return true;
+}
+
+/**
+ * Emit a bare `*equate` line per cave-local tie. Operands render
+ * cave-relative (see equateOperand): a NativeCave handle as its tail, a
+ * Trip handle as "<scopePrefix><tail>". No `*export`/`*infer` is needed —
+ * a cross-scope `*equate` inside the cave block resolves both sibling
+ * scopes on its own. Structurally-invalid equates, and any whose Trip
+ * handle names a trip absent from this cave, are dropped silently; station
+ * *existence* is not checked here (deferred to the equate UX, master plan
+ * §1.2), matching the fix-station path which also trusts the snapshot.
+ */
+void cwSurvexExporterCaveTask::writeEquates(QTextStream& stream, const cwCaveData& cave) const
+{
+    for (const cwEquate& equate : cave.equates) {
+        if (!equate.isValid()) {
+            continue;
+        }
+
+        const QList<cwStationHandle> handles = equate.stations();
+        QStringList operands;
+        operands.reserve(handles.size());
+        for (const cwStationHandle& handle : handles) {
+            const QString operand = equateOperand(handle, cave);
+            if (operand.isEmpty()) {
+                operands.clear();
+                break;
+            }
+            operands.append(operand);
+        }
+
+        if (operands.size() < 2) {
+            continue;
+        }
+
+        stream << "*equate " << operands.join(QLatin1Char(' ')) << Qt::endl;
+    }
 }
 
 /**
