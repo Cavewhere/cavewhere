@@ -1,0 +1,620 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>#601 · 3D tools → per-page tool rail in the sidebar — Plan &amp; Prototype</title>
+<style>
+  :root{
+    --bg:#f4f6f9; --panel:#ffffff; --ink:#1a1d22; --ink2:#4b5563; --ink3:#7b828d;
+    --line:#e2e6ec; --line2:#d3d9e0; --accent:#1d6fc0; --accent-soft:#a5cdff;
+    --code-bg:#f2f4f7; --good:#1a7f37; --bad:#b3261e; --warn:#9a6a00; --chip:#eef2f7;
+    --cw-view-inner:#92D7F8; --cw-view-outer:#F3F8FB;
+    --cw-surface:#ffffff; --cw-surface-muted:#f6f6f6; --cw-text:#1a1d22;
+    --cw-float:#DDDDDD; --cw-highlight:#a5cdff; --cw-border:#d3d3d3;
+    --cw-sidebar-top:#1b2331; --cw-sidebar-bot:#616469;
+    --cw-line:#20303c; --cw-station:#202020;
+    --shadow:0 1px 3px rgba(17,24,39,.14),0 6px 20px rgba(17,24,39,.08);
+  }
+  html[data-theme="dark"]{
+    --bg:#0d1117; --panel:#161b22; --ink:#e6edf3; --ink2:#b3bcc7; --ink3:#8a94a0;
+    --line:#242c36; --line2:#30363d; --accent:#7cb7f2; --accent-soft:#314f78;
+    --code-bg:#0b0f14; --good:#5fd07d; --bad:#f0776b; --warn:#e2b23c; --chip:#1c2530;
+    --cw-view-inner:#1a2a3d; --cw-view-outer:#0b0e13;
+    --cw-surface:#1f232a; --cw-surface-muted:#292d35; --cw-text:#e6edf3;
+    --cw-float:#2b3038; --cw-highlight:#314f78; --cw-border:#4a4f58;
+    --cw-sidebar-top:#161d29; --cw-sidebar-bot:#1f232a;
+    --cw-line:#cfe6f5; --cw-station:#e8eef2;
+    --shadow:0 1px 3px rgba(0,0,0,.5),0 8px 28px rgba(0,0,0,.4);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.62 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 22px 120px}
+  header.top{position:sticky;top:0;z-index:50;background:color-mix(in srgb,var(--bg) 86%,transparent);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);margin-bottom:34px}
+  .top-inner{max-width:1080px;margin:0 auto;padding:13px 22px;display:flex;align-items:center;gap:14px}
+  .top .issue{font-weight:700;color:var(--accent)} .top .ttl{font-weight:600;color:var(--ink2);font-size:13.5px} .top .sp{flex:1}
+  .themebtn{border:1px solid var(--line2);background:var(--panel);color:var(--ink2);border-radius:8px;padding:6px 12px;font-size:13px;cursor:pointer;font-weight:600}
+  .themebtn:hover{border-color:var(--accent);color:var(--accent)}
+  h1{font-size:30px;line-height:1.2;margin:14px 0 6px;letter-spacing:-.4px}
+  h2{font-size:22px;margin:46px 0 8px;padding-top:12px;letter-spacing:-.2px}
+  h3{font-size:17px;margin:26px 0 6px}
+  .lede{font-size:17px;color:var(--ink2);max-width:74ch}
+  p{max-width:74ch} a{color:var(--accent)}
+  code{background:var(--code-bg);border:1px solid var(--line);border-radius:5px;padding:.08em .38em;font:13px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  pre{background:var(--code-bg);border:1px solid var(--line);border-radius:10px;padding:14px 16px;overflow:auto;font:12.5px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  pre code{background:none;border:0;padding:0}
+  ul,ol{max-width:74ch;padding-left:22px} li{margin:4px 0}
+  .muted{color:var(--ink3)}
+  .callout{border:1px solid var(--line2);border-left-width:4px;border-radius:10px;padding:14px 18px;margin:18px 0;background:var(--panel)}
+  .callout.rec{border-left-color:var(--good)} .callout.warn{border-left-color:var(--warn)} .callout.info{border-left-color:var(--accent)}
+  .callout h4{margin:0 0 6px;font-size:14px;text-transform:uppercase;letter-spacing:.6px}
+  .callout.rec h4{color:var(--good)} .callout.warn h4{color:var(--warn)} .callout.info h4{color:var(--accent)}
+  .tag{display:inline-block;font-size:11.5px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;padding:2px 9px;border-radius:20px;background:var(--chip);color:var(--ink2);border:1px solid var(--line2)}
+  .tag.rec{background:color-mix(in srgb,var(--good) 16%,transparent);color:var(--good);border-color:transparent}
+  .tag.no{background:color-mix(in srgb,var(--bad) 15%,transparent);color:var(--bad);border-color:transparent}
+  .tag.maybe{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn);border-color:transparent}
+  table{border-collapse:collapse;width:100%;margin:16px 0;font-size:13.5px}
+  th,td{border:1px solid var(--line);padding:9px 11px;text-align:left;vertical-align:top}
+  th{background:var(--chip);font-weight:600} td.c{text-align:center}
+  .toc{columns:2;font-size:13.5px;gap:26px} .toc a{display:block;padding:2px 0;color:var(--ink2);text-decoration:none} .toc a:hover{color:var(--accent)}
+  @media(max-width:640px){.toc{columns:1}}
+
+  .protobar{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-start;margin:18px 0 12px}
+  .ctl{display:flex;flex-direction:column;gap:4px}
+  .ctl label{font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--ink3);font-weight:700;padding-left:2px}
+  .seg{display:flex;background:var(--panel);border:1px solid var(--line2);border-radius:10px;overflow:hidden;width:fit-content}
+  .seg button{border:0;background:transparent;color:var(--ink2);padding:7px 13px;font-size:12.5px;font-weight:600;cursor:pointer;border-right:1px solid var(--line)}
+  .seg button:last-child{border-right:0}
+  .seg button.on{background:var(--accent);color:#fff}
+  .seg.dim{opacity:.45}
+
+  .stage{border:1px solid var(--line2);border-radius:14px;overflow:hidden;box-shadow:var(--shadow);background:var(--panel)}
+  .osframe{display:flex;height:580px;position:relative}
+  @media(max-width:780px){.osframe{height:auto;flex-direction:column}}
+
+  /* sidebar */
+  .sidebar{background:linear-gradient(160deg,var(--cw-sidebar-top),var(--cw-sidebar-bot));display:flex;flex-direction:column;color:#cfd6df;flex:0 0 auto}
+  .sidebar.wide{width:80px} .sidebar.mid{width:50px}
+  .filebtn{margin:8px auto 4px;font-size:9.5px;color:#aeb7c2;display:flex;align-items:center;gap:3px}
+  .nav{display:flex;flex-direction:column;align-items:center;gap:3px;padding:2px 0 6px}
+  .navbtn{width:calc(100% - 8px);min-height:46px;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:9.5px;color:#cfd6df;cursor:pointer}
+  .navbtn.mid{min-height:40px} .navbtn.on{background:rgba(255,255,255,.16);color:#fff} .navbtn svg{width:18px;height:18px}
+  .divider.strong{height:2px;background:rgba(255,255,255,.28);margin:4px 6px}
+  .toolsec{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;display:flex;flex-direction:column;padding:4px 0 6px}
+  .toolsec::-webkit-scrollbar{width:5px} .toolsec::-webkit-scrollbar-thumb{background:rgba(255,255,255,.18);border-radius:3px}
+  .secttl{font-size:8px;font-weight:800;letter-spacing:.8px;color:rgba(255,255,255,.5);text-transform:uppercase;text-align:center;margin:2px 0}
+  .grplbl{font-size:8px;font-weight:700;color:rgba(255,255,255,.42);text-transform:uppercase;text-align:center;line-height:1.12;margin:7px 3px 2px}
+  .trbtn{width:38px;height:38px;margin:2px auto;border-radius:9px;border:1px solid transparent;background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#e6ecf2;position:relative}
+  .sidebar.mid .trbtn{width:34px;height:34px}
+  .trbtn svg{width:19px;height:19px} .trbtn:hover{background:rgba(255,255,255,.14)}
+  .trbtn.on{background:var(--cw-highlight);color:var(--cw-text);border-color:color-mix(in srgb,var(--accent) 70%,transparent)}
+  .trbtn.ghost{opacity:.42}
+  .trbtn .tip{position:absolute;left:44px;top:50%;transform:translateY(-50%);background:var(--ink);color:var(--panel);font-size:11px;font-weight:600;padding:3px 8px;border-radius:6px;white-space:nowrap;opacity:0;pointer-events:none;z-index:30}
+  html[data-theme="dark"] .trbtn .tip{background:#e6edf3;color:#161b22}
+  .trbtn:hover .tip{opacity:1}
+  .toolempty{font-size:9px;color:rgba(255,255,255,.4);text-align:center;padding:16px 6px;line-height:1.4}
+
+  /* footer */
+  .sbfooter{border-top:1px solid rgba(255,255,255,.16);padding:7px 5px;color:#cfd6df}
+  .autotoggle{display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer}
+  .autotoggle .sw{width:30px;height:17px;border-radius:20px;background:rgba(255,255,255,.22);position:relative;transition:.15s}
+  .autotoggle.on .sw{background:var(--accent)}
+  .autotoggle .sw::after{content:"";position:absolute;top:2px;left:2px;width:13px;height:13px;border-radius:50%;background:#fff;transition:.15s}
+  .autotoggle.on .sw::after{left:15px}
+  .autotoggle .lbl{font-size:8.5px;text-align:center;line-height:1.1;color:#aeb7c2}
+  .pendbox{background:color-mix(in srgb,var(--warn) 30%,transparent);border:1px solid color-mix(in srgb,var(--warn) 60%,transparent);border-radius:8px;padding:6px 4px;text-align:center;cursor:pointer;position:relative}
+  .pendbox .t{font-size:8.5px;font-weight:700;color:#ffe0a3;line-height:1.15;margin-bottom:4px}
+  .runbtn{background:var(--warn);color:#1a1400;border:0;border-radius:6px;font-size:9.5px;font-weight:700;padding:3px 8px;cursor:pointer;width:100%}
+  .runningbox{cursor:pointer;position:relative}
+  .runrow{display:flex;align-items:center;gap:5px;justify-content:center;font-size:9px;font-weight:700;color:#bfe3ff}
+  .spinner{width:13px;height:13px;border:2px solid rgba(255,255,255,.25);border-top-color:#7cb7f2;border-radius:50%;animation:spin .8s linear infinite;flex:0 0 auto}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .sidebar.mid .autotoggle .lbl,.sidebar.mid .pendbox .t,.sidebar.mid .runrow span{display:none}
+  .badge{position:absolute;top:-4px;right:-2px;background:var(--accent);color:#fff;font-size:8px;font-weight:800;border-radius:9px;padding:0 4px}
+
+  /* center */
+  .view{position:relative;flex:1;min-width:0;overflow:hidden}
+  .view.scene{background:radial-gradient(120% 120% at 50% 42%,var(--cw-view-inner),var(--cw-view-outer))}
+  .view.data{background:var(--cw-surface)} .view.map{background:var(--cw-surface-muted)}
+  .view svg.plot{position:absolute;inset:0;width:100%;height:100%}
+  .compass{position:absolute;right:18px;bottom:18px;width:88px;height:88px;opacity:.92}
+  .scalebar{position:absolute;right:112px;bottom:30px;display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--cw-station);font-size:10px;font-weight:600}
+  .scalebar .bar{width:110px;height:7px;border:1.5px solid var(--cw-station);background:linear-gradient(90deg,var(--cw-station) 50%,transparent 50%);background-size:36px 100%}
+  .pagemark{position:absolute;top:12px;left:16px;font-size:11px;font-weight:700;color:var(--ink3);letter-spacing:.5px;text-transform:uppercase}
+  .datatbl{position:absolute;inset:34px 16px auto 16px;border:1px solid var(--cw-border);border-radius:8px;overflow:hidden;color:var(--cw-text)}
+  .datatbl .r{display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr;border-bottom:1px solid var(--cw-border);font-size:11px}
+  .datatbl .r.h{background:var(--cw-surface-muted);font-weight:700}
+  .datatbl .r>div{padding:6px 9px;border-right:1px solid var(--cw-border)}
+  .mapg{position:absolute;inset:34px 16px 16px 16px;border:1px solid var(--cw-border);border-radius:8px;background-image:linear-gradient(var(--cw-border) 1px,transparent 1px),linear-gradient(90deg,var(--cw-border) 1px,transparent 1px);background-size:34px 34px;opacity:.9}
+
+  /* flyouts (tool + tasks) hinged to sidebar */
+  .flyout{position:absolute;left:10px;top:50%;transform:translateY(-50%);width:210px;background:var(--cw-surface);border:1px solid var(--cw-border);border-radius:11px;box-shadow:var(--shadow);color:var(--cw-text);overflow:hidden;z-index:20}
+  .flyout::before{content:"";position:absolute;left:-7px;top:50%;transform:translateY(-50%);border:7px solid transparent;border-right-color:var(--cw-surface);filter:drop-shadow(-1px 0 0 var(--cw-border))}
+  .flyout.tasks{top:auto;bottom:12px;transform:none;width:196px}
+  .flyout.tasks::before{top:auto;bottom:20px;transform:none}
+  .flyout header{display:flex;align-items:center;gap:8px;padding:9px 11px;border-bottom:1px solid var(--cw-border);font-size:13px;font-weight:600;background:var(--cw-surface-muted)}
+  .flyout header svg{width:15px;height:15px} .flyout header .x{margin-left:auto;color:var(--ink3);cursor:pointer;font-size:15px;line-height:1}
+  .flyout .fbody{padding:11px}
+  .tkrow{font-size:11.5px;color:var(--cw-text);margin-bottom:9px}
+  .tkrow:last-child{margin-bottom:0}
+  .tkrow .bar{height:5px;border-radius:3px;background:var(--cw-border);margin-top:3px;overflow:hidden}
+  .tkrow .bar i{display:block;height:100%;background:var(--accent)}
+  .fauxrow{height:9px;border-radius:5px;background:var(--cw-border);margin:7px 0;opacity:.7} .fauxrow.s{width:60%}.fauxrow.m{width:82%}
+  .btnrow{display:flex;gap:6px;flex-wrap:wrap}
+  .cwbtn{border:1px solid var(--cw-border);background:var(--cw-surface);border-radius:6px;padding:6px 10px;font-size:12px;color:var(--cw-text);cursor:pointer;display:flex;align-items:center;gap:6px} .cwbtn svg{width:14px;height:14px}
+  .kvr{font-size:11.5px;color:var(--cw-text)} .kvr b{display:block;font-size:9.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--ink3);margin:6px 0 2px}
+
+  /* bottom sheet (compact/phone properties + tasks) */
+  .sheet{position:absolute;left:0;right:0;background:var(--cw-surface);border-top:1px solid var(--cw-border);box-shadow:var(--shadow);color:var(--cw-text);z-index:22;border-radius:12px 12px 0 0}
+  .sheet header{display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid var(--cw-border);font-size:13px;font-weight:600} .sheet header svg{width:15px;height:15px} .sheet header .x{margin-left:auto;color:var(--ink3);cursor:pointer;font-size:15px}
+  .sheet .fbody{padding:11px 12px}
+  .grab{width:34px;height:4px;border-radius:3px;background:var(--cw-border);margin:6px auto 0}
+
+  /* right inspector */
+  .side{width:230px;flex:0 0 230px;background:var(--cw-surface);border-left:1px solid var(--cw-border);display:flex;flex-direction:column;color:var(--cw-text)}
+  .tabbar{display:flex;border-bottom:1px solid var(--cw-border)} .tabbar .tb{flex:1;text-align:center;padding:9px 4px;font-size:12.5px;font-weight:600;color:var(--ink3);cursor:pointer;border-bottom:2px solid transparent} .tabbar .tb.on{color:var(--accent);border-bottom-color:var(--accent)}
+  .panelbody{flex:1;overflow:auto;padding:12px} .grp{border:1px solid var(--cw-border);border-radius:8px;padding:10px;margin-bottom:10px;background:var(--cw-surface-muted)} .grp h5{margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--ink3)}
+
+  /* phone device */
+  .devwrap{flex:1;display:flex;align-items:center;justify-content:center;padding:18px;background:
+     repeating-linear-gradient(45deg,transparent,transparent 10px,color-mix(in srgb,var(--ink3) 6%,transparent) 10px,color-mix(in srgb,var(--ink3) 6%,transparent) 11px)}
+  .device{width:360px;height:544px;background:var(--cw-surface);border:1px solid var(--line2);border-radius:26px;overflow:hidden;box-shadow:var(--shadow);display:flex;flex-direction:column;position:relative}
+  .ptopbar{display:flex;align-items:center;gap:7px;padding:9px 10px;border-bottom:1px solid var(--cw-border);background:var(--cw-surface);z-index:8}
+  .picon{width:31px;height:31px;border-radius:8px;border:1px solid var(--cw-border);display:flex;align-items:center;justify-content:center;color:var(--cw-text);cursor:pointer;flex:0 0 auto} .picon svg{width:16px;height:16px}
+  .pcrumb{font-size:12.5px;font-weight:600;color:var(--cw-text)} .pspacer{flex:1}
+  .pchip{display:flex;align-items:center;gap:5px;font-size:10.5px;font-weight:700;padding:5px 10px;border-radius:20px;cursor:pointer;flex:0 0 auto}
+  .pchip.auto{background:var(--cw-surface-muted);color:var(--ink3)} .pchip.pend{background:color-mix(in srgb,var(--warn) 24%,transparent);color:var(--warn)} .pchip.run{background:color-mix(in srgb,var(--accent) 18%,transparent);color:var(--accent)}
+  .pchip .spinner{width:12px;height:12px;border-top-color:var(--accent)}
+  .pview{flex:1;position:relative;overflow:hidden;background:radial-gradient(120% 120% at 50% 42%,var(--cw-view-inner),var(--cw-view-outer))}
+  .pview .compass{width:70px;height:70px;right:12px;bottom:12px} .pview .scalebar{right:88px;bottom:22px} .pview .scalebar .bar{width:86px;background-size:28px 100%}
+  /* bottom tray */
+  .tooltray{position:absolute;left:8px;right:8px;bottom:8px;display:flex;gap:5px;padding:6px;border-radius:14px;background:var(--cw-float);box-shadow:var(--shadow);overflow-x:auto;z-index:10}
+  .tooltray::-webkit-scrollbar{height:0}
+  .traygrp{display:flex;gap:5px;padding-right:7px;margin-right:2px;border-right:1px solid color-mix(in srgb,var(--cw-station) 25%,transparent)}
+  .traygrp:last-child{border-right:0;padding-right:0;margin-right:0}
+  .traybtn{width:48px;height:48px;border-radius:11px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:8.5px;font-weight:600;color:var(--cw-text);border:1px solid transparent;background:transparent;cursor:pointer;flex:0 0 auto}
+  .traybtn svg{width:20px;height:20px} .traybtn.on{background:var(--cw-highlight);border-color:color-mix(in srgb,var(--accent) 60%,transparent)} .traybtn.ghost{opacity:.5}
+  /* top-right floating panel buttons (View / Layers / Tools) */
+  .pfloat{position:absolute;top:10px;right:10px;display:flex;flex-direction:column;gap:9px;z-index:11}
+  .pfbtn{width:42px;height:42px;border-radius:50%;background:var(--cw-surface);border:1px solid var(--cw-border);box-shadow:var(--shadow);display:flex;align-items:center;justify-content:center;color:var(--cw-text);cursor:pointer;position:relative}
+  .pfbtn svg{width:19px;height:19px}
+  .pfbtn.armed{background:var(--cw-highlight);border-color:color-mix(in srgb,var(--accent) 60%,transparent)}
+  .pfbtn.open{outline:2px solid var(--accent);outline-offset:1px}
+  .pfbtn .lbl{position:absolute;right:48px;top:50%;transform:translateY(-50%);font-size:9px;font-weight:700;color:var(--cw-text);background:var(--cw-surface);border:1px solid var(--cw-border);border-radius:5px;padding:1px 5px;white-space:nowrap;opacity:.9}
+  /* right drawer (shared by View / Layers / Tools) */
+  .pscrim{position:absolute;inset:0;background:rgba(0,0,0,.3);z-index:14}
+  .pdrawer{position:absolute;top:0;right:0;bottom:0;width:214px;background:var(--cw-surface);border-left:1px solid var(--cw-border);box-shadow:var(--shadow);z-index:15;display:flex;flex-direction:column;color:var(--cw-text)}
+  .pdrawer header{display:flex;align-items:center;gap:8px;padding:11px 12px;border-bottom:1px solid var(--cw-border);font-size:13px;font-weight:600} .pdrawer header svg{width:16px;height:16px} .pdrawer header .x{margin-left:auto;color:var(--ink3);cursor:pointer;font-size:15px}
+  .dbody{flex:1;overflow:auto;padding:8px}
+  .drawerprops{margin-top:8px;border-top:1px solid var(--cw-border);padding-top:10px}
+  .dpttl{font-size:9.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--ink3);margin-bottom:6px;font-weight:700}
+  .popgrp{font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--ink3);padding:7px 8px 3px}
+  .poprow{display:flex;align-items:center;gap:9px;padding:8px;border-radius:9px;font-size:12.5px;color:var(--cw-text);cursor:pointer} .poprow:hover{background:var(--cw-surface-muted)} .poprow.on{background:var(--cw-highlight)} .poprow svg{width:16px;height:16px} .poprow.ghost{opacity:.5}
+
+  .capt{font-size:12.5px;color:var(--ink3);margin:8px 2px 0}
+  .appnav-base{width:64px;flex:0 0 64px;background:linear-gradient(160deg,var(--cw-sidebar-top),var(--cw-sidebar-bot));display:flex;flex-direction:column;align-items:center;padding-top:10px;gap:4px}
+  .appnav-base .nb{width:52px;height:50px;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:9.5px;color:#cfd6df} .appnav-base .nb.on{background:rgba(255,255,255,.16);color:#fff} .appnav-base .nb svg{width:18px;height:18px}
+  .floatbar{position:absolute;display:flex;gap:5px;padding:6px;border-radius:8px;background:var(--cw-float);box-shadow:var(--shadow)}
+  .toolbtn{width:40px;height:44px;border-radius:6px;border:1px solid transparent;background:transparent;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:var(--cw-text);font-size:9.5px;font-weight:600} .toolbtn svg{width:20px;height:20px} .toolbtn.on{background:var(--cw-highlight)}
+  .floatbar.bl{left:18px;bottom:18px} .floatbar.bc{left:50%;transform:translateX(-50%);bottom:74px}
+  .clash{position:absolute;border:2px dashed var(--bad);border-radius:8px;pointer-events:none}
+  .clashlbl{position:absolute;background:var(--bad);color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;pointer-events:none;white-space:nowrap}
+  .helpbox{position:absolute;top:14px;left:50%;transform:translateX(-50%);background:var(--cw-float);color:var(--cw-text);font-size:11.5px;padding:6px 12px;border-radius:20px;box-shadow:var(--shadow)}
+  .readout{position:absolute;top:14px;right:14px;background:var(--cw-surface);border:1px solid var(--cw-border);border-radius:8px;padding:9px 12px;font-size:11.5px;box-shadow:var(--shadow);color:var(--cw-text)} .readout b{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--ink3);margin-bottom:4px}
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:16px} @media(max-width:780px){.cols{grid-template-columns:1fr}.side{display:none}}
+  .foot{margin-top:60px;padding-top:20px;border-top:1px solid var(--line);color:var(--ink3);font-size:12.5px}
+</style>
+</head>
+<body>
+<header class="top"><div class="top-inner">
+  <span class="issue">#601</span><span class="ttl">3D tools → per-page tool rail in the sidebar</span>
+  <span class="sp"></span><button class="themebtn" id="themeBtn">◐ Theme</button>
+</div></header>
+
+<div class="wrap">
+  <h1>Per-page tool rail in the main sidebar</h1>
+  <p class="lede">Modal tools leave the 3D scene and live in the <b>main sidebar</b>, contributed <b>per page</b>.
+  Selecting a tool opens a sidebar-hinged property flyout; the task list and Auto-update merge into one stateful
+  footer whose running state <b>pops out a task flyout</b> to the side. Three responsive sizes — <b>Wide</b>,
+  <b>Mid</b>, and <b>Compact (phone, no sidebar)</b> — each get their own treatment.</p>
+
+  <div class="callout rec">
+    <h4>What we're building</h4>
+    <ul style="margin:.3em 0">
+      <li><b>Tool rail in <code>MainSideBar</code></b> — icon-only, grouped (e.g. <em>Point Cloud → Clip</em>), instant tooltips, scrolls.</li>
+      <li><b>Per-page tool contract</b> — the active page publishes a tool model; the sidebar renders it.</li>
+      <li><b>Sidebar-hinged property flyout</b>; on phone it's a bottom sheet.</li>
+      <li><b>Merged footer</b>: Auto-update toggle ⟷ "Update needed · Run" ⟷ "⟳ Running n Tasks ›". Clicking it <b>pops a task flyout</b> beside the sidebar — no inline expansion.</li>
+      <li><b>Three sizes</b>: Wide (80px) · Mid (50px) · Compact (no sidebar — Tools joins View/Layers as a top-right button that opens the shared drawer).</li>
+    </ul>
+  </div>
+
+  <nav class="toc">
+    <a href="#proto">1 · The design — interactive prototype</a>
+    <a href="#tasks">2 · Task flyout (replaces inline expand)</a>
+    <a href="#phone">3 · Compact / phone — no sidebar</a>
+    <a href="#contract">4 · Per-page tool contract</a>
+    <a href="#baseline">5 · Why — the overlap today</a>
+    <a href="#impl">6 · Implementation plan</a>
+    <a href="#open">7 · Still open</a>
+    <a href="#dirty">A · "Update needed" — audit + dirty model</a>
+  </nav>
+
+  <h2 id="proto">1 · The design — click through it</h2>
+  <p>Switch <b>page</b> to swap per-page tools. Switch <b>size</b> across Wide / Mid / Compact — Compact drops the
+  sidebar and reveals the phone controls (and the <b>Phone tools</b> selector). Drive the <b>footer</b> through its
+  states; in the running state, click the footer to pop the task flyout. Click a tool to open its flyout; hover for
+  the instant tooltip.</p>
+
+  <div class="protobar">
+    <div class="ctl"><label>Page</label>
+      <div class="seg" id="segPage"><button data-v="view" class="on">View</button><button data-v="data">Data</button><button data-v="map">Map</button></div></div>
+    <div class="ctl"><label>Size</label>
+      <div class="seg" id="segLayout"><button data-v="wide" class="on">Wide</button><button data-v="mid">Mid</button><button data-v="compact">Compact</button></div></div>
+    <div class="ctl"><label>Footer / tasks</label>
+      <div class="seg" id="segFooter"><button data-v="idle" class="on">Idle</button><button data-v="pending">Update needed</button><button data-v="running">Running</button></div></div>
+  </div>
+  <p class="muted" style="margin:2px 0 0;font-size:12.5px">In <b>Compact</b>, tap the top-right <b>Tools</b> button (below View/Layers) to open the tool drawer; pick a tool to arm it — the button then shows the active tool.</p>
+
+  <div class="stage"><div class="osframe" id="frameProto"></div></div>
+  <p class="capt" id="protoCapt"></p>
+
+  <h2 id="tasks">2 · Task flyout — pops out, doesn't expand inline</h2>
+  <p>Per your note, clicking the footer's <b>Running n Tasks</b> no longer grows the footer downward. Instead it
+  opens a <b>flyout hinged to the sidebar's right edge</b>, aligned to the footer — the same motion as a tool's
+  property flyout, just anchored at the bottom. Set the footer to <b>Running</b> above and click it to see it.</p>
+  <table>
+    <tr><th style="width:130px">Footer state</th><th>Shows</th><th>Click behaviour</th></tr>
+    <tr><td><b>Idle</b></td><td>Auto-update toggle.</td><td>Toggles auto-update on/off.</td></tr>
+    <tr><td><b>Update needed</b></td><td>Amber "Update needed" + <b>Run</b>.</td><td>Run kicks off the update (→ Running).</td></tr>
+    <tr><td><b>Running</b></td><td><b>⟳ Running n Tasks ›</b>.</td><td><b>Pops the task flyout</b> beside the sidebar (progress per task).</td></tr>
+  </table>
+  <p class="muted">Mid collapses each state to an icon (toggle / amber dot / spinner+badge); the flyout still pops to the side. On phone the equivalent is a status chip in the top bar that opens a task sheet.</p>
+
+  <h2 id="phone">3 · Compact / phone — Tools drawer beside View &amp; Layers</h2>
+  <p>At <code>LayoutSize.Narrow</code> the app hides <code>MainSideBar</code> and moves View/Data/Map into the top
+  <code>LinkBar</code> hamburger. The View page <em>already</em> floats a <b>top-right column of round buttons</b>
+  (Camera/View + Layers) that open a right-edge drawer. The fix is simply: <b>add Tools as a third button in that
+  column</b>, opening the same drawer — a grouped tool list, plus the active tool's options below it.</p>
+  <div class="callout rec"><h4>Why this beats a bottom tray or a top-left button</h4>
+    <ul style="margin:.3em 0">
+      <li><b>Consistency</b> — reuses the exact pattern View &amp; Layers use on mobile; nothing new to learn, and it drops into the existing <code>floatingButtonsId</code> column.</li>
+      <li><b>Reachable</b> — top-<em>right</em>, not top-left, and the Tools button sits lowest in the column, so it's an easy right-thumb tap.</li>
+      <li><b>Scene stays clear</b> — no persistent bottom strip covering the cave; the drawer is summoned only when needed.</li>
+      <li><b>Modal state stays glanceable</b> — once a tool is armed, the floating Tools button <b>shows that tool's icon and highlights</b>, so you always know what's active without opening anything. Tap it again to put it away.</li>
+    </ul>
+  </div>
+  <p class="muted">Rejected: a bottom tool tray (covers the view, doesn't match the app's mobile idiom) and a top-left
+  button (hard to reach, hides active state). Per-tool live readouts that must stay visible during interaction
+  (e.g. the measurement distance) remain small scene overlays; only the <em>editable</em> options live in the drawer.</p>
+
+  <h2 id="contract">4 · Per-page tool contract</h2>
+  <p>The sidebar doesn't hardcode 3D tools — the <b>page</b> hands it a model; the sidebar (and the phone tray)
+  render it. One model entry per new tool; new pages get the same home for free.</p>
+  <pre><code>RenderingView { property list&lt;ToolItem&gt; tools: [ pickTool, measureTool, clipTool ] }   // View page
+
+Repeater {
+    // NB: cwPage (currentPage) is C++ and has NO tools property. Tools are
+    // published on the page's QML *item*, reached via cwPageView.currentPageItem.
+    model: RootData.pageView.currentPageItem.tools
+    delegate: ToolRailButton {
+        selected: interactionManager.activeInteraction === modelData.interaction
+        onClicked: interactionManager.toggle(modelData.interaction)   // toggle() to be added in CP3
+    }
+}</code></pre>
+  <p class="muted">Grouping key: <code>ToolItem.group</code> is currently a <code>qsTr()</code> display string — CP3 must
+  group on a <b>stable untranslated id</b> (with a separate translated label), or the grouping reshuffles under
+  translation.</p>
+
+  <h2 id="baseline">5 · Why — the overlap today</h2>
+  <p>Overlays in <code>GLTerrainRenderer.qml</code> carry <b>no explicit <code>z</code></b>, so the bottom-left tool
+  toolbar, Clip's bottom-centre toolbar, the readout popup and the compass fight for the same corners:</p>
+  <div class="protobar"><div class="seg" id="segBaseline">
+    <button data-b="clean" class="on">Idle</button><button data-b="clip">Clip active</button><button data-b="measure">Measure active</button><button data-b="clash">Show collisions</button>
+  </div></div>
+  <div class="stage"><div class="osframe" id="frameBaseline"></div></div>
+  <p class="capt">Today's UI. Dashed boxes mark where floating widgets collide.</p>
+
+  <h2 id="impl">6 · Implementation plan</h2>
+  <p>View/chrome refactor — the interaction objects and <code>InteractionManager</code> stay put; only buttons and
+  property UI move. Reviewable checkpoints:</p>
+  <ol>
+    <li><b>CP1 — Explicit z-layers</b> in <code>GLTerrainRenderer.qml</code> (bug-only). Kills the worst overlap now.</li>
+    <li><b>CP2 — Tool model + <code>ToolRailButton.qml</code>.</b> Define <code>ToolItem</code>; View page publishes <code>tools</code>.</li>
+    <li><b>CP3 — Rail in <code>MainSideBar.qml</code> ✅ DONE.</b> New <code>SideBarToolRail.qml</code> (grouped <code>Repeater</code> of <code>ToolRailButton</code>, caption per group) sits between the nav and <code>TaskListView</code>; reads the active page's tools + interactionManager via <code>RootData.pageView.currentPageItem</code> (guarded ternaries, empty rail for Data/Map). <b>In Medium (compact) the rail is shown, not hidden</b> — the per-group grid flips from 2 columns to 1 (<code>columns: compact ? 1 : 2</code>), captions still shown; the sidebar itself is already absent at Narrow, so there's nothing to hide. <code>InteractionManager.toggle()</code> added. <code>ToolItem</code> gained <code>groupId</code> (stable group key) + <code>buttonObjectName</code> (kept off the holder's own objectName to avoid a duplicate in the tree). The per-page tool contract is now the typed <code>ToolProviderPage.qml</code> base (typed <code>tools</code> + <code>interactionManager</code>); <code>RenderingView</code> inherits it. Bottom-left <code>bottomToolbarId</code> deleted from <code>GLTerrainRenderer</code>; the two readout popups now key off <code>interactionManager.activeInteraction</code>. Tests repointed to the sidebar (<code>findChild</code>/<code>findByName</code> on <code>mainWindow</code>): Coordinate 4/4, Measurement 8/8, ManualScreenshots clip+measure PASS. <b>Follow-up:</b> the manual .md text still says "bottom toolbar" — update text + regenerate <code>measurement-tool.png</code>/<code>point-clouds-clip-tool.png</code> on the manual branch.</li>
+    <li><b>CP4 — <code>ToolPropertyFlyout.qml</code></b> hinged to the sidebar; migrate Clip Crop/Erase/Cancel + Measure readout into it. <b>Bind the flyout's active-tool state off <code>InteractionManager.activeInteraction</code></b> (the same channel the rail and both readout popups already use) rather than inventing a parallel channel — <code>activeInteraction</code> + <code>toggle()</code>/<code>activate()</code>/<code>deactivate()</code> is now the de-facto tool-state API.</li>
+    <li><b>CP5 — Update coordinator</b> (backs the footer's "Update needed" state — see Appendix A). New <code>cwUpdatable</code> contract + <code>cwUpdateCoordinator</code> that owns <code>automaticUpdate</code> (moved off <code>cwJobSettings</code>) and the aggregate <code>needsUpdate</code> + <code>updateNow()</code>. Managers drop their auto gate; <code>cwRootData</code> just registers them. Fixes the Solve/Compute-Scraps no-op bug. Lands independently of the tool-rail work.</li>
+    <li><b>CP6 — Merged footer + task flyout.</b> Replace the Auto-update box &amp; separate <code>TaskListView</code> with the three-state footer, driven by <code>updateCoordinator.needsUpdate</code> + the task model; the running state pops a task flyout (reusing the flyout component).</li>
+    <li><b>CP7 — Compact / phone.</b> No sidebar: add a <b>Tools button</b> to <code>RenderingView</code>'s existing top-right <code>floatingButtonsId</code> column (beside Camera/Layers), opening the same right drawer with the grouped tool list + active tool's options; the button shows the armed tool's icon. Tasks become a top-bar status chip. (Nav already lives in the <code>LinkBar</code> hamburger.)</li>
+    <li><b>CP8 — Polish + tests.</b> Light/dark, focus order, <code>QQ.Accessible</code>. QML tests: rail click flips <code>activeInteraction</code>; flyout tracks active tool; footer transitions on <code>derivedDataStale</code>; task flyout opens on running-click; per-page swap on page change.</li>
+  </ol>
+
+  <h2 id="open">7 · Still open</h2>
+  <ol>
+    <li><b>Phone tools placement</b> — settled: Tools becomes a third top-right button opening the shared View/Layers drawer. (Confirm the armed-tool icon-swap on the button reads clearly.)</li>
+    <li><b>Group taxonomy</b> — settled for today's tools: <em>Measure &amp; Pick</em> (Pick, Measure) and <em>Point Cloud</em> (Clip alone). Revisit as tools are added.</li>
+    <li><b>Data &amp; Map tools</b> — ship the contract for them now (empty state shown) or View-only first?</li>
+    <li><b>"Update needed" trigger</b> — <b>audited</b> (Appendix A). Decision left to you: build the dirty-subscription model to drive it, and what scope (line plot + scraps first, or include LiDAR/sketch).</li>
+  </ol>
+
+  <h2 id="dirty">Appendix A · The "Update needed" signal — audit + dirty model</h2>
+  <p>The footer's amber state needs a real "derived data is stale" signal. Audit of <code>cavewherelib/src</code>
+  confirms your read: <b>the current mechanism is one-way and silent.</b></p>
+
+  <h3>What exists today</h3>
+  <ul>
+    <li><b>Four separate <code>automaticUpdate</code> flags</b>, not one. Canonical is <code>cwJobSettings::automaticUpdate</code> (the setting the checkbox writes). <code>cwRootData</code> fans it out to <b>only</b> <code>cwLinePlotManager</code> + <code>cwScrapManager</code> (<code>cwRootData.cpp:204-214</code>). <code>cwNoteLiDARManager</code> keeps its <em>own</em> auto-update island, never wired to the setting; <code>cwSketchManager</code> has its own <code>markDirty</code> too.</li>
+    <li><b>Line plot = pure fire-and-forget.</b> Every survey edit calls <code>runSurvex()</code>, which early-returns when auto is off (<code>cwLinePlotManager.cpp:475</code>) and <b>records nothing</b>. No dirty flag survives. Nothing to subscribe to.</li>
+    <li><b>Scraps = a real dirty set, but hidden.</b> <code>cwScrapManager::DirtyScraps</code> (<code>cwScrapManager.h:149</code>) <em>does</em> accumulate while auto is off — but it's a bare <code>QSet</code> with a non-<code>Q_PROPERTY</code> getter and <b>no change signal</b>, so QML can't observe it.</li>
+    <li><b>No aggregator.</b> Nothing unions line-plot + scrap (+ LiDAR + sketch) staleness. There is <b>no user-facing "update needed" signal anywhere today.</b></li>
+    <li>Don't conflate with <code>cwProject::modified</code> — that's <em>unsaved-changes</em> (needs <b>save</b>), a different axis from <em>derived-data-stale</em> (needs <b>recompute</b>).</li>
+  </ul>
+
+  <div class="callout warn"><h4>Latent bug the audit surfaced</h4>
+    <p style="margin:0">The existing <b>"Solve"</b> (<code>CavernOutputPage.qml</code> → <code>rerunSurvex()</code>) and
+    <b>"Compute Scraps"</b> (<code>FileMenu.qml</code> → <code>updateAllScraps()</code>) buttons are gated by the same
+    <code>automaticUpdate</code> flag, so they <b>no-op while auto-update is off</b> — the only way to force a recompute
+    today is to toggle the setting back on. A footer "Run" button needs an explicit path that bypasses the gate, so
+    this gets fixed either way.</p>
+  </div>
+
+  <h3>Proposed: one coordinator owns policy + aggregation</h3>
+  <p>Neither host should own this state. <code>cwRootData</code> is already a god-hub, and <code>cwJobSettings</code>
+  is a passive settings bag — the <em>auto-update policy</em> doesn't belong in either. Introduce a dedicated owner
+  and invert control: <b>managers become pure mechanism</b> (compute + report dirty); a <b>coordinator</b> decides
+  when to run and aggregates staleness.</p>
+
+  <h4 style="margin:18px 0 4px;font-size:14px">1 · A tiny contract each pipeline implements — <code>cwUpdatable</code></h4>
+  <pre><code>class cwUpdatable {
+public:
+    virtual ~cwUpdatable() = default;
+    virtual bool needsUpdate() const = 0;   // I have pending derived work
+    virtual void update() = 0;              // recompute NOW — unconditional, no auto gate
+    // (the QObject subclass also declares:  NOTIFY needsUpdateChanged() )
+};</code></pre>
+  <p>A survey edit now just <b>marks dirty + emits <code>needsUpdateChanged</code></b>; the manager no longer decides
+  whether to run and <b>drops its <code>automaticUpdate</code> mirror + internal gate</b>. <code>update()</code> does
+  the work unconditionally — which also <b>fixes the Solve / Compute-Scraps no-op bug</b>. Line plot gains a real
+  persistent <code>m_needsUpdate</code>; scraps derive it from the existing <code>DirtyScraps</code>.</p>
+
+  <h4 style="margin:18px 0 4px;font-size:14px">2 · The owner — <code>cwUpdateCoordinator</code> (new QObject)</h4>
+  <pre><code>class cwUpdateCoordinator : public QObject {
+    Q_OBJECT
+    Q_PROPERTY(bool automaticUpdate READ automaticUpdate WRITE setAutomaticUpdate NOTIFY automaticUpdateChanged)
+    Q_PROPERTY(bool needsUpdate     READ needsUpdate                              NOTIFY needsUpdateChanged) // aggregate
+public:
+    template&lt;class T&gt; void add(T* u);   // register + connect its needsUpdateChanged
+    bool needsUpdate() const;           // OR over registered updatables
+public slots:
+    void updateNow();                   // update() every dirty updatable — ignores the flag
+    void setAutomaticUpdate(bool on);   // toggling ON flushes everything dirty
+private slots:
+    void onChildDirty(cwUpdatable* u);  // automaticUpdate ? u-&gt;update() : re-emit aggregate
+};</code></pre>
+  <p>It owns the <b>policy</b> (the <code>automaticUpdate</code> flag, persisted to the same QSettings key so existing
+  prefs migrate) <em>and</em> the <b>aggregation</b>. Auto-on: a child going dirty runs immediately. Auto-off:
+  accumulate, and expose <code>needsUpdate</code>.</p>
+
+  <h4 style="margin:18px 0 4px;font-size:14px">3 · <code>cwRootData</code> wires, but holds no state</h4>
+  <pre><code>UpdateCoordinator = new cwUpdateCoordinator(this);
+UpdateCoordinator-&gt;add(LinePlotManager);
+UpdateCoordinator-&gt;add(ScrapManager);
+// later: add(NoteLiDARManager); add(SketchManager);</code></pre>
+  <p>The current fan-out lambda (<code>cwRootData.cpp:204-214</code>) is <b>replaced</b> by these two lines; there is
+  <b>no <code>derivedDataStale</code> on <code>cwRootData</code></b> and <b>no <code>automaticUpdate</code> on
+  <code>cwJobSettings</code></b>. Everything is behind <code>RootData.updateCoordinator</code>.</p>
+
+  <h4 style="margin:18px 0 4px;font-size:14px">4 · The footer binds one object</h4>
+  <pre><code>Idle          : coordinator.automaticUpdate && !coordinator.needsUpdate
+Update needed : coordinator.needsUpdate       → Run = coordinator.updateNow()
+Running       : !taskManagerModel.isIdle
+</code></pre>
+  <p class="muted">QML checkbox/menu switch from <code>RootData.settings.jobSettings.automaticUpdate</code> to
+  <code>RootData.updateCoordinator.automaticUpdate</code>. <code>needsUpdate</code> can only be true while auto is off
+  (auto-on recomputes on every edit), so the amber state is exactly "you turned auto off and have unrecomputed edits."
+  <b>Migration:</b> move the <code>"automaticUpdate"</code> QSettings read/write into the coordinator and drop it from
+  <code>cwJobSettings::isAtDefaults()/resetToDefaults()</code>. <b>Scope:</b> line plot + scraps adopt
+  <code>cwUpdatable</code> first; LiDAR + sketch adopt the same contract later with zero coordinator changes.
+  Name is a placeholder — <code>cwUpdateCoordinator</code> vs <code>cwUpdateManager</code>/<code>cwAutoUpdater</code>.</p>
+
+  <div class="foot">Plan for <b>#601</b>. Interactive HTML mockups approximate CaveWhere Theme tokens — not the real Qt UI.
+  Files: <code>MainSideBar.qml</code>, <code>GLTerrainRenderer.qml</code>, <code>RenderingView.qml</code>,
+  <code>InteractionManager.qml</code>, <code>LinkBar.qml</code>, <code>MainContent.qml</code>, <code>TaskListView.qml</code>.</div>
+</div>
+
+<script>
+const IC={
+  box:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.1"><path d="M8 1.3l6 3.1v7.2L8 14.7l-6-3.1V4.4z"/><path d="M2 4.4l6 3.1 6-3.1M8 7.5v7.2"/></svg>',
+  book:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.1"><path d="M8 3.5C6.5 2.3 4 2.3 2.3 3v9C4 11.3 6.5 11.3 8 12.5c1.5-1.2 4-1.2 5.7-.5v-9C12 2.3 9.5 2.3 8 3.5zM8 3.5v9"/></svg>',
+  map:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.1"><path d="M6 2.5L2 4v9.5l4-1.5 4 1.5 4-1.5V2.5L10 4 6 2.5zM6 2.5v9M10 4v9.5"/></svg>',
+  crosshair:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.15"><circle cx="8" cy="8" r="3.2"/><path d="M8 .8v3.2M8 12v3.2M.8 8h3.2M12 8h3.2"/></svg>',
+  scissors:'<svg viewBox="0 0 16 16" fill="currentColor"><path d="M3.5 3.5a1.5 1.5 0 1 1 2.4 1.2L8 6.3l6.1-3.5a.5.5 0 0 1 .7.6L9.2 8l5.6 4.6a.5.5 0 0 1-.7.6L8 9.7l-2.1 1.6a1.5 1.5 0 1 1-.6-.8L7 9.1 5.3 7.8A1.5 1.5 0 1 1 3.5 3.5zm0 2a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1zm.9 6.6a.5.5 0 1 0-.9-.5.5.5 0 0 0 .9.5z"/></svg>',
+  ruler:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.1"><rect x="1.5" y="5" width="13" height="6" rx="1" transform="rotate(-20 8 8)"/><path d="M4.5 5.7l.7 1.4M6.7 4.9l1 2M9 4l.7 1.4M11 3.2l1 2"/></svg>',
+  slice:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.1"><path d="M2 4.5l6-3 6 3v7l-6 3-6-3z"/><path d="M2 4.5l6 3 6-3M8 7.5v7"/></svg>',
+  pencil:'<svg viewBox="0 0 16 16" fill="currentColor"><path d="M12.1 1.6a1.5 1.5 0 0 1 2.1 2.1l-.9.9-2.1-2.1zM10.5 3.2l2.1 2.1-7 7L2 13.9l1.6-3.6z"/></svg>',
+  layers:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.1"><path d="M8 1.5l6.5 3-6.5 3-6.5-3z"/><path d="M1.5 8l6.5 3 6.5-3M1.5 11l6.5 3 6.5-3"/></svg>',
+  list:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M5 4h9M5 8h9M5 12h9M2 4h.01M2 8h.01M2 12h.01"/></svg>',
+  tools:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.1"><path d="M10.5 1.5a3 3 0 0 0-1 5.8L3 13.8a1.4 1.4 0 0 0 2 2l6.5-6.5a3 3 0 0 0 3.8-3.7l-2 2-1.8-1.8 2-2a3 3 0 0 0-3-.6z"/></svg>',
+  chev:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" style="width:11px;height:11px"><path d="M6 3.5L10.5 8 6 12.5"/></svg>',
+  sync:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2v3h-3"/></svg>',
+};
+function plotSVG(){return `<svg class="plot" viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice">
+  <g stroke="var(--cw-line)" stroke-width="1.6" fill="none" opacity="0.85" stroke-linejoin="round" stroke-linecap="round">
+  <path d="M60 210 L110 170 L150 200 L210 150 L250 175 L300 120 L340 150"/><path d="M150 200 L165 250 L200 265"/><path d="M210 150 L230 100 L275 85"/><path d="M300 120 L315 80"/></g>
+  <g fill="var(--cw-station)">${[[60,210],[110,170],[150,200],[210,150],[250,175],[300,120],[340,150],[165,250],[200,265],[230,100],[275,85],[315,80]].map(p=>`<circle cx="${p[0]}" cy="${p[1]}" r="2.4"/>`).join('')}</g></svg>`;}
+function compassSVG(){return `<svg class="compass" viewBox="0 0 100 100"><circle cx="50" cy="50" r="46" fill="none" stroke="var(--cw-station)" stroke-width="1.4" opacity=".55"/><path d="M50 10 L58 50 L50 44 L42 50 Z" fill="#c0392b"/><path d="M50 90 L42 50 L50 56 L58 50 Z" fill="var(--cw-station)" opacity=".7"/><text x="50" y="9" text-anchor="middle" font-size="10" font-weight="700" fill="var(--cw-station)">N</text></svg>`;}
+function scaleSVG(){return `<div class="scalebar"><div class="bar"></div><span>0        40 m</span></div>`;}
+
+const PAGE_TOOLS={
+  view:[
+    {group:'Measure & Pick',tools:[
+      {id:'pick',ic:IC.crosshair,name:'Pick',tip:'Pick coordinates',props:null},
+      {id:'measure',ic:IC.ruler,name:'Measure',tip:'Measure distance & bearing',props:'measure'}]},
+    {group:'Point Cloud',tools:[
+      {id:'clip',ic:IC.scissors,name:'Clip',tip:'Clip point cloud',props:'clip'}]},
+  ],
+  data:[],
+  map:[
+    {group:'Export',tools:[{id:'exportArea',ic:IC.box,name:'Export area',tip:'Select export area',props:'export'}]},
+    {group:'Layers',tools:[{id:'addLayer',ic:IC.layers,name:'Add layer',tip:'Add geospatial layer',props:null,ghost:true}]},
+  ],
+};
+function toolById(page,id){for(const g of PAGE_TOOLS[page])for(const t of g.tools)if(t.id===id)return t;return null;}
+function propUI(kind){
+  if(kind==='clip')return `<div class="btnrow"><button class="cwbtn">${IC.box} Crop</button><button class="cwbtn">Erase</button></div><div class="kvr"><b>Selected points</b>~48,200</div><button class="cwbtn" style="margin-top:9px">Cancel</button>`;
+  if(kind==='measure')return `<div class="kvr"><b>Distance</b>12.4 m</div><div class="kvr"><b>Bearing</b>042°</div><div class="kvr"><b>Inclination</b>−7°</div>`;
+  if(kind==='slice')return `<div class="kvr"><b>Plane offset</b></div><div class="fauxrow m"></div><div class="fauxrow s"></div>`;
+  if(kind==='export')return `<div class="kvr"><b>Area</b>drag on the map</div><div class="fauxrow m"></div><button class="cwbtn" style="margin-top:8px">Export…</button>`;
+  return `<div style="font-size:11.5px;color:var(--ink3)">No options for this tool.</div>`;
+}
+function tasklistHTML(){return `<div class="tkrow">Loop closure<div class="bar"><i style="width:64%"></i></div></div><div class="tkrow">Rendering plot<div class="bar"><i style="width:30%"></i></div></div>`;}
+
+let P={page:'view',layout:'wide',footer:'idle',tool:null,flyout:false,taskFly:false,drawer:null};
+
+/* ---- sidebar (wide/mid) ---- */
+function navBtns(){
+  const items=[['view','View',IC.box],['data','Data',IC.book],['map','Map',IC.map]];
+  const mid=P.layout==='mid';
+  return items.map(it=>`<div class="navbtn ${mid?'mid':''} ${P.page===it[0]?'on':''}" data-nav="${it[0]}">${it[2]}${mid?'':`<span>${it[1]}</span>`}</div>`).join('');
+}
+function toolSection(){
+  const groups=PAGE_TOOLS[P.page];
+  if(!groups.length)return `<div class="toolempty">No tools for this page yet</div>`;
+  let h='<div class="secttl">Tools</div>';
+  groups.forEach(g=>{h+=`<div class="grplbl">${g.group}</div>`;
+    g.tools.forEach(t=>{h+=`<button class="trbtn ${t.ghost?'ghost':''} ${P.tool===t.id?'on':''}" data-tool="${t.id}">${t.ic}<span class="tip">${t.tip}</span></button>`;});});
+  return h;
+}
+function footer(){
+  if(P.footer==='idle')return `<div class="autotoggle on" data-toggleauto="1"><div class="sw"></div><span class="lbl">Auto-update</span></div>`;
+  if(P.footer==='pending')return `<div class="pendbox" data-run="1"><div class="t">Update needed</div><button class="runbtn">Run</button><span class="badge" style="${P.layout==='mid'?'':'display:none'}">!</span></div>`;
+  return `<div class="runningbox" data-tasks="1"><div class="runrow"><span class="spinner"></span><span>Running 2 Tasks</span>${IC.chev}</div><span class="badge" style="${P.layout==='mid'?'':'display:none'}">2</span></div>`;
+}
+function flyoutHTML(){
+  let h='';
+  if(P.flyout&&P.tool){const t=toolById(P.page,P.tool);
+    if(t&&t.props)h+=`<div class="flyout"><header>${t.ic}<span>${t.name}</span><span class="x" data-x="tool">✕</span></header><div class="fbody">${propUI(t.props)}</div></div>`;}
+  if(P.taskFly&&P.footer==='running')
+    h+=`<div class="flyout tasks"><header>${IC.list}<span>Running Tasks</span><span class="x" data-x="task">✕</span></header><div class="fbody">${tasklistHTML()}</div></div>`;
+  return h;
+}
+function centerScene(extra){return `<div class="view scene">${plotSVG()}${scaleSVG()}${compassSVG()}${extra||''}${flyoutHTML()}</div>`;}
+function centerData(){const row=(a,b,c,d,h)=>`<div class="r ${h?'h':''}"><div>${a}</div><div>${b}</div><div>${c}</div><div>${d}</div></div>`;
+  return `<div class="view data"><div class="pagemark">Data · Survey editor</div><div class="datatbl">${row('Station','Dist','Bear','Incl',true)}${row('A1','12.4','042','−7')}${row('A2','8.1','118','3')}${row('A3','15.0','090','0')}</div>${flyoutHTML()}</div>`;}
+function centerMap(){return `<div class="view map"><div class="pagemark">Map · Geospatial</div><div class="mapg"></div>${flyoutHTML()}</div>`;}
+function centerFor(){return P.page==='view'?centerScene():P.page==='data'?centerData():centerMap();}
+function rightPanel(){
+  if(P.page!=='view')return '';
+  return `<div class="side"><div class="tabbar"><div class="tb on">View</div><div class="tb">Layers</div></div><div class="panelbody"><button class="cwbtn" style="margin:0 auto 10px">↺ Reset</button><div class="grp"><h5>Azimuth</h5><div class="fauxrow m"></div></div><div class="grp"><h5>Projection</h5><div class="fauxrow m"></div><div class="fauxrow s"></div></div></div></div>`;
+}
+
+/* ---- phone (compact) ---- */
+function phoneStatusChip(){
+  if(P.footer==='pending')return `<div class="pchip pend" data-run="1">! Update</div>`;
+  if(P.footer==='running')return `<div class="pchip run" data-tasks="1"><span class="spinner"></span>2</div>`;
+  return `<div class="pchip auto" data-toggleauto="1">↻ Auto</div>`;
+}
+function phoneFloatingButtons(){
+  const armed=P.tool?toolById(P.page,P.tool):null;
+  const hasTools=PAGE_TOOLS[P.page].length>0;
+  const btns=[];
+  if(P.page==='view'){btns.push({k:'view',ic:IC.box,armed:false,lbl:P.drawer==='view'?'View':''});
+                      btns.push({k:'layers',ic:IC.layers,armed:false,lbl:P.drawer==='layers'?'Layers':''});}
+  if(hasTools)btns.push({k:'tools',ic:armed?armed.ic:IC.tools,armed:!!armed,lbl:P.drawer==='tools'?'Tools':(armed?armed.name:'')});
+  return `<div class="pfloat">${btns.map(b=>`<div class="pfbtn ${b.armed?'armed':''} ${P.drawer===b.k?'open':''}" data-panel="${b.k}">${b.ic}${b.lbl?`<span class="lbl">${b.lbl}</span>`:''}</div>`).join('')}</div>`;
+}
+function phoneDrawer(){
+  if(!P.drawer)return '';
+  let title='',body='';
+  if(P.drawer==='tools'){
+    title=`${IC.tools}<span>Tools</span>`;
+    const groups=PAGE_TOOLS[P.page];
+    body=groups.map(g=>`<div class="popgrp">${g.group}</div>${g.tools.map(t=>`<div class="poprow ${t.ghost?'ghost':''} ${P.tool===t.id?'on':''}" data-tool="${t.id}">${t.ic}<span>${t.name}</span></div>`).join('')}`).join('');
+    if(P.tool){const t=toolById(P.page,P.tool); if(t&&t.props)body+=`<div class="drawerprops"><div class="dpttl">${t.name} options</div>${propUI(t.props)}</div>`;}
+  } else if(P.drawer==='view'){title=`${IC.box}<span>View</span>`;body=`<button class="cwbtn" style="margin:0 auto 10px">↺ Reset</button><div class="grp"><h5>Azimuth</h5><div class="fauxrow m"></div></div><div class="grp"><h5>Projection</h5><div class="fauxrow m"></div></div>`;}
+  else {title=`${IC.layers}<span>Layers</span>`;body=`<div class="grp"><h5>Keyword filter</h5><div class="fauxrow m"></div><div class="fauxrow s"></div></div><div class="grp"><h5>Point clouds</h5><div class="fauxrow m"></div></div>`;}
+  return `<div class="pscrim" data-scrim="1"></div><div class="pdrawer"><header>${title}<span class="x" data-x="drawer">✕</span></header><div class="dbody">${body}</div></div>`;
+}
+function phoneTaskSheet(){
+  if(P.taskFly&&P.footer==='running')
+    return `<div class="sheet" style="bottom:0"><div class="grab"></div><header>${IC.list}<span>Running Tasks</span><span class="x" data-x="task">✕</span></header><div class="fbody">${tasklistHTML()}</div></div>`;
+  return '';
+}
+function phoneFrame(){
+  const crumb=P.page==='view'?'View':P.page==='data'?'Data':'Map';
+  const pv = P.page==='view'
+    ? `<div class="pview">${plotSVG()}${scaleSVG()}${compassSVG()}${phoneFloatingButtons()}${phoneTaskSheet()}${phoneDrawer()}</div>`
+    : `<div class="pview" style="background:var(--cw-surface)"><div class="pagemark">${crumb}</div>${phoneFloatingButtons()}${phoneTaskSheet()}${phoneDrawer()}</div>`;
+  return `<div class="devwrap"><div class="device">
+    <div class="ptopbar"><div class="picon" title="Menu (View/Data/Map)">${IC.list}</div>
+      <div class="pcrumb">${crumb} ›</div><div class="pspacer"></div>${phoneStatusChip()}<div class="picon">${IC.sync}</div></div>
+    ${pv}</div></div>`;
+}
+
+function renderProto(){
+  const f=document.getElementById('frameProto');
+  const caps={
+    wide:'Wide — full 80px sidebar (icon+label nav, icon-only tools). Footer running-state pops the task flyout to the right.',
+    mid:'Mid — 50px sidebar, icon-only nav + tools, footer collapses to icons + badges; task flyout still pops to the side.',
+    compact:'Compact (phone) — no sidebar. Tap the top-right Tools button (below View/Layers) to open the shared drawer; pick a tool to arm it — the button then shows the active tool. Tasks are a top-bar chip.'
+  };
+  document.getElementById('protoCapt').textContent=caps[P.layout];
+  if(P.layout==='compact'){f.innerHTML=phoneFrame();return;}
+  f.innerHTML=`<div class="sidebar ${P.layout}">
+    ${P.layout==='wide'?'<div class="filebtn">☰ File</div>':''}
+    <div class="nav">${navBtns()}</div><div class="divider strong"></div>
+    <div class="toolsec">${toolSection()}</div>
+    <div class="sbfooter">${footer()}</div></div>
+    ${centerFor()}${rightPanel()}`;
+}
+
+/* controls */
+document.getElementById('segPage').addEventListener('click',e=>seg(e,'page'));
+document.getElementById('segLayout').addEventListener('click',e=>seg(e,'layout'));
+document.getElementById('segFooter').addEventListener('click',e=>seg(e,'footer'));
+function seg(e,key){const b=e.target.closest('button');if(!b)return;
+  [...e.currentTarget.children].forEach(x=>x.classList.toggle('on',x===b));
+  P[key]=b.dataset.v;
+  if(key==='page'){P.tool=null;P.flyout=false;P.drawer=null;}
+  if(key==='footer'){P.taskFly=false;}
+  renderProto();}
+
+document.getElementById('frameProto').addEventListener('click',e=>{
+  const nav=e.target.closest('[data-nav]'),tool=e.target.closest('[data-tool]'),x=e.target.closest('[data-x]');
+  const tasks=e.target.closest('[data-tasks]'),run=e.target.closest('[data-run]'),auto=e.target.closest('[data-toggleauto]');
+  const panel=e.target.closest('[data-panel]'),scrim=e.target.closest('[data-scrim]');
+  if(x){const k=x.dataset.x; if(k==='tool')P.flyout=false; else if(k==='task')P.taskFly=false; else if(k==='drawer')P.drawer=null; renderProto();return;}
+  if(nav){P.page=nav.dataset.nav;P.tool=null;P.flyout=false;P.drawer=null;renderProto();return;}
+  if(panel){P.drawer=(P.drawer===panel.dataset.panel)?null:panel.dataset.panel;renderProto();return;}
+  if(scrim){P.drawer=null;renderProto();return;}
+  if(tool){const id=tool.dataset.tool;
+    if(P.tool===id){P.tool=null;if(P.layout!=='compact')P.flyout=false;}
+    else {P.tool=id;if(P.layout!=='compact')P.flyout=true;}
+    renderProto();return;}
+  if(tasks){P.taskFly=!P.taskFly;renderProto();return;}
+  if(run){P.footer='running';document.querySelectorAll('#segFooter button').forEach(x=>x.classList.toggle('on',x.dataset.v==='running'));renderProto();return;}
+  if(auto){auto.classList.toggle('on');return;}
+});
+
+/* baseline */
+let baseState='clean';
+function renderBaseline(){
+  const f=document.getElementById('frameBaseline');
+  const c=baseState==='clip',m=baseState==='measure',cl=baseState==='clash';
+  let ov=`<div class="floatbar bl"><div class="toolbtn"><span>${IC.crosshair}</span>Pick</div><div class="toolbtn ${c?'on':''}"><span>${IC.scissors}</span>Clip</div><div class="toolbtn ${m?'on':''}"><span>${IC.ruler}</span>Meas</div></div>`;
+  if(c)ov+=`<div class="floatbar bc"><div class="toolbtn">${IC.box}<span>Crop</span></div><div class="toolbtn">Erase</div><div class="toolbtn">✕</div></div><div class="helpbox">Click two points to crop</div>`;
+  if(m)ov+=`<div class="readout"><b>Measurement</b>12.4 m · 042°</div><div class="helpbox">Tap a station to measure</div>`;
+  if(cl)ov+=`<div class="clash" style="left:10px;bottom:10px;width:180px;height:60px"></div><div class="clash" style="right:10px;bottom:10px;width:210px;height:96px"></div><div class="clash" style="left:50%;transform:translateX(-50%);bottom:64px;width:170px;height:52px"></div><div class="clashlbl" style="right:14px;bottom:114px">compass ↔ readout</div><div class="clashlbl" style="left:14px;bottom:78px">2 toolbars stack</div><div class="floatbar bc"><div class="toolbtn">${IC.box}</div><div class="toolbtn">✕</div></div>`;
+  const nb=[['View',IC.box,1],['Data',IC.book,0],['Map',IC.map,0]];
+  f.innerHTML=`<div class="appnav-base">${nb.map(n=>`<div class="nb ${n[2]?'on':''}">${n[1]}<span>${n[0]}</span></div>`).join('')}</div><div class="view scene">${plotSVG()}${scaleSVG()}${compassSVG()}${ov}</div><div class="side"><div class="tabbar"><div class="tb on">View</div><div class="tb">Layers</div></div><div class="panelbody"><div class="grp"><h5>Azimuth</h5><div class="fauxrow m"></div></div><div class="grp"><h5>Projection</h5><div class="fauxrow m"></div></div></div></div>`;
+}
+document.getElementById('segBaseline').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;baseState=b.dataset.b;[...e.currentTarget.children].forEach(x=>x.classList.toggle('on',x===b));renderBaseline();});
+
+const root=document.documentElement;
+function setTheme(t){root.setAttribute('data-theme',t);try{localStorage.setItem('t601theme',t)}catch(e){}}
+document.getElementById('themeBtn').addEventListener('click',()=>setTheme(root.getAttribute('data-theme')==='dark'?'light':'dark'));
+(function(){let t='light';try{t=localStorage.getItem('t601theme')||(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light')}catch(e){}setTheme(t);})();
+renderProto();renderBaseline();
+</script>
+</body>
+</html>

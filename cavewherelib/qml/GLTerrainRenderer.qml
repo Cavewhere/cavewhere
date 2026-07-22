@@ -6,7 +6,6 @@
 **************************************************************************/
 
 import QtQuick
-import QtQuick.Layouts
 import QtQuick.Window
 import cavewherelib
 
@@ -29,25 +28,31 @@ Item {
     // renders this; grouping and order here drive the rail's grouping and order.
     property list<ToolItem> tools: [
         ToolItem {
+            buttonObjectName: "coordinatePickerButton"
             interaction: coordinatePickerId
             iconSource: "qrc:/twbs-icons/icons/crosshair.svg"
             text: qsTr("Pick")
             toolTip: qsTr("Pick coordinates")
             group: qsTr("Measure & Pick")
+            groupId: "measurePick"
         },
         ToolItem {
+            buttonObjectName: "measurementButton"
             interaction: measurementInteractionId
             iconSource: "qrc:/twbs-icons/icons/rulers.svg"
             text: qsTr("Measure")
             toolTip: qsTr("Measure distance and bearing")
             group: qsTr("Measure & Pick")
+            groupId: "measurePick"
         },
         ToolItem {
+            buttonObjectName: "lazClipButton"
             interaction: lazClipInteractionId
             iconSource: "qrc:/twbs-icons/icons/scissors.svg"
             text: qsTr("Clip")
             toolTip: qsTr("Clip point cloud")
             group: qsTr("Point Cloud")
+            groupId: "pointCloud"
         }
     ]
 
@@ -59,7 +64,9 @@ Item {
     readonly property int zScene: 0
     readonly property int zInteraction: 1
     readonly property int zLabels: 2
-    readonly property int zFloatingTools: 3
+    // Top of the stack: in-view chrome (compass + scale bar). The tool buttons
+    // that used to live here moved to the sidebar tool rail (see MainSideBar).
+    readonly property int zOverlay: 3
 
     clip: true
 
@@ -211,7 +218,7 @@ Item {
         anchors.bottomMargin: 20
         anchors.right: parent.right
         anchors.rightMargin: 20
-        z: rootId.zFloatingTools
+        z: rootId.zOverlay
         spacing: 10
 
         ScaleBar {
@@ -233,86 +240,16 @@ Item {
         }
     }
 
-    // Floating background for the Pick/Clip toolbar. IconButton renders a
-    // transparent background until hovered/selected, so without this surface
-    // the icons disappear when the terrain underneath matches the icon color.
-    ShadowRectangle {
-        id: bottomToolbarId
-        anchors {
-            left: parent.left
-            bottom: parent.bottom
-            margins: 20
-        }
-        z: rootId.zFloatingTools
-        width: bottomToolbarRowId.implicitWidth + Theme.floatingToolbarPadding
-        height: bottomToolbarRowId.implicitHeight + Theme.floatingToolbarPadding
-        color: Theme.surface
-        radius: 5
-
-        RowLayout {
-            id: bottomToolbarRowId
-            anchors.centerIn: parent
-            spacing: 4
-
-            IconButton {
-                id: pickButtonId
-                objectName: "coordinatePickerButton"
-                iconSource: "qrc:/twbs-icons/icons/crosshair.svg"
-                sourceSize: Qt.size(21, 21)
-                text: qsTr("Pick")
-                toolTip: qsTr("Pick coordinates")
-                selected: interactionManagerId.activeInteraction === coordinatePickerId
-                onClicked: {
-                    if (pickButtonId.selected) {
-                        coordinatePickerId.deactivate()
-                    } else {
-                        coordinatePickerId.activate()
-                    }
-                }
-            }
-
-            IconButton {
-                id: lazClipButtonId
-                objectName: "lazClipButton"
-                iconSource: "qrc:/twbs-icons/icons/scissors.svg"
-                sourceSize: Qt.size(21, 21)
-                text: qsTr("Clip")
-                toolTip: qsTr("Clip point cloud")
-                selected: interactionManagerId.activeInteraction === lazClipInteractionId
-                onClicked: {
-                    if (lazClipButtonId.selected) {
-                        lazClipInteractionId.deactivate()
-                    } else {
-                        lazClipInteractionId.activate()
-                    }
-                }
-            }
-
-            IconButton {
-                id: measureButtonId
-                objectName: "measurementButton"
-                iconSource: "qrc:/twbs-icons/icons/rulers.svg"
-                sourceSize: Qt.size(21, 21)
-                text: qsTr("Measure")
-                toolTip: qsTr("Measure distance and bearing")
-                selected: interactionManagerId.activeInteraction === measurementInteractionId
-                onClicked: {
-                    if (measureButtonId.selected) {
-                        measurementInteractionId.deactivate()
-                    } else {
-                        measurementInteractionId.activate()
-                    }
-                }
-            }
-        }
-    }
-
+    // The tools are armed from the main sidebar's tool rail (see MainSideBar),
+    // which renders the `tools` model above. The picked/measured readout popups
+    // stay in the view, keyed off the InteractionManager's active tool.
     CoordinatePickerPopup {
         id: pickPopupId
         objectName: "coordinatePickerPopup"
         parent: rendererId
         picker: coordinatePickerId
-        visible: coordinatePickerId.hasPick && pickButtonId.selected
+        visible: coordinatePickerId.hasPick
+                 && interactionManagerId.activeInteraction === coordinatePickerId
     }
 
     MeasurementReadoutPopup {
@@ -320,7 +257,8 @@ Item {
         objectName: "measurementReadoutPopup"
         parent: rendererId
         interaction: measurementInteractionId
-        visible: measureButtonId.selected && measurementInteractionId.hasMeasurement
+        visible: interactionManagerId.activeInteraction === measurementInteractionId
+                 && measurementInteractionId.hasMeasurement
         x: Math.max(0, parent.width - width - 20)
         y: 20
     }

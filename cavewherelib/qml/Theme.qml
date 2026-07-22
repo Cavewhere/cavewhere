@@ -104,8 +104,12 @@ QtObject {
     readonly property int sidebarWidthFull: 80
     readonly property int sidebarWidthCompact: 50
 
-    // Per-page tool rail: icon-only buttons, smaller than the nav buttons above.
-    readonly property int toolRailButtonSize: 38
+    // Per-page tool rail: icon-only buttons, sized so two fit across the wide
+    // sidebar, grouped inside a card that lifts them off the dark gradient.
+    readonly property int toolRailButtonSize: 30
+    readonly property int toolRailSpacing: 4
+    readonly property int toolRailPanelInset: 3
+    readonly property int toolRailPanelPadding: 4
 
     // Icon sizes
     readonly property int iconSizeButton: 16

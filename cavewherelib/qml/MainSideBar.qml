@@ -201,11 +201,33 @@ QQ.Rectangle {
         }
     }
 
+    SideBarToolRail {
+        id: toolRailId
+        objectName: "sideBarToolRail"
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: buttonBar.bottom
+
+        compact: sidebarArea._compactMode
+
+        // The active page's ToolProviderPage contract, reached through the page's
+        // QML item (currentPageItem is a QQuickItem*, so the read stays dynamic).
+        // Pages that don't inherit ToolProviderPage (Data, Map) yield an empty rail.
+        interactionManager: {
+            let pageItem = RootData.pageView ? RootData.pageView.currentPageItem : null
+            return (pageItem && pageItem.interactionManager) ? pageItem.interactionManager : null
+        }
+        toolModel: {
+            let pageItem = RootData.pageView ? RootData.pageView.currentPageItem : null
+            return (pageItem && pageItem.tools) ? pageItem.tools : []
+        }
+    }
+
     TaskListView {
         id: taskListView
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.top: buttonBar.bottom
+        anchors.top: toolRailId.bottom
         anchors.bottom: autoSwitchId.top
     }
 

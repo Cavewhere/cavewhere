@@ -26,8 +26,8 @@ MainWindowTest {
             }
         }
 
-        // Verifies the view wiring: the toolbar button activates the interaction
-        // via InteractionManager (disabling the turn-table), placing two points
+        // Verifies the view wiring: the sidebar tool-rail button activates the
+        // interaction via InteractionManager (disabling the turn-table), placing two points
         // fills the readout popup, the copy button invokes copyToClipboard(), and
         // toggling off restores the turn-table and resets the measurement.
         //
@@ -128,8 +128,8 @@ MainWindowTest {
             }, 5000, "Renderer found")
 
             let measurement = renderer.measurementInteraction
-            let measureButton = ObjectFinder.findObjectByChain(rootId.mainWindow,
-                "rootId->viewPage->SplitView->renderer->measurementButton")
+            let measureButton = findChild(rootId.mainWindow, "measurementButton")
+            verify(measureButton !== null, "Measure button found")
             mouseClick(measureButton)
             tryVerify(() => measurement.enabled === true, 1000, "Measurement enabled")
             return renderer
@@ -176,8 +176,7 @@ MainWindowTest {
             verify(measurement !== null, "Measurement interaction exposed on renderer")
             verify(turnTable !== null, "Turn table exposed on renderer")
 
-            let measureButton = ObjectFinder.findObjectByChain(rootId.mainWindow,
-                "rootId->viewPage->SplitView->renderer->measurementButton")
+            let measureButton = findChild(rootId.mainWindow, "measurementButton")
             verify(measureButton !== null, "Measure button found")
 
             // Default: turn-table active, measurement idle.

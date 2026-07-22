@@ -38,6 +38,18 @@ QQ.Item {
         active(defaultInteraction)
     }
 
+    //Arms the interaction if it isn't already active, otherwise disarms it back
+    //to the default interaction. Routes through activate()/deactivate() so any
+    //interaction-specific setup runs, exactly like the tool buttons did.
+    function toggle(interaction) {
+        if(!interaction) { return; }
+        if(activeInteraction === interaction) {
+            interaction.deactivate();
+        } else {
+            interaction.activate();
+        }
+    }
+
     function add(interaction) {
         if(interactions.indexOf(interaction) >= 0) {
             console.warn("Can't add interaction because it has already been added");

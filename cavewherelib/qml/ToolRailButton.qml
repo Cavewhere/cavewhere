@@ -20,7 +20,7 @@ AbstractIconButton {
 
     // Inset of the glyph inside the square button, so the icon reads at a
     // consistent size regardless of the SVG's own bounds.
-    readonly property int _iconInset: 9
+    readonly property int _iconInset: 6
 
     implicitWidth: Theme.toolRailButtonSize
     implicitHeight: Theme.toolRailButtonSize

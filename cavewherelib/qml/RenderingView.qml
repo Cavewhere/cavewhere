@@ -3,7 +3,10 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import cavewherelib
 
-QQ.Item {
+// The View page contributes the 3D tools to the sidebar tool rail via the
+// typed ToolProviderPage contract (tools + interactionManager), sourced from
+// the renderer below.
+ToolProviderPage {
     id: rootId
     objectName: "viewPage"
 
@@ -16,9 +19,8 @@ QQ.Item {
     property alias renderer: rendererId
     property alias viewDrawer: drawerId
 
-    // Per-page tool contract: the View page publishes the 3D tools; the sidebar
-    // tool rail (CP3) renders whatever the active page exposes here.
-    property alias tools: rendererId.tools
+    tools: rendererId.tools
+    interactionManager: rendererId.interactionManager
 
     SplitView {
         id: splitViewId

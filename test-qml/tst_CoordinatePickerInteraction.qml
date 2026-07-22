@@ -11,7 +11,7 @@ MainWindowTest {
         name: "CoordinatePickerInteraction"
         when: windowShown
 
-        // Verifies the interaction lifecycle: the floating toggle button activates
+        // Verifies the interaction lifecycle: the sidebar tool-rail button activates
         // the picker via InteractionManager, which disables the turn-table; toggling
         // off restores the turn-table and clears the current pick.
         //
@@ -37,8 +37,8 @@ MainWindowTest {
             verify(picker !== null, "Coordinate picker exposed on renderer")
             verify(turnTable !== null, "Turn table exposed on renderer")
 
-            let pickButton = ObjectFinder.findObjectByChain(rootId.mainWindow,
-                "rootId->viewPage->SplitView->renderer->coordinatePickerButton")
+            // The tool now lives in the main sidebar's tool rail, not the view.
+            let pickButton = findChild(rootId.mainWindow, "coordinatePickerButton")
             verify(pickButton !== null, "Pick button found")
 
             // Default: turn-table is the active interaction.

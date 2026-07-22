@@ -25,7 +25,17 @@ QQ.QtObject {
     property string text
     property string toolTip
 
+    // Stable objectName handed to the rail button so tests (and screenshots) can
+    // find it. Kept off this data holder's own objectName to avoid a duplicate
+    // in the object tree.
+    property string buttonObjectName
+
     // Grouping heading ("Measure & Pick", "Point Cloud", …). Tools sharing a
     // group render together under one label in the rail.
     property string group
+
+    // Stable, untranslated key the rail groups on. `group` is the visible
+    // (translatable) heading; boundary detection keys off this so a translation
+    // never merges or splits groups.
+    property string groupId
 }
