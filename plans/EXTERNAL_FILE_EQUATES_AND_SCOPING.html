@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>External File Integration — Equates &amp; Station Scoping</title>
+<style>
+  body { font-family: -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif; color: #1c1c1c; background: #fff; line-height: 1.5; max-width: 920px; margin: 2.5rem auto; padding: 0 1.5rem 4rem; }
+  h1 { font-size: 1.85rem; border-bottom: 2px solid #2451a4; padding-bottom: 0.35rem; }
+  h2 { font-size: 1.4rem; margin-top: 2.4rem; border-bottom: 1px solid #d8d8d8; padding-bottom: 0.25rem; color: #2451a4; }
+  h3 { font-size: 1.1rem; margin-top: 1.6rem; }
+  h4 { font-size: 1.0rem; margin-top: 1.2rem; color: #5a5a5a; }
+  code, pre { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+  code { background: #f4f4f6; padding: 0.08rem 0.32rem; border-radius: 3px; font-size: 0.92em; }
+  pre { background: #f4f4f6; padding: 0.8rem 1rem; border-radius: 4px; overflow-x: auto; font-size: 0.88em; line-height: 1.4; }
+  pre code { background: transparent; padding: 0; }
+  table { border-collapse: collapse; margin: 0.6rem 0 1.1rem; font-size: 0.95em; }
+  th, td { border: 1px solid #d8d8d8; padding: 0.4rem 0.7rem; text-align: left; vertical-align: top; }
+  th { background: #f4f4f6; font-weight: 600; }
+  .note { background: #fff7d6; border: 1px solid #e0c346; padding: 0.5rem 0.9rem; border-radius: 4px; margin: 0.8rem 0; }
+  .yes { background: #e4f5e4; }
+  .no { background: #fbe4e4; }
+  .meta { color: #5a5a5a; font-size: 0.92em; }
+  a { color: #2451a4; }
+</style>
+</head>
+<body>
+
+<h1>External File Integration — Equates &amp; Station Scoping</h1>
+
+<p class="meta">
+  Part of the External File Integration plan. Read
+  <a href="EXTERNAL_FILE_INTEGRATION_PLAN.html">the master plan</a> and
+  <a href="EXTERNAL_FILE_PHASE2.html">Phase 2</a> first. This file owns a
+  <strong>foundational feature that is bigger than Phase 2 and underpins
+  Phase 3</strong>: a persistent, user-editable <em>equate</em> (station
+  tie-in) concept, the unified station-<em>scope</em> model it rides on, and
+  opt-in native station prefixing. It was spun out of Phase 2 &sect;15 because
+  the equate work is a new model concept, not a Phase-2 bug fix.
+</p>
+
+<p class="meta">
+  Cross-cutting test rules (per-process safety, cavern serialisation, narrow
+  tag filters, "existing tests always green") live in
+  <a href="EXTERNAL_FILE_INTEGRATION_PLAN.html#testing">master &sect;10.1</a>
+  and apply to every commit here without restating.
+</p>
+
+<h2 id="why">0. Why this exists (and how it relates to Phase 2 &amp; 3)</h2>
+
+<p>
+  The user asked a deceptively simple question: <em>how does a native survey
+  tie into an attached external centerline?</em> The answer, after tracing the
+  code, is <strong>it can't</strong> &mdash; and the reason exposes a missing
+  primitive that three separate features all need. This plan builds that
+  primitive once.
+</p>
+
+<ul>
+  <li><strong>Phase 2</strong> is <em>not</em> gated by this work. Its only
+    remaining blockers are &sect;16 <a href="EXTERNAL_FILE_PHASE2.html#bug-b2">B2</a>
+    / <a href="EXTERNAL_FILE_PHASE2.html#bug-b3">B3</a> /
+    <a href="EXTERNAL_FILE_PHASE2.html#bug-b6">B6</a>. But the note-station
+    entry UI and the trip-page layout Phase 2 is finishing will be
+    <em>reshaped</em> by the scope model here &mdash; so settling this design
+    before hardening that UI avoids building it twice.</li>
+  <li><strong>Phase 3</strong> (cave-level attach) is already specified in
+    terms of a <code>stationPrefix</code> on "Scope trips" (Phase 2 &sect;11
+    stub, master &sect;7.2 / &sect;8.5.1 / &sect;8.7). That is
+    <em>identical</em> to the "native prefixing" designed here (&sect;7 Path B).
+    This plan makes the shared foundation explicit so Phase 3 consumes it
+    rather than reinventing it (&sect;6).</li>
+  <li><strong>Phase 2 &sect;15 F1</strong> (external note-name / native-station
+    collision) is a symptom of the same missing scope model and is folded into
+    the scope lens (&sect;4 commit&nbsp;7) here.</li>
+</ul>
+
+<h2 id="findings">1. Investigation findings (the current reality)</h2>
+
+<h3>1.1 The four tie-in directions today</h3>
+
+<p>
+  The scope a station lands in is set at export time in
+  <code>cwSurvexExporterCaveTask.cpp:104&ndash;125</code> (external trips get a
+  <code>*begin trip_&lt;hex&gt;</code> wrapper; native trips are written
+  unwrapped, <code>:128&ndash;132</code>), and mirrored on decode by
+  <code>cwLinePlotTask::scopedStationName</code>
+  (<code>cwLinePlotTask.cpp:64&ndash;70</code>).
+</p>
+
+<table>
+  <tr><th>Tie</th><th>Works today?</th><th>Mechanism</th></tr>
+  <tr><td>native &rarr; native</td><td class="yes">Yes</td>
+    <td>Implicit &mdash; a shared bare name <em>is</em> one node.
+      <code>cwSurveyNetwork::addShot</code> keys adjacency by
+      <code>cwStation::canonicalKey</code> (lower-case only,
+      <code>cwStation.h:66</code>), so two trips both naming <code>5</code>
+      collapse to one solved point. <code>cwFindUnconnectedSurveyChunks</code>
+      even <em>defines</em> connectivity as shared-name set-intersection
+      (<code>cwFindUnconnectedSurveyChunks.cpp:22&ndash;45</code>).</td></tr>
+  <tr><td>native &rarr; external</td><td class="no">No</td>
+    <td><code>cave_&lt;hex&gt;.Y</code> vs
+      <code>cave_&lt;hex&gt;.trip_&lt;hex&gt;.X</code> &mdash; different cavern
+      scopes, distinct nodes.</td></tr>
+  <tr><td>external &rarr; native</td><td class="no">No</td>
+    <td>Same, reversed.</td></tr>
+  <tr><td>external &rarr; external</td><td class="no">No</td>
+    <td><code>trip_&lt;hexT1&gt;.X</code> vs <code>trip_&lt;hexT2&gt;.X</code>
+      &mdash; different <code>trip_</code> prefixes, distinct nodes even for
+      identical tails.</td></tr>
+</table>
+
+<p>
+  Only native&rarr;native works, and it works <em>by accident of naming</em>,
+  not by an explicit tie. The <code>*begin trip_&lt;hex&gt;</code> isolation
+  wrapper (<code>cwSurvexExporterCaveTask.cpp:98&ndash;103</code>) is exactly
+  what severs the other three.
+</p>
+
+<h3>1.2 There is no equate concept in the model at all</h3>
+
+<ul>
+  <li><strong>Nothing persists an equate.</strong> <code>cavewhere.proto</code>
+    stores stations only by <code>name</code> &mdash; no equate/tie/alias/
+    connection field on <code>Cave</code> (<code>:82</code>), <code>Trip</code>
+    (<code>:107</code>), <code>Shot</code>/<code>StationShot</code>
+    (<code>:217</code>/<code>:244</code>), or <code>ExternalCenterline</code>
+    (<code>:76</code>). <code>FixStation</code> (<code>:65</code>) is a
+    georeferencing position, not a station-to-station tie. No runtime
+    <code>cwEquate</code>/<code>cwConnection</code> class exists.</li>
+  <li><strong>Import <em>flattens</em> equates.</strong> A Survex
+    <code>*equate A.1 B.1</code> is consumed at import:
+    <code>cwSurvexGlobalData::populateEquateMap</code>
+    (<code>cwSurvexGlobalData.cpp:278&ndash;311</code>) picks a canonical name
+    and <code>fixStationNames</code> (<code>:148&ndash;250</code>)
+    <em>renames</em> the stations to share it, then discards the map. The
+    relationship becomes an implicit shared-name tie. (It also can't handle
+    3+-way equates &mdash; <code>FIXME</code> at
+    <code>cwSurvexGlobalData.cpp:292&ndash;296</code>.)</li>
+  <li><strong>Export <em>synthesizes</em> equates.</strong> The only
+    <code>*equate</code> lines the exporter writes are for LRUD carrier
+    stations, generated fresh from geometry each export
+    (<code>cwSurvexExporterTripTask.cpp:346&ndash;350</code>,
+    <code>cwSurvexExporterRule.cpp:428&ndash;432</code>) &mdash; not a
+    round-trip of stored data.</li>
+</ul>
+
+<p>
+  <strong>Conclusion:</strong> a user-editable equate is a brand-new
+  persistent model concept. The only reusable prior art is the mechanical
+  <code>*equate</code> emission pattern and the import-side name-merge
+  machinery.
+</p>
+
+<h3>1.3 Feasibility: decode is ready, emission has one real blocker</h3>
+
+<p>
+  <strong>Decode round-trips an equate for free.</strong> Cavern emits both
+  equated names at the same coordinate; the reader keeps both
+  (<code>cwSurvex3DFileReader.cpp:89&ndash;105</code>); and
+  <code>splitLookupByCave</code> keys the per-cave lookup by regex capture 2
+  (<code>cwLinePlotTask.cpp:455&ndash;456</code>,
+  <code>cwCavernNaming.cpp:65&ndash;67</code>), producing <strong>two distinct
+  cave-local keys sharing one position</strong> with no collision. An equate is
+  literally "two aliased names, one point," and the pipeline already represents
+  it that way.
+</p>
+
+<p>
+  <strong>Emission is a bare <code>*equate</code> line &mdash; SPIKED &amp;
+  RESOLVED 2026-07-22 (commit&nbsp;1, <code>testcases/test_cwEquateSpike.cpp</code>).</strong>
+  The feared export barrier does <em>not</em> apply to our driver. Cavern's
+  error 26 ("Station not exported") fires only when a station <em>was</em>
+  <code>*export</code>-ed but not to a deep enough level: the check at
+  <code>readval.c:329</code> runs only when <code>min_export</code> is neither
+  <code>0</code> nor <code>USHRT_MAX</code>, and a never-exported station keeps
+  <code>min_export == 0</code>, making the check a no-op. The survex corpus shows
+  exactly this asymmetry: <code>survex/tests/export.svx</code> passes because
+  <code>inner.1</code> is <code>*export</code>-ed at <em>both</em> nesting levels;
+  <code>survex/tests/exporterr1b.svx</code> fails because it is exported at the
+  inner level only &mdash; an <em>incomplete chain</em>, not a missing one. Since
+  our driver emits no <code>*export</code> at all
+  (<code>cwSurvexExporterCaveTask.cpp:104&ndash;125</code>), a bare qualified
+  <code>*equate</code> just resolves. <strong>No <code>*export</code> and no
+  <code>*infer exports</code> are needed.</strong> The spike drove real cavern
+  solves and confirmed coincident positions at cave scope, region scope, and for
+  an N-way (3-operand) equate. This materially simplifies commits 4 and 5:
+  emission is one <code>*equate</code> line at the tie's scope.
+</p>
+
+<p>
+  Two lesser wrinkles to design around, not blockers:
+</p>
+<ul>
+  <li><strong>Topology stays "two nodes at one point."</strong> The
+    <code>.3d</code> line-endpoint index is first-label-wins
+    (<code>cwSurvex3DFileReader.cpp:98&ndash;104</code>), so the alias name gets
+    a position but may carry no adjacency edges;
+    <code>updateCaveNetworks</code>
+    (<code>cwLinePlotTask.cpp:576&ndash;620</code>) does not merge the two
+    cave-local keys. Positions are perfect; consumers must treat the aliased
+    keys as <em>position-aliases</em>, not assume one merged node.</li>
+</ul>
+
+<h2 id="decisions">2. Decisions locked (2026-07-22)</h2>
+
+<table>
+  <tr><th>#</th><th>Decision</th><th>Rationale</th></tr>
+  <tr><td>D1</td><td><strong>Alias, never merge.</strong> A 3D station location
+    may carry multiple names; both stations keep their identity.</td>
+    <td>Mandatory for external (can't rename a foreign file's stations) and
+      matches the decode's natural representation (&sect;1.3). The import's
+      rename-and-drop is the wrong model for a persistent tie.</td></tr>
+  <tr><td>D2</td><td><strong>Both cave-scoped and cross-cave / region-level
+    equates ship in this plan.</strong> Cross-cave is a second storage home + a
+    second emission path (&sect;5), not a new model &mdash; the handle (D6) is
+    shared.</td>
+    <td>Two caves that physically connect (a dig breaks through) is a
+      first-class case, not a someday one; the self-contained handle makes it
+      cheap to include now.</td></tr>
+  <tr><td>D3</td><td><strong>Spike first &mdash; DONE 2026-07-22 (GREEN).</strong>
+    Commit&nbsp;1 proved cross-scope <code>*equate</code> solves at both cave and
+    region scope with a bare line: <em>no <code>*export</code>, no
+    <code>*infer exports</code>.</em> The export barrier was a false alarm (see
+    &sect;1). Emission in commits 4/5 is one <code>*equate</code> line.</td>
+    <td>Small, decisive, and the whole model is worthless if cross-scope
+      <code>*equate</code> can't solve. It can.</td></tr>
+  <tr><td>D4</td><td><strong>N-way equates.</strong> An equate is a set
+    (&ge;2) of station handles; fix the import's 2-way limit while here.</td>
+    <td>A junction where three surveys meet is one physical point, not two
+      pairwise ties.</td></tr>
+  <tr><td>D5</td><td><strong>Additive / opt-in.</strong> native&rarr;native
+    keeps working implicitly by shared name (backward compat). Equates are
+    <em>added</em> for the three external directions and for prefixed-native
+    trips.</td>
+    <td>No migration forced on existing flat projects.</td></tr>
+  <tr><td>D6</td><td><strong>Self-contained station handle</strong>
+    <code>(scope, containerId, tail)</code> with <code>containerId</code> always
+    populated (option&nbsp;A): <code>caveId</code> for a
+    <code>NativeCave</code> station, <code>tripId</code> for a
+    <code>Trip</code>-scoped (external / Scope-trip) station.</td>
+    <td>Location-independent identity &mdash; the same handle works on a cave or
+      the region, so cross-cave needs no schema change. A <code>tripId</code>
+      (not a denormalized caveId) for scoped stations keeps a re-parented trip
+      correct.</td></tr>
+</table>
+
+<h2 id="foundation">3. Foundation: one unified station scope</h2>
+
+<p>
+  Three things scope a trip's stations, and they are the same shape. The whole
+  plan hinges on collapsing them into one accessor so equates, the scope lens,
+  native prefixing, and Phase 3 all speak it.
+</p>
+
+<table>
+  <tr><th>Trip kind</th><th>Scope prefix</th><th>Source</th></tr>
+  <tr><td>Native (flat)</td><td><code></code> (empty)</td><td>&mdash;</td></tr>
+  <tr><td>External (trip attach)</td><td><code>trip_&lt;hex&gt;.</code></td>
+    <td><code>externalCenterline</code></td></tr>
+  <tr><td>Scope trip (Phase 3 cave attach) / native prefixed</td>
+    <td><code>&lt;stationPrefix&gt;.</code></td>
+    <td><code>stationPrefix</code></td></tr>
+</table>
+
+<pre><code>QString cwTrip::scopePrefix() const {
+    if (!externalCenterline().isEmpty()) return cwCavernNaming::tripScopePrefix(id()); // "trip_&lt;hex&gt;."
+    if (!m_stationPrefix.isEmpty())      return m_stationPrefix + QLatin1Char('.');     // "A."
+    return QString();                                                                   // flat native
+}
+bool cwTrip::isScoped() const { return !scopePrefix().isEmpty(); }</code></pre>
+
+<p>
+  The three <code>cwTrip</code> accessors
+  (<code>solvedStationPositions</code>/<code>solvedNetwork</code>/
+  <code>solvedStations</code>, <code>cwTrip.cpp:406&ndash;503</code>) currently
+  branch on <code>m_externalCenterline.isEmpty()</code> and strip
+  <code>tripScopePrefix(id())</code>. They switch to branching on
+  <code>isScoped()</code> and stripping <code>scopePrefix()</code> &mdash; the
+  strip logic is <em>already there</em>, just generalised. This subsumes Phase 2
+  &sect;15 <strong>R2</strong> ("shared <code>externallyBacked</code>
+  predicate") and <strong>A1</strong> ("uniform external-station accessor"):
+  both C++ (<code>cwLinePlotGeometry.cpp</code>,
+  <code>cwLinePlotLabelView.cpp</code>) and QML
+  (<code>TripPage.isExternal</code>, <code>NoteStation</code> /
+  <code>NoteLiDARStationItem</code> validator bindings) sites that hand-roll
+  <code>externalCenterline.entryFile.length &gt; 0</code> collapse onto
+  <code>isScoped</code>.
+</p>
+
+<p class="note">
+  <strong>The failure mode to avoid:</strong> building equate emission (or any
+  new scope logic) around the external-only <code>trip_&lt;hex&gt;</code>
+  prefix. That works for trip-attach but silently breaks for Phase-3 Scope
+  trips. Everything must go through <code>scopePrefix()</code>.
+</p>
+
+<h2 id="sequence">4. Commit sequence</h2>
+
+<h3 id="c1">Commit 1 &mdash; Equate spike (throwaway) &mdash; DONE 2026-07-22, GREEN</h3>
+<p class="note">
+  <strong>Result:</strong> cross-scope <code>*equate</code> solves at both scopes
+  with a <em>bare</em> <code>*equate</code> line &mdash; no <code>*export</code>,
+  no <code>*infer exports</code>. The export barrier was a false alarm (see
+  &sect;1, "Emission is a bare <code>*equate</code> line"). The spike
+  (<code>testcases/test_cwEquateSpike.cpp</code>, tag <code>[EquateSpike]</code>)
+  drove real cavern solves via <code>cwCavernRunner::run</code> and read positions
+  back with <code>cwSurvex3DFileReader</code>, asserting coincident coordinates for:
+</p>
+<ul>
+  <li><strong>Cave scope</strong> &mdash; two isolated
+    <code>*begin trip_&lt;hex&gt;</code> blocks inside one
+    <code>*begin cave_&lt;hex&gt;</code>, equated by cave-relative name. ✓</li>
+  <li><strong>Region scope</strong> &mdash; two
+    <code>*begin cave_&lt;hex&gt;</code> blocks inside the region wrapper, equated
+    by fully-qualified <code>cave_&lt;hex&gt;.&lt;tail&gt;</code> name. ✓</li>
+  <li><strong>N-way</strong> &mdash; one <code>*equate</code> with three qualified
+    operands lands all three at one coordinate, so an N-way tie is a single
+    emitted line, not a pairwise chain (validates D4). ✓</li>
+</ul>
+<p>
+  Emission point for commit&nbsp;4 (cave):
+  <code>cwSurvexExporterCaveTask::writeCave</code>, a new slot between the trip
+  loop end (<code>cwSurvexExporterCaveTask.cpp:133</code>) and the closing
+  <code>*end</code> (<code>:135</code>), operands cave-relative. Emission point
+  for commit&nbsp;5 (region): <code>cwSurvexExporterRegion::exportRegion</code>,
+  after the cave loop (<code>cwSurvexExporterRegion.cpp:58</code>) and before the
+  outer <code>*end</code> (<code>:60</code>), operands fully qualified
+  <code>cave_&lt;hex&gt;.&lt;tail&gt;</code>. The spike file is throwaway &mdash;
+  delete it once those two emission points land.
+</p>
+<p class="note">
+  <strong>Follow-up surfaced by the spike (feeds commit&nbsp;6 UX, not a blocker):</strong>
+  equating the two <em>directly fixed</em> stations of two independently-fixed
+  subnetworks raises cavern error 46 ("Station already fixed or equated to a
+  fixed point"). The safe tie is between non-fixed stations of each component
+  (each component keeps its own <code>*fix</code> elsewhere), which cavern solves
+  as an over-constrained loop and reports as misclosure &mdash; the exact signal
+  commit&nbsp;6 surfaces to the user. The equate UX must therefore steer the user
+  to tie ordinary stations, and route error 46 to a friendly message rather than
+  a raw cavern failure.
+</p>
+
+<h3 id="c2">Commit 2 &mdash; <code>cwTrip::scopePrefix()</code> foundation + predicate</h3>
+<p>
+  Add <code>m_stationPrefix</code> (plain member + explicit setter +
+  <code>NOTIFY</code>, no bindable), <code>scopePrefix()</code>,
+  <code>isScoped()</code>. Re-point the three solved-* accessors and the
+  R2/A1 consumer sites. Proto gets <code>Trip.station_prefix</code> (string,
+  empty default). No behaviour change yet for existing projects (empty prefix
+  &rArr; identical output). Tests: the existing external round-trip stays
+  green; add a native-trip-with-prefix accessor test.
+</p>
+
+<h3 id="c3">Commit 3 &mdash; Equate model + persistence (self-contained handle)</h3>
+<p>
+  An equate is an N-way set of <strong>self-contained station handles</strong>
+  (D6):
+</p>
+<pre><code>struct cwStationHandle {
+    enum Scope { NativeCave, Trip };
+    Scope   scope;
+    QUuid   containerId;   // caveId when NativeCave, tripId when Trip
+    QString tail;
+};</code></pre>
+<p>
+  <code>containerId</code> is always populated &mdash; auto-filled from the
+  owning cave for a within-cave native tie, so the UI never asks for it. Because
+  the handle is location-independent, one type serves two homes:
+</p>
+<ul>
+  <li><strong><code>cwCave</code> equate list</strong> &mdash; within-cave ties.
+    Validation: every <code>Trip</code> handle's <code>parentCave</code> and
+    every <code>NativeCave</code> handle's <code>containerId</code> must equal
+    the owner cave. Travels with the cave.</li>
+  <li><strong><code>cwCavingRegion</code> equate list</strong> &mdash; cross-cave
+    ties (two caves that connect). Handles may span caves; no owner-cave
+    constraint.</li>
+</ul>
+<p>
+  Proto: <code>repeated Equate</code> on both <code>Cave</code> and the region
+  message, each with <code>repeated StationHandle { Scope scope; bytes
+  container_uuid; string tail; }</code>. Runtime objects with undo, save/load,
+  <code>equatesChanged</code>. Fix the import's 2-way limit (D4). No solve wiring
+  yet.
+</p>
+<p class="note">
+  A <code>Trip</code> handle covers external trips
+  (<code>trip_&lt;hex&gt;</code>) and Phase-3 Scope trips
+  (<code>stationPrefix</code>) with no distinction &mdash; emission renders each
+  via <code>trip-&gt;scopePrefix()</code>. A <code>NativeCave</code> handle
+  covers bare native stations <em>and</em> the
+  cave-level-<code>externalCenterline</code> variant (stations directly under
+  <code>cave_&lt;hex&gt;.</code> with no trip).
+</p>
+
+<h3 id="c4">Commit 4 &mdash; Cave-level equate emission + decode consumption</h3>
+<p>
+  Emit each <code>cwCave</code> equate as a <code>*equate</code> at cave scope
+  &mdash; the natural slot is <strong>after the trip loop closes, before
+  <code>*end&nbsp;cave</code></strong>
+  (<code>cwSurvexExporterCaveTask.cpp</code>, between the <code>:133</code> loop
+  end and the <code>:135</code> <code>*end</code>), where every native station
+  and every <code>*begin trip_&lt;hex&gt;</code> sibling is in scope. Operands
+  render cave-relative: <code>&lt;scopePrefix&gt;&lt;tail&gt;</code> for a
+  <code>Trip</code> handle, <code>&lt;tail&gt;</code> for a
+  <code>NativeCave</code> handle. No <code>*export</code>/<code>*infer</code> line is
+  needed (commit&nbsp;1). Make consumers treat the aliased cave-local keys as position-aliases
+  (the &sect;1.3 wrinkles): confirm geometry + labels resolve through the shared
+  position; document that the cave network holds two nodes at one point. Test:
+  red&rarr;green &mdash; a native station equated to an external tail draws them
+  coincident (fixture with a deliberate pre-tie gap).
+</p>
+
+<h3 id="c5">Commit 5 &mdash; Region-level (cross-cave) equate emission</h3>
+<p>
+  Emit each <code>cwCavingRegion</code> equate at region scope in
+  <code>cwSurvexExporterRegion</code>, after both
+  <code>*begin cave_&lt;hex&gt;</code> blocks are declared as siblings. Operands
+  render <strong>fully qualified</strong>:
+  <code>cave_&lt;hex&gt;.&lt;scopePrefix&gt;&lt;tail&gt;</code> for a
+  <code>Trip</code> handle (cave hex from <code>trip-&gt;parentCave()</code>),
+  <code>cave_&lt;hex&gt;.&lt;tail&gt;</code> for a <code>NativeCave</code> handle
+  (cave hex from <code>containerId</code>). No <code>*export</code>/<code>*infer</code>
+  line is needed (commit&nbsp;1). Decode is unchanged &mdash; <code>splitLookupByCave</code>
+  already routes each qualified name to its cave and keys by the tail, so a
+  cross-cave equate lands as two position-aliased keys, one in <em>each</em>
+  cave's lookup. Test: red&rarr;green &mdash; a station in cave A equated to one
+  in cave B solves coincident across the cave boundary.
+</p>
+
+<h3 id="c6">Commit 6 &mdash; Equate UX (the pain-point payoff)</h3>
+<p>
+  Survex's pain is a hand-managed text list of qualified names. CaveWhere has
+  the stations and positions, so make it visual:
+</p>
+<ul>
+  <li><strong>Create by picking two stations, never typing qualified
+    names</strong> &mdash; select a station &rarr; "Tie in&hellip;" &rarr; pick
+    the partner via the scope search picker (commit&nbsp;7) or by clicking it in
+    the 3D view. The un-typeable-UUID problem disappears because you select.</li>
+  <li><strong>Existence + misclosure feedback</strong> &mdash; confirm both
+    stations exist (today's validator is character-only, &sect;1.2) and surface
+    the gap distance cavern already computes ("these were 0.4&nbsp;m
+    apart").</li>
+  <li><strong>A "Ties" panel</strong> &mdash; friendly rows
+    (<code>Trip&nbsp;A&nbsp;&middot;&nbsp;5&nbsp;&harr;&nbsp;Whitmore.svx&nbsp;&middot;&nbsp;X</code>),
+    add/remove, misclosure per row. A reviewable table, not a text file. Shows
+    both a cave's own ties and the region's cross-cave ties (&sect;5).</li>
+  <li><em>Deferred nicety:</em> auto-suggest an equate when two absolutely-fixed
+    components land within &epsilon;.</li>
+</ul>
+
+<h3 id="c7">Commit 7 &mdash; Scope lens (reference / autocomplete / prefix-free typing)</h3>
+<p>
+  Distinct from equate (a <em>join</em> that affects the solve): the scope lens
+  is <em>reference</em> (look up where a station is) for note/scrap/LiDAR entry.
+</p>
+<ul>
+  <li>Generalise <code>cwScopeStationListModel</code> (today external-only,
+    prefix-matched against the region network,
+    <code>cwScopeStationListModel.cpp:76&ndash;99</code>; wired only in
+    <code>ExternalCenterlineTripPanel.qml:105&ndash;111</code>) to be
+    <strong>trip-driven</strong> from <code>trip-&gt;solvedStations()</code>, so
+    native and external get the same autocomplete. Default scope = the current
+    trip.</li>
+  <li>Wire the scope model + a scope selector into
+    <code>NoteStation.qml</code> and <code>NoteLiDARStationItem.qml</code>
+    (shared <code>StationDoubleClickTextInput</code> + <code>StationValidator</code>
+    &rArr; one change). Type <code>a2</code> = "<code>a2</code> in this trip";
+    expand to This Cave / another trip when you need a tie-in reference.</li>
+  <li><strong>Folds in Phase 2 &sect;15 F1.</strong> Membership feedback
+    surfaces an out-of-scope name ("<code>a2</code> isn't in this trip &mdash;
+    tie into &lt;cave&gt; a2?") instead of the current silent anchor to a
+    colliding native station. Membership stays a <em>non-blocking advisory</em>
+    (a separate signal, <strong>not</strong> folded into
+    <code>cwStationValidator::validate()</code>, which must stay
+    permissive).</li>
+  <li><em>Deferred follow-up (its own item):</em> a searchable, whole-cave
+    station picker for big caves (many <code>myprefix1.1</code>,
+    <code>myprefix2.1</code>), optionally ranked by 3D distance to the trip
+    (<code>solvedStations()</code> carries positions).</li>
+</ul>
+
+<h3 id="c8">Commit 8 &mdash; Native prefixing, Path A (dotted names)</h3>
+<p>
+  Widen the native <code>cwStationValidator</code> grammar to allow
+  <code>.</code> (currently native forbids it,
+  <code>cwStationValidator.cpp:20</code>; only external allows dot+space,
+  <code>:26</code>). Then <code>A.1</code> is simply a station name, cave-wide
+  identity as typed, ties by full name like any native name today. The scope
+  lens (commit&nbsp;7) makes typing ergonomic (type <code>1</code>, pick
+  <code>A.1</code>) and can group by the common prefix. Nearly free, no solve
+  change, no migration hazard, and it supports the real
+  <code>myprefix1.1</code> caves immediately. Safety check: dots decode cleanly
+  (<code>stationRegex</code> capture 2 is <code>\S.*</code>; native has no
+  <code>trip_&lt;hex&gt;.</code> to confuse them with).
+</p>
+
+<h3 id="c9">Commit 9 &mdash; Native prefixing, Path B (declared <code>stationPrefix</code>)</h3>
+<p>
+  The ergonomic + structural layer, <strong>shared with Phase 3</strong>: a trip
+  carries a declared <code>stationPrefix</code> (from commit&nbsp;2); chunks
+  store bare tails; the qualified identity is <code>prefix.tail</code>, applied
+  at the same layer external trips are wrapped
+  (<code>cwSurvexExporterCaveTask.cpp:104&ndash;125</code> generalised from
+  <code>trip_&lt;hex&gt;</code> to any scope label). Cross-trip ties then use
+  equates (commits&nbsp;3&ndash;6).
+</p>
+<p class="note">
+  <strong>Migration hazard to surface in the UI:</strong> adding a prefix to an
+  <em>existing</em> native trip renames its stations (<code>5</code> &rarr;
+  <code>A.5</code>), silently disconnecting any implicit shared-name ties it had
+  to other trips. Make the consequence visible; optionally offer to convert the
+  broken implicit ties into explicit equates on opt-in.
+</p>
+
+<h2 id="two-homes">5. Cave-owned vs region-owned equates</h2>
+<p>
+  Both ship in this plan (D2). They differ only in storage home and emission
+  scope; the self-contained handle (D6) is identical, so cross-cave adds no new
+  field &mdash; a region-owned equate is simply one whose handles resolve to
+  more than one cave.
+</p>
+<table>
+  <tr><th></th><th>Cave-owned (<code>cwCave</code>)</th>
+    <th>Region-owned (<code>cwCavingRegion</code>)</th></tr>
+  <tr><td>Covers</td>
+    <td>native&harr;native (explicit), native&harr;external,
+      external&harr;external &mdash; within one cave</td>
+    <td>two caves that physically connect</td></tr>
+  <tr><td>Handle constraint</td>
+    <td>all handles resolve to the owner cave (validated)</td>
+    <td>handles span caves; none</td></tr>
+  <tr><td>Emitted by</td>
+    <td><code>cwSurvexExporterCaveTask</code>, inside
+      <code>*begin cave</code>, cave-relative operands (commit&nbsp;4)</td>
+    <td><code>cwSurvexExporterRegion</code>, region scope,
+      <code>cave_&lt;hex&gt;.</code>-qualified operands (commit&nbsp;5)</td></tr>
+  <tr><td>Travels with</td>
+    <td>the cave (part of its definition)</td>
+    <td>the region</td></tr>
+</table>
+<p>
+  A within-cave native&harr;native <em>explicit</em> equate (tying two
+  differently-named native stations without renaming either) is supported by the
+  cave-owned list &mdash; the implicit shared-name tie (D5) stays the default,
+  the explicit equate is additive.
+</p>
+
+<h2 id="phase3">6. Phase 3 compatibility</h2>
+<p>
+  Phase 3's cave-level attach auto-creates <strong>Scope trips</strong> under a
+  cave, each carrying a <code>stationPrefix</code> (the file's survey
+  designation) rather than a per-trip <code>externalCenterline</code> (Phase 2
+  &sect;11 stub: <code>trip.stationPrefix</code> "Phase 3 adds it";
+  <code>isScope</code>/<code>scopeHeaderComp</code>; master &sect;7.2 /
+  &sect;8.5.1 / &sect;8.7). Because this plan builds on
+  <code>cwTrip::scopePrefix()</code> (&sect;3) and handles reference
+  <em>trips</em> (&sect;4 commit&nbsp;3):
+</p>
+<ul>
+  <li>An equate to/from a Phase-3 Scope trip works <strong>by
+    construction</strong> &mdash; it's just a trip with a non-empty
+    <code>scopePrefix()</code>.</li>
+  <li>external&rarr;external <em>within</em> a cave-level attach (two Scope trips
+    of one file) is the same case, no special handling.</li>
+  <li>The <code>isScoped()</code> predicate (commit&nbsp;2) is exactly what
+    Phase 2 &sect;15 R2 says the relaxed-grammar / externally-backed check must
+    become, <em>because</em> "Scope trips carry <code>stationPrefix</code>, not
+    <code>externalCenterline</code>."</li>
+  <li>Path B (commit&nbsp;9) <strong>is</strong> the Phase-3 Scope-trip
+    mechanism &mdash; Phase 3 reduces to "a cave attach that creates Scope trips
+    + equates for the joins," not a new naming system.</li>
+</ul>
+
+<h2 id="risks">7. Risks</h2>
+<table>
+  <tr><th>Risk</th><th>Mitigation</th></tr>
+  <tr><td><s>Cross-scope <code>*equate</code> can't be made to solve.</s>
+    <strong>RETIRED</strong> &mdash; commit&nbsp;1 spike proved it solves at
+    both scopes with a bare line.</td>
+    <td>Was the gate; now green.</td></tr>
+  <tr><td>"Two nodes at one point" leaks into topology consumers (loop-closure
+    display, neighbour walks) that assume one merged node.</td>
+    <td>Commit&nbsp;4 audits the consumers; document the position-alias
+      contract; add a test that walks the network from the alias side.</td></tr>
+  <tr><td>Path-B prefixing silently disconnects an existing survey.</td>
+    <td>Opt-in only; UI surfaces the rename consequence; offer implicit&rarr;
+      explicit-equate conversion (commit&nbsp;8).</td></tr>
+  <tr><td><s>Region-scope <code>*equate</code> hits a deeper export barrier than
+    cave scope.</s> <strong>RETIRED</strong> &mdash; there is no export barrier
+    (commit&nbsp;1); region scope solved identically.</td>
+    <td>The self-contained handle (D6) already carries the cave id, so cross-cave
+      needs no schema change.</td></tr>
+</table>
+
+<h2 id="testing">8. Test strategy</h2>
+<ul>
+  <li>Reuse the external-attach fixtures (<code>survex_simple.svx</code>) and
+    add a two-scope fixture with a deliberate pre-tie gap so an equate's effect
+    is measurable (position moves onto the partner).</li>
+  <li>Every commit keeps the existing <code>[Attach]</code>/<code>[LinePlot]</code>/
+    <code>[Geometry]</code> sets green (treat "green" as the gate, not an
+    assertion count &mdash; per Phase 2 &sect;16 B1).</li>
+  <li>Model/persistence commits assert round-trip through save/load (equate
+    survives a project reload) and undo/redo.</li>
+  <li>QML: the scope selector and Ties panel get <code>tst_</code> coverage;
+    collapse note overlays before clicking note stations (CLAUDE.md QML testing
+    rule).</li>
+</ul>
+
+<p class="meta">Filed 2026-07-22. Owns the equate/scoping foundation; Phase 2
+  &sect;16 (B2/B3/B6) remains the sole gate on Phase 2 completion.</p>
+
+</body>
+</html>
