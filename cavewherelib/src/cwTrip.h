@@ -64,6 +64,9 @@ class CAVEWHERE_LIB_EXPORT cwTrip : public QObject, public cwUndoer
     Q_PROPERTY(cwErrorModel* errorModel READ errorModel CONSTANT)
     Q_PROPERTY(cwKeywordModel* keywordModel READ keywordModel CONSTANT)
     Q_PROPERTY(cwExternalCenterline externalCenterline READ externalCenterline WRITE setExternalCenterline NOTIFY externalCenterlineChanged)
+    Q_PROPERTY(QString stationPrefix READ stationPrefix WRITE setStationPrefix NOTIFY stationPrefixChanged)
+    Q_PROPERTY(QString scopePrefix READ scopePrefix NOTIFY scopeChanged)
+    Q_PROPERTY(bool isScoped READ isScoped NOTIFY scopeChanged)
 
 public:
     explicit cwTrip(QObject *parent = 0);
@@ -83,6 +86,23 @@ public:
 
     cwExternalCenterline externalCenterline() const { return m_externalCenterline; }
     void setExternalCenterline(const cwExternalCenterline& value);
+
+    QString stationPrefix() const { return m_stationPrefix; }
+    void setStationPrefix(const QString& stationPrefix);
+
+    //! The scope prefix this trip's stations carry in the cave namespace: empty
+    //! for a flat native trip, "trip_<hex>." for an externally-attached trip, or
+    //! "<stationPrefix>." for a native-prefixed (Scope) trip. The one accessor
+    //! every scope consumer — equates, the solved-* accessors, and the geometry
+    //! enumeration — speaks, so the three trip kinds never diverge.
+    QString scopePrefix() const;
+
+    //! Snapshot overload: the same policy computed from a cwTripData, so the
+    //! worker-thread geometry pass shares this one source of truth.
+    static QString scopePrefix(const cwTripData& data);
+
+    //! True when this trip's stations carry a scope prefix (external or prefixed).
+    bool isScoped() const;
 
     QDateTime date() const;
     void setDate(QDateTime date);
@@ -171,6 +191,12 @@ signals:
     void numberOfChunksChanged();
     void parentCaveChanged();
     void externalCenterlineChanged();
+    void stationPrefixChanged();
+
+    //! Fired whenever this trip's scope changes — i.e. whenever externalCenterline
+    //! or stationPrefix changes and scopePrefix()/isScoped() may differ. The NOTIFY
+    //! for both derived properties.
+    void scopeChanged();
 
 public slots:
     void setChucks(QList<cwSurveyChunk*> chunks);
@@ -197,6 +223,7 @@ protected:
 
     QUuid Id;
     cwExternalCenterline m_externalCenterline;
+    QString m_stationPrefix;
 
     //Units
 

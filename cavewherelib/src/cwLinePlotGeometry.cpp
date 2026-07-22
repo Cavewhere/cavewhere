@@ -8,6 +8,7 @@
 #include "cwLinePlotGeometry.h"
 #include "cwCavernNaming.h"
 #include "cwStation.h"
+#include "cwTrip.h"
 
 #include <QHash>
 #include <QLineF>
@@ -160,12 +161,12 @@ cwLinePlotGeometry::generate(const cwCavingRegionData& region,
                 return true;
             };
 
-            // An externally-attached trip has no chunk topology of its own; its
-            // shots live only in the solved network. Emit those segments and
-            // skip the chunk walk entirely.
-            if (!trip.externalCenterline.isEmpty()) {
-                const QString scopePrefix =
-                    cavePrefix + cwCavernNaming::tripScopePrefix(trip.id);
+            // A scoped trip (externally-attached) has no chunk topology of its
+            // own; its shots live only in the solved network. Emit those segments
+            // and skip the chunk walk entirely.
+            const QString tripScope = cwTrip::scopePrefix(trip);
+            if (!tripScope.isEmpty()) {
+                const QString scopePrefix = cavePrefix + tripScope;
                 const ScopeExtent extent = emitNetworkScopeGeometry(
                     network, cavePrefix, scopePrefix, stationPositions, result.points);
                 if (extent.hasDepth) {

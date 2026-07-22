@@ -25,6 +25,25 @@
 #include <QMap>
 #include <QUuid>
 
+namespace {
+    // The single scope-prefix policy, shared by the instance accessor and the
+    // cwTripData snapshot overload so the UI-thread and worker-thread scope
+    // decisions can never diverge: an external centerline scopes to its trip id,
+    // else a non-empty station prefix scopes to "<prefix>.", else unscoped.
+    QString computeScopePrefix(bool hasExternalCenterline,
+                               const QUuid& id,
+                               const QString& stationPrefix)
+    {
+        if (hasExternalCenterline) {
+            return cwCavernNaming::tripScopePrefix(id);
+        }
+        if (!stationPrefix.isEmpty()) {
+            return stationPrefix + QLatin1Char('.');
+        }
+        return QString();
+    }
+}
+
 cwTrip::cwTrip(QObject *parent) :
     QObject(parent),
     ParentCave(nullptr)
@@ -146,6 +165,32 @@ void cwTrip::setExternalCenterline(const cwExternalCenterline& value)
     }
     m_externalCenterline = value;
     emit externalCenterlineChanged();
+    emit scopeChanged();
+}
+
+void cwTrip::setStationPrefix(const QString& stationPrefix)
+{
+    if (m_stationPrefix == stationPrefix) {
+        return;
+    }
+    m_stationPrefix = stationPrefix;
+    emit stationPrefixChanged();
+    emit scopeChanged();
+}
+
+QString cwTrip::scopePrefix() const
+{
+    return computeScopePrefix(!m_externalCenterline.isEmpty(), id(), m_stationPrefix);
+}
+
+QString cwTrip::scopePrefix(const cwTripData& data)
+{
+    return computeScopePrefix(!data.externalCenterline.isEmpty(), data.id, data.stationPrefix);
+}
+
+bool cwTrip::isScoped() const
+{
+    return !scopePrefix().isEmpty();
 }
 
 void cwTrip::setId(const QUuid& id)
@@ -158,6 +203,9 @@ void cwTrip::setId(const QUuid& id)
     }
     if (Id != oldId) {
         emit idChanged();
+        //An external trip's scope is trip_<hex-of-id>., so a new id moves the
+        //scope even though externalCenterline is unchanged.
+        emit scopeChanged();
     }
 }
 
@@ -410,20 +458,24 @@ cwStationPositionLookup cwTrip::solvedStationPositions() const {
     }
 
     cwStationPositionLookup lookup = cave->stationPositionLookup();
-    if(m_externalCenterline.isEmpty()) {
+    const QString prefix = scopePrefix();
+    if(prefix.isEmpty()) {
         //Native trip: the cave keys already speak this trip's namespace.
         return lookup;
     }
 
-    //External trip: the cave keys retain the trip scope (trip_<hex>.<tail>) but
-    //note/scrap/lead stations carry only the tail. Add a stripped-tail alias for
-    //each scoped entry so bare names resolve, keeping the full cave data so a
-    //cross-trip tie-in neighbor still carries a position.
-    const QString scopePrefix = cwCavernNaming::tripScopePrefix(id());
+    //Scoped trip (external or native-prefixed): the cave keys retain the scope
+    //prefix (trip_<hex>.<tail> or <stationPrefix>.<tail>) but note/scrap/lead
+    //stations carry only the tail. Add a stripped-tail alias for each scoped
+    //entry so bare names resolve, keeping the full cave data so a cross-trip
+    //tie-in neighbor still carries a position.
+    //The cave lookup keys canonically (lowercased); an authored stationPrefix may
+    //carry any case, so match case-insensitively. mid(prefix.size()) is still
+    //correct because a case-insensitive prefix match has the same length.
     const QMap<QString, QVector3D> positions = lookup.positions();
     for(auto it = positions.constBegin(); it != positions.constEnd(); ++it) {
-        if(it.key().startsWith(scopePrefix)) {
-            lookup.setPosition(it.key().mid(scopePrefix.size()), it.value());
+        if(it.key().startsWith(prefix, Qt::CaseInsensitive)) {
+            lookup.setPosition(it.key().mid(prefix.size()), it.value());
         }
     }
     return lookup;
@@ -436,26 +488,27 @@ cwSurveyNetwork cwTrip::solvedNetwork() const {
     }
 
     cwSurveyNetwork network = cave->network();
-    if(m_externalCenterline.isEmpty()) {
+    const QString prefix = scopePrefix();
+    if(prefix.isEmpty()) {
         //Native trip: pass through, cross-trip junction neighbors intact.
         return network;
     }
 
-    //External trip: alias each scoped station to its stripped tail so bare note
-    //names resolve. Neighbors that live in another scope (native tie-ins) keep
-    //their names so their positions still resolve in solvedStationPositions().
-    const QString scopePrefix = cwCavernNaming::tripScopePrefix(id());
+    //Scoped trip (external or native-prefixed): alias each scoped station to its
+    //stripped tail so bare note names resolve. Neighbors that live in another
+    //scope (native tie-ins) keep their names so their positions still resolve in
+    //solvedStationPositions().
     const QStringList stations = network.stations();
     for(const QString& station : stations) {
-        if(!station.startsWith(scopePrefix)) {
+        if(!station.startsWith(prefix, Qt::CaseInsensitive)) {
             continue;
         }
 
-        const QString localStation = station.mid(scopePrefix.size());
+        const QString localStation = station.mid(prefix.size());
         const QStringList neighbors = network.neighbors(station);
         for(const QString& neighbor : neighbors) {
-            const QString localNeighbor = neighbor.startsWith(scopePrefix)
-                    ? neighbor.mid(scopePrefix.size())
+            const QString localNeighbor = neighbor.startsWith(prefix, Qt::CaseInsensitive)
+                    ? neighbor.mid(prefix.size())
                     : neighbor;
             network.addShot(localStation, localNeighbor);
         }
@@ -475,8 +528,9 @@ QList<QPair<QString, QVector3D>> cwTrip::solvedStations() const {
     }
 
     const cwStationPositionLookup lookup = cave->stationPositionLookup();
+    const QString prefix = scopePrefix();
 
-    if(m_externalCenterline.isEmpty()) {
+    if(prefix.isEmpty()) {
         //Native trip: its own stations are its chunk stations that have a
         //solved position.
         const QList<cwStation> unique = uniqueStations();
@@ -489,14 +543,14 @@ QList<QPair<QString, QVector3D>> cwTrip::solvedStations() const {
         return solved;
     }
 
-    //External trip: its stations live in the cave lookup under the trip scope
-    //(trip_<hex>.<tail>); yield each as the scope-relative tail, the same local
-    //name the note/scrap/lead sites and cwScopeStationListModel speak.
-    const QString scopePrefix = cwCavernNaming::tripScopePrefix(id());
+    //Scoped trip: its stations live in the cave lookup under the scope prefix
+    //(trip_<hex>.<tail> or <stationPrefix>.<tail>); yield each as the
+    //scope-relative tail, the same local name the note/scrap/lead sites and
+    //cwScopeStationListModel speak.
     const QMap<QString, QVector3D> positions = lookup.positions();
     for(auto it = positions.constBegin(); it != positions.constEnd(); ++it) {
-        if(it.key().startsWith(scopePrefix)) {
-            solved.append({it.key().mid(scopePrefix.size()), it.value()});
+        if(it.key().startsWith(prefix, Qt::CaseInsensitive)) {
+            solved.append({it.key().mid(prefix.size()), it.value()});
         }
     }
     return solved;
@@ -527,7 +581,8 @@ cwTripData cwTrip::data() const
         NotesLidar->data(),
         NotesSketch->data(),
         Id,
-        m_externalCenterline
+        m_externalCenterline,
+        m_stationPrefix
     };
 }
 
@@ -537,6 +592,7 @@ void cwTrip::setData(const cwTripData &data)
     setId(data.id);
     setDate(data.date);
     setExternalCenterline(data.externalCenterline);
+    setStationPrefix(data.stationPrefix);
     Team->setData(data.team);
     Calibration->setData(data.calibrations);
     Notes->setData(data.noteModel);

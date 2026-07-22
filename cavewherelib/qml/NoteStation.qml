@@ -16,8 +16,8 @@ ScrapPointItem {
     objectName: "station" + stationName.text
 
     // Re-resolved when the point manager rebinds scrap; the validator
-    // below relaxes to the external station grammar (dots, embedded
-    // spaces - master plan §7.2) while the owning trip is attached.
+    // below relaxes to the scope station grammar (dots, embedded
+    // spaces - master plan §7.2) while the owning trip is scoped.
     readonly property Trip parentTrip: scrap !== null ? scrap.parentTrip() : null
 
     function updateItem() {
@@ -84,7 +84,7 @@ ScrapPointItem {
         id: stationValidatorId
         objectName: "stationValidator"
         external: noteStationId.parentTrip !== null
-                  && noteStationId.parentTrip.externalCenterline.entryFile.length > 0
+                  && noteStationId.parentTrip.isScoped
     }
 
     StationDoubleClickTextInput {

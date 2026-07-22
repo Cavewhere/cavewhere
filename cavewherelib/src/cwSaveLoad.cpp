@@ -1947,6 +1947,10 @@ std::unique_ptr<CavewhereProto::Trip> cwSaveLoad::toProtoTrip(const cwTrip *trip
                 trip->externalCenterline().entryFile().toStdString();
     }
 
+    if (!trip->stationPrefix().isEmpty()) {
+        *(protoTrip->mutable_station_prefix()) = trip->stationPrefix().toStdString();
+    }
+
     return protoTrip;
 }
 
@@ -3013,6 +3017,10 @@ cwTripData cwSaveLoad::tripDataFromProtoTrip(const CavewhereProto::Trip& tripPro
     if (tripProto.has_external_centerline()) {
         tripData.externalCenterline = cwExternalCenterline(
                     QString::fromStdString(tripProto.external_centerline().entry_file()));
+    }
+
+    if (tripProto.has_station_prefix()) {
+        tripData.stationPrefix = QString::fromStdString(tripProto.station_prefix());
     }
 
     return tripData;
@@ -4117,6 +4125,7 @@ void cwSaveLoad::connectTrip(cwTrip* trip)
     // Trip-level changes
     connect(trip, &cwTrip::dateChanged, this, saveTrip);
     connect(trip, &cwTrip::externalCenterlineChanged, this, saveTrip);
+    connect(trip, &cwTrip::stationPrefixChanged, this, saveTrip);
     // connect(trip, &cwTrip::numberOfChunksChanged, this, saveTrip);
     connect(trip, &cwTrip::chunksAboutToBeRemoved, this, saveTrip);
     connect(trip, &cwTrip::chunksRemoved, this, saveTrip);

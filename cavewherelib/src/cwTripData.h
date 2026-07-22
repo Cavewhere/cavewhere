@@ -25,6 +25,7 @@ struct cwTripData {
     cwSurveyNoteSketchModelData sketchModel;
     QUuid id;
     cwExternalCenterline externalCenterline;
+    QString stationPrefix;
 };
 
 

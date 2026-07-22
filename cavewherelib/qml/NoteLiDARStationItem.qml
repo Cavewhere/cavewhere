@@ -8,7 +8,7 @@ PointItem {
     required property string name
     property QQ.vector3d position3D: Qt.vector3d(0, 0, 0)
     // Re-resolved when note rebinds; the validator below relaxes to
-    // the external station grammar while the owning trip is attached.
+    // the scope station grammar while the owning trip is scoped.
     readonly property Trip parentTrip: note !== null ? note.parentTrip() : null
 
     width: 2
@@ -68,10 +68,10 @@ PointItem {
     StationValidator {
         id: stationValidatorId
         objectName: "stationValidator"
-        // Same external-grammar relaxation as NoteStation (master plan
-        // §7.2): attached trips reference upstream file station names.
+        // Same scope-grammar relaxation as NoteStation (master plan §7.2):
+        // scoped trips reference upstream/prefixed station names.
         external: noteStationId.parentTrip !== null
-                  && noteStationId.parentTrip.externalCenterline.entryFile.length > 0
+                  && noteStationId.parentTrip.isScoped
     }
 
     StationDoubleClickTextInput {

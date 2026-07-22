@@ -120,6 +120,10 @@ message Trip {
     // Attached external centerline (Survex/Compass/Walls). Absent for
     // Native trips; present (and entry_file set) for Attached.
     optional ExternalCenterline external_centerline = 10;
+
+    // Scope prefix for a native-prefixed (Scope) trip. Empty/absent for flat
+    // native trips and Attached trips (whose scope is derived from the trip id).
+    optional string station_prefix = 11;
 }
 
 //This is a legacy message, do not use, use StationShot instead

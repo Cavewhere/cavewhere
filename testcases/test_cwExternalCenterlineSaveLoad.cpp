@@ -120,6 +120,35 @@ QString writeFileWithMtime(const QString& path, const QByteArray& content, const
 
 } // namespace
 
+TEST_CASE("trip station prefix round-trips through save/load",
+          "[SaveLoad][scope]")
+{
+    constexpr const char* kPrefix = "A";
+
+    auto fixture = makeSavedProject(QStringLiteral("station-prefix-roundtrip"));
+    fixture->trip->setStationPrefix(QString::fromLatin1(kPrefix));
+    REQUIRE(fixture->project->save());
+    fixture->project->waitSaveToFinish();
+    fixture->rootData->futureManagerModel()->waitForFinished();
+    QCoreApplication::processEvents();
+
+    const QString projectPath = fixture->project->filename();
+
+    // A fresh session opening the project must see the prefix survive
+    // serialization (proto Trip.station_prefix) and re-derive isScoped from it.
+    auto freshRoot = std::make_unique<cwRootData>();
+    freshRoot->project()->loadFile(projectPath);
+    freshRoot->project()->waitLoadToFinish();
+
+    auto region = freshRoot->project()->cavingRegion();
+    REQUIRE(region->caveCount() == 1);
+    cwCave* loadedCave = region->cave(0);
+    REQUIRE(loadedCave->tripCount() == 1);
+    cwTrip* loadedTrip = loadedCave->trip(0);
+    CHECK(loadedTrip->stationPrefix() == QString::fromLatin1(kPrefix));
+    CHECK(loadedTrip->isScoped());
+}
+
 TEST_CASE("externalCenterlineDir computes <ownerDir>/external-centerline",
           "[SaveLoad][External]")
 {

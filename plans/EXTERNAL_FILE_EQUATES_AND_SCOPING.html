@@ -280,11 +280,14 @@ bool cwTrip::isScoped() const { return !scopePrefix().isEmpty(); }</code></pre>
   &sect;15 <strong>R2</strong> ("shared <code>externallyBacked</code>
   predicate") and <strong>A1</strong> ("uniform external-station accessor"):
   both C++ (<code>cwLinePlotGeometry.cpp</code>,
-  <code>cwLinePlotLabelView.cpp</code>) and QML
-  (<code>TripPage.isExternal</code>, <code>NoteStation</code> /
-  <code>NoteLiDARStationItem</code> validator bindings) sites that hand-roll
-  <code>externalCenterline.entryFile.length &gt; 0</code> collapse onto
-  <code>isScoped</code>.
+  <code>cwLinePlotLabelView.cpp</code>) and the QML
+  <code>NoteStation</code> / <code>NoteLiDARStationItem</code> validator
+  bindings that hand-roll <code>externalCenterline.entryFile.length &gt; 0</code>
+  collapse onto <code>isScoped</code>. <strong>Exception:</strong>
+  <code>TripPage.isExternal</code> stays on <code>externalCenterline</code>
+  &mdash; it drives the pane swap ("is this an external attach?"), not the
+  station-name grammar, and a Scope trip has native chunks that must keep the
+  survey editor. (See Commit 2's "deliberate deviations".)
 </p>
 
 <p class="note">
@@ -340,7 +343,7 @@ bool cwTrip::isScoped() const { return !scopePrefix().isEmpty(); }</code></pre>
   a raw cavern failure.
 </p>
 
-<h3 id="c2">Commit 2 &mdash; <code>cwTrip::scopePrefix()</code> foundation + predicate</h3>
+<h3 id="c2">Commit 2 &mdash; <code>cwTrip::scopePrefix()</code> foundation + predicate &mdash; DONE 2026-07-22, GREEN</h3>
 <p>
   Add <code>m_stationPrefix</code> (plain member + explicit setter +
   <code>NOTIFY</code>, no bindable), <code>scopePrefix()</code>,
@@ -350,6 +353,56 @@ bool cwTrip::isScoped() const { return !scopePrefix().isEmpty(); }</code></pre>
   &rArr; identical output). Tests: the existing external round-trip stays
   green; add a native-trip-with-prefix accessor test.
 </p>
+<p><strong>Delivered:</strong></p>
+<ul>
+  <li><code>cwTrip</code>: <code>m_stationPrefix</code> member,
+    <code>stationPrefix()/setStationPrefix()</code> (plain, <code>NOTIFY
+    stationPrefixChanged</code>), <code>scopePrefix()</code>,
+    <code>isScoped()</code>, and a <code>scopeChanged()</code> signal fired from
+    both <code>setStationPrefix</code> and <code>setExternalCenterline</code>
+    (the <code>NOTIFY</code> for the derived <code>scopePrefix</code>/
+    <code>isScoped</code> Q_PROPERTYs). Static overload
+    <code>scopePrefix(const cwTripData&amp;)</code> so the worker-thread geometry
+    pass shares one source of truth.</li>
+  <li>The three solved-* accessors (<code>cwTrip.cpp</code>) now branch on
+    <code>isScoped()</code> and strip <code>scopePrefix()</code>. The strip is
+    now <strong>case-insensitive</strong>
+    (<code>startsWith(prefix, Qt::CaseInsensitive)</code>): the cave lookup keys
+    canonically (lowercased via <code>cwStation::canonicalKey</code>), and an
+    authored <code>stationPrefix</code> may be mixed-case &mdash; behaviour-identical
+    for the lowercase-hex external case, forward-correct for native prefixes.</li>
+  <li>Proto <code>Trip.station_prefix = 11</code> + save/load in
+    <code>cwSaveLoad.cpp</code>; <code>cwTripData.stationPrefix</code> threaded
+    through <code>data()/setData()</code>.</li>
+  <li>Consumer re-point: <code>cwLinePlotGeometry.cpp</code> now uses
+    <code>cwTrip::scopePrefix(trip)</code>; the <code>NoteStation</code> /
+    <code>NoteLiDARStationItem</code> validator <code>external:</code> bindings
+    now read <code>parentTrip.isScoped</code>. The label view already consumed
+    via <code>solvedStations()</code>, so it needed no edit.</li>
+  <li>Tests: new <code>[cwTrip][scope]</code> cases (scopePrefix policy across
+    the three kinds, <code>stationPrefixChanged</code>/<code>scopeChanged</code>
+    emission, native-prefix strip in <code>solvedStationPositions</code>/
+    <code>solvedStations</code>). Regression: <code>[cwTrip] [SaveLoad] [Attach]
+    [cwLinePlotGeometry] [cwLinePlotLabelView] [LinePlotManager]</code> green
+    (1698 assertions); relevant QML (<code>tst_TripPageExternalAttach</code>,
+    <code>tst_ExternalCenterlineTripPanel</code>, <code>tst_CavePage</code>)
+    green.</li>
+</ul>
+<p><strong>Two deliberate deviations from the sketch:</strong></p>
+<ul>
+  <li><code>TripPage.isExternal</code> was <em>not</em> collapsed onto
+    <code>isScoped</code>. It drives only the pane swap (external panel vs.
+    survey editor); a Phase-3 Scope trip has native chunks and must keep the
+    survey editor, so keying that swap on <code>isScoped</code> would be exactly
+    the &ldquo;silently breaks for Scope trips&rdquo; failure this plan warns
+    against. Left on <code>externalCenterline</code>; the pane-selection
+    predicate is genuinely &ldquo;is external attach&rdquo;, not &ldquo;is
+    scoped&rdquo;. The two note validators, which relax name validation for
+    scoped/upstream names, <em>are</em> correctly on <code>isScoped</code>.</li>
+  <li>The strip was made case-insensitive (above) rather than a literal copy of
+    the external-only logic &mdash; the honest generalisation, since native
+    prefixes are not constrained to lowercase.</li>
+</ul>
 
 <h3 id="c3">Commit 3 &mdash; Equate model + persistence (self-contained handle)</h3>
 <p>
@@ -512,6 +565,23 @@ bool cwTrip::isScoped() const { return !scopePrefix().isEmpty(); }</code></pre>
   <code>A.5</code>), silently disconnecting any implicit shared-name ties it had
   to other trips. Make the consequence visible; optionally offer to convert the
   broken implicit ties into explicit equates on opt-in.
+</p>
+<p class="note">
+  <strong>Case-policy landmine (from Commit&nbsp;2 review):</strong> Commit&nbsp;2
+  made the three <code>cwTrip</code> solved-* accessors strip the scope prefix
+  <em>case-insensitively</em> (the cave lookup keys canonically via
+  <code>cwStation::canonicalKey</code>, so an authored mixed-case prefix must
+  match case-folded), but the worker-thread geometry strip in
+  <code>emitNetworkScopeGeometry</code> (<code>cwLinePlotGeometry.cpp:82</code>,
+  <code>station.startsWith(scopePrefix)</code>) is still <em>case-sensitive</em>.
+  Invisible today because external scopes are lowercase hex; the moment a native
+  <code>stationPrefix</code> like <code>"A"</code> goes live here, the geometry
+  path matches <code>cave_&lt;hex&gt;.A.</code> against canonically-lowercased
+  network keys and silently emits <strong>no</strong> segments for that trip.
+  Before this commit relies on <code>stationPrefix</code>, unify the strip/match
+  onto one shared <code>stripScope()</code>/<code>matchesScope()</code> helper
+  (review item R2) so all four sites &mdash; the three accessors and the
+  geometry path &mdash; share one case policy.
 </p>
 
 <h2 id="two-homes">5. Cave-owned vs region-owned equates</h2>
