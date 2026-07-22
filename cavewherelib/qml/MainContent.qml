@@ -78,11 +78,11 @@ QQ.Item {
     }
 
     // The active page's tool options, hinged to the sidebar's right edge and
-    // drawn above the page view. It reads the same per-page ToolProviderPage
-    // contract the sidebar tool rail does (tools + interactionManager, via
-    // currentPageItem), and shows only while an armed tool has options. Kept a
-    // sibling after `container` so it composites above the 3D view; a child of
-    // MainSideBar could not, since z can't lift it past a sibling Item.
+    // drawn above the page view. It reads the same ActiveTools contract the
+    // sidebar tool rail does (tools + interactionManager) and shows only while an
+    // armed tool has options. Kept a sibling after `container` so it composites
+    // above the 3D view; a child of MainSideBar could not, since z can't lift it
+    // past a sibling Item.
     ToolPropertyFlyout {
         id: toolPropertyFlyout
         anchors.left: mainSideBar.right
@@ -90,14 +90,8 @@ QQ.Item {
         anchors.verticalCenter: container.verticalCenter
 
         hostVisible: mainContentId.layoutSize >= Theme.LayoutSize.Medium
-        interactionManager: {
-            let pageItem = RootData.pageView ? RootData.pageView.currentPageItem : null
-            return (pageItem && pageItem.interactionManager) ? pageItem.interactionManager : null
-        }
-        toolModel: {
-            let pageItem = RootData.pageView ? RootData.pageView.currentPageItem : null
-            return (pageItem && pageItem.tools) ? pageItem.tools : []
-        }
+        interactionManager: ActiveTools.interactionManager
+        toolModel: ActiveTools.tools
     }
 
     QQ.Item {

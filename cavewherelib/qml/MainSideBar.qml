@@ -210,17 +210,11 @@ QQ.Rectangle {
 
         compact: sidebarArea._compactMode
 
-        // The active page's ToolProviderPage contract, reached through the page's
-        // QML item (currentPageItem is a QQuickItem*, so the read stays dynamic).
-        // Pages that don't inherit ToolProviderPage (Data, Map) yield an empty rail.
-        interactionManager: {
-            let pageItem = RootData.pageView ? RootData.pageView.currentPageItem : null
-            return (pageItem && pageItem.interactionManager) ? pageItem.interactionManager : null
-        }
-        toolModel: {
-            let pageItem = RootData.pageView ? RootData.pageView.currentPageItem : null
-            return (pageItem && pageItem.tools) ? pageItem.tools : []
-        }
+        // The active page's tool contract. ActiveTools narrows currentPageItem to
+        // the typed ToolProviderPage; pages that don't provide tools (Data, Map)
+        // yield an empty rail.
+        interactionManager: ActiveTools.interactionManager
+        toolModel: ActiveTools.tools
     }
 
     TaskListView {
