@@ -7,6 +7,7 @@
 
 //Our includes
 #include "cwExternalCenterlineManager.h"
+#include "cwCavernNaming.h"
 #include "cwCave.h"
 #include "cwCavingRegion.h"
 #include "cwConcurrent.h"
@@ -707,9 +708,6 @@ QString cwExternalCenterlineManager::scopePrefixForTrip(cwTrip* trip) const
     if (trip == nullptr || trip->parentCave() == nullptr) {
         return QString();
     }
-    return cwLinePlotTask::cavernCaveNameFor(trip->parentCave()->id())
-        + QLatin1Char('.')
-        + cwLinePlotTask::cavernTripNameFor(trip->id())
-        + QLatin1Char('.');
+    return cwCavernNaming::fullScopePrefix(trip->parentCave()->id(), trip->id());
 }
 

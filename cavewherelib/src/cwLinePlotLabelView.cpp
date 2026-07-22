@@ -16,7 +16,6 @@
 #include "cwKeywordItem.h"
 #include "cwKeywordItemModel.h"
 #include "cwKeywordModel.h"
-#include "cwLinePlotTask.h"
 
 //Qt includes
 #include <QMap>
@@ -91,7 +90,7 @@ void cwLinePlotLabelView::addCaves(int begin, int end) {
         connectCave(cave);
 
         for(cwTrip* trip : cave->trips()) {
-            addTrip(cave, trip);
+            addTrip(trip);
         }
     }
 }
@@ -123,7 +122,7 @@ void cwLinePlotLabelView::removeCaves(int begin, int end)
 void cwLinePlotLabelView::caveTripsInserted(int begin, int end) {
     cwCave* cave = static_cast<cwCave*>(sender());
     for(int i = begin; i <= end; i++) {
-        addTrip(cave, cave->trip(i));
+        addTrip(cave->trip(i));
     }
 }
 
@@ -150,7 +149,7 @@ void cwLinePlotLabelView::updateStations() {
     for(cwTrip* trip : cave->trips()) {
         auto it = m_groups.find(trip);
         if(it != m_groups.end()) {
-            it.value()->setLabels(labels(cave, trip));
+            it.value()->setLabels(labels(trip));
             updateKeywordItem(trip);
         }
     }
@@ -158,16 +157,15 @@ void cwLinePlotLabelView::updateStations() {
 
 /**
  * @brief cwLinePlotLabelView::addTrip
- * @param cave - The cave that owns the trip (its station position lookup positions the labels)
  * @param trip - The trip to add a label group for
  */
-void cwLinePlotLabelView::addTrip(cwCave* cave, cwTrip* trip) {
+void cwLinePlotLabelView::addTrip(cwTrip* trip) {
     if(m_groups.contains(trip)) {
         return;
     }
 
     cwLabel3dGroup* group = new cwLabel3dGroup(this);
-    group->setLabels(labels(cave, trip));
+    group->setLabels(labels(trip));
 
     m_groups.insert(trip, group);
     updateKeywordItem(trip);
@@ -216,44 +214,21 @@ void cwLinePlotLabelView::disconnectCave(cwCave *cave)
 
 /**
  * @brief cwLinePlotLabelView::labels
- * @param cave - Supplies the solved station positions
- * @param trip - Supplies the trip's unique stations
+ * @param trip - Supplies its own solved stations (native or externally attached)
  * @return The labels for the trip's stations that have a solved position
  *
  * A station shared by several trips gets a (duplicate) label in each owning
  * trip's group; the view's shared declutter KD-tree rejects the co-located
  * duplicate, so a shared station shows as long as any owning trip is visible.
  */
-QList<cwLabel3dItem> cwLinePlotLabelView::labels(cwCave *cave, cwTrip *trip) const
+QList<cwLabel3dItem> cwLinePlotLabelView::labels(cwTrip *trip) const
 {
-    const cwStationPositionLookup positions = cave->stationPositionLookup();
+    const QList<QPair<QString, QVector3D>> stations = trip->solvedStations();
 
     QList<cwLabel3dItem> labels;
-
-    // An externally-attached trip owns no survey chunk, so uniqueStations() is
-    // empty. Its solved stations live in the cave lookup under the trip's scope
-    // prefix (trip_<uuid>.), labelled with the scope-relative tail — the same
-    // name cwScopeStationListModel shows in the trip's station-list panel.
-    if(!trip->externalCenterline().isEmpty()) {
-        const QString prefix = cwStation::canonicalKey(
-            cwLinePlotTask::cavernTripNameFor(trip->id()) + QLatin1Char('.'));
-        const QMap<QString, QVector3D> allPositions = positions.positions();
-        for(auto it = allPositions.constBegin(); it != allPositions.constEnd(); ++it) {
-            const QString key = cwStation::canonicalKey(it.key());
-            if(key.startsWith(prefix)) {
-                labels.append(cwLabel3dItem(key.sliced(prefix.size()), it.value()));
-            }
-        }
-        return labels;
-    }
-
-    const QList<cwStation> stations = trip->uniqueStations();
     labels.reserve(stations.size());
-
-    for(const cwStation& station : stations) {
-        if(positions.hasPosition(station.name())) {
-            labels.append(cwLabel3dItem(station.name(), positions.position(station.name())));
-        }
+    for(const auto& station : stations) {
+        labels.append(cwLabel3dItem(station.first, station.second));
     }
 
     return labels;

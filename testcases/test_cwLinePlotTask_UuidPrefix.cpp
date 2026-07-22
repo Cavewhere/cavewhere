@@ -11,6 +11,7 @@
 // Cavewhere includes
 #include "cwCave.h"
 #include "cwCavingRegion.h"
+#include "cwCavernNaming.h"
 #include "cwLinePlotManager.h"
 #include "cwLinePlotTask.h"
 #include "cwShot.h"
@@ -64,11 +65,11 @@ cwCave* addCaveWithSimpleShot(cwCavingRegion& region,
 
 } // namespace
 
-TEST_CASE("cavernCaveNameFor returns cave_<32 hex of the QUuid>",
+TEST_CASE("cwCavernNaming::caveName returns cave_<32 hex of the QUuid>",
           "[LinePlot][UuidPrefix]")
 {
     const QUuid id = QUuid::createUuid();
-    const QString encoded = cwLinePlotTask::cavernCaveNameFor(id);
+    const QString encoded = cwCavernNaming::caveName(id);
 
     REQUIRE(encoded.startsWith(QStringLiteral("cave_")));
     const QString tail = encoded.mid(5);
@@ -80,14 +81,14 @@ TEST_CASE("cavernCaveNameFor returns cave_<32 hex of the QUuid>",
     // would silently fold two caves together.
     const QUuid other = QUuid::createUuid();
     REQUIRE(id != other);
-    CHECK(cwLinePlotTask::cavernCaveNameFor(other) != encoded);
+    CHECK(cwCavernNaming::caveName(other) != encoded);
 
     // The encoded prefix must be self-matching with the public regex: this
     // catches drift between the encoder and the parser (the two halves
     // share a literal "cave_" and a hex character class, and any future
     // edit that touches only one side is caught here).
     const QString joined = encoded + QStringLiteral(".a1");
-    const QRegularExpressionMatch match = cwLinePlotTask::cavernStationRegex().match(joined);
+    const QRegularExpressionMatch match = cwCavernNaming::stationRegex().match(joined);
     REQUIRE(match.hasMatch());
     CHECK(match.captured(2) == QStringLiteral("a1"));
 
@@ -106,14 +107,14 @@ TEST_CASE("cavernCaveNameFor returns cave_<32 hex of the QUuid>",
     CHECK(recovered == id);
 }
 
-TEST_CASE("cavernStationRegex matches new prefixed names and rejects the old integer form",
+TEST_CASE("cwCavernNaming::stationRegex matches new prefixed names and rejects the old integer form",
           "[LinePlot][UuidPrefix]")
 {
-    const QRegularExpression regex = cwLinePlotTask::cavernStationRegex();
+    const QRegularExpression regex = cwCavernNaming::stationRegex();
 
     SECTION("matches cave_<32 hex>.<station>") {
         const QUuid id = QUuid::createUuid();
-        const QString name = cwLinePlotTask::cavernCaveNameFor(id) + QStringLiteral(".a1");
+        const QString name = cwCavernNaming::caveName(id) + QStringLiteral(".a1");
         const QRegularExpressionMatch match = regex.match(name);
         REQUIRE(match.hasMatch());
         CHECK(match.captured(2) == QStringLiteral("a1"));
@@ -121,7 +122,7 @@ TEST_CASE("cavernStationRegex matches new prefixed names and rejects the old int
 
     SECTION("matches stations with hyphens and underscores (validCharactersRegex contract)") {
         const QUuid id = QUuid::createUuid();
-        const QString name = cwLinePlotTask::cavernCaveNameFor(id) + QStringLiteral(".big-passage_east");
+        const QString name = cwCavernNaming::caveName(id) + QStringLiteral(".big-passage_east");
         const QRegularExpressionMatch match = regex.match(name);
         REQUIRE(match.hasMatch());
         CHECK(match.captured(2) == QStringLiteral("big-passage_east"));
@@ -144,7 +145,7 @@ TEST_CASE("cavernStationRegex matches new prefixed names and rejects the old int
     }
 
     SECTION("rejects a missing dot separator") {
-        const QString prefixOnly = cwLinePlotTask::cavernCaveNameFor(QUuid::createUuid());
+        const QString prefixOnly = cwCavernNaming::caveName(QUuid::createUuid());
         CHECK_FALSE(regex.match(prefixOnly).hasMatch());
         CHECK_FALSE(regex.match(prefixOnly + QStringLiteral("a1")).hasMatch());
     }
@@ -155,7 +156,7 @@ TEST_CASE("cavernStationRegex matches new prefixed names and rejects the old int
         // "cave_<uuid>. " (single space) into the lookup with an empty
         // or whitespace key. Trailing spaces are still tolerated for
         // Walls' empty-name quirk.
-        const QString prefix = cwLinePlotTask::cavernCaveNameFor(QUuid::createUuid());
+        const QString prefix = cwCavernNaming::caveName(QUuid::createUuid());
         CHECK_FALSE(regex.match(prefix + QStringLiteral(".")).hasMatch());
         CHECK_FALSE(regex.match(prefix + QStringLiteral(". ")).hasMatch());
         CHECK_FALSE(regex.match(prefix + QStringLiteral(".\t")).hasMatch());

@@ -18,7 +18,7 @@
 #include "cwData.h"
 #include "cwKeywordModel.h"
 #include "cwNameUtils.h"
-#include "cwLinePlotTask.h"
+#include "cwCavernNaming.h"
 
 //Qt includes
 #include <QDebug>
@@ -419,7 +419,7 @@ cwStationPositionLookup cwTrip::solvedStationPositions() const {
     //note/scrap/lead stations carry only the tail. Add a stripped-tail alias for
     //each scoped entry so bare names resolve, keeping the full cave data so a
     //cross-trip tie-in neighbor still carries a position.
-    const QString scopePrefix = cwLinePlotTask::cavernTripNameFor(id()) + QLatin1Char('.');
+    const QString scopePrefix = cwCavernNaming::tripScopePrefix(id());
     const QMap<QString, QVector3D> positions = lookup.positions();
     for(auto it = positions.constBegin(); it != positions.constEnd(); ++it) {
         if(it.key().startsWith(scopePrefix)) {
@@ -444,7 +444,7 @@ cwSurveyNetwork cwTrip::solvedNetwork() const {
     //External trip: alias each scoped station to its stripped tail so bare note
     //names resolve. Neighbors that live in another scope (native tie-ins) keep
     //their names so their positions still resolve in solvedStationPositions().
-    const QString scopePrefix = cwLinePlotTask::cavernTripNameFor(id()) + QLatin1Char('.');
+    const QString scopePrefix = cwCavernNaming::tripScopePrefix(id());
     const QStringList stations = network.stations();
     for(const QString& station : stations) {
         if(!station.startsWith(scopePrefix)) {
@@ -465,6 +465,41 @@ cwSurveyNetwork cwTrip::solvedNetwork() const {
         }
     }
     return network;
+}
+
+QList<QPair<QString, QVector3D>> cwTrip::solvedStations() const {
+    QList<QPair<QString, QVector3D>> solved;
+    cwCave* cave = parentCave();
+    if(cave == nullptr) {
+        return solved;
+    }
+
+    const cwStationPositionLookup lookup = cave->stationPositionLookup();
+
+    if(m_externalCenterline.isEmpty()) {
+        //Native trip: its own stations are its chunk stations that have a
+        //solved position.
+        const QList<cwStation> unique = uniqueStations();
+        solved.reserve(unique.size());
+        for(const cwStation& station : unique) {
+            if(lookup.hasPosition(station.name())) {
+                solved.append({station.name(), lookup.position(station.name())});
+            }
+        }
+        return solved;
+    }
+
+    //External trip: its stations live in the cave lookup under the trip scope
+    //(trip_<hex>.<tail>); yield each as the scope-relative tail, the same local
+    //name the note/scrap/lead sites and cwScopeStationListModel speak.
+    const QString scopePrefix = cwCavernNaming::tripScopePrefix(id());
+    const QMap<QString, QVector3D> positions = lookup.positions();
+    for(auto it = positions.constBegin(); it != positions.constEnd(); ++it) {
+        if(it.key().startsWith(scopePrefix)) {
+            solved.append({it.key().mid(scopePrefix.size()), it.value()});
+        }
+    }
+    return solved;
 }
 
 /**

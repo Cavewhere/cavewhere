@@ -17,7 +17,7 @@
 #include "cwExternalSourceSettings.h"
 #include "cwFutureManagerModel.h"
 #include "cwLinePlotManager.h"
-#include "cwLinePlotTask.h"
+#include "cwCavernNaming.h"
 #include "cwProject.h"
 #include "cwRootData.h"
 #include "cwSaveLoad.h"
@@ -782,9 +782,9 @@ TEST_CASE("scopePrefixForTrip derives the driver's qualified-station prefix",
     auto manager = managerOf(fixture.get());
 
     const QString prefix = manager->scopePrefixForTrip(fixture->trip);
-    CHECK(prefix == cwLinePlotTask::cavernCaveNameFor(fixture->cave->id())
+    CHECK(prefix == cwCavernNaming::caveName(fixture->cave->id())
                     + QLatin1Char('.')
-                    + cwLinePlotTask::cavernTripNameFor(fixture->trip->id())
+                    + cwCavernNaming::tripName(fixture->trip->id())
                     + QLatin1Char('.'));
     // Shape contract independent of the helpers: what
     // cwScopeStationListModel::scopePrefix expects.

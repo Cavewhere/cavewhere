@@ -15,7 +15,7 @@
 #include "cwExternalCenterline.h"
 #include "cwExternalCenterlineManager.h"
 #include "cwLinePlotManager.h"
-#include "cwLinePlotTask.h"
+#include "cwCavernNaming.h"
 #include "cwShot.h"
 #include "cwStation.h"
 #include "cwSurveyChunk.h"
@@ -72,7 +72,7 @@ TEST_CASE("Native region has zero attached rows and a native driver source",
     const QString driver = manager.driverSource();
     REQUIRE_FALSE(driver.isEmpty());
     CHECK(driver.contains(QStringLiteral("*begin %1")
-                          .arg(cwLinePlotTask::cavernCaveNameFor(cave->id()))));
+                          .arg(cwCavernNaming::caveName(cave->id()))));
     CHECK_FALSE(driver.contains(QStringLiteral("*include")));
 }
 

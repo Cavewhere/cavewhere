@@ -43,7 +43,6 @@
 #include "cwSketchManager.h"
 #include "cwScale.h"
 #include "cwTripLinePlotTask.h"
-#include "cwLinePlotTask.h"
 #include "cwStation.h"
 #include "cwNoteStation.h"
 #include "cwImage.h"
@@ -1221,26 +1220,20 @@ cwTriangulateInData cwScrapManager::mapScrapToTriangulateInData(cwScrap *scrap) 
     }
 
     cwTrip* trip = scrap->parentNote()->parentTrip();
-    cwCave* cave = trip->parentCave();
 
     cwImage noteImage = scrap->parentNote()->image();
     if (Project) {
         data.setNoteImage(Project->absolutePathNoteImage(scrap->parentNote()));
     }
 
-    // An externally-attached trip's solved positions are keyed with the trip
-    // scope, but the scrap's note stations carry only the scope-relative tail;
-    // qualify them so the triangulator resolves against the cave lookup and
-    // network (a no-op for a native trip).
-    QList<cwNoteStation> noteStations = scrap->stations();
-    if(!trip->externalCenterline().isEmpty()) {
-        for(cwNoteStation& noteStation : noteStations) {
-            noteStation.setName(cwLinePlotTask::scopedStationName(trip, noteStation.name()));
-        }
-    }
-    data.setNoteStation(noteStations);
-    data.setStationLookup(cave->stationPositionLookup());
-    data.setSurveyNetwork(cave->network());
+    // Resolve the scrap's note stations against the trip's own solved data, in
+    // the trip's local namespace. For a native trip the accessors return the
+    // cave lookup/network verbatim; for an externally-attached trip they present
+    // the scope-relative tails the note stations carry, so the triangulator
+    // resolves either without the note names ever being rewritten.
+    data.setNoteStation(scrap->stations());
+    data.setStationLookup(trip->solvedStationPositions());
+    data.setSurveyNetwork(trip->solvedNetwork());
     data.setNoteTransform(scrap->noteTransformAdjustedDeclination());
 
     double dotsPerMeter = scrap->parentNote()->imageResolution()->convertTo(cwUnits::DotsPerMeter).value;

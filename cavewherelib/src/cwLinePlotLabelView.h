@@ -59,10 +59,10 @@ private:
     void connectCave(cwCave* cave);
     void disconnectCave(cwCave* cave);
 
-    void addTrip(cwCave* cave, cwTrip* trip);
+    void addTrip(cwTrip* trip);
     void removeTrip(cwTrip* trip);
 
-    QList<cwLabel3dItem> labels(cwCave* cave, cwTrip* trip) const;
+    QList<cwLabel3dItem> labels(cwTrip* trip) const;
 
     void updateKeywordItem(cwTrip* trip);
 

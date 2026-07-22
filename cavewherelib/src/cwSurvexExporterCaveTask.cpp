@@ -7,7 +7,7 @@
 
 //Our includes
 #include "cwSurvexExporterCaveTask.h"
-#include "cwLinePlotTask.h"
+#include "cwCavernNaming.h"
 #include "cwSurvexExporterTripTask.h"
 #include "cwSurvexExporterUtils.h"
 #include "cwTrip.h"
@@ -102,7 +102,7 @@ bool cwSurvexExporterCaveTask::writeCave(QTextStream& stream, const cwCaveData& 
         // asymmetric — on purpose"). Stations from the included file
         // resolve to cave_<uuid>.trip_<uuid>.<file-tail>.
         if (!tripData.externalCenterline.isEmpty()) {
-            const QString tripLabel = cwLinePlotTask::cavernTripNameFor(tripData.id);
+            const QString tripLabel = cwCavernNaming::tripName(tripData.id);
             stream << "*begin " << tripLabel << " ; " << tripData.name << Qt::endl;
             // CaveWhere-resolved declination for files that carry none of
             // their own. Emitted before *include so it scopes over the

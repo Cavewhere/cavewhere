@@ -7,6 +7,7 @@
 
 // Our includes
 #include "cwLinePlotTask.h"
+#include "cwCavernNaming.h"
 #include "cwConcurrent.h"
 #include "cwSurvexExporterRegion.h"
 #include "cwCavernRunner.h"
@@ -41,26 +42,6 @@
 
 namespace {
 
-// Cave name encoding used by the line-plot driver. Cave names emitted by
-// cwSurvexExporterRegion become survex *begin / *end identifiers, and cavern
-// prefixes every station in a cave with that identifier. We pick a synthetic
-// "cave_<32 hex>" form (the cave UUID in QUuid::Id128 layout) so:
-//   - the prefix round-trips: splitLookupByCave can recover the QUuid from a
-//     cavern-emitted "cave_<32hex>.<station>" line with no name-collision risk
-//     across caves;
-//   - the survex syntax is satisfied: cave_<hex> only uses [a-zA-Z0-9_], which
-//     matches cwStationValidator::validCharactersRegex();
-//   - the user-facing survex exporter (cwSurveyExportManager) is unaffected -
-//     this rewrite happens on a worker-local copy of the region snapshot, so
-//     human-readable cave names persist in any user-driven export.
-constexpr QLatin1String kCaveNamePrefix("cave_");
-
-// trip_<uuid> wrapper the survex exporter puts around an externally-
-// attached trip's *include, so its stations resolve to
-// cave_<uuid>.trip_<uuid>.<file-tail>. Same Id128 encoding rationale as
-// the cave prefix.
-constexpr QLatin1String kTripNamePrefix("trip_");
-
 // QUuid::fromString refuses the 32-hex-no-hyphens form even when wrapped in
 // braces; it requires either the dashed RFC-4122 layout (36 chars) or the
 // dashed-and-braced layout (38 chars). We emit the no-hyphen form via
@@ -80,49 +61,12 @@ QString reinsertUuidHyphens(const QString& hex32)
 
 } // namespace
 
-QString cwLinePlotTask::cavernCaveNameFor(const QUuid& caveId)
-{
-    return kCaveNamePrefix + caveId.toString(QUuid::Id128);
-}
-
-QString cwLinePlotTask::cavernTripNameFor(const QUuid& tripId)
-{
-    return kTripNamePrefix + tripId.toString(QUuid::Id128);
-}
-
 QString cwLinePlotTask::scopedStationName(const cwTrip* trip, const QString& stationName)
 {
     if (trip == nullptr || trip->externalCenterline().isEmpty()) {
         return stationName;
     }
-    return cavernTripNameFor(trip->id()) + QLatin1Char('.') + stationName;
-}
-
-QRegularExpression cwLinePlotTask::cavernStationRegex()
-{
-    // ^cave_<32 hex>\.(\S.*)$ — the tail is intentionally permissive
-    // (must start with a non-whitespace, then any trailing text) so it
-    // covers:
-    //   - native shots:    cave_<uuid>.<station>
-    //   - trip-attached:   cave_<uuid>.trip_<uuid>.<file-begin>.<station>
-    //   - cave-attached:   cave_<uuid>.<file-begin>.<station>
-    // External Survex files can introduce nested *begin scopes that
-    // surface as dotted segments inside the tail, and Walls' empty-name
-    // quirk can emit trailing spaces; tightening the tail to the native
-    // station validator would drop both. The leading \\S guard rejects
-    // pure-whitespace tails (e.g. cave_<uuid>. ) so a malformed external
-    // file can't pollute the lookup with whitespace keys. The cave UUID
-    // prefix is still strictly bounded so the integer-keyed legacy form
-    // ("<digit>.station") remains rejected.
-    //
-    // CaseInsensitiveOption: cwStationPositionLookup keys via
-    // cwStation::canonicalKey() which folds station names to lower case
-    // (cwStation.h:66). cavernCaveNameFor() already emits lowercase via
-    // QUuid::Id128 — but the flag keeps the matcher robust if QUuid::Id128
-    // ever changes its case.
-    return QRegularExpression(
-        QStringLiteral("^cave_([0-9a-fA-F]{32})\\.(\\S.*)$"),
-        QRegularExpression::CaseInsensitiveOption);
+    return cwCavernNaming::tripName(trip->id()) + QLatin1Char('.') + stationName;
 }
 
 cwLinePlotTask::LinePlotCaveData::LinePlotCaveData() :
@@ -282,7 +226,7 @@ private:
 
     void encodeCaveNames(cwCavingRegionData& regionData)
     {
-        // Cave names are rewritten to cavernCaveNameFor(cave.id) so the
+        // Cave names are rewritten to cwCavernNaming::caveName(cave.id) so the
         // exporter emits "*begin cave_<uuid>" and splitLookupByCave can
         // recover cwCave::id() from the cavern station prefix. Caller
         // contract: cave.id must be non-null - the manager satisfies this via
@@ -290,7 +234,7 @@ private:
         // generate a UUID before building Input.
         for (cwCaveData& cave : regionData.caves) {
             Q_ASSERT(!cave.id.isNull());
-            cave.name = cwLinePlotTask::cavernCaveNameFor(cave.id);
+            cave.name = cwCavernNaming::caveName(cave.id);
         }
     }
 
@@ -466,10 +410,10 @@ private:
         constexpr int kPositionPrecisionDigits = 3;
         const double positionFactor = std::pow(10.0, kPositionPrecisionDigits);
 
-        // Compiled once per splitLookupByCave call. cavernStationRegex()
-        // documents the contract (see cwLinePlotTask.h) and is what the
-        // [LinePlot][UuidPrefix] tests bind against.
-        const QRegularExpression regex = cwLinePlotTask::cavernStationRegex();
+        // Compiled once per splitLookupByCave call. cwCavernNaming::stationRegex()
+        // documents the contract and is what the [LinePlot][UuidPrefix] tests
+        // bind against.
+        const QRegularExpression regex = cwCavernNaming::stationRegex();
 
         QHash<QUuid, cwStationPositionLookup> caveStations;
         caveStations.reserve(InternalCaveByUuid.size());
@@ -655,14 +599,13 @@ private:
             // same keying splitLookupByCave gives the position lookup) so the
             // note-editing sites can resolve external neighbors. Native-to-native
             // edges are left to the chunk loop above.
-            const QString cavePrefix = cwLinePlotTask::cavernCaveNameFor(cave->id())
-                    + QLatin1Char('.');
+            const QString cavePrefix = cwCavernNaming::caveScopePrefix(cave->id());
             for (const QString& scopedStation : regionNetwork.stations()) {
                 if (!scopedStation.startsWith(cavePrefix)) {
                     continue;
                 }
                 const QString caveLocalStation = scopedStation.mid(cavePrefix.size());
-                if (!caveLocalStation.startsWith(kTripNamePrefix)) {
+                if (!cwCavernNaming::hasTripScope(caveLocalStation)) {
                     continue; //native station, already covered by the chunk loop
                 }
                 for (const QString& scopedNeighbor : regionNetwork.neighbors(scopedStation)) {

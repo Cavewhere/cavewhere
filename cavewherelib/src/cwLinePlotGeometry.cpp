@@ -6,7 +6,7 @@
 **************************************************************************/
 
 #include "cwLinePlotGeometry.h"
-#include "cwLinePlotTask.h"
+#include "cwCavernNaming.h"
 #include "cwStation.h"
 
 #include <QHash>
@@ -134,9 +134,8 @@ cwLinePlotGeometry::generate(const cwCavingRegionData& region,
         // Network keys are region-wide ("cave_<hex>.trip_<hex>.<tail>"); the
         // cave-local lookup strips this cave prefix, so external scopes bridge
         // through it. cave.name has already been rewritten to cave_<hex> by the
-        // worker, so cavernCaveNameFor(cave.id) reproduces the network prefix.
-        const QString cavePrefix =
-            cwLinePlotTask::cavernCaveNameFor(cave.id) + QLatin1Char('.');
+        // worker, so cwCavernNaming::caveScopePrefix(cave.id) reproduces it.
+        const QString cavePrefix = cwCavernNaming::caveScopePrefix(cave.id);
 
         double minDepth = std::numeric_limits<double>::max();
         double maxDepth = -std::numeric_limits<double>::max();
@@ -166,7 +165,7 @@ cwLinePlotGeometry::generate(const cwCavingRegionData& region,
             // skip the chunk walk entirely.
             if (!trip.externalCenterline.isEmpty()) {
                 const QString scopePrefix =
-                    cavePrefix + cwLinePlotTask::cavernTripNameFor(trip.id) + QLatin1Char('.');
+                    cavePrefix + cwCavernNaming::tripScopePrefix(trip.id);
                 const ScopeExtent extent = emitNetworkScopeGeometry(
                     network, cavePrefix, scopePrefix, stationPositions, result.points);
                 if (extent.hasDepth) {

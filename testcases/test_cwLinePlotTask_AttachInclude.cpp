@@ -19,6 +19,7 @@
 #include "cwFixStationModel.h"
 #include "cwGeoReference.h"
 #include "cwLinePlotManager.h"
+#include "cwCavernNaming.h"
 #include "cwLinePlotTask.h"
 #include "cwNote.h"
 #include "cwNoteLiDAR.h"
@@ -161,7 +162,7 @@ TEST_CASE("Driver *include emits absolute forward-slash quoted path for trip att
     // content assertion reflects the production line-plot path.
     cwCavingRegionData snapshot = region.data();
     REQUIRE(snapshot.caves.size() == 1);
-    snapshot.caves[0].name = cwLinePlotTask::cavernCaveNameFor(cave->id());
+    snapshot.caves[0].name = cwCavernNaming::caveName(cave->id());
 
     const QString driverPath = QDir(tempRoot.path()).absoluteFilePath(QStringLiteral("driver.svx"));
     const auto result = cwSurvexExporterRegion::exportRegion(snapshot, driverPath, options);
@@ -562,7 +563,7 @@ TEST_CASE("Driver emits injected declination inside the trip block before *inclu
 
     cwCavingRegionData snapshot = region.data();
     REQUIRE(snapshot.caves.size() == 1);
-    snapshot.caves[0].name = cwLinePlotTask::cavernCaveNameFor(cave->id());
+    snapshot.caves[0].name = cwCavernNaming::caveName(cave->id());
 
     cwSurvexExporterRegion::Options options;
     options.tripAttachmentDirs.insert(attached->id(), attachDir);

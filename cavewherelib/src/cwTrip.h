@@ -36,6 +36,8 @@ class cwKeywordModel;
 //Qt include
 #include <QObject>
 #include <QList>
+#include <QPair>
+#include <QVector3D>
 #include <QAbstractListModel>
 #include <QWeakPointer>
 #include <QDate>
@@ -139,6 +141,15 @@ public:
     //! an externally-attached (chunk-less) trip and includes cross-trip
     //! junction neighbors.
     cwSurveyNetwork solvedNetwork() const;
+
+    //! This trip's own solved stations as (local name, position) pairs. Unlike
+    //! solvedStationPositions() — a resolution lookup that carries the full cave
+    //! as a superset — this enumerates only the stations this trip owns, in the
+    //! trip's local namespace: a native trip's chunk stations that have a solved
+    //! position, or an externally-attached trip's scope-relative tails. The
+    //! authoritative answer to "what are my stations, and where are they?" for
+    //! the line-plot geometry and label views, native or external alike.
+    QList<QPair<QString, QVector3D>> solvedStations() const;
 
     // void stationPositionModelUpdated();
 

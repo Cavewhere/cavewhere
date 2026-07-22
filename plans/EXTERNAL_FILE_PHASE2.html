@@ -2813,6 +2813,14 @@ public:
     encode/decode grammar in one home; (R2) relocate
     <code>cavernCaveNameFor</code>/<code>cavernTripNameFor</code> to a low-level
     naming header so no data-model class includes a Task header.</em>
+    <em><strong>DONE 2026-07-21 (B5 Commit 2):</strong> landed as the free-function
+    <code>cwCavernNaming</code> namespace (<code>.h</code>/<code>.cpp</code>);
+    <code>cavernCaveNameFor</code>/<code>cavernTripNameFor</code>/<code>cavernStationRegex</code>
+    removed from <code>cwLinePlotTask</code> and all consumers + the 4 contract
+    tests re-pointed. The three divergent prefix slices are one home
+    (<code>caveScopePrefix</code>/<code>tripScopePrefix</code>/<code>fullScopePrefix</code>),
+    and no data-model/view/manager class includes <code>cwLinePlotTask.h</code> for
+    naming anymore. Retire this entry.</em>
   </li>
   <li>
     <strong>State-managed pane width in <code>TripPage</code></strong>
@@ -2892,6 +2900,15 @@ public:
     <code>solvedNetwork()</code> in <a href="#bug-b5">B5 Commit 1</a> (fixing
     the note-editing gap), and B5 Commit 2 folds the B1/B1b/B4 scans onto it
     and deletes them. Retire this entry when B5 Commit 2 lands.</em>
+    <em><strong>DONE 2026-07-21 (B5 Commit 2):</strong> the enumeration accessor
+    landed as <code>cwTrip::solvedStations()</code> &rarr;
+    <code>QList&lt;QPair&lt;QString, QVector3D&gt;&gt;</code> (distinct from the
+    Commit-1 resolution superset <code>solvedStationPositions()</code>), and the
+    label view folded onto it (native + external branches collapsed). Note the
+    scope did <em>not</em> reach all four scans the entry imagined: the L2 morph
+    folded onto the Commit-1 resolution accessors; geometry stays a producer-side
+    scan (worker, value snapshots, no live trip); L1 stays a reverse-scope map.
+    Retire this entry.</em>
     Pairs with the <code>externallyBacked</code> predicate above and the
     <code>cwCavernNaming</code> move. Blast radius: <code>cwTrip</code>
     API + ~4 consumers.
@@ -3001,6 +3018,71 @@ public:
     folding the three <code>setTemporary(false)</code> sites into one
     transition &mdash; is tracked as
     <a href="https://github.com/Cavewhere/cavewhere/issues/603">#603</a>.
+  </li>
+  <li>
+    <strong>External-trip note-station names resolve against the whole cave,
+    not just the trip's own scope</strong> <em>(B5 Commit 2 review,
+    2026-07-22)</em>. After the L2 morph fold, an externally-attached trip's
+    note/scrap station is looked up by its bare tail against
+    <code>cwTrip::solvedStationPositions()</code> &mdash; the resolution
+    <em>superset</em>, which still carries every native (unscoped) cave key so
+    cross-trip tie-in neighbors resolve. Consequence: a bare note-station name
+    that is <em>not</em> in the trip's external centerline but collides with a
+    native station name elsewhere in the same cave now anchors to that native
+    station's world position, where the old scope-qualified path
+    (<code>scopedStationName</code> &rarr;
+    <code>trip_&lt;hex&gt;.&lt;tail&gt;</code>) found nothing and correctly
+    dropped it &mdash; so a mistyped or not-yet-surveyed label silently morphs
+    the scrap to the wrong 3D anchor. <strong>Reachable:</strong> external
+    note-station names are grammar-validated only
+    (<code>cwStationValidator</code> widens the allowed character class for
+    external trips; it never checks membership in the centerline's station set),
+    and <code>cwScopeStationListModel</code> is read-only autocomplete, not a
+    constraint. The lead / auto-transform / station-guide paths already resolve
+    tail-only names against the full cave lookup the same way, so this may be an
+    acceptable consistency rather than a new bug &mdash; the open question is
+    whether the external note-anchor match should be scope-isolated (resolve a
+    bare tail only against the trip's own scoped stations, keeping the superset
+    for tie-in neighbors only).
+    <em>Product idea to explore (not yet decided, captured 2026-07-22): surface
+    to the user which stations are in scope for an external trip &mdash; give
+    feedback when a typed note-station name is not one of them &mdash; and let
+    the user deliberately expand the scope to admit a station from outside the
+    attached centerline. That would turn the silent collision into a visible,
+    intentional choice. Revisit before deciding whether to scope-isolate the
+    match.</em>
+    Blast radius: <code>cwScrapManager::mapScrapToTriangulateInData</code> /
+    <code>cwNoteLiDARManager::mapNoteToInData</code> (resolution), plus the
+    scope-feedback UI (station-list panel + note-station validator/editor).
+  </li>
+  <li>
+    <strong>Collapse the three <code>cwTrip</code> external-scope scans into a
+    private helper</strong> <em>(B5 Commit 2 review, 2026-07-22)</em>.
+    <code>solvedStationPositions()</code>, <code>solvedNetwork()</code> and the
+    new <code>solvedStations()</code> each recompute
+    <code>cwCavernNaming::tripScopePrefix(id())</code> and walk the cave
+    lookup/network stripping that prefix; the two positions-scans are identical.
+    A private scan helper on <code>cwTrip</code> would remove the triplication.
+    Kept separate for now because the accessors are deliberately distinct
+    contracts (resolution <em>superset</em> vs <em>enumeration</em>) and the
+    grammar &mdash; the risky part &mdash; is already centralized in
+    <code>cwCavernNaming</code>. Blast radius: <code>cwTrip.cpp</code> internals
+    only, behavior-preserving.
+  </li>
+  <li>
+    <strong>Generalize the scope-strip <em>operation</em>, not just the
+    grammar</strong> <em>(B5 Commit 2 review, 2026-07-22)</em>.
+    <code>cwCavernNaming</code> centralized the naming grammar (prefixes +
+    regex), so grammar drift is now impossible; but the scope-strip operation
+    &mdash; walk a lookup/network, re-key each entry by stripping the scope
+    prefix &mdash; is still hand-written in ~5 places
+    (<code>cwTrip</code> &times;3, <code>cwLinePlotGeometry::generate</code>,
+    the cave-network mirror in <code>cwLinePlotTask</code>). Operation drift
+    remains possible. A shared helper is awkward today because the sites run in
+    different threading contexts (worker value-snapshots vs main-thread live
+    <code>cwTrip</code>), so this is named as the next natural generalization,
+    not an immediate action. Blast radius: cross-cutting (worker + main-thread
+    paths).
   </li>
 </ul>
 
@@ -3169,7 +3251,12 @@ public:
   <code>cwLinePlotTask::scopedStationName(trip, name)</code> prepends
   <code>cavernTripNameFor(trip-&gt;id()) + "."</code> for an
   externally-backed trip (returns the name unchanged for a native or null
-  trip). Applied at:
+  trip). <em>(B5 Commit 2, 2026-07-22: <code>cavernTripNameFor</code> was
+  renamed to <code>cwCavernNaming::tripName</code>, and the Layer-2 morph
+  application below was retired &mdash; the morph now resolves via
+  <code>cwTrip::solvedStationPositions()</code>, leaving
+  <code>scopedStationName</code> used only by the Layer-1 trigger.)</em>
+  Applied at:
 </p>
 <ul>
   <li>
@@ -3382,27 +3469,60 @@ cwSurveyNetwork         cwTrip::solvedNetwork() const;</code></pre>
   heavy-fixture bucket as the deferred B4 end-to-end render test (&sect;16 B4).
 </p>
 
-<p><strong>Commit 2 &mdash; unify (next commit).</strong> Re-point the already-green
-  B1/B1b/B4 paths onto the same accessors and delete the bespoke prefix-scan
-  code they carry today:</p>
+<p><strong>Commit 2 &mdash; unify (DONE, uncommitted, 2026-07-21).</strong> The
+  plan's original "re-point all four B1/B1b/B4 paths onto the accessors and delete
+  their prefix scans, pure refactor" framing only <em>partly</em> survived contact
+  with the code. What each site actually needed:</p>
 <ul>
-  <li><code>cwLinePlotGeometry::generate()</code> (B1) &mdash; scope-prefix scan of
-    the cave lookup.</li>
-  <li><code>cwLinePlotLabelView::labels()</code> (B1b) &mdash; prefix scan +
-    tail relabel.</li>
-  <li><code>cwLinePlotTask::StationTripScrapLookup</code> and the L2 morph
-    boundary (<code>cwScrapManager::mapScrapToTriangulateInData</code>,
-    <code>cwNoteLiDARManager::mapNoteToInData</code>) &mdash; B4's
-    <code>scopedStationName</code> applications. NB: the L1 trigger runs on the
-    <em>worker</em>-owned <code>cwCavingRegion</code> snapshot, so any accessor it
-    uses must stay a pure value read with no main-thread reach &mdash; verify
-    before folding it in.</li>
+  <li><strong>R1/R2 first (done).</strong> New free-function home
+    <code>cwCavernNaming</code> (<code>.h</code>/<code>.cpp</code>):
+    <code>caveName</code>/<code>tripName</code>/<code>caveScopePrefix</code>/
+    <code>tripScopePrefix</code>/<code>fullScopePrefix</code>/<code>hasTripScope</code>/
+    <code>stationRegex</code>. <code>cavernCaveNameFor</code>/<code>cavernTripNameFor</code>/
+    <code>cavernStationRegex</code> deleted off <code>cwLinePlotTask</code>; every
+    consumer (geometry, label view, exporter, external-centerline manager, the
+    worker's encode/decode, and the 4 contract test files) now speaks
+    <code>cwCavernNaming</code>. <strong>Layering inversion resolved</strong>:
+    <code>cwTrip.cpp</code>, <code>cwScrapManager.cpp</code>,
+    <code>cwNoteLiDARManager.cpp</code>, <code>cwLinePlotGeometry.cpp</code> and
+    <code>cwLinePlotLabelView.cpp</code> no longer <code>#include cwLinePlotTask.h</code>.
+    (<code>scopedStationName</code> stays a <code>cwLinePlotTask</code> static &mdash;
+    its only remaining caller is the L1 trigger in the same TU, and it delegates to
+    <code>cwCavernNaming::tripName</code>.)</li>
+  <li><strong>L2 morph &mdash; folded (behavior-preserving).</strong>
+    <code>cwScrapManager::mapScrapToTriangulateInData</code> and
+    <code>cwNoteLiDARManager::mapNoteToInData</code> now feed
+    <code>trip-&gt;solvedStationPositions()</code>/<code>solvedNetwork()</code> with
+    <em>unscoped</em> note names; both <code>scopedStationName</code> branches
+    deleted. Native = accessor pass-through (byte-identical); external resolves via
+    the local-tail aliases.</li>
+  <li><strong>Labels (B1b) &mdash; folded onto a <em>new</em> accessor.</strong>
+    <code>solvedStationPositions()</code> is a resolution <em>superset</em>, not an
+    enumeration, so it can't answer "which stations are mine." Added
+    <code>cwTrip::solvedStations()</code> &rarr;
+    <code>QList&lt;QPair&lt;QString, QVector3D&gt;&gt;</code> (this trip's own
+    stations, local namespace, native <em>and</em> external), and
+    <code>cwLinePlotLabelView::labels()</code> now iterates it &mdash; the native
+    and external branches collapse to one, and <code>labels()</code>/<code>addTrip()</code>
+    drop their now-redundant <code>cwCave*</code> param. This is the &sect;15 A1
+    <code>solvedStations()</code> accessor; that entry is retired.</li>
+  <li><strong>Geometry (B1) &mdash; NOT folded; centralized naming only.</strong>
+    <code>cwLinePlotGeometry::generate(cwCavingRegionData, cwSurveyNetwork)</code> is
+    the solve <em>producer</em> and runs inside the worker on value snapshots &mdash;
+    there is no live <code>cwTrip*</code>, and it already holds the freshest solved
+    network as a parameter. Folding it onto <code>solvedNetwork()</code> (a
+    main-thread reader of the <em>written-back</em> result) would be circular. It
+    keeps its prefix-scan; only its naming grammar moved to <code>cwCavernNaming</code>.</li>
+  <li><strong>L1 trigger &mdash; NOT folded; correct as-is.</strong>
+    <code>StationTripScrapLookup</code> does <em>reverse</em> scoping (local note
+    name &rarr; scoped key) to match the region-wide changed-station stream; the
+    accessor yields local names, so it genuinely needs <code>scopedStationName</code>.
+    Intra-TU, so no layering benefit from touching it.</li>
 </ul>
 <p>
-  Pure refactor, no behavior change; kept out of Commit 1 so the B5 fix stays
-  reviewable and the accessor proves itself on B5 first. When it lands, retire
-  the &sect;15 <code>solvedStations()</code> follow-up entry &mdash; this
-  <em>is</em> that work.
+  Net: two sites folded onto accessors, two stay as producer-side/reverse scans
+  with centralized naming. Retires the &sect;15 <code>solvedStations()</code> and
+  <code>cwCavernNaming</code> follow-ups.
 </p>
 <p>
   <strong>Known edge (document, don't block):</strong> an external tail that
@@ -3519,6 +3639,22 @@ Stations list   &larr; denser rows; consider abbreviated UsedStations view</code
   "Split <code>RemoveAskBox</code> into a generic ConfirmPopover"
   follow-up &mdash; fix the clipping here regardless of whether that
   extraction happens.
+</p>
+
+<h3 id="bug-b6">B6 &mdash; Attaching a Compass <code>.dat</code> file does not work</h3>
+
+<p>
+  <em>(Reported 2026-07-22.)</em> Attaching a Compass <code>.dat</code>
+  survey file as an external centerline does not work. Example that
+  reproduces it: <code>/Users/cave/Downloads/unins000 - Copy.dat</code>.
+  Root cause not yet diagnosed &mdash; needs investigation of the
+  external-centerline attach path for the Compass importer (does the
+  attach flow accept <code>.dat</code> at file-pick, does the solve
+  produce stations, and do they reach the cave lookup / renderer the way
+  a Survex attach does?). Capture the actual symptom (pick rejected /
+  attaches but nothing solves / solves but nothing draws) when diagnosing,
+  and add a regression test that attaches a <code>.dat</code> fixture and
+  asserts the resulting external trip has solved stations.
 </p>
 
 </body>

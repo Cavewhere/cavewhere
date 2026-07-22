@@ -30,7 +30,6 @@
 #include "cwSurveyNoteLiDARModel.h"
 #include "cwNoteLiDAR.h"
 #include "cwLinePlotManager.h"
-#include "cwLinePlotTask.h"
 #include "cwProject.h"
 #include "asyncfuture.h"
 #include "cwUniqueConnectionChecker.h"
@@ -512,19 +511,12 @@ cwTriangulateLiDARInData cwNoteLiDARManager::mapNoteToInData(const cwNoteLiDAR* 
     }
 
     const cwTrip* trip = note->parentTrip();
-    const cwCave* cave = trip ? trip->parentCave() : nullptr;
 
-    // Note stations. An externally-attached trip's solved positions are keyed
-    // with the trip scope, but the LiDAR note's stations carry only the
-    // scope-relative tail; qualify them so the morph resolves against the cave
-    // lookup and network (a no-op for a native trip).
-    QList<cwNoteLiDARStation> noteStations = note->stations();
-    if(trip != nullptr && !trip->externalCenterline().isEmpty()) {
-        for(cwNoteLiDARStation& noteStation : noteStations) {
-            noteStation.setName(cwLinePlotTask::scopedStationName(trip, noteStation.name()));
-        }
-    }
-    in.setNoteStations(noteStations);
+    // Note stations resolve against the trip's own solved data (see
+    // mapScrapToTriangulateInData): native passes the cave lookup/network
+    // through, external presents the scope-relative tails the note carries, so
+    // the LiDAR station names are never rewritten.
+    in.setNoteStations(note->stations());
 
     // Model matrix for lidar
     QMatrix4x4 modelMatrix = note->noteTransformation()->matrix();
@@ -538,10 +530,10 @@ cwTriangulateLiDARInData cwNoteLiDARManager::mapNoteToInData(const cwNoteLiDAR* 
     }
     in.setModelMatrix(modelMatrix);
 
-    // Station lookup and network from cave when available
-    if (cave != nullptr) {
-        in.setStationLookup(cave->stationPositionLookup());
-        in.setSurveyNetwork(cave->network());
+    // Station lookup and network in the trip's own local namespace.
+    if (trip != nullptr) {
+        in.setStationLookup(trip->solvedStationPositions());
+        in.setSurveyNetwork(trip->solvedNetwork());
     }
 
     // GLTF path (if the note exposes one via filename())
