@@ -23,6 +23,7 @@
 #include "cwPenStroke.h"
 #include "cwScale.h"
 #include "cwSketchData.h"
+#include "cwEquate.h"
 #include "cwFixStation.h"
 #include "cwGeoPoint.h"
 
@@ -56,6 +57,8 @@ class Scale;
 class Sketch;
 class FixStation;
 class DoubleVector3d;
+class Equate;
+class StationHandle;
 }
 
 namespace QtProto {
@@ -173,6 +176,10 @@ CAVEWHERE_LIB_EXPORT cwSketchData  fromProtoSketch   (const CavewhereProto::Sket
 // Fix stations / world origin
 CAVEWHERE_LIB_EXPORT void saveFixStation(CavewhereProto::FixStation* protoFix, const cwFixStation& fix);
 CAVEWHERE_LIB_EXPORT cwFixStation fromProtoFixStation(const CavewhereProto::FixStation& protoFix);
+
+// Equates
+CAVEWHERE_LIB_EXPORT void saveEquate(CavewhereProto::Equate* protoEquate, const cwEquate& equate);
+CAVEWHERE_LIB_EXPORT cwEquate fromProtoEquate(const CavewhereProto::Equate& protoEquate);
 CAVEWHERE_LIB_EXPORT void saveDoubleVector3d(CavewhereProto::DoubleVector3d* protoVec, const cwGeoPoint& point);
 CAVEWHERE_LIB_EXPORT cwGeoPoint fromProtoDoubleVector3d(const CavewhereProto::DoubleVector3d& protoVec);
 

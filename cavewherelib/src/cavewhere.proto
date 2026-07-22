@@ -45,6 +45,13 @@ message Project {
     optional string name = 2;
     optional ProjectMetadata metadata = 3;
     optional string id = 4; // UUID, stable across renames
+
+    // Region-level (cross-cave) equate ties: a station in one cave tied to a
+    // station in another. Within-cave ties live on each Cave instead. Held on
+    // the region top-level file (the Project message) because the new
+    // directory format stores each cave in its own file and has no separate
+    // CavingRegion message on disk.
+    repeated Equate equates = 5;
 }
 
 //This is a legacy message, do not use
@@ -79,6 +86,23 @@ message ExternalCenterline {
     optional string entry_file = 1;
 }
 
+// One endpoint of an equate: a station named by the scope it lives in plus its
+// tail (name relative to that scope), never a flat fully-qualified string, so
+// the tie survives re-parenting and renames.
+message StationHandle {
+    // 0 = NativeCave (container_uuid is the cave's id), 1 = Trip
+    // (container_uuid is the trip's id). Mirrors cwStationHandle::Scope.
+    optional int32 scope = 1;
+    optional string container_uuid = 2;
+    optional string tail = 3;
+}
+
+// A user-editable N-way (>= 2) tie: every listed station names one physical
+// point. Emitted as a bare *equate line at solve time (commits 4/5).
+message Equate {
+    repeated StationHandle stations = 1;
+}
+
 message Cave {
     optional FileVersion fileVersion = 9;
     optional string name = 8;
@@ -102,6 +126,10 @@ message Cave {
     // Attached external centerline (Survex/Compass/Walls). Absent for
     // Native caves; present (and entry_file set) for Attached/Scope.
     optional ExternalCenterline external_centerline = 12;
+
+    // Within-cave equate ties (a station tied to another station in the same
+    // cave). Cross-cave ties live on the region (Project.equates).
+    repeated Equate equates = 13;
 }
 
 message Trip {

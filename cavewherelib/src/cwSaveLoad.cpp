@@ -19,6 +19,8 @@
 #include "cwFutureManagerModel.h"
 #include "cwTeam.h"
 #include "cwCavingRegion.h"
+#include "cwCave.h"
+#include "cwEquateModel.h"
 #include "cwGeoReference.h"
 #include "cwLazLayer.h"
 #include "cwLazLayerModel.h"
@@ -1843,6 +1845,9 @@ std::unique_ptr<CavewhereProto::Project> cwSaveLoad::toProtoProject(const cwCavi
                                      region->geoReference()->globalCoordinateSystem());
         }
 
+        for (const cwEquate& equate : region->equates()->equates()) {
+            cwProtoUtils::saveEquate(protoProject->add_equates(), equate);
+        }
     }
 
     return protoProject;
@@ -1910,6 +1915,10 @@ std::unique_ptr<CavewhereProto::Cave> cwSaveLoad::toProtoCave(const cwCave *cave
         auto* protoExternal = protoCave->mutable_external_centerline();
         *(protoExternal->mutable_entry_file()) =
                 cave->externalCenterline().entryFile().toStdString();
+    }
+
+    for (const cwEquate& equate : cave->equates()->equates()) {
+        cwProtoUtils::saveEquate(protoCave->add_equates(), equate);
     }
 
     return protoCave;
@@ -2769,6 +2778,11 @@ QFuture<Monad::Result<cwSaveLoad::ProjectLoadData>> cwSaveLoad::loadAll(const QS
                     cave.fixStations.append(cwProtoUtils::fromProtoFixStation(protoFix));
                 }
 
+                cave.equates.reserve(caveProto.equates_size());
+                for (const auto& protoEquate : caveProto.equates()) {
+                    cave.equates.append(cwProtoUtils::fromProtoEquate(protoEquate));
+                }
+
                 // Load all trips for this cave
                 QDir caveDir = caveFileInfo.absoluteDir();
                 QDir tripsDir(caveDir.filePath("trips"));
@@ -2946,6 +2960,11 @@ Monad::Result<cwSaveLoad::ProjectLoadData> cwSaveLoad::loadProject(const QString
 
         if (loadData.metadata.dataRoot.isEmpty()) {
             loadData.metadata.dataRoot = cwSaveLoadPrivate::defaultDataRoot(loadData.region.name);
+        }
+
+        loadData.region.equates.reserve(projectProto.equates_size());
+        for (const auto& protoEquate : projectProto.equates()) {
+            loadData.region.equates.append(cwProtoUtils::fromProtoEquate(protoEquate));
         }
 
         return Result(loadData);
@@ -3290,6 +3309,17 @@ void cwSaveLoad::disconnectTreeModel()
             disconnect(this, &cwSaveLoad::discardCompleted,
                        lazLayers, &cwLazLayerModel::rescan);
         }
+        // geoReference and the equate model are children of region too, so their
+        // this-bound saveMetadata connections (wired in connectTreeModel) survive
+        // the disconnect(region, ...) above. Each reconcile disconnects then
+        // reconnects the tree, so without an explicit teardown they accumulate a
+        // duplicate saveProject per cycle.
+        if (auto* geoReference = region->geoReference()) {
+            disconnect(geoReference, nullptr, this, nullptr);
+        }
+        if (auto* equateModel = region->equates()) {
+            disconnect(equateModel, nullptr, this, nullptr);
+        }
     }
 
     //Disconnect from the tree model
@@ -3536,6 +3566,14 @@ void cwSaveLoad::connectTreeModel()
         // needs the same handler — without it a units change made in the UI never
         // reaches disk or flips the dirty bit, and is dropped on close.
         connect(region, &cwCavingRegion::unitSystemChanged, this, saveMetadata);
+
+        // Cross-cave equates persist in the same region top-level file (the
+        // Project message), so an equate added/removed on the region must flush
+        // it, exactly like a units or CS change. These connections are wired
+        // before the region is populated, so WatchReset::No is mandatory here:
+        // setEquates() (the bulk load path) resets the model, and saving then
+        // would overwrite the on-disk project with a half-built one mid-load.
+        connectListModelSaveTrigger(region->equates(), WatchReset::No, saveMetadata);
 
         // LAZ layers live in "GIS Layers/" inside the project root and are
         // discovered by directory scan, so adds go through cwProject::addFiles
@@ -4036,6 +4074,21 @@ void cwSaveLoad::connectObjects()
 
 }
 
+void cwSaveLoad::connectListModelSaveTrigger(QAbstractItemModel* model,
+                                             WatchReset watchReset,
+                                             const std::function<void()>& onChanged)
+{
+    if (model == nullptr) {
+        return;
+    }
+    connect(model, &QAbstractItemModel::rowsInserted, this, onChanged);
+    connect(model, &QAbstractItemModel::rowsRemoved, this, onChanged);
+    connect(model, &QAbstractItemModel::dataChanged, this, onChanged);
+    if (watchReset == WatchReset::Yes) {
+        connect(model, &QAbstractItemModel::modelReset, this, onChanged);
+    }
+}
+
 void cwSaveLoad::connectCave(cwCave *cave)
 {
     if (cave == nullptr) {
@@ -4060,11 +4113,13 @@ void cwSaveLoad::connectCave(cwCave *cave)
     connect(cave->depth(), &cwUnitValue::unitChanged, this, saveCave);
     connect(cave, &cwCave::externalCenterlineChanged, this, saveCave);
 
-    cwFixStationModel* fixModel = cave->fixStations();
-    connect(fixModel, &QAbstractItemModel::rowsInserted, this, saveCave);
-    connect(fixModel, &QAbstractItemModel::rowsRemoved, this, saveCave);
-    connect(fixModel, &QAbstractItemModel::modelReset, this, saveCave);
-    connect(fixModel, &QAbstractItemModel::dataChanged, this, saveCave);
+    // connectCave runs after the cave's data is loaded, so watching modelReset
+    // is safe here (the load-time setFixStations()/setEquates() reset fires
+    // before these connections exist). Within-cave equates persist in the cave
+    // file, so a row added/removed must mark the cave dirty — mirrors the
+    // fix-station wiring; without it an equate never reaches disk.
+    connectListModelSaveTrigger(cave->fixStations(), WatchReset::Yes, saveCave);
+    connectListModelSaveTrigger(cave->equates(), WatchReset::Yes, saveCave);
 }
 
 

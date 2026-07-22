@@ -14,6 +14,8 @@ class cwCavingRegion;
 class cwKeywordModel;
 #include "cwGridConvergence.h"
 #include "cwErrorModel.h"
+#include "cwEquate.h"
+#include "cwEquateModel.h"
 #include "cwExternalCenterline.h"
 #include "cwLength.h"
 #include "cwStation.h"
@@ -50,6 +52,7 @@ class CAVEWHERE_LIB_EXPORT cwCave : public QAbstractListModel, public cwUndoer
     Q_PROPERTY(cwFixStationModel* fixStations READ fixStations CONSTANT)
     Q_PROPERTY(cwGridConvergence* gridConvergence READ gridConvergence CONSTANT)
     Q_PROPERTY(cwExternalCenterline externalCenterline READ externalCenterline WRITE setExternalCenterline NOTIFY externalCenterlineChanged)
+    Q_PROPERTY(cwEquateModel* equates READ equates CONSTANT)
     Q_PROPERTY(cwKeywordModel* keywordModel READ keywordModel CONSTANT)
 
 public:
@@ -71,6 +74,17 @@ public:
 
     cwExternalCenterline externalCenterline() const { return m_externalCenterline; }
     void setExternalCenterline(const cwExternalCenterline& value);
+
+    //! Within-cave equate ties, travelling with the cave. Cross-cave ties live
+    //! on cwCavingRegion instead.
+    cwEquateModel* equates() const { return m_equates; }
+
+    //! A within-cave equate is only accepted here if it is structurally valid
+    //! (cwEquate::isValid) and every handle resolves into this cave: a
+    //! NativeCave handle's containerId equals this cave's id, and a Trip
+    //! handle's containerId is one of this cave's trips. Cross-cave ties do not
+    //! satisfy this and belong on the region instead.
+    bool validate(const cwEquate& equate) const;
 
     cwKeywordModel* keywordModel() const { return m_keywordModel; }
 
@@ -169,6 +183,8 @@ private:
     cwGridConvergence* m_gridConvergence;
 
     cwExternalCenterline m_externalCenterline;
+
+    cwEquateModel* m_equates;
 
     cwKeywordModel* m_keywordModel = nullptr;
     void updateKeywords();

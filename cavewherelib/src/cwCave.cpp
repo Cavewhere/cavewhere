@@ -32,6 +32,7 @@ cwCave::cwCave(QObject* parent) :
     StationPositionModelStale(false),
     Id(QUuid::createUuid()),
     m_gridConvergence(new cwGridConvergence(this)),
+    m_equates(new cwEquateModel(this)),
     m_keywordModel(new cwKeywordModel(this))
 {
     Length->setUnit(cwUnits::Meters);
@@ -530,6 +531,44 @@ QList<cwStation> cwCave::stations() const {
     return allStations;
 }
 
+bool cwCave::validate(const cwEquate& equate) const
+{
+    if (!equate.isValid()) {
+        return false;
+    }
+
+    const auto tripContains = [this](const QUuid& tripId) {
+        for (const cwTrip* trip : Trips) {
+            if (trip != nullptr && trip->id() == tripId) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    const QList<cwStationHandle> handles = equate.stations();
+    for (const cwStationHandle& handle : handles) {
+        switch (handle.scope()) {
+        case cwStationHandle::NativeCave:
+            if (handle.containerId() != Id) {
+                return false;
+            }
+            break;
+        case cwStationHandle::Trip:
+            if (!tripContains(handle.containerId())) {
+                return false;
+            }
+            break;
+        default:
+            // An out-of-enum scope (e.g. a cast int pushed through QML) names no
+            // container this cave can resolve, so it is never a valid tie.
+            return false;
+        }
+    }
+
+    return true;
+}
+
 cwCaveData cwCave::data() const
 {
     //Todo load trips
@@ -541,7 +580,8 @@ cwCaveData cwCave::data() const
         static_cast<cwUnits::LengthUnit>(length()->unit()),
         static_cast<cwUnits::LengthUnit>(depth()->unit()),
         FixStations->fixStations(),
-        m_externalCenterline
+        m_externalCenterline,
+        m_equates->equates()
     };
 }
 
@@ -556,6 +596,7 @@ void cwCave::setData(const cwCaveData &data)
     clearTrips();
 
     FixStations->setFixStations(data.fixStations);
+    m_equates->setEquates(data.equates);
 
     //Insert all trips
     for(const auto& tripData : data.trips) {

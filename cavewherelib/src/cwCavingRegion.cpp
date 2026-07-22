@@ -10,6 +10,7 @@
 #include "cwCave.h"
 #include "cwCoordinateTransform.h"
 #include "cwDebug.h"
+#include "cwEquateModel.h"
 #include "cwFixStation.h"
 #include "cwFixStationModel.h"
 #include "cwLazLayerModel.h"
@@ -24,7 +25,8 @@
 cwCavingRegion::cwCavingRegion(QObject *parent) :
     QAbstractListModel(parent),
     m_geoReference(new cwGeoReference(this)),
-    m_lazLayers(new cwLazLayerModel(this))
+    m_lazLayers(new cwLazLayerModel(this)),
+    m_equates(new cwEquateModel(this))
 {
     // geoReference owns the CS + worldOrigin; the region only mirrors each change
     // into the LAZ layer model (it owns lazLayers). Consumers that react to CS /
@@ -355,6 +357,8 @@ void cwCavingRegion::setData(const cwCavingRegionData &data)
         m_geoReference->setWorldOrigin(data.worldOrigin);
     }
 
+    m_equates->setEquates(data.equates);
+
     clearCaves();
 
     QList<cwCave*> newCaves;
@@ -374,7 +378,8 @@ cwCavingRegionData cwCavingRegion::data() const
         cwData::toDataList<cwCaveData>(m_caves),
         m_geoReference->globalCoordinateSystem(),
         m_geoReference->worldOrigin(),
-        m_unitSystem
+        m_unitSystem,
+        m_equates->equates()
     };
 }
 

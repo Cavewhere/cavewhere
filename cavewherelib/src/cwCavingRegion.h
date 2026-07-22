@@ -22,6 +22,7 @@
 //Our includes
 class cwCave;
 class cwProject;
+class cwEquateModel;
 #include "cwCavingRegionData.h"
 #include "cwGeoReference.h"
 #include "cwLazLayerModel.h"
@@ -43,6 +44,7 @@ class CAVEWHERE_LIB_EXPORT cwCavingRegion : public QAbstractListModel, public cw
     Q_PROPERTY(cwGeoReference* geoReference READ geoReference CONSTANT)
     Q_PROPERTY(cwLazLayerModel* lazLayers READ lazLayers CONSTANT)
     Q_PROPERTY(cwUnits::UnitSystem unitSystem READ unitSystem WRITE setUnitSystem NOTIFY unitSystemChanged)
+    Q_PROPERTY(cwEquateModel* equates READ equates CONSTANT)
 
 public:
     enum Roles {
@@ -72,6 +74,10 @@ public:
 
     cwLazLayerModel* lazLayers() const { return m_lazLayers; }
     void setFutureManagerToken(const cwFutureManagerToken& token);
+
+    //! Cross-cave equate ties (two caves that physically connect). Within-cave
+    //! ties live on each cwCave instead.
+    cwEquateModel* equates() const { return m_equates; }
 
     //! The project-wide default unit system, persisted with the project. It
     //! seeds the entry unit of new trips but never reinterprets existing ones.
@@ -134,6 +140,8 @@ private:
     cwGeoReference* m_geoReference = nullptr;
 
     cwLazLayerModel* m_lazLayers = nullptr;
+
+    cwEquateModel* m_equates = nullptr;
 
     cwUnits::UnitSystem m_unitSystem = cwUnits::Metric;
 

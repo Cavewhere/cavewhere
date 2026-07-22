@@ -404,7 +404,57 @@ bool cwTrip::isScoped() const { return !scopePrefix().isEmpty(); }</code></pre>
     prefixes are not constrained to lowercase.</li>
 </ul>
 
-<h3 id="c3">Commit 3 &mdash; Equate model + persistence (self-contained handle)</h3>
+<h3 id="c3">Commit 3 &mdash; Equate model + persistence (self-contained handle) &mdash; DONE, GREEN (uncommitted)</h3>
+<p class="note">
+  <strong>Delivered 2026-07-22 on <code>externalFiles</code>, both suites green
+  (C++ 1664 passed / 1 skipped; QML 809 passed / 82 skipped), not yet
+  committed.</strong> New value types <code>cwStationHandle</code>
+  (<code>Q_GADGET</code>, <code>Scope{NativeCave,Trip}</code>, containerId, tail)
+  and <code>cwEquate</code> (list of handles, <code>isValid()</code> = &ge;2
+  distinct valid handles). New <code>cwEquateModel</code>
+  (<code>QAbstractListModel</code>, mirrors <code>cwFixStationModel</code>) owned by
+  both <code>cwCave</code> and <code>cwCavingRegion</code>. Proto
+  <code>StationHandle</code>/<code>Equate</code> messages; <code>Cave.equates=13</code>
+  and <code>Project.equates=5</code> (see deviation 2). Save/load + save-triggers
+  wired in <code>cwSaveLoad</code>; threaded through <code>cwCaveData</code> /
+  <code>cwCavingRegionData</code>. <code>cwCave::validate(equate)</code> enforces
+  within-cave membership. D4 import fix landed (union-find in
+  <code>populateEquateMap</code>). New tests: <code>test_cwEquate.cpp</code>
+  (<code>[Equate]</code>), cave+region round-trip in
+  <code>test_cwExternalCenterlineSaveLoad.cpp</code>, and a chained-equate importer
+  test (verified it fails on the pre-fix algorithm).
+</p>
+<p class="note">
+  <strong>Three deviations from this sketch (deliberate):</strong>
+  <br><strong>1. No per-edit undo.</strong> The sketch said "runtime objects with
+  undo"; the closest sibling (<code>cwFixStationModel</code>, added 2026) has no
+  <code>QUndoCommand</code>, and cave-name undo is unused in practice. Matched the
+  sibling &mdash; edits persist via the model's row signals, not an undo stack.
+  <br><strong>2. Region equates live in the <code>Project</code> proto, not
+  <code>CavingRegion</code>.</strong> The new <code>.cwproj</code> directory format
+  has no <code>CavingRegion</code> message on disk (that message is legacy
+  bundled-<code>.cw</code> read-only, never written); the region top-level file
+  <em>is</em> the <code>Project</code> proto, so region-level ties go there
+  (<code>Project.equates=5</code>). Cave ties go in the per-cave <code>Cave</code>
+  proto (<code>Cave.equates=13</code>).
+  <br><strong>3. <code>equatesChanged</code></strong> is realized as the model's
+  <code>QAbstractItemModel</code> row/reset signals (what the save layer needs),
+  not a bespoke signal.
+</p>
+<p class="note">
+  <strong>&#9888; Save-trigger landmine (found &amp; fixed here).</strong> The
+  region equate save-trigger is wired in <code>connectTreeModel</code>, which runs
+  <em>before</em> the region is populated. <code>setEquates()</code> (the bulk load
+  path) emits <code>modelReset</code>; connecting <code>modelReset</code> to
+  <code>saveMetadata</code> made a load fire <code>saveProject</code> mid-load,
+  <strong>truncating the source <code>.cw</code> to a 246-byte Project proto</strong>
+  and breaking every legacy conversion (3 tests). Fix: the region trigger watches
+  only <code>rowsInserted</code>/<code>rowsRemoved</code>/<code>dataChanged</code>
+  (user mutations), never <code>modelReset</code>. The cave-level trigger lives in
+  <code>connectCave</code> (post-load, like <code>fixStations</code>) so it can keep
+  <code>modelReset</code> safely. Any future model-owned save-trigger wired pre-load
+  must follow the same rule.
+</p>
 <p>
   An equate is an N-way set of <strong>self-contained station handles</strong>
   (D6):
@@ -444,6 +494,30 @@ bool cwTrip::isScoped() const { return !scopePrefix().isEmpty(); }</code></pre>
   covers bare native stations <em>and</em> the
   cave-level-<code>externalCenterline</code> variant (stations directly under
   <code>cave_&lt;hex&gt;.</code> with no trip).
+</p>
+<p class="note">
+  <strong>C3 pre-commit review (2026-07-22):</strong> one real defect found &amp;
+  fixed &mdash; the region equate save-trigger was wired to <code>this</code> via
+  a <em>child</em> QObject sender (<code>region-&gt;equates()</code>) that
+  <code>disconnectTreeModel</code> never tore down, so each git-sync
+  disconnect/reconnect cycle accumulated a duplicate <code>saveProject</code>
+  connection. Fixed with an explicit teardown mirroring the <code>lazLayers</code>
+  precedent; the identical pre-existing <code>geoReference</code> sibling was
+  folded into the same fix. The model&rarr;save-trigger wiring was also unified
+  behind <code>cwSaveLoad::connectListModelSaveTrigger(model, WatchReset, cb)</code>,
+  making the pre/post-load <code>modelReset</code> rule a compile-time parameter
+  instead of tribal comment knowledge (fixStation + cave-equate + region-equate
+  sites all route through it).
+</p>
+<p class="note">
+  <strong>Deferred cleanup (post-commit&nbsp;6):</strong> <code>cwEquateModel</code>
+  is a near-verbatim clone of <code>cwFixStationModel</code> (rowCount / index /
+  <code>count</code>+<code>countChanged</code> / removeAt / append / setX / the
+  row-signal contract). Commit&nbsp;6's Ties panel adds a third value-row model, at
+  which point a shared <code>cwValueListModel&lt;T&gt;</code> base (one place to get
+  <code>beginResetModel</code>/<code>countChanged</code> semantics right) becomes
+  worthwhile. Out of scope for C3 &mdash; folding <code>cwFixStationModel</code>
+  onto a base would touch its QML consumers and tests mid-feature.
 </p>
 
 <h3 id="c4">Commit 4 &mdash; Cave-level equate emission + decode consumption</h3>

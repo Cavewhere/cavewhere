@@ -36,6 +36,7 @@ class cwNoteLiDARData;
 class cwSketch;
 class cwSketchData;
 class cwLazLayer;
+class QAbstractItemModel;
 struct cwSaveLoadPrivate;
 #include "cwRemoteAuthProvider.h"
 #include "cwCavingRegionData.h"
@@ -491,6 +492,17 @@ private:
 
     void disconnectObjects();
     void connectObjects();
+
+    // Wire a list model's row/data (and optionally reset) signals to a save
+    // callback. WatchReset::No is mandatory for triggers connected BEFORE the
+    // model is populated (e.g. connectTreeModel): setEquates()/setData() emit
+    // modelReset during load, and saving then would overwrite the on-disk file
+    // with a half-built one. WatchReset::Yes is safe only for post-load wiring
+    // (connectCave), where the load-time reset fires before the connection.
+    enum class WatchReset { No, Yes };
+    void connectListModelSaveTrigger(QAbstractItemModel* model,
+                                     WatchReset watchReset,
+                                     const std::function<void()>& onChanged);
 
     //Save
     void connectCave(cwCave* cave);

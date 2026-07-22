@@ -6,6 +6,7 @@
 #include <QUuid>
 
 //Our includes
+#include "cwEquate.h"
 #include "cwExternalCenterline.h"
 #include "cwTripData.h"
 #include "cwStationPositionLookup.h"
@@ -21,6 +22,7 @@ struct cwCaveData {
     cwUnits::LengthUnit depthUnit = cwUnits::Meters;
     QList<cwFixStation> fixStations;
     cwExternalCenterline externalCenterline;
+    QList<cwEquate> equates;
 };
 
 #endif // CWCAVEDATA_H

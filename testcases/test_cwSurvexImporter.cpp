@@ -194,6 +194,85 @@ TEST_CASE("Survex passage data with '-' placeholders imports as empty LRUDs", "[
     CHECK(s3.down().state() == cwDistanceReading::State::Empty);
 }
 
+TEST_CASE("Chained (non-linear) equates collapse transitively on import",
+          "[SurvexImport][equate]") {
+    // Three *equate statements that merge two separate pairs into one set:
+    //   {a.a1, b.b1}, {c.c1, d.d1}, then b.b1 = c.c1 joins them.
+    // The old per-statement merge left d.d1 under a different name than a.a1;
+    // union-find collapses all four to one representative.
+    QTemporaryDir dir;
+    REQUIRE(dir.isValid());
+    const QString path = dir.filePath(QStringLiteral("chained_equate.svx"));
+    {
+        QFile f(path);
+        REQUIRE(f.open(QIODevice::WriteOnly | QIODevice::Text));
+        f.write(
+            "*begin chained\n"
+            "*equate a.a1 b.b1\n"
+            "*equate c.c1 d.d1\n"
+            "*equate b.b1 c.c1\n"
+            "*begin a\n"
+            "*export a1\n"
+            "a1 a2 5.0 0 0\n"
+            "*end a\n"
+            "*begin b\n"
+            "*export b1\n"
+            "b1 b2 5.0 0 0\n"
+            "*end b\n"
+            "*begin c\n"
+            "*export c1\n"
+            "c1 c2 5.0 0 0\n"
+            "*end c\n"
+            "*begin d\n"
+            "*export d1\n"
+            "d1 d2 5.0 0 0\n"
+            "*end d\n"
+            "*end chained\n");
+    }
+
+    auto importer = std::make_unique<cwSurvexImporter>();
+    importer->setInputFiles(QStringList() << path);
+    importer->start();
+    importer->waitToFinish();
+
+    REQUIRE_FALSE(importer->hasParseErrors());
+
+    // The "chained" wrapper becomes the cave; its a/b/c/d children become trips.
+    REQUIRE(importer->data()->nodes().size() == 1);
+    importer->data()->nodes().first()->setImportType(cwTreeImportDataNode::Cave);
+
+    QList<cwCave*> caves = importer->data()->caves();
+    REQUIRE(caves.size() == 1);
+    cwCave* cave = caves.first();
+
+    // Gather the renamed name of each block's exported (equated) station.
+    auto equatedName = [&](const QString& tripName) -> QString {
+        for (cwTrip* trip : cave->trips()) {
+            if (trip->name() != tripName) {
+                continue;
+            }
+            REQUIRE(trip->chunks().size() == 1);
+            return trip->chunk(0)->station(0).name();
+        }
+        FAIL("trip not found: " << tripName.toStdString());
+        return QString();
+    };
+
+    const QString aName = equatedName(QStringLiteral("a"));
+    const QString bName = equatedName(QStringLiteral("b"));
+    const QString cName = equatedName(QStringLiteral("c"));
+    const QString dName = equatedName(QStringLiteral("d"));
+
+    INFO("a1=" << aName.toStdString() << " b1=" << bName.toStdString()
+         << " c1=" << cName.toStdString() << " d1=" << dName.toStdString());
+
+    // All four equated endpoints must share one name - in particular d1 (the
+    // endpoint the old chaining bug stranded) must equal a1.
+    CHECK(aName == bName);
+    CHECK(aName == cName);
+    CHECK(aName == dName);
+}
+
 TEST_CASE("Unknown *data columns are tolerated with a warning", "[SurvexImport]") {
     //Issue #173: previously backtape (and other unknown column names) caused
     //the entire data format to be reset, which produced a parse error and

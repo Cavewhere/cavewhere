@@ -11,6 +11,8 @@
 // Our
 #include "cwCave.h"
 #include "cwCavingRegion.h"
+#include "cwEquate.h"
+#include "cwEquateModel.h"
 #include "cwFutureManagerModel.h"
 #include "cwProject.h"
 #include "cwRootData.h"
@@ -25,6 +27,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QTemporaryDir>
+#include <QThread>
 
 namespace {
 
@@ -147,6 +150,136 @@ TEST_CASE("trip station prefix round-trips through save/load",
     cwTrip* loadedTrip = loadedCave->trip(0);
     CHECK(loadedTrip->stationPrefix() == QString::fromLatin1(kPrefix));
     CHECK(loadedTrip->isScoped());
+}
+
+TEST_CASE("cave and region equates round-trip through save/load",
+          "[SaveLoad][scope][equate]")
+{
+    auto fixture = makeSavedProject(QStringLiteral("equate-roundtrip"));
+
+    // A second cave so the region (cross-cave) tie has two homes to connect.
+    auto region = fixture->project->cavingRegion();
+    region->addCave();
+    cwCave* secondCave = region->cave(1);
+    secondCave->setName(QStringLiteral("SecondCave"));
+    secondCave->addTrip();
+    cwTrip* secondTrip = secondCave->trip(0);
+
+    const QUuid cave0Id = fixture->cave->id();
+    const QUuid trip0Id = fixture->trip->id();
+    const QUuid cave1Id = secondCave->id();
+
+    // Within-cave tie on cave0: a bare native station equated to a trip-scoped
+    // station in the same cave.
+    const cwEquate caveEquate({
+        cwStationHandle(cwStationHandle::NativeCave, cave0Id, QStringLiteral("1")),
+        cwStationHandle(cwStationHandle::Trip, trip0Id, QStringLiteral("1"))
+    });
+    REQUIRE(fixture->cave->validate(caveEquate));
+    fixture->cave->equates()->appendEquate(caveEquate);
+
+    // Cross-cave tie on the region: a station in cave0 equated to one in cave1.
+    const cwEquate regionEquate({
+        cwStationHandle(cwStationHandle::NativeCave, cave0Id, QStringLiteral("2")),
+        cwStationHandle(cwStationHandle::NativeCave, cave1Id, QStringLiteral("7"))
+    });
+    region->equates()->appendEquate(regionEquate);
+
+    REQUIRE(fixture->project->save());
+    fixture->project->waitSaveToFinish();
+    fixture->rootData->futureManagerModel()->waitForFinished();
+    QCoreApplication::processEvents();
+
+    const QString projectPath = fixture->project->filename();
+
+    auto freshRoot = std::make_unique<cwRootData>();
+    freshRoot->project()->loadFile(projectPath);
+    freshRoot->project()->waitLoadToFinish();
+
+    auto loadedRegion = freshRoot->project()->cavingRegion();
+    REQUIRE(loadedRegion->caveCount() == 2);
+
+    // Cave-level equate survives on its owning cave (matched by id, not order).
+    cwCave* loadedCave0 = loadedRegion->cave(0)->id() == cave0Id
+            ? loadedRegion->cave(0) : loadedRegion->cave(1);
+    cwCave* loadedCave1 = loadedCave0 == loadedRegion->cave(0)
+            ? loadedRegion->cave(1) : loadedRegion->cave(0);
+    REQUIRE(loadedCave0->equates()->count() == 1);
+    const cwEquate loadedCaveEquate = loadedCave0->equates()->equateAt(0);
+    CHECK(loadedCaveEquate == caveEquate);
+
+    // The within-cave tie must land only on its owning cave, not fan onto the
+    // other cave (which would still leave both region/cave counts at 1).
+    CHECK(loadedCave1->equates()->count() == 0);
+
+    // Region-level (cross-cave) equate survives on the region.
+    REQUIRE(loadedRegion->equates()->count() == 1);
+    CHECK(loadedRegion->equates()->equateAt(0) == regionEquate);
+
+    Q_UNUSED(secondTrip);
+}
+
+TEST_CASE("Loading a project does not re-save the project file",
+          "[SaveLoad][scope][equate]")
+{
+    // Regression guard for the C3 save-trigger landmine. The region equate
+    // save-trigger is wired in cwSaveLoad::connectTreeModel, which runs BEFORE
+    // the region is populated. setEquates() (the bulk load path) emits
+    // modelReset; if that reset were wired to saveMetadata, load would rewrite
+    // the top-level Project file (project->filename()) mid-load with a
+    // half-built region — the exact bug that truncated legacy .cw conversions.
+    // The trigger must therefore watch only rowsInserted/rowsRemoved, never
+    // modelReset. Assert the project file's mtime is unchanged after a clean
+    // load of a project that has both cave-level and region-level equates.
+    auto fixture = makeSavedProject(QStringLiteral("equate-load-stable"));
+
+    auto region = fixture->project->cavingRegion();
+    region->addCave();
+    cwCave* secondCave = region->cave(1);
+    secondCave->setName(QStringLiteral("SecondCave"));
+
+    const QUuid cave0Id = fixture->cave->id();
+    const QUuid trip0Id = fixture->trip->id();
+    const QUuid cave1Id = secondCave->id();
+
+    fixture->cave->equates()->appendEquate(cwEquate({
+        cwStationHandle(cwStationHandle::NativeCave, cave0Id, QStringLiteral("1")),
+        cwStationHandle(cwStationHandle::Trip, trip0Id, QStringLiteral("1"))
+    }));
+    region->equates()->appendEquate(cwEquate({
+        cwStationHandle(cwStationHandle::NativeCave, cave0Id, QStringLiteral("2")),
+        cwStationHandle(cwStationHandle::NativeCave, cave1Id, QStringLiteral("7"))
+    }));
+
+    REQUIRE(fixture->project->save());
+    fixture->project->waitSaveToFinish();
+    fixture->rootData->futureManagerModel()->waitForFinished();
+    QCoreApplication::processEvents();
+
+    const QString projectFile = fixture->project->filename();
+    REQUIRE(QFileInfo::exists(projectFile));
+    const QDateTime mtimeBeforeLoad = QFileInfo(projectFile).lastModified();
+
+    // QTemporaryDir lands on APFS (/var/folders), whose mtime resolution is
+    // sub-millisecond, so a 50 ms gap reliably distinguishes a mid-load re-save
+    // from the baseline.
+    QThread::msleep(50);
+
+    auto loaderRoot = std::make_unique<cwRootData>();
+    loaderRoot->project()->loadFile(projectFile);
+    loaderRoot->project()->waitLoadToFinish();
+    loaderRoot->project()->waitSaveToFinish();
+    loaderRoot->futureManagerModel()->waitForFinished();
+    QCoreApplication::processEvents();
+
+    // The loaded equates must still be intact...
+    auto loadedRegion = loaderRoot->project()->cavingRegion();
+    REQUIRE(loadedRegion->caveCount() == 2);
+    CHECK(loadedRegion->equates()->count() == 1);
+
+    // ...and the load must not have touched the project file on disk.
+    const QDateTime mtimeAfterLoad = QFileInfo(projectFile).lastModified();
+    CHECK(mtimeAfterLoad == mtimeBeforeLoad);
 }
 
 TEST_CASE("externalCenterlineDir computes <ownerDir>/external-centerline",
