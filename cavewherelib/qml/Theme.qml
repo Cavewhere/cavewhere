@@ -114,6 +114,9 @@ QtObject {
     // project panel or a fix-station table cell.
     readonly property int csZoneFieldWidth: 84
     readonly property int csHemisphereFieldWidth: 64
+    // Cap the inline Custom resolved-name label so a long CRS name elides
+    // instead of stretching the picker past its host cell / wrapping the Flow.
+    readonly property int csResolvedLabelMaxWidth: 180
 
     // Touch target sizing — scale up hit points on mobile builds
     readonly property real pointSizeFactor: RootData.mobileBuild ? 2.0 : 1.0

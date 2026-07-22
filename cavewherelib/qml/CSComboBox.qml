@@ -29,8 +29,12 @@ QQ.Item {
     signal committed(string newCS)
 
     // One line width = the picker, plus the label only when Custom shows it.
+    // The label contribution is capped so a long CRS name elides rather than
+    // stretching this field past its host cell (fix-station) or wrapping the
+    // narrow-delegate Flow onto extra lines.
     implicitWidth: rootId.currentMode === CoordinateSystem.Custom
-                   ? pickerId.oneLineWidth + rowId.spacing + labelId.implicitWidth
+                   ? pickerId.oneLineWidth + rowId.spacing
+                     + Math.min(labelId.implicitWidth, Theme.csResolvedLabelMaxWidth)
                    : pickerId.oneLineWidth
     implicitHeight: rowId.implicitHeight
 
@@ -56,6 +60,11 @@ QQ.Item {
             font.family: Theme.fontFamilyMono
             elide: QC.Label.ElideRight
             Layout.fillWidth: true
+            Layout.maximumWidth: Theme.csResolvedLabelMaxWidth
+
+            QC.ToolTip.text: labelId.text
+            QC.ToolTip.visible: labelHover.hovered && labelId.truncated
+            QQ.HoverHandler { id: labelHover }
         }
     }
 }
