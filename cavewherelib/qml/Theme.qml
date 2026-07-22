@@ -111,6 +111,13 @@ QtObject {
     readonly property int toolRailPanelInset: 3
     readonly property int toolRailPanelPadding: 4
 
+    // Tool property flyout: the sidebar-hinged panel showing the armed tool's
+    // options. Sized to hold a compact options card; sits a small gap off the
+    // sidebar's right edge.
+    readonly property int toolFlyoutWidth: 220
+    readonly property int toolFlyoutGap: 8
+    readonly property int toolFlyoutPadding: 11
+
     // Icon sizes
     readonly property int iconSizeButton: 16
     readonly property int iconSizeSmall: 24

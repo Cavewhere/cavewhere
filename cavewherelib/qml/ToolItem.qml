@@ -25,6 +25,18 @@ QQ.QtObject {
     property string text
     property string toolTip
 
+    // Heading shown on the tool-property flyout while this tool is armed. The
+    // rail button stays terse (`text`), so this defaults to it but can be a
+    // fuller phrase (e.g. "Point Cloud Clip") for the flyout's wider header.
+    property string flyoutTitle: toolId.text
+
+    // Optional options UI shown in the sidebar tool-property flyout while this
+    // tool is armed. Null means the tool has no editable options, so arming it
+    // opens no flyout. The Component is instantiated in the flyout's Loader but
+    // resolves ids in its declaration context (the page), so it can reference
+    // the interaction objects declared beside the tool model.
+    property QQ.Component propertyContent: null
+
     // Stable objectName handed to the rail button so tests (and screenshots) can
     // find it. Kept off this data holder's own objectName to avoid a duplicate
     // in the object tree.

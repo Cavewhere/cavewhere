@@ -50,9 +50,17 @@ Item {
             interaction: lazClipInteractionId
             iconSource: "qrc:/twbs-icons/icons/scissors.svg"
             text: qsTr("Clip")
+            flyoutTitle: qsTr("Point Cloud Clip")
             toolTip: qsTr("Clip point cloud")
             group: qsTr("Point Cloud")
             groupId: "pointCloud"
+            // The Crop/Erase/Cancel actions live in the sidebar tool-property
+            // flyout while Clip is armed, not floating over the scene.
+            propertyContent: Component {
+                LazClipToolOptions {
+                    interaction: lazClipInteractionId
+                }
+            }
         }
     ]
 

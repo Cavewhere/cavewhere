@@ -6,7 +6,6 @@
 **************************************************************************/
 
 import QtQuick as QQ
-import QtQuick.Layouts
 import cavewherelib
 
 LazClipInteraction {
@@ -25,8 +24,8 @@ LazClipInteraction {
     // While the tool is active, sit above the always-on map overlays
     // (LeadView, LinePlotLabelView) that are declared after this view in
     // GLTerrainRenderer. Those overlays have full-fill tap-away handlers; left
-    // below them, they grab taps meant for this tool's Crop/Erase/Cancel
-    // buttons. z beats sibling declaration order, so this reclaims input.
+    // below them, they grab the taps meant for placing and closing the clip
+    // polygon. z beats sibling declaration order, so this reclaims input.
     z: visible ? 1 : 0
 
     onActivated: {
@@ -91,70 +90,6 @@ LazClipInteraction {
         polygonVertexBorderColor: Theme.text
     }
 
-    // Floating background for the Crop/Erase/Cancel toolbar. IconButton
-    // renders a transparent background until hovered/selected, so without
-    // this surface the icons disappear against same-colored terrain.
-    ShadowRectangle {
-        id: actionsContainerId
-        anchors {
-            bottom: parent.bottom
-            bottomMargin: 64
-            horizontalCenter: parent.horizontalCenter
-        }
-        width: actionsRowId.implicitWidth + Theme.floatingToolbarPadding
-        height: actionsRowId.implicitHeight + Theme.floatingToolbarPadding
-        color: Theme.surface
-        radius: 5
-        visible: clipperId.state === LazClipInteraction.Closed
-                  || clipperId.state === LazClipInteraction.Processing
-
-        RowLayout {
-            id: actionsRowId
-            anchors.centerIn: parent
-            spacing: 10
-
-            // Crop/Erase are fire-and-forget: failures surface via
-            // cwProject::errorModel(), not an in-tool banner.
-            IconButton {
-                id: cropButtonId
-                objectName: "lazClipCropButton"
-                iconSource: "qrc:/twbs-icons/icons/crop.svg"
-                sourceSize: Qt.size(21, 21)
-                text: qsTr("Crop")
-                toolTip: qsTr("Crop — keep points inside the polygon")
-                enabled: clipperId.canCommit
-                onClicked: {
-                    clipperId.commit(LazClipInteraction.Keep)
-                    clipperId.deactivate()
-                }
-            }
-
-            IconButton {
-                id: eraseButtonId
-                objectName: "lazClipEraseButton"
-                iconSource: "qrc:/twbs-icons/icons/eraser.svg"
-                sourceSize: Qt.size(21, 21)
-                text: qsTr("Erase")
-                toolTip: qsTr("Erase — remove points inside the polygon")
-                enabled: clipperId.canCommit
-                onClicked: {
-                    clipperId.commit(LazClipInteraction.Remove)
-                    clipperId.deactivate()
-                }
-            }
-
-            IconButton {
-                id: cancelButtonId
-                objectName: "lazClipCancelButton"
-                iconSource: "qrc:/twbs-icons/icons/x-lg.svg"
-                sourceSize: Qt.size(21, 21)
-                text: qsTr("Cancel")
-                toolTip: qsTr("Cancel — discard the polygon and exit")
-                onClicked: clipperId.deactivate()
-            }
-        }
-    }
-
     HelpBox {
         id: helpBoxId
         objectName: "lazClipHelpBox"
@@ -174,7 +109,7 @@ LazClipInteraction {
                 }
                 return qsTr("Click near the first vertex (or double-click) to close.")
             case LazClipInteraction.Closed:
-                return qsTr("Choose <b>Crop</b> or <b>Erase</b>, or cancel.")
+                return qsTr("Choose <b>Crop</b> or <b>Erase</b>, or press <b>Esc</b> to cancel.")
             }
             return ""
         }
@@ -199,11 +134,21 @@ LazClipInteraction {
         text: qsTr("Clipping…")
     }
 
-    // deactivate() emits the deactivated signal that InteractionManager
-    // listens on, which clears activeInteraction and restores the default
-    // (turn-table) interaction. The C++ onDeactivated slot also runs and
-    // calls cancel() to drop any in-progress polygon and error state, so
-    // a plain deactivate() here fully exits the tool — no need to call
-    // cancel() separately.
-    QQ.Keys.onEscapePressed: clipperId.deactivate()
+    // A window-context Shortcut instead of Keys.onEscapePressed: the latter
+    // needs this view to hold focus, but the Crop/Erase controls now live in the
+    // sidebar tool-property flyout — clicking them (or anything in the sidebar)
+    // steals focus, after which a focus-scoped Escape would go dead. The shortcut
+    // is live only while the tool is active.
+    //
+    // deactivate() emits the deactivated signal that InteractionManager listens
+    // on, which clears activeInteraction and restores the default (turn-table)
+    // interaction. The C++ onDeactivated slot also runs and calls cancel() to
+    // drop any in-progress polygon and error state, so a plain deactivate() here
+    // fully exits the tool — no need to call cancel() separately.
+    QQ.Shortcut {
+        sequences: ["Escape"]
+        enabled: clipperId.visible
+        context: Qt.WindowShortcut
+        onActivated: clipperId.deactivate()
+    }
 }
