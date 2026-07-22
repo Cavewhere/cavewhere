@@ -29,6 +29,7 @@ class cwLinePlotTripVisibility;
 #include "cwSurveyNetworkArtifact.h"
 #include "cwGlobals.h"
 #include "cwFutureManagerToken.h"
+#include "cwUpdatable.h"
 
 //Qt includes
 #include <QHash>
@@ -47,12 +48,12 @@ QT_FORWARD_DECLARE_CLASS(QFileSystemWatcher)
 //Std includes
 #include <optional>
 
-class CAVEWHERE_LIB_EXPORT cwLinePlotManager : public QObject
+class CAVEWHERE_LIB_EXPORT cwLinePlotManager : public QObject, public cwUpdatableBase
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(LinePlotManager)
 
-    Q_PROPERTY(bool automaticUpdate READ automaticUpdate WRITE setAutomaticUpdate NOTIFY automaticUpdateChanged)
+    Q_PROPERTY(bool needsUpdate READ needsUpdate NOTIFY needsUpdateChanged)
     Q_PROPERTY(cwSurveyNetworkArtifact* surveyNetworkArtifact READ surveyNetworkArtifact CONSTANT)
     Q_PROPERTY(bool hasSolveError READ hasSolveError NOTIFY cavernOutputChanged FINAL)
     Q_PROPERTY(QString solveErrorMessage READ solveErrorMessage NOTIFY cavernOutputChanged FINAL)
@@ -116,8 +117,8 @@ public:
     // plan. Empty when no live-link attachment is configured.
     QList<QUuid> missingSourceOwners() const { return m_missingSourceOwners; }
 
-    bool automaticUpdate() const;
-    void setAutomaticUpdate(bool automaticUpdate);
+    bool needsUpdate() const override;
+    void update() override;
 
     // Region-wide survey network artifact, updated whenever the line-plot
     // pipeline completes. Shared across every consumer (sketches today; future
@@ -131,7 +132,7 @@ signals:
     void stationPositionInCavesChanged(QList<cwCave*>);
     void stationPositionInTripsChanged(QList<cwTrip*>);
     void stationPositionInScrapsChanged(QList<cwScrap*>);
-    void automaticUpdateChanged();
+    void needsUpdateChanged();
     void cavernOutputChanged();
 
     // Emitted whenever the external-centerline watch set changes. Tests
@@ -197,7 +198,7 @@ private:
     QPointer<cwKeywordItemModel> m_keywordItemModel;
     QHash<cwTrip*, QPointer<cwKeywordItem>> m_tripKeywordEntries;
 
-    bool AutomaticUpdate = true;
+    bool m_needsUpdate = false;
 
     void connectCaves(cwCavingRegion* region);
     void connectFixStations(cwCave* cave);
@@ -249,8 +250,8 @@ private slots:
 //This needs to be here for moc to generate correctly and we can forward declare cwRenderLinePlot
 #include "cwRenderLinePlot.h"
 
-inline bool cwLinePlotManager::automaticUpdate() const {
-    return AutomaticUpdate;
+inline bool cwLinePlotManager::needsUpdate() const {
+    return m_needsUpdate;
 }
 
 #endif // CWLINEPLOTMANAGER_H

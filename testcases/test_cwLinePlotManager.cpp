@@ -13,6 +13,8 @@
 
 //Cavewhere includes
 #include "cwLinePlotManager.h"
+#include "cwUpdateCoordinator.h"
+#include "cwJobSettings.h"
 #include "cwCavingRegion.h"
 #include "cwGeoReference.h"
 #include "cwCave.h"
@@ -731,7 +733,7 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
     }
 }
 
-TEST_CASE("cwLinePlotManager automatic update should work", "[cwLinePlotManager]") {
+TEST_CASE("cwLinePlotManager defers solving to the update coordinator", "[cwLinePlotManager]") {
 
     cwCavingRegion region;
 
@@ -756,47 +758,51 @@ TEST_CASE("cwLinePlotManager automatic update should work", "[cwLinePlotManager]
     chunk->appendShot(s1, s2, shot1);
 
     auto plotManager = std::make_unique<cwLinePlotManager>();
-    cwSignalSpy autoUpdateSpy(plotManager.get(), &cwLinePlotManager::automaticUpdateChanged);
-    autoUpdateSpy.setObjectName("autoUpdateSpy");
+
+    // Once a coordinator drives the manager it is pure mechanism: with automatic
+    // update off, survey edits only mark it dirty; the coordinator's Run
+    // (updateNow) forces the solve. This is the footer "Update needed" path.
+    cwUpdateCoordinator coordinator;
+    coordinator.add(plotManager.get());
+
+    cwJobSettings::initialize();
+    cwJobSettings::instance()->setAutomaticUpdate(false);
 
     cwSignalSpy stationPositionSpy(cave, &cwCave::stationPositionPositionChanged);
     stationPositionSpy.setObjectName("stationPositionSpy");
 
     SpyChecker spyChecker {
-        {&autoUpdateSpy, 0},
         {&stationPositionSpy, 0}
     };
-
-    CHECK(plotManager->automaticUpdate() == true);
-
-    plotManager->setAutomaticUpdate(false);
-
-    spyChecker[&autoUpdateSpy]++;
-
-    CHECK(plotManager->automaticUpdate() == false);
-    spyChecker.checkSpies();
 
     plotManager->setRegion(&region);
     plotManager->waitToFinish();
 
-    spyChecker.checkSpies(); //StationPositionSpy should be zero
+    CHECK(plotManager->needsUpdate() == true);
+    CHECK(coordinator.needsUpdate() == true);
+    spyChecker.checkSpies(); //deferred: nothing solved while auto update is off
 
     chunk->setData(cwSurveyChunk::ShotDistanceRole, 0, "11.0");
     plotManager->waitToFinish();
 
-    spyChecker.checkSpies(); //StationPositionSpy should be zero
+    CHECK(plotManager->needsUpdate() == true);
+    spyChecker.checkSpies(); //still deferred
 
-    plotManager->setAutomaticUpdate(true);
+    // Run: recompute now regardless of the policy, clearing the dirty flag.
+    coordinator.updateNow();
     plotManager->waitToFinish();
-    spyChecker[&autoUpdateSpy]++;
     spyChecker[&stationPositionSpy]++;
     spyChecker.checkSpies();
-    CHECK(plotManager->automaticUpdate() == true);
+    CHECK(plotManager->needsUpdate() == false);
+    CHECK(coordinator.needsUpdate() == false);
 
+    // Turning automatic update back on flushes a later edit immediately.
+    cwJobSettings::instance()->setAutomaticUpdate(true);
     chunk->setData(cwSurveyChunk::ShotDistanceRole, 0, "12.0");
     plotManager->waitToFinish();
     spyChecker[&stationPositionSpy]++;
     spyChecker.checkSpies();
+    CHECK(plotManager->needsUpdate() == false);
 }
 
 TEST_CASE("cwLinePlotManager clears geometry when all caves are removed", "[LinePlotManager]")

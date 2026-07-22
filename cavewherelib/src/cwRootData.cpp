@@ -201,17 +201,14 @@ cwRootData::cwRootData(QObject *parent) :
     // imageUpdater->setFutureToken(FutureManagerModel->token());
     // imageUpdater->setRegionTreeModel(RegionTreeModel);
 
-    auto updateAutomaticUpdate = [this]()
-    {
-        bool autoUpdate = cwJobSettings::instance()->automaticUpdate();
-        LinePlotManager->setAutomaticUpdate(autoUpdate);
-        ScrapManager->setAutomaticUpdate(autoUpdate);
-    };
-
-    updateAutomaticUpdate();
-
-    connect(cwJobSettings::instance(), &cwJobSettings::automaticUpdateChanged,
-            this, updateAutomaticUpdate);
+    // The coordinator owns the auto-update policy and the staleness aggregate;
+    // the managers are pure cwUpdatable mechanism. add() flushes each manager if
+    // it is already dirty (e.g. the line plot marked by setRegion above) and
+    // automatic update is on.
+    UpdateCoordinator = new cwUpdateCoordinator(this);
+    UpdateCoordinator->add(LinePlotManager);
+    UpdateCoordinator->add(ScrapManager);
+    UpdateCoordinator->add(NoteLiDARManager);
 
     connect(Project, &cwProject::filenameChanged, this, [this]() {
         // Reset the filter pipeline UI state when the project file changes.

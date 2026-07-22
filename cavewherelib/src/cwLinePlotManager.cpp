@@ -460,20 +460,37 @@ void cwLinePlotManager::clearUnconnectedChunkErrors()
 /**
  * @brief cwLinePlotManager::rerunSurvex
  *
- * Re-runs the survex. This simply just calls runSurvex but is useful for debugging
- * if the re-run isn't working correctly.
+ * Forces a solve now, ignoring the auto-update policy. This is the "Solve"
+ * button path, so it must recompute even when automatic update is off.
  */
 void cwLinePlotManager::rerunSurvex()
 {
-    runSurvex();
+    update();
 }
 
 /**
-  \brief Run the line plot task
+  \brief Marks the line plot dirty in response to a survey edit.
+
+  Pure mechanism: it records that a solve is pending and notifies. Whether the
+  solve runs now (automatic update) or waits is cwUpdateCoordinator's call,
+  which drives update().
   */
 void cwLinePlotManager::runSurvex() {
-    if(!AutomaticUpdate) {
-        return;
+    if(!m_needsUpdate) {
+        m_needsUpdate = true;
+        emit needsUpdateChanged();
+    }
+
+    runIfStandalone();
+}
+
+/**
+  \brief Runs the line plot task now, unconditionally.
+  */
+void cwLinePlotManager::update() {
+    if(m_needsUpdate) {
+        m_needsUpdate = false;
+        emit needsUpdateChanged();
     }
 
     if(Region != nullptr) {
@@ -689,14 +706,6 @@ void cwLinePlotManager::updateLinePlot(cwLinePlotTask::LinePlotResultData result
     }
 }
 
-
-void cwLinePlotManager::setAutomaticUpdate(bool automaticUpdate) {
-    if(AutomaticUpdate != automaticUpdate) {
-        AutomaticUpdate = automaticUpdate;
-        emit automaticUpdateChanged();
-        runSurvex();
-    }
-}
 
 void cwLinePlotManager::recomputeWatchSetAndProbeSources()
 {

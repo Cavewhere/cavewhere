@@ -53,18 +53,19 @@ class cwSketchManager;
 #include "cwTriangulateWarping.h"
 #include "cwSketchScrapOutline.h"
 #include "cwKeywordItemRegistry.h"
+#include "cwUpdatable.h"
 #include <memory>
 
 /**
     The scrap manager listens to changes in the notes and creates all
     the geometry need to show a scrap in 3d
   */
-class CAVEWHERE_LIB_EXPORT cwScrapManager : public QObject
+class CAVEWHERE_LIB_EXPORT cwScrapManager : public QObject, public cwUpdatableBase
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(ScrapManager)
 
-    Q_PROPERTY(bool automaticUpdate READ automaticUpdate WRITE setAutomaticUpdate NOTIFY automaticUpdateChanged)
+    Q_PROPERTY(bool needsUpdate READ needsUpdate NOTIFY needsUpdateChanged)
     Q_PROPERTY(cwTriangulateWarping* warpingSettings READ warpingSettings CONSTANT)
 
 public:
@@ -113,8 +114,8 @@ public:
 
     Q_INVOKABLE void setRenderScraps(cwRenderTexturedItems* glScraps);
 
-    bool automaticUpdate() const;
-    void setAutomaticUpdate(bool automaticUpdate);
+    bool needsUpdate() const override;
+    void update() override;
 
     void waitForFinish();
 
@@ -131,7 +132,7 @@ public:
     Q_INVOKABLE int renderScrapCount() const { return m_scrapToRenderId.size(); }
 
 signals:
-    void automaticUpdateChanged();
+    void needsUpdateChanged();
 
     // Fires whenever stroke-level state changes for a tracked sketch; downstream
     // consumers (and tests) use this to observe the diff pipeline.
@@ -159,8 +160,6 @@ private:
 
     //The render scraps that need updating
     QPointer<cwRenderTexturedItems> m_renderScraps;
-
-    bool AutomaticUpdate; //!< 
 
     cwTriangulateWarping* m_warpingSettings = nullptr;
     std::unique_ptr<class cwTriangulateWarpingSettings> m_warpingSettingsStore;
@@ -208,6 +207,7 @@ private:
     void attachScrap(cwScrap* scrap);
     void detachScrap(cwScrap* scrap);
 
+    void markAllScrapsDirty();
     void updateScrapGeometry(QList<cwScrap *> scraps = QList<cwScrap*>());
     void updateScrapGeometryHelper(QList<cwScrap *> scraps);
     cwTriangulateInData mapScrapToTriangulateInData(cwScrap *scrap) const;
@@ -272,17 +272,5 @@ inline uint32_t qHash(const QWeakPointer<cwScrap> &scrapPointer)
 {
     return qHash(scrapPointer.toStrongRef().data());
 }
-
-/**
-Gets automaticUpdate
-
- If true the scrap manager automatically update the 3d geometry of the scrap
-*/
-inline bool cwScrapManager::automaticUpdate() const {
-    return AutomaticUpdate;
-}
-
-
-
 
 #endif // CWSCRAPMANAGER_H

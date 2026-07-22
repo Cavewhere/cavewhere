@@ -253,7 +253,7 @@ TEST_CASE("Check that auto calculate work outside of trip", "[cwScrap]") {
         root->scrapManager()->warpingSettings()->setUseShotInterpolationSpacing(false);
         root->scrapManager()->warpingSettings()->setUseMaxClosestStations(false);
         root->scrapManager()->warpingSettings()->setUseSmoothingRadius(false);
-        CHECK(root->scrapManager()->automaticUpdate());
+        CHECK(root->updateCoordinator()->automaticUpdate());
 
         fileToProject(root->project(), row.Filename);
         auto project = root->project();
@@ -293,7 +293,7 @@ TEST_CASE("Auto calculate if survey station change position", "[cwScrap]") {
         root->scrapManager()->warpingSettings()->setUseShotInterpolationSpacing(false);
         root->scrapManager()->warpingSettings()->setUseMaxClosestStations(false);
         root->scrapManager()->warpingSettings()->setUseSmoothingRadius(false);
-        CHECK(root->scrapManager()->automaticUpdate());
+        CHECK(root->updateCoordinator()->automaticUpdate());
 
         fileToProject(root->project(), row.Filename);
         auto project = root->project();

@@ -65,6 +65,12 @@ namespace {
 // namespace within cwDiskCacher; identical rasters collide harmlessly.
 inline const QString kSketchTextureCacheKeyPrefix =
     QStringLiteral("sketch-texture");
+
+// A dirty scrap is only worth (re)triangulating once it is out of editing and
+// attached to a cave. Shared by needsUpdate() and the run path.
+bool isRunnableScrap(const cwScrap* scrap) {
+    return scrap != nullptr && !scrap->editing() && scrap->parentCave() != nullptr;
+}
 } // namespace
 
 cwScrapManager::cwScrapManager(QObject *parent) :
@@ -73,13 +79,16 @@ cwScrapManager::cwScrapManager(QObject *parent) :
     Project(nullptr),
     TriangulateRestarter(this),
     m_renderScraps(nullptr),
-    AutomaticUpdate(true),
     m_warpingSettings(new cwTriangulateWarping(this))
 {
     cwTrackRestarter(FutureManagerToken, TriangulateRestarter, QStringLiteral("Updating Scaps"));
 
+    //Warping changes mark every scrap dirty; the auto-update policy (via
+    //cwUpdateCoordinator) decides whether to run, unlike the explicit
+    //updateAllScraps() force path. Uncoordinated managers recompute eagerly.
     auto notifyWarpingChanged = [this]() {
-        updateAllScraps();
+        markAllScrapsDirty();
+        runIfStandalone();
     };
 
     connect(m_warpingSettings, &cwTriangulateWarping::gridResolutionMetersChanged,
@@ -303,12 +312,11 @@ void cwScrapManager::setKeywordItemModel(cwKeywordItemModel *keywordItemModel)
 }
 
 /**
-  This function is for testing
-
-  This will gather all the scraps from all the caves, and trips, and notes and regenerate
-  all there geometry
+  Marks every scrap in the region dirty, without running. Callers that honour
+  the auto-update policy (e.g. a warping-settings change) route through the
+  cwUpdateCoordinator, which drives update() when appropriate.
   */
-void cwScrapManager::updateAllScraps() {
+void cwScrapManager::markAllScrapsDirty() {
     if(!RegionModel) {
         return;
     }
@@ -324,6 +332,23 @@ void cwScrapManager::updateAllScraps() {
         }
     }
 
+    emit needsUpdateChanged();
+}
+
+/**
+  Recomputes every scrap in the region now, ignoring the auto-update flag. This
+  is the "Compute Scraps" force path.
+  */
+void cwScrapManager::updateAllScraps() {
+    markAllScrapsDirty();
+    update();
+}
+
+bool cwScrapManager::needsUpdate() const {
+    return std::any_of(DirtyScraps.begin(), DirtyScraps.end(), &isRunnableScrap);
+}
+
+void cwScrapManager::update() {
     updateScrapGeometryHelper(cw::toList(DirtyScraps));
 }
 
@@ -1040,7 +1065,9 @@ void cwScrapManager::updateScrapGeometry(QList<cwScrap *> scraps) {
         DirtyScraps.insert(scrap);
     }
 
-    updateScrapGeometryHelper(scraps);
+    emit needsUpdateChanged();
+
+    runIfStandalone();
 }
 
 QList<cwScrapManager::TriangulatedScrapResult> cwScrapManager::triangulateScraps(const QList<cwScrap *> &scraps) const
@@ -1099,13 +1126,7 @@ void cwScrapManager::updateScrapGeometryHelper(QList<cwScrap *> scraps)
     //     scrap->setTriangulationData(oldData);
     // }
 
-    if(!automaticUpdate()) {
-        return;
-    }
-
-    const bool hasRunnableScrap = std::any_of(DirtyScraps.begin(), DirtyScraps.end(), [](const cwScrap* scrap) {
-        return scrap != nullptr && !scrap->editing() && scrap->parentCave() != nullptr;
-    });
+    const bool hasRunnableScrap = std::any_of(DirtyScraps.begin(), DirtyScraps.end(), &isRunnableScrap);
 
     if(!hasRunnableScrap) {
         return;
@@ -1117,9 +1138,7 @@ void cwScrapManager::updateScrapGeometryHelper(QList<cwScrap *> scraps)
         //Running
         auto dirtyScrapsRange =
             cw::toList(DirtyScraps)
-            | std::views::filter([](const cwScrap* scrap) {
-                return scrap != nullptr && !scrap->editing() && scrap->parentCave() != nullptr;
-            });
+            | std::views::filter(&isRunnableScrap);
 
         QList<cwScrap*> dirtyScraps(dirtyScrapsRange.begin(), dirtyScrapsRange.end());
 
@@ -1569,6 +1588,7 @@ void cwScrapManager::taskFinished(const QList<cwScrap*>& scrapsToUpdate,
         disconnect(scrap, &cwScrap::destroyed, this, &cwScrapManager::scrapDeleted);
     }
     DirtyScraps.clear();
+    emit needsUpdateChanged();
 
     //Make sure there's the same amount of data
     if(scrapsToUpdate.size() != scrapDataset.size()) {
@@ -1655,20 +1675,6 @@ void cwScrapManager::setRenderScraps(cwRenderTexturedItems *scraps)
 
     for(auto scrap : m_scrapToRenderId.keys()) {
         addKeywordItemForScrap(scrap);
-    }
-}
-
-/**
-    Sets automaticUpdate
-
-    If true (default) this class will update the 3d geometry of the scrap when data has
-    change.  Otherwise, scraps must be updated manaually, using updateAllScraps().
-*/
-void cwScrapManager::setAutomaticUpdate(bool automaticUpdate) {
-    if(AutomaticUpdate != automaticUpdate) {
-        AutomaticUpdate = automaticUpdate;
-        emit automaticUpdateChanged();
-        updateScrapGeometry(cw::toList(DirtyScraps));
     }
 }
 

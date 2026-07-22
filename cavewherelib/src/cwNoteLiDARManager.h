@@ -36,6 +36,7 @@ class cwNoteLiDAR;
 #include "cwRenderTexturedItems.h"
 #include "cwConnectionRegistry.h"
 #include "cwKeywordItemRegistry.h"
+#include "cwUpdatable.h"
 class cwKeywordItemModel;
 class cwRenderTexturedItemsVisibilityGroup;
 
@@ -47,12 +48,12 @@ class cwRenderTexturedItemsVisibilityGroup;
  * - Tracks dirty cwNoteLiDAR objects and batches them through cwTriangulateLiDARTask.
  * - Exposes slots to trigger recomputation when the cave centerline (station positions or survey network) changes.
  */
-class CAVEWHERE_LIB_EXPORT cwNoteLiDARManager : public QObject
+class CAVEWHERE_LIB_EXPORT cwNoteLiDARManager : public QObject, public cwUpdatableBase
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(NoteLiDARManager)
 
-    Q_PROPERTY(bool automaticUpdate READ automaticUpdate WRITE setAutomaticUpdate NOTIFY automaticUpdateChanged)
+    Q_PROPERTY(bool needsUpdate READ needsUpdate NOTIFY needsUpdateChanged)
 
 public:
     explicit cwNoteLiDARManager(QObject* parent = nullptr);
@@ -68,10 +69,11 @@ public:
     void setKeepRenderGeometry(bool keepGeometry);
     bool keepRenderGeometry() const;
 
-    bool automaticUpdate() const;
-    void setAutomaticUpdate(bool automaticUpdate);
+    bool needsUpdate() const override;
+    void update() override;
 
-    // Useful in tests or manual recompute
+    // Useful in tests or manual recompute. Forces a recompute regardless of the
+    // auto-update policy (the "Compute" force path).
     Q_INVOKABLE void updateAllLiDAR();
 
     // Call when a cave’s centerline changed (station positions, network, etc.)
@@ -89,7 +91,7 @@ public:
     static cwTriangulateLiDARInData mapNoteToInData(const cwNoteLiDAR* note, const cwProject *project);
 
 signals:
-    void automaticUpdateChanged();
+    void needsUpdateChanged();
     // Emitted after a successful triangulation batch completes
     void liDARNotesUpdated(const QList<cwNoteLiDAR*>& notes);
 
@@ -113,7 +115,8 @@ private:
 
     // Batch scheduling
     void markDirty(cwNoteLiDAR* note);
-    void runIfNeeded();
+    // Notifies the coordinator of dirtiness and, when standalone, recomputes now.
+    void notifyDirty();
     void runBatch();
 
     // Trip wiring
@@ -145,7 +148,6 @@ private:
 
     QPointer<cwRenderTexturedItems> m_render;
 
-    bool m_automaticUpdate = true;
     bool m_keepRenderGeometry = false;
     QMetaObject::Connection m_pathReadyConnection;
 

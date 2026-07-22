@@ -121,23 +121,27 @@ TEST_CASE("cwScrapManager auto update should work propertly", "[cwScrapManager]"
     cwSignalSpy addRowSpy(rootData->futureManagerModel(), &cwFutureManagerModel::rowsInserted);
 
     auto scrapManager = rootData->scrapManager();
-    CHECK(scrapManager->automaticUpdate() == true);
+    auto coordinator = rootData->updateCoordinator();
+    CHECK(coordinator->automaticUpdate() == true);
 
-    scrapManager->setAutomaticUpdate(false);
-    CHECK(scrapManager->automaticUpdate() == false);
+    coordinator->setAutomaticUpdate(false);
+    CHECK(coordinator->automaticUpdate() == false);
 
-    //Change the station position
     auto cave = rootData->region()->cave(0);
     auto trip = cave->trip(0);
-    auto chunk = trip->chunk(0);
-    chunk->setData(cwSurveyChunk::ShotDistanceRole, 0, "10.0");
-
     auto notes = trip->notes()->notes();
     REQUIRE(notes.size() > 0);
     auto note = notes.first();
     REQUIRE(note->scraps().size() > 0);
     auto scraps = note->scraps();
     auto scrap = scraps.first();
+
+    //Dirty the scraps while auto update is off. The single coordinator gates
+    //the whole pipeline, so a warping change (which marks scraps dirty on its
+    //own) is used rather than a station move, whose line-plot solve would also
+    //be deferred.
+    auto warping = scrapManager->warpingSettings();
+    warping->setGridResolutionMeters(warping->gridResolutionMeters() + 1.0);
 
     rootData->futureManagerModel()->waitForFinished();
     CHECK(scrapManager->dirtyScraps().contains(scrap));
@@ -150,7 +154,7 @@ TEST_CASE("cwScrapManager auto update should work propertly", "[cwScrapManager]"
         auto pendingScraps = scrapManager->dirtyScraps();
         CHECK(pendingScraps.contains(scrap));
 
-        scrapManager->setAutomaticUpdate(true);
+        coordinator->setAutomaticUpdate(true);
 
         rootData->futureManagerModel()->waitForFinished();
         scrapManager->waitForFinish();

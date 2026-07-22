@@ -129,13 +129,11 @@ TEST_CASE("cwRootData should update the managers with auto update correctly", "[
     cwJobSettings::instance()->setAutomaticUpdate(false);
 
     cwRootData rootData;
-    CHECK(rootData.linePlotManager()->automaticUpdate() == false);
-    CHECK(rootData.scrapManager()->automaticUpdate() == false);
+    CHECK(rootData.updateCoordinator()->automaticUpdate() == false);
 
     cwJobSettings::instance()->setAutomaticUpdate(true);
 
-    CHECK(rootData.linePlotManager()->automaticUpdate() == true);
-    CHECK(rootData.scrapManager()->automaticUpdate() == true);
+    CHECK(rootData.updateCoordinator()->automaticUpdate() == true);
 }
 
 TEST_CASE("cwRootData should install GitHub LFS auth provider", "[cwRootData]")

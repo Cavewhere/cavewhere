@@ -44,9 +44,24 @@
 // Async
 #include "asyncfuture.h"
 
+// Std
+#include <algorithm>
+
 using NotePtrList = QList<cwNoteLiDAR*>;
 
 namespace {
+
+// A dirty note is only worth triangulating once it is attached to a cave/trip,
+// has stations, and its cave centerline is solved. Shared by needsUpdate() and
+// the run path.
+bool isRunnableNote(const cwNoteLiDAR* note)
+{
+    return note != nullptr
+        && note->parentTrip() != nullptr
+        && note->parentCave() != nullptr
+        && note->rowCount() > 0
+        && !note->parentCave()->stationPositionLookup().positions().isEmpty();
+}
 
 cwDiskCacher::Key iconCacheKey(const cwProject* project, const cwNoteLiDAR* note)
 {
@@ -153,7 +168,7 @@ void cwNoteLiDARManager::setProject(cwProject* project)
             if (auto* note = qobject_cast<cwNoteLiDAR*>(object)) {
                 updateIconFromCache(note);
                 markDirty(note);
-                runIfNeeded();
+                notifyDirty();
                 return;
             }
 
@@ -228,7 +243,7 @@ void cwNoteLiDARManager::setLinePlotManager(cwLinePlotManager* linePlotManager)
                         }
                     }
 
-                    runIfNeeded();
+                    notifyDirty();
         });
     }
 }
@@ -276,19 +291,14 @@ bool cwNoteLiDARManager::keepRenderGeometry() const
     return m_keepRenderGeometry;
 }
 
-bool cwNoteLiDARManager::automaticUpdate() const
+bool cwNoteLiDARManager::needsUpdate() const
 {
-    return m_automaticUpdate;
+    return std::any_of(m_dirtyNotes.begin(), m_dirtyNotes.end(), &isRunnableNote);
 }
 
-void cwNoteLiDARManager::setAutomaticUpdate(bool automaticUpdate)
+void cwNoteLiDARManager::update()
 {
-    if (m_automaticUpdate == automaticUpdate) {
-        return;
-    }
-    m_automaticUpdate = automaticUpdate;
-    emit automaticUpdateChanged();
-    runIfNeeded();
+    runBatch();
 }
 
 void cwNoteLiDARManager::updateAllLiDAR()
@@ -301,7 +311,8 @@ void cwNoteLiDARManager::updateAllLiDAR()
     for (cwNoteLiDAR* note : all) {
         markDirty(note);
     }
-    runIfNeeded();
+    emit needsUpdateChanged();
+    update();
 }
 
 void cwNoteLiDARManager::updateLiDARForCave(cwCave* cave)
@@ -324,7 +335,7 @@ void cwNoteLiDARManager::updateLiDARForTrip(cwTrip* trip)
             markDirty(note);
         }
     }
-    runIfNeeded();
+    notifyDirty();
 }
 
 void cwNoteLiDARManager::waitForFinish()
@@ -456,7 +467,7 @@ void cwNoteLiDARManager::liDARRowsInserted(const QModelIndex& parent, int begin,
         }
     }
 
-    runIfNeeded();
+    notifyDirty();
 }
 
 void cwNoteLiDARManager::liDARRowsAboutToBeRemoved(const QModelIndex& parent, int begin, int end)
@@ -563,12 +574,10 @@ void cwNoteLiDARManager::markDirty(cwNoteLiDAR* note)
     m_dirtyNotes.insert(note);
 }
 
-void cwNoteLiDARManager::runIfNeeded()
+void cwNoteLiDARManager::notifyDirty()
 {
-    if (!m_automaticUpdate) {
-        return;
-    }
-    runBatch();
+    emit needsUpdateChanged();
+    runIfStandalone();
 }
 
 void cwNoteLiDARManager::runBatch()
@@ -581,13 +590,7 @@ void cwNoteLiDARManager::runBatch()
     NotePtrList notes;
     notes.reserve(m_dirtyNotes.size());
     for (cwNoteLiDAR* note : std::as_const(m_dirtyNotes)) {
-        if (note != nullptr
-            && note->parentTrip() != nullptr
-            && note->parentCave() != nullptr
-            && note->rowCount() > 0 //Make sure there's stations
-            && !note->parentCave()->stationPositionLookup().positions().isEmpty() //Station lookup must be populated
-            )
-        {
+        if (isRunnableNote(note)) {
             notes.append(note);
         }
     }
@@ -672,6 +675,7 @@ void cwNoteLiDARManager::runBatch()
                          }
                          m_deletedNotes.clear();
 
+                         emit needsUpdateChanged();
                          emit liDARNotesUpdated(notes);
                      }).future();
     });
@@ -699,7 +703,7 @@ void cwNoteLiDARManager::connectTrip(cwTrip* trip)
         });
 
         if (added) {
-            runIfNeeded();
+            notifyDirty();
         }
     }
 }
@@ -733,7 +737,7 @@ void cwNoteLiDARManager::connectNote(cwNoteLiDAR *note)
     const bool added = m_connectionRegistry.add(note, [this, note]{
         auto handleNoteChange = [note, this]() {
             markDirty(note);
-            runIfNeeded();
+            notifyDirty();
         };
 
         connect(note, &QObject::destroyed, this, &cwNoteLiDARManager::noteDestroyed, Qt::UniqueConnection);
