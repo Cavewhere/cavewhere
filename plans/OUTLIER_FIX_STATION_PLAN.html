@@ -90,6 +90,8 @@ where the user can act on it. Grows out of <a href="https://github.com/Cavewhere
   <a href="#tests">9. Test plan</a><br>
   <a href="#risks">10. Risks &amp; open decisions</a><br>
   <a href="#scope">11. Out of scope (v2)</a><br>
+  <a href="#fewcaves">12. Commit 6 — the few-caves case</a><br>
+  <a href="#usability">13. Usability &amp; error-handling backlog</a><br>
 </div>
 
 <h2 id="problem">2. Problem &amp; precision math</h2>
@@ -613,8 +615,286 @@ center only sits on the real data when a majority is clustered there.</p>
   concession in §10.
 </div>
 
+<h2 id="usability">13. Fix-station usability &amp; error-handling backlog <span class="pill new">post-detection workstream</span></h2>
+
+<p>Commits 1–6 make the app <b>detect</b> a bad fix-station coordinate. This section tracks the hands-on
+feedback about <b>living with fix stations</b> — entering them, reading the errors, and getting a new project
+into a real-world coordinate system in the first place. It is a distinct workstream from the detection math:
+mostly QML, plus a couple of small model/accessor additions. Item IDs <b>U1–U10</b> match the feedback list so
+they can be referenced directly; a suggested commit grouping is in §13.6.</p>
+
+<div class="callout">
+  <b>All anchors below were confirmed against the tree</b> (dev_3, post-Commit-6). The two hubs almost every
+  item touches: <code>CSComboBox.qml</code> (the one CS picker reused by the project CS <i>and</i> every
+  fix-station row) and <code>FixStationPage.qml</code> (a <code>ListView</code>-based <code>TableStaticView</code>
+  with a wide <code>RowLayout</code> delegate and a narrow <code>Flow</code> delegate).
+</div>
+
+<table>
+  <tr><th>ID</th><th>Item</th><th>Area</th><th>Rough size</th></tr>
+  <tr><td><b>U1</b></td><td>Input CS column clips the UTM zone combo</td><td>CSComboBox / FixStationPage column width</td><td><span class="pill new">small</span></td></tr>
+  <tr><td><b>U2</b></td><td>Mark a station <b>Fixed</b> from the survey table (caret menu + badge + inline coords)</td><td>StationBox / StationMenu / cwFixStationModel</td><td><span class="pill edit">large</span></td></tr>
+  <tr><td><b>U3</b></td><td>Tab order broken on the Fix Stations page</td><td>shared table-input stack</td><td><span class="pill edit">medium (shared)</span></td></tr>
+  <tr><td><b>U4</b></td><td>Highlight <i>which</i> coordinate component is out of domain (red)</td><td>cwFixStationModel + cell styling</td><td><span class="pill new">small–medium</span></td></tr>
+  <tr><td><b>U5</b></td><td>Easting / Northing headers should read “Easting / Long”, “Northing / Lat”</td><td>FixStationPage column text</td><td><span class="pill ok">trivial</span></td></tr>
+  <tr><td><b>U6</b></td><td>New project’s first fix is still Local → cave renders far away; prompt/auto-set a <b>projected</b> output CS</td><td>validator/region + a QML prompt</td><td><span class="pill edit">medium</span></td></tr>
+  <tr><td><b>U7</b></td><td>Project UTM zone spinbox + N/S combo overflow the box</td><td>CSComboBox widths</td><td><span class="pill ok">trivial</span></td></tr>
+  <tr><td><b>U8</b></td><td>Project CS as a 3-line GroupBox (combo · CS name · EPSG); UTM shows only EPSG today</td><td>DataMainPage + CSComboBox</td><td><span class="pill new">small</span></td></tr>
+  <tr><td><b>U9</b></td><td>Badge next to the “Fix stations:” line on CavePage when a fix errors</td><td>CavePage</td><td><span class="pill new">small</span></td></tr>
+  <tr><td><b>U10</b></td><td>Error on a fix row whose station name is <b>empty</b> or <b>doesn’t exist</b> in the cave’s survey</td><td>cwFixStationModel + FixStationPage row</td><td><span class="pill new">small–medium</span></td></tr>
+</table>
+
+<h3 id="cspicker">13.1 — The coordinate-system picker (U1, U7, U8)</h3>
+<div class="callout ok"><b>Superseded by the Commit 7 callout + review-refactor below (§13.6).</b> The prose in this
+subsection was the pre-implementation sketch: it predates the split of the picker into
+<code>CSPicker</code> (core controls) + <code>CSComboBox</code> (inline shell) + <code>CSFormat</code>
+(presentation), so its line-number citations and the "flat <code>RowLayout</code>" / <code>Layout.preferredWidth</code>
+descriptions are stale. Read it for the U1/U7/U8 <i>intent</i> only; the shipped structure is described in §13.6.
+One correction of record: <code>CSComboBox</code> is used by the project CS and fix-station rows <b>only</b> —
+<code>CoordinatePickerPopup.qml</code> does <i>not</i> use it (host-inventory error below).</div>
+<p>One component, <code>CSComboBox.qml</code>, is the shared CS picker for the project CS
+(<code>DataMainPage.qml:186-195</code>, <code>allowGeographic:false</code>), every fix-station row
+(<code>FixStationPage.qml:112-121</code> wide, <code>:363-365</code> narrow, <code>allowGeographic:true</code>),
+and <code>CoordinatePickerPopup.qml</code>. It is a flat <code>RowLayout</code> (<code>CSComboBox.qml:55</code>) of:
+mode combo (<code>:62-101</code>), UTM zone <code>SpinBox</code> (<code>:103-119</code>), N/S combo
+(<code>:121-132</code>), resolved-CS label (<code>:134-143</code>). U1/U7/U8 all live here, so do them as one pass.</p>
+<ul>
+  <li><b>U7 (root cause of U1 too).</b> Neither the zone <code>SpinBox</code> (<code>CSComboBox.qml:103</code>) nor
+  the N/S combo (<code>:121</code>) has a width cap, and the resolved label is <code>Layout.fillWidth</code>
+  (<code>:134</code>). On the project page they push past the panel edge; in a fix-station row they overflow the
+  fixed 140&nbsp;px CS cell. Fix: give the zone spinbox and hemisphere combo a <code>Layout.preferredWidth</code>
+  sized for their content (2-digit zone, single N/S letter). This one edit relieves both surfaces.</li>
+  <li><b>U1 (column clipping).</b> The row CS picker sits in <code>CSCell</code> — <code>implicitWidth: columnWidth</code>
+  with <code>clip:true</code> (<code>FixStationPage.qml:108-117</code>), where <code>columnWidth</code> = the
+  <code>csColumn</code> width <b>140</b> (<code>:146</code>). In UTM mode the extra controls appear inside that clipped
+  140&nbsp;px cell and are cut off. Fix: after U7 shrinks the controls, widen the Input CS column to fit UTM mode
+  (raise <code>csColumn.columnWidth</code>, or let the column grow to content). Verify under both the project’s
+  <code>Layout.fillWidth</code> host and the clipped fixed-width cell (the two differ).</li>
+  <li><b>U8 (friendly name + 3-line GroupBox).</b> Today <code>resolvedDescription</code>
+  (<code>CSComboBox.qml:22-28</code>) returns the bare <code>value</code> (EPSG) for UTM and only appends a name for
+  <i>Custom</i> — so UTM shows just <code>EPSG:326xx</code>. The human name is available for any valid CS:
+  <code>CoordinateSystem.nameFor(cs)</code> → PROJ <code>proj_get_name</code>
+  (<code>cwCoordinateTransform.cpp:430,456</code>) yields e.g. “WGS 84 / UTM zone 13N”. Fix: on the <b>project</b> CS
+  surface (<code>DataMainPage.qml:186-195</code>), wrap the picker in a <code>GroupBox</code> with three lines —
+  (1)&nbsp;the mode combo (+ UTM zone/hemi), (2)&nbsp;the CS name via <code>nameFor(value)</code>, (3)&nbsp;the EPSG
+  code — and make UTM show the name, not only the code. The read-only mirror <code>coordinateSystemText</code>
+  (<code>DataMainPage.qml:106-116</code>) has the same UTM-only-EPSG behavior; fold it in or drop it.
+  <br><span class="mono-note">Open decision: the 3-line GroupBox is for the project CS only; a fix-station table row
+  can’t afford three lines, so rows keep the compact inline form (name in the resolved label is enough there).</span></li>
+</ul>
+
+<h3 id="fixrows">13.2 — Fix Stations page rows (U3, U4, U5)</h3>
+<ul>
+  <li><b>U5 (headers).</b> Column labels are set on <code>TableStaticColumn</code>: easting <code>"Easting"</code>
+  (<code>FixStationPage.qml:143-147</code>), northing <code>"Northing"</code> (<code>:148-152</code>). For a lat/lon
+  input CS these fields are really longitude/latitude. Cheapest fix: relabel to <code>"Easting / Long"</code> and
+  <code>"Northing / Lat"</code> (the narrow <code>Flow</code> has no headers, so only the wide layout changes). A
+  CS-aware header (switch label by the row’s mode) is possible but the header is per-column while the CS is per-row,
+  so a static combined label is the pragmatic call.</li>
+  <li><b>U4 (which component is bad).</b> The domain flag is a single row-level string: <code>DomainErrorRole</code>
+  (<code>cwFixStationModel</code>) drives one shared <code>DomainWarning</code> icon at the row’s end
+  (<code>FixStationPage.qml:76-100</code>, wide <code>:294-299</code> / narrow <code>:349-352</code>). The coordinate
+  cells (<code>WideCell</code>/<code>FixField</code>, <code>:43-72</code>) carry no error/color property. Fix: have the
+  model attribute the domain failure to a component (easting vs northing vs elevation) and expose it — a per-field
+  role or a small flags role — then tint the offending cell red. Requires the domain check to identify the bad
+  component (e.g. easting outside the zone’s valid easting band vs northing outside the lat band) rather than just
+  “the point is out of domain”. <span class="mono-note">Relates to the §11 “per-fix-station-row flagging” item — that
+  was resolved at row granularity by <code>DomainErrorRole</code>; U4 is the finer per-component granularity.</span></li>
+  <li><b>U3 (tab order).</b> There is no focus wiring anywhere in the fix-station stack — no <code>KeyNavigation</code>,
+  <code>activeFocusOnTab</code>, or <code>nextItemInFocusChain</code> in <code>FixStationPage.qml</code>,
+  <code>CSComboBox.qml</code>, <code>TableStaticView.qml</code>, or <code>DoubleClickTextInput.qml</code>. The cells
+  (<code>FixField</code> → <code>DoubleClickTextInput</code> → <code>CoreClickTextInput</code>) host no focusable
+  editor; editing is deferred to a single shared overlay singleton, <code>GlobalShadowTextInput</code>
+  (<code>CoreClickTextInput.qml:39-40,78-117</code>), positioned over the double-clicked cell. With one shared editor
+  and no focus chain, Tab has nothing to traverse.
+  <div class="callout warn" style="margin-top:8px"><b>Bigger than a FixStationPage tweak.</b> The fix lives in the
+  shared <code>CoreClickTextInput</code>/<code>GlobalShadowTextInput</code>/<code>TableStaticView</code> stack, which
+  other tables use, so it must be designed and tested there: on Tab, commit the current overlay edit and advance to the
+  next cell/row (the overlay needs a notion of its “next cell”). Treat as its own change with a careful blast-radius
+  check, not a one-line addition.</div></li>
+</ul>
+
+<h3 id="markfixed">13.3 — Mark a station Fixed from the survey table (U2)</h3>
+<p>Today the only way to fix a station is to open <code>FixStationPage</code>. U2 wants it inline on the survey
+table: right-click / caret a station and mark it Fixed, show a badge, and enter coordinates without leaving the page.
+The <b>“Exclude distance”</b> feature is the exact template to copy.</p>
+<ul>
+  <li><b>Reuse targets.</b> Focus-activated caret loader: <code>ShotDistanceDataBox.qml:52-84</code> +
+  <code>ContextMenuButton.qml</code> (a caret <code>RoundButton</code> that <code>popup()</code>s a menu). Menu action
+  toggling a model role: <code>ShotDistanceDataBox.qml:73-81</code>. The “Excluded” pill badge:
+  <code>ShotDistanceDataBox.qml:27-50</code> — the template for a “Fixed” badge.</li>
+  <li><b>Where it goes.</b> Station cells are <code>StationBox.qml</code> (no caret today; it wires a right-click
+  <code>StationMenu.qml:17-25</code>). Add a “Mark station as Fixed” item to <code>StationMenu.qml</code> and/or a
+  focus caret on <code>StationBox</code>, plus a “Fixed” badge. Gate on a non-empty station name — trailing
+  virtual/auto-name rows exist (<code>StationBox.qml:44-60</code>); the name value is
+  <code>dataValue.reading.value</code>.</li>
+  <li><b>Model support (C++).</b> A cave owns one <code>cwFixStationModel</code> (<code>cwCave.h:50,81</code>). The
+  QML-facing <code>addFixStation()</code> takes <b>no args</b> and appends a blank row
+  (<code>cwFixStationModel.cpp:182-194</code>); stations are keyed only by <code>stationName</code> string + a
+  <code>QUuid</code> with no dedup. Add a convenience <code>Q_INVOKABLE cwFixStation addFixStation(const QString&amp;
+  name)</code> with a name-lookup guard (don’t double-add an already-fixed station), and an
+  <code>Q_INVOKABLE bool isFixed(const QString&amp; name)</code> (or a role) so the badge can reflect state.</li>
+  <li><b>Coordinate entry — recommended inline.</b> After marking Fixed, let the user enter easting/northing/CS in a
+  small inline element (a popup/expander anchored to the caret, reusing <code>CSComboBox</code>) rather than bouncing
+  to <code>FixStationPage</code>. The fallback (route to <code>FixStationPage</code>) is simpler but loses context.
+  <span class="mono-note">Open decision: inline popup vs. route. Recommend inline per the feedback.</span></li>
+  <li><b>Biggest item</b> — own commit(s). Sub-steps: (a) model API + <code>isFixed</code>; (b) caret + menu item;
+  (c) Fixed badge; (d) inline coordinate popup; (e) tests (mark → appears in <code>cave.fixStations</code>; badge on;
+  no double-add).</li>
+</ul>
+
+<h3 id="firstfix">13.4 — New project: derive a projected output CS from the first fix (U6)</h3>
+<p>A fresh project has an empty global CS (<code>cwGeoReference.h:77</code>; <code>hasCoordinateSystem()</code> =
+<code>!isEmpty()</code>, <code>:54</code>) — the UI shows “Local” (<code>DataMainPage.qml:108-110</code>). When the
+global CS is empty the validator short-circuits (<code>cwFixStationValidator.cpp:190-196</code>), so
+<code>robustWorldOrigin()</code> is <code>nullopt</code> and <code>recomputeWorldOrigin()</code> leaves the origin at
+<code>(0,0,0)</code> (<code>cwCavingRegion.cpp:292-300</code>). The line plot then renders relative to an untouched
+origin → the cave lands far away / garbage. Nothing auto-sets the global CS from a fix’s <code>inputCS</code> today;
+the only existing “set your CS” prompt is in <code>CoordinatePickerPopup.qml:138-157</code> (routes to the Data page).</p>
+<div class="callout warn"><b>Hard constraint.</b> The output CS <b>must be projected</b> — survex/cavern only emits
+projected output, so a geographic (lat/long) CS can’t be the global CS. Test with
+<code>CoordinateSystem.isGeographic(cs)</code> (<code>cwCoordinateTransform.h:60,131</code>); the project combo already
+enforces this by hiding the geographic option (<code>allowGeographic:false</code>, <code>DataMainPage.qml:191</code>).
+“Valid output CS” = <code>isValidCS(cs) &amp;&amp; !isGeographic(cs)</code>.</div>
+<ul>
+  <li><b>Trigger.</b> On first fix added while <code>!region.geoReference().hasCoordinateSystem()</code> — watch
+  <code>cwFixStationModel::countChanged</code> (already connected in the validator,
+  <code>cwFixStationValidator.cpp:397</code>).</li>
+  <li><b>(a) Prompt.</b> Show a banner/dialog “Your project has no output coordinate system — set one to place the
+  cave,” linking to the Data page CS picker (reuse the <code>CoordinatePickerPopup</code> message pattern).</li>
+  <li><b>(b) Auto-derive — recommended, with a confirm.</b> If the fix’s <code>inputCS</code> is already projected,
+  offer it as the global CS. If it’s geographic, compute the UTM zone from the fix’s WGS84 longitude + hemisphere and
+  build the EPSG via <code>CoordinateSystem.utmZoneToEpsg(zone, north)</code> (<code>cwCoordinateTransform.h:75,138</code>),
+  then call <code>setGlobalCoordinateSystem(...)</code> (<code>cwGeoReference.cpp:15-31</code> — which conveniently
+  clears the stale world origin, so the next line-plot recomputes it). Make it an <i>undoable, confirmed</i> action, not
+  a silent write.</li>
+</ul>
+
+<h3 id="cavepagebadge">13.5 — Surface fix-station errors on CavePage (U9)</h3>
+<p>Commit 4 added a page-level <b>banner</b> on CavePage that joins <i>all</i> of a cave’s non-suppressed warnings.
+U9 is complementary and finer: a small <b>badge on the “Fix stations:” line itself</b> so the error is attached to the
+thing it’s about. The line is <code>fixStationsRow</code> (<code>CavePage.qml:169-181</code>, link at <code>:176</code>),
+mirrored in the narrow layout at <code>CavePage.qml:765-770</code>. There is a reusable <code>ErrorIconBar</code> already
+bound to an <code>errorModel</code> on this page (<code>CavePage.qml:603-604,871-872</code>).</p>
+<ul>
+  <li>Place an <code>ErrorIconBar</code> (or a compact warning badge) next to the “Fix stations:” label, bound to a
+  <b>fix-station-scoped</b> view of <code>currentCave.errorModel</code> — only the fix-station error types
+  (<code>cwErrorTypeId::FixStationOutlier</code>=596, <code>FixStationDomain</code>=597) light it, so it stays distinct
+  from the page banner’s all-warnings roll-up. Needs a filtered model/count by <code>errorTypeId ∈ {596,597}</code>.</li>
+  <li>Do both layouts (<code>fixStationsRow</code> wide + the narrow mirror at <code>:765-770</code>).</li>
+</ul>
+
+<h3 id="stationexists">13.6 — Validate the fix’s station reference (U10)</h3>
+<p>A fix station anchors a <b>named survey station</b> to absolute coordinates. Two ways the reference is broken, both
+of which silently produce a fix that anchors nothing:</p>
+<ul>
+  <li><b>Empty station name.</b> The <code>StationNameRole</code> (<code>cwFixStationModel.h:35</code>) is blank — an
+  unfinished row. Today <code>addFixStation()</code> appends exactly such a blank row, so this is the default state
+  until the user types a name.</li>
+  <li><b>Non-existent station.</b> The name doesn’t match any station in the cave’s survey. The authority is
+  <code>cwCave::network()</code> → <code>cwSurveyNetwork::stations()</code> (<code>cwSurveyNetwork.h:30</code>), the
+  <code>QStringList</code> of every station name; membership must be <b>case-insensitive</b> (CaveWhere is, Compass
+  isn’t — see CLAUDE.md). A fix on <code>XYZ1</code> when the survey only has <code>A1…A9</code> anchors nothing and
+  survex/cavern just ignores it.</li>
+</ul>
+<p><b>Approach.</b> Add a read-only <code>StationErrorRole</code> to <code>cwFixStationModel</code> (mirrors the
+<code>DomainErrorRole</code> pattern from Commit 6): empty string when fine, else a message (“Enter a station name” /
+“No station <i>XYZ1</i> in this cave”). Drive an inline indicator on the row reusing the existing
+<code>DomainWarning</code> component (<code>FixStationPage.qml:76-100</code>) — or a sibling of it so station-vs-domain
+read distinctly. The model needs the owning <code>cwCave*</code> (it already lives under one) to reach
+<code>network().stations()</code>, and must re-emit <code>dataChanged</code> for the role when the network changes
+(connect to the cave’s network/relink signal) so a station appearing/disappearing updates the flag live.</p>
+<p class="mono-note">Open question: an empty name is a “not-done-yet” state, not really an <i>error</i> — consider a quieter
+hint (placeholder / muted) for empty vs. a real warning icon for a name that’s present but unknown. Also decide whether
+this rolls into the CavePage “Fix stations” badge (U9) and the page banner — likely yes, as a new
+<code>cwErrorTypeId</code> (next id after 597).</p>
+
+<h3 id="commitgrouping">13.7 — Suggested commit grouping</h3>
+<table>
+  <tr><th>Commit</th><th>Items</th><th>Why together</th></tr>
+  <tr><td><b>7</b> — CS picker polish <span class="pill ok">implemented</span></td><td>U7, U1, U8, U5</td><td>All small QML on <code>CSComboBox</code>/<code>FixStationPage</code>/<code>DataMainPage</code>; U7 unblocks U1; U5 is a free header relabel that rides along.</td></tr>
+  <tr><td><b>8</b> — First-fix output CS</td><td>U6</td><td>Self-contained validator/region + one prompt; the highest-impact correctness item (fixes “cave renders far away”).</td></tr>
+  <tr><td><b>9</b> — Error surfacing</td><td>U9, U4, U10</td><td>All three are “show the error where it belongs”: U9 the CavePage line badge, U4 the per-component red cell, U10 the empty/unknown-station flag — each is a model role + inline indicator (new <code>cwErrorTypeId</code> for U10).</td></tr>
+  <tr><td><b>10</b> — Mark Fixed inline</td><td>U2</td><td>Largest, standalone feature (model API + caret + badge + inline coords); its own commit(s).</td></tr>
+  <tr><td><b>—</b> — Tab order</td><td>U3</td><td>Separate: it edits the <i>shared</i> table-input stack used by other tables, so it stands alone with its own blast-radius review; not gated on the fix-station work.</td></tr>
+</table>
+<p class="mono-note">Grouping is a recommendation, not a commitment — U5/U7/U9 are each shippable on their own if you want
+smaller commits. U2 and U3 are the two that genuinely need their own space.</p>
+
+<div class="callout ok">
+<b>Commit 7 implemented 2026-07-22 — uncommitted, gates green.</b> Four files:
+<ul>
+  <li><b>U7</b> — <code>CSComboBox.qml</code>: width caps on the UTM zone spinbox
+  (<code>Theme.csZoneFieldWidth</code> = 84) and N/S combo (<code>Theme.csHemisphereFieldWidth</code> = 64).</li>
+  <li><b>U8</b> — <code>CSComboBox.qml</code>: <code>resolvedDescription</code> now appends the friendly
+  <code>nameFor()</code> for <i>any</i> non-Local CS (UTM included), and a new <code>showResolvedLabel</code>
+  property lets a host drop the inline label. <code>DataMainPage.qml</code>: the project CS is a
+  <code>QC.GroupBox</code> “Coordinate system” with three lines — combo (edit only, label off) · friendly name ·
+  EPSG code. The GroupBox is wrapped in a plain <code>Item</code> the outer <code>ColumnLayout</code> manages (a
+  Control placed directly as a Layout child there lands unmanaged at the top and overlaps the pencil). Old
+  <code>coordinateSystemText</code> helper replaced by <code>csValue</code>/<code>csName</code>.</li>
+  <li><b>U1</b> — <code>FixStationPage.qml</code>: <code>csColumn.columnWidth</code> 140 → 300 (measured: mode combo
+  sizes to “Lat/Lon (WGS84)” = 120, + zone 84 + hemi 64 + spacing ⇒ hemisphere’s right edge at 280, now inside the
+  cell).</li>
+  <li><b>U5</b> — <code>FixStationPage.qml</code>: wide-layout headers relabelled “Easting / Long”, “Northing / Lat”.</li>
+</ul>
+Verified: <code>tst_DataMainPage_globalCS</code> (7), <code>tst_FixStationPage</code> (13),
+<code>tst_FixStations_RoundTrip</code> (3), <code>tst_CavePage_outlierWarning</code> (7),
+<code>tst_CoordinatePickerInteraction</code> (4) all green; screenshots of both surfaces confirm no clipping.
+<br><br>
+<b>Review follow-ups (same commit, 2026-07-22):</b>
+<ul>
+  <li><b>Project GroupBox overflow — real root cause.</b> The UTM controls spilled out of the CS
+  <code>GroupBox</code> at every window width (measured: at a 900&nbsp;px window the hemisphere combo’s right edge sat
+  90&nbsp;px past the group border). The Flow-wrap below was necessary but <i>inert on its own</i>: the picker never
+  received a constrained width to wrap within. Cause — the picker’s <code>ColumnLayout</code> was a <i>free-floating
+  child</i> of the GroupBox’s auto-created <code>contentItem</code>, so it kept its implicit width (280) and
+  overflowed while the frame tracked <code>availableWidth</code> correctly. Fix: assign the <code>ColumnLayout</code>
+  as the GroupBox’s <code>contentItem</code> directly (a Control resizes <code>contentItem.width = availableWidth</code>),
+  so the picker now shrinks to the group. Verified by geometry probe: combo w tracks the group (187 / 139 / 536&hellip;)
+  and the hemisphere’s right edge is always ≤ the group’s right edge.</li>
+  <li><b>Graceful wrap (needed once width propagates).</b> A <code>RowLayout</code> can’t shrink the fixed-width combos,
+  so once the picker is constrained below its natural width it would clip. <code>CSComboBox</code>’s inner layout is a
+  <code>QQ.Flow</code>: one line when the host is ≥ its natural width (a fix-station row, cell = 300, or the full-width
+  narrow layout), <b>wraps</b> the trailing controls to a second/third line when the group is narrow (wide layout’s
+  ~200&nbsp;px info column). Root <code>implicitWidth</code> is the manual one-line width so unconstrained hosts (the
+  narrow fix-station <code>Flow</code>) still get one line; <code>implicitHeight</code> follows the wrapped Flow height.</li>
+  <li><b>Inline resolved label scoped to Custom.</b> UTM is fully described by its zone + hemisphere, so the inline
+  <code>csResolvedLabel</code> now shows only for <i>Custom</i> mode (where there are no zone/hemi controls) — this
+  also keeps fix-station UTM rows single-line under the Flow. The label is width-capped to the Flow so a long custom
+  name elides instead of overflowing.</li>
+  <li><b>Selectable name/EPSG.</b> The project GroupBox’s name and EPSG lines are now
+  <code>SelectableValue</code> (the shared flat copyable read-only field: drag-select + right-click Copy / Select All,
+  single-highlight via <code>SelectableValueGroup</code>) instead of plain <code>QC.Label</code>s.</li>
+</ul>
+
+<p><b>Review refactor (same commit, 2026-07-22) — R1/A1/A2 from the cavewhere-review triage.</b> The Flow/label
+machinery above was then split so no component straddles two roles and CS presentation has one home:</p>
+<ul>
+  <li><b>A1 · one presentation source — <code>CSFormat.qml</code> (new singleton).</b> The name/code/Local composition
+  lived in two places (<code>CSComboBox.resolvedDescription</code> and <code>DataMainPage</code>’s
+  <code>csName</code>/<code>csValue</code> fallback). Both now call <code>CSFormat</code> — <code>localLabel()</code>,
+  <code>hasName(cs)</code>, <code>displayName(cs)</code>, <code>inlineDescription(cs)</code> — backed by
+  <code>CoordinateSystem.nameFor</code>. This also fixed the nameless-Custom double-render (the project name line is
+  now hidden via <code>hasName</code> when only the raw code exists, so the code shows once).</li>
+  <li><b>A2 · split the picker — <code>CSPicker.qml</code> (new core) + <code>CSComboBox.qml</code> (inline shell).</b>
+  <code>CSPicker</code> is the presentation-free controls (mode + UTM zone/hemi) + commit logic, in a <code>QQ.Flow</code>
+  (still wraps in the slim project column). <code>CSComboBox</code> is now a thin shell = <code>CSPicker</code> + the
+  Custom-only inline label. The project GroupBox drives a <code>CSPicker</code> <b>directly</b> (name/EPSG as its own
+  lines), so the <code>showResolvedLabel</code> dual-personality flag is deleted.</li>
+  <li><b>R1 · generic self-sizing.</b> <code>CSPicker.oneLineWidth</code> now sums the Flow’s visible children’s widths
+  + spacing generically (loop over <code>flowId.children</code>), replacing the mode-enumerated hand-math — adding or
+  hiding a control needs no edit to the width calc.</li>
+  <li><b>Test gate (closed the U8 coverage gap).</b> <code>tst_DataMainPage_globalCS.qml</code> gains
+  <code>test_projectCSShowsFriendlyNameAndCode</code>: after <code>committed("EPSG:32613")</code> the name line shows the
+  PROJ name and the code line reads <code>EPSG:32613</code>; unset CS read-only shows “Local” with the code line hidden.
+  Verified: 5 affected QML suites green (35 tests); geometry probe confirms the overflow fix held through the split
+  (fix row one line ≤ cell; project picker wraps ≤ group at a narrow column).</li>
+</ul>
+</div>
+
 <hr>
-<p class="mono-note">#596 · fix-station outlier detection · 5 commits (Commit 2 optional) · dev_3</p>
+<p class="mono-note">#596 · fix-station outlier detection (Commits 1–6) + usability &amp; error-handling backlog (§13, U1–U10) · dev_3</p>
 
 </div>
 </body>

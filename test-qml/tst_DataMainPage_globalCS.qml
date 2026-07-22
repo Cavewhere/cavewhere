@@ -70,6 +70,35 @@ MainWindowTest {
                     "Local / UTM / Custom (3 modes) when allowGeographic === false")
         }
 
+        function test_projectCSShowsFriendlyNameAndCode() {
+            gotoDataMainPage()
+
+            const dataPage = RootData.pageView.currentPageItem
+            const nameLine = findChild(dataPage, "coordinateSystemValue")
+            const codeLine = findChild(dataPage, "coordinateSystemCode")
+            verify(nameLine !== null, "coordinateSystemValue must exist on dataMainPage")
+            verify(codeLine !== null, "coordinateSystemCode must exist on dataMainPage")
+
+            // A fresh project has no CS: the name line reads "Local" and the
+            // raw-code line is hidden (there is no authority code to show).
+            compare(RootData.region.geoReference.globalCoordinateSystem, "")
+            tryCompare(nameLine, "text", qsTr("Local"))
+            tryVerify(() => !codeLine.visible, 2000, "code line hidden when CS is Local")
+
+            // U8: a projected CS shows the human-readable PROJ name on the name
+            // line (not just the EPSG code) and the raw authority code on its own
+            // line. This is the behavior the 3-line GroupBox exists to deliver.
+            RootData.region.geoReference.globalCoordinateSystem = "EPSG:32613"
+            tryVerify(() => nameLine.text.indexOf("UTM zone 13") >= 0, 2000,
+                      "name line should show the friendly PROJ name, got: " + nameLine.text)
+            verify(nameLine.text !== "EPSG:32613",
+                   "name line must be the friendly name, not the raw code")
+            tryCompare(codeLine, "text", "EPSG:32613")
+            tryVerify(() => codeLine.visible, 2000, "code line shows once a CS is set")
+
+            RootData.region.geoReference.globalCoordinateSystem = ""
+        }
+
         function test_regionContextMenuReachable() {
             gotoDataMainPage()
 

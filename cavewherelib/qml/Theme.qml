@@ -109,6 +109,12 @@ QtObject {
     readonly property int iconSizeSmall: 24
     readonly property int iconSizeMedium: 32
 
+    // Coordinate-system picker: keep the UTM zone spinbox and N/S combo
+    // compact so mode + zone + hemisphere fit one row without overflowing the
+    // project panel or a fix-station table cell.
+    readonly property int csZoneFieldWidth: 84
+    readonly property int csHemisphereFieldWidth: 64
+
     // Touch target sizing — scale up hit points on mobile builds
     readonly property real pointSizeFactor: RootData.mobileBuild ? 2.0 : 1.0
 

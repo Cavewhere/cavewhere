@@ -137,18 +137,21 @@ StandardPage {
             },
             TableStaticColumn {
                 id: csColumn
-                columnWidth: 140
+                // Wide enough for UTM mode's mode combo + zone + hemisphere
+                // controls (mode combo sizes to its widest entry, "Lat/Lon
+                // (WGS84)") so the hemisphere combo isn't clipped by the cell.
+                columnWidth: 300
                 text: "Input CS"
             },
             TableStaticColumn {
                 id: eastingColumn
                 columnWidth: 130
-                text: "Easting"
+                text: "Easting / Long"
             },
             TableStaticColumn {
                 id: northingColumn
                 columnWidth: 130
-                text: "Northing"
+                text: "Northing / Lat"
             },
             TableStaticColumn {
                 id: elevationColumn

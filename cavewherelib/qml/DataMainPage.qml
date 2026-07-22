@@ -103,17 +103,9 @@ StandardPage {
 
         property bool editMode: settingsEditButton.editMode
 
-        readonly property string coordinateSystemText: {
-            const value = RootData.region.geoReference.globalCoordinateSystem
-            if (value === "") {
-                return qsTr("Local")
-            }
-            if (CoordinateSystem.modeFor(value) === CoordinateSystem.Custom) {
-                const name = CoordinateSystem.nameFor(value)
-                return name.length > 0 ? value + " — " + name : value
-            }
-            return value
-        }
+        // The project CS. Its human-facing name/code come from CSFormat (the one
+        // presentation source shared with the inline picker). Empty value == Local.
+        readonly property string csValue: RootData.region.geoReference.globalCoordinateSystem
 
         ColumnLayout {
             id: infoColumnId
@@ -167,30 +159,66 @@ StandardPage {
                 QQ.Item { Layout.fillWidth: true }
             }
 
-            RowLayout {
+            // Wrap the GroupBox in a plain Item the outer ColumnLayout manages:
+            // a Control placed directly as a Layout child here lands unmanaged
+            // at the top and overlaps the rows above it.
+            QQ.Item {
                 Layout.fillWidth: true
-                spacing: Theme.delegatePadding
+                implicitHeight: coordinateSystemGroupId.implicitHeight
 
-                QC.Label {
-                    text: qsTr("Coordinate system:")
-                }
+                QC.GroupBox {
+                    id: coordinateSystemGroupId
+                    objectName: "coordinateSystemGroup"
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    title: qsTr("Coordinate system")
 
-                QC.Label {
-                    objectName: "coordinateSystemValue"
-                    visible: !regionInfoBox.editMode
-                    Layout.fillWidth: true
-                    elide: QQ.Text.ElideRight
-                    text: regionInfoBox.coordinateSystemText
-                }
+                    // The ColumnLayout must BE the contentItem, not a floating
+                    // child of it: a Control resizes contentItem.width to
+                    // availableWidth, so this is what shrinks the picker down to
+                    // the group and lets its controls wrap. A declared child
+                    // instead keeps its implicit width and overflows the frame.
+                    contentItem: ColumnLayout {
+                        spacing: Theme.tightSpacing
 
-                CSComboBox {
-                    objectName: "globalCoordinateSystemComboBox"
-                    visible: regionInfoBox.editMode
-                    Layout.fillWidth: true
-                    value: RootData.region.geoReference.globalCoordinateSystem
-                    allowGeographic: false
-                    onCommitted: (newCS) => {
-                        RootData.region.geoReference.globalCoordinateSystem = newCS
+                        // Line 1: the bare picker controls (edit mode only). The
+                        // name/code lines below present the CS — the project
+                        // surface needs no inline resolved label.
+                        CSPicker {
+                            objectName: "globalCoordinateSystemComboBox"
+                            visible: regionInfoBox.editMode
+                            Layout.fillWidth: true
+                            value: regionInfoBox.csValue
+                            allowGeographic: false
+                            onCommitted: (newCS) => {
+                                RootData.region.geoReference.globalCoordinateSystem = newCS
+                            }
+                        }
+
+                        // Line 2: friendly name (or "Local" when unset). Hidden for
+                        // a CS with no PROJ name — the code line below carries it,
+                        // so the raw string never renders on both lines. Copyable.
+                        SelectableValue {
+                            objectName: "coordinateSystemValue"
+                            visible: regionInfoBox.csValue === ""
+                                     ? !regionInfoBox.editMode
+                                     : CSFormat.hasName(regionInfoBox.csValue)
+                            Layout.fillWidth: true
+                            text: regionInfoBox.csValue === ""
+                                  ? CSFormat.localLabel()
+                                  : CSFormat.displayName(regionInfoBox.csValue)
+                        }
+
+                        // Line 3: the raw authority code (EPSG:xxxx), hidden for
+                        // Local. Copyable — the code is the thing users paste.
+                        SelectableValue {
+                            objectName: "coordinateSystemCode"
+                            visible: regionInfoBox.csValue !== ""
+                            Layout.fillWidth: true
+                            color: Theme.textSubtle
+                            font.family: Theme.fontFamilyMono
+                            text: regionInfoBox.csValue
+                        }
                     }
                 }
             }
