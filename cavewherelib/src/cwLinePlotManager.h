@@ -53,7 +53,6 @@ class CAVEWHERE_LIB_EXPORT cwLinePlotManager : public QObject, public cwUpdatabl
     Q_OBJECT
     QML_NAMED_ELEMENT(LinePlotManager)
 
-    Q_PROPERTY(bool needsUpdate READ needsUpdate NOTIFY needsUpdateChanged)
     Q_PROPERTY(cwSurveyNetworkArtifact* surveyNetworkArtifact READ surveyNetworkArtifact CONSTANT)
     Q_PROPERTY(bool hasSolveError READ hasSolveError NOTIFY cavernOutputChanged FINAL)
     Q_PROPERTY(QString solveErrorMessage READ solveErrorMessage NOTIFY cavernOutputChanged FINAL)
@@ -117,9 +116,8 @@ public:
     // plan. Empty when no live-link attachment is configured.
     QList<QUuid> missingSourceOwners() const { return m_missingSourceOwners; }
 
-    bool needsUpdate() const override;
+    cwUpdatable::State updateState() const override;
     void update() override;
-    bool isUpdating() const override;
 
     // Region-wide survey network artifact, updated whenever the line-plot
     // pipeline completes. Shared across every consumer (sketches today; future
@@ -133,7 +131,7 @@ signals:
     void stationPositionInCavesChanged(QList<cwCave*>);
     void stationPositionInTripsChanged(QList<cwTrip*>);
     void stationPositionInScrapsChanged(QList<cwScrap*>);
-    void needsUpdateChanged();
+    void updateStateChanged();
     void cavernOutputChanged();
 
     // Emitted whenever the external-centerline watch set changes. Tests
@@ -201,15 +199,16 @@ private:
 
     bool m_needsUpdate = false;
 
-    // True from the moment update() kicks a solve until that solve's completion
-    // callback runs. needsUpdate() clears synchronously at update() start (so an
-    // edit mid-solve re-triggers a fresh restart), so this is the coordinator's
-    // only signal that the pipeline is still working.
+    // The Working bit: true from the moment update() kicks a solve until that
+    // solve's completion callback runs. m_needsUpdate clears synchronously at
+    // update() start (so an edit mid-solve re-triggers a fresh restart via
+    // Dirty), which is why the line plot needs this separate flag to stay
+    // observably Working through the async solve — see cwUpdatable::State.
     bool m_solving = false;
 
-    // Clears m_solving and re-emits needsUpdateChanged so the coordinator
-    // re-evaluates its forced-cascade settle state, even on a solve that dirtied
-    // nothing downstream.
+    // Clears m_solving (Working -> Clean, or -> Dirty if re-edited mid-solve)
+    // and emits updateStateChanged so the coordinator re-evaluates its
+    // forced-cascade settle state.
     void finishSolving();
 
     void connectCaves(cwCavingRegion* region);
@@ -262,12 +261,13 @@ private slots:
 //This needs to be here for moc to generate correctly and we can forward declare cwRenderLinePlot
 #include "cwRenderLinePlot.h"
 
-inline bool cwLinePlotManager::needsUpdate() const {
-    return m_needsUpdate;
-}
-
-inline bool cwLinePlotManager::isUpdating() const {
-    return m_solving;
+inline cwUpdatable::State cwLinePlotManager::updateState() const {
+    // Dirty takes priority over Working: a survey edit that arrives mid-solve
+    // must re-drive update() (which restarts and coalesces), so it reports Dirty
+    // even while a solve is in flight — not Working. See cwUpdatable::State.
+    if(m_needsUpdate) { return cwUpdatable::State::Dirty; }
+    if(m_solving)     { return cwUpdatable::State::Working; }
+    return cwUpdatable::State::Clean;
 }
 
 #endif // CWLINEPLOTMANAGER_H

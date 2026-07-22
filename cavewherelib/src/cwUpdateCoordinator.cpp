@@ -30,7 +30,7 @@ void cwUpdateCoordinator::setAutomaticUpdate(bool automaticUpdate)
 bool cwUpdateCoordinator::needsUpdate() const
 {
     return std::any_of(m_updatables.begin(), m_updatables.end(),
-                       [](const cwUpdatable* u) { return u->needsUpdate(); });
+                       [](const cwUpdatable* u) { return u->updateState() == cwUpdatable::State::Dirty; });
 }
 
 void cwUpdateCoordinator::updateNow()
@@ -40,7 +40,7 @@ void cwUpdateCoordinator::updateNow()
     //single Run resolves the whole chain without a second press.
     m_forcing = true;
     for(cwUpdatable* u : std::as_const(m_updatables)) {
-        if(u->needsUpdate()) {
+        if(u->updateState() == cwUpdatable::State::Dirty) {
             u->update();
         }
     }
@@ -48,13 +48,13 @@ void cwUpdateCoordinator::updateNow()
     clearForcingIfSettled();
 }
 
-void cwUpdateCoordinator::onChildDirty(cwUpdatable* updatable)
+void cwUpdateCoordinator::onChildStateChanged(cwUpdatable* updatable)
 {
-    //Guard on needsUpdate() so update()'s own needsUpdateChanged (dirty
-    //cleared) doesn't re-enter and re-run. While a forced cascade is open we
-    //run the child regardless of the automatic-update flag — that is what
-    //carries the line-plot -> scraps handoff to completion under one Run.
-    if((automaticUpdate() || m_forcing) && updatable->needsUpdate()) {
+    //Guard on Dirty so update()'s own Working transition (dirty cleared) doesn't
+    //re-enter and re-run. While a forced cascade is open we run the child
+    //regardless of the automatic-update flag — that is what carries the
+    //line-plot -> scraps handoff to completion under one Run.
+    if((automaticUpdate() || m_forcing) && updatable->updateState() == cwUpdatable::State::Dirty) {
         updatable->update();
     }
     refreshNeedsUpdate();
@@ -78,19 +78,19 @@ void cwUpdateCoordinator::refreshNeedsUpdate()
     }
 }
 
-bool cwUpdateCoordinator::anyUpdating() const
+bool cwUpdateCoordinator::anyWorking() const
 {
     return std::any_of(m_updatables.begin(), m_updatables.end(),
-                       [](const cwUpdatable* u) { return u->isUpdating(); });
+                       [](const cwUpdatable* u) { return u->updateState() == cwUpdatable::State::Working; });
 }
 
 void cwUpdateCoordinator::clearForcingIfSettled()
 {
     //The cascade is done when nothing is dirty and no async solve is still in
-    //flight. anyUpdating() covers the line plot's window between its
-    //synchronous needsUpdate() clear and its async completion — without it the
+    //flight. anyWorking() covers the line plot's window between its synchronous
+    //dirty clear (at update() start) and its async completion — without it the
     //cascade would look settled mid-solve and drop the forced handoff to scraps.
-    if(m_forcing && !needsUpdate() && !anyUpdating()) {
+    if(m_forcing && !needsUpdate() && !anyWorking()) {
         m_forcing = false;
     }
 }

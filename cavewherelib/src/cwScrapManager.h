@@ -65,7 +65,6 @@ class CAVEWHERE_LIB_EXPORT cwScrapManager : public QObject, public cwUpdatableBa
     Q_OBJECT
     QML_NAMED_ELEMENT(ScrapManager)
 
-    Q_PROPERTY(bool needsUpdate READ needsUpdate NOTIFY needsUpdateChanged)
     Q_PROPERTY(cwTriangulateWarping* warpingSettings READ warpingSettings CONSTANT)
 
 public:
@@ -114,7 +113,7 @@ public:
 
     Q_INVOKABLE void setRenderScraps(cwRenderTexturedItems* glScraps);
 
-    bool needsUpdate() const override;
+    cwUpdatable::State updateState() const override;
     void update() override;
 
     void waitForFinish();
@@ -132,7 +131,7 @@ public:
     Q_INVOKABLE int renderScrapCount() const { return m_scrapToRenderId.size(); }
 
 signals:
-    void needsUpdateChanged();
+    void updateStateChanged();
 
     // Fires whenever stroke-level state changes for a tracked sketch; downstream
     // consumers (and tests) use this to observe the diff pipeline.
@@ -149,6 +148,16 @@ private:
 
     QSet<cwScrap*> DirtyScraps; //These are the scraps that need to be updated
     QSet<cwScrap*> DeletedScraps; //All the deleted scraps
+
+    // The two bits behind updateState() (see cwUpdatable::State), mirroring the
+    // line plot: m_workPending is set when a scrap is (re)dirtied and cleared at
+    // dispatch, so a fresh edit mid-run reports Dirty (re-driving the restarter)
+    // rather than Working. m_taskRunning marks a triangulation task in flight —
+    // set before restart(), cleared on every completion path — so a running
+    // pipeline reports Working. Cleared-on-every-path is essential: a leaked
+    // m_taskRunning would keep the coordinator's forced cascade from settling.
+    bool m_workPending = false;
+    bool m_taskRunning = false;
     QHash<cwScrap*, uint32_t> m_scrapToRenderId; //The render id of the scrap
     cwKeywordItemRegistry<cwScrap*> m_keywordRegistry;
 
@@ -259,6 +268,11 @@ private slots:
 
     void taskFinished(const QList<cwScrap *> &scrapsToUpdate,
                       const QList<cwTriangulatedData>& scrapDataset);
+
+    // Leaves Working: clears m_taskRunning and emits updateStateChanged. Called
+    // on every task-completion path (taskFinished plus the run lambda's early
+    // returns) so a running task can never leave m_taskRunning stuck.
+    void finishScrapTask();
 
 };
 

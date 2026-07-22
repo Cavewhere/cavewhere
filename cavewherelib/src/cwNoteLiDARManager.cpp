@@ -52,7 +52,7 @@ using NotePtrList = QList<cwNoteLiDAR*>;
 namespace {
 
 // A dirty note is only worth triangulating once it is attached to a cave/trip,
-// has stations, and its cave centerline is solved. Shared by needsUpdate() and
+// has stations, and its cave centerline is solved. Shared by updateState() and
 // the run path.
 bool isRunnableNote(const cwNoteLiDAR* note)
 {
@@ -291,9 +291,18 @@ bool cwNoteLiDARManager::keepRenderGeometry() const
     return m_keepRenderGeometry;
 }
 
-bool cwNoteLiDARManager::needsUpdate() const
+cwUpdatable::State cwNoteLiDARManager::updateState() const
 {
-    return std::any_of(m_dirtyNotes.begin(), m_dirtyNotes.end(), &isRunnableNote);
+    // Dirty takes priority over Working: a note (re)dirtied but not yet handed to
+    // a batch (m_workPending) reports Dirty even while an earlier batch runs, so
+    // the coordinator re-drives update() and the restarter coalesces the fresh
+    // edit. Once dispatched, a running batch reports Working until it completes.
+    // See cwUpdatable::State.
+    const bool runnableDirty =
+        std::any_of(m_dirtyNotes.begin(), m_dirtyNotes.end(), &isRunnableNote);
+    if(m_workPending && runnableDirty) { return cwUpdatable::State::Dirty; }
+    if(m_taskRunning)                  { return cwUpdatable::State::Working; }
+    return cwUpdatable::State::Clean;
 }
 
 void cwNoteLiDARManager::update()
@@ -311,7 +320,7 @@ void cwNoteLiDARManager::updateAllLiDAR()
     for (cwNoteLiDAR* note : all) {
         markDirty(note);
     }
-    emit needsUpdateChanged();
+    emit updateStateChanged();
     update();
 }
 
@@ -572,11 +581,12 @@ void cwNoteLiDARManager::markDirty(cwNoteLiDAR* note)
 
     // connect(note, &QObject::destroyed, this, &cwNoteLiDARManager::noteDestroyed, Qt::UniqueConnection);
     m_dirtyNotes.insert(note);
+    m_workPending = true;
 }
 
 void cwNoteLiDARManager::notifyDirty()
 {
-    emit needsUpdateChanged();
+    emit updateStateChanged();
     runIfStandalone();
 }
 
@@ -595,9 +605,16 @@ void cwNoteLiDARManager::runBatch()
         }
     }
 
-    if (notes.isEmpty()) {        
+    if (notes.isEmpty()) {
         return;
     }
+
+    // Dispatching now covers the current dirty set: drop the pending marker and
+    // enter Working. A note dirtied after this re-sets m_workPending (markDirty),
+    // flipping back to Dirty so the restarter re-runs.
+    m_workPending = false;
+    m_taskRunning = true;
+    emit updateStateChanged();
 
     // Prepare inputs
     auto inputs = cw::transform(notes, [this](const cwNoteLiDAR* note) {
@@ -675,7 +692,11 @@ void cwNoteLiDARManager::runBatch()
                          }
                          m_deletedNotes.clear();
 
-                         emit needsUpdateChanged();
+                         // Batch done: leave Working (updateState reflects the
+                         // notes just removed from m_dirtyNotes — Clean, or Dirty
+                         // if an edit arrived mid-batch).
+                         m_taskRunning = false;
+                         emit updateStateChanged();
                          emit liDARNotesUpdated(notes);
                      }).future();
     });

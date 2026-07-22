@@ -478,7 +478,9 @@ void cwLinePlotManager::rerunSurvex()
 void cwLinePlotManager::runSurvex() {
     if(!m_needsUpdate) {
         m_needsUpdate = true;
-        emit needsUpdateChanged();
+        // Clean -> Dirty, or (mid-solve edit) Working -> Dirty. Either is a real
+        // state change; the coordinator re-drives update() on the Dirty.
+        emit updateStateChanged();
     }
 
     runIfStandalone();
@@ -488,15 +490,16 @@ void cwLinePlotManager::runSurvex() {
   \brief Runs the line plot task now, unconditionally.
   */
 void cwLinePlotManager::update() {
-    // Mark solving before clearing needsUpdate: the clear below emits
-    // needsUpdateChanged, and the coordinator's forced-cascade settle check must
-    // already see this pipeline as updating so it doesn't mistake the
-    // (synchronously cleared) needsUpdate for "finished" while the solve runs.
+    // Enter Working and drop the pending-dirty marker in one step: a solve now
+    // covers the current data, so the pipeline is Working (not Dirty) until it
+    // completes. Reporting Working — not the synchronously-cleared Dirty — is
+    // what keeps the coordinator's forced-cascade settle check from mistaking
+    // the pipeline for "finished" while the solve is still in flight.
+    const cwUpdatable::State previousState = updateState();
     m_solving = true;
-
-    if(m_needsUpdate) {
-        m_needsUpdate = false;
-        emit needsUpdateChanged();
+    m_needsUpdate = false;
+    if(updateState() != previousState) {
+        emit updateStateChanged();
     }
 
     if(Region != nullptr) {
@@ -576,10 +579,10 @@ void cwLinePlotManager::update() {
 void cwLinePlotManager::finishSolving() {
     if(m_solving) {
         m_solving = false;
-        // Re-emit even though needsUpdate() is unchanged: this is the
-        // coordinator's cue to re-check its forced-cascade settle state on a
-        // solve that dirtied nothing downstream.
-        emit needsUpdateChanged();
+        // Working -> Clean (or -> Dirty if a survey edit arrived mid-solve). A
+        // real state transition, which is the coordinator's cue to re-check its
+        // forced-cascade settle state.
+        emit updateStateChanged();
     }
 }
 

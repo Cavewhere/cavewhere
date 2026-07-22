@@ -221,7 +221,8 @@ TEST_CASE("A single Run resolves the line-plot to scraps cascade with automatic 
     // scraps, and the still-open forced update runs them too.
     for(int i = 0; i < 20 && (coordinator->needsUpdate()
                               || rootData->futureManagerModel()->rowCount() > 0
-                              || linePlotManager->isUpdating()); ++i) {
+                              || linePlotManager->updateState() == cwUpdatable::State::Working
+                              || scrapManager->updateState() == cwUpdatable::State::Working); ++i) {
         rootData->futureManagerModel()->waitForFinished();
         linePlotManager->waitToFinish();
         scrapManager->waitForFinish();
@@ -244,6 +245,42 @@ TEST_CASE("A single Run resolves the line-plot to scraps cascade with automatic 
     // ...and one Run resolved it: nothing stale, no second press needed.
     CHECK(coordinator->needsUpdate() == false);
     CHECK(scrapManager->dirtyScraps().contains(scrap) == false);
+}
+
+TEST_CASE("Scrap pipeline reports Working while a triangulation task is in flight",
+          "[cwScrapManager]")
+{
+    // updateState() must distinguish "dirty and idle" (Dirty) from "dirty and
+    // computing" (Working): the restarter queues its start, so the task is in
+    // flight — but not yet finished — the moment the forced update() returns.
+    requireAutomaticUpdatesEnabled();
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+    fileToProject(project, testcasesDatasetPath("test_cwScrapManager/scrapGuessNeigborPlan.cw"));
+    rootData->futureManagerModel()->waitForFinished();
+
+    auto scrapManager = rootData->scrapManager();
+    REQUIRE(scrapManager);
+
+    // Settle to Clean.
+    scrapManager->waitForFinish();
+    rootData->futureManagerModel()->waitForFinished();
+    QCoreApplication::processEvents();
+    REQUIRE(scrapManager->updateState() == cwUpdatable::State::Clean);
+
+    // Force a recompute of every scrap. updateAllScraps marks the scraps dirty
+    // then dispatches unconditionally; the restarter's start is queued, so the
+    // pipeline is Working (task dispatched, not yet finished) synchronously here.
+    scrapManager->updateAllScraps();
+    CHECK(scrapManager->updateState() == cwUpdatable::State::Working);
+
+    // Drain to completion — back to Clean, never stuck Working.
+    for(int i = 0; i < 20 && scrapManager->updateState() != cwUpdatable::State::Clean; ++i) {
+        rootData->futureManagerModel()->waitForFinished();
+        scrapManager->waitForFinish();
+        QCoreApplication::processEvents();
+    }
+    CHECK(scrapManager->updateState() == cwUpdatable::State::Clean);
 }
 
 

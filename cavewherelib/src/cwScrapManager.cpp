@@ -67,7 +67,7 @@ inline const QString kSketchTextureCacheKeyPrefix =
     QStringLiteral("sketch-texture");
 
 // A dirty scrap is only worth (re)triangulating once it is out of editing and
-// attached to a cave. Shared by needsUpdate() and the run path.
+// attached to a cave. Shared by updateState() and the run path.
 bool isRunnableScrap(const cwScrap* scrap) {
     return scrap != nullptr && !scrap->editing() && scrap->parentCave() != nullptr;
 }
@@ -332,7 +332,8 @@ void cwScrapManager::markAllScrapsDirty() {
         }
     }
 
-    emit needsUpdateChanged();
+    m_workPending = true;
+    emit updateStateChanged();
 }
 
 /**
@@ -344,8 +345,17 @@ void cwScrapManager::updateAllScraps() {
     update();
 }
 
-bool cwScrapManager::needsUpdate() const {
-    return std::any_of(DirtyScraps.begin(), DirtyScraps.end(), &isRunnableScrap);
+cwUpdatable::State cwScrapManager::updateState() const {
+    // Dirty takes priority over Working: a scrap (re)dirtied but not yet handed
+    // to a task (m_workPending) reports Dirty even while an earlier task runs, so
+    // the coordinator re-drives update() and the restarter coalesces the fresh
+    // edit. Once dispatched, a running task reports Working until it completes.
+    // See cwUpdatable::State.
+    const bool runnableDirty =
+        std::any_of(DirtyScraps.begin(), DirtyScraps.end(), &isRunnableScrap);
+    if(m_workPending && runnableDirty) { return cwUpdatable::State::Dirty; }
+    if(m_taskRunning)                  { return cwUpdatable::State::Working; }
+    return cwUpdatable::State::Clean;
 }
 
 void cwScrapManager::update() {
@@ -1065,7 +1075,8 @@ void cwScrapManager::updateScrapGeometry(QList<cwScrap *> scraps) {
         DirtyScraps.insert(scrap);
     }
 
-    emit needsUpdateChanged();
+    m_workPending = true;
+    emit updateStateChanged();
 
     runIfStandalone();
 }
@@ -1132,6 +1143,12 @@ void cwScrapManager::updateScrapGeometryHelper(QList<cwScrap *> scraps)
         return;
     }
 
+    // Dispatching now covers the current dirty set: drop the pending marker and
+    // enter Working. Any edit that arrives after this re-sets m_workPending (via
+    // updateScrapGeometry), flipping back to Dirty so the restarter re-runs.
+    m_workPending = false;
+    m_taskRunning = true;
+    emit updateStateChanged();
 
     auto run = [this]() {
 
@@ -1143,12 +1160,14 @@ void cwScrapManager::updateScrapGeometryHelper(QList<cwScrap *> scraps)
         QList<cwScrap*> dirtyScraps(dirtyScrapsRange.begin(), dirtyScrapsRange.end());
 
         if(dirtyScraps.isEmpty()) {
+            finishScrapTask();
             return AsyncFuture::completed();
         }
 
         auto triangulationResults = triangulateScraps(dirtyScraps);
 
         if(triangulationResults.isEmpty()) {
+            finishScrapTask();
             return AsyncFuture::completed();
         }
 
@@ -1569,6 +1588,15 @@ void cwScrapManager::updateScrapWithNewNoteTransform()
     updateExistingScrapGeometryHelper(parentScrap);
 }
 
+void cwScrapManager::finishScrapTask()
+{
+    if(!m_taskRunning) {
+        return;
+    }
+    m_taskRunning = false;
+    emit updateStateChanged();
+}
+
 /**
   \brief Triangulation task has finished
   */
@@ -1577,6 +1605,12 @@ void cwScrapManager::taskFinished(const QList<cwScrap*>& scrapsToUpdate,
     qCDebug(lcPick).nospace()
         << "ScrapManager::taskFinished scraps=" << scrapsToUpdate.size()
         << " dataset=" << scrapDataset.size();
+
+    // Task done: leave Working. finishScrapTask emits so the coordinator
+    // re-checks its forced-cascade settle state on both the empty and normal
+    // paths below.
+    finishScrapTask();
+
     if(scrapDataset.isEmpty()) {
         //No scrap data udpated...
         qCDebug(lcPick) << "ScrapManager::taskFinished EARLY RETURN: empty dataset";
@@ -1588,7 +1622,8 @@ void cwScrapManager::taskFinished(const QList<cwScrap*>& scrapsToUpdate,
         disconnect(scrap, &cwScrap::destroyed, this, &cwScrapManager::scrapDeleted);
     }
     DirtyScraps.clear();
-    emit needsUpdateChanged();
+    m_workPending = false;
+    emit updateStateChanged();
 
     //Make sure there's the same amount of data
     if(scrapsToUpdate.size() != scrapDataset.size()) {

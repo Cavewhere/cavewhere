@@ -36,16 +36,16 @@ class CAVEWHERE_LIB_EXPORT cwUpdateCoordinator : public QObject
 public:
     explicit cwUpdateCoordinator(QObject* parent = nullptr);
 
-    //Registers a pipeline and connects its needsUpdateChanged signal. Flushes
+    //Registers a pipeline and connects its updateStateChanged signal. Flushes
     //immediately if it is already dirty and automatic update is on. T must be a
-    //QObject deriving cwUpdatable that declares a void needsUpdateChanged() signal.
+    //QObject deriving cwUpdatable that declares a void updateStateChanged() signal.
     template<class T>
     void add(T* updatable)
     {
         cwUpdatable* u = updatable;
         u->setCoordinated(true);
         m_updatables.append(u);
-        connect(updatable, &T::needsUpdateChanged, this, [this, u]() { onChildDirty(u); });
+        connect(updatable, &T::updateStateChanged, this, [this, u]() { onChildStateChanged(u); });
         //Drop the raw pointer if the pipeline is destroyed first (the handler only
         //compares the pointer value, never dereferences it).
         connect(updatable, &QObject::destroyed, this, [this, u]() {
@@ -55,7 +55,7 @@ public:
             //keeping the forced update open; re-settle so m_forcing can't stick.
             clearForcingIfSettled();
         });
-        onChildDirty(u);
+        onChildStateChanged(u);
     }
 
     bool automaticUpdate() const;
@@ -72,7 +72,7 @@ signals:
     void needsUpdateChanged();
 
 private:
-    void onChildDirty(cwUpdatable* updatable);
+    void onChildStateChanged(cwUpdatable* updatable);
     void onAutomaticUpdateChanged();
     void refreshNeedsUpdate();
 
@@ -81,7 +81,7 @@ private:
     //clean and idle, so an async cascade — the line plot solve dirtying scraps
     //after updateNow() has already iterated — is driven to completion by the
     //one Run press instead of leaving the user to press Run again.
-    bool anyUpdating() const;
+    bool anyWorking() const;
     void clearForcingIfSettled();
 
     QList<cwUpdatable*> m_updatables;

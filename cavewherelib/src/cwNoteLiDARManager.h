@@ -53,8 +53,6 @@ class CAVEWHERE_LIB_EXPORT cwNoteLiDARManager : public QObject, public cwUpdatab
     Q_OBJECT
     QML_NAMED_ELEMENT(NoteLiDARManager)
 
-    Q_PROPERTY(bool needsUpdate READ needsUpdate NOTIFY needsUpdateChanged)
-
 public:
     explicit cwNoteLiDARManager(QObject* parent = nullptr);
     ~cwNoteLiDARManager();
@@ -69,7 +67,7 @@ public:
     void setKeepRenderGeometry(bool keepGeometry);
     bool keepRenderGeometry() const;
 
-    bool needsUpdate() const override;
+    cwUpdatable::State updateState() const override;
     void update() override;
 
     // Useful in tests or manual recompute. Forces a recompute regardless of the
@@ -91,7 +89,7 @@ public:
     static cwTriangulateLiDARInData mapNoteToInData(const cwNoteLiDAR* note, const cwProject *project);
 
 signals:
-    void needsUpdateChanged();
+    void updateStateChanged();
     // Emitted after a successful triangulation batch completes
     void liDARNotesUpdated(const QList<cwNoteLiDAR*>& notes);
 
@@ -143,6 +141,14 @@ private:
 
     QSet<cwNoteLiDAR*> m_dirtyNotes;
     QSet<cwNoteLiDAR*> m_deletedNotes;
+
+    // The two bits behind updateState() (see cwUpdatable::State), mirroring the
+    // line plot and scraps: m_workPending is set when a note is (re)dirtied and
+    // cleared at dispatch, so a fresh edit mid-run reports Dirty; m_taskRunning
+    // marks a batch in flight (set before restart(), cleared in the completion
+    // callback) so a running pipeline reports Working.
+    bool m_workPending = false;
+    bool m_taskRunning = false;
     QHash<cwNoteLiDAR*, QVector<uint32_t>> m_noteToRender;
     cwKeywordItemRegistry<cwNoteLiDAR*> m_keywordRegistry;
 

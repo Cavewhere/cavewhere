@@ -778,14 +778,14 @@ TEST_CASE("cwLinePlotManager defers solving to the update coordinator", "[cwLine
     plotManager->setRegion(&region);
     plotManager->waitToFinish();
 
-    CHECK(plotManager->needsUpdate() == true);
+    CHECK(plotManager->updateState() == cwUpdatable::State::Dirty);
     CHECK(coordinator.needsUpdate() == true);
     spyChecker.checkSpies(); //deferred: nothing solved while auto update is off
 
     chunk->setData(cwSurveyChunk::ShotDistanceRole, 0, "11.0");
     plotManager->waitToFinish();
 
-    CHECK(plotManager->needsUpdate() == true);
+    CHECK(plotManager->updateState() == cwUpdatable::State::Dirty);
     spyChecker.checkSpies(); //still deferred
 
     // Run: recompute now regardless of the policy, clearing the dirty flag.
@@ -793,7 +793,7 @@ TEST_CASE("cwLinePlotManager defers solving to the update coordinator", "[cwLine
     plotManager->waitToFinish();
     spyChecker[&stationPositionSpy]++;
     spyChecker.checkSpies();
-    CHECK(plotManager->needsUpdate() == false);
+    CHECK(plotManager->updateState() == cwUpdatable::State::Clean);
     CHECK(coordinator.needsUpdate() == false);
 
     // Turning automatic update back on flushes a later edit immediately.
@@ -802,7 +802,7 @@ TEST_CASE("cwLinePlotManager defers solving to the update coordinator", "[cwLine
     plotManager->waitToFinish();
     spyChecker[&stationPositionSpy]++;
     spyChecker.checkSpies();
-    CHECK(plotManager->needsUpdate() == false);
+    CHECK(plotManager->updateState() == cwUpdatable::State::Clean);
 }
 
 TEST_CASE("cwLinePlotManager clears geometry when all caves are removed", "[LinePlotManager]")
