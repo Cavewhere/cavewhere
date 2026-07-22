@@ -192,6 +192,21 @@ Item {
         }
     }
 
+    // A project with fix stations but no output CS renders around an untouched
+    // world origin, so the scene looks empty or misplaced. Surface the same
+    // prompt here with its inline picker to adopt an output system in place.
+    OutputCSPrompt {
+        objectName: "outputCSPrompt"
+        anchors.top: fixStationOutlierBox.visible ? fixStationOutlierBox.bottom : parent.top
+        anchors.topMargin: 20
+        anchors.horizontalCenter: parent.horizontalCenter
+        width: Math.min(parent.width - 2 * Theme.pageMargin, Theme.outputCSPromptWidth)
+        visible: RootData.region.fixStationValidator.needsOutputCS
+        suggestedCS: RootData.region.fixStationValidator.suggestedOutputCS
+        coordinateInvalid: RootData.region.fixStationValidator.outputCSCoordinateInvalid
+        onUseSuggested: (cs) => RootData.region.geoReference.globalCoordinateSystem = cs
+    }
+
     Row {
         anchors.bottom: parent.bottom
         anchors.bottomMargin: 20

@@ -21,6 +21,9 @@ StandardPage {
 
     readonly property bool isNarrow: width < Theme.breakpointPanelCollapse
 
+    // The project has fix stations but no output CS, so the prompt banner is up.
+    readonly property bool needsOutputCS: RootData.region.fixStationValidator.needsOutputCS
+
     function cavePageName(cave) {
         return "Cave=" + cave.name;
     }
@@ -163,6 +166,10 @@ StandardPage {
             // a Control placed directly as a Layout child here lands unmanaged
             // at the top and overlaps the rows above it.
             QQ.Item {
+                objectName: "coordinateSystemGroupContainer"
+                // While the output-CS prompt is up, its banner carries the same
+                // picker — hide the GroupBox so the choice isn't shown twice.
+                visible: !RootData.region.fixStationValidator.needsOutputCS
                 Layout.fillWidth: true
                 implicitHeight: coordinateSystemGroupId.implicitHeight
 
@@ -243,6 +250,18 @@ StandardPage {
                 QQ.Item { Layout.fillWidth: true }
             }
         }
+    }
+
+    // Fix stations were entered on some cave but the project still has no output
+    // CS, so nothing can be placed on the map. The inline picker adopts a system
+    // directly (the settings box above is the same choice, without the prompt).
+    OutputCSPrompt {
+        id: outputCSPrompt
+        objectName: "outputCSPrompt"
+        suggestedCS: RootData.region.fixStationValidator.suggestedOutputCS
+        coordinateInvalid: RootData.region.fixStationValidator.outputCSCoordinateInvalid
+        onUseSuggested: (cs) => RootData.region.geoReference.globalCoordinateSystem = cs
+        // Visibility is owned by the hosting proxy (visible: needsOutputCS).
     }
 
     QQ.Flow {
@@ -404,12 +423,19 @@ StandardPage {
             ColumnLayout {
                 Layout.maximumWidth: regionInfoBox.editMode
                                      ? Theme.infoColumnEditMaxWidth
-                                     : Theme.infoColumnMaxWidth
+                                     : (pageId.needsOutputCS
+                                        ? Theme.infoColumnPromptMaxWidth
+                                        : Theme.infoColumnMaxWidth)
                 Layout.alignment: Qt.AlignTop
                 spacing: Theme.sectionSpacing
 
                 LayoutItemProxy { target: titleRow }
                 LayoutItemProxy { target: regionInfoBox }
+                LayoutItemProxy {
+                    target: outputCSPrompt
+                    visible: pageId.needsOutputCS
+                    Layout.fillWidth: true
+                }
             }
 
             ColumnLayout {
@@ -441,6 +467,11 @@ StandardPage {
 
             LayoutItemProxy { target: titleRow }
             LayoutItemProxy { target: regionInfoBox }
+            LayoutItemProxy {
+                target: outputCSPrompt
+                visible: pageId.needsOutputCS
+                Layout.fillWidth: true
+            }
             LayoutItemProxy { target: actionBar }
             LayoutItemProxy { target: caveListId }
         }

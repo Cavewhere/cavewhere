@@ -76,6 +76,18 @@ public:
     static QString nameFor(const QString& cs);
 
     /**
+     * Derive a *projected* coordinate system usable as the region's global
+     * (output) CS from a single fix's input CS and coordinate. survex/cavern
+     * only emits projected output, so a geographic input can't seed the global
+     * CS directly:
+     *   - inputCS already valid and projected -> returned unchanged.
+     *   - inputCS geographic -> the WGS84 UTM zone containing the fix.
+     *   - inputCS empty/invalid, or nothing projected can be derived -> "".
+     * `point` is in inputCS's own axis order and units.
+     */
+    static QString deriveProjectedOutputCS(const QString& inputCS, const cwGeoPoint& point);
+
+    /**
      * Set the directories PROJ searches for proj.db and grid-shift files.
      * Should be called once at application startup (before any
      * cwCoordinateTransform / isValidCS call) with the result of

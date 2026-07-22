@@ -744,6 +744,45 @@ The <b>“Exclude distance”</b> feature is the exact template to copy.</p>
 </ul>
 
 <h3 id="firstfix">13.4 — New project: derive a projected output CS from the first fix (U6)</h3>
+<div class="callout ok">
+  <b>Implemented</b> (Commit 8; dev_3, uncommitted; C++ + QML gates green). Decision (b) — auto-derive with a confirm —
+  with the prompt shown on the <b>Fix Stations page</b>, the <b>Data page</b>, and the <b>3D view</b> (not CavePage):
+  <ul>
+    <li><b>Pure derivation.</b> New <code>cwCoordinateTransform::deriveProjectedOutputCS(inputCS, point)</code>: an
+    already-projected input passes through; a geographic input transforms to WGS84 (axis order normalized to x=lon) and
+    returns the <b>UTM zone</b> containing the fix via <code>utmZoneToEpsg</code>; empty/invalid input → "". PROJ stays
+    encapsulated in <code>cwCoordinateTransform</code>. Unit-tested in <code>test_cwCoordinateTransform.cpp</code>.</li>
+    <li><b>Trigger + state on the validator.</b> <code>cwFixStationValidator</code> gained
+    <code>needsOutputCS</code> / <code>suggestedOutputCS</code> / <code>outputCSCoordinateInvalid</code> properties,
+    recomputed in a new <code>updateOutputCSPrompt()</code> called at the end of <code>revalidate()</code> — so it tracks
+    on the same triggers (a fix edit, a cave joining/leaving, the global CS changing). <code>needsOutputCS</code> is true
+    once a fix carries an <i>input CS</i> (a blank scaffold row doesn't fire it). The suggestion is derived from the first
+    such fix that also has a <i>real</i> coordinate — a fix still at the origin counts as "not entered yet" (empty
+    suggestion, not invalid), so a freshly-picked CS doesn't momentarily read as an error. If that first real coordinate
+    falls outside its input CS's valid domain (<code>cwCoordinateTransform::isWithinDomain</code>), it is almost certainly
+    a data-entry error: <code>outputCSCoordinateInvalid</code> goes true and the suggestion is withheld.</li>
+    <li><b>Confirmed, not silent.</b> Each host adopts the picker's selection with a direct write to
+    <code>region.geoReference.globalCoordinateSystem</code> (the same setter DataMainPage's project picker and the LAZ
+    loader already use; it clears the stale world origin so the next line-plot recomputes it). There is no undo command for
+    the global CS anywhere, so "undoable" in the spec below is not wired; the explicit <b>Use this</b> click satisfies
+    "confirmed, not silent". (The earlier <code>applySuggestedOutputCS()</code> invokable was dropped — the inline picker
+    can apply an edited selection, not just the raw suggestion.)</li>
+    <li><b>Prompt.</b> New presentation-only <code>OutputCSPrompt.qml</code>: a message, an <b>inline projected-CS
+    picker</b> (<code>CSPicker</code>, <code>allowGeographic:false</code>) pre-filled with <code>suggestedCS</code>, and an
+    adjacent <b>Use this</b> button that applies the picker's current selection via a <code>useSuggested(cs)</code> signal.
+    Below the picker, two labels resolve the picker's live selection to a friendly name (<code>CSFormat.displayName</code>)
+    and its authority code (EPSG, mono/subtle), so the abstract mode/zone controls name a concrete system. When
+    <code>coordinateInvalid</code> is set, the picker, button, and both labels gray out / hide and a "correct the coordinate
+    on the Fix Stations page" line appears instead of a suggestion. Reused across three hosts, visibility driven by
+    <code>needsOutputCS</code>: the <b>Fix Stations page</b> (top of the column, where fixes are typed), the <b>Data
+    page</b> (info column, proxied into the wide/narrow layouts — while the prompt is up the redundant "Coordinate system"
+    GroupBox is hidden, since the banner carries the same picker, and the info column widens to
+    <code>Theme.infoColumnPromptMaxWidth</code>), and the <b>3D view</b> (top overlay in <code>GLTerrainRenderer.qml</code>,
+    stacked under the outlier banner, clamped to <code>Theme.outputCSPromptWidth</code>). Covered by
+    <code>tst_OutputCSPrompt.qml</code> (Data + Fix Stations hosts, including the grayed-out bad-coordinate state, the
+    hidden GroupBox, and the name/EPSG labels; the view host reuses the same component and validator API).</li>
+  </ul>
+</div>
 <p>A fresh project has an empty global CS (<code>cwGeoReference.h:77</code>; <code>hasCoordinateSystem()</code> =
 <code>!isEmpty()</code>, <code>:54</code>) — the UI shows “Local” (<code>DataMainPage.qml:108-110</code>). When the
 global CS is empty the validator short-circuits (<code>cwFixStationValidator.cpp:190-196</code>), so
@@ -757,9 +796,12 @@ projected output, so a geographic (lat/long) CS can’t be the global CS. Test w
 enforces this by hiding the geographic option (<code>allowGeographic:false</code>, <code>DataMainPage.qml:191</code>).
 “Valid output CS” = <code>isValidCS(cs) &amp;&amp; !isGeographic(cs)</code>.</div>
 <ul>
-  <li><b>Trigger.</b> On first fix added while <code>!region.geoReference().hasCoordinateSystem()</code> — watch
-  <code>cwFixStationModel::countChanged</code> (already connected in the validator,
-  <code>cwFixStationValidator.cpp:397</code>).</li>
+  <li><b>Trigger.</b> <span class="pill">Superseded — see the Implemented callout above.</span> Original spec: "on first
+  fix added while <code>!hasCoordinateSystem()</code>, watch <code>cwFixStationModel::countChanged</code>." As built, the
+  prompt state recomputes in <code>updateOutputCSPrompt()</code> at the tail of <code>revalidate()</code>, so it fires on
+  the validator's full trigger set — <code>countChanged</code> <b>and</b> <code>dataChanged</code>/<code>modelReset</code>,
+  plus <code>caveCountChanged</code> and <code>globalCoordinateSystemChanged</code> — and the condition is "a fix carries an
+  <i>input CS</i>," not "first fix added."</li>
   <li><b>(a) Prompt.</b> Show a banner/dialog “Your project has no output coordinate system — set one to place the
   cave,” linking to the Data page CS picker (reuse the <code>CoordinatePickerPopup</code> message pattern).</li>
   <li><b>(b) Auto-derive — recommended, with a confirm.</b> If the fix’s <code>inputCS</code> is already projected,
@@ -769,6 +811,26 @@ enforces this by hiding the geographic option (<code>allowGeographic:false</code
   clears the stale world origin, so the next line-plot recomputes it). Make it an <i>undoable, confirmed</i> action, not
   a silent write.</li>
 </ul>
+
+<div class="callout">
+  <b>Review follow-ups (Commit 8, out of scope; 2026-07-22).</b>
+  <ul>
+    <li><b>Centralize the projected-CS invariant.</b> <code>setGlobalCoordinateSystem()</code>
+    (<code>cwGeoReference.cpp:14-31</code>) accepts <i>any</i> string; the "output CS must be projected" hard constraint
+    above is enforced only UI-side, re-stated per-caller via <code>allowGeographic:false</code> on each picker
+    (<code>OutputCSPrompt.qml</code>, <code>DataMainPage.qml</code>, and the LAZ loader). A
+    <code>region.adoptOutputCoordinateSystem(cs)</code> that rejects geographic/invalid CS — and is the <i>undoable</i>
+    write the spec above still asks for — would put the invariant in one place instead of N picker configs. Blast radius:
+    <code>cwGeoReference</code> setter + project picker + LAZ loader + the three new prompt hosts. Deferred: cross-cutting,
+    and no global-CS undo command exists yet.</li>
+    <li><b>De-duplicate the domain scan.</b> <code>updateOutputCSPrompt()</code>
+    (<code>cwFixStationValidator.cpp:395-408</code>) independently re-scans the caves and re-runs
+    <code>isWithinDomain()</code> on the first fix, duplicating the domain verdict <code>revalidate()</code> just produced
+    in <code>classification.domainOutliers</code>. Folding "first real fix + its domain verdict" out of the existing
+    classification would remove a second scan and a second source of truth. Low payoff — the two scans track different
+    sets (all outliers vs. first-entered) — so nice-to-have, not urgent.</li>
+  </ul>
+</div>
 
 <h3 id="cavepagebadge">13.5 — Surface fix-station errors on CavePage (U9)</h3>
 <p>Commit 4 added a page-level <b>banner</b> on CavePage that joins <i>all</i> of a cave’s non-suppressed warnings.

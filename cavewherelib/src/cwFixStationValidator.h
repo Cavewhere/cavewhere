@@ -54,6 +54,21 @@ class CAVEWHERE_LIB_EXPORT cwFixStationValidator : public QObject
     Q_PROPERTY(int outlierCount READ outlierCount NOTIFY outlierCountChanged FINAL)
     Q_PROPERTY(cwCave* firstOutlierCave READ firstOutlierCave NOTIFY firstOutlierCaveChanged FINAL)
 
+    //! First-fix output-CS prompt: a project with fix stations but no global
+    //! (output) CS can't place its caves — the line plot renders around an
+    //! untouched (0,0,0) origin, so the cave lands far away. needsOutputCS is
+    //! true in exactly that state. suggestedOutputCS is a projected CS derived
+    //! from the first fix that carries a real, in-domain coordinate — empty when
+    //! no coordinate has been entered yet, or when it is invalid (see below). The
+    //! prompt pre-fills its coordinate-system picker with it.
+    //! outputCSCoordinateInvalid is true when that first real coordinate falls
+    //! outside its own input CS's valid domain (almost certainly a data-entry
+    //! error): no suggestion can be trusted, so the prompt grays out its picker
+    //! and points the user at the coordinate instead.
+    Q_PROPERTY(bool needsOutputCS READ needsOutputCS NOTIFY needsOutputCSChanged FINAL)
+    Q_PROPERTY(QString suggestedOutputCS READ suggestedOutputCS NOTIFY suggestedOutputCSChanged FINAL)
+    Q_PROPERTY(bool outputCSCoordinateInvalid READ outputCSCoordinateInvalid NOTIFY outputCSCoordinateInvalidChanged FINAL)
+
 public:
     //! One reprojected fix station plus the provenance needed to attribute a
     //! warning back to the owning cave and row.
@@ -102,10 +117,17 @@ public:
     int outlierCount() const { return m_outlierCount; }
     cwCave* firstOutlierCave() const { return m_firstOutlierCave; }
 
+    bool needsOutputCS() const { return m_needsOutputCS; }
+    QString suggestedOutputCS() const { return m_suggestedOutputCS; }
+    bool outputCSCoordinateInvalid() const { return m_outputCSCoordinateInvalid; }
+
 signals:
     void warningMessageChanged();
     void outlierCountChanged();
     void firstOutlierCaveChanged();
+    void needsOutputCSChanged();
+    void suggestedOutputCSChanged();
+    void outputCSCoordinateInvalidChanged();
 
 private:
     QList<FixCandidate> gatherCandidates() const;
@@ -130,6 +152,11 @@ private:
 
     void setSummary(const QString& message, int count, cwCave* cave);
 
+    //! Recompute needsOutputCS/suggestedOutputCS from the current fixes and
+    //! global CS. Runs on the same triggers as revalidate() (a fix edit, a cave
+    //! joining/leaving, the global CS changing), so the prompt tracks live.
+    void updateOutputCSPrompt();
+
     cwCavingRegion* m_region = nullptr;
 
     QString m_warningMessage;
@@ -149,6 +176,10 @@ private:
     //! mirrored here — a copy would stop matching the row once the user suppresses
     //! it (cwError equality includes the suppressed flag).
     QSet<cwCave*> m_cavesWithWarning;
+
+    bool m_needsOutputCS = false;
+    QString m_suggestedOutputCS;
+    bool m_outputCSCoordinateInvalid = false;
 };
 
 #endif // CWFIXSTATIONVALIDATOR_H

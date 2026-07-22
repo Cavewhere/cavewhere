@@ -173,6 +173,17 @@ StandardPage {
         anchors.margins: Theme.pageMargin
         spacing: Theme.sectionSpacing
 
+        // Entering fixes here without a project output CS leaves the caves
+        // unplaceable; prompt for one right where the fixes are typed.
+        OutputCSPrompt {
+            objectName: "outputCSPrompt"
+            Layout.fillWidth: true
+            visible: RootData.region.fixStationValidator.needsOutputCS
+            suggestedCS: RootData.region.fixStationValidator.suggestedOutputCS
+            coordinateInvalid: RootData.region.fixStationValidator.outputCSCoordinateInvalid
+            onUseSuggested: (cs) => RootData.region.geoReference.globalCoordinateSystem = cs
+        }
+
         LayoutItemProxy {
             target: addFixBar
             Layout.fillWidth: true

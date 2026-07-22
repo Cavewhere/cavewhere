@@ -246,6 +246,44 @@ TEST_CASE("cwCoordinateTransform::nameFor returns the human-readable description
     CHECK(osgbName.contains("British", Qt::CaseInsensitive));
 }
 
+TEST_CASE("cwCoordinateTransform::deriveProjectedOutputCS suggests a projected CS",
+          "[cwCoordinateTransform][deriveOutputCS]")
+{
+    SECTION("Empty / invalid input yields no suggestion") {
+        CHECK(cwCoordinateTransform::deriveProjectedOutputCS("", cwGeoPoint(0, 0, 0)).isEmpty());
+        CHECK(cwCoordinateTransform::deriveProjectedOutputCS("   ", cwGeoPoint(0, 0, 0)).isEmpty());
+        CHECK(cwCoordinateTransform::deriveProjectedOutputCS("NOT_A_CRS", cwGeoPoint(0, 0, 0)).isEmpty());
+    }
+
+    SECTION("Already-projected input passes through unchanged (trimmed)") {
+        CHECK(cwCoordinateTransform::deriveProjectedOutputCS("EPSG:32612",
+                  cwGeoPoint(585360, 4428236, 1500)) == "EPSG:32612");
+        CHECK(cwCoordinateTransform::deriveProjectedOutputCS("  EPSG:27700  ",
+                  cwGeoPoint(400000, 300000, 100)) == "EPSG:27700");
+    }
+
+    SECTION("Geographic input (WGS84) resolves to the UTM zone at the fix") {
+        // -110 lon, 40 lat is zone 12 north: floor((-110+180)/6)+1 = 12.
+        CHECK(cwCoordinateTransform::deriveProjectedOutputCS(
+                  cwCoordinateTransform::Wgs84, cwGeoPoint(-110.0, 40.0, 1500.0)) == "EPSG:32612");
+        // 0 lon, 51.5 lat (London) is zone 31 north.
+        CHECK(cwCoordinateTransform::deriveProjectedOutputCS(
+                  cwCoordinateTransform::Wgs84, cwGeoPoint(0.0, 51.5, 0.0)) == "EPSG:32631");
+        // Southern hemisphere picks a 327xx code: 151 lon, -33.9 lat (Sydney) → zone 56 south.
+        CHECK(cwCoordinateTransform::deriveProjectedOutputCS(
+                  cwCoordinateTransform::Wgs84, cwGeoPoint(151.2, -33.9, 0.0)) == "EPSG:32756");
+    }
+
+    SECTION("A geographic input reprojects to WGS84 before choosing the zone") {
+        // NAD83 (EPSG:4269) at -87 lon, 38 lat → WGS84 ≈ same → zone 16 north
+        // ((-87+180)/6 = 15.5 → floor 15, +1 = 16). -87 is well inside zone 16,
+        // clear of the 16/17 boundary at -84.
+        const QString cs = cwCoordinateTransform::deriveProjectedOutputCS(
+            "EPSG:4269", cwGeoPoint(-87.0, 38.0, 0.0));
+        CHECK(cs == "EPSG:32616");
+    }
+}
+
 TEST_CASE("cwCoordinateSystem::modeFor classifies CS strings",
           "[cwCoordinateTransform][modeFor]")
 {

@@ -383,6 +383,38 @@ QString cwCoordinateTransform::utmZoneToEpsg(int zone, bool north)
     return QStringLiteral("EPSG:%1").arg(base + zone);
 }
 
+QString cwCoordinateTransform::deriveProjectedOutputCS(const QString& inputCS,
+                                                       const cwGeoPoint& point)
+{
+    const QString cs = inputCS.trimmed();
+    if (cs.isEmpty() || !isValidCS(cs)) {
+        return QString();
+    }
+    if (!isGeographic(cs)) {
+        // Already projected — usable as the output CS verbatim.
+        return cs;
+    }
+
+    // A geographic input can't be the output CS; pick the WGS84 UTM zone that
+    // contains the fix. Transforming to WGS84 normalizes the axis order to
+    // x=longitude, y=latitude (normalize_for_visualization in the ctor).
+    cwCoordinateTransform toGeographic(cs, Wgs84);
+    if (!toGeographic.isValid()) {
+        return QString();
+    }
+    const cwGeoPoint geo = toGeographic.transform(point);
+    if (!std::isfinite(geo.x) || !std::isfinite(geo.y)) {
+        return QString();
+    }
+
+    constexpr double kDegreesPerZone = 6.0;
+    constexpr double kZoneOriginLongitude = 180.0;
+    const int rawZone = int(std::floor((geo.x + kZoneOriginLongitude) / kDegreesPerZone)) + 1;
+    const int zone = qBound(1, rawZone, 60);
+    const bool north = geo.y >= 0.0;
+    return utmZoneToEpsg(zone, north);
+}
+
 namespace {
     struct ParsedCS {
         cwCoordinateSystem::Mode mode = cwCoordinateSystem::Local;

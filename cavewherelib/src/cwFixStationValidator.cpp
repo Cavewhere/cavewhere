@@ -360,6 +360,68 @@ void cwFixStationValidator::revalidate()
                       .arg(firstOffender->name());
     }
     setSummary(summary, total, firstOffender);
+
+    updateOutputCSPrompt();
+}
+
+void cwFixStationValidator::updateOutputCSPrompt()
+{
+    bool needs = false;
+    bool coordinateInvalid = false;
+    QString suggested;
+
+    // Only prompt while there is no output CS to place the caves; a set global
+    // CS clears the state (globalCoordinateSystemChanged re-runs revalidate).
+    if (m_region != nullptr
+        && m_region->geoReference()->globalCoordinateSystem().trimmed().isEmpty()) {
+        // A fix that carries an input CS is the signal that real fix data is
+        // being entered (a blank scaffold row has none). The suggestion comes
+        // from the first such fix that also has a coordinate: a fix still at the
+        // origin counts as "not entered yet", so a freshly picked CS doesn't
+        // momentarily read as an invalid coordinate.
+        const auto scan = [&]() {
+            for (cwCave* cave : m_region->caves()) {
+                if (cave == nullptr || cave->fixStations() == nullptr) {
+                    continue;
+                }
+                for (const cwFixStation& fix : cave->fixStations()->fixStations()) {
+                    const QString inputCS = fix.inputCS().trimmed();
+                    if (inputCS.isEmpty()) {
+                        continue;
+                    }
+                    needs = true;
+                    const cwGeoPoint p(fix.easting(), fix.northing(), fix.elevation());
+                    if (p.x == 0.0 && p.y == 0.0) {
+                        continue;  // coordinate not entered yet
+                    }
+                    // The first real coordinate decides the suggestion. A
+                    // coordinate outside its own CS's valid domain is almost
+                    // certainly a data-entry error, so offer no suggestion and
+                    // flag it — the prompt grays out and points at the coordinate.
+                    if (cwCoordinateTransform::isWithinDomain(inputCS, p)) {
+                        suggested = cwCoordinateTransform::deriveProjectedOutputCS(inputCS, p);
+                    } else {
+                        coordinateInvalid = true;
+                    }
+                    return;
+                }
+            }
+        };
+        scan();
+    }
+
+    if (m_needsOutputCS != needs) {
+        m_needsOutputCS = needs;
+        emit needsOutputCSChanged();
+    }
+    if (m_suggestedOutputCS != suggested) {
+        m_suggestedOutputCS = suggested;
+        emit suggestedOutputCSChanged();
+    }
+    if (m_outputCSCoordinateInvalid != coordinateInvalid) {
+        m_outputCSCoordinateInvalid = coordinateInvalid;
+        emit outputCSCoordinateInvalidChanged();
+    }
 }
 
 void cwFixStationValidator::syncCaveConnections()
