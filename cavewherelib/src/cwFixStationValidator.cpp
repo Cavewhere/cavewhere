@@ -10,6 +10,7 @@
 #include "cwCave.h"
 #include "cwCavingRegion.h"
 #include "cwCoordinateTransform.h"
+#include "cwError.h"
 #include "cwErrorListModel.h"
 #include "cwErrorModel.h"
 #include "cwFixStation.h"
@@ -38,13 +39,20 @@ constexpr double kOutlierFloorMeters = kFloatPrecisionBudgetMeters / kFloatManti
 // a legitimately spread-out survey (large radius) never trips on the floor.
 constexpr double kMadMultiplier = 6.0;
 
-// Below this many fixes there is no cluster to judge an outlier against.
-constexpr int kMinFixesForDetection = 4;
+// Below this many domain-valid fixes there is no cluster to judge an outlier
+// against. Kept small (3, not 4) so the common "one cluster + one straggler
+// cave" shape is caught: with an odd count the component-wise median lands on
+// the majority. The pathological even balanced split (2 vs 2, no majority) is
+// covered by the per-fix domain check instead. The cluster rule is best-effort
+// for small N; the domain check (Part A) is the reliable path.
+constexpr int kMinFixesForDetection = 3;
 
-// A stable id for the fix-station outlier Warning, so a user's suppression of it
-// survives the message text changing across versions (see cwError::errorTypeId).
-// No other cwError sets an id today; this reserves one (issue #596).
-constexpr int kOutlierErrorTypeId = 596;
+// Our two Warning kinds are identified by stable ids from the cwErrorTypeId
+// registry, so a user's suppression survives the message text changing across
+// versions (see cwError::errorTypeId) and each kind is suppressed independently.
+// FixStationOutlier is the cross-cave cluster straggler; FixStationDomain is a
+// coordinate outside its own CS's valid range (a transposed digit or wrong
+// zone), which needs no cluster to prove.
 
 double distance(const cwGeoPoint& a, const cwGeoPoint& b)
 {
@@ -132,26 +140,42 @@ cwFixStationValidator::classifyCandidates(const QList<FixCandidate>& candidates)
 {
     Classification result;
 
-    if (candidates.size() < kMinFixesForDetection) {
-        result.inliers = candidates;
+    // Part A (primary): a fix whose coordinate is implausible for its own CS is
+    // a certain outlier on its own — no cluster needed. Pull these out first so
+    // a wild typo can't drag the median center off the real data and mask a
+    // second, subtler straggler.
+    QList<FixCandidate> clusterCandidates;
+    clusterCandidates.reserve(candidates.size());
+    for (const auto& c : candidates) {
+        if (c.domainValid) {
+            clusterCandidates.append(c);
+        } else {
+            result.domainOutliers.append(c);
+        }
+    }
+
+    // Part B (secondary): the cross-cave cluster rule. Below the minimum there
+    // is no majority to place the median center against, so nothing is judged.
+    if (clusterCandidates.size() < kMinFixesForDetection) {
+        result.inliers = clusterCandidates;
         return result;
     }
 
-    const cwGeoPoint center = medianCenter(candidates);
+    const cwGeoPoint center = medianCenter(clusterCandidates);
 
     QList<double> distances;
-    distances.reserve(candidates.size());
-    for (const auto& c : candidates) {
+    distances.reserve(clusterCandidates.size());
+    for (const auto& c : clusterCandidates) {
         distances.append(distance(c.global, center));
     }
 
-    const double threshold = std::max(kOutlierFloorMeters, kMadMultiplier * median(distances));
+    const double threshold = (std::max)(kOutlierFloorMeters, kMadMultiplier * median(distances));
 
-    for (qsizetype i = 0; i < candidates.size(); ++i) {
+    for (qsizetype i = 0; i < clusterCandidates.size(); ++i) {
         if (distances.at(i) > threshold) {
-            result.outliers.append(candidates.at(i));
+            result.outliers.append(clusterCandidates.at(i));
         } else {
-            result.inliers.append(candidates.at(i));
+            result.inliers.append(clusterCandidates.at(i));
         }
     }
     return result;
@@ -205,6 +229,11 @@ cwFixStationValidator::gatherCandidates() const
 
             const cwGeoPoint p(fix.easting(), fix.northing(), fix.elevation());
 
+            // Part A: does the raw coordinate even belong to its own CS? This is
+            // independent of the global CS and of any cluster, so it catches the
+            // single-cave, single-fix typo the cluster rule structurally can't.
+            const bool domainValid = cwCoordinateTransform::isWithinDomain(inputCS, p);
+
             // currentClassification() guarantees globalCSTrimmed is non-empty.
             cwGeoPoint global;
             if (inputCS.compare(globalCSTrimmed, Qt::CaseInsensitive) == 0) {
@@ -216,7 +245,7 @@ cwFixStationValidator::gatherCandidates() const
                 }
                 global = t.transform(p);
             }
-            candidates.append(FixCandidate{cave, fix.id(), global});
+            candidates.append(FixCandidate{cave, fix.id(), global, domainValid});
         }
     }
     return candidates;
@@ -243,60 +272,94 @@ void cwFixStationValidator::revalidate()
 {
     const Classification classification = currentClassification();
 
-    // The reference the outliers are "off" from: the inlier centroid — the same
-    // robust origin the render centers on, so the reported distance is the gap
-    // the user would see between the bad station and the rest of the survey.
+    // The reference the cluster outliers are "off" from: the inlier centroid —
+    // the same robust origin the render centers on, so the reported distance is
+    // the gap the user would see between the bad station and the rest.
     const cwGeoPoint center = centroid(classification.inliers);
 
-    // Group each cave's outliers into one "«station» (~N km)" fragment list.
-    QHash<cwCave*, QStringList> parts;
+    // Cluster-outlier messages (Part B): one "«station» (~N km)" fragment list
+    // per offending cave.
+    QHash<cwCave*, QStringList> clusterParts;
     for (const auto& c : classification.outliers) {
         if (c.cave == nullptr) {
             continue;
         }
         const QString name = stationNameFor(c.cave, c.fixId);
         const double km = distance(c.global, center) / 1000.0;
-        parts[c.cave].append(QStringLiteral("\"%1\" (~%2 km)").arg(name).arg(km, 0, 'f', 0));
+        clusterParts[c.cave].append(QStringLiteral("\"%1\" (~%2 km)").arg(name).arg(km, 0, 'f', 0));
     }
 
-    // Compose a message per offending cave, then reconcile against every cave
-    // that has or had a warning so corrections clear the old one.
-    QHash<cwCave*, QString> messages;
-    for (auto it = parts.constBegin(); it != parts.constEnd(); ++it) {
+    QHash<cwCave*, QString> clusterMessages;
+    for (auto it = clusterParts.constBegin(); it != clusterParts.constEnd(); ++it) {
         const QStringList& fragments = it.value();
         const QString stationWord = fragments.size() == 1
             ? QStringLiteral("station") : QStringLiteral("stations");
         const QString verb = fragments.size() == 1
             ? QStringLiteral("is") : QStringLiteral("are");
-        messages.insert(it.key(),
+        clusterMessages.insert(it.key(),
             QStringLiteral("Fix %1 %2 %3 far from the rest of the survey — "
                            "check the coordinate system, UTM zone, and value.")
                 .arg(stationWord, fragments.join(QStringLiteral(", ")), verb));
     }
 
+    // Domain-outlier messages (Part A): fixes outside their own CS's valid range.
+    QHash<cwCave*, QStringList> domainParts;
+    for (const auto& c : classification.domainOutliers) {
+        if (c.cave == nullptr) {
+            continue;
+        }
+        domainParts[c.cave].append(QStringLiteral("\"%1\"").arg(stationNameFor(c.cave, c.fixId)));
+    }
+
+    QHash<cwCave*, QString> domainMessages;
+    for (auto it = domainParts.constBegin(); it != domainParts.constEnd(); ++it) {
+        const QStringList& fragments = it.value();
+        const QString message = fragments.size() == 1
+            ? QStringLiteral("Fix station %1 has a coordinate outside the valid range for its "
+                             "coordinate system — check for a transposed digit or the wrong CS/zone.")
+                  .arg(fragments.first())
+            : QStringLiteral("Fix stations %1 have coordinates outside the valid range for their "
+                             "coordinate system — check for a transposed digit or the wrong CS/zone.")
+                  .arg(fragments.join(QStringLiteral(", ")));
+        domainMessages.insert(it.key(), message);
+    }
+
+    // Reconcile both warning kinds against every cave that has or had one, so a
+    // correction clears the old warning.
     QSet<cwCave*> caves(m_connectedCaves);
     caves.unite(m_cavesWithWarning);
     for (cwCave* cave : caves) {
-        setCaveWarning(cave, messages.value(cave));
+        setCaveWarning(cave, cwErrorTypeId::FixStationOutlier, clusterMessages.value(cave));
+        setCaveWarning(cave, cwErrorTypeId::FixStationDomain, domainMessages.value(cave));
     }
 
-    // Region-wide summary for the render-view overlay. Name the first offending
-    // cave in region order (classification.outliers follows caves() order), so
-    // the message is deterministic when more than one cave has an outlier.
+    // Region-wide summary for the render-view overlay. A domain-bad fix is the
+    // most certain error, so it names the culprit first; otherwise the first
+    // cluster outlier in region order (both lists follow caves() order). The
+    // message stays generic so it covers either kind.
     cwCave* firstOffender = nullptr;
-    for (const auto& c : classification.outliers) {
+    for (const auto& c : classification.domainOutliers) {
         if (c.cave != nullptr) {
             firstOffender = c.cave;
             break;
         }
     }
+    if (firstOffender == nullptr) {
+        for (const auto& c : classification.outliers) {
+            if (c.cave != nullptr) {
+                firstOffender = c.cave;
+                break;
+            }
+        }
+    }
+    const int total = int(classification.domainOutliers.size() + classification.outliers.size());
     QString summary;
     if (firstOffender != nullptr) {
         summary = QStringLiteral("Part of your survey is off-screen — a fix-station "
                                  "coordinate in \"%1\" looks wrong.")
                       .arg(firstOffender->name());
     }
-    setSummary(summary, classification.outliers.size(), firstOffender);
+    setSummary(summary, total, firstOffender);
 }
 
 void cwFixStationValidator::syncCaveConnections()
@@ -316,7 +379,8 @@ void cwFixStationValidator::syncCaveConnections()
                     disconnect(cave->fixStations(), nullptr, this, nullptr);
                 }
             }
-            setCaveWarning(cave, QString());
+            setCaveWarning(cave, cwErrorTypeId::FixStationOutlier, QString());
+            setCaveWarning(cave, cwErrorTypeId::FixStationDomain, QString());
             it = m_connectedCaves.erase(it);
         } else {
             ++it;
@@ -346,19 +410,20 @@ void cwFixStationValidator::syncCaveConnections()
     }
 }
 
-void cwFixStationValidator::setCaveWarning(cwCave* cave, const QString& message)
+void cwFixStationValidator::setCaveWarning(cwCave* cave, cwErrorTypeId errorTypeId, const QString& message)
 {
     if (cave == nullptr || cave->errorModel() == nullptr) {
         return;
     }
     cwErrorListModel* errors = cave->errorModel()->errors();
+    const int errorTypeIdValue = static_cast<int>(errorTypeId);
 
     // Find our warning by its stable errorTypeId, not by value equality: the user
     // can suppress it, and cwError::operator== includes the suppressed flag, so a
     // stored value copy would stop matching the row the moment it is suppressed.
     int row = -1;
     for (int i = 0; i < errors->size(); ++i) {
-        if (errors->at(i).errorTypeId() == kOutlierErrorTypeId) {
+        if (errors->at(i).errorTypeId() == errorTypeIdValue) {
             row = i;
             break;
         }
@@ -368,25 +433,35 @@ void cwFixStationValidator::setCaveWarning(cwCave* cave, const QString& message)
         if (row >= 0) {
             errors->remove(row);
         }
-        m_cavesWithWarning.remove(cave);
-        return;
-    }
-
-    if (row >= 0) {
+    } else if (row >= 0) {
         // Text-only change: update the row in place so the cave-list badge, any
         // open delegate, the user's suppression, and warningCount all survive.
         if (errors->at(row).message() != message) {
             errors->setData(errors->index(row), message,
                             static_cast<int>(cwErrorListModel::ErrorRoles::MessageRole));
         }
-        m_cavesWithWarning.insert(cave);
-        return;
+    } else {
+        cwError error(message, cwError::Warning);
+        error.setErrorTypeId(errorTypeIdValue);
+        errors->append(error);
     }
 
-    cwError error(message, cwError::Warning);
-    error.setErrorTypeId(kOutlierErrorTypeId);
-    errors->append(error);
-    m_cavesWithWarning.insert(cave);
+    updateWarningTracking(cave, errors);
+}
+
+void cwFixStationValidator::updateWarningTracking(cwCave* cave, cwErrorListModel* errors)
+{
+    // A cave stays tracked while it carries either warning kind, so reconcile
+    // still visits it to clear the last one; it drops out once both are gone.
+    for (int i = 0; i < errors->size(); ++i) {
+        const int id = errors->at(i).errorTypeId();
+        if (id == static_cast<int>(cwErrorTypeId::FixStationOutlier)
+            || id == static_cast<int>(cwErrorTypeId::FixStationDomain)) {
+            m_cavesWithWarning.insert(cave);
+            return;
+        }
+    }
+    m_cavesWithWarning.remove(cave);
 }
 
 void cwFixStationValidator::setSummary(const QString& message, int count, cwCave* cave)

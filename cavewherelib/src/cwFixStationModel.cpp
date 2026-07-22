@@ -7,6 +7,34 @@
 
 #include "cwFixStationModel.h"
 
+//Our includes
+#include "cwCoordinateTransform.h"
+#include "cwGeoPoint.h"
+
+namespace {
+
+//! Empty when the fix's coordinate is plausible for its own input CS, otherwise
+//! a one-line explanation. Mirrors cwFixStationValidator's Part-A domain check
+//! (cwCoordinateTransform::isWithinDomain), but scoped to a single row: an empty
+//! or unparseable CS never flags, so this only speaks up when the CS is known
+//! and the point is well outside its declared area of use.
+QString domainErrorMessage(const cwFixStation& fix)
+{
+    const QString cs = fix.inputCS().trimmed();
+    if (cs.isEmpty()) {
+        return QString();
+    }
+    const cwGeoPoint point(fix.easting(), fix.northing(), fix.elevation());
+    if (cwCoordinateTransform::isWithinDomain(cs, point)) {
+        return QString();
+    }
+    return cwFixStationModel::tr(
+        "This coordinate is outside the valid range for its coordinate system "
+        "— check for a transposed digit or the wrong CS/zone.");
+}
+
+}
+
 cwFixStationModel::cwFixStationModel(QObject* parent) :
     QAbstractListModel(parent)
 {
@@ -41,6 +69,7 @@ QVariant cwFixStationModel::data(const QModelIndex& index, int role) const
     case HorizontalVarianceRole: return fix.horizontalVariance();
     case VerticalVarianceRole:   return fix.verticalVariance();
     case IdRole:                 return fix.id();
+    case DomainErrorRole:        return domainErrorMessage(fix);
     default:                     return QVariant();
     }
 }
@@ -124,7 +153,13 @@ bool cwFixStationModel::setData(const QModelIndex& index, const QVariant& value,
     }
 
     if (changed) {
-        emit dataChanged(index, index, {role});
+        QList<int> changedRoles{role};
+        // The domain check reads the easting, northing, and input CS, so a
+        // change to any of those can turn the row's DomainErrorRole on or off.
+        if (role == EastingRole || role == NorthingRole || role == InputCSRole) {
+            changedRoles.append(DomainErrorRole);
+        }
+        emit dataChanged(index, index, changedRoles);
     }
     return changed;
 }
@@ -139,7 +174,8 @@ QHash<int, QByteArray> cwFixStationModel::roleNames() const
         {ElevationRole,          "elevation"},
         {HorizontalVarianceRole, "horizontalVariance"},
         {VerticalVarianceRole,   "verticalVariance"},
-        {IdRole,                 "id"}
+        {IdRole,                 "id"},
+        {DomainErrorRole,        "domainError"}
     };
 }
 

@@ -13,6 +13,7 @@
 #include <QDir>
 
 //Std includes
+#include <cmath>
 #include <vector>
 
 const QString cwCoordinateTransform::Wgs84 = QStringLiteral("EPSG:4326");
@@ -289,6 +290,88 @@ bool cwCoordinateTransform::isGeographic(const QString& cs)
     }
     cache.insert(key, geographic);
     return geographic;
+}
+
+bool cwCoordinateTransform::isWithinDomain(const QString& cs, const cwGeoPoint& point)
+{
+    const QString key = cs.trimmed();
+    if (key.isEmpty()) {
+        return true;
+    }
+
+    // Per-thread cache keyed by the CS and the horizontal coordinate (z is not
+    // part of the domain test). revalidate() re-runs this for every fix on each
+    // fix-station edit, and the model recomputes DomainErrorRole per row on each
+    // dataChanged; without the cache each call pays a fresh proj_create plus a
+    // proj_create_crs_to_crs. Capped like isGeographic/nameFor so a long edit
+    // session can't grow it unboundedly.
+    thread_local QHash<QString, bool> cache;
+    const QString cacheKey = key
+        + QLatin1Char('|') + QString::number(point.x, 'g', 17)
+        + QLatin1Char('|') + QString::number(point.y, 'g', 17);
+    const auto cached = cache.constFind(cacheKey);
+    if (cached != cache.constEnd()) {
+        return *cached;
+    }
+
+    const bool result = [&]() -> bool {
+        PJ_CONTEXT* ctx = validatorContext();
+        if (!ctx) {
+            return true;
+        }
+
+        PJ* crs = proj_create(ctx, key.toUtf8().constData());
+        if (!crs) {
+            return true;
+        }
+
+        double west = 0.0;
+        double south = 0.0;
+        double east = 0.0;
+        double north = 0.0;
+        const int haveArea =
+            proj_get_area_of_use(ctx, crs, &west, &south, &east, &north, nullptr);
+        proj_destroy(crs);
+
+        // PROJ reports unknown bounds as -1000 and outright failure as 0. An area
+        // that wraps the antimeridian (west > east) we don't try to reason about.
+        // In any of these cases we can't judge the domain, so defer to the caller.
+        constexpr double kUnknownBound = -1000.0;
+        if (haveArea != 1
+            || west <= kUnknownBound || south <= kUnknownBound
+            || east <= kUnknownBound || north <= kUnknownBound
+            || west > east) {
+            return true;
+        }
+
+        // Inverse-project the fix into geographic lon/lat to compare against the
+        // area of use. normalize_for_visualization (applied by the constructor)
+        // makes the output x=lon, y=lat.
+        cwCoordinateTransform toGeographic(key, Wgs84);
+        if (!toGeographic.isValid()) {
+            return true;
+        }
+        const cwGeoPoint geo = toGeographic.transform(point);
+        if (!std::isfinite(geo.x) || !std::isfinite(geo.y)) {
+            return false;
+        }
+
+        // A generous margin absorbs legitimately surveying just past a UTM zone's
+        // nominal edge; a transposed digit or wrong zone lands many multiples of
+        // this far out, so the two never overlap.
+        constexpr double kDomainMarginDegrees = 5.0;
+        const bool inLon = geo.x >= west - kDomainMarginDegrees
+                        && geo.x <= east + kDomainMarginDegrees;
+        const bool inLat = geo.y >= south - kDomainMarginDegrees
+                        && geo.y <= north + kDomainMarginDegrees;
+        return inLon && inLat;
+    }();
+
+    if (cache.size() >= 256) {
+        cache.clear();
+    }
+    cache.insert(cacheKey, result);
+    return result;
 }
 
 QString cwCoordinateTransform::utmZoneToEpsg(int zone, bool north)

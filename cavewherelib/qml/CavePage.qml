@@ -99,6 +99,14 @@ StandardPage {
 
     readonly property bool isNarrow: width < Theme.breakpointPanelCollapse
 
+    // Whether the current cave carries any non-suppressed warning. Drives the
+    // banner proxies' visibility directly — the banner's own visibility is
+    // controlled by whichever proxy hosts it, so this must not read off the
+    // banner (that clobbers the proxy's imperative control and deadlocks).
+    readonly property bool hasCaveWarning: cavePageArea.currentCave
+        ? cavePageArea.currentCave.errorModel.errors.warningMessages.length > 0
+        : false
+
     // --- Standalone items (defined once, proxied into wide/narrow layouts) ---
 
     DoubleClickTextInput {
@@ -123,7 +131,8 @@ StandardPage {
         text: cavePageArea.currentCave
               ? cavePageArea.currentCave.errorModel.errors.warningMessages.join("<br>")
               : ""
-        visible: text.length > 0
+        // Visibility is owned by the hosting proxy (visible: hasCaveWarning);
+        // don't set it here or it fights the proxy's imperative control.
     }
 
     SelectableCaveStat {
@@ -319,7 +328,13 @@ StandardPage {
                 LayoutItemProxy { target: caveNameText }
 
                 LayoutItemProxy {
+                    objectName: "outlierWarningBannerProxy"
                     target: cavePageArea.isNarrow ? null : outlierWarningBanner
+                    // Hide the proxy when there is no warning: a visible proxy
+                    // whose target is invisible still forwards the target's
+                    // implicit height, reserving an empty full-width slot (an
+                    // empty "badge"). An invisible layout item is excluded.
+                    visible: cavePageArea.hasCaveWarning
                     Layout.fillWidth: true
                 }
 
@@ -706,6 +721,7 @@ StandardPage {
 
                 LayoutItemProxy {
                     target: cavePageArea.isNarrow ? outlierWarningBanner : null
+                    visible: cavePageArea.hasCaveWarning
                     Layout.fillWidth: true
                 }
 

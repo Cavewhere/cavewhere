@@ -39,7 +39,13 @@ public:
         ElevationRole,
         HorizontalVarianceRole,
         VerticalVarianceRole,
-        IdRole
+        IdRole,
+        //! Read-only: a short message when the row's coordinate falls outside
+        //! the valid domain of its own input CS (a transposed digit, the wrong
+        //! zone), empty otherwise. A pure per-row check, so the FixStationPage
+        //! can flag the bad cell inline — independent of the region-wide
+        //! outlier detection in cwFixStationValidator.
+        DomainErrorRole
     };
     Q_ENUM(Roles)
 

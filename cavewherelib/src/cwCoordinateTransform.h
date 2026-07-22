@@ -58,6 +58,20 @@ public:
     static QStringList commonProjectedCSList();
     static bool isValidCS(const QString& cs);
     static bool isGeographic(const QString& cs);
+
+    /**
+     * True iff `point` (in cs's own axis order and units) sits inside cs's
+     * declared area of use — i.e. it inverse-projects to a geographic location
+     * within the CRS's valid domain, widened by a small margin. Returns false
+     * only when PROJ can evaluate the CRS and places the point well outside
+     * that domain, the signature of a transposed digit, wrong UTM zone, or
+     * wrong hemisphere. Returns true — never flags — when cs is empty or
+     * unparseable or its area of use is unknown, so an un-checkable CS defers
+     * to the cluster rule rather than crying wolf. z is ignored (a horizontal
+     * domain check).
+     */
+    static bool isWithinDomain(const QString& cs, const cwGeoPoint& point);
+
     static QString utmZoneToEpsg(int zone, bool north);
     static QString nameFor(const QString& cs);
 

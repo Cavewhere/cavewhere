@@ -127,18 +127,83 @@ TEST_CASE("classifyCandidates ignores a legitimately spread-out survey",
 TEST_CASE("classifyCandidates does not flag below the minimum fix count",
           "[cwFixStationValidator]")
 {
-    // Three points, one obviously distant — but too few to establish a cluster,
+    // Two points, one obviously distant — but too few to establish a cluster,
     // so detection is off and everything is an inlier.
     const QList<FixCandidate> candidates = {
         candidateAt(0.0, 0.0),
-        candidateAt(5.0, 5.0),
         candidateAt(500000.0, 0.0),
     };
 
     const auto result = cwFixStationValidator::classifyCandidates(candidates);
 
     CHECK(result.outliers.isEmpty());
-    CHECK(result.inliers.size() == 3);
+    CHECK(result.inliers.size() == 2);
+}
+
+TEST_CASE("classifyCandidates flags a straggler once a two-point majority exists",
+          "[cwFixStationValidator]")
+{
+    // Three points: two clustered, one ~500 km away. With the relaxed minimum
+    // (3), the component-wise median lands on the majority pair, so the odd one
+    // out is judged an outlier — the realistic "cluster + one straggler cave"
+    // shape the old four-fix floor would have missed.
+    const QList<FixCandidate> candidates = {
+        candidateAt(0.0, 0.0),
+        candidateAt(10.0, 5.0),
+        candidateAt(500000.0, 0.0),
+    };
+
+    const auto result = cwFixStationValidator::classifyCandidates(candidates);
+
+    REQUIRE(result.outliers.size() == 1);
+    CHECK(result.inliers.size() == 2);
+    CHECK(result.outliers.first().global.x == 500000.0);
+}
+
+TEST_CASE("classifyCandidates separates a domain-bad fix without a cluster",
+          "[cwFixStationValidator]")
+{
+    // Two points only — below the cluster minimum — but one is marked
+    // domain-invalid (Part A). It must land in domainOutliers, leaving the good
+    // one as the sole inlier, even though no cluster could be formed.
+    QList<FixCandidate> candidates = {
+        candidateAt(0.0, 0.0),
+        candidateAt(10.0, 5.0),
+    };
+    candidates[1].domainValid = false;
+
+    const auto result = cwFixStationValidator::classifyCandidates(candidates);
+
+    CHECK(result.outliers.isEmpty());
+    REQUIRE(result.domainOutliers.size() == 1);
+    CHECK(result.domainOutliers.first().global.x == 10.0);
+    REQUIRE(result.inliers.size() == 1);
+    CHECK(result.inliers.first().global.x == 0.0);
+}
+
+TEST_CASE("classifyCandidates drops a domain-bad fix before the cluster median",
+          "[cwFixStationValidator]")
+{
+    // A wild domain-bad point sits far off; if it were left in, the median
+    // center would be dragged toward it and could mask a second, subtler
+    // straggler. Pulling it out first keeps the cluster judged on real data.
+    QList<FixCandidate> candidates = {
+        candidateAt(0.0, 0.0),
+        candidateAt(10.0, 5.0),
+        candidateAt(-8.0, 12.0),
+        candidateAt(3.0, 3.0),
+        candidateAt(500000.0, 0.0),    // in-domain straggler → cluster outlier
+        candidateAt(9000000.0, 0.0),   // domain-bad → pulled out first
+    };
+    candidates[5].domainValid = false;
+
+    const auto result = cwFixStationValidator::classifyCandidates(candidates);
+
+    REQUIRE(result.domainOutliers.size() == 1);
+    CHECK(result.domainOutliers.first().global.x == 9000000.0);
+    REQUIRE(result.outliers.size() == 1);
+    CHECK(result.outliers.first().global.x == 500000.0);
+    CHECK(result.inliers.size() == 4);
 }
 
 TEST_CASE("classifyCandidates leaves a near point below the precision floor alone",
@@ -542,4 +607,168 @@ TEST_CASE("revalidate refreshes the summary when the offending cave is renamed",
     const QString message = validator->property("warningMessage").toString();
     CHECK(message.contains(QStringLiteral("Old Sink")));
     CHECK_FALSE(message.contains(QStringLiteral("Deep Hole")));
+}
+
+TEST_CASE("revalidate flags a fix outside its CS's valid domain with no cluster",
+          "[cwFixStationValidator]")
+{
+    // The realistic 2-cave typo: one good cave, one whose single fix has a
+    // transposed leading digit (1478000 easting in UTM 13N — ~1000 km east of
+    // the zone). Only one fix is domain-valid, so the cluster rule cannot fire;
+    // the per-fix domain check (Part A) is what catches it.
+    cwCavingRegion region;
+    region.geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32613"));
+
+    region.addCave();
+    auto* goodCave = region.cave(0);
+    REQUIRE(goodCave != nullptr);
+    goodCave->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("G"), QStringLiteral("EPSG:32613"), 478000.0, 4430000.0, 1655.0));
+
+    region.addCave();
+    auto* badCave = region.cave(1);
+    REQUIRE(badCave != nullptr);
+    badCave->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("B"), QStringLiteral("EPSG:32613"), 1478000.0, 4430000.0, 1655.0));
+
+    REQUIRE(badCave->errorModel()->warningCount() == 1);
+    CHECK(badCave->errorModel()->toStringList().join(QChar(' '))
+              .contains(QStringLiteral("outside the valid range")));
+    CHECK(goodCave->errorModel()->warningCount() == 0);
+}
+
+TEST_CASE("revalidate flags a distant in-domain cave once a two-cave majority exists",
+          "[cwFixStationValidator]")
+{
+    // Three caves, one fix each, all valid UTM 13N coordinates — but one sits
+    // ~1000 km north of the other two. The domain check passes (it is a real
+    // in-zone location), so this is caught only by the relaxed cluster rule
+    // (Part B): with an odd count the median center lands on the majority pair.
+    cwCavingRegion region;
+    region.geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32613"));
+
+    region.addCave();
+    auto* caveA = region.cave(0);
+    REQUIRE(caveA != nullptr);
+    caveA->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("A"), QStringLiteral("EPSG:32613"), 478000.0, 4430000.0, 1655.0));
+
+    region.addCave();
+    auto* caveB = region.cave(1);
+    REQUIRE(caveB != nullptr);
+    caveB->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("B"), QStringLiteral("EPSG:32613"), 478100.0, 4430100.0, 1656.0));
+
+    region.addCave();
+    auto* caveC = region.cave(2);
+    REQUIRE(caveC != nullptr);
+    caveC->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("C"), QStringLiteral("EPSG:32613"), 478000.0, 5430000.0, 1655.0));
+
+    REQUIRE(caveC->errorModel()->warningCount() == 1);
+    CHECK(caveC->errorModel()->toStringList().join(QChar(' '))
+              .contains(QStringLiteral("far from the rest")));
+    CHECK(caveA->errorModel()->warningCount() == 0);
+    CHECK(caveB->errorModel()->warningCount() == 0);
+}
+
+TEST_CASE("revalidate flags a domain-bad cave in a balanced split the cluster rule cannot",
+          "[cwFixStationValidator]")
+{
+    // Two caves, two fixes each. One cave's fixes both carry a transposed-digit
+    // easting (out of the zone's domain). A balanced 2-vs-2 split defeats the
+    // cluster rule — the median center sits midway, so neither pair strays — yet
+    // Part A still flags the bad cave.
+    cwCavingRegion region;
+    region.geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32613"));
+
+    region.addCave();
+    auto* goodCave = region.cave(0);
+    REQUIRE(goodCave != nullptr);
+    goodCave->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("G1"), QStringLiteral("EPSG:32613"), 478000.0, 4430000.0, 1655.0));
+    goodCave->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("G2"), QStringLiteral("EPSG:32613"), 478100.0, 4430100.0, 1656.0));
+
+    region.addCave();
+    auto* badCave = region.cave(1);
+    REQUIRE(badCave != nullptr);
+    badCave->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("B1"), QStringLiteral("EPSG:32613"), 1478000.0, 4430000.0, 1655.0));
+    badCave->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("B2"), QStringLiteral("EPSG:32613"), 1478100.0, 4430100.0, 1656.0));
+
+    // Part A flags the bad cave with the domain message; the good cave is clean.
+    REQUIRE(badCave->errorModel()->warningCount() == 1);
+    CHECK(badCave->errorModel()->toStringList().join(QChar(' '))
+              .contains(QStringLiteral("outside the valid range")));
+    CHECK(goodCave->errorModel()->warningCount() == 0);
+
+    // Prove the cluster rule alone could not: the same four points, all treated
+    // as in-domain, produce no cluster outlier (median center sits midway).
+    const QList<FixCandidate> balanced = {
+        candidateAt(478000.0, 4430000.0), candidateAt(478100.0, 4430100.0),
+        candidateAt(1478000.0, 4430000.0), candidateAt(1478100.0, 4430100.0),
+    };
+    CHECK(cwFixStationValidator::classifyCandidates(balanced).outliers.isEmpty());
+}
+
+TEST_CASE("revalidate does not flag two legitimately distant caves",
+          "[cwFixStationValidator]")
+{
+    // Two caves ~300 km apart, every fix a valid in-zone UTM 13N coordinate.
+    // Neither the domain check nor the balanced cluster split should fire — a
+    // legitimately spread-out survey must not cry wolf.
+    cwCavingRegion region;
+    region.geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32613"));
+
+    region.addCave();
+    auto* westCave = region.cave(0);
+    REQUIRE(westCave != nullptr);
+    westCave->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("W1"), QStringLiteral("EPSG:32613"), 400000.0, 4430000.0, 1655.0));
+    westCave->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("W2"), QStringLiteral("EPSG:32613"), 400100.0, 4430100.0, 1656.0));
+
+    region.addCave();
+    auto* eastCave = region.cave(1);
+    REQUIRE(eastCave != nullptr);
+    eastCave->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("E1"), QStringLiteral("EPSG:32613"), 700000.0, 4430000.0, 1655.0));
+    eastCave->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("E2"), QStringLiteral("EPSG:32613"), 700100.0, 4430100.0, 1656.0));
+
+    CHECK(westCave->errorModel()->warningCount() == 0);
+    CHECK(eastCave->errorModel()->warningCount() == 0);
+}
+
+TEST_CASE("robustWorldOrigin ignores a domain-bad fix",
+          "[cwFixStationValidator]")
+{
+    // Four good fixes plus one transposed-digit typo. The typo is domain-bad, so
+    // it is excluded from the inlier centroid — otherwise it would still drag the
+    // world origin ~200 km east even though it is now flagged.
+    cwCavingRegion region;
+    region.geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32613"));
+
+    region.addCave();
+    auto* cave = region.cave(0);
+    REQUIRE(cave != nullptr);
+    cave->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("A1"), QStringLiteral("EPSG:32613"), 478000.0, 4430000.0, 1655.0));
+    cave->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("A2"), QStringLiteral("EPSG:32613"), 478100.0, 4430100.0, 1656.0));
+    cave->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("A3"), QStringLiteral("EPSG:32613"), 477900.0, 4429900.0, 1654.0));
+    cave->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("A4"), QStringLiteral("EPSG:32613"), 478050.0, 4430050.0, 1655.0));
+    cave->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("Bad"), QStringLiteral("EPSG:32613"), 1478000.0, 4430000.0, 1655.0));
+
+    const auto origin = region.fixStationValidator()->robustWorldOrigin();
+    REQUIRE(origin.has_value());
+    // Centroid of the four good fixes (~478012 E); nowhere near the ~678000 it
+    // would be if the 1478000 typo were averaged in.
+    CHECK(origin->x < 500000.0);
+    CHECK(origin->x > 470000.0);
 }

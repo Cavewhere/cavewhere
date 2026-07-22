@@ -195,6 +195,79 @@ MainWindowTest {
             compare(cave.fixStations.count, 1)
         }
 
+        function test_domainErrorRoleFlagsBadCoordinate() {
+            const cave = gotoFixStations()
+            cave.fixStations.addFixStation()
+            tryCompare(cave.fixStations, "count", 1)
+
+            const model = cave.fixStations
+            const idx = model.index(0)
+            model.setData(idx, "BAD", FixStationModel.StationNameRole)
+            model.setData(idx, "EPSG:32613", FixStationModel.InputCSRole)
+            // A transposed leading digit (1478000 easting) lands outside UTM
+            // 13N's valid domain, so the per-row check flags it on its own.
+            model.setData(idx, 1478000.0, FixStationModel.EastingRole)
+            model.setData(idx, 4430000.0, FixStationModel.NorthingRole)
+
+            const err = model.data(idx, FixStationModel.DomainErrorRole)
+            verify(err.length > 0, "domain error should be set for an out-of-range easting")
+            verify(err.indexOf("outside the valid range") >= 0, "message: " + err)
+
+            // Correcting the coordinate clears the role.
+            model.setData(idx, 478000.0, FixStationModel.EastingRole)
+            compare(model.data(idx, FixStationModel.DomainErrorRole), "",
+                    "domain error clears once the coordinate is in range")
+        }
+
+        function test_domainErrorRoleQuietForGoodCoordinate() {
+            const cave = gotoFixStations()
+            cave.fixStations.addFixStation()
+            tryCompare(cave.fixStations, "count", 1)
+
+            const model = cave.fixStations
+            const idx = model.index(0)
+            model.setData(idx, "EPSG:32613", FixStationModel.InputCSRole)
+            model.setData(idx, 478000.0, FixStationModel.EastingRole)
+            model.setData(idx, 4430000.0, FixStationModel.NorthingRole)
+            compare(model.data(idx, FixStationModel.DomainErrorRole), "",
+                    "an in-range coordinate raises no domain error")
+
+            // No input CS to judge against → the row never flags on its own.
+            model.setData(idx, "", FixStationModel.InputCSRole)
+            model.setData(idx, 1478000.0, FixStationModel.EastingRole)
+            compare(model.data(idx, FixStationModel.DomainErrorRole), "",
+                    "a blank input CS defers to the region-level check")
+        }
+
+        function test_domainWarningIconShowsInline() {
+            const cave = gotoFixStations()
+            cave.fixStations.addFixStation()
+            tryCompare(cave.fixStations, "count", 1)
+
+            const model = cave.fixStations
+            const idx = model.index(0)
+            model.setData(idx, "BAD", FixStationModel.StationNameRole)
+            model.setData(idx, "EPSG:32613", FixStationModel.InputCSRole)
+            model.setData(idx, 478000.0, FixStationModel.EastingRole)
+            model.setData(idx, 4430000.0, FixStationModel.NorthingRole)
+
+            const fixPage = RootData.pageView.currentPageItem
+            let warning = null
+            tryVerify(() => {
+                warning = findChild(fixPage, "domainWarning.0")
+                return warning !== null
+            }, 5000, "row 0 domain warning indicator should be reachable")
+            verify(!warning.visible, "warning is hidden for a well-formed row")
+
+            model.setData(idx, 1478000.0, FixStationModel.EastingRole)
+            tryVerify(() => warning.visible, 2000,
+                      "warning appears once the coordinate leaves its CS domain")
+
+            model.setData(idx, 478000.0, FixStationModel.EastingRole)
+            tryVerify(() => !warning.visible, 2000,
+                      "warning clears once the coordinate is corrected")
+        }
+
         function test_fixStationsLinkCount() {
             const cave = gotoFixStations()
             cave.fixStations.addFixStation()

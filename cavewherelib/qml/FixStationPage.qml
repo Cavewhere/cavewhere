@@ -71,6 +71,34 @@ StandardPage {
         }
     }
 
+    // Inline flag for a coordinate that falls outside its input CS's valid
+    // domain (DomainErrorRole). Hidden — and zero-width — when the row is fine.
+    component DomainWarning : QQ.Item {
+        id: domainWarning
+        property string message: ""
+
+        visible: domainWarning.message !== ""
+        implicitWidth: visible ? Theme.iconSizeButton : 0
+        implicitHeight: Theme.iconSizeButton
+
+        QQ.Image {
+            anchors.centerIn: parent
+            source: "qrc:icons/svg/warning.svg"
+            sourceSize: Qt.size(Theme.iconSizeButton, Theme.iconSizeButton)
+            visible: domainWarning.visible
+        }
+
+        QQ.HoverHandler {
+            id: warningHover
+        }
+
+        QC.ToolTip {
+            visible: warningHover.hovered && domainWarning.message !== ""
+            text: domainWarning.message
+            delay: 300
+        }
+    }
+
     component CSCell : QQ.Item {
         id: csCell
         property int columnWidth: 0
@@ -197,6 +225,7 @@ StandardPage {
             required property double easting
             required property double northing
             required property double elevation
+            required property string domainError
 
             implicitHeight: rowLayoutId.implicitHeight + Theme.tightSpacing * 2
             implicitWidth: rowLayoutId.implicitWidth
@@ -261,6 +290,13 @@ StandardPage {
                     rowIndex: wideDelegateId.index
                     numeric: true
                 }
+
+                DomainWarning {
+                    objectName: "domainWarning." + wideDelegateId.index
+                    Layout.leftMargin: Theme.tightSpacing
+                    Layout.alignment: Qt.AlignVCenter
+                    message: wideDelegateId.domainError
+                }
             }
         }
     }
@@ -277,6 +313,7 @@ StandardPage {
             required property double easting
             required property double northing
             required property double elevation
+            required property string domainError
 
             width: QQ.ListView.view ? QQ.ListView.view.width : 0
             implicitHeight: narrowFlow.implicitHeight + Theme.delegatePadding * 2
@@ -308,6 +345,11 @@ StandardPage {
                 anchors.leftMargin: Theme.delegatePadding
                 anchors.rightMargin: Theme.delegatePadding
                 spacing: Theme.flowSpacing
+
+                DomainWarning {
+                    objectName: "domainWarning." + narrowDelegateId.index
+                    message: narrowDelegateId.domainError
+                }
 
                 FixField {
                     value: narrowDelegateId.stationName

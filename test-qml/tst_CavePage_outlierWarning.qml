@@ -41,6 +41,10 @@ MainWindowTest {
             return findChild(cavePage(), "outlierWarningBanner")
         }
 
+        function bannerProxy() {
+            return findChild(cavePage(), "outlierWarningBannerProxy")
+        }
+
         function addUtm13NFix(name, e, n, z) {
             cave.fixStations.addFixStation()
             const idx = cave.fixStations.index(cave.fixStations.count - 1)
@@ -51,8 +55,9 @@ MainWindowTest {
             cave.fixStations.setData(idx, z, FixStationModel.ElevationRole)
         }
 
-        // A tight cluster of four good fixes near Boulder, UTM Z13N. Detection
-        // needs at least four fixes to have a cluster to judge an outlier from.
+        // A tight cluster of four good fixes near Boulder, UTM Z13N. The cluster
+        // rule needs at least three fixes to have a majority to judge an outlier
+        // against; four keeps a clear majority once a straggler is added.
         function addGoodCluster() {
             addUtm13NFix("g1", 478000.0, 4430000.0, 1655.0)
             addUtm13NFix("g2", 478010.0, 4430010.0, 1656.0)
@@ -71,19 +76,36 @@ MainWindowTest {
             verify(!b.visible, "a clean cluster raises no warning")
         }
 
+        // The proxy that hosts the banner in the wide layout must be hidden when
+        // there is no warning — a visible proxy with an invisible target still
+        // reserves an empty full-width slot (an empty "badge") under the cave
+        // name. An invisible layout item is excluded from the layout.
+        function test_bannerProxyHiddenWithoutOutlier() {
+            const proxy = bannerProxy()
+            verify(proxy !== null, "banner proxy must exist in the wide layout")
+            verify(!proxy.visible, "empty banner proxy must be hidden")
+
+            addGoodCluster()
+            verify(!proxy.visible, "a clean cluster keeps the proxy hidden")
+
+            addUtm13NFix("BAD", 1478000.0, 4430000.0, 1655.0)
+            tryVerify(() => proxy.visible, 1000,
+                      "proxy appears once a warning does")
+        }
+
         // ── Typo'd fix → banner names the station and how far off it is ──────
 
         function test_bannerAppearsForOutlier() {
             addGoodCluster()
-            // ~1000 km east of the cluster: exceeds both the precision floor and
-            // the cluster-radius multiple, so it is flagged.
+            // A transposed leading digit (1478000 easting) falls outside UTM 13N's
+            // valid domain, so the per-fix domain check flags it on its own.
             addUtm13NFix("BAD", 1478000.0, 4430000.0, 1655.0)
 
             const b = banner()
             tryVerify(() => b.visible, 1000, "banner appears once a fix is an outlier")
             verify(b.text.indexOf("BAD") >= 0,
                    "banner names the offending station: " + b.text)
-            verify(b.text.indexOf("far from the rest of the survey") >= 0,
+            verify(b.text.indexOf("outside the valid range") >= 0,
                    "banner explains the problem: " + b.text)
         }
 

@@ -24,6 +24,8 @@
 
 class cwCave;
 class cwCavingRegion;
+class cwErrorListModel;
+enum class cwErrorTypeId : int;
 
 /**
  * Finds fix stations whose coordinate is almost certainly a data-entry error
@@ -59,13 +61,20 @@ public:
         cwCave* cave = nullptr;
         QUuid fixId;
         cwGeoPoint global;  //!< reprojected into the region's global CS
+        //! Whether the fix's raw coordinate is plausible for its own input CS
+        //! (Part A). A domain-bad fix is a certain outlier with no cluster
+        //! needed, and is excluded from the cluster math and the world origin.
+        bool domainValid = true;
     };
 
-    //! Partition of the gathered candidates into the tight cluster (inliers)
-    //! and the isolated stragglers (outliers).
+    //! Partition of the gathered candidates: the tight cluster (inliers), the
+    //! stragglers far from it (cluster outliers), and the fixes whose coordinate
+    //! is outside their own CS's valid domain (domain outliers — flagged on
+    //! their own, independent of any cluster).
     struct Classification {
         QList<FixCandidate> inliers;
         QList<FixCandidate> outliers;
+        QList<FixCandidate> domainOutliers;
     };
 
     explicit cwFixStationValidator(cwCavingRegion* region);
@@ -108,7 +117,17 @@ private:
     void revalidate();
 
     void syncCaveConnections();
-    void setCaveWarning(cwCave* cave, const QString& message);
+
+    //! Set (or, with an empty message, clear) the cave's Warning row for one of
+    //! our stable errorTypeIds. Each id owns its own row, so the cluster-outlier
+    //! and the domain warnings coexist and are suppressed independently.
+    void setCaveWarning(cwCave* cave, cwErrorTypeId errorTypeId, const QString& message);
+
+    //! Keep m_cavesWithWarning in step with the cave's error rows after a
+    //! setCaveWarning: a cave stays tracked while it carries any of our
+    //! warnings, and drops out once the last one clears.
+    void updateWarningTracking(cwCave* cave, cwErrorListModel* errors);
+
     void setSummary(const QString& message, int count, cwCave* cave);
 
     cwCavingRegion* m_region = nullptr;

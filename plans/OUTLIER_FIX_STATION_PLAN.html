@@ -496,14 +496,49 @@ wired into existing components.</p>
   <code>cwError</code> + target <code>cwErrorModel*</code>; <code>set(message,type,typeId)</code> / <code>clear()</code>,
   finding its row by stable <code>errorTypeId</code>) would collapse both. Blast radius: new small helper + 2 callers
   (touches <code>cwTripCalibration</code>, unrelated to #596, so its own commit + tests).</li>
-  <li><b>Central <code>errorTypeId</code> registry</b> (surfaced by the Commit 3 review). <code>kOutlierErrorTypeId = 596</code>
-  is the codebase's <i>only</i> <code>setErrorTypeId()</code> call and silently establishes an issue-number-as-id
-  convention that the suppression-serialization layer keys on. The moment a second id appears (e.g. the trip
-  declination warning growing a stable id), an <code>enum class cwErrorTypeId</code> prevents collision. Premature
-  with exactly one id.</li>
+  <li><b>Central <code>errorTypeId</code> registry</b> (surfaced by the Commit 3 review) &mdash; <b>DONE in Commit 6</b>.
+  Commit 6 added a second stable id (<code>597</code>), meeting the trigger this item named, so the
+  <code>enum class cwErrorTypeId : int</code> registry now lives in <code>cwError.h</code> with
+  <code>FixStationOutlier = 596</code> and <code>FixStationDomain = 597</code> (values pinned because the
+  suppression-serialization layer keys on them). <code>cwFixStationValidator</code> allocates and compares ids
+  through the enum instead of bare literals, giving one authoritative allocation point + collision guard. Note:
+  <code>cwError</code>'s <code>errorTypeId()</code>/<code>setErrorTypeId()</code> stay <code>int</code>-typed (the enum
+  is cast at that boundary); migrating the <code>cwError</code> API to the enum type is the still-deferred larger
+  refactor.</li>
+  <li><b>Tooltip-delay consistency</b> (nit, surfaced by the Commit 6 review). The inline <code>DomainWarning</code>
+  tooltip on <code>FixStationPage.qml</code> uses <code>delay: 300</code>, while the rest of the app's explicit
+  <code>QC.ToolTip</code> delays use <code>500</code>. There is no <code>Theme</code> token for tooltip delay, so the
+  real cleanup is to add one (e.g. <code>Theme.tooltipDelay</code>) and route all tooltip delays through it, then
+  drop the literal. Cosmetic; batch with any future tooltip-token work.</li>
 </ul>
 
 <h2 id="fewcaves">12. Commit 6 — Detecting the few-caves case <span class="pill new">post-Commit-5 follow-up</span></h2>
+
+<div class="callout ok">
+  <b>Implemented</b> (dev_3, uncommitted; C++ + QML gates green). Resolutions of the open decisions below:
+  <ul>
+    <li><b>Domain bound → decision (a).</b> New <code>cwCoordinateTransform::isWithinDomain(cs, point)</code> queries
+    <code>proj_get_area_of_use()</code> for the CRS's lon/lat bbox, inverse-projects the fix to geographic, and flags it
+    when the result is non-finite or lands more than a <b>5° margin</b> outside the bbox. PROJ stays encapsulated in
+    <code>cwCoordinateTransform</code>; the validator never includes <code>&lt;proj.h&gt;</code>. Un-checkable CS
+    (empty / unparseable / unknown area of use) returns <i>within</i> — it never cries wolf, deferring to the cluster rule.</li>
+    <li><b>Distinct errorTypeId.</b> Domain warnings use <code>kDomainErrorTypeId = 597</code> (cluster keeps
+    <code>596</code>), so the two kinds coexist on one cave and are suppressed independently. <code>setCaveWarning()</code>
+    is now keyed by id; a small <code>updateWarningTracking()</code> keeps <code>m_cavesWithWarning</code> correct while a
+    cave carries either.</li>
+    <li><b>Part B.</b> <code>kMinFixesForDetection</code> lowered <b>4 → 3</b>; domain-bad fixes are pulled out
+    (<code>Classification.domainOutliers</code>) <i>before</i> the cluster median, and are excluded from
+    <code>robustWorldOrigin()</code> via the inlier set.</li>
+    <li><b>Summary/overlay.</b> A domain outlier names the culprit first; <code>outlierCount</code> now totals both kinds;
+    the render-view message stays generic ("looks wrong").</li>
+    <li><b>Inline on the FixStationPage</b> (follow-up, additive). Because the domain check is <i>pure per-fix</i> (no
+    neighbours), it also surfaces right on the row that owns the coordinate: a read-only <code>DomainErrorRole</code> on
+    <code>cwFixStationModel</code> (computed from the row's own input CS via <code>isWithinDomain</code>, empty when
+    in-range or when the CS is blank) drives a warning icon + tooltip in both the wide and narrow row delegates. A blank
+    input CS defers to the region-level 596/597 path; the cave banner and world-origin exclusion are unchanged (kept
+    per the "both altitudes" decision).</li>
+  </ul>
+</div>
 
 <p>Commits 1–5 flag an outlier only when a <b>majority</b> of the pooled fix stations form one tight cluster and a
 <b>minority</b> stray from it. The realistic data shape is the opposite: <b>2–3 caves, one with a typo</b>, each cave
