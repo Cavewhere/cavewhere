@@ -488,6 +488,12 @@ void cwLinePlotManager::runSurvex() {
   \brief Runs the line plot task now, unconditionally.
   */
 void cwLinePlotManager::update() {
+    // Mark solving before clearing needsUpdate: the clear below emits
+    // needsUpdateChanged, and the coordinator's forced-cascade settle check must
+    // already see this pipeline as updating so it doesn't mistake the
+    // (synchronously cleared) needsUpdate for "finished" while the solve runs.
+    m_solving = true;
+
     if(m_needsUpdate) {
         m_needsUpdate = false;
         emit needsUpdateChanged();
@@ -523,15 +529,17 @@ void cwLinePlotManager::update() {
         if(!hasAnySolvableInput()) {
             // No-shots path must also clear the cached cavern output / solve
             // error so CavernOutputPage doesn't keep showing the previous
-            // run's text (D-1).
+            // run's text (D-1). No async work, so the solve is already done.
             publishResults(cwLinePlotTask::LinePlotResultData());
             updateLinePlot(cwLinePlotTask::LinePlotResultData());
+            finishSolving();
             return;
         }
 
         setCaveStationLookupAsStale(true);
         m_restarter.restart([this]() {
             if (Region.isNull()) {
+                finishSolving();
                 return QFuture<cwLinePlotTask::LinePlotResultData>();
             }
 
@@ -553,12 +561,26 @@ void cwLinePlotManager::update() {
                     if (!result.hasSolveError()) {
                         updateLinePlot(std::move(result));
                     }
+                    finishSolving();
                 });
 
             return future;
         });
+    } else {
+        // No region: nothing to solve.
+        finishSolving();
     }
 
+}
+
+void cwLinePlotManager::finishSolving() {
+    if(m_solving) {
+        m_solving = false;
+        // Re-emit even though needsUpdate() is unchanged: this is the
+        // coordinator's cue to re-check its forced-cascade settle state on a
+        // solve that dirtied nothing downstream.
+        emit needsUpdateChanged();
+    }
 }
 
 /**

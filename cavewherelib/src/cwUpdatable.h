@@ -28,6 +28,14 @@ public:
     //Recompute now, unconditionally.
     virtual void update() = 0;
 
+    //True while an update() started here is still running asynchronously. The
+    //coordinator holds a forced update (updateNow) open until every pipeline is
+    //both clean and not updating, so a pipeline whose needsUpdate() clears at
+    //the START of update() (the line plot) is not mistaken for finished while
+    //its solve is still in flight. Pipelines that stay needsUpdate()==true until
+    //their async work completes (scraps, LiDAR) leave this at the default false.
+    virtual bool isUpdating() const { return false; }
+
     //Called by cwUpdateCoordinator when it takes over driving this pipeline.
     //Until coordinated, an implementer may recompute eagerly on a source edit
     //(the sensible standalone default); once coordinated, it only marks dirty

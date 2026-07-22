@@ -51,6 +51,9 @@ public:
         connect(updatable, &QObject::destroyed, this, [this, u]() {
             m_updatables.removeAll(u);
             refreshNeedsUpdate();
+            //A pipeline destroyed mid-cascade may have been the last thing
+            //keeping the forced update open; re-settle so m_forcing can't stick.
+            clearForcingIfSettled();
         });
         onChildDirty(u);
     }
@@ -73,8 +76,17 @@ private:
     void onAutomaticUpdateChanged();
     void refreshNeedsUpdate();
 
+    //True while an updateNow() cascade is in flight. Keeps force-running dirty
+    //pipelines (regardless of the automatic-update flag) until every pipeline is
+    //clean and idle, so an async cascade — the line plot solve dirtying scraps
+    //after updateNow() has already iterated — is driven to completion by the
+    //one Run press instead of leaving the user to press Run again.
+    bool anyUpdating() const;
+    void clearForcingIfSettled();
+
     QList<cwUpdatable*> m_updatables;
     bool m_lastNeedsUpdate = false;
+    bool m_forcing = false;
 };
 
 #endif // CWUPDATECOORDINATOR_H

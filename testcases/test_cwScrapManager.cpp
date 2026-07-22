@@ -16,6 +16,7 @@
 #include "cwNote.h"
 #include "cwSurveyNoteModel.h"
 #include "cwLinePlotManager.h"
+#include "cwUpdateCoordinator.h"
 #include "cwJobSettings.h"
 // #include "cwScrapsEntity.h"
 #include "cwProjectedProfileScrapViewMatrix.h"
@@ -165,6 +166,84 @@ TEST_CASE("cwScrapManager auto update should work propertly", "[cwScrapManager]"
     });
 
     loop.exec();
+}
+
+TEST_CASE("A single Run resolves the line-plot to scraps cascade with automatic update off", "[cwScrapManager]") {
+    // Regression for the F1 "press Run twice" trap: with automatic update off, a
+    // survey edit defers the line-plot solve. One Run (updateNow) must solve the
+    // line plot AND carry the station-position change through to the scraps it
+    // dirties on completion, leaving nothing stale — the user never has to press
+    // Run a second time.
+    requireAutomaticUpdatesEnabled();
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+    fileToProject(project, testcasesDatasetPath("test_cwScrapManager/scrapGuessNeigborPlan.cw"));
+    rootData->futureManagerModel()->waitForFinished();
+
+    auto scrapManager = rootData->scrapManager();
+    auto linePlotManager = rootData->linePlotManager();
+    auto coordinator = rootData->updateCoordinator();
+    REQUIRE(scrapManager);
+    REQUIRE(linePlotManager);
+
+    coordinator->setAutomaticUpdate(false);
+    REQUIRE(coordinator->automaticUpdate() == false);
+
+    auto cave = rootData->region()->cave(0);
+    auto trip = cave->trip(0);
+    REQUIRE(trip->chunkCount() > 0);
+    auto chunk = trip->chunk(0);
+    auto note = trip->notes()->notes().first();
+    REQUIRE(note->scraps().size() > 0);
+    auto scrap = note->scraps().first();
+
+    // Everything is clean and settled to start.
+    rootData->futureManagerModel()->waitForFinished();
+    REQUIRE(coordinator->needsUpdate() == false);
+    REQUIRE(scrapManager->dirtyScraps().contains(scrap) == false);
+
+    // Edit a survey shot: this dirties the line plot only. With automatic update
+    // off nothing solves, so the scrap stays clean (it is dirtied later, by the
+    // line-plot solve moving station positions).
+    cwSignalSpy scrapsCascadeSpy(linePlotManager,
+                                 &cwLinePlotManager::stationPositionInScrapsChanged);
+    chunk->setData(cwSurveyChunk::ShotDistanceRole, 0, "25.0");
+    rootData->futureManagerModel()->waitForFinished();
+
+    CHECK(coordinator->needsUpdate() == true);          // line plot is dirty
+    CHECK(scrapManager->dirtyScraps().contains(scrap) == false); // scrap not yet
+    CHECK(scrapsCascadeSpy.count() == 0);               // nothing solved
+
+    // One Run.
+    coordinator->updateNow();
+
+    // Drain the whole cascade: the line-plot solve completes, dirties the
+    // scraps, and the still-open forced update runs them too.
+    for(int i = 0; i < 20 && (coordinator->needsUpdate()
+                              || rootData->futureManagerModel()->rowCount() > 0
+                              || linePlotManager->isUpdating()); ++i) {
+        rootData->futureManagerModel()->waitForFinished();
+        linePlotManager->waitToFinish();
+        scrapManager->waitForFinish();
+        QCoreApplication::processEvents();
+    }
+
+    // The cascade actually fired for THIS scrap — assert the scrap itself
+    // appears in a stationPositionInScrapsChanged payload, not merely that some
+    // solve emitted (that signal fires per successful solve regardless of which
+    // scraps moved). Guards against dataset drift silently making the test pass.
+    const auto scrapCascaded = [&]() {
+        for(const auto& emission : scrapsCascadeSpy) {
+            if(emission.at(0).value<QList<cwScrap*>>().contains(scrap)) {
+                return true;
+            }
+        }
+        return false;
+    };
+    CHECK(scrapCascaded());
+    // ...and one Run resolved it: nothing stale, no second press needed.
+    CHECK(coordinator->needsUpdate() == false);
+    CHECK(scrapManager->dirtyScraps().contains(scrap) == false);
 }
 
 

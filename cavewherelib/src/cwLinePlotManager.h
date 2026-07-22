@@ -119,6 +119,7 @@ public:
 
     bool needsUpdate() const override;
     void update() override;
+    bool isUpdating() const override;
 
     // Region-wide survey network artifact, updated whenever the line-plot
     // pipeline completes. Shared across every consumer (sketches today; future
@@ -200,6 +201,17 @@ private:
 
     bool m_needsUpdate = false;
 
+    // True from the moment update() kicks a solve until that solve's completion
+    // callback runs. needsUpdate() clears synchronously at update() start (so an
+    // edit mid-solve re-triggers a fresh restart), so this is the coordinator's
+    // only signal that the pipeline is still working.
+    bool m_solving = false;
+
+    // Clears m_solving and re-emits needsUpdateChanged so the coordinator
+    // re-evaluates its forced-cascade settle state, even on a solve that dirtied
+    // nothing downstream.
+    void finishSolving();
+
     void connectCaves(cwCavingRegion* region);
     void connectFixStations(cwCave* cave);
 
@@ -252,6 +264,10 @@ private slots:
 
 inline bool cwLinePlotManager::needsUpdate() const {
     return m_needsUpdate;
+}
+
+inline bool cwLinePlotManager::isUpdating() const {
+    return m_solving;
 }
 
 #endif // CWLINEPLOTMANAGER_H
