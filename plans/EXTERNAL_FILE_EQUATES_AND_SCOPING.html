@@ -568,7 +568,42 @@ bool cwTrip::isScoped() const { return !scopePrefix().isEmpty(); }</code></pre>
   coincident (fixture with a deliberate pre-tie gap).
 </p>
 
-<h3 id="c5">Commit 5 &mdash; Region-level (cross-cave) equate emission</h3>
+<h3 id="c5">Commit 5 &mdash; Region-level (cross-cave) equate emission &mdash; DONE, GREEN (uncommitted)</h3>
+<p class="note">
+  <strong>Done 2026-07-22 (uncommitted, branch externalFiles).</strong>
+  <code>cwSurvexExporterRegion</code> emits one bare <code>*equate</code> per
+  <code>cwCavingRegionData::equates</code> entry, after the cave loop and before
+  the region's outer <code>*end</code>, so every <code>*begin cave_&lt;hex&gt;</code>
+  sibling is declared and closed first. Operands render <strong>fully
+  qualified</strong>: an anonymous-namespace <code>qualifiedOperand</code> finds
+  the handle's owning cave (<code>owningCave</code> &mdash; the cave itself for a
+  <code>NativeCave</code> handle, the cave holding the trip for a <code>Trip</code>
+  handle) and prepends <code>cwCavernNaming::caveScopePrefix</code> to the
+  cave-relative rendering. <strong>Both C4 review follow-ups landed here.</strong>
+  (1) <em>Shared renderer:</em> C4's <code>equateOperand</code> was lifted to a
+  public static <code>cwSurvexExporterCaveTask::equateOperand</code>, so the
+  region qualifier reuses the exact NativeCave&rarr;tail /
+  Trip&rarr;<code>scopePrefix+tail</code> logic instead of near-duplicating it
+  &mdash; region rendering is just <code>caveScopePrefix + equateOperand</code>.
+  The chosen home is the cave task, not <code>cwCavernNaming</code>: the renderer
+  needs <code>cwCaveData</code>/<code>cwTripData</code>/<code>cwTrip::scopePrefix</code>,
+  which the UUID-only naming grammar must not depend on. (2) <em>Operand
+  de-dup:</em> a new shared <code>cwSurvexExporterCaveTask::writeEquateLine</code>
+  (used by both the cave and region emitters) drops the whole tie on any
+  unresolvable operand and skips the line unless &ge; 2 <em>distinct</em>
+  operands survive, since cavern rejects a self-<code>*equate</code>. Decode is
+  unchanged &mdash; <code>splitLookupByCave</code> routes each qualified name to
+  its cave, so a cross-cave tie lands as a position-alias in <em>each</em> cave's
+  lookup. Tests: <code>test_cwEquateEmission.cpp</code> gained two
+  <code>[Equate][Emission]</code> cases &mdash; deterministic region-scope
+  operand + ordering (after both cave <code>*end</code>s, before the outer
+  <code>*end</code>), and a real cavern solve tying Alpha's north-running
+  <code>2</code> to Beta's east-running <code>y</code> so they draw coincident
+  across the cave boundary (a genuine pre-tie gap, since the two derived stations
+  sit on different axes). The throwaway <code>test_cwEquateSpike.cpp</code>
+  (<code>[EquateSpike]</code>) was deleted per its own note now that both emission
+  points exist.
+</p>
 <p>
   Emit each <code>cwCavingRegion</code> equate at region scope in
   <code>cwSurvexExporterRegion</code>, after both
@@ -585,22 +620,45 @@ bool cwTrip::isScoped() const { return !scopePrefix().isEmpty(); }</code></pre>
   in cave B solves coincident across the cave boundary.
 </p>
 <p class="note">
-  <strong>From the C4 review &mdash; do these here.</strong>
+  <strong>From the C4 review &mdash; DONE in C5 (see the done-note above).</strong>
   (1) <strong>Share the operand renderer.</strong> C4 left
   <code>equateOperand()</code> as a file-local anonymous-namespace helper in
   <code>cwSurvexExporterCaveTask.cpp</code>. C5's fully-qualified rendering is
   the same NativeCave&rarr;tail / Trip&rarr;<code>scopePrefix+tail</code> logic
-  with a <code>cave_&lt;hex&gt;.</code> prefix, so lift the renderer into a
-  shared home &mdash; <code>cwCavernNaming</code> already owns
-  <code>caveName</code>/<code>tripName</code>/<code>tripScopePrefix</code> and is
-  the natural authority for driver naming &mdash; and have both exporters plus
-  decode key off it, so encode and <code>splitLookupByCave</code> can't drift.
+  with a <code>cave_&lt;hex&gt;.</code> prefix, so the renderer was lifted to a
+  public static <code>cwSurvexExporterCaveTask::equateOperand</code> that both
+  exporters share (region rendering is just <code>caveScopePrefix +
+  equateOperand</code>). <em>The initial idea of homing it in
+  <code>cwCavernNaming</code> was rejected: that namespace is deliberately
+  UUID-only, and the renderer needs
+  <code>cwCaveData</code>/<code>cwTripData</code>/<code>cwTrip::scopePrefix</code>,
+  which the naming grammar must not depend on &mdash; see the done-note above.</em>
   (2) <strong>De-duplicate rendered operands.</strong> Two distinct handles can
   render to the same string (e.g. two trips sharing a <code>stationPrefix</code>),
   and the current <code>operands.size() &lt; 2</code> guard counts entries, not
   distinct strings, so <code>*equate&nbsp;X&nbsp;X</code> can be emitted (cavern
   rejects a self-equate). Skip the line when fewer than two <em>distinct</em>
   operands survive &mdash; belongs with the equate-UX/validation hardening.
+</p>
+<p class="note">
+  <strong>From the C5 review.</strong> The cave and region emit loops (iterate
+  valid equates &rarr; render each handle &rarr; <code>writeEquateLine</code>)
+  were unified behind a shared
+  <code>cwSurvexExporterCaveTask::writeEquates(stream, equates, renderOperand)</code>
+  static, so only the per-handle renderer differs (cave-relative
+  <code>equateOperand</code> vs fully-qualified <code>qualifiedOperand</code>).
+  A 3-way (N&gt;2) region-equate test was added to
+  <code>test_cwEquateEmission.cpp</code>, restoring the N-way emit+solve
+  coverage the deleted spike carried. <strong>Follow-up, not now:</strong>
+  <code>equateOperand</code>/<code>writeEquateLine</code>/<code>writeEquates</code>
+  are public statics on the <code>QObject</code> cave task purely so the region
+  exporter can share them &mdash; the right seam today, since the region exporter
+  already depends on <code>cwSurvexExporterCaveTask::writeCave</code>. If a
+  <em>third</em> survex-emission helper ever needs sharing, that is the signal to
+  extract a non-<code>QObject</code> <code>cwSurvexEquateWriter</code> (or add a
+  <code>.cpp</code> to the header-only <code>cwSurvexExporterUtils</code>
+  namespace) rather than grow the task's public surface further &mdash; blast
+  radius ~3 call sites across the two exporters.
 </p>
 
 <h3 id="c6">Commit 6 &mdash; Equate UX (the pain-point payoff)</h3>
