@@ -661,27 +661,199 @@ bool cwTrip::isScoped() const { return !scopePrefix().isEmpty(); }</code></pre>
   radius ~3 call sites across the two exporters.
 </p>
 
-<h3 id="c6">Commit 6 &mdash; Equate UX (the pain-point payoff)</h3>
-<p>
-  Survex's pain is a hand-managed text list of qualified names. CaveWhere has
-  the stations and positions, so make it visual:
+<h3 id="c6">Commit 6 &mdash; Tie-in UX (the pain-point payoff)</h3>
+<p class="note">
+  <strong>Design settled 2026-07-22</strong> across three interactive HTML
+  prototype iterations; the editor-centric direction below was chosen. It
+  <em>supersedes</em> the original "pick two stations in a global Ties panel"
+  sketch &mdash; a global pick-two panel tested as <em>confusing</em>. A tie is
+  not an object you curate in a list; it is how a station <em>joins the cave</em>
+  (same qualified name &rArr; same point, the D5 implicit tie). So creation moves
+  <strong>into the editor, where the survey data is</strong>, and the global list
+  survives only as a read-only audit.
+</p>
+<p><strong>Two mechanisms, chosen automatically by whether the tails match:</strong></p>
+<ul>
+  <li><strong>Same tail &rarr; re-scope (no equate object).</strong> The trip has
+    <code>a1</code> and the cave already has <code>a1</code>: escape the trip's
+    prefix on that one station so its qualified name becomes the cave's
+    <code>a1</code> and the two coincide (D5 shared-name tie, taken cross-scope).
+    Non-destructive &mdash; the tail is unchanged, only its scope. This is the
+    <code>.</code>-absolute override (below), and it is the primary path.</li>
+  <li><strong>Different tail &rarr; <code>cwEquate</code>.</strong> The trip's
+    <code>b1</code> meets the cave's <code>c1</code>: re-scoping can't help (names
+    still differ), so emit a real equate &mdash; exactly the C2&ndash;C5 model,
+    now <em>created by the suggester</em> rather than hand-authored.</li>
+</ul>
+<p><strong>The payoff is the floating-survey suggester, not a pretty table.</strong>
+  CaveWhere already detects the failure and dead-ends on it:
+  <code>cwFindUnconnectedSurveyChunks</code> &rarr;
+  <code>updateUnconnectedChunkErrors</code> emits "<em>Cannot solve: N survey
+  leg(s) are not connected to the cave network&hellip; fix the disconnected
+  station names.</em>" Commit&nbsp;6 turns that dead-end message into an action:</p>
+<ul>
+  <li><strong>Proactive banner</strong> the instant a trip lands floating &mdash;
+    it is something you <em>must</em> fix, so in-your-face, not a dismissible
+    toast.</li>
+  <li><strong>Suggester</strong> ranks candidate partners by <strong>tail match
+    &rarr; letter-prefix &rarr; 3D proximity</strong> and offers one-click
+    connect. Ambiguous tails (<code>topo1.0</code> vs <code>topo2.0</code> &mdash;
+    the same bare <code>0</code> living in many trips) list the prefixed
+    candidates to choose from.</li>
+  <li><strong>Two triggers, one banner.</strong> Native floats are caught
+    <em>pre-solve</em> by <code>cwFindUnconnectedSurveyChunks</code>; external
+    centerlines float <em>inside cavern</em> and surface as a post-run cavern
+    error. Unify both into one "trip is floating" signal that drives the banner.</li>
+</ul>
+<p><strong>Three surfaces, one shared banner&rarr;suggester spine:</strong></p>
+<ul>
+  <li><strong>Native &mdash; the <code>SurveyDataEditor</code> station cell.</strong>
+    Cells are small, so a tied station shows <strong>only its tail plus a tie
+    badge</strong> (<code>a1&nbsp;&#8627;&nbsp;tied</code>), never the full
+    <code>whitmore.a1</code>; the target opens in a click popover (change /
+    remove). The badge is the required <em>visible marker</em> &mdash; an
+    invisible re-scope is how survex ties become unmaintainable.</li>
+  <li><strong>External centerline &mdash; the <code>TripPage</code> panel.</strong>
+    No editable shot cells exist (stations come from the <code>.svx</code>), so
+    ties live in their own <strong>Connections list</strong> on the panel. A
+    freshly-attached centerline is floating by definition, so the suggester is
+    <strong>open by default</strong> post-attach &mdash; connecting is the
+    required next step, not an error to discover. The panel must support
+    <strong>connecting several stations</strong> (see the coordinates note).</li>
+  <li><strong>Global &mdash; a read-only Health / Ties page.</strong> Never
+    creates a tie: every join in one place with its misclosure, which trips are
+    still floating, and an <strong>exported-survex peek</strong> (readable vs
+    hex) &mdash; the "reviewable, not a text file" win, and where the naming
+    spike's payoff is visible.</li>
+</ul>
+<p class="note">
+  <strong>Floating means no coordinates &mdash; so the first tie cannot be
+  distance-ranked.</strong> A disconnected survey has no position in the cave's
+  frame, so proximity ranking <em>and</em> the misclosure/gap read-out are
+  unavailable until <em>at least one</em> station is tied and the network
+  re-solves. The suggester therefore ranks the <strong>first</strong> connection
+  by <strong>name only</strong> (tail + letter-prefix, no gap number); once one
+  tie lands and the solve pulls the survey into frame, subsequent connections
+  gain distance ranking and gap numbers. This is precisely why the
+  external-centerline panel must allow <strong>multiple</strong> connections and
+  iterate: tie one by name &rarr; re-solve &rarr; refine the rest with distance
+  (extra ties past the first also yield the loop misclosure that validates the
+  join).
+</p>
+<p class="note">
+  <strong>Scope-label spike (A vs B) &mdash; RESOLVED 2026-07-22: Fork&nbsp;A.</strong>
+  A stored human-readable slug replaces <code>cave_&lt;hex&gt;</code>/<code>trip_&lt;hex&gt;</code>
+  in <em>both</em> emission and decode (<code>fisher_ridge.a1</code>). Proven with
+  a throwaway Catch2 PoC (36 assertions / 5 cases green, then deleted &mdash; same
+  disposable pattern as the C1 equate spike). This is a <em>different axis</em>
+  from commit&nbsp;8/9's "Path&nbsp;A / Path&nbsp;B" (those are native
+  <em>station</em>-name prefixing; this is the <em>cave/trip scope label</em> that
+  emission writes). Two findings decided it:
 </p>
 <ul>
-  <li><strong>Create by picking two stations, never typing qualified
-    names</strong> &mdash; select a station &rarr; "Tie in&hellip;" &rarr; pick
-    the partner via the scope search picker (commit&nbsp;7) or by clicking it in
-    the 3D view. The un-typeable-UUID problem disappears because you select.</li>
-  <li><strong>Existence + misclosure feedback</strong> &mdash; confirm both
-    stations exist (today's validator is character-only, &sect;1.2) and surface
-    the gap distance cavern already computes ("these were 0.4&nbsp;m
-    apart").</li>
-  <li><strong>A "Ties" panel</strong> &mdash; friendly rows
-    (<code>Trip&nbsp;A&nbsp;&middot;&nbsp;5&nbsp;&harr;&nbsp;Whitmore.svx&nbsp;&middot;&nbsp;X</code>),
-    add/remove, misclosure per row. A reviewable table, not a text file. Shows
-    both a cave's own ties and the region's cross-cave ties (&sect;5).</li>
-  <li><em>Deferred nicety:</em> auto-suggest an equate when two absolutely-fixed
-    components land within &epsilon;.</li>
+  <li><strong>Zero migration.</strong> <code>cave_&lt;hex&gt;.&lt;tail&gt;</code>
+    is <em>never persisted</em> &mdash; the project stores equates as
+    <code>{scope, container_uuid, tail}</code> handles (<code>cavewhere.proto</code>
+    <code>StationHandle</code>) and regenerates the label on every export from the
+    live <code>QUuid</code>. Changing the scheme touches only runtime
+    generation&nbsp;+&nbsp;decode; old projects round-trip untouched. This retired
+    Fork&nbsp;A's single biggest risk.</li>
+  <li><strong>The user-facing export already uses <em>real</em> cave names.</strong>
+    <code>encodeCaveNames</code> (the hex rewrite,
+    <code>cwLinePlotTask.cpp:153</code>) runs <em>only</em> on the internal
+    cavern-solve driver, never on <code>cwSurveyExportManager::exportSurvex*</code>
+    (those pass <code>region-&gt;data()</code> straight through). So the hex a user
+    actually sees in a shared <code>.svx</code> is narrow: <code>*begin trip_&lt;hex&gt;</code>
+    for external-centerline trips (<code>cwSurvexExporterCaveTask.cpp:140</code>)
+    and <code>cave_&lt;hex&gt;.</code>/<code>trip_&lt;hex&gt;.</code> operands
+    inside <code>*equate</code> lines. <strong>Fork&nbsp;B (UI-only alias) leaves
+    the emitted file untouched and therefore does not address the actual
+    complaint</strong> &mdash; only&nbsp;A reaches the export.</li>
 </ul>
+<p class="note">
+  <strong>Latent bug the spike surfaced (fix under Fork&nbsp;A, track regardless):</strong>
+  in the user-facing <em>region</em> export the cross-cave <code>*equate</code>
+  operands are qualified with <code>caveScopePrefix(id)</code>&nbsp;=&nbsp;<code>cave_&lt;hex&gt;.</code>
+  while the <code>*begin</code> blocks use the <em>real</em> cave name &mdash; so
+  those operands reference scopes that do not exist in the exported file. Region
+  equates resolve only in the solve driver (where begins were hex-rewritten), not
+  in the shared <code>.svx</code>. Fork&nbsp;A fixes this as a side effect by
+  slugging begins <em>and</em> operands consistently.
+</p>
+<p>
+  <strong>Fork&nbsp;A implementation shape (all proven in the PoC):</strong>
+</p>
+<ul>
+  <li><code>sanitizeToCavernIdentifier(name)</code> in <code>cwCavernNaming</code>:
+    fold every non-<code>[a-z0-9]</code> char to <code>_</code>, collapse runs,
+    trim, lowercase (cavern is case-insensitive; <code>cwStation::canonicalKey</code>
+    lowercases), empty&nbsp;&rarr;&nbsp;<code>"x"</code>. Cavern forbids hyphens
+    inside a scope identifier (<code>cwLinePlotTask.cpp:49</code>) &mdash; the very
+    reason hex was chosen &mdash; so the slug <em>must</em> sanitise. (Native trips
+    already emit an un-sanitised user <code>stationPrefix + "."</code>,
+    <code>cwTrip.cpp:40</code>: the closest precedent, and a caution.)</li>
+  <li>A <code>SlugRegistry</code>: one unique legal slug per <code>QUuid</code>,
+    assigned deterministically from the region's iteration order
+    (<code>region.caves</code> index order, trips within), disambiguating
+    collisions that survive sanitisation
+    (<code>Big&nbsp;Cave</code>/<code>Big-Cave</code>&nbsp;&rarr;&nbsp;<code>cave_big_cave</code>,
+    <code>cave_big_cave_2</code>). <code>cwSaveLoad</code>'s per-entity directories
+    keep <em>display</em> names unique, but sanitisation can still collapse
+    distinct names, so the dedup pass is load-bearing. Reserved <code>cave_</code>/<code>trip_</code>
+    names are neutralised by the prepend (<code>cave_cave_x</code>).</li>
+  <li><strong>Decode gets <em>simpler</em>, not harder.</strong> Replace the
+    32-hex regex (<code>^cave_([0-9a-fA-F]{32})\.(\S.*)$</code>) +
+    <code>reinsertUuidHyphens</code> + <code>QUuid::fromString</code> in
+    <code>splitLookupByCave</code> (<code>cwLinePlotTask.cpp:405&ndash;460</code>)
+    with <code>indexOf('.')</code> split + <code>SlugRegistry::uuidFor()</code>.
+    Slugs contain no dots (sanitise folds them), so the first <code>.</code> always
+    ends the cave slug; the tail keeps the current loose semantics (nested trip
+    scopes / dots preserved). Encode and decode independently rebuild the registry
+    from the same ordered snapshot and reach identical assignments &mdash; no map
+    is carried across the thread boundary (PROVEN).</li>
+  <li><strong>Ambiguous <code>topo1.0</code>/<code>topo2.0</code> proven end to
+    end:</strong> two external trips under one cave, each with a bare <code>0</code>,
+    emit <code>cave_fisher_ridge.trip_topo1.0</code> vs <code>&hellip;trip_topo2.0</code>
+    &mdash; distinct, both routing to the same cave with distinct cave-local tails
+    <code>trip_topo1.0</code>/<code>trip_topo2.0</code>, never collapsing.</li>
+</ul>
+<p class="note">
+  <strong>Test blast radius (small).</strong> <code>test_cwEquateEmission.cpp</code>
+  builds every expectation via <code>cwCavernNaming</code> and auto-follows the
+  format change (0 breaks). Only the format-contract assertions break by design and
+  must be rewritten: <code>test_cwLinePlotTask_UuidPrefix.cpp</code> (pins
+  <code>cave_&lt;32&nbsp;hex&gt;</code> + <code>stationRegex</code>) and one regex at
+  <code>test_cwExternalCenterlineAttach.cpp:792</code>. <code>test_cwScopeStationListModel.cpp</code>
+  uses synthetic <code>cave_x.</code> literals independent of <code>cwCavernNaming</code>
+  (unaffected). <strong>Touch sites for the real change:</strong>
+  <code>cwCavernNaming.cpp</code> (<code>caveName</code>/<code>tripName</code>/<code>stationRegex</code>
+  + new sanitise + registry), <code>cwLinePlotTask.cpp</code>
+  (<code>encodeCaveNames</code> builds the registry; <code>splitLookupByCave</code>
+  decodes via it; drop <code>reinsertUuidHyphens</code>), and the two
+  format-contract tests. Lands alongside the scope lens (commit&nbsp;7) / dotted
+  names (commit&nbsp;8). The user <em>never types the scope path</em> either way
+  &mdash; the load-reducer is autocomplete + suggester + visual pick resolving to a
+  stored handle; the slug only decides what the machine writes and what a human
+  reads.
+</p>
+<p>
+  <strong>The <code>.</code>-absolute override:</strong> a station name that
+  contains "<code>.</code>" in a prefixed trip is treated as <strong>absolute</strong>
+  (bypass the trip's own prefix), not nested under it &mdash; the per-station
+  escape that authors a cross-scope reference by hand. This is commit&nbsp;8's
+  dotted grammar applied as an explicit scope-escape; its exact semantics (what
+  the "<code>.</code>" resolves against) are settled by the resolved spike above
+  &mdash; with Fork&nbsp;A the readable slug <em>is</em> typeable, so an absolute
+  reference reads <code>fisher_ridge.a1</code> rather than a hex path.
+</p>
+<p class="note">
+  <strong>Demoted from the original sketch:</strong> the standalone pick-two Ties
+  <em>panel</em> and the 3D-view "click two stations" gesture are no longer the
+  primary creation surface &mdash; kept, if at all, only as an optional
+  convenience. The deferred "auto-suggest on &epsilon;-coincidence" nicety folds
+  into the suggester's proximity ranking. Depends on the scope lens
+  (commit&nbsp;7) for the autocomplete that resolves a typed tail to a handle.
+</p>
 
 <h3 id="c7">Commit 7 &mdash; Scope lens (reference / autocomplete / prefix-free typing)</h3>
 <p>
@@ -713,6 +885,114 @@ bool cwTrip::isScoped() const { return !scopePrefix().isEmpty(); }</code></pre>
     <code>myprefix2.1</code>), optionally ranked by 3D distance to the trip
     (<code>solvedStations()</code> carries positions).</li>
 </ul>
+<p class="note">
+  <strong>Status (2026-07-22): bullets 1–3 built + green; not committed.</strong>
+  <strong>(1)</strong> <code>cwScopeStationListModel</code> is now trip-driven:
+  set a <code>trip</code> and it lists <code>cwTrip::solvedStations()</code>,
+  unifying native (bare chunk names, empty prefix) and scoped/external
+  (prefix-stripped tails) — the legacy <code>scopePrefix</code>+<code>network</code>
+  path stays for the external panel and a set trip takes precedence.
+  <code>network</code> is the re-solve pulse in trip mode. Added
+  <code>Q_INVOKABLE containsStation()</code> (advisory) and
+  <code>matchingStations(prefix)</code> (dropdown filter), both
+  canonical-key case-insensitive. <strong>(2)</strong> Autocomplete is a new
+  <code>ScopeStationCompleter.qml</code> &mdash; a dropdown of in-scope stations
+  (Tab fills the field with the top/highlighted match, Up/Down live-preview,
+  click commits). It lives as a <em>single</em> instance in
+  <code>MainContent.qml</code>'s overlay &mdash;
+  <code>GlobalShadowTextInput</code> stays a generic editor, untouched &mdash;
+  tracking the shared editor's geometry and reading its scope model from the
+  field being edited
+  (<code>coreClickInput.stationScopeModel</code>, an opt-in property on
+  <code>CoreClickTextInput</code>);
+  <code>StationDoubleClickTextInput</code> owns a trip-scoped model and both
+  <code>NoteStation</code>/<code>NoteLiDARStationItem</code> feed it their
+  <code>parentTrip</code>. Inert for every non-station field (proven by
+  <code>tst_ScopeStationCompleter</code>). Adding a station with no guessed
+  name now pre-fills the trip's first solved station
+  (<code>cwBaseNoteStationInteraction</code> /
+  <code>cwBaseNoteLiDARStationInteraction</code>) instead of the literal
+  &ldquo;Station Name&rdquo;, saving typing. <strong>(3)</strong> The out-of-scope
+  advisory (Phase&nbsp;2 §15 F1) shows “<code>X</code> isn't in this trip — tie
+  into &lt;cave&gt; <code>X</code>?” as a non-blocking dropdown row, never folded
+  into the permissive <code>cwStationValidator</code>. Tests:
+  <code>test_cwScopeStationListModel.cpp</code> (48 assertions / 11 cases),
+  <code>tst_ScopeStationCompleter.qml</code> (6 cases). <strong>Deferred:</strong>
+  the This-Cave/another-trip scope selector (user decision — fast-follow) and
+  bullet 4's whole-cave picker. <strong>Follow-up gap:</strong> the completer's
+  match/ghost/navigation over <em>populated</em> rows is covered at the C++ level
+  (<code>matchingStations</code>); a full load+solve QML interaction test is not
+  yet written (a populated model isn't reachable from pure QML). The Fork&nbsp;A
+  slug emission/decode is <em>not</em> part of this — it lands with commit&nbsp;8.
+</p>
+<p class="note">
+  <strong>Review follow-ups (deferred, from the 2026-07-22 pre-commit review):</strong>
+  <strong>(a)</strong> The &ldquo;default new-station name = trip's first solved
+  station&rdquo; policy is duplicated verbatim in
+  <code>cwBaseNoteStationInteraction.cpp</code> and
+  <code>cwBaseNoteLiDARStationInteraction.cpp</code> — centralise it (e.g.
+  <code>cwTrip::defaultNewStationName()</code>) before it drifts.
+  <strong>(b)</strong> One <code>ScopeStationListModel</code> is instantiated
+  <em>per station delegate</em> (<code>StationDoubleClickTextInput</code>), each
+  bound to <code>regionNetwork</code>; every re-solve resets all N models and each
+  reset calls <code>cwTrip::solvedStations()</code> (copies the cave lookup +
+  scans all positions) &rarr; ≈ O(stations-in-note × stations-in-cave) per solve.
+  Share one trip-scoped model per note. Invisible on small data, quadratic on the
+  big &ldquo;many <code>myprefix1.1</code>&rdquo; caves bullet&nbsp;4 anticipates —
+  pairs naturally with that picker work.
+  <strong>(c)</strong> The overlay completer reaches through
+  <code>GlobalShadowTextInput.coreClickInput.stationScopeModel</code> and mirrors
+  the editor geometry from <code>MainContent</code>. If a second per-field
+  editor add-on ever appears, generalise this into a provider/attached-property
+  on the shared editor rather than hard-coding one field's internals.
+  <strong>&rarr; Promoted to a decided next task; see &ldquo;Completer decoupling&rdquo;
+  below.</strong>
+</p>
+
+<h3 id="completer-decoupling">Next &mdash; Completer decoupling (the <code>ToolTip</code> shape)</h3>
+<p>
+  Follow-up (c), now decided. Two coupling smells to remove, both tracing to the
+  same fact &mdash; <code>GlobalShadowTextInput</code> is a singleton, so there is
+  exactly one live editor and therefore exactly one completer (that single-instance
+  part is correct and stays). What changes is <em>how a field declares its model</em>
+  and <em>where the one completer instance lives</em>. The target is the same shape
+  as <code>QtQuick.Controls</code>' <code>ToolTip</code>: one shared visual instance,
+  fed per-item by an attached property, rendered in the overlay.
+</p>
+<ol>
+  <li>
+    <strong>Opt-in via a C++ attached property.</strong> Add a
+    <code>StationScope</code> attached type (C++ &mdash; attached types cannot be
+    pure QML) exposing <code>model</code>. Station fields write
+    <code>StationScope.model: scopeStationModel</code> (in
+    <code>StationDoubleClickTextInput.qml</code>), exactly as
+    <code>ToolTip.text: &hellip;</code> reads. <code>CoreClickTextInput</code> then
+    <em>drops <code>stationScopeModel</code> entirely</em> and is a generic editor
+    again. The completer resolves the active field's model through the attachment
+    in C++ (<code>qmlAttachedPropertiesObject&lt;&hellip;&gt;(coreClickInput, false)</code>);
+    QML cannot read another object's attached property, so the resolver is C++ too.
+    The singleton editor never learns anything about stations.
+  </li>
+  <li>
+    <strong>Home the one instance under the shadow-editor singleton.</strong> Move
+    <code>ScopeStationCompleter {}</code> out of <code>MainContent.qml</code> and make
+    it a generic child slot of <code>GlobalShadowTextInput</code> (already parented
+    into the overlay via <code>GlobalShadowTextInput.parent = overlay</code>), so it
+    still renders under the editor's geometry. The singleton stays station-agnostic:
+    the model arrives via the attached-property resolver, not via singleton code.
+    <code>MainContent</code> no longer mentions the completer.
+  </li>
+</ol>
+<p>
+  Net: <code>CoreClickTextInput</code> becomes pristine, <code>MainContent</code>
+  loses the widget, and the singleton gains a generic add-on slot but no station
+  knowledge. Considered but <em>not</em> chosen: a generic pure-QML pass-through
+  property (lighter, but a property still lives on the editor &mdash; doesn't fully
+  remove the coupling), and a fully C++-owned lazy shared instance (fullest
+  <code>ToolTip</code> parity, but more plumbing than warranted for one add-on).
+  Tests: extend <code>tst_ScopeStationCompleter.qml</code> for the attached-property
+  opt-in path; keep the existing inert/out-of-scope contract green.
+</p>
 
 <h3 id="c8">Commit 8 &mdash; Native prefixing, Path A (dotted names)</h3>
 <p>

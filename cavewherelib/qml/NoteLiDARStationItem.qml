@@ -81,6 +81,7 @@ PointItem {
         anchors.left: stationImage.right
         pointItem: noteStationId
         validator: stationValidatorId
+        trip: noteStationId.parentTrip
         text: name
 
         onFinishedEditting: (newText) => {

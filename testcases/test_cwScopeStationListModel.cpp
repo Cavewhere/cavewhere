@@ -8,6 +8,11 @@
 //Our includes
 #include "cwScopeStationListModel.h"
 #include "cwSurveyNetwork.h"
+#include "cwCave.h"
+#include "cwTrip.h"
+#include "cwStation.h"
+#include "cwShot.h"
+#include "cwSurveyChunk.h"
 
 namespace {
 
@@ -33,6 +38,27 @@ QStringList roleValues(const cwScopeStationListModel& model, int role)
         values.append(model.data(model.index(i, 0), role).toString());
     }
     return values;
+}
+
+// A native (unprefixed) trip carrying two chunk stations, plus a cave lookup
+// that solved both to a position. This is the case a scopePrefix path cannot
+// select — an empty prefix — so it exercises the trip-driven path proper.
+cwShot unitShot()
+{
+    cwShot shot;
+    shot.setDistance(cwDistanceReading("10"));
+    shot.setCompass(cwCompassReading("0"));
+    shot.setBackCompass(cwCompassReading("180"));
+    shot.setClino(cwClinoReading("0"));
+    shot.setBackClino(cwClinoReading("0"));
+    return shot;
+}
+
+cwStation namedStation(const QString& name)
+{
+    cwStation station;
+    station.setName(name);
+    return station;
 }
 
 }
@@ -77,12 +103,13 @@ TEST_CASE("Prefix strip and out-of-scope filtering", "[Model][ScopeStations]")
           == QStringLiteral("b1"));
 }
 
-TEST_CASE("Rows are sorted by qualified name", "[Model][ScopeStations]")
+TEST_CASE("Rows are sorted in natural order by qualified name", "[Model][ScopeStations]")
 {
     // Station keys are canonical lowercase, so case-insensitivity is
-    // unobservable here; this pins the lexicographic order. QHash iteration
-    // is arbitrary, so enough stations that an unsorted model can't pass by
-    // luck.
+    // unobservable here; this pins the natural order. QHash iteration is
+    // arbitrary, so enough stations that an unsorted model can't pass by luck.
+    // The trailing number must ascend numerically: "a2" before "a10", not the
+    // lexicographic "a10" before "a2".
     cwSurveyNetwork network;
     network.addShot(QStringLiteral("cave_x.trip_y.B1"), QStringLiteral("cave_x.trip_y.A2"));
     network.addShot(QStringLiteral("cave_x.trip_y.A1"), QStringLiteral("cave_x.trip_y.C3"));
@@ -97,8 +124,8 @@ TEST_CASE("Rows are sorted by qualified name", "[Model][ScopeStations]")
 
     CHECK(roleValues(model, cwScopeStationListModel::StationNameRole)
           == QStringList({ QStringLiteral("a1"),
-                           QStringLiteral("a10"),
                            QStringLiteral("a2"),
+                           QStringLiteral("a10"),
                            QStringLiteral("aa1"),
                            QStringLiteral("b1"),
                            QStringLiteral("b2"),
@@ -153,4 +180,149 @@ TEST_CASE("Clearing the network empties the model", "[Model][ScopeStations]")
 
     model.setNetwork(cwSurveyNetwork());
     CHECK(model.rowCount() == 0);
+}
+
+TEST_CASE("A native (unprefixed) trip lists its solved chunk stations", "[Model][ScopeStations]")
+{
+    // The whole point of the trip-driven path: a native trip has an empty scope
+    // prefix, which the scopePrefix path treats as zero rows. solvedStations()
+    // still yields the bare chunk-station names the note site speaks.
+    cwCave cave;
+    cwTrip* trip = new cwTrip();
+    cave.addTrip(trip);
+
+    cwSurveyChunk* chunk = new cwSurveyChunk();
+    trip->addChunk(chunk);
+    chunk->appendShot(namedStation(QStringLiteral("s1")),
+                      namedStation(QStringLiteral("s2")), unitShot());
+
+    cwStationPositionLookup lookup;
+    lookup.setPosition(QStringLiteral("s1"), QVector3D(1, 2, 3));
+    lookup.setPosition(QStringLiteral("s2"), QVector3D(4, 5, 6));
+    lookup.setPosition(QStringLiteral("outside"), QVector3D(7, 8, 9));
+    cave.setStationPositionLookup(lookup);
+
+    cwScopeStationListModel model;
+    model.setTrip(trip);
+
+    // Bare names, unprefixed; the foreign "outside" station is excluded.
+    CHECK(roleValues(model, cwScopeStationListModel::StationNameRole)
+          == QStringList({ QStringLiteral("s1"), QStringLiteral("s2") }));
+    // Native qualified name == the bare name (empty scope prefix).
+    CHECK(roleValues(model, cwScopeStationListModel::QualifiedNameRole)
+          == QStringList({ QStringLiteral("s1"), QStringLiteral("s2") }));
+    CHECK(model.data(model.index(0, 0), cwScopeStationListModel::PositionRole).value<QVector3D>()
+          == QVector3D(1, 2, 3));
+
+    // Membership advisory: in-scope names hit (case-insensitively), others miss.
+    CHECK(model.containsStation(QStringLiteral("s1")));
+    CHECK(model.containsStation(QStringLiteral("S2")));
+    CHECK_FALSE(model.containsStation(QStringLiteral("outside")));
+    CHECK_FALSE(model.containsStation(QStringLiteral("nope")));
+}
+
+TEST_CASE("matchingStations filters in-scope names by typed prefix", "[Model][ScopeStations]")
+{
+    cwScopeStationListModel model;
+    model.setNetwork(makeScopedNetwork());
+    model.setScopePrefix(QStringLiteral("cave_x.trip_y."));
+    // Rows: a1, a2, sidepassage.b1 (sorted by qualified name).
+
+    // Empty prefix returns every in-scope name, in row order.
+    CHECK(model.matchingStations(QString())
+          == QStringList({ QStringLiteral("a1"),
+                           QStringLiteral("a2"),
+                           QStringLiteral("sidepassage.b1") }));
+
+    // Prefix filters case-insensitively.
+    CHECK(model.matchingStations(QStringLiteral("a"))
+          == QStringList({ QStringLiteral("a1"), QStringLiteral("a2") }));
+    CHECK(model.matchingStations(QStringLiteral("A2"))
+          == QStringList({ QStringLiteral("a2") }));
+    CHECK(model.matchingStations(QStringLiteral("side"))
+          == QStringList({ QStringLiteral("sidepassage.b1") }));
+
+    // No match yields an empty list (drives the out-of-scope advisory).
+    CHECK(model.matchingStations(QStringLiteral("z")).isEmpty());
+}
+
+TEST_CASE("A native-prefixed trip lists scope-relative tails", "[Model][ScopeStations]")
+{
+    // Prefix "A": the cave lookup keys stations A.s1/A.s2; the model must strip
+    // the prefix to the tail and qualify it back with the same prefix.
+    cwCave cave;
+    cwTrip* trip = new cwTrip();
+    trip->setStationPrefix(QStringLiteral("A"));
+    cave.addTrip(trip);
+
+    cwStationPositionLookup lookup;
+    lookup.setPosition(QStringLiteral("A.s1"), QVector3D(1, 2, 3));
+    lookup.setPosition(QStringLiteral("A.s2"), QVector3D(4, 5, 6));
+    cave.setStationPositionLookup(lookup);
+
+    cwScopeStationListModel model;
+    model.setTrip(trip);
+
+    CHECK(roleValues(model, cwScopeStationListModel::StationNameRole)
+          == QStringList({ QStringLiteral("s1"), QStringLiteral("s2") }));
+    CHECK(roleValues(model, cwScopeStationListModel::QualifiedNameRole)
+          == QStringList({ QStringLiteral("A.s1"), QStringLiteral("A.s2") }));
+}
+
+TEST_CASE("A set trip takes precedence over scopePrefix", "[Model][ScopeStations]")
+{
+    cwCave cave;
+    cwTrip* trip = new cwTrip();
+    trip->setStationPrefix(QStringLiteral("A"));
+    cave.addTrip(trip);
+
+    cwStationPositionLookup lookup;
+    lookup.setPosition(QStringLiteral("A.s1"), QVector3D(1, 2, 3));
+    cave.setStationPositionLookup(lookup);
+
+    cwScopeStationListModel model;
+    // A legacy prefix + network is present, but the trip must win.
+    model.setNetwork(makeScopedNetwork());
+    model.setScopePrefix(QStringLiteral("cave_x.trip_y."));
+    REQUIRE(model.rowCount() == 3);
+
+    model.setTrip(trip);
+    CHECK(roleValues(model, cwScopeStationListModel::StationNameRole)
+          == QStringList({ QStringLiteral("s1") }));
+
+    // Clearing the trip falls back to the legacy prefix path.
+    model.setTrip(nullptr);
+    CHECK(model.rowCount() == 3);
+}
+
+TEST_CASE("A network change re-pulls the trip's solved stations", "[Model][ScopeStations]")
+{
+    // In trip mode the network value is unused, but its change is the re-solve
+    // pulse: the model re-reads solvedStations() and picks up the new lookup.
+    cwCave cave;
+    cwTrip* trip = new cwTrip();
+    trip->setStationPrefix(QStringLiteral("A"));
+    cave.addTrip(trip);
+
+    cwStationPositionLookup first;
+    first.setPosition(QStringLiteral("A.s1"), QVector3D(1, 2, 3));
+    cave.setStationPositionLookup(first);
+
+    cwScopeStationListModel model;
+    model.setTrip(trip);
+    REQUIRE(model.rowCount() == 1);
+
+    // The solve advances: a second station appears in the cave lookup.
+    cwStationPositionLookup second = first;
+    second.setPosition(QStringLiteral("A.s2"), QVector3D(4, 5, 6));
+    cave.setStationPositionLookup(second);
+
+    QSignalSpy resetSpy(&model, &QAbstractItemModel::modelReset);
+    cwSurveyNetwork pulse;
+    pulse.addShot(QStringLiteral("ignored.a"), QStringLiteral("ignored.b"));
+    model.setNetwork(pulse);
+
+    CHECK(resetSpy.count() == 1);
+    CHECK(roleValues(model, cwScopeStationListModel::StationNameRole)
+          == QStringList({ QStringLiteral("s1"), QStringLiteral("s2") }));
 }

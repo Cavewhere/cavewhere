@@ -1,0 +1,7 @@
+; Tiny Walls fixture. Processing any Walls .srv in a run makes cavern's
+; find_output_separator() mark '.' as a name character and ':' as a
+; separator (commands.c update_separator_map_for_foreign_format), so every
+; label in the emitted .3d — including the survex stations — uses ':'.
+#UNITS D=Meters A=Degrees V=Degrees
+#Fix WA 0 0 0
+WA	WB	10.0	0	0

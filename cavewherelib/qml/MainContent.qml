@@ -80,6 +80,31 @@ QQ.Item {
     QQ.Item {
         id: overlay
         anchors.fill: parent
+
+        // The one station-name autocomplete for the whole app. It attaches to
+        // the shared shadow editor (which stays a generic text editor) and
+        // reads its scope model from whichever field is being edited, so it is
+        // inert for every non-station field. Tracks the editor's geometry so
+        // its dropdown lands under the field.
+        ScopeStationCompleter {
+            id: stationCompleter
+
+            x: GlobalShadowTextInput.editor.x
+            y: GlobalShadowTextInput.editor.y
+            width: GlobalShadowTextInput.editor.width
+            height: GlobalShadowTextInput.editor.height
+
+            textInput: GlobalShadowTextInput.textInput
+            scopeModel: GlobalShadowTextInput.coreClickInput !== null
+                        ? GlobalShadowTextInput.coreClickInput.stationScopeModel
+                        : null
+
+            onPickCommitted: {
+                if (GlobalShadowTextInput.coreClickInput !== null) {
+                    GlobalShadowTextInput.coreClickInput.commitChanges()
+                }
+            }
+        }
     }
 
     QQ.Component {

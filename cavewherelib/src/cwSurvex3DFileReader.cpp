@@ -73,6 +73,18 @@ cwSurvex3DFileReader::NetworkAndLookup cwSurvex3DFileReader::readNetworkAndLooku
         return out;
     }
 
+    // Survex chooses the label separator dynamically for the whole .3d
+    // (find_output_separator in survex/src/commands.c): it is '.' only when '.'
+    // is never a name character. Processing any Walls (.srv) or Compass (.dat)
+    // data in the run — which a region solve may include alongside native
+    // survex caves — marks '.' as a name character and ':' as a separator, so
+    // cavern emits ':'-joined labels like "cave_<hex>:trip_<hex>:1".
+    // cwCavernNaming and every decode consumer assume '.', so normalise the
+    // actual separator to '.' at the one point labels enter CaveWhere. The
+    // chosen separator is guaranteed never to occur inside a name, so this
+    // replacement is unambiguous.
+    const QChar separator = QLatin1Char(pimg->separator);
+
     // Pass 1: collect station labels (name + position). Build a coord -> name
     // index so pass 2 can resolve LINE endpoints. Skip anonymous stations —
     // they're never referenced as shot endpoints.
@@ -91,6 +103,9 @@ cwSurvex3DFileReader::NetworkAndLookup cwSurvex3DFileReader::readNetworkAndLooku
                 continue;
             }
             QString name = QString::fromUtf8(pimg->label);
+            if (separator != QLatin1Char('.')) {
+                name.replace(separator, QLatin1Char('.'));
+            }
             const QVector3D position(pt.x, pt.y, pt.z);
             out.lookup.setPosition(name, position);
             out.network.setPosition(name, position);

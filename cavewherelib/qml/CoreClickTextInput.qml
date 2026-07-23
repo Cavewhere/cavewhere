@@ -20,6 +20,7 @@ QQ.Item {
     property bool doubleClickEdit: false
     property bool isEditting: false
     property Validator validator;
+    property ScopeStationListModel stationScopeModel  //opt-in station autocomplete
     property bool readOnly: false
     property bool autoResize: false
     property alias wrapMode: textAreaId.wrapMode

@@ -1,0 +1,29 @@
+; Reproduces the dynamic survex separator bug end to end. Including any Walls
+; .srv makes cavern pick ':' (not '.') as the label separator for the whole
+; .3d — the exact situation a project with mixed survex + Walls data hits. The
+; "*alias station - .." mirrors the external TopoDroid file that surfaced this.
+; The nested cave_/trip_ begins mirror the line-plot driver's synthetic
+; prefixes, so the emitted labels are the exact form cwCavernNaming decodes.
+; The Walls include forces the ':' separator and fixes its own WA station
+; (#Fix). The cave below fixes station 1. Both connected components carry a
+; control point so cavern emits no warning (the in-process runner surfaces
+; warnings as errors).
+*include separator_walls.srv
+
+*begin cave_f5881643adce48de9d5fe2224c217a86
+*begin trip_6f7da06a8b8c471cbfbefe23b99e4fd4
+*begin holberg1
+  *units tape meters
+  *units compass degrees
+  *units clino degrees
+  *alias station - ..
+  *fix 1 0 0 0
+  *data normal from to tape compass clino
+    1 2   3.56 221.3 4.5
+    1 3   8.21 54.6 -72.6
+  1 - 9.25 138.6 85.0
+    1 4   9.20 212.0 66.3
+    4 5   0.47 257.7 -38.7
+*end holberg1
+*end trip_6f7da06a8b8c471cbfbefe23b99e4fd4
+*end cave_f5881643adce48de9d5fe2224c217a86

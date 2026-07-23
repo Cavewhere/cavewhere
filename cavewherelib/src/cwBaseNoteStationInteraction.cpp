@@ -13,6 +13,25 @@
 #include "cwScrapView.h"
 #include "cwScrapItem.h"
 #include "cwScrapStationView.h"
+#include "cwTrip.h"
+
+namespace {
+//! First solved station in the scrap's trip, by scope-relative name — the same
+//! list the scope autocomplete offers. Pre-filling a new station with it saves
+//! typing when the guess and this agree; falls back to a placeholder when the
+//! trip is unsolved or absent.
+QString defaultStationName(cwScrap* scrap)
+{
+    cwTrip* trip = scrap != nullptr ? scrap->parentTrip() : nullptr;
+    if (trip != nullptr) {
+        const QList<QPair<QString, QVector3D>> solved = trip->solvedStations();
+        if (!solved.isEmpty()) {
+            return solved.first().first;
+        }
+    }
+    return QStringLiteral("Station Name");
+}
+}
 
 cwBaseNoteStationInteraction::cwBaseNoteStationInteraction(QQuickItem *parent) :
     cwBaseNotePointInteraction(parent)
@@ -41,7 +60,7 @@ void  cwBaseNoteStationInteraction::addPoint(QPointF notePosition, cwScrapItem* 
     QString stationName = scrap->guessNeighborStationName(selectedStation, notePosition);
 
     if(stationName.isEmpty()) {
-        stationName = "Station Name";
+        stationName = defaultStationName(scrap);
     }
 
     newNoteStation.setName(stationName);

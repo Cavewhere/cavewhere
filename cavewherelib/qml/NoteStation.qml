@@ -94,6 +94,7 @@ ScrapPointItem {
         anchors.left: stationImage.right
         pointItem: noteStationId
         validator: stationValidatorId
+        trip: noteStationId.parentTrip
         onFinishedEditting: (newText) => {
             noteStationId.scrap.setStationData(Scrap.StationName, noteStationId.pointIndex, newText);
             text = newText;
