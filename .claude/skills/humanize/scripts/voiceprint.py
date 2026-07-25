@@ -54,7 +54,10 @@ kFeatures: list[tuple[str, re.Pattern, str]] = [
     # The habit is register-independent; only its dress changes. The blog says
     # "see below", the ICS paper says "see Figure 3". Match both or the feature
     # looks like a blog quirk when it is actually voice.
-    ("points at figure", re.compile(r"\b(?:see below|shown below|check ?out|below shows|"
+    # "above" as well as "below": a caption sits under its image, so the prose
+    # that points back at it from the caption legitimately says "shown above".
+    ("points at figure", re.compile(r"\b(?:see (?:below|above)|shown (?:below|above)|"
+                                    r"check ?out|below shows|above shows|"
                                     r"see the (?:image|video|graph)|as shown|"
                                     r"(?:see|in|from)\s+(?:figure|fig\.?|table)\s*\d+|"
                                     r"(?:figure|fig\.?|table)\s*\d+\s+(?:shows|illustrates|"

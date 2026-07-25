@@ -29,7 +29,7 @@ eight years) against `docs/manual/` (50,490 words). Rates per 1000 words.
 | | blog | 2013 | 2021 | manual |
 |---|---|---|---|---|
 | **em dashes** | **0.00** | **0.00** | **0.00** | **19.73** |
-| **points at a figure** | 4.64 | 4.67 | 3.39 | **0.16** |
+| **points at a figure** | 4.96 | 4.67 | 3.39 | **0.32** |
 | **digits / measurements** | 20.32 | 27.50 | 14.06 | **3.90** |
 | **distinct named things** | 21.92 | 30.62 | 27.14 | **10.71** |
 | **contractions** | 6.72 | 6.23 | 5.33 | **18.72** |
