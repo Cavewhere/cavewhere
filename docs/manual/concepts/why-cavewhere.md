@@ -8,156 +8,158 @@ related: [glossary.md]
 
 # Why CaveWhere
 
-## Why / when you need this
+We use cave maps as a tool for exploration. Without them, leads get lost and
+projects stagnate. Plenty of caves have twenty years of survey data and no
+finished map. CaveWhere turns that pile into an accurate, shareable 3D map.
 
-Read this first. CaveWhere has a lot of features, and each one exists to solve a
-specific, long-standing problem in cave surveying. If you understand the
-problems, the rest of the manual — and the app — makes far more sense.
-
-Cavers measure passages by hand in the dark: a tape, a compass, a clinometer,
-and a pencil sketch on waterproof paper — or, increasingly, a digital sketch
-drawn in a mobile app like TopoDroid and exported as SVG. Turning thousands of
-those raw measurements and sketches into an accurate, shareable 3D map is the
-hard part. CaveWhere is built to do exactly that, and to keep the map correct
-and in sync as a team keeps surveying.
+This page lists those problems. The rest of the manual makes more sense after
+it.
 
 ## The guiding idea: a living map that helps you find cave
 
-CaveWhere was built to answer one question fast: **where is there more cave to
-find?** A map that takes weeks of drafting to finish is a historical record. A
-map that updates the moment you enter your survey is a *tool* — you can see
-where the [leads](glossary.md#lead) are and where the passages you've surveyed
-are heading, all before the next trip.
+I built CaveWhere to answer one question fast: **where is there more cave to
+find?** A map that takes weeks of drafting is a historical record. A map that
+updates the moment you enter your survey is a *tool*. You can see the
+[leads](glossary.md#lead) and which way the surveyed passages head, before the
+next trip.
 
-Everything else in CaveWhere serves that goal. Quick 2D-to-3D
-[morphing](#from-a-2d-sketch-to-a-3d-cave) means a working map exists as soon as
-you've entered data, not months later. [Loop closure](#keeping-the-map-correct-loop-closure)
-and automatic re-morphing keep it trustworthy as the survey grows.
-[Sync](#working-as-a-team-sync) means the whole team is looking at the same
-current map. The point of an always-up-to-date map is not tidiness — it's using
-what you know to go find what you don't.
+The rest follows from that. 2D-to-3D [morphing](#from-a-2d-sketch-to-a-3d-cave)
+gives you a working map as soon as you enter the data, not months later.
+[Loop closure](#keeping-the-map-correct-loop-closure) and automatic re-morphing
+keep it trustworthy as the survey grows. [Sync](#working-as-a-team-sync) keeps
+the whole team on the same current map.
 
 ## The long-term goal: salon-quality maps in CaveWhere
 
-The second overarching goal is to produce **award-winning, salon-quality 2D cave
-maps entirely within CaveWhere** — finished cartography good enough for
-publication and map salons, without leaving the app.
+CaveWhere should eventually draw **award-winning, salon-quality 2D cave maps**
+on its own: finished cartography, good enough to publish or hang in a map salon.
 
-**This does not exist yet.** Today CaveWhere produces the *working* map — the
-fast, always-current draft you use to survey and find cave. To make a
-presentation-quality final map, the current workflow is to export a view of the
-working map and redraw it in an external illustration tool such as Adobe
-Illustrator. Closing that gap — bringing full finished-map cartography into
-CaveWhere so the working map and the published map are one continuous
-document — is a long-term direction for the project, not a feature you'll find
-in the app today.
+**This does not exist yet.** Today CaveWhere gives you the *working* map, the
+fast always-current draft you survey from. For a presentation-quality final map,
+you export a view and redraw it in Adobe Illustrator or Inkscape. Closing that
+gap remains a long-term goal.
 
 ## From a 2D sketch to a 3D cave
 
-**The problem:** A surveyor's sketch is a flat drawing of a passage that twists
-and climbs in three dimensions. Traditionally the finished map stays 2D — the
-sketches are never turned into a 3D-aware model — and even that 2D map has to be
-redrawn by hand whenever the underlying survey data changes.
+You draw the passage in TopoDroid or with a pencil on waterproof paper, and
+either way you get a flat drawing of something that twists and climbs in three
+dimensions. Traditionally it stays that way: the sketches never become a 3D
+model, and even the 2D map gets redrawn by hand every time the survey data
+changes.
 
-**What CaveWhere does:** CaveWhere's signature feature — called
-*[carpeting](glossary.md#carpeting)* — morphs your 2D cave notes into 3D. You
-digitize pieces of a sketch as [scraps](glossary.md#scrap), tie them to survey
-[stations](glossary.md#station), and CaveWhere deforms each scrap onto the 3D
-survey line so the sketch drapes over the real passage geometry like a carpet.
-The result is a 3D model built from the drawings you already make in the cave.
+CaveWhere's signature feature, *[carpeting](glossary.md#carpeting)*, morphs
+those sketches into 3D. You digitize pieces of a sketch as
+[scraps](glossary.md#scrap), tie them to survey [stations](glossary.md#station),
+and CaveWhere deforms each scrap onto the 3D survey line so the drawing drapes
+over the passage like a carpet. The model comes out of the drawings you already
+make in the cave.
+
+Carpeting doesn't always come out clean. Sometimes a plan scrap pulls in
+stations it shouldn't and you get small vertical bumps; a running profile drawn
+over stacked stations creases. You can fix both, usually by tightening the
+default of 10 nearest stations or splitting the scrap. See
+[Troubleshoot Carpeting](../scraps/troubleshoot-carpeting.md).
 
 ## Keeping the map correct: loop closure
 
-**The problem:** Every instrument reading has a little error. When a survey
-route comes back to a station it already visited — a *loop* — those errors add
-up and the two paths don't quite meet. A large mismatch usually means a
-[blunder](glossary.md#loop-closure): a transposed digit, a reversed compass
-reading, a mistyped distance.
+**The problem:** Every instrument reading carries a little error. When a survey
+route comes back to a station it already visited, a *loop*, those errors add up
+and the two paths don't quite meet. A large mismatch usually means a
+[blunder](glossary.md#loop-closure): a transposed digit, a compass read
+backwards, a mistyped distance.
 
-**What CaveWhere does:** CaveWhere detects loops and reports the misclosure so
-you can find and fix blunders instead of shipping a warped map. When the
-underlying survey shifts — because you fixed a reading or closed a loop —
-CaveWhere automatically re-carpets the affected scraps so the map stays
-consistent with the data. You don't redraw anything.
+**What CaveWhere does:** CaveWhere finds the loops and reports the misclosure as
+a percentage of loop length. Under about 0.5% counts as a tight loop. Between
+0.5% and 2% is normal for longer loops or older instruments. Past about 5%, you
+almost certainly have a blunder. Go find it instead of shipping a warped map.
+When the survey shifts, CaveWhere re-carpets the affected scraps on its own. You
+don't redraw anything.
 
-**Powered by Survex:** CaveWhere doesn't reinvent the survey math — it embeds
-[Survex](glossary.md#survex), the open-source cave-surveying engine cavers have
-trusted for decades to process the world's largest and most complex cave
-systems. Survex's `cavern` solver does a proper least-squares network
-adjustment: rather than dumping all the misclosure onto the last shot, it
-spreads the error across the whole loop, weighted by each leg, to find the most
-statistically likely position for every station. Two benefits follow. First,
-the results are the community standard — a cave closed in CaveWhere lines up the
-way the rest of the caving world expects, and the same engine underlies Survex's
-own tools. Second, because Survex is built in as a library rather than a
-separate program, CaveWhere re-solves the whole network automatically on every
-edit, so the loop closure and the 3D line plot are always current with no export
-step.
+**Powered by Survex:** CaveWhere doesn't reinvent the survey math. It embeds
+[Survex](glossary.md#survex) 1.4.21, the open-source engine cavers use on the
+world's largest and most complex cave systems. Its `cavern` solver runs a real
+least-squares network adjustment: instead of dumping all the misclosure on the
+last shot, it spreads the error across the loop, weighted by each leg, to land
+on the most likely position for every station.
+
+Two things follow. Your caves close the way the rest of the caving world expects
+(same solver as Survex's own `aven` viewer). And since CaveWhere links Survex in
+as a library rather than running it as a separate program, it re-solves the
+whole network on every edit. The loop closure and the 3D line plot stay current,
+with no export step.
 
 ## Working as a team: sync
 
-**The problem:** Cave surveys are a team effort, but sharing the project has
-always been painful. For a small cave you email the file around. Bigger projects
-put it on a file share — Dropbox, Google Drive, a network drive — which suffers
-the same problem: two people open the same project, and one person's save
-quietly overwrites the other's work, or a change is lost to a stale copy. A few
-projects reach for Git, which solves the merge problem technically — but Git was
-built for programmers, and getting a survey team to learn branches, commits, and
-merge conflicts is its own uphill battle.
+**The problem:** A cave survey is a team effort, but sharing the project has
+always been the awkward part. For a small cave you email the file around. Bigger
+projects go on a file share (Dropbox, Google Drive, a network drive), which has
+the same flaw: two people open the same project and one person's save quietly
+overwrites the other's work. A few projects reach for Git, which does solve the
+merge problem, but Git was built for programmers. Teaching a survey team
+branches, commits, and merge conflicts becomes a project of its own.
 
 **What CaveWhere does:** CaveWhere gives you **sync powered by Git, without
-having to know Git.** You sign in to GitHub once and press a single Sync button;
-there are no commands, branches, or merge conflicts to resolve by hand. Under
-the hood it is real Git — so you still get full version history and can roll back
-to any previous state — but the plumbing stays out of your way. When two cavers
-change different parts of the cave, CaveWhere combines them with a smart
-three-way merge that understands its own data model (caves, trips, shots, notes,
-scraps), not just lines of text, so the edits merge cleanly. Sync also lays the
-groundwork for in-cave digital survey on phones and tablets, where teams capture
-on multiple devices and merge on the surface.
+having to know Git.** Sign in to GitHub once, then press **Sync**. No commands,
+no branches, no merge conflicts to resolve by hand. It is real Git underneath,
+so you keep the full version history and can roll back to any earlier state.
+
+When two cavers change different parts of the cave, CaveWhere merges them with a
+three-way merge that understands caves, trips, shots, notes, and scraps, not
+lines of text. Sync also lays the groundwork for in-cave digital survey on
+phones and tablets, where several devices capture separately and merge on the
+surface.
 
 ## Not losing the data: the project format
 
-**The problem:** Cave survey data takes enormous time and money to collect —
-often years of trips into remote caves. Losing it is not an option. Yet the normal
-way software treats a document is to hold your work in memory until you remember to
-save, which puts an evening of data entry one crash, flat battery, or power cut away
-from being gone.
+**The problem:** Cave survey data takes enormous time and money to collect,
+often years of trips into remote caves. Most software holds your work in memory
+until you remember to save. That puts an evening of data entry one crash, one
+flat battery, one power cut away from gone — and nobody should have to re-survey
+a cave because a laptop died.
 
-**What CaveWhere does:** CaveWhere's project formats are built around safety,
-readability, and portability. **Your work is written to disk as you type it**, so
-there is no unsaved window to lose — which frees [Save](../projects-and-files/save-a-project.md)
-to mean something more useful: it marks a version you can return to. The `.cwproj`
-directory format is human-readable, machine-parseable, and Git-backed, with atomic
-saves and full version history so you can roll back to any previous state. A
-bundled `.cw` file packs the same data (with history) into one file for easy
-sharing. You can inspect or recover raw data without needing CaveWhere at all.
+**What CaveWhere does:** **CaveWhere writes your work to disk as you type it.**
+Nothing sits unsaved, which frees
+[Save](../projects-and-files/save-a-project.md) to mean something more useful:
+it marks a version you can return to.
+
+The `.cwproj` directory format is human-readable, machine-parseable, and
+Git-backed, with atomic saves and full history, and you can recover the raw data
+without CaveWhere at all. A bundled `.cw` file packs the same data, history
+included, into one file for sharing. The catch with a bundle: every save repacks
+the whole project, which you feel on a multi-cave project carrying years of
+scans. I recommend `.cwproj` for anything you plan to keep working on, and `.cw`
+for handing a finished cave to someone.
+[Choose a Project Format](../projects-and-files/project-formats.md) has the full
+comparison.
 
 ## Capturing passage shape faster: LiDAR notes
 
-**The problem:** Hand-sketching passage shape is slow, and some detail is nearly
-impossible to capture with a pencil.
+Hand-sketching passage shape takes time, and some detail never makes it onto
+paper.
 
-**What CaveWhere does:** You can scan a passage in seconds with a LiDAR-capable
-phone (or build a photogrammetry model), export it as glTF/GLB, and drop it into
-your trip notes alongside traditional sketches. Scans tie to survey stations and
-are [carpeted](glossary.md#carpeting) into the cave model just like sketched
-scraps — the same morphing applies to LiDAR and photogrammetry, adding rich 3D
-geometry.
+Scan a passage in seconds with a LiDAR-capable phone (or build a photogrammetry
+model from photographs), export it as `.glb`, and drop it into your trip notes
+next to the sketches. Scans tie to stations and get
+[carpeted](glossary.md#carpeting) into the model just like sketched scraps.
+
+A scan doesn't replace sketching. It records surfaces, and only surfaces:
+airflow never shows up in a scan, and neither does which of the three ways on
+deserves pushing. PolyCam works best, since its scans arrive upright and
+life-size. Photogrammetry models usually need their up direction and scale set
+by hand. See [LiDAR Notes](../notes/lidar-notes.md).
 
 ## Focusing on one part of a big cave: keywords and layers
 
-**The problem:** As a project grows to dozens of trips and hundreds of stations,
-it becomes hard to focus on the area you're actually working on.
+As a project grows to dozens of trips and hundreds of stations, it gets hard to
+focus on the part you care about.
 
-**What CaveWhere does:** You can tag caves, trips, teams, notes, and scraps with
-[keywords](glossary.md#keyword), then filter and control layer visibility in the
-3D view — showing or hiding parts of the cave by keyword so you can concentrate
-on the section that matters.
+Tag caves, trips, teams, notes, and scraps with
+[keywords](glossary.md#keyword), then filter on them to hide everything in the
+3D view except the section that matters.
 
 ## Where to go next
 
 - New to the vocabulary? Start with the [glossary](glossary.md).
 - Ready to survey? The Getting Started and Survey Data chapters walk through a
-  first project. (Being written — see [the manual index](../index.md) for
-  what's available.)
+  first project. (Still in progress; see [the manual index](../index.md) for
+  what exists so far.)
