@@ -122,7 +122,12 @@ Legend: `[ ]` open · `[~]` reported, awaiting review · `[x]` committed
 
 - [x] **8. `survey-data/survey-errors.md`** — 1230 wds, score 63.8 → **~13** — **to-be 61.0 → 17.9**, the worst rate in the manual; em dash 14.6 → 0.00, contractions 32.2 → 7.4, PAR gone, `judgement` → `judgment`. The residual to-be hits are the app's own quoted strings ("There are *n* errors") plus one adjectival "is finished".
 - [x] **9. `survey-data/declination.md`** — 865 wds, score 56.0 → **~6** — em dash 16.2 → 0.00, to-be 45.1 → clear, both PAR findings gone, contractions 30.4 → 9.4, digits 5.3 → 10.7. Sourced the 0.5° mismatch threshold and IGRF-14.
-- [ ] **10. `survey-data/calibration.md`** — 1220 wds, score 55.8 — **6 span findings**
+- [x] **10. `survey-data/calibration.md`** — 1220 wds, score 55.8 — **6 span findings**
+      → 0 span findings, em dash 12.3→0.00, to-be 39.3→clear, digits 13.8→31.7.
+      First subagent page. Orchestrator caught 3 things the agent missed: a
+      one-sided 45° import window described as symmetric, "keeps all 3 digits"
+      for a 3-decimal value, and 6 places where `1` was standing in for the
+      word "one" to lift the digit rate.
 - [ ] **11. `survey-data/enter-survey-data.md`** — 2005 wds, score 49.9 — 37.4 to-be, longest page
 - [ ] **12. `survey-data/caves-and-trips.md`** — 998 wds, score 34.7 — 46.1 to-be
 
