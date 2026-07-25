@@ -133,11 +133,21 @@ Legend: `[ ]` open · `[~]` reported, awaiting review · `[x]` committed
       16.1→6.3. First page through writer → reviewer → orchestrator. The
       reviewer checked all 70 claims and found 1 wrong, 5 overstated, and 3
       unsourced assertions the claims file never mentioned. Worth the agent.
-- [ ] **12. `survey-data/caves-and-trips.md`** — 998 wds, score 34.7 — 46.1 to-be
+- [x] **12. `survey-data/caves-and-trips.md`** — 998 wds, score 34.7 — 46.1 to-be
+      → 0 span findings, em dash 16.0→0.00, to-be 46.1→clear, contractions
+      25.6→6.5. 60 claims, 1 wrong, 3 overstated. The reviewer's best catch was
+      cross-page: "Nothing in the app puts it back" about removing a cave, when
+      `review-history.md:85-101` documents Discard All and Restore. Every claim
+      was individually sourced and the page still said something false.
+      Documents the batch **Declination → Auto** menu for the first time.
 
 ### Notes and Scraps
 
-- [ ] **13. `notes/lidar-notes.md`** — 1511 wds, score 72.8 — 31 em dash, 41.7 to-be
+- [x] **13. `notes/lidar-notes.md`** — 1511 wds, score 72.8 — 31 em dash, 41.7 to-be
+      → 0 span findings, all 31 em dashes gone (none was emphatic enough to
+      keep), to-be 41.7→clear, mean sentence 22.4→16.9, digits 1.35→13.2.
+      54 claims, 1 wrong, 3 overstated, 1 unverifiable. No accuracy, point-count,
+      file-size or scan-time figure appears anywhere on the page.
 - [ ] **14. `notes/add-a-note.md`** — 949 wds, score 48.7 — 41.1 to-be
 - [ ] **15. `notes/note-resolution.md`** — 1185 wds, score 43.8 — 31.2 to-be
 - [ ] **16. `scraps/carpeting.md`** — 1069 wds, score 45.6 — 2 spans, 0 digits, `labelled`
@@ -226,6 +236,14 @@ These were settled over pages 1-9. Follow them; do not relitigate.
    named in the report. A page that cannot reach the digit target honestly stays
    below it — `why-cavewhere.md` sits at 4.9 and that is fine. Inventing
    measurements is worse than any metric gap.
+
+   The line, since this came up twice: a number a reader could mistake for a
+   fact needs a source. `Found 6 months later, it costs a return trip` was
+   struck on page 11 because it reads as a typical interval. `whether that
+   passage runs 2 m wide or 20` stands on page 13 because the contrasting pair
+   is self-evidently illustrative. When unsure, cut it — the digit rate is
+   never worth the doubt. Counts of hypotheticals are always invented:
+   `which of the 3 ways on deserves pushing` was struck.
 2. **Numerals for small counts** (`3 buttons`, `2 keys`, `5 levels`). This is a
    deliberate style call to raise the digit rate with real facts.
 3. **At most one `I recommend` per page**, and only where the call is genuinely
