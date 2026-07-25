@@ -128,7 +128,11 @@ Legend: `[ ]` open · `[~]` reported, awaiting review · `[x]` committed
       one-sided 45° import window described as symmetric, "keeps all 3 digits"
       for a 3-decimal value, and 6 places where `1` was standing in for the
       word "one" to lift the digit rate.
-- [ ] **11. `survey-data/enter-survey-data.md`** — 2005 wds, score 49.9 — 37.4 to-be, longest page
+- [x] **11. `survey-data/enter-survey-data.md`** — 2005 wds, score 49.9 — 37.4 to-be, longest page
+      → 0 span findings, em dash 15.0→0.00, to-be 37.4→clear, contractions
+      16.1→6.3. First page through writer → reviewer → orchestrator. The
+      reviewer checked all 70 claims and found 1 wrong, 5 overstated, and 3
+      unsourced assertions the claims file never mentioned. Worth the agent.
 - [ ] **12. `survey-data/caves-and-trips.md`** — 998 wds, score 34.7 — 46.1 to-be
 
 ### Notes and Scraps
@@ -238,8 +242,10 @@ These were settled over pages 1-9. Follow them; do not relitigate.
 7. **Do not add exclamation marks or hedges to hit a number.** Escalation is
    register-dependent; a warning inserted to move `hedge/admit` reads worse than
    the gap.
-8. **Alt text may be long.** A `LONG` hit whose only offender is alt text or a
-   caption is not a finding.
+8. **Alt text may be long.** A `LONG` or `PARA` hit whose only offender is alt
+   text or a caption is not a finding. `slopcheck` counts an image line and its
+   caption as one paragraph, so a thorough alt text trips `PARA` on its own.
+   Describing the screenshot properly matters more than the rule.
 9. **Numerals are for counted things, not for the word "one".** Decision 2 covers
    `3 buttons`, `2 keys`, `200 px`, `0.3048 m`. It does not license `1 shot from
    A1 to A2`, `Get 1 of these wrong`, or `at least 1 of them` — those are the
