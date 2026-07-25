@@ -168,6 +168,8 @@ kLexiconRe = re.compile(r"\b(" + "|".join(re.escape(w) for w in kLexicon) + r")\
 # is acceptable in American English) and "towards" (style, not spelling).
 kBritish: dict[str, str] = {
     "behaviour": "behavior", "behaviours": "behaviors", "behavioural": "behavioral",
+    "neighbour": "neighbor", "neighbours": "neighbors",
+    "neighbouring": "neighboring", "neighbourhood": "neighborhood",
     "colour": "color", "colours": "colors", "coloured": "colored", "colourful": "colorful",
     "centre": "center", "centres": "centers", "centred": "centered",
     "licence": "license", "licences": "licenses",

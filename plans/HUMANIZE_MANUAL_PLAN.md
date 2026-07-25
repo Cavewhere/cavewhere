@@ -102,7 +102,7 @@ Legend: `[ ]` open · `[~]` reported, awaiting review · `[x]` committed
 
 - [x] **0. `concepts/why-cavewhere.md`** — 1302 wds, score 12.4 — commit `e4b95e73`
 - [x] **1. `concepts/data-model.md`** — 1164 wds, score 77.4 → **~9** — em dash 23.2 → 0.00, to-be 44.7 → clear, sentences 23.0 → 17.0, contractions 24.5 → 6.1, digits 0.00 → 8.7. Added `survey-calibration.png` (the page had no figure at all). Remaining: digit rate still under target, and `points at figure` needs more than one image on the page.
-- [ ] **2. `concepts/coordinate-systems.md`** — 987 wds, score 67.6 — 21 em dash, 41.5 to-be, **0 digits**
+- [x] **2. `concepts/coordinate-systems.md`** — 987 wds, score 67.6 → **~11** — em dash 21.3 → 0.00, to-be 41.5 → clear, sentences 22.3 → 18.1, contractions 19.7 → 5.9, digits 0.00 → 4.9. Added the `utm-grid-convergence.svg` illustration. **Fixed the manual's one broken anchor** by renaming `## Magnetic → true: declination` to `## Magnetic to true: declination` and updating the inbound link; `check-manual-links.py` is now fully clean.
 - [ ] **3. `concepts/glossary.md`** — 895 wds, score 30.8 — 13 em dash, 0 digits
 
 ### Getting Started
@@ -134,7 +134,7 @@ Legend: `[ ]` open · `[~]` reported, awaiting review · `[x]` committed
 ### Loop Closure, Measurement, Georeferencing
 
 - [ ] **21. `loop-closure/check-loop-closure.md`** — 1860 wds, score 74.5 — 6 spans, 41.4 to-be
-- [ ] **22. `measurement/measure-distance-and-bearing.md`** — 1281 wds, score 76.3 — **7 spans**, 0 digits. Also fix the broken anchor at `:127` → `../concepts/coordinate-systems.md#magnetic--true-declination`
+- [ ] **22. `measurement/measure-distance-and-bearing.md`** — 1281 wds, score 76.3 — **7 spans**, 0 digits. (The broken anchor at `:127` was already fixed during item 2.)
 - [ ] **23. `georeferencing/grid-convergence.md`** — 1169 wds, score 64.5 — 25 em dash, 35.9 to-be
 - [ ] **24. `georeferencing/georeference-a-cave.md`** — 1282 wds, score 53.9 — 24 em dash
 
