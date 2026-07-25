@@ -114,7 +114,7 @@ Legend: `[ ]` open · `[~]` reported, awaiting review · `[x]` committed
 
 ### Survey Data
 
-- [ ] **8. `survey-data/survey-errors.md`** — 1230 wds, score 63.8 — **61.0 to-be, worst in the manual**
+- [x] **8. `survey-data/survey-errors.md`** — 1230 wds, score 63.8 → **~13** — **to-be 61.0 → 17.9**, the worst rate in the manual; em dash 14.6 → 0.00, contractions 32.2 → 7.4, PAR gone, `judgement` → `judgment`. The residual to-be hits are the app's own quoted strings ("There are *n* errors") plus one adjectival "is finished".
 - [ ] **9. `survey-data/declination.md`** — 865 wds, score 56.0 — 45.1 to-be
 - [ ] **10. `survey-data/calibration.md`** — 1220 wds, score 55.8 — **6 span findings**
 - [ ] **11. `survey-data/enter-survey-data.md`** — 2005 wds, score 49.9 — 37.4 to-be, longest page
