@@ -107,7 +107,7 @@ Legend: `[ ]` open · `[~]` reported, awaiting review · `[x]` committed
 
 ### Getting Started
 
-- [ ] **4. `getting-started/set-up-your-identity.md`** — 786 wds, score 59.9 — 50.9 to-be
+- [x] **4. `getting-started/set-up-your-identity.md`** — 786 wds, score 59.9 → **~7** — em dash 19.1 → 1.2, to-be 50.9 (14 passives) → clear, `grey` → `gray`. Added the verified per-platform settings paths. The 1 remaining em dash and both remaining passives sit inside verbatim quotes of the app's own text, so they stay.
 - [ ] **5. `getting-started/install-cavewhere.md`** — 610 wds, score 59.6 — 21.4 sent, 0 digits
 - [ ] **6. `getting-started/find-your-way-around.md`** — 1106 wds, score 58.1 — 23 em dash, 37.1 to-be
 - [ ] **7. `getting-started/open-the-example-cave.md`** — 578 wds, score 45.7 — 15 em dash
@@ -207,6 +207,13 @@ Not page-scoped; land them wherever they fit or as their own commit.
   requires the H1 to match the front-matter `title`, which is Title Case and also
   supplies the link text in `index.md` and `llms.txt`. Ignore it on H1s; it is
   still worth heeding on `##`/`###`.
+- **`contraction` counts possessives.** `project's`, `app's` and the UI string
+  `Let's set you up!` all score as contractions, so a page thick with possessives
+  reads high on a metric meant to catch informal register. Check what the hits
+  actually are before cutting anything.
+- **Verbatim quotes of the app's own strings** trip `EMDASH`, `TOBE` and
+  `contraction`, and must not be edited to satisfy the scripts. Where a residual
+  hit is entirely inside a block quote, say so and move on.
 - **`distinct names` above target** is the good direction. `voiceprint` marks any
   feature more than 50% off with `<--` in either direction, but naming *more*
   real things is the point of check 1.
