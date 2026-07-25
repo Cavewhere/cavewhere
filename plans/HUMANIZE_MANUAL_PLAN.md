@@ -21,6 +21,12 @@ pointers at the 60+ screenshots the prose almost never mentions.
 So most of the work on any given page is *sourcing facts*, not rewriting
 sentences.
 
+Pages 1-9 were done in one long session. From page 10 on, each page goes to a
+**fresh subagent**, 2 at a time. **If you are that subagent, read
+[Running this as a subagent](#running-this-as-a-subagent) first** — it is your
+whole briefing, and it overrides your instincts about scope, commits, and how
+far to chase a number.
+
 ---
 
 ## Per-page procedure
@@ -54,20 +60,20 @@ pass isn't spent on mechanical hits.
    Do not invent measurements to move the digit rate. If a number cannot be
    sourced, ask Philip or leave the gap and say so.
 
-5. **Report before rewriting.** One checklist, `file:line`, one sentence on the
-   problem, and the replacement text. Philip reviews, then the rewrite lands.
+5. **Rewrite the page.** Philip reviews the commits at the end rather than each
+   page up front, so a page lands finished. See **Running this as a subagent**
+   below for the house decisions that govern the rewrite.
 
 6. **Verify**
    ```bash
    python3 scripts/check-manual-links.py
-   python3 scripts/build-manual-html.py            # multi-page
-   python3 scripts/build-manual-html.py --single   # single-file
    ```
-   Only known-acceptable failure: the pre-existing missing anchor at
-   `measurement/measure-distance-and-bearing.md:127` (fix it during item 22).
+   This must print `OK`; the manual has no known-acceptable failures left. Build
+   the HTML (`scripts/build-manual-html.py`, and `--single`) once per batch
+   rather than once per page.
 
 7. **Commit one page per commit**, subject `Rewrite <Page Title> with the
-   humanize skill`.
+   humanize skill`. Only the orchestrator commits — never a subagent.
 
 ---
 
@@ -174,6 +180,93 @@ Legend: `[ ]` open · `[~]` reported, awaiting review · `[x]` committed
 
 - [ ] **45. `keyboard-shortcuts/keyboard-shortcuts.md`** — 864 wds, score 69.5 — mostly tables; the 26.6 em-dash rate is largely table cells, so judge the prose separately
 - [ ] **46. `index.md`** — 894 wds, score 71.2 — **50 em dashes, one per link entry.** This is a list format, not prose. Needs a format decision from Philip (keep the dash, switch to a colon, or drop the gloss), not a rewrite
+
+---
+
+## Running this as a subagent
+
+From page 10 on, each page is rewritten by a **fresh subagent** so the sweep does
+not consume one long context. This section is that agent's whole briefing: it
+starts with no memory of the pages before it.
+
+### The contract
+
+- **Hand back a finished page.** Edit the file, verify it, and stop.
+- **Never `git commit`, `git add`, or `git checkout`.** The orchestrator commits.
+- **Never edit this plan file.** The orchestrator ticks the queue. Two agents run
+  at once and would collide here.
+- **Touch only your assigned page**, plus an inbound link if renaming a heading
+  forces it (say so in the report).
+- **Return**: the before/after numbers, what you sourced and from where, anything
+  you could not source, and a commit-message body in the house format below.
+
+### House decisions
+
+These were settled over pages 1-9. Follow them; do not relitigate.
+
+1. **Never invent a number.** Every figure must come from a file in this repo,
+   named in the report. A page that cannot reach the digit target honestly stays
+   below it — `why-cavewhere.md` sits at 4.9 and that is fine. Inventing
+   measurements is worse than any metric gap.
+2. **Numerals for small counts** (`3 buttons`, `2 keys`, `5 levels`). This is a
+   deliberate style call to raise the digit rate with real facts.
+3. **At most one `I recommend` per page**, and only where the call is genuinely
+   defensible from the code or the docs. Philip's voice makes calls; a fabricated
+   preference is worse than none.
+4. **Never edit text quoted from the app.** Block quotes of CaveWhere's own
+   strings are evidence. Residual `EMDASH`/`TOBE`/`contraction` hits inside them
+   are correct outcomes — report them as such.
+5. **Keep the `## Why / when you need this` heading.** `AUTHORING.md:28` requires
+   it. `why-cavewhere.md` is the one exception, granted directly by Philip.
+6. **Headings stay byte-identical** unless you first run
+   `grep -rn '<page>.md#' docs/manual/` and update every inbound link in the same
+   edit.
+7. **Do not add exclamation marks or hedges to hit a number.** Escalation is
+   register-dependent; a warning inserted to move `hedge/admit` reads worse than
+   the gap.
+8. **Alt text may be long.** A `LONG` hit whose only offender is alt text or a
+   caption is not a finding.
+
+### Sourcing playbook
+
+Where the checkable facts actually live. Found the hard way over pages 1-9.
+
+| You need | Look in |
+|---|---|
+| UI sizes, responsive breakpoints, font tokens | `cavewherelib/qml/Theme.qml` |
+| Per-trip corrections, declination thresholds | `cwTripCalibration.h` / `.cpp` |
+| Shot readings, LRUD | `cwShot.h` |
+| Station name matching, chunk rules, tolerances | `cwSurveyChunk.h` / `.cpp` |
+| Scrap types, carpeting internals | `cwScrap.h`, `cwScrapManager.cpp` |
+| Survex version | `survex/configure.ac` |
+| IGRF model version | `survex/src/igrf14coeffs.txt` |
+| Settings keys and per-platform paths | `QQuickGit/src/AccountSettingWatcher.cpp`, `main.cpp:163` |
+| Build requirements, platform targets | `CMakeLists.txt`, `.github/workflows/`, `installer/mac/` |
+| A number another page already states | the other manual page — reuse it verbatim so the two agree |
+
+Two established values worth reusing: **Survex 1.4.21**, and the misclosure bands
+(under 0.5% tight, past 5% a probable blunder) from `check-loop-closure.md`.
+
+### Verify before returning
+
+```bash
+python3 .claude/skills/humanize/scripts/slopcheck.py docs/manual/<page>.md
+python3 .claude/skills/humanize/scripts/voiceprint.py \
+    --against .claude/skills/humanize/references/voiceprint-blog.json \
+    docs/manual/<page>.md
+python3 scripts/check-manual-links.py
+```
+
+`check-manual-links.py` must print `OK`. It scans every page, so if it fails on a
+file that is not yours, another agent is mid-edit — re-run it rather than
+"fixing" the other page.
+
+### Commit-message format
+
+Subject `Rewrite <Page Title> with the humanize skill`, then a body covering what
+changed mechanically (with before/after rates), what substance was added and the
+file each fact came from, and any inbound anchor that moved. No Claude mention,
+no Co-Authored-By.
 
 ---
 
