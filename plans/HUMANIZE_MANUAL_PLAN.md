@@ -202,8 +202,17 @@ starts with no memory of the pages before it.
   at once and would collide here.
 - **Touch only your assigned page**, plus an inbound link if renaming a heading
   forces it (say so in the report).
-- **Return**: the before/after numbers, what you sourced and from where, anything
-  you could not source, and a commit-message body in the house format below.
+- **Write your long output to files, not into your reply.** The orchestrator's
+  context is the scarce resource, and a 22-row claim table costs it more than the
+  page does. Write two files, using the queue number as `NN`:
+  - `<scratchpad>/page-NN-claims.md` — one row per factual claim you added:
+    the sentence as it appears on the page, and the `file:line` it came from.
+    The reviewer reads this; the orchestrator does not.
+  - `<scratchpad>/page-NN-commit.txt` — the commit body, house format, ready for
+    `git commit -F`. No subject line, body only.
+- **Return at most 10 lines**: before/after on the `!` rows, the count of claims
+  written to the claims file, anything you could not source, and residual script
+  hits with why they stand. Nothing else. No tables, no restating the page.
 
 ### House decisions
 
@@ -231,6 +240,12 @@ These were settled over pages 1-9. Follow them; do not relitigate.
    the gap.
 8. **Alt text may be long.** A `LONG` hit whose only offender is alt text or a
    caption is not a finding.
+9. **Numerals are for counted things, not for the word "one".** Decision 2 covers
+   `3 buttons`, `2 keys`, `200 px`, `0.3048 m`. It does not license `1 shot from
+   A1 to A2`, `Get 1 of these wrong`, or `at least 1 of them` — those are the
+   indefinite article wearing a digit, and they read as metric-chasing because
+   they are. Philip's digit rate comes from `3.91MB` and `8.4 times slower`.
+   Never open a sentence with a numeral either; recast instead.
 
 ### Sourcing playbook
 
@@ -272,6 +287,53 @@ Subject `Rewrite <Page Title> with the humanize skill`, then a body covering wha
 changed mechanically (with before/after rates), what substance was added and the
 file each fact came from, and any inbound anchor that moved. No Claude mention,
 no Co-Authored-By.
+
+---
+
+## The reviewer agent
+
+Every page goes writer → reviewer → orchestrator. The reviewer exists for one
+reason: on page 10 the writer made 22 sourced claims and the orchestrator
+spot-checked 6, so 16 rode through unverified. One of the 6 was wrong. Sampling
+at that rate is not verification.
+
+**The reviewer checks facts. It does not judge voice.** Voice stays with the
+orchestrator, who reads every page — a page can score clean on every metric and
+still read like a machine, and no amount of claim-checking sees that.
+
+### Reviewer contract
+
+- **Read the page cold**, then `<scratchpad>/page-NN-claims.md`. Do not read the
+  writer's reasoning or self-assessment; you are not grading its effort.
+- **Be adversarial. Try to refute.** Assume each claim is wrong until the file
+  says otherwise. A claim you cannot check is `UNVERIFIABLE`, not `CONFIRMED`.
+- **Every row gets a verdict**, no sampling:
+  - `CONFIRMED` — the page's sentence is true of the cited code.
+  - `WRONG` — it contradicts the source.
+  - `OVERSTATED` — the source is real but the page generalizes past it. This is
+    the one that matters. Page 10 described `fmod(v + 180, 360) < 45` as "within
+    45° of 180°", which sounds right and is a one-sided window: `180` trips it,
+    `179` does not.
+  - `UNVERIFIABLE` — the cited file or line does not support it either way.
+- **Then hunt unsourced claims.** Scan the page for factual assertions with no
+  row in the claims file. Nobody else is looking for these.
+- **Check house decisions 1, 2, 4, 6 and 9** — invented numbers, numeral misuse,
+  edited app quotes, moved headings.
+- **Report only. No edits, no git, no plan edits.** A second agent's prose in the
+  page would be reviewed by nobody.
+- **Return only the problems**, each as `file:line`, one sentence on what's
+  wrong, and the replacement text. Lead with a count: `N claims, M confirmed`.
+  Do not list the confirmed ones.
+- If the page needs no changes, say so in one line.
+
+### Orchestrator steps
+
+1. Launch the writer. Note its ≤10-line report.
+2. Launch the reviewer with the page path and the claims file path.
+3. Read the page in full. Apply the reviewer's fixes plus anything the read turns
+   up. Re-run the three verify commands.
+4. `git commit -F <scratchpad>/page-NN-commit.txt` after amending the body for
+   any fix applied in step 3, then tick the queue.
 
 ---
 
