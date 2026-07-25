@@ -1,0 +1,63 @@
+{
+  "name": "cavewhere.com blog (hand-written)",
+  "words": 6250,
+  "mean_sentence": 14.2,
+  "p90_sentence": 21,
+  "question_headings_pct": 6.5,
+  "headings": 62,
+  "rates": {
+    "em dash": 0.0,
+    "parenthesis": 6.08,
+    "exclamation": 1.92,
+    "question": 0.32,
+    "first person": 1.6,
+    "second person": 18.08,
+    "contraction": 6.72,
+    "digit token": 20.32,
+    "distinct names": 21.92,
+    "hedge/admit": 5.44,
+    "sent-initial conj": 0.64,
+    "points at figure": 4.64,
+    "recommends": 0.96
+  },
+  "measured": "2026-07-25",
+  "method": "raw HTML via curl, entry-content parsed with html.parser; body prose only. Verified faithful by confirming known typos survive extraction.",
+  "source": [
+    "https://cavewhere.com/",
+    "https://cavewhere.com/2020/12/19/projected-profiles-support/",
+    "https://cavewhere.com/2020/12/16/sketch-carpeting-behavior-and-troubleshooting/",
+    "https://cavewhere.com/2020/12/15/cave-mapping-sketch-projections/",
+    "https://cavewhere.com/2020/09/04/cavewhere-supports-pdf-import/",
+    "https://cavewhere.com/2020/05/09/0-09-cavewhere-release/",
+    "https://cavewhere.com/2020/05/09/cavewheres-use-of-dxt1-compression/",
+    "https://cavewhere.com/2020/05/10/settings-explained/",
+    "https://cavewhere.com/2020/05/10/32bit-export-limitation/"
+  ],
+  "invariants": [
+    "em dash",
+    "digit token",
+    "distinct names",
+    "points at figure",
+    "contraction"
+  ],
+  "corroborated_by": {
+    "ICS 2013 paper": {
+      "words": 1927,
+      "em dash": 0.0,
+      "digit token": 27.5,
+      "distinct names": 30.62,
+      "points at figure": 4.67,
+      "contraction": 6.23,
+      "mean_sentence": 16.9
+    },
+    "ICS 2021 paper": {
+      "words": 2063,
+      "em dash": 0.0,
+      "digit token": 14.06,
+      "distinct names": 27.14,
+      "points at figure": 3.39,
+      "contraction": 5.33,
+      "mean_sentence": 16.6
+    }
+  }
+}
