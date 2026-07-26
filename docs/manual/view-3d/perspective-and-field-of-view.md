@@ -34,10 +34,13 @@ Which one you're in changes two things elsewhere:
   in orthogonal only. In perspective there is no single scale that holds across
   the frame, so CaveWhere hides the bar rather than show a distance that means
   different things front to back.
-- **Measuring and map export assume orthogonal.** Switch back to orthogonal to
-  [measure](../measurement/measure-distance-and-bearing.md) or
-  [export a map](../import-export/export-a-map.md) — those want true, undistorted
-  proportions.
+- **A map exported from perspective is still a perspective picture.** Nothing
+  stops you, but an [exported map](../import-export/export-a-map.md) wants one
+  scale everywhere, and that is exactly what perspective gives up. Measuring is
+  the exception: the
+  [measurement tool](../measurement/measure-distance-and-bearing.md) picks
+  world-space points, so its distances and bearings read the same in either
+  projection.
 
 ## Set the Field of View
 
