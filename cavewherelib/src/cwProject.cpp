@@ -467,14 +467,18 @@ bool cwProject::save()
     return true;
 }
 
-bool cwProject::beginSyncOperation(const QFuture<Monad::ResultBase>& operationFuture)
+bool cwProject::beginSyncOperation(const QFuture<Monad::ResultBase>& operationFuture, bool registerJob)
 {
     SyncFuture = AsyncFuture::observe(operationFuture)
         .context(this, [this, operationFuture]() {
             completeSyncOperation(operationFuture.result());
         }).future();
 
-    FutureToken.addJob(SyncFuture, QStringLiteral("Syncing"));
+    // An outer gate (credential/install) may already have registered the single
+    // "Syncing" job whose deferred spans this whole cycle; don't add a second.
+    if (registerJob) {
+        FutureToken.addJob(SyncFuture, QStringLiteral("Syncing"));
+    }
 
     AsyncFuture::observe(SyncFuture).context(this, [this]() {
         emit syncInProgressChanged();
@@ -516,7 +520,7 @@ bool cwProject::sync()
         emit syncInProgressChanged();
         connect(provider, &cwRemoteAuthProvider::credentialsLoaded,
                 this, [this, deferredSync]() {
-                    if (continueSyncAfterGates()) {
+                    if (continueSyncAfterGates(/*registerJob=*/false)) {
                         AsyncFuture::observe(SyncFuture).context(this, [deferredSync]() {
                             deferredSync->complete();
                         });
@@ -534,10 +538,10 @@ bool cwProject::sync()
         return true;
     }
 
-    return continueSyncAfterGates();
+    return continueSyncAfterGates(/*registerJob=*/true);
 }
 
-bool cwProject::continueSyncAfterGates()
+bool cwProject::continueSyncAfterGates(bool registerJob)
 {
     auto* provider = m_saveLoad->authProvider();
 
@@ -545,13 +549,15 @@ bool cwProject::continueSyncAfterGates()
         auto* saveLoad = m_saveLoad;
         auto deferredSync = std::make_shared<AsyncFuture::Deferred<void>>();
         SyncFuture = deferredSync->future();
-        FutureToken.addJob(SyncFuture, QStringLiteral("Syncing"));
+        if (registerJob) {
+            FutureToken.addJob(SyncFuture, QStringLiteral("Syncing"));
+        }
         emit syncInProgressChanged();
 
         connect(provider, &cwRemoteAuthProvider::installationVerified,
                 this, [this, saveLoad, deferredSync](bool installed) {
                     if (installed) {
-                        beginSyncOperation(saveLoad->sync());
+                        beginSyncOperation(saveLoad->sync(), /*registerJob=*/false);
                         AsyncFuture::observe(SyncFuture).context(this, [deferredSync]() {
                             deferredSync->complete();
                         });
@@ -567,7 +573,7 @@ bool cwProject::continueSyncAfterGates()
         return true;
     }
 
-    return beginSyncOperation(m_saveLoad->sync());
+    return beginSyncOperation(m_saveLoad->sync(), registerJob);
 }
 
 bool cwProject::resetBranchAndReconcile(const QString& refSpec, BranchResetMode resetMode)

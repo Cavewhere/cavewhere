@@ -226,7 +226,7 @@ public slots:
 
 private:
     QString rawRemoteUrlString() const;
-    bool beginSyncOperation(const QFuture<Monad::ResultBase>& operationFuture);
+    bool beginSyncOperation(const QFuture<Monad::ResultBase>& operationFuture, bool registerJob = true);
     void setModified(bool modified);
 
     //! Seed the region's unitSystem from the app-level default. Runs only at
@@ -289,7 +289,7 @@ private:
     bool emitVersionGuardError(const QString& action);
     void setSqliteTemporaryProject(bool isTemp);
     void completeSyncOperation(const Monad::ResultBase& result);
-    bool continueSyncAfterGates();
+    bool continueSyncAfterGates(bool registerJob = true);
 
     // void addImageHelper(std::function<void (QList<cwImage>)> outputCallBackFunc,
     //                     std::function<void (cwAddImageTask*)> setImagesFunc);
