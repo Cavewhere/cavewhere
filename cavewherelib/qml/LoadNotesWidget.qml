@@ -109,7 +109,7 @@ QQ.Item {
                             Layout.alignment: Qt.AlignHCenter
                         }
 
-                        NeutralIconButton {
+                        IconButton {
                             Layout.alignment: Qt.AlignHCenter
                             objectName: "emptyStateNewSketchButton"
                             iconSource: "qrc:/twbs-icons/icons/pencil-square.svg"
