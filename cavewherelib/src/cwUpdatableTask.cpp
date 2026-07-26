@@ -1,67 +1,65 @@
 //Our includes
 #include "cwUpdatableTask.h"
-#include "cwUpdateCoordinator.h"
+
+//Async includes
+#include "asyncfuture.h"
 
 cwUpdatableTask::cwUpdatableTask(QObject* parent) :
     QObject(parent)
 {
 }
 
-void cwUpdatableTask::setPipeline(cwUpdateCoordinator* coordinator, cwUpdatable* pipeline)
+void cwUpdatableTask::setPipeline(cwUpdatable* pipeline)
 {
-    m_coordinator = coordinator;
     m_pipeline = pipeline;
 }
 
 void cwUpdatableTask::start()
 {
-    if(m_coordinator == nullptr || m_pipeline == nullptr) {
-        finish(QtTaskTree::DoneResult::Error);
+    if(m_pipeline == nullptr) {
+        emit done(QtTaskTree::DoneResult::Error);
         return;
     }
 
-    connect(m_coordinator, &cwUpdateCoordinator::pipelineStateChanged,
-            this, &cwUpdatableTask::onPipelineStateChanged);
-
-    //Only Dirty needs driving. A pipeline already Working covers the current
-    //data, and calling update() on it would make its restarter cancel the run in
-    //flight and start over from zero; the node just waits for that run instead.
-    if(m_pipeline->updateState() == cwUpdatable::State::Dirty) {
-        m_pipeline->update();
-    }
-
-    //update() may resolve the pipeline synchronously, in which case no further
-    //state change is coming and the task finishes without reaching the event loop.
-    if(m_pipeline->updateState() == cwUpdatable::State::Clean) {
-        finish(QtTaskTree::DoneResult::Success);
-    }
+    drive();
 }
 
-void cwUpdatableTask::onPipelineStateChanged(cwUpdatable* pipeline)
+void cwUpdatableTask::drive()
 {
-    if(pipeline != m_pipeline || m_finished) {
-        return;
-    }
-
     switch(m_pipeline->updateState()) {
     case cwUpdatable::State::Clean:
-        finish(QtTaskTree::DoneResult::Success);
-        break;
-    case cwUpdatable::State::Dirty:
-        //Re-edited while this node was running: drive it again so the pipeline's
-        //restarter coalesces the fresh edit into the run this node is waiting on.
-        m_pipeline->update();
-        break;
+        emit done(QtTaskTree::DoneResult::Success);
+        return;
     case cwUpdatable::State::Working:
-        break;
+        //A run in flight already covers the current data. Waiting on it, rather
+        //than forcing another, is what keeps an unrelated cascade from cancelling
+        //work that is already doing this node's job.
+        waitFor(m_pipeline->currentRun());
+        return;
+    case cwUpdatable::State::Dirty:
+        waitFor(m_pipeline->run());
+        return;
     }
 }
 
-void cwUpdatableTask::finish(QtTaskTree::DoneResult result)
+void cwUpdatableTask::waitFor(const QFuture<void>& run)
 {
-    if(m_finished) {
-        return;
-    }
-    m_finished = true;
-    emit done(result);
+    AsyncFuture::observe(run).context(this,
+        [this]() {
+            //A run can finish with the pipeline dirty again, because the source
+            //was edited while it ran. drive() then runs it once more so the
+            //layers below this node see current data. The future's completion
+            //arrives through the event loop, so this iterates rather than
+            //recursing, and it ends as soon as the edits do — provided a
+            //pipeline that reports Dirty actually starts work when run(). One
+            //that returned an already-finished future while still calling itself
+            //Dirty would spin here.
+            drive();
+        },
+        [this]() {
+            //Cancelled: the run this node waited on will never report, so finish
+            //rather than leave the cascade holding a node open forever. What is
+            //still dirty stays in the coordinator's staleness aggregate.
+            emit done(QtTaskTree::DoneResult::Error);
+        });
 }

@@ -514,7 +514,10 @@ Running       : !taskManagerModel.isIdle
   <code>cwUpdateCoordinator.h</code> names <code>QtTaskTree::Group</code> and <code>QSingleTaskTreeRunner</code> directly, and
   <code>cwUpdatableTask</code> has to infer completion by watching the state enum. So the closing claim "that engine swap is cheap either way"
   is weaker than stated: swapping engines today means editing the coordinator, not swapping an implementation behind an interface. Building the
-  <code>run()</code>→future half is tracked as the D1 follow-up; it is what would make this paragraph true retroactively.</p>
+  <code>run()</code>→future half is tracked as the D1 follow-up; it is what would make this paragraph true retroactively.
+  <b>UPDATE 2026-07-26: the node half is now true</b> — <code>cwUpdatableTask</code> observes a future and no longer infers completion from the enum. The
+  coordinator itself still names <code>QtTaskTree::Group</code> and <code>QSingleTaskTreeRunner</code>, so the "swap engines by swapping an implementation"
+  claim is still not literally true; it is now a coordinator-only edit rather than a coordinator-plus-node one.</p>
 
   <p><b>Stage-2 QtTaskTree spike — BUILT AND RUN (2026-07-25).</b> The spike is no longer hypothetical: the real cascade runs on
   <code>Qt6::TaskTree</code> in <code>cwUpdateCoordinator</code>, not a throwaway sandbox. <b>Availability:</b> TaskTree is <em>not</em> in a default
@@ -578,7 +581,8 @@ Running       : !taskManagerModel.isIdle
   <code>cwConcurrent::run</code>. So today "cancel" anywhere in the cascade means <em>discard the result</em>, not <em>stop the CPU</em>
   (<code>cwScrapManager.cpp:113</code> already calls <code>TriangulateRestarter.future().cancel()</code> in its destructor — flag flips, result dropped,
   worker runs on). <b>Conclusion: cancellation is NOT an argument against adopting TaskTree.</b> It is three independent layers: (a) tree cancel destroys
-  the node — have it; (b) the D1 <code>run()</code>→future seam would let the node cancel the pipeline's future — missing, already planned;
+  the node — have it; (b) the D1 <code>run()</code>→future seam — <b>landed 2026-07-26</b>; the node holds the pipeline's future, and a cancelled run now ends
+  the node instead of hanging it, though nothing calls <code>cancel()</code> on that future yet;
   (c) cooperative workers actually stop the work — missing and orthogonal to TaskTree. Feasibility of (c) differs sharply per pipeline: triangulation is
   amenable (per-scrap <code>cwConcurrent::run</code>, poll between scraps; <code>cwConcurrent::run</code> forwards to <code>QtConcurrent::run</code> which
   already supports the <code>QPromise</code> overload, so it is a per-task lambda change, not a wrapper change), whereas the line plot is effectively
@@ -615,10 +619,14 @@ Running       : !taskManagerModel.isIdle
   <b>(H1) A stuck state bit now wedges the app permanently.</b> With the timeout gone, a node that never reaches <code>Clean</code> leaves
   <code>taskTreeRunning()</code> true forever, so <code>onChildStateChanged()</code> early-returns forever and <code>flushAfterCascade()</code> never fires —
   automatic update is dead app-wide. Not an argument for restoring the timeout; an argument that the per-node done signal must be structurally guaranteed
-  rather than hand-maintained. Concretely, <code>cwNoteLiDARManager</code> clears <code>m_taskRunning</code> in <em>exactly one place</em>
-  (<code>cwNoteLiDARManager.cpp:686</code>, inside the <code>.context()</code> continuation), where <code>cwScrapManager</code> deliberately routes every
-  completion path through <code>finishScrapTask()</code>. One added early return there and the bit sticks. Fix cheaply by mirroring
-  <code>finishScrapTask()</code>; fix properly with the D1 <code>run()</code>→future seam, so the node observes a future instead of a bool.
+  rather than hand-maintained. Concretely, <code>cwNoteLiDARManager</code> cleared <code>m_taskRunning</code> in <em>exactly one place</em>
+  (inside the <code>.context()</code> continuation), where <code>cwScrapManager</code> deliberately routed every completion path through
+  <code>finishScrapTask()</code>. One added early return there and the bit sticks.
+  <b>PARTLY ADDRESSED by D1, 2026-07-26.</b> Both <code>m_taskRunning</code> bits are gone; the busy state is the run's promise in
+  <code>cwUpdatableBase</code>, LiDAR got its <code>finishBatch()</code> funnel to mirror <code>finishScrapTask()</code>, and the node observes a future
+  instead of a bool. <b>H1 is reduced, not closed:</b> a completion path that misses <code>endRun()</code> still leaves a future that never finishes, which
+  still holds the tree open and still defers automatic update app-wide. What is structurally fixed is destruction (<code>~cwUpdatableBase</code> finishes the
+  run) and expressibility — the wedge is now something the node can cancel or time out, which a bool never was.
   <b>(H2) Pipeline destroyed mid-cascade: use-after-free plus wedge.</b> <code>cwUpdatableTask</code> holds a raw <code>cwUpdatable*</code> and cannot watch
   destruction (<code>cwUpdatable</code> is not a QObject); <code>add()</code>'s destroyed-handler drops the pipeline from <code>m_updatables</code> but never
   tells the tree. Because setup handlers run at <em>node start</em>, a pipeline destroyed between recipe build and layer-1 start makes
@@ -647,8 +655,10 @@ Running       : !taskManagerModel.isIdle
   calls <code>update()</code> → <code>runBatch()</code> over notes that are being destroyed. Every LiDAR removal site has this shape, including the
   <code>destroyed()</code> handler. <b>The general lesson:</b> any transition announced during destruction is a request to start work during destruction,
   because the coordinator's whole job is to turn a transition into a run. <b>Fix direction:</b> a coordinator-level guard so nothing is driven once teardown
-  has begun (or a deferred/queued announcement that cannot land inside a nested teardown loop) — not a per-call-site workaround. This is the same root the
-  <code>run()</code>→future seam (R2/D1) would remove structurally, since a cancelled future can't ask for work the way a re-entrant signal can.
+  has begun (or a deferred/queued announcement that cannot land inside a nested teardown loop) — not a per-call-site workaround.
+  <b>D1 did NOT fix this (checked 2026-07-26).</b> The seam changed how the <em>node</em> learns a run is over; it did not change
+  <code>onChildStateChanged()</code>, which still calls <code>run()</code> on a Dirty transition when automatic update is on. A transition announced during
+  teardown is therefore still a request to start work during teardown, and the fix is still a coordinator-level teardown guard.
   <b>(H6) Dead latch code. RESOLVED 2026-07-25</b> — the <code>#ifdef</code>, the <code>#else</code> latch branch and every symbol that fed it are gone;
   see the adoption note below. This was the "two implementations behind an #ifdef" cost of tradeoff (2), made concrete.</p>
 
@@ -714,18 +724,34 @@ Running       : !taskManagerModel.isIdle
   site: it needs either a queued/deferred announcement or a coordinator-level guard against driving work during destruction. Left unfixed deliberately rather
   than piling on variants. Consequence today: deleting the last dirty LiDAR note can leave the footer offering Run for nothing.</p>
 
-  <p><b>NEXT ARCHITECTURAL STEP (decided 2026-07-26): finish the D1 seam — <code>run()</code> returning a <code>QFuture</code> on <code>cwUpdatable</code>.</b>
-  The plan has always described the node contract as <code>state()</code> <em>plus</em> <code>run()</code>→future, but only <code>state()</code> was built, and
-  the cost of that shortcut is now measurable rather than theoretical. Because a node can only <em>infer</em> completion by watching an enum,
-  <code>cwUpdatableTask</code> carries a synchronous-completion special case, a Dirty re-drive branch, an <code>m_finished</code> re-entrancy guard, and the
-  H5 emit-order trap — and, more seriously, <b>both wedge/crash classes trace back to the same shortcut</b>: H1 (a leaked in-flight bool wedges automatic
-  update app-wide) and H7 (announcing a transition during destruction asks the coordinator to start work). A future has neither failure mode: it cannot leak a
-  "still running" state the way a hand-maintained bool can, and cancelling it cannot request new work the way a re-entrant signal does. The node body
-  collapses to <code>QFuture f = pipeline-&gt;run(); observe(f) → done()</code>. It also unlocks cancellation layer (b) — the node can cancel the pipeline's
-  future — and makes the "engine swap is cheap" claim true, since the coordinator would then name a seam rather than <code>QtTaskTree</code> types directly.
-  Blast radius: <code>cwUpdatable.h</code> + <code>cwUpdatableBase</code>, all three managers (each currently ends in an AsyncFuture <code>.context()</code>
-  continuation rather than exposing its future), <code>cwUpdatableTask</code>, the coordinator, ~5 test sites. <b>Ordering note:</b> worth doing before the
-  <code>QBarrier</code> execution half — a true DAG over a contract that can't report completion reliably buys precision on top of an unreliable signal.</p>
+  <p class="hist"><b>D1 SEAM — DONE 2026-07-26.</b> <code>cwUpdatable</code> now reads
+  <code>State updateState() const</code> + <code>QFuture&lt;void&gt; run()</code> + <code>QFuture&lt;void&gt; currentRun() const</code>. <code>update()</code>
+  is gone; <code>run()</code> is the same force path under a name that says what it returns. The busy bit moved into <code>cwUpdatableBase</code> as a
+  <code>std::optional&lt;QPromise&lt;void&gt;&gt;</code> behind <code>beginRun()</code> / <code>endRun()</code> / <code>isRunning()</code>, so
+  <code>m_solving</code>, <code>cwScrapManager::m_taskRunning</code> and <code>cwNoteLiDARManager::m_taskRunning</code> all deleted — each manager keeps only
+  its staleness bit. <b>What the node became:</b> read state once, then <code>Clean → done</code>, <code>Working → waitFor(currentRun())</code>,
+  <code>Dirty → waitFor(run())</code>; on completion re-read state and repeat. That deleted the synchronous-completion special case, the
+  <code>m_finished</code> re-entrancy guard, the H5 emit-order trap, <em>and</em> the <code>cwUpdateCoordinator::pipelineStateChanged</code> signal with it —
+  the node no longer knows the coordinator exists (<code>setPipeline(pipeline)</code>, and <code>cwUpdatableTask.cpp</code> no longer includes the
+  coordinator's header). <b>F1 is now structural rather than an inferred special case:</b> the "already Working → wait, don't restart" decision is a state
+  branch that hands back the in-flight future, not a guard someone can forget. <b>Cancellation half of layer (b) landed:</b> a cancelled run ends the node
+  with <code>DoneResult::Error</code> instead of holding the cascade open forever — before, a cancelled pipeline simply never announced Clean.
+  <b>Behavior change, deliberate and pinned by test:</b> a mid-run edit no longer cancels and restarts the run in flight. The node lets it finish, then
+  re-reads the state and runs the pipeline again. Same end state, work in flight preserved, and it terminates under continuous editing where
+  cancel-and-restart could starve. <b>New implementer invariant</b> (documented on <code>run()</code>): a pipeline reporting Dirty must start work in
+  <code>run()</code>. One that reported Dirty and returned a finished future would spin the node through the event loop — which is still the better failure
+  than the note (2) below described, since the old signal-driven re-drive was direct <em>recursion</em> and would overflow the stack. All three current
+  pipelines satisfy it (traced: each early return implies not-Dirty).
+  <b>Honest scope — what this did NOT fix.</b> <b>H1 is reduced, not closed:</b> a missed <code>endRun()</code> still wedges (the node waits on a future that
+  never finishes, the tree stays open, and <code>onChildStateChanged</code> defers to it app-wide). What changed is that destruction can no longer wedge —
+  <code>~cwUpdatableBase</code> finishes the run — and that a wedge is now fixable at the node, because there is a future to cancel or time out.
+  <b>H7 is untouched:</b> the coordinator still drives <code>run()</code> on a Dirty transition, so announcing one during teardown still asks for work during
+  teardown. The LiDAR half of F11 stays open on its own terms. Tests: <code>[cwUpdateCoordinator]</code> 51/9 green (the re-edit case rewritten to assert the
+  new ordering), the manager tags 519/62, <code>[cwProject]</code> 10671/137, the scrap/sketch/region tags 1127/66, QML 743 passed / 5 pre-existing failures.</p>
+
+  <p><b>Still open from the D1 write-up: the execution half.</b> The seam makes the coordinator name a future rather than <code>QtTaskTree</code> types at
+  the node boundary, which is what the <code>QBarrier</code> DAG re-arch below wanted underneath it. That ordering note is now satisfied — a true DAG would
+  be built over a contract that reports completion directly.</p>
 
   <p><b>Also recorded 2026-07-26 (no deadline).</b>
   <b>(1) <code>cwUpdatable</code> should carry a QObject identity</b> — beside H2. The contract is a plain abstract class, so lifetime is <em>inexpressible</em>
@@ -733,11 +759,13 @@ Running       : !taskManagerModel.isIdle
   whole run, and neither can watch destruction. <code>add()</code>'s destroyed handler can only scrub its own containers, which is why the guard had to be the
   blunt <code>dropRunningCascade()</code>. An <code>asQObject()</code> on the interface (or <code>QPointer</code> storage) would make it expressible, and would
   also retire the <code>dynamic_cast&lt;const QObject*&gt;</code> in <code>pipelineName()</code>. Blast radius: the interface, three managers, coordinator, task.
-  <b>(2) The node's Dirty re-drive is recursion, not a spin</b> — beside H4. On a Dirty transition <code>cwUpdatableTask</code> calls
-  <code>update()</code> again, and because the managers emit <code>updateStateChanged()</code> <em>synchronously</em> inside <code>update()</code>, the chain
-  <code>update() → onChildStateChanged → pipelineStateChanged → onPipelineStateChanged → update()</code> is direct recursion. A pipeline that ever returns from
-  <code>update()</code> still Dirty would overflow the stack rather than merely spin — a worse failure than H4's queued <code>flushAfterCascade()</code> variant,
-  which is the one H4 documents. All three current pipelines are safe (traced), so this is a note for whoever adds the fourth. R2 removes the branch entirely.</p>
+  <b>(2) The node's Dirty re-drive was recursion, not a spin — FIXED by D1, 2026-07-26</b> — beside H4. It used to be that on a Dirty transition
+  <code>cwUpdatableTask</code> called <code>update()</code> again, and because the managers emit <code>updateStateChanged()</code> <em>synchronously</em>
+  inside it, the chain <code>update() → onChildStateChanged → pipelineStateChanged → onPipelineStateChanged → update()</code> was direct recursion: a pipeline
+  that ever returned from <code>update()</code> still Dirty would overflow the stack rather than merely spin. The re-drive branch still exists, but it now
+  hangs off the run's future instead of the signal, so the same bad pipeline spins through the event loop instead of overflowing — the same failure H4
+  documents for the queued <code>flushAfterCascade()</code> variant. Still a note for whoever adds the fourth pipeline; the invariant it must uphold is
+  written on <code>cwUpdatable::run()</code>.</p>
 
   <p><b>Follow-up promoted to the commit sequence (2026-07-26): route the UI force paths through the coordinator.</b> The reach check below is confirmed
   accurate — <code>CavernOutputPage.qml:45</code> calls <code>linePlotManager.rerunSurvex()</code> and <code>FileMenu.qml:151</code> calls

@@ -96,11 +96,6 @@ signals:
     void automaticUpdateChanged();
     void needsUpdateChanged();
 
-    //Re-emits a registered pipeline's updateStateChanged with the pipeline that
-    //changed. cwUpdatable isn't a QObject, so this is how a cwUpdatableTask
-    //observes the one pipeline it drives.
-    void pipelineStateChanged(cwUpdatable* pipeline);
-
 private:
     void onChildStateChanged(cwUpdatable* updatable);
     void onAutomaticUpdateChanged();

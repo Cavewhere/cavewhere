@@ -114,7 +114,7 @@ public:
     Q_INVOKABLE void setRenderScraps(cwRenderTexturedItems* glScraps);
 
     cwUpdatable::State updateState() const override;
-    void update() override;
+    QFuture<void> run() override;
 
     void waitForFinish();
 
@@ -149,15 +149,11 @@ private:
     QSet<cwScrap*> DirtyScraps; //These are the scraps that need to be updated
     QSet<cwScrap*> DeletedScraps; //All the deleted scraps
 
-    // The two bits behind updateState() (see cwUpdatable::State), mirroring the
-    // line plot: m_workPending is set when a scrap is (re)dirtied and cleared at
-    // dispatch, so a fresh edit mid-run reports Dirty (re-driving the restarter)
-    // rather than Working. m_taskRunning marks a triangulation task in flight —
-    // set before restart(), cleared on every completion path — so a running
-    // pipeline reports Working. Cleared-on-every-path is essential: a leaked
-    // m_taskRunning would keep the coordinator's forced cascade from settling.
+    // The staleness half of updateState() (see cwUpdatable::State), mirroring the
+    // line plot: set when a scrap is (re)dirtied and cleared at dispatch, so a
+    // fresh edit mid-run reports Dirty rather than Working. The busy half is the
+    // run's future, held by cwUpdatableBase.
     bool m_workPending = false;
-    bool m_taskRunning = false;
     QHash<cwScrap*, uint32_t> m_scrapToRenderId; //The render id of the scrap
     cwKeywordItemRegistry<cwScrap*> m_keywordRegistry;
 
@@ -218,7 +214,7 @@ private:
 
     void markAllScrapsDirty();
     void updateScrapGeometry(QList<cwScrap *> scraps = QList<cwScrap*>());
-    void updateScrapGeometryHelper(QList<cwScrap *> scraps);
+    QFuture<void> updateScrapGeometryHelper(QList<cwScrap *> scraps);
     cwTriangulateInData mapScrapToTriangulateInData(cwScrap *scrap) const;
     static QList<cwTriangulateStation> mapNoteStationsToTriangulateStation(QList<cwNoteStation> noteStations,
                                                                            const cwStationPositionLookup& positionLookup);
@@ -269,9 +265,9 @@ private slots:
     void taskFinished(const QList<cwScrap *> &scrapsToUpdate,
                       const QList<cwTriangulatedData>& scrapDataset);
 
-    // Leaves Working: clears m_taskRunning and emits updateStateChanged. Called
-    // on every task-completion path (taskFinished plus the run lambda's early
-    // returns) so a running task can never leave m_taskRunning stuck.
+    // Leaves Working: finishes the run's future and emits updateStateChanged.
+    // Called on every task-completion path (taskFinished plus the task lambda's
+    // early returns), since that future is what whoever asked for the run waits on.
     void finishScrapTask();
 
 };

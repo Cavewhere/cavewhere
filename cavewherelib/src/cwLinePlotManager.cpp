@@ -465,7 +465,7 @@ void cwLinePlotManager::clearUnconnectedChunkErrors()
  */
 void cwLinePlotManager::rerunSurvex()
 {
-    update();
+    run();
 }
 
 /**
@@ -473,13 +473,13 @@ void cwLinePlotManager::rerunSurvex()
 
   Pure mechanism: it records that a solve is pending and notifies. Whether the
   solve runs now (automatic update) or waits is cwUpdateCoordinator's call,
-  which drives update().
+  which drives run().
   */
 void cwLinePlotManager::runSurvex() {
     if(!m_needsUpdate) {
         m_needsUpdate = true;
         // Clean -> Dirty, or (mid-solve edit) Working -> Dirty. Either is a real
-        // state change; the coordinator re-drives update() on the Dirty.
+        // state change; whoever is driving runs the pipeline again on the Dirty.
         emit updateStateChanged();
     }
 
@@ -489,15 +489,15 @@ void cwLinePlotManager::runSurvex() {
 /**
   \brief Runs the line plot task now, unconditionally.
   */
-void cwLinePlotManager::update() {
+QFuture<void> cwLinePlotManager::run() {
     // Enter Working and drop the pending-dirty marker in one step: a solve now
     // covers the current data, so the pipeline is Working (not Dirty) until it
     // completes. Reporting Working — not the synchronously-cleared Dirty — is
-    // what keeps the coordinator's forced-cascade settle check from mistaking
-    // the pipeline for "finished" while the solve is still in flight.
+    // what keeps a caller waiting on the returned future from mistaking the
+    // pipeline for "finished" while the solve is still in flight.
     const cwUpdatable::State previousState = updateState();
-    m_solving = true;
     m_needsUpdate = false;
+    const QFuture<void> solve = beginRun();
     if(updateState() != previousState) {
         emit updateStateChanged();
     }
@@ -536,7 +536,7 @@ void cwLinePlotManager::update() {
             publishResults(cwLinePlotTask::LinePlotResultData());
             updateLinePlot(cwLinePlotTask::LinePlotResultData());
             finishSolving();
-            return;
+            return solve;
         }
 
         setCaveStationLookupAsStale(true);
@@ -574,14 +574,16 @@ void cwLinePlotManager::update() {
         finishSolving();
     }
 
+    return solve;
 }
 
 void cwLinePlotManager::finishSolving() {
-    if(m_solving) {
-        m_solving = false;
-        // Working -> Clean (or -> Dirty if a survey edit arrived mid-solve). A
-        // real state transition, which is the coordinator's cue to re-check its
-        // forced-cascade settle state.
+    if(isRunning()) {
+        // Working -> Clean (or -> Dirty if a survey edit arrived mid-solve).
+        // endRun() finishes the future run() handed out, releasing whoever is
+        // waiting on the solve; the signal is the coordinator's cue to re-check
+        // its staleness aggregate.
+        endRun();
         emit updateStateChanged();
     }
 }

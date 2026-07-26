@@ -314,7 +314,7 @@ void cwScrapManager::setKeywordItemModel(cwKeywordItemModel *keywordItemModel)
 /**
   Marks every scrap in the region dirty, without running. Callers that honour
   the auto-update policy (e.g. a warping-settings change) route through the
-  cwUpdateCoordinator, which drives update() when appropriate.
+  cwUpdateCoordinator, which drives run() when appropriate.
   */
 void cwScrapManager::markAllScrapsDirty() {
     if(!RegionModel) {
@@ -342,24 +342,24 @@ void cwScrapManager::markAllScrapsDirty() {
   */
 void cwScrapManager::updateAllScraps() {
     markAllScrapsDirty();
-    update();
+    run();
 }
 
 cwUpdatable::State cwScrapManager::updateState() const {
     // Dirty takes priority over Working: a scrap (re)dirtied but not yet handed
     // to a task (m_workPending) reports Dirty even while an earlier task runs, so
-    // the coordinator re-drives update() and the restarter coalesces the fresh
-    // edit. Once dispatched, a running task reports Working until it completes.
+    // whoever is driving runs the pipeline again once that task is over. Once
+    // dispatched, a running task reports Working until it completes.
     // See cwUpdatable::State.
     const bool runnableDirty =
         std::any_of(DirtyScraps.begin(), DirtyScraps.end(), &isRunnableScrap);
     if(m_workPending && runnableDirty) { return cwUpdatable::State::Dirty; }
-    if(m_taskRunning)                  { return cwUpdatable::State::Working; }
+    if(isRunning())                    { return cwUpdatable::State::Working; }
     return cwUpdatable::State::Clean;
 }
 
-void cwScrapManager::update() {
-    updateScrapGeometryHelper(cw::toList(DirtyScraps));
+QFuture<void> cwScrapManager::run() {
+    return updateScrapGeometryHelper(cw::toList(DirtyScraps));
 }
 
 /**
@@ -1134,10 +1134,10 @@ QList<cwScrapManager::TriangulatedScrapResult> cwScrapManager::triangulateScraps
  * @brief cwScrapManager::updateScrapGeometryHelper
  * @param scraps
  */
-void cwScrapManager::updateScrapGeometryHelper(QList<cwScrap *> scraps)
+QFuture<void> cwScrapManager::updateScrapGeometryHelper(QList<cwScrap *> scraps)
 {
     if(scraps.isEmpty()) {
-        return;
+        return currentRun();
     }
 
     //Union NeedUpdate list with scraps, these are the scraps that need to be updated
@@ -1150,17 +1150,17 @@ void cwScrapManager::updateScrapGeometryHelper(QList<cwScrap *> scraps)
     const bool hasRunnableScrap = std::any_of(DirtyScraps.begin(), DirtyScraps.end(), &isRunnableScrap);
 
     if(!hasRunnableScrap) {
-        return;
+        return currentRun();
     }
 
     // Dispatching now covers the current dirty set: drop the pending marker and
     // enter Working. Any edit that arrives after this re-sets m_workPending (via
-    // updateScrapGeometry), flipping back to Dirty so the restarter re-runs.
+    // updateScrapGeometry), flipping back to Dirty so the pipeline is run again.
     m_workPending = false;
-    m_taskRunning = true;
+    const QFuture<void> task = beginRun();
     emit updateStateChanged();
 
-    auto run = [this]() {
+    auto startTask = [this]() {
 
         //Running
         auto dirtyScrapsRange =
@@ -1219,7 +1219,9 @@ void cwScrapManager::updateScrapGeometryHelper(QList<cwScrap *> scraps)
         return finalFuture;
     };
 
-    TriangulateRestarter.restart(run);
+    TriangulateRestarter.restart(startTask);
+
+    return task;
 }
 
 /**
@@ -1600,10 +1602,10 @@ void cwScrapManager::updateScrapWithNewNoteTransform()
 
 void cwScrapManager::finishScrapTask()
 {
-    if(!m_taskRunning) {
+    if(!isRunning()) {
         return;
     }
-    m_taskRunning = false;
+    endRun();
     emit updateStateChanged();
 }
 

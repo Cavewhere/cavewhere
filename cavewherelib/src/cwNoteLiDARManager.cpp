@@ -295,19 +295,19 @@ cwUpdatable::State cwNoteLiDARManager::updateState() const
 {
     // Dirty takes priority over Working: a note (re)dirtied but not yet handed to
     // a batch (m_workPending) reports Dirty even while an earlier batch runs, so
-    // the coordinator re-drives update() and the restarter coalesces the fresh
-    // edit. Once dispatched, a running batch reports Working until it completes.
+    // whoever is driving runs the pipeline again once that batch is over. Once
+    // dispatched, a running batch reports Working until it completes.
     // See cwUpdatable::State.
     const bool runnableDirty =
         std::any_of(m_dirtyNotes.begin(), m_dirtyNotes.end(), &isRunnableNote);
     if(m_workPending && runnableDirty) { return cwUpdatable::State::Dirty; }
-    if(m_taskRunning)                  { return cwUpdatable::State::Working; }
+    if(isRunning())                    { return cwUpdatable::State::Working; }
     return cwUpdatable::State::Clean;
 }
 
-void cwNoteLiDARManager::update()
+QFuture<void> cwNoteLiDARManager::run()
 {
-    runBatch();
+    return runBatch();
 }
 
 void cwNoteLiDARManager::updateAllLiDAR()
@@ -321,7 +321,7 @@ void cwNoteLiDARManager::updateAllLiDAR()
         markDirty(note);
     }
     emit updateStateChanged();
-    update();
+    run();
 }
 
 void cwNoteLiDARManager::updateLiDARForCave(cwCave* cave)
@@ -590,10 +590,10 @@ void cwNoteLiDARManager::notifyDirty()
     runIfStandalone();
 }
 
-void cwNoteLiDARManager::runBatch()
+QFuture<void> cwNoteLiDARManager::runBatch()
 {
     if (m_dirtyNotes.isEmpty()) {
-        return;
+        return currentRun();
     }
 
     // Snapshot and clear “deleted” guard
@@ -606,14 +606,14 @@ void cwNoteLiDARManager::runBatch()
     }
 
     if (notes.isEmpty()) {
-        return;
+        return currentRun();
     }
 
     // Dispatching now covers the current dirty set: drop the pending marker and
     // enter Working. A note dirtied after this re-sets m_workPending (markDirty),
-    // flipping back to Dirty so the restarter re-runs.
+    // flipping back to Dirty so the pipeline is run again.
     m_workPending = false;
-    m_taskRunning = true;
+    const QFuture<void> batch = beginRun();
     emit updateStateChanged();
 
     // Prepare inputs
@@ -695,11 +695,21 @@ void cwNoteLiDARManager::runBatch()
                          // Batch done: leave Working (updateState reflects the
                          // notes just removed from m_dirtyNotes — Clean, or Dirty
                          // if an edit arrived mid-batch).
-                         m_taskRunning = false;
-                         emit updateStateChanged();
+                         finishBatch();
                          emit liDARNotesUpdated(notes);
                      }).future();
     });
+
+    return batch;
+}
+
+void cwNoteLiDARManager::finishBatch()
+{
+    if (!isRunning()) {
+        return;
+    }
+    endRun();
+    emit updateStateChanged();
 }
 
 // ---------------------- Trip wiring helpers ----------------------

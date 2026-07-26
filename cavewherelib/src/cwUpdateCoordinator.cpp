@@ -117,21 +117,19 @@ void cwUpdateCoordinator::updateNow()
 
 void cwUpdateCoordinator::onChildStateChanged(cwUpdatable* updatable)
 {
-    //Let the pipeline's cwUpdatableTask, if any, see the transition first.
-    emit pipelineStateChanged(updatable);
-
-    //A running tree owns the run decision for every node in the cascade, so
-    //driving the pipeline here would only duplicate what the tree is doing.
+    //A running tree owns the run decision for every node in the cascade: each
+    //node waits on its pipeline's run future and re-runs it if the run ends with
+    //the pipeline dirty again, so driving it here would only duplicate that.
     //flushAfterCascade() picks up anything dirtied after its node had finished.
     if(taskTreeRunning()) {
         refreshNeedsUpdate();
         return;
     }
 
-    //Guard on Dirty so update()'s own Working transition (dirty cleared) doesn't
+    //Guard on Dirty so run()'s own Working transition (dirty cleared) doesn't
     //re-enter and re-run.
     if(automaticUpdate() && updatable->updateState() == cwUpdatable::State::Dirty) {
-        updatable->update();
+        updatable->run();
     }
     refreshNeedsUpdate();
 }
@@ -182,13 +180,14 @@ QtTaskTree::Group cwUpdateCoordinator::buildCascadeRecipe()
                 if(pipeline->updateState() == cwUpdatable::State::Clean) {
                     return SetupResult::StopWithSuccess;
                 }
-                task.setPipeline(this, pipeline);
+                task.setPipeline(pipeline);
                 return SetupResult::Continue;
             };
 
-            //No timeout: these pipelines aren't cancellable mid-run, and a large
-            //cave's solve is legitimately slow. A node that never reaches Clean is
-            //a bug in that pipeline's state reporting, not something to time out.
+            //No timeout: a large cave's solve is legitimately slow, and a node
+            //whose pipeline never finishes its run is a bug in that pipeline, not
+            //something to time out. A cancelled run does end the node — see
+            //cwUpdatableTask::waitFor().
             const QCustomTask<cwUpdatableTask> task(onSetup);
 
             //withLog() prints on every node start and finish with no category of

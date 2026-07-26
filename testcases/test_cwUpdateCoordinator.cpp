@@ -25,13 +25,13 @@ namespace {
     }
 
     /**
-     * Stand-in for a real derived-data pipeline. Mirrors the two-bit model the
-     * scrap manager and line plot use: markDirty() sets the pending bit, update()
-     * trades it for the in-flight bit, and finish() clears that.
+     * Stand-in for a real derived-data pipeline. Mirrors the managers: markDirty()
+     * sets the pending bit, run() trades it for a run whose future finish()
+     * resolves.
      *
-     * autoFinish makes update() complete on the next event-loop turn (a short
-     * async job); leaving it off lets a test hold a pipeline in Working for as
-     * long as it needs, which is how a cascade is kept open on purpose.
+     * autoFinish makes run() complete on the next event-loop turn (a short async
+     * job); leaving it off lets a test hold a pipeline in Working for as long as
+     * it needs, which is how a cascade is kept open on purpose.
      */
     class FakePipeline : public QObject, public cwUpdatableBase
     {
@@ -46,25 +46,26 @@ namespace {
         cwUpdatable::State updateState() const override
         {
             if(m_pending) { return cwUpdatable::State::Dirty; }
-            if(m_running) { return cwUpdatable::State::Working; }
+            if(isRunning()) { return cwUpdatable::State::Working; }
             return cwUpdatable::State::Clean;
         }
 
-        void update() override
+        QFuture<void> run() override
         {
-            //Counted before the early return: the real pipelines have no such
-            //guard (cwLinePlotManager::update() restarts its solve unconditionally),
-            //so a redundant drive that this fake absorbs would restart real work.
+            //Counted before the early return: run() is a force path on the real
+            //pipelines too (cwLinePlotManager::run() restarts its solve
+            //unconditionally), so a redundant drive would restart real work.
             m_driveCount++;
-            if(!m_pending) { return; }
+            if(!m_pending) { return currentRun(); }
             m_pending = false;
-            m_running = true;
+            const QFuture<void> future = beginRun();
             m_updateCount++;
             emit updateStateChanged();
 
             if(m_autoFinish) {
                 QMetaObject::invokeMethod(this, &FakePipeline::finish, Qt::QueuedConnection);
             }
+            return future;
         }
 
         void markDirty()
@@ -77,24 +78,23 @@ namespace {
 
         void finish()
         {
-            if(!m_running) { return; }
-            m_running = false;
+            if(!isRunning()) { return; }
+            endRun();
             emit updateStateChanged();
         }
 
-        //Runs started, versus every update() call including ones that started nothing.
+        //Runs started, versus every run() call including ones that started nothing.
         int updateCount() const { return m_updateCount; }
         int driveCount() const { return m_driveCount; }
-
-    signals:
-        void updateStateChanged();
 
     private:
         bool m_autoFinish;
         bool m_pending = false;
-        bool m_running = false;
         int m_updateCount = 0;
         int m_driveCount = 0;
+
+    signals:
+        void updateStateChanged();
     };
 }
 
@@ -222,8 +222,8 @@ TEST_CASE("A forced Run doesn't chase edits made after it", "[cwUpdateCoordinato
 TEST_CASE("A pipeline re-edited while its own node runs is driven again",
           "[cwUpdateCoordinator]")
 {
-    //Dirty outranks Working, so a mid-run edit re-drives the pipeline rather than
-    //letting the node settle on a run that predates it. Without this the cascade
+    //A run that is already in flight can't cover an edit made after it started,
+    //so the node has to run the pipeline a second time. Without this the cascade
     //would finish reporting Clean against data the user has already changed.
     cwJobSettings::initialize();
     cwJobSettings::instance()->setAutomaticUpdate(false);
@@ -243,6 +243,16 @@ TEST_CASE("A pipeline re-edited while its own node runs is driven again",
     slow.markDirty();
     settle();
 
+    //The node waits on the run's future rather than reacting to the edit, so the
+    //work in flight is left to finish instead of being cancelled and restarted.
+    CHECK(slow.updateCount() == 1);
+    CHECK(slow.updateState() == cwUpdatable::State::Dirty);
+
+    slow.finish();
+    settle();
+
+    //That future finishing is what re-drives the pipeline: the node re-reads the
+    //state, finds it dirty again, and runs it rather than reporting done.
     CHECK(slow.updateCount() == 2);
     CHECK(slow.updateState() == cwUpdatable::State::Working);
 
@@ -270,7 +280,7 @@ TEST_CASE("A pipeline already working when the cascade starts isn't restarted",
     //Put it in Working outside the coordinator, the way rerunSurvex() and
     //updateAllScraps() do when they bypass the coordinator entirely.
     busy.markDirty();
-    busy.update();
+    busy.run();
     REQUIRE(busy.updateState() == cwUpdatable::State::Working);
     REQUIRE(busy.driveCount() == 1);
 

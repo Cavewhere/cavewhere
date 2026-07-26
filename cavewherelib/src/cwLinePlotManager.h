@@ -117,7 +117,7 @@ public:
     QList<QUuid> missingSourceOwners() const { return m_missingSourceOwners; }
 
     cwUpdatable::State updateState() const override;
-    void update() override;
+    QFuture<void> run() override;
 
     // Region-wide survey network artifact, updated whenever the line-plot
     // pipeline completes. Shared across every consumer (sketches today; future
@@ -199,16 +199,10 @@ private:
 
     bool m_needsUpdate = false;
 
-    // The Working bit: true from the moment update() kicks a solve until that
-    // solve's completion callback runs. m_needsUpdate clears synchronously at
-    // update() start (so an edit mid-solve re-triggers a fresh restart via
-    // Dirty), which is why the line plot needs this separate flag to stay
-    // observably Working through the async solve — see cwUpdatable::State.
-    bool m_solving = false;
-
-    // Clears m_solving (Working -> Clean, or -> Dirty if re-edited mid-solve)
-    // and emits updateStateChanged so the coordinator re-evaluates its
-    // forced-cascade settle state.
+    // Ends the run (Working -> Clean, or -> Dirty if re-edited mid-solve) and
+    // emits updateStateChanged so the coordinator re-evaluates its staleness
+    // aggregate. Finishing the run's future is what releases anyone waiting on
+    // the solve, so every completion path has to reach here.
     void finishSolving();
 
     void connectCaves(cwCavingRegion* region);
@@ -263,10 +257,10 @@ private slots:
 
 inline cwUpdatable::State cwLinePlotManager::updateState() const {
     // Dirty takes priority over Working: a survey edit that arrives mid-solve
-    // must re-drive update() (which restarts and coalesces), so it reports Dirty
-    // even while a solve is in flight — not Working. See cwUpdatable::State.
+    // isn't covered by the solve in flight, so it reports Dirty and the driver
+    // runs it again. See cwUpdatable::State.
     if(m_needsUpdate) { return cwUpdatable::State::Dirty; }
-    if(m_solving)     { return cwUpdatable::State::Working; }
+    if(isRunning())   { return cwUpdatable::State::Working; }
     return cwUpdatable::State::Clean;
 }
 

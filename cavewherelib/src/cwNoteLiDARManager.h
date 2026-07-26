@@ -68,7 +68,7 @@ public:
     bool keepRenderGeometry() const;
 
     cwUpdatable::State updateState() const override;
-    void update() override;
+    QFuture<void> run() override;
 
     // Useful in tests or manual recompute. Forces a recompute regardless of the
     // auto-update policy (the "Compute" force path).
@@ -115,7 +115,12 @@ private:
     void markDirty(cwNoteLiDAR* note);
     // Notifies the coordinator of dirtiness and, when standalone, recomputes now.
     void notifyDirty();
-    void runBatch();
+    QFuture<void> runBatch();
+
+    // Leaves Working: finishes the run's future and emits updateStateChanged.
+    // That future is what whoever asked for the batch waits on, so every
+    // completion path has to reach here.
+    void finishBatch();
 
     // Trip wiring
     void connectTrip(cwTrip* trip);
@@ -142,13 +147,11 @@ private:
     QSet<cwNoteLiDAR*> m_dirtyNotes;
     QSet<cwNoteLiDAR*> m_deletedNotes;
 
-    // The two bits behind updateState() (see cwUpdatable::State), mirroring the
-    // line plot and scraps: m_workPending is set when a note is (re)dirtied and
-    // cleared at dispatch, so a fresh edit mid-run reports Dirty; m_taskRunning
-    // marks a batch in flight (set before restart(), cleared in the completion
-    // callback) so a running pipeline reports Working.
+    // The staleness half of updateState() (see cwUpdatable::State), mirroring the
+    // line plot and scraps: set when a note is (re)dirtied and cleared at
+    // dispatch, so a fresh edit mid-run reports Dirty. The busy half is the run's
+    // future, held by cwUpdatableBase.
     bool m_workPending = false;
-    bool m_taskRunning = false;
     QHash<cwNoteLiDAR*, QVector<uint32_t>> m_noteToRender;
     cwKeywordItemRegistry<cwNoteLiDAR*> m_keywordRegistry;
 
