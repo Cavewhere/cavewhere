@@ -85,6 +85,7 @@ measurement you plan to write down.
 With both points down, a **Measurement** panel appears in the top-right.
 
 ![The Measurement readout panel: unit selector m, Straight-line (3D) 58.11 m, Horizontal (2D) 48.38 m, Azimuth Grid 90.9 degrees, Inclination -33.6 degrees, Easting (X) +48.38 m, Northing (Y) -0.75 m, Vertical (Z) -32.19 m, and Copy.](../images/measurement-readout.png)
+*The Measurement panel, the same vector shown 3 ways.*
 
 Every group carries the same vector in different clothes, in selectable monospace
 text, lengths at 2 decimal places and angles at 1:
@@ -99,15 +100,14 @@ text, lengths at 2 decimal places and angles at 1:
   (Y)**, and **Vertical (Z)**. A positive value carries an explicit sign,
   `+48.38 m`, and a value that rounds to zero prints no sign at all.
 
-The panel doesn't appear during the live preview, so a bearing always costs you
-both points.
+No panel appears during the live preview, so a bearing costs both points.
 
 ### Units and copying
 
 The **unit selector** in the panel header switches every length at once between
 **m**, **km**, **ft**, and **mi**. It starts on whatever the project's unit system
-implies, meters for a metric project and feet for an imperial one, and follows
-that system until you pick a unit yourself. Then the choice saves, stops tracking
+implies, meters for metric and feet for imperial, and follows that system until
+you pick a unit yourself. Then the choice saves, stops tracking
 the project, and waits for you next session.
 
 **Copy** drops the whole readout on the clipboard as plain text, laid out like the
@@ -153,7 +153,7 @@ correction. **A set but unresolvable coordinate system reads `n/a`**, never a
 silently wrong grid number, with the reason in a tooltip. And a *geographic*
 coordinate system makes True equal Grid, because latitude and longitude have no
 grid to lean against, so the convergence comes out 0. The cave page reports that
-case as `n/a (geographic CS)`, which reads like a failure but says the same thing.
+case as `n/a (geographic CS)`, which looks like a failure but is not.
 
 ## Next steps
 
