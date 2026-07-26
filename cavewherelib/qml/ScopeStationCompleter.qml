@@ -15,10 +15,9 @@ import cavewherelib
   unless both textInput and scopeModel are set, so every non-station field
   using the shadow editor is unaffected.
 
-  This item does not live inside GlobalShadowTextInput — that stays a generic
-  editor. A single instance is placed in the main overlay, tracks the shared
-  editor's geometry, and reads its scope model from the field currently being
-  edited (GlobalShadowTextInput.coreClickInput.stationScopeModel).
+  It is a plain widget over a text input: StationNameEditor places it and feeds
+  it the scope, and only station fields open that editor. Nothing here knows
+  about the shared editor host.
 
   Interaction: type to filter; the dropdown lists matches; Tab fills the field
   with the top (or highlighted) match; Up/Down live-preview a match into the

@@ -1,3 +1,5 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import cavewherelib
 
@@ -18,7 +20,12 @@ DoubleClickTextInput {
     //So we don't add new station when we click on the station
     acceptMousePress: true
 
-    stationScopeModel: scopeStationModel
+    //The scope the editor autocompletes against. Read off the field by
+    //StationNameEditor, so every station field shares one editor component.
+    readonly property alias scopeModel: scopeStationModel
+
+    //Station entry gets the autocompleting editor
+    editorComponent: EditorComponents.stationName
 
     ScopeStationListModel {
         id: scopeStationModel

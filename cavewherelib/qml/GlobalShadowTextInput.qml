@@ -7,25 +7,109 @@
 pragma Singleton
 
 import QtQuick as QQ
-import QtQuick.Controls as QC
 import cavewherelib
 
+/**
+  The one shadow-editor host. Fields (CoreClickTextInput) hand editing off to
+  it: it loads the editor that field asked for, positions it over the field,
+  and commits when the user presses somewhere else.
+
+  It knows how to show *an* editor, never what a particular editor is for.
+  Fields that need more than plain text name their own with
+  CoreClickTextInput.editorComponent, and that editor carries its own extras
+  (see StationNameEditor) instead of this host growing a slot per feature.
+ */
 QQ.MouseArea {
     id: globalMouseArea
 
-    property alias textInput: input
-    property alias editor: shadowEditor
-    property int minWidth: 0
-    property int minHeight: 0
-    property alias errorHelpBox: errorHelpBoxItem
     property CoreClickTextInput coreClickInput
 
+    readonly property ShadowTextEditor currentEditor: editorLoader.item as ShadowTextEditor
+    readonly property GlobalTextInputHelper textInput: globalMouseArea.currentEditor !== null
+                                                       ? globalMouseArea.currentEditor.textInput
+                                                       : null
+    readonly property ErrorHelpBox errorHelpBox: globalMouseArea.currentEditor !== null
+                                                 ? globalMouseArea.currentEditor.errorHelpBox
+                                                 : null
+
+    //Re-emitted from whichever editor is live. Consumers must bind to these and
+    //never to textInput itself: the editor is swapped out and destroyed when a
+    //field asks for a different one, and a QQ.PropertyChanges bound to the old
+    //object resolves it once and never re-resolves, so it silently dies.
     signal enterPressed()
     signal escapePressed()
+    signal pressKeyPressed()
+    signal editorFocusChanged(bool editorFocus)
 
     anchors.fill: parent
     enabled: false
     visible: enabled
+
+    //Returns false when the field's editorComponent could not be loaded, so the
+    //caller can put itself back rather than sitting blank with no editor.
+    function openEditor(field: CoreClickTextInput) : bool {
+        editorLoader.sourceComponent = field.editorComponent !== null
+                ? field.editorComponent
+                : defaultEditorComponent
+
+        let editorItem = globalMouseArea.currentEditor
+        if(editorItem === null) {
+            console.warn("editorComponent must be a ShadowTextEditor, refusing to edit",
+                         field)
+            return false
+        }
+
+        editorItem.field = field
+
+        editorItem.textInput.text = field.text
+        editorItem.textInput.font = field.font
+        editorLoader.visible = true
+        editorItem.textInput.forceActiveFocus()
+        editorItem.textInput.selectAll();
+
+        //Assigned unconditionally: the editor outlives any one field, so a
+        //validator left by the previous one would filter this field's typing.
+        //After the text, so the incoming value is never rejected on the way in.
+        editorItem.textInput.validator = field.validator
+        editorItem.errorHelpBox.visible = false
+
+        globalMouseArea.enabled = true
+
+        //Set the editor's position
+        //Calling this function with just GlobalShadowTextInput cause a crash, maybe because it's a singleton?
+        //Using the parent, should be the CavewhereMainWindow
+        let globalPosition = field.mapToItem(globalMouseArea.parent, 0, 0)
+        editorLoader.x = globalPosition.x - editorItem.contentMargin
+        editorLoader.y = globalPosition.y - editorItem.contentMargin
+
+        editorItem.minWidth = field.width + editorItem.contentMargin * 2
+        editorItem.minHeight = field.height + editorItem.contentMargin * 2
+
+        //Connect to commitChanges()
+        globalMouseArea.coreClickInput = field
+        return true
+    }
+
+    function closeEditor() {
+        editorLoader.visible = false
+
+        if(globalMouseArea.currentEditor !== null) {
+            globalMouseArea.textInput.focus = false
+            globalMouseArea.textInput.validator = null
+            globalMouseArea.errorHelpBox.visible = false
+            globalMouseArea.currentEditor.field = null
+        }
+
+        globalMouseArea.enabled = false
+        globalMouseArea.coreClickInput = null
+    }
+
+    function clearSelection() {
+        if(globalMouseArea.textInput !== null) {
+            globalMouseArea.textInput.select(globalMouseArea.textInput.cursorPosition,
+                                             globalMouseArea.textInput.cursorPosition)
+        }
+    }
 
     onPressed: (mouse) => {
         if(coreClickInput !== null) {
@@ -38,106 +122,34 @@ QQ.MouseArea {
         mouse.accepted = false
     }
 
-    function clearSelection() {
-        input.select(input.cursorPosition, input.cursorPosition)
-    }
+    QQ.Connections {
+        target: globalMouseArea.textInput
 
-    ShadowRectangle {
-        id: shadowEditor
-        visible: false;
-
-        color: Theme.surface
-
-        width:  globalMouseArea.minWidth > input.width + 6 ? globalMouseArea.minWidth : input.width  + 6
-        height: globalMouseArea.minHeight > input.height + 6 ? globalMouseArea.minHeight : input.height + 6
-
-        QQ.MouseArea {
-            id: borderArea
-
-            anchors.fill: parent
-
-            onPressed: (mouse) => {
-                input.forceActiveFocus()
-                mouse.accepted = true
-            }
-        }
-
-        GlobalTextInputHelper {
-            id: input
-        }
-
-        // QC.LabelInput {
-        //     id: input
-        //     visible: shadowEditor.visible
-        //     anchors.centerIn: parent;
-
-        //     selectByMouse: activeFocus;
-        //     activeFocusOnPress: false
-
-        //     //FIXME: Revert back to orinial code
-        //     //This is a work around to QTBUG-27300
-        //     property var pressKeyEvent
-        //     signal pressKeyPressed; //This is emitted every time key is pressed
-
-        //     QQ.KeyNavigation.tab: {
-        //         if(globalMouseArea.coreClickInput === null) {
-        //             return null
-        //         }
-        //         return globalMouseArea.coreClickInput.QQ.KeyNavigation.tab
-        //     }
-
-        //     QQ.KeyNavigation.backtab: {
-        //         if(globalMouseArea.coreClickInput === null) {
-        //             return null
-        //         }
-        //         return globalMouseArea.coreClickInput.QQ.KeyNavigation.backtab
-        //     }
-
-        //     onFocusChanged: {
-        //         if(!focus && globalMouseArea.editor.visible && !globalMouseArea.coreClickInput.focus) {
-        //             globalMouseArea.coreClickInput.commitChanges();
-        //         }
-
-        //         if(globalMouseArea.coreClickInput !== null && globalMouseArea.coreClickInput.focus)
-        //         {
-        //             forceActiveFocus()
-        //             selectAll()
-        //         }
-        //     }
-
-        //     function defaultKeyHandling() {
-        //         if(pressKeyEvent.key === Qt.Key_Return || pressKeyEvent.key === Qt.Key_Enter) {
-        //             enterPressed()
-        //             if(coreClickInput !== null) {
-        //                 coreClickInput.commitChanges()
-        //             } else {
-        //                 escapePressed()
-        //             }
-
-        //         } else if(pressKeyEvent.key === Qt.Key_Escape) {
-        //             escapePressed()
-        //             coreClickInput.closeEditor();
-        //             pressKeyEvent.accepted = true
-        //         }
-        //     }
-
-        //     QQ.Keys.onPressed: (event) => {
-        //         pressKeyEvent = event;
-        //         pressKeyPressed();
-        //     }
-
-        //     onPressKeyPressed: {
-        //         defaultKeyHandling();
-        //     }
-        // }
-
-        ErrorHelpBox {
-            id: errorHelpBoxItem
-            y: parent.height + 10
-            visible: false
-            anchors.bottom: undefined
-            anchors.bottomMargin: 0
+        function onEnterPressed() { globalMouseArea.enterPressed() }
+        function onEscapePressed() { globalMouseArea.escapePressed() }
+        function onPressKeyPressed() { globalMouseArea.pressKeyPressed() }
+        //activeFocus for the same reason GlobalTextInputHelper uses it: the
+        //Loader is a focus scope, so `focus` never goes back false on its own.
+        function onActiveFocusChanged() {
+            globalMouseArea.editorFocusChanged(globalMouseArea.textInput.activeFocus)
         }
     }
 
+    //One editor alive at a time, however many fields there are. It is rebuilt
+    //whenever a field asks for a different component — and since an inline
+    //editorComponent is wrapped per declaring instance, two fields of the same
+    //kind still count as different. Nothing outside may hold onto what this
+    //loads; watch the host's signals instead.
+    QQ.Loader {
+        id: editorLoader
+
+        visible: false
+        sourceComponent: defaultEditorComponent
+    }
+
+    QQ.Component {
+        id: defaultEditorComponent
+
+        ShadowTextEditor {}
+    }
 }

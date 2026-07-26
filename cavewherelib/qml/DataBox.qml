@@ -63,7 +63,6 @@ QQ.Item {
     property int editTargetRole: -1
 
     property GlobalShadowTextInput _globalShadowTextInput: GlobalShadowTextInput
-    property GlobalTextInputHelper _globalTextInput: GlobalShadowTextInput.textInput
 
     signal rightClick(var mouse);
     signal enteredPressed();
@@ -496,7 +495,11 @@ QQ.Item {
 
             QQ.PropertyChanges {
 
-                dataBox._globalTextInput.onPressKeyPressed: () => {
+                dataBox._globalShadowTextInput.onPressKeyPressed: () => {
+                    //Read through the host: the editor holding this event is
+                    //swapped out per field, so it can't be captured up front.
+                    let pressKeyEvent = GlobalShadowTextInput.textInput.pressKeyEvent
+
                     if(pressKeyEvent.key === Qt.Key_Tab ||
                        pressKeyEvent.key === 1 + Qt.Key_Tab ||
                        pressKeyEvent.key === Qt.Key_Space)
@@ -531,8 +534,8 @@ QQ.Item {
 
                 }
 
-                dataBox._globalTextInput.onFocusChanged: {
-                    if(!focus) {
+                dataBox._globalShadowTextInput.onEditorFocusChanged: (editorFocus) => {
+                    if(!editorFocus) {
                         dataBox.state = '';
                     }
                 }

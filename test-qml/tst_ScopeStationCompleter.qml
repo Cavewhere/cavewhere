@@ -32,9 +32,9 @@ QQ.Item {
         name: "ScopeStationCompleter"
         when: windowShown
 
-        // active gates on the editor field being shown; force our standalone
-        // helper visible (its default binding tracks the shadow-editor singleton,
-        // which isn't opened in this bare-component test).
+        // active gates on the editor field being shown. In the app that follows
+        // the editor's visibility; here the helper stands alone, so drive it
+        // directly.
         function openEditor() {
             inputId.visible = true
         }

@@ -898,13 +898,13 @@ bool cwTrip::isScoped() const { return !scopePrefix().isEmpty(); }</code></pre>
   canonical-key case-insensitive. <strong>(2)</strong> Autocomplete is a new
   <code>ScopeStationCompleter.qml</code> &mdash; a dropdown of in-scope stations
   (Tab fills the field with the top/highlighted match, Up/Down live-preview,
-  click commits). It lives as a <em>single</em> instance in
-  <code>MainContent.qml</code>'s overlay &mdash;
-  <code>GlobalShadowTextInput</code> stays a generic editor, untouched &mdash;
-  tracking the shared editor's geometry and reading its scope model from the
-  field being edited
-  (<code>coreClickInput.stationScopeModel</code>, an opt-in property on
-  <code>CoreClickTextInput</code>);
+  click commits).
+  <strong>Superseded &mdash; see <a href="#editor-component">Per-field editor
+  components</a>:</strong> the completer no longer lives as an instance in
+  <code>MainContent.qml</code>'s overlay, no longer mirrors the shared editor's
+  geometry, and <code>coreClickInput.stationScopeModel</code> no longer exists.
+  It is now part of <code>StationNameEditor</code>, which only station fields
+  open, and <code>GlobalShadowTextInput</code> is a host rather than the editor.
   <code>StationDoubleClickTextInput</code> owns a trip-scoped model and both
   <code>NoteStation</code>/<code>NoteLiDARStationItem</code> feed it their
   <code>parentTrip</code>. Inert for every non-station field (proven by
@@ -949,7 +949,15 @@ bool cwTrip::isScoped() const { return !scopePrefix().isEmpty(); }</code></pre>
   below.</strong>
 </p>
 
-<h3 id="completer-decoupling">Next &mdash; Completer decoupling (the <code>ToolTip</code> shape)</h3>
+<h3 id="completer-decoupling">Completer decoupling &mdash; DONE, but not this way</h3>
+<p>
+  <strong>The plan below was built, reviewed, and thrown away.</strong> It works, and
+  it is kept here for the reasoning; what shipped instead is
+  &ldquo;<a href="#editor-component">Per-field editor components</a>&rdquo; below.
+  The attached-property version answers &ldquo;how does a field declare its model&rdquo;
+  but leaves the deeper problem in place: one fixed editor that every feature has to
+  be bolted onto, and that every unrelated field then has to stay inert for.
+</p>
 <p>
   Follow-up (c), now decided. Two coupling smells to remove, both tracing to the
   same fact &mdash; <code>GlobalShadowTextInput</code> is a singleton, so there is
@@ -993,6 +1001,144 @@ bool cwTrip::isScoped() const { return !scopePrefix().isEmpty(); }</code></pre>
   Tests: extend <code>tst_ScopeStationCompleter.qml</code> for the attached-property
   opt-in path; keep the existing inert/out-of-scope contract green.
 </p>
+
+<h3 id="editor-component">Per-field editor components &mdash; DONE</h3>
+<p>
+  What actually shipped. The question that dissolved the previous design: is the
+  problem <em>where the editor is hosted</em> (singleton? popup? overlay?), or
+  <em>who decides what the editor is</em>? It is the second. Hosting was never the
+  coupling &mdash; a shared instance is correct either way, since a survey table has
+  hundreds of live fields and one editor.
+</p>
+<p>
+  So <code>CoreClickTextInput</code> gained one generic property,
+  <code>editorComponent</code>. Null gets the plain editor; a field with more to offer
+  while editing names its own. The completer stopped being an add-on and became part
+  of an editor that only station fields open.
+</p>
+<ul>
+  <li>
+    <strong><code>ShadowTextEditor.qml</code></strong> (new) &mdash; the plain editor,
+    extracted from the singleton: shadow box, the live text input, the error help box.
+    Takes <code>field</code>, <code>minWidth</code>, <code>minHeight</code> from
+    whoever hosts it and never reaches back. <em>That</em> file is re-hostable on
+    its own, but the system is not yet: <code>CoreClickTextInput</code> still has
+    six references to the singleton, three of them to host internals (see the
+    follow-up below).
+  </li>
+  <li>
+    <strong><code>StationNameEditor.qml</code></strong> (new) &mdash;
+    <code>ShadowTextEditor</code> + <code>ScopeStationCompleter</code>. It reads the
+    scope off whichever field it is given (<code>field as
+    StationDoubleClickTextInput</code>), rather than being handed one per
+    instance. No attached property, no resolver, no C++ &mdash;
+    <code>cwStationScope</code> was deleted.
+  </li>
+  <li>
+    <strong><code>EditorComponents.qml</code></strong> (new singleton) &mdash; holds
+    one shared component per editor <em>kind</em>. An inline component is wrapped
+    per declaring instance, so declaring the editor at each field made two station
+    fields hand the host two different components and rebuild the editor on every
+    move between them. Fields now say
+    <code>editorComponent: EditorComponents.stationName</code>.
+  </li>
+  <li>
+    <strong><code>GlobalShadowTextInput</code></strong> became a host: it loads the
+    requested component into a <code>Loader</code>, positions it over the field, and
+    commits on an outside press. The whole open/close handoff moved here from
+    <code>CoreClickTextInput</code>, which now says
+    <code>GlobalShadowTextInput.openEditor(clickTextInput)</code> and keeps only its
+    own field-side state.
+    <strong>The names held; the contract did not.</strong> <code>textInput</code> and
+    <code>errorHelpBox</code> went from never-null aliases to nullable bindings that
+    <em>change identity</em> when the editor is swapped, and <code>editor</code>
+    (never used again) was deleted. That broke <code>DataBox</code>: its
+    &ldquo;MiddleTyping&rdquo; state installs Tab/Space/Enter handling via
+    <code>QQ.PropertyChanges</code> on <code>textInput</code>, and
+    <code>PropertyChanges</code> resolves its target object <em>once</em> and never
+    re-resolves &mdash; measured, including across state re-entry. So the first
+    editor swap killed that handling permanently and silently. The host now
+    re-emits <code>pressKeyPressed</code> and <code>editorFocusChanged</code>
+    alongside <code>enterPressed</code>/<code>escapePressed</code>, and
+    <code>DataBox</code> binds to the host. <strong>Nothing outside may hold the
+    editor or its input</strong>; watch the host's signals.
+    (<code>tst_ShadowEditorSignalRouting.qml</code> fails without this.)
+  </li>
+  <li>
+    <strong><code>GlobalTextInputHelper</code></strong> is finally generic. It used to
+    reach <code>coreClickInput</code> and <code>enterPressed()</code> <em>unqualified</em>,
+    resolving through the singleton's creation context &mdash; which is why it could
+    only ever live inside that one file. It now takes a <code>field</code> property.
+    The host re-emits the enter/escape signals from whichever editor is live.
+  </li>
+</ul>
+<p>
+  Net: <code>MainContent</code> loses the widget, the host holds no station knowledge
+  and needs no extension slot, and the fields that don't want autocomplete never
+  instantiate any. Latent bugs fixed on the way: the Escape branch of
+  <code>defaultKeyHandling</code> dereferenced a null field, and
+  <code>commitChanges</code> read the committed text after closing the editor
+  &mdash; the latter <em>only in the no-validator branch</em>; the validator branch
+  still emits <code>finishedEditting</code> before closing, so the two disagree on
+  ordering (open follow-up).
+  Fixed in pre-commit review: the error box was painted <em>under</em> anything a
+  subclass adds (the completer dropdown shares its band, and station fields do set
+  validators), so it now carries a <code>z</code>;
+  <code>openEditor()</code> now assigns the validator unconditionally and clears the
+  error box, since the editor outlives any one field; and because the
+  <code>Loader</code> is a <em>focus scope</em>, <code>focus</code> never returns to
+  false on blur &mdash; the commit-on-blur path and the host's focus relay both had
+  to move to <code>activeFocus</code>.
+  Not chosen: converting the host to <code>QC.Popup</code> &mdash; it would delete the
+  <code>parent = overlay</code> reparenting hack, but
+  <code>CloseOnPressOutside</code> consumes the closing press, and today's
+  full-window <code>MouseArea</code> deliberately passes it through so clicking cell to
+  cell commits and re-opens in one click.
+  Tests: <code>tst_ShadowTextEditor.qml</code> (new) covers plain vs. station editor
+  selection, one shared editor instance across fields of the same kind, editor swap
+  between fields, and field release on close;
+  <code>tst_ShadowEditorSignalRouting.qml</code> (new) covers the host relay
+  surviving a swap and reporting focus leaving the editor;
+  <code>tst_LiDARNotes.qml</code> now asserts the <em>production</em> station field
+  opens the autocompleting editor;
+  <code>tst_ScopeStationCompleter.qml</code>'s inert/out-of-scope contract is unchanged
+  and still green.
+  <strong>Status: built, reviewed and green &mdash; not committed.</strong> The test
+  gap noted under commit 7 is still open: no test drives a <em>populated</em>
+  dropdown, so click-to-pick through the real editor remains unverified end to end.
+</p>
+<p>
+  <strong>Follow-ups this refactor surfaced</strong> (none of them in this commit):
+</p>
+<ul>
+  <li>
+    <strong>The host should own the whole stable contract.</strong>
+    <code>textInput</code>/<code>errorHelpBox</code> are still nullable,
+    identity-changing, and dereferenced unguarded at <code>DataBox.qml</code>'s
+    type-ahead and <code>CoreClickTextInput.commitChanges()</code>. The signal relay
+    fixed the case that broke; the remaining direct reaches should follow it, so no
+    consumer ever holds the transient editor. ~3 files.
+  </li>
+  <li>
+    <strong>Move validation/error display behind that host API.</strong>
+    <code>CoreClickTextInput</code> still sets
+    <code>errorHelpBox.text</code>/<code>.visible</code> and
+    <code>textInput.focus</code> directly. This is the residue that keeps the
+    system (as opposed to <code>ShadowTextEditor</code>) from being re-hostable, and
+    it is where the two <code>commitChanges</code> branches should be reconciled.
+    Changes the commit protocol, so it wants its own commit.
+  </li>
+  <li>
+    <strong>Consider a per-window host instead of a reparented singleton.</strong>
+    A third option alongside the rejected <code>QC.Popup</code> route: keep the
+    full-window <code>MouseArea</code> (the reason Popup was rejected) but drop the
+    <em>singleton</em>. That removes <code>GlobalShadowTextInput.parent = overlay</code>
+    (<code>MainContent.qml</code>, duplicated in <code>sketch/qml/Main.qml</code>),
+    the anchors-with-no-parent startup state, and the global-state reset boilerplate
+    now copied into six test files. Cost: fields need a way to find their host.
+    ~10 files.
+  </li>
+</ul>
 
 <h3 id="c8">Commit 8 &mdash; Native prefixing, Path A (dotted names)</h3>
 <p>

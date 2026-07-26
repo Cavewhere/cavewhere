@@ -83,6 +83,10 @@ MainWindowTest {
 
             let stationNameInput_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARStation_0->coreTextInput")
             stationNameInput_obj1.openEditor();
+            //A production station field must open the autocompleting editor —
+            //tst_ShadowTextEditor only proves that for a field it builds itself.
+            verify(GlobalShadowTextInput.currentEditor.stationField !== undefined,
+                   "station fields should open the station-name editor")
             keyClick(54, 0) //6
             keyClick(16777220, 0) //Return
 

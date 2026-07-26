@@ -20,7 +20,9 @@ QQ.Item {
     property bool doubleClickEdit: false
     property bool isEditting: false
     property Validator validator;
-    property ScopeStationListModel stationScopeModel  //opt-in station autocomplete
+    //The editor this field opens. Null gets the plain shadow editor; a field
+    //with more to offer while editing names its own (see StationNameEditor).
+    property QQ.Component editorComponent
     property bool readOnly: false
     property bool autoResize: false
     property alias wrapMode: textAreaId.wrapMode
@@ -70,23 +72,17 @@ QQ.Item {
         } else {
             var newText = GlobalShadowTextInput.textInput.text
             closeEditor();
-            finishedEditting(GlobalShadowTextInput.textInput.text);
+            finishedEditting(newText);
             return true;
         }
     }
 
     function closeEditor() {
-        GlobalShadowTextInput.editor.visible = false;
-        GlobalShadowTextInput.textInput.focus = false;
-        GlobalShadowTextInput.textInput.validator = null;
+        GlobalShadowTextInput.closeEditor()
 
-        GlobalShadowTextInput.enabled = false
         doubleClickArea.enabled = true;
         textAreaId.visible = true;
         isEditting = false;
-        GlobalShadowTextInput.errorHelpBox.visible = false;
-
-        GlobalShadowTextInput.coreClickInput = null
     }
 
     function openEditor() {
@@ -97,32 +93,15 @@ QQ.Item {
 
         textAreaId.visible = false
 
-        GlobalShadowTextInput.textInput.text = clickTextInput.text
-        GlobalShadowTextInput.textInput.font = textAreaId.font
-        GlobalShadowTextInput.editor.visible = true
-        GlobalShadowTextInput.textInput.forceActiveFocus()
-        GlobalShadowTextInput.textInput.selectAll();
-
-        if(clickTextInput.validator !== null) {
-            GlobalShadowTextInput.textInput.validator = clickTextInput.validator
+        //The editor itself — which one, where it sits, what it holds — is the
+        //host's business
+        if(!GlobalShadowTextInput.openEditor(clickTextInput)) {
+            textAreaId.visible = true
+            return
         }
 
-        GlobalShadowTextInput.enabled = true
         doubleClickArea.enabled = false
         isEditting = true
-
-        //Set the editor's position
-        //Calling this function with just GlobalShadowTextInput cause a crash, maybe because it's a singleton?
-        //Using the parent, should be the CavewhereMainWindow
-        var globalPosition = clickTextInput.mapToItem(GlobalShadowTextInput.parent, 0, 0)
-        GlobalShadowTextInput.editor.x = globalPosition.x - 3
-        GlobalShadowTextInput.editor.y = globalPosition.y - 3
-
-        GlobalShadowTextInput.minWidth = clickTextInput.width + 6
-        GlobalShadowTextInput.minHeight = clickTextInput.height + 6
-
-        //Connect to commitChanges()
-        GlobalShadowTextInput.coreClickInput = clickTextInput
     }
 
     QC.Label {
