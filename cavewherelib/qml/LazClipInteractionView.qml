@@ -68,11 +68,12 @@ LazClipInteraction {
     TurnTableForwardingHandlers {
         turnTableInteraction: clipperId.turnTableInteraction
         // Polygon vertices are projected onto z=0 at the camera angle in
-        // effect when each vertex is placed — rotating mid-draw would
-        // re-project the existing vertices and silently move them. Block
-        // right-drag rotate (pitchLocked above blocks the plan/profile
-        // buttons) until the tool deactivates.
+        // effect when each vertex is placed — moving the camera mid-draw would
+        // re-project the existing vertices and silently move them. Block both
+        // left-drag pan and right-drag rotate (pitchLocked above blocks the
+        // plan/profile buttons) until the tool deactivates.
         rotationEnabled: false
+        panEnabled: false
     }
 
     LazClipPolygonCanvas {

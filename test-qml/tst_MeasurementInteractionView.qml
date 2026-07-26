@@ -110,10 +110,10 @@ MainWindowTest {
             return null
         }
 
-        // Loads the cave, activates the tool, and places A + B at the two
-        // farthest pickable points, returning the renderer with a completed
-        // measurement.
-        function _setupCompletedMeasurement() {
+        // Loads the cave, navigates to the View page, and toggles the measuring
+        // tool on via its toolbar button, returning the renderer with the tool
+        // active (turn-table disabled) but no points placed yet.
+        function _activateMeasurement() {
             TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
             RootData.pageSelectionModel.currentPageAddress = "View"
             tryVerify(() => RootData.pageView.currentPageItem !== null
@@ -132,6 +132,15 @@ MainWindowTest {
                 "rootId->viewPage->SplitView->renderer->measurementButton")
             mouseClick(measureButton)
             tryVerify(() => measurement.enabled === true, 1000, "Measurement enabled")
+            return renderer
+        }
+
+        // Loads the cave, activates the tool, and places A + B at the two
+        // farthest pickable points, returning the renderer with a completed
+        // measurement.
+        function _setupCompletedMeasurement() {
+            let renderer = _activateMeasurement()
+            let measurement = renderer.measurementInteraction
 
             let hits = []
             tryVerify(() => {
@@ -218,6 +227,54 @@ MainWindowTest {
             tryVerify(() => turnTable.enabled === true, 1000, "Turn-table restored when measuring toggled off")
             tryVerify(() => measurement.enabled === false, 1000, "Measurement disabled after toggle off")
             tryVerify(() => measurement.hasMeasurement === false, 1000, "Measurement reset on deactivate")
+        }
+
+        // A left-drag must still pan the camera while the measuring tool is active.
+        // The tool reserves a left *click* to place a point, but a click only needs
+        // the press-release — a press-and-drag past the drag threshold should pan
+        // the view, matching every other tool and the default turn-table. Before
+        // the fix the measuring view forwarded only right-drag rotate and wheel
+        // zoom, so a left-drag did nothing and the camera stayed put. This drives a
+        // real left-drag and asserts the shared turn-table camera moves, while the
+        // drag places no point (the tap and pan gestures coexist via grab handoff).
+        function test_leftDragPansWhileMeasuring() {
+            let renderer = _activateMeasurement()
+            let measurement = renderer.measurementInteraction
+            let turnTable = renderer.turnTableInteraction
+
+            tryVerify(() => turnTable.camera !== null, 1000, "Camera available")
+            verify(turnTable.enabled === false, "Turn-table disabled while measuring")
+
+            // The forwarder pans the shared turn-table camera; snapshot its pose
+            // right before the drag. Copy the components explicitly — assigning
+            // camera.position keeps a live handle that tracks the pan (same reason
+            // tst_TurntableInteraction / tst_CameraOptions reconstruct it).
+            let start = Qt.vector3d(turnTable.camera.position.x,
+                                    turnTable.camera.position.y,
+                                    turnTable.camera.position.z)
+
+            // Left press-and-drag across the middle of the view. The point-placing
+            // TapHandler keeps only a passive grab, so once the pointer passes the
+            // drag threshold the pan DragHandler takes the exclusive grab. The
+            // built-in mouseDrag() helper's coarse move sequence doesn't reliably
+            // win that handoff against the competing TapHandler, so step the moves
+            // manually to cross the threshold cleanly.
+            let cx = Math.round(renderer.width / 2)
+            let cy = Math.round(renderer.height / 2)
+            mousePress(measurement, cx, cy, Qt.LeftButton)
+            for (let i = 1; i <= 6; i++) {
+                mouseMove(measurement, cx - i * 20, cy, 0, Qt.LeftButton)
+            }
+            mouseRelease(measurement, cx - 120, cy, Qt.LeftButton)
+
+            // pan() is timer-driven (TranslateTimer), so wait for the pose to move.
+            tryVerify(() => turnTable.camera.position.x !== start.x
+                            || turnTable.camera.position.y !== start.y
+                            || turnTable.camera.position.z !== start.z,
+                      2000, "Left-drag should pan the camera while measuring")
+
+            // The gesture panned rather than placing a point.
+            verify(!measurement.hasFirst, "A left-drag pans; it must not place a point")
         }
 
         // Reproduces the distance-readout truncation: a distance of 10 m or more
