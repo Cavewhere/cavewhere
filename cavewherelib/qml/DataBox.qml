@@ -342,8 +342,10 @@ QQ.Item {
                            if(dataValidator.validate(event.text) > 0 && event.text.length > 0) {
                                dataBox.state = 'MiddleTyping'
                                editor.openEditor()
-                               GlobalShadowTextInput.textInput.text  = event.text
-                               GlobalShadowTextInput.clearSelection() //GlobalShowTextInput is what's opened from editor.openEditor
+                               //editor.openEditor() handed off to the host, so
+                               //the typed character goes in through it
+                               GlobalShadowTextInput.setEditorText(event.text)
+                               GlobalShadowTextInput.clearSelection()
                            }
                        }
 
@@ -495,11 +497,7 @@ QQ.Item {
 
             QQ.PropertyChanges {
 
-                dataBox._globalShadowTextInput.onPressKeyPressed: () => {
-                    //Read through the host: the editor holding this event is
-                    //swapped out per field, so it can't be captured up front.
-                    let pressKeyEvent = GlobalShadowTextInput.textInput.pressKeyEvent
-
+                dataBox._globalShadowTextInput.onPressKeyPressed: (pressKeyEvent) => {
                     if(pressKeyEvent.key === Qt.Key_Tab ||
                        pressKeyEvent.key === 1 + Qt.Key_Tab ||
                        pressKeyEvent.key === Qt.Key_Space)
@@ -521,7 +519,7 @@ QQ.Item {
                     }
 
                     //Use the default keyhanding that the GlobalShadowTextInput has
-                    GlobalShadowTextInput.textInput.defaultKeyHandling();
+                    GlobalShadowTextInput.defaultKeyHandling();
 
                     //Handle the tabbing
                     dataBox.handleTab(pressKeyEvent);

@@ -63,14 +63,14 @@ QQ.Item {
             //note station before touching the survey table would
             stationFieldId.openEditor()
             stationFieldId.closeEditor()
-            let staleInput = GlobalShadowTextInput.textInput
+            let staleInput = GlobalShadowTextInput.currentEditor.textInput
             verify(staleInput !== null)
 
             //DataBox enters the state before it opens its editor
             rootId.state = "Typing"
 
             plainFieldId.openEditor()
-            let liveInput = GlobalShadowTextInput.textInput
+            let liveInput = GlobalShadowTextInput.currentEditor.textInput
             verify(liveInput !== staleInput,
                    "expected the loader to swap editors, or this proves nothing")
 
@@ -94,7 +94,7 @@ QQ.Item {
             GlobalShadowTextInput.editorFocusChanged.connect(onEditorFocus)
 
             plainFieldId.openEditor()
-            tryVerify(() => GlobalShadowTextInput.textInput.activeFocus, 1000,
+            tryVerify(() => GlobalShadowTextInput.editorHasFocus(), 1000,
                       "the editor should take active focus when opened")
 
             focusSinkId.forceActiveFocus()

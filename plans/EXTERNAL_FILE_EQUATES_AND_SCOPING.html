@@ -1108,25 +1108,14 @@ bool cwTrip::isScoped() const { return !scopePrefix().isEmpty(); }</code></pre>
   dropdown, so click-to-pick through the real editor remains unverified end to end.
 </p>
 <p>
-  <strong>Follow-ups this refactor surfaced</strong> (none of them in this commit):
+  <strong>Follow-ups this refactor surfaced</strong> (none of them in that commit):
 </p>
 <ul>
   <li>
-    <strong>The host should own the whole stable contract.</strong>
-    <code>textInput</code>/<code>errorHelpBox</code> are still nullable,
-    identity-changing, and dereferenced unguarded at <code>DataBox.qml</code>'s
-    type-ahead and <code>CoreClickTextInput.commitChanges()</code>. The signal relay
-    fixed the case that broke; the remaining direct reaches should follow it, so no
-    consumer ever holds the transient editor. ~3 files.
-  </li>
-  <li>
-    <strong>Move validation/error display behind that host API.</strong>
-    <code>CoreClickTextInput</code> still sets
-    <code>errorHelpBox.text</code>/<code>.visible</code> and
-    <code>textInput.focus</code> directly. This is the residue that keeps the
-    system (as opposed to <code>ShadowTextEditor</code>) from being re-hostable, and
-    it is where the two <code>commitChanges</code> branches should be reconciled.
-    Changes the commit protocol, so it wants its own commit.
+    <strong>The host should own the whole stable contract, and validation/error
+    display with it &mdash; DONE, GREEN.</strong> Two entries originally; they were
+    one piece of work. See
+    <a href="#host-contract">Host owns the editing contract</a>.
   </li>
   <li>
     <strong>Consider a per-window host instead of a reparented singleton.</strong>
@@ -1139,6 +1128,48 @@ bool cwTrip::isScoped() const { return !scopePrefix().isEmpty(); }</code></pre>
     ~10 files.
   </li>
 </ul>
+
+<h3 id="host-contract">Host owns the editing contract &mdash; DONE</h3>
+<p>
+  The per-field editor commit made <code>GlobalShadowTextInput.textInput</code> and
+  <code>.errorHelpBox</code> <em>transient</em> &mdash; bindings over
+  <code>editorLoader.item</code>, rebuilt whenever a field asks for a different
+  editor &mdash; but left five call sites still reaching through them. That relay was
+  only half the repair: any one of those reaches could have grown into the same
+  silent <code>QQ.PropertyChanges</code> failure, and the nullable bindings were
+  dereferenced unguarded. Both properties are now <strong>gone from the host's
+  public surface</strong>, replaced by verbs the host performs:
+  <code>editorText()</code>, <code>setEditorText()</code>,
+  <code>clearSelection()</code>, <code>focusEditor()</code>,
+  <code>editorHasFocus()</code>, <code>showError()</code>,
+  <code>clearError()</code>, <code>hasError()</code>,
+  <code>defaultKeyHandling()</code>. Each null-guards in
+  one place, so the "don't hold the editor" rule is enforced by there being nothing
+  to hold. <code>pressKeyPressed</code> now <em>carries</em> the key event, so
+  <code>DataBox</code>'s <code>MiddleTyping</code> handler no longer has to go find
+  it on an object it isn't allowed to keep. <code>currentEditor</code> stays public:
+  a caller that legitimately needs to know <em>which</em> editor opened has to look,
+  and looking was never the mistake &mdash; storing it was.
+</p>
+<p>
+  Two behaviour fixes fell out of it. <code>commitChanges()</code>'s branches
+  disagreed on ordering &mdash; the validator branch emitted
+  <code>finishedEditting</code> <em>before</em> <code>closeEditor()</code>, the other
+  closed first &mdash; so a handler that moved focus and rewrote the model (which
+  <code>DataBox</code>'s does) saw the editor still open and the focus leaving it,
+  and committed a second time. Both branches now capture, close, then emit. And the
+  error path's <code>textInput.focus = true</code> could not put the cursor back at
+  all: under the <code>Loader</code>'s focus scope <code>focus</code> is still true
+  after a blur, so the assignment changed nothing. <code>focusEditor()</code> calls
+  <code>forceActiveFocus()</code>.
+</p>
+<p>
+  Tests: <code>tst_ShadowEditorHostContract.qml</code> (new) covers a rejected value
+  leaving the editor open, focused and explaining itself, and
+  <code>finishedEditting</code> arriving with the editor already closed on both
+  branches. Existing tests moved onto the host API rather than the editor.
+  <strong>Status: built, green (QML suite), not committed.</strong>
+</p>
 
 <h3 id="c8">Commit 8 &mdash; Native prefixing, Path A (dotted names)</h3>
 <p>

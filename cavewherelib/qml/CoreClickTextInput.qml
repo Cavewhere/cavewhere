@@ -56,25 +56,22 @@ QQ.Item {
     }
 
     function commitChanges() {
-        //Emit the finishedEditting signal
-        if(validator !== null) {
-            var accepted = 2;
-            if(validator.validate(GlobalShadowTextInput.textInput.text) === accepted) {
-                finishedEditting(GlobalShadowTextInput.textInput.text)
-                closeEditor();
-                return true;
-            } else {
-                GlobalShadowTextInput.errorHelpBox.text = validator.errorText
-                GlobalShadowTextInput.errorHelpBox.visible = true
-                GlobalShadowTextInput.textInput.focus = true
-                return false;
-            }
-        } else {
-            var newText = GlobalShadowTextInput.textInput.text
-            closeEditor();
-            finishedEditting(newText);
-            return true;
+        const acceptable = 2 //QValidator.Acceptable, which Validator doesn't export
+
+        let newText = GlobalShadowTextInput.editorText()
+
+        if(validator !== null && validator.validate(newText) !== acceptable) {
+            GlobalShadowTextInput.showError(validator.errorText)
+            GlobalShadowTextInput.focusEditor()
+            return false;
         }
+
+        //Close before emitting, whether or not there's a validator: handlers
+        //move focus and rewrite the model, and an editor still open for that
+        //sees the focus leave and tries to commit a second time.
+        closeEditor();
+        finishedEditting(newText);
+        return true;
     }
 
     function closeEditor() {

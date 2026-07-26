@@ -60,7 +60,7 @@ QQ.Item {
 
             verify(GlobalShadowTextInput.currentEditor !== null)
             compare(GlobalShadowTextInput.currentEditor.field, plainFieldId)
-            compare(GlobalShadowTextInput.textInput.text, "plain")
+            compare(GlobalShadowTextInput.editorText(), "plain")
             // editor.visible isn't assertable here: the host is only parented
             // into a scene by MainContent, so effective visibility is always
             // false in a bare-component test. enabled is the editing flag.
@@ -79,7 +79,7 @@ QQ.Item {
             stationFieldId.openEditor()
 
             compare(GlobalShadowTextInput.currentEditor.field, stationFieldId)
-            compare(GlobalShadowTextInput.textInput.text, "a1")
+            compare(GlobalShadowTextInput.editorText(), "a1")
             verify(isStationEditor())
         }
 
@@ -95,7 +95,7 @@ QQ.Item {
             compare(GlobalShadowTextInput.currentEditor, firstEditor,
                     "station fields should reuse one editor instance")
             compare(GlobalShadowTextInput.currentEditor.field, otherStationFieldId)
-            compare(GlobalShadowTextInput.textInput.text, "a2")
+            compare(GlobalShadowTextInput.editorText(), "a2")
         }
 
         function test_editorSwapsWithTheFieldBeingEdited() {

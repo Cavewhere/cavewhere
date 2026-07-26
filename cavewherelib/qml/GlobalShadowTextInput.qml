@@ -18,27 +18,35 @@ import cavewherelib
   Fields that need more than plain text name their own with
   CoreClickTextInput.editorComponent, and that editor carries its own extras
   (see StationNameEditor) instead of this host growing a slot per feature.
+
+  Editing goes through this host's own signals and functions. Nothing outside
+  may reach the loaded editor or its text input: both are destroyed and rebuilt
+  whenever a field asks for a different editor, so anything holding one is left
+  pointing at a corpse — and a QQ.PropertyChanges that captured it resolves its
+  target once and never re-resolves, which fails silently.
  */
 QQ.MouseArea {
     id: globalMouseArea
 
     property CoreClickTextInput coreClickInput
 
+    //The loaded editor, for the length of one statement only. Editors declare
+    //their own extras, so a caller that needs those (a test asserting which
+    //editor opened, say) has to look; storing it is the mistake, not looking.
     readonly property ShadowTextEditor currentEditor: editorLoader.item as ShadowTextEditor
-    readonly property GlobalTextInputHelper textInput: globalMouseArea.currentEditor !== null
-                                                       ? globalMouseArea.currentEditor.textInput
-                                                       : null
-    readonly property ErrorHelpBox errorHelpBox: globalMouseArea.currentEditor !== null
-                                                 ? globalMouseArea.currentEditor.errorHelpBox
-                                                 : null
 
-    //Re-emitted from whichever editor is live. Consumers must bind to these and
-    //never to textInput itself: the editor is swapped out and destroyed when a
-    //field asks for a different one, and a QQ.PropertyChanges bound to the old
-    //object resolves it once and never re-resolves, so it silently dies.
+    //The live editor's text input. Internal on purpose: every caller outside
+    //this file goes through the functions below, which is what keeps the
+    //null-guarding and the "don't hold it" rule in one place.
+    readonly property GlobalTextInputHelper _input: globalMouseArea.currentEditor !== null
+                                                    ? globalMouseArea.currentEditor.textInput
+                                                    : null
+
+    //Re-emitted from whichever editor is live, so consumers bind to something
+    //that outlives the swap.
     signal enterPressed()
     signal escapePressed()
-    signal pressKeyPressed()
+    signal pressKeyPressed(pressKeyEvent: var)
     signal editorFocusChanged(bool editorFocus)
 
     anchors.fill: parent
@@ -71,7 +79,7 @@ QQ.MouseArea {
         //validator left by the previous one would filter this field's typing.
         //After the text, so the incoming value is never rejected on the way in.
         editorItem.textInput.validator = field.validator
-        editorItem.errorHelpBox.visible = false
+        globalMouseArea.clearError()
 
         globalMouseArea.enabled = true
 
@@ -94,9 +102,9 @@ QQ.MouseArea {
         editorLoader.visible = false
 
         if(globalMouseArea.currentEditor !== null) {
-            globalMouseArea.textInput.focus = false
-            globalMouseArea.textInput.validator = null
-            globalMouseArea.errorHelpBox.visible = false
+            globalMouseArea._input.focus = false
+            globalMouseArea._input.validator = null
+            globalMouseArea.clearError()
             globalMouseArea.currentEditor.field = null
         }
 
@@ -104,11 +112,58 @@ QQ.MouseArea {
         globalMouseArea.coreClickInput = null
     }
 
-    function clearSelection() {
-        if(globalMouseArea.textInput !== null) {
-            globalMouseArea.textInput.select(globalMouseArea.textInput.cursorPosition,
-                                             globalMouseArea.textInput.cursorPosition)
+    //What's being edited right now. Empty when nothing is.
+    function editorText() : string {
+        return globalMouseArea._input?.text ?? ""
+    }
+
+    function setEditorText(text: string) {
+        if(globalMouseArea._input !== null) {
+            globalMouseArea._input.text = text
         }
+    }
+
+    function clearSelection() {
+        if(globalMouseArea._input !== null) {
+            globalMouseArea._input.select(globalMouseArea._input.cursorPosition,
+                                          globalMouseArea._input.cursorPosition)
+        }
+    }
+
+    //forceActiveFocus, not focus: the editor sits inside a QQ.Loader, which is
+    //a focus scope, so `focus` is still true after a blur and setting it again
+    //would change nothing.
+    function focusEditor() {
+        globalMouseArea._input?.forceActiveFocus()
+    }
+
+    function editorHasFocus() : bool {
+        return globalMouseArea._input !== null && globalMouseArea._input.activeFocus
+    }
+
+    //Why the value the user typed can't be taken, shown under the editor until
+    //they fix it or give up.
+    function showError(message: string) {
+        if(globalMouseArea.currentEditor !== null) {
+            globalMouseArea.currentEditor.errorHelpBox.text = message
+            globalMouseArea.currentEditor.errorHelpBox.visible = true
+        }
+    }
+
+    function clearError() {
+        if(globalMouseArea.currentEditor !== null) {
+            globalMouseArea.currentEditor.errorHelpBox.visible = false
+        }
+    }
+
+    function hasError() : bool {
+        return globalMouseArea.currentEditor?.errorHelpBox.visible ?? false
+    }
+
+    //Enter commits, Escape closes. Consumers handling pressKeyPressed run
+    //their own keys first, then call this for the rest.
+    function defaultKeyHandling() {
+        globalMouseArea._input?.defaultKeyHandling()
     }
 
     onPressed: (mouse) => {
@@ -123,15 +178,19 @@ QQ.MouseArea {
     }
 
     QQ.Connections {
-        target: globalMouseArea.textInput
+        target: globalMouseArea._input
 
         function onEnterPressed() { globalMouseArea.enterPressed() }
         function onEscapePressed() { globalMouseArea.escapePressed() }
-        function onPressKeyPressed() { globalMouseArea.pressKeyPressed() }
+        //The event rides along, so a consumer never has to go find it on an
+        //object it isn't allowed to keep.
+        function onPressKeyPressed() {
+            globalMouseArea.pressKeyPressed(globalMouseArea._input.pressKeyEvent)
+        }
         //activeFocus for the same reason GlobalTextInputHelper uses it: the
         //Loader is a focus scope, so `focus` never goes back false on its own.
         function onActiveFocusChanged() {
-            globalMouseArea.editorFocusChanged(globalMouseArea.textInput.activeFocus)
+            globalMouseArea.editorFocusChanged(globalMouseArea.editorHasFocus())
         }
     }
 

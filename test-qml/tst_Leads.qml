@@ -41,7 +41,7 @@ MainWindowTest {
 
         function clickToEdit(item) {
             mouseClick(item)
-            tryVerify(() => GlobalShadowTextInput.textInput.activeFocus, 1000,
+            tryVerify(() => GlobalShadowTextInput.editorHasFocus(), 1000,
                       "Shadow text input should have focus after clicking " + item.objectName)
         }
 
