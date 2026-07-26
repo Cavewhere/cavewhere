@@ -1121,17 +1121,23 @@ notes. Ordered by payoff-vs-cost, not by confidence.</p>
   <td><code>cwCaveData</code>/<code>cwCave::data</code>, <code>cwLinePlotTask</code>, scrap/note regeneration</td></tr>
 
   <tr><td><b>A3 — Cave-owned child model reaching back up into its owner</b>
-  (<code>cwFixStationModel.h:124</code>)</td>
+  (<code>cwFixStationModel.h:124</code>) — <b>CLOSED</b></td>
   <td>The row model holds <code>cwCave*</code> to read <code>cave-&gt;network()</code> (and now the region's globalCS),
   inverting the ownership arrow. Either the cave pushes those down, or classification moves to the validator — which is
   A1, and makes this item disappear. <span class="mono-note">Note: §13.6 explicitly prescribed this back-reference, so
   it is a documented decision rather than drift.</span>
-  <span class="mono-note"><b>Partly addressed by A1, not closed.</b> The <i>persisted</i> row model is now free of it —
-  <code>cwFixStationModel</code> has no cave, region, network or PROJ dependency at all. The back-reference moved to
-  <code>cwFixStationDiagnosticsModel</code>, whose whole job is answering cave-scoped questions, so it is a better home;
-  but a cave-owned child still holds its owner. Closing it properly means the cave pushing the network and fallback CS
-  down, or R4's shared classifier.</span></td>
-  <td>2 files + <code>test_cwFixStationModel.cpp</code></td></tr>
+  <span class="mono-note"><b>Closed 2026-07-26 — the coupling that had teeth is gone; what remains is acceptable.</b>
+  A1 removed the part that was actually wrong: <code>cwFixStationModel</code>, whose job is holding what the user typed,
+  no longer depends on cave, region, network or PROJ at all. The back-reference now lives on
+  <code>cwFixStationDiagnosticsModel</code>, and three properties make it fine rather than merely tolerated —
+  (1) <b>lifetime is strictly nested</b>: parented to the cave, destroyed with it, can never outlive it;
+  (2) it is <b>read-only and compiler-enforced</b> (<code>const cwCave* const m_cave</code>), so the two failure modes
+  feared from a child→parent pointer — the child mutating its owner, or being re-pointed at another one — both fail to
+  compile; (3) the <b>alternative is worse</b>: having the cave push the network and fallback CS down means the proxy
+  <i>stores copies</i> kept in sync by two setters, trading a safe read-through for duplicated state and a staleness
+  invariant. Consistent with §13.6, which prescribed this back-reference deliberately. Revisit only if the proxy ever
+  needs to <i>write</i> to the cave, or is handed a cave it does not belong to.</span></td>
+  <td>Closed by design decision — no code change</td></tr>
 
   <tr><td><b>A4 — No first-class scoped view of an <code>errorModel</code></b>
   (<code>cwErrorListModel.h:44</code>)</td>
@@ -1157,11 +1163,39 @@ notes. Ordered by payoff-vs-cost, not by confidence.</p>
   added the third and fourth copy of “join fragments → pick phrasing → one sentence per cave”; wants a
   <code>joinCaveWarning(parts, singular, plural)</code> helper.</li>
   <li><b>R4 — The row flag and the cave warning classify independently</b>
-  (<code>cwFixStationDiagnosticsModel.cpp:25</code> vs <code>cwFixStationValidator.cpp:231</code>). Already noted for the
-  domain check; U10 doubled it for the reference check. <span class="mono-note">Still open after A1: the proxy and the
-  validator share <code>classifyStationReference</code> for station names, but each runs its own domain check. Folding
-  them means the proxy sourcing verdicts from the validator, which is region-scoped and would need a per-cave/per-fix
-  lookup surface — a design question of its own, deliberately kept out of A1.</span></li>
+  (<code>cwFixStationDiagnosticsModel.cpp:25</code> vs <code>cwFixStationValidator.cpp:231</code>) — <b>DONE</b>. Already
+  noted for the domain check; U10 doubled it for the reference check.
+  <span class="mono-note"><b>Done 2026-07-26 — both rules now live in one headless unit,
+  <code>cwFixStationDiagnostics</code>.</b> New <code>cwFixStationDiagnostics.{h,cpp}</code>: a plain namespace (no
+  QObject, no UI) holding <code>domainCheck(fix, globalCS)</code> / <code>isDomainValid(fix, globalCS)</code> and
+  <code>classifyStationReference(name, network)</code>, moved off <code>cwFixStationDiagnosticsModel</code>. Three
+  domain-check call sites collapsed to one rule: the proxy's <code>data()</code>, the validator's
+  <code>gatherCandidates()</code> (Part A), and <code>updateOutputCSPrompt()</code>. The validator no longer includes a
+  view model header at all, which was the layering cost of A1's placement.
+  <br><b>Second pass (same day) fixed a dependency the first pass introduced and finished the job.</b> Sharing the CS
+  resolution via <code>cwSurvexExporterUtils::resolveFixCS</code> made the headless validator include the survex
+  <i>writer's</i> header — <code>QTextStream</code>, <code>cwShot</code>, <code>cwStation</code> and three reading types,
+  for a 4-line string helper, with the dependency arrow pointing validation&nbsp;&rarr;&nbsp;export. And it only covered
+  three of five sites: <code>cwGridConvergence</code> and <code>cwTripCalibration</code> still hand-rolled the identical
+  fallback. Resolved by putting the rule on the value type it belongs to —
+  <b><code>cwFixStation::effectiveCS(globalCS)</code></b>, pure <code>QString</code> work adding no includes to a
+  protobuf-serialized class. <code>resolveFixCS</code> deleted; all five sites (exporter&nbsp;&times;2, diagnostics,
+  validator, convergence, calibration) now call the one method.
+  <code>cwCoordinateTransform::isWithinDomain</code> also deleted — this refactor removed its last two production callers,
+  and leaving a second "both axes valid" collapse one level down invited a fix-level caller to skip the CS resolution that
+  <i>is</i> the rule; <code>domainCheck</code>'s doc now says so explicitly.
+  <br><b>The plan's sketched approach was rejected.</b> "The proxy sources verdicts from the validator" would make a
+  cave-owned row model depend on a region-scoped, refresh-driven object — a
+  cave&nbsp;&rarr;&nbsp;region&nbsp;&rarr;&nbsp;validator&nbsp;&rarr;&nbsp;cave read cycle, plus per-row staleness
+  whenever the proxy asks before <code>revalidate()</code> has run. Sharing the <i>rule</i> instead of the <i>result</i>
+  needs no lookup surface, no ordering guarantee, and no new coupling in either direction.
+  <br><b>Pure refactor — no behavior change.</b> The two paths already agreed (both resolved the CS the same way and
+  <code>isWithinDomain</code> is exactly "both axes valid"), so this removes a latent drift risk rather than fixing a
+  live bug; the existing validator/proxy tests are the regression net. New
+  <code>testcases/test_cwFixStationDiagnostics.cpp</code> pins the shared contract — CS resolution (own&nbsp;/ global
+  fallback&nbsp;/ neither&nbsp;/ unparseable), per-axis attribution surviving the fix-level wrapper, name classification,
+  and one test asserting the invariant itself: for the same fix, the inline row flag and the cave banner both fire or
+  both stay quiet, including the global-CS fallback case where the two used to resolve independently.</span></li>
 </ul>
 
 <h3>Known gaps left open</h3>

@@ -71,6 +71,12 @@ void cwFixStation::setStationName(const QString& name) { data->StationName = nam
 QString cwFixStation::inputCS() const { return data->InputCS; }
 void cwFixStation::setInputCS(const QString& cs) { data->InputCS = cs; }
 
+QString cwFixStation::effectiveCS(const QString& globalCS) const
+{
+    const QString own = data->InputCS.trimmed();
+    return own.isEmpty() ? globalCS.trimmed() : own;
+}
+
 double cwFixStation::easting() const { return data->Easting; }
 void cwFixStation::setEasting(double v) { data->Easting = v; }
 

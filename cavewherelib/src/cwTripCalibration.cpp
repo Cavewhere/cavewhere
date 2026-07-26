@@ -260,12 +260,9 @@ Monad::Result<double> cwTripCalibration::resolveAuto() const
     }
 
     const cwFixStation fix = m_wiredCave->fixStations()->fixStationAt(0);
-    QString sourceCS = fix.inputCS().trimmed();
-    if (sourceCS.isEmpty()) {
-        if (auto* region = m_wiredCave->parentRegion()) {
-            sourceCS = region->geoReference()->globalCoordinateSystem().trimmed();
-        }
-    }
+    const cwCavingRegion* region = m_wiredCave->parentRegion();
+    const QString sourceCS = fix.effectiveCS(
+        region != nullptr ? region->geoReference()->globalCoordinateSystem() : QString());
     const cwGeoPoint location(fix.easting(), fix.northing(), fix.elevation());
     return cwDeclination::compute(location, sourceCS, m_parentTrip->date());
 }

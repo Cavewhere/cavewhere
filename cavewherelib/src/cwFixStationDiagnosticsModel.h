@@ -19,10 +19,12 @@
 class cwCave;
 class cwFixStation;
 class cwFixStationModel;
-class cwSurveyNetwork;
 
 /**
  * Adds the read-only, computed error roles on top of a cave's cwFixStationModel.
+ *
+ * The verdicts are cwFixStationDiagnostics'; this class only decides which role
+ * carries which one, and when to re-emit it.
  *
  * These verdicts are derived from the line-plot solve and the region's
  * coordinate system, not from anything the user typed or the project persists,
@@ -70,19 +72,6 @@ public:
         StationErrorRole
     };
     Q_ENUM(Roles)
-
-    //! A fix's station-name reference measured against a cave's survey network,
-    //! shared by this model's StationErrorRole and cwFixStationValidator's
-    //! cave-level FixStationReference warning so both read the same verdict.
-    //! A named fix defers to Ok while the network is empty (nothing to check
-    //! against yet); an empty name is always flagged (survex drops such a fix).
-    enum class StationReference {
-        Ok,      //!< names an existing station (or nothing to check against)
-        Empty,   //!< no name — an incomplete fix that survex silently drops
-        Unknown  //!< a non-empty name that no survey station matches
-    };
-    static StationReference classifyStationReference(const QString& stationName,
-                                                     const cwSurveyNetwork& network);
 
     //! Proxies the cave's own cwFixStationModel and resolves StationErrorRole
     //! against the cave's survey network. The cave is the parent and is fixed

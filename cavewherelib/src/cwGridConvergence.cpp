@@ -129,10 +129,7 @@ void cwGridConvergence::update(const QList<cwFixStation>& fixStations,
         }
 
         const cwFixStation& first = fixStations.first();
-        QString sourceCS = first.inputCS().trimmed();
-        if (sourceCS.isEmpty()) {
-            sourceCS = fallbackCoordinateSystem.trimmed();
-        }
+        const QString sourceCS = first.effectiveCS(fallbackCoordinateSystem);
 
         if (sourceCS.isEmpty()) {
             return { 0.0, NoCoordinateSystem, QString(), QString(), QString() };

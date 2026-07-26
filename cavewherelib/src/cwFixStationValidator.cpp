@@ -14,7 +14,7 @@
 #include "cwErrorListModel.h"
 #include "cwErrorModel.h"
 #include "cwFixStation.h"
-#include "cwFixStationDiagnosticsModel.h"
+#include "cwFixStationDiagnostics.h"
 #include "cwFixStationModel.h"
 #include "cwGeoReference.h"
 
@@ -229,10 +229,7 @@ cwFixStationValidator::gatherCandidates() const
             continue;
         }
         for (const cwFixStation& fix : cave->fixStations()->fixStations()) {
-            QString inputCS = fix.inputCS().trimmed();
-            if (inputCS.isEmpty()) {
-                inputCS = globalCSTrimmed;
-            }
+            const QString inputCS = fix.effectiveCS(globalCSTrimmed);
             if (inputCS.isEmpty() || !cwCoordinateTransform::isValidCS(inputCS)) {
                 continue;
             }
@@ -242,7 +239,7 @@ cwFixStationValidator::gatherCandidates() const
             // Part A: does the raw coordinate even belong to its own CS? This is
             // independent of the global CS and of any cluster, so it catches the
             // single-cave, single-fix typo the cluster rule structurally can't.
-            const bool domainValid = cwCoordinateTransform::isWithinDomain(inputCS, p);
+            const bool domainValid = cwFixStationDiagnostics::isDomainValid(fix, globalCSTrimmed);
 
             // currentClassification() guarantees globalCSTrimmed is non-empty.
             cwGeoPoint global;
@@ -397,14 +394,14 @@ QHash<cwCave*, QString> cwFixStationValidator::referenceWarnings() const
         QStringList unknownNames;
         int emptyCount = 0;
         for (const cwFixStation& fix : cave->fixStations()->fixStations()) {
-            switch (cwFixStationDiagnosticsModel::classifyStationReference(fix.stationName(), network)) {
-            case cwFixStationDiagnosticsModel::StationReference::Unknown:
+            switch (cwFixStationDiagnostics::classifyStationReference(fix.stationName(), network)) {
+            case cwFixStationDiagnostics::StationReference::Unknown:
                 unknownNames.append(QStringLiteral("\"%1\"").arg(fix.stationName().trimmed()));
                 break;
-            case cwFixStationDiagnosticsModel::StationReference::Empty:
+            case cwFixStationDiagnostics::StationReference::Empty:
                 ++emptyCount;
                 break;
-            case cwFixStationDiagnosticsModel::StationReference::Ok:
+            case cwFixStationDiagnostics::StationReference::Ok:
                 break;
             }
         }
@@ -471,7 +468,9 @@ void cwFixStationValidator::updateOutputCSPrompt()
                     // coordinate outside its own CS's valid domain is almost
                     // certainly a data-entry error, so offer no suggestion and
                     // flag it — the prompt grays out and points at the coordinate.
-                    if (cwCoordinateTransform::isWithinDomain(inputCS, p)) {
+                    // No global CS exists — that is this prompt's precondition —
+                    // so the fix is judged under its own inputCS.
+                    if (cwFixStationDiagnostics::isDomainValid(fix, QString())) {
                         suggested = cwCoordinateTransform::deriveProjectedOutputCS(inputCS, p);
                     } else {
                         coordinateInvalid = true;

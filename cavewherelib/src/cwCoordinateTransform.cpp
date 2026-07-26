@@ -293,12 +293,6 @@ bool cwCoordinateTransform::isGeographic(const QString& cs)
     return geographic;
 }
 
-bool cwCoordinateTransform::isWithinDomain(const QString& cs, const cwGeoPoint& point)
-{
-    const DomainCheck check = domainCheck(cs, point);
-    return check.eastingValid && check.northingValid;
-}
-
 cwCoordinateTransform::DomainCheck
 cwCoordinateTransform::domainCheck(const QString& cs, const cwGeoPoint& point)
 {

@@ -60,29 +60,29 @@ public:
     static bool isGeographic(const QString& cs);
 
     /**
-     * True iff `point` (in cs's own axis order and units) sits inside cs's
-     * declared area of use — i.e. it inverse-projects to a geographic location
-     * within the CRS's valid domain, widened by a small margin. Returns false
-     * only when PROJ can evaluate the CRS and places the point well outside
-     * that domain, the signature of a transposed digit, wrong UTM zone, or
-     * wrong hemisphere. Returns true — never flags — when cs is empty or
-     * unparseable or its area of use is unknown, so an un-checkable CS defers
-     * to the cluster rule rather than crying wolf. z is ignored (a horizontal
-     * domain check).
+     * Which horizontal components of `point` (in cs's own axis order and units)
+     * fall outside cs's declared area of use — i.e. whether it inverse-projects
+     * to a geographic location within the CRS's valid domain, widened by a small
+     * margin. `eastingValid`/`northingValid` are true when the corresponding axis
+     * (longitude for the easting, latitude for the northing) is inside, so a
+     * caller can tint just the offending cell; an axis goes false only when PROJ
+     * can evaluate the CRS and places the point well outside that domain — the
+     * signature of a transposed digit, wrong UTM zone, or wrong hemisphere.
+     *
+     * Both stay true — never flags — when cs is empty or unparseable or its area
+     * of use is unknown, so an un-checkable CS defers to the cluster rule rather
+     * than crying wolf. z is not part of the domain test, so elevation is never
+     * reported.
+     *
+     * Callers judging a *fix station* should go through
+     * cwFixStationDiagnostics::domainCheck instead, which resolves the fix's
+     * effective CS first — that resolution is the rule, and skipping it judges a
+     * fix under the wrong CS.
+     *
+     * Attribution is best-effort: a coordinate whose inverse projection wraps
+     * (a northing far past the pole flips the longitude ~180°) can't be blamed
+     * on one axis, so both are reported invalid rather than the wrong one.
      */
-    static bool isWithinDomain(const QString& cs, const cwGeoPoint& point);
-
-    //! Which horizontal components of `point` fall outside cs's declared area of
-    //! use. `eastingValid`/`northingValid` are true when the corresponding axis
-    //! (longitude for the easting, latitude for the northing) is inside the
-    //! domain — so a caller can tint just the offending cell. Both stay true (no
-    //! flag) whenever isWithinDomain() would defer: cs empty/unparseable, or its
-    //! area of use unknown. z is not part of the domain test, so elevation is
-    //! never reported. isWithinDomain() is exactly "both valid".
-    //!
-    //! Attribution is best-effort: a coordinate whose inverse projection wraps
-    //! (a northing far past the pole flips the longitude ~180°) can't be blamed
-    //! on one axis, so both are reported invalid rather than the wrong one.
     struct DomainCheck {
         bool eastingValid = true;
         bool northingValid = true;

@@ -47,6 +47,13 @@ public:
     QString inputCS() const;
     void setInputCS(const QString& cs);
 
+    //! The coordinate system this fix is actually expressed in: its own inputCS,
+    //! or `globalCS` when it declares none. Trimmed; empty when neither supplies
+    //! one. Every consumer of a fix's coordinate has to answer this the same way
+    //! — the survex export anchors it under this CS, so the domain check, grid
+    //! convergence and auto-declination must all judge it under the same one.
+    QString effectiveCS(const QString& globalCS) const;
+
     double easting() const;
     void setEasting(double v);
 

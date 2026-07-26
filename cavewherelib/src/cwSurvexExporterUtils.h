@@ -18,18 +18,6 @@
 
 namespace cwSurvexExporterUtils {
 
-// Resolve a fix's input CS, falling back to the region's globalCS when the
-// fix doesn't override it. Returns trimmed string (empty when neither
-// provides a CS).
-inline QString resolveFixCS(const cwFixStation& fix, const QString& globalCS)
-{
-    QString cs = fix.inputCS().trimmed();
-    if (cs.isEmpty()) {
-        cs = globalCS.trimmed();
-    }
-    return cs;
-}
-
 inline void writeCoordTriplet(QTextStream& stream, double e, double n, double z)
 {
     stream << QString::number(e, 'f', 6) << ' '
@@ -54,7 +42,7 @@ inline std::optional<DeclinationContext> makeDeclinationContext(
         return std::nullopt;
     }
     const cwFixStation& fix = fixes.first();
-    const QString cs = resolveFixCS(fix, globalCS);
+    const QString cs = fix.effectiveCS(globalCS);
     if (cs.isEmpty()) {
         return std::nullopt;
     }
@@ -223,7 +211,7 @@ inline void writeFixStations(QTextStream& stream,
     QString currentCS;
     bool csEmitted = false;
     for (const cwFixStation& fix : fixes) {
-        const QString cs = resolveFixCS(fix, globalCSTrimmed);
+        const QString cs = fix.effectiveCS(globalCSTrimmed);
         if (!csEmitted || cs != currentCS) {
             if (!cs.isEmpty()) {
                 stream << "*cs " << cs << Qt::endl;

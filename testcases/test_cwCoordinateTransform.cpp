@@ -295,8 +295,6 @@ TEST_CASE("cwCoordinateTransform::domainCheck attributes the out-of-domain axis"
             cwCoordinateTransform::domainCheck("EPSG:32613", cwGeoPoint(478000.0, 4430000.0, 1655.0));
         CHECK(check.eastingValid);
         CHECK(check.northingValid);
-        CHECK(cwCoordinateTransform::isWithinDomain("EPSG:32613",
-                  cwGeoPoint(478000.0, 4430000.0, 1655.0)));
     }
 
     SECTION("A transposed-digit easting flags only the easting") {
@@ -306,8 +304,6 @@ TEST_CASE("cwCoordinateTransform::domainCheck attributes the out-of-domain axis"
             cwCoordinateTransform::domainCheck("EPSG:32613", cwGeoPoint(1478000.0, 4430000.0, 1655.0));
         CHECK_FALSE(check.eastingValid);
         CHECK(check.northingValid);
-        CHECK_FALSE(cwCoordinateTransform::isWithinDomain("EPSG:32613",
-                        cwGeoPoint(1478000.0, 4430000.0, 1655.0)));
     }
 
     SECTION("A wildly wrong northing flags only the northing") {
@@ -329,8 +325,6 @@ TEST_CASE("cwCoordinateTransform::domainCheck attributes the out-of-domain axis"
             cwCoordinateTransform::domainCheck("EPSG:32613", cwGeoPoint(478000.0, 14430000.0, 1655.0));
         CHECK_FALSE(check.eastingValid);
         CHECK_FALSE(check.northingValid);
-        CHECK_FALSE(cwCoordinateTransform::isWithinDomain("EPSG:32613",
-                        cwGeoPoint(478000.0, 14430000.0, 1655.0)));
     }
 
     SECTION("An empty or unparseable CS defers — both axes valid") {

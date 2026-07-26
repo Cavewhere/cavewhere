@@ -12,29 +12,13 @@
 #include "cwCavingRegion.h"
 #include "cwCoordinateTransform.h"
 #include "cwFixStation.h"
+#include "cwFixStationDiagnostics.h"
 #include "cwFixStationModel.h"
-#include "cwGeoPoint.h"
 #include "cwGeoReference.h"
-#include "cwSurveyNetwork.h"
-#include "cwSurvexExporterUtils.h"
+
+using cwFixStationDiagnostics::StationReference;
 
 namespace {
-
-//! The input CS's domain verdict for a fix, once per row. Resolves the CS
-//! through cwSurvexExporterUtils::resolveFixCS so a row's warning is judged
-//! against the very CS the survex export would anchor it with — the cave-level
-//! check in cwFixStationValidator and cwCave::recomputeGridConvergence resolve
-//! it the same way. Unparseable or wholly absent CS defers (both valid).
-cwCoordinateTransform::DomainCheck domainCheck(const cwFixStation& fix,
-                                               const QString& fallbackCS)
-{
-    const QString cs = cwSurvexExporterUtils::resolveFixCS(fix, fallbackCS);
-    if (cs.isEmpty()) {
-        return {};
-    }
-    const cwGeoPoint point(fix.easting(), fix.northing(), fix.elevation());
-    return cwCoordinateTransform::domainCheck(cs, point);
-}
 
 //! Empty when the fix's coordinate is plausible for its CS, otherwise a one-line
 //! explanation. Scoped to a single row: an absent or unparseable CS never flags,
@@ -42,8 +26,7 @@ cwCoordinateTransform::DomainCheck domainCheck(const cwFixStation& fix,
 //! declared area of use.
 QString domainErrorMessage(const cwFixStation& fix, const QString& fallbackCS)
 {
-    const cwCoordinateTransform::DomainCheck check = domainCheck(fix, fallbackCS);
-    if (check.eastingValid && check.northingValid) {
+    if (cwFixStationDiagnostics::isDomainValid(fix, fallbackCS)) {
         return QString();
     }
     return cwFixStationDiagnosticsModel::tr(
@@ -51,29 +34,6 @@ QString domainErrorMessage(const cwFixStation& fix, const QString& fallbackCS)
         "— check for a transposed digit or the wrong CS/zone.");
 }
 
-}
-
-cwFixStationDiagnosticsModel::StationReference
-cwFixStationDiagnosticsModel::classifyStationReference(const QString& stationName,
-                                                       const cwSurveyNetwork& network)
-{
-    // Trim before matching, exactly as the survex export does
-    // (cwSurvexExporterUtils::validateFixStations) — otherwise a stray trailing
-    // space would report a station survex anchors just fine as missing.
-    const QString trimmedName = stationName.trimmed();
-    if (trimmedName.isEmpty()) {
-        return StationReference::Empty;
-    }
-    // Nothing to check against — a cave whose survey network hasn't been
-    // computed yet would flag every named fix, so defer instead.
-    if (network.isEmpty()) {
-        return StationReference::Ok;
-    }
-    // CaveWhere station names are case-insensitive (Compass isn't — see
-    // CLAUDE.md); hasStation matches that way in one hash probe.
-    return network.hasStation(trimmedName)
-        ? StationReference::Ok
-        : StationReference::Unknown;
 }
 
 cwFixStationDiagnosticsModel::cwFixStationDiagnosticsModel(cwCave* cave) :
@@ -147,7 +107,8 @@ QString cwFixStationDiagnosticsModel::stationErrorMessage(const cwFixStation& fi
     if (m_cave == nullptr) {
         return QString();
     }
-    switch (classifyStationReference(fix.stationName(), m_cave->network())) {
+    switch (cwFixStationDiagnostics::classifyStationReference(fix.stationName(),
+                                                             m_cave->network())) {
     case StationReference::Ok:
         return QString();
     case StationReference::Empty:
@@ -200,10 +161,12 @@ QVariant cwFixStationDiagnosticsModel::data(const QModelIndex& index, int role) 
     default:               break;
     }
 
-    // Both coordinate flags come from one verdict — the check resolves the CS
-    // and round-trips the point through PROJ, so asking twice per row would
-    // double that work for every visible row on every refresh.
-    const cwCoordinateTransform::DomainCheck check = domainCheck(*fix, fallbackCS());
+    // Both coordinate flags come from one verdict rather than one each. data() is
+    // still entered once per role, so a row showing all three domain roles asks
+    // three times; this only keeps that from being four. The check is cached per
+    // (CS, coordinate) inside cwCoordinateTransform, so the repeats are hits.
+    const cwCoordinateTransform::DomainCheck check =
+        cwFixStationDiagnostics::domainCheck(*fix, fallbackCS());
     return role == EastingDomainErrorRole ? !check.eastingValid : !check.northingValid;
 }
 
