@@ -227,7 +227,8 @@ Legend: `[ ]` open · `[~]` reported, awaiting review · `[x]` committed
 ### Loop Closure, Measurement, Georeferencing
 
 - [x] **21. `loop-closure/check-loop-closure.md`** — 1860 → 2567 wds, score 74.5 → **~7** — em dash 20.91 → 0.40 (38 → 1), to-be 41.4 → clear, sentences 22.7 → 17.7, contractions 14.31 → 5.61, digits 7.71 → **26.46**, fig 0.55 → 3.21, `greyed` ×3 and `centimetres` cleared. Added `break-the-tie-in.svg` and a new `### What the Cavern log tells you` section sourced off the screenshot. 80 claims, 74 confirmed, 0 unverifiable. **The reviewer's lead catch was a localization bug in the page's worked example**: the sample `.err` block quoted survex's untranslated msgid (`legs`, `m/leg`), but `survex/lib/en_US.po:1310-1311` renames message 145 to `shots` / `m/shot`, and the screenshot proves the catalog is live (`cavern.c:769` says "survey legs"; the log reads "survey shots"). Also corrected: `.err` is created on **every** solve and left *empty* for a loop-free cave (`netskel.c:451`, which is why `CavernOutputPage.qml:73` gates on content length, not file existence); the Data page has **no `⋯` button** (`DataMainPage.qml:80-82` uses `list.svg`, and the `...` in the screenshot is the breadcrumb); and "one block per loop" is per **traverse** (`netskel.c:527`, `:729-731`, `!fArtic`). `llms.txt:37` re-synced to match.
-- [ ] **22. `measurement/measure-distance-and-bearing.md`** — 1281 wds, score 76.3 — **7 spans**, 0 digits. (The broken anchor at `:127` was already fixed during item 2.)
+- [x] **22. `measurement/measure-distance-and-bearing.md`** — 1281 → 2533 wds, score 76.3 → **~7** — commit `1b38cb1a`. 7 spans → **0**; em dash 22.47 → 0.00 (28 → 0), digits **0.00 → 20.12**, to-be 28.9 → clear, contractions 16.05 → 8.05, sentences 22.2 → 17.4, fig 0.80 → 2.01, hedges 0.00 → 2.41, `labelled`×2 / `metres` / `kilometres` / `greyed` cleared. **The worst-scoring page and the emptiest**: 0 digits describing a tool whose only output is numbers. It now carries the 1.5 mm snap tolerance (`cwScenePicker.cpp:20`, physical millimeters, shared with the coordinate picker), the 480-logical-pixel collapse threshold, 2-decimal lengths / 1-decimal angles, the verbatim `copyToClipboard()` block, and a worked example read off `measurement-readout.png` whose arithmetic the page shows (`hypot(48.38, 32.19)` = 58.11; `atan2(48.38, -0.75)` = 90.9°; `atan2(-32.19, 48.38)` = -33.6°). 80 claims, 74 confirmed, **2 wrong**, 3 overstated, 0 unverifiable. **Lead catch: "you can still orbit, pan, and zoom" was wrong about pan.** `TurnTableForwardingHandlers.qml` wires only a right-button `DragHandler` and a `WheelHandler`, and its header says it exists for interactions "that take over left-click"; the turn-table pans on left-drag (`TurnTableInteraction.qml:29-32`), which the tool has taken, so no pan path exists. Also corrected: the Station-only help string is **"Click a survey station to start measuring."**; the unit selector seeds from the project unit system (Metric→`m` / Imperial→`ft`) rather than always metres, and its labels are `m`/`km`/`ft`/`mi`; the **Station only switch is unreachable before the first measurement** (it lives in a popup gated on `hasMeasurement`, `GLTerrainRenderer.qml:277`) and the mode is session-only while the unit and north reference persist; and True/Magnetic are grayed out but still listed (`MeasurementReadoutPopup.qml:243`, `:256`). `llms.txt:42` re-synced.
+      **Second page whose worst defect was on a *neighboring* page.** `view-3d/perspective-and-field-of-view.md:37` told readers "Measuring and map export assume orthogonal. Switch back to orthogonal to measure." Both halves are false: `cwCamera::pickQuery` (`cwCamera.cpp:228-250`) has an explicit perspective branch converting the pick radius to a depth-dependent slope tolerance, the measurement is a world-space distance the projection cannot affect, and `cwCaptureManager.cpp:583` says the tiled capture "will work with orthognal and perspective projections". Corrected in the same commit; what perspective actually costs is a uniform scale, which is why the scale bar hides.
 - [ ] **23. `georeferencing/grid-convergence.md`** — 1169 wds, score 64.5 — 25 em dash, 35.9 to-be
 - [ ] **24. `georeferencing/georeference-a-cave.md`** — 1282 wds, score 53.9 — 24 em dash
 
@@ -460,11 +461,14 @@ Not page-scoped; land them wherever they fit or as their own commit.
 - [ ] **`BRIT` spellings across `docs/`** — `slopcheck` names the American form
       in each message. `metres` x2 and `neighbourhood` cleared with #20;
       `greyed` x3, `centimetres`, and `behaviour`/`Colours` in
-      `images/illustrations/README.md` cleared with #21. Still open: `greyed` x2
-      (keyboard shortcuts) and **4 more `greyed` inside `llms.txt`** (lines 42,
-      63, 65), which belong to pages not yet swept and should be fixed as those
-      pages land. Re-run the whole-tree scan to get a current count rather than
-      trusting the 43 first measured.
+      `images/illustrations/README.md` cleared with #21; `labelled` x2,
+      `metres`, `kilometres` and `greyed` cleared with #22. Still open:
+      `greyed` x2 (keyboard shortcuts) and **5 more inside `llms.txt`**:
+      `labelled` on lines 28 and 29 (`open-a-project.md`, `the-3d-view.md`) and
+      `greyed` x3 on lines 63 and 65 (`change-settings.md`,
+      `keyboard-shortcuts.md`). Those belong to pages not yet swept and should
+      be fixed as those pages land. Re-run the whole-tree scan to get a current
+      count rather than trusting the 43 first measured.
 - [ ] **No figure text has ever been checked.** `slopcheck` reads Markdown, QML
       and C++, not SVG, so the label text inside
       `docs/manual/images/illustrations/*.svg` has been invisible to every pass.
@@ -501,6 +505,17 @@ Not page-scoped; land them wherever they fit or as their own commit.
       CaveWhere's own strings: `survey-errors.md:113` quotes
       `cwLinePlotTask.cpp:359`, which is untranslated and correctly says "leg".
       Worth a grep for other survex-quoting pages before the sweep ends.
+- [ ] **Pages that describe a feature from a distance get it wrong, and the
+      sweep only finds out when the feature's own page comes round.** Twice now
+      the worst defect of an item was on a *neighboring* page: #20 corrected
+      `carpeting.md:75`, and #22 corrected
+      `perspective-and-field-of-view.md:37`, which told readers to switch out of
+      perspective to measure when the picker has an explicit perspective branch
+      (`cwCamera.cpp:228-250`). The failure mode is a one-line summary written
+      by someone who had not read the code. Worth grepping each page's inbound
+      links (`grep -rn '<page>.md' docs/manual/`) as a standard step and reading
+      what the linking sentence actually claims, not just that the link
+      resolves — `check-manual-links.py` validates targets, never assertions.
 - [ ] **32 em dashes in ~29 shipped UI strings** under `cavewherelib/qml/`. In a
       UI string there is no room for emphasis, so every one is habit rather than
       intent.
