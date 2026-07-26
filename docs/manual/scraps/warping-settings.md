@@ -88,19 +88,21 @@ whatever cost.
 
 ## Smoothing radius (m)
 
-Applies Gaussian smoothing to the carpet's height (Z) values over this radius to
+Applies Gaussian smoothing along the scrap's own view axis over this radius to
 **reduce surface noise**. Every point within the radius contributes to a point's
-new height, weighted so the nearest count most; anything beyond the radius is
+new position, weighted so the nearest count most; anything beyond the radius is
 ignored outright.
 
 ![A side view of a carpet surface: a noisy raw line over a broad arch, and the smoothed line that keeps the arch but drops the noise, with a bell curve spanning the radius to show the weighting.](../images/illustrations/setting-smoothing-radius.svg)
 *Smoothing averages heights within the radius. Broad, real relief survives; noise
 riding on top of it does not.*
 
-Raise it to calm a bumpy carpet; lower it to preserve genuine relief. Only the
-height moves — a point never shifts across the plan — and **running profiles are
-never smoothed**, so this setting has no effect on them. Default **2.0 m**, on by
-default.
+Raise it to calm a bumpy carpet; lower it to preserve genuine relief. Which way a
+point moves depends on the scrap type: on a plan the view axis is elevation, so
+only the height changes, while on a projected profile it is distance from the
+projection plane, so the point shifts toward or away from that plane instead.
+**Running profiles are never smoothed**, so this setting has no effect on them.
+Default **2.0 m**, on by default.
 
 ## Restore the defaults
 

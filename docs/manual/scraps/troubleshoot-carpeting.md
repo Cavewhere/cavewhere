@@ -84,7 +84,7 @@ The orientation row sits inside the Auto Calculate box and changes name with the
 type: **North** on a plan scrap, **Up** on either profile, described in
 [North or up](scrap-types.md#north-or-up-orient-the-drawing) and shown below.
 
-![The Scrap Info panel with the North row highlighted: a compass-arrow button, the label North, and the value 2.32 degrees. The Type above reads Plan and Auto Calculate is unchecked.](../images/scraps-north-up.png)
+![The Scrap Info panel with the North row highlighted: a north-arrow button, the label North, and the value 2.32 degrees. The Type above reads Plan and Auto Calculate is unchecked.](../images/scraps-north-up.png)
 *The orientation row on a plan scrap, so it reads **North**. On either profile
 type the same row reads **Up**.*
 
