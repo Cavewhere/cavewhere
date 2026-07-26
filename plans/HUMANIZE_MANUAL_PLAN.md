@@ -180,12 +180,36 @@ Legend: `[ ]` open · `[~]` reported, awaiting review · `[x]` committed
       display-only, and an omitted lead dimension reads `?` in Lead Info but
       `-1` on the Leads page. Also cut 5 padding passages and broke a 3x
       template lock the reviewer flagged under structural check 6.
-- [ ] **18. `scraps/scrap-types.md`** — 1913 wds, score 43.2 — 32 em dash
-- [ ] **19. `scraps/troubleshoot-carpeting.md`** — 597 wds, score 38.1 — 0 digits
-      **Carries an invented number**: the "rotation error of more than about ten
-      degrees" at `:35-37` has no threshold anywhere in the code. Page 16's
-      writer dropped the same claim from `carpeting.md`; strike this one too.
+- [x] **18. `scraps/scrap-types.md`** — 1913 wds, score 43.2 — 32 em dash
+      → 0 span findings, 32 em dash → 0, digits 9.69→27.57. Grew to 3034 wds
+      (379 of it alt text for 12 images), the longest page in the manual.
+      83 claims, 1 wrong, 3 overstated, 1 unverifiable — plus **10 unlisted, 2 of
+      them wrong**. Worst was unlisted: "a note imported at the wrong resolution
+      shows an error here instead of a wrong-looking carpet." The opposite is
+      true — a merely wrong resolution gives a finite ratio and total silence,
+      and it contradicted 2 sibling pages. Fixed the Auto Calculate shot
+      qualifier and the 0–360 azimuth overstatement (both inherited). 4 new
+      admissions confirmed. Cut ~210 wds net of duplication.
+- [x] **19. `scraps/troubleshoot-carpeting.md`** — 597 wds, score 38.1 — 0 digits
+      **Carried an invented number**: the "rotation error of more than about ten
+      degrees" at `:35-37`. Struck, with no substitute figure — no rotation
+      tolerance exists anywhere; `cwNoteTranformation.cpp:175` hands the angle
+      straight to `matrix.rotate` with no check. Restructured into 4 symptoms
+      that link out instead of restating siblings. 52 claims, 0 wrong, 4
+      overstated, **9 unlisted including 2 self-contradictions**. Best catch was
+      unlisted: the page told readers to distrust a ratio far from the 1:250 seed
+      while its own screenshot shows a healthy scrap at **1:517**. Best new
+      content: a non-finite or ≤0 scale returns the identity matrix *before* the
+      rotate, so a bad scale silently kills the rotation too.
 - [ ] **20. `scraps/warping-settings.md`** — 967 wds, score **29.5 (best remaining)** — 2x `metres`
+      Partly corrected already during #18: `## Smoothing radius` claimed "only
+      the height moves — a point never shifts across the plan". `smoothZ` blends
+      in **view space**, so that holds only on a plan; on a projected profile the
+      point moves toward or away from the projection plane. Still needs the
+      prose sweep. Also reconcile `:82-83` ("more stations can stabilize the
+      warp") against `carpeting.md` and `troubleshoot-carpeting.md`, which both
+      now say to **lower** Max closest stations — a reader following the link at
+      `:85` lands on the contrary advice.
 
 ### Loop Closure, Measurement, Georeferencing
 
@@ -370,8 +394,22 @@ still read like a machine, and no amount of claim-checking sees that.
     45° of 180°", which sounds right and is a one-sided window: `180` trips it,
     `179` does not.
   - `UNVERIFIABLE` — the cited file or line does not support it either way.
-- **Then hunt unsourced claims.** Scan the page for factual assertions with no
-  row in the claims file. Nobody else is looking for these.
+- **Then hunt unsourced claims. This now finds more than the citation check
+  does — do not treat it as a last step.** Scan the page for factual assertions
+  with no row in the claims file. Nobody else is looking for these. Across pages
+  16–19 the sourced tables produced 1 wrong claim in 256; the *unlisted* set
+  produced 4, and every one would have sent a reader to the wrong control:
+  page 16 said to raise Max closest stations, page 17 called a black outline
+  yellow, page 18 promised a wrong resolution cannot pass unnoticed, page 19
+  told readers to distrust the exact ratio its own screenshot shows as healthy.
+  Pay particular attention to **alt text and captions**, sentences that
+  characterize *how much* or *how often*, and claims about when a control is
+  visible.
+- **Read the page as one document and look for self-contradiction.** Page 19
+  stated both "unrelated stations stop pulling on the scrap" and "a station in
+  the next chamber cannot pull on it" 36 lines apart. Per-claim checking cannot
+  see this; both sentences cite real code. The same applies across pages — check
+  what this page asserts that a sibling denies.
 - **Check house decisions 1, 2, 4, 6 and 9** — invented numbers, numeral misuse,
   edited app quotes, moved headings.
 - **Report only. No edits, no git, no plan edits.** A second agent's prose in the
@@ -409,6 +447,17 @@ Not page-scoped; land them wherever they fit or as their own commit.
 - [ ] **43 `BRIT` spellings across `docs/`** — `slopcheck` names the American
       form in each message. Known: `labelled` (carpeting), `metres` x2 (warping
       settings), `greyed` x2 (keyboard shortcuts).
+- [ ] **The scraps chapter is now ~10,700 words across 5 pages**, and
+      `scrap-types.md` at 3034 is the longest page in the manual. Sourcing a
+      thin page grows it: #19 went 597 → 1813 even after cutting half the
+      draft's duplication. Two structural questions worth deciding before the
+      chapter is called done, neither in this sweep's remit: whether
+      `scrap-types.md` should split its four-projection explainer (with 12
+      images) from its Scrap Info panel reference, and whether the
+      running-profile mechanism should live in exactly one place instead of
+      being trimmed to a different length on each of three pages. Watch for the
+      same growth on the remaining thin pages — a page with 0 digits is thin
+      because facts are missing, and finding them adds words.
 - [ ] **32 em dashes in ~29 shipped UI strings** under `cavewherelib/qml/`. In a
       UI string there is no room for emphasis, so every one is habit rather than
       intent.
