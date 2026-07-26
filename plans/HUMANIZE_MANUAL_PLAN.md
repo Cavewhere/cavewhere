@@ -163,10 +163,28 @@ Legend: `[ ]` open · `[~]` reported, awaiting review · `[x]` committed
       `lidar-notes.md:181` (a LiDAR note has no DPI). The wrong claim was
       arithmetic, not sourcing: 2835/39.3700787 is 72.01, not 72.00, and
       `Utils.fixed` strips trailing zeros so "72.00" can never render.
-- [ ] **16. `scraps/carpeting.md`** — 1069 wds, score 45.6 — 2 spans, 0 digits, `labelled`
-- [ ] **17. `scraps/digitize-a-scrap.md`** — 1061 wds, score 41.2 — 20.8 sent, 0 digits
+- [x] **16. `scraps/carpeting.md`** — 1069 wds, score 45.6 — 2 spans, 0 digits, `labelled`
+      → 0 span findings, digits 0→18.1, em dash 13.09→0.57 (1 kept, on the
+      Automatic Update warning, and the reviewer agreed it earns the volume).
+      57 claims, **0 wrong**, 4 overstated — the best claim accuracy of the
+      sweep. New `## Why does a carpet come out bumpy?` names 6 limitations, all
+      6 confirmed. The reviewer's catch was an *unlisted* claim: the draft said
+      to **raise** Max closest stations to cut bumps. Lowering it is right, per
+      `troubleshoot-carpeting.md:66-69` and Philip's own article. Pure invention
+      that read as plausible and pointed at the wrong knob.
+- [x] **17. `scraps/digitize-a-scrap.md`** — 1061 wds, score 41.2 — 20.8 sent, 0 digits
+      → 0 span findings, digits 0→19.4, mean sentence 24.1→16.9. Grew 1115→2170
+      wds. 64 claims, 2 wrong, 5 overstated. All 3 new admissions confirmed,
+      including that removing the last outline point deletes the whole scrap.
+      Two cross-page contradictions caught: the Leads page **Done** column is
+      display-only, and an omitted lead dimension reads `?` in Lead Info but
+      `-1` on the Leads page. Also cut 5 padding passages and broke a 3x
+      template lock the reviewer flagged under structural check 6.
 - [ ] **18. `scraps/scrap-types.md`** — 1913 wds, score 43.2 — 32 em dash
 - [ ] **19. `scraps/troubleshoot-carpeting.md`** — 597 wds, score 38.1 — 0 digits
+      **Carries an invented number**: the "rotation error of more than about ten
+      degrees" at `:35-37` has no threshold anywhere in the code. Page 16's
+      writer dropped the same claim from `carpeting.md`; strike this one too.
 - [ ] **20. `scraps/warping-settings.md`** — 967 wds, score **29.5 (best remaining)** — 2x `metres`
 
 ### Loop Closure, Measurement, Georeferencing
@@ -407,6 +425,16 @@ Not page-scoped; land them wherever they fit or as their own commit.
       uses the short form; the other 41 pages carry the long one from
       `AUTHORING.md:28`. Pre-existing, not introduced by the sweep. Pick one and
       apply it chapter-wide rather than page by page.
+- [ ] **`keyboard-shortcuts.md:97` says Esc closes the active note tool. It does
+      not**, for Scrap, Station or Lead. All 3 derive from `PanZoomInteraction`
+      → `Interaction` (`cwInteraction.h`, a plain `QQuickItem` with no
+      `keyPressEvent`), and there is no `Keys` handler, `Shortcut`, or
+      focus-scope Escape anywhere up through `NoteItem`, `NotesGallery`,
+      `NotePage`, `TripPage` or `CavewhereMainWindow`. The app's only Escape
+      `Shortcut` is `MeasurementInteractionView.qml:215`. They do take focus
+      (`InteractionManager.qml:32`), so it is a missing handler, not a focus
+      bug — worth filing against the app, not only the shortcut page. Esc does
+      work on the north, scale and DPI tools.
 - [ ] **The digit gap needs Philip.** 17 pages have zero checkable numbers and
       the repo cannot supply all of them. Collect the open questions as the
       sweep goes and ask in a batch rather than stalling a page.
