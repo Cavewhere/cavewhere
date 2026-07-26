@@ -14,8 +14,6 @@ StandardPage {
                                         ? linePlotManager.cavernLog : ""
     readonly property string loopClosureStats: linePlotManager !== null
                                                ? linePlotManager.loopClosureStats : ""
-    readonly property string solveErrorMessage: linePlotManager !== null
-                                                ? linePlotManager.solveErrorMessage : ""
 
     ColumnLayout {
         anchors.fill: parent
@@ -44,14 +42,6 @@ StandardPage {
                 text: qsTr("Solve")
                 onClicked: root.linePlotManager.rerunSurvex()
             }
-        }
-
-        QC.Label {
-            objectName: "errorMessageLabel"
-            Layout.fillWidth: true
-            visible: root.hasError
-            wrapMode: QC.Label.WordWrap
-            text: root.solveErrorMessage
         }
 
         QC.TabBar {

@@ -68,10 +68,6 @@ MainWindowTest {
             verify(status !== null, "statusLabel must exist")
             compare(status.text, qsTr("Last solve completed successfully."))
 
-            const errorLabel = findChild(page, "errorMessageLabel")
-            verify(errorLabel !== null, "errorMessageLabel must exist")
-            verify(!errorLabel.visible, "error message hidden when no solve error")
-
             const textArea = findChild(page, "cavernLogTextArea")
             verify(textArea !== null, "cavernLogTextArea must exist")
             compare(textArea.text, "")
