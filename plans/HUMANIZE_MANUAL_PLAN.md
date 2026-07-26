@@ -226,7 +226,7 @@ Legend: `[ ]` open · `[~]` reported, awaiting review · `[x]` committed
 
 ### Loop Closure, Measurement, Georeferencing
 
-- [ ] **21. `loop-closure/check-loop-closure.md`** — 1860 wds, score 74.5 — 6 spans, 41.4 to-be
+- [x] **21. `loop-closure/check-loop-closure.md`** — 1860 → 2567 wds, score 74.5 → **~7** — em dash 20.91 → 0.40 (38 → 1), to-be 41.4 → clear, sentences 22.7 → 17.7, contractions 14.31 → 5.61, digits 7.71 → **26.46**, fig 0.55 → 3.21, `greyed` ×3 and `centimetres` cleared. Added `break-the-tie-in.svg` and a new `### What the Cavern log tells you` section sourced off the screenshot. 80 claims, 74 confirmed, 0 unverifiable. **The reviewer's lead catch was a localization bug in the page's worked example**: the sample `.err` block quoted survex's untranslated msgid (`legs`, `m/leg`), but `survex/lib/en_US.po:1310-1311` renames message 145 to `shots` / `m/shot`, and the screenshot proves the catalog is live (`cavern.c:769` says "survey legs"; the log reads "survey shots"). Also corrected: `.err` is created on **every** solve and left *empty* for a loop-free cave (`netskel.c:451`, which is why `CavernOutputPage.qml:73` gates on content length, not file existence); the Data page has **no `⋯` button** (`DataMainPage.qml:80-82` uses `list.svg`, and the `...` in the screenshot is the breadcrumb); and "one block per loop" is per **traverse** (`netskel.c:527`, `:729-731`, `!fArtic`). `llms.txt:37` re-synced to match.
 - [ ] **22. `measurement/measure-distance-and-bearing.md`** — 1281 wds, score 76.3 — **7 spans**, 0 digits. (The broken anchor at `:127` was already fixed during item 2.)
 - [ ] **23. `georeferencing/grid-convergence.md`** — 1169 wds, score 64.5 — 25 em dash, 35.9 to-be
 - [ ] **24. `georeferencing/georeference-a-cave.md`** — 1282 wds, score 53.9 — 24 em dash
@@ -459,8 +459,12 @@ Not page-scoped; land them wherever they fit or as their own commit.
 
 - [ ] **`BRIT` spellings across `docs/`** — `slopcheck` names the American form
       in each message. `metres` x2 and `neighbourhood` cleared with #20;
-      `greyed` x2 (keyboard shortcuts) still open. Re-run the whole-tree scan to
-      get a current count rather than trusting the 43 first measured.
+      `greyed` x3, `centimetres`, and `behaviour`/`Colours` in
+      `images/illustrations/README.md` cleared with #21. Still open: `greyed` x2
+      (keyboard shortcuts) and **4 more `greyed` inside `llms.txt`** (lines 42,
+      63, 65), which belong to pages not yet swept and should be fixed as those
+      pages land. Re-run the whole-tree scan to get a current count rather than
+      trusting the 43 first measured.
 - [ ] **No figure text has ever been checked.** `slopcheck` reads Markdown, QML
       and C++, not SVG, so the label text inside
       `docs/manual/images/illustrations/*.svg` has been invisible to every pass.
@@ -469,6 +473,12 @@ Not page-scoped; land them wherever they fit or as their own commit.
       `projection-*` figures in `scrap-types.md` and the rest of the
       `illustrations/` set are unaudited. Worth either teaching `slopcheck` to
       parse `<text>` elements or sweeping the directory once by hand.
+      #21 added `break-the-tie-in.svg` and checked it explicitly: labels,
+      spelling and `aria-label` clean, and the drawn coordinates back the
+      "nearest A4" claim (30 px to A4 against 115 and 148). But its **README
+      provenance row had the wrong number** — the left panel's shortening is
+      23%, not the 30% claimed. So provenance prose needs the same scrutiny as
+      the figure; neither is covered by any script.
 - [ ] **The scraps chapter is now ~10,700 words across 5 pages**, and
       `scrap-types.md` at 3034 is the longest page in the manual. Sourcing a
       thin page grows it: #19 went 597 → 1813 even after cutting half the
@@ -480,6 +490,17 @@ Not page-scoped; land them wherever they fit or as their own commit.
       being trimmed to a different length on each of three pages. Watch for the
       same growth on the remaining thin pages — a page with 0 digits is thin
       because facts are missing, and finding them adds words.
+- [ ] **Survex output is localized, so reading the C source is not enough.**
+      #21's worked example quoted `netskel.c`'s msgid verbatim and was wrong on
+      screen: `survex/lib/en_US.po` rewrites 13 messages, including every
+      "leg"/"legs" to "shot"/"shots" (`:1238`, `:1244`, `:1250`, `:1311`,
+      `:1503`). Any page quoting cavern's log or `.err` text **must be checked
+      against `en_US.po`, not just against `survex/src/`** — or better, against
+      a screenshot, which is how this one was caught (`cavern.c:769` emits
+      "survey legs"; the screenshot reads "survey shots"). Not an issue for
+      CaveWhere's own strings: `survey-errors.md:113` quotes
+      `cwLinePlotTask.cpp:359`, which is untranslated and correctly says "leg".
+      Worth a grep for other survex-quoting pages before the sweep ends.
 - [ ] **32 em dashes in ~29 shipped UI strings** under `cavewherelib/qml/`. In a
       UI string there is no room for emphasis, so every one is habit rather than
       intent.
