@@ -77,6 +77,30 @@ struct SyncJobFixture {
         QObject::disconnect(connection);
         return seen;
     }
+
+    // The highest progressMaximum surfaced on any "Syncing" row while `action`
+    // runs. Nonzero proves the sync operation's live progress reaches the job
+    // through the whole track() chain (operation queue -> syncDeferred -> cycle).
+    int captureMaxSyncingProgressRange(cwFutureManagerModel* model, const std::function<void()>& action) {
+        int maxRange = 0;
+        auto connection = QObject::connect(
+            model, &QAbstractItemModel::dataChanged, model,
+            [&](const QModelIndex& topLeft, const QModelIndex& bottomRight, const QList<int>& roles) {
+                Q_UNUSED(roles);
+                for (int row = topLeft.row(); row <= bottomRight.row(); ++row) {
+                    const QModelIndex jobIndex = model->index(row, 0);
+                    const QString name = model->data(jobIndex, cwFutureManagerModel::NameRole).toString();
+                    if (name != QStringLiteral("Syncing")) {
+                        continue;
+                    }
+                    maxRange = std::max(maxRange,
+                                        model->data(jobIndex, cwFutureManagerModel::NumberOfStepRole).toInt());
+                }
+            });
+        action();
+        QObject::disconnect(connection);
+        return maxRange;
+    }
 };
 
 } // namespace
@@ -109,4 +133,31 @@ TEST_CASE("cwProject::sync() adds exactly one Syncing job to the future manager"
     INFO("Syncing jobs inserted for one sync(): " << syncingJobs.size());
     CHECK(stub->verifyCalls() == 1);
     CHECK(syncingJobs.size() == 1);
+}
+
+// The "Syncing" job's progress bar must advance during the sync: the underlying
+// pull/push operations report byte progress, and that progress must survive the
+// operation queue, cwSaveLoad's syncDeferred, and cwProject's SyncCycle to reach
+// the future-manager row. A flat (progressMaximum == 0) bar is the "flat progress"
+// bug this guards against. The first sync pushes local commits to the empty bare
+// remote, so libgit2's push_transfer_progress reports a nonzero range.
+TEST_CASE("cwProject::sync() surfaces operation progress on the Syncing job",
+          "[cwProject][sync][jobs][progress]")
+{
+    SyncJobFixture fx;
+
+    auto stub = std::make_unique<MockAuthProvider>();
+    stub->setInstalled(true);
+    fx.project->setAuthProvider(stub.get());
+
+    auto* futureModel = fx.rootData->futureManagerModel();
+
+    const int maxRange = fx.captureMaxSyncingProgressRange(futureModel, [&]() {
+        REQUIRE(fx.project->sync());
+        futureModel->waitForFinished();
+        fx.project->waitSaveToFinish();
+    });
+
+    INFO("Max progressMaximum surfaced on the Syncing job: " << maxRange);
+    CHECK(maxRange > 0);
 }

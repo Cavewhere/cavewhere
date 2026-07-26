@@ -738,6 +738,12 @@ void cwSaveLoadPrivate::runNextOperation(cwSaveLoad* context)
         opFuture = AsyncFuture::completed(Monad::ResultBase(QStringLiteral("Invalid operation request.")));
     }
 
+    // Forward the running operation's live progress into its deferred without
+    // completing it. track() mirrors progress value/range only; the callback
+    // below still value-completes with the cancellation-rewritten result. This
+    // lights up progress for every queued operation type, not just sync.
+    op->deferred.track(opFuture);
+
     AsyncFuture::observe(opFuture)
             .context(context, [this, context, opFuture, op]() {
         Monad::ResultBase result = opFuture.result();

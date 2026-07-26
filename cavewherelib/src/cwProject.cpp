@@ -515,6 +515,11 @@ std::shared_ptr<cwProject::SyncCycle> cwProject::startSyncCycle()
 void cwProject::runSyncOperation(const std::shared_ptr<SyncCycle>& cycle,
                                  const QFuture<Monad::ResultBase>& operationFuture)
 {
+    // Forward the operation's live progress onto the cycle's deferred so the
+    // "Syncing" job's progress bar advances; track() mirrors progress only and
+    // never completes, so the callback below still ends the cycle exactly once.
+    cycle->m_deferred.track(operationFuture);
+
     // Capturing `cycle` keeps the single "Syncing" job alive until the operation
     // finishes; completing it then ends the cycle.
     AsyncFuture::observe(operationFuture).context(this, [this, cycle, operationFuture]() {

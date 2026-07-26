@@ -4839,6 +4839,29 @@ void cwSaveLoad::setAuthProvider(cwRemoteAuthProvider* provider)
     updateCredentials();
 }
 
+namespace {
+
+// Surface a phased reconcile operation's live progress on `deferred` as each
+// phase runs: the network prepare (pull/checkout + LFS hydration) during
+// prepareFuture, then the push during finalizeFuture. Tracked in sequence —
+// tracking finalize eagerly would reset the bar to its not-yet-started empty
+// range mid-prepare — so finalize is tracked only once reconcile completes,
+// immediately before it runs. Shared by sync() and gitOperationAndReconcile()
+// so every prepare/reconcile/finalize path surfaces progress the same way.
+void trackPhasedProgress(QObject* context,
+                         const std::shared_ptr<AsyncFuture::Deferred<ResultBase>>& deferred,
+                         const QFuture<ResultBase>& prepareFuture,
+                         const QFuture<ResultBase>& reconcileFuture,
+                         const QFuture<ResultBase>& finalizeFuture)
+{
+    deferred->track(prepareFuture);
+    AsyncFuture::observe(reconcileFuture).context(context, [deferred, finalizeFuture]() {
+        deferred->track(finalizeFuture);
+    });
+}
+
+} // namespace
+
 QFuture<Monad::ResultBase> cwSaveLoad::sync()
 {
     d->lastSyncReport.reset();
@@ -5004,6 +5027,8 @@ QFuture<Monad::ResultBase> cwSaveLoad::sync()
                                                    repo,
                                                    attemptState,
                                                    FinalizeMode::SyncPush);
+
+        trackPhasedProgress(this, syncDeferred, syncPrepareFuture, reconcileFuture, finalizeFuture);
 
         AsyncFuture::observe(finalizeFuture)
                 .context(this, [this, finalizeFuture, retryCount, scheduleAttempt, syncDeferred]() {
@@ -5173,6 +5198,7 @@ QFuture<Monad::ResultBase> cwSaveLoad::gitOperationAndReconcile(const QString& o
                                                FinalizeMode::CheckoutLocal);
 
     auto checkoutDeferred = std::make_shared<AsyncFuture::Deferred<ResultBase>>();
+    trackPhasedProgress(this, checkoutDeferred, checkoutPrepareFuture, reconcileFuture, finalizeFuture);
     AsyncFuture::observe(finalizeFuture)
             .context(this, [this, finalizeFuture, checkoutDeferred]() {
         d->remoteApplyGuard.end();
