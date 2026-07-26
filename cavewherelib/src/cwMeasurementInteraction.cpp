@@ -26,7 +26,6 @@ namespace {
     constexpr int kAngleDecimals = 1;
 
     QString azimuthReferenceKey() { return QStringLiteral("measurement/azimuthReference"); }
-    QString lengthUnitKey() { return QStringLiteral("measurement/lengthUnit"); }
 
     // The parenthetical that tags the azimuth in the clipboard readout, so a
     // pasted measurement says which north it is against (matching the on-screen
@@ -62,10 +61,6 @@ cwMeasurementInteraction::cwMeasurementInteraction(QQuickItem* parent) :
     m_azimuthReference(loadAzimuthReference()),
     m_lengthUnit(new cwLengthUnitSelection(this))
 {
-    // Persist the length-unit choice under the measurement key; setting the key
-    // also loads any previously stored choice.
-    m_lengthUnit->setSettingsKey(lengthUnitKey());
-
     // Resolve once up front so the reference readout is self-consistent from
     // construction. With no measurement yet this takes the cheap grid-passthrough
     // path; the detailed resolve waits for a frozen, expanded readout.
@@ -91,10 +86,10 @@ void cwMeasurementInteraction::setUnitSystem(cwUnits::UnitSystem system)
         return;
     }
     m_unitSystem = system;
-    // Seed the default readout unit from the project system. A previously saved
-    // choice is persisted and wins, so this only takes effect on a fresh
-    // selection (setDefaultUnit is a no-op when a value is stored).
-    m_lengthUnit->setDefaultUnit(cwUnits::smallLengthUnit(system));
+    // The readout unit follows the project's unit system (metres / feet). The
+    // popup can override it for the session, but that choice isn't persisted, so
+    // opening a project in the other system re-seeds to its unit here.
+    m_lengthUnit->setUnit(cwUnits::smallLengthUnit(system));
     emit unitSystemChanged();
 }
 

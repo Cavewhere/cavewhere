@@ -149,10 +149,9 @@ TEST_CASE("cwMeasurementInteraction measures between two stations", "[cwMeasurem
 
     SECTION("the clipboard reports lengths in the selected unit") {
         // #564: the interaction routes every clipboard length through its shared
-        // cwLengthUnitSelection. Clear/restore settings so this Feet choice can't
-        // leak into sibling sections (the unit persists via QSettings). The unit
-        // mapping/conversion itself is covered by [cwLengthUnitSelection].
-        QSettings().clear();
+        // cwLengthUnitSelection. The unit is per-instance in-memory state, so this
+        // Feet pick can't leak into sibling sections; the mapping/conversion
+        // itself is covered by [cwLengthUnitSelection].
         QClipboard* clipboard = QGuiApplication::clipboard();
         REQUIRE(clipboard != nullptr);
 
@@ -177,21 +176,27 @@ TEST_CASE("cwMeasurementInteraction measures between two stations", "[cwMeasurem
 
         // Angles are unit-independent and stay in degrees.
         CHECK(text.contains(QStringLiteral("Inclination: 0.0°")));
-
-        lengthUnit->setUnit(cwUnits::Meters);
     }
 
-    SECTION("the length unit persists across interaction instances") {
-        // The interaction wires its selection to a shared QSettings key, so the
-        // choice survives into a fresh interaction (and a new session).
-        QSettings().clear();
-        {
-            cwMeasurementInteraction first;
-            first.lengthUnitSelection()->setUnit(cwUnits::Feet);
-        }
-        cwMeasurementInteraction second;
-        CHECK(second.lengthUnitSelection()->unit() == cwUnits::Feet);
-        second.lengthUnitSelection()->setUnit(cwUnits::Meters);
+    SECTION("the readout unit follows the project unit system") {
+        // #614: the measuring tool takes its length unit from the project, not a
+        // persisted global choice — imperial reads in feet, metric in metres, and
+        // the switch is live.
+        cwLengthUnitSelection* lengthUnit = interaction.lengthUnitSelection();
+        REQUIRE(lengthUnit != nullptr);
+
+        interaction.setUnitSystem(cwUnits::Imperial);
+        CHECK(lengthUnit->unit() == cwUnits::Feet);
+
+        interaction.setUnitSystem(cwUnits::Metric);
+        CHECK(lengthUnit->unit() == cwUnits::Meters);
+
+        // A fresh interaction inherits no prior in-session pick: it defaults to
+        // metres and only its own project binding moves it.
+        interaction.setUnitSystem(cwUnits::Imperial);
+        lengthUnit->setUnit(cwUnits::Miles);
+        cwMeasurementInteraction fresh;
+        CHECK(fresh.lengthUnitSelection()->unit() == cwUnits::Meters);
     }
 
     SECTION("awaiting-second hover previews the live measurement") {

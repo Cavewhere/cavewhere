@@ -51,14 +51,14 @@ class cwMeasurementInteraction : public cwScenePicker
 
     // The shared length-unit selection every length readout (distance,
     // horizontal, the by-axis components) and the clipboard report in. Owned by
-    // this interaction and persisted across sessions; the pointer is stable,
-    // hence CONSTANT. QML drives it as interaction.lengthUnit.index / .names /
-    // .name / .fromMeters().
+    // this interaction; the pointer is stable, hence CONSTANT. QML drives it as
+    // interaction.lengthUnit.index / .names / .name / .fromMeters().
     Q_PROPERTY(cwLengthUnitSelection* lengthUnit READ lengthUnitSelection CONSTANT)
 
-    // The project's unit system. It seeds the default readout unit (metres /
-    // feet) until the user picks one in the popup; that choice is persisted and
-    // wins. Bound to RootData.region.unitSystem by the view.
+    // The project's unit system. It drives the readout unit (metres / feet): the
+    // popup can override it for the session, but nothing is persisted, so the
+    // readout re-follows the project on the next change. Bound to
+    // RootData.region.unitSystem by the view.
     Q_PROPERTY(cwUnits::UnitSystem unitSystem READ unitSystem WRITE setUnitSystem NOTIFY unitSystemChanged)
 
     // True/Magnetic resolution needs PROJ (grid convergence) and IGRF and is the
