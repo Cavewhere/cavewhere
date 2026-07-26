@@ -34,6 +34,18 @@ far to chase a number.
 Run these in order. Steps 1-2 are cheap; do them before reading, so the reading
 pass isn't spent on mechanical hits.
 
+0. **Record the word budget.** This is a ceiling, not a target.
+   ```bash
+   git show HEAD:docs/manual/<page>.md | wc -w
+   ```
+   **The rewrite must come in at or under that number.** Every voice metric in
+   this plan is a rate per 1000 words, so all of them can be satisfied by adding
+   text and none of them is charged for space. Between items 11 and 22 that
+   one-way pressure grew the manual 59,418 → 71,016 words, +19.5% with half the
+   queue undone, peaking at +105% on a single page. Nothing in the scorecard
+   caught it because every rate went green. The budget is the only thing that
+   does, so check it first and last.
+
 1. **Deterministic pass**
    ```bash
    python3 .claude/skills/humanize/scripts/slopcheck.py docs/manual/<page>.md
@@ -60,20 +72,38 @@ pass isn't spent on mechanical hits.
    Do not invent measurements to move the digit rate. If a number cannot be
    sourced, ask Philip or leave the gap and say so.
 
-5. **Rewrite the page.** Philip reviews the commits at the end rather than each
-   page up front, so a page lands finished. See **Running this as a subagent**
-   below for the house decisions that govern the rewrite.
+5. **Edit the flagged spans. Do not rewrite the page from a blank file.** The
+   skill is explicit: "change the flagged spans and leave everything else alone
+   — a full-page rewrite loses whatever human texture was already there, which
+   is exactly the failure this skill exists to prevent." This step used to read
+   "Rewrite the page", and that wording is where the inflation started. Work
+   from the shipped text.
 
-6. **Verify**
+   **Every fact added displaces something.** Going over the ceiling means
+   something else comes off the page, not that the ceiling moves. If a fact is
+   genuinely worth more than anything currently on the page, say which paragraph
+   it replaced in the commit message.
+
+   Ask what belongs on *this* page. On item 23 a 250-word cavern-log section was
+   accurate, sourced and interesting, and still wrong to include, because it was
+   `check-loop-closure.md`'s job.
+
+6. **Cut pass.** One read whose only job is deletion. No fact checking, no voice
+   work, no additions. If this pass removes nothing, it was not a real pass.
+
+7. **Verify**
    ```bash
+   git show HEAD:docs/manual/<page>.md | wc -w   # ceiling
+   wc -w docs/manual/<page>.md                   # must be <=
    python3 scripts/check-manual-links.py
    ```
-   This must print `OK`; the manual has no known-acceptable failures left. Build
-   the HTML (`scripts/build-manual-html.py`, and `--single`) once per batch
+   Links must print `OK`; the manual has no known-acceptable failures left.
+   Build the HTML (`scripts/build-manual-html.py`, and `--single`) once per batch
    rather than once per page.
 
-7. **Commit one page per commit**, subject `Rewrite <Page Title> with the
-   humanize skill`. Only the orchestrator commits — never a subagent.
+8. **Commit one page per commit**, subject `Rewrite <Page Title> with the
+   humanize skill`. Only the orchestrator commits — never a subagent. The
+   commit body opens with `words: <before> -> <after>`.
 
 ---
 
@@ -229,7 +259,7 @@ Legend: `[ ]` open · `[~]` reported, awaiting review · `[x]` committed
 - [x] **21. `loop-closure/check-loop-closure.md`** — 1860 → 2567 wds, score 74.5 → **~7** — em dash 20.91 → 0.40 (38 → 1), to-be 41.4 → clear, sentences 22.7 → 17.7, contractions 14.31 → 5.61, digits 7.71 → **26.46**, fig 0.55 → 3.21, `greyed` ×3 and `centimetres` cleared. Added `break-the-tie-in.svg` and a new `### What the Cavern log tells you` section sourced off the screenshot. 80 claims, 74 confirmed, 0 unverifiable. **The reviewer's lead catch was a localization bug in the page's worked example**: the sample `.err` block quoted survex's untranslated msgid (`legs`, `m/leg`), but `survex/lib/en_US.po:1310-1311` renames message 145 to `shots` / `m/shot`, and the screenshot proves the catalog is live (`cavern.c:769` says "survey legs"; the log reads "survey shots"). Also corrected: `.err` is created on **every** solve and left *empty* for a loop-free cave (`netskel.c:451`, which is why `CavernOutputPage.qml:73` gates on content length, not file existence); the Data page has **no `⋯` button** (`DataMainPage.qml:80-82` uses `list.svg`, and the `...` in the screenshot is the breadcrumb); and "one block per loop" is per **traverse** (`netskel.c:527`, `:729-731`, `!fArtic`). `llms.txt:37` re-synced to match.
 - [x] **22. `measurement/measure-distance-and-bearing.md`** — 1281 → 2533 wds, score 76.3 → **~7** — commit `1b38cb1a`. 7 spans → **0**; em dash 22.47 → 0.00 (28 → 0), digits **0.00 → 20.12**, to-be 28.9 → clear, contractions 16.05 → 8.05, sentences 22.2 → 17.4, fig 0.80 → 2.01, hedges 0.00 → 2.41, `labelled`×2 / `metres` / `kilometres` / `greyed` cleared. **The worst-scoring page and the emptiest**: 0 digits describing a tool whose only output is numbers. It now carries the 1.5 mm snap tolerance (`cwScenePicker.cpp:20`, physical millimeters, shared with the coordinate picker), the 480-logical-pixel collapse threshold, 2-decimal lengths / 1-decimal angles, the verbatim `copyToClipboard()` block, and a worked example read off `measurement-readout.png` whose arithmetic the page shows (`hypot(48.38, 32.19)` = 58.11; `atan2(48.38, -0.75)` = 90.9°; `atan2(-32.19, 48.38)` = -33.6°). 80 claims, 74 confirmed, **2 wrong**, 3 overstated, 0 unverifiable. **Lead catch: "you can still orbit, pan, and zoom" was wrong about pan.** `TurnTableForwardingHandlers.qml` wires only a right-button `DragHandler` and a `WheelHandler`, and its header says it exists for interactions "that take over left-click"; the turn-table pans on left-drag (`TurnTableInteraction.qml:29-32`), which the tool has taken, so no pan path exists. Also corrected: the Station-only help string is **"Click a survey station to start measuring."**; the unit selector seeds from the project unit system (Metric→`m` / Imperial→`ft`) rather than always metres, and its labels are `m`/`km`/`ft`/`mi`; the **Station only switch is unreachable before the first measurement** (it lives in a popup gated on `hasMeasurement`, `GLTerrainRenderer.qml:277`) and the mode is session-only while the unit and north reference persist; and True/Magnetic are grayed out but still listed (`MeasurementReadoutPopup.qml:243`, `:256`). `llms.txt:42` re-synced.
       **Second page whose worst defect was on a *neighboring* page.** `view-3d/perspective-and-field-of-view.md:37` told readers "Measuring and map export assume orthogonal. Switch back to orthogonal to measure." Both halves are false: `cwCamera::pickQuery` (`cwCamera.cpp:228-250`) has an explicit perspective branch converting the pick radius to a depth-dependent slope tolerance, the measurement is a world-space distance the projection cannot affect, and `cwCaptureManager.cpp:583` says the tiled capture "will work with orthognal and perspective projections". Corrected in the same commit; what perspective actually costs is a uniform scale, which is why the scale bar hides.
-- [ ] **23. `georeferencing/grid-convergence.md`** — 1169 wds, score 64.5 — 25 em dash, 35.9 to-be
+- [x] **23. `georeferencing/grid-convergence.md`** — words **1277 → 1084 (−15%)**, the first page to land under its ceiling. Em dash 25 → **0**, to-be 35.9 → 18.6, digits 2.78 → 51.8, spans 1 → 0. 67 claims, 51 confirmed, 7 wrong, 6 overstated. **Lead catch: the page said the solve always folds in the convergence. It does not.** Survex subtracts it only inside the `*declination auto` branch of `get_declination()` (`survex/src/datain.c:4092`), and CaveWhere emits `*declination auto` only when the trip is on Auto (`cwSurvexExporterTripTask.cpp:100-104`); Manual goes out as `*calibrate DECLINATION`, taking the branch at `datain.c:4066` that never calls `get_convergence()`, and a manual `0` writes no line at all (`default_calib` sets `z[Q_DECLINATION] = 0.0`). The page's own screenshot is a `0° manual` trip. Also corrected: the example read `0.74° at a1` while the screenshot reads **`-1.08° at a1`** (verified independently — `proj -V` on E 350000 / N 4300000 in EPSG:32613 gives −1.08396°); there is no **?** button, `LabelWithHelp.qml` toggles on clicking the label text; the error state is `Failed to transform from … to WGS84`, not `PROJ failed to create CRS` (the transform at `cwGridConvergence.cpp:190` is checked before `cachedConvergencePj` at `:198`); `n/a (geographic CS)` reads the **fix's** Input CS, so a Lat/Lon fix in a UTM project reads `n/a` while the solve applies the real angle; of declination.md's 3 reasons to sit in Manual the first costs nothing; a missing cavern log line means no trip date rather than no convergence. **First page written under the word budget** — the cavern-log section, the local-cave subsection and the CS-mismatch paragraph were cut to make room rather than appended.
 - [ ] **24. `georeferencing/georeference-a-cave.md`** — 1282 wds, score 53.9 — 24 em dash
 
 ### Projects and Files
@@ -426,6 +456,17 @@ still read like a machine, and no amount of claim-checking sees that.
   what this page asserts that a sibling denies.
 - **Check house decisions 1, 2, 4, 6 and 9** — invented numbers, numeral misuse,
   edited app quotes, moved headings.
+- **Propose every fix at equal or fewer words than the text it replaces.** The
+  reviewer defaults to appending a qualifying clause, because that is the
+  cheapest repair for imprecision and nothing charges it for space. On item 23
+  its 14 fixes were +90 words with exactly 1 deletion. A 43-word replacement for
+  a 17-word sentence is a rejected fix, not a finding: *"No line means no trip
+  date, not necessarily no convergence"* carries the same correction in 12.
+- **Answer "what should come off this page?"** This is required, not optional.
+  Nominate the weakest paragraphs: anything restating a neighbor page's job,
+  anything true but not load-bearing, anything the reader already knows by the
+  time they reach it. The orchestrator holds a hard word ceiling and needs
+  candidates, not only corrections.
 - **Report only. No edits, no git, no plan edits.** A second agent's prose in the
   page would be reviewed by nobody.
 - **Return only the problems**, each as `file:line`, one sentence on what's
@@ -453,6 +494,48 @@ still read like a machine, and no amount of claim-checking sees that.
 | `docs/manual/llms.txt` | Machine index, generated. |
 
 ---
+
+## Backlog: the compression pass
+
+**Do this before resuming the queue.** Philip's call, 2026-07-26: the sweep was
+making the manual wordier, not more concise. "Concise means to match or beat"
+the original length. Items 1-10 held roughly flat (−8% to +7%); item 11
+(`calibration.md`) is where step 5 started meaning "rewrite from blank" and
+every page after it inflated.
+
+These 11 pages are already committed and their facts are already verified. This
+pass is **deletion only — no fact changes, no re-research, no new sources.**
+
+| Page | pre-sweep | now | cut |
+|---|---|---|---|
+| `scraps/digitize-a-scrap.md` | 1115 | 2287 | 1172 |
+| `measurement/measure-distance-and-bearing.md` | 1368 | 2650 | 1282 |
+| `scraps/carpeting.md` | 1121 | 1906 | 785 |
+| `loop-closure/check-loop-closure.md` | 1860 | 2567 | 707 |
+| `survey-data/caves-and-trips.md` | 1074 | 1750 | 676 |
+| `survey-data/enter-survey-data.md` | 2136 | 2810 | 674 |
+| `notes/add-a-note.md` | 1051 | 1697 | 646 |
+| `notes/lidar-notes.md` | 1580 | 2222 | 642 |
+| `survey-data/calibration.md` | 1318 | 1834 | 516 |
+| `notes/note-resolution.md` | 1236 | 1718 | 482 |
+| `README.md` | 753 | 901 | 148 |
+
+About 7,700 words. Removing them, then running the remaining 23 queue pages at
+net zero, lands the manual near its pre-sweep 59,418 rather than the ~85,000 it
+was tracking toward.
+
+**The safety net: every one of those commits carries a 34-133 line body listing
+the facts and corrections it introduced.** Those bodies are fact manifests. So
+each page is: compress to the ceiling, then walk its own commit message and
+confirm every line still appears on the page. Losing a correction is checkable
+rather than a matter of trust. Get the manifest with
+`git log --format=%b -1 <sha> -- <page>`.
+
+Order: start with `digitize-a-scrap.md` and `measure-distance-and-bearing.md`.
+They are the 2 worst and they will show quickly whether the manifest check
+holds.
+
+Commit subject: `Compress <Page Title>`, body opening `words: <before> -> <after>`.
 
 ## Cross-cutting items
 
