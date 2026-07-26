@@ -4006,7 +4006,16 @@ void cwSaveLoad::connectCave(cwCave *cave)
     connect(fixModel, &QAbstractItemModel::rowsInserted, this, saveCave);
     connect(fixModel, &QAbstractItemModel::rowsRemoved, this, saveCave);
     connect(fixModel, &QAbstractItemModel::modelReset, this, saveCave);
-    connect(fixModel, &QAbstractItemModel::dataChanged, this, saveCave);
+    // The model's read-only computed error roles (domain / station warnings) are
+    // derived from the line-plot solve, not from anything persisted, and they
+    // refresh on every surveyNetworkChanged. Saving on those would dirty the
+    // project and rewrite the cave the moment a freshly opened project solves.
+    connect(fixModel, &QAbstractItemModel::dataChanged, this,
+            [this, saveCave](const QModelIndex&, const QModelIndex&, const QList<int>& roles) {
+                if (!cwFixStationModel::isErrorOnlyRoleChange(roles)) {
+                    saveCave();
+                }
+            });
 }
 
 

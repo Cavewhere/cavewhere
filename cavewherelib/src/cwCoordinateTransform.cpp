@@ -13,6 +13,7 @@
 #include <QDir>
 
 //Std includes
+#include <algorithm>
 #include <cmath>
 #include <vector>
 
@@ -294,18 +295,25 @@ bool cwCoordinateTransform::isGeographic(const QString& cs)
 
 bool cwCoordinateTransform::isWithinDomain(const QString& cs, const cwGeoPoint& point)
 {
+    const DomainCheck check = domainCheck(cs, point);
+    return check.eastingValid && check.northingValid;
+}
+
+cwCoordinateTransform::DomainCheck
+cwCoordinateTransform::domainCheck(const QString& cs, const cwGeoPoint& point)
+{
     const QString key = cs.trimmed();
     if (key.isEmpty()) {
-        return true;
+        return {};
     }
 
     // Per-thread cache keyed by the CS and the horizontal coordinate (z is not
     // part of the domain test). revalidate() re-runs this for every fix on each
-    // fix-station edit, and the model recomputes DomainErrorRole per row on each
+    // fix-station edit, and the model recomputes the domain roles per row on each
     // dataChanged; without the cache each call pays a fresh proj_create plus a
-    // proj_create_crs_to_crs. Capped like isGeographic/nameFor so a long edit
-    // session can't grow it unboundedly.
-    thread_local QHash<QString, bool> cache;
+    // proj_create_crs_to_crs. The two valid flags pack into one byte. Capped like
+    // isGeographic/nameFor so a long edit session can't grow it unboundedly.
+    thread_local QHash<QString, DomainCheck> cache;
     const QString cacheKey = key
         + QLatin1Char('|') + QString::number(point.x, 'g', 17)
         + QLatin1Char('|') + QString::number(point.y, 'g', 17);
@@ -314,15 +322,15 @@ bool cwCoordinateTransform::isWithinDomain(const QString& cs, const cwGeoPoint& 
         return *cached;
     }
 
-    const bool result = [&]() -> bool {
+    const DomainCheck result = [&]() -> DomainCheck {
         PJ_CONTEXT* ctx = validatorContext();
         if (!ctx) {
-            return true;
+            return {};
         }
 
         PJ* crs = proj_create(ctx, key.toUtf8().constData());
         if (!crs) {
-            return true;
+            return {};
         }
 
         double west = 0.0;
@@ -341,7 +349,7 @@ bool cwCoordinateTransform::isWithinDomain(const QString& cs, const cwGeoPoint& 
             || west <= kUnknownBound || south <= kUnknownBound
             || east <= kUnknownBound || north <= kUnknownBound
             || west > east) {
-            return true;
+            return {};
         }
 
         // Inverse-project the fix into geographic lon/lat to compare against the
@@ -349,22 +357,50 @@ bool cwCoordinateTransform::isWithinDomain(const QString& cs, const cwGeoPoint& 
         // makes the output x=lon, y=lat.
         cwCoordinateTransform toGeographic(key, Wgs84);
         if (!toGeographic.isValid()) {
-            return true;
+            return {};
         }
         const cwGeoPoint geo = toGeographic.transform(point);
         if (!std::isfinite(geo.x) || !std::isfinite(geo.y)) {
-            return false;
+            // The coordinate can't even be inverse-projected — both horizontal
+            // components are suspect.
+            return {false, false};
         }
 
         // A generous margin absorbs legitimately surveying just past a UTM zone's
         // nominal edge; a transposed digit or wrong zone lands many multiples of
-        // this far out, so the two never overlap.
+        // this far out, so the two never overlap. Longitude gates the easting,
+        // latitude the northing, so the caller can point at the wrong one.
         constexpr double kDomainMarginDegrees = 5.0;
-        const bool inLon = geo.x >= west - kDomainMarginDegrees
-                        && geo.x <= east + kDomainMarginDegrees;
-        const bool inLat = geo.y >= south - kDomainMarginDegrees
-                        && geo.y <= north + kDomainMarginDegrees;
-        return inLon && inLat;
+        const double lonLow = west - kDomainMarginDegrees;
+        const double lonHigh = east + kDomainMarginDegrees;
+        DomainCheck fields;
+        fields.eastingValid = geo.x >= lonLow && geo.x <= lonHigh;
+        fields.northingValid = geo.y >= south - kDomainMarginDegrees
+                            && geo.y <= north + kDomainMarginDegrees;
+
+        // Per-axis attribution only holds while the inverse projection stays near
+        // the domain. A northing far past the pole wraps the longitude ~180°
+        // (EPSG:32613 at 478000E/14430000N inverts to 75E/50N: a latitude that
+        // still looks valid and a longitude that does not), which would tint the
+        // easting for a bad northing. When an already-failing longitude is that
+        // far outside, the axes can't be told apart — call both suspect rather
+        // than point at the wrong cell. Gated on eastingValid being false so a
+        // wide-domain CS (a geographic one spans the globe) can never be dragged
+        // in. isWithinDomain() is unaffected either way: it only asks whether
+        // some axis failed.
+        constexpr double kMaxAttributableLonExcessDegrees = 90.0;
+        if (!fields.eastingValid) {
+            const auto angularDistance = [](double a, double b) {
+                const double delta = std::fmod(std::abs(a - b), 360.0);
+                return delta > 180.0 ? 360.0 - delta : delta;
+            };
+            const double excess = (std::min)(angularDistance(geo.x, lonLow),
+                                             angularDistance(geo.x, lonHigh));
+            if (excess > kMaxAttributableLonExcessDegrees) {
+                return {false, false};
+            }
+        }
+        return fields;
     }();
 
     if (cache.size() >= 256) {

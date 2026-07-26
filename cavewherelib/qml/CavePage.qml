@@ -180,6 +180,12 @@ StandardPage {
                 RootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page, "Fix Stations");
             }
         }
+
+        FixStationErrorBadge {
+            objectName: "fixStationsBadge"
+            errorModel: cavePageArea.currentCave ? cavePageArea.currentCave.errorModel : null
+            errorTypeIds: RootData.region.fixStationValidator.fixStationErrorTypeIds
+        }
     }
 
     ColumnLayout {
@@ -513,8 +519,10 @@ StandardPage {
                         },
                         TableStaticColumn {
                             id: declColumn
-                            columnWidth: 95
-                            text: "Decl"
+                            // Fits "Declination" plus the sort indicator with
+                            // headroom at larger font scales.
+                            columnWidth: 115
+                            text: "Declination"
                             sortRole: CavePageModel.DeclinationRole
                         }
                     ]
@@ -769,6 +777,11 @@ StandardPage {
                             onClicked: {
                                 RootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page, "Fix Stations");
                             }
+                        }
+
+                        FixStationErrorBadge {
+                            errorModel: cavePageArea.currentCave ? cavePageArea.currentCave.errorModel : null
+                            errorTypeIds: RootData.region.fixStationValidator.fixStationErrorTypeIds
                         }
                     }
                 }

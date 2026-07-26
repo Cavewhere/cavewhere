@@ -41,6 +41,10 @@ MainWindowTest {
             return findChild(cavePage(), "outlierWarningBanner")
         }
 
+        function fixStationsBadge() {
+            return findChild(cavePage(), "fixStationsBadge")
+        }
+
         function bannerProxy() {
             return findChild(cavePage(), "outlierWarningBannerProxy")
         }
@@ -141,6 +145,40 @@ MainWindowTest {
 
             tryVerify(() => !b.visible, 1000,
                       "banner hides once the warning is suppressed")
+        }
+
+        // ── The "Fix stations:" line badge (U9) — a finer, scoped indicator ──
+
+        function test_fixStationBadgeHiddenWithoutError() {
+            const badge = fixStationsBadge()
+            verify(badge !== null, "fix-station badge must exist on CavePage")
+            verify(!badge.visible, "badge hidden with no fix-station error")
+
+            addGoodCluster()
+            verify(!badge.visible, "a clean cluster raises no badge")
+        }
+
+        function test_fixStationBadgeAppearsForError() {
+            const badge = fixStationsBadge()
+            // A single out-of-domain fix (Part A) is enough to flag the cave.
+            addUtm13NFix("BAD", 1478000.0, 4430000.0, 1655.0)
+            tryVerify(() => badge.visible, 1000, "badge appears once a fix errors")
+
+            // Correcting the coordinate clears the badge.
+            const idx = cave.fixStations.index(cave.fixStations.count - 1)
+            cave.fixStations.setData(idx, 478000.0, FixStationModel.EastingRole)
+            tryVerify(() => !badge.visible, 1000, "badge clears once corrected")
+        }
+
+        function test_fixStationBadgeHidesWhenSuppressed() {
+            addUtm13NFix("BAD", 1478000.0, 4430000.0, 1655.0)
+            const badge = fixStationsBadge()
+            tryVerify(() => badge.visible, 1000, "badge up before suppression")
+
+            const errors = cave.errorModel.errors
+            tryCompare(errors, "count", 1)
+            errors.setData(errors.index(0, 0), true, ErrorListModel.SuppressedRole)
+            tryVerify(() => !badge.visible, 1000, "badge hides once suppressed")
         }
     }
 }

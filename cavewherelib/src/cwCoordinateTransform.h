@@ -72,6 +72,23 @@ public:
      */
     static bool isWithinDomain(const QString& cs, const cwGeoPoint& point);
 
+    //! Which horizontal components of `point` fall outside cs's declared area of
+    //! use. `eastingValid`/`northingValid` are true when the corresponding axis
+    //! (longitude for the easting, latitude for the northing) is inside the
+    //! domain — so a caller can tint just the offending cell. Both stay true (no
+    //! flag) whenever isWithinDomain() would defer: cs empty/unparseable, or its
+    //! area of use unknown. z is not part of the domain test, so elevation is
+    //! never reported. isWithinDomain() is exactly "both valid".
+    //!
+    //! Attribution is best-effort: a coordinate whose inverse projection wraps
+    //! (a northing far past the pole flips the longitude ~180°) can't be blamed
+    //! on one axis, so both are reported invalid rather than the wrong one.
+    struct DomainCheck {
+        bool eastingValid = true;
+        bool northingValid = true;
+    };
+    static DomainCheck domainCheck(const QString& cs, const cwGeoPoint& point);
+
     static QString utmZoneToEpsg(int zone, bool north);
     static QString nameFor(const QString& cs);
 

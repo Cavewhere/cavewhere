@@ -404,6 +404,11 @@ void cwCavingRegion::InsertRemoveCave::insertCaves() {
         QObject::connect(regionPtr->geoReference(), &cwGeoReference::globalCoordinateSystemChanged,
                          Caves.at(i), &cwCave::recomputeGridConvergence,
                          Qt::UniqueConnection);
+        // The per-row domain warnings fall back to the same globalCS, so they
+        // move in and out of the flagged state with it.
+        QObject::connect(regionPtr->geoReference(), &cwGeoReference::globalCoordinateSystemChanged,
+                         Caves.at(i), &cwCave::refreshFixStationDomainErrors,
+                         Qt::UniqueConnection);
         Caves.at(i)->recomputeGridConvergence();
     }
 

@@ -148,6 +148,13 @@ public slots:
     /// the region's globalCS changes (in cwCavingRegion).
     void recomputeGridConvergence();
 
+    /// Re-evaluate the fix stations' per-row domain warnings. A fix that omits
+    /// its own input CS is judged against the region's globalCS, so a change to
+    /// that CS moves rows in and out of the flagged state. Wired next to
+    /// recomputeGridConvergence (in cwCavingRegion), which needs it for the
+    /// same reason.
+    void refreshFixStationDomainErrors();
+
 private:
     QList<cwTrip*> Trips;
     QString Name;

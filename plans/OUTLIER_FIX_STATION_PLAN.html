@@ -92,6 +92,7 @@ where the user can act on it. Grows out of <a href="https://github.com/Cavewhere
   <a href="#scope">11. Out of scope (v2)</a><br>
   <a href="#fewcaves">12. Commit 6 — the few-caves case</a><br>
   <a href="#usability">13. Usability &amp; error-handling backlog</a><br>
+  <a href="#commit9followups">14. Follow-ups raised by the Commit 9 review</a><br>
 </div>
 
 <h2 id="problem">2. Problem &amp; precision math</h2>
@@ -453,13 +454,26 @@ wired into existing components.</p>
   the existing renamed <code>tst_DataMainPage_globalCS.qml</code> stays green.</li>
   <li>Run both suites before pushing (repo rule). Logs to <code>/tmp/</code>.</li>
 </ul>
+<p class="mono-note"><b>Added by Commits 6–9</b> (the list above covers only Commits 1–2):
+<code>test_cwCoordinateTransform.cpp</code> (<code>domainCheck</code> axis attribution, incl. the past-the-pole
+wrap case) · <code>test_cwErrorListModel.cpp</code> (<code>warningMessagesForTypeIds</code> scoping) ·
+<code>test_cwFixStationModel.cpp</code> (per-component domain roles, <code>StationErrorRole</code>, whitespace
+trimming, globalCS fallback) · <code>test_cwFixStationValidator.cpp</code> (598 reference warnings) ·
+<code>test_cwLinePlotManager.cpp</code> (the endless-re-solve regression — deadline-based, anchored on a real solve) ·
+<code>test_cwCave.cpp</code> (<code>setSurveyNetwork</code> equality guard) · <code>test_cwSurveyNetwork.cpp</code>
+(<code>hasStation</code>) · <code>tst_FixStationPage.qml</code> (inline warnings + the U4 red-cell tint) ·
+<code>tst_CavePage_outlierWarning.qml</code> (the U9 badge).</p>
 
 <h2 id="risks">10. Risks &amp; open decisions</h2>
 <table>
   <tr><th>Item</th><th>Note</th></tr>
   <tr><td><b>Trigger timing</b></td><td>The validator owns its own connections to each cave's
   <code>fixStations</code> signals, so it re-runs on a coordinate <i>edit</i> independent of the solve/origin
-  gate. Resolved by design in Commit 3 — no reliance on the line-plot re-firing.</td></tr>
+  gate. Resolved by design in Commit 3 — no reliance on the line-plot re-firing.
+  <span class="mono-note"><b>No longer wholly true after Commit 9.</b> The new <b>598</b> reference check is judged
+  against <code>cave-&gt;network()</code>, which only a line-plot solve populates, so an unknown-station reference stays
+  undetected until a solve has run (<code>classifyStationReference</code> defers on an empty network). The 596/597
+  cluster and domain checks remain solve-independent as described.</span></td></tr>
   <tr><td><b>Ownership / lifetime</b></td><td>Region constructs the validator after <code>geoReference</code> and
   <code>caves</code> exist; validator holds a raw <code>cwCavingRegion*</code> parent back-pointer (it is a child
   QObject, dies with the region). It must rewire per-cave connections as caves are added/removed.</td></tr>
@@ -507,7 +521,10 @@ wired into existing components.</p>
   <code>cwError</code>'s <code>errorTypeId()</code>/<code>setErrorTypeId()</code> stay <code>int</code>-typed (the enum
   is cast at that boundary); migrating the <code>cwError</code> API to the enum type is the still-deferred larger
   refactor.</li>
-  <li><b>Tooltip-delay consistency</b> (nit, surfaced by the Commit 6 review). The inline <code>DomainWarning</code>
+  <li><b>Tooltip-delay consistency</b> (nit, surfaced by the Commit 6 review). <span class="mono-note">Updated after
+  Commit 9: the component is now <code>InlineWarning</code> and there are <b>four</b> such tooltips — two per fix row
+  (station + domain) plus the new <code>FixStationErrorBadge</code> on both CavePage layouts — so the duplication this
+  item describes has grown.</span> The inline <code>InlineWarning</code>
   tooltip on <code>FixStationPage.qml</code> uses <code>delay: 300</code>, while the rest of the app's explicit
   <code>QC.ToolTip</code> delays use <code>500</code>. There is no <code>Theme</code> token for tooltip delay, so the
   real cleanup is to add one (e.g. <code>Theme.tooltipDelay</code>) and route all tooltip delays through it, then
@@ -691,10 +708,34 @@ mode combo (<code>:62-101</code>), UTM zone <code>SpinBox</code> (<code>:103-119
   <code>"Northing / Lat"</code> (the narrow <code>Flow</code> has no headers, so only the wide layout changes). A
   CS-aware header (switch label by the row’s mode) is possible but the header is per-column while the CS is per-row,
   so a static combined label is the pragmatic call.</li>
-  <li><b>U4 (which component is bad).</b> The domain flag is a single row-level string: <code>DomainErrorRole</code>
-  (<code>cwFixStationModel</code>) drives one shared <code>DomainWarning</code> icon at the row’s end
-  (<code>FixStationPage.qml:76-100</code>, wide <code>:294-299</code> / narrow <code>:349-352</code>). The coordinate
-  cells (<code>WideCell</code>/<code>FixField</code>, <code>:43-72</code>) carry no error/color property. Fix: have the
+  <li><b>U4 (which component is bad).</b>
+  <span class="pill ok">Implemented (Commit 9)</span> <code>cwCoordinateTransform::isWithinDomain</code> was refactored to
+  delegate to a new <code>domainCheck(cs, point)</code> that returns a <code>{eastingValid, northingValid}</code> struct
+  (longitude gates the easting, latitude the northing); the cached PROJ path is unchanged and <code>isWithinDomain</code>
+  is now exactly "both valid". The model exposes two new read-only bool roles <code>EastingDomainErrorRole</code> /
+  <code>NorthingDomainErrorRole</code>, and the page tints just the offending coordinate cell red via a new
+  <code>error</code> flag on <code>FixField</code> (<code>Theme.errorText</code>). Elevation is never flagged — z is not
+  part of the domain test. The row-end <code>DomainErrorRole</code> icon (renamed component <code>InlineWarning</code>)
+  still carries the explanation.
+  <br><b>Attribution caveat (found in the Commit 9 review).</b> “Longitude gates the easting, latitude the northing”
+  only holds while the inverse projection stays near the domain. A northing far past the pole wraps the longitude
+  ~180° — EPSG:32613 at <code>478000E / 14430000N</code> inverts to <b>75E / 50N</b>, a latitude that still looks valid
+  and a longitude that does not — which tinted the <i>easting</i> for a bad <i>northing</i>. <code>domainCheck</code>
+  now declines to attribute when an already-failing longitude is more than 90° outside the domain and reports both
+  components suspect instead. Gated on <code>eastingValid</code> being false so a wide-domain (geographic) CS is never
+  dragged in; <code>isWithinDomain()</code> is unaffected either way.
+  <br><b>Blank per-row CS (found in the Commit 9 review).</b> The per-row check now falls back to the region’s
+  <code>globalCS</code> when a fix omits its own <code>inputCS</code> — matching <code>gatherCandidates()</code> and
+  <code>cwCave::recomputeGridConvergence</code>. Before, the cave-level 597 warning could fire while the page showed no
+  red cell and no icon. Refresh is wired in <code>cwCavingRegion</code> beside the existing
+  <code>recomputeGridConvergence</code> connect, via <code>cwCave::refreshFixStationDomainErrors</code>.
+  <span class="mono-note">Original sketch below — still accurate on the <i>problem</i>, but its “the coordinate cells
+  carry no error/color property” claim and all its line citations are now superseded by the implementation above.</span>
+  <br>The domain flag is a single row-level string: <code>DomainErrorRole</code>
+  (<code>cwFixStationModel</code>) drove one shared <code>DomainWarning</code> icon at the row’s end
+  (<code>FixStationPage.qml:76-100</code>, wide <code>:294-299</code> / narrow <code>:349-352</code> — all pre-Commit-9
+  locations). The coordinate
+  cells (<code>WideCell</code>/<code>FixField</code>, <code>:43-72</code>) carried no error/color property. Fix: have the
   model attribute the domain failure to a component (easting vs northing vs elevation) and expose it — a per-field
   role or a small flags role — then tint the offending cell red. Requires the domain check to identify the bad
   component (e.g. easting outside the zone’s valid easting band vs northing outside the lat band) rather than just
@@ -833,6 +874,18 @@ enforces this by hiding the geographic option (<code>allowGeographic:false</code
 </div>
 
 <h3 id="cavepagebadge">13.5 — Surface fix-station errors on CavePage (U9)</h3>
+<div class="callout ok">
+  <b>Implemented</b> (Commit 9; dev_3, uncommitted; C++ + QML gates green). A new presentation-only
+  <code>FixStationErrorBadge.qml</code> — a warning icon with a hover tooltip — sits right after the “Fix stations:”
+  link in <b>both</b> layouts (wide <code>fixStationsRow</code> + the narrow mirror). It binds the cave's
+  <code>errorModel</code> but scopes to the fix-station warning kinds via a new
+  <code>region.fixStationValidator.fixStationErrorTypeIds</code> property ({596, 597, <b>598</b>}), so it stays distinct
+  from the page banner's all-warnings roll-up. The scoped slice comes from a generic new
+  <code>cwErrorListModel::warningMessagesForTypeIds(ids)</code> (non-suppressed Warnings whose id is in the set); the
+  badge subscribes to <code>warningMessagesChanged</code> (by reading <code>warningMessages</code>) so it tracks adds,
+  removals, and suppression toggles live. The <code>ErrorIconBar</code> reuse in the original sketch was dropped — it
+  shows a good/warning/fatal triad for a whole model, whereas U9 wants a single scoped indicator that vanishes when clean.
+</div>
 <p>Commit 4 added a page-level <b>banner</b> on CavePage that joins <i>all</i> of a cave’s non-suppressed warnings.
 U9 is complementary and finer: a small <b>badge on the “Fix stations:” line itself</b> so the error is attached to the
 thing it’s about. The line is <code>fixStationsRow</code> (<code>CavePage.qml:169-181</code>, link at <code>:176</code>),
@@ -847,6 +900,73 @@ bound to an <code>errorModel</code> on this page (<code>CavePage.qml:603-604,871
 </ul>
 
 <h3 id="stationexists">13.6 — Validate the fix’s station reference (U10)</h3>
+<div class="callout ok">
+  <b>Implemented</b> (Commit 9; dev_3, uncommitted; C++ + QML gates green). The empty-vs-unknown distinction the open
+  question asked for is honored, and yes — it rolls into both the U9 badge and the page banner as a new
+  <code>cwErrorTypeId::FixStationReference = 598</code>.
+  <ul>
+    <li><b>Shared verdict.</b> A static <code>cwFixStationModel::classifyStationReference(name, network)</code> →
+    <code>{Ok, Empty, Unknown}</code> is the single source both surfaces read. <b>Revised (post-review, per user):</b>
+    an <b>Empty</b> name is now <i>flagged</i>, not quiet — survex silently drops a fix that names no station, so a blank
+    row is a real error, not a benign not-done-yet state. Only an <b>un-computed network</b> defers a <i>named</i> fix to
+    Ok (nothing to check against yet); the empty-name check runs <i>before</i> that deferral, so a blank row is flagged
+    even before a network exists. Membership is <b>case-insensitive</b> (<code>cwSurveyNetwork::stations()</code>).</li>
+    <li><b>Inline row flag.</b> New read-only <code>StationErrorRole</code> on the model (distinct messages for
+    <i>Empty</i> and <i>Unknown</i>). The model gained a <code>setCave()</code> back-reference (wired in the cwCave ctor)
+    so it can reach <code>cave->network()</code>, and re-emits <code>dataChanged</code> for the role on
+    <code>surveyNetworkChanged</code> and on a station-name edit. Driven on the row by the shared <code>InlineWarning</code>
+    component (a sibling icon of the domain warning, distinct <code>objectName</code> <code>stationWarning.N</code>) plus a
+    red tint on the station-name cell.</li>
+    <li><b>Cave-level warning.</b> <code>cwFixStationValidator</code> pushes/clears the <b>598</b> warning per cave
+    (<code>referenceWarnings()</code>, reconciled alongside 596/597, tracked in <code>updateWarningTracking</code>,
+    torn down in <code>syncCaveConnections</code>), and re-runs on <code>cwCave::surveyNetworkChanged</code>. This is what
+    lights the U9 badge and joins the page banner. It is <i>not</i> fed into the 3D render-view summary — a broken
+    reference doesn't push the cave off-screen.</li>
+  </ul>
+  <span class="mono-note">Duplication note (as with DomainErrorRole vs FixStationDomain): the row flag and the cave warning
+  both classify independently — the review-followup "de-duplicate the domain scan" applies here too. Left as nice-to-have.</span>
+</div>
+<div class="callout warn">
+  <b>Regression found &amp; fixed (post-Commit-9).</b> Commit 9's <code>surveyNetworkChanged → dataChanged(StationErrorRole)</code>
+  re-emit created an <b>endless line-plot re-solve loop</b> whenever a fix station existed: add a fix (even a blank row) and
+  <code>cwLinePlotManager</code> re-ran loop closure forever. Proven by a bounded C++ regression test
+  (<code>test_cwLinePlotManager.cpp</code>, "An empty fix station must not trigger endless line-plot re-solves" — 19 solves
+  in ~80&nbsp;ms of idle time before the fix, 0 after). <b>Root cause:</b> the line-plot worker rebuilds each cave's survey
+  network every solve and can't see the cave's current one (its region snapshot carries no network), so it always reports
+  the network as "changed"; <code>cwCave::setSurveyNetwork</code> then fired <code>surveyNetworkChanged</code> on
+  <i>every</i> solve, and Commit 9's error-role refresh fed that straight back into <code>runSurvex</code> via the fix-model
+  <code>dataChanged</code> wiring. <b>Fix (two layers):</b>
+  <ul>
+    <li><b>Root:</b> added the standard CLAUDE.md equality guard to <code>cwCave::setSurveyNetwork</code>
+    (<code>if (Network == network) return;</code>) so <code>surveyNetworkChanged</code> fires only on a genuine change —
+    it also stops <code>revalidate</code>/artifact churn on every solve. <span class="mono-note">Correction (Commit 9
+    review): it was <i>not</i> “the only setter missing the house-rule guard” — <code>cwCave::setStationPositionLookup</code>
+    (<code>cwCave.cpp:565</code>) also emits unconditionally. The guard itself is sound; only the superlative was wrong.
+    Pinned by a dedicated test in <code>test_cwCave.cpp</code> covering both halves (equal network stays silent, genuine
+    change still notifies).</span></li>
+    <li><b>Intent:</b> the read-only computed error roles (<code>DomainErrorRole</code>, <code>Easting/NorthingDomainErrorRole</code>,
+    <code>StationErrorRole</code>) must never trigger a re-solve or declination refresh. New static
+    <code>cwFixStationModel::isErrorOnlyRoleChange(roles)</code>; <code>cwLinePlotManager::connectFixStations</code> and
+    <code>cwTripCalibration::rewireCaveSignals</code> now skip an error-only <code>dataChanged</code>. Prevents a redundant
+    survex run per real network-changing edit.</li>
+    <li><b>Two more consumers, found in the Commit 9 review.</b> The list above was incomplete — the fix model's
+    <code>dataChanged</code> has <b>five</b> consumers, and two were left unfiltered:
+    <ul>
+      <li><code>cwSaveLoad::connectCave</code> (<code>cwSaveLoad.cpp:4009</code>) routed it to <code>saveCave</code>, so a
+      pure solve counted as a local mutation: <b>open a saved project with ≥1 fix station, touch nothing, and it reported
+      unsaved changes and rewrote the cave file</b> (dirtying the git working tree in <code>.cwproj</code> mode) via
+      <code>saveObject</code> → <code>localMutationOccurred()</code> → <code>setModified(true)</code>. Now filtered.</li>
+      <li><code>cwFixStationValidator::syncCaveConnections</code> (<code>:534</code>) re-ran the PROJ-heavy
+      <code>revalidate()</code> a second time per network change (once directly off <code>surveyNetworkChanged</code>,
+      once via the error-role echo). Now filtered.</li>
+    </ul>
+    <code>cwCave</code>'s grid-convergence handler was already safe via its positive role allowlist.</li>
+  </ul>
+  <span class="mono-note">Latent, pre-existing &amp; still open: the worker's "network always looks changed" comparison (snapshot
+  carries no network) is now harmless (guard absorbs it) but wasteful — a real efficiency fix would carry the network into the
+  snapshot or compare against the live cave. It also makes <code>changedStations(empty, network)</code> report <i>every</i>
+  station changed each solve, so every trip and scrap is marked changed too. Out of scope here — see A2 in §14.</span>
+</div>
 <p>A fix station anchors a <b>named survey station</b> to absolute coordinates. Two ways the reference is broken, both
 of which silently produce a fix that anchors nothing:</p>
 <ul>
@@ -865,18 +985,29 @@ of which silently produce a fix that anchors nothing:</p>
 <code>DomainWarning</code> component (<code>FixStationPage.qml:76-100</code>) — or a sibling of it so station-vs-domain
 read distinctly. The model needs the owning <code>cwCave*</code> (it already lives under one) to reach
 <code>network().stations()</code>, and must re-emit <code>dataChanged</code> for the role when the network changes
-(connect to the cave’s network/relink signal) so a station appearing/disappearing updates the flag live.</p>
-<p class="mono-note">Open question: an empty name is a “not-done-yet” state, not really an <i>error</i> — consider a quieter
-hint (placeholder / muted) for empty vs. a real warning icon for a name that’s present but unknown. Also decide whether
-this rolls into the CavePage “Fix stations” badge (U9) and the page banner — likely yes, as a new
-<code>cwErrorTypeId</code> (next id after 597).</p>
+(connect to the cave’s network/relink signal) so a station appearing/disappearing updates the flag live.
+<span class="mono-note">As shipped: one renamed <code>InlineWarning</code> instantiated twice per row (distinct
+<code>objectName</code>s <code>stationWarning.N</code> / <code>domainWarning.N</code>), not a separate sibling
+component; membership is a single <code>cwSurveyNetwork::hasStation()</code> hash probe rather than a scan of
+<code>stations()</code>.</span></p>
+<p class="mono-note"><b>Open question — resolved.</b> An empty name is <i>flagged</i>, not quieted: survex silently
+drops a fix that names no station, so a blank row is a real error. And yes, it rolls into both the U9 badge and the
+page banner as <code>cwErrorTypeId::FixStationReference = 598</code>.</p>
+<p class="mono-note"><b>Source of truth — decided (Commit 9 review).</b> <code>classifyStationReference</code> judges
+against <code>cwSurveyNetwork</code>, <i>not</i> the chunk station set the survex exporter uses
+(<code>cwSurvexExporterCaveTask::writeFixStations</code>). These diverge today — <code>addShot</code> drops a shot with
+either end empty, so a half-entered trip’s stations are missing from the network while survex still honours a fix on
+them, producing a transient false “the fix is ignored” during data entry. The network is nonetheless the right long-term
+authority: <b>external svx / Compass / Walls centreline files</b> populate <code>cwSurveyNetwork</code> but never appear
+in chunks at all, so the chunk set would miss those stations entirely. Do not switch this to
+<code>cwSurveyDataArtifact</code> — that is an unused pipeline prototype.</p>
 
 <h3 id="commitgrouping">13.7 — Suggested commit grouping</h3>
 <table>
   <tr><th>Commit</th><th>Items</th><th>Why together</th></tr>
   <tr><td><b>7</b> — CS picker polish <span class="pill ok">implemented</span></td><td>U7, U1, U8, U5</td><td>All small QML on <code>CSComboBox</code>/<code>FixStationPage</code>/<code>DataMainPage</code>; U7 unblocks U1; U5 is a free header relabel that rides along.</td></tr>
   <tr><td><b>8</b> — First-fix output CS</td><td>U6</td><td>Self-contained validator/region + one prompt; the highest-impact correctness item (fixes “cave renders far away”).</td></tr>
-  <tr><td><b>9</b> — Error surfacing</td><td>U9, U4, U10</td><td>All three are “show the error where it belongs”: U9 the CavePage line badge, U4 the per-component red cell, U10 the empty/unknown-station flag — each is a model role + inline indicator (new <code>cwErrorTypeId</code> for U10).</td></tr>
+  <tr><td><b>9</b> — Error surfacing <span class="pill ok">implemented</span></td><td>U9, U4, U10</td><td>All three are “show the error where it belongs”: U9 the CavePage line badge, U4 the per-component red cell, U10 the empty/unknown-station flag — each is a model role + inline indicator (new <code>cwErrorTypeId::FixStationReference</code>=598 for U10). See the Implemented callouts in §13.5 / §13.6 / §13.2.</td></tr>
   <tr><td><b>10</b> — Mark Fixed inline</td><td>U2</td><td>Largest, standalone feature (model API + caret + badge + inline coords); its own commit(s).</td></tr>
   <tr><td><b>—</b> — Tab order</td><td>U3</td><td>Separate: it edits the <i>shared</i> table-input stack used by other tables, so it stands alone with its own blast-radius review; not gated on the fix-station work.</td></tr>
 </table>
@@ -954,6 +1085,80 @@ machinery above was then split so no component straddles two roles and CS presen
   (fix row one line ≤ cell; project picker wraps ≤ group at a narrow column).</li>
 </ul>
 </div>
+
+<h2 id="commit9followups">14. Follow-ups raised by the Commit 9 review</h2>
+<p>Recorded from the pre-commit review of Commit 9. None is in scope for Commit 9 itself; all were left as code-untouched
+notes. Ordered by payoff-vs-cost, not by confidence.</p>
+
+<h3>Architecture</h3>
+<table>
+  <tr><th>Item</th><th>Why</th><th>Blast radius</th></tr>
+  <tr><td><b>A1 — Derived diagnostics should not ride <code>dataChanged</code></b>
+  (<code>cwFixStationModel.cpp:96</code>)</td>
+  <td><b>Highest-payoff item here.</b> <code>dataChanged</code> now means both “the user edited persisted data” and
+  “a computed warning changed”, so every present and future consumer must remember to call
+  <code>isErrorOnlyRoleChange()</code>. Two of the five forgot (the save path and the validator, both fixed in Commit 9)
+  and the failure mode is <i>silent</i> — a stray save, a redundant re-solve, or an infinite loop. Better: keep the four
+  computed error roles out of the persisted row model — a per-cave diagnostics object the delegate binds — or at minimum
+  give them their own notification signal so the opt-out is structural rather than remembered.</td>
+  <td><code>cwFixStationModel</code>, <code>cwLinePlotManager</code>, <code>cwTripCalibration</code>,
+  <code>cwSaveLoad</code>, <code>cwFixStationValidator</code>, <code>FixStationPage.qml</code>, 4 test files</td></tr>
+
+  <tr><td><b>A2 — The line-plot worker's snapshot carries no survey network</b>
+  (<code>cwLinePlotTask.cpp:592</code>, <code>cwCaveData</code>)</td>
+  <td>The snapshot's caves have an empty network, so <code>updateCaveNetworks</code> reports “changed” on <i>every</i>
+  solve and <code>changedStations(empty, network)</code> marks every station — hence every trip and scrap — changed each
+  time. Commit 9's equality guard on <code>setSurveyNetwork</code> is currently what stops that from becoming an endless
+  re-solve, i.e. correctness now leans on a guard masking this. Carry the network into the snapshot, or compare against
+  the live cave.</td>
+  <td><code>cwCaveData</code>/<code>cwCave::data</code>, <code>cwLinePlotTask</code>, scrap/note regeneration</td></tr>
+
+  <tr><td><b>A3 — Cave-owned child model reaching back up into its owner</b>
+  (<code>cwFixStationModel.h:124</code>)</td>
+  <td>The row model holds <code>cwCave*</code> to read <code>cave-&gt;network()</code> (and now the region's globalCS),
+  inverting the ownership arrow. Either the cave pushes those down, or classification moves to the validator — which is
+  A1, and makes this item disappear. <span class="mono-note">Note: §13.6 explicitly prescribed this back-reference, so
+  it is a documented decision rather than drift.</span></td>
+  <td>2 files + <code>test_cwFixStationModel.cpp</code></td></tr>
+
+  <tr><td><b>A4 — No first-class scoped view of an <code>errorModel</code></b>
+  (<code>cwErrorListModel.h:44</code>)</td>
+  <td>Three unrelated idioms now read cave errors in QML: <code>ErrorIconBar</code> (counts), the CavePage banner
+  (<code>warningMessages.join</code>), and the new badge (an <code>Q_INVOKABLE</code> inside a binding <i>plus</i> a
+  discarded read of <code>warningMessages</code> purely to register the dependency). That last one is load-bearing but
+  reads as dead code. A small filter proxy exposing <code>count</code>/<code>messages</code> as real properties would
+  make all three declarative.</td>
+  <td><code>cwErrorListModel</code>/<code>cwErrorModel</code> + 3 QML sites</td></tr>
+</table>
+
+<h3>Refactors</h3>
+<ul>
+  <li><b>R1 — Promote <code>InlineWarning</code> to a shared component + add <code>Theme.tooltipDelay</code></b>
+  (<code>FixStationPage.qml:83</code> vs <code>FixStationErrorBadge.qml:38</code>). The badge re-implements the
+  component near-verbatim (warning.svg + <code>HoverHandler</code> + <code>ToolTip{delay:300}</code> +
+  hidden-means-zero-width). See also the §11 tooltip-delay nit, which this would close.</li>
+  <li><b>R2 — CavePage's wide/narrow layouts are hand-mirrored</b> (<code>CavePage.qml:167</code> vs <code>:771</code>).
+  Every stat row must be added twice; the narrow badge silently lost its <code>objectName</code>, so only the wide one is
+  test-reachable. A shared <code>FixStationsStat</code>-style component would make the mirror structural.</li>
+  <li><b>R3 — Three near-identical singular/plural sentence builders in the validator</b>
+  (<code>cwFixStationValidator.cpp:301</code>, <code>:323</code>, <code>:404</code>). <code>referenceWarnings()</code>
+  added the third and fourth copy of “join fragments → pick phrasing → one sentence per cave”; wants a
+  <code>joinCaveWarning(parts, singular, plural)</code> helper.</li>
+  <li><b>R4 — The row flag and the cave warning classify independently</b> (<code>cwFixStationModel.cpp:22</code> vs
+  <code>cwFixStationValidator.cpp:231</code>). Already noted for the domain check; U10 doubled it for the reference
+  check. Folds into A1 if that is done.</li>
+</ul>
+
+<h3>Known gaps left open</h3>
+<ul>
+  <li><b>Reference check vs. survex's real authority.</b> See the “Source of truth — decided” note in §13.6: the network
+  and the exporter's chunk-station set diverge for a half-entered trip, producing a transient false warning. Accepted
+  deliberately so external svx/Compass/Walls centrelines stay covered.</li>
+  <li><b>The narrow-layout badge is untested</b> — no <code>objectName</code>, and no existing QML suite drives
+  <code>isNarrow</code>.</li>
+  <li><b><code>setCave()</code> is single-call by contract.</b> Commit 9's review added an equality guard and a
+  disconnect-previous, so a second call is now safe rather than merely unreached.</li>
+</ul>
 
 <hr>
 <p class="mono-note">#596 · fix-station outlier detection (Commits 1–6) + usability &amp; error-handling backlog (§13, U1–U10) · dev_3</p>

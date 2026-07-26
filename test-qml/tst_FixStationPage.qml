@@ -268,6 +268,93 @@ MainWindowTest {
                       "warning clears once the coordinate is corrected")
         }
 
+        function test_domainErrorTintsTheOffendingCell() {
+            // U4's point is the *cell*: the role-level attribution is covered in
+            // C++, so what only QML can prove is that the offending coordinate
+            // actually turns red and back. Guards the FixField.error binding and
+            // the WideCell alias chain, either of which could be dropped without
+            // failing any other suite.
+            const cave = gotoFixStations()
+            cave.fixStations.addFixStation()
+            tryCompare(cave.fixStations, "count", 1)
+
+            const model = cave.fixStations
+            const idx = model.index(0)
+            model.setData(idx, "EPSG:32613", FixStationModel.InputCSRole)
+            model.setData(idx, 478000.0, FixStationModel.EastingRole)
+            model.setData(idx, 4430000.0, FixStationModel.NorthingRole)
+
+            const fixPage = RootData.pageView.currentPageItem
+            let eastingCell = null
+            tryVerify(() => {
+                eastingCell = findChild(fixPage, "eastingCell.0")
+                return eastingCell !== null
+            }, 5000, "row 0 easting cell should be reachable")
+
+            verify(!eastingCell.error, "a clean easting carries no error flag")
+            compare(eastingCell.color, Theme.text, "a clean easting uses the normal text color")
+
+            // Transposed leading digit in the easting only.
+            model.setData(idx, 1478000.0, FixStationModel.EastingRole)
+            tryVerify(() => eastingCell.error, 5000, "the bad easting is flagged")
+            compare(eastingCell.color, Theme.errorText, "the bad easting is tinted red")
+            verify(!model.data(idx, FixStationModel.NorthingDomainErrorRole),
+                   "the northing stays unflagged")
+
+            // Correcting the coordinate clears the tint again.
+            model.setData(idx, 478000.0, FixStationModel.EastingRole)
+            tryVerify(() => !eastingCell.error, 5000, "correcting the easting clears the flag")
+            compare(eastingCell.color, Theme.text, "and restores the normal text color")
+        }
+
+        function test_stationWarningIconHiddenWithoutSurvey() {
+            // Without a computed survey network there's nothing to validate the
+            // station reference against, so the icon stays hidden — and its
+            // objectName confirms the shared InlineWarning wiring is intact.
+            const cave = gotoFixStations()
+            cave.fixStations.addFixStation()
+            tryCompare(cave.fixStations, "count", 1)
+
+            const model = cave.fixStations
+            model.setData(model.index(0), "A1", FixStationModel.StationNameRole)
+
+            const fixPage = RootData.pageView.currentPageItem
+            let warning = null
+            tryVerify(() => {
+                warning = findChild(fixPage, "stationWarning.0")
+                return warning !== null
+            }, 5000, "row 0 station warning indicator should be reachable")
+            verify(!warning.visible, "no survey network → no station-reference warning")
+        }
+
+        function test_stationWarningShownForEmptyName() {
+            // A blank row names no survey station — survex drops such a fix — so
+            // it is flagged inline the moment it appears, even before a network
+            // exists (the empty check runs before the "nothing to check" defer).
+            const cave = gotoFixStations()
+            cave.fixStations.addFixStation()
+            tryCompare(cave.fixStations, "count", 1)
+
+            const model = cave.fixStations
+            verify(model.data(model.index(0), FixStationModel.StationErrorRole) !== "",
+                   "an empty station name is flagged")
+
+            const fixPage = RootData.pageView.currentPageItem
+            let warning = null
+            tryVerify(() => {
+                warning = findChild(fixPage, "stationWarning.0")
+                return warning !== null
+            }, 5000, "row 0 station warning indicator should be reachable")
+            verify(warning.visible, "empty station name → station-reference warning shows")
+
+            // Typing any name clears it: with no network there is nothing to
+            // match against, so a *named* fix defers rather than cry wolf. The
+            // flag is specific to the name being missing altogether.
+            model.setData(model.index(0), "A1", FixStationModel.StationNameRole)
+            tryVerify(() => !warning.visible, 5000,
+                      "a named fix with no network defers and clears the warning")
+        }
+
         function test_fixStationsLinkCount() {
             const cave = gotoFixStations()
             cave.fixStations.addFixStation()

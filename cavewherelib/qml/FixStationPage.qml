@@ -46,8 +46,12 @@ StandardPage {
         property int role
         property int rowIndex
         property bool numeric: false
+        // Tints the value red when it's the coordinate component that falls
+        // outside the input CS's valid domain (U4).
+        property bool error: false
 
         text: value
+        color: field.error ? Theme.errorText : Theme.text
         onFinishedEditting: (newText) => fixStationPage.commitEdit(field.rowIndex, field.role, newText, field.numeric)
     }
 
@@ -58,6 +62,10 @@ StandardPage {
         property alias role: field.role
         property alias rowIndex: field.rowIndex
         property alias numeric: field.numeric
+        property alias error: field.error
+        //! Names the inner editable field rather than this wrapper, so callers
+        //! reach the same item the narrow layout exposes directly.
+        property alias fieldObjectName: field.objectName
 
         implicitWidth: columnWidth
         implicitHeight: field.implicitHeight
@@ -71,13 +79,15 @@ StandardPage {
         }
     }
 
-    // Inline flag for a coordinate that falls outside its input CS's valid
-    // domain (DomainErrorRole). Hidden — and zero-width — when the row is fine.
-    component DomainWarning : QQ.Item {
-        id: domainWarning
+    // Inline per-row warning icon with a hover tooltip, driven by a message
+    // string (empty ⇒ hidden and zero-width). Shared by the coordinate-domain
+    // flag (DomainErrorRole) and the station-reference flag (StationErrorRole),
+    // so the two read the same but carry distinct messages.
+    component InlineWarning : QQ.Item {
+        id: inlineWarning
         property string message: ""
 
-        visible: domainWarning.message !== ""
+        visible: inlineWarning.message !== ""
         implicitWidth: visible ? Theme.iconSizeButton : 0
         implicitHeight: Theme.iconSizeButton
 
@@ -85,7 +95,6 @@ StandardPage {
             anchors.centerIn: parent
             source: "qrc:icons/svg/warning.svg"
             sourceSize: Qt.size(Theme.iconSizeButton, Theme.iconSizeButton)
-            visible: domainWarning.visible
         }
 
         QQ.HoverHandler {
@@ -93,8 +102,8 @@ StandardPage {
         }
 
         QC.ToolTip {
-            visible: warningHover.hovered && domainWarning.message !== ""
-            text: domainWarning.message
+            visible: warningHover.hovered && inlineWarning.message !== ""
+            text: inlineWarning.message
             delay: 300
         }
     }
@@ -240,6 +249,9 @@ StandardPage {
             required property double northing
             required property double elevation
             required property string domainError
+            required property bool eastingDomainError
+            required property bool northingDomainError
+            required property string stationError
 
             implicitHeight: rowLayoutId.implicitHeight + Theme.tightSpacing * 2
             implicitWidth: rowLayoutId.implicitWidth
@@ -273,6 +285,7 @@ StandardPage {
                     value: wideDelegateId.stationName
                     role: FixStationModel.StationNameRole
                     rowIndex: wideDelegateId.index
+                    error: wideDelegateId.stationError !== ""
                 }
 
                 CSCell {
@@ -282,11 +295,13 @@ StandardPage {
                 }
 
                 WideCell {
+                    fieldObjectName: "eastingCell." + wideDelegateId.index
                     columnWidth: eastingColumn.columnWidth
                     value: wideDelegateId.easting
                     role: FixStationModel.EastingRole
                     rowIndex: wideDelegateId.index
                     numeric: true
+                    error: wideDelegateId.eastingDomainError
                 }
 
                 WideCell {
@@ -295,6 +310,7 @@ StandardPage {
                     role: FixStationModel.NorthingRole
                     rowIndex: wideDelegateId.index
                     numeric: true
+                    error: wideDelegateId.northingDomainError
                 }
 
                 WideCell {
@@ -305,7 +321,14 @@ StandardPage {
                     numeric: true
                 }
 
-                DomainWarning {
+                InlineWarning {
+                    objectName: "stationWarning." + wideDelegateId.index
+                    Layout.leftMargin: Theme.tightSpacing
+                    Layout.alignment: Qt.AlignVCenter
+                    message: wideDelegateId.stationError
+                }
+
+                InlineWarning {
                     objectName: "domainWarning." + wideDelegateId.index
                     Layout.leftMargin: Theme.tightSpacing
                     Layout.alignment: Qt.AlignVCenter
@@ -328,6 +351,9 @@ StandardPage {
             required property double northing
             required property double elevation
             required property string domainError
+            required property bool eastingDomainError
+            required property bool northingDomainError
+            required property string stationError
 
             width: QQ.ListView.view ? QQ.ListView.view.width : 0
             implicitHeight: narrowFlow.implicitHeight + Theme.delegatePadding * 2
@@ -360,7 +386,12 @@ StandardPage {
                 anchors.rightMargin: Theme.delegatePadding
                 spacing: Theme.flowSpacing
 
-                DomainWarning {
+                InlineWarning {
+                    objectName: "stationWarning." + narrowDelegateId.index
+                    message: narrowDelegateId.stationError
+                }
+
+                InlineWarning {
                     objectName: "domainWarning." + narrowDelegateId.index
                     message: narrowDelegateId.domainError
                 }
@@ -370,6 +401,7 @@ StandardPage {
                     role: FixStationModel.StationNameRole
                     rowIndex: narrowDelegateId.index
                     font.bold: true
+                    error: narrowDelegateId.stationError !== ""
                 }
 
                 QC.Label { text: "·"; color: Theme.textSubtle }
@@ -385,10 +417,12 @@ StandardPage {
                 QC.Label { text: "·"; color: Theme.textSubtle }
 
                 FixField {
+                    objectName: "eastingCell." + narrowDelegateId.index
                     value: narrowDelegateId.easting
                     role: FixStationModel.EastingRole
                     rowIndex: narrowDelegateId.index
                     numeric: true
+                    error: narrowDelegateId.eastingDomainError
                 }
 
                 FixField {
@@ -396,6 +430,7 @@ StandardPage {
                     role: FixStationModel.NorthingRole
                     rowIndex: narrowDelegateId.index
                     numeric: true
+                    error: narrowDelegateId.northingDomainError
                 }
 
                 FixField {

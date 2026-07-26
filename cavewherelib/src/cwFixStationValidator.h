@@ -10,6 +10,7 @@
 
 //Qt includes
 #include <QObject>
+#include <QHash>
 #include <QList>
 #include <QSet>
 #include <QUuid>
@@ -69,6 +70,12 @@ class CAVEWHERE_LIB_EXPORT cwFixStationValidator : public QObject
     Q_PROPERTY(QString suggestedOutputCS READ suggestedOutputCS NOTIFY suggestedOutputCSChanged FINAL)
     Q_PROPERTY(bool outputCSCoordinateInvalid READ outputCSCoordinateInvalid NOTIFY outputCSCoordinateInvalidChanged FINAL)
 
+    //! The stable errorTypeIds this validator pushes onto a cave's errorModel —
+    //! the fix-station warning kinds ({596,597,598}). A fix-station badge binds a
+    //! cave's errorModel to just these so it stays distinct from the all-warnings
+    //! page banner. Constant: the id set is fixed at compile time.
+    Q_PROPERTY(QList<int> fixStationErrorTypeIds READ fixStationErrorTypeIds CONSTANT FINAL)
+
 public:
     //! One reprojected fix station plus the provenance needed to attribute a
     //! warning back to the owning cave and row.
@@ -121,6 +128,8 @@ public:
     QString suggestedOutputCS() const { return m_suggestedOutputCS; }
     bool outputCSCoordinateInvalid() const { return m_outputCSCoordinateInvalid; }
 
+    static QList<int> fixStationErrorTypeIds();
+
 signals:
     void warningMessageChanged();
     void outlierCountChanged();
@@ -139,6 +148,11 @@ private:
     void revalidate();
 
     void syncCaveConnections();
+
+    //! Per-cave FixStationReference message: the fixes whose station name matches
+    //! no station in that cave's survey network, joined into one warning. Caves
+    //! with no broken reference are absent from the map (their warning clears).
+    QHash<cwCave*, QString> referenceWarnings() const;
 
     //! Set (or, with an empty message, clear) the cave's Warning row for one of
     //! our stable errorTypeIds. Each id owns its own row, so the cluster-outlier

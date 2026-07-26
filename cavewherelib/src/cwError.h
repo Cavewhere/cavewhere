@@ -28,8 +28,9 @@ class cwErrorData;
  */
 enum class cwErrorTypeId : int {
     None = 0,
-    FixStationOutlier = 596, //!< issue #596: a fix far from the survey cluster
-    FixStationDomain = 597,  //!< issue #596: a fix outside its CS's valid domain
+    FixStationOutlier = 596,   //!< issue #596: a fix far from the survey cluster
+    FixStationDomain = 597,    //!< issue #596: a fix outside its CS's valid domain
+    FixStationReference = 598, //!< issue #596: a fix names a station not in the survey
 };
 
 /**

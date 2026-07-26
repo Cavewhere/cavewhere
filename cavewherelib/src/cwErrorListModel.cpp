@@ -36,6 +36,18 @@ QStringList cwErrorListModel::warningMessages() const
     return messages;
 }
 
+QStringList cwErrorListModel::warningMessagesForTypeIds(const QList<int>& ids) const
+{
+    QStringList messages;
+    for (const cwError& error : m_errors) {
+        if (error.type() == cwError::Warning && !error.suppressed()
+            && ids.contains(error.errorTypeId())) {
+            messages.append(error.message());
+        }
+    }
+    return messages;
+}
+
 cwError cwErrorListModel::at(int index) const
 {
     if (index >= 0 && index < m_errors.size()) {

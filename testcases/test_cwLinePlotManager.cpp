@@ -37,6 +37,7 @@
 #include "SpyChecker.h"
 
 //Qt includes
+#include <QElapsedTimer>
 #include <QThread>
 #include <QApplication>
 #include "cwSignalSpy.h"
@@ -1528,4 +1529,88 @@ TEST_CASE("cwLinePlotManager surfaces cavern output to QML",
         // an error-class letter (L = length, B = bearing, G = gradient).
         CHECK_FALSE(plotManager->loopClosureStats().isEmpty());
     }
+}
+
+// Regression: adding a fix station leaves a blank row until the user types a
+// station name. That empty row must not put cwLinePlotManager into an endless
+// re-solve. The worker rebuilds each cave's survey network every solve and
+// can't see the cave's current one, so it always reports the network as
+// "changed"; before the guard on cwCave::setSurveyNetwork, that fired
+// surveyNetworkChanged on every solve, and the fix-station error-role refresh
+// (surveyNetworkChanged -> dataChanged -> runSurvex) fed straight back into it.
+TEST_CASE("An empty fix station must not trigger endless line-plot re-solves",
+          "[LinePlotManager]")
+{
+    cwCavingRegion region;
+
+    cwCave* cave = new cwCave();
+    cave->setName(QStringLiteral("Cave 1"));
+    region.addCave(cave);
+
+    cwTrip* trip = new cwTrip();
+    trip->setName(QStringLiteral("Trip 1"));
+    cave->addTrip(trip);
+
+    cwSurveyChunk* chunk = new cwSurveyChunk();
+    trip->addChunk(chunk);
+
+    cwShot shot;
+    shot.setDistance(cwDistanceReading(QStringLiteral("10.0")));
+    shot.setCompass(cwCompassReading(QStringLiteral("0.0")));
+    shot.setClino(cwClinoReading(QStringLiteral("0.0")));
+    chunk->appendShot(cwStation(QStringLiteral("A1")),
+                      cwStation(QStringLiteral("A2")),
+                      shot);
+
+    auto plotManager = std::make_unique<cwLinePlotManager>();
+    plotManager->setRegion(&region);
+    plotManager->waitToFinish();
+
+    // The FixStationPage adds a blank row when the user clicks "add".
+    cave->fixStations()->addFixStation();
+
+    // Pump until the solver goes quiet, measured in wall clock so a loaded CI box
+    // (several test processes in parallel) waits longer rather than mistaking a
+    // slow first solve for quiescence. Deliberately NOT waitToFinish(): were the
+    // loop to return it would spin forever and hang CI, so the bounded pump lets
+    // the test fail loudly instead. A healthy manager runs the one legitimate
+    // solve (the row insert) and settles; the bug produced dozens, never settling.
+    constexpr int kSolveTimeoutMs = 30000;
+    constexpr int kQuietWindowMs = 500;
+
+    cwSignalSpy solveSpy(plotManager.get(),
+                         &cwLinePlotManager::stationPositionInCavesChanged);
+
+    // Anchor on the row-insert solve first. Without this the quiet window below
+    // could be satisfied simply because the first solve hadn't landed yet —
+    // passing whether or not the re-solve loop exists.
+    if (solveSpy.count() == 0) {
+        REQUIRE(solveSpy.wait(kSolveTimeoutMs));
+    }
+
+    QElapsedTimer quietTimer;
+    QElapsedTimer totalTimer;
+    quietTimer.start();
+    totalTimer.start();
+    int totalSolves = solveSpy.count();
+    while (quietTimer.elapsed() < kQuietWindowMs && totalTimer.elapsed() < kSolveTimeoutMs) {
+        QCoreApplication::processEvents();
+        QThread::msleep(2);
+        if (solveSpy.count() > totalSolves) {
+            totalSolves = solveSpy.count();
+            quietTimer.restart();
+        }
+    }
+    INFO("total solves after adding an empty fix: " << totalSolves);
+    CHECK(quietTimer.elapsed() >= kQuietWindowMs);  // settled rather than spinning
+    CHECK(totalSolves <= 2);    // one legitimate solve, not an endless run
+
+    // Naming the fix is a real edit and must still re-solve — proving the loop
+    // fix didn't over-filter genuine fix-station changes.
+    cwSignalSpy editSpy(plotManager.get(),
+                        &cwLinePlotManager::stationPositionInCavesChanged);
+    cave->fixStations()->setData(cave->fixStations()->index(0),
+                                 QStringLiteral("A1"),
+                                 cwFixStationModel::StationNameRole);
+    CHECK(editSpy.wait(kSolveTimeoutMs));
 }

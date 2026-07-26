@@ -9,6 +9,7 @@
 #include "cwProject.h"
 #include "cwRootData.h"
 #include "cwGeoPoint.h"
+#include "cwSurveyNetwork.h"
 #include "cwFutureManagerModel.h"
 
 //Test helpers
@@ -93,6 +94,141 @@ TEST_CASE("cwFixStationModel exposes role names for QML", "[FixStation][cwFixSta
     CHECK(roles.value(cwFixStationModel::NorthingRole) == "northing");
     CHECK(roles.value(cwFixStationModel::ElevationRole) == "elevation");
     CHECK(roles.value(cwFixStationModel::IdRole) == "id");
+    CHECK(roles.value(cwFixStationModel::DomainErrorRole) == "domainError");
+    CHECK(roles.value(cwFixStationModel::EastingDomainErrorRole) == "eastingDomainError");
+    CHECK(roles.value(cwFixStationModel::NorthingDomainErrorRole) == "northingDomainError");
+    CHECK(roles.value(cwFixStationModel::StationErrorRole) == "stationError");
+}
+
+TEST_CASE("cwFixStationModel flags only the out-of-domain coordinate component",
+          "[FixStation][cwFixStationModel]") {
+    cwFixStationModel model;
+    model.addFixStation();
+    const QModelIndex idx = model.index(0);
+
+    // A clean in-zone UTM 13N coordinate flags neither component.
+    model.setData(idx, QStringLiteral("EPSG:32613"), cwFixStationModel::InputCSRole);
+    model.setData(idx, 478000.0, cwFixStationModel::EastingRole);
+    model.setData(idx, 4430000.0, cwFixStationModel::NorthingRole);
+    CHECK_FALSE(model.data(idx, cwFixStationModel::EastingDomainErrorRole).toBool());
+    CHECK_FALSE(model.data(idx, cwFixStationModel::NorthingDomainErrorRole).toBool());
+    CHECK(model.data(idx, cwFixStationModel::DomainErrorRole).toString().isEmpty());
+
+    // A transposed-digit easting flags the easting cell alone.
+    model.setData(idx, 1478000.0, cwFixStationModel::EastingRole);
+    CHECK(model.data(idx, cwFixStationModel::EastingDomainErrorRole).toBool());
+    CHECK_FALSE(model.data(idx, cwFixStationModel::NorthingDomainErrorRole).toBool());
+    CHECK_FALSE(model.data(idx, cwFixStationModel::DomainErrorRole).toString().isEmpty());
+}
+
+TEST_CASE("cwFixStationModel StationErrorRole flags empty and unknown names",
+          "[FixStation][cwFixStationModel]") {
+    // Owned by a cave so setCave() wires the network lookup.
+    cwCave cave;
+    cwFixStationModel* model = cave.fixStations();
+
+    cwSurveyNetwork network;
+    network.addShot(QStringLiteral("A1"), QStringLiteral("A2"));
+    cave.setSurveyNetwork(network);
+
+    model->addFixStation();
+    const QModelIndex idx = model->index(0);
+
+    // A blank row names no survey station — survex silently drops such a fix,
+    // so it is flagged rather than treated as a valid anchor.
+    CHECK_FALSE(model->data(idx, cwFixStationModel::StationErrorRole).toString().isEmpty());
+
+    // A name that exists in the survey (case-insensitively) is fine.
+    model->setData(idx, QStringLiteral("a1"), cwFixStationModel::StationNameRole);
+    CHECK(model->data(idx, cwFixStationModel::StationErrorRole).toString().isEmpty());
+
+    // A name no station matches is flagged, and the message names it.
+    QSignalSpy changeSpy(model, &QAbstractItemModel::dataChanged);
+    model->setData(idx, QStringLiteral("ZZ9"), cwFixStationModel::StationNameRole);
+    const QString message = model->data(idx, cwFixStationModel::StationErrorRole).toString();
+    CHECK(message.contains(QStringLiteral("ZZ9")));
+    // The station-name edit carried the StationErrorRole in its dataChanged.
+    REQUIRE(changeSpy.count() >= 1);
+    CHECK(changeSpy.last().at(2).value<QList<int>>().contains(
+        cwFixStationModel::StationErrorRole));
+
+    // A station appearing in the survey clears the flag live.
+    cwSurveyNetwork grown;
+    grown.addShot(QStringLiteral("A1"), QStringLiteral("ZZ9"));
+    cave.setSurveyNetwork(grown);
+    CHECK(model->data(idx, cwFixStationModel::StationErrorRole).toString().isEmpty());
+}
+
+TEST_CASE("cwFixStationModel domain roles fall back to the region global CS",
+          "[FixStation][cwFixStationModel]") {
+    // A row that omits its own CS is judged against the region's globalCS, the
+    // same fallback cwFixStationValidator and recomputeGridConvergence use.
+    // Without it the cave-level warning would fire with no cell to point at.
+    cwCavingRegion region;
+    region.geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32613"));
+    region.addCave();
+    cwCave* cave = region.cave(0);
+    REQUIRE(cave != nullptr);
+
+    cwFixStationModel* model = cave->fixStations();
+    model->addFixStation();
+    const QModelIndex idx = model->index(0);
+
+    // No per-row CS, but a transposed-digit easting for the global CS.
+    model->setData(idx, 1478000.0, cwFixStationModel::EastingRole);
+    model->setData(idx, 4430000.0, cwFixStationModel::NorthingRole);
+    CHECK(model->data(idx, cwFixStationModel::EastingDomainErrorRole).toBool());
+    CHECK_FALSE(model->data(idx, cwFixStationModel::DomainErrorRole).toString().isEmpty());
+
+    // Correcting it clears the flag.
+    model->setData(idx, 478000.0, cwFixStationModel::EastingRole);
+    CHECK_FALSE(model->data(idx, cwFixStationModel::EastingDomainErrorRole).toBool());
+
+    // A row's own CS still wins over the fallback.
+    model->setData(idx, QStringLiteral("EPSG:4326"), cwFixStationModel::InputCSRole);
+    model->setData(idx, -105.25, cwFixStationModel::EastingRole);
+    model->setData(idx, 40.02, cwFixStationModel::NorthingRole);
+    CHECK_FALSE(model->data(idx, cwFixStationModel::EastingDomainErrorRole).toBool());
+}
+
+TEST_CASE("cwFixStationModel StationErrorRole ignores surrounding whitespace",
+          "[FixStation][cwFixStationModel]") {
+    // The survex export trims before matching (validateFixStations), so a stray
+    // space still anchors the station — the warning must not contradict that.
+    cwCave cave;
+    cwFixStationModel* model = cave.fixStations();
+
+    cwSurveyNetwork network;
+    network.addShot(QStringLiteral("A1"), QStringLiteral("A2"));
+    cave.setSurveyNetwork(network);
+
+    model->addFixStation();
+    const QModelIndex idx = model->index(0);
+
+    model->setData(idx, QStringLiteral(" A1 "), cwFixStationModel::StationNameRole);
+    CHECK(model->data(idx, cwFixStationModel::StationErrorRole).toString().isEmpty());
+
+    // Whitespace-only is still an empty name, not a match.
+    model->setData(idx, QStringLiteral("   "), cwFixStationModel::StationNameRole);
+    CHECK_FALSE(model->data(idx, cwFixStationModel::StationErrorRole).toString().isEmpty());
+}
+
+TEST_CASE("cwFixStationModel StationErrorRole defers a named fix when the network is empty",
+          "[FixStation][cwFixStationModel]") {
+    // No survey network computed yet — a named fix can't be judged, so it must
+    // not cry wolf. An empty name is invalid regardless of the network, though.
+    cwCave cave;
+    cwFixStationModel* model = cave.fixStations();
+    model->addFixStation();
+    const QModelIndex idx = model->index(0);
+
+    // Empty name is flagged even before a network exists (the empty check runs
+    // before the "nothing to check against" deferral).
+    CHECK_FALSE(model->data(idx, cwFixStationModel::StationErrorRole).toString().isEmpty());
+
+    // A named fix defers while there's no network to match it against.
+    model->setData(idx, QStringLiteral("A1"), cwFixStationModel::StationNameRole);
+    CHECK(model->data(idx, cwFixStationModel::StationErrorRole).toString().isEmpty());
 }
 
 TEST_CASE("cwFixStationModel setFixStations replaces contents", "[FixStation][cwFixStationModel]") {

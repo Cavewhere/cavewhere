@@ -284,6 +284,63 @@ TEST_CASE("cwCoordinateTransform::deriveProjectedOutputCS suggests a projected C
     }
 }
 
+TEST_CASE("cwCoordinateTransform::domainCheck attributes the out-of-domain axis",
+          "[cwCoordinateTransform][domainCheck]")
+{
+    using DomainCheck = cwCoordinateTransform::DomainCheck;
+
+    SECTION("An in-domain UTM coordinate flags neither axis") {
+        // 478000 E, 4430000 N in UTM 13N is a real in-zone Colorado location.
+        const DomainCheck check =
+            cwCoordinateTransform::domainCheck("EPSG:32613", cwGeoPoint(478000.0, 4430000.0, 1655.0));
+        CHECK(check.eastingValid);
+        CHECK(check.northingValid);
+        CHECK(cwCoordinateTransform::isWithinDomain("EPSG:32613",
+                  cwGeoPoint(478000.0, 4430000.0, 1655.0)));
+    }
+
+    SECTION("A transposed-digit easting flags only the easting") {
+        // 1478000 E is ~1000 km east of zone 13 — the longitude leaves the
+        // domain while the latitude (from a normal northing) stays inside it.
+        const DomainCheck check =
+            cwCoordinateTransform::domainCheck("EPSG:32613", cwGeoPoint(1478000.0, 4430000.0, 1655.0));
+        CHECK_FALSE(check.eastingValid);
+        CHECK(check.northingValid);
+        CHECK_FALSE(cwCoordinateTransform::isWithinDomain("EPSG:32613",
+                        cwGeoPoint(1478000.0, 4430000.0, 1655.0)));
+    }
+
+    SECTION("A wildly wrong northing flags only the northing") {
+        // A large negative northing in a northern zone inverts to a southern
+        // latitude well outside the domain, while the easting stays near the
+        // central meridian and remains valid.
+        const DomainCheck check =
+            cwCoordinateTransform::domainCheck("EPSG:32613", cwGeoPoint(478000.0, -2000000.0, 1655.0));
+        CHECK(check.eastingValid);
+        CHECK_FALSE(check.northingValid);
+    }
+
+    SECTION("A northing past the pole is not blamed on the easting") {
+        // 14430000 N inverts to 50N/75E — the latitude still looks in-domain
+        // while the longitude has wrapped ~180 degrees past the pole. Attributing
+        // by axis here would tint the easting red for a bad northing, so the
+        // check must decline to attribute and flag both instead.
+        const DomainCheck check =
+            cwCoordinateTransform::domainCheck("EPSG:32613", cwGeoPoint(478000.0, 14430000.0, 1655.0));
+        CHECK_FALSE(check.eastingValid);
+        CHECK_FALSE(check.northingValid);
+        CHECK_FALSE(cwCoordinateTransform::isWithinDomain("EPSG:32613",
+                        cwGeoPoint(478000.0, 14430000.0, 1655.0)));
+    }
+
+    SECTION("An empty or unparseable CS defers — both axes valid") {
+        CHECK(cwCoordinateTransform::domainCheck("", cwGeoPoint(0, 0, 0)).eastingValid);
+        CHECK(cwCoordinateTransform::domainCheck("", cwGeoPoint(0, 0, 0)).northingValid);
+        CHECK(cwCoordinateTransform::domainCheck("NOT_A_CRS", cwGeoPoint(9e9, 9e9, 0)).eastingValid);
+        CHECK(cwCoordinateTransform::domainCheck("NOT_A_CRS", cwGeoPoint(9e9, 9e9, 0)).northingValid);
+    }
+}
+
 TEST_CASE("cwCoordinateSystem::modeFor classifies CS strings",
           "[cwCoordinateTransform][modeFor]")
 {

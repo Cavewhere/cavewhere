@@ -205,6 +205,51 @@ TEST_CASE("Basic QML Gadget List operations") {
     }
 }
 
+TEST_CASE("warningMessagesForTypeIds scopes to the requested error type ids") {
+    cwErrorListModel model;
+
+    cwError outlier;
+    outlier.setMessage("far away");
+    outlier.setType(cwError::Warning);
+    outlier.setErrorTypeId(596);
+
+    cwError reference;
+    reference.setMessage("no such station");
+    reference.setType(cwError::Warning);
+    reference.setErrorTypeId(598);
+
+    cwError other;
+    other.setMessage("unrelated");
+    other.setType(cwError::Warning);
+    other.setErrorTypeId(42);
+
+    cwError fatal;
+    fatal.setMessage("kaboom");
+    fatal.setType(cwError::Fatal);
+    fatal.setErrorTypeId(596);
+
+    model.append(outlier);
+    model.append(reference);
+    model.append(other);
+    model.append(fatal);
+
+    // Only the non-suppressed Warnings whose id is in the set, in order.
+    CHECK(model.warningMessagesForTypeIds({596, 597, 598})
+          == QStringList({QStringLiteral("far away"), QStringLiteral("no such station")}));
+
+    // A fatal of a matching id is excluded (Warnings only).
+    CHECK_FALSE(model.warningMessagesForTypeIds({596}).contains(QStringLiteral("kaboom")));
+
+    // Suppressing a matching warning drops it.
+    model.setData(model.index(0), true,
+                  static_cast<int>(cwErrorListModel::ErrorRoles::SuppressedRole));
+    CHECK(model.warningMessagesForTypeIds({596, 597, 598})
+          == QStringList({QStringLiteral("no such station")}));
+
+    // An empty id set matches nothing.
+    CHECK(model.warningMessagesForTypeIds({}).isEmpty());
+}
+
 TEST_CASE("warningMessages lists only active warnings") {
     cwErrorListModel model;
 

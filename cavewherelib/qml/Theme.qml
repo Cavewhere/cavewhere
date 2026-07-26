@@ -24,6 +24,9 @@ QtObject {
     readonly property color textSubtle: dark ? "#9fa6b1" : "#616469"
     readonly property color textInverse: dark ? "#111318" : "#f5f5f5"
     readonly property color textLink: dark ? "#85c1f4" : "#1d4d77"
+    // Red foreground for an invalid value (e.g. an out-of-domain coordinate cell),
+    // legible on the page background in both themes — danger is a fill, not text.
+    readonly property color errorText: dark ? "#f47067" : "#cf222e"
 
     // Accents & states
     readonly property color accent: palette.accent

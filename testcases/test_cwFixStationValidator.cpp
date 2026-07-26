@@ -17,6 +17,7 @@
 #include "cwFixStationValidator.h"
 #include "cwGeoPoint.h"
 #include "cwGeoReference.h"
+#include "cwSurveyNetwork.h"
 
 //Catch includes
 #include <catch2/catch_test_macros.hpp>
@@ -940,4 +941,101 @@ TEST_CASE("suggestedOutputCS is decided by the first cave's fix, not a later cav
     CHECK(validator->needsOutputCS());
     CHECK(validator->suggestedOutputCS() == QStringLiteral("EPSG:32612"));
     CHECK_FALSE(validator->outputCSCoordinateInvalid());
+}
+
+TEST_CASE("fixStationErrorTypeIds lists the three fix-station warning kinds",
+          "[cwFixStationValidator][reference]")
+{
+    const QList<int> ids = cwFixStationValidator::fixStationErrorTypeIds();
+    CHECK(ids.contains(static_cast<int>(cwErrorTypeId::FixStationOutlier)));
+    CHECK(ids.contains(static_cast<int>(cwErrorTypeId::FixStationDomain)));
+    CHECK(ids.contains(static_cast<int>(cwErrorTypeId::FixStationReference)));
+}
+
+TEST_CASE("revalidate flags a fix whose station name is not in the survey",
+          "[cwFixStationValidator][reference]")
+{
+    // No global CS, so the cluster/domain math sits out — this isolates the
+    // reference check, which is independent of any output CS.
+    cwCavingRegion region;
+    region.addCave();
+    auto* cave = region.cave(0);
+    REQUIRE(cave != nullptr);
+
+    cwSurveyNetwork network;
+    network.addShot(QStringLiteral("A1"), QStringLiteral("A2"));
+    cave->setSurveyNetwork(network);
+
+    // A fix on a real station raises nothing.
+    cave->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("A1"), QStringLiteral("EPSG:32613"), 478000.0, 4430000.0, 1655.0));
+    CHECK(cave->errorModel()->warningCount() == 0);
+
+    // A fix on a station that doesn't exist is flagged, and the message names it.
+    cave->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("XYZ"), QStringLiteral("EPSG:32613"), 478100.0, 4430100.0, 1656.0));
+    REQUIRE(cave->errorModel()->warningCount() == 1);
+    CHECK(cave->errorModel()->toStringList().join(QChar(' ')).contains(QStringLiteral("XYZ")));
+
+    // Correcting the name to an existing station clears the warning.
+    const int badRow = cave->fixStations()->count() - 1;
+    cave->fixStations()->setData(cave->fixStations()->index(badRow),
+                                 QStringLiteral("A2"),
+                                 cwFixStationModel::StationNameRole);
+    CHECK(cave->errorModel()->warningCount() == 0);
+}
+
+TEST_CASE("revalidate defers a named fix with no network but flags a blank fix",
+          "[cwFixStationValidator][reference]")
+{
+    cwCavingRegion region;
+    region.addCave();
+    auto* cave = region.cave(0);
+    REQUIRE(cave != nullptr);
+
+    // A named fix but no survey network yet — nothing to check against.
+    cave->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("A1"), QStringLiteral("EPSG:32613"), 478000.0, 4430000.0, 1655.0));
+    CHECK(cave->errorModel()->warningCount() == 0);
+
+    // A blank scaffold row names no station; survex drops such a fix, so it is
+    // flagged at the cave level.
+    cwSurveyNetwork network;
+    network.addShot(QStringLiteral("A1"), QStringLiteral("A2"));
+    cave->setSurveyNetwork(network);
+    cave->fixStations()->addFixStation();
+    REQUIRE(cave->errorModel()->warningCount() == 1);
+    CHECK(cave->errorModel()->toStringList().join(QChar(' '))
+              .contains(QStringLiteral("no station name")));
+
+    // Naming the blank row to an existing station clears the warning.
+    const int blankRow = cave->fixStations()->count() - 1;
+    cave->fixStations()->setData(cave->fixStations()->index(blankRow),
+                                 QStringLiteral("A2"),
+                                 cwFixStationModel::StationNameRole);
+    CHECK(cave->errorModel()->warningCount() == 0);
+}
+
+TEST_CASE("a station appearing in the survey clears the reference warning",
+          "[cwFixStationValidator][reference]")
+{
+    cwCavingRegion region;
+    region.addCave();
+    auto* cave = region.cave(0);
+    REQUIRE(cave != nullptr);
+
+    cwSurveyNetwork network;
+    network.addShot(QStringLiteral("A1"), QStringLiteral("A2"));
+    cave->setSurveyNetwork(network);
+
+    cave->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("Depot"), QStringLiteral("EPSG:32613"), 478000.0, 4430000.0, 1655.0));
+    REQUIRE(cave->errorModel()->warningCount() == 1);
+
+    // The line plot recomputes and now includes the station — the warning clears
+    // without touching the fix (surveyNetworkChanged re-attributes).
+    cwSurveyNetwork grown;
+    grown.addShot(QStringLiteral("A1"), QStringLiteral("Depot"));
+    cave->setSurveyNetwork(grown);
+    CHECK(cave->errorModel()->warningCount() == 0);
 }

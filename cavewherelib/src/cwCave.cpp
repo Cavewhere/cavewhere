@@ -42,6 +42,8 @@ cwCave::cwCave(QObject* parent) :
 
 //    ErrorModel->addParent(this);
 
+    FixStations->setCave(this);
+
     connect(FixStations, &cwFixStationModel::countChanged,
             this, &cwCave::recomputeGridConvergence);
     connect(FixStations, &QAbstractItemModel::modelReset,
@@ -285,6 +287,11 @@ void cwCave::recomputeGridConvergence()
     const cwCavingRegion* region = parentRegion();
     const QString fallbackCS = region ? region->geoReference()->globalCoordinateSystem() : QString();
     m_gridConvergence->update(FixStations->fixStations(), fallbackCS);
+}
+
+void cwCave::refreshFixStationDomainErrors()
+{
+    FixStations->refreshDomainErrors();
 }
 
 /**
@@ -577,6 +584,15 @@ void cwCave::setStationPositionLookup(const cwStationPositionLookup &model) {
  */
 void cwCave::setSurveyNetwork(const cwSurveyNetwork &network)
 {
+    // The line-plot worker rebuilds the network on every solve and cannot see
+    // the cave's current one (its region snapshot carries no network), so it
+    // reports "changed" every time. Guard here so surveyNetworkChanged only
+    // fires on a genuine change — otherwise every solve re-notifies listeners,
+    // and any listener that re-runs the solve (fix-station error refresh,
+    // declination) would feed back into an endless re-solve loop.
+    if (Network == network) {
+        return;
+    }
     Network = network;
     emit surveyNetworkChanged();
 }

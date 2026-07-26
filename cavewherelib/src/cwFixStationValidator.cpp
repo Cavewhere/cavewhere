@@ -135,6 +135,15 @@ cwFixStationValidator::cwFixStationValidator(cwCavingRegion* region) :
     revalidate();
 }
 
+QList<int> cwFixStationValidator::fixStationErrorTypeIds()
+{
+    return {
+        static_cast<int>(cwErrorTypeId::FixStationOutlier),
+        static_cast<int>(cwErrorTypeId::FixStationDomain),
+        static_cast<int>(cwErrorTypeId::FixStationReference),
+    };
+}
+
 cwFixStationValidator::Classification
 cwFixStationValidator::classifyCandidates(const QList<FixCandidate>& candidates)
 {
@@ -324,13 +333,21 @@ void cwFixStationValidator::revalidate()
         domainMessages.insert(it.key(), message);
     }
 
-    // Reconcile both warning kinds against every cave that has or had one, so a
+    // Reference messages: fixes whose station name matches no survey station in
+    // the owning cave, plus fixes with no name at all (both are anchors survex
+    // silently drops). Independent of the global CS and the cluster/domain math,
+    // so it runs even before an output CS is set. A cave whose network hasn't
+    // been computed yet is skipped by the classifier for its *named* fixes.
+    const QHash<cwCave*, QString> referenceMessages = referenceWarnings();
+
+    // Reconcile every warning kind against every cave that has or had one, so a
     // correction clears the old warning.
     QSet<cwCave*> caves(m_connectedCaves);
     caves.unite(m_cavesWithWarning);
     for (cwCave* cave : caves) {
         setCaveWarning(cave, cwErrorTypeId::FixStationOutlier, clusterMessages.value(cave));
         setCaveWarning(cave, cwErrorTypeId::FixStationDomain, domainMessages.value(cave));
+        setCaveWarning(cave, cwErrorTypeId::FixStationReference, referenceMessages.value(cave));
     }
 
     // Region-wide summary for the render-view overlay. A domain-bad fix is the
@@ -362,6 +379,61 @@ void cwFixStationValidator::revalidate()
     setSummary(summary, total, firstOffender);
 
     updateOutputCSPrompt();
+}
+
+QHash<cwCave*, QString> cwFixStationValidator::referenceWarnings() const
+{
+    QHash<cwCave*, QString> messages;
+    if (m_region == nullptr) {
+        return messages;
+    }
+
+    for (cwCave* cave : m_region->caves()) {
+        if (cave == nullptr || cave->fixStations() == nullptr) {
+            continue;
+        }
+        const cwSurveyNetwork network = cave->network();
+        QStringList unknownNames;
+        int emptyCount = 0;
+        for (const cwFixStation& fix : cave->fixStations()->fixStations()) {
+            switch (cwFixStationModel::classifyStationReference(fix.stationName(), network)) {
+            case cwFixStationModel::StationReference::Unknown:
+                unknownNames.append(QStringLiteral("\"%1\"").arg(fix.stationName().trimmed()));
+                break;
+            case cwFixStationModel::StationReference::Empty:
+                ++emptyCount;
+                break;
+            case cwFixStationModel::StationReference::Ok:
+                break;
+            }
+        }
+
+        // Each broken category gets its own sentence; survex silently drops
+        // both, so the phrasing tells the user the fix is being ignored.
+        QStringList parts;
+        if (!unknownNames.isEmpty()) {
+            parts.append(unknownNames.size() == 1
+                ? QStringLiteral("Fix station %1 names a survey station that doesn't exist in "
+                                 "this cave — the fix is ignored until the name matches a station.")
+                      .arg(unknownNames.first())
+                : QStringLiteral("Fix stations %1 name survey stations that don't exist in this "
+                                 "cave — the fixes are ignored until the names match stations.")
+                      .arg(unknownNames.join(QStringLiteral(", "))));
+        }
+        if (emptyCount > 0) {
+            parts.append(emptyCount == 1
+                ? QStringLiteral("A fix station has no station name — it is ignored until you "
+                                 "enter the survey station it fixes.")
+                : QStringLiteral("%1 fix stations have no station name — they are ignored until "
+                                 "you enter the survey stations they fix.")
+                      .arg(emptyCount));
+        }
+        if (parts.isEmpty()) {
+            continue;
+        }
+        messages.insert(cave, parts.join(QStringLiteral(" ")));
+    }
+    return messages;
 }
 
 void cwFixStationValidator::updateOutputCSPrompt()
@@ -443,6 +515,7 @@ void cwFixStationValidator::syncCaveConnections()
             }
             setCaveWarning(cave, cwErrorTypeId::FixStationOutlier, QString());
             setCaveWarning(cave, cwErrorTypeId::FixStationDomain, QString());
+            setCaveWarning(cave, cwErrorTypeId::FixStationReference, QString());
             it = m_connectedCaves.erase(it);
         } else {
             ++it;
@@ -458,8 +531,15 @@ void cwFixStationValidator::syncCaveConnections()
         cwFixStationModel* model = cave->fixStations();
         connect(model, &cwFixStationModel::countChanged,
                 this, &cwFixStationValidator::revalidate, Qt::UniqueConnection);
-        connect(model, &cwFixStationModel::dataChanged,
-                this, &cwFixStationValidator::revalidate, Qt::UniqueConnection);
+        // Skip the model's read-only computed error roles: those are re-emitted
+        // from surveyNetworkChanged, which already re-runs us directly below, so
+        // reacting here too would revalidate the whole region twice per solve.
+        connect(model, &cwFixStationModel::dataChanged, this,
+                [this](const QModelIndex&, const QModelIndex&, const QList<int>& roles) {
+                    if (!cwFixStationModel::isErrorOnlyRoleChange(roles)) {
+                        revalidate();
+                    }
+                });
         connect(model, &cwFixStationModel::modelReset,
                 this, &cwFixStationValidator::revalidate, Qt::UniqueConnection);
 
@@ -467,6 +547,10 @@ void cwFixStationValidator::syncCaveConnections()
         // rename must re-run to refresh the banner (the per-cave errorModel
         // message carries no name and is unaffected).
         connect(cave, &cwCave::nameChanged,
+                this, &cwFixStationValidator::revalidate, Qt::UniqueConnection);
+        // The survey network decides which fix references are broken, so a
+        // recompute (a station appearing/disappearing) must re-attribute.
+        connect(cave, &cwCave::surveyNetworkChanged,
                 this, &cwFixStationValidator::revalidate, Qt::UniqueConnection);
         m_connectedCaves.insert(cave);
     }
@@ -518,7 +602,8 @@ void cwFixStationValidator::updateWarningTracking(cwCave* cave, cwErrorListModel
     for (int i = 0; i < errors->size(); ++i) {
         const int id = errors->at(i).errorTypeId();
         if (id == static_cast<int>(cwErrorTypeId::FixStationOutlier)
-            || id == static_cast<int>(cwErrorTypeId::FixStationDomain)) {
+            || id == static_cast<int>(cwErrorTypeId::FixStationDomain)
+            || id == static_cast<int>(cwErrorTypeId::FixStationReference)) {
             m_cavesWithWarning.insert(cave);
             return;
         }

@@ -28,6 +28,13 @@ public:
 
     QStringList neighbors(const QString& stationName) const;
     QStringList stations() const;
+
+    //! True when stationName names a station in this network. Trims and matches
+    //! case-insensitively, like every other lookup here (cwStation::canonicalKey).
+    //! Prefer this over scanning stations(), which allocates the whole name list
+    //! on every call — this is a single hash probe.
+    bool hasStation(const QString& stationName) const;
+
     bool isEmpty() const;
 
     void setPosition(const QString& stationName, const QVector3D& stationPosition);
