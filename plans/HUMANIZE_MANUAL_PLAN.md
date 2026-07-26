@@ -509,7 +509,7 @@ pass is **deletion only — no fact changes, no re-research, no new sources.**
 | Page | pre-sweep | now | cut |
 |---|---|---|---|
 | ~~`scraps/digitize-a-scrap.md`~~ | 1115 | **1114 done** | ~~1172~~ |
-| `measurement/measure-distance-and-bearing.md` | 1368 | 2650 | 1282 |
+| ~~`measurement/measure-distance-and-bearing.md`~~ | 1368 | **1367 done** | ~~1282~~ |
 | `scraps/carpeting.md` | 1121 | 1906 | 785 |
 | `loop-closure/check-loop-closure.md` | 1860 | 2727 | 867 |
 | `survey-data/caves-and-trips.md` | 1074 | 1750 | 676 |
@@ -518,13 +518,14 @@ pass is **deletion only — no fact changes, no re-research, no new sources.**
 | `notes/lidar-notes.md` | 1580 | 2222 | 642 |
 | `survey-data/calibration.md` | 1318 | 1834 | 516 |
 | `notes/note-resolution.md` | 1236 | 1718 | 482 |
-| `README.md` (?) | 753 | 901 | 148 |
+| ~~`README.md`~~ | 753 | 901 | ~~148~~ dropped |
 
 `check-loop-closure.md` grew again after this table was written (2567 -> 2727),
 so re-measure each row before starting it rather than trusting the number here.
-The `README.md` row does not resolve: the repo root README is 516 words and
-`docs/manual/index.md` is 1025, neither of which is 901. Identify what it meant
-or drop the row.
+The `README.md` row resolves to `docs/manual/images/illustrations/README.md`,
+901 words, which #21 grew from 753. That file is in the excluded table above:
+authoring and provenance notes, never seen by a reader, where more detail is a
+feature. Row dropped rather than compressed.
 
 About 7,700 words. Removing them, then running the remaining 23 queue pages at
 net zero, lands the manual near its pre-sweep 59,418 rather than the ~85,000 it
