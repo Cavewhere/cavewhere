@@ -148,8 +148,21 @@ Legend: `[ ]` open · `[~]` reported, awaiting review · `[x]` committed
       keep), to-be 41.7→clear, mean sentence 22.4→16.9, digits 1.35→13.2.
       54 claims, 1 wrong, 3 overstated, 1 unverifiable. No accuracy, point-count,
       file-size or scan-time figure appears anywhere on the page.
-- [ ] **14. `notes/add-a-note.md`** — 949 wds, score 48.7 — 41.1 to-be
-- [ ] **15. `notes/note-resolution.md`** — 1185 wds, score 43.8 — 31.2 to-be
+- [x] **14. `notes/add-a-note.md`** — 949 wds, score 48.7 — 41.1 to-be
+      → 0 span findings, em dash 13.26→0, digits 5.52→17.6, points-at-figure
+      0→3.27, mean sentence 20.6→17.2. 53 claims, 1 wrong, 4 overstated.
+      Corrected 4 errors the old page shipped, the biggest being "PDF and SVG are
+      rasterized on import" — they are copied verbatim and rendered at draw time.
+      The reviewer's catch: `clampImageSize` has 2 call sites and
+      `cwNote::renderSize` returns early unclamped for `Unit::Pixels`, so the
+      256 MB cap governs rasterization only, never a raster scan.
+- [x] **15. `notes/note-resolution.md`** — 1185 wds, score 43.8 — 31.2 to-be
+      → **slopcheck fully clean**, em dash 12.23→0, digits 11.35→30.4, mean
+      sentence 21.1→16.9. 67 claims, 1 wrong, 4 overstated, 1 unverifiable.
+      Grew 1145→1644 wds, all sourced. Independently confirmed
+      `lidar-notes.md:181` (a LiDAR note has no DPI). The wrong claim was
+      arithmetic, not sourcing: 2835/39.3700787 is 72.01, not 72.00, and
+      `Utils.fixed` strips trailing zeros so "72.00" can never render.
 - [ ] **16. `scraps/carpeting.md`** — 1069 wds, score 45.6 — 2 spans, 0 digits, `labelled`
 - [ ] **17. `scraps/digitize-a-scrap.md`** — 1061 wds, score 41.2 — 20.8 sent, 0 digits
 - [ ] **18. `scraps/scrap-types.md`** — 1913 wds, score 43.2 — 32 em dash
@@ -381,6 +394,19 @@ Not page-scoped; land them wherever they fit or as their own commit.
 - [ ] **32 em dashes in ~29 shipped UI strings** under `cavewherelib/qml/`. In a
       UI string there is no room for emphasis, so every one is habit rather than
       intent.
+- [ ] **Two errors to sweep up when #40 `settings/change-settings.md` comes
+      round**, both found by the #14/#15 reviewers. It still says a PDF/SVG note
+      is "rasterized on import" (`llms.txt:63` too, and `llms.txt:43` still says
+      CaveWhere "caps very large images"). And `change-settings.md:93` repeats
+      the app's own mistake that 92 ppi imports an SVG 1:1 — `cwNote.cpp:258`
+      and `cwSvgReader.cpp:199` divide by `cwUnits::SvgCssDpi = 96.0`
+      (`cwUnits.h:74`), so 96 is 1:1 and `PDFSettingsItem.qml:43` is wrong.
+      Worth filing against the app string, not just the manual.
+- [ ] **`## Why you need this` vs `## Why / when you need this`.** The whole
+      notes chapter (`add-a-note.md`, `lidar-notes.md`, `note-resolution.md`)
+      uses the short form; the other 41 pages carry the long one from
+      `AUTHORING.md:28`. Pre-existing, not introduced by the sweep. Pick one and
+      apply it chapter-wide rather than page by page.
 - [ ] **The digit gap needs Philip.** 17 pages have zero checkable numbers and
       the repo cannot supply all of them. Collect the open questions as the
       sweep goes and ask in a batch rather than stalling a page.
