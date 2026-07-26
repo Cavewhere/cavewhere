@@ -963,10 +963,13 @@ bound to an <code>errorModel</code> on this page (<code>CavePage.qml:603-604,871
     </ul>
     <code>cwCave</code>'s grid-convergence handler was already safe via its positive role allowlist.</li>
   </ul>
-  <span class="mono-note">Latent, pre-existing &amp; still open: the worker's "network always looks changed" comparison (snapshot
-  carries no network) is now harmless (guard absorbs it) but wasteful — a real efficiency fix would carry the network into the
+  <span class="mono-note">Latent, pre-existing: the worker's "network always looks changed" comparison (snapshot
+  carries no network) is harmless here (guard absorbs it) but wasteful — a real efficiency fix would carry the network into the
   snapshot or compare against the live cave. It also makes <code>changedStations(empty, network)</code> report <i>every</i>
-  station changed each solve, so every trip and scrap is marked changed too. Out of scope here — see A2 in §14.</span>
+  station changed each solve, so every trip and scrap is marked changed too. Out of scope here — see A2 in §14.
+  <b>Fixed 2026-07-26 in A2</b>, which also found a second hole this note missed (the snapshot drops station
+  positions too) and that the cost was not merely wasteful: every solve re-morphed every scrap. See A2 for the
+  correction.</span>
 </div>
 <p>A fix station anchors a <b>named survey station</b> to absolute coordinates. Two ways the reference is broken, both
 of which silently produce a fix that anchors nothing:</p>
@@ -1112,14 +1115,62 @@ notes. Ordered by payoff-vs-cost, not by confidence.</p>
   <td><code>cwFixStationModel</code>, <code>cwLinePlotManager</code>, <code>cwTripCalibration</code>,
   <code>cwSaveLoad</code>, <code>cwFixStationValidator</code>, <code>FixStationPage.qml</code>, 4 test files</td></tr>
 
-  <tr><td><b>A2 — The line-plot worker's snapshot carries no survey network</b>
-  (<code>cwLinePlotTask.cpp:592</code>, <code>cwCaveData</code>)</td>
+  <tr><td><b>A2 — The line-plot worker's snapshot carries no previous solve</b>
+  (<code>cwLinePlotTask.cpp:592</code>, <code>cwCaveData</code>) — <b>DONE</b></td>
   <td>The snapshot's caves have an empty network, so <code>updateCaveNetworks</code> reports “changed” on <i>every</i>
   solve and <code>changedStations(empty, network)</code> marks every station — hence every trip and scrap — changed each
   time. Commit 9's equality guard on <code>setSurveyNetwork</code> is currently what stops that from becoming an endless
   re-solve, i.e. correctness now leans on a guard masking this. Carry the network into the snapshot, or compare against
-  the live cave.</td>
-  <td><code>cwCaveData</code>/<code>cwCave::data</code>, <code>cwLinePlotTask</code>, scrap/note regeneration</td></tr>
+  the live cave.
+
+  <span class="mono-note"><b>Done 2026-07-26. Three things above are wrong; recorded here rather than silently
+  fixed, because each one changes what the item was.</b>
+
+  <b>(1) It is a performance bug, not a latent-correctness one.</b> The framing above says the equality guard keeps
+  this from becoming an endless re-solve, implying the cost is hypothetical. It is not: the changed-station set flows
+  through <code>cwLinePlotManager</code>'s <code>stationPositionInScrapsChanged</code> into
+  <code>cwScrapManager::updateStationPositionChangedForScraps</code> (<code>cwScrapManager.cpp:335</code>), which is an
+  unconditional <code>updateNoteTransformation()</code> + <code>updateScrapGeometry()</code> — the comment there reads
+  “Explicit call, don't check automatic update”. So <b>every line-plot solve re-morphed every scrap in the region</b>.
+  The guard suppressed the re-solve loop, not the work.
+
+  <b>(2) There were TWO holes, and fixing only the network would have been a no-op.</b> The item names only
+  <code>surveyNetwork</code> (absent from <code>cwCaveData</code> entirely). But
+  <code>stationPositionModel</code> <i>is</i> in <code>cwCaveData</code> and <i>is</i> filled by
+  <code>cwCave::data()</code> — and <code>cwCave::setData()</code> silently drops it (see the commented-out
+  <code>setStationPositionLookup</code> at <code>cwCave.cpp:108</code>). Carried across the thread boundary, thrown
+  away on arrival. With the network fixed alone, the position path still marks every station changed and nothing
+  observable improves.
+
+  <b>(3) “Carry the network into the snapshot” was rejected.</b> Putting derived state in <code>cwCaveData</code>
+  would grow the type that mirrors save/load. Both baselines now ride on
+  <code>cwLinePlotTask::Input</code> instead (<code>previousStationPositions</code>, <code>previousNetworks</code>,
+  keyed by <code>cwCave::id()</code>), filled in <code>buildInput()</code> from the live caves — which hold the last
+  <i>applied</i> solve, so a restarted run diffs against what the user last saw. <code>cwCaveData</code>,
+  <code>cwCave::setData</code>, save and load are untouched, and empty maps reproduce the old
+  everything-changed behavior for any hand-built <code>Input</code>.
+
+  <b>Constraint discovered while fixing it — the reason the first attempt broke 10 assertions.</b>
+  <code>updateExteralCaveStationLookups</code> had two jobs behind one guard: publishing positions to the result,
+  <i>and</i> writing them into the worker's own <code>Region</code>. The second is not bookkeeping —
+  <code>generateGeometry()</code> (<code>cwLinePlotTask.cpp:323</code>) rebuilds the plot from
+  <code>Region.data()</code>, and <code>cwCave::data()</code> only carries positions that were set on the internal
+  cave. That guard was never taken while everything always “changed”; the moment change detection worked, an unmoved
+  cave dropped out of the plot and lost its length and depth with it. Now split into
+  <code>refreshInternalStationLookups()</code> (unconditional, takes no <code>result</code> parameter so it cannot be
+  re-gated by mistake) and <code>publishChangedStationLookups()</code>.
+
+  <b>Still true after this:</b> <code>stationPositionModel</code> cannot be removed from <code>cwCaveData</code>
+  despite its <code>//TODO: remove stationPositionModel?</code> — <code>cwLinePlotGeometry.cpp:24</code> reads
+  <code>cave.stationPositionModel.positions()</code>, and this change makes the worker's dependence on that
+  round-trip sharper, not weaker. Disk caching of station positions remains deferred.
+
+  <b>Tests:</b> new <code>[LinePlotManager]</code> case “Line plot reports only the stations that actually moved” —
+  an idle re-solve reports an empty changed-trip set (this one case covers <i>both</i> holes, since either baseline
+  left un-seeded fails it), plus moved-station and added-station cases guarding against over-filtering.
+  Full C++ 1618/0/1 (313,432 assertions); full QML 774/2/83 = baseline.</span></td>
+  <td><code>cwLinePlotTask</code> (<code>Input</code> + worker), <code>cwTripLinePlotTask</code> (contract comment),
+  <code>test_cwLinePlotManager</code>. <code>cwCaveData</code>/<code>cwCave::data</code> deliberately untouched.</td></tr>
 
   <tr><td><b>A3 — Cave-owned child model reaching back up into its owner</b>
   (<code>cwFixStationModel.h:124</code>) — <b>CLOSED</b></td>

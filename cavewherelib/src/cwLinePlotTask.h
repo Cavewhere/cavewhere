@@ -71,6 +71,16 @@ public:
         // (see cwSurvexExporterCaveTask::writeExternalInclude).
         QHash<QUuid, QString> caveAttachmentDirs;
         QHash<QUuid, QString> tripAttachmentDirs;
+
+        // The previous solve's derived state, keyed by cwCave::id(). The worker
+        // diffs its fresh solve against these to decide which stations actually
+        // moved. This is deliberately not part of cwCaveData: it is input to
+        // change detection, not something a cave is, and it is never saved or
+        // loaded. Empty maps mean "assume everything changed", which is both the
+        // correct answer for a first solve and a safe default for synthetic
+        // callers that build an Input by hand (cwTripLinePlotTask).
+        QHash<QUuid, cwStationPositionLookup> previousStationPositions;
+        QHash<QUuid, cwSurveyNetwork> previousNetworks;
     };
 
     class LinePlotCaveData {

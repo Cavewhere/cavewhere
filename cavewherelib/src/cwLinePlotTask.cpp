@@ -255,7 +255,10 @@ private:
             cwCave* cave = Region.cave(i);
             const QUuid id = cave->id();
             InternalCaveByUuid.insert(id, cave);
-            CaveStationLookups.insert(id, cave->stationPositionLookup());
+            // Seed from the caller's snapshot, not from `cave`: Region is
+            // rebuilt from cwCaveData, and cwCave::setData doesn't restore
+            // station positions, so the internal cave's lookup is always empty.
+            CaveStationLookups.insert(id, InputData.previousStationPositions.value(id));
         }
     }
 
@@ -512,19 +515,30 @@ private:
         }
     }
 
-    void updateExteralCaveStationLookups(cwLinePlotTask::LinePlotResultData& result)
+    // Deliberately takes no result parameter, so it cannot be gated on
+    // something having changed: generateGeometry() rebuilds the whole plot from
+    // Region.data(), and cwCave::data() only carries positions that were set on
+    // the internal cave. A cave whose stations didn't move this solve still
+    // needs them written here or it drops out of the plot entirely, losing its
+    // geometry, length and depth along with it.
+    void refreshInternalStationLookups()
     {
         for (int i = 0; i < Region.caveCount(); i++) {
             cwCave* internalCave = Region.cave(i);
-            const QUuid caveId = internalCave->id();
-            if (!result.Caves.contains(caveId)) {
-                continue;
-            }
+            internalCave->setStationPositionLookup(CaveStationLookups.value(internalCave->id()));
+        }
+    }
 
-            const cwStationPositionLookup updatedLookup = CaveStationLookups.value(caveId);
-            cwLinePlotTask::LinePlotCaveData& caveData = result.Caves[caveId];
-            caveData.setStationPositions(updatedLookup);
-            internalCave->setStationPositionLookup(updatedLookup);
+    // Publishing is what tells cwLinePlotManager to write back to the live
+    // cave, so only the caves something actually changed on are published.
+    void publishChangedStationLookups(cwLinePlotTask::LinePlotResultData& result)
+    {
+        for (int i = 0; i < Region.caveCount(); i++) {
+            const QUuid caveId = Region.cave(i)->id();
+            const auto it = result.Caves.find(caveId);
+            if (it != result.Caves.end()) {
+                it.value().setStationPositions(CaveStationLookups.value(caveId));
+            }
         }
     }
 
@@ -555,7 +569,8 @@ private:
         const QHash<QUuid, cwStationPositionLookup> caveStationLookups = splitLookupByCave(stationPostions);
 
         updateInteralCaveStationLookups(caveStationLookups, result);
-        updateExteralCaveStationLookups(result);
+        refreshInternalStationLookups();
+        publishChangedStationLookups(result);
     }
 
     void updateDepthLength(const QVector<cwLinePlotGeometry::CaveLengthAndDepth>& lengths,
@@ -591,13 +606,17 @@ private:
         const QList<cwCave*> caves = Region.caves();
         for (cwCave* cave : caves) {
             const cwSurveyNetwork network = createNetwork(cave);
-            if (network == cave->network()) {
+            const QUuid caveId = cave->id();
+            // As with the station lookups, the internal cave carries no network
+            // of its own — cwCaveData has no such field — so the previous one
+            // has to come from the caller's snapshot.
+            const cwSurveyNetwork previousNetwork = InputData.previousNetworks.value(caveId);
+            if (network == previousNetwork) {
                 continue;
             }
-            const QUuid caveId = cave->id();
             result.Caves[caveId].setNetwork(network);
 
-            const auto changedStations = cwSurveyNetwork::changedStations(cave->network(), network);
+            const auto changedStations = cwSurveyNetwork::changedStations(previousNetwork, network);
             for (const auto& station : changedStations) {
                 setStationAsChanged(caveId, station, result);
             }
@@ -610,6 +629,18 @@ cwLinePlotTask::Input cwLinePlotTask::buildInput(const cwCavingRegion *region)
     Input input;
     if(region != nullptr) {
         input.regionData = region->data();
+
+        // Carry the last applied solve across as the change-detection baseline.
+        // The live caves hold it because cwLinePlotManager writes each result
+        // back to them, so a restarted solve still diffs against what the user
+        // last saw rather than against a half-finished run.
+        const QList<cwCave*> caves = region->caves();
+        input.previousStationPositions.reserve(caves.size());
+        input.previousNetworks.reserve(caves.size());
+        for(const cwCave* cave : caves) {
+            input.previousStationPositions.insert(cave->id(), cave->stationPositionLookup());
+            input.previousNetworks.insert(cave->id(), cave->network());
+        }
     }
     return input;
 }

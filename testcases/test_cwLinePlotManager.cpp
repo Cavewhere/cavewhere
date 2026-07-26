@@ -1614,3 +1614,77 @@ TEST_CASE("An empty fix station must not trigger endless line-plot re-solves",
                                  cwFixStationModel::StationNameRole);
     CHECK(editSpy.wait(kSolveTimeoutMs));
 }
+
+TEST_CASE("Line plot reports only the stations that actually moved", "[LinePlotManager]")
+{
+    // The worker rebuilds its own cwCavingRegion from a cwCavingRegionData
+    // snapshot, and that snapshot restores neither station positions nor the
+    // survey network. Both baselines therefore have to be carried across on
+    // cwLinePlotTask::Input. This test covers both at once by design: either
+    // one left un-seeded makes an idle re-solve claim every station moved,
+    // which is what re-morphs every scrap in the region.
+    cwCavingRegion region;
+
+    cwCave* cave = new cwCave();
+    cave->setName("Cave 1");
+    region.addCave(cave);
+
+    cwTrip* trip = new cwTrip();
+    trip->setName("Trip 1");
+    cave->addTrip(trip);
+
+    cwSurveyChunk* chunk = new cwSurveyChunk();
+    trip->addChunk(chunk);
+
+    cwShot shot;
+    shot.setDistance(cwDistanceReading("10.0"));
+    shot.setCompass(cwCompassReading("0.0"));
+    shot.setClino(cwClinoReading("0.0"));
+    chunk->appendShot(cwStation("a1"), cwStation("a2"), shot);
+
+    auto plotManager = std::make_unique<cwLinePlotManager>();
+    plotManager->setRegion(&region);
+    plotManager->waitToFinish();
+
+    REQUIRE(cave->stationPositionLookup().position("a2") == QVector3D(0.0, 10.0, 0.0));
+
+    // Captured by lambda rather than QSignalSpy so the payload arrives as a
+    // real QList<cwTrip*> instead of a QVariant needing a registered metatype.
+    int emitCount = 0;
+    QList<cwTrip*> changedTrips;
+    QObject::connect(plotManager.get(), &cwLinePlotManager::stationPositionInTripsChanged,
+                     [&](QList<cwTrip*> trips) {
+                         emitCount++;
+                         changedTrips = trips;
+                     });
+
+    SECTION("A re-solve with no edits moves nothing") {
+        plotManager->rerunSurvex();
+        plotManager->waitToFinish();
+
+        REQUIRE(emitCount == 1);    // the solve really did run
+        CHECK(changedTrips.isEmpty());
+    }
+
+    SECTION("Moving a station reports its trip") {
+        chunk->setData(cwSurveyChunk::ShotDistanceRole, 0, 20.0);
+        plotManager->waitToFinish();
+
+        REQUIRE(cave->stationPositionLookup().position("a2") == QVector3D(0.0, 20.0, 0.0));
+        CHECK(changedTrips == QList<cwTrip*>({trip}));
+    }
+
+    SECTION("Adding a shot reports its trip") {
+        // Growing the survey leaves a1/a2 where they were, so this covers the
+        // added-station path rather than the moved-station one above.
+        cwShot secondShot;
+        secondShot.setDistance(cwDistanceReading("5.0"));
+        secondShot.setCompass(cwCompassReading("0.0"));
+        secondShot.setClino(cwClinoReading("0.0"));
+        chunk->appendShot(cwStation("a2"), cwStation("a3"), secondShot);
+        plotManager->waitToFinish();
+
+        REQUIRE(cave->stationPositionLookup().position("a3") == QVector3D(0.0, 15.0, 0.0));
+        CHECK(changedTrips == QList<cwTrip*>({trip}));
+    }
+}
