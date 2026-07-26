@@ -508,43 +508,31 @@ pass is **deletion only — no fact changes, no re-research, no new sources.**
 
 | Page | pre-sweep | now | cut |
 |---|---|---|---|
-| ~~`scraps/digitize-a-scrap.md`~~ | 1115 | **1114 done** | ~~1172~~ |
-| ~~`measurement/measure-distance-and-bearing.md`~~ | 1368 | **1367 done** | ~~1282~~ |
-| `scraps/carpeting.md` | 1121 | 1906 | 785 |
-| `loop-closure/check-loop-closure.md` | 1860 | 2727 | 867 |
-| `survey-data/caves-and-trips.md` | 1074 | 1750 | 676 |
-| `survey-data/enter-survey-data.md` | 2136 | 2810 | 674 |
-| `notes/add-a-note.md` | 1051 | 1697 | 646 |
-| `notes/lidar-notes.md` | 1580 | 2222 | 642 |
-| `survey-data/calibration.md` | 1318 | 1834 | 516 |
-| `notes/note-resolution.md` | 1236 | 1718 | 482 |
-| ~~`README.md`~~ | 753 | 901 | ~~148~~ dropped |
+**Done, 2026-07-26.** All 10 reader-facing pages are under their ceilings.
 
-`check-loop-closure.md` grew again after this table was written (2567 -> 2727),
-so re-measure each row before starting it rather than trusting the number here.
-The `README.md` row resolves to `docs/manual/images/illustrations/README.md`,
-901 words, which #21 grew from 753. That file is in the excluded table above:
-authoring and provenance notes, never seen by a reader, where more detail is a
-feature. Row dropped rather than compressed.
+| Page | ceiling | before | after | commit |
+|---|---|---|---|---|
+| `scraps/digitize-a-scrap.md` | 1115 | 2287 | **1114** | `9f563d33` |
+| `measurement/measure-distance-and-bearing.md` | 1368 | 2650 | **1367** | `884fe7aa` |
+| `loop-closure/check-loop-closure.md` | 1860 | 2727 | **1856** | `d073a600` |
+| `scraps/carpeting.md` | 1121 | 1905 | **1114** | `89b6f741` |
+| `survey-data/caves-and-trips.md` | 1074 | 1750 | **1069** | `6fa79161` |
+| `survey-data/enter-survey-data.md` | 2136 | 2810 | **2118** | `b11740a0` |
+| `notes/add-a-note.md` | 1051 | 1697 | **1050** | `2132159c` |
+| `notes/lidar-notes.md` | 1580 | 2222 | **1569** | `70eff568` |
+| `survey-data/calibration.md` | 1318 | 1834 | **1317** | `51899cfd` |
+| `notes/note-resolution.md` | 1236 | 1718 | **1236** | `3af294bb` |
+| ~~`README.md`~~ | 753 | 901 | dropped | resolves to the excluded `images/illustrations/README.md` |
 
-About 7,700 words. Removing them, then running the remaining 23 queue pages at
-net zero, lands the manual near its pre-sweep 59,418 rather than the ~85,000 it
-was tracking toward.
+**Manual total 68,729 -> 61,211**, against a pre-sweep baseline of 59,418. The
+remaining 23 queue pages must run at net zero to hold that.
 
-**The safety net: every one of those commits carries a 34-133 line body listing
-the facts and corrections it introduced.** Those bodies are fact manifests. So
-each page is: compress to the ceiling, then walk its own commit message and
-confirm every line still appears on the page. Losing a correction is checkable
-rather than a matter of trust. Get the manifest with
-`git log --format=%b -1 <sha> -- <page>`.
+The safety net was meant to be the fact manifest in each page's original commit
+body. It did not survive contact; see below. What replaced it was a **drop list
+in every compression commit**, one line per fact removed with the reason. Keep
+writing them.
 
-Order: start with `digitize-a-scrap.md` and `measure-distance-and-bearing.md`.
-They are the 2 worst and they will show quickly whether the manifest check
-holds.
-
-Commit subject: `Compress <Page Title>`, body opening `words: <before> -> <after>`.
-
-### What the first page taught us
+### What the pass taught us
 
 `digitize-a-scrap.md` landed at 1114 against a 1115 ceiling, and the manifest
 check **does not hold as written.** Halving a page does not halve its prose, it
@@ -568,6 +556,38 @@ Revise the method for the remaining 10:
    not 4 facts; dropping one bought 18 words here.
 4. **Write the drop list in the commit.** A dropped fact is a decision, not an
    accident, and it must be as reviewable as an added one.
+
+The other 9 pages went to fresh subagents, 2 at a time, working from a shared
+briefing that front-loaded all 4 rules above. That worked: every page landed
+under its ceiling on the first pass, against 6 passes for the page done by hand.
+Four more things came out of it, and they belong in the briefing next time.
+
+5. **An image you keep keeps its caption.** `AUTHORING.md:108` requires
+   descriptive alt text *and* an italic caption on every image, and
+   `AUTHORING.md` outranks everything here. Two agents stripped captions to buy
+   words and both had to be reverted by hand. The corollary at `AUTHORING.md:114`
+   matters just as much: neither the alt text nor the caption may carry a fact
+   the body prose lacks, so a fact cannot be *moved* into a caption to save room.
+   Drop the whole image or keep both lines. Trimming a bloated alt text from 60
+   words to 25 is the legitimate version of this saving, and it is worth real
+   words.
+6. **Deleting a block quote is not the safe way to obey "never reword a quote".**
+   It happened twice, and on `add-a-note.md` the app's PDF/SVG memory warning
+   then existed nowhere in the manual. A quoted app string is the top-ranked
+   keep; it outranks the words it costs. Before dropping one, `grep -rn` its text
+   across `docs/` to prove another page carries it.
+7. **Verify the report against the file, not the report against itself.** One
+   agent reported "no quote reworded, both block quotes byte-identical" when one
+   had been tightened and another deleted. Cheap checks that caught real things:
+   `diff <(git show HEAD:<page> | grep '^>') <(grep '^>' <page>)` for quotes, and
+   a set difference of every backticked and bolded token between the two
+   versions, which is what surfaced the Compass/Walls field names vanishing from
+   `calibration.md`.
+8. **A fact deduped into a sibling page is only safe if the sibling is already
+   written.** Agents correctly deferred material to pages that own it, but 3 of
+   those siblings were themselves mid-compression. Tell each agent which
+   neighbors are in flight, and require `grep` proof rather than an assumption
+   about what the other page says.
 
 ## Cross-cutting items
 
