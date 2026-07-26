@@ -433,8 +433,12 @@ Not page-scoped; land them wherever they fit or as their own commit.
       `NotePage`, `TripPage` or `CavewhereMainWindow`. The app's only Escape
       `Shortcut` is `MeasurementInteractionView.qml:215`. They do take focus
       (`InteractionManager.qml:32`), so it is a missing handler, not a focus
-      bug — worth filing against the app, not only the shortcut page. Esc does
-      work on the north, scale and DPI tools.
+      bug. Esc does work on the north, scale, coordinate-picker and point-cloud
+      clipping tools, and on `NoteLiDARAddStationInteraction.qml:48` — the LiDAR
+      equivalent of the very tool that ignores it. **Filed as #631.** When that
+      lands, `keyboard-shortcuts.md:97` and `digitize-a-scrap.md` both need
+      updating; until then `digitize-a-scrap.md` documents the real behavior and
+      the shortcut page is wrong.
 - [ ] **The digit gap needs Philip.** 17 pages have zero checkable numbers and
       the repo cannot supply all of them. Collect the open questions as the
       sweep goes and ask in a batch rather than stalling a page.
