@@ -38,7 +38,7 @@ for every station. You orbit that adjusted
 
 Because the solve runs on its own, fixing a blunder repairs everything
 downstream. You correct the bad reading, the network re-solves, the loop closes,
-and any [carpeted](../concepts/glossary.md#carpeting) sketches re-drape to
+and any [carpeted](../concepts/glossary.md#carpeting) sketches re-carpet to
 follow (scraps hang off stations, not off the page). See
 [Why an edit ripples](../concepts/data-model.md#why-an-edit-ripples) for the full
 cascade.
@@ -289,4 +289,4 @@ cross-check, and only on the legs you shot both ways.
 - **[Why CaveWhere](../concepts/why-cavewhere.md#keeping-the-map-correct-loop-closure)**:
   the reasoning behind an always-current, always-closed 3D map.
 - **[How a Project Is Organized](../concepts/data-model.md#why-an-edit-ripples)**:
-  why fixing one shot moves stations elsewhere and re-drapes old sketches.
+  why fixing one shot moves stations elsewhere and re-carpets old sketches.

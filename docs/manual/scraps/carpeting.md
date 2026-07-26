@@ -32,7 +32,7 @@ You trace pieces of your sketch as
 [stations](../concepts/glossary.md#station). CaveWhere then bends each scrap
 onto the 3D survey line, so the drawing drapes over the real passage like a
 carpet, as shown in the orbit animation above. Every carpet shown above started
-life as a flat drawing. Better still, the drape rebuilds itself whenever the
+life as a flat drawing. Better still, the carpet rebuilds itself whenever the
 survey moves. (For the product-level version of this idea, see
 [Why CaveWhere](../concepts/why-cavewhere.md#from-a-2d-sketch-to-a-3d-cave).)
 
@@ -147,8 +147,8 @@ north/up direction, you change its type, or you move a lead.
 
 A scrap you have open for editing sits the round out. The recompute skips it,
 then fires once you finish. And because the survey re-solves on every edit as
-well, **closing a loop or fixing a blunder re-drapes
-every affected carpet on its own**. Correct the survey once, and the drawings
+well, **closing a loop or fixing a blunder re-carpets
+everything affected on its own**. Correct the survey once, and the drawings
 follow. That is the reason carpets are worth building at all.
 
 One checkbox governs the whole arrangement: **Automatic Update**, at the bottom

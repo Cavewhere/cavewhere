@@ -69,8 +69,8 @@ does.
 The cave arrives as an ordinary project on your disk. Orbit it, edit it, break
 it; none of that matters. Your changes stay on your machine and never reach the
 shared copy online unless you deliberately sync. I recommend breaking it on
-purpose: change a shot distance and watch the loop closure shift and the
-carpeted scraps re-drape to follow. Nothing you do here can damage anyone
+purpose: change a shot distance and watch the loop closure shift and the scraps
+re-carpet to follow. Nothing you do here can damage anyone
 else's copy.
 
 ## Next steps

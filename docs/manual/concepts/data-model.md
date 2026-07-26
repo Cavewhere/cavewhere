@@ -1,7 +1,7 @@
 ---
 title: How a Project Is Organized
 summary: The Region → Cave → Trip → Survey chunk → Shot / Note → Scrap hierarchy: what each level holds, what decision it encodes, and why an edit low in the tree ripples upward.
-problem: Know where each kind of data lives and why editing one shot can re-close a loop and re-drape a sketch.
+problem: Know where each kind of data lives and why editing one shot can re-close a loop and re-carpet a sketch.
 keywords: [data model, region, cave, trip, survey chunk, shot, note, scrap, station, hierarchy, structure, keywords]
 related: [glossary.md, why-cavewhere.md, ../survey-data/caves-and-trips.md]
 ---
@@ -14,7 +14,7 @@ CaveWhere shows you tables, notes, and a 3D view. One tree sits underneath them
 all, and its shape answers three questions the UI never spells out: where a piece
 of data goes, and why calibration belongs to a whole trip instead of one shot. The
 third one is the surprise. Correcting a single distance can shift a loop closure
-and re-drape a sketch you drew months ago.
+and re-carpet a sketch you drew months ago.
 
 You never build the tree by hand. It fills in as you survey. But the moment
 something surprises you ("why did that scrap move?"), the answer usually lives in
@@ -134,7 +134,7 @@ across every leg. Correct one shot's distance and the solve re-runs, so stations
 
 Scraps anchor to stations, so when a station moves, every scrap tied to it
 re-carpets to follow. You fix a reading in a table, and a sketch you drew months
-ago re-drapes to match with nothing to redraw. That cascade, from one shot up
+ago re-carpets to match with nothing to redraw. That cascade, from one shot up
 through the solve and back down through the scraps, keeps the model honest as the
 survey grows.
 
@@ -145,7 +145,7 @@ nearest stations usually clears them. See
 
 For the mechanism behind the solve, see
 [Why CaveWhere](why-cavewhere.md#keeping-the-map-correct-loop-closure); for the
-re-draping, see [Scraps and Carpeting](../scraps/carpeting.md).
+re-carpeting, see [Scraps and Carpeting](../scraps/carpeting.md).
 
 ## What cuts across the tree
 
