@@ -206,9 +206,11 @@ cwRootData::cwRootData(QObject *parent) :
     // it is already dirty (e.g. the line plot marked by setRegion above) and
     // automatic update is on.
     UpdateCoordinator = new cwUpdateCoordinator(this);
+    //Scraps and LiDAR notes both consume the line plot's station positions, so a
+    //solve dirties them and they must run after it.
     UpdateCoordinator->add(LinePlotManager);
-    UpdateCoordinator->add(ScrapManager);
-    UpdateCoordinator->add(NoteLiDARManager);
+    UpdateCoordinator->add(ScrapManager, {LinePlotManager});
+    UpdateCoordinator->add(NoteLiDARManager, {LinePlotManager});
 
     connect(Project, &cwProject::filenameChanged, this, [this]() {
         // Reset the filter pipeline UI state when the project file changes.

@@ -87,12 +87,12 @@ conan profile detect --force
 4. **Install CaveWhere dependencies through Conan**
 
 ```
-conan install ../cavewhere -o "&:system_qt=False" --build=missing -c tools.system.package_manager:mode=install -c tools.system.package_manager:sudo=True -of conan_deps
+conan install ../cavewhere --build=missing -c tools.system.package_manager:mode=install -c tools.system.package_manager:sudo=True -of conan_deps
 ```
         
    Conan will try to use the local package manager to install compatible dependencies. If a dependency isn't compatible, it will download it from Conan Center or build it from source.
 
-   Conan may also build Qt from source, which can take a long time and use a large amount of ram (16GB recommended for the build, 2GB VM will not cut it). However, this ensures you get the correct version of Qt that has been tested with Cavewhere. To use the system's Qt, set ```system_qt=False```.
+   CaveWhere builds against your Qt install (`system_qt=True`, the default). It needs **Qt 6.11 or later plus the Qt TaskTree add-on** — a Technical Preview component that is not installed by default. Add `qt.qt6.<version>.addons.qttasktree` with the Qt Maintenance Tool or `qt-cli`; the build stops with an explanatory error if it is missing. Conan's bundled Qt (`system_qt=False`) cannot supply TaskTree and is rejected up front.
 
    **To use the system Qt libraries (note that you might encounter build errors, as Qt is typically outdated on most Linux distributions 2025.2 will build and run on 6.8 or later):**
 

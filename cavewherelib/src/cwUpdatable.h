@@ -35,13 +35,10 @@ public:
         Dirty takes priority over Working: a pipeline re-edited mid-run reports
         Dirty (not Working) so the coordinator drives update() again and the
         pipeline's restarter coalesces the fresh edit into the in-flight run.
-        Only a pipeline that clears its dirty marker synchronously at the top of
-        update() (the line plot) is ever observably Working; a pipeline that
-        holds its dirty set until the async task completes (scraps, LiDAR)
-        reports Dirty for the whole run and Clean when it finishes. The
-        coordinator's forced-cascade settle logic handles both — a Working keeps
-        the cascade open for the line plot, a persistent Dirty keeps it open for
-        the others.
+        Every pipeline reports Working for the whole span of its run: the line
+        plot clears its dirty marker synchronously at the top of update(), while
+        scraps and LiDAR notes carry a separate in-flight bit that is set at
+        dispatch and cleared on every completion path.
 
         There is no default: every implementer must state its value explicitly,
         so none can silently clear its dirty marker yet forget it is still busy

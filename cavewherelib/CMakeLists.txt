@@ -204,6 +204,23 @@ target_link_libraries(cavewherelib
 
 cw_link_absl_static(cavewherelib)
 
+# cwUpdateCoordinator runs the derived-data cascade as an explicit
+# dependency-ordered task tree. Qt TaskTree is a Technical Preview add-on and is
+# NOT part of a stock Qt install, so say so rather than letting find_package emit
+# its generic "could not find a package configuration file" message.
+find_package(Qt6 COMPONENTS TaskTree QUIET)
+if(NOT TARGET Qt6::TaskTree)
+    message(FATAL_ERROR
+        "Qt TaskTree not found. It is a Technical Preview add-on and is not part "
+        "of a stock Qt install; install \"qt.qt6.<version>.addons.qttasktree\" with "
+        "the Qt Maintenance Tool or qt-cli. Required on every build machine, "
+        "including CI. Conan's bundled Qt (system_qt=False) cannot provide it.")
+endif()
+# PRIVATE: only cwUpdateCoordinator.cpp and its cwUpdatableTask node touch
+# TaskTree, and cwUpdateCoordinator.h forward declares the two types it names, so
+# no consumer of cavewherelib needs the add-on's headers.
+target_link_libraries(cavewherelib PRIVATE Qt6::TaskTree)
+
 # Conditionally find the package and include directories
 find_package(Qt6 COMPONENTS Pdf QUIET)
 if(TARGET Qt6::Pdf)
