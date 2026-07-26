@@ -24,7 +24,7 @@ QQ.Loader {
             objectName: loaderId.quoteBoxObjectName
             z: 10
 
-            parent: RootPopupItem
+            parent: loaderId.WindowOverlay.overlay
 
             function errorImageSource(errorType) {
                 switch(errorType) {

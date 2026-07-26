@@ -2879,8 +2879,8 @@ MainWindowTest {
             verify(box, "found the first shot's Distance cell");
 
             // Open the message. The badge is a checkable button, and the box it
-            // shows is a plain in-scene item (QuoteBox reparented to
-            // RootPopupItem), so grabWindow captures it — no popupType override
+            // shows is a plain in-scene item (QuoteBox reparented into the
+            // window's AppOverlay), so grabWindow captures it — no popupType override
             // like test_excludeDistance needs.
             let badge = null;
             tryVerify(() => {

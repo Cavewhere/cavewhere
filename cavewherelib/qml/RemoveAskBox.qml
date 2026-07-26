@@ -39,7 +39,7 @@ ShadowRectangle {
     color: Theme.errorBackground
 
     QQ.MouseArea {
-        parent: RootPopupItem
+        parent: removeChallenge.WindowOverlay.overlay
         anchors.fill: parent
 
         visible: removeChallenge.visible

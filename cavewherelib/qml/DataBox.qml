@@ -62,7 +62,10 @@ QQ.Item {
     property int editTargetRow: -1
     property int editTargetRole: -1
 
-    property GlobalShadowTextInput _globalShadowTextInput: GlobalShadowTextInput
+    //The editor host for whichever window this box is in — see
+    //CoreClickTextInput._shadowEditor
+    readonly property ShadowEditorHost _shadowEditor:
+        (WindowOverlay.overlay as AppOverlay)?.shadowEditor ?? null
 
     signal rightClick(var mouse);
     signal enteredPressed();
@@ -344,8 +347,8 @@ QQ.Item {
                                editor.openEditor()
                                //editor.openEditor() handed off to the host, so
                                //the typed character goes in through it
-                               GlobalShadowTextInput.setEditorText(event.text)
-                               GlobalShadowTextInput.clearSelection()
+                               dataBox._shadowEditor?.setEditorText(event.text)
+                               dataBox._shadowEditor?.clearSelection()
                            }
                        }
 
@@ -490,66 +493,79 @@ QQ.Item {
         }
     }
 
+    //While this cell is being typed into, its keys come from the shared editor
+    //rather than from the cell itself.
+    //
+    //Gated by state instead of installed by a QQ.PropertyChanges, which is how
+    //this used to work, for two reasons: a PropertyChanges resolves its target
+    //exactly once, so it cannot follow _shadowEditor; and reaching through a
+    //property with grouped syntax needs the host's type fully resolved while
+    //this file is still being compiled, which is order-dependent between two
+    //types that name each other and fails intermittently with "Invalid grouped
+    //property access". A Connections target is an ordinary binding, so neither
+    //applies.
+    QQ.Connections {
+        target: dataBox._shadowEditor
+        enabled: dataBox.state === "MiddleTyping"
+
+        function onPressKeyPressed(pressKeyEvent) {
+            if(pressKeyEvent.key === Qt.Key_Tab ||
+               pressKeyEvent.key === 1 + Qt.Key_Tab ||
+               pressKeyEvent.key === Qt.Key_Space)
+            {
+                var commited = editor.commitChanges()
+                if(!commited) { return; }
+            }
+
+            if(pressKeyEvent.key === Qt.Key_Space) {
+                dataBox.addNewChunk();
+            }
+
+            //Tab to the next entry on enter
+            if(pressKeyEvent.key === Qt.Key_Enter ||
+               pressKeyEvent.key === Qt.Key_Return) {
+
+                dataBox.handleNextTab()
+                pressKeyEvent.accepted = true;
+            }
+
+            //Use the default key handling the host provides
+            dataBox._shadowEditor.defaultKeyHandling();
+
+            //Handle the tabbing
+            dataBox.handleTab(pressKeyEvent);
+
+            if(pressKeyEvent.accepted) {
+                //Have the editor commit changes
+                dataBox.state = ''; //Default state
+            }
+        }
+
+        function onEditorFocusChanged(editorFocus) {
+            if(!editorFocus) {
+                dataBox.state = '';
+            }
+        }
+
+        function onEscapePressed() {
+            dataBox.state = ''; //Default state
+            dataBox.forceActiveFocus()
+        }
+
+        function onEnterPressed() {
+            var commited = editor.commitChanges();
+            if(commited) {
+                dataBox.forceActiveFocus()
+            }
+        }
+    }
+
     states: [
 
         QQ.State {
             name: "MiddleTyping"
 
             QQ.PropertyChanges {
-
-                dataBox._globalShadowTextInput.onPressKeyPressed: (pressKeyEvent) => {
-                    if(pressKeyEvent.key === Qt.Key_Tab ||
-                       pressKeyEvent.key === 1 + Qt.Key_Tab ||
-                       pressKeyEvent.key === Qt.Key_Space)
-                    {
-                        var commited = editor.commitChanges()
-                        if(!commited) { return; }
-                    }
-
-                    if(pressKeyEvent.key === Qt.Key_Space) {
-                        dataBox.addNewChunk();
-                    }
-
-                    //Tab to the next entry on enter
-                    if(pressKeyEvent.key === Qt.Key_Enter ||
-                       pressKeyEvent.key === Qt.Key_Return) {
-
-                        dataBox.handleNextTab()
-                        pressKeyEvent.accepted = true;
-                    }
-
-                    //Use the default keyhanding that the GlobalShadowTextInput has
-                    GlobalShadowTextInput.defaultKeyHandling();
-
-                    //Handle the tabbing
-                    dataBox.handleTab(pressKeyEvent);
-
-                    if(pressKeyEvent.accepted) {
-                        //Have the editor commit changes
-                        dataBox.state = ''; //Default state
-
-                    }
-
-                }
-
-                dataBox._globalShadowTextInput.onEditorFocusChanged: (editorFocus) => {
-                    if(!editorFocus) {
-                        dataBox.state = '';
-                    }
-                }
-
-                dataBox._globalShadowTextInput.onEscapePressed: {
-                    dataBox.state = ''; //Default state
-                    dataBox.forceActiveFocus()
-                }
-
-                dataBox._globalShadowTextInput.onEnterPressed: {
-                    var commited = editor.commitChanges();
-                    if(commited) {
-                        dataBox.forceActiveFocus()
-                    }
-                }
-
                 dataBox.z: 1
             }
         }

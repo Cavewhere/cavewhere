@@ -19,11 +19,7 @@ MainWindowTest {
         readonly property int leadSelectTimeout: 10000
 
         function init() {
-            // Dismiss any leftover text editor from a previous test
-            if (GlobalShadowTextInput.coreClickInput !== null) {
-                GlobalShadowTextInput.coreClickInput.closeEditor()
-            }
-            GlobalShadowTextInput.enabled = false
+            rootId.closeAnyOpenEditor()
 
             RootData.futureManagerModel.waitForFinished()
             RootData.project.newProject()
@@ -41,7 +37,7 @@ MainWindowTest {
 
         function clickToEdit(item) {
             mouseClick(item)
-            tryVerify(() => GlobalShadowTextInput.editorHasFocus(), 1000,
+            tryVerify(() => rootId.shadowEditor.editorHasFocus(), 1000,
                       "Shadow text input should have focus after clicking " + item.objectName)
         }
 

@@ -962,7 +962,13 @@ bool cwTrip::isScoped() const { return !scopePrefix().isEmpty(); }</code></pre>
   Follow-up (c), now decided. Two coupling smells to remove, both tracing to the
   same fact &mdash; <code>GlobalShadowTextInput</code> is a singleton, so there is
   exactly one live editor and therefore exactly one completer (that single-instance
-  part is correct and stays). What changes is <em>how a field declares its model</em>
+  part is correct and stays).
+  <strong>Superseded in its premise &mdash; see
+  <a href="#per-window-host">Per-window editor host</a>:</strong> the type is now
+  <code>ShadowEditorHost</code> and it is not a singleton, so &ldquo;exactly one live
+  editor&rdquo; holds <em>per window</em>, not per application. The conclusion below
+  is unchanged &mdash; one editor and one completer per window is still right &mdash;
+  but singleton-ness is no longer the reason for it. What changes is <em>how a field declares its model</em>
   and <em>where the one completer instance lives</em>. The target is the same shape
   as <code>QtQuick.Controls</code>' <code>ToolTip</code>: one shared visual instance,
   fed per-item by an attached property, rendered in the overlay.
@@ -985,7 +991,9 @@ bool cwTrip::isScoped() const { return !scopePrefix().isEmpty(); }</code></pre>
     <strong>Home the one instance under the shadow-editor singleton.</strong> Move
     <code>ScopeStationCompleter {}</code> out of <code>MainContent.qml</code> and make
     it a generic child slot of <code>GlobalShadowTextInput</code> (already parented
-    into the overlay via <code>GlobalShadowTextInput.parent = overlay</code>), so it
+    into the overlay via <code>GlobalShadowTextInput.parent = overlay</code> &mdash;
+    that reparenting line no longer exists, see
+    <a href="#per-window-host">Per-window editor host</a>), so it
     still renders under the editor's geometry. The singleton stays station-agnostic:
     the model arrives via the attached-property resolver, not via singleton code.
     <code>MainContent</code> no longer mentions the completer.
@@ -1043,6 +1051,12 @@ bool cwTrip::isScoped() const { return !scopePrefix().isEmpty(); }</code></pre>
     <code>editorComponent: EditorComponents.stationName</code>.
   </li>
   <li>
+    <strong>Renamed since &mdash; see
+    <a href="#per-window-host">Per-window editor host</a>:</strong> everything called
+    <code>GlobalShadowTextInput</code> below is now <code>ShadowEditorHost</code>, one
+    instance per window rather than a singleton, and the
+    <code>QQ.PropertyChanges</code> mechanism described here has been replaced in
+    <code>DataBox</code> by a <code>QQ.Connections</code> gated on the state.
     <strong><code>GlobalShadowTextInput</code></strong> became a host: it loads the
     requested component into a <code>Loader</code>, positions it over the field, and
     commits on an outside press. The whole open/close handoff moved here from
@@ -1094,6 +1108,10 @@ bool cwTrip::isScoped() const { return !scopePrefix().isEmpty(); }</code></pre>
   <code>CloseOnPressOutside</code> consumes the closing press, and today's
   full-window <code>MouseArea</code> deliberately passes it through so clicking cell to
   cell commits and re-opens in one click.
+  <strong>The rejection is now stronger, not weaker</strong> (see
+  <a href="#per-window-host">Per-window editor host</a>): the reparenting hack that
+  was Popup's only advantage here is gone by other means, so Popup would buy nothing
+  and still cost the press-through. Do not re-litigate.
   Tests: <code>tst_ShadowTextEditor.qml</code> (new) covers plain vs. station editor
   selection, one shared editor instance across fields of the same kind, editor swap
   between fields, and field release on close;
@@ -1118,16 +1136,96 @@ bool cwTrip::isScoped() const { return !scopePrefix().isEmpty(); }</code></pre>
     <a href="#host-contract">Host owns the editing contract</a>.
   </li>
   <li>
-    <strong>Consider a per-window host instead of a reparented singleton.</strong>
-    A third option alongside the rejected <code>QC.Popup</code> route: keep the
-    full-window <code>MouseArea</code> (the reason Popup was rejected) but drop the
-    <em>singleton</em>. That removes <code>GlobalShadowTextInput.parent = overlay</code>
-    (<code>MainContent.qml</code>, duplicated in <code>sketch/qml/Main.qml</code>),
-    the anchors-with-no-parent startup state, and the global-state reset boilerplate
-    now copied into six test files. Cost: fields need a way to find their host.
-    ~10 files.
+    <strong>Per-window host instead of a reparented singleton &mdash; DONE, GREEN.</strong>
+    See <a href="#per-window-host">Per-window editor host</a>.
   </li>
 </ul>
+
+<h3 id="per-window-host">Per-window editor host &mdash; DONE</h3>
+<p>
+  A spike settled first whether this was needed at all, since
+  <a href="https://github.com/Cavewhere/cavewhere/issues/494">issue #494</a>
+  (&ldquo;Support Multiple windows&rdquo; &mdash; right-click the sidebar to open
+  View/Data/Map in its own window) would depend on it. It was:
+  <code>tst_ShadowEditorMultiWindow.qml</code> built two windows, each claiming the
+  host the way <code>MainContent.qml</code> did. There is one
+  <code>QQmlApplicationEngine</code> for the application, so a singleton host is
+  shared by every window, and an <code>Item</code> has one parent &mdash; the second
+  window <em>took the host away from the first</em>, and window A's fields then
+  opened an editor in window B. Silently: no warning, no crash. The Data page is
+  wall-to-wall <code>ClickTextInput</code>, so #494 would have hit this immediately.
+</p>
+<p>
+  <code>GlobalShadowTextInput</code> is gone. In its place: <code>ShadowEditorHost</code>
+  (the same component, no <code>pragma Singleton</code>), held by a new
+  <code>AppOverlay</code> that each window declares once, and a C++ attached type
+  <code>cwWindowOverlay</code> that resolves an item's window to that window's overlay
+  &mdash; the same shape as Qt's own <code>Overlay.overlay</code>. A field writes
+  <code>(WindowOverlay.overlay as AppOverlay)?.shadowEditor</code>. An attached type was
+  chosen over a hand-rolled QML registry keyed by window because it re-resolves on
+  <code>windowChanged</code> by construction: #494 moves items <em>between</em> windows,
+  which a resolve-once registry gets wrong, and gets wrong silently.
+</p>
+<p>
+  <code>RootPopupItem</code> rode along and is deleted: it was the identical hack on the
+  identical two lines, and its two consumers (<code>ErrorListQuoteBox</code>,
+  <code>RemoveAskBox</code>) now reparent into the same per-window overlay. Also gone:
+  both <code>X.parent = overlay</code> reparent pairs, the anchors-with-no-parent startup
+  state, and the reset boilerplate that had been copied into five test files &mdash;
+  now one <code>MainWindowTest.closeAnyOpenEditor()</code>.
+</p>
+<p>
+  <strong>One trap worth keeping.</strong> <code>DataBox</code>'s
+  <code>MiddleTyping</code> state used to install its Tab/Space/Enter handling with
+  <code>QQ.PropertyChanges</code> reaching through <code>_shadowEditor</code> with
+  grouped-property syntax. That needs the host's type fully resolved while
+  <code>DataBox.qml</code> is still compiling, and now that the two types name each
+  other it is order-dependent: <code>MainContent</code> failed to load with
+  <em>&ldquo;Invalid grouped property access &hellip; neither a value nor an object
+  type&rdquo;</em> in 3 runs out of 5. The handlers are now a <code>QQ.Connections</code>
+  gated on <code>enabled: state === "MiddleTyping"</code>, whose target is an ordinary
+  binding &mdash; which also retires <code>DataBox</code>'s exposure to the
+  PropertyChanges-resolves-once landmine. Note the <strong>QML suite could not catch
+  this</strong>: <code>test-qml</code> is a separate module that loads
+  <code>cavewherelib</code> already built, so only the C++
+  <code>test_CavewhereMainWindow</code> saw it, and only intermittently.
+</p>
+<p>
+  <strong>Still single-window, and not this commit's work.</strong> The editor host
+  was one instance of the pattern, not the last.
+  <code>RootData.pageView</code> (<code>cwRootData.h</code>, written from both
+  <code>MainContent.qml</code> and <code>sketch/qml/Main.qml</code>) is the same
+  app-global slot for a per-window visual object, and
+  <code>prepareForProjectSwitch()</code> clears only the one registered page view's
+  cache. <code>cwPageSelectionModel</code> fuses an app-wide page <em>registry</em>
+  with per-window <em>selection and history</em> &mdash; the larger #494 blocker.
+  <code>SelectableValueGroup</code> holds an app-global <code>Item</code>, so
+  focusing a field in one window deselects another's. All three can now use this
+  mechanism; none is scheduled here.
+</p>
+<p>
+  <strong>Tests.</strong> <code>tst_ShadowEditorMultiWindow.qml</code> &mdash; kept,
+  not deleted: the spike was rewritten into a permanent regression test asserting the
+  fixed behaviour (each field resolves its own window's host; a field edits in its own
+  window; both windows edit at once). Its host-identity assertions are deliberate
+  &mdash; asserting only that two <code>AppOverlay</code>s carry two distinct hosts
+  proves nothing, since the inline alias guarantees that whatever the registry does.
+  <code>tst_ShadowTextEditor.qml</code> gained
+  <code>test_0_fieldsResolveTheHostInTheirOwnWindow</code>, covering a field declared
+  <em>before</em> the overlay and recovering once it registers.
+  <code>tst_ShadowEditorSignalRouting.qml</code> was rewritten off
+  <code>QQ.PropertyChanges</code> onto <code>QQ.Connections</code> to mirror
+  <code>DataBox</code>. Eight test files moved off the singleton in total.
+</p>
+<p>
+  <strong>Status:</strong> reviewed and green, not committed, not pushed. QML suite
+  835/0 (83 skipped); C++ 1684 cases with 2 pre-existing
+  <code>[Issue505]</code> BVH failures reproduced identically on a stashed clean
+  <code>HEAD</code>. Because the grouped-property failure above is <em>intermittent</em>,
+  one green run does not settle it: <code>[CavewhereMainWindow]</code> was run five
+  consecutive times, 5/5 clean with zero &ldquo;Invalid grouped&rdquo; errors. Treat
+  that repeated run as this section's gate whenever QML type declarations change.
+</p>
 
 <h3 id="host-contract">Host owns the editing contract &mdash; DONE</h3>
 <p>

@@ -32,20 +32,34 @@ QQ.Item {
         editorComponent: EditorComponents.stationName
     }
 
+    //Deliberately declared after the fields: they resolve their host before it
+    //exists, so this also covers a field recovering once the overlay registers.
+    AppOverlay {
+        id: overlayId
+    }
+
     TestCase {
         name: "ShadowTextEditor"
         when: windowShown
 
         function init() {
-            if(GlobalShadowTextInput.coreClickInput !== null) {
-                GlobalShadowTextInput.coreClickInput.closeEditor()
+            if(overlayId.shadowEditor.coreClickInput !== null) {
+                overlayId.shadowEditor.coreClickInput.closeEditor()
             }
-            GlobalShadowTextInput.enabled = false
+            overlayId.shadowEditor.enabled = false
+        }
+
+        function test_0_fieldsResolveTheHostInTheirOwnWindow() {
+            verify(overlayId.shadowEditor !== null, "the overlay carries a host")
+            //verify, not compare: compare deep-walks two Items when they differ
+            //and dies with "Maximum call stack size exceeded" instead of saying so
+            verify(plainFieldId._shadowEditor === overlayId.shadowEditor,
+                   "a field declared before the overlay must still find it")
         }
 
         //The station editor carries this; the plain one has no such property.
         function isStationEditor() {
-            return GlobalShadowTextInput.currentEditor.stationField !== undefined
+            return overlayId.shadowEditor.currentEditor.stationField !== undefined
         }
 
         function test_fieldWithoutEditorComponentGetsThePlainEditor() {
@@ -58,13 +72,10 @@ QQ.Item {
 
             plainFieldId.openEditor()
 
-            verify(GlobalShadowTextInput.currentEditor !== null)
-            compare(GlobalShadowTextInput.currentEditor.field, plainFieldId)
-            compare(GlobalShadowTextInput.editorText(), "plain")
-            // editor.visible isn't assertable here: the host is only parented
-            // into a scene by MainContent, so effective visibility is always
-            // false in a bare-component test. enabled is the editing flag.
-            compare(GlobalShadowTextInput.enabled, true)
+            verify(overlayId.shadowEditor.currentEditor !== null)
+            compare(overlayId.shadowEditor.currentEditor.field, plainFieldId)
+            compare(overlayId.shadowEditor.editorText(), "plain")
+            compare(overlayId.shadowEditor.enabled, true)
 
             verify(!isStationEditor(),
                    "the plain editor must not carry any autocomplete machinery")
@@ -78,8 +89,8 @@ QQ.Item {
 
             stationFieldId.openEditor()
 
-            compare(GlobalShadowTextInput.currentEditor.field, stationFieldId)
-            compare(GlobalShadowTextInput.editorText(), "a1")
+            compare(overlayId.shadowEditor.currentEditor.field, stationFieldId)
+            compare(overlayId.shadowEditor.editorText(), "a1")
             verify(isStationEditor())
         }
 
@@ -87,24 +98,24 @@ QQ.Item {
         //it rebuilds the whole editor on every move between them.
         function test_fieldsOfOneKindShareTheEditorInstance() {
             stationFieldId.openEditor()
-            let firstEditor = GlobalShadowTextInput.currentEditor
+            let firstEditor = overlayId.shadowEditor.currentEditor
             stationFieldId.closeEditor()
 
             otherStationFieldId.openEditor()
 
-            compare(GlobalShadowTextInput.currentEditor, firstEditor,
+            compare(overlayId.shadowEditor.currentEditor, firstEditor,
                     "station fields should reuse one editor instance")
-            compare(GlobalShadowTextInput.currentEditor.field, otherStationFieldId)
-            compare(GlobalShadowTextInput.editorText(), "a2")
+            compare(overlayId.shadowEditor.currentEditor.field, otherStationFieldId)
+            compare(overlayId.shadowEditor.editorText(), "a2")
         }
 
         function test_editorSwapsWithTheFieldBeingEdited() {
             stationFieldId.openEditor()
-            let stationEditor = GlobalShadowTextInput.currentEditor
+            let stationEditor = overlayId.shadowEditor.currentEditor
             stationFieldId.closeEditor()
 
             plainFieldId.openEditor()
-            verify(GlobalShadowTextInput.currentEditor !== stationEditor)
+            verify(overlayId.shadowEditor.currentEditor !== stationEditor)
             verify(!isStationEditor())
         }
 
@@ -112,9 +123,9 @@ QQ.Item {
             plainFieldId.openEditor()
             plainFieldId.closeEditor()
 
-            compare(GlobalShadowTextInput.enabled, false)
-            compare(GlobalShadowTextInput.coreClickInput, null)
-            compare(GlobalShadowTextInput.currentEditor.field, null)
+            compare(overlayId.shadowEditor.enabled, false)
+            compare(overlayId.shadowEditor.coreClickInput, null)
+            compare(overlayId.shadowEditor.currentEditor.field, null)
         }
     }
 }

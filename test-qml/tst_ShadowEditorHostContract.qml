@@ -4,7 +4,7 @@ import QtQuick as QQ
 import QtTest
 import cavewherelib
 
-// Fields talk to the shared editor through GlobalShadowTextInput's own verbs,
+// Fields talk to the shared editor through ShadowEditorHost's own verbs,
 // never by reaching into the editor it loaded. These cover the two behaviours
 // that contract has to keep: a rejected value leaves the editor open and
 // focused, and a commit tears the editor down before it reports the new text.
@@ -29,39 +29,37 @@ QQ.Item {
         validator: stationValidatorId
     }
 
+    AppOverlay {
+        id: overlayId
+    }
+
     TestCase {
         name: "ShadowEditorHostContract"
         when: windowShown
 
-        function init() {
-            //Parented in the way MainContent does it, or nothing here has real
-            //active focus to lose or take back
-            GlobalShadowTextInput.parent = rootId
-        }
-
         //These tests deliberately leave the editor open, and an editor still
         //focused while the fields are torn down blurs onto a dead field.
         function cleanup() {
-            if(GlobalShadowTextInput.coreClickInput !== null) {
-                GlobalShadowTextInput.coreClickInput.closeEditor()
+            if(overlayId.shadowEditor.coreClickInput !== null) {
+                overlayId.shadowEditor.coreClickInput.closeEditor()
             }
         }
 
         function test_rejectedTextKeepsTheEditorOpenAndFocused() {
             validatedFieldId.openEditor()
-            tryVerify(() => GlobalShadowTextInput.editorHasFocus(), 1000)
+            tryVerify(() => overlayId.shadowEditor.editorHasFocus(), 1000)
 
-            GlobalShadowTextInput.setEditorText("not a station name")
+            overlayId.shadowEditor.setEditorText("not a station name")
 
             compare(validatedFieldId.commitChanges(), false,
                     "a value the validator rejects must not commit")
-            compare(GlobalShadowTextInput.coreClickInput, validatedFieldId,
+            compare(overlayId.shadowEditor.coreClickInput, validatedFieldId,
                     "the field keeps the editor so the user can fix the value")
-            verify(GlobalShadowTextInput.hasError(),
+            verify(overlayId.shadowEditor.hasError(),
                    "the reason it was rejected has to be on screen")
             //focus stays true under the Loader's focus scope, so only
             //forceActiveFocus puts the cursor back — hence editorHasFocus()
-            tryVerify(() => GlobalShadowTextInput.editorHasFocus(), 1000,
+            tryVerify(() => overlayId.shadowEditor.editorHasFocus(), 1000,
                       "typing should continue where the user left off")
         }
 
@@ -71,18 +69,18 @@ QQ.Item {
             //focus leave and commits a second time.
             let stillOpen = []
             function record() {
-                stillOpen.push(GlobalShadowTextInput.coreClickInput !== null)
+                stillOpen.push(overlayId.shadowEditor.coreClickInput !== null)
             }
 
             plainFieldId.finishedEditting.connect(record)
             validatedFieldId.finishedEditting.connect(record)
 
             plainFieldId.openEditor()
-            GlobalShadowTextInput.setEditorText("plain2")
+            overlayId.shadowEditor.setEditorText("plain2")
             compare(plainFieldId.commitChanges(), true)
 
             validatedFieldId.openEditor()
-            GlobalShadowTextInput.setEditorText("a2")
+            overlayId.shadowEditor.setEditorText("a2")
             compare(validatedFieldId.commitChanges(), true)
 
             plainFieldId.finishedEditting.disconnect(record)

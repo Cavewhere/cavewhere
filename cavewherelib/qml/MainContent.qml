@@ -77,10 +77,7 @@ QQ.Item {
         }
     }
 
-    QQ.Item {
-        id: overlay
-        anchors.fill: parent
-    }
+    AppOverlay {}
 
     QQ.Component {
         id: renderingComponent
@@ -200,9 +197,6 @@ QQ.Item {
     }
 
     QQ.Component.onCompleted: {
-        GlobalShadowTextInput.parent = overlay;
-        RootPopupItem.parent = overlay
-
         pageView.unknownPageComponent = unknownPageComponent
         let viewPage = RootData.pageSelectionModel.registerPage(null, "View", renderingComponent);
         let repositoryPage = RootData.pageSelectionModel.registerPage(null, "Source", sourceComponent);

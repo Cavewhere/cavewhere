@@ -13,7 +13,25 @@ Rectangle {
     // an objectName search can't reach it. Expose it for tests that drive it.
     property alias saveAsDialog: testSaveAsDialogId
 
+    //This window's shared text editor, for tests that drive or assert on it
+    readonly property ShadowEditorHost shadowEditor:
+        (rootId.WindowOverlay.overlay as AppOverlay)?.shadowEditor ?? null
+
     color: Theme.background
+
+    //Every test in a file shares this window, so an editor one test left open
+    //is still open in the next. Closing through the field is what happens when
+    //a user leaves the cell, so this leaves both sides consistent.
+    function closeAnyOpenEditor() {
+        if(rootId.shadowEditor === null) {
+            return
+        }
+
+        if(rootId.shadowEditor.coreClickInput !== null) {
+            rootId.shadowEditor.coreClickInput.closeEditor()
+        }
+        rootId.shadowEditor.enabled = false
+    }
 
     width: 1200
     height: 700

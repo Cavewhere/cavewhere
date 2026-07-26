@@ -28,6 +28,18 @@ QQ.Item {
     property alias wrapMode: textAreaId.wrapMode
     property string errorText
 
+    //The editor host for whichever window this field is in. Resolved rather
+    //than named: there is one host per window, and a field can be moved
+    //between windows (issue #494).
+    readonly property ShadowEditorHost _shadowEditor:
+        (WindowOverlay.overlay as AppOverlay)?.shadowEditor ?? null
+
+    //The host this field actually handed its editor to. Held rather than
+    //re-resolved, because _shadowEditor follows the field between windows: a
+    //commit has to land in the editor holding the text, not in whichever
+    //window the field has moved to since (issue #494).
+    property ShadowEditorHost _openHost: null
+
     signal startedEditting()
     signal finishedEditting(string newText)
 
@@ -40,8 +52,9 @@ QQ.Item {
 
     onFocusChanged: {
         if(focus) {
-            if(GlobalShadowTextInput.coreClickInput !== null) {
-                GlobalShadowTextInput.coreClickInput.commitChanges()
+            let openField = clickTextInput._shadowEditor?.coreClickInput ?? null
+            if(openField !== null) {
+                openField.commitChanges()
             }
             openEditor()
         }
@@ -58,11 +71,16 @@ QQ.Item {
     function commitChanges() {
         const acceptable = 2 //QValidator.Acceptable, which Validator doesn't export
 
-        let newText = GlobalShadowTextInput.editorText()
+        let host = clickTextInput._openHost ?? clickTextInput._shadowEditor
+        if(host === null) {
+            return false;
+        }
+
+        let newText = host.editorText()
 
         if(validator !== null && validator.validate(newText) !== acceptable) {
-            GlobalShadowTextInput.showError(validator.errorText)
-            GlobalShadowTextInput.focusEditor()
+            host.showError(validator.errorText)
+            host.focusEditor()
             return false;
         }
 
@@ -75,7 +93,9 @@ QQ.Item {
     }
 
     function closeEditor() {
-        GlobalShadowTextInput.closeEditor()
+        let host = clickTextInput._openHost ?? clickTextInput._shadowEditor
+        host?.closeEditor()
+        clickTextInput._openHost = null
 
         doubleClickArea.enabled = true;
         textAreaId.visible = true;
@@ -83,6 +103,13 @@ QQ.Item {
     }
 
     function openEditor() {
+        let host = clickTextInput._shadowEditor
+        if(host === null) {
+            console.warn("No AppOverlay in this field's window, so there is "
+                         + "nowhere to edit it", clickTextInput)
+            return
+        }
+
         //Open the virtual keyboard if any
         Qt.inputMethod.show()
 
@@ -92,11 +119,12 @@ QQ.Item {
 
         //The editor itself — which one, where it sits, what it holds — is the
         //host's business
-        if(!GlobalShadowTextInput.openEditor(clickTextInput)) {
+        if(!host.openEditor(clickTextInput)) {
             textAreaId.visible = true
             return
         }
 
+        clickTextInput._openHost = host
         doubleClickArea.enabled = false
         isEditting = true
     }

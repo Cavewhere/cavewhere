@@ -19,7 +19,7 @@ import cavewherelib
   exists only for the fields that asked for it instead of riding along inert on
   every other field.
 
-  The host (GlobalShadowTextInput) fills in field, minWidth and minHeight when
+  The host (ShadowEditorHost) fills in field, minWidth and minHeight when
   it opens an editor. An editor never reaches back into its host, so hosting it
   somewhere else later is a change to one file.
  */
