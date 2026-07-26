@@ -52,6 +52,13 @@ cwFixStation makeFix(const QString& name,
     return fix;
 }
 
+// Every warning a cave carries, flattened to one string to assert substrings
+// against. Joined with a space so a phrase never spans two warnings.
+QString warningText(cwCave* cave)
+{
+    return cave->errorModel()->toStringList().join(QChar(' '));
+}
+
 // Append four fixes in a tight EPSG:32612 cluster — enough to establish a
 // cluster so a fifth straggler can be judged an outlier.
 void appendGoodCluster(cwCave* cave)
@@ -361,7 +368,7 @@ TEST_CASE("revalidate attributes an outlier warning to its cave",
         makeFix(QStringLiteral("Bad"), QStringLiteral("EPSG:32612"), 500150.0, 5194000.0, 2708.0));
 
     REQUIRE(cave->errorModel()->warningCount() == 1);
-    CHECK(cave->errorModel()->toStringList().join(QChar(' ')).contains(QStringLiteral("Bad")));
+    CHECK(warningText(cave).contains(QStringLiteral("Bad")));
 }
 
 TEST_CASE("revalidate clears the warning when the outlier is corrected",
@@ -401,7 +408,7 @@ TEST_CASE("revalidate updates an existing warning in place without re-adding",
         makeFix(QStringLiteral("Bad"), QStringLiteral("EPSG:32612"), 500150.0, 5194000.0, 2708.0));
     REQUIRE(cave->errorModel()->warningCount() == 1);
 
-    const QString firstMessage = cave->errorModel()->toStringList().join(QChar(' '));
+    const QString firstMessage = warningText(cave);
 
     // Moving the outlier to a different far coordinate should update the same
     // warning row (new distance) rather than remove-and-append a new one.
@@ -413,7 +420,7 @@ TEST_CASE("revalidate updates an existing warning in place without re-adding",
 
     CHECK(cave->errorModel()->warningCount() == 1);
     CHECK(warningSpy.size() == 0);
-    CHECK(cave->errorModel()->toStringList().join(QChar(' ')) != firstMessage);
+    CHECK(warningText(cave) != firstMessage);
 }
 
 TEST_CASE("revalidate preserves a suppressed outlier warning across edits",
@@ -634,8 +641,12 @@ TEST_CASE("revalidate flags a fix outside its CS's valid domain with no cluster"
         makeFix(QStringLiteral("B"), QStringLiteral("EPSG:32613"), 1478000.0, 4430000.0, 1655.0));
 
     REQUIRE(badCave->errorModel()->warningCount() == 1);
-    CHECK(badCave->errorModel()->toStringList().join(QChar(' '))
-              .contains(QStringLiteral("outside the valid range")));
+    // These messages are assembled by choosing between two whole sentences, so
+    // the tests pin the exact wording — a wrong choice is invisible to a
+    // substring both wordings share. The plural halves are pinned further down.
+    CHECK(warningText(badCave).contains(
+        QStringLiteral("Fix station \"B\" has a coordinate outside the valid range for its "
+                       "coordinate system")));
     CHECK(goodCave->errorModel()->warningCount() == 0);
 }
 
@@ -668,8 +679,11 @@ TEST_CASE("revalidate flags a distant in-domain cave once a two-cave majority ex
         makeFix(QStringLiteral("C"), QStringLiteral("EPSG:32613"), 478000.0, 5430000.0, 1655.0));
 
     REQUIRE(caveC->errorModel()->warningCount() == 1);
-    CHECK(caveC->errorModel()->toStringList().join(QChar(' '))
-              .contains(QStringLiteral("far from the rest")));
+    // One outlier, so the singular verb. The distance is computed, so the
+    // assertions straddle it rather than pinning a number.
+    const QString clusterMessage = warningText(caveC);
+    CHECK(clusterMessage.contains(QStringLiteral("Fix station \"C\" (~")));
+    CHECK(clusterMessage.contains(QStringLiteral(") is far from the rest of the survey")));
     CHECK(caveA->errorModel()->warningCount() == 0);
     CHECK(caveB->errorModel()->warningCount() == 0);
 }
@@ -700,10 +714,12 @@ TEST_CASE("revalidate flags a domain-bad cave in a balanced split the cluster ru
     badCave->fixStations()->appendFixStation(
         makeFix(QStringLiteral("B2"), QStringLiteral("EPSG:32613"), 1478100.0, 4430100.0, 1656.0));
 
-    // Part A flags the bad cave with the domain message; the good cave is clean.
+    // Part A flags the bad cave; the good cave is clean. Two offenders in one
+    // cave, so the plural wording — one sentence naming both, not one each.
     REQUIRE(badCave->errorModel()->warningCount() == 1);
-    CHECK(badCave->errorModel()->toStringList().join(QChar(' '))
-              .contains(QStringLiteral("outside the valid range")));
+    CHECK(warningText(badCave).contains(
+        QStringLiteral("Fix stations \"B1\", \"B2\" have coordinates outside the valid range for "
+                       "their coordinate system")));
     CHECK(goodCave->errorModel()->warningCount() == 0);
 
     // Prove the cluster rule alone could not: the same four points, all treated
@@ -975,7 +991,9 @@ TEST_CASE("revalidate flags a fix whose station name is not in the survey",
     cave->fixStations()->appendFixStation(
         makeFix(QStringLiteral("XYZ"), QStringLiteral("EPSG:32613"), 478100.0, 4430100.0, 1656.0));
     REQUIRE(cave->errorModel()->warningCount() == 1);
-    CHECK(cave->errorModel()->toStringList().join(QChar(' ')).contains(QStringLiteral("XYZ")));
+    CHECK(warningText(cave).contains(
+        QStringLiteral("Fix station \"XYZ\" names a survey station that doesn't exist in this "
+                       "cave")));
 
     // Correcting the name to an existing station clears the warning.
     const int badRow = cave->fixStations()->count() - 1;
@@ -983,6 +1001,34 @@ TEST_CASE("revalidate flags a fix whose station name is not in the survey",
                                  QStringLiteral("A2"),
                                  cwFixStationModel::StationNameRole);
     CHECK(cave->errorModel()->warningCount() == 0);
+}
+
+TEST_CASE("several broken fixes in one cave collapse into one plural sentence per kind",
+          "[cwFixStationValidator][reference]")
+{
+    // Both reference kinds report per cave, not per fix, so a cave with two of
+    // each produces one warning carrying two sentences, each in its plural form.
+    // The unknown names are listed; the unnamed fixes can only be counted, which
+    // is why that sentence is built separately from the other three.
+    cwCavingRegion region;
+    region.addCave();
+    auto* cave = region.cave(0);
+    REQUIRE(cave != nullptr);
+
+    cwSurveyNetwork network;
+    network.addShot(QStringLiteral("A1"), QStringLiteral("A2"));
+    cave->setSurveyNetwork(network);
+
+    for (const QString& name : {QStringLiteral("XYZ"), QStringLiteral("PDQ"), QString(), QString()}) {
+        cave->fixStations()->appendFixStation(
+            makeFix(name, QStringLiteral("EPSG:32613"), 478000.0, 4430000.0, 1655.0));
+    }
+
+    REQUIRE(cave->errorModel()->warningCount() == 1);
+    const QString message = warningText(cave);
+    CHECK(message.contains(QStringLiteral("Fix stations \"XYZ\", \"PDQ\" name survey stations that "
+                                          "don't exist in this cave")));
+    CHECK(message.contains(QStringLiteral("2 fix stations have no station name")));
 }
 
 TEST_CASE("revalidate defers a named fix with no network but flags a blank fix",
@@ -1005,7 +1051,7 @@ TEST_CASE("revalidate defers a named fix with no network but flags a blank fix",
     cave->setSurveyNetwork(network);
     cave->fixStations()->addFixStation();
     REQUIRE(cave->errorModel()->warningCount() == 1);
-    CHECK(cave->errorModel()->toStringList().join(QChar(' '))
+    CHECK(warningText(cave)
               .contains(QStringLiteral("no station name")));
 
     // Naming the blank row to an existing station clears the warning.

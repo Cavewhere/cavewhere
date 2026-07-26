@@ -913,7 +913,8 @@ bound to an <code>errorModel</code> on this page (<code>CavePage.qml:603-604,871
     even before a network exists. Membership is <b>case-insensitive</b> (<code>cwSurveyNetwork::stations()</code>).</li>
     <li><b>Inline row flag.</b> New read-only <code>StationErrorRole</code> on the model (distinct messages for
     <i>Empty</i> and <i>Unknown</i>). The model gained a <code>setCave()</code> back-reference (wired in the cwCave ctor)
-    so it can reach <code>cave->network()</code>, and re-emits <code>dataChanged</code> for the role on
+    so it can reach <code>cave->network()</code> — <i>later replaced by constructor injection in A1;
+    <code>setCave()</code> no longer exists</i> — and re-emits <code>dataChanged</code> for the role on
     <code>surveyNetworkChanged</code> and on a station-name edit. Driven on the row by the shared <code>InlineWarning</code>
     component (a sibling icon of the domain warning, distinct <code>objectName</code> <code>stationWarning.N</code>) plus a
     red tint on the station-name cell.</li>
@@ -1161,7 +1162,73 @@ notes. Ordered by payoff-vs-cost, not by confidence.</p>
   <li><b>R3 — Three near-identical singular/plural sentence builders in the validator</b>
   (<code>cwFixStationValidator.cpp:301</code>, <code>:323</code>, <code>:404</code>). <code>referenceWarnings()</code>
   added the third and fourth copy of “join fragments → pick phrasing → one sentence per cave”; wants a
-  <code>joinCaveWarning(parts, singular, plural)</code> helper.</li>
+  <code>joinCaveWarning(parts, singular, plural)</code> helper. — <b>DONE</b>.
+  <span class="mono-note"><b>Done 2026-07-26 — the helper landed, named <code>namedCaveWarning</code></b> rather than the
+  <code>joinCaveWarning</code> sketched above: a file-scope free function in the validator's anonymous namespace,
+  <code>singular.arg(parts.first())</code> for one fragment, <code>plural.arg(parts.join(kFragmentSeparator))</code>
+  otherwise. Three of the four sites call it — cluster, domain, and the unknown-name half of
+  <code>referenceWarnings()</code>. The rename is deliberate: “join” describes only the plural path, and
+  <i>named</i> marks the contrast with the count-based fourth builder six lines below it, which was the thing a reader
+  would otherwise misread as an oversight.
+  <br><b>A review pass removed a dead guard and paired the separators.</b> The first cut opened with
+  <code>if (parts.isEmpty()) return QString();</code> plus a doc sentence promising “empty in, empty out” — unreachable
+  from all three sites: two iterate hashes whose only mutation is <code>parts[cave].append(...)</code> (insert and append
+  in one expression, so no entry can hold zero fragments) and the third is already inside
+  <code>if (!unknownNames.isEmpty())</code>. Deleted, and the contract is now one line stating the precondition.
+  <code>kFragmentSeparator</code> also moved up to join the file's other constants and gained a sibling,
+  <code>kSentenceSeparator</code> — the two levels of joining (names inside a sentence vs. sentences inside a warning)
+  are not interchangeable, and naming only one of the pair documented neither.
+  <br><b>The cluster site changed shape, not text.</b> It was the only one doing <i>word</i>-level pluralization —
+  a single <code>"Fix %1 %2 %3 far from…"</code> template with <code>station</code>/<code>stations</code> and
+  <code>is</code>/<code>are</code> slotted in — which is the form that cannot be translated, since a language whose
+  number agreement touches more than those two words has nowhere to put it. It now selects between two whole sentences
+  like the others. Verified byte-identical output for both counts.
+  <br><b>The fourth builder was deliberately left alone</b> (<code>emptyCount</code>, now <code>:435</code>). It is
+  count-based rather than name-based, and its singular form has no placeholder at all, so routing it through a helper
+  that calls <code>arg()</code> would emit a Qt “Argument missing” warning. A second single-use helper to avoid that
+  would be abstraction for its own sake.
+  <br><b>The pluralization had no test coverage before this</b> — the one assertion that touched these messages
+  (<code>test_cwFixStationValidator.cpp:672</code>) matched <code>"far from the rest"</code>, which is common to both
+  wordings, so R3 could have silently changed user-facing text. Now pinned in both directions: singular and plural
+  domain, singular cluster, singular unknown-name, and a new case
+  (<i>“several broken fixes in one cave collapse into one plural sentence per kind”</i>) covering plural unknown-name
+  plus the counted empty-name form. 79 cases / 472 assertions on the fix-station tags, QML 16/16 and 10/10.
+  <br><b>Line count went slightly up</b> (+12 in the <code>.cpp</code>): the three sites shed ~8 lines while the
+  documented helper costs 20. What collapsed is conceptual — one pluralization decision instead of three — not bulk.
+  <br><b>Not folded in: the <code>tr()</code> asymmetry.</b> The row message goes through
+  <code>cwFixStationDiagnosticsModel::tr()</code> while these cave-level messages are raw <code>QStringLiteral</code>.
+  Checked before deciding: CaveWhere has <i>no</i> translation infrastructure — no <code>.ts</code> files, no
+  <code>qt_add_translations</code>, no <code>lupdate</code>, and only 27 <code>tr()</code> calls in all of
+  <code>cavewherelib/src/*.cpp</code> across 5 files (one of them the <code>tr()</code> A1 itself added). Marking four
+  more strings would make nothing translatable; whether to ship translations at all is a project-level call, not R3's.
+  Logged as a §14 item instead.
+  <br><b>Test cleanup in the same pass.</b> <code>cave-&gt;errorModel()-&gt;toStringList().join(QChar(' '))</code> appeared
+  nine times in <code>test_cwFixStationValidator.cpp</code>, and the new assertions were about to make it eleven with two
+  spellings (some inline, some bound to a local). Extracted as <code>warningText(cave)</code> in the file's existing
+  anonymous namespace and applied to all nine, so no split idiom is left behind.</span></li>
+  <li><b>R6 — Station names reach a <code>RichText</code> label unescaped</b> (pre-existing; found while tracing R3's
+  message path). <code>HelpArea.qml:74</code> sets <code>textFormat: QC.Label.RichText</code> and
+  <code>CavePage.qml:132</code> joins a cave's <code>warningMessages</code> into it with <code>&lt;br&gt;</code>. Every
+  fragment built at <code>cwFixStationValidator.cpp:314</code>, <code>:333</code> and <code>:411</code> interpolates a
+  user-typed station name with no escaping, so a station named <code>A&amp;B</code> or <code>A&lt;b&gt;</code> renders
+  wrong — and <code>&lt;img src=…&gt;</code> renders worse. <code>.arg()</code> itself is safe (replacements are not
+  re-scanned for placeholders), so this is purely a markup-escaping gap. Note this is the one argument for structured
+  errors that has teeth: escaping belongs at the view boundary, and today there is no boundary to put it at. Deserves its
+  own issue.</li>
+  <li><b>R7 — <code>gatherCandidates()</code> builds a <code>cwCoordinateTransform</code> inside its per-fix loop</b>
+  (<code>cwFixStationValidator.cpp:255</code>), and that constructor does <code>proj_context_create</code> +
+  <code>proj_create_crs_to_crs</code> + <code>proj_normalize_for_visualization</code> with no caching — hundreds of µs to
+  ms per cross-CS fix, per <code>revalidate()</code>. Two things keep it from being urgent: the loop short-circuits when
+  the fix's CS already equals the global CS (<code>:252</code>, so a single-zone project builds no PROJ object at all),
+  and the neighbouring domain check already caches. This is the same cost centre as
+  <a href="https://github.com/Cavewhere/cavewhere/issues/633">#633</a> and was
+  <a href="https://github.com/Cavewhere/cavewhere/issues/633#issuecomment-5084127547">reported there</a> rather than
+  tracked here, together with the ordering it implies: caching the transform per CS pair collapses this loop from N
+  constructions to one and makes the hand-hoist unnecessary. It dwarfs every string cost in this feature by six orders of
+  magnitude, which is the honest reason none of R3's micro-costs mattered.
+  <br><b>Also corrected while filing:</b> both earlier comments on #633 linked to
+  <code>blob/master/cavewherelib/src/…</code>, a path that does not exist on <code>master</code> — the C++ tree lives on
+  <code>dev</code>, so those links 404. Noted in the same comment.</li>
   <li><b>R4 — The row flag and the cave warning classify independently</b>
   (<code>cwFixStationDiagnosticsModel.cpp:25</code> vs <code>cwFixStationValidator.cpp:231</code>) — <b>DONE</b>. Already
   noted for the domain check; U10 doubled it for the reference check.
@@ -1196,6 +1263,15 @@ notes. Ordered by payoff-vs-cost, not by confidence.</p>
   fallback&nbsp;/ neither&nbsp;/ unparseable), per-axis attribution surviving the fix-level wrapper, name classification,
   and one test asserting the invariant itself: for the same fix, the inline row flag and the cave banner both fire or
   both stay quiet, including the global-CS fallback case where the two used to resolve independently.</span></li>
+  <li><b>R5 — Decide whether user-facing strings are translatable at all</b> (project-level, surfaced by R3).
+  This feature ships both conventions: the row messages use <code>cwFixStationDiagnosticsModel::tr()</code>, the
+  cave-level warnings use raw <code>QStringLiteral</code>. Neither is wrong today because <b>nothing is translated</b> —
+  there are no <code>.ts</code> files, no <code>qt_add_translations</code>, no <code>lupdate</code> step, and only 27
+  <code>tr()</code> calls across 5 files in <code>cavewherelib/src</code>. So the real question is not which convention
+  this feature should follow but whether CaveWhere intends to be localizable. <i>Yes</i> ⇒ a wrapping pass plus a
+  <code>.ts</code>/<code>lupdate</code> build step, and the <code>tr()</code> calls that exist become meaningful;
+  <i>no</i> ⇒ drop the stray <code>tr()</code> calls so the codebase stops implying a pipeline that isn't there.
+  Worth answering once, region-wide — not per feature, which is how the split arose.</li>
 </ul>
 
 <h3>Known gaps left open</h3>
@@ -1205,8 +1281,10 @@ notes. Ordered by payoff-vs-cost, not by confidence.</p>
   deliberately so external svx/Compass/Walls centrelines stay covered.</li>
   <li><b>The narrow-layout badge is untested</b> — no <code>objectName</code>, and no existing QML suite drives
   <code>isNarrow</code>.</li>
-  <li><b><code>setCave()</code> is single-call by contract.</b> Commit 9's review added an equality guard and a
-  disconnect-previous, so a second call is now safe rather than merely unreached.</li>
+  <li><b><s><code>setCave()</code> is single-call by contract.</s> — no longer applies (2026-07-26).</b>
+  A1 replaced the setter with constructor injection (<code>cwFixStationDiagnosticsModel(cwCave*)</code>) and deleted
+  <code>setCave()</code>, so there is no second call to guard against: the back-reference is now <code>const</code> for the
+  model's lifetime. Commit 9's equality guard and disconnect-previous went with it.</li>
 </ul>
 
 <hr>

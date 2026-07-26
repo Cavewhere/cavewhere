@@ -48,6 +48,12 @@ constexpr double kMadMultiplier = 6.0;
 // for small N; the domain check (Part A) is the reliable path.
 constexpr int kMinFixesForDetection = 3;
 
+// A cave's warning nests two levels of joining, and they are not interchangeable:
+// station names are listed inside one sentence, while a cave with more than one
+// kind of problem gets one sentence per kind.
+constexpr QLatin1String kFragmentSeparator(", ");
+constexpr QLatin1String kSentenceSeparator(" ");
+
 // Our two Warning kinds are identified by stable ids from the cwErrorTypeId
 // registry, so a user's suppression survives the message text changing across
 // versions (see cwError::errorTypeId) and each kind is suppressed independently.
@@ -260,6 +266,18 @@ cwFixStationValidator::gatherCandidates() const
 
 namespace {
 
+//! Two whole sentences rather than slotting "station"/"stations" and "is"/"are"
+//! into one template — number agreement is not always confined to those words.
+//! `parts` must be non-empty.
+QString namedCaveWarning(const QStringList& parts,
+                         const QString& singular,
+                         const QString& plural)
+{
+    return parts.size() == 1
+        ? singular.arg(parts.first())
+        : plural.arg(parts.join(kFragmentSeparator));
+}
+
 QString stationNameFor(cwCave* cave, const QUuid& fixId)
 {
     if (cave == nullptr || cave->fixStations() == nullptr) {
@@ -298,15 +316,12 @@ void cwFixStationValidator::revalidate()
 
     QHash<cwCave*, QString> clusterMessages;
     for (auto it = clusterParts.constBegin(); it != clusterParts.constEnd(); ++it) {
-        const QStringList& fragments = it.value();
-        const QString stationWord = fragments.size() == 1
-            ? QStringLiteral("station") : QStringLiteral("stations");
-        const QString verb = fragments.size() == 1
-            ? QStringLiteral("is") : QStringLiteral("are");
         clusterMessages.insert(it.key(),
-            QStringLiteral("Fix %1 %2 %3 far from the rest of the survey — "
-                           "check the coordinate system, UTM zone, and value.")
-                .arg(stationWord, fragments.join(QStringLiteral(", ")), verb));
+            namedCaveWarning(it.value(),
+                QStringLiteral("Fix station %1 is far from the rest of the survey — "
+                               "check the coordinate system, UTM zone, and value."),
+                QStringLiteral("Fix stations %1 are far from the rest of the survey — "
+                               "check the coordinate system, UTM zone, and value.")));
     }
 
     // Domain-outlier messages (Part A): fixes outside their own CS's valid range.
@@ -320,15 +335,12 @@ void cwFixStationValidator::revalidate()
 
     QHash<cwCave*, QString> domainMessages;
     for (auto it = domainParts.constBegin(); it != domainParts.constEnd(); ++it) {
-        const QStringList& fragments = it.value();
-        const QString message = fragments.size() == 1
-            ? QStringLiteral("Fix station %1 has a coordinate outside the valid range for its "
-                             "coordinate system — check for a transposed digit or the wrong CS/zone.")
-                  .arg(fragments.first())
-            : QStringLiteral("Fix stations %1 have coordinates outside the valid range for their "
-                             "coordinate system — check for a transposed digit or the wrong CS/zone.")
-                  .arg(fragments.join(QStringLiteral(", ")));
-        domainMessages.insert(it.key(), message);
+        domainMessages.insert(it.key(),
+            namedCaveWarning(it.value(),
+                QStringLiteral("Fix station %1 has a coordinate outside the valid range for its "
+                               "coordinate system — check for a transposed digit or the wrong CS/zone."),
+                QStringLiteral("Fix stations %1 have coordinates outside the valid range for their "
+                               "coordinate system — check for a transposed digit or the wrong CS/zone.")));
     }
 
     // Reference messages: fixes whose station name matches no survey station in
@@ -410,14 +422,15 @@ QHash<cwCave*, QString> cwFixStationValidator::referenceWarnings() const
         // both, so the phrasing tells the user the fix is being ignored.
         QStringList parts;
         if (!unknownNames.isEmpty()) {
-            parts.append(unknownNames.size() == 1
-                ? QStringLiteral("Fix station %1 names a survey station that doesn't exist in "
-                                 "this cave — the fix is ignored until the name matches a station.")
-                      .arg(unknownNames.first())
-                : QStringLiteral("Fix stations %1 name survey stations that don't exist in this "
-                                 "cave — the fixes are ignored until the names match stations.")
-                      .arg(unknownNames.join(QStringLiteral(", "))));
+            parts.append(namedCaveWarning(unknownNames,
+                QStringLiteral("Fix station %1 names a survey station that doesn't exist in "
+                               "this cave — the fix is ignored until the name matches a station."),
+                QStringLiteral("Fix stations %1 name survey stations that don't exist in this "
+                               "cave — the fixes are ignored until the names match stations.")));
         }
+        // Counted rather than named — an unnamed fix has nothing to list it by —
+        // so this stays hand-rolled: its singular form takes no argument at all,
+        // and namedCaveWarning() interpolates unconditionally.
         if (emptyCount > 0) {
             parts.append(emptyCount == 1
                 ? QStringLiteral("A fix station has no station name — it is ignored until you "
@@ -429,7 +442,7 @@ QHash<cwCave*, QString> cwFixStationValidator::referenceWarnings() const
         if (parts.isEmpty()) {
             continue;
         }
-        messages.insert(cave, parts.join(QStringLiteral(" ")));
+        messages.insert(cave, parts.join(kSentenceSeparator));
     }
     return messages;
 }
