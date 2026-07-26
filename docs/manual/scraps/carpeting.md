@@ -104,8 +104,9 @@ where the passage floor runs between stations, only where the stations landed
 and where the straight line between them runs.
 
 Nobody wants the bumps. Today the fix is to constrain the morph rather than to
-trust it: lower **Max closest stations** so unrelated stations stop pulling on
-the scrap, raise the smoothing radius, or split the sketch into smaller scraps.
+trust it: lower **Max closest stations** so each point is fitted to a shorter run
+of line around it, raise the smoothing radius, or split the sketch into smaller
+scraps.
 [Troubleshoot the carpet](troubleshoot-carpeting.md#choose-the-right-scrap-type)
 works through that.
 
