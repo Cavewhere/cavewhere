@@ -70,9 +70,7 @@ jobs:
           host: ${{ matrix.qt_host }}
           target: 'desktop'
           arch: ${{ matrix.qt_arch }}
-          # qttasktree is a Technical Preview add-on that cavewherelib requires
-          # (cwUpdateCoordinator runs the derived-data cascade on it).
-          modules: 'qtshadertools qtcanvaspainter qtpdf qttasktree'
+          modules: 'qtshadertools qtcanvaspainter qtpdf'
 
       - name: Install Conan
         run: pipx install conan

@@ -13,9 +13,10 @@ namespace {
 
     //Event-loop turns spun to let the queued hops settle: the fake pipeline's
     //queued finish, the coordinator's queued flush, and the cascade a flush
-    //starts. Comfortably above the ~4 hops the deepest case needs, so a spurious
-    //failure means a hop was added rather than that the margin was too thin.
-    constexpr int kSettleTurns = 8;
+    //starts. The deepest case here measures 6, and each extra link in a
+    //dependency chain costs several more, so this carries headroom for one — a
+    //case that needs more should wait on its own post-condition instead.
+    constexpr int kSettleTurns = 16;
 
     void settle()
     {
@@ -101,14 +102,14 @@ namespace {
 TEST_CASE("A pipeline dirtied after its node finished is picked up when the cascade ends",
           "[cwUpdateCoordinator]")
 {
-    //The recipe is fixed once the tree starts, so this can't be handled by the
+    //The DAG is fixed once the cascade starts, so this can't be handled by the
     //run in flight — the coordinator has to re-apply policy when it ends.
     cwJobSettings::initialize();
     cwJobSettings::instance()->setAutomaticUpdate(true);
 
     FakePipeline root;
     FakePipeline fast;
-    FakePipeline slow(false); //Held in Working by the test to keep the tree open
+    FakePipeline slow(false); //Held in Working by the test to keep the cascade open
 
     cwUpdateCoordinator coordinator;
     coordinator.add(&root);
@@ -116,7 +117,7 @@ TEST_CASE("A pipeline dirtied after its node finished is picked up when the casc
     coordinator.add(&slow, {&root});
 
     //Automatic update drives slow the moment it is dirtied, so the cascade
-    //updateNow() opens is one whose second layer is already busy and can't finish
+    //updateNow() opens is one whose dependent is already busy and can't finish
     //until the test says so.
     slow.markDirty();
     coordinator.updateNow();
@@ -125,8 +126,8 @@ TEST_CASE("A pipeline dirtied after its node finished is picked up when the casc
     CHECK(slow.updateState() == cwUpdatable::State::Working);
     CHECK(fast.updateState() == cwUpdatable::State::Clean);
 
-    //fast's node has already been skipped as clean, but the tree is still alive
-    //waiting on its sibling. The coordinator defers to the running tree here, so
+    //fast's node has already been skipped as clean, but the cascade is still alive
+    //waiting on its sibling. The coordinator defers to the running cascade here, so
     //nothing drives this edit at the moment it arrives.
     fast.markDirty();
     settle();
@@ -144,12 +145,12 @@ TEST_CASE("A pipeline dirtied after its node finished is picked up when the casc
     CHECK_FALSE(coordinator.needsUpdate());
 }
 
-TEST_CASE("A pipeline runs after its deepest dependency, not its first",
+TEST_CASE("A pipeline waits for every dependency it declares, not just one",
           "[cwUpdateCoordinator]")
 {
-    //middle depends on root, and leaf depends on both. Ordering leaf by its first
-    //dependency would put it alongside middle, letting it run against output
-    //middle hasn't produced yet; ordering by the deepest puts it after both.
+    //middle depends on root, and leaf depends on both. leaf's node joins both of
+    //its own parents, so holding middle in Working holds leaf too — releasing it
+    //on root alone would let it run against output middle hasn't produced yet.
     cwJobSettings::initialize();
     cwJobSettings::instance()->setAutomaticUpdate(false);
 
@@ -179,6 +180,9 @@ TEST_CASE("A pipeline runs after its deepest dependency, not its first",
     CHECK(leaf.updateCount() == 1);
     CHECK(leaf.updateState() == cwUpdatable::State::Clean);
     CHECK_FALSE(coordinator.needsUpdate());
+    //root is a dependency of both middle and leaf, so it is reached twice while
+    //the DAG is built and must still be driven once.
+    CHECK(root.driveCount() == 1);
 }
 
 TEST_CASE("A forced Run doesn't chase edits made after it", "[cwUpdateCoordinator]")
@@ -244,7 +248,7 @@ TEST_CASE("A pipeline re-edited while its own node runs is driven again",
     settle();
 
     //The node waits on the run's future rather than reacting to the edit, so the
-    //work in flight is left to finish instead of being cancelled and restarted.
+    //work in flight is left to finish instead of being canceled and restarted.
     CHECK(slow.updateCount() == 1);
     CHECK(slow.updateState() == cwUpdatable::State::Dirty);
 
@@ -374,7 +378,7 @@ TEST_CASE("Pressing Run again supersedes the cascade in flight", "[cwUpdateCoord
     REQUIRE(root.updateState() == cwUpdatable::State::Working);
     REQUIRE(dependent.updateCount() == 0);
 
-    //A second Run replaces the tree in flight rather than racing a second one
+    //A second Run replaces the cascade in flight rather than racing a second one
     //alongside it, so the busy pipeline is not driven again.
     coordinator.updateNow();
     settle();
@@ -382,7 +386,7 @@ TEST_CASE("Pressing Run again supersedes the cascade in flight", "[cwUpdateCoord
     CHECK(root.driveCount() == 1);
     CHECK(dependent.updateCount() == 0);
 
-    //The superseding cascade still carries the dependent layer to completion.
+    //The superseding cascade still carries the dependents to completion.
     root.finish();
     settle();
 
@@ -391,9 +395,73 @@ TEST_CASE("Pressing Run again supersedes the cascade in flight", "[cwUpdateCoord
     CHECK_FALSE(coordinator.needsUpdate());
 }
 
+TEST_CASE("Destroying the coordinator doesn't cancel work in flight",
+          "[cwUpdateCoordinator]")
+{
+    //A cascade observes each pipeline's run future, and those futures are shared:
+    //the pipeline itself and anyone who asked for currentRun() are holding the
+    //same handle. A coordinator that canceled them on its way out would reach
+    //into a solve it doesn't own and stop it for everybody.
+    //
+    //Note this does not exercise waitForRun()'s shield(): teardown deletes the
+    //watcher that would have pushed a cancel upstream before it can deliver, so
+    //the run survives here either way. The shield covers a node canceled while
+    //the coordinator is still alive, which nothing reaches today.
+    cwJobSettings::initialize();
+    cwJobSettings::instance()->setAutomaticUpdate(false);
+
+    FakePipeline slow(false);
+    QFuture<void> run;
+
+    {
+        cwUpdateCoordinator coordinator;
+        coordinator.add(&slow);
+
+        slow.markDirty();
+        coordinator.updateNow();
+        settle();
+
+        REQUIRE(slow.updateState() == cwUpdatable::State::Working);
+        run = slow.currentRun();
+        REQUIRE_FALSE(run.isFinished());
+    }
+
+    settle();
+
+    CHECK_FALSE(run.isCanceled());
+
+    //Still the pipeline's own run to finish, and finishing it still resolves the
+    //future every other waiter is holding.
+    slow.finish();
+
+    CHECK(run.isFinished());
+    CHECK(slow.updateState() == cwUpdatable::State::Clean);
+}
+
+TEST_CASE("A cascade with nothing to do ends before the next edit arrives",
+          "[cwUpdateCoordinator]")
+{
+    //updateNow() on a clean graph has to finish synchronously. If it stayed
+    //"running" for an event-loop turn, an edit made in that turn would be
+    //deferred to a cascade that had already ended and never driven.
+    cwJobSettings::initialize();
+    cwJobSettings::instance()->setAutomaticUpdate(true);
+
+    FakePipeline pipeline;
+
+    cwUpdateCoordinator coordinator;
+    coordinator.add(&pipeline);
+
+    coordinator.updateNow();
+
+    //No settle() — the point is that the edit lands in the same turn.
+    pipeline.markDirty();
+    CHECK(pipeline.updateCount() == 1);
+}
+
 TEST_CASE("A mis-registered dependency cycle still terminates", "[cwUpdateCoordinator]")
 {
-    //Nothing should register a cycle, but the depth walk must be bounded rather
+    //Nothing should register a cycle, but the node walk must notice one rather
     //than recursing until the stack runs out.
     cwJobSettings::initialize();
     cwJobSettings::instance()->setAutomaticUpdate(false);
@@ -417,3 +485,66 @@ TEST_CASE("A mis-registered dependency cycle still terminates", "[cwUpdateCoordi
 }
 
 #include "test_cwUpdateCoordinator.moc"
+
+namespace {
+
+    //Models the real pipelines' destructors, which pump a nested event loop
+    //(waitToFinish() -> AsyncFuture::waitForFinished) in the destructor *body* —
+    //before ~QObject emits destroyed(), which is when the coordinator abandons
+    //its cascade. Records whether the coordinator drove it while it was dying.
+    class PumpingPipeline : public FakePipeline
+    {
+    public:
+        explicit PumpingPipeline(bool* ranWhileDestructing) :
+            FakePipeline(false),
+            m_ranWhileDestructing(ranWhileDestructing)
+        {
+        }
+
+        ~PumpingPipeline() override
+        {
+            m_destructing = true;
+            settle();
+        }
+
+        QFuture<void> run() override
+        {
+            if(m_destructing) { *m_ranWhileDestructing = true; }
+            return FakePipeline::run();
+        }
+
+    private:
+        bool* m_ranWhileDestructing;
+        bool m_destructing = false;
+    };
+}
+
+TEST_CASE("A pipeline destroyed with a continuation queued isn't driven while it dies",
+          "[cwUpdateCoordinator][!shouldfail]")
+{
+    cwJobSettings::initialize();
+    cwJobSettings::instance()->setAutomaticUpdate(false);
+
+    bool ranWhileDestructing = false;
+    auto* pipeline = new PumpingPipeline(&ranWhileDestructing);
+
+    cwUpdateCoordinator coordinator;
+    coordinator.add(pipeline);
+
+    pipeline->markDirty();
+    coordinator.updateNow();
+    settle();
+    REQUIRE(pipeline->updateState() == cwUpdatable::State::Working);
+
+    //The run ends, so the node's continuation is queued but not yet delivered.
+    pipeline->finish();
+    //And the source is edited again, so that continuation will read Dirty.
+    pipeline->markDirty();
+    REQUIRE(pipeline->updateState() == cwUpdatable::State::Dirty);
+
+    //The destructor pumps, which delivers that continuation. dropRunningCascade()
+    //has not run yet — destroyed() comes later — so the generation still matches.
+    delete pipeline;
+
+    CHECK_FALSE(ranWhileDestructing);
+}

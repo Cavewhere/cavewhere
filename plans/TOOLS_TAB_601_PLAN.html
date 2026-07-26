@@ -395,19 +395,26 @@ public:
     template&lt;class T&gt; void add(T* u, QList&lt;cwUpdatable*&gt; dependsOn = {}); // register + connect + declare edges
     bool needsUpdate() const;           // any registered updatable is Dirty
 public slots:
-    void updateNow();                   // build the dependency-layered recipe and start the task tree
+    void updateNow();                   // bump the generation, build the future DAG, observe it
     void setAutomaticUpdate(bool on);   // toggling ON flushes everything dirty
 private:
-    void onChildStateChanged(cwUpdatable* u); // let the node see it; step aside if a tree runs; else honour automaticUpdate()
-    QtTaskTree::Group buildCascadeRecipe();   // pipelines layered by dependency depth
-    bool taskTreeRunning() const;
-    void dropRunningCascade();          // abandon the tree when a registered pipeline is destroyed
+    void onChildStateChanged(cwUpdatable* u); // step aside if a cascade runs; else honour automaticUpdate()
+    QFuture&lt;void&gt; startCascade(quint64 generation);  // one memoized node per pipeline
+    void finishCascade(quint64 generation);          // no-op if a newer cascade superseded this one
+    QFuture&lt;void&gt; cascadeNode(cwUpdatable*, quint64, QHash&lt;...&gt;&amp; built, QSet&lt;...&gt;&amp; building);
+    QFuture&lt;void&gt; driveToClean(cwUpdatable*, quint64);  // Clean skip / Working wait / Dirty run
+    QFuture&lt;void&gt; waitForRun(cwUpdatable*, const QFuture&lt;void&gt;&amp;, quint64);
+    bool cascadeRunning() const;
+    void dropRunningCascade();          // abandon by generation when a registered pipeline is destroyed
     void flushAfterCascade();           // re-apply policy to anything dirtied after its own node finished
-    std::unique_ptr&lt;QtTaskTree::QSingleTaskTreeRunner&gt; m_taskTreeRunner;
+    quint64 m_cascadeGeneration = 0;
 };</code></pre>
-  <p class="note"><b>Superseded 2026-07-25.</b> This sketch originally showed the <code>m_forcing</code> run-until-settled
-  latch (<code>anyWorking()</code>, <code>clearForcingIfSettled()</code>). All of it was deleted when the Stage-2 task tree
-  was adopted; the shape above is what the coordinator actually has. See "ADOPTED 2026-07-25" below.</p>
+  <p class="note"><b>Superseded twice.</b> This sketch originally showed the <code>m_forcing</code> run-until-settled
+  latch (<code>anyWorking()</code>, <code>clearForcingIfSettled()</code>), deleted when the Stage-2 task tree was adopted
+  2026-07-25. It then showed that tree's surface (<code>buildCascadeRecipe()</code>, <code>taskTreeRunning()</code>,
+  <code>m_taskTreeRunner</code>), all of which was deleted 2026-07-26 when the cascade moved to a pure AsyncFuture future
+  DAG &mdash; see "TaskTree removed" below. The shape above is what the coordinator actually has: no recipe, no runner, and
+  no depth layering. Ordering is the dependency edges themselves, and supersede/abandon is a generation bump.</p>
   <p>It owns the <b>policy</b> (the <code>automaticUpdate</code> flag, persisted to the same QSettings key so existing
   prefs migrate) <em>and</em> the <b>aggregation</b>. Auto-on: a child going dirty runs immediately. Auto-off:
   accumulate, and expose <code>needsUpdate</code>.</p>
@@ -506,6 +513,21 @@ Running       : !taskManagerModel.isIdle
   cascade as a <code>Group</code> recipe driven by a <code>QSequential</code>/<code>QMapped</code> runner <em>behind the Stage 1 seam</em>; if it
   is clean and preview-stability looks acceptable, adopt it; otherwise ship Stage 2 on AsyncFuture <code>combine()</code> and revisit TaskTree
   once it leaves Technical Preview. Because Stage 1 is the seam, that engine swap is cheap either way.</p>
+
+  <p class="note"><b>RESOLVED AGAINST &mdash; 2026-07-26. The outcome is this paragraph's own "otherwise" branch.</b> TaskTree was adopted
+  2026-07-25, then removed 2026-07-26; Stage 2 now ships on AsyncFuture, with <code>combine(AllSettled)</code> doing the fan-in joins exactly as
+  the fallback predicted. Everything below describing TaskTree as the engine is <b>historical record, not current design</b> &mdash; read it for
+  the reasoning, not for what the code does. What decided it: once D1 gave <code>cwUpdatable::run()</code> a <code>QFuture</code>, the adapter
+  (<code>cwUpdatableTask</code>) existed only to convert that future back into a <code>done()</code> signal so a framework could rebuild a
+  completion graph we already had. Removing it cost ~6 net lines of production C++ and bought back: a true per-node DAG instead of depth layers
+  (a dependent waits on <em>its own</em> parents), no Technical-Preview churn risk on a foundational subsystem, no add-on install for every
+  developer and CI image, the Conan-Qt build path unblocked in principle (see issue #635), and an engine written in the idiom the maintainer
+  reasons in. What it cost: 3 extra event-loop turns to settle (6 vs 3), and <code>finishAllAndSuccess</code> &mdash; one word in TaskTree &mdash;
+  became three hand-built pieces (<code>AllSettled</code>, a dual-handler <code>.context()</code>, and an explicit <code>Deferred</code>).
+  <b>The seam thesis was vindicated:</b> the swap touched <code>cwUpdateCoordinator.{h,cpp}</code> and deleted
+  <code>cwUpdatableTask.{h,cpp}</code> &mdash; zero changes to <code>cwUpdatable.h</code> and zero to any of the three managers. What is
+  <em>not</em> true is that the engine is pluggable: the coordinator no longer <em>names</em> a third-party engine, it <em>is</em> the engine.
+  See the "extract the cascade" follow-up below.</p>
 
   <p class="note"><b>Gate not met — recorded 2026-07-26.</b> The adoption decision below was taken against this paragraph's conditions, and
   neither half held. <b>(1) Not throwaway:</b> the spike replaced production code in <code>cwUpdateCoordinator</code> and turned TaskTree into a
@@ -625,7 +647,7 @@ Running       : !taskManagerModel.isIdle
   <b>PARTLY ADDRESSED by D1, 2026-07-26.</b> Both <code>m_taskRunning</code> bits are gone; the busy state is the run's promise in
   <code>cwUpdatableBase</code>, LiDAR got its <code>finishBatch()</code> funnel to mirror <code>finishScrapTask()</code>, and the node observes a future
   instead of a bool. <b>H1 is reduced, not closed:</b> a completion path that misses <code>endRun()</code> still leaves a future that never finishes, which
-  still holds the tree open and still defers automatic update app-wide. What is structurally fixed is destruction (<code>~cwUpdatableBase</code> finishes the
+  still holds the cascade open and still defers automatic update app-wide. What is structurally fixed is destruction (<code>~cwUpdatableBase</code> finishes the
   run) and expressibility — the wedge is now something the node can cancel or time out, which a bool never was.
   <b>(H2) Pipeline destroyed mid-cascade: use-after-free plus wedge.</b> <code>cwUpdatableTask</code> holds a raw <code>cwUpdatable*</code> and cannot watch
   destruction (<code>cwUpdatable</code> is not a QObject); <code>add()</code>'s destroyed-handler drops the pipeline from <code>m_updatables</code> but never
@@ -633,9 +655,19 @@ Running       : !taskManagerModel.isIdle
   <code>onSetup</code> dereference freed memory. Latent today: the managers are children of <code>Project</code> (<code>cwRootData.cpp:113/119/127</code>),
   the coordinator is a child of <code>cwRootData</code> (line 208), <code>Project</code> is created first (line 81) so it dies first, and nothing deletes
   <code>Project</code> during a session. Guard is one line — <code>m_taskTreeRunner-&gt;cancel()</code> in the destroyed handler.
+  <b>MECHANISM REPLACED 2026-07-26 (hazard unchanged in kind).</b> <code>cwUpdatableTask</code> is gone; the raw <code>cwUpdatable*</code> now lives in the
+  coordinator's own continuation lambdas (<code>cascadeNode</code>'s dependency handler, <code>waitForRun</code>'s completion handler), which survive
+  event-loop turns. The guard is <b>not</b> a cancel: a canceled continuation still runs its body, and it is exactly the one holding the destroyed pointer.
+  Instead <code>dropRunningCascade()</code> bumps <code>m_cascadeGeneration</code>, and <code>driveToClean()</code> compares the generation
+  <em>before</em> dereferencing the pipeline &mdash; so a stale continuation returns without touching it. Same three-pipeline latency argument as above still
+  makes it latent in production. <b>But see H7:</b> the generation is bumped on <code>destroyed()</code>, which is <em>too late</em> for a pipeline that pumps
+  an event loop in its destructor body &mdash; that gap is confirmed by test.
   <b>(H3) It is a forest, not a DAG.</b> <span class="hist"><code>QHash&lt;cwUpdatable*, cwUpdatable*&gt;</code> permits exactly one dependency per pipeline</span> (fixed — it is now <code>QHash&lt;cwUpdatable*, QList&lt;cwUpdatable*&gt;&gt;</code>; see "(a) DONE" below), so "depends on A
   <em>and</em> B" is inexpressible; and depth-layering is a barrier, so a slow independent root blocks unrelated depth-1 work. Fine at three pipelines, but
-  the plan calls Stage 2 "dependency-DAG" and this is not yet one. <b>DECIDED 2026-07-25 — see the DAG re-arch note below.</b> H1 <b>ACCEPTED as-is</b> by
+  the plan calls Stage 2 "dependency-DAG" and this is not yet one. <b>RESOLVED 2026-07-26:</b> it is now a real DAG. <code>dependencyDepth()</code> is
+  deleted along with its <code>remainingHops</code> bound; <code>cascadeNode()</code> memoizes one node per pipeline in a <code>built</code> hash and each
+  node joins only <em>its own</em> parents, so a slow independent root no longer blocks anything, and cycle detection is the <code>building</code> set
+  (which also names the pipeline that closes the cycle, where the hop budget could only name whichever node exhausted it). <b>DECIDED 2026-07-25 — see the DAG re-arch note below.</b> H1 <b>ACCEPTED as-is</b> by
   the user 2026-07-25: hand-maintained completion state is how CaveWhere's async pipelines have always worked. Recorded as a latent risk, not to be fixed.
   (Factual footnote: the AsyncFuture continuation pattern is long-standing, but <code>m_taskRunning</code> itself landed in <code>d7be02a8</code>, so
   <code>cwNoteLiDARManager.cpp:686</code> is #601 code rather than legacy.)
@@ -645,7 +677,9 @@ Running       : !taskManagerModel.isIdle
   <b>(H5) Latent trap in <code>cwUpdatableTask::start()</code>:</b> the synchronous-<code>Clean</code> path emits <code>done()</code>, after which the tree may
   destroy the task. <b>Downgraded 2026-07-26 after reading <code>qtasktree.cpp</code>:</b> <code>m_finished</code> is set <em>before</em> the emit and the
   tree releases the adapter with <code>deleteLater()</code>, so the task is not destroyed inside the emission; synchronous destruction only happens on the
-  cancel path, which never routes through <code>finish()</code>. Still worth knowing, but it is not a live use-after-free.
+  cancel path, which never routes through <code>finish()</code>. <b>CLOSED 2026-07-26 &mdash; moot:</b> <code>cwUpdatableTask</code> no longer
+  exists. TaskTree was removed and the coordinator observes each pipeline's run future directly, so there is no adapter, no <code>done()</code> emit and no
+  tree to destroy it.
   <b>(H7) Driving work from a destruction-time transition — CONFIRMED REACHABLE 2026-07-26, promoted from latent.</b> This was written up as a
   <em>possible</em> teardown-window problem: the coordinator's queued <code>flushAfterCascade()</code> is its first self-posted continuation, and every
   CaveWhere teardown path spins a nested event loop (<code>cwRootData::shutdownBlocking()</code>, and both the scrap and LiDAR destructors via
@@ -659,6 +693,22 @@ Running       : !taskManagerModel.isIdle
   <b>D1 did NOT fix this (checked 2026-07-26).</b> The seam changed how the <em>node</em> learns a run is over; it did not change
   <code>onChildStateChanged()</code>, which still calls <code>run()</code> on a Dirty transition when automatic update is on. A transition announced during
   teardown is therefore still a request to start work during teardown, and the fix is still a coordinator-level teardown guard.
+  <b>The AsyncFuture cascade did not fix it either, and the window is wider than written above (confirmed by test, 2026-07-26).</b> The guard is armed by
+  <code>dropRunningCascade()</code> on <code>QObject::destroyed</code>, which <code>~QObject</code> emits <em>after</em> the derived destructor body — but all
+  three pipelines pump their nested event loop <em>in</em> that body (<code>cwLinePlotManager.cpp:133-138</code> → <code>:389</code>,
+  <code>cwScrapManager.cpp:111-115</code> → <code>:1712</code>, <code>cwNoteLiDARManager.cpp:143-147</code> → <code>:351</code>). So a queued node
+  continuation delivered inside that loop still passes <code>driveToClean()</code>'s generation check and calls <code>run()</code> on a pipeline that is
+  already dying. <b>Confirmed</b> by "A pipeline destroyed with a continuation queued isn't driven while it dies" in
+  <code>testcases/test_cwUpdateCoordinator.cpp</code>, carried as <code>[!shouldfail]</code>: a fake pipeline that pumps in its destructor body records
+  <code>run()</code> being called after destruction began. It is a tripwire — Catch2 fails a <code>!shouldfail</code> test that starts passing, so the guard
+  landing will flag it for removal. Consequence for the fix: the guard has to be armed <em>earlier</em> than <code>destroyed()</code> — teardown must be
+  announced before a pipeline starts pumping, not after.
+  <b>Fold in with it: <code>setCoordinated()</code> is never cleared.</b> <code>cwUpdateCoordinator::add()</code> sets <code>setCoordinated(true)</code> and
+  nothing ever sets it false, so a pipeline outliving its coordinator stays coordinated forever and <code>runIfStandalone()</code> becomes a silent no-op —
+  it marks dirty on every edit and never runs, with no coordinator left to drive it. Nothing in production outlives the coordinator today, so this is latent.
+  It belongs to <em>this</em> commit rather than its own because the obvious fix is unsafe on its own: clearing the flag in
+  <code>~cwUpdateCoordinator</code> hands a pipeline back its eager behavior during shutdown, which is precisely the H7 crash shape. The teardown guard is
+  what makes "hand the pipeline back" safe, so the two land together.
   <b>(H6) Dead latch code. RESOLVED 2026-07-25</b> — the <code>#ifdef</code>, the <code>#else</code> latch branch and every symbol that fed it are gone;
   see the adoption note below. This was the "two implementations behind an #ifdef" cost of tradeoff (2), made concrete.</p>
 
@@ -688,6 +738,18 @@ Running       : !taskManagerModel.isIdle
   <code>validate()</code> now rejects <code>system_qt=False</code> up front with an actionable message, and <code>README.md</code> + <code>CLAUDE.md</code>
   dropped <code>-o "&amp;:system_qt=False"</code> from the documented build and state the Qt 6.11 + qttasktree requirement. <b>Consequence worth naming:</b>
   adopting a Technical Preview add-on removed the option of building CaveWhere against Conan-supplied Qt.</p>
+
+  <p class="note"><b>ALL SIX REVERTED 2026-07-26 with the TaskTree removal.</b> <code>build-linux.yml</code> is back to
+  <code>modules: 'qtshadertools qtcanvaspainter qtpdf'</code>; <code>build-windows.yml</code>'s <code>qttasktree</code> archive entry is gone;
+  <code>conanfile.py</code>'s <code>validate()</code> is deleted; the CMake <code>QUIET</code> find + <code>FATAL_ERROR</code> block is deleted; and
+  <code>README.md</code> / <code>CLAUDE.md</code> now say only "Requires Qt 6.11+". There is no <code>tasktree</code> reference left anywhere outside this
+  plan file. <b>One thing did not come back:</b> <code>-o "&amp;:system_qt=False"</code> is still absent from the documented <code>conan install</code>, and
+  deliberately so &mdash; removing the gate re-opened that path in principle, but it still cannot build. <code>conanfile.py</code> pins
+  <code>qt/6.10.1</code> while <code>cavewherelib/CMakeLists.txt:22</code> requires <code>CanvasPainter</code>, a 6.11+ module, so the option now fails at
+  CMake configure with a generic message instead of being rejected up front. That was pre-existing breakage the <code>validate()</code> was masking behind a
+  TaskTree-flavored misdiagnosis. Tracked as <b>issue #635</b>. <b>Also worth recording:</b> the Qt 6.11 floor was never TaskTree's &mdash; CI moved to
+  6.11.0 in <code>a54605c8</code> before TaskTree existed here, and the binding constraint is <code>qtcanvaspainter</code>. It is enforced only by module
+  availability: there is no <code>find_package(Qt6 6.11 ...)</code> pin and no <code>QT_VERSION_CHECK</code> guard anywhere in the tree.</p>
 
   <p><b>Review fixes 2026-07-26 (post-adoption).</b> Two defects the adoption introduced, both found by review and fixed:
   <b>(1) A node restarted work already in flight.</b> The recipe's setup handler skips only <code>Clean</code>, so a node could land on a
@@ -806,6 +868,21 @@ Running       : !taskManagerModel.isIdle
   <b>(b) trigger for the execution half</b>, the first second-independent-root or first two-dependency pipeline. Doing the barrier work before then adds a
   second coordination concept (Storage, barriers, awaiter tasks) to a spike whose primary open question is still whether we adopt the add-on at all.</p>
 
+  <p class="note"><b>(b) BUILT 2026-07-26 with the gate unmet &mdash; overruled, and here is the reason.</b> Production registration is still one root and two
+  single-dependency dependents (<code>cwRootData.cpp:211-213</code>), so the schedule argument above still holds: the DAG buys no measurable wall-clock
+  today. It was built anyway, because it came <em>free</em> with a change made for a different reason. Removing TaskTree meant rewriting the ordering code
+  regardless, and at the <code>QFuture</code> layer "each node waits on its own parents" is the <em>simpler</em> formulation &mdash; memoized recursion in
+  <code>cascadeNode()</code> &mdash; not the more complex one. Depth layering would have been extra code to preserve a limitation. So the trade the gate was
+  protecting against (a second coordination concept for no gain) never arose: there are no barriers, no Storage and no awaiter tasks, and
+  <code>dependencyDepth()</code> + <code>remainingHops</code> were <em>deleted</em> rather than added to. <b>What the QBarrier section got right:</b> arbitrary
+  fan-in and per-node readiness are the real requirement. <b>What it got wrong:</b> that they need a barrier primitive &mdash; with futures they fall out of
+  memoization for free. The <code>QBarrier</code> design, the <code>Group{ sequential, barrierAwaiterTask(depA), … }</code> shape, and the
+  <code>SetupResult::Continue</code> prescription for the scoped-force follow-up are all unreachable now. <b>Caveat carried forward:</b> the test named in
+  (a) was renamed to "A pipeline waits for every dependency it declares, not just one" &mdash; there is no longer a depth to be deepest in &mdash; and it
+  gained <code>CHECK(root.driveCount() == 1)</code>, since a shared parent is now reached twice while the DAG is built and must still be driven once.
+  <b>Not covered by any test:</b> the capability the DAG actually adds &mdash; a dependent released while an unrelated slow root is still running, which
+  layering would have blocked. Worth adding when the second root that motivates it arrives.</p>
+
   <p><b>Reach check 2026-07-25: <code>updateNow()</code> has no production caller.</b> The task tree runs only when automatic update is switched
   <em>on</em> (<code>onAutomaticUpdateChanged()</code>) or from tests. Both UI force paths bypass the coordinator entirely —
   <code>CavernOutputPage.qml:45</code> calls <code>linePlotManager.rerunSurvex()</code> and <code>FileMenu.qml:151</code> calls
@@ -823,6 +900,71 @@ Running       : !taskManagerModel.isIdle
   <code>taskFinished</code>). Costs to weigh first: <code>taskFinished()</code> clears the <em>whole</em> <code>DirtyScraps</code> set and does one batched
   render/image update, both of which assume batch semantics; per-key completion would mean N render updates instead of 1. Not worth doing until scrap edits
   during long triangulations are an actual complaint.</p>
+
+  <p class="note"><b>Rewrite the paragraph above when it is next touched (2026-07-26).</b> <code>QMappedTaskTreeRunner</code> is unreachable &mdash; TaskTree
+  is gone. The only per-key restart primitive left is <code>AsyncFuture::Restarter</code>, which <code>cwScrapManager</code> already uses via
+  <code>TriangulateRestarter</code>. Everything in the paragraph about <em>costs</em> still applies verbatim (batch <code>DirtyScraps</code> clearing, N render
+  updates instead of 1), as does the gate: not worth doing until it is an actual complaint. One new constraint: <code>cwUpdatableBase</code> gives one promise
+  per pipeline, so per-<code>cwScrap*</code> completion cannot be expressed through <code>currentRun()</code> at all &mdash; it would stay an umbrella future
+  over per-key restarts, which is most of what batching already provides.</p>
+
+  <h4 style="margin:18px 0 4px;font-size:14px">Invariants the AsyncFuture cascade introduced (added 2026-07-26)</h4>
+  <p>Four things the code now depends on that are not obvious from reading it, recorded because each one is easy to "simplify" back into a bug.</p>
+  <p><b>(1) A pipeline's run future is shared, and no consumer may cancel it.</b> <code>run()</code> and <code>currentRun()</code> hand out the pipeline's own
+  <code>QPromise</code> future, and AsyncFuture's <code>observe().context()</code> pushes a cancel back up the chain it observed &mdash; so one node giving up
+  would cancel the run itself, and with it every other waiter's work. This is why <code>waitForRun()</code> observes
+  <code>AsyncFuture::shield(run)</code>. <code>shield()</code> and its <code>enum class CancelPropagation { Propagate, Blocked }</code> are <b>new to the
+  asyncfuture submodule and CaveWhere-authored</b> (bumped <code>ed7f3c5a</code> → <code>45f55f7b</code>, pushed to <code>origin/master</code> of the fork);
+  the change is additive &mdash; the policy parameter defaults to <code>Propagate</code>, reproducing the old path exactly &mdash; so no existing AsyncFuture
+  site in the tree is affected. <b>Note what shield does <em>not</em> do:</b> the policy only removes the upstream <code>pushCancel</code> watcher
+  (<code>asyncfuture.h:596</code>); the <code>onCanceled &rarr; cancel()</code> watcher at <code>:583-591</code> is installed unconditionally, so a canceled
+  <em>upstream</em> still settles the shield &mdash; measured, it arrives as a <b>completion</b>, which is why <code>waitForRun()</code>'s cancel branch is
+  currently unreachable. The shield could instead be cached at the producer (<code>beginRun()</code>) so no consumer anywhere can cancel; see the follow-up
+  below for why the naive version of that breaks things.</p>
+  <p><b>(2) "Already finished &rArr; complete synchronously" is correctness, not optimization.</b> <code>completeWith()</code> and
+  <code>joinNodes()</code>'s all-settled short-circuit exist because <code>Deferred::complete(QFuture)</code> and <code>combine()</code> always install a
+  <code>QFutureWatcher</code>, even for a finished input &mdash; and <code>updateNow()</code>'s <code>cascade.isFinished()</code> branch depends on that
+  short-circuit reaching it. A cascade that found nothing to do <b>must</b> end synchronously: otherwise it is still "running" for one event-loop turn, and an
+  edit arriving in that turn is deferred by <code>onChildStateChanged()</code> to a cascade that has already ended, so the edit never runs. This regression was
+  real and was caught only by a <code>cwLinePlotManager</code> test, never by a coordinator test; there is now a coordinator case for it ("A cascade with
+  nothing to do ends before the next edit arrives", negative-checked &mdash; removing the shortcut gives <code>updateCount</code> 0 vs 1).</p>
+  <p><b>(3) Supersede and abandon are one mechanism: the generation counter.</b> <code>m_cascadeGeneration</code> covers pressing Run twice, a registered
+  pipeline being destroyed, and the coordinator's own destruction. It is deliberately <em>not</em> a cancel: a canceled continuation still runs its body, and
+  it is exactly the one that would read the pipeline the cascade was dropped because of. <code>driveToClean()</code>'s generation compare, placed before any
+  dereference, is what makes a stale continuation a no-op &mdash; which makes it load-bearing for memory safety, not just tidiness.</p>
+  <p><b>(4) The cascade has no failure channel.</b> With <code>AllSettled</code> joins and <code>node.complete()</code> on cancel, a cascade always succeeds;
+  staleness is the only report of what still needs work. That is continuity with TaskTree's <code>finishAllAndSuccess</code>, not a change &mdash; but with
+  <code>DoneResult</code>/<code>DoneWith</code> gone there is no longer anywhere in the code that says so.</p>
+
+  <h4 style="margin:18px 0 4px;font-size:14px">Follow-ups from the 2026-07-26 review</h4>
+  <p><b>Extract the cascade DAG out of <code>cwUpdateCoordinator</code> (highest payoff).</b> The class is now ~172 of 324 lines of graph/future algebra
+  (<code>completeWith</code>, <code>joinNodes</code>, <code>startCascade</code>, <code>cascadeNode</code>, <code>driveToClean</code>,
+  <code>waitForRun</code>, <code>dropRunningCascade</code>) against ~90 lines of actual policy. A <code>cwUpdateCascade</code> built from
+  <code>(QList&lt;cwUpdatable*&gt;, QHash&lt;cwUpdatable*, QList&lt;cwUpdatable*&gt;&gt;)</code> and returning one <code>QFuture&lt;void&gt;</code>, whose
+  <b>lifetime is the epoch</b>, would delete <code>m_cascadeGeneration</code> and the <code>quint64 generation</code> parameter currently threaded through
+  four signatures &mdash; destroying the cascade would <em>be</em> superseding it. It would also let graph ordering be tested without
+  <code>cwJobSettings::initialize()</code>, which every case in <code>test_cwUpdateCoordinator.cpp</code> calls purely as setup. Not done in the swap commit
+  because splitting the file in the same change makes it unreviewable against the engine it replaced. Note the scoped-force follow-up below adds more graph
+  code to this same place.</p>
+  <p><b>Move <code>shield()</code> to the producer.</b> Today it is at the consumer (<code>waitForRun</code>), so the invariant in (1) above is one every
+  future consumer must remember &mdash; CP6's footer, the scoped force, a test. It belongs to the owner of the run. <b>The naive version breaks
+  correctness:</b> <code>shield()</code> always routes through a watcher (<code>watch()</code> never short-circuits on <code>isFinished()</code>), so a
+  blanket <code>return shield(m_run-&gt;future())</code> is never synchronously finished &mdash; which defeats invariant (2) and reintroduces the deferred-edit
+  bug. The version that works caches the shielded future in <code>beginRun()</code> and returns <code>QtFuture::makeReadyVoidFuture()</code> when idle,
+  preserving the documented not-running semantics exactly. <b>Residual cost needing sign-off:</b> the shielded future finishes one turn after
+  <code>endRun()</code>, so "Working lasts exactly as long as the run's future" becomes approximate.</p>
+  <p><b>Fix the always-install-a-watcher behavior upstream in AsyncFuture.</b> <code>completeWith()</code> and the all-settled short-circuit are workarounds
+  for <code>Deferred::complete(QFuture)</code> and <code>combine()</code> installing a <code>QFutureWatcher</code> even for already-finished inputs. The fork
+  is ours. Doing it upstream deletes ~20 lines here and fixes it for every other AsyncFuture site (<code>cwSaveLoadPrivate</code>,
+  <code>cwSketchManager</code>, <code>cwScrapManager</code>). It became worth doing at the point the workaround turned correctness-load-bearing (invariant 2)
+  rather than merely a saved event-loop turn. Kept out of the engine-swap commit: shared dependency, own test suite.</p>
+  <p><b>The re-drive chain retains one link per iteration.</b> When a run finishes with the pipeline Dirty again,
+  <code>completeWith(node, driveToClean(...))</code> takes the <code>node.complete(next)</code> branch, and
+  <code>DeferredFuture::complete(QFuture)</code> holds a <code>strongRef</code> per watcher &mdash; so link <em>k</em> cannot be released until link
+  <em>k+1</em> settles. Each link is roughly a <code>DeferredFuture</code> + 3 watchers, plus <code>shield()</code>'s deferred and its 2, so N re-drives hold
+  ~8N QObjects live at once, collapsing only when the pipeline finally reports Clean. The deleted <code>cwUpdatableTask</code> did not have this &mdash; it
+  re-armed with <code>emit done()</code> rather than completing one deferred with the next one's future. Retention, not a leak, and bounded by how long a user
+  can hold a pipeline dirty; recorded as a real cost of the future-chain formulation that the AsyncFuture-vs-TaskTree comparison did not capture.</p>
 
   <div class="foot">Plan for <b>#601</b>. Interactive HTML mockups approximate CaveWhere Theme tokens — not the real Qt UI.
   Files: <code>MainSideBar.qml</code>, <code>GLTerrainRenderer.qml</code>, <code>RenderingView.qml</code>,

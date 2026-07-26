@@ -80,7 +80,7 @@ public:
     /**
         The future for the run in flight, or an already-finished future when
         nothing is running. Waiting on it is how a driver lets a run that already
-        covers the current data finish, rather than cancelling it by forcing
+        covers the current data finish, rather than canceling it by forcing
         another.
     */
     virtual QFuture<void> currentRun() const = 0;
@@ -146,6 +146,13 @@ protected:
 
     //Leaves the run, finishing the future beginRun() handed out. A no-op when
     //nothing is running, so every completion path can call it unconditionally.
+    //
+    //Call it from the pipeline's own thread: the promise's interior is
+    //thread-safe, but the optional holding it is not. Note the destructor path
+    //reports the run *finished*, not canceled, so a driver waiting on it takes
+    //its success branch — safe only because that branch is delivered through the
+    //event loop, by which time ~QObject has announced destroyed() and the driver
+    //has dropped the pipeline.
     void endRun()
     {
         if(!m_run.has_value()) {

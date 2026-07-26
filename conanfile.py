@@ -71,19 +71,6 @@ class CaveWhereConan(ConanFile):
         else:
             self.requires("sqlite3/[>=3.48.0]", override=True)
 
-    def validate(self):
-        # cavewherelib requires Qt TaskTree, a Technical Preview add-on that is
-        # only distributed through a Qt install (qt.qt6.<version>.addons.qttasktree
-        # via the Qt Maintenance Tool or qt-cli). Conan Center's qt recipe does not
-        # package it, so the bundled-Qt path cannot satisfy the dependency. Fail
-        # here with an actionable message rather than at CMake configure time.
-        if not self.options.system_qt:
-            raise ConanInvalidConfiguration(
-                "system_qt=False cannot provide Qt TaskTree, which cavewherelib "
-                "requires. Install Qt 6.11+ with the qttasktree add-on and build "
-                "with the default system_qt=True."
-            )
-
     def build_requirements(self):
         self.tool_requires("protobuf/<host_version>")
 
