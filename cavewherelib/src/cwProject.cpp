@@ -467,25 +467,60 @@ bool cwProject::save()
     return true;
 }
 
-bool cwProject::beginSyncOperation(const QFuture<Monad::ResultBase>& operationFuture, bool registerJob)
+struct cwProject::SyncCycle
 {
-    SyncFuture = AsyncFuture::observe(operationFuture)
-        .context(this, [this, operationFuture]() {
-            completeSyncOperation(operationFuture.result());
-        }).future();
-
-    // An outer gate (credential/install) may already have registered the single
-    // "Syncing" job whose deferred spans this whole cycle; don't add a second.
-    if (registerJob) {
-        FutureToken.addJob(SyncFuture, QStringLiteral("Syncing"));
+    explicit SyncCycle(cwProject* project)
+        : m_project(project)
+    {
+        // The deferred's future is Running from construction, so registering it
+        // here both marks a sync in progress and adds the single "Syncing" job.
+        m_project->SyncFuture = m_deferred.future();
+        m_project->FutureToken.addJob(m_project->SyncFuture, QStringLiteral("Syncing"));
     }
 
+    ~SyncCycle()
+    {
+        // Safety net: if every async stage is torn down without reaching a
+        // terminal (e.g. the auth provider dies mid-gate), release the job so
+        // syncInProgress() can't latch on forever.
+        finish();
+    }
+
+    // Ends the cycle, releasing the "Syncing" job. Idempotent: Deferred::complete()
+    // is a no-op once the future is finished, so any terminal stage and the dtor
+    // may all call it.
+    void finish()
+    {
+        m_deferred.complete();
+    }
+
+    cwProject* m_project;
+    AsyncFuture::Deferred<void> m_deferred;
+};
+
+std::shared_ptr<cwProject::SyncCycle> cwProject::startSyncCycle()
+{
+    auto cycle = std::make_shared<SyncCycle>(this);
+
+    // syncInProgress flips false exactly once, when the cycle's deferred
+    // completes, regardless of which gate path terminated it.
     AsyncFuture::observe(SyncFuture).context(this, [this]() {
         emit syncInProgressChanged();
     });
 
     emit syncInProgressChanged();
-    return true;
+    return cycle;
+}
+
+void cwProject::runSyncOperation(const std::shared_ptr<SyncCycle>& cycle,
+                                 const QFuture<Monad::ResultBase>& operationFuture)
+{
+    // Capturing `cycle` keeps the single "Syncing" job alive until the operation
+    // finishes; completing it then ends the cycle.
+    AsyncFuture::observe(operationFuture).context(this, [this, cycle, operationFuture]() {
+        completeSyncOperation(operationFuture.result());
+        cycle->finish();
+    });
 }
 
 bool cwProject::sync()
@@ -510,23 +545,15 @@ bool cwProject::sync()
     const QUrl remoteUrl = m_saveLoad->repository() ? m_saveLoad->repository()->remoteUrl() : QUrl();
     const bool remoteUnknown = provider && remoteUrl.isEmpty();
 
+    auto cycle = startSyncCycle();
+
     // When the remote URL is empty (not yet known), we can't determine
     // whether credentials are needed. Defer to be safe so the token is
     // available for HTTPS push/LFS operations once the URL resolves.
     if (provider && !credsLoaded && (needsCreds || remoteUnknown)) {
-        auto deferredSync = std::make_shared<AsyncFuture::Deferred<void>>();
-        SyncFuture = deferredSync->future();
-        FutureToken.addJob(SyncFuture, QStringLiteral("Syncing"));
-        emit syncInProgressChanged();
         connect(provider, &cwRemoteAuthProvider::credentialsLoaded,
-                this, [this, deferredSync]() {
-                    if (continueSyncAfterGates(/*registerJob=*/false)) {
-                        AsyncFuture::observe(SyncFuture).context(this, [deferredSync]() {
-                            deferredSync->complete();
-                        });
-                    } else {
-                        deferredSync->complete();
-                    }
+                this, [this, cycle]() {
+                    continueSyncAfterGates(cycle);
                 },
                 Qt::SingleShotConnection);
         // Emit authProviderCredentialsNeeded so cwRootData can bootstrap
@@ -538,42 +565,32 @@ bool cwProject::sync()
         return true;
     }
 
-    return continueSyncAfterGates(/*registerJob=*/true);
+    continueSyncAfterGates(cycle);
+    return true;
 }
 
-bool cwProject::continueSyncAfterGates(bool registerJob)
+void cwProject::continueSyncAfterGates(const std::shared_ptr<SyncCycle>& cycle)
 {
     auto* provider = m_saveLoad->authProvider();
 
     if (provider && provider->supportsInstallationCheck()) {
         auto* saveLoad = m_saveLoad;
-        auto deferredSync = std::make_shared<AsyncFuture::Deferred<void>>();
-        SyncFuture = deferredSync->future();
-        if (registerJob) {
-            FutureToken.addJob(SyncFuture, QStringLiteral("Syncing"));
-        }
-        emit syncInProgressChanged();
-
         connect(provider, &cwRemoteAuthProvider::installationVerified,
-                this, [this, saveLoad, deferredSync](bool installed) {
+                this, [this, saveLoad, cycle](bool installed) {
                     if (installed) {
-                        beginSyncOperation(saveLoad->sync(), /*registerJob=*/false);
-                        AsyncFuture::observe(SyncFuture).context(this, [deferredSync]() {
-                            deferredSync->complete();
-                        });
+                        runSyncOperation(cycle, saveLoad->sync());
                     } else {
-                        deferredSync->complete();
-                        emit syncInProgressChanged();
+                        cycle->finish();
                         emit syncNeedsInstallation();
                     }
                 },
                 Qt::SingleShotConnection);
 
         provider->verifyInstallation();
-        return true;
+        return;
     }
 
-    return beginSyncOperation(m_saveLoad->sync(), registerJob);
+    runSyncOperation(cycle, m_saveLoad->sync());
 }
 
 bool cwProject::resetBranchAndReconcile(const QString& refSpec, BranchResetMode resetMode)
@@ -584,7 +601,8 @@ bool cwProject::resetBranchAndReconcile(const QString& refSpec, BranchResetMode 
 
     if (emitVersionGuardError(QStringLiteral("reconcile"))) { return false; }
 
-    return beginSyncOperation(m_saveLoad->resetBranchAndReconcile(refSpec, resetMode));
+    runSyncOperation(startSyncCycle(), m_saveLoad->resetBranchAndReconcile(refSpec, resetMode));
+    return true;
 }
 
 bool cwProject::restoreToCommit(const QString& targetSha)
@@ -595,7 +613,8 @@ bool cwProject::restoreToCommit(const QString& targetSha)
 
     if (emitVersionGuardError(QStringLiteral("restore"))) { return false; }
 
-    return beginSyncOperation(m_saveLoad->restoreToCommitAndReconcile(targetSha));
+    runSyncOperation(startSyncCycle(), m_saveLoad->restoreToCommitAndReconcile(targetSha));
+    return true;
 }
 
 void cwProject::waitForSyncToFinish()
