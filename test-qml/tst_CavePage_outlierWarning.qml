@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls as QC
 import QtTest
 import cavewherelib
 import cw.TestLib
@@ -111,6 +112,23 @@ MainWindowTest {
                    "banner names the offending station: " + b.text)
             verify(b.text.indexOf("outside the valid range") >= 0,
                    "banner explains the problem: " + b.text)
+        }
+
+        // ── The banner renders station names, it doesn't interpret them ─────
+
+        // ErrorHelpArea reads RichText by default so help text elsewhere can
+        // carry links, but warning messages quote whatever the user typed into
+        // the station-name field. A station named A<b>B must reach the screen
+        // intact instead of being swallowed as a tag.
+        function test_bannerRendersStationNameLiterally() {
+            addUtm13NFix("A<b>B", 1478000.0, 4430000.0, 1655.0)
+
+            const b = banner()
+            tryVerify(() => b.visible, 1000, "banner appears for the bad fix")
+            compare(b.textFormat, QC.Label.PlainText,
+                    "warning text must not be read as markup")
+            verify(b.text.indexOf("A<b>B") >= 0,
+                   "banner quotes the station name verbatim: " + b.text)
         }
 
         // ── Correcting the coordinate clears the banner ─────────────────────

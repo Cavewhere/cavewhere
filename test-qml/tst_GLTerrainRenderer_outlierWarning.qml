@@ -29,6 +29,10 @@ MainWindowTest {
             }
             RootData.region.geoReference.globalCoordinateSystem = "EPSG:32613"
 
+            // The overlay quotes the cave name, so a case that renames the cave
+            // would otherwise leak that name into the ones after it.
+            cave.name = "OutlierCave"
+
             // A routing case can navigate away from the view; return to it so the
             // next case (alphabetical order) finds the overlay again.
             RootData.pageSelectionModel.currentPageAddress = "View"
@@ -89,6 +93,28 @@ MainWindowTest {
                    "overlay names the offending cave: " + o.text)
             verify(o.text.indexOf("Fix Stations") >= 0,
                    "overlay hints toward the cave's fix stations: " + o.text)
+        }
+
+        // ── The cave name is escaped into the overlay's markup ───────────────
+
+        // This overlay really is rich text — the "Fix Stations" link is what
+        // makes it actionable — so the summary glued in front of that link
+        // carries a name the user chose. Angle brackets can't get this far:
+        // cwNameUtils::sanitizeFileName rejects them, since a cave name becomes
+        // a directory name. An ampersand is accepted, and starts an entity.
+        function test_overlayEscapesCaveNameIntoMarkup() {
+            cave.name = "Bat & Ball"
+            compare(cave.name, "Bat & Ball", "the ampersand must survive the name validator")
+
+            addGoodCluster()
+            addUtm13NFix("BAD", 1478000.0, 4430000.0, 1655.0)
+
+            const o = overlay()
+            tryVerify(() => o.visible, 1000, "overlay appears once a fix is an outlier")
+            verify(o.text.indexOf("Bat &amp; Ball") >= 0,
+                   "the cave name reaches the label escaped: " + o.text)
+            verify(o.text.indexOf("<a href=\"fixStations\">") >= 0,
+                   "the overlay's own link survives the escaping: " + o.text)
         }
 
         // ── Activating the link routes to the offending cave's fix stations ──

@@ -75,6 +75,11 @@ QQ.Loader {
 
                         QC.Label {
                             objectName: "errorText"
+                            // Error messages quote user-typed names, so they are
+                            // never markup — AutoText would guess otherwise for a
+                            // station named A<b>B. ErrorListView's TextEdit is
+                            // plain by default; this is the same contract.
+                            textFormat: QC.Label.PlainText
                             text: delegateId.message
                             font.strikeout: delegateId.suppressed
                         }

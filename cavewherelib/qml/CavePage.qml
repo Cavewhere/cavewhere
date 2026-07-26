@@ -128,8 +128,12 @@ StandardPage {
         // The cave's own non-suppressed warnings (the fix-station outlier among
         // them), joined for the banner. Read straight off the cave's errorModel
         // list — trip warnings live in child models, so they never leak in here.
+        // Plain text, joined with newlines rather than <br>: the messages quote
+        // user-typed station names, so treating them as markup would swallow a
+        // name like A<b>B and render whatever it happens to spell.
+        textFormat: QC.Label.PlainText
         text: cavePageArea.currentCave
-              ? cavePageArea.currentCave.errorModel.errors.warningMessages.join("<br>")
+              ? cavePageArea.currentCave.errorModel.errors.warningMessages.join("\n")
               : ""
         // Visibility is owned by the hosting proxy (visible: hasCaveWarning);
         // don't set it here or it fights the proxy's imperative control.

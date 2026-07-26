@@ -11,6 +11,19 @@ function fixed(number, fixed) {
 }
 
 /**
+  Escapes the HTML metacharacters in text so a RichText item renders it
+  literally. Use this on anything the user typed — a cave named A<b>B would
+  otherwise be read as markup. Only needed where the surrounding text really is
+  markup; a label that can be told PlainText should be told that instead.
+
+  @param text - The plain text to escape
+  @return string - text with &, < and > replaced by entities
+  */
+function escapeHtml(text) {
+    return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+}
+
+/**
   This will map MouseArea mouseX and mouseY to global coordinates
 
   @param mouseArea - The mouse area, that the mouse event came from

@@ -1206,15 +1206,59 @@ notes. Ordered by payoff-vs-cost, not by confidence.</p>
   nine times in <code>test_cwFixStationValidator.cpp</code>, and the new assertions were about to make it eleven with two
   spellings (some inline, some bound to a local). Extracted as <code>warningText(cave)</code> in the file's existing
   anonymous namespace and applied to all nine, so no split idiom is left behind.</span></li>
-  <li><b>R6 — Station names reach a <code>RichText</code> label unescaped</b> (pre-existing; found while tracing R3's
-  message path). <code>HelpArea.qml:74</code> sets <code>textFormat: QC.Label.RichText</code> and
+  <li><b>R6 — Station names reach a <code>RichText</code> label unescaped</b> — <b>DONE</b> (pre-existing; found while
+  tracing R3's message path). <code>HelpArea.qml:74</code> sets <code>textFormat: QC.Label.RichText</code> and
   <code>CavePage.qml:132</code> joins a cave's <code>warningMessages</code> into it with <code>&lt;br&gt;</code>. Every
   fragment built at <code>cwFixStationValidator.cpp:314</code>, <code>:333</code> and <code>:411</code> interpolates a
   user-typed station name with no escaping, so a station named <code>A&amp;B</code> or <code>A&lt;b&gt;</code> renders
   wrong — and <code>&lt;img src=…&gt;</code> renders worse. <code>.arg()</code> itself is safe (replacements are not
   re-scanned for placeholders), so this is purely a markup-escaping gap. Note this is the one argument for structured
   errors that has teeth: escaping belongs at the view boundary, and today there is no boundary to put it at. Deserves its
-  own issue.</li>
+  own issue.
+  <span class="mono-note"><b>Done 2026-07-26 — fixed by removing the markup, not by escaping into it.</b> The banner never
+  needed rich text; it was inheriting it. <code>HelpArea</code> gained a <code>textFormat</code> alias and the banner
+  declares <code>QC.Label.PlainText</code>, joining its messages with <code>\n</code> instead of <code>&lt;br&gt;</code>.
+  Nothing builds markup any more, so no escape helper was written and none is needed.
+  <br><b>Why <code>ErrorHelpArea</code> couldn't just be flipped wholesale.</b> The obvious move — make the error variant
+  plain for everyone — breaks a real caller: <code>CloneArea.qml:132</code> shows
+  <code>cwGitHostingProvider::notFoundOrAccessMessage()</code>, which appends an <code>&lt;a href&gt;</code> (already
+  <code>toHtmlEscaped</code>) and wires <code>onLinkActivated</code> to open it. So rich text stays the default for the 29
+  <code>HelpArea</code> callers and the one supplying user data opts out. That is the boundary the note above said didn't
+  exist — it did, it just wasn't declared.
+  <br><b>A third surface needed the opposite treatment, and R6's note had missed it.</b> The render-view overlay
+  (<code>GLTerrainRenderer.qml:183</code>) concatenates the validator's summary — which quotes the offending
+  <i>cave</i> name, also user-typed — with <code>&lt;br&gt;Open the cave's &lt;a href="fixStations"&gt;…</code>, and that
+  link is the whole point of the banner. Plain text is not an option there, so this is the one place that actually
+  escapes: <code>Utils.escapeHtml()</code> (new, in the existing shared <code>Utils.js</code>) wraps the summary, and the
+  box now states <code>RichText</code> outright instead of letting <code>AutoText</code> infer it from the
+  <code>&lt;a&gt;</code> it happens to contain. Note what the two halves of R6 have in common: neither surface was
+  <i>wrong</i> about which format it wanted — neither had been asked.
+  <br><b>The overlay's exposure is narrower than R6 assumed, and the test is what found it.</b> The first version of
+  <code>test_overlayEscapesCaveNameIntoMarkup</code> renamed the cave to <code>A&lt;b&gt;B &amp; Co</code> and failed with
+  the name still reading <code>OutlierCave</code>: <code>cwCave::setName</code> drops any name that
+  <code>cwNameUtils::sanitizeFileName</code> would alter, and its forbidden set is
+  <code>\ / : * ? " &lt; &gt; |</code> — a cave name becomes a directory name in a <code>.cwproj</code>. So no cave name
+  can carry a tag. <code>&amp;</code> <i>is</i> accepted, and it still opens an entity, so the escape is right and the
+  test now pins the reachable case (<code>Bat &amp; Ball</code> → <code>Bat &amp;amp; Ball</code>) and asserts the
+  rename took. <b>Station names have no such validator</b> — <code>cwFixStationModel::setData</code> stores whatever is
+  typed — which is why the tag case is real for the CavePage banner and not here.
+  <br><b>Second surface fixed in the same pass.</b> <code>ErrorListQuoteBox.qml</code>'s message label was
+  <code>AutoText</code>, whose <code>Qt::mightBeRichText()</code> heuristic fires on a tag before the first line break — so
+  the same names mis-rendered in the error list. Pinned to <code>PlainText</code>, which also makes it agree with sibling
+  <code>ErrorListView.qml</code>, whose <code>TextEdit</code> has defaulted to plain all along.
+  <br><b>Deliberately left open — see R8.</b> The two fix-station tooltips still run <code>AutoText</code> over a message
+  quoting a station name. <code>QC.ToolTip</code> has no <code>textFormat</code> (checked against the Qt 6.11 docs: only
+  <code>delay</code>, <code>text</code>, <code>timeout</code>), so pinning one means replacing its styled
+  <code>contentItem</code> — and ~20 tooltip sites app-wide carry the same exposure with CS and cave names. Too broad to
+  smuggle in here.
+  <br><b>Test.</b> <code>tst_CavePage_outlierWarning</code> gained <code>test_bannerRendersStationNameLiterally</code>: a
+  fix named <code>A&lt;b&gt;B</code> must survive into <code>banner.text</code> verbatim <i>and</i> the banner must report
+  <code>PlainText</code> — the second assertion is the one that actually pins the rendering, since the
+  <code>text</code> property is unchanged either way. <code>tst_GLTerrainRenderer_outlierWarning</code> gained
+  <code>test_overlayEscapesCaveNameIntoMarkup</code>: a cave named <code>A&lt;b&gt;B &amp; Co</code> must reach the label
+  as entities while the overlay's own <code>&lt;a href&gt;</code> survives. That case renames the cave, so
+  <code>init()</code> now restores the name — the routing case downstream asserts on it. 11/11 and 7/7 on the two files;
+  full QML suite clean apart from the standing <code>MainSideBarResponsive::autoUpdateLabel</code> pair. No C++ changed.</span></li>
   <li><b>R7 — <code>gatherCandidates()</code> builds a <code>cwCoordinateTransform</code> inside its per-fix loop</b>
   (<code>cwFixStationValidator.cpp:255</code>), and that constructor does <code>proj_context_create</code> +
   <code>proj_create_crs_to_crs</code> + <code>proj_normalize_for_visualization</code> with no caching — hundreds of µs to
@@ -1229,6 +1273,15 @@ notes. Ordered by payoff-vs-cost, not by confidence.</p>
   <br><b>Also corrected while filing:</b> both earlier comments on #633 linked to
   <code>blob/master/cavewherelib/src/…</code>, a path that does not exist on <code>master</code> — the C++ tree lives on
   <code>dev</code>, so those links 404. Noted in the same comment.</li>
+  <li><b>R8 — Tooltips guess whether user data is markup</b> (app-wide; split out of R6). Every
+  <code>QC.ToolTip</code> renders through the style's default <code>Text</code>, which is <code>AutoText</code>, and
+  <code>QC.ToolTip</code> exposes no <code>textFormat</code> to override it — only <code>delay</code>,
+  <code>text</code> and <code>timeout</code>. <code>Qt::mightBeRichText()</code> then decides per string, so a station
+  named <code>A&lt;b&gt;B</code> renders as markup at <code>FixStationErrorBadge.qml:53</code> and
+  <code>FixStationPage.qml:111</code>, and the same holds for the ~20 other tooltip sites that show CS names, cave names
+  and file paths. The fix is one shared tooltip component with an explicit <code>PlainText</code>
+  <code>contentItem</code> — which is also where R1's <code>Theme.tooltipDelay</code> belongs, since every site currently
+  repeats <code>delay: 300</code> or <code>500</code> by hand. Doing both at once is the cheap version.</li>
   <li><b>R4 — The row flag and the cave warning classify independently</b>
   (<code>cwFixStationDiagnosticsModel.cpp:25</code> vs <code>cwFixStationValidator.cpp:231</code>) — <b>DONE</b>. Already
   noted for the domain check; U10 doubled it for the reference check.

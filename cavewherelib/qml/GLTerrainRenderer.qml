@@ -6,9 +6,11 @@
 **************************************************************************/
 
 import QtQuick
+import QtQuick.Controls as QC
 import QtQuick.Layouts
 import QtQuick.Window
 import cavewherelib
+import "Utils.js" as Utils
 
 
 Item {
@@ -181,7 +183,11 @@ Item {
         anchors.topMargin: 20
         anchors.bottom: undefined
         visible: RootData.region.fixStationValidator.warningMessage !== ""
-        text: RootData.region.fixStationValidator.warningMessage
+        // Markup here is real — the link is what makes the banner actionable —
+        // so the message it is glued to has to be escaped: the summary quotes
+        // the offending cave's name, and the user chose that name.
+        textFormat: QC.Label.RichText
+        text: Utils.escapeHtml(RootData.region.fixStationValidator.warningMessage)
               + qsTr("<br>Open the cave's <a href=\"fixStations\">Fix Stations</a> to correct the coordinate.")
 
         onLinkActivated: {
