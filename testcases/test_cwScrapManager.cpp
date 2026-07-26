@@ -327,6 +327,63 @@ TEST_CASE("cwScrapManager shouldn't update scraps that are invalid", "[cwScrapMa
     rootData->futureManagerModel()->waitForFinished();
 }
 
+TEST_CASE("Deleting the last dirty scrap announces the pipeline is clean",
+          "[cwScrapManager]") {
+    // Removing a scrap drops it from the dirty set, which can take the pipeline
+    // from Dirty straight to Clean. That transition has to be announced like any
+    // other, or the coordinator's aggregate goes stale: the footer keeps offering
+    // Run for work that no longer exists.
+    requireAutomaticUpdatesEnabled();
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    fileToProject(project, testcasesDatasetPath("test_cwScrapManager/ProjectProfile-test-v3.cw"));
+    rootData->futureManagerModel()->waitForFinished();
+
+    auto scrapManager = rootData->scrapManager();
+    auto coordinator = rootData->updateCoordinator();
+    REQUIRE(scrapManager != nullptr);
+
+    auto notes = project->cavingRegion()->cave(0)->trip(0)->notes()->notes();
+    REQUIRE(notes.size() == 1);
+    auto note = notes.at(0);
+    REQUIRE(note->scraps().size() == 1);
+
+    coordinator->setAutomaticUpdate(false);
+
+    // Settle to Clean so the dirty set is exactly what this test puts in it.
+    scrapManager->waitForFinish();
+    rootData->futureManagerModel()->waitForFinished();
+    QCoreApplication::processEvents();
+    REQUIRE(scrapManager->updateState() == cwUpdatable::State::Clean);
+
+    // Dirty the one scrap without running it: with automatic update off, moving a
+    // station marks the scrap and leaves the run to the coordinator. This is the
+    // state the footer's Run offer is built on.
+    auto scrap = note->scraps().at(0);
+    const QPointF stationPos = scrap->stationData(cwScrap::StationPosition, 0).toPointF();
+    scrap->setStationData(cwScrap::StationPosition, 0, stationPos + QPointF(0.01, 0.0));
+
+    REQUIRE(scrapManager->dirtyScraps().contains(scrap));
+    REQUIRE(scrapManager->updateState() == cwUpdatable::State::Dirty);
+    REQUIRE(coordinator->needsUpdate());
+
+    cwSignalSpy pipelineSpy(scrapManager, &cwScrapManager::updateStateChanged);
+    cwSignalSpy aggregateSpy(coordinator, &cwUpdateCoordinator::needsUpdateChanged);
+
+    // Delete the only dirty scrap. Nothing is left to compute. removeScraps uses
+    // deleteLater, and plain processEvents() doesn't flush deferred deletes, so
+    // ask for them explicitly — the manager reacts to the scrap's destroyed().
+    note->removeScraps(0, 0);
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    QCoreApplication::processEvents();
+
+    CHECK(scrapManager->updateState() == cwUpdatable::State::Clean);
+    CHECK(pipelineSpy.count() > 0);
+    CHECK_FALSE(coordinator->needsUpdate());
+    CHECK(aggregateSpy.count() == 1);
+}
+
 TEST_CASE("cwScrapManager should update on viewMatrix change", "[cwScrapManager]") {
     requireAutomaticUpdatesEnabled();
     auto rootData = std::make_unique<cwRootData>();

@@ -396,9 +396,19 @@ void cwScrapManager::rerunDirtyScraps()
 void cwScrapManager::scrapDeleted(QObject *scrapObj)
 {
     cwScrap* scrap = static_cast<cwScrap*>(scrapObj);
+    const cwUpdatable::State previousState = updateState();
+
     addToDeletedScraps(scrap);
     DirtyScraps.remove(scrap); //scrapObj);
     m_sketchScrapBoundingBox.remove(scrap);
+
+    //Deleting the last dirty scrap takes the pipeline Dirty -> Clean, which the
+    //coordinator's staleness aggregate has to hear about like any other
+    //transition; otherwise the footer keeps offering to compute work that no
+    //longer exists.
+    if(updateState() != previousState) {
+        emit updateStateChanged();
+    }
 }
 
 /**
