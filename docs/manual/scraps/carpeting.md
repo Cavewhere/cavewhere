@@ -72,7 +72,7 @@ survey line plot. Four stages:
    pinning the stations and stretching. CaveWhere anchors the sketch to the
    stations you placed *and* to control points interpolated along every shot
    that runs between two of them, stepping at 0.5 m by default, so the surveyed
-   line inside the scrap steers the deformation. A shot shorter than that
+   line inside the scrap steers the deformation. A shot no longer than that
    spacing gets none of them; it already has a station at each end. For each
    grid point CaveWhere then keeps the 10 nearest control points, measured on
    the page, and weights each one by the inverse square of its distance. A

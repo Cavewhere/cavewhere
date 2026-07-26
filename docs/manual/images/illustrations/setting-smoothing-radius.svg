@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 300" width="512" height="300" role="img" aria-label="A side view of a carpet surface. The raw surface is a noisy grey line over a broad arch; the smoothed surface is a calm black line that keeps the arch but drops the noise. A bell curve spans the smoothing radius around one point, showing that near neighbours count most, and that points beyond the radius are excluded entirely.">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 300" width="512" height="300" role="img" aria-label="A side view of a carpet surface. The raw surface is a noisy grey line over a broad arch; the smoothed surface is a calm black line that keeps the arch but drops the noise. A bell curve spans the smoothing radius around one point, showing that near neighbors count most, and that points beyond the radius are excluded entirely.">
   <defs>
     <style>
       .card    { fill: #ffffff; }
@@ -35,7 +35,7 @@
                           L 234 52 L 102 52 Z"/>
     <text class="note" x="240" y="20">weight</text>
     <text class="note" x="240" y="34">of each</text>
-    <text class="note" x="240" y="48">neighbour</text>
+    <text class="note" x="240" y="48">neighbor</text>
 
     <!-- Raw, noisy surface over a broad arch of genuine relief. -->
     <path class="raw" d="M 0 114.8 L 8 115.4 L 16 122.7 L 24 108.6 L 32 107.6 L 40 107.6 L 48 95.0 L 56 101.6
@@ -73,7 +73,8 @@
   </g>
 
   <text class="note" x="16" y="222">Each point&#8217;s height becomes the average of every point within the radius, weighted so near</text>
-  <text class="note" x="16" y="238">neighbours count most. The broad rise survives; the noise on top of it does not.</text>
+  <text class="note" x="16" y="238">neighbors count most. The broad rise survives; the noise on top of it does not.</text>
   <text class="note" x="16" y="260">Raise the radius to calm a bumpy carpet — too far, and it flattens genuine relief too.</text>
-  <text class="note" x="16" y="282">Only height moves; a point never shifts across the plan. Running profiles are never smoothed.</text>
+  <text class="note" x="16" y="278">Points move along the view axis only: height on a plan, depth on a projected profile.</text>
+  <text class="note" x="16" y="294">Running profiles are never smoothed.</text>
 </svg>
