@@ -508,7 +508,7 @@ pass is **deletion only — no fact changes, no re-research, no new sources.**
 
 | Page | pre-sweep | now | cut |
 |---|---|---|---|
-| `scraps/digitize-a-scrap.md` | 1115 | 2287 | 1172 |
+| ~~`scraps/digitize-a-scrap.md`~~ | 1115 | **1114 done** | ~~1172~~ |
 | `measurement/measure-distance-and-bearing.md` | 1368 | 2650 | 1282 |
 | `scraps/carpeting.md` | 1121 | 1906 | 785 |
 | `loop-closure/check-loop-closure.md` | 1860 | 2567 | 707 |
@@ -536,6 +536,31 @@ They are the 2 worst and they will show quickly whether the manifest check
 holds.
 
 Commit subject: `Compress <Page Title>`, body opening `words: <before> -> <after>`.
+
+### What the first page taught us
+
+`digitize-a-scrap.md` landed at 1114 against a 1115 ceiling, and the manifest
+check **does not hold as written.** Halving a page does not halve its prose, it
+halves its facts. Roughly 40 facts at 2287 words is 57 words each; at 1115 it is
+28, and the floor for one fact stated plainly in this register is about 20. So a
+50% cut cannot be pure rewording, and pretending otherwise just produces a
+telegram.
+
+Revise the method for the remaining 10:
+
+1. **Tighten first, then cut facts.** Wording alone got 2287 to about 1350
+   (−41%). Everything below that came out of the fact list.
+2. **Rank the facts before cutting.** Keep, in order: quoted UI strings the
+   reader might search for, corrections to what previously shipped, silent
+   failures and destructive actions, concrete numbers the reader can act on.
+   Cut, in order: layout and responsive-breakpoint trivia, pixel sizes of
+   decorations, facts that belong to a page already linked from this one,
+   toolbar inventories the screenshot already shows.
+3. **Screenshots count against the budget.** Alt text plus caption runs 25-45
+   words. Four near-identical toolbar shots with a different button ringed are
+   not 4 facts; dropping one bought 18 words here.
+4. **Write the drop list in the commit.** A dropped fact is a decision, not an
+   accident, and it must be as reviewable as an added one.
 
 ## Cross-cutting items
 
