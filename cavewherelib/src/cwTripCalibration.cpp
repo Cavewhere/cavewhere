@@ -239,16 +239,8 @@ void cwTripCalibration::rewireCaveSignals()
 
     if (m_wiredCave && m_wiredCave->fixStations()) {
         auto* fixModel = m_wiredCave->fixStations();
-        // Skip the model's read-only computed error roles (domain / station
-        // warnings): they are derived from the solve, so re-resolving on them
-        // is wasted work and risks a re-solve feedback loop (bug: an empty fix
-        // triggered endless loop-closure runs).
-        connect(fixModel, &QAbstractItemModel::dataChanged, this,
-                [this](const QModelIndex&, const QModelIndex&, const QList<int>& roles) {
-                    if (!cwFixStationModel::isErrorOnlyRoleChange(roles)) {
-                        refreshResolved();
-                    }
-                });
+        connect(fixModel, &QAbstractItemModel::dataChanged,
+                this, &cwTripCalibration::refreshResolved);
         connect(fixModel, &QAbstractItemModel::rowsInserted,
                 this, &cwTripCalibration::refreshResolved);
         connect(fixModel, &QAbstractItemModel::rowsRemoved,

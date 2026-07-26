@@ -200,8 +200,12 @@ MainWindowTest {
             cave.fixStations.addFixStation()
             tryCompare(cave.fixStations, "count", 1)
 
+            // Edits go to the row model; the warning is read off the
+            // diagnostics proxy, which is where the derived roles live.
             const model = cave.fixStations
+            const diagnostics = cave.fixStationDiagnostics
             const idx = model.index(0)
+            const proxyIdx = diagnostics.index(0)
             model.setData(idx, "BAD", FixStationModel.StationNameRole)
             model.setData(idx, "EPSG:32613", FixStationModel.InputCSRole)
             // A transposed leading digit (1478000 easting) lands outside UTM
@@ -209,13 +213,13 @@ MainWindowTest {
             model.setData(idx, 1478000.0, FixStationModel.EastingRole)
             model.setData(idx, 4430000.0, FixStationModel.NorthingRole)
 
-            const err = model.data(idx, FixStationModel.DomainErrorRole)
+            const err = diagnostics.data(proxyIdx, FixStationDiagnosticsModel.DomainErrorRole)
             verify(err.length > 0, "domain error should be set for an out-of-range easting")
             verify(err.indexOf("outside the valid range") >= 0, "message: " + err)
 
             // Correcting the coordinate clears the role.
             model.setData(idx, 478000.0, FixStationModel.EastingRole)
-            compare(model.data(idx, FixStationModel.DomainErrorRole), "",
+            compare(diagnostics.data(proxyIdx, FixStationDiagnosticsModel.DomainErrorRole), "",
                     "domain error clears once the coordinate is in range")
         }
 
@@ -225,17 +229,19 @@ MainWindowTest {
             tryCompare(cave.fixStations, "count", 1)
 
             const model = cave.fixStations
+            const diagnostics = cave.fixStationDiagnostics
             const idx = model.index(0)
+            const proxyIdx = diagnostics.index(0)
             model.setData(idx, "EPSG:32613", FixStationModel.InputCSRole)
             model.setData(idx, 478000.0, FixStationModel.EastingRole)
             model.setData(idx, 4430000.0, FixStationModel.NorthingRole)
-            compare(model.data(idx, FixStationModel.DomainErrorRole), "",
+            compare(diagnostics.data(proxyIdx, FixStationDiagnosticsModel.DomainErrorRole), "",
                     "an in-range coordinate raises no domain error")
 
             // No input CS to judge against → the row never flags on its own.
             model.setData(idx, "", FixStationModel.InputCSRole)
             model.setData(idx, 1478000.0, FixStationModel.EastingRole)
-            compare(model.data(idx, FixStationModel.DomainErrorRole), "",
+            compare(diagnostics.data(proxyIdx, FixStationDiagnosticsModel.DomainErrorRole), "",
                     "a blank input CS defers to the region-level check")
         }
 
@@ -298,7 +304,9 @@ MainWindowTest {
             model.setData(idx, 1478000.0, FixStationModel.EastingRole)
             tryVerify(() => eastingCell.error, 5000, "the bad easting is flagged")
             compare(eastingCell.color, Theme.errorText, "the bad easting is tinted red")
-            verify(!model.data(idx, FixStationModel.NorthingDomainErrorRole),
+            const diagnostics = cave.fixStationDiagnostics
+            verify(!diagnostics.data(diagnostics.index(0, 0),
+                                     FixStationDiagnosticsModel.NorthingDomainErrorRole),
                    "the northing stays unflagged")
 
             // Correcting the coordinate clears the tint again.
@@ -336,7 +344,9 @@ MainWindowTest {
             tryCompare(cave.fixStations, "count", 1)
 
             const model = cave.fixStations
-            verify(model.data(model.index(0), FixStationModel.StationErrorRole) !== "",
+            const diagnostics = cave.fixStationDiagnostics
+            verify(diagnostics.data(diagnostics.index(0),
+                                    FixStationDiagnosticsModel.StationErrorRole) !== "",
                    "an empty station name is flagged")
 
             const fixPage = RootData.pageView.currentPageItem

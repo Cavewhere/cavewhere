@@ -22,6 +22,11 @@ StandardPage {
     readonly property bool isNarrow: width < Theme.breakpointPanelCollapse
     readonly property FixStationModel fixStationsModel: cave ? cave.fixStations : null
 
+    // Edits go to fixStationsModel; the rows the table shows come from the
+    // diagnostics proxy, which layers the read-only warning roles on top. Same
+    // rows, same role names — only the derived warnings are extra.
+    readonly property FixStationDiagnosticsModel diagnosticsModel: cave ? cave.fixStationDiagnostics : null
+
     function addFix() {
         if (fixStationPage.fixStationsModel) {
             fixStationPage.fixStationsModel.addFixStation()
@@ -218,7 +223,7 @@ StandardPage {
                 id: tableView
                 objectName: "fixStationTableView"
 
-                model: fixStationPage.fixStationsModel
+                model: fixStationPage.diagnosticsModel
                 columnModel: columnModelId
 
                 implicitWidth: fixStationPage.isNarrow ? 0 : columnModelId.totalWidth

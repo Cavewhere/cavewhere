@@ -227,15 +227,7 @@ void cwLinePlotManager::connectFixStations(cwCave* cave) {
     auto* model = cave->fixStations();
     if (!model) { return; }
     const auto rerun = [this](){ runSurvex(); };
-    // dataChanged also carries the model's read-only computed error roles
-    // (domain / station warnings), which are derived from the solve output —
-    // re-solving on those would loop endlessly, so skip an error-only change.
-    connect(model, &cwFixStationModel::dataChanged, this,
-            [this](const QModelIndex&, const QModelIndex&, const QList<int>& roles) {
-                if (!cwFixStationModel::isErrorOnlyRoleChange(roles)) {
-                    runSurvex();
-                }
-            });
+    connect(model, &cwFixStationModel::dataChanged, this, rerun);
     connect(model, &cwFixStationModel::rowsInserted, this, rerun);
     connect(model, &cwFixStationModel::rowsRemoved,  this, rerun);
     connect(model, &cwFixStationModel::modelReset,   this, rerun);

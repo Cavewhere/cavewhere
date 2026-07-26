@@ -13,6 +13,7 @@
 #include "cwErrorModel.h"
 #include "cwCavingRegion.h"
 #include "cwData.h"
+#include "cwFixStationDiagnosticsModel.h"
 #include "cwFixStationModel.h"
 #include "cwGridConvergence.h"
 #include "cwNameUtils.h"
@@ -42,7 +43,9 @@ cwCave::cwCave(QObject* parent) :
 
 //    ErrorModel->addParent(this);
 
-    FixStations->setCave(this);
+    // Built in the body, not the init list: it reads FixStations through this
+    // cave, so that member has to already exist.
+    m_fixStationDiagnostics = new cwFixStationDiagnosticsModel(this);
 
     connect(FixStations, &cwFixStationModel::countChanged,
             this, &cwCave::recomputeGridConvergence);
@@ -291,7 +294,7 @@ void cwCave::recomputeGridConvergence()
 
 void cwCave::refreshFixStationDomainErrors()
 {
-    FixStations->refreshDomainErrors();
+    m_fixStationDiagnostics->refreshDomainErrors();
 }
 
 /**

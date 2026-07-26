@@ -1094,13 +1094,20 @@ notes. Ordered by payoff-vs-cost, not by confidence.</p>
 <table>
   <tr><th>Item</th><th>Why</th><th>Blast radius</th></tr>
   <tr><td><b>A1 — Derived diagnostics should not ride <code>dataChanged</code></b>
-  (<code>cwFixStationModel.cpp:96</code>)</td>
-  <td><b>Highest-payoff item here.</b> <code>dataChanged</code> now means both “the user edited persisted data” and
-  “a computed warning changed”, so every present and future consumer must remember to call
+  (<code>cwFixStationModel.cpp:96</code>) — <b>DONE</b></td>
+  <td><b>Highest-payoff item here.</b> <code>dataChanged</code> meant both “the user edited persisted data” and
+  “a computed warning changed”, so every present and future consumer had to remember to call
   <code>isErrorOnlyRoleChange()</code>. Two of the five forgot (the save path and the validator, both fixed in Commit 9)
-  and the failure mode is <i>silent</i> — a stray save, a redundant re-solve, or an infinite loop. Better: keep the four
-  computed error roles out of the persisted row model — a per-cave diagnostics object the delegate binds — or at minimum
-  give them their own notification signal so the opt-out is structural rather than remembered.</td>
+  and the failure mode is <i>silent</i> — a stray save, a redundant re-solve, or an infinite loop.
+  <span class="mono-note">Resolved 2026-07-26 by <b>cwFixStationDiagnosticsModel</b>, a <code>QIdentityProxyModel</code>
+  that layers the four computed roles (renumbered to <code>Qt::UserRole + 100</code>…) on top of the row model and owns
+  the classification, the <code>cwCave*</code> back-reference and both refresh triggers. The four consumers connect to
+  the <i>source</i>, which no longer defines those roles, so the opt-out is structural rather than remembered:
+  <code>isErrorOnlyRoleChange</code> and all four filter lambdas are deleted. FixStationPage binds its delegates to the
+  proxy — one <code>model:</code> line changed, both delegates untouched, since the role <i>names</i> pass through.
+  Note for the record: the plan’s fallback suggestion (“give them their own notification signal”) does not work as
+  written — QML delegate role properties refresh only on <code>dataChanged</code>, so a custom signal would leave the
+  eight bindings permanently stale. The question was never which signal but which <i>object</i>.</span></td>
   <td><code>cwFixStationModel</code>, <code>cwLinePlotManager</code>, <code>cwTripCalibration</code>,
   <code>cwSaveLoad</code>, <code>cwFixStationValidator</code>, <code>FixStationPage.qml</code>, 4 test files</td></tr>
 
@@ -1118,7 +1125,12 @@ notes. Ordered by payoff-vs-cost, not by confidence.</p>
   <td>The row model holds <code>cwCave*</code> to read <code>cave-&gt;network()</code> (and now the region's globalCS),
   inverting the ownership arrow. Either the cave pushes those down, or classification moves to the validator — which is
   A1, and makes this item disappear. <span class="mono-note">Note: §13.6 explicitly prescribed this back-reference, so
-  it is a documented decision rather than drift.</span></td>
+  it is a documented decision rather than drift.</span>
+  <span class="mono-note"><b>Partly addressed by A1, not closed.</b> The <i>persisted</i> row model is now free of it —
+  <code>cwFixStationModel</code> has no cave, region, network or PROJ dependency at all. The back-reference moved to
+  <code>cwFixStationDiagnosticsModel</code>, whose whole job is answering cave-scoped questions, so it is a better home;
+  but a cave-owned child still holds its owner. Closing it properly means the cave pushing the network and fallback CS
+  down, or R4's shared classifier.</span></td>
   <td>2 files + <code>test_cwFixStationModel.cpp</code></td></tr>
 
   <tr><td><b>A4 — No first-class scoped view of an <code>errorModel</code></b>
@@ -1144,9 +1156,12 @@ notes. Ordered by payoff-vs-cost, not by confidence.</p>
   (<code>cwFixStationValidator.cpp:301</code>, <code>:323</code>, <code>:404</code>). <code>referenceWarnings()</code>
   added the third and fourth copy of “join fragments → pick phrasing → one sentence per cave”; wants a
   <code>joinCaveWarning(parts, singular, plural)</code> helper.</li>
-  <li><b>R4 — The row flag and the cave warning classify independently</b> (<code>cwFixStationModel.cpp:22</code> vs
-  <code>cwFixStationValidator.cpp:231</code>). Already noted for the domain check; U10 doubled it for the reference
-  check. Folds into A1 if that is done.</li>
+  <li><b>R4 — The row flag and the cave warning classify independently</b>
+  (<code>cwFixStationDiagnosticsModel.cpp:25</code> vs <code>cwFixStationValidator.cpp:231</code>). Already noted for the
+  domain check; U10 doubled it for the reference check. <span class="mono-note">Still open after A1: the proxy and the
+  validator share <code>classifyStationReference</code> for station names, but each runs its own domain check. Folding
+  them means the proxy sourcing verdicts from the validator, which is region-scoped and would need a per-cave/per-fix
+  lookup surface — a design question of its own, deliberately kept out of A1.</span></li>
 </ul>
 
 <h3>Known gaps left open</h3>

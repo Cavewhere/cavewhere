@@ -23,6 +23,7 @@ class cwKeywordModel;
 #include "cwSanitizedNameSet.h"
 #include "cwSurveyNetwork.h"
 #include "cwCaveData.h"
+#include "cwFixStationDiagnosticsModel.h"
 #include "cwFixStationModel.h"
 
 //Qt includes
@@ -48,6 +49,7 @@ class CAVEWHERE_LIB_EXPORT cwCave : public QAbstractListModel, public cwUndoer
     Q_PROPERTY(cwLength* depth READ depth CONSTANT)
     Q_PROPERTY(cwErrorModel* errorModel READ errorModel CONSTANT)
     Q_PROPERTY(cwFixStationModel* fixStations READ fixStations CONSTANT)
+    Q_PROPERTY(cwFixStationDiagnosticsModel* fixStationDiagnostics READ fixStationDiagnostics CONSTANT)
     Q_PROPERTY(cwGridConvergence* gridConvergence READ gridConvergence CONSTANT)
     Q_PROPERTY(cwExternalCenterline externalCenterline READ externalCenterline WRITE setExternalCenterline NOTIFY externalCenterlineChanged)
     Q_PROPERTY(cwKeywordModel* keywordModel READ keywordModel CONSTANT)
@@ -79,6 +81,13 @@ public:
 
     cwErrorModel* errorModel() const;
     cwFixStationModel* fixStations() const { return FixStations; }
+
+    /// The fix stations plus their read-only, computed warnings (coordinate
+    /// domain, station reference). A proxy over fixStations() that the
+    /// FixStationPage delegates bind to; the warnings are derived from the solve
+    /// and the region CS, so they deliberately do not reach fixStations()'
+    /// dataChanged, which means "persisted data changed" and nothing else.
+    cwFixStationDiagnosticsModel* fixStationDiagnostics() const { return m_fixStationDiagnostics; }
 
     /// Per-cave grid-convergence readout (angle + state + display text).
     /// Recomputed from the fix stations / region CS via recomputeGridConvergence();
@@ -177,6 +186,11 @@ private:
     cwExternalCenterline m_externalCenterline;
 
     cwKeywordModel* m_keywordModel = nullptr;
+
+    //! Proxy over FixStations adding the computed warning roles. Constructed
+    //! last so both its source model and this cave exist to bind to.
+    cwFixStationDiagnosticsModel* m_fixStationDiagnostics = nullptr;
+
     void updateKeywords();
 
     cwCave& Copy(const cwCave& object);

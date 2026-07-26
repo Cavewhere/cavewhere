@@ -14,6 +14,7 @@
 #include "cwErrorListModel.h"
 #include "cwErrorModel.h"
 #include "cwFixStation.h"
+#include "cwFixStationDiagnosticsModel.h"
 #include "cwFixStationModel.h"
 #include "cwGeoReference.h"
 
@@ -396,14 +397,14 @@ QHash<cwCave*, QString> cwFixStationValidator::referenceWarnings() const
         QStringList unknownNames;
         int emptyCount = 0;
         for (const cwFixStation& fix : cave->fixStations()->fixStations()) {
-            switch (cwFixStationModel::classifyStationReference(fix.stationName(), network)) {
-            case cwFixStationModel::StationReference::Unknown:
+            switch (cwFixStationDiagnosticsModel::classifyStationReference(fix.stationName(), network)) {
+            case cwFixStationDiagnosticsModel::StationReference::Unknown:
                 unknownNames.append(QStringLiteral("\"%1\"").arg(fix.stationName().trimmed()));
                 break;
-            case cwFixStationModel::StationReference::Empty:
+            case cwFixStationDiagnosticsModel::StationReference::Empty:
                 ++emptyCount;
                 break;
-            case cwFixStationModel::StationReference::Ok:
+            case cwFixStationDiagnosticsModel::StationReference::Ok:
                 break;
             }
         }
@@ -531,15 +532,8 @@ void cwFixStationValidator::syncCaveConnections()
         cwFixStationModel* model = cave->fixStations();
         connect(model, &cwFixStationModel::countChanged,
                 this, &cwFixStationValidator::revalidate, Qt::UniqueConnection);
-        // Skip the model's read-only computed error roles: those are re-emitted
-        // from surveyNetworkChanged, which already re-runs us directly below, so
-        // reacting here too would revalidate the whole region twice per solve.
-        connect(model, &cwFixStationModel::dataChanged, this,
-                [this](const QModelIndex&, const QModelIndex&, const QList<int>& roles) {
-                    if (!cwFixStationModel::isErrorOnlyRoleChange(roles)) {
-                        revalidate();
-                    }
-                });
+        connect(model, &cwFixStationModel::dataChanged,
+                this, &cwFixStationValidator::revalidate, Qt::UniqueConnection);
         connect(model, &cwFixStationModel::modelReset,
                 this, &cwFixStationValidator::revalidate, Qt::UniqueConnection);
 
