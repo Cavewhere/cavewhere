@@ -201,15 +201,28 @@ Legend: `[ ]` open · `[~]` reported, awaiting review · `[x]` committed
       while its own screenshot shows a healthy scrap at **1:517**. Best new
       content: a non-finite or ≤0 scale returns the identity matrix *before* the
       rotate, so a bad scale silently kills the rotation too.
-- [ ] **20. `scraps/warping-settings.md`** — 967 wds, score **29.5 (best remaining)** — 2x `metres`
-      Partly corrected already during #18: `## Smoothing radius` claimed "only
-      the height moves — a point never shifts across the plan". `smoothZ` blends
-      in **view space**, so that holds only on a plan; on a projected profile the
-      point moves toward or away from the projection plane. Still needs the
-      prose sweep. Also reconcile `:82-83` ("more stations can stabilize the
-      warp") against `carpeting.md` and `troubleshoot-carpeting.md`, which both
-      now say to **lower** Max closest stations — a reader following the link at
-      `:85` lands on the contrary advice.
+- [x] **20. `scraps/warping-settings.md`** — 967 wds, score 29.5 — commit `5a8f0710`
+      → 0 span findings, em dash 8.51→0.00, to-be 20.0→clear, digits 13.83→28.53,
+      points-at-figure 0→3.57. Grew 1001→1524 wds.
+      **The flagged contradiction was not one.** `:82-83` quotes the shipped
+      help verbatim (`WarpingSettingsItem.qml:145`) and is correct. Philip
+      pointed out that the cap and the number of stations are separate
+      parameters working together, and that the tradeoff is documented — it is,
+      in the project's own [carpeting
+      article](https://cavewhere.com/2020/12/16/sketch-carpeting-behavior-and-troubleshooting/):
+      all stations buy continuity, the drawback is unrelated stations bleeding
+      into plan elevation. The code makes the pairing literal
+      (`cwTriangulateTask.cpp:876-877` falls back to `interpolatedStations.size()`).
+      The page now quotes and links that article, the first citation of it in
+      the manual, and says which way to turn the knob for each failure.
+      38 claims, 36 confirmed, 2 overstated, **0 wrong**, plus 6 unlisted.
+      **First page where the worst finding was in a figure, not the prose:**
+      `setting-grid-resolution.svg` labeled its panels 1.0 m and 0.25 m but drew
+      26 px and 10 px cells, a 2.6x ratio contradicting its own caption's
+      "quadruples". Also carried the item-18 view-axis error in
+      `setting-smoothing-radius.svg` and 3 `neighbour` spellings.
+      Corrected `carpeting.md:75` for the same off-by-a-boundary wording
+      ("shorter than" → "no longer than"; `ceil()` skips at `segmentCount <= 1`).
 
 ### Loop Closure, Measurement, Georeferencing
 
@@ -444,9 +457,18 @@ still read like a machine, and no amount of claim-checking sees that.
 
 Not page-scoped; land them wherever they fit or as their own commit.
 
-- [ ] **43 `BRIT` spellings across `docs/`** — `slopcheck` names the American
-      form in each message. Known: `labelled` (carpeting), `metres` x2 (warping
-      settings), `greyed` x2 (keyboard shortcuts).
+- [ ] **`BRIT` spellings across `docs/`** — `slopcheck` names the American form
+      in each message. `metres` x2 and `neighbourhood` cleared with #20;
+      `greyed` x2 (keyboard shortcuts) still open. Re-run the whole-tree scan to
+      get a current count rather than trusting the 43 first measured.
+- [ ] **No figure text has ever been checked.** `slopcheck` reads Markdown, QML
+      and C++, not SVG, so the label text inside
+      `docs/manual/images/illustrations/*.svg` has been invisible to every pass.
+      #20 found 2 defects in 2 of the 4 files it touched: a wrong density ratio
+      and a stale claim the prose had already been corrected for. The
+      `projection-*` figures in `scrap-types.md` and the rest of the
+      `illustrations/` set are unaudited. Worth either teaching `slopcheck` to
+      parse `<text>` elements or sweeping the directory once by hand.
 - [ ] **The scraps chapter is now ~10,700 words across 5 pages**, and
       `scrap-types.md` at 3034 is the longest page in the manual. Sourcing a
       thin page grows it: #19 went 597 → 1813 even after cutting half the
