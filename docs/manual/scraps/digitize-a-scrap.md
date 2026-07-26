@@ -10,8 +10,9 @@ related: [carpeting.md, scrap-types.md, ../leads/track-and-export-leads.md, ../c
 
 ## Why / when you need this
 
-Draping a sketch over the 3D survey takes 2 things: the **shape** of the passage,
-traced as an outline on the note, and the **survey stations** drawn inside it.
+[Carpeting](../concepts/glossary.md#carpeting) a sketch onto the 3D survey takes
+2 things: the **shape** of the passage, traced as an outline on the note, and the
+**survey stations** drawn inside it.
 CaveWhere carpets a scrap once it holds 1 of each. A note usually breaks into
 several scraps, and [Troubleshoot the Carpet](troubleshoot-carpeting.md) explains
 why the smaller pieces morph cleaner.
