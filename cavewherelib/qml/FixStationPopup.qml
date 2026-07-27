@@ -30,6 +30,33 @@ QC.Popup {
                                                    ? popupId.cave.fixStations
                                                    : null
 
+    // Edits go to fixStations; the warnings come from the diagnostics proxy
+    // over it, the same rows FixStationPage reads (U12). Row indices pass
+    // through unchanged, so popupId.row addresses both.
+    readonly property FixStationDiagnosticsModel diagnostics: popupId.cave !== null
+                                                              ? popupId.cave.fixStationDiagnostics
+                                                              : null
+
+    // What's wrong with this fix right now, worst first: text that wouldn't
+    // parse beats a coordinate outside its CS, which beats a station name the
+    // cave doesn't have. Before U12 the popup showed none of these, so a fix
+    // typed here looked identical whether or not it was usable.
+    property string parseError: ""
+    property string domainError: ""
+    property string stationError: ""
+
+    // Which axis the field leads with. A geographic CS is written latitude
+    // first, a projected one easting first, and the numbers alone can't say
+    // which — so the label and placeholder below tell the user, and every
+    // format/parse call is handed this same value.
+    readonly property int axisOrder: CoordinateText.axisOrderFor(csPickerId.value)
+
+    readonly property string errorMessage: popupId.parseError !== ""
+                                           ? popupId.parseError
+                                           : (popupId.domainError !== ""
+                                              ? popupId.domainError
+                                              : popupId.stationError)
+
     // Which station is being fixed, and the row that anchors it. Both are set by
     // openFor(); the row is re-resolved on every open rather than kept, since a
     // fix added or removed on FixStationPage would shift a stored index.
@@ -100,16 +127,50 @@ QC.Popup {
     // read through data(), which no binding can depend on. Nothing else edits
     // these rows while the popup is up, so one read is enough.
     function reload(): void {
+        popupId.parseError = ""
+        popupId.reloadCoordinate()
+        popupId.reloadErrors()
+    }
+
+    // Re-renders the field from the model. Kept apart from reload() because a
+    // CS change must not run it while a parse error is pending: the model never
+    // received that text, so re-rendering would replace what the user still has
+    // to correct with the coordinate they were trying to replace.
+    function reloadCoordinate(): void {
         const model = popupId.fixStations
         if (model === null || popupId.row < 0) {
             return
         }
 
         const modelIndex = model.index(popupId.row)
-        csPickerId.value = model.data(modelIndex, FixStationModel.InputCSRole)
-        eastingFieldId.text = model.data(modelIndex, FixStationModel.EastingRole)
-        northingFieldId.text = model.data(modelIndex, FixStationModel.NorthingRole)
-        elevationFieldId.text = model.data(modelIndex, FixStationModel.ElevationRole)
+        //Read the CS into a local rather than off the picker, so the order this
+        //renders in comes from the same read as the numbers. commitCoordinate()
+        //re-reads it rather than trusting this one — the two reads are separated
+        //by however long the user spends typing.
+        const inputCS = model.data(modelIndex, FixStationModel.InputCSRole)
+        csPickerId.value = inputCS
+        coordinateFieldId.text = CoordinateText.format(
+                    model.data(modelIndex, FixStationModel.EastingRole),
+                    model.data(modelIndex, FixStationModel.NorthingRole),
+                    model.data(modelIndex, FixStationModel.ElevationRole),
+                    ProjectUnits.unitSystem,
+                    CoordinateText.axisOrderFor(inputCS))
+    }
+
+    // The derived warnings, unlike the coordinate, change without anyone
+    // touching this popup — a re-solve or a CS change moves them — so they are
+    // re-read whenever the proxy says so, not only on open.
+    function reloadErrors(): void {
+        const model = popupId.diagnostics
+        if (model === null || popupId.row < 0) {
+            popupId.domainError = ""
+            popupId.stationError = ""
+            return
+        }
+
+        const modelIndex = model.index(popupId.row)
+        popupId.domainError = model.data(modelIndex, FixStationDiagnosticsModel.DomainErrorRole)
+        popupId.stationError = model.data(modelIndex, FixStationDiagnosticsModel.StationErrorRole)
     }
 
     function commit(role: int, value: var): void {
@@ -120,17 +181,29 @@ QC.Popup {
         model.setData(model.index(popupId.row), value, role)
     }
 
-    component CoordinateField : QC.TextField {
-        id: fieldId
-        required property int role
+    // Writes all three components in one edit, or leaves the row alone and
+    // reports why. No QValidator here on purpose: QC.TextField withholds
+    // editingFinished while a validator reports unacceptable input, which would
+    // swallow the very message this is here to show (see cwCoordinateText).
+    function commitCoordinate(text: string): void {
+        const model = popupId.fixStations
+        if (model === null || popupId.row < 0) {
+            return
+        }
+        const inputCS = model.data(model.index(popupId.row), FixStationModel.InputCSRole)
+        popupId.parseError = model.setCoordinateText(
+                    popupId.row, text, ProjectUnits.unitSystem,
+                    CoordinateText.axisOrderFor(inputCS))
+    }
 
-        Layout.preferredWidth: Theme.fixPopupFieldWidth
+    QQ.Connections {
+        target: popupId.diagnostics
 
-        // Validated, so editingFinished can't fire on text Number() would turn
-        // into NaN — a NaN easting propagates straight into the line plot.
-        validator: QQ.DoubleValidator {}
-
-        onEditingFinished: popupId.commit(fieldId.role, Number(fieldId.text))
+        function onDataChanged(topLeft: var, bottomRight: var): void {
+            if (popupId.row >= topLeft.row && popupId.row <= bottomRight.row) {
+                popupId.reloadErrors()
+            }
+        }
     }
 
     contentItem: ColumnLayout {
@@ -162,31 +235,35 @@ QC.Popup {
                 onCommitted: (newCS) => {
                     csPickerId.value = newCS
                     popupId.commit(FixStationModel.InputCSRole, newCS)
+                    //Geographic and projected write their axes in opposite
+                    //orders, so the text on screen may have just become a
+                    //transposition of itself — but only text the model actually
+                    //took can be re-rendered. Changing the CS is the natural
+                    //next move after a refusal, and it must not eat the
+                    //coordinate that was refused.
+                    if (popupId.parseError === "") {
+                        popupId.reloadCoordinate()
+                    }
+                    popupId.reloadErrors()
                 }
             }
 
-            QC.Label { text: qsTr("Easting / Long") }
-
-            CoordinateField {
-                id: eastingFieldId
-                objectName: "fixStationPopupEasting"
-                role: FixStationModel.EastingRole
+            QC.Label {
+                objectName: "fixStationPopupCoordinateLabel"
+                text: popupId.axisOrder === CoordinateText.LatitudeLongitude
+                      ? qsTr("Lat, Long, Elev")
+                      : qsTr("East, North, Elev")
             }
 
-            QC.Label { text: qsTr("Northing / Lat") }
+            QC.TextField {
+                id: coordinateFieldId
+                objectName: "fixStationPopupCoordinate"
 
-            CoordinateField {
-                id: northingFieldId
-                objectName: "fixStationPopupNorthing"
-                role: FixStationModel.NorthingRole
-            }
+                Layout.preferredWidth: Theme.fixPopupCoordinateWidth
 
-            QC.Label { text: qsTr("Elevation") }
+                color: popupId.parseError !== "" ? Theme.errorText : Theme.text
 
-            CoordinateField {
-                id: elevationFieldId
-                objectName: "fixStationPopupElevation"
-                role: FixStationModel.ElevationRole
+                onEditingFinished: popupId.commitCoordinate(coordinateFieldId.text)
             }
         }
 
@@ -199,6 +276,36 @@ QC.Popup {
             Layout.fillWidth: true
             wrapMode: QC.Label.WordWrap
             text: CSFormat.displayName(csPickerId.value)
+        }
+
+        // U12 — the one place this editor admits something is wrong. It sits
+        // below the CS name so the layout doesn't jump when it appears.
+        RowLayout {
+            objectName: "fixStationPopupError"
+
+            Layout.fillWidth: true
+            Layout.maximumWidth: Theme.fixPopupCoordinateWidth
+            spacing: Theme.tightSpacing
+
+            visible: popupId.errorMessage !== ""
+
+            QQ.Image {
+                Layout.alignment: Qt.AlignTop
+                source: "qrc:icons/svg/warning.svg"
+                sourceSize: Qt.size(Theme.iconSizeButton, Theme.iconSizeButton)
+            }
+
+            QC.Label {
+                objectName: "fixStationPopupErrorText"
+                Layout.fillWidth: true
+                color: Theme.errorText
+                wrapMode: QC.Label.WordWrap
+                // Every message here quotes something the user typed — the
+                // refused text, or a station name — and AutoText would render
+                // "<b>" in it as markup rather than as characters.
+                textFormat: QC.Label.PlainText
+                text: popupId.errorMessage
+            }
         }
 
         QC.Button {

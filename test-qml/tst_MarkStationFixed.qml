@@ -149,6 +149,16 @@ MainWindowTest {
             return popup
         }
 
+        // Opens the popup on station A1 and returns it, ready to edit.
+        function popupForA1(context) {
+            const menu = openFixMenu(focusedStationBox(context, 0))
+            menu.mark.triggered()
+
+            const popup = fixStationPopup()
+            tryCompare(popup, "opened", true)
+            return popup
+        }
+
         function test_blankStationOffersNoFix() {
             const context = gotoSurveyTable()
 
@@ -233,12 +243,7 @@ MainWindowTest {
         function test_popupEditsTheFixInPlace() {
             const context = gotoSurveyTable()
 
-            const stationBox = focusedStationBox(context, 0)
-            const menu = openFixMenu(stationBox)
-            menu.mark.triggered()
-
-            const popup = fixStationPopup()
-            tryCompare(popup, "opened", true)
+            const popup = popupForA1(context)
             compare(popup.stationName, "A1")
             compare(popup.row, 0)
 
@@ -247,25 +252,19 @@ MainWindowTest {
             compare(title.text, "Fix station A1")
 
             // Typing a coordinate: editingFinished is the same handler a keyboard
-            // commit runs.
-            const easting = findChild(popup, "fixStationPopupEasting")
-            const northing = findChild(popup, "fixStationPopupNorthing")
-            const elevation = findChild(popup, "fixStationPopupElevation")
-            verify(easting !== null && northing !== null && elevation !== null,
-                   "popup should offer all three coordinate fields")
+            // commit runs. One field takes the whole thing (#621).
+            const coordinate = findChild(popup, "fixStationPopupCoordinate")
+            verify(coordinate !== null, "popup should offer the coordinate field")
 
-            easting.text = "500200.5"
-            easting.editingFinished()
-            northing.text = "4194100"
-            northing.editingFinished()
-            elevation.text = "2750"
-            elevation.editingFinished()
+            coordinate.text = "500200.5, 4194100, 2750m"
+            coordinate.editingFinished()
 
             const model = context.cave.fixStations
             const modelIndex = model.index(0)
             compare(model.data(modelIndex, FixStationModel.EastingRole), 500200.5)
             compare(model.data(modelIndex, FixStationModel.NorthingRole), 4194100.0)
             compare(model.data(modelIndex, FixStationModel.ElevationRole), 2750.0)
+            compare(popup.parseError, "", "a coordinate it could read leaves no complaint")
 
             // The input CS comes from the shared picker, the same one the
             // FixStationPage rows use.
@@ -292,12 +291,245 @@ MainWindowTest {
             const reopenMenu = openFixMenu(focusedStationBox(context, 0))
             reopenMenu.mark.triggered()
             tryCompare(popup, "opened", true)
-            compare(easting.text, "500200.5")
+            compare(coordinate.text, "500200.5, 4194100, 2750m")
             compare(picker.value, "EPSG:26916")
 
             // Left open, it would sit in the window overlay and eat clicks for
             // whichever test runs next.
             done.clicked()
+            tryCompare(popup, "opened", false)
+        }
+
+        function test_popupRejectsAPasteItCantRead() {
+            // U11/U12 — free-form entry creates an error class ("couldn't make
+            // sense of that") the popup had nowhere to put before this.
+            const context = gotoSurveyTable()
+            const popup = popupForA1(context)
+
+            const coordinate = findChild(popup, "fixStationPopupCoordinate")
+            verify(coordinate !== null, "popup should offer the coordinate field")
+
+            coordinate.text = "500200.5, 4194100, 2750m"
+            coordinate.editingFinished()
+
+            const errorRow = findChild(popup, "fixStationPopupError")
+            const errorText = findChild(popup, "fixStationPopupErrorText")
+            verify(errorRow !== null && errorText !== null, "popup should have an error line")
+            tryVerify(() => !errorRow.visible, 2000, "a readable coordinate shows no error")
+
+            coordinate.text = "somewhere near the entrance"
+            coordinate.editingFinished()
+
+            tryVerify(() => errorRow.visible, 2000, "an unreadable paste is reported")
+            verify(errorText.text !== "", "and the reason is spelled out, not just flagged")
+
+            // A refused paste must leave the fix exactly as it was.
+            const model = context.cave.fixStations
+            const modelIndex = model.index(0)
+            compare(model.data(modelIndex, FixStationModel.EastingRole), 500200.5)
+            compare(model.data(modelIndex, FixStationModel.NorthingRole), 4194100.0)
+
+            // ...and what the user typed stays put, so it can be corrected
+            // rather than retyped.
+            compare(coordinate.text, "somewhere near the entrance")
+
+            // Fixing the text clears the complaint.
+            coordinate.text = "500200.5, 4194100, 2751m"
+            coordinate.editingFinished()
+            tryVerify(() => !errorRow.visible, 2000, "a readable coordinate clears the error")
+
+            findChild(popup, "fixStationPopupDone").clicked()
+            tryCompare(popup, "opened", false)
+        }
+
+        function test_popupKeepsRefusedTextWhenTheCSChanges() {
+            // Changing the CS is the natural next move after a refusal — the
+            // user assumes that's what upset it. The popup re-renders the field
+            // on a CS change, because geographic and projected write their axes
+            // in opposite orders; doing that while a parse error is pending
+            // would replace the text they still have to fix with the coordinate
+            // they were trying to replace, and drop the reason with it.
+            const context = gotoSurveyTable()
+            const popup = popupForA1(context)
+
+            const coordinate = findChild(popup, "fixStationPopupCoordinate")
+            const errorRow = findChild(popup, "fixStationPopupError")
+            verify(coordinate !== null && errorRow !== null)
+
+            coordinate.text = "46.12113 N, 115.59902 W"
+            coordinate.editingFinished()
+            tryVerify(() => errorRow.visible, 2000, "the paste is refused")
+
+            const picker = findChild(popup, "fixStationPopupCS")
+            verify(picker !== null, "popup should offer a CS picker")
+            picker.committed("EPSG:4326")
+
+            compare(coordinate.text, "46.12113 N, 115.59902 W",
+                    "the refused text survives the CS change")
+            tryVerify(() => errorRow.visible, 2000,
+                      "and so does the reason it was refused")
+
+            // The CS itself still landed, and a good coordinate still commits.
+            const model = context.cave.fixStations
+            compare(model.data(model.index(0), FixStationModel.InputCSRole), "EPSG:4326")
+
+            coordinate.text = "46.12113, -115.59902, 304m"
+            coordinate.editingFinished()
+            tryVerify(() => !errorRow.visible, 2000)
+
+            findChild(popup, "fixStationPopupDone").clicked()
+            tryCompare(popup, "opened", false)
+        }
+
+        function test_popupShowsTheWarningsTheFixStationPageShows() {
+            // U12 — before this, a coordinate typed here could sit outside its
+            // own CS and the popup looked exactly the same either way. The only
+            // way to find out was to navigate to FixStationPage.
+            const context = gotoSurveyTable()
+            const popup = popupForA1(context)
+
+            const coordinate = findChild(popup, "fixStationPopupCoordinate")
+            const picker = findChild(popup, "fixStationPopupCS")
+            const errorRow = findChild(popup, "fixStationPopupError")
+            const errorText = findChild(popup, "fixStationPopupErrorText")
+
+            picker.committed("EPSG:32613")
+            coordinate.text = "478000, 4430000, 1655m"
+            coordinate.editingFinished()
+            tryVerify(() => !errorRow.visible, 2000, "a coordinate inside its CS is quiet")
+
+            // Transposed leading digit: still a number, still parses, but no
+            // longer anywhere near UTM zone 13.
+            coordinate.text = "1478000, 4430000, 1655m"
+            coordinate.editingFinished()
+
+            tryVerify(() => errorRow.visible, 5000,
+                      "a coordinate outside its CS is reported without leaving the popup")
+            compare(popup.parseError, "", "it parsed fine — this is the domain warning")
+            verify(errorText.text === popup.domainError && popup.domainError !== "",
+                   "and the message is the domain one")
+
+            // Both derived roles are read from the same row, so pin each to what
+            // the model actually says.
+            const diagnostics = context.cave.fixStationDiagnostics
+            const diagnosticsIndex = diagnostics.index(0)
+            compare(popup.domainError,
+                    diagnostics.data(diagnosticsIndex,
+                                     FixStationDiagnosticsModel.DomainErrorRole))
+
+            // stationError has to be driven to something before comparing it —
+            // both sides are empty while the fix names a real station, so the
+            // comparison would hold just as well against a property wired to
+            // nothing at all. Renaming the fix to a station the survey doesn't
+            // have is what makes it speak.
+            const model = context.cave.fixStations
+            model.setData(model.index(0), "ZZ9", FixStationModel.StationNameRole)
+            tryVerify(() => popup.stationError !== "", 2000,
+                      "an unknown station name reaches the popup")
+            compare(popup.stationError,
+                    diagnostics.data(diagnosticsIndex,
+                                     FixStationDiagnosticsModel.StationErrorRole))
+            model.setData(model.index(0), "A1", FixStationModel.StationNameRole)
+            tryCompare(popup, "stationError", "")
+
+            // A parse failure is the more immediate problem, so it takes the line.
+            coordinate.text = "not a coordinate"
+            coordinate.editingFinished()
+            tryVerify(() => popup.parseError !== "", 2000)
+            compare(errorText.text, popup.parseError,
+                    "the parse failure outranks the domain warning still sitting there")
+            verify(popup.domainError !== "", "which is still there")
+
+            findChild(popup, "fixStationPopupDone").clicked()
+            tryCompare(popup, "opened", false)
+        }
+
+        function test_popupWritesLatitudeFirstForAGeographicCS() {
+            // The popup has to follow the same lat-first rule as the page, and
+            // say which order it wants — the numbers alone can't tell the user,
+            // and getting it wrong transposes the fix silently.
+            const context = gotoSurveyTable()
+            const popup = popupForA1(context)
+
+            const coordinate = findChild(popup, "fixStationPopupCoordinate")
+            const picker = findChild(popup, "fixStationPopupCS")
+            const label = findChild(popup, "fixStationPopupCoordinateLabel")
+            verify(label !== null, "popup should label the coordinate field")
+
+            picker.committed("EPSG:32613")
+            tryCompare(label, "text", "East, North, Elev", 2000,
+                       "a projected CS asks for easting first")
+
+            coordinate.text = "478000, 4430000, 1655m"
+            coordinate.editingFinished()
+
+            const model = context.cave.fixStations
+            const modelIndex = model.index(0)
+            compare(model.data(modelIndex, FixStationModel.EastingRole), 478000.0)
+            compare(model.data(modelIndex, FixStationModel.NorthingRole), 4430000.0)
+
+            // Switching to lat/long re-renders the field in the other order
+            // without touching the stored coordinate.
+            picker.committed("EPSG:4326")
+            tryCompare(label, "text", "Lat, Long, Elev", 2000,
+                       "a geographic CS asks for latitude first")
+            tryCompare(coordinate, "text", "4430000, 478000, 1655m", 2000,
+                       "and the field swaps to match")
+            compare(model.data(modelIndex, FixStationModel.EastingRole), 478000.0,
+                    "re-rendering wrote nothing to the model")
+
+            coordinate.text = "46.12113, -115.59902, 304m"
+            coordinate.editingFinished()
+            compare(popup.parseError, "")
+            fuzzyCompare(model.data(modelIndex, FixStationModel.NorthingRole), 46.12113, 1e-9)
+            fuzzyCompare(model.data(modelIndex, FixStationModel.EastingRole), -115.59902, 1e-9)
+
+            findChild(popup, "fixStationPopupDone").clicked()
+            tryCompare(popup, "opened", false)
+        }
+
+        function test_popupErrorsFollowTheRowWhenItIsReopened() {
+            // The popup fills itself imperatively, so a stale complaint from the
+            // previous row would otherwise survive the next open.
+            const context = gotoSurveyTable()
+            const popup = popupForA1(context)
+
+            const coordinate = findChild(popup, "fixStationPopupCoordinate")
+            const errorRow = findChild(popup, "fixStationPopupError")
+
+            coordinate.text = "nonsense"
+            coordinate.editingFinished()
+            tryVerify(() => errorRow.visible, 2000, "the paste is refused")
+
+            findChild(popup, "fixStationPopupDone").clicked()
+            tryCompare(popup, "opened", false)
+
+            // Give A1's row a coordinate that really is outside its CS, before
+            // opening on anyone else. Every other error assertion in this file
+            // runs on row 0, so without a flagged row 0 to contrast against,
+            // reading the diagnostics at a hardcoded index(0) would look right.
+            const model = context.cave.fixStations
+            model.setData(model.index(0), "EPSG:32613", FixStationModel.InputCSRole)
+            model.setData(model.index(0), 1478000.0, FixStationModel.EastingRole)
+
+            const diagnostics = context.cave.fixStationDiagnostics
+            tryVerify(() => diagnostics.data(diagnostics.index(0),
+                                             FixStationDiagnosticsModel.DomainErrorRole) !== "",
+                      5000, "row 0 really is flagged now")
+
+            // A different station, whose own fix has nothing wrong with it.
+            const menu = openFixMenu(focusedStationBox(context, 1))
+            menu.mark.triggered()
+            tryCompare(popup, "opened", true)
+            compare(popup.stationName, "A2")
+            compare(popup.row, 1, "the popup is on the second fix")
+
+            compare(popup.parseError, "", "the previous row's complaint doesn't follow")
+            compare(popup.domainError, "",
+                    "and neither does the other row's, which is the one on file")
+            tryVerify(() => !errorRow.visible, 2000, "so the error line is gone")
+
+            findChild(popup, "fixStationPopupDone").clicked()
             tryCompare(popup, "opened", false)
         }
     }

@@ -14,6 +14,7 @@
 #include "cwFixStationDiagnostics.h"
 #include "cwFixStationDiagnosticsModel.h"
 #include "cwFixStationModel.h"
+#include "cwGeoPoint.h"
 #include "cwGeoReference.h"
 #include "cwSurveyNetwork.h"
 
@@ -68,6 +69,31 @@ TEST_CASE("cwFixStationDiagnostics::domainCheck resolves the CS it judges under"
     SECTION("Whitespace-only CS strings count as absent") {
         const cwFixStation fix = makeFix(QStringLiteral("   "), kBadEasting);
         CHECK(cwFixStationDiagnostics::isDomainValid(fix, QStringLiteral("  ")));
+    }
+
+    SECTION("A fix still on the origin has no coordinate to judge") {
+        // "Mark Station as Fixed" creates the row before the user types anything,
+        // so a default fix must not open its popup on a red warning. The CS is a
+        // southern-hemisphere zone, where the origin lands near the pole — the
+        // deferral has to come from the fix, not from the coordinate happening to
+        // land somewhere harmless.
+        const QString cs = QStringLiteral("EPSG:28355");
+
+        // The premise, asserted rather than assumed: without the guard this fix
+        // really would be flagged, so the check below cannot pass for free.
+        REQUIRE_FALSE(cwCoordinateTransform::domainCheck(cs, cwGeoPoint(0.0, 0.0, 0.0))
+                          .northingValid);
+
+        cwFixStation untouched;
+        untouched.setStationName(QStringLiteral("A"));
+        untouched.setInputCS(cs);
+        CHECK(cwFixStationDiagnostics::isDomainValid(untouched, QString()));
+
+        // One zero is not two. A real easting with the northing still at zero is
+        // a half-entered coordinate, not an unentered one, and stays flagged.
+        cwFixStation halfEntered = untouched;
+        halfEntered.setEasting(kGoodEasting);
+        CHECK_FALSE(cwFixStationDiagnostics::isDomainValid(halfEntered, QString()));
     }
 
     SECTION("Per-axis attribution survives the fix-level wrapper") {

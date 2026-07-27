@@ -1092,7 +1092,9 @@ in chunks at all, so the chunk set would miss those stations entirely. Do not sw
   <tr><td><b>8</b> — First-fix output CS</td><td>U6</td><td>Self-contained validator/region + one prompt; the highest-impact correctness item (fixes “cave renders far away”).</td></tr>
   <tr><td><b>9</b> — Error surfacing <span class="pill ok">implemented</span></td><td>U9, U4, U10</td><td>All three are “show the error where it belongs”: U9 the CavePage line badge, U4 the per-component red cell, U10 the empty/unknown-station flag — each is a model role + inline indicator (new <code>cwErrorTypeId::FixStationReference</code>=598 for U10). See the Implemented callouts in §13.5 / §13.6 / §13.2.</td></tr>
   <tr><td><b>10</b> — Mark Fixed inline <span class="pill ok">implemented</span></td><td>U2</td><td>Largest, standalone feature (model API + caret + badge + inline coords); its own commit(s). See the Implemented callout in §13.3.</td></tr>
-  <tr><td><b>11</b> — Free-form coordinates <span class="pill new">next</span></td><td>U11, U12</td><td>One parser feeding both entry surfaces, plus the error line that a parse failure needs somewhere to land. See §13.8 for why U12 rides along rather than waiting.</td></tr>
+  <tr><td><b>11</b> — Free-form coordinates <span class="pill ok">implemented</span></td><td>U11, U12</td><td>One parser feeding both entry surfaces, plus the error line that a parse failure needs somewhere to land. See §13.8 for why U12 rides along rather than waiting, and the Implemented callout there for the two decisions that shaped it.</td></tr>
+  <tr><td><b>12</b> — Keep what the user typed</td><td>U14</td><td>Stores the raw coordinate string beside the numbers, so the <i>editor</i> re-offers what was typed while the cell keeps rendering in project units (§13.10). Its own commit: it touches the model, <code>cavewhere.proto</code> and both entry surfaces, and it supersedes A6 rather than sitting beside it. A CS change deliberately writes <b>nothing</b> — the stored axis order exists so the no-op guard can tell a re-commit under a new order apart from a genuine no-op.</td></tr>
+  <tr><td><b>13</b> — Remove Fix into the popup</td><td>U13</td><td>Small, self-contained QML (§13.9) — delete the cell menu item, add the action to the editor; the caret and its menu stay. Deliberately <i>after</i> U14 only because both edit <code>FixStationPopup</code>; nothing else couples them, so the order is reversible.</td></tr>
   <tr><td><b>—</b> — Tab order</td><td>U3</td><td>Separate: it edits the <i>shared</i> table-input stack used by other tables, so it stands alone with its own blast-radius review; not gated on the fix-station work.</td></tr>
 </table>
 <p class="mono-note">Grouping is a recommendation, not a commitment — U5/U7/U9 are each shippable on their own if you want
@@ -1170,7 +1172,7 @@ machinery above was then split so no component straddles two roles and CS presen
 </ul>
 </div>
 
-<h3 id="freeform">13.8 — Free-form coordinate entry (U11, <a href="https://github.com/Cavewhere/cavewhere/issues/621">#621</a>) and the popup's missing errors (U12) <span class="pill new">next</span></h3>
+<h3 id="freeform">13.8 — Free-form coordinate entry (U11, <a href="https://github.com/Cavewhere/cavewhere/issues/621">#621</a>) and the popup's missing errors (U12) <span class="pill ok">implemented</span></h3>
 
 <p>Added 2026-07-26, after Commit 10. Three separate numeric fields make the common case — <b>paste a coordinate you
 got from somewhere else</b> — into a manual split-and-retype. Issue #621 asks for one field that takes the whole
@@ -1241,6 +1243,106 @@ it is a few bindings — strictly less work than a second pass, and it avoids sh
 conspicuously ignores the errors sitting right next to it.
 </div>
 
+<div class="callout ok">
+<b>Commit 11 implemented 2026-07-26 — U11 + U12 together, gates green.</b> New
+<code>cwCoordinateText</code> (<code>parse</code> returning <code>Monad::Result&lt;Coordinate&gt;</code>,
+<code>format</code> as a <code>QML_SINGLETON</code> invokable, plus <code>cwCoordinateTextValidator</code>),
+a new <code>cwFixStationModel::setCoordinateText(row, text, units)</code>, and both entry surfaces rebuilt
+around one field.
+
+<h4>The two decisions that shaped it</h4>
+<ul>
+  <li><b>One field replaces three</b>, on both surfaces — <code>FixStationPage</code> now has a single
+  <i>Coordinate</i> column where Easting / Northing / Elevation were. The consequence, accepted knowingly:
+  <b>U4's per-component tint is gone.</b> <code>EastingDomainErrorRole</code> and
+  <code>NorthingDomainErrorRole</code> both still exist and are both still read, but they now feed one
+  <code>||</code> into one tint, so a bad easting and a bad northing look the same. The per-axis
+  <i>attribution</i> survives only in C++ and in <code>DomainErrorRole</code>'s message.</li>
+  <li><b>A bare elevation is read in the project's unit system</b> (the <code>Metric ⇒ m / Imperial ⇒ ft</code>
+  rule via <code>cwUnits::surveyUnit</code>), which is what #621's "(use the projects units)" line asks for.
+  That decision forced a second one: because the single field is <i>both</i> the display and the input,
+  <code>format()</code> has to write the unit suffix — otherwise an Imperial user who opened the editor and
+  pressed Enter without typing would divide their elevation by 3.28 every time.</li>
+</ul>
+
+<h4>Settled while implementing</h4>
+<ul>
+  <li><b>The elevation is meters, full stop</b> — the plan's open question, now answered from the source
+  rather than assumed. <code>survex/src/commands.c:1195-1224</code> reads <code>*fix</code>'s three numbers
+  raw and hands them straight to <code>proj_trans</code>; no <code>*units</code> scaling is applied. Every CS
+  CaveWhere offers is 2D, so PROJ passes <code>z</code> through untouched, and survex's own internal length
+  unit is metres — so a fix's elevation has to be metres to line up with the survey it anchors. A
+  <code>ft</code> suffix is therefore converted at parse time and never stored, exactly as feared.</li>
+  <li><b>The first two components are not always the same axis — and this was got wrong first.</b> #621's
+  lat/long examples are written <i>latitude first</i> (46.12113 is a latitude in Idaho, -115.59902 the longitude),
+  while its UTM examples are easting first. The model stores easting/northing, so a geographic row has to render and
+  read its two horizontal components in the opposite order from a projected one. The plan already said the two can't
+  be told apart from the numbers — "46.12113, -115.59902 is a legal (if absurd) UTM pair" — but the first cut of the
+  parser still mapped component 0 to the easting unconditionally, which transposed every pasted lat/long.
+  <br>
+  The rule now: <code>cwCoordinateText::AxisOrder</code>, resolved by <code>axisOrderFor(cs)</code> from
+  <code>cwCoordinateTransform::isGeographic</code> (per-thread cached, so it is safe inside a delegate binding).
+  <b>parse() and format() must be handed the same order</b> or a value transposes itself on every trip through the
+  field, so both take it as an explicit argument and neither has a default. An empty or unresolvable CS is
+  <code>EastingNorthing</code>: a fix that declares none defers to the region's global CS, which survex requires to be
+  projected, so no geographic case hides behind the empty string. The popup's field label and placeholder switch with
+  it ("Lat, Long, Elev" vs "East, North, Elev") — with one free-form field the user has no other way to know which
+  order is wanted.</li>
+  <li><b>"Project units" comes from <code>cwCave::unitSystem()</code>'s well</b>, reached in QML through the
+  existing <code>ProjectUnits.qml</code> singleton (region's <code>unitSystem</code>, falling back to the app
+  default). The per-trip <code>cwTripCalibration</code> is not involved, as the plan required.</li>
+  <li><b>Numbers are formatted shortest-exact</b> (<code>QLocale::c().toString(v, 'g',
+  QLocale::FloatingPointShortest)</code>), not to a fixed precision. 15 digits loses a double's low bits and
+  17 renders 46.12113 as "46.121129999999997"; shortest-exact gives both. <i>Known cost:</i> a
+  unit-<i>converted</i> elevation renders long — 305 m shows as <code>1000.6561679790026ft</code> under
+  Imperial. Rounding it would be prettier but would break the guarantee that re-committing an untouched
+  field writes nothing, so it was left exact. Prettifying this needs
+  <code>setCoordinateText</code> to short-circuit on <i>text</i> identity as well as numeric equality; see
+  A6 in §14 — <b>and its successor U14 (§13.10)</b>, which removes the problem instead, by keeping the string the
+  user typed rather than re-deriving one.</li>
+  <li><b>The validator is stateless.</b> It carries neither a unit system nor an axis order, because neither can
+  change its verdict — both decide what the numbers <i>mean</i>, never whether they can be read. A test pins that
+  claim down so a change making the verdict unit-dependent fails loudly rather than validating against the wrong
+  project.</li>
+  <li><b>Where the validator went.</b> #621 asks for a validator, and there is one — but only on
+  <code>FixStationPage</code>. <code>cwCoordinateTextValidator</code> never returns
+  <code>Invalid</code> (that would reject the keystroke, and every coordinate is half-typed on its way to
+  being whole); incomplete text is <code>Intermediate</code>, which <code>CoreClickTextInput</code> already
+  knows how to handle — it holds the editor open, keeps what was typed, and shows <code>errorText</code>.
+  <code>FixStationPopup</code> installs <b>no</b> validator, because <code>QC.TextField</code> withholds
+  <code>editingFinished</code> while a validator reports unacceptable input, which would swallow the very
+  message U12 exists to show. It validates by committing and displaying what
+  <code>setCoordinateText</code> returns.</li>
+  <li><b>One <code>dataChanged</code> per paste.</b> <code>setCoordinateText</code> writes all three
+  components and emits once with <code>{Easting, Northing, Elevation}</code>. Three
+  <code>setData</code> calls would have been three <code>runSurvex()</code> calls
+  (<code>cwLinePlotManager::connectFixStations</code> reruns on every <code>dataChanged</code>) for one paste.</li>
+  <li><b>Two components are legal</b> — "46.12113, -115.59902" leaves the elevation at 0. A unit suffix is
+  accepted only on the elevation; on a horizontal it is a hard error, since those are in the CS's own units
+  and this parser has no way to know them.</li>
+</ul>
+
+<h4>U12's error surface</h4>
+<p>The popup shows one line, worst-first: a parse failure outranks <code>DomainErrorRole</code>, which
+outranks <code>StationErrorRole</code>. It reads the warnings from the cave's
+<code>cwFixStationDiagnosticsModel</code> — the same proxy <code>FixStationPage</code> binds to, with row
+indices passing through unchanged. Because the popup fills itself imperatively rather than by binding
+(§13.3), the warnings are re-read from a <code>Connections</code> on the proxy's <code>dataChanged</code>,
+not only on open: a re-solve or a CS change moves them with nobody touching the popup.</p>
+
+<p class="mono-note"><b>Verification.</b> C++: <code>test_cwCoordinateText.cpp</code> (new, 9 cases) and 2 new
+cases in <code>test_cwFixStationModel.cpp</code>. QML: 4 new cases in <code>tst_FixStationPage.qml</code>,
+3 new in <code>tst_MarkStationFixed.qml</code>, plus both files' existing coordinate tests rewritten for the
+single field. Eight mutants were injected and all eight killed — the reactive error refresh, the popup's
+<code>parseError</code> assignment, <code>reload()</code>'s error reset, the northing term of the domain
+tint, the unchanged-coordinate short-circuit, <code>format()</code>'s unit suffix, <code>axisOrderFor()</code>
+never reporting geographic, and <code>format()</code> swapping the axes when <code>parse()</code> doesn't.
+Worth recording: the round-trip test does <i>not</i> catch a missing suffix (a suffix-less format still
+round-trips, since parse falls back to the same unit) — the explicit <code>format()</code> assertions are what
+cover it. For the same reason the round trip is run under <i>both</i> axis orders: a swap that format and parse
+made in lockstep would be invisible to a one-order check.</p>
+</div>
+
 <p class="mono-note">Also in #621, <b>not</b> planned here: "a fixed station tool, for moving the station" — the issue
 itself is ambivalent about it ("might pollute the tool bar with a tool that won't be used that much"). Left open; it is
 a 3D-view interaction, not a coordinate-entry one, and shares nothing with U11 beyond the subject.</p>
@@ -1265,7 +1367,189 @@ U11/U12 gives this popup a parser and an error surface — a third role. If a no
 <i>with</i> U11 is cheaper than after. Blast radius either way: <code>StationBox</code>,
 <code>DrySurveyComponent</code>, <code>SurveyEditor</code>, <code>FixStationPopup</code>,
 <code>tst_MarkStationFixed</code>.
+<br><br>
+<b>Decided 2026-07-26 when Commit 11 landed: not now, deliberately.</b> The popup kept the write path and did take the
+third role. Two reasons. First, the parser itself did <i>not</i> land in the popup — it is
+<code>cwCoordinateText</code>, reached through <code>cwFixStationModel::setCoordinateText()</code>, so the popup holds
+one <code>commitCoordinate()</code> forwarder and no parsing logic; the accumulation this callout warned about went to
+C++ instead. Second, moving the write path is a pure refactor across five files with no user-visible effect, and
+folding it into an already-large feature commit would have buried the feature in it. The cost of deferring is
+unchanged, because the third role turned out thin — so this stays open at the same weight it had before.
 </div>
+
+<h3 id="removefix">13.9 — <b>Remove Fix</b> moves out of the survey-table menu and into the popup (U13)
+<span class="pill new">requested 2026-07-27</span></h3>
+
+<p>Today the station cell's caret menu carries the removal itself
+(<code>StationBox.qml:145-151</code>, <code>removeStationFixMenuItem</code> → <code>FixStationPopup.removeFixFor()</code>),
+gated <code>enabled: stationBox.stationIsFixed</code>. <b>Decision: delete that menu item.</b> Dropping a fix is done
+from inside the editor that owns the fix, the same way every other destructive action in this feature already works —
+<code>FixStationPage</code> removes a row from within the page (<code>FixStationPage.qml:171</code>), not from a menu
+somewhere else that points at it.</p>
+
+<ul>
+  <li><b>Why it's the right move.</b> The menu item is a second, blind path to a mutation whose consequences are only
+  visible in the popup: from the cell you can't see <i>which</i> coordinate you're about to discard. It also duplicates
+  reachability — the same caret already opens the editor, so removal costs one more click there and buys the user the
+  coordinate in front of them while they decide.</li>
+  <li><b>Free consequence — Remove becomes the undo for an accidental Mark Fixed.</b> <code>openFor()</code> creates the
+  fix on open, so a user who opens the editor on an unfixed station has already added a blank row. Today backing out of
+  that means closing the popup and finding <b>Remove Fix</b> in the menu behind it; with the action inside, it is the
+  button right there. This is the strongest argument for the move and should shape the button's placement (next to
+  <b>Done</b>), not just its existence.</li>
+  <li><b><code>removeFixFor(name)</code> collapses to <code>removeFix()</code>.</b> Its open-coded
+  <i>“close first if I happen to be showing that row”</i> guard (<code>FixStationPopup.qml:102-112</code>) exists only
+  because the caller might be pointing at some <i>other</i> station. With the popup as the sole caller, the row is always
+  the one on screen: close, then remove, unconditionally, and the name argument goes away.</li>
+  <li><b>The caret keeps its menu — decided 2026-07-27.</b> One item left (<b>Mark Station as Fixed</b> /
+  <b>Edit Fixed Coordinates…</b>) is a menu that only ever offers its own title, and the alternative was to have the
+  caret open the editor on click and drop <code>fixStationMenu</code>. Rejected: the caret one column over
+  (exclude-distance) <i>is</i> a menu, and §13.3 chose the caret specifically so the two cell actions would “share an
+  affordance rather than resembling one” — a click-caret sitting next to a menu-caret is exactly that
+  resemblance-without-sameness. The menu also stays open for growth, which it has already had once. So this stays a
+  pure deletion: <code>DataBoxCaret</code> and <code>fixStationMenu</code> are untouched, one
+  <code>QC.MenuItem</code> goes away.</li>
+  <li><b>Confirmation — decide, don't default.</b> <code>RemoveAskBox</code> is the house pattern for “are you sure” and
+  <code>FixStationPage</code> already uses it for this exact deletion, so the two surfaces would otherwise disagree about
+  whether dropping a fix is worth a challenge. But a challenge is a popup, and this popup is deliberately
+  <b>not</b> <code>CloseOnPressOutside</code> precisely because nested popups (the CS mode combo, the Custom CRS dialog)
+  read as a press outside — so a nested <code>RemoveAskBox</code> needs that interaction checked, not assumed.
+  <i>Recommended:</i> no challenge here — unlike the page, the popup shows the coordinate being discarded, and re-adding
+  is one caret away.</li>
+  <li><b>Interaction with <a href="https://github.com/Cavewhere/cavewhere/issues/640">#640</a>.</b> The item's
+  <code>enabled: stationBox.stationIsFixed</code> binding is one instance of the stale menu-enable-state class #640
+  tracks. Deleting the item removes an instance; it does not fix the class, and shouldn't be reported as doing so.</li>
+  <li><b>Tests.</b> <code>tst_MarkStationFixed.qml:228</code> (<code>test_removeFixDropsTheFix</code>) drives
+  <code>removeStationFixMenuItem</code> through the helper at <code>:130</code> — both must be redriven through the popup
+  rather than deleted, since the behavior under test (the fix row disappears, the badge clears) is unchanged. Add a case
+  for the undo path above: open on an unfixed station, Remove, and assert the cave is back to no fix for that station.</li>
+</ul>
+
+<p class="mono-note"><b>Revisit §13.8's ownership callout when this lands.</b> One of its two pieces of evidence that the
+popup is the wrong owner of the write path was exactly this <code>removeFixFor</code> guard — “open-coded purely because
+the mutation is hosted by the view that displays it”. Moving Remove <i>inside</i> dissolves that argument (the closing is
+then simply correct, not a workaround) while adding to the other one: another role on the popup. The callout's evidence
+list will be half stale, so it needs rewriting rather than re-reading.</p>
+
+<h3 id="rawtext">13.10 — Keep what the user typed (U14) <span class="pill new">requested 2026-07-27</span></h3>
+
+<p>Commit 11 stores a fix as three doubles and <i>re-derives</i> the text on every read
+(<code>cwCoordinateText::format()</code>). So the field can show something the user never typed: enter
+<code>304m</code> in an imperial project and it reads back <code>997.3753280839895ft</code>. <b>Decision: store the
+user's string.</b> The pipeline becomes <b>user text → parse → numbers</b>, with the text kept alongside the numbers
+rather than thrown away — and the <i>editor</i>, not the cell, is where it comes back.</p>
+
+<ul>
+  <li><b>Display and edit show different strings, deliberately</b> <span class="pill new">decided 2026-07-27</span>.
+  The cell keeps rendering the numbers through <code>format()</code> in project units and the row's axis order,
+  exactly as Commit 11 does. Opening the editor swaps in the stored string. The worked example, in the units it was
+  asked in: a project in meters, the user types <code>46.12113, -115.59902, 30ft</code>.
+  <br>&nbsp;&nbsp;&nbsp;&nbsp;cell&nbsp;&nbsp;&nbsp;<code>46.12113, -115.59902, 9.144m</code>
+  <br>&nbsp;&nbsp;&nbsp;&nbsp;editor&nbsp;<code>46.12113, -115.59902, 30ft</code>
+  <br>Each half is right for its job. A <i>column</i> of fixes is only comparable when every row is in one unit
+  system — a page where one row reads <code>9.144m</code> and the next <code>997.375ft</code> is harder to scan than
+  one that reads <code>9.144m</code> and <code>304.008m</code>. An <i>edit</i>, on the other hand, starts from what
+  you wrote; being handed a machine's rounding of your own number and told to correct it is the complaint this item
+  exists to answer. The cost, stated plainly: the field stops being WYSIWYG, which is a real loss and the reason the
+  split has to be deliberate rather than incidental.
+  <br>This makes the no-op rule load-bearing rather than merely nice: opening an editor and closing it commits a
+  string that differs from the displayed one, so identity against the stored string must short-circuit the write.
+  Without it every focus-and-leave rewrites the row, dirties the project and re-solves the line plot. Identity here
+  means <i>text and axis order together</i> — see Trap 2, where the same string under a different order is the one
+  case that must not be swallowed.
+  <code>FixStationPopup</code> has no display/edit distinction — its field is always an editor — so it shows the
+  stored string throughout.</li>
+  <li><b>Shape.</b> <code>cwFixStation</code> gains a coordinate-text member next to
+  <code>easting</code>/<code>northing</code>/<code>elevation</code>;
+  <code>cwFixStationModel::setCoordinateText()</code> stores the raw string <i>and</i> the parsed doubles in the one
+  edit it already makes. The doubles stay authoritative for everything downstream — the line plot and survex need
+  meters, and nothing outside the editor should have to parse. The string is display state, not the source of truth.</li>
+  <li><b><code>format()</code> stays the display path, and becomes the <i>editor's</i> fallback.</b> Every cell renders
+  through it, so the display needs no notion of stored text at all and rows that have none are not a special case.
+  The editor is where the fallback lives: empty text ⇒ open on <code>format()</code>'s rendering. That covers more
+  rows than it looks — a fix loaded from a project written before this field existed, one imported from
+  svx/Compass/Walls, or one whose numbers were written by anything other than the coordinate field.</li>
+  <li><b>The load-bearing invariant — any write to a component invalidates the text.</b> The moment easting, northing or
+  elevation changes by some path that isn't <code>setCoordinateText</code>, the stored string is a lie about the row.
+  Clear it there and let the fallback re-render. This has to hold at <i>every</i> setter, not just the ones that exist
+  today, which argues for making the components private to the class and clearing in one place rather than trusting
+  future call sites.</li>
+  <li><b>Trap 1 — a bare elevation changes meaning when the project's units flip.</b> <code>46.1, -115.6, 304</code>
+  means "304 in project units" at parse time. Store it verbatim, switch the project to imperial, and the
+  <i>editor</i> now offers <code>304</code> for a fix that is 304&nbsp;m — accept it unchanged and it re-parses as
+  304&nbsp;ft, moving the fix 213&nbsp;m. The display is safe under the split above (it renders the numbers), so this
+  is squarely an edit-path bug: the one string the user is invited to accept is the one that changed meaning while
+  they weren't looking. <i>Recommended:</i> normalize on store by
+  appending the unit that was actually resolved, so the stored string is always self-describing. That is the smallest
+  edit to the user's text that keeps it honest, and it is the only place this feature should rewrite what was typed.</li>
+  <li><b>Trap 2 — a CS change touches nothing.</b>
+  <span class="pill new">settled 2026-07-27</span> Not the stored text, not the numbers. Geographic and projected
+  write their axes in opposite orders (§13.8), which makes it tempting to compensate; the answer is that changing the
+  CS is not an edit to the coordinate and must not behave like one. <b>Only a commit ever changes a number.</b>
+  <br><b>The use case that settles it.</b> A user copies numbers from a source into a row whose CS is wrong. The
+  coordinate is impossible for that CS, so U4's domain warning fires. They change the CS to the right one, and the
+  warning clears — the numbers were correct the whole time and only ever needed to be read under the right system.
+  Any rule that rewrites something on the CS change breaks this: the numbers move out from under a user who was
+  fixing metadata, not data.
+  <br><b>This is the second reversal of the same item, so both rejected rules are recorded</b> to keep them from
+  being re-proposed as obvious cleanups. (a) <i>Re-emit the tokens in the new axis order</i> — rejected because it
+  assumes the numbers were right and only their interpretation changed, and hands a user who typed
+  <code>46.12113, -115.59902</code> back their own numbers as <code>-115.59902, 46.12113</code>, something they
+  never wrote. (b) <i>Re-parse the stored text under the new order and rewrite the components</i> — rejected because
+  it silently moves the fix on what the user experienced as a metadata correction, which is the one thing this whole
+  item exists to stop.
+  <br><b>The dominant shape has no axis-order question at all.</b> Wrong UTM zone, wrong projected CS for the region
+  — projected → projected, same order, numbers and text both already right. This is what the use case above
+  describes and it costs nothing to support.
+  <br><b>The flip case is handled by the warning, not by compensation.</b> Switch a row from projected to geographic
+  and its numbers are re-read in the opposite order; the domain check catches that in practice, because a UTM pair
+  read as a latitude and longitude is far out of range and a lat/long pair read as a UTM easting/northing
+  inverse-projects nowhere near any area of use. That is an observation about realistic coordinates, not a guarantee
+  — but the failure mode is a <i>visible warning on a fix the user is already looking at</i>, and the string they
+  typed is sitting in the editor one keystroke from fixing it.</li>
+  <li><b>The trap the "touch nothing" rule creates — the no-op short-circuit would swallow the fix.</b> The split
+  above needs a commit of unchanged text to write nothing. But after an axis-order flip, re-committing the
+  byte-identical string is <i>exactly</i> the gesture that corrects the row, and a short-circuit keyed on text alone
+  would silently discard it — leaving the user pressing Enter on a visibly-warned fix and watching nothing happen.
+  <b>So store the axis order the text was parsed under, alongside the text, and short-circuit only when the order
+  matches too.</b> Same string under a different order is a real edit and must re-parse. This is also the cheapest
+  way to know the stored text is stale, should a later commit want to say so in the UI.</li>
+  <li><b>Persistence.</b> An additive field on the fix station in <code>cavewhere.proto</code> plus its save/load leg.
+  Old projects simply have none and take the fallback, so there is no migration — but a fix edited and saved by a new
+  build then opened by an old one loses only the display text, never the coordinate.</li>
+  <li><b>This closes A6, and closes it better.</b> §14's A6 proposes short-circuiting
+  <code>setCoordinateText</code> on <i>text</i> identity so the display is free to round. Storing the text gets that for
+  free — the incoming string either matches the stored one (write nothing) or replaces it — and goes further, because
+  A6 would still have rendered a <i>rounded</i> machine string rather than the user's own. When U14 lands, A6 should be
+  struck rather than left as a parallel proposal. The shortest-exact rule in <code>format()</code> stays for the
+  fallback path, where there is no user text to prefer.</li>
+  <li><b>Tests.</b> The character of the round-trip test changes: today it asserts
+  <code>parse(format(x)) == x</code>; it should also assert that a stored string survives a read unchanged. The cases,
+  now that the split and the reversal have moved several of them:
+  <ul>
+    <li><b>The motivating one, in both halves.</b> Project in meters, <code>46.12113, -115.59902, 30ft</code> typed:
+    the <i>cell</i> reads <code>9.144m</code>, the <i>editor</i> reads <code>30ft</code>, the model holds
+    9.144&nbsp;m. Asserting only one half lets the split be implemented as a no-op in the other.</li>
+    <li><b>A component write clears the text</b>, so the editor falls back rather than offering a string that no
+    longer describes the row.</li>
+    <li><b>A CS change writes nothing — under either kind of change.</b> Projected → projected (the use case:
+    wrong UTM zone corrected) and projected → geographic both leave the text byte-identical <i>and</i> every
+    component untouched. Assert both halves on both changes, or the test passes against either rejected rule.</li>
+    <li><b>The warning is what carries the flip case.</b> Paste <code>610016.792, 5615117.075, 304m</code> under a
+    geographic CS, assert the domain warning fires; change to the UTM zone it belongs to, assert it clears and the
+    numbers never moved. That is the use case end to end.</li>
+    <li><b>Re-committing the unchanged string after an order flip is <i>not</i> a no-op.</b> The mutant to kill: a
+    short-circuit keyed on text alone. Flip the order, commit the byte-identical text, assert the components are now
+    the other way round. Without this the user presses Enter on a warned fix and nothing happens.</li>
+    <li><b>A row with no stored text</b> takes the fallback in the editor and is unaffected by a CS change beyond
+    the re-render.</li>
+    <li><b>Focus and leave is a no-op.</b> Open the editor on an imperial row, commit the offered string unchanged,
+    and assert no <code>dataChanged</code> — this is the assertion that would have caught A6's ULP bug, and under the
+    split it now guards a much wider gap than one ulp.</li>
+  </ul>
+  Mutation-check the invalidation and the order half of the no-op guard: a test that only reads back what it wrote
+  will pass with either deleted.</li>
+</ul>
 
 <h2 id="commit9followups">14. Follow-ups raised by the Commit 9 review</h2>
 <p>Recorded from the pre-commit review of Commit 9. None is in scope for Commit 9 itself; all were left as code-untouched
@@ -1389,6 +1673,23 @@ notes. Ordered by payoff-vs-cost, not by confidence.</p>
   <code>if</code> in <code>changedRolesFor()</code>. Decide the criterion — <i>proxy when the base model is persisted
   data, in-model when it is already a view transform</i>, or whatever replaces it — before that second role lands.</td>
   <td><code>cwSurveyEditorModel</code>, <code>cwFixStationDiagnosticsModel</code>, 3 QML sites, 2 test files</td></tr>
+
+  <tr><td><b>A6 — The coordinate field trades readability for an exact round trip</b>
+  (<code>cwCoordinateText.cpp</code>, <code>cwFixStationModel.cpp</code>) — <i>added 2026-07-26</i></td>
+  <td>Commit 11 put the whole coordinate in one field, which makes that field both the display and the input. So
+  <code>format()</code> renders shortest-<i>exact</i>: re-committing an untouched field has to write nothing, and
+  <code>setCoordinateText</code> decides "nothing changed" by comparing doubles. The price is that a
+  unit-<b>converted</b> elevation renders long — 305 m reads as <code>1000.6561679790026ft</code> in an imperial
+  project. Rounding the display to, say, three decimals would fix that (sub-millimetre elevation is noise in a cave
+  survey) but would break the no-op guarantee: the rounded text parses back to a <i>slightly</i> different double, so
+  opening the editor and pressing Enter would silently dirty the project. The way out is to short-circuit on
+  <b>text</b> identity as well as numeric equality — if the incoming text is exactly what <code>format()</code> would
+  produce for that row, write nothing — after which the display is free to round. Not urgent: the ugly case is
+  metric-entered data viewed in an imperial project, and it is cosmetic, not wrong.
+  <br><b>Superseded 2026-07-27 by U14 (§13.10)</b> — keeping the user's own string subsumes this: the text
+  short-circuit falls out of storing the text, and the field shows what was typed rather than a prettier machine
+  rendering of it. Strike A6 when U14 lands; don't implement both.</td>
+  <td><code>cwCoordinateText</code>, <code>cwFixStationModel</code>, 2 test files</td></tr>
 
   <tr><td><b>A4 — No first-class scoped view of an <code>errorModel</code></b>
   (<code>cwErrorListModel.h:44</code>)</td>
@@ -1591,7 +1892,7 @@ notes. Ordered by payoff-vs-cost, not by confidence.</p>
 </ul>
 
 <hr>
-<p class="mono-note">#596 · fix-station outlier detection (Commits 1–6) + usability &amp; error-handling backlog (§13, U1–U10) · dev_3</p>
+<p class="mono-note">#596 · fix-station outlier detection (Commits 1–6) + usability &amp; error-handling backlog (§13, U1–U14) · dev_3</p>
 
 </div>
 </body>

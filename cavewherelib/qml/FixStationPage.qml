@@ -39,10 +39,25 @@ StandardPage {
         }
     }
 
-    function commitEdit(rowIndex, role, newText, numeric) {
-        const v = numeric ? Number(newText) : newText
+    function commitEdit(rowIndex, role, newText) {
         fixStationPage.fixStationsModel.setData(
-            fixStationPage.fixStationsModel.index(rowIndex), v, role)
+            fixStationPage.fixStationsModel.index(rowIndex), newText, role)
+    }
+
+    // Easting, northing and elevation in one write, so a pasted coordinate
+    // re-solves the line plot once. Text that won't parse never reaches here:
+    // the field's CoordinateTextValidator holds the editor open and shows the
+    // reason, in the row's own axis order.
+    //
+    // The axis order is re-derived from the row's own CS rather than passed in,
+    // so it can't drift from the one the cell was rendered with — a mismatch
+    // would silently transpose a lat/long.
+    function commitCoordinate(rowIndex, newText) {
+        const model = fixStationPage.fixStationsModel
+        const rowIdx = model.index(rowIndex)
+        model.setCoordinateText(
+            rowIndex, newText, ProjectUnits.unitSystem,
+            CoordinateText.axisOrderFor(model.data(rowIdx, FixStationModel.InputCSRole)))
     }
 
     component FixField : DoubleClickTextInput {
@@ -50,14 +65,36 @@ StandardPage {
         property string value
         property int role
         property int rowIndex
-        property bool numeric: false
-        // Tints the value red when it's the coordinate component that falls
-        // outside the input CS's valid domain (U4).
+        // Tints the value red when the row's coordinate falls outside the input
+        // CS's valid domain (U4), or when the station name matches nothing.
         property bool error: false
+        //! When set, the field carries the whole coordinate rather than one
+        //! role: it commits through setCoordinateText() and is validated as a
+        //! unit. See cwCoordinateText for the formats it takes.
+        property bool coordinate: false
+        //! Which axis the coordinate leads with, from this row's own CS. It
+        //! reaches the validator because a refusal has to name the axes the row
+        //! actually wants — the verdict is order-independent, the message isn't.
+        property int axisOrder: CoordinateText.EastingNorthing
 
         text: value
         color: field.error ? Theme.errorText : Theme.text
-        onFinishedEditting: (newText) => fixStationPage.commitEdit(field.rowIndex, field.role, newText, field.numeric)
+        validator: field.coordinate ? coordinateValidatorId : null
+
+        onFinishedEditting: (newText) => {
+            if (field.coordinate) {
+                fixStationPage.commitCoordinate(field.rowIndex, newText)
+            } else {
+                fixStationPage.commitEdit(field.rowIndex, field.role, newText)
+            }
+        }
+
+        // One per field rather than one per page: the axis order it explains
+        // itself in belongs to the row, and two rows can disagree.
+        CoordinateTextValidator {
+            id: coordinateValidatorId
+            axisOrder: field.axisOrder
+        }
     }
 
     component WideCell : QQ.Item {
@@ -66,8 +103,9 @@ StandardPage {
         property alias value: field.value
         property alias role: field.role
         property alias rowIndex: field.rowIndex
-        property alias numeric: field.numeric
         property alias error: field.error
+        property alias coordinate: field.coordinate
+        property alias axisOrder: field.axisOrder
         //! Names the inner editable field rather than this wrapper, so callers
         //! reach the same item the narrow layout exposes directly.
         property alias fieldObjectName: field.objectName
@@ -132,7 +170,7 @@ StandardPage {
             value: csCell.value
             allowGeographic: true
             onCommitted: (newCS) => fixStationPage.commitEdit(
-                csCell.rowIndex, FixStationModel.InputCSRole, newCS, false)
+                csCell.rowIndex, FixStationModel.InputCSRole, newCS)
         }
     }
 
@@ -158,19 +196,15 @@ StandardPage {
                 text: "Input CS"
             },
             TableStaticColumn {
-                id: eastingColumn
-                columnWidth: 130
-                text: "Easting / Long"
-            },
-            TableStaticColumn {
-                id: northingColumn
-                columnWidth: 130
-                text: "Northing / Lat"
-            },
-            TableStaticColumn {
-                id: elevationColumn
-                columnWidth: 110
-                text: "Elevation"
+                id: coordinateColumn
+                // Wide enough for a UTM triple with its elevation unit, e.g.
+                // "610016.792, 5615117.075, 2545.34m".
+                columnWidth: 300
+                // Both orders are named because the order is per row, not per
+                // column: a geographic CS writes latitude first, a projected one
+                // easting first. The headers this column replaced ("Easting /
+                // Long", "Northing / Lat") were the only place that was said.
+                text: "Coordinate (East, North / Lat, Long)"
             }
         ]
     }
@@ -286,6 +320,7 @@ StandardPage {
                 anchors.verticalCenter: parent.verticalCenter
 
                 WideCell {
+                    fieldObjectName: "stationCell." + wideDelegateId.index
                     columnWidth: stationColumn.columnWidth
                     value: wideDelegateId.stationName
                     role: FixStationModel.StationNameRole
@@ -300,30 +335,23 @@ StandardPage {
                 }
 
                 WideCell {
-                    fieldObjectName: "eastingCell." + wideDelegateId.index
-                    columnWidth: eastingColumn.columnWidth
-                    value: wideDelegateId.easting
-                    role: FixStationModel.EastingRole
+                    fieldObjectName: "coordinateCell." + wideDelegateId.index
+                    columnWidth: coordinateColumn.columnWidth
+                    // Reading inputCS here is what makes the cell re-render
+                    // when the CS flips between geographic and projected — the
+                    // two write their axes in opposite orders.
+                    value: CoordinateText.format(wideDelegateId.easting,
+                                                 wideDelegateId.northing,
+                                                 wideDelegateId.elevation,
+                                                 ProjectUnits.unitSystem,
+                                                 CoordinateText.axisOrderFor(wideDelegateId.inputCS))
                     rowIndex: wideDelegateId.index
-                    numeric: true
+                    coordinate: true
+                    axisOrder: CoordinateText.axisOrderFor(wideDelegateId.inputCS)
+                    // One field now holds both horizontal components, so the
+                    // two per-axis domain flags share the one tint.
                     error: wideDelegateId.eastingDomainError
-                }
-
-                WideCell {
-                    columnWidth: northingColumn.columnWidth
-                    value: wideDelegateId.northing
-                    role: FixStationModel.NorthingRole
-                    rowIndex: wideDelegateId.index
-                    numeric: true
-                    error: wideDelegateId.northingDomainError
-                }
-
-                WideCell {
-                    columnWidth: elevationColumn.columnWidth
-                    value: wideDelegateId.elevation
-                    role: FixStationModel.ElevationRole
-                    rowIndex: wideDelegateId.index
-                    numeric: true
+                           || wideDelegateId.northingDomainError
                 }
 
                 InlineWarning {
@@ -402,6 +430,7 @@ StandardPage {
                 }
 
                 FixField {
+                    objectName: "stationCell." + narrowDelegateId.index
                     value: narrowDelegateId.stationName
                     role: FixStationModel.StationNameRole
                     rowIndex: narrowDelegateId.index
@@ -416,33 +445,23 @@ StandardPage {
                     value: narrowDelegateId.inputCS
                     allowGeographic: true
                     onCommitted: (newCS) => fixStationPage.commitEdit(
-                        narrowDelegateId.index, FixStationModel.InputCSRole, newCS, false)
+                        narrowDelegateId.index, FixStationModel.InputCSRole, newCS)
                 }
 
                 QC.Label { text: "·"; color: Theme.textSubtle }
 
                 FixField {
-                    objectName: "eastingCell." + narrowDelegateId.index
-                    value: narrowDelegateId.easting
-                    role: FixStationModel.EastingRole
+                    objectName: "coordinateCell." + narrowDelegateId.index
+                    value: CoordinateText.format(narrowDelegateId.easting,
+                                                 narrowDelegateId.northing,
+                                                 narrowDelegateId.elevation,
+                                                 ProjectUnits.unitSystem,
+                                                 CoordinateText.axisOrderFor(narrowDelegateId.inputCS))
                     rowIndex: narrowDelegateId.index
-                    numeric: true
+                    coordinate: true
+                    axisOrder: CoordinateText.axisOrderFor(narrowDelegateId.inputCS)
                     error: narrowDelegateId.eastingDomainError
-                }
-
-                FixField {
-                    value: narrowDelegateId.northing
-                    role: FixStationModel.NorthingRole
-                    rowIndex: narrowDelegateId.index
-                    numeric: true
-                    error: narrowDelegateId.northingDomainError
-                }
-
-                FixField {
-                    value: narrowDelegateId.elevation
-                    role: FixStationModel.ElevationRole
-                    rowIndex: narrowDelegateId.index
-                    numeric: true
+                           || narrowDelegateId.northingDomainError
                 }
             }
         }

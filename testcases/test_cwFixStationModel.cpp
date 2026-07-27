@@ -19,6 +19,7 @@
 #include "GitRepository.h"
 
 //Catch includes
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 //Qt includes
@@ -495,4 +496,213 @@ TEST_CASE("Loading a project does not re-save the cave file",
 
     const QDateTime mtimeAfterLoad = QFileInfo(caveFilePath).lastModified();
     CHECK(mtimeAfterLoad == mtimeBeforeLoad);
+}
+
+TEST_CASE("cwFixStationModel setCoordinateText writes the whole coordinate at once",
+          "[FixStation][cwFixStationModel]") {
+    cwFixStationModel model;
+    model.addFixStation();
+    REQUIRE(model.rowCount() == 1);
+
+    QSignalSpy dataChangedSpy(&model, &QAbstractItemModel::dataChanged);
+
+    SECTION("a pasted lat/long lands in all three roles") {
+        CHECK(model.setCoordinateText(0, QStringLiteral("46.12113, -115.59902, 304m"),
+                                      cwUnits::Metric,
+                                      cwCoordinateText::EastingNorthing) == QString());
+
+        const cwFixStation fix = model.fixStationAt(0);
+        CHECK(fix.easting() == Catch::Approx(46.12113));
+        CHECK(fix.northing() == Catch::Approx(-115.59902));
+        CHECK(fix.elevation() == Catch::Approx(304.0));
+    }
+
+    SECTION("a feet suffix is converted, because nothing downstream carries a unit") {
+        CHECK(model.setCoordinateText(0, QStringLiteral("46.12113, -115.59902, 304ft"),
+                                      cwUnits::Metric,
+                                      cwCoordinateText::EastingNorthing) == QString());
+        CHECK(model.fixStationAt(0).elevation() == Catch::Approx(304.0 * 0.3048));
+    }
+
+    SECTION("a bare elevation follows the unit system it is given") {
+        CHECK(model.setCoordinateText(0, QStringLiteral("46.12113, -115.59902, 304"),
+                                      cwUnits::Imperial,
+                                      cwCoordinateText::EastingNorthing) == QString());
+        CHECK(model.fixStationAt(0).elevation() == Catch::Approx(304.0 * 0.3048));
+    }
+
+    SECTION("one dataChanged covers all three, so the line plot re-solves once") {
+        //cwLinePlotManager reruns survex on every dataChanged from this model.
+        //Three setData() calls would be three solves for one paste.
+        REQUIRE(model.setCoordinateText(0, QStringLiteral("46.12113, -115.59902, 304m"),
+                                        cwUnits::Metric,
+                                        cwCoordinateText::EastingNorthing) == QString());
+
+        REQUIRE(dataChangedSpy.count() == 1);
+        const auto roles = dataChangedSpy.first().at(2).value<QList<int>>();
+        CHECK(roles.size() == 3);
+        CHECK(roles.contains(cwFixStationModel::EastingRole));
+        CHECK(roles.contains(cwFixStationModel::NorthingRole));
+        CHECK(roles.contains(cwFixStationModel::ElevationRole));
+
+        const auto topLeft = dataChangedSpy.first().at(0).toModelIndex();
+        const auto bottomRight = dataChangedSpy.first().at(1).toModelIndex();
+        CHECK(topLeft.row() == 0);
+        CHECK(bottomRight.row() == 0);
+    }
+
+    SECTION("text that won't parse is refused with a reason and changes nothing") {
+        REQUIRE(model.setCoordinateText(0, QStringLiteral("46.12113, -115.59902, 304m"),
+                                        cwUnits::Metric,
+                                        cwCoordinateText::EastingNorthing) == QString());
+        dataChangedSpy.clear();
+
+        const QString error = model.setCoordinateText(0, QStringLiteral("somewhere over there"),
+                                                      cwUnits::Metric,
+                                                      cwCoordinateText::EastingNorthing);
+        CHECK_FALSE(error.isEmpty());
+
+        //A rejected paste must not half-write the row.
+        CHECK(model.fixStationAt(0).easting() == Catch::Approx(46.12113));
+        CHECK(model.fixStationAt(0).northing() == Catch::Approx(-115.59902));
+        CHECK(model.fixStationAt(0).elevation() == Catch::Approx(304.0));
+        CHECK(dataChangedSpy.count() == 0);
+    }
+
+    SECTION("re-committing the same coordinate emits nothing") {
+        //The one field is both display and input, so pressing Enter without
+        //editing is the common case — it must not dirty the project.
+        REQUIRE(model.setCoordinateText(0, QStringLiteral("46.12113, -115.59902, 304m"),
+                                        cwUnits::Metric,
+                                        cwCoordinateText::EastingNorthing) == QString());
+        dataChangedSpy.clear();
+
+        CHECK(model.setCoordinateText(0, QStringLiteral("46.12113, -115.59902, 304m"),
+                                      cwUnits::Metric,
+                                      cwCoordinateText::EastingNorthing) == QString());
+        CHECK(dataChangedSpy.count() == 0);
+    }
+
+    SECTION("the axis order is forwarded, not assumed") {
+        //Without this the model could hardcode EastingNorthing and every test
+        //above would still pass, while a lat/long row put its latitude in the
+        //easting and plotted the cave in the Gulf of Guinea.
+        CHECK(model.setCoordinateText(0, QStringLiteral("46.12113, -115.59902, 304m"),
+                                      cwUnits::Metric,
+                                      cwCoordinateText::LatitudeLongitude) == QString());
+
+        const cwFixStation fix = model.fixStationAt(0);
+        CHECK(fix.northing() == Catch::Approx(46.12113));
+        CHECK(fix.easting() == Catch::Approx(-115.59902));
+    }
+
+    SECTION("a second, different write is not swallowed by the no-op guard") {
+        //Every other successful write here starts from a fresh 0/0/0 row, so a
+        //guard that returned early on any *one* matching component would pass
+        //them all. Editing just the elevation is the case that catches it.
+        REQUIRE(model.setCoordinateText(0, QStringLiteral("46.12113, -115.59902, 304m"),
+                                        cwUnits::Metric,
+                                        cwCoordinateText::EastingNorthing) == QString());
+        dataChangedSpy.clear();
+
+        CHECK(model.setCoordinateText(0, QStringLiteral("46.12113, -115.59902, 305m"),
+                                      cwUnits::Metric,
+                                      cwCoordinateText::EastingNorthing) == QString());
+        CHECK(model.fixStationAt(0).elevation() == Catch::Approx(305.0));
+        CHECK(dataChangedSpy.count() == 1);
+    }
+
+    SECTION("an untouched imperial field is a no-op even when the numbers disagree") {
+        //format() renders the elevation in feet and parse() converts it back,
+        //and (m/0.3048)*0.3048 lands one ulp away for about an eighth of all
+        //doubles. Opening the cell and leaving without typing would otherwise
+        //rewrite the fix, dirty the project and re-solve the line plot.
+        REQUIRE(model.setCoordinateText(0, QStringLiteral("46.12113, -115.59902, 1m"),
+                                        cwUnits::Metric,
+                                        cwCoordinateText::EastingNorthing) == QString());
+        dataChangedSpy.clear();
+
+        const cwFixStation before = model.fixStationAt(0);
+        const QString shown = cwCoordinateText::format(before.easting(), before.northing(),
+                                                       before.elevation(), cwUnits::Imperial,
+                                                       cwCoordinateText::EastingNorthing);
+        //The premise: the round trip really is lossy here, so the numeric guard
+        //alone could not have caught this.
+        const auto reparsed = cwCoordinateText::parse(shown, cwUnits::Imperial,
+                                                      cwCoordinateText::EastingNorthing);
+        REQUIRE_FALSE(reparsed.hasError());
+        REQUIRE(reparsed.value().elevation != before.elevation());
+
+        CHECK(model.setCoordinateText(0, shown, cwUnits::Imperial,
+                                      cwCoordinateText::EastingNorthing) == QString());
+        CHECK(dataChangedSpy.count() == 0);
+        CHECK(model.fixStationAt(0).elevation() == before.elevation());
+    }
+
+    SECTION("a two-component paste leaves the elevation it already had") {
+        //"46.12113, -115.59902" is the shape a coordinate copied from a map
+        //arrives in. It says nothing about elevation, so reading its absence as
+        //zero would drop the cave by however deep the entrance was.
+        REQUIRE(model.setCoordinateText(0, QStringLiteral("46.12113, -115.59902, 304m"),
+                                        cwUnits::Metric,
+                                        cwCoordinateText::EastingNorthing) == QString());
+
+        CHECK(model.setCoordinateText(0, QStringLiteral("46.2, -115.6"), cwUnits::Metric,
+                                      cwCoordinateText::EastingNorthing) == QString());
+        CHECK(model.fixStationAt(0).easting() == Catch::Approx(46.2));
+        CHECK(model.fixStationAt(0).elevation() == Catch::Approx(304.0));
+
+        //Clearing it stays possible, by saying so.
+        CHECK(model.setCoordinateText(0, QStringLiteral("46.2, -115.6, 0"), cwUnits::Metric,
+                                      cwCoordinateText::EastingNorthing) == QString());
+        CHECK(model.fixStationAt(0).elevation() == Catch::Approx(0.0));
+    }
+
+    SECTION("a row that doesn't exist is a silent no-op") {
+        //Out of range is a programming error, not something to show the user.
+        CHECK(model.setCoordinateText(5, QStringLiteral("1, 2, 3m"), cwUnits::Metric,
+                                      cwCoordinateText::EastingNorthing) == QString());
+        CHECK(model.setCoordinateText(-1, QStringLiteral("1, 2, 3m"), cwUnits::Metric,
+                                      cwCoordinateText::EastingNorthing) == QString());
+        CHECK(dataChangedSpy.count() == 0);
+    }
+}
+
+TEST_CASE("cwFixStationModel setCoordinateText writes the row it was given",
+          "[FixStation][cwFixStationModel]") {
+    //With one row in the model, hardcoding index 0 in the body passes every
+    //other case here. Three rows is what makes `row` load-bearing: a user
+    //editing the third fix would otherwise move the first station's anchor,
+    //and with it the whole cave.
+    cwFixStationModel model;
+    REQUIRE(model.addFixStation(QStringLiteral("A1")) == 0);
+    REQUIRE(model.addFixStation(QStringLiteral("A2")) == 1);
+    REQUIRE(model.addFixStation(QStringLiteral("A3")) == 2);
+
+    QSignalSpy dataChangedSpy(&model, &QAbstractItemModel::dataChanged);
+    REQUIRE(model.setCoordinateText(2, QStringLiteral("11, 22, 33m"), cwUnits::Metric,
+                                    cwCoordinateText::EastingNorthing) == QString());
+
+    CHECK(model.fixStationAt(2).easting() == Catch::Approx(11.0));
+    CHECK(model.fixStationAt(0).easting() == Catch::Approx(0.0));
+    CHECK(model.fixStationAt(1).easting() == Catch::Approx(0.0));
+
+    REQUIRE(dataChangedSpy.count() == 1);
+    CHECK(dataChangedSpy.first().at(0).toModelIndex().row() == 2);
+}
+
+TEST_CASE("cwFixStationModel setCoordinateText leaves the station name alone",
+          "[FixStation][cwFixStationModel]") {
+    //The coordinate field sits next to the name field; writing one must not
+    //disturb the other, and StationNameRole must stay out of the emission so
+    //fixedStationsChanged() doesn't fire for a coordinate edit.
+    cwFixStationModel model;
+    REQUIRE(model.addFixStation(QStringLiteral("A1")) == 0);
+
+    QSignalSpy fixedStationsSpy(&model, &cwFixStationModel::fixedStationsChanged);
+    REQUIRE(model.setCoordinateText(0, QStringLiteral("1, 2, 3m"), cwUnits::Metric,
+                                      cwCoordinateText::EastingNorthing) == QString());
+
+    CHECK(model.fixStationAt(0).stationName() == QStringLiteral("A1"));
+    CHECK(fixedStationsSpy.count() == 0);
 }

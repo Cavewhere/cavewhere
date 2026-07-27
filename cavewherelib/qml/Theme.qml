@@ -120,10 +120,11 @@ QtObject {
     // Cap the inline Custom resolved-name label so a long CRS name elides
     // instead of stretching the picker past its host cell / wrapping the Flow.
     readonly property int csResolvedLabelMaxWidth: 180
-    // Coordinate fields in the inline fix-station editor: wide enough for a UTM
-    // easting/northing with decimals without making the popup wider than the CS
-    // picker row above them.
-    readonly property int fixPopupFieldWidth: 140
+    // The whole-coordinate field in the inline fix-station editor: wide enough
+    // for a UTM triple with its elevation unit, e.g.
+    // "610016.792, 5615117.075, 2545.34m". Also caps the error line below it, so
+    // a long message wraps inside the popup instead of widening it.
+    readonly property int fixPopupCoordinateWidth: 260
 
     // Touch target sizing — scale up hit points on mobile builds
     readonly property real pointSizeFactor: RootData.mobileBuild ? 2.0 : 1.0

@@ -42,7 +42,8 @@ namespace cwFixStationDiagnostics {
 //! judged under (cwFixStation::effectiveCS with `globalCS` as the fallback), so a
 //! caller can tint just the offending cell. Deferral is
 //! cwCoordinateTransform::domainCheck's — an absent or un-checkable CS flags
-//! nothing.
+//! nothing — plus one of this layer's own: a fix still on the origin is one
+//! nobody has typed a coordinate into yet, and flags nothing either.
 CAVEWHERE_LIB_EXPORT cwCoordinateTransform::DomainCheck domainCheck(const cwFixStation& fix,
                                                                    const QString& globalCS);
 

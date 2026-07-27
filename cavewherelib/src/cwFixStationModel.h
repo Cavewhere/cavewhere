@@ -15,7 +15,9 @@
 
 //Our includes
 #include "cwFixStation.h"
+#include "cwCoordinateText.h"
 #include "cwGlobals.h"
+#include "cwUnits.h"
 
 /**
  * QAbstractListModel of cwFixStation rows owned by a cwCave.
@@ -77,6 +79,23 @@ public:
     //! empty — there is nothing to anchor.
     Q_INVOKABLE int addFixStation(const QString& stationName);
     Q_INVOKABLE void removeFixStation(const QString& stationName);
+
+    //! Write the whole coordinate of \a row from one free-form string (#621),
+    //! e.g. "46.12113, -115.59902, 304ft". Returns an empty string on success,
+    //! or the reason the text couldn't be read — setData() can only report
+    //! failure as a bool, and a free-form field has to say what was wrong with
+    //! what the user typed.
+    //!
+    //! All three components land in a single dataChanged(), so the line plot
+    //! re-solves once for a pasted coordinate rather than three times. \a units
+    //! is the project's unit system, which resolves an elevation with no unit
+    //! suffix, and \a order says whether the text leads with the easting or the
+    //! latitude — it must be the same order the field was rendered with, or the
+    //! coordinate comes back transposed. See cwCoordinateText for both.
+    Q_INVOKABLE QString setCoordinateText(int row,
+                                          const QString& text,
+                                          cwUnits::UnitSystem units,
+                                          cwCoordinateText::AxisOrder order);
 
     void appendFixStation(const cwFixStation& fix);
     void setFixStations(const QList<cwFixStation>& fixes);

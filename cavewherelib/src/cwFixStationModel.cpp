@@ -8,6 +8,7 @@
 #include "cwFixStationModel.h"
 
 //Our includes
+#include "cwCoordinateText.h"
 #include "cwStation.h"
 
 namespace {
@@ -210,6 +211,55 @@ int cwFixStationModel::addFixStation(const QString& stationName)
     fix.setStationName(trimmedName);
     appendFixStation(fix);
     return m_fixStations.size() - 1;
+}
+
+QString cwFixStationModel::setCoordinateText(int row,
+                                             const QString& text,
+                                             cwUnits::UnitSystem units,
+                                             cwCoordinateText::AxisOrder order)
+{
+    if (row < 0 || row >= m_fixStations.size()) {
+        return QString();
+    }
+
+    //Text the field would have rendered anyway is a no-op, checked before the
+    //numbers because the numbers can't see it: the elevation crosses a unit
+    //conversion in each direction, and (meters/0.3048)*0.3048 differs from
+    //meters for about an eighth of all doubles. Without this, opening an
+    //imperial project's coordinate cell and leaving it untouched would rewrite
+    //the fix, dirty the project and re-solve the line plot.
+    const cwFixStation& current = m_fixStations.at(row);
+    if (text == cwCoordinateText::format(current.easting(), current.northing(),
+                                         current.elevation(), units, order)) {
+        return QString();
+    }
+
+    const auto result = cwCoordinateText::parse(text, units, order);
+    if (result.hasError()) {
+        return result.errorMessage();
+    }
+
+    const cwCoordinateText::Coordinate coordinate = result.value();
+    cwFixStation& fix = m_fixStations[row];
+
+    //Two components say nothing about elevation — that is the shape a coordinate
+    //copied from a map arrives in — so the one already on the fix stands. To
+    //clear it the user types it: "46.2, -115.6, 0".
+    const double elevation = coordinate.hasElevation ? coordinate.elevation : fix.elevation();
+
+    if (fix.easting() == coordinate.easting
+        && fix.northing() == coordinate.northing
+        && fix.elevation() == elevation) {
+        return QString();
+    }
+
+    fix.setEasting(coordinate.easting);
+    fix.setNorthing(coordinate.northing);
+    fix.setElevation(elevation);
+
+    const QModelIndex changed = index(row);
+    emit dataChanged(changed, changed, {EastingRole, NorthingRole, ElevationRole});
+    return QString();
 }
 
 void cwFixStationModel::removeFixStation(const QString& stationName)
