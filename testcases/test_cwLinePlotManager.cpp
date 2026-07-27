@@ -990,8 +990,8 @@ TEST_CASE("cwLinePlotManager re-runs cavern when globalCS or fix stations change
         plotManager->waitToFinish();
 
         // Reported positions are shifted by -worldOrigin for shader float
-        // precision (see cwLinePlotTask::applyWorldOriginOffset). Add the
-        // current worldOrigin back to recover absolute projected coords.
+        // precision (see cwSurvex3DFileReader). Add the current worldOrigin
+        // back to recover absolute projected coords.
         const auto absolutePosition = [&](const QString& station) {
             return cave->stationPositionLookup().position(station)
                 + region.geoReference()->worldOrigin().toVector3D();

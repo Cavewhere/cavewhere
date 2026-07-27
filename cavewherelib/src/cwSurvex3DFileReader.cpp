@@ -40,6 +40,8 @@ size_t qHash(const CoordKey& key, size_t seed = 0) noexcept {
     return qHashMulti(seed, key.x, key.y, key.z);
 }
 
+// Keyed on the file's own coordinates, not the offset ones: pass 2 only ever
+// matches line endpoints against pass-1 labels read from the same file.
 CoordKey toKey(const img_point& p) {
     return {
         static_cast<qint64>(std::llround(p.x * kCoordKeyScale)),
@@ -50,20 +52,8 @@ CoordKey toKey(const img_point& p) {
 
 } // namespace
 
-/**
- * @brief Reads station positions from a survex .3d file
- * @param threeDFilePath - path to the .3d file
- * @return cwStationPositionLookup containing station name -> position mapping
- *
- * This replaces the old pipeline of running survexport to produce a CSV file
- * and then parsing it. The img.h API reads .3d files directly.
- */
-cwStationPositionLookup cwSurvex3DFileReader::readStationPositions(const QString& threeDFilePath)
-{
-    return readNetworkAndLookup(threeDFilePath).lookup;
-}
-
-cwSurvex3DFileReader::NetworkAndLookup cwSurvex3DFileReader::readNetworkAndLookup(const QString& threeDFilePath)
+cwSurvex3DFileReader::NetworkAndLookup cwSurvex3DFileReader::readNetworkAndLookup(const QString& threeDFilePath,
+                                                                                 const cwGeoPoint& worldOrigin)
 {
     NetworkAndLookup out;
 
@@ -91,7 +81,7 @@ cwSurvex3DFileReader::NetworkAndLookup cwSurvex3DFileReader::readNetworkAndLooku
                 continue;
             }
             QString name = QString::fromUtf8(pimg->label);
-            const QVector3D position(pt.x, pt.y, pt.z);
+            const QVector3D position = cwGeoPoint(pt.x, pt.y, pt.z).toVector3D(worldOrigin);
             out.lookup.setPosition(name, position);
             out.network.setPosition(name, position);
 

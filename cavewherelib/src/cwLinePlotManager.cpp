@@ -191,8 +191,8 @@ void cwLinePlotManager::setRegion(cwCavingRegion* region) {
     // region's CS.
     connect(Region->geoReference(), &cwGeoReference::globalCoordinateSystemChanged, this, &cwLinePlotManager::runSurvex);
 
-    // worldOrigin is subtracted by cwLinePlotTask::applyWorldOriginOffset, so
-    // the line plot must re-solve when it changes (auto-compute or manual recenter).
+    // cwSurvex3DFileReader subtracts worldOrigin while parsing the .3d, so the
+    // line plot must re-solve when it changes (auto-compute or manual recenter).
     connect(Region->geoReference(), &cwGeoReference::worldOriginChanged, this, &cwLinePlotManager::runSurvex);
 
     SurveySignaler->setRegion(Region);

@@ -12,7 +12,7 @@
 
 TEST_CASE("cwSurvex3DFileReader should return empty lookup for missing file", "[cwSurvex3DFileReader]") {
     cwSurvex3DFileReader reader;
-    auto lookup = reader.readStationPositions("/nonexistent/file.3d");
+    auto lookup = reader.readNetworkAndLookup("/nonexistent/file.3d", cwGeoPoint()).lookup;
     CHECK(lookup.isEmpty());
 }
 
@@ -29,7 +29,8 @@ TEST_CASE("cwSurvex3DFileReader should read station positions from .3d file", "[
 
     // Read station positions directly from the .3d file
     cwSurvex3DFileReader reader;
-    cwStationPositionLookup lookup = reader.readStationPositions(cavernResult.value().output3dPath);
+    cwStationPositionLookup lookup =
+        reader.readNetworkAndLookup(cavernResult.value().output3dPath, cwGeoPoint()).lookup;
 
     CHECK(!lookup.isEmpty());
 
@@ -64,7 +65,7 @@ TEST_CASE("cwSurvex3DFileReader should build a survey network from .3d file", "[
     REQUIRE(QFileInfo(cavernResult.value().output3dPath).exists());
 
     cwSurvex3DFileReader reader;
-    auto parsed = reader.readNetworkAndLookup(cavernResult.value().output3dPath);
+    auto parsed = reader.readNetworkAndLookup(cavernResult.value().output3dPath, cwGeoPoint());
 
     // Lookup and network positions must agree for every station in the file.
     CHECK(parsed.lookup.positions().size() == 6);
