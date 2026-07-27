@@ -43,6 +43,26 @@ QQ.Item {
         id: removePreviewId
     }
 
+    // One editor for the whole table, shared by every station cell's caret — see
+    // FixStationPopup on why it can't live in the cell that opens it.
+    FixStationPopup {
+        id: fixStationPopupId
+        cave: clipArea.currentTrip !== null ? clipArea.currentTrip.parentCave : null
+    }
+
+    // The editor isn't modal, so left open it would float over the cells the user
+    // moved on to. Its own fields don't touch the focused cell, so this only fires
+    // when the user really has left the station behind.
+    QQ.Connections {
+        target: editorModel
+        function onFocusedRowChanged() {
+            fixStationPopupId.close()
+        }
+        function onFocusedRoleChanged() {
+            fixStationPopupId.close()
+        }
+    }
+
 
     SurveyEditorModel {
         id: editorModel
@@ -367,6 +387,7 @@ QQ.Item {
                 // view: viewId
                 model: editorModel
                 removePreview: removePreviewId
+                fixStationPopup: fixStationPopupId
                 stationValidator: stationValidatorId
                 distanceValidator: distanceValidatorId
                 compassValidator: compassValidatorId

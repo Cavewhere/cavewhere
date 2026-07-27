@@ -25,6 +25,7 @@ Item {
     required property int index;
     required property QC.ButtonGroup errorButtonGroup
     required property var removePreview
+    required property FixStationPopup fixStationPopup
     required property int rowType
 
     //Data that comes from the model
@@ -87,6 +88,7 @@ Item {
                 calibration: itemId.calibration
                 view: itemId.ListView.view
                 dataValidator: stationValidator
+                fixStationPopup: itemId.fixStationPopup
             }
 
 

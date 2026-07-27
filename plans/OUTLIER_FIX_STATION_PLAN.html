@@ -638,7 +638,7 @@ center only sits on the real data when a majority is clustered there.</p>
 feedback about <b>living with fix stations</b> — entering them, reading the errors, and getting a new project
 into a real-world coordinate system in the first place. It is a distinct workstream from the detection math:
 mostly QML, plus a couple of small model/accessor additions. Item IDs <b>U1–U10</b> match the feedback list so
-they can be referenced directly; a suggested commit grouping is in §13.6.</p>
+they can be referenced directly; <b>U11–U12</b> were added later (see §13.8). A suggested commit grouping is in §13.7.</p>
 
 <div class="callout">
   <b>All anchors below were confirmed against the tree</b> (dev_3, post-Commit-6). The two hubs almost every
@@ -659,6 +659,8 @@ they can be referenced directly; a suggested commit grouping is in §13.6.</p>
   <tr><td><b>U8</b></td><td>Project CS as a 3-line GroupBox (combo · CS name · EPSG); UTM shows only EPSG today</td><td>DataMainPage + CSComboBox</td><td><span class="pill new">small</span></td></tr>
   <tr><td><b>U9</b></td><td>Badge next to the “Fix stations:” line on CavePage when a fix errors</td><td>CavePage</td><td><span class="pill new">small</span></td></tr>
   <tr><td><b>U10</b></td><td>Error on a fix row whose station name is <b>empty</b> or <b>doesn’t exist</b> in the cave’s survey</td><td>cwFixStationModel + FixStationPage row</td><td><span class="pill new">small–medium</span></td></tr>
+  <tr><td><b>U11</b></td><td><b>Free-form coordinate entry</b> — paste a whole coordinate as one string instead of three fields (<a href="https://github.com/Cavewhere/cavewhere/issues/621">#621</a>)</td><td>new C++ parser + FixStationPage row + FixStationPopup</td><td><span class="pill edit">medium–large</span></td></tr>
+  <tr><td><b>U12</b></td><td>The inline <b>fix popup shows no errors at all</b> — no domain flag, no station-reference flag, no message line</td><td>FixStationPopup</td><td><span class="pill new">small–medium</span></td></tr>
 </table>
 
 <h3 id="cspicker">13.1 — The coordinate-system picker (U1, U7, U8)</h3>
@@ -756,6 +758,55 @@ mode combo (<code>:62-101</code>), UTM zone <code>SpinBox</code> (<code>:103-119
 </ul>
 
 <h3 id="markfixed">13.3 — Mark a station Fixed from the survey table (U2)</h3>
+<div class="callout ok">
+  <b>Implemented</b> (Commit 10; dev_3; C++ + QML gates green). The open decision below is resolved: <b>inline
+  popup</b>, as recommended — no routing to <code>FixStationPage</code>.
+  <ul>
+    <li><b>Model API (C++).</b> <code>cwFixStationModel</code> gained <code>indexOf(name)</code>,
+    <code>isFixed(name)</code>, <code>addFixStation(name)</code> and <code>removeFixStation(name)</code>. Name matching
+    is factored into one file-local <code>fixKey()</code> = trim then <code>cwStation::canonicalKey</code>, deliberately
+    the same rule <code>cwFixStationDiagnostics::classifyStationReference</code> resolves a fix by, so a fix survex
+    anchors fine can't read as a different station here. An empty name matches nothing, so a blank scaffold row is never
+    "the fix for no station".</li>
+    <li><b>Two corrections to the spec below.</b> (1) <code>addFixStation(name)</code> returns the <b>row index</b>
+    (<code>int</code>), not a <code>cwFixStation</code> — QML needs the row to edit through, and <code>cwFixStation</code>
+    isn't a <code>Q_GADGET</code>, so QML couldn't read its accessors anyway (already recorded in
+    <code>tst_FixStationPage.qml</code>). (2) <code>isFixed()</code> alone can't drive the badge: it's a lookup, not a
+    bindable property, so a new <code>fixedStationsChanged()</code> signal covers every way the answer can move.
+    <code>countChanged()</code> can't stand in — <b>renaming</b> a fix changes which station shows as Fixed without
+    changing how many fixes there are.</li>
+    <li><b>Caret only, not <code>StationMenu</code>.</b> The section offers "and/or"; the caret is what mirrors the
+    Exclude-distance template it calls the one to copy, and duplicating the action into the right-click menu would mean
+    two paths to keep in step. <code>StationBox</code> gained a focus-activated <code>ContextMenuButton</code> with
+    <b>Mark Station as Fixed</b> / <b>Edit Fixed Coordinates...</b> (one action, two labels — opening the editor creates
+    the fix when there isn't one) plus <b>Remove Fix</b>. Gated on <code>canFix</code>: a non-empty name and a
+    resolvable model, so the trailing virtual row offers nothing.</li>
+    <li><b>The pill was extracted, not copied.</b> New shared <code>DataBoxBadge.qml</code> carries the cell-state pill;
+    <code>ShotDistanceDataBox</code>'s "Excluded" badge now uses it too, and <code>StationBox</code>'s "Fixed" badge is
+    three lines rather than a second copy of the same rectangle.</li>
+    <li><b>The popup lives at page level, not in the cell.</b> New <code>FixStationPopup.qml</code> is hosted by
+    <code>SurveyEditor</code> and injected down through <code>DrySurveyComponent</code> — the survey table destroys cell
+    delegates as they scroll out of view, which would take a cell-owned popup down with an open edit. It is positioned
+    once from the caret's item on open rather than anchored to it, for the same reason.</li>
+    <li><b><code>CSPicker</code>, not <code>CSComboBox</code>.</b> Commit 7 split the picker; the popup labels its own
+    rows, so it drives <code>CSPicker</code> directly and adds a <code>CSFormat.displayName</code> line the way
+    <code>OutputCSPrompt</code> does. <span class="mono-note"><b>Trap found in review:</b> <code>CSPicker</code> does not
+    own its <code>value</code> — the table rows feed it back from the model role they're bound to. A host that fills its
+    fields imperatively (this popup does, since roles are read through <code>data()</code>, which no binding can depend
+    on) has to write the committed CS back into the picker itself, or its controls keep showing the CS the fix had
+    before.</span></li>
+    <li><b>Dismissal.</b> Escape or <b>Done</b>, plus an auto-close when the editor model's focused cell moves — the
+    popup isn't modal, so left open it would float over the cells the user moved on to. Deliberately <i>not</i>
+    <code>CloseOnPressOutside</code>: the CS picker opens popups of its own (mode combo, Custom CRS dialog), and a press
+    in one of those is a press outside this one. Coordinate fields carry a <code>DoubleValidator</code> so
+    <code>editingFinished</code> can't commit a <code>NaN</code> into the line plot.</li>
+    <li><b>Tests.</b> C++: name lookup / trim + case-insensitivity / no-double-anchor / remove-by-name / one case per
+    way <code>fixedStationsChanged</code> must and must not fire, in <code>test_cwFixStationModel.cpp</code>. QML: new
+    <code>tst_MarkStationFixed.qml</code> — blank station offers no caret, mark adds the fix, badge tracks the rows
+    (including the rename case), marking twice doesn't duplicate, Remove Fix drops it, and the popup edits coordinates +
+    CS in place and re-reads them on reopen.</li>
+  </ul>
+</div>
 <p>Today the only way to fix a station is to open <code>FixStationPage</code>. U2 wants it inline on the survey
 table: right-click / caret a station and mark it Fixed, show a badge, and enter coordinates without leaving the page.
 The <b>“Exclude distance”</b> feature is the exact template to copy.</p>
@@ -771,14 +822,16 @@ The <b>“Exclude distance”</b> feature is the exact template to copy.</p>
   <code>dataValue.reading.value</code>.</li>
   <li><b>Model support (C++).</b> A cave owns one <code>cwFixStationModel</code> (<code>cwCave.h:50,81</code>). The
   QML-facing <code>addFixStation()</code> takes <b>no args</b> and appends a blank row
-  (<code>cwFixStationModel.cpp:182-194</code>); stations are keyed only by <code>stationName</code> string + a
+  (<code>cwFixStationModel.cpp:146</code> — the <code>:182-194</code> this line used to cite was moved by commits 8/9);
+  stations are keyed only by <code>stationName</code> string + a
   <code>QUuid</code> with no dedup. Add a convenience <code>Q_INVOKABLE cwFixStation addFixStation(const QString&amp;
   name)</code> with a name-lookup guard (don’t double-add an already-fixed station), and an
   <code>Q_INVOKABLE bool isFixed(const QString&amp; name)</code> (or a role) so the badge can reflect state.</li>
   <li><b>Coordinate entry — recommended inline.</b> After marking Fixed, let the user enter easting/northing/CS in a
   small inline element (a popup/expander anchored to the caret, reusing <code>CSComboBox</code>) rather than bouncing
   to <code>FixStationPage</code>. The fallback (route to <code>FixStationPage</code>) is simpler but loses context.
-  <span class="mono-note">Open decision: inline popup vs. route. Recommend inline per the feedback.</span></li>
+  <span class="mono-note"><b>Decided — inline popup</b> (Commit 10). Built on <code>CSPicker</code>, not
+  <code>CSComboBox</code>: Commit 7 split the picker and this popup labels its own rows. See the callout above.</span></li>
   <li><b>Biggest item</b> — own commit(s). Sub-steps: (a) model API + <code>isFixed</code>; (b) caret + menu item;
   (c) Fixed badge; (d) inline coordinate popup; (e) tests (mark → appears in <code>cave.fixStations</code>; badge on;
   no double-add).</li>
@@ -1012,11 +1065,12 @@ in chunks at all, so the chunk set would miss those stations entirely. Do not sw
   <tr><td><b>7</b> — CS picker polish <span class="pill ok">implemented</span></td><td>U7, U1, U8, U5</td><td>All small QML on <code>CSComboBox</code>/<code>FixStationPage</code>/<code>DataMainPage</code>; U7 unblocks U1; U5 is a free header relabel that rides along.</td></tr>
   <tr><td><b>8</b> — First-fix output CS</td><td>U6</td><td>Self-contained validator/region + one prompt; the highest-impact correctness item (fixes “cave renders far away”).</td></tr>
   <tr><td><b>9</b> — Error surfacing <span class="pill ok">implemented</span></td><td>U9, U4, U10</td><td>All three are “show the error where it belongs”: U9 the CavePage line badge, U4 the per-component red cell, U10 the empty/unknown-station flag — each is a model role + inline indicator (new <code>cwErrorTypeId::FixStationReference</code>=598 for U10). See the Implemented callouts in §13.5 / §13.6 / §13.2.</td></tr>
-  <tr><td><b>10</b> — Mark Fixed inline</td><td>U2</td><td>Largest, standalone feature (model API + caret + badge + inline coords); its own commit(s).</td></tr>
+  <tr><td><b>10</b> — Mark Fixed inline <span class="pill ok">implemented</span></td><td>U2</td><td>Largest, standalone feature (model API + caret + badge + inline coords); its own commit(s). See the Implemented callout in §13.3.</td></tr>
+  <tr><td><b>11</b> — Free-form coordinates <span class="pill new">next</span></td><td>U11, U12</td><td>One parser feeding both entry surfaces, plus the error line that a parse failure needs somewhere to land. See §13.8 for why U12 rides along rather than waiting.</td></tr>
   <tr><td><b>—</b> — Tab order</td><td>U3</td><td>Separate: it edits the <i>shared</i> table-input stack used by other tables, so it stands alone with its own blast-radius review; not gated on the fix-station work.</td></tr>
 </table>
 <p class="mono-note">Grouping is a recommendation, not a commitment — U5/U7/U9 are each shippable on their own if you want
-smaller commits. U2 and U3 are the two that genuinely need their own space.</p>
+smaller commits. U2, U3 and U11 are the three that genuinely need their own space.</p>
 
 <div class="callout ok">
 <b>Commit 7 implemented 2026-07-22 — uncommitted, gates green.</b> Four files:
@@ -1089,6 +1143,81 @@ machinery above was then split so no component straddles two roles and CS presen
   (fix row one line ≤ cell; project picker wraps ≤ group at a narrow column).</li>
 </ul>
 </div>
+
+<h3 id="freeform">13.8 — Free-form coordinate entry (U11, <a href="https://github.com/Cavewhere/cavewhere/issues/621">#621</a>) and the popup's missing errors (U12) <span class="pill new">next</span></h3>
+
+<p>Added 2026-07-26, after Commit 10. Three separate numeric fields make the common case — <b>paste a coordinate you
+got from somewhere else</b> — into a manual split-and-retype. Issue #621 asks for one field that takes the whole
+thing:</p>
+
+<pre>Lat / long        46.12113, -115.59902, 304m
+                  46.12113, -115.59902, 304ft
+                  46.12113, -115.59902, 304        (project units)
+
+UTM               610016.792, 5615117.075, 2545.340m
+                  610016.792, 5615117.075, 2545.340 feet</pre>
+
+<h4>Where it lands</h4>
+<p>There are now <b>two</b> coordinate-entry surfaces, and they must not each grow their own parser:</p>
+<ul>
+  <li><code>FixStationPage.qml</code> — the wide <code>RowLayout</code> and narrow <code>Flow</code> delegates, three
+  <code>ValueField</code>s bound to <code>EastingRole</code> / <code>NorthingRole</code> / <code>ElevationRole</code>.</li>
+  <li><code>FixStationPopup.qml</code> — the Commit 10 inline editor, same three roles, filled imperatively through
+  <code>data()</code> rather than by binding (see the §13.3 callout).</li>
+</ul>
+<p>So the parser belongs in <b>C++</b>, called from both — one function, one set of accepted formats, one place a new
+format gets added. The natural shape is a small free function or value class returning the monad submodule's
+<code>Result&lt;T&gt;</code>: a struct of three doubles on success, a human-readable reason on failure (the message U12
+then has to display).</p>
+
+<h4>Three design questions worth settling before writing it</h4>
+<ul>
+  <li><b>The elevation unit is the real trap.</b> <code>cwFixStation::elevation()</code> is a <b>bare, unitless
+  double</b> (<code>cwFixStation.h:63</code>) fed straight into <code>cwGeoPoint(easting, northing, elevation)</code>
+  (<code>cwFixStationValidator.cpp:243</code>, <code>cwGridConvergence.cpp:141</code>,
+  <code>cwTripCalibration.cpp:266</code>) and serialized as-is (<code>cwProtoUtils.cpp:821</code>) — nothing downstream
+  carries a unit, and <code>cwGeoPoint</code> has none either. A <code>304ft</code> suffix therefore has to be
+  <b>converted at parse time</b> into whatever the fix's <code>effectiveCS()</code> expresses its vertical axis in; the
+  suffix cannot be stored. Reuse targets already exist: <code>cwUnits::toLengthUnit(QString)</code> for the suffix and
+  <code>cwUnits::convert(value, from, to)</code> for the conversion.</li>
+  <li><b>"Use the project's units" needs a source.</b> A fix belongs to a <i>cave</i>, not a trip, so the per-trip
+  <code>cwTripCalibration</code> distance unit is the wrong well — it would make the same pasted string mean different
+  things depending on which trip was last open. Most likely the settings unit system via
+  <code>cwUnits::surveyUnit(UnitSystem)</code>; decide once and write it down, because a silent wrong answer here moves
+  a cave by a factor of 3.28.</li>
+  <li><b>Lat/long vs. UTM is not decidable from the numbers alone.</b> <code>46.12113, -115.59902</code> is a legal
+  (if absurd) UTM pair. The row already declares an <b>Input CS</b>, so the honest rule is: parse under the CS the row
+  currently has, and let the <b>existing</b> per-fix CS-domain check (§12 Part A) say when the result is outside it —
+  rather than inventing a second magnitude-based inference that can disagree with the domain check. Inferring the CS
+  from the paste is a possible nicety, but it should <i>propose</i> a CS, never silently switch one.</li>
+</ul>
+
+<h4>Validation</h4>
+<p>#621 asks for a validator, but not a <code>QValidator</code>: a free-form field must accept partial text while the
+user is still typing, so blocking keystrokes is the wrong mechanism. Validate <b>on commit</b> and show the reason.
+Note this <i>replaces</i>, and must not simply sit beside, the per-field <code>DoubleValidator</code> Commit 10 put on
+the popup's coordinate fields (§13.3) — that guard exists so <code>editingFinished</code> can't push a
+<code>NaN</code> into the line plot, and the free-form path needs its own equivalent guarantee.</p>
+
+<div class="callout warn">
+<b>U12 — the inline popup has no error surface at all.</b> Commit 9 gave <code>FixStationPage</code> rows a full set:
+red field text via <code>error:</code> on the station name and on whichever coordinate component is out of domain
+(<code>eastingDomainError</code> / <code>northingDomainError</code>, U4), plus message bars for
+<code>stationError</code> (U10) and <code>domainError</code>. <code>FixStationPopup</code> got <b>none</b> of it — a
+coordinate typed there can be outside its CS's domain, or anchored to a station that doesn't exist, and the popup
+looks exactly the same either way. The user only learns about it by navigating to the Fix Stations page or the CavePage
+badge, which defeats the point of editing inline.
+<br><br>
+<b>Recommendation: fold U12 into the U11 commit rather than scheduling it separately.</b> Free-form parsing
+<i>creates</i> a new error class ("couldn't make sense of that") that has nowhere to go today, so U11 has to build a
+message line in the popup regardless. Once that line exists, wiring the two error roles the model already exposes into
+it is a few bindings — strictly less work than a second pass, and it avoids shipping a parse-error line that
+conspicuously ignores the errors sitting right next to it.
+</div>
+
+<p class="mono-note">Also in #621, <b>not</b> planned here: "a fixed station tool, for moving the station" — the issue
+itself is ambivalent about it ("might pollute the tool bar with a tool that won't be used that much"). Left open; it is
+a 3D-view interaction, not a coordinate-entry one, and shares nothing with U11 beyond the subject.</p>
 
 <h2 id="commit9followups">14. Follow-ups raised by the Commit 9 review</h2>
 <p>Recorded from the pre-commit review of Commit 9. None is in scope for Commit 9 itself; all were left as code-untouched

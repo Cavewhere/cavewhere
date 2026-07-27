@@ -24,60 +24,25 @@ DataBox {
 
     rightClickMenuLoader: removeMenuId
 
-    QQ.Rectangle {
+    DataBoxBadge {
         visible: !dataBoxId.distanceIncluded
-
-        anchors.bottom: parent.bottom
-        anchors.horizontalCenter: parent.horizontalCenter
-        anchors.bottomMargin: 2
-
-        width: textId.width + 4
-        height: textId.height - 2
-
-        color: Theme.border
-        QC.Label {
-            id: textId
-
-            anchors.centerIn: parent
-            anchors.verticalCenterOffset: 1
-
-            // font.family: "monospace"
-            font.pixelSize: Theme.fontSizeBody
-            font.bold: true
-            color: Theme.surfaceMuted
-            text: "Excluded"
-        }
+        text: "Excluded"
     }
 
-    QQ.Loader {
-        // anchors.fill: parent
-        anchors.right: parent.right
-        anchors.top: parent.top
-        anchors.margins: 3
+    DataBoxCaret {
         active: dataBoxId.focus
+        buttonObjectName: "excludeMenuButton"
 
-        sourceComponent: ContextMenuButton {
-            id: menuButtonId
-            objectName: "excludeMenuButton"
-            visible: dataBoxId.focus //&& dataBoxId.dataValue.reading.state === cwDistanceReading.Valid
+        menu: QC.Menu {
+            objectName: "excludeMenuId"
 
-
-            focusPolicy: Qt.NoFocus
-
-            opacity: state === "" ? .75 : 1.0
-
-            menu: QC.Menu {
-                id: menuId
-                objectName: "excludeMenuId"
-
-                QC.MenuItem {
-                    objectName: "excludeDistanceMenuItem"
-                    text: dataBoxId.distanceIncluded ? "Exclude Distance" : "Include Distance"
-                    onTriggered: {
-                        dataBoxId.model.setDataAt(dataBoxId.model.cellIndex(dataBoxId.listViewIndex,
-                                                                            SurveyChunk.ShotDistanceIncludedRole),
-                                                  !dataBoxId.distanceIncluded)
-                    }
+            QC.MenuItem {
+                objectName: "excludeDistanceMenuItem"
+                text: dataBoxId.distanceIncluded ? "Exclude Distance" : "Include Distance"
+                onTriggered: {
+                    dataBoxId.model.setDataAt(dataBoxId.model.cellIndex(dataBoxId.listViewIndex,
+                                                                        SurveyChunk.ShotDistanceIncludedRole),
+                                              !dataBoxId.distanceIncluded)
                 }
             }
         }

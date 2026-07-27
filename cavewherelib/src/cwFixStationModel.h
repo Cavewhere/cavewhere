@@ -62,6 +62,22 @@ public:
     Q_INVOKABLE void removeAt(int index);
     Q_INVOKABLE cwFixStation fixStationAt(int index) const;
 
+    //! Row of the fix anchoring \a stationName, or -1 if no row does. Matching
+    //! follows the same rule as every other place a fix is resolved to a survey
+    //! station (cwFixStationDiagnostics::classifyStationReference via
+    //! cwSurveyNetwork::hasStation): trim, then case-insensitive. An empty name
+    //! matches nothing, so a blank scaffold row is never "the fix for no
+    //! station".
+    Q_INVOKABLE int indexOf(const QString& stationName) const;
+    Q_INVOKABLE bool isFixed(const QString& stationName) const;
+
+    //! Row of the fix for \a stationName, appending one if the station isn't
+    //! fixed yet. Idempotent by name, so marking the same station Fixed twice
+    //! can't leave a cave with two anchors fighting over it. -1 when the name is
+    //! empty — there is nothing to anchor.
+    Q_INVOKABLE int addFixStation(const QString& stationName);
+    Q_INVOKABLE void removeFixStation(const QString& stationName);
+
     void appendFixStation(const cwFixStation& fix);
     void setFixStations(const QList<cwFixStation>& fixes);
     const QList<cwFixStation>& fixStations() const { return m_fixStations; }
@@ -69,6 +85,14 @@ public:
 
 signals:
     void countChanged();
+
+    //! The set of station names these rows anchor changed — a row was added,
+    //! removed, replaced or renamed. Separate from countChanged(), which a
+    //! rename doesn't move, so a view showing "is this station fixed?" has one
+    //! signal that covers every way the answer can change. Derived in the
+    //! constructor from the model's own row/reset/dataChanged signals, so no
+    //! mutator has to remember to emit it.
+    void fixedStationsChanged();
 
 private:
     QList<cwFixStation> m_fixStations;

@@ -7,9 +7,36 @@
 
 #include "cwFixStationModel.h"
 
+//Our includes
+#include "cwStation.h"
+
+namespace {
+
+//! The key a fix's station name matches on. See cwFixStationModel::indexOf().
+QString fixKey(const QString& stationName)
+{
+    return cwStation::canonicalKey(stationName.trimmed());
+}
+
+}
+
 cwFixStationModel::cwFixStationModel(QObject* parent) :
     QAbstractListModel(parent)
 {
+    //Derived from the model's own change signals rather than emitted by each
+    //mutator: a future insert, remove or bulk edit can't forget to fire it, and
+    //it can't run ahead of the dataChanged that carries the new name.
+    connect(this, &QAbstractItemModel::rowsInserted, this, &cwFixStationModel::fixedStationsChanged);
+    connect(this, &QAbstractItemModel::rowsRemoved, this, &cwFixStationModel::fixedStationsChanged);
+    connect(this, &QAbstractItemModel::modelReset, this, &cwFixStationModel::fixedStationsChanged);
+    connect(this, &QAbstractItemModel::dataChanged, this,
+            [this](const QModelIndex&, const QModelIndex&, const QList<int>& roles)
+    {
+        //Empty roles means "every role", which includes the name.
+        if(roles.isEmpty() || roles.contains(StationNameRole)) {
+            emit fixedStationsChanged();
+        }
+    });
 }
 
 cwFixStationModel::~cwFixStationModel() = default;
@@ -146,6 +173,48 @@ QHash<int, QByteArray> cwFixStationModel::roleNames() const
 void cwFixStationModel::addFixStation()
 {
     appendFixStation(cwFixStation());
+}
+
+int cwFixStationModel::indexOf(const QString& stationName) const
+{
+    const QString key = fixKey(stationName);
+    if (key.isEmpty()) {
+        return -1;
+    }
+    for (int i = 0; i < m_fixStations.size(); i++) {
+        if (fixKey(m_fixStations.at(i).stationName()) == key) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+bool cwFixStationModel::isFixed(const QString& stationName) const
+{
+    return indexOf(stationName) >= 0;
+}
+
+int cwFixStationModel::addFixStation(const QString& stationName)
+{
+    const QString trimmedName = stationName.trimmed();
+    if (trimmedName.isEmpty()) {
+        return -1;
+    }
+
+    const int existingRow = indexOf(trimmedName);
+    if (existingRow >= 0) {
+        return existingRow;
+    }
+
+    cwFixStation fix;
+    fix.setStationName(trimmedName);
+    appendFixStation(fix);
+    return m_fixStations.size() - 1;
+}
+
+void cwFixStationModel::removeFixStation(const QString& stationName)
+{
+    removeAt(indexOf(stationName));
 }
 
 void cwFixStationModel::appendFixStation(const cwFixStation& fix)

@@ -118,6 +118,145 @@ TEST_CASE("cwFixStationModel setFixStations replaces contents", "[FixStation][cw
     CHECK(model.fixStationAt(1).stationName() == QStringLiteral("Y"));
 }
 
+TEST_CASE("cwFixStationModel looks a fix up by station name",
+          "[FixStation][cwFixStationModel]") {
+    cwFixStationModel model;
+
+    cwFixStation fix;
+    fix.setStationName(QStringLiteral("A1"));
+    model.appendFixStation(fix);
+
+    SECTION("An exact name matches") {
+        CHECK(model.indexOf(QStringLiteral("A1")) == 0);
+        CHECK(model.isFixed(QStringLiteral("A1")));
+    }
+
+    SECTION("Matching follows the rule the rest of the app resolves fixes by") {
+        // Trim then case-insensitive, same as cwSurveyNetwork::hasStation — a
+        // fix the survex export anchors fine must not read as a different
+        // station here.
+        CHECK(model.indexOf(QStringLiteral("a1")) == 0);
+        CHECK(model.indexOf(QStringLiteral("  a1  ")) == 0);
+    }
+
+    SECTION("A different station doesn't match") {
+        CHECK(model.indexOf(QStringLiteral("A2")) == -1);
+        CHECK_FALSE(model.isFixed(QStringLiteral("A2")));
+    }
+
+    SECTION("An empty name matches nothing, including a blank row") {
+        model.addFixStation();
+        REQUIRE(model.rowCount() == 2);
+        CHECK(model.indexOf(QString()) == -1);
+        CHECK(model.indexOf(QStringLiteral("   ")) == -1);
+        CHECK_FALSE(model.isFixed(QString()));
+    }
+}
+
+TEST_CASE("cwFixStationModel addFixStation(name) won't double-anchor a station",
+          "[FixStation][cwFixStationModel]") {
+    cwFixStationModel model;
+
+    const int firstRow = model.addFixStation(QStringLiteral("A1"));
+    REQUIRE(firstRow == 0);
+    REQUIRE(model.rowCount() == 1);
+    CHECK(model.fixStationAt(0).stationName() == QStringLiteral("A1"));
+
+    SECTION("Marking the same station again returns the row it already has") {
+        CHECK(model.addFixStation(QStringLiteral("A1")) == 0);
+        CHECK(model.addFixStation(QStringLiteral("a1")) == 0);
+        CHECK(model.rowCount() == 1);
+    }
+
+    SECTION("A different station gets its own row") {
+        CHECK(model.addFixStation(QStringLiteral("A2")) == 1);
+        CHECK(model.rowCount() == 2);
+    }
+
+    SECTION("A blank name anchors nothing") {
+        CHECK(model.addFixStation(QStringLiteral("   ")) == -1);
+        CHECK(model.rowCount() == 1);
+    }
+
+    SECTION("The stored name is trimmed") {
+        CHECK(model.addFixStation(QStringLiteral("  A2  ")) == 1);
+        CHECK(model.fixStationAt(1).stationName() == QStringLiteral("A2"));
+    }
+}
+
+TEST_CASE("cwFixStationModel removeFixStation drops the row for a station",
+          "[FixStation][cwFixStationModel]") {
+    cwFixStationModel model;
+    model.addFixStation(QStringLiteral("A1"));
+    model.addFixStation(QStringLiteral("A2"));
+    REQUIRE(model.rowCount() == 2);
+
+    SECTION("The named station's fix goes away") {
+        model.removeFixStation(QStringLiteral("a1"));
+        REQUIRE(model.rowCount() == 1);
+        CHECK(model.fixStationAt(0).stationName() == QStringLiteral("A2"));
+    }
+
+    SECTION("An unfixed station is a no-op") {
+        model.removeFixStation(QStringLiteral("A3"));
+        CHECK(model.rowCount() == 2);
+    }
+}
+
+TEST_CASE("cwFixStationModel reports every change to the set of fixed stations",
+          "[FixStation][cwFixStationModel]") {
+    cwFixStationModel model;
+    QSignalSpy fixedSpy(&model, &cwFixStationModel::fixedStationsChanged);
+    QSignalSpy countSpy(&model, &cwFixStationModel::countChanged);
+
+    SECTION("Adding a fix") {
+        model.addFixStation(QStringLiteral("A1"));
+        CHECK(fixedSpy.count() == 1);
+    }
+
+    SECTION("Removing a fix") {
+        model.addFixStation(QStringLiteral("A1"));
+        fixedSpy.clear();
+        model.removeFixStation(QStringLiteral("A1"));
+        CHECK(fixedSpy.count() == 1);
+    }
+
+    SECTION("Renaming a fix, which leaves the row count alone") {
+        model.addFixStation(QStringLiteral("A1"));
+        fixedSpy.clear();
+        countSpy.clear();
+
+        model.setData(model.index(0), QStringLiteral("A2"),
+                      cwFixStationModel::StationNameRole);
+
+        // This is why countChanged() can't stand in: a rename changes which
+        // station shows as fixed without changing how many fixes there are.
+        CHECK(fixedSpy.count() == 1);
+        CHECK(countSpy.count() == 0);
+    }
+
+    SECTION("Replacing the rows wholesale, even at the same count") {
+        model.addFixStation(QStringLiteral("A1"));
+        fixedSpy.clear();
+        countSpy.clear();
+
+        cwFixStation replacement;
+        replacement.setStationName(QStringLiteral("A2"));
+        model.setFixStations({replacement});
+
+        CHECK(fixedSpy.count() == 1);
+        CHECK(countSpy.count() == 0);
+    }
+
+    SECTION("Editing a coordinate is not a change to the set") {
+        model.addFixStation(QStringLiteral("A1"));
+        fixedSpy.clear();
+
+        model.setData(model.index(0), 100.0, cwFixStationModel::EastingRole);
+        CHECK(fixedSpy.count() == 0);
+    }
+}
+
 TEST_CASE("cwFixStations and globalCS survive a project save/load",
           "[FixStation][cwSaveLoad]") {
     // Build a project with two caves: one with two fixes, one with none.

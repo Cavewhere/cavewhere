@@ -120,6 +120,10 @@ QtObject {
     // Cap the inline Custom resolved-name label so a long CRS name elides
     // instead of stretching the picker past its host cell / wrapping the Flow.
     readonly property int csResolvedLabelMaxWidth: 180
+    // Coordinate fields in the inline fix-station editor: wide enough for a UTM
+    // easting/northing with decimals without making the popup wider than the CS
+    // picker row above them.
+    readonly property int fixPopupFieldWidth: 140
 
     // Touch target sizing — scale up hit points on mobile builds
     readonly property real pointSizeFactor: RootData.mobileBuild ? 2.0 : 1.0

@@ -14,6 +14,39 @@ DataBox {
 
     // property var window: QQ.Window.window
 
+    // The page-level inline fix editor this cell's caret opens. Null leaves the
+    // caret and badge off, so a host that doesn't offer fixing loses nothing.
+    property FixStationPopup fixStationPopup: null
+
+    readonly property FixStationModel fixStations: stationBox.fixStationPopup !== null
+                                                   ? stationBox.fixStationPopup.fixStations
+                                                   : null
+
+    readonly property string stationNameValue: stationBox.dataValue.reading.value
+
+    // A blank name has nothing to anchor — that's the trailing virtual station
+    // row, which shouldn't offer to fix itself.
+    readonly property bool canFix: stationBox.fixStations !== null
+                                   && stationBox.stationNameValue.trim() !== ""
+
+    // isFixed() is a lookup, not a bindable property, so there is nothing for a
+    // binding to depend on when a fix is added, removed or renamed. Bumping this
+    // from fixedStationsChanged supplies that dependency — the `>= 0` term below
+    // is always true, and is load-bearing: drop it and the badge goes stale.
+    // (The station name and the model are already reactive on their own.)
+    property int _fixStationsRevision: 0
+
+    readonly property bool stationIsFixed: stationBox._fixStationsRevision >= 0
+                                           && stationBox.canFix
+                                           && stationBox.fixStations.isFixed(stationBox.stationNameValue)
+
+    QQ.Connections {
+        target: stationBox.fixStations
+        function onFixedStationsChanged() {
+            stationBox._fixStationsRevision++
+        }
+    }
+
     StationMenu {
         id: removeMenuId
         model: stationBox.model
@@ -97,6 +130,40 @@ DataBox {
             id: stationName
             anchors.horizontalCenter: parent.horizontalCenter
             //            font.pixelSize: Theme.fontSizeCaption
+        }
+    }
+
+    DataBoxBadge {
+        objectName: "fixedStationBadge"
+        visible: stationBox.stationIsFixed
+        text: "Fixed"
+    }
+
+    // The same caret the exclude-distance menu uses one column over, so the two
+    // cell-level actions share an affordance rather than resembling one.
+    DataBoxCaret {
+        active: stationBox.focus && stationBox.canFix
+        buttonObjectName: "fixStationMenuButton"
+
+        menu: QC.Menu {
+            objectName: "fixStationMenu"
+
+            QC.MenuItem {
+                objectName: "markStationFixedMenuItem"
+                // One action, two labels: opening the editor creates the fix
+                // when there isn't one, which is what "mark as fixed" means.
+                text: stationBox.stationIsFixed
+                      ? qsTr("Edit Fixed Coordinates...")
+                      : qsTr("Mark Station as Fixed")
+                onTriggered: stationBox.fixStationPopup.openFor(stationBox.stationNameValue, stationBox)
+            }
+
+            QC.MenuItem {
+                objectName: "removeStationFixMenuItem"
+                text: qsTr("Remove Fix")
+                enabled: stationBox.stationIsFixed
+                onTriggered: stationBox.fixStations.removeFixStation(stationBox.stationNameValue)
+            }
         }
     }
 
