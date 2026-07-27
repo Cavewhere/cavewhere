@@ -52,22 +52,24 @@ public:
                     QObject* parent = nullptr);
 
     /**
-        A pass whose reason for existing is one pipeline: forcedRoot is run whether
-        or not it is dirty, and the pass covers only what that reaches. This is the
-        "Solve" / "Compute Scraps" button — forcing is what those already did; what
-        they could not do is carry the result onward.
+        root, plus every pipeline that transitively consumes it, in the order
+        pipelines gives them.
 
-        Narrowed on the consuming side only. A pipeline forcedRoot itself depends
-        on is still built as its dependency and driven the ordinary way, so
-        forcing scraps against a line plot that has fallen behind solves the line
-        plot first rather than triangulating onto stale stations.
+        This is how a caller scopes a pass to one button: "Solve" marks the line
+        plot dirty and then recomputes it together with the scraps and LiDAR notes
+        that consume it, leaving anything else that happens to be dirty for the
+        ordinary policy.
 
-        forcedRoot must be one of pipelines; anything else yields an empty pass.
+        Narrowed on the consuming side only — pass the *whole* edge set to the
+        constructor alongside the result. A pipeline root itself depends on is then
+        still built as its dependency and driven the ordinary way, so recomputing
+        scraps against a line plot that has fallen behind solves the line plot
+        first rather than triangulating onto stale stations.
     */
-    cwUpdateCascade(cwUpdatable* forcedRoot,
-                    const QList<cwUpdatable*>& pipelines,
-                    const QHash<cwUpdatable*, QList<cwUpdatable*>>& dependencies,
-                    QObject* parent = nullptr);
+    static QList<cwUpdatable*> consumersOf(
+        cwUpdatable* root,
+        const QList<cwUpdatable*>& pipelines,
+        const QHash<cwUpdatable*, QList<cwUpdatable*>>& dependencies);
 
     /**
         Drives every pipeline in the snapshot, ordered by the edges, and returns
@@ -100,15 +102,12 @@ private:
     //time only when the dependencies are already finished — which is to say they
     //had nothing to do and so dirtied nothing — and otherwise from inside their
     //continuation, so a pipeline they just dirtied is still seen as Dirty here.
-    //force skips that reading and runs regardless; only buildNode() passes it.
-    QFuture<void> driveToClean(cwUpdatable* pipeline, bool force);
+    QFuture<void> driveToClean(cwUpdatable* pipeline);
     QFuture<void> waitForRun(cwUpdatable* pipeline, const QFuture<void>& run);
 
     const QList<cwUpdatable*> m_pipelines;
     //Pipeline -> the pipelines whose output it consumes. Absent or empty is a root.
     const QHash<cwUpdatable*, QList<cwUpdatable*>> m_dependencies;
-    //The one pipeline this pass runs whether or not it is dirty, or null.
-    cwUpdatable* const m_forcedRoot = nullptr;
     bool m_abandoned = false;
 };
 

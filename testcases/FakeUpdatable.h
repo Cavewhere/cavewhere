@@ -51,11 +51,6 @@ public:
     int updateCount() const { return m_updateCount; }
     int driveCount() const { return m_driveCount; }
 
-    //Off by default, which is cwScrapManager: a run with no dirty scrap has
-    //nothing to triangulate. On models cwLinePlotManager, which solves whether or
-    //not the survey changed — the property that makes it forceable by a button.
-    void setRunsWhenClean(bool runsWhenClean) { m_runsWhenClean = runsWhenClean; }
-
     //Protected on the real thing, since it is a pipeline's statement about
     //itself. Exposed here so a case can check the latch head-on rather than only
     //through a destructor.
@@ -71,11 +66,11 @@ protected:
 
     QFuture<void> doRun() override
     {
-        //Counted before the early return: run() is a force path on the real
-        //pipelines too (cwLinePlotManager restarts its solve unconditionally), so
-        //a redundant drive would restart real work.
+        //Counted before the early return, so a case can tell "never driven" from
+        //"driven and found nothing to do" — the distinction that catches a driver
+        //restarting a real pipeline that was already covering the current data.
         m_driveCount++;
-        if(!m_pending && !m_runsWhenClean) { return currentRun(); }
+        if(!m_pending) { return currentRun(); }
         m_pending = false;
         const QFuture<void> future = beginRun();
         m_updateCount++;
@@ -89,7 +84,6 @@ protected:
 
 private:
     bool m_autoFinish;
-    bool m_runsWhenClean = false;
     bool m_pending = false;
     int m_updateCount = 0;
     int m_driveCount = 0;

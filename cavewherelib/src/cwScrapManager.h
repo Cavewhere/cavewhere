@@ -137,12 +137,9 @@ signals:
     void sketchDiagnosticsChanged(cwSketch* sketch);
 
 public slots:
-    void updateAllScraps();
-
     //Marks every scrap in the region dirty without running anything. Public so a
-    //caller can pair it with cwUpdateCoordinator::updateNow(this) — the marking is
-    //what makes "Compute Scraps" mean every scrap rather than the dirty ones, and
-    //the coordinator is what carries the result into whatever consumes it.
+    //"Compute Scraps" button can pair it with cwUpdateCoordinator::updateNow(this),
+    //where the mark-then-drive split is explained.
     void markAllScrapsDirty();
 
 private:

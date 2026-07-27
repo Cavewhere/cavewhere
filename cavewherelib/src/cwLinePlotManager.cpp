@@ -461,21 +461,24 @@ void cwLinePlotManager::clearUnconnectedChunkErrors()
     UnconnectedChunks.clear();
 }
 
-/**
-  \brief Marks the line plot dirty in response to a survey edit.
-
-  Pure mechanism: it records that a solve is pending and notifies. Whether the
-  solve runs now (automatic update) or waits is cwUpdateCoordinator's call,
-  which drives run().
-  */
-void cwLinePlotManager::runSurvex() {
+void cwLinePlotManager::markNeedsUpdate() {
     if(!m_needsUpdate) {
         m_needsUpdate = true;
         // Clean -> Dirty, or (mid-solve edit) Working -> Dirty. Either is a real
         // state change; whoever is driving runs the pipeline again on the Dirty.
         emit updateStateChanged();
     }
+}
 
+/**
+  \brief The survey-edit slot: marks the line plot dirty, and solves on the spot
+  while standalone.
+
+  Marking is all this does once a coordinator has taken over — whether the solve
+  runs now or waits is that coordinator's call.
+  */
+void cwLinePlotManager::runSurvex() {
+    markNeedsUpdate();
     runIfStandalone();
 }
 

@@ -67,10 +67,6 @@ public:
     void setKeepRenderGeometry(bool keepGeometry);
     bool keepRenderGeometry() const;
 
-    // Useful in tests or manual recompute. Forces a recompute regardless of the
-    // auto-update policy (the "Compute" force path).
-    Q_INVOKABLE void updateAllLiDAR();
-
     // Call when a cave’s centerline changed (station positions, network, etc.)
     Q_INVOKABLE void updateLiDARForCave(cwCave* cave);
     Q_INVOKABLE void updateLiDARForTrip(cwTrip* trip);
@@ -147,9 +143,7 @@ private:
     void removeKeywordItemForNote(cwNoteLiDAR* note);
 
     // Utilities
-    static QList<cwNoteLiDAR*> collectAllNotes(cwRegionTreeModel* regionModel);
     static QList<cwNoteLiDAR*> notesFromModel(cwSurveyNoteLiDARModel* model);
-    static QList<cwTrip*> allTrips(cwRegionTreeModel* regionModel);
 
 private:
     QPointer<cwRegionTreeModel> m_regionModel;

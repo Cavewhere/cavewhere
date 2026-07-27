@@ -84,8 +84,8 @@ cwScrapManager::cwScrapManager(QObject *parent) :
     cwTrackRestarter(FutureManagerToken, TriangulateRestarter, QStringLiteral("Updating Scaps"));
 
     //Warping changes mark every scrap dirty; the auto-update policy (via
-    //cwUpdateCoordinator) decides whether to run, unlike the explicit
-    //updateAllScraps() force path. Uncoordinated managers recompute eagerly.
+    //cwUpdateCoordinator) decides whether to run. Uncoordinated managers
+    //recompute eagerly.
     auto notifyWarpingChanged = [this]() {
         markAllScrapsDirty();
         runIfStandalone();
@@ -347,18 +347,6 @@ void cwScrapManager::markAllScrapsDirty() {
 
     m_workPending = true;
     emit updateStateChanged();
-}
-
-/**
-  Recomputes every scrap in the region now, ignoring the auto-update flag. This
-  is the "Compute Scraps" force path.
-  */
-void cwScrapManager::updateAllScraps() {
-    markAllScrapsDirty();
-    //Marking is the force, so the drive is the ordinary reading: a region with no
-    //runnable scrap stays Clean, and run() would cancel a triangulation in flight
-    //to start an empty one.
-    runIfNeeded();
 }
 
 cwUpdatable::State cwScrapManager::doUpdateState() const {

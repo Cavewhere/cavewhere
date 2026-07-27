@@ -40,9 +40,11 @@ StandardPage {
                 objectName: "rerunSolveButton"
                 enabled: root.linePlotManager !== null
                 text: qsTr("Solve")
-                // Through the coordinator so the scraps and LiDAR notes the solve
-                // dirties recompute behind it.
-                onClicked: RootData.updateCoordinator.updateNow(root.linePlotManager)
+                onClicked: {
+                    // Mark, then drive — see cwUpdateCoordinator::updateNow().
+                    root.linePlotManager.markNeedsUpdate()
+                    RootData.updateCoordinator.updateNow(root.linePlotManager)
+                }
             }
         }
 

@@ -122,14 +122,20 @@ public slots:
     void updateNow();
 
     /**
-        Recompute one pipeline now whether or not it is dirty, then carry the
-        result through everything that consumes it.
+        Bring one pipeline up to date now, along with everything that consumes it,
+        and leave the rest of the registry for the ordinary policy.
 
-        This is what a "Solve" / "Compute Scraps" button wants, and the reason it
-        is not the same as calling the manager's own force method: forcing a
-        pipeline directly leaves its dependents holding output that has just gone
-        stale, so with automatic update off, solving used to dirty the scraps and
-        nothing recomputed them.
+        This is the second half of a "Solve" / "Compute Scraps" button; the first
+        half is the caller marking the pipeline dirty (cwLinePlotManager::
+        markNeedsUpdate(), cwScrapManager::markAllScrapsDirty()), which is what
+        makes the button mean "recompute regardless". The two are separate on
+        purpose: the manager owns what dirty means, the coordinator owns when and
+        in what order, and a manager that had to reach for a coordinator to run its
+        own button would have that backwards.
+
+        Marking without this leaves the dependents holding output the run has just
+        made stale — with automatic update off, solving used to dirty the scraps
+        and nothing recomputed them.
 
         pipeline must be a registered cwUpdatable; anything else is ignored with a
         warning, since the coordinator can only order what it has edges for. Takes

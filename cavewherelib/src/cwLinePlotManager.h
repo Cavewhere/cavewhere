@@ -140,6 +140,12 @@ signals:
     // changes. The set itself is read via missingSourceOwners().
     void missingSourceOwnersChanged();
 
+public slots:
+    //Marks the line plot dirty without running anything. Public so a "Solve"
+    //button can pair it with cwUpdateCoordinator::updateNow(this), where the
+    //mark-then-drive split is explained.
+    void markNeedsUpdate();
+
 private:
     cwUpdatable::State doUpdateState() const override;
     QFuture<void> doRun() override;

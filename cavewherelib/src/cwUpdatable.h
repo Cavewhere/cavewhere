@@ -66,10 +66,16 @@ public:
     /**
         Recomputes now, unconditionally, and returns the future for that run.
 
-        There is no automatic-update gate, so a "Solve" / "Compute Scraps" style
-        action always forces the work — including on a pipeline that is already
-        Working, which restarts it. A caller that wants to *wait* for the current
-        run rather than force a new one wants currentRun() instead.
+        The primitive underneath runIfNeeded()'s Dirty branch, not a drive in its
+        own right: it reads no state, so a call on a pipeline that is already
+        Working restarts it, which for the real managers cancels a run that was
+        doing the job. A caller that wants to *wait* for the current run wants
+        currentRun() instead.
+
+        Nothing drives a pipeline through here. An action that must recompute
+        regardless — "Solve", "Compute Scraps" — marks the pipeline dirty and
+        then drives it: marking is the force, and runIfNeeded() stays the only
+        reading of the state.
 
         The future finishes when the run is over, which is the same instant the
         pipeline stops reporting Working. A call with nothing to do returns an
@@ -92,9 +98,8 @@ public:
         Not a force, and that is the whole point: Working attaches to the run
         already covering the current data instead of restarting it, which for the
         real managers would cancel a solve that was doing the job. A caller whose
-        purpose is to recompute regardless — the "Solve" button on an already-clean
-        line plot — wants run(); one that first marks its inputs dirty gets the same
-        effect from here.
+        purpose is to recompute regardless marks the pipeline dirty first and then
+        calls this — there is no second, forcing kind of drive.
 
         Says nothing about whether the pipeline is clean afterwards: a run can end
         with the pipeline dirty again, so a driver that must reach Clean calls this

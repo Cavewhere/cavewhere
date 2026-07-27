@@ -149,9 +149,7 @@ QC.Menu {
         QC.MenuItem {
             text: "Compute Scraps"
             onTriggered: {
-                // Marking is what makes this every scrap rather than the dirty
-                // ones; the coordinator then orders it behind the line plot, so
-                // the triangulation isn't fitted to stale station positions.
+                // Mark, then drive — see cwUpdateCoordinator::updateNow().
                 RootData.scrapManager.markAllScrapsDirty()
                 RootData.updateCoordinator.updateNow(RootData.scrapManager)
             }

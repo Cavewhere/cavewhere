@@ -314,23 +314,6 @@ QFuture<void> cwNoteLiDARManager::doRun()
     return runBatch();
 }
 
-void cwNoteLiDARManager::updateAllLiDAR()
-{
-    if (m_regionModel.isNull() || m_regionModel->cavingRegion() == nullptr) {
-        return;
-    }
-
-    const NotePtrList all = collectAllNotes(m_regionModel);
-    for (cwNoteLiDAR* note : all) {
-        markDirty(note);
-    }
-    emit updateStateChanged();
-    //Marking is the force, so the drive is the ordinary reading: notes with no
-    //LiDAR to process leave nothing runnable, and run() would cancel a batch in
-    //flight to start an empty one.
-    runIfNeeded();
-}
-
 void cwNoteLiDARManager::updateLiDARForCave(cwCave* cave)
 {
     if (cave == nullptr) {
@@ -828,20 +811,6 @@ void cwNoteLiDARManager::connectNote(cwNoteLiDAR *note)
 
 // ---------------------- Utilities ----------------------
 
-QList<cwTrip*> cwNoteLiDARManager::allTrips(cwRegionTreeModel* regionModel)
-{
-    QList<cwTrip*> out;
-    if (regionModel == nullptr || regionModel->cavingRegion() == nullptr) {
-        return out;
-    }
-    for (cwCave* cave : regionModel->cavingRegion()->caves()) {
-        for (cwTrip* trip : cave->trips()) {
-            out.append(trip);
-        }
-    }
-    return out;
-}
-
 NotePtrList cwNoteLiDARManager::notesFromModel(cwSurveyNoteLiDARModel* model)
 {
     NotePtrList out;
@@ -863,17 +832,6 @@ NotePtrList cwNoteLiDARManager::notesFromModel(cwSurveyNoteLiDARModel* model)
         }
     }
 
-    return out;
-}
-
-NotePtrList cwNoteLiDARManager::collectAllNotes(cwRegionTreeModel* regionModel)
-{
-    NotePtrList out;
-    for (cwTrip* trip : allTrips(regionModel)) {
-        if (auto* model = trip->notesLiDAR()) {
-            out.append(notesFromModel(model));
-        }
-    }
     return out;
 }
 

@@ -44,6 +44,17 @@
 //Async includes
 #include "asyncfuture.h"
 
+namespace {
+    //What the "Compute Scraps" menu item does. The manager has no single call for
+    //it on purpose: marking is what makes it every scrap rather than the dirty
+    //ones, and the drive that follows is the ordinary reading of the state.
+    void computeAllScraps(cwScrapManager* scrapManager)
+    {
+        scrapManager->markAllScrapsDirty();
+        scrapManager->runIfNeeded();
+    }
+}
+
 static void requireAutomaticUpdatesEnabled()
 {
     cwJobSettings::initialize();
@@ -72,7 +83,7 @@ TEST_CASE("cwScrapManager should make the file size grow when re-calculaing scra
         QElapsedTimer timer;
         for(int i = 0; i < numberOfRuns; i++) {
             timer.restart();
-            scrapManager->updateAllScraps();
+            computeAllScraps(scrapManager);
             scrapManager->waitForFinish();
             runTime.append(timer.nsecsElapsed());
         }
@@ -94,7 +105,7 @@ TEST_CASE("cwScrapManager should make the file size grow when re-calculaing scra
             timer.setInterval(waitTime * 1e-6);
             timer.start();
 
-            scrapManager->updateAllScraps();
+            computeAllScraps(scrapManager);
 
             QEventLoop eventLoop;
             QObject::connect(&timer, &QTimer::timeout, &eventLoop, &QEventLoop::quit);
@@ -268,10 +279,10 @@ TEST_CASE("Scrap pipeline reports Working while a triangulation task is in fligh
     QCoreApplication::processEvents();
     REQUIRE(scrapManager->updateState() == cwUpdatable::State::Clean);
 
-    // Force a recompute of every scrap. updateAllScraps marks the scraps dirty
-    // then dispatches unconditionally; the restarter's start is queued, so the
-    // pipeline is Working (task dispatched, not yet finished) synchronously here.
-    scrapManager->updateAllScraps();
+    // Recompute every scrap. Marking makes the pipeline Dirty, so the drive
+    // dispatches a task; the restarter's start is queued, so the pipeline is
+    // Working (task dispatched, not yet finished) synchronously here.
+    computeAllScraps(scrapManager);
     CHECK(scrapManager->updateState() == cwUpdatable::State::Working);
 
     // Drain to completion — back to Clean, never stuck Working.

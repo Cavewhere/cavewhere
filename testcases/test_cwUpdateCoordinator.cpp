@@ -679,19 +679,19 @@ TEST_CASE("A coordinator torn down during shutdown leaves its pipelines inert",
     CHECK(pipeline.updateCount() == 0);
 }
 
-TEST_CASE("Forcing one pipeline recomputes it and everything that consumes it",
+TEST_CASE("Updating one pipeline recomputes it and everything that consumes it",
           "[cwUpdateCoordinator]")
 {
-    //The "Solve" button, with automatic update off. Forcing the manager directly
-    //is what it used to do, and that left the scraps holding output the solve had
-    //just made stale with nothing to recompute them.
+    //The "Solve" button, with automatic update off: the caller marks and this
+    //carries the result onward. Running the manager directly is what it used to do,
+    //and that left the scraps holding output the solve had just made stale with
+    //nothing to recompute them.
     cwJobSettings::initialize();
     cwJobSettings::instance()->setAutomaticUpdate(false);
 
     FakeUpdatable root;
     FakeUpdatable dependent;
     FakeUpdatable unrelated;
-    root.setRunsWhenClean(true);
 
     cwUpdateCoordinator coordinator;
     coordinator.add(&root);
@@ -701,30 +701,33 @@ TEST_CASE("Forcing one pipeline recomputes it and everything that consumes it",
     dirtyWhenWorking(&root, &dependent);
 
     unrelated.markDirty();
-    REQUIRE(root.updateState() == cwUpdatable::State::Clean);
+    root.markDirty();
 
     coordinator.updateNow(&root);
     settle();
 
     CHECK(root.updateCount() == 1);
     CHECK(dependent.updateCount() == 1);
-    //Scoped: a pipeline the forced one doesn't reach is left for the normal
+    //Scoped: a pipeline the scoped one doesn't reach is left for the normal
     //policy, which with automatic update off means left dirty.
     CHECK(unrelated.updateCount() == 0);
     CHECK(coordinator.needsUpdate());
 }
 
-TEST_CASE("Forcing a pipeline the coordinator doesn't know starts nothing",
+TEST_CASE("Updating a pipeline the coordinator doesn't know starts nothing",
           "[cwUpdateCoordinator]")
 {
-    //There are no edges for it, so a cascade built around it could only run it
-    //alone — which is the thing this overload exists to stop callers doing.
+    //There are no edges for it, so a pass scoped to it could only run it alone —
+    //which is the thing this overload exists to stop callers doing.
     cwJobSettings::initialize();
     cwJobSettings::instance()->setAutomaticUpdate(false);
 
     FakeUpdatable registered;
     FakeUpdatable stranger;
-    stranger.setRunsWhenClean(true);
+    //Coordinated so marking it doesn't make it run itself; the point is that
+    //nothing here drives it.
+    stranger.setCoordinated(true);
+    stranger.markDirty();
 
     cwUpdateCoordinator coordinator;
     coordinator.add(&registered);
@@ -737,7 +740,7 @@ TEST_CASE("Forcing a pipeline the coordinator doesn't know starts nothing",
     CHECK(registered.driveCount() == 0);
 }
 
-TEST_CASE("A forced pass is superseded by the next one, like any other",
+TEST_CASE("A scoped pass is superseded by the next one, like any other",
           "[cwUpdateCoordinator]")
 {
     //Scoped or not, only one pass owns the pipelines at a time: the incumbent is
@@ -748,12 +751,12 @@ TEST_CASE("A forced pass is superseded by the next one, like any other",
 
     FakeUpdatable root(false); //Held in Working so the first pass stays open
     FakeUpdatable dependent;
-    root.setRunsWhenClean(true);
 
     cwUpdateCoordinator coordinator;
     coordinator.add(&root);
     coordinator.add(&dependent, {&root});
 
+    root.markDirty();
     coordinator.updateNow(&root);
     settle();
 
