@@ -139,10 +139,10 @@ next to the sketches. Scans tie to stations and get
 [carpeted](glossary.md#carpeting) into the model just like sketched scraps.
 
 A scan doesn't replace sketching. It records surfaces, and only surfaces:
-airflow never shows up in a scan, and neither does which of the three ways on
-deserves pushing. PolyCam works best, since its scans arrive upright and
-life-size. Photogrammetry models usually need their up direction and scale set
-by hand. See [LiDAR Notes](../notes/lidar-notes.md).
+airflow never shows up in a scan, and neither does how good a lead is. PolyCam
+works best, since its scans arrive upright and life-size. Photogrammetry
+models usually need their up direction and scale set by hand. See
+[LiDAR Notes](../notes/lidar-notes.md).
 
 ## Focusing on one part of a big cave: keywords and layers
 
