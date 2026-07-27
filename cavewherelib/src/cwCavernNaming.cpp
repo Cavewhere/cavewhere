@@ -2,67 +2,136 @@
 #include "cwCavernNaming.h"
 
 //Qt includes
-#include <QUuid>
-#include <QLatin1String>
 #include <QLatin1Char>
+#include <QSet>
 
 namespace {
-constexpr QLatin1String kCaveNamePrefix("cave_");
-constexpr QLatin1String kTripNamePrefix("trip_");
+
+constexpr QLatin1Char kSeparator('.');
+constexpr QLatin1Char kWordSeparator('_');
+
+//! First suffix a colliding label takes, so the second "Fisher Ridge" is
+//! fisher_ridge_2 rather than fisher_ridge_1.
+constexpr int kFirstCollisionSuffix = 2;
+
 }
 
-QString cwCavernNaming::caveName(const QUuid& caveId)
+QString cwCavernNaming::sanitizeToCavernIdentifier(const QString& name)
 {
-    return kCaveNamePrefix + caveId.toString(QUuid::Id128);
+    //Decomposed so a Latin diacritic drops to its base letter ("rio", not
+    //"r_o") instead of folding to a separator. Cavern's own command charset is
+    //ASCII (survex commands.c sets a-z, A-Z, 0-9, '_' and '-'), so anything
+    //that survives decomposition without an ASCII form still has to go.
+    const QString decomposed = name.normalized(QString::NormalizationForm_KD);
+
+    QString label;
+    label.reserve(decomposed.size());
+
+    bool pendingSeparator = false;
+    for (const QChar character : decomposed) {
+        if (character.isMark()) {
+            continue; //a combining accent whose base letter was just kept
+        }
+
+        const QChar lower = character.toLower();
+        const bool isIdentifierChar = (lower >= QLatin1Char('a') && lower <= QLatin1Char('z'))
+                || (lower >= QLatin1Char('0') && lower <= QLatin1Char('9'));
+
+        if (isIdentifierChar) {
+            if (pendingSeparator) {
+                label.append(kWordSeparator);
+                pendingSeparator = false;
+            }
+            label.append(lower);
+        } else if (!label.isEmpty()) {
+            //Held rather than appended, so a run of punctuation collapses to one
+            //separator and a trailing run adds none at all.
+            pendingSeparator = true;
+        }
+    }
+
+    if (label.isEmpty()) {
+        return QStringLiteral("x"); //stands in for a name that sanitizes away to nothing
+    }
+    return label;
 }
 
-QString cwCavernNaming::tripName(const QUuid& tripId)
+QHash<QUuid, QString> cwCavernNaming::scopeLabels(const QList<ScopeEntry>& siblings)
 {
-    return kTripNamePrefix + tripId.toString(QUuid::Id128);
+    QHash<QUuid, QString> labels;
+    labels.reserve(siblings.size());
+
+    QSet<QString> used;
+    used.reserve(siblings.size());
+
+    for (const ScopeEntry& entry : siblings) {
+        const QString base = sanitizeToCavernIdentifier(entry.name);
+
+        //Distinct names can sanitize to one identifier ("Big Cave" and
+        //"Big-Cave"), and two scopes sharing a label would silently merge their
+        //stations into one survey, so the collision has to be broken here.
+        QString label = base;
+        int suffix = kFirstCollisionSuffix;
+        while (used.contains(label)) {
+            label = base + kWordSeparator + QString::number(suffix);
+            suffix++;
+        }
+
+        used.insert(label);
+        labels.insert(entry.id, label);
+    }
+
+    return labels;
 }
 
-QString cwCavernNaming::caveScopePrefix(const QUuid& caveId)
+QString cwCavernNaming::scopeLabel(const QUuid& id, const QList<ScopeEntry>& siblings)
 {
-    return caveName(caveId) + QLatin1Char('.');
+    return scopeLabels(siblings).value(id);
 }
 
-QString cwCavernNaming::tripScopePrefix(const QUuid& tripId)
+QString cwCavernNaming::scopePrefix(const QUuid& id, const QList<ScopeEntry>& siblings)
 {
-    return tripName(tripId) + QLatin1Char('.');
+    const QString label = scopeLabel(id, siblings);
+    if (label.isEmpty()) {
+        return QString();
+    }
+    return label + kSeparator;
 }
 
-QString cwCavernNaming::fullScopePrefix(const QUuid& caveId, const QUuid& tripId)
+QString cwCavernNaming::scopeHeadOf(const QString& scopedName)
 {
-    return caveScopePrefix(caveId) + tripScopePrefix(tripId);
+    const qsizetype separator = scopedName.indexOf(kSeparator);
+    if (separator <= 0) {
+        return QString();
+    }
+    return scopedName.first(separator);
 }
 
-bool cwCavernNaming::hasTripScope(const QString& caveLocalStation)
+QString cwCavernNaming::removeScopeHead(const QString& scopedName)
 {
-    return caveLocalStation.startsWith(kTripNamePrefix);
+    const qsizetype separator = scopedName.indexOf(kSeparator);
+    if (separator <= 0) {
+        return scopedName;
+    }
+    return scopedName.sliced(separator + 1);
 }
 
-QRegularExpression cwCavernNaming::stationRegex()
+QList<cwCavernNaming::ScopeEntry> cwCavernNaming::scopeEntries(const QList<cwCaveData>& caves)
 {
-    // Parses cavern's emitted "cave_<32 hex>.<station>" lines back into a
-    // (QUuid, station) pair. The tail (capture 2) is deliberately loose:
-    //   - native:          cave_<uuid>.<station>
-    //   - trip-attached:   cave_<uuid>.trip_<uuid>.<station>
-    //   - cave-attached:   cave_<uuid>.<file-begin>.<station>
-    // External Survex files can introduce nested *begin scopes that surface as
-    // dotted segments inside the tail, and Walls' empty-name quirk can emit
-    // trailing spaces; tightening the tail to the native station validator
-    // would drop both. The leading \\S guard rejects pure-whitespace tails
-    // (e.g. cave_<uuid>. ) so a malformed external file can't pollute the
-    // lookup with whitespace keys. The cave UUID prefix is still strictly
-    // bounded so the integer-keyed legacy form ("<digit>.station") remains
-    // rejected.
-    //
-    // CaseInsensitiveOption: cwStationPositionLookup keys via
-    // cwStation::canonicalKey() which folds station names to lower case
-    // (cwStation.h:66). caveName() already emits lowercase via QUuid::Id128 —
-    // but the flag keeps the matcher robust if QUuid::Id128 ever changes its
-    // case.
-    return QRegularExpression(
-        QStringLiteral("^cave_([0-9a-fA-F]{32})\\.(\\S.*)$"),
-        QRegularExpression::CaseInsensitiveOption);
+    QList<ScopeEntry> entries;
+    entries.reserve(caves.size());
+    for (const cwCaveData& cave : caves) {
+        entries.append({cave.id, cave.name});
+    }
+    return entries;
+}
+
+QList<cwCavernNaming::ScopeEntry> cwCavernNaming::scopeEntries(const QList<cwTripData>& trips)
+{
+    QList<ScopeEntry> entries;
+    entries.reserve(trips.size());
+    for (const cwTripData& trip : trips) {
+        entries.append({trip.id, trip.name});
+    }
+    return entries;
 }

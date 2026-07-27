@@ -142,6 +142,19 @@ inline cwTrip* addAttachedTrip(cwCave* cave, const QString& name)
     return trip;
 }
 
+//! The survey label an externally-attached trip's *begin block carries, which is
+//! also the scope its solved stations are keyed under in the cave lookup.
+inline QString tripScopeLabel(const cwTrip* trip)
+{
+    QString prefix = trip->scopePrefix();
+    //An unscoped trip has no label, and chop() would quietly hand back "" —
+    //which turns every '*begin ' + label assertion into a match on the cave's
+    //own block instead of failing.
+    REQUIRE_FALSE(prefix.isEmpty());
+    prefix.chop(1); //the trailing '.'
+    return prefix;
+}
+
 inline QVariant roleAt(const QAbstractItemModel* model, int row, int role)
 {
     return model->data(model->index(row, 0), role);

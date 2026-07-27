@@ -2,8 +2,9 @@
 ; .srv makes cavern pick ':' (not '.') as the label separator for the whole
 ; .3d — the exact situation a project with mixed survex + Walls data hits. The
 ; "*alias station - .." mirrors the external TopoDroid file that surfaced this.
-; The nested cave_/trip_ begins mirror the line-plot driver's synthetic
-; prefixes, so the emitted labels are the exact form cwCavernNaming decodes.
+; The nested begins are hand-written survey labels (the driver now emits
+; sanitized cave/trip names instead); what matters here is only that the
+; emitted labels are nested and dot-separated, the shape cwCavernNaming splits.
 ; The Walls include forces the ':' separator and fixes its own WA station
 ; (#Fix). The cave below fixes station 1. Both connected components carry a
 ; control point so cavern emits no warning (the in-process runner surfaces

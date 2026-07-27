@@ -91,15 +91,28 @@ public:
     void setStationPrefix(const QString& stationPrefix);
 
     //! The scope prefix this trip's stations carry in the cave namespace: empty
-    //! for a flat native trip, "trip_<hex>." for an externally-attached trip, or
-    //! "<stationPrefix>." for a native-prefixed (Scope) trip. The one accessor
-    //! every scope consumer — equates, the solved-* accessors, and the geometry
-    //! enumeration — speaks, so the three trip kinds never diverge.
+    //! for a flat native trip, "<tripLabel>." for an externally-attached trip
+    //! (see cwCavernNaming), or "<stationPrefix>." for a native-prefixed (Scope)
+    //! trip. The one accessor every scope consumer — equates, the solved-*
+    //! accessors, and the geometry enumeration — speaks, so the three trip kinds
+    //! never diverge.
     QString scopePrefix() const;
 
     //! Snapshot overload: the same policy computed from a cwTripData, so the
-    //! worker-thread geometry pass shares this one source of truth.
-    static QString scopePrefix(const cwTripData& data);
+    //! worker-thread geometry pass shares this one source of truth. An external
+    //! trip's label is only unique among its cave's trips, so \a siblingTrips
+    //! must be the whole cwCaveData::trips list this trip belongs to.
+    //!
+    //! Pools the sibling labels on every call. Prefer the overload below in a
+    //! loop over a cave's trips, which is otherwise quadratic.
+    static QString scopePrefix(const cwTripData& data, const QList<cwTripData>& siblingTrips);
+
+    //! Pooled-label overload, and the one place the policy actually lives. Takes
+    //! the labels cwCavernNaming::scopeLabels assigned for the whole cave, so an
+    //! emitter that already holds that map — the survex exporter's "*begin"
+    //! loop, its equate operands, the geometry pass — names the very same scope
+    //! it opened rather than deriving a second answer that has to agree.
+    static QString scopePrefix(const cwTripData& data, const QHash<QUuid, QString>& tripLabels);
 
     //! True when this trip's stations carry a scope prefix (external or prefixed).
     bool isScoped() const;
@@ -148,7 +161,7 @@ public:
     //! This trip's solved station positions, keyed in the trip's own local
     //! namespace. A native trip returns the cave lookup unchanged. An
     //! externally-attached trip (whose solved stations are keyed
-    //! trip_<hex>.<tail> in the cave) gets a stripped-tail alias for each of
+    //! "<scopePrefix><tail>" in the cave) gets a stripped-tail alias for each of
     //! its scoped entries so bare note/scrap/lead station names resolve, while
     //! the full cave data is retained so a cross-trip tie-in neighbor still
     //! carries a position. Consumers never need to know the trip is external.
@@ -193,9 +206,15 @@ signals:
     void externalCenterlineChanged();
     void stationPrefixChanged();
 
-    //! Fired whenever this trip's scope changes — i.e. whenever externalCenterline
-    //! or stationPrefix changes and scopePrefix()/isScoped() may differ. The NOTIFY
-    //! for both derived properties.
+    //! Fired when this trip's own scope inputs change — externalCenterline,
+    //! stationPrefix, or (since an external trip's scope is its own survey
+    //! label) its name. The NOTIFY for both derived properties.
+    //!
+    //! Not exhaustive for scopePrefix(): a label is unique among the cave's
+    //! trips, so renaming, adding, or removing a *sibling* can move this trip's
+    //! collision suffix without this firing. Covering that needs a change
+    //! signal on the cave's trip list, which nothing consumes yet — read
+    //! scopePrefix() fresh rather than caching it off this signal.
     void scopeChanged();
 
 public slots:

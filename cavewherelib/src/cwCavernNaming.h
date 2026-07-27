@@ -3,54 +3,72 @@
 
 //Our includes
 #include "cwGlobals.h"
+#include "cwCaveData.h"
+#include "cwTripData.h"
 
 //Qt includes
 #include <QString>
-#include <QRegularExpression>
-
-class QUuid;
+#include <QHash>
+#include <QList>
+#include <QUuid>
 
 /**
- * One home for the synthetic-name grammar the line-plot driver uses to carry a
- * cave/trip identity through the worker's intermediate .svx and back out of
- * cavern's emitted station lines.
+ * One home for the survey-scope labels CaveWhere writes into Survex.
  *
- * The driver rewrites each cave to "cave_<32 hex of QUuid::Id128>" and wraps an
- * externally-attached trip's *include in "trip_<32 hex>", so cavern echoes a
- * fully-qualified station as cave_<hex>.trip_<hex>.<tail> (external) or
- * cave_<hex>.<tail> (native). stationRegex() decodes the cave half back into a
- * (QUuid, station) pair. The names are never user-visible: the friendly-name
- * exporter operates on the original snapshot before this rewrite.
+ * A cave becomes "*begin <caveLabel>" and an externally-attached trip becomes a
+ * nested "*begin <tripLabel>", so cavern echoes a fully-qualified station as
+ * <caveLabel>.<tripLabel>.<tail> (external) or <caveLabel>.<tail> (native).
+ * The labels are the cave's and trip's own names, folded to a legal cavern
+ * identifier - a survey named "Fisher Ridge" writes fisher_ridge, so the driver
+ * text on the CavernOutputPage and any .svx a user exports read the way
+ * hand-written Survex does.
  *
- * Every producer (the survex exporter, the worker encoder) and every consumer
+ * Labels are assigned per sibling set: cave labels are unique within a region,
+ * trip labels within their cave. Two names that sanitize to the same identifier
+ * are disambiguated by iteration order, so encode and decode reach the same
+ * assignment from the same ordered snapshot without carrying a map between
+ * them - which is what lets the worker thread decode what the exporter wrote.
+ *
+ * Every producer (the survex exporter, the line-plot driver) and every consumer
  * (splitLookupByCave, the cave-network mirror, the cwTrip solved-station
- * accessors, the geometry/label enumeration, cwScopeStationListModel) shares
- * these functions so the encode and decode sides can never drift.
+ * accessors, the geometry/label enumeration) shares these functions so the
+ * encode and decode sides can never drift.
  */
 namespace cwCavernNaming {
 
-//! "cave_<32 hex of QUuid::Id128>"
-CAVEWHERE_LIB_EXPORT QString caveName(const QUuid& caveId);
+/**
+ * One nameable scope: a cave among its region's caves, or a trip among the
+ * trips of its cave.
+ */
+struct ScopeEntry {
+    QUuid id;
+    QString name;
+};
 
-//! "trip_<32 hex of QUuid::Id128>"
-CAVEWHERE_LIB_EXPORT QString tripName(const QUuid& tripId);
+//! Folds a user-facing name into a legal, lowercase cavern survey identifier.
+CAVEWHERE_LIB_EXPORT QString sanitizeToCavernIdentifier(const QString& name);
 
-//! "cave_<hex>." — the cave-scope prefix a cave-local key carries in the region network.
-CAVEWHERE_LIB_EXPORT QString caveScopePrefix(const QUuid& caveId);
+//! A unique label per sibling, assigned in iteration order.
+CAVEWHERE_LIB_EXPORT QHash<QUuid, QString> scopeLabels(const QList<ScopeEntry>& siblings);
 
-//! "trip_<hex>." — the trip-scope prefix an externally-attached trip's cave-local keys carry.
-CAVEWHERE_LIB_EXPORT QString tripScopePrefix(const QUuid& tripId);
+//! The label \a id takes among \a siblings. Empty when \a id is not one of them.
+CAVEWHERE_LIB_EXPORT QString scopeLabel(const QUuid& id, const QList<ScopeEntry>& siblings);
 
-//! "cave_<hex>.trip_<hex>." — the full region-network prefix for an external trip's stations.
-CAVEWHERE_LIB_EXPORT QString fullScopePrefix(const QUuid& caveId, const QUuid& tripId);
+//! "<label>." — the prefix a name nested in \a id's scope carries. Empty when
+//! \a id is not among \a siblings.
+CAVEWHERE_LIB_EXPORT QString scopePrefix(const QUuid& id, const QList<ScopeEntry>& siblings);
 
-//! True when a cave-local station name still carries a trip scope (i.e. it came
-//! from an externally-attached trip rather than a native chunk).
-CAVEWHERE_LIB_EXPORT bool hasTripScope(const QString& caveLocalStation);
+//! The leading "<label>" of a scoped name, or empty when the name carries no
+//! scope at all. Only the first segment is returned: nested scopes and dotted
+//! tails stay in the remainder.
+CAVEWHERE_LIB_EXPORT QString scopeHeadOf(const QString& scopedName);
 
-//! Decodes a cavern-emitted "cave_<32 hex>.<station>" line into its (QUuid,
-//! station) parts (match capture 1 = hex, capture 2 = station tail).
-CAVEWHERE_LIB_EXPORT QRegularExpression stationRegex();
+//! \a scopedName with its leading scope removed, or \a scopedName unchanged
+//! when it carries none.
+CAVEWHERE_LIB_EXPORT QString removeScopeHead(const QString& scopedName);
+
+CAVEWHERE_LIB_EXPORT QList<ScopeEntry> scopeEntries(const QList<cwCaveData>& caves);
+CAVEWHERE_LIB_EXPORT QList<ScopeEntry> scopeEntries(const QList<cwTripData>& trips);
 
 }
 

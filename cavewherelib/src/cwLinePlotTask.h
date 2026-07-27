@@ -211,20 +211,6 @@ public:
     static QFuture<LinePlotResultData> run(Input input);
 
     /**
-     * Qualifies a user-facing station name with its trip scope for lookup
-     * against the solved cave data. An externally-attached trip's solved
-     * stations are keyed with the trip scope (trip_<hex>.<tail>) in both the
-     * cave-local position lookup and the cave survey network, while its
-     * note/scrap stations carry only the scope-relative tail — so any code
-     * that resolves a note station against solved positions must prepend this
-     * scope first. Returns stationName unchanged for a native trip (whose
-     * solved stations are unscoped) or a null trip.
-     */
-    static QString scopedStationName(const cwTrip* trip, const QString& stationName);
-
-
-
-    /**
      * @brief The StationCaveLookup class
      *
      * Stores a lookup for all the stations and scraps in a cave.  This will a station to multiple

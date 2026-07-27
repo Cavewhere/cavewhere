@@ -40,14 +40,16 @@ QString driverIncludePathFor(const QString& attachmentDir, const QString& entryF
 // A NativeCave station sits directly at cave scope — the native trip's
 // "*begin" is anonymous, adding no naming level — so the operand is the
 // bare tail. A Trip station carries its trip's scope prefix
-// (trip_<hex>. for an externally-attached trip, "<stationPrefix>." for a
+// ("<tripLabel>." for an externally-attached trip, "<stationPrefix>." for a
 // native-prefixed trip), matching how the trip loop names those stations.
 // Returns an empty string when a handle names a container that is not this
 // cave — a Trip handle whose trip is absent, or a NativeCave handle whose
 // containerId is another cave — so the caller can drop the malformed equate
 // rather than emit a name that silently mis-ties to a like-named local
 // station (the same membership check cwCave::validate performs).
-QString cwSurvexExporterCaveTask::equateOperand(const cwStationHandle& handle, const cwCaveData& cave)
+QString cwSurvexExporterCaveTask::equateOperand(const cwStationHandle& handle,
+                                                const cwCaveData& cave,
+                                                const QHash<QUuid, QString>& tripLabels)
 {
     switch (handle.scope()) {
     case cwStationHandle::NativeCave:
@@ -58,7 +60,7 @@ QString cwSurvexExporterCaveTask::equateOperand(const cwStationHandle& handle, c
     case cwStationHandle::Trip:
         for (const cwTripData& trip : cave.trips) {
             if (trip.id == handle.containerId()) {
-                return cwTrip::scopePrefix(trip) + handle.tail();
+                return cwTrip::scopePrefix(trip, tripLabels) + handle.tail();
             }
         }
         return QString();
@@ -97,7 +99,12 @@ bool cwSurvexExporterCaveTask::writeCave(QTextStream& stream, const cwCaveData& 
         return false;
     }
 
-    QString caveName = QString(cave.name).remove(" ");
+    // The region exporter decides this, because uniqueness spans the region; a
+    // single-cave export has no siblings, so its own sanitized name is right.
+    QString caveName = ExportOptions.caveLabels.value(cave.id);
+    if (caveName.isEmpty()) {
+        caveName = cwCavernNaming::sanitizeToCavernIdentifier(cave.name);
+    }
 
     stream << "*begin " << caveName << " ;" << cave.name << Qt::endl << Qt::endl;
 
@@ -126,18 +133,21 @@ bool cwSurvexExporterCaveTask::writeCave(QTextStream& stream, const cwCaveData& 
     //Haven't done anything
     TotalProgress = 0;
 
+    const QHash<QUuid, QString> tripLabels =
+        cwCavernNaming::scopeLabels(cwCavernNaming::scopeEntries(cave.trips));
+
     //Go throug all the trips and save them
     for(int i = 0; i < cave.trips.size(); i++) {
         const cwTripData& tripData = cave.trips.at(i);
 
         // Trip-level external attachment: wrap the *include in
-        // *begin trip_<uuid> / *end trip_<uuid> so the included file's
+        // *begin <tripLabel> / *end <tripLabel> so the included file's
         // own *begin / *end stay isolated from this cave's namespace
         // (master plan §6, "Native vs. external trip wrapping is
         // asymmetric — on purpose"). Stations from the included file
-        // resolve to cave_<uuid>.trip_<uuid>.<file-tail>.
+        // resolve to <caveLabel>.<tripLabel>.<file-tail>.
         if (!tripData.externalCenterline.isEmpty()) {
-            const QString tripLabel = cwCavernNaming::tripName(tripData.id);
+            const QString tripLabel = tripLabels.value(tripData.id);
             stream << "*begin " << tripLabel << " ; " << tripData.name << Qt::endl;
             // CaveWhere-resolved declination for files that carry none of
             // their own. Emitted before *include so it scopes over the
@@ -168,12 +178,12 @@ bool cwSurvexExporterCaveTask::writeCave(QTextStream& stream, const cwCaveData& 
     }
 
     // Cave-level ties emit here, after every native station and every
-    // *begin trip_<hex> sibling is declared, so both operands are in scope
+    // *begin <tripLabel> sibling is declared, so both operands are in scope
     // (master plan §C4). Cavern merges the tied stations to one position;
     // the decode side then keys both cave-local names to that shared point.
     writeEquates(stream, cave.equates,
-                 [&cave](const cwStationHandle& handle) {
-                     return equateOperand(handle, cave);
+                 [&cave, &tripLabels](const cwStationHandle& handle) {
+                     return equateOperand(handle, cave, tripLabels);
                  });
 
     stream << "*end " << caveName << " ; End of " << cave.name << Qt::endl;

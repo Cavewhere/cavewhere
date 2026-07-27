@@ -68,36 +68,22 @@ static QSizeF geometryBoundsSize(const cwGeometry& geometry)
 }
 
 // An externally attached trip's solved positions and changed-station keys are
-// scoped with the trip prefix ("trip_<hex>.simple.a1"), while a scrap's note
-// station carries only the scope-relative tail the station-list panel shows
-// ("simple.a1"). cwLinePlotTask::scopedStationName qualifies the tail so the
-// changed-station trigger (StationTripScrapLookup) matches it against the
-// scoped lookup keys; it no-ops for a native trip, whose keys are already
-// unscoped.
-TEST_CASE("scopedStationName qualifies external-trip stations and no-ops native ones",
-          "[cwLinePlotTask][Attach]") {
-    cwTrip nativeTrip;
-    CHECK(cwLinePlotTask::scopedStationName(&nativeTrip, QStringLiteral("a1"))
-          == QStringLiteral("a1"));
-    CHECK(cwLinePlotTask::scopedStationName(nullptr, QStringLiteral("a1"))
-          == QStringLiteral("a1"));
-
-    cwTrip externalTrip;
-    externalTrip.setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_simple.svx")));
-    CHECK(cwLinePlotTask::scopedStationName(&externalTrip, QStringLiteral("simple.a1"))
-          == cwCavernNaming::tripName(externalTrip.id()) + QStringLiteral(".simple.a1"));
-}
-
+// scoped with the trip prefix ("topo1.simple.a1"), while a scrap's note station
+// carries only the scope-relative tail the station-list panel shows
+// ("simple.a1"). cwTrip::scopePrefix() is what qualifies the tail, so the
+// changed-station trigger (StationTripScrapLookup) matches it against the scoped
+// lookup keys; a native trip is unscoped, and its keys already agree.
 TEST_CASE("A boundary-scoped external note station resolves against the cave lookup",
           "[cwTriangulateInData][Attach]") {
     cwTrip externalTrip;
+    externalTrip.setName(QStringLiteral("Topo 1"));
     externalTrip.setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_simple.svx")));
 
     // computeStations resolves a note station by exact key: a scoped name and a
-    // cave lookup keyed the same way anchor a solved point. scopedStationName
-    // produces that scoped form for an external trip.
+    // cave lookup keyed the same way anchor a solved point.
     const QString scopedName =
-        cwLinePlotTask::scopedStationName(&externalTrip, QStringLiteral("simple.a1"));
+        externalTrip.scopePrefix() + QStringLiteral("simple.a1");
+    REQUIRE(scopedName == QStringLiteral("topo_1.simple.a1"));
 
     cwNoteStation noteStation;
     noteStation.setName(scopedName);

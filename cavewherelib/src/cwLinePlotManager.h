@@ -106,7 +106,7 @@ public:
     // unstarted until the first line plot finishes.
     cwSurveyNetworkArtifact* surveyNetworkArtifact() const { return m_surveyNetworkArtifact; }
 
-    // Region-wide qualified survey network (cave_<uuid>.trip_<uuid>.<station>
+    // Region-wide qualified survey network ("<caveLabel>.<tripLabel>.<station>"
     // keys) parsed from cavern's .3d output on the most recent solve. Empty
     // until the first solve completes. Bind cwScopeStationListModel::network
     // to this.

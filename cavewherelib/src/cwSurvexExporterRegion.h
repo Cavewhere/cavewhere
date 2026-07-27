@@ -19,7 +19,7 @@
 /**
  * \brief Writes a survex (.svx) file for the entire caving region.
  *
- * Iterates the region's caves and emits a *begin/*end block per cave using
+ * Iterates the region's caves and emits a *begin / *end block per cave using
  * cwSurvexExporterCaveTask::writeCave under the hood. Pure compute on the
  * provided value-snapshot \a region; safe to call from any thread.
  */
@@ -55,16 +55,27 @@ public:
      * CaveWhere-resolved declination (degrees, east-positive) for
      * external trips whose file carries no declination of its own. The
      * exporter emits it as \c *calibrate \c DECLINATION inside the
-     * \c trip_<uuid> block before \c *include, where cavern applies it
+     * \c *begin block before \c *include, where cavern applies it
      * to the included legs. An absent key means the file owns
      * declination (or ownership is unknown) and nothing is emitted —
      * the file's own directive would override an injected value anyway
      * (cavern-verified, master plan §8.8 q7).
+     *
+     * \c caveLabels maps \c cwCave::id() to the survey label that cave's
+     * \c *begin block uses. Filled by \c exportRegion itself rather than by the
+     * caller: a cave label has to be unique across the whole region (see
+     * cwCavernNaming), which is a question only the region exporter can answer.
+     * A cave missing from the map falls back to its own sanitized name when a
+     * \c *begin block is written for it, which is correct for the single-cave
+     * exporter, where there are no siblings to collide with. A cross-cave
+     * \c *equate operand takes no such fallback — it drops the tie rather than
+     * name a scope whose uniqueness nothing established.
      */
     struct CAVEWHERE_LIB_EXPORT Options {
         QHash<QUuid, QString> caveAttachmentDirs;
         QHash<QUuid, QString> tripAttachmentDirs;
         QHash<QUuid, double> tripInjectedDeclinations;
+        QHash<QUuid, QString> caveLabels;
     };
 
     cwSurvexExporterRegion() = delete;

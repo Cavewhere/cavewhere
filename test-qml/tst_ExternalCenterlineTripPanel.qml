@@ -117,7 +117,7 @@ MainWindowTest {
             verify(fileLabel !== null, "attachedFileLabel must exist")
             tryCompare(fileLabel, "text", "survex_simple.svx")
 
-            // The real per-trip scope prefix (cave_<hex>.trip_<hex>.)
+            // The real per-trip scope prefix ("<caveLabel>.<tripLabel>.")
             // must select the solved stations.
             tryVerify(() => RootData.linePlotManager.lastSolveStationCount > 0,
                       10000, "the attach-chained solve publishes stations")
@@ -149,10 +149,13 @@ MainWindowTest {
             compare(stationClickSpyId.count, 1, "panel forwards the click")
             const clickedName = stationClickSpyId.signalArguments[0][0]
 
-            verify(clickedName.indexOf("cave_") === 0,
+            const scopePrefix =
+                RootData.externalCenterlineManager.scopePrefixForTrip(rootId.trip)
+            verify(scopePrefix.length > 0, "the attached trip has a scope prefix")
+            verify(clickedName.indexOf(scopePrefix) === 0,
                    "panel forwards the qualified name; got: " + clickedName)
-            verify(clickedName.indexOf(".trip_") > 0,
-                   "qualified name carries the trip segment; got: " + clickedName)
+            verify(clickedName.length > scopePrefix.length,
+                   "the qualified name carries a station after its scope; got: " + clickedName)
         }
 
         function test_reloadRerunsSolve() {

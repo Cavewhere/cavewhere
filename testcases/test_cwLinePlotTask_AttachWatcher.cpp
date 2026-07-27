@@ -125,7 +125,7 @@ TEST_CASE("Editing the in-project copy triggers a re-run that picks up the new s
     manager.setRegion(&region);
     manager.waitToFinish();
 
-    const QString tripPrefix = QStringLiteral("trip_%1").arg(attached->id().toString(QUuid::Id128));
+    const QString tripPrefix = tripScopeLabel(attached);
     const QString a3Key = tripPrefix + QStringLiteral(".simple.a3");
     const QString a4Key = tripPrefix + QStringLiteral(".simple.a4");
     REQUIRE(cave->stationPositionLookup().hasPosition(a3Key));
@@ -347,7 +347,7 @@ TEST_CASE("Live-link source edit flags the owner stale and never reconciles on i
     CHECK(manager.externalCenterlineManager()->staleSourceOwners().isEmpty());
 
     const QString tripPrefix =
-        QStringLiteral("trip_%1").arg(fixture->trip->id().toString(QUuid::Id128));
+        tripScopeLabel(fixture->trip);
     const QString a3Key = tripPrefix + QStringLiteral(".simple.a3");
     const QString a4Key = tripPrefix + QStringLiteral(".simple.a4");
     REQUIRE(fixture->cave->stationPositionLookup().hasPosition(a3Key));
@@ -415,7 +415,7 @@ TEST_CASE("updateFromSource lands the copy, re-solves, clears the flag, and mark
     REQUIRE_FALSE(fixture->project->modified());
 
     const QString tripPrefix =
-        QStringLiteral("trip_%1").arg(fixture->trip->id().toString(QUuid::Id128));
+        tripScopeLabel(fixture->trip);
     const QString a4Key = tripPrefix + QStringLiteral(".simple.a4");
     REQUIRE_FALSE(fixture->cave->stationPositionLookup().hasPosition(a4Key));
 

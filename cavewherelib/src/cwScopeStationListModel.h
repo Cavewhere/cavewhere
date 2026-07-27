@@ -38,7 +38,7 @@ class cwTrip;
  *
  *  - scopePrefix + network: the legacy path — list the network stations
  *    whose qualified name starts with scopePrefix (e.g.
- *    "cave_<uuid>.trip_<uuid>."), prefix-stripped. Used where only a
+ *    "<caveLabel>.<tripLabel>."), prefix-stripped. Used where only a
  *    prefix and a network are on hand (the external-centerline panel).
  *    An empty scopePrefix yields zero rows rather than every station.
  *

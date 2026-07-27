@@ -244,7 +244,7 @@ TEST_CASE("cwLinePlotLabelView registers per-trip station label keyword visibili
 // An externally-attached trip owns no cwSurveyChunk, so trip->uniqueStations()
 // is empty and the view produced no station labels — the line plot drew but its
 // stations were unlabeled. The labels must instead come from the solved cave
-// lookup (scope prefix trip_<uuid>.), named with the scope-relative tail that
+// lookup (scope prefix "<tripLabel>."), named with the scope-relative tail that
 // cwScopeStationListModel's panel shows.
 TEST_CASE("cwLinePlotLabelView shows station labels for an externally attached trip",
           "[cwLinePlotLabelView][Attach]")

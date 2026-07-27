@@ -28,10 +28,11 @@
  * containerId is always populated (option A in the plan):
  *   - NativeCave: containerId is the owning cave's id; the station is a bare
  *     native station (or a cave-level-externalCenterline station directly
- *     under cave_<hex>.).
+ *     under the cave scope).
  *   - Trip: containerId is the owning trip's id; covers both attached external
- *     trips (trip_<hex>.) and native-prefixed Scope trips (stationPrefix). The
- *     concrete prefix is rendered at emission time via cwTrip::scopePrefix().
+ *     trips (their own survey label) and native-prefixed Scope trips
+ *     (stationPrefix). The concrete prefix is rendered at emission time via
+ *     cwTrip::scopePrefix().
  */
 class CAVEWHERE_LIB_EXPORT cwStationHandle
 {

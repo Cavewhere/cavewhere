@@ -104,10 +104,18 @@ QQ.Item {
 
     ScopeStationListModel {
         id: scopeStationModelId
-        scopePrefix: root.trip !== null
+
+        network: root.linePlotManager.regionNetwork
+
+        //scopePrefixForTrip() is derived from the cave's and the trip's names,
+        //so a rename moves it — and a plain call would bind only to root.trip
+        //and hold the old prefix forever, filtering the re-solved network with a
+        //scope no station carries. Every rename re-solves, so the network is the
+        //pulse that says the prefix may have moved; naming it here is what makes
+        //this re-evaluate.
+        scopePrefix: root.trip !== null && scopeStationModelId.network !== null
                      ? root.externalCenterlineManager.scopePrefixForTrip(root.trip)
                      : ""
-        network: root.linePlotManager.regionNetwork
     }
 
     ColumnLayout {

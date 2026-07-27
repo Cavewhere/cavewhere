@@ -781,15 +781,24 @@ TEST_CASE("scopePrefixForTrip derives the driver's qualified-station prefix",
     auto fixture = makeSavedProject(QStringLiteral("manager-scope-prefix"));
     auto manager = managerOf(fixture.get());
 
+    // A native trip's stations sit at cave scope, so there is no qualified
+    // prefix to hand the station-list model — only an attached trip has one.
+    CHECK(manager->scopePrefixForTrip(fixture->trip).isEmpty());
+
+    fixture->trip->setExternalCenterline(
+        cwExternalCenterline(QStringLiteral("survex_simple.svx")));
+
     const QString prefix = manager->scopePrefixForTrip(fixture->trip);
-    CHECK(prefix == cwCavernNaming::caveName(fixture->cave->id())
+    // The cave and trip are the only ones in this project, so neither label
+    // needs a collision suffix and each is its name folded to an identifier.
+    CHECK(prefix == cwCavernNaming::sanitizeToCavernIdentifier(fixture->cave->name())
                     + QLatin1Char('.')
-                    + cwCavernNaming::tripName(fixture->trip->id())
+                    + cwCavernNaming::sanitizeToCavernIdentifier(fixture->trip->name())
                     + QLatin1Char('.'));
     // Shape contract independent of the helpers: what
-    // cwScopeStationListModel::scopePrefix expects.
-    CHECK(QRegularExpression(
-              QStringLiteral("^cave_[0-9a-f]{32}\\.trip_[0-9a-f]{32}\\.$"))
+    // cwScopeStationListModel::scopePrefix expects — two legal cavern
+    // identifiers, readable rather than hex.
+    CHECK(QRegularExpression(QStringLiteral("^[a-z0-9_]+\\.[a-z0-9_]+\\.$"))
               .match(prefix).hasMatch());
 
     CHECK(manager->scopePrefixForTrip(nullptr).isEmpty());

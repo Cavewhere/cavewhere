@@ -31,6 +31,7 @@
 // Qt includes
 #include <QElapsedTimer>
 #include <QHash>
+#include <QSet>
 #include <QTemporaryDir>
 #include <QRegularExpression>
 #include <QFileInfo>
@@ -39,35 +40,6 @@
 #include <QUuid>
 #include <QtGlobal>
 #include <cmath>
-
-namespace {
-
-// QUuid::fromString refuses the 32-hex-no-hyphens form even when wrapped in
-// braces; it requires either the dashed RFC-4122 layout (36 chars) or the
-// dashed-and-braced layout (38 chars). We emit the no-hyphen form via
-// QUuid::Id128 because it is what cavern's name syntax allows (cavern's
-// validCharactersRegex permits hex + underscore but not hyphens inside an
-// identifier prefix), so on the way back we re-insert hyphens at the
-// 8/4/4/4/12 boundaries before handing the string to QUuid.
-QString reinsertUuidHyphens(const QString& hex32)
-{
-    Q_ASSERT(hex32.size() == 32);
-    return hex32.mid(0, 8) + QLatin1Char('-')
-         + hex32.mid(8, 4) + QLatin1Char('-')
-         + hex32.mid(12, 4) + QLatin1Char('-')
-         + hex32.mid(16, 4) + QLatin1Char('-')
-         + hex32.mid(20, 12);
-}
-
-} // namespace
-
-QString cwLinePlotTask::scopedStationName(const cwTrip* trip, const QString& stationName)
-{
-    if (trip == nullptr || trip->externalCenterline().isEmpty()) {
-        return stationName;
-    }
-    return cwCavernNaming::tripName(trip->id()) + QLatin1Char('.') + stationName;
-}
 
 cwLinePlotTask::LinePlotCaveData::LinePlotCaveData() :
     DepthLengthChanged(false),
@@ -91,17 +63,22 @@ cwLinePlotTask::StationTripScrapLookup::StationTripScrapLookup(cwCave *cave)
 {
     // Keys are matched against the changed-station names reported by
     // setStationAsChanged, which are the cave-local lookup keys. For an
-    // externally-attached trip those retain the trip scope (trip_<hex>.<tail>)
-    // while chunk / note / scrap stations carry only the tail, so every key
-    // inserted here is scoped to match (a no-op for a native trip).
+    // externally-attached trip those retain the trip scope
+    // ("<tripLabel>.<tail>") while chunk / note / scrap stations carry only the
+    // tail, so every key inserted here is scoped to match (a no-op for a native
+    // trip). Resolved once per trip rather than per station: cwTrip::scopePrefix
+    // has to look at the trip's siblings to know its label.
     for(int tripIndex = 0; tripIndex < cave->tripCount(); tripIndex++) {
         cwTrip* trip = cave->trip(tripIndex);
         const QUuid tripId = trip->id();
         const bool external = !trip->externalCenterline().isEmpty();
+        //Native-prefixed (Scope) trips are deliberately left unscoped here:
+        //their stations come from chunks, which the exporter emits unprefixed.
+        const QString tripScope = external ? trip->scopePrefix() : QString();
 
         foreach(cwSurveyChunk* surveyChunk, trip->chunks()) {
             foreach(cwStation station, surveyChunk->stations()) {
-                MapStationToTrip.insert(scopedStationName(trip, station.name()).toUpper(), tripId);
+                MapStationToTrip.insert((tripScope + station.name()).toUpper(), tripId);
             }
         }
 
@@ -111,7 +88,7 @@ cwLinePlotTask::StationTripScrapLookup::StationTripScrapLookup(cwCave *cave)
                 const QUuid scrapId = scrap->id();
 
                 foreach(cwNoteStation noteStation, scrap->stations()) {
-                    MapStationToScrap.insert(scopedStationName(trip, noteStation.name()).toUpper(),
+                    MapStationToScrap.insert((tripScope + noteStation.name()).toUpper(),
                                              std::make_pair(tripId, scrapId));
                 }
             }
@@ -128,7 +105,7 @@ cwLinePlotTask::StationTripScrapLookup::StationTripScrapLookup(cwCave *cave)
                     continue;
                 }
                 foreach(const cwNoteLiDARStation& noteStation, lidarNote->stations()) {
-                    MapStationToTrip.insert(scopedStationName(trip, noteStation.name()).toUpper(), tripId);
+                    MapStationToTrip.insert((tripScope + noteStation.name()).toUpper(), tripId);
                 }
             }
         }
@@ -150,9 +127,9 @@ struct cwLinePlotTask::LinePlotWorker {
         }
 
         // Prepare working copy of region data
-        encodeCaveNames(InputData.regionData);
         Region.setData(InputData.regionData);
 
+        initializeCaveLabels();
         initializeCaveStationLookups();
 
         if (!checkForErrors(result)) {
@@ -213,7 +190,7 @@ private:
     cwLinePlotTask::Input InputData;
     cwCavingRegion Region;
     // All cave-keyed bookkeeping uses cwCave::id() rather than an integer
-    // position: the driver emits "cave_<uuid>" prefixes, so integer cave
+    // position: the driver scopes every station under its cave's label, so
     // indexes have no representation in the cavern output; UUIDs do. The
     // result likewise identifies changed caves/trips/scraps by id(), so the
     // worker never holds a pointer into the main-thread-owned objects.
@@ -223,19 +200,54 @@ private:
     // Built once in initializeCaveStationLookups() so the rest of the worker
     // can stay UUID-keyed.
     QHash<QUuid, cwCave*> InternalCaveByUuid;
+    // The survey label each cave's "*begin" carries, and its inverse. The
+    // exporter derives the same labels from the same ordered snapshot, so this
+    // is not a map handed across a boundary — it is the same pure function
+    // evaluated on both sides, which is what lets the decode below recover
+    // cwCave::id() from a name cavern echoed back.
+    QHash<QUuid, QString> CaveLabels;
+    QHash<QString, QUuid> CaveIdByLabel;
 
-    void encodeCaveNames(cwCavingRegionData& regionData)
+    void initializeCaveLabels()
     {
-        // Cave names are rewritten to cwCavernNaming::caveName(cave.id) so the
-        // exporter emits "*begin cave_<uuid>" and splitLookupByCave can
-        // recover cwCave::id() from the cavern station prefix. Caller
-        // contract: cave.id must be non-null - the manager satisfies this via
-        // cwCavingRegion::data(); synthetic callers (cwTripLinePlotTask)
-        // generate a UUID before building Input.
-        for (cwCaveData& cave : regionData.caves) {
+        // Caller contract: cave.id must be non-null - the manager satisfies
+        // this via cwCavingRegion::data(); synthetic callers
+        // (cwTripLinePlotTask) generate a UUID before building Input.
+        for (const cwCaveData& cave : std::as_const(InputData.regionData.caves)) {
             Q_ASSERT(!cave.id.isNull());
-            cave.name = cwCavernNaming::caveName(cave.id);
         }
+
+        CaveLabels = cwCavernNaming::scopeLabels(
+            cwCavernNaming::scopeEntries(InputData.regionData.caves));
+
+        CaveIdByLabel.reserve(CaveLabels.size());
+        for (auto iter = CaveLabels.constBegin(); iter != CaveLabels.constEnd(); ++iter) {
+            CaveIdByLabel.insert(iter.value(), iter.key());
+        }
+    }
+
+    // The labels of this cave's externally-attached trips, which are the only
+    // scopes the exporter opens inside a cave block. A native-prefixed (Scope)
+    // trip is deliberately absent: its stations come from chunks, which the
+    // exporter emits unscoped.
+    QSet<QString> externalTripLabelsFor(cwCave* cave) const
+    {
+        const QList<cwTrip*> trips = cave->trips();
+
+        QList<cwCavernNaming::ScopeEntry> entries;
+        entries.reserve(trips.size());
+        for (const cwTrip* trip : trips) {
+            entries.append({trip->id(), trip->name()});
+        }
+        const QHash<QUuid, QString> labels = cwCavernNaming::scopeLabels(entries);
+
+        QSet<QString> externalLabels;
+        for (const cwTrip* trip : trips) {
+            if (!trip->externalCenterline().isEmpty()) {
+                externalLabels.insert(labels.value(trip->id()));
+            }
+        }
+        return externalLabels;
     }
 
     void initializeCaveStationLookups()
@@ -254,9 +266,10 @@ private:
 
     bool exportSurvex(const QString& svxPath, cwLinePlotTask::LinePlotResultData& result)
     {
-        // The line-plot driver always emits InternalUuid-style cave names
-        // (encodeCaveNames already rewrote cave.name); the attachment-dir
-        // maps come straight from the Input the caller built.
+        // exportRegion assigns the cave labels itself, from the same ordered
+        // snapshot initializeCaveLabels() reads, which is what lets the decode
+        // below recover a cave from a name cavern echoed back. The
+        // attachment-dir maps come straight from the Input the caller built.
         cwSurvexExporterRegion::Options exportOptions;
         exportOptions.caveAttachmentDirs = InputData.caveAttachmentDirs;
         exportOptions.tripAttachmentDirs = InputData.tripAttachmentDirs;
@@ -395,11 +408,11 @@ private:
         }
     }
 
-    // Parses cavern-emitted prefixed station names of the form
-    //   "cave_<32-hex-uuid>.<station-name>"
+    // Parses cavern-emitted scoped station names of the form
+    //   "<caveLabel>.<station-name>"
     // back into a per-cave position lookup keyed by cwCave::id(). Stations
-    // whose prefix UUID is not present in the worker's known cave set are
-    // dropped (they would not match any cave in the region; this keeps
+    // whose leading scope is not one of this region's cave labels are dropped
+    // (they would not match any cave in the region; this keeps
     // splitLookupByCave robust against accidental orphan prefixes without
     // poisoning the whole result).
     QHash<QUuid, cwStationPositionLookup> splitLookupByCave(
@@ -409,11 +422,6 @@ private:
         // double-to-text rounding when comparing against the previous run.
         constexpr int kPositionPrecisionDigits = 3;
         const double positionFactor = std::pow(10.0, kPositionPrecisionDigits);
-
-        // Compiled once per splitLookupByCave call. cwCavernNaming::stationRegex()
-        // documents the contract and is what the [LinePlot][UuidPrefix] tests
-        // bind against.
-        const QRegularExpression regex = cwCavernNaming::stationRegex();
 
         QHash<QUuid, cwStationPositionLookup> caveStations;
         caveStations.reserve(InternalCaveByUuid.size());
@@ -431,29 +439,36 @@ private:
             position.setY(float(std::round(double(position.y()) * positionFactor) / positionFactor));
             position.setZ(float(std::round(double(position.z()) * positionFactor) / positionFactor));
 
-            const QRegularExpressionMatch match = regex.match(name);
-            if (!match.hasMatch()) {
-                qDebug() << "Couldn't match cavern station name:" << name << "This is a bug!" << LOCATION;
+            // Cave labels are lowercase by construction, but cavern echoes back
+            // whatever case the included file used for a nested scope, so match
+            // the leading scope case-insensitively.
+            const QString caveLabel = cwCavernNaming::scopeHeadOf(name).toLower();
+            if (caveLabel.isEmpty()) {
+                qDebug() << "Cavern station name carries no cave scope:" << name
+                         << "This is a bug!" << LOCATION;
                 continue;
             }
 
-            // QUuid::fromString requires hyphens; reinsertUuidHyphens turns
-            // the 32-hex capture back into the RFC-4122 dashed layout that
-            // QUuid::fromString accepts. The regex already restricted the
-            // capture to 32 hex chars so the parse never returns null for a
-            // matched name.
-            const QUuid caveId = QUuid::fromString(reinsertUuidHyphens(match.captured(1)));
-            if (caveId.isNull()) {
-                qDebug() << "Failed to parse cave UUID from cavern prefix:" << match.captured(1) << LOCATION;
-                return {};
+            const QUuid caveId = CaveIdByLabel.value(caveLabel);
+            if (caveId.isNull() || !InternalCaveByUuid.contains(caveId)) {
+                qDebug() << "Cavern emitted station with unknown cave scope:" << caveLabel << LOCATION;
+                continue;
             }
-            if (!InternalCaveByUuid.contains(caveId)) {
-                qDebug() << "Cavern emitted station with unknown cave UUID:" << caveId << LOCATION;
+
+            //Walls' empty-name quirk can put a bare "<caveLabel>." (or one with
+            //only spaces after the separator) in the .3d, and neither
+            //setPosition nor cwStation::canonicalKey trims, so an unguarded tail
+            //would pollute the lookup with a blank key that no chunk station can
+            //ever match.
+            const QString tail = cwCavernNaming::removeScopeHead(name);
+            if (tail.trimmed().isEmpty()) {
+                qDebug() << "Cavern station name has no station under its cave scope:"
+                         << name << LOCATION;
                 continue;
             }
 
             cwStationPositionLookup& lookup = caveStations[caveId];
-            lookup.setPosition(match.captured(2), position);
+            lookup.setPosition(tail, position);
         }
 
         return caveStations;
@@ -577,10 +592,10 @@ private:
     {
         // The solved region network carries every scope's topology, including
         // externally-attached trips that own no cwSurveyChunk. Keyed
-        // cave_<hex>.<tail> (native) and cave_<hex>.trip_<hex>.<tail> (external).
+        // "<caveLabel>.<tail>" (native) and "<caveLabel>.<tripLabel>.<tail>" (external).
         const cwSurveyNetwork regionNetwork = result.regionNetwork();
 
-        auto createNetwork = [&regionNetwork](cwCave* cave) {
+        auto createNetwork = [&regionNetwork, this](cwCave* cave) {
             cwSurveyNetwork network;
 
             for (cwTrip* trip : cave->trips()) {
@@ -595,17 +610,24 @@ private:
             // An externally-attached trip owns no chunk, so the loop above adds
             // none of its adjacency. Its solved topology exists only in the
             // region network; copy each edge that touches a trip scope into the
-            // cave network under the cave-local scope (trip_<hex>.<tail>, the
+            // cave network under the cave-local scope ("<tripLabel>.<tail>", the
             // same keying splitLookupByCave gives the position lookup) so the
             // note-editing sites can resolve external neighbors. Native-to-native
             // edges are left to the chunk loop above.
-            const QString cavePrefix = cwCavernNaming::caveScopePrefix(cave->id());
+            //
+            // Which names are external is a membership question, not a spelling
+            // one: a trip label is an ordinary survey name, so nothing about
+            // "topo1.a1" marks it as scoped except that this cave has a trip
+            // labeled topo1.
+            const QString cavePrefix = CaveLabels.value(cave->id()) + QLatin1Char('.');
+            const QSet<QString> externalTripLabels = externalTripLabelsFor(cave);
+
             for (const QString& scopedStation : regionNetwork.stations()) {
                 if (!scopedStation.startsWith(cavePrefix)) {
                     continue;
                 }
                 const QString caveLocalStation = scopedStation.mid(cavePrefix.size());
-                if (!cwCavernNaming::hasTripScope(caveLocalStation)) {
+                if (!externalTripLabels.contains(cwCavernNaming::scopeHeadOf(caveLocalStation))) {
                     continue; //native station, already covered by the chunk loop
                 }
                 for (const QString& scopedNeighbor : regionNetwork.neighbors(scopedStation)) {

@@ -78,7 +78,7 @@ cwSurvex3DFileReader::NetworkAndLookup cwSurvex3DFileReader::readNetworkAndLooku
     // is never a name character. Processing any Walls (.srv) or Compass (.dat)
     // data in the run — which a region solve may include alongside native
     // survex caves — marks '.' as a name character and ':' as a separator, so
-    // cavern emits ':'-joined labels like "cave_<hex>:trip_<hex>:1".
+    // cavern emits ':'-joined labels like "fisher_ridge:topo1:1".
     // cwCavernNaming and every decode consumer assume '.', so normalise the
     // actual separator to '.' at the one point labels enter CaveWhere. The
     // chosen separator is guaranteed never to occur inside a name, so this

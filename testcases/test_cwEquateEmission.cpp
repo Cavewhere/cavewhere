@@ -14,10 +14,10 @@
 // stations to one coordinate, which is the payoff: a native station and an
 // externally-attached station drawn coincident.
 //
-// A cwCavingRegion equate renders at region scope, after both *begin cave_<hex>
-// siblings close, with fully-qualified operands ("cave_<hex>." prepended to the
-// same cave-relative rendering). A cross-cave tie draws stations in two
-// different caves coincident across the cave boundary.
+// A cwCavingRegion equate renders at region scope, after both caves' *begin
+// siblings close, with fully-qualified operands (the owning cave's own label
+// prepended to the same cave-relative rendering). A cross-cave tie draws
+// stations in two different caves coincident across the cave boundary.
 
 // Catch
 #include <catch2/catch_approx.hpp>
@@ -87,19 +87,38 @@ cwStationHandle tripHandle(const cwTrip* trip, const QString& tail)
 
 QString tripScopePrefix(const cwTrip* trip)
 {
-    return cwCavernNaming::tripScopePrefix(trip->id());
+    return trip->scopePrefix();
 }
 
-// Runs the driver export the worker would run (cave name rewritten to
-// cave_<hex> via encodeCaveNames) and returns the emitted .svx text.
+QList<cwCavernNaming::ScopeEntry> caveEntries(const cwCavingRegion& region)
+{
+    QList<cwCavernNaming::ScopeEntry> entries;
+    const QList<cwCave*> caves = region.caves();
+    entries.reserve(caves.size());
+    for (const cwCave* cave : caves) {
+        entries.append({cave->id(), cave->name()});
+    }
+    return entries;
+}
+
+//! The survey label this cave's *begin block carries, as the exporter derives it
+QString caveLabel(const cwCavingRegion& region, const cwCave* cave)
+{
+    return cwCavernNaming::scopeLabel(cave->id(), caveEntries(region));
+}
+
+QString caveScopePrefix(const cwCavingRegion& region, const cwCave* cave)
+{
+    return caveLabel(region, cave) + QLatin1Char('.');
+}
+
+// Runs the driver export the worker would run and returns the emitted .svx text.
 QString driverTextFor(const cwCavingRegion& region,
-                      const cwCave* cave,
                       const cwSurvexExporterRegion::Options& options,
                       const QString& outputPath)
 {
-    cwCavingRegionData snapshot = region.data();
+    const cwCavingRegionData snapshot = region.data();
     REQUIRE(snapshot.caves.size() == 1);
-    snapshot.caves[0].name = cwCavernNaming::caveName(cave->id());
 
     const auto result = cwSurvexExporterRegion::exportRegion(snapshot, outputPath, options);
     REQUIRE_FALSE(result.hasError());
@@ -109,17 +128,13 @@ QString driverTextFor(const cwCavingRegion& region,
     return QString::fromUtf8(file.readAll());
 }
 
-// The region driver the worker would run: every cave name rewritten to
-// cave_<hex> (encodeCaveNames), so region-scope operands are fully qualified.
-// Returns the emitted .svx text.
+// The region driver the worker would run, whose region-scope operands are
+// qualified with each cave's own label. Returns the emitted .svx text.
 QString regionDriverText(const cwCavingRegion& region,
                          const cwSurvexExporterRegion::Options& options,
                          const QString& outputPath)
 {
-    cwCavingRegionData snapshot = region.data();
-    for (cwCaveData& cave : snapshot.caves) {
-        cave.name = cwCavernNaming::caveName(cave.id);
-    }
+    const cwCavingRegionData snapshot = region.data();
 
     const auto result = cwSurvexExporterRegion::exportRegion(snapshot, outputPath, options);
     REQUIRE_FALSE(result.hasError());
@@ -160,7 +175,7 @@ TEST_CASE("Cave equate emits a bare *equate line at cave scope", "[Equate][Emiss
     options.tripAttachmentDirs.insert(attached->id(), attachDir);
 
     const QString driverPath = QDir(tempRoot.path()).absoluteFilePath(QStringLiteral("driver.svx"));
-    const QString driver = driverTextFor(region, cave, options, driverPath);
+    const QString driver = driverTextFor(region, options, driverPath);
 
     const QString crossScopeLine =
         QStringLiteral("*equate 1 %1simple.a1").arg(tripScopePrefix(attached));
@@ -171,8 +186,9 @@ TEST_CASE("Cave equate emits a bare *equate line at cave scope", "[Equate][Emiss
     // The ties must sit inside the cave block: after the trip wrapper that
     // declares the external stations, before the cave's *end. Otherwise a
     // cave-relative operand names a station that is out of scope.
-    const QString caveEnd = QStringLiteral("*end %1").arg(cwCavernNaming::caveName(cave->id()));
-    const int tripBeginIndex = driver.indexOf(QStringLiteral("*begin trip_"));
+    const QString caveEnd = QStringLiteral("*end %1").arg(caveLabel(region, cave));
+    const int tripBeginIndex =
+        driver.indexOf(QStringLiteral("*begin ") + tripScopeLabel(attached));
     const int equateIndex = driver.indexOf(QStringLiteral("*equate"));
     const int caveEndIndex = driver.indexOf(caveEnd);
     REQUIRE(tripBeginIndex >= 0);
@@ -209,7 +225,7 @@ TEST_CASE("Structurally invalid or out-of-cave equates emit nothing", "[Equate][
 
     cwSurvexExporterRegion::Options options;
     const QString driverPath = QDir(tempRoot.path()).absoluteFilePath(QStringLiteral("driver.svx"));
-    const QString driver = driverTextFor(region, cave, options, driverPath);
+    const QString driver = driverTextFor(region, options, driverPath);
 
     CHECK_FALSE(driver.contains(QStringLiteral("*equate")));
 }
@@ -285,7 +301,7 @@ TEST_CASE("A region equate emits a fully-qualified *equate at region scope",
 
     // A cross-cave tie: Alpha's native "2" == Beta's native "y". Neither cave
     // knows the other's namespace, so each operand must carry its own
-    // cave_<hex>. qualifier for the region-scope *equate to resolve it.
+    // cave-label qualifier for the region-scope *equate to resolve it.
     region.equates()->appendEquate(cwEquate({nativeHandle(caveA, QStringLiteral("2")),
                                              nativeHandle(caveB, QStringLiteral("y"))}));
 
@@ -295,14 +311,14 @@ TEST_CASE("A region equate emits a fully-qualified *equate at region scope",
 
     const QString equateLine =
         QStringLiteral("*equate ")
-        + cwCavernNaming::caveScopePrefix(caveA->id()) + QStringLiteral("2 ")
-        + cwCavernNaming::caveScopePrefix(caveB->id()) + QStringLiteral("y");
+        + caveScopePrefix(region, caveA) + QStringLiteral("2 ")
+        + caveScopePrefix(region, caveB) + QStringLiteral("y");
     CHECK(driver.contains(equateLine));
 
     // The tie must sit at region scope: after BOTH cave blocks close (so both
     // qualified operands are declared) and before the region's outer *end.
-    const QString caveAEnd = QStringLiteral("*end %1").arg(cwCavernNaming::caveName(caveA->id()));
-    const QString caveBEnd = QStringLiteral("*end %1").arg(cwCavernNaming::caveName(caveB->id()));
+    const QString caveAEnd = QStringLiteral("*end %1").arg(caveLabel(region, caveA));
+    const QString caveBEnd = QStringLiteral("*end %1").arg(caveLabel(region, caveB));
     const int caveAEndIndex = driver.indexOf(caveAEnd);
     const int caveBEndIndex = driver.indexOf(caveBEnd);
     const int equateIndex = driver.indexOf(QStringLiteral("*equate"));
@@ -400,9 +416,9 @@ TEST_CASE("A region equate ties three caves' stations coincident in one line",
     // reordered operand would fail here even if the solve still converged.
     const QString equateLine =
         QStringLiteral("*equate ")
-        + cwCavernNaming::caveScopePrefix(caveA->id()) + QStringLiteral("2 ")
-        + cwCavernNaming::caveScopePrefix(caveB->id()) + QStringLiteral("y ")
-        + cwCavernNaming::caveScopePrefix(caveC->id()) + QStringLiteral("q");
+        + caveScopePrefix(region, caveA) + QStringLiteral("2 ")
+        + caveScopePrefix(region, caveB) + QStringLiteral("y ")
+        + caveScopePrefix(region, caveC) + QStringLiteral("q");
     CHECK(manager.driverSource().contains(equateLine));
 
     // Each qualified operand decodes back into its own cave's lookup, all three

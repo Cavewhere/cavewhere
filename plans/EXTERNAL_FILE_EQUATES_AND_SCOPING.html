@@ -76,6 +76,16 @@
 
 <h2 id="findings">1. Investigation findings (the current reality)</h2>
 
+<p class="note">
+  <strong>Written 2026-07-22; a historical snapshot, not current code.</strong>
+  Fork&nbsp;A (2026-07-26) deleted several APIs named present-tense below &mdash;
+  <code>cwLinePlotTask::scopedStationName</code>,
+  <code>encodeCaveNames</code>, <code>cwCavernNaming::caveName</code>/
+  <code>tripName</code>/<code>caveScopePrefix</code>/<code>tripScopePrefix</code>/
+  <code>stationRegex</code>, <code>hasTripScope</code>. Read this section for the
+  <em>problem</em> it establishes, not for the call sites.
+</p>
+
 <h3>1.1 The four tie-in directions today</h3>
 
 <p>
@@ -255,28 +265,58 @@
 <table>
   <tr><th>Trip kind</th><th>Scope prefix</th><th>Source</th></tr>
   <tr><td>Native (flat)</td><td><code></code> (empty)</td><td>&mdash;</td></tr>
-  <tr><td>External (trip attach)</td><td><code>trip_&lt;hex&gt;.</code></td>
-    <td><code>externalCenterline</code></td></tr>
+  <tr><td>External (trip attach)</td><td><code>&lt;tripLabel&gt;.</code></td>
+    <td>the trip's <code>name</code>, pooled for uniqueness against
+      <em>its cave's other trips</em>; <code>externalCenterline</code> only
+      selects that this rule applies</td></tr>
   <tr><td>Scope trip (Phase 3 cave attach) / native prefixed</td>
     <td><code>&lt;stationPrefix&gt;.</code></td>
     <td><code>stationPrefix</code></td></tr>
 </table>
 
-<pre><code>QString cwTrip::scopePrefix() const {
-    if (!externalCenterline().isEmpty()) return cwCavernNaming::tripScopePrefix(id()); // "trip_&lt;hex&gt;."
-    if (!m_stationPrefix.isEmpty())      return m_stationPrefix + QLatin1Char('.');     // "A."
-    return QString();                                                                   // flat native
+<p class="note">
+  <strong>Updated 2026-07-26 (Fork&nbsp;A).</strong> The sketch below was written
+  when a label was <code>trip_&lt;hex&gt;</code> &mdash; a pure function of an
+  immutable <code>QUuid</code>. It is now derived from the trip's <em>name</em>
+  and de-duplicated against its siblings, which changes the shape of the
+  accessor: it needs the sibling set, and <code>isScoped()</code> deliberately no
+  longer routes through it.
+</p>
+
+<pre><code>// As shipped. The pooled-label overload is where the policy actually lives;
+// the other two entry points feed it a label and share the branch.
+QString cwTrip::scopePrefix(const cwTripData&amp; data, const QHash&lt;QUuid, QString&gt;&amp; tripLabels) {
+    if (!data.externalCenterline.isEmpty()) {
+        const QString label = tripLabels.value(data.id);      // cwCavernNaming::scopeLabels
+        return label.isEmpty() ? QString() : label + '.';     // "topo_1." / "topo_1_2."
+    }
+    if (!data.stationPrefix.isEmpty()) return data.stationPrefix + '.';  // "A."
+    return QString();                                                     // flat native
 }
-bool cwTrip::isScoped() const { return !scopePrefix().isEmpty(); }</code></pre>
+
+// NOT !scopePrefix().isEmpty(): scopePrefix() has to walk the cave's trips to
+// pool the labels, and this is read from QML bindings. Same two fields decide it.
+bool cwTrip::isScoped() const { return !m_externalCenterline.isEmpty() || !m_stationPrefix.isEmpty(); }</code></pre>
+
+<p class="note">
+  <strong>Consequence for every future commit here:</strong> a label is only
+  unique <em>within a cave</em>, and producing one costs the whole sibling set.
+  Anything asking per trip inside a loop over a cave's trips is quadratic &mdash;
+  pool once with <code>cwCavernNaming::scopeLabels</code> and pass the map
+  (<code>cwSurvexExporterCaveTask::writeCave</code> and
+  <code>cwLinePlotGeometry</code> both do). And because the label depends on a
+  <em>mutable name</em>, deriving it in two places is no longer safe by
+  construction &mdash; see "Label ownership" under Fork&nbsp;A.
+</p>
 
 <p>
   The three <code>cwTrip</code> accessors
   (<code>solvedStationPositions</code>/<code>solvedNetwork</code>/
-  <code>solvedStations</code>, <code>cwTrip.cpp:406&ndash;503</code>) currently
-  branch on <code>m_externalCenterline.isEmpty()</code> and strip
-  <code>tripScopePrefix(id())</code>. They switch to branching on
-  <code>isScoped()</code> and stripping <code>scopePrefix()</code> &mdash; the
-  strip logic is <em>already there</em>, just generalised. This subsumes Phase 2
+  <code>solvedStations</code>, <code>cwTrip.cpp:406&ndash;503</code>) originally
+  branched on <code>m_externalCenterline.isEmpty()</code> and stripped
+  <code>tripScopePrefix(id())</code>. They now branch on
+  <code>isScoped()</code> and strip <code>scopePrefix()</code> &mdash; the
+  strip logic was <em>already there</em>, just generalised. This subsumes Phase 2
   &sect;15 <strong>R2</strong> ("shared <code>externallyBacked</code>
   predicate") and <strong>A1</strong> ("uniform external-station accessor"):
   both C++ (<code>cwLinePlotGeometry.cpp</code>,
@@ -741,6 +781,137 @@ bool cwTrip::isScoped() const { return !scopePrefix().isEmpty(); }</code></pre>
   join).
 </p>
 <p class="note">
+  <strong>Fork&nbsp;A &mdash; BUILT 2026-07-26, GREEN, not committed.</strong>
+  C++ 1684/1686 (the two known pre-existing <code>[Issue505]</code> BVH failures);
+  QML 835 passed / 0 failed / 83 skipped, identical to the pre-change baseline.
+  Implemented as described below, with three decisions the spike had left open or
+  got wrong:
+</p>
+<ul>
+  <li><strong>The <code>cave_</code>/<code>trip_</code> prefixes are gone, not
+    kept.</strong> This section showed the slug both ways
+    (<code>fisher_ridge.a1</code> in one place,
+    <code>cave_fisher_ridge.trip_topo1.0</code> in another). The bare form won:
+    the prefixes only ever existed to make the <em>hex</em> unambiguous, and once
+    the label is a real name they are CaveWhere internals leaking into a format
+    that already expresses nesting. A driver now reads
+    <code>*begin fisher_ridge</code> / <code>*begin topo1</code> &mdash; ordinary
+    Survex. Decode does not need them either: it is an exact lookup against the
+    labels this region generated, not a pattern match.</li>
+  <li><strong>One label everywhere, so <code>encodeCaveNames</code> is
+    deleted.</strong> With no prefix, the cave label <em>is</em> the cave name
+    sanitized, so there was no reason left for the driver and the user-facing
+    export to use different policies. <code>cwSurvexExporterRegion</code> assigns
+    the labels once per run (uniqueness is a region-wide property) and passes
+    them through <code>Options::caveLabels</code>; <code>writeCave</code> and the
+    region equate operands both read that map, which is what actually fixes the
+    bug below &mdash; the operand can no longer name a scope the file never
+    opened. The worker rebuilds the same assignment from the same ordered
+    snapshot to decode. Consequence, accepted: a user-facing export now writes
+    <code>*begin fisher_ridge</code> where it wrote <code>*begin FisherRidge</code>.
+    That is a fix, not churn &mdash; the old label was <code>cave.name</code> with
+    spaces stripped, so a cave named <code>Sistema Cheve &mdash; Sur</code> or
+    anything containing a <code>.</code> emitted a name that was illegal or
+    mis-scoped.</li>
+  <li><strong>Cavern does <em>not</em> forbid hyphens.</strong> The claim below
+    (&ldquo;the very reason hex was chosen&rdquo;) is wrong:
+    <code>survex/src/commands.c:201</code> sets
+    <code>t['-'] |= SPECIAL_NAMES</code> (&ldquo;Added in 0.97 prerelease
+    4&rdquo;). Sanitizing is still required &mdash; for spaces, and above all for
+    <code>.</code>, which would open a survey level nobody asked for &mdash; so
+    the design is unchanged, but the stated justification was not real.</li>
+</ul>
+<p class="note">
+  <strong>New coupling this creates.</strong> The solve output now depends on
+  cave and trip <em>names</em>, which it never did under hex.
+  <code>cwLinePlotManager</code> already re-solves on cave and trip
+  <code>nameChanged</code> (<code>cwLinePlotManager.cpp:108</code>,
+  <code>:112</code>), so that half was free. The half that was not:
+  <code>cwTrip::scopePrefix</code> is a <code>Q_PROPERTY</code> notified by
+  <code>scopeChanged</code>, and a rename now moves it &mdash; so
+  <code>NameCommand::redo/undo</code> emit <code>scopeChanged</code>, and
+  <code>setId</code> no longer does (an id no longer has anything to do with a
+  scope).
+</p>
+
+<h3>Label ownership and invalidation (from the 2026-07-26 pre-commit review)</h3>
+<p>
+  The deeper version of that coupling, and the thing to design before
+  Commit&nbsp;6 and Commit&nbsp;8 add consumers. Under hex a label was a pure
+  function of an <em>immutable</em> <code>QUuid</code>, so "derive it wherever you
+  need it" was correct by construction, and six sites adopted that habit:
+  <code>cwSurvexExporterRegion.cpp</code>, <code>cwSurvexExporterCaveTask.cpp</code>
+  (&times;2), <code>cwLinePlotTask.cpp</code>, <code>cwLinePlotGeometry.cpp</code>,
+  <code>cwTrip.cpp</code>, <code>cwExternalCenterlineManager.cpp</code>. Fork&nbsp;A
+  makes a label a function of <em>(mutable display name &times; mutable sibling
+  set &times; iteration order)</em>. The habit is no longer safe.
+</p>
+<p>
+  Three consequences were found; the first two are fixed, the third is open:
+</p>
+<ul>
+  <li><strong>Fixed.</strong> <code>ExternalCenterlineTripPanel.qml</code> bound
+    <code>scopePrefixForTrip(trip)</code> with <code>trip</code> as its only
+    declared dependency, so a rename left it filtering the re-solved network on a
+    dead prefix and the station list silently emptied. It now names the network
+    &mdash; every rename re-solves, so that is the pulse that says the prefix may
+    have moved. <em>Any future binding on a scope label needs the same care;</em>
+    a <code>Q_INVOKABLE</code> returning a name-derived value has no NOTIFY of its
+    own.</li>
+  <li><strong>Fixed.</strong> The trip label had four independent derivations
+    where the cave label had one. <code>cwTrip::scopePrefix(data, tripLabels)</code>
+    is now the single policy, and <code>writeCave</code>, the cave and region
+    equate operands, and the geometry pass all pass it a pool computed once per
+    cave (this also removed an O(trips&sup2;) per solve and an
+    O(equates&nbsp;&times;&nbsp;handles&nbsp;&times;&nbsp;trips) per export).</li>
+  <li><strong>Open.</strong> <code>scopeChanged</code> fires for a trip's
+    <em>own</em> rename but cannot fire when a <em>sibling</em> is renamed, added,
+    or removed &mdash; which is exactly what moves this trip's collision suffix.
+    No signal exists that could carry it; it needs a change signal on the cave's
+    trip list. Latent today (nothing consumes <code>scopeChanged</code>), and the
+    header now says so rather than promising exhaustiveness. <strong>Commit&nbsp;6's
+    tie-in editor is the first likely consumer &mdash; close this before it binds
+    a scope label.</strong></li>
+</ul>
+<p>
+  The shape worth considering when it is time: a <code>cwScopeLabels</code> value
+  type (cave map + per-cave trip maps) built once from a
+  <code>cwCavingRegionData</code> and <em>received</em> by the exporter, the
+  worker, the geometry pass and both equate renderers instead of re-derived, plus
+  a region-owned cache on the live side with one <code>scopeLabelsChanged()</code>
+  that <code>cwTrip::scopePrefix</code>'s NOTIFY chains to. Blast radius ~7 source
+  files, one QML binding, ~6 test files. Deliberately not done inside Fork&nbsp;A:
+  Commit&nbsp;6's suggester and Commit&nbsp;8's dotted names both add consumers,
+  and the type should be designed with their requirements visible.
+</p>
+
+<h3>Layering: cwCavernNaming stopped being UUID-only</h3>
+<p>
+  <code>cwCavernNaming.h</code> now includes <code>cwCaveData.h</code> and
+  <code>cwTripData.h</code> purely to serve the two <code>scopeEntries</code>
+  adapters, which drags <code>cwEquate</code>,
+  <code>cwStationPositionLookup</code>, <code>cwSurveyChunkData</code>, the three
+  note models, <code>cwFixStation</code>, <code>cwTeamData</code> and
+  <code>cwTripCalibration</code> into every TU that wants a string function.
+  <strong>This reverses a decision recorded in the C5 review</strong> &mdash; the
+  operand renderer was kept out of <code>cwCavernNaming</code> precisely because
+  "that namespace is deliberately UUID-only, and the renderer needs
+  <code>cwCaveData</code>/<code>cwTripData</code>/<code>cwTrip::scopePrefix</code>,
+  which the naming grammar must not depend on". Either drop the adapters (callers
+  build <code>QList&lt;ScopeEntry&gt;</code> &mdash; a four-line loop, or take a
+  projection) and keep the boundary, or retire the C5 rationale deliberately.
+  Small either way (2 files + ~4 call sites); flagged so it is a decision rather
+  than a drift.
+</p>
+<p class="note">
+  <strong>Also settled here:</strong> <code>cwExternalCenterlineManager::scopePrefixForTrip</code>
+  now returns empty for a trip that is not scoped. It used to hand back
+  <code>cave_&lt;hex&gt;.trip_&lt;hex&gt;.</code> for any trip at all, including a
+  plain native one &mdash; a prefix naming a scope the driver never opened. The
+  fixture in <code>test_cwExternalCenterlineAttach.cpp</code> was asserting that
+  behaviour, so it was attaching nothing and checking the shape of a lie.
+</p>
+<p class="note">
   <strong>Scope-label spike (A vs B) &mdash; RESOLVED 2026-07-22: Fork&nbsp;A.</strong>
   A stored human-readable slug replaces <code>cave_&lt;hex&gt;</code>/<code>trip_&lt;hex&gt;</code>
   in <em>both</em> emission and decode (<code>fisher_ridge.a1</code>). Proven with
@@ -779,9 +950,41 @@ bool cwTrip::isScoped() const { return !scopePrefix().isEmpty(); }</code></pre>
   equates resolve only in the solve driver (where begins were hex-rewritten), not
   in the shared <code>.svx</code>. Fork&nbsp;A fixes this as a side effect by
   slugging begins <em>and</em> operands consistently.
+  <strong>FIXED 2026-07-26</strong> &mdash; and structurally, not by matching two
+  derivations: <code>writeCave</code> and <code>qualifiedOperand</code> now read
+  the same <code>Options::caveLabels</code> entry, so there is only one label to
+  get right.
+</p>
+<p class="note">
+  <strong>Still open elsewhere (review 2026-07-26):</strong>
+  <code>cwSurvexExporterRule::writeCave</code>
+  (<code>cwSurvexExporterRule.cpp:88</code>) is untouched by Fork&nbsp;A and
+  still derives its cave label as <code>cave.name</code> with spaces removed
+  &mdash; so <code>Sistema Cheve &mdash; Sur</code>, or any name containing a
+  <code>.</code>, emits a label that is illegal or opens a survey level nobody
+  asked for. No production caller today
+  (<code>cwSurveyExportManager</code> uses the region exporter and the cave
+  task), but the rule pipeline is the intended successor and would ship the bug
+  on day one. Fixing it means regenerating the committed expected-output
+  fixtures (<code>PhakeCave3000_expected.svx</code> and siblings). See
+  <code>[[project_artifacts_experimental]]</code> &mdash; the pipeline is
+  experimental, so this is a "before it goes live" item, not a now item.
 </p>
 <p>
   <strong>Fork&nbsp;A implementation shape (all proven in the PoC):</strong>
+</p>
+<p class="note">
+  <strong>Sketch, superseded by what shipped 2026-07-26.</strong> The reasoning
+  below held; several API names did not. There is no <code>SlugRegistry</code>
+  type and no <code>uuidFor()</code> &mdash; the registry is a pure function,
+  <code>cwCavernNaming::scopeLabels(QList&lt;ScopeEntry&gt;)&nbsp;&rarr;&nbsp;QHash&lt;QUuid,QString&gt;</code>,
+  with <code>scopeLabel</code>/<code>scopePrefix</code> single-id conveniences
+  over it. The decode splits with
+  <code>scopeHeadOf()</code>/<code>removeScopeHead()</code> against a locally
+  built label&nbsp;&rarr;&nbsp;id inverse. There is no <code>cave_</code>/<code>trip_</code>
+  prepend, so the "reserved names are neutralised" sentence is moot. And the
+  touch-site list names <code>caveName</code>, <code>tripName</code>,
+  <code>stationRegex</code> and <code>encodeCaveNames</code>, all deleted.
 </p>
 <ul>
   <li><code>sanitizeToCavernIdentifier(name)</code> in <code>cwCavernNaming</code>:
@@ -1093,8 +1296,9 @@ bool cwTrip::isScoped() const { return !scopePrefix().isEmpty(); }</code></pre>
   <code>defaultKeyHandling</code> dereferenced a null field, and
   <code>commitChanges</code> read the committed text after closing the editor
   &mdash; the latter <em>only in the no-validator branch</em>; the validator branch
-  still emits <code>finishedEditting</code> before closing, so the two disagree on
-  ordering (open follow-up).
+  still emitted <code>finishedEditting</code> before closing, so the two disagreed
+  on ordering (closed by <a href="#host-contract">Host owns the editing
+  contract</a>: both branches now capture, close, then emit).
   Fixed in pre-commit review: the error box was painted <em>under</em> anything a
   subclass adds (the completer dropdown shares its band, and station fields do set
   validators), so it now carries a <code>z</code>;
@@ -1281,8 +1485,37 @@ bool cwTrip::isScoped() const { return !scopePrefix().isEmpty(); }</code></pre>
   <code>A.1</code>) and can group by the common prefix. Nearly free, no solve
   change, no migration hazard, and it supports the real
   <code>myprefix1.1</code> caves immediately. Safety check: dots decode cleanly
-  (<code>stationRegex</code> capture 2 is <code>\S.*</code>; native has no
-  <code>trip_&lt;hex&gt;.</code> to confuse them with).
+  (the decode side splits only the leading cave scope and hands the rest through
+  untouched).
+</p>
+<p class="note">
+  <strong>Hazard Fork&nbsp;A hands to this commit.</strong> A trip label is now an
+  ordinary survey name, so nothing about <code>topo1.a1</code> marks it as scoped
+  except that its cave has a trip labelled <code>topo1</code> &mdash; which is why
+  the cave-network mirror in <code>cwLinePlotTask</code> tests <em>membership</em>
+  in the cave's external-trip labels rather than a string prefix
+  (<code>hasTripScope</code> is gone). That test is exact today because native
+  station names cannot contain <code>.</code>. The moment this commit lets them,
+  a native station literally named <code>topo1.a1</code> in a cave that also has a
+  trip labelled <code>topo1</code> is undecidable from the string alone. Decide
+  what wins before widening the grammar.
+</p>
+<p class="note">
+  <strong>Case asymmetry in the same pair of sites (review 2026-07-26).</strong>
+  The two places that split a decoded name disagree on case:
+  <code>splitLookupByCave</code> folds the scope head
+  (<code>scopeHeadOf(name).toLower()</code>, <code>cwLinePlotTask.cpp:444</code>)
+  with a comment justifying it as defence against cavern echoing a different
+  case; the cave-network membership test does <em>not</em> fold
+  (<code>cwLinePlotTask.cpp:617</code>), comparing a raw head against a set of
+  always-lowercase sanitized labels. Both cannot be right. Today cavern's default
+  is <code>*case lower</code> and both labels come back lowercase, so neither can
+  miss &mdash; but if the <code>:444</code> guard is ever warranted, the
+  <code>:617</code> mismatch silently drops every external-trip edge from the
+  cave network, with no diagnostic. Settle it with the rest of the case policy in
+  Commit&nbsp;9's landmine below (this diff took the count from four sites to
+  five); the question is whether a <code>*case preserve</code> path can reach a
+  label <em>CaveWhere itself</em> wrote, not just an included file's own names.
 </p>
 
 <h3 id="c9">Commit 9 &mdash; Native prefixing, Path B (declared <code>stationPrefix</code>)</h3>
@@ -1310,14 +1543,36 @@ bool cwTrip::isScoped() const { return !scopePrefix().isEmpty(); }</code></pre>
   match case-folded), but the worker-thread geometry strip in
   <code>emitNetworkScopeGeometry</code> (<code>cwLinePlotGeometry.cpp:82</code>,
   <code>station.startsWith(scopePrefix)</code>) is still <em>case-sensitive</em>.
-  Invisible today because external scopes are lowercase hex; the moment a native
-  <code>stationPrefix</code> like <code>"A"</code> goes live here, the geometry
-  path matches <code>cave_&lt;hex&gt;.A.</code> against canonically-lowercased
-  network keys and silently emits <strong>no</strong> segments for that trip.
+  Invisible today because external scopes are lowercase (hex originally, and
+  sanitized labels since Fork&nbsp;A, so this hazard did not widen); the moment a
+  native <code>stationPrefix</code> like <code>"A"</code> goes live here, the
+  geometry path matches <code>&lt;caveLabel&gt;.A.</code> against
+  canonically-lowercased network keys and silently emits <strong>no</strong>
+  segments for that trip.
   Before this commit relies on <code>stationPrefix</code>, unify the strip/match
   onto one shared <code>stripScope()</code>/<code>matchesScope()</code> helper
-  (review item R2) so all four sites &mdash; the three accessors and the
-  geometry path &mdash; share one case policy.
+  (review item R2) so all sites share one case policy. <strong>Updated
+  2026-07-26: there are now five, not four</strong> &mdash; the three accessors,
+  the geometry path, and the two decode sites in <code>cwLinePlotTask</code>
+  that already disagree with each other (see Commit&nbsp;8's case-asymmetry
+  note). Fold that pair into the same helper.
+</p>
+<p class="note">
+  <strong>New collision class this commit creates (review 2026-07-26).</strong>
+  <code>cwCavernNaming::scopeLabels</code> pools an external trip's
+  name-derived label against its <em>siblings' names</em>, but a native-prefixed
+  trip's <code>stationPrefix</code> goes through
+  <code>cwTrip::scopePrefix</code> verbatim and never enters that pool. So a cave
+  holding an external trip named <code>"A"</code> and a Scope trip with
+  <code>stationPrefix&nbsp;=&nbsp;"A"</code> opens two different scopes that both
+  resolve to <code>a.</code>, and cavern merges the included file's top-level
+  <code>a1</code> with the native <code>a.a1</code> &mdash; a silent false equate
+  that shifts the solve. <code>trip_&lt;hex&gt;</code> could never equal a
+  user-typed prefix, so this is newly reachable, and it is reachable
+  <em>here</em>: the <code>stationPrefix</code> emission path does not exist yet
+  (<code>cwSurveyExportManager.cpp:349</code> defers it to Phase&nbsp;3). Decide
+  the policy when wiring it &mdash; the obvious one is to put declared prefixes
+  into the same uniqueness pool as derived labels.
 </p>
 
 <h2 id="two-homes">5. Cave-owned vs region-owned equates</h2>
@@ -1340,8 +1595,9 @@ bool cwTrip::isScoped() const { return !scopePrefix().isEmpty(); }</code></pre>
   <tr><td>Emitted by</td>
     <td><code>cwSurvexExporterCaveTask</code>, inside
       <code>*begin cave</code>, cave-relative operands (commit&nbsp;4)</td>
-    <td><code>cwSurvexExporterRegion</code>, region scope,
-      <code>cave_&lt;hex&gt;.</code>-qualified operands (commit&nbsp;5)</td></tr>
+    <td><code>cwSurvexExporterRegion</code>, region scope, operands qualified
+      with the cave's own <code>*begin</code> label from
+      <code>Options::caveLabels</code> (commit&nbsp;5; Fork&nbsp;A)</td></tr>
   <tr><td>Travels with</td>
     <td>the cave (part of its definition)</td>
     <td>the region</td></tr>

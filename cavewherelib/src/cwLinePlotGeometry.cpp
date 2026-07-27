@@ -46,9 +46,9 @@ struct ScopeExtent {
 // Emit line segments for an external-centerline scope (a trip or cave attached
 // to an external file), whose shot topology lives only in the solved survey
 // network. `scopePrefix` selects the scope's stations from the region-wide
-// network (e.g. "cave_<hex>.trip_<hex>."); coordinates are resolved through the
-// cave-local position lookup — network keys carry the "cave_<hex>." prefix that
-// the lookup strips, so `cavePrefix` bridges the two.
+// network (e.g. "fisher_ridge.topo1."); coordinates are resolved through the
+// cave-local position lookup — network keys carry the "fisher_ridge." cave
+// prefix that the lookup strips, so `cavePrefix` bridges the two.
 ScopeExtent emitNetworkScopeGeometry(const cwSurveyNetwork& network,
                                      const QString& cavePrefix,
                                      const QString& scopePrefix,
@@ -128,15 +128,24 @@ cwLinePlotGeometry::generate(const cwCavingRegionData& region,
     const int caveCount = region.caves.size();
     result.cavesLengthAndDepths.resize(caveCount);
 
+    // The same labels the exporter wrote, rebuilt from the same ordered
+    // snapshot rather than carried across the boundary (see cwCavernNaming).
+    const QHash<QUuid, QString> caveLabels =
+        cwCavernNaming::scopeLabels(cwCavernNaming::scopeEntries(region.caves));
+
     for (int caveIndex = 0; caveIndex < caveCount; caveIndex++) {
         const cwCaveData& cave = region.caves.at(caveIndex);
         const QHash<QString, QVector3D> stationPositions = caveStationPositions(cave);
 
-        // Network keys are region-wide ("cave_<hex>.trip_<hex>.<tail>"); the
+        // Network keys are region-wide ("fisher_ridge.topo1.<tail>"); the
         // cave-local lookup strips this cave prefix, so external scopes bridge
-        // through it. cave.name has already been rewritten to cave_<hex> by the
-        // worker, so cwCavernNaming::caveScopePrefix(cave.id) reproduces it.
-        const QString cavePrefix = cwCavernNaming::caveScopePrefix(cave.id);
+        // through it.
+        const QString cavePrefix = caveLabels.value(cave.id) + QLatin1Char('.');
+
+        // Pooled once for the cave: a trip label is unique among its siblings,
+        // so asking per trip would re-pool the whole cave on every iteration.
+        const QHash<QUuid, QString> tripLabels =
+            cwCavernNaming::scopeLabels(cwCavernNaming::scopeEntries(cave.trips));
 
         double minDepth = std::numeric_limits<double>::max();
         double maxDepth = -std::numeric_limits<double>::max();
@@ -164,7 +173,7 @@ cwLinePlotGeometry::generate(const cwCavingRegionData& region,
             // A scoped trip (externally-attached) has no chunk topology of its
             // own; its shots live only in the solved network. Emit those segments
             // and skip the chunk walk entirely.
-            const QString tripScope = cwTrip::scopePrefix(trip);
+            const QString tripScope = cwTrip::scopePrefix(trip, tripLabels);
             if (!tripScope.isEmpty()) {
                 const QString scopePrefix = cavePrefix + tripScope;
                 const ScopeExtent extent = emitNetworkScopeGeometry(

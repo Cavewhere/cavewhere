@@ -192,11 +192,11 @@ cwLinePlotTask::Input buildLinePlotInput(const QString &tripName,
     tripData.chunks = chunks;
 
     cwCaveData caveData;
-    caveData.name = QStringLiteral("sketch-trip"); // worker will re-encode
-    // cwLinePlotTask hashes per-cave bookkeeping by cwCaveData::id (the same
-    // UUID surfaces in the cavern station prefix). Synthetic input built here
-    // doesn't have a stable cave identity, but the id must be non-null so
-    // encodeCaveNames can stamp it into the cavern name. Generate once here.
+    caveData.name = QStringLiteral("sketch-trip");
+    // cwLinePlotTask hashes per-cave bookkeeping by cwCaveData::id, and the
+    // exporter labels the cave's *begin block from cwCaveData::name. Synthetic
+    // input built here doesn't have a stable cave identity, but the id must be
+    // non-null for that bookkeeping to key. Generate once here.
     caveData.id = QUuid::createUuid();
     caveData.trips.append(tripData);
 

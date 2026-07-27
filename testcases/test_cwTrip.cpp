@@ -4,7 +4,7 @@
 //Our includes
 #include "cwTrip.h"
 #include "cwCave.h"
-#include "cwCavernNaming.h"
+#include "cwCavingRegion.h"
 #include "cwExternalCenterline.h"
 #include "cwKeywordModel.h"
 #include "cwKeyword.h"
@@ -44,9 +44,10 @@ TEST_CASE("cwTrip::scopePrefix unifies the three trip kinds", "[cwTrip][scope]")
         CHECK_FALSE(trip.isScoped());
     }
 
-    SECTION("an externally-attached trip scopes to trip_<hex>.") {
+    SECTION("an externally-attached trip scopes to its own survey label") {
+        trip.setName(QStringLiteral("Topo 1"));
         trip.setExternalCenterline(cwExternalCenterline(QStringLiteral("/tmp/cave.svx")));
-        CHECK(trip.scopePrefix() == cwCavernNaming::tripScopePrefix(trip.id()));
+        CHECK(trip.scopePrefix() == QStringLiteral("topo_1."));
         CHECK(trip.isScoped());
     }
 
@@ -57,10 +58,37 @@ TEST_CASE("cwTrip::scopePrefix unifies the three trip kinds", "[cwTrip][scope]")
     }
 
     SECTION("external centerline wins over a station prefix") {
+        trip.setName(QStringLiteral("Topo 1"));
         trip.setStationPrefix(QStringLiteral("A"));
         trip.setExternalCenterline(cwExternalCenterline(QStringLiteral("/tmp/cave.svx")));
-        CHECK(trip.scopePrefix() == cwCavernNaming::tripScopePrefix(trip.id()));
+        CHECK(trip.scopePrefix() == QStringLiteral("topo_1."));
     }
+}
+
+TEST_CASE("Two like-named external trips in one cave get different scopes",
+          "[cwTrip][scope]")
+{
+    // A trip's label is only unique among its cave's trips, so the accessor has
+    // to look at its siblings. Two trips sharing a scope would put both files'
+    // stations in one survey and tie every same-named station together.
+    cwCavingRegion region;
+    cwCave* cave = new cwCave();
+    cave->setName(QStringLiteral("Fisher Ridge"));
+    region.addCave(cave);
+
+    auto addExternalTrip = [cave](const QString& name) {
+        cwTrip* trip = new cwTrip();
+        trip->setName(name);
+        cave->addTrip(trip);
+        trip->setExternalCenterline(cwExternalCenterline(QStringLiteral("/tmp/cave.svx")));
+        return trip;
+    };
+
+    cwTrip* first = addExternalTrip(QStringLiteral("Topo 1"));
+    cwTrip* second = addExternalTrip(QStringLiteral("Topo-1"));
+
+    CHECK(first->scopePrefix() == QStringLiteral("topo_1."));
+    CHECK(second->scopePrefix() == QStringLiteral("topo_1_2."));
 }
 
 TEST_CASE("cwTrip scope changes emit stationPrefixChanged and scopeChanged", "[cwTrip][scope]")
@@ -82,6 +110,11 @@ TEST_CASE("cwTrip scope changes emit stationPrefixChanged and scopeChanged", "[c
     trip.setExternalCenterline(cwExternalCenterline(QStringLiteral("/tmp/cave.svx")));
     CHECK(prefixSpy.count() == 1);
     CHECK(scopeSpy.count() == 2);
+
+    // An external trip's scope is its own survey label, so a rename moves it.
+    trip.setName(QStringLiteral("Topo 1"));
+    CHECK(trip.scopePrefix() == QStringLiteral("topo_1."));
+    CHECK(scopeSpy.count() == 3);
 }
 
 TEST_CASE("cwTrip solved-* accessors strip a native station prefix", "[cwTrip][scope]")

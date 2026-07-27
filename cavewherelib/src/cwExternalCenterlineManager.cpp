@@ -705,9 +705,28 @@ QFuture<Monad::ResultBase> cwExternalCenterlineManager::detachCenterline(cwTrip*
 
 QString cwExternalCenterlineManager::scopePrefixForTrip(cwTrip* trip) const
 {
-    if (trip == nullptr || trip->parentCave() == nullptr) {
+    cwCave* cave = (trip == nullptr) ? nullptr : trip->parentCave();
+    if (cave == nullptr) {
         return QString();
     }
-    return cwCavernNaming::fullScopePrefix(trip->parentCave()->id(), trip->id());
+
+    const QString tripPrefix = trip->scopePrefix();
+    if (tripPrefix.isEmpty()) {
+        return QString();
+    }
+
+    cwCavingRegion* region = cave->parentRegion();
+    if (region == nullptr) {
+        return QString();
+    }
+
+    QList<cwCavernNaming::ScopeEntry> caveEntries;
+    const QList<cwCave*> caves = region->caves();
+    caveEntries.reserve(caves.size());
+    for (const cwCave* sibling : caves) {
+        caveEntries.append({sibling->id(), sibling->name()});
+    }
+
+    return cwCavernNaming::scopePrefix(cave->id(), caveEntries) + tripPrefix;
 }
 

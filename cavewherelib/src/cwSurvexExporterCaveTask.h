@@ -42,8 +42,14 @@ public:
     // container that is not this cave (a Trip whose trip is absent, or a
     // NativeCave whose containerId is another cave), so the caller can drop
     // the malformed tie. Shared with the region exporter, which prepends
-    // "cave_<hex>." to qualify the same operand across caves.
-    static QString equateOperand(const cwStationHandle& handle, const cwCaveData& cave);
+    // the owning cave's own label to qualify the same operand across caves.
+    //
+    // `tripLabels` must be the pool writeCave opened its "*begin" blocks from
+    // (cwCavernNaming::scopeLabels over cave.trips) — an operand deriving its
+    // own answer could name a scope the file never opened.
+    static QString equateOperand(const cwStationHandle& handle,
+                                 const cwCaveData& cave,
+                                 const QHash<QUuid, QString>& tripLabels);
 
     // Emit one "*equate <a> <b> ..." line from pre-rendered operands. An empty
     // operand (an unresolvable handle) drops the whole tie; operands are

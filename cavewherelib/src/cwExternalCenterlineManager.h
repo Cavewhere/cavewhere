@@ -202,7 +202,7 @@ public:
     }
 
     // The qualified-station prefix the line-plot driver gives an
-    // attached trip's stations ("cave_<32hex>.trip_<32hex>."), for
+    // attached trip's stations ("<caveLabel>.<tripLabel>."), for
     // cwScopeStationListModel::scopePrefix. Empty for a null trip or a
     // trip without a parent cave.
     Q_INVOKABLE QString scopePrefixForTrip(cwTrip* trip) const;

@@ -55,6 +55,19 @@
 
 namespace {
 
+//! The survey label an externally-attached trip's *begin block carries, which is
+//! also the scope its solved stations are keyed under in the cave lookup.
+QString tripScopeLabel(const cwTrip* trip)
+{
+    QString prefix = trip->scopePrefix();
+    //An unscoped trip has no label, and chop() would quietly hand back "" —
+    //which turns every '*begin ' + label assertion into a match on the cave's
+    //own block instead of failing.
+    REQUIRE_FALSE(prefix.isEmpty());
+    prefix.chop(1); //the trailing '.'
+    return prefix;
+}
+
 QString fixturePath(const QString& name)
 {
     return testcasesDatasetSourcePath(QStringLiteral("external-centerlines/%1").arg(name));
@@ -157,12 +170,8 @@ TEST_CASE("Driver *include emits absolute forward-slash quoted path for trip att
     cwSurvexExporterRegion::Options options;
     options.tripAttachmentDirs.insert(attached->id(), attachDir);
 
-    // Worker rewrites the cave name to cave_<uuid> via encodeCaveNames
-    // before calling exportRegion; mirror that here so the driver
-    // content assertion reflects the production line-plot path.
-    cwCavingRegionData snapshot = region.data();
+    const cwCavingRegionData snapshot = region.data();
     REQUIRE(snapshot.caves.size() == 1);
-    snapshot.caves[0].name = cwCavernNaming::caveName(cave->id());
 
     const QString driverPath = QDir(tempRoot.path()).absoluteFilePath(QStringLiteral("driver.svx"));
     const auto result = cwSurvexExporterRegion::exportRegion(snapshot, driverPath, options);
@@ -172,9 +181,8 @@ TEST_CASE("Driver *include emits absolute forward-slash quoted path for trip att
     REQUIRE(file.open(QFile::ReadOnly));
     const QString driver = QString::fromUtf8(file.readAll());
 
-    // The trip wrapper uses trip_<uuid> with QUuid::Id128 layout
-    // (32 lower-case hex, no hyphens, no braces).
-    const QString tripLabel = QStringLiteral("trip_%1").arg(attached->id().toString(QUuid::Id128));
+    // The trip wrapper opens a survey named for the trip itself.
+    const QString tripLabel = tripScopeLabel(attached);
     CHECK(driver.contains(QStringLiteral("*begin %1").arg(tripLabel)));
     CHECK(driver.contains(QStringLiteral("*end %1").arg(tripLabel)));
 
@@ -191,7 +199,7 @@ TEST_CASE("Driver *include emits absolute forward-slash quoted path for trip att
     CHECK_FALSE(driver.contains(QStringLiteral("*include \"") + QString(expectedAbs).replace('/', '\\')));
 }
 
-TEST_CASE("Trip-attached centerline resolves stations under cave_<uuid>.trip_<uuid>.*",
+TEST_CASE("Trip-attached centerline resolves stations under <caveLabel>.<tripLabel>.*",
           "[Attach][Trip]")
 {
     QTemporaryDir tempRoot;
@@ -216,9 +224,9 @@ TEST_CASE("Trip-attached centerline resolves stations under cave_<uuid>.trip_<uu
 
     // survex_simple.svx defines *begin Simple with stations a1, a2, a3.
     // After cavern's tolower default and our prefix wrapping, the
-    // lookup keys are "trip_<uuid>.simple.a1" etc.
+    // lookup keys are "<tripLabel>.simple.a1" etc.
     const cwStationPositionLookup& lookup = cave->stationPositionLookup();
-    const QString tripPrefix = QStringLiteral("trip_%1").arg(attached->id().toString(QUuid::Id128));
+    const QString tripPrefix = tripScopeLabel(attached);
 
     const QStringList expectedTails = {QStringLiteral("simple.a1"),
                                        QStringLiteral("simple.a2"),
@@ -228,6 +236,72 @@ TEST_CASE("Trip-attached centerline resolves stations under cave_<uuid>.trip_<uu
         INFO("expected key: " << key.toStdString());
         CHECK(lookup.hasPosition(key));
     }
+}
+
+TEST_CASE("Two trips whose names sanitize alike keep separate scopes end to end",
+          "[Attach][Trip]")
+{
+    // The trip analogue of the two-cave collision gate in test_cwCavernNaming:
+    // "Topo 1" and "Topo-1" fold to the same identifier, so one of them must
+    // take a collision suffix. This is the case that actually holds the
+    // emitter and the decoder to one assignment — the exporter's "*begin"
+    // pool, the operand renderer, the geometry pass and the worker's cave
+    // network each derive the trip label, and a disagreement between any two
+    // of them lands these stations in the wrong scope or in none.
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    const QString attachDir = seedAttachment(tempSubdir(tempRoot, QStringLiteral("collide-attach")),
+                                             fixturePath(QStringLiteral("survex_simple.svx")));
+
+    cwCavingRegion region;
+    cwCave* cave = addEmptyCave(region, QStringLiteral("Alpha"));
+    cwTrip* first = addEmptyTrip(cave, QStringLiteral("Topo 1"));
+    first->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_simple.svx")));
+    cwTrip* second = addEmptyTrip(cave, QStringLiteral("Topo-1"));
+    second->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_simple.svx")));
+
+    const QString firstLabel = tripScopeLabel(first);
+    const QString secondLabel = tripScopeLabel(second);
+    REQUIRE(firstLabel != secondLabel);
+
+    cwLinePlotManager manager;
+    QHash<QUuid, QString> tripDirs;
+    tripDirs.insert(first->id(), attachDir);
+    tripDirs.insert(second->id(), attachDir);
+    manager.externalCenterlineManager()->setTripAttachmentDirs(tripDirs);
+    manager.setRegion(&region);
+    manager.waitToFinish();
+
+    REQUIRE_FALSE(manager.hasSolveError());
+
+    // Both trips include the same file, so both carry a "simple.a1". They must
+    // land under their own labels; if the two derivations disagreed, one set
+    // would be missing entirely rather than merely misplaced.
+    const cwStationPositionLookup& lookup = cave->stationPositionLookup();
+    for (const QString& label : {firstLabel, secondLabel}) {
+        for (const QString& tail : {QStringLiteral("simple.a1"),
+                                    QStringLiteral("simple.a3")}) {
+            const QString key = label + QStringLiteral(".") + tail;
+            INFO("expected key: " << key.toStdString());
+            CHECK(lookup.hasPosition(key));
+        }
+    }
+
+    // And the solved-station accessor agrees with the emitted scope: each trip
+    // strips its own label, so both resolve their own tail rather than one of
+    // them coming back empty.
+    const auto hasSolvedTail = [](const cwTrip* trip, const QString& tail) {
+        const QList<QPair<QString, QVector3D>> stations = trip->solvedStations();
+        for (const auto& station : stations) {
+            if (station.first == tail) {
+                return true;
+            }
+        }
+        return false;
+    };
+    CHECK(hasSolvedTail(first, QStringLiteral("simple.a1")));
+    CHECK(hasSolvedTail(second, QStringLiteral("simple.a1")));
 }
 
 TEST_CASE("Trip-attached centerline emits renderable line geometry",
@@ -261,7 +335,7 @@ TEST_CASE("Trip-attached centerline emits renderable line geometry",
     // The external stations solved and reached the cave lookup — this half
     // works today (it is why the trip's station-list panel populates).
     const cwStationPositionLookup& lookup = cave->stationPositionLookup();
-    const QString tripPrefix = QStringLiteral("trip_%1").arg(attached->id().toString(QUuid::Id128));
+    const QString tripPrefix = tripScopeLabel(attached);
     const QString a1Key = tripPrefix + QStringLiteral(".simple.a1");
     const QString a2Key = tripPrefix + QStringLiteral(".simple.a2");
     const QString a3Key = tripPrefix + QStringLiteral(".simple.a3");
@@ -296,7 +370,7 @@ TEST_CASE("Trip-attached centerline emits renderable line geometry",
 // anchored to an external station by its scope-stripped panel name ("simple.a1").
 // After a solve the manager announces the scrap as changed so cwScrapManager
 // remorphs it. The changed-scrap set keys on the scoped station name
-// ("TRIP_<HEX>.SIMPLE.A1", via cwLinePlotTask::scopedStationName), which is the
+// ("TOPO_1.SIMPLE.A1", via cwTrip::scopePrefix), which is the
 // name cavern reports for the solved position — so the scrap is flagged.
 TEST_CASE("Externally attached scrap is flagged for remorph after a solve",
           "[Attach][Scrap]")
@@ -391,7 +465,7 @@ TEST_CASE("Externally attached trip with a LiDAR note is flagged after a solve",
     CHECK(changedTrips.contains(attached));
 }
 
-TEST_CASE("Cave-attached centerline skips trip loop and resolves under cave_<uuid>.*",
+TEST_CASE("Cave-attached centerline skips trip loop and resolves under <caveLabel>.*",
           "[Attach][Cave]")
 {
     QTemporaryDir tempRoot;
@@ -421,7 +495,7 @@ TEST_CASE("Cave-attached centerline skips trip loop and resolves under cave_<uui
     REQUIRE_FALSE(manager.hasSolveError());
 
     const cwStationPositionLookup& lookup = cave->stationPositionLookup();
-    // cave-level attachment unwraps directly inside cave_<uuid>, so the
+    // cave-level attachment unwraps directly inside the cave scope, so the
     // lookup keys reflect the file's own *begin nesting:
     //   nested.entrance.e1 / e2 (from entrance.svx)
     //   nested.entrance.passage.p2 / p3 (from passage.svx, which joins
@@ -468,13 +542,13 @@ TEST_CASE("Mixed cave: native trip and attached trip both resolve",
     REQUIRE_FALSE(manager.hasSolveError());
 
     const cwStationPositionLookup& lookup = cave->stationPositionLookup();
-    // Native trip stations come from cave_<uuid>.N1 / N2 (cavern lowercases)
+    // Native trip stations come from "<caveLabel>.N1" / N2 (cavern lowercases)
     // and the lookup strips the cave prefix.
     CHECK(lookup.hasPosition(QStringLiteral("n1")));
     CHECK(lookup.hasPosition(QStringLiteral("n2")));
 
-    // Attached trip stations come through the trip_<uuid>.simple.* prefix.
-    const QString tripPrefix = QStringLiteral("trip_%1").arg(attached->id().toString(QUuid::Id128));
+    // Attached trip stations come through the "<tripLabel>.simple.*" prefix.
+    const QString tripPrefix = tripScopeLabel(attached);
     CHECK(lookup.hasPosition(tripPrefix + QStringLiteral(".simple.a1")));
     CHECK(lookup.hasPosition(tripPrefix + QStringLiteral(".simple.a3")));
 }
@@ -561,9 +635,8 @@ TEST_CASE("Driver emits injected declination inside the trip block before *inclu
     cwTrip* attached = addEmptyTrip(cave, QStringLiteral("Attached"));
     attached->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_no_metadata.svx")));
 
-    cwCavingRegionData snapshot = region.data();
+    const cwCavingRegionData snapshot = region.data();
     REQUIRE(snapshot.caves.size() == 1);
-    snapshot.caves[0].name = cwCavernNaming::caveName(cave->id());
 
     cwSurvexExporterRegion::Options options;
     options.tripAttachmentDirs.insert(attached->id(), attachDir);
@@ -580,7 +653,7 @@ TEST_CASE("Driver emits injected declination inside the trip block before *inclu
 
     // Stored +5.5 east-positive comes out with survex's negated calibrate
     // convention, same as native trips.
-    const QString tripLabel = QStringLiteral("trip_%1").arg(attached->id().toString(QUuid::Id128));
+    const QString tripLabel = tripScopeLabel(attached);
     const qsizetype beginIndex = driver.indexOf(QStringLiteral("*begin %1").arg(tripLabel));
     const qsizetype declinationIndex = driver.indexOf(QStringLiteral("*calibrate DECLINATION -5.50"));
     const qsizetype includeIndex = driver.indexOf(QStringLiteral("*include"));
@@ -636,7 +709,7 @@ TEST_CASE("Injected manual declination rotates externally attached stations",
     // fixed at the origin. Declination +90 east swings the true bearing
     // to 90°, so B2 lands 10 m east instead of 10 m north.
     const cwStationPositionLookup& lookup = cave->stationPositionLookup();
-    const QString tripPrefix = QStringLiteral("trip_%1").arg(attached->id().toString(QUuid::Id128));
+    const QString tripPrefix = tripScopeLabel(attached);
     const QString b2Key = tripPrefix + QStringLiteral(".nometadata.b2");
     REQUIRE(lookup.hasPosition(b2Key));
     const QVector3D b2 = lookup.position(b2Key);
@@ -684,7 +757,7 @@ TEST_CASE("Project-side scan flag wins over a diverged live-link source",
 
     // Injection applied → B2 swings east, exactly as in the undiverged case.
     const cwStationPositionLookup& lookup = cave->stationPositionLookup();
-    const QString tripPrefix = QStringLiteral("trip_%1").arg(attached->id().toString(QUuid::Id128));
+    const QString tripPrefix = tripScopeLabel(attached);
     const QString b2Key = tripPrefix + QStringLiteral(".nometadata.b2");
     REQUIRE(lookup.hasPosition(b2Key));
     const QVector3D b2 = lookup.position(b2Key);
@@ -728,7 +801,7 @@ TEST_CASE("File-owned declination wins over the trip's CaveWhere setting",
     // x = 10·sin(-7.2°), y = 10·cos(-7.2°). The trip's 90° sentinel must
     // leave no trace.
     const cwStationPositionLookup& lookup = cave->stationPositionLookup();
-    const QString tripPrefix = QStringLiteral("trip_%1").arg(attached->id().toString(QUuid::Id128));
+    const QString tripPrefix = tripScopeLabel(attached);
     const QString a2Key = tripPrefix + QStringLiteral(".withmetadata.a2");
     REQUIRE(lookup.hasPosition(a2Key));
     const QVector3D a2 = lookup.position(a2Key);
@@ -738,7 +811,7 @@ TEST_CASE("File-owned declination wins over the trip's CaveWhere setting",
 
 // B5 — the accessor at the heart of the note-editing fix. After a solve the
 // cave lookup/network key an externally-attached trip's stations with the trip
-// scope (trip_<hex>.simple.a1), but the trip's note/scrap/lead stations carry
+// scope ("<tripLabel>.simple.a1"), but the trip's note/scrap/lead stations carry
 // only the tail (simple.a1). solvedStationPositions()/solvedNetwork() present
 // the solved data in the trip's own local namespace so every editing consumer
 // resolves without knowing the trip is external.
@@ -765,7 +838,7 @@ TEST_CASE("Solved accessors resolve an external trip's local tail names",
 
     REQUIRE_FALSE(manager.hasSolveError());
 
-    const QString tripPrefix = QStringLiteral("trip_%1").arg(attached->id().toString(QUuid::Id128));
+    const QString tripPrefix = tripScopeLabel(attached);
     const QString a1Scoped = tripPrefix + QStringLiteral(".simple.a1");
 
     // Precondition — the exact mismatch B5 fixes: the cave lookup keys are
@@ -864,7 +937,7 @@ TEST_CASE("External scrap guessNeighborStationName returns the tail name",
 
     const QString guessed = scrap->guessNeighborStationName(previous, QPointF(0.6, 0.5));
     // a2 is a1's sole neighbor, so it is the guess — and it comes back as the
-    // user-facing tail, never the scoped trip_<hex>.simple.a2.
+    // user-facing tail, never the scoped "<tripLabel>.simple.a2".
     CHECK(guessed == QStringLiteral("simple.a2"));
 }
 

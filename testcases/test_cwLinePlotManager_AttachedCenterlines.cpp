@@ -67,12 +67,16 @@ TEST_CASE("Native region has zero attached rows and a native driver source",
     REQUIRE_FALSE(manager.hasSolveError());
     CHECK(manager.externalCenterlineManager()->attachedCenterlinesModel()->rowCount() == 0);
 
-    // The driver text is the native *begin cave_<uuid> form the line-plot
-    // exporter has emitted since Phase 1 commit 7.
+    // The driver text opens the cave under its own survey label, not a
+    // synthetic one: the only cave here is "Native", so the label is its name
+    // folded to an identifier.
     const QString driver = manager.driverSource();
     REQUIRE_FALSE(driver.isEmpty());
-    CHECK(driver.contains(QStringLiteral("*begin %1")
-                          .arg(cwCavernNaming::caveName(cave->id()))));
+    // Matched to the end of the token, so a stray collision suffix
+    // ("*begin native_2" for the only cave in the region) fails here.
+    CHECK(driver.contains(QStringLiteral("*begin %1 ;%2")
+                          .arg(cwCavernNaming::sanitizeToCavernIdentifier(cave->name()),
+                               cave->name())));
     CHECK_FALSE(driver.contains(QStringLiteral("*include")));
 }
 

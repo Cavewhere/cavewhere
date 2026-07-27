@@ -28,14 +28,24 @@
 namespace {
     // The single scope-prefix policy, shared by the instance accessor and the
     // cwTripData snapshot overload so the UI-thread and worker-thread scope
-    // decisions can never diverge: an external centerline scopes to its trip id,
-    // else a non-empty station prefix scopes to "<prefix>.", else unscoped.
+    // decisions can never diverge: an external centerline scopes to the trip's
+    // label among its cave's trips, else a non-empty station prefix scopes to
+    // "<prefix>.", else unscoped.
+    //
+    // The label arrives as a callable because only the first branch needs it:
+    // this is a Q_PROPERTY read, and pooling a whole cave's trip labels to
+    // answer "unscoped" for an ordinary native trip is the common case.
+    template <typename LabelProvider>
     QString computeScopePrefix(bool hasExternalCenterline,
-                               const QUuid& id,
-                               const QString& stationPrefix)
+                               const QString& stationPrefix,
+                               LabelProvider&& label)
     {
         if (hasExternalCenterline) {
-            return cwCavernNaming::tripScopePrefix(id);
+            const QString scopeLabel = label();
+            if (scopeLabel.isEmpty()) {
+                return QString();
+            }
+            return scopeLabel + QLatin1Char('.');
         }
         if (!stationPrefix.isEmpty()) {
             return stationPrefix + QLatin1Char('.');
@@ -180,17 +190,56 @@ void cwTrip::setStationPrefix(const QString& stationPrefix)
 
 QString cwTrip::scopePrefix() const
 {
-    return computeScopePrefix(!m_externalCenterline.isEmpty(), id(), m_stationPrefix);
+    //A trip's label is only unique among the trips of its cave, so the siblings
+    //are part of the question.
+    const auto label = [this]() {
+        QList<cwCavernNaming::ScopeEntry> entries;
+        bool listed = false;
+
+        const cwCave* cave = parentCave();
+        if (cave != nullptr) {
+            const QList<cwTrip*> trips = cave->trips();
+            entries.reserve(trips.size());
+            for (const cwTrip* trip : trips) {
+                entries.append({trip->id(), trip->name()});
+                listed = listed || trip->id() == id();
+            }
+        }
+
+        //A trip its cave doesn't list — an orphan, or one an undo command still
+        //holds after a remove, since cwCave leaves the parent set — is its own
+        //only sibling, which gives it the label it would take once (re)added to
+        //a cave with no name clash. Without this it would report a scope by
+        //isScoped() and no prefix to strip by, and every solved-* accessor would
+        //read it as a flat native trip and hand back the whole cave lookup.
+        if (!listed) {
+            entries.append({id(), name()});
+        }
+
+        return cwCavernNaming::scopeLabel(id(), entries);
+    };
+
+    return computeScopePrefix(!m_externalCenterline.isEmpty(), m_stationPrefix, label);
 }
 
-QString cwTrip::scopePrefix(const cwTripData& data)
+QString cwTrip::scopePrefix(const cwTripData& data, const QList<cwTripData>& siblingTrips)
 {
-    return computeScopePrefix(!data.externalCenterline.isEmpty(), data.id, data.stationPrefix);
+    return scopePrefix(data, cwCavernNaming::scopeLabels(
+                                 cwCavernNaming::scopeEntries(siblingTrips)));
+}
+
+QString cwTrip::scopePrefix(const cwTripData& data, const QHash<QUuid, QString>& tripLabels)
+{
+    return computeScopePrefix(!data.externalCenterline.isEmpty(), data.stationPrefix,
+                              [&data, &tripLabels]() { return tripLabels.value(data.id); });
 }
 
 bool cwTrip::isScoped() const
 {
-    return !scopePrefix().isEmpty();
+    //Answered without building the label: whether there is a scope is decided by
+    //the same two fields scopePrefix() branches on, and this is read from QML
+    //bindings often enough that walking the cave's trips for it would be waste.
+    return !m_externalCenterline.isEmpty() || !m_stationPrefix.isEmpty();
 }
 
 void cwTrip::setId(const QUuid& id)
@@ -203,9 +252,6 @@ void cwTrip::setId(const QUuid& id)
     }
     if (Id != oldId) {
         emit idChanged();
-        //An external trip's scope is trip_<hex-of-id>., so a new id moves the
-        //scope even though externalCenterline is unchanged.
-        emit scopeChanged();
     }
 }
 
@@ -465,7 +511,7 @@ cwStationPositionLookup cwTrip::solvedStationPositions() const {
     }
 
     //Scoped trip (external or native-prefixed): the cave keys retain the scope
-    //prefix (trip_<hex>.<tail> or <stationPrefix>.<tail>) but note/scrap/lead
+    //prefix ("<tripLabel>.<tail>" or "<stationPrefix>.<tail>") but note/scrap/lead
     //stations carry only the tail. Add a stripped-tail alias for each scoped
     //entry so bare names resolve, keeping the full cave data so a cross-trip
     //tie-in neighbor still carries a position.
@@ -544,7 +590,7 @@ QList<QPair<QString, QVector3D>> cwTrip::solvedStations() const {
     }
 
     //Scoped trip: its stations live in the cave lookup under the scope prefix
-    //(trip_<hex>.<tail> or <stationPrefix>.<tail>); yield each as the
+    //("<tripLabel>.<tail>" or "<stationPrefix>.<tail>"); yield each as the
     //scope-relative tail, the same local name the note/scrap/lead sites and
     //cwScopeStationListModel speak.
     const QMap<QString, QVector3D> positions = lookup.positions();
@@ -717,6 +763,9 @@ void cwTrip::NameCommand::redo() {
     Trip->Name = NewName;
     Trip->updateKeywordMetadata();
     emit Trip->nameChanged();
+    //An external trip's scope is its own survey label, which is derived from
+    //the name, so a rename moves the scope every consumer resolves against.
+    emit Trip->scopeChanged();
 }
 
 void cwTrip::NameCommand::undo() {
@@ -728,6 +777,7 @@ void cwTrip::NameCommand::undo() {
     Trip->Name = OldName;
     Trip->updateKeywordMetadata();
     emit Trip->nameChanged();
+    emit Trip->scopeChanged();
 }
 
 cwTrip::DateCommand::DateCommand(cwTrip* trip, QDateTime date) {

@@ -60,8 +60,8 @@ TEST_CASE("cwSurvex3DFileReader should normalize a non-dot survex separator", "[
     // makes '.' a name character, so cavern picks ':' as the label separator.
     // cwCavernNaming and every decode consumer assume '.', so the reader must
     // normalize the emitted labels back to '.'. Without normalization the
-    // labels arrive as "cave_<hex>:trip_<hex>:holberg1:1" and stationRegex()
-    // fails to match, dropping every station from the solve.
+    // labels arrive as "<caveLabel>:<tripLabel>:holberg1:1", the cave scope
+    // never splits off, and every station drops out of the solve.
     // Read from the source tree (not copyToTempFolder) so the sibling
     // separator_walls.srv the *include pulls in resolves. cavern only reads the
     // .svx; the .3d goes to a private temp dir below, so this stays safe to run
@@ -84,17 +84,16 @@ TEST_CASE("cwSurvex3DFileReader should normalize a non-dot survex separator", "[
 
     CHECK(!lookup.isEmpty());
 
-    // No label may keep the raw ':' separator, and every cave-prefixed label
-    // must decode through the cavern-naming grammar. (The Walls include emits
-    // its own top-level stations without a cave_ prefix; they only need to be
-    // separator-normalized, not decodable.)
-    const QRegularExpression stationRegex = cwCavernNaming::stationRegex();
+    // No label may keep the raw ':' separator, and every scoped label must split
+    // on '.' the way the decode side expects. (The Walls include emits its own
+    // top-level stations with no enclosing survey; they only need to be
+    // separator-normalized, not splittable.)
     const QMap<QString, QVector3D> positions = lookup.positions();
     for (auto iter = positions.constBegin(); iter != positions.constEnd(); ++iter) {
         const QString& name = iter.key();
         CHECK_FALSE(name.contains(QLatin1Char(':')));
-        if (name.startsWith(QLatin1String("cave_"))) {
-            CHECK(stationRegex.match(name).hasMatch());
+        if (name.contains(QLatin1Char('.'))) {
+            CHECK_FALSE(cwCavernNaming::scopeHeadOf(name).isEmpty());
         }
     }
 

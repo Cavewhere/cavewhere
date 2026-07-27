@@ -2862,6 +2862,14 @@ public:
     joining <code>scopePrefixForTrip</code>'s null/empty guard. Whatever
     form the predicate takes must serve the C++ enumeration guards, not
     just QML.</em>
+    <em><strong>Partly overtaken 2026-07-26:</strong> the predicate itself shipped
+    as <code>cwTrip::isScoped()</code> in
+    <a href="EXTERNAL_FILE_EQUATES_AND_SCOPING.html#c2">Equates commit&nbsp;2</a>,
+    and that plan's &sect;6 states it is exactly what this relaxed-grammar check
+    must become. What is left of this entry is the consumer sweep: two QML sites
+    still hand-roll <code>externalCenterline.entryFile.length &gt; 0</code>
+    (<code>TripPage.qml</code>, <code>ExternalCenterlineTripPanel.qml</code>) plus
+    the C++ enumeration guards.</em>
   </li>
   <li>
     <strong>Uniform external-station accessor on <code>cwTrip</code></strong>
