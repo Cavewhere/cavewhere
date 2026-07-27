@@ -260,17 +260,119 @@ Legend: `[ ]` open · `[~]` reported, awaiting review · `[x]` committed
 - [x] **22. `measurement/measure-distance-and-bearing.md`** — 1281 → 2533 wds, score 76.3 → **~7** — commit `1b38cb1a`. 7 spans → **0**; em dash 22.47 → 0.00 (28 → 0), digits **0.00 → 20.12**, to-be 28.9 → clear, contractions 16.05 → 8.05, sentences 22.2 → 17.4, fig 0.80 → 2.01, hedges 0.00 → 2.41, `labelled`×2 / `metres` / `kilometres` / `greyed` cleared. **The worst-scoring page and the emptiest**: 0 digits describing a tool whose only output is numbers. It now carries the 1.5 mm snap tolerance (`cwScenePicker.cpp:20`, physical millimeters, shared with the coordinate picker), the 480-logical-pixel collapse threshold, 2-decimal lengths / 1-decimal angles, the verbatim `copyToClipboard()` block, and a worked example read off `measurement-readout.png` whose arithmetic the page shows (`hypot(48.38, 32.19)` = 58.11; `atan2(48.38, -0.75)` = 90.9°; `atan2(-32.19, 48.38)` = -33.6°). 80 claims, 74 confirmed, **2 wrong**, 3 overstated, 0 unverifiable. **Lead catch: "you can still orbit, pan, and zoom" was wrong about pan.** `TurnTableForwardingHandlers.qml` wires only a right-button `DragHandler` and a `WheelHandler`, and its header says it exists for interactions "that take over left-click"; the turn-table pans on left-drag (`TurnTableInteraction.qml:29-32`), which the tool has taken, so no pan path exists. Also corrected: the Station-only help string is **"Click a survey station to start measuring."**; the unit selector seeds from the project unit system (Metric→`m` / Imperial→`ft`) rather than always metres, and its labels are `m`/`km`/`ft`/`mi`; the **Station only switch is unreachable before the first measurement** (it lives in a popup gated on `hasMeasurement`, `GLTerrainRenderer.qml:277`) and the mode is session-only while the unit and north reference persist; and True/Magnetic are grayed out but still listed (`MeasurementReadoutPopup.qml:243`, `:256`). `llms.txt:42` re-synced.
       **Second page whose worst defect was on a *neighboring* page.** `view-3d/perspective-and-field-of-view.md:37` told readers "Measuring and map export assume orthogonal. Switch back to orthogonal to measure." Both halves are false: `cwCamera::pickQuery` (`cwCamera.cpp:228-250`) has an explicit perspective branch converting the pick radius to a depth-dependent slope tolerance, the measurement is a world-space distance the projection cannot affect, and `cwCaptureManager.cpp:583` says the tiled capture "will work with orthognal and perspective projections". Corrected in the same commit; what perspective actually costs is a uniform scale, which is why the scale bar hides.
 - [x] **23. `georeferencing/grid-convergence.md`** — words **1277 → 1084 (−15%)**, the first page to land under its ceiling. Em dash 25 → **0**, to-be 35.9 → 18.6, digits 2.78 → 51.8, spans 1 → 0. 67 claims, 51 confirmed, 7 wrong, 6 overstated. **Lead catch: the page said the solve always folds in the convergence. It does not.** Survex subtracts it only inside the `*declination auto` branch of `get_declination()` (`survex/src/datain.c:4092`), and CaveWhere emits `*declination auto` only when the trip is on Auto (`cwSurvexExporterTripTask.cpp:100-104`); Manual goes out as `*calibrate DECLINATION`, taking the branch at `datain.c:4066` that never calls `get_convergence()`, and a manual `0` writes no line at all (`default_calib` sets `z[Q_DECLINATION] = 0.0`). The page's own screenshot is a `0° manual` trip. Also corrected: the example read `0.74° at a1` while the screenshot reads **`-1.08° at a1`** (verified independently — `proj -V` on E 350000 / N 4300000 in EPSG:32613 gives −1.08396°); there is no **?** button, `LabelWithHelp.qml` toggles on clicking the label text; the error state is `Failed to transform from … to WGS84`, not `PROJ failed to create CRS` (the transform at `cwGridConvergence.cpp:190` is checked before `cachedConvergencePj` at `:198`); `n/a (geographic CS)` reads the **fix's** Input CS, so a Lat/Lon fix in a UTM project reads `n/a` while the solve applies the real angle; of declination.md's 3 reasons to sit in Manual the first costs nothing; a missing cavern log line means no trip date rather than no convergence. **First page written under the word budget** — the cavern-log section, the local-cave subsection and the CS-mismatch paragraph were cut to make room rather than appended.
-- [ ] **24. `georeferencing/georeference-a-cave.md`** — 1282 wds, score 53.9 — 24 em dash
+- [x] **24. `georeferencing/georeference-a-cave.md`** — words **1350 → 1329**, score 53.9 — commit `5d67a7ac`.
+      Em dash 19.18 → **0.00** (24 → 0), digits 1.60 → 20.41, mean sentence
+      22.7 → 18.8, fig 0.80 → 3.27, contractions 19.18 → 6.53. 28 claims, 27
+      confirmed. Four claims that shipped wrong are corrected, led by **the
+      convergence caveat** (`datain.c:4066` vs `:4092`,
+      `cwSurvexExporterTripTask.cpp:100-108`), plus the **Recenter world origin**
+      menu item #596 deleted in `80df1e9b`, the world origin's recompute policy
+      (computed once and sticky, `cwLinePlotManager.cpp:687-689`), and the box
+      now labeled **Project** rather than Geospatial.
+      **The reviewer's lead catch was a quoted string that is almost never on
+      screen**: the page told readers the Custom dialog greets them with
+      *"Showing common projections…"*, but `CSCustomDialog.qml:133-138` gates that
+      label on `count === 0` and an empty query returns the 17 curated codes
+      (`cwCoordinateTransform.cpp:190-211`). It is a zero-results fallback; the
+      page now says the dialog lists 17 projections.
+      **Second page whose worst defect was inherited from a committed sibling.**
+      "Overlay on surface maps" promised a feature CaveWhere does not have —
+      grepping for basemap/imagery/tile/WMS returns nothing, and Geospatial
+      Layers takes LAZ point clouds only. `concepts/coordinate-systems.md:99-100`
+      carried it too; both fixed in `58817a98`, which also repairs
+      `tst_ManualScreenshots.qml`'s stale `geospatialGroupBox` lookup (untested —
+      no build directory in this checkout).
 
 ### Projects and Files
 
-- [ ] **25. `projects-and-files/open-a-project.md`** — 747 wds, score 62.0 — 18 em dash, 33.5 to-be
-- [ ] **26. `projects-and-files/save-a-project.md`** — 2080 wds, score 61.3 — 44.7 to-be
-- [ ] **27. `projects-and-files/project-formats.md`** — 1417 wds, score 60.1 — 39.5 to-be
+- [x] **25. `projects-and-files/open-a-project.md`** — words **817 → 812**, score 62.0 — commit `dc99815c`.
+      Em dash 25.25 → **0.00** (18 → 0), to-be 33.5 → 11.0, digits 1.40 → 5.59,
+      mean sentence 19.3 → 17.0, fig 0.00 → 1.39. slopcheck fully clean.
+      33 claims, 30 confirmed. **First page of the net-zero phase.** Five wrong
+      claims corrected, 3 of them shipped before this sweep: `.cwproj` is trusted
+      by extension while only `.cw` is content-sniffed (`cwProject.cpp:1638-1673`);
+      **Open from Online navigates to the Remote page and downloads nothing**
+      (`FileMenu.qml:73-80`); and the ask-to-save question arrives *after* the
+      clone, not before. The reviewer's lead catch was self-contradiction: the
+      opening said Online and Link never ask, while line 78 of the same page said
+      they ask later — and `open-a-shared-project.md:78-80` agreed with line 78.
+      Also: a new project is temporary but **not unnamed**
+      (`cwSaveLoad.cpp:1304` sets `friendlyProjectName()`), **Show in File
+      Manager** exists on Linux (`RevealInFileManagerMenuItem.qml:10-17`), a dead
+      recent entry covers deleted and ambiguous files too, and the temporary-folder
+      quote carried an invented trailing period — `save-a-project.md:213` has the
+      same one, to fix under item 26.
+      **Rejected the reviewer's em dash**: its fix for the Finder/Explorer line
+      introduced a routine appositive dash on a page that had reached 0.
+- [x] **26. `projects-and-files/save-a-project.md`** — words **2176 → 2036**, score 61.3 — commit `e824eb80`.
+      To-be 44.7 → **12.7** (the headline defect, one of the worst in the manual),
+      em dash 15.53 → 0.00, contractions 29.56 → 6.91 (target 6.72), digits
+      3.51 → 6.91, fig 0.00 → 1.60. slopcheck fully clean. 38 claims, 32
+      confirmed, plus **7 unlisted problems the claims table never mentioned**.
+      **Lead catch is a shipped UI bug, not just a doc error.** The page said the
+      Read-only banner names the version you need. It cannot:
+      `VersionIncompatibleBanner.qml:41` renders `"Upgrade to CaveWhere v" +
+      requiredVersion`, `requiredVersion` is `toVersion(FileVersion)`, and that
+      table stops at `{9, "2026.4"}` returning `"Unknown Version"` for anything
+      higher — which is the only case the banner ever appears in, since
+      `saveWillCauseDataLoss()` is `FileVersion > 9`. **The shipped banner always
+      reads "Upgrade to CaveWhere vUnknown Version to edit."**
+      Also corrected: forbidden filename characters become **underscores**, not
+      stripped (`cwNameUtils.cpp:4-11`) and the user sees them in the path
+      preview; renaming renames the data folder and `.cwproj` but **not the outer
+      folder** (`cwSaveLoad.cpp:3440-3487`); the `.cw_cache`/`.DS_Store`
+      exclusions are bundle-only; Save As copies **before** any commit, so the
+      original keeps its uncommitted edits; and "one more version each time"
+      contradicted this page's own "no file changed means no version at all".
+      Deduped `project-git-history.png` and the History paragraphs to
+      `review-history.md:20-47`, verified by grep. `llms.txt:26` re-synced.
+      **The writer's report claimed 8 new block quotes; the page has 2, unchanged.**
+      Caught by the `^>` diff, which is why that check exists.
+- [x] **27. `projects-and-files/project-formats.md`** — words **1691 → 1632**, score 60.1 — commit `3e09566a`.
+      To-be 39.5 → **11.5** (the headline defect), em dash 16.74 → 0.00 in the
+      prose, contractions 25.10 → 5.94, digits 0.84 → 9.34, fig 0.00 → 1.70.
+      25 claims, 20 confirmed. **Projects and Files chapter complete.**
+      Corrections: the extension list was short by one and contradicted the page's
+      own directory tree — **`.cwlaz`** is a JSON entity file written beside each
+      point cloud (`cwLazLayerModel.cpp:204`); "every file except images and point
+      clouds holds JSON" was false for `.gitattributes`, which CaveWhere writes
+      itself (`GitRepository.cpp:2434`); the tree called the outer folder "the
+      folder you chose" when in directory mode you choose the *parent*; and
+      "Save As converts either way at any time" is false above file version 9,
+      where Save As is grayed.
+      The Read-only sentence took `9` as its antecedent and so implied the banner
+      reads 9 — the third page in a row to get that banner wrong. It names no
+      version at all.
+      The 2 residual em dashes are the app's own cells in the comparison table,
+      quoted byte-for-byte from `SaveAsDialog.qml:220-229` with both U+2713 marks.
+      `llms.txt:27` re-synced, including the ⓘ → **?** glyph and the
+      format-version clause every sibling entry carried and this one lacked.
 
 ### Collaboration
 
-- [ ] **28. `collaboration/sync-your-changes.md`** — 1291 wds, score 60.9 — **31.8 em dash, worst rate in the manual**
+- [x] **28. `collaboration/sync-your-changes.md`** — words **1430 → 1409**, score 60.9 — commit `70668af6`.
+      **Em dash 30.22 → 2.62, the worst rate in the manual cleared**: 43 → 3, and
+      all 3 survivors sit inside verbatim app strings (house rule 4). To-be
+      25.6 → clear, contractions 19.56 → 3.50, digits 0.00 → 13.12, names
+      25.78 → 43.74. 40 claims, 32 confirmed — **the lowest confirmation rate of
+      the sweep so far**, and every miss was real.
+      Corrections: the commit subject is **`Sync from CaveWhere`**, not `Sync`
+      (`cwSaveLoad.cpp:590-593`), so History searches for "Sync" found nothing;
+      the retry count was off by one (`retryCount >= 3` from a base of 0 is one
+      try plus 3 retries); **Local edits pending** described commits waiting to
+      push when `hasLocalChanges` is `modifiedFileCount() > 0`, i.e. the opposite;
+      the Sync button is **never hidden** (`SyncButton.qml` has no `visible`
+      binding, only the badge is gated on `hasRemote`); and `Theme.warning` is
+      `#FF9C14`, orange not yellow.
+      **The badge was wrong in 3 ways at once.** `SyncButton.qml:136-141` always
+      prints both arrows as one string with `" •"` as a suffix, so `↑ N` alone
+      and a standalone `•` are both impossible, and the ahead-0/behind-0 case
+      renders an empty green badge rather than a dot.
+      `llms.txt:59` re-synced — it was stale on 7 separate points.
+      **Flagged, not a doc fix**: `AskToSaveDialog.qml:361` is
+      `text: "Save && Sync"`. Qt Quick Controls does no mnemonic processing on
+      `AbstractButton.text`, so that button most likely renders a literal doubled
+      ampersand. It is the only one in any QML button text in the repo.
 - [ ] **29. `collaboration/review-history.md`** — 1066 wds, score 56.3 — 21.8 sent
 - [ ] **30. `collaboration/how-sync-works.md`** — 868 wds, score 55.3 — 0 digits
 - [ ] **31. `collaboration/open-a-shared-project.md`** — 726 wds, score 51.2 — 23.4 em dash
@@ -279,13 +381,62 @@ Legend: `[ ]` open · `[~]` reported, awaiting review · `[x]` committed
 
 ### 3D View, Point Clouds, Leads, Settings
 
-- [ ] **34. `leads/track-and-export-leads.md`** — 1323 wds, score 62.7 — 33 em dash, 0 digits
+- [x] **34. `leads/track-and-export-leads.md`** — words **1429 → 1408**, score 62.7 — commit `280fad7a`.
+      Em dash 25.88 → **0.00** (33 → 0), digits **0.00 → 13.46**, mean sentence
+      21.2 → 17.3, contractions 27.45 → 9.50, `centres` cleared. 47 claims, 40
+      confirmed.
+      **The lesson of this page: open the screenshot and read it.** Four defects
+      fell out of `images/leads-page.png` alone — the list does *not* arrive
+      sorted by Nearest (the shot reads A3, A5, a10, A14, A12, and nothing calls
+      `sort()` while `sortColumn() == -1`); the Description column reads
+      **"Needs Aid, Dome"**, which the page was mis-transcribing from its own
+      figure; the Size column carries **no unit** (`cwLeadModel.cpp:88` is
+      `"%1 x %2"`); and "Lead Distance from" is pre-filled with `a1`.
+      Corrections to what shipped: **Nearest** is the closest station *on the same
+      scrap* measured in note space (`cwLeadModel.cpp:439-454`), not in the cave;
+      the reference station is **seeded** with the cave's first surveyed station
+      (`:185-191`), so "reads 0 m until you pick one" was wrong; and leads toggle
+      from **File → Debug → Leads Visible** plus the `Type=Lead` keyword filter,
+      not the 3D view's layer controls.
+      Also: the size unit is `readOnly` (`SizeEditor.qml:57-59`), the Done cell is
+      a bare `Icon` so the Leads page never writes, a marker click only *selects*
+      (Goto also switches page and moves the camera), the empty-state message is
+      gated on the **filtered** count, and CSV distance is *up to* 12 significant
+      digits since `'g'` drops trailing zeros.
+      **Invented number struck**: "spread over a dozen notes" put a count on
+      nothing. `llms.txt:50` re-synced — stale on 11 points, silent on 4 more.
 - [ ] **35. `view-3d/layers-and-keywords.md`** — 1449 wds, score 58.6 — 33 em dash
 - [ ] **36. `view-3d/perspective-and-field-of-view.md`** — 692 wds, score 50.3 — 22.1 sent
 - [ ] **37. `view-3d/the-3d-view.md`** — 1187 wds, score 48.6 — 2 spans
 - [ ] **38. `point-clouds/add-a-point-cloud.md`** — 1196 wds, score 52.8 — 32.6 to-be
 - [ ] **39. `point-clouds/clip-a-point-cloud.md`** — 762 wds, score 45.5 — 0 digits
-- [ ] **40. `settings/change-settings.md`** — 1395 wds, score 52.0 — 23.8 sent, longest sentences in the manual
+- [x] **40. `settings/change-settings.md`** — words **1476 → 1413**, score 52.0 — commit `a0850f54`.
+      **Mean sentence 26.5 → 19.1** (slopcheck 23.8 → 17.1), the longest sentences
+      in the manual, fixed. Em dash 18.46 → 0.00, digits 10.34 → **28.09**, fig
+      0.74 → 3.04. 29 claims, 25 confirmed.
+      Corrections: Settings has **8 tabs** (`SettingsPage.qml:20`), not 6; the help
+      glyph is a **"?"** (`question-circle.svg`), not an "i", and it is absent from
+      Appearance, Git and Units; **Restore Defaults is in 5 of 8 tabs** — Git and
+      Units have none and Sketch's never grays; MSAA does **not** touch the scale
+      bar (`ScaleBar.qml` is a Qt Quick overlay outside the `QQuickRhiItem`); and
+      you cannot watch the 3D view while changing MSAA, because Settings is a full
+      page.
+      **Second invented number struck this session**: "600 ppi may cost 39 times
+      what 96 ppi does" is `(600/96)²` computed and presented as fact, and the
+      same sentence hardened the app's "supported up to 600 ppi or 256mb" into
+      "import stops at" — no 256 MB limit is enforced anywhere in the code.
+      Best original finding, confirmed in both directions: **the Jobs tab shares
+      `cwJobSettings` with the sidebar's Automatic Update checkbox**, so unchecking
+      it un-grays Jobs' Restore Defaults, and pressing that button silently turns
+      recompute back on (`cwJobSettings.cpp:74-81`, covered by
+      `tst_JobSettingsItem.qml:49-73`).
+      **All 4 screenshots on this page are stale** — they show 7 tabs, Units
+      absent, while the body correctly says 8. They were committed in `ed1d7c4a`,
+      *after* `741c818a` added the tab, so the shots came from an older build and
+      the tests were never re-run. Needs a build to regenerate; none in this
+      checkout. No alt text or caption claims a tab count, so no figure
+      contradicts its own caption.
+      `llms.txt:63` re-synced, and the file's last 4 British spellings cleared.
 
 ### Import and Export
 
