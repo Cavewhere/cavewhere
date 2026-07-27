@@ -346,12 +346,13 @@ private:
     cwNoteTransformationData noteTransformAdjustedDeclination(cwNoteTransformationData transformation) const;
 
     /// Grid-convergence correction (degrees) that the plotted stations carry,
-    /// or 0.0 when it doesn't apply. Survex folds grid convergence into the
-    /// plot only when declination is auto-computed (manual declination is
-    /// verbatim, see survex datain.c get_declination), and only Plan scraps
-    /// store north in the grid-aligned magnetic frame. Storage subtracts this
-    /// and the read side adds it back, so the store/read round-trip cancels.
-    double autoDeclinationGridConvergence() const;
+    /// or 0.0 when it doesn't apply. Grid convergence is a property of the
+    /// projection at the fix station, independent of whether declination is
+    /// auto-computed or manual, so it applies in both cases (issue #628). Only
+    /// Plan scraps store north in the grid-aligned magnetic frame. Storage
+    /// subtracts this and the read side adds it back, so the store/read
+    /// round-trip cancels.
+    double planGridConvergence() const;
 
 private slots:
 //    void updateStationsWithNewCave();

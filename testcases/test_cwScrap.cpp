@@ -449,11 +449,12 @@ TEST_CASE("Manual scrap rotation uses declination during triangulation", "[cwScr
 TEST_CASE("Plan scrap removes grid convergence from the note transform", "[cwScrap]") {
     // Build a cave -> trip -> note -> scrap chain in memory and georeference
     // the cave with a projected coordinate system so grid convergence is
-    // non-zero. Survex folds grid convergence into the plotted stations only
-    // when declination is auto-computed (it leaves manual declination
-    // verbatim, see survex datain.c get_declination). The note transform must
-    // mirror that: remove convergence in addition to declination, but only
-    // when the trip uses auto-declination.
+    // non-zero. Grid convergence is a property of the projection at the fix
+    // station, so it applies regardless of whether declination is auto or
+    // manual (issue #628). CaveWhere folds it into the plotted stations for
+    // both cases (subtracting it for manual declination when exporting to
+    // survex, since cavern won't), so the note transform must remove it in
+    // both cases too.
 
     const QString utm13N = QStringLiteral("EPSG:32613"); // central meridian -105°
 
@@ -512,16 +513,23 @@ TEST_CASE("Plan scrap removes grid convergence from the note transform", "[cwScr
               == Catch::Approx(expectedConvergence.value()).margin(1e-6));
     }
 
-    SECTION("Manual declination: convergence is left in (survex does not remove it)") {
+    SECTION("Manual declination: convergence is removed too (issue #628)") {
         calibration->setAutoDeclination(false);
         calibration->setDeclinationManual(12.5);
 
         const double declination = calibration->declination();
         const double adjusted = scrap->noteTransformAdjustedDeclination().north;
 
-        const double expected =
-            cwNoteTranformation::northAdjustedForDeclination(rawNorth, declination);
+        // Same as the auto case: manual declination is a pure magnetic
+        // declination, so grid convergence is applied on top of it.
+        const double expected = cwWrapDegrees360(
+            rawNorth - declination + expectedConvergence.value());
         CHECK(adjusted == Catch::Approx(expected).epsilon(1e-6));
+
+        const double declinationOnly =
+            cwNoteTranformation::northAdjustedForDeclination(rawNorth, declination);
+        CHECK(cwWrapDegrees360(adjusted - declinationOnly)
+              == Catch::Approx(expectedConvergence.value()).margin(1e-6));
     }
 
     SECTION("Non-plan scraps ignore both declination and convergence") {

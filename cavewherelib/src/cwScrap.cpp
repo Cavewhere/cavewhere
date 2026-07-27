@@ -612,7 +612,7 @@ void cwScrap::updateNoteTransformation() {
     // back — the store/read round-trip cancels and the stored north stays in
     // the magnetic frame.
     averageTransformation.north =
-        cwWrapDegrees360(averageTransformation.north - autoDeclinationGridConvergence());
+        cwWrapDegrees360(averageTransformation.north - planGridConvergence());
 
     // The calculator emits the scale in raw inches; re-express it in the units
     // the scrap currently shows (seeded from the project unit system for new
@@ -637,13 +637,11 @@ cwTripCalibration* cwScrap::tripCalibration() const {
     return parentNote()->parentTrip()->calibrations();
 }
 
-double cwScrap::autoDeclinationGridConvergence() const
+double cwScrap::planGridConvergence() const
 {
     if(type() != Plan) { return 0.0; }
-    const cwTripCalibration* calibration = tripCalibration();
-    if(calibration == nullptr || !calibration->autoDeclination()) { return 0.0; }
-    const cwCave* cave = parentCave();
-    return cave == nullptr ? 0.0 : cave->gridConvergence()->angle();
+    if(tripCalibration() == nullptr) { return 0.0; }
+    return cwGridConvergence::angleForCave(parentCave());
 }
 
 cwNoteTransformationData cwScrap::noteTransformAdjustedDeclination() const {
@@ -664,11 +662,11 @@ cwNoteTransformationData cwScrap::noteTransformAdjustedDeclination(cwNoteTransfo
     transformData.north = cwNoteTranformation::northAdjustedForDeclination(transformData.north,
                                                                            calibration->declination());
 
-    // The note's resolved declination is the pure IGRF value; add the grid
-    // convergence back to match the grid-aligned 3D stations the shot leaders
-    // point to (see autoDeclinationGridConvergence).
+    // The note's resolved declination is the pure magnetic declination; add the
+    // grid convergence back to match the grid-aligned 3D stations the shot
+    // leaders point to (see planGridConvergence).
     transformData.north =
-        cwWrapDegrees360(transformData.north + autoDeclinationGridConvergence());
+        cwWrapDegrees360(transformData.north + planGridConvergence());
 
     return transformData;
 }

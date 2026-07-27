@@ -26,6 +26,9 @@
 #include "cwFixStationModel.h"
 #include "cwFixStation.h"
 #include "cwRenderLinePlot.h"
+#include "cwGridConvergence.h"
+#include "cwGeoPoint.h"
+#include "cwStationPositionLookup.h"
 #include "cwKeywordItemModel.h"
 #include "cwKeywordItem.h"
 #include "cwKeywordModel.h"
@@ -39,7 +42,11 @@
 //Qt includes
 #include <QThread>
 #include <QApplication>
+#include <QtMath>
 #include "cwSignalSpy.h"
+
+//Std includes
+#include <cmath>
 
 TEST_CASE("Survey network are returned", "[LinePlotManager]") {
     auto project = fileToProject(testcasesDatasetPath("network.cw"));
@@ -1023,6 +1030,79 @@ TEST_CASE("cwLinePlotManager re-runs cavern when globalCS or fix stations change
             CHECK(absolutePosition("a2") == QVector3D(0.0f, 10.0f, 0.0f));
         }
     }
+}
+
+TEST_CASE("cwLinePlotManager applies grid convergence to a manual declination (issue #628)",
+          "[LinePlotManager][fix]")
+{
+    // A manual declination is a pure magnetic declination. Cavern only folds
+    // grid convergence into `*declination auto`, so CaveWhere subtracts it from
+    // the literal `*calibrate DECLINATION` it exports (see manualDeclinationForGrid).
+    // This proves the end-to-end 3D plot lands in grid north: a magnetic-north
+    // shot with declination 0 must plot at grid bearing -convergence, not 0.
+
+    const QString cs = QStringLiteral("EPSG:32613"); // UTM 13N, central meridian -105
+
+    cwCavingRegion region;
+    region.geoReference()->setGlobalCoordinateSystem(cs);
+
+    auto* cave = new cwCave();
+    cave->setName(QStringLiteral("Cave 1"));
+    region.addCave(cave);
+
+    auto* trip = new cwTrip();
+    cave->addTrip(trip);
+    trip->calibrations()->setAutoDeclination(false);
+    trip->calibrations()->setDeclinationManual(0.0);
+
+    auto* chunk = new cwSurveyChunk();
+    trip->addChunk(chunk);
+    cwShot shot;
+    shot.setDistance(cwDistanceReading(QStringLiteral("100.0")));
+    shot.setCompass(cwCompassReading(QStringLiteral("0.0")));
+    shot.setClino(cwClinoReading(QStringLiteral("0.0")));
+    chunk->appendShot(cwStation(QStringLiteral("a1")), cwStation(QStringLiteral("a2")), shot);
+
+    // Fix east of the central meridian at ~40°N so grid convergence is large
+    // (~1.5°). Distance from the meridian keeps easting away from float-lossy
+    // magnitudes, and pinning worldOrigin to the fix keeps the reported
+    // positions local (and skips the auto-compute second-run race).
+    const double fixE = 700000.0;
+    const double fixN = 4430000.0;
+    const double fixZ = 1600.0;
+
+    cwFixStation fix;
+    fix.setStationName(QStringLiteral("a1"));
+    fix.setInputCS(cs);
+    fix.setEasting(fixE);
+    fix.setNorthing(fixN);
+    fix.setElevation(fixZ);
+    cave->fixStations()->appendFixStation(fix);
+
+    region.geoReference()->setWorldOrigin(cwGeoPoint(fixE, fixN, fixZ));
+
+    auto plotManager = std::make_unique<cwLinePlotManager>();
+    plotManager->setRegion(&region);
+    plotManager->waitToFinish();
+
+    const auto convergence = cwGridConvergence::computeAt(cwGeoPoint(fixE, fixN, fixZ), cs);
+    REQUIRE_FALSE(convergence.hasError());
+    REQUIRE(std::abs(convergence.value()) > 0.5); // meaningful convergence here
+
+    const QVector3D a1 = cave->stationPositionLookup().position(QStringLiteral("a1"));
+    const QVector3D a2 = cave->stationPositionLookup().position(QStringLiteral("a2"));
+    const QVector3D delta = a2 - a1;
+
+    // Grid north lies `convergence` east of true north, so a true-north shot
+    // plots at grid bearing -convergence (bearing measured clockwise from grid
+    // north, i.e. atan2(easting, northing)).
+    const double bearing = qRadiansToDegrees(std::atan2(delta.x(), delta.y()));
+    CHECK(bearing == Catch::Approx(-convergence.value()).margin(0.1));
+    CHECK(double(delta.length()) == Catch::Approx(100.0).margin(0.5));
+
+    // Regression guard: the old behavior left convergence out, plotting due
+    // grid north (bearing 0).
+    CHECK(std::abs(bearing) > 0.5);
 }
 
 TEST_CASE("cwLinePlotManager re-solves when a trip's date changes (bug #581)",

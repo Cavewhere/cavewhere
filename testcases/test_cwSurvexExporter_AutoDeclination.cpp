@@ -25,6 +25,8 @@
 #include "cwSurveyDataArtifact.h"
 #include "cwTrip.h"
 #include "cwTripCalibration.h"
+#include "cwGridConvergence.h"
+#include "cwGeoPoint.h"
 
 //Qt includes
 #include <QBuffer>
@@ -127,9 +129,21 @@ TEST_CASE("cwSurvexExporterRule: autoDeclination off emits literal *calibrate DE
 
     CHECK_FALSE(output.contains(QStringLiteral("*declination auto")));
     CHECK(output.contains(QStringLiteral("*calibrate DECLINATION")));
-    // survex literal sign convention is opposite of stored manual: stored
-    // 12.34 → emitted -12.34
-    CHECK(output.contains(QStringLiteral("-12.34")));
+
+    // Manual declination is a pure magnetic declination, so the exporter
+    // subtracts the fix station's grid convergence before writing the literal
+    // (issue #628) — cavern won't do it for *calibrate DECLINATION. writeCalibration
+    // then flips the sign, so the emitted value is -(12.34 - convergence).
+    const auto convergence = cwGridConvergence::computeAt(
+        cwGeoPoint(478000.0, 4430000.0, 1655.0), kUtmZ13N);
+    REQUIRE_FALSE(convergence.hasError());
+    REQUIRE(convergence.value() != 0.0);
+    const double emitted = -(12.34 - convergence.value());
+    CHECK(output.contains(QString::number(emitted, 'f', 2)));
+    // The plain magnetic value must NOT appear as the calibrate value.
+    CHECK_FALSE(output.contains(QStringLiteral("DECLINATION -12.34")));
+    // A comment explains the adjustment so the export isn't confusing.
+    CHECK(output.contains(QStringLiteral("grid convergence")));
 }
 
 TEST_CASE("cwSurvexExporterRule: autoDeclination on but no fix station falls back to literal",

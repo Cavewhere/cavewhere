@@ -27,6 +27,7 @@
 #include "cwTriangulateLiDARTask.h"
 #include "cwCavingRegion.h"
 #include "cwCave.h"
+#include "cwGridConvergence.h"
 #include "cwTrip.h"
 #include "cwSurveyNoteLiDARModel.h"
 #include "cwNoteLiDAR.h"
@@ -527,6 +528,12 @@ cwTriangulateLiDARInData cwNoteLiDARManager::mapNoteToInData(const cwNoteLiDAR* 
         cwNoteLiDARTransformationData data = note->noteTransformation()->data();
         data.north = cwNoteTranformation::northAdjustedForDeclination(data.north,
                                                                       trip->calibrations()->declination());
+        // Add back the grid convergence the store side
+        // (cwNoteLiDAR::updateNoteTransformion) subtracted, so the note north
+        // matches the grid-aligned plotted stations (0.0 without a projected
+        // CS). See issue #628.
+        const double convergence = cwGridConvergence::angleForCave(cave);
+        data.north = cwNoteTranformation::northAdjustedForDeclination(data.north, -convergence);
         cwNoteLiDARTransformation adjustedTransform;
         adjustedTransform.setData(data);
         modelMatrix = adjustedTransform.matrix();

@@ -31,6 +31,12 @@
 #include "cwLinePlotManager.h"
 #include "cwNoteLiDARStation.h"
 #include "cwTripCalibration.h"
+#include "cwFixStation.h"
+#include "cwFixStationModel.h"
+#include "cwGridConvergence.h"
+#include "cwCoordinateTransform.h"
+#include "cwGeoPoint.h"
+#include "cwMath.h"
 
 TEST_CASE("cwNoteLiDARManager no crash when caves cleared during triangulation", "[cwNoteLiDARManager][Issue371]")
 {
@@ -144,6 +150,93 @@ TEST_CASE("cwNoteLiDARManager applies declination for manual north", "[cwNoteLiD
     note.setAutoCalculateNorth(false);
     const cwTriangulateLiDARInData manualData = cwNoteLiDARManager::mapNoteToInData(&note, nullptr);
     compareMatrix(manualData.modelMatrix(), adjustedTransform.matrix());
+}
+
+TEST_CASE("cwNoteLiDARManager folds grid convergence into the note north (issue #628)", "[cwNoteLiDARManager]")
+{
+    // Georeference the cave so grid convergence is non-zero, then verify
+    // mapNoteToInData removes it (in addition to declination) from the stored
+    // note north to recover the geometric north used for triangulation. This
+    // is the read-side mirror of cwNoteLiDAR::updateNoteTransformion (which
+    // subtracts the same convergence at store time) and matches the scrap-side test in
+    // test_cwScrap.cpp. Convergence is a property of the projection at the fix
+    // station, so it applies to a manual declination just like an auto one.
+    const QString utm13N = QStringLiteral("EPSG:32613"); // central meridian -105°
+
+    cwCave cave;
+    auto* trip = new cwTrip(&cave);
+    cave.addTrip(trip);
+
+    // Fix the cave east of the central meridian -> positive convergence.
+    cwCoordinateTransform geoToUtm(QStringLiteral("EPSG:4326"), utm13N);
+    REQUIRE(geoToUtm.isValid());
+    const cwGeoPoint fixPoint = geoToUtm.transform(cwGeoPoint(-104.0, 40.015, 1655.0));
+
+    cwFixStation fix;
+    fix.setStationName(QStringLiteral("a1"));
+    fix.setInputCS(utm13N);
+    fix.setEasting(fixPoint.x);
+    fix.setNorthing(fixPoint.y);
+    fix.setElevation(fixPoint.z);
+    cave.fixStations()->appendFixStation(fix);
+
+    auto expectedConvergence = cwGridConvergence::computeAt(fixPoint, utm13N);
+    REQUIRE_FALSE(expectedConvergence.hasError());
+    REQUIRE(expectedConvergence.value() > 0.0);
+    REQUIRE(cave.gridConvergence()->angle()
+            == Catch::Approx(expectedConvergence.value()).epsilon(1e-9));
+
+    cwNoteLiDAR note;
+    note.setParentTrip(trip);
+
+    auto* transform = note.noteTransformation();
+    REQUIRE(transform != nullptr);
+    transform->setNorthUp(10.0);
+
+    trip->calibrations()->setAutoDeclination(false);
+    trip->calibrations()->setDeclinationManual(5.0);
+    const double declination = trip->calibrations()->declination();
+
+    auto compareMatrix = [](const QMatrix4x4& actual, const QMatrix4x4& expected) {
+        const float* actualData = actual.constData();
+        const float* expectedData = expected.constData();
+        for(int i = 0; i < 16; ++i) {
+            CHECK(actualData[i] == Catch::Approx(expectedData[i]).epsilon(1e-6));
+        }
+    };
+
+    auto matrixForNorth = [&](double north) {
+        cwNoteLiDARTransformationData data = transform->data();
+        data.north = north;
+        cwNoteLiDARTransformation t;
+        t.setData(data);
+        return t.matrix();
+    };
+
+    // Read side recovers the geometric north: stored - declination + convergence.
+    const double declinationOnly =
+        cwNoteTranformation::northAdjustedForDeclination(transform->northUp(), declination);
+    const double expectedNorth =
+        cwNoteTranformation::northAdjustedForDeclination(declinationOnly, -expectedConvergence.value());
+
+    const cwTriangulateLiDARInData data = cwNoteLiDARManager::mapNoteToInData(&note, nullptr);
+    compareMatrix(data.modelMatrix(), matrixForNorth(expectedNorth));
+
+    // Regression guard: a declination-only adjustment (the pre-#628 behavior)
+    // differs from the emitted matrix by exactly the grid convergence.
+    CHECK(cwWrapDegrees360(expectedNorth - declinationOnly)
+          == Catch::Approx(expectedConvergence.value()).margin(1e-6));
+    const QMatrix4x4 emittedMatrix = data.modelMatrix();
+    const QMatrix4x4 declOnlyMatrix = matrixForNorth(declinationOnly);
+    const float* emitted = emittedMatrix.constData();
+    const float* declOnly = declOnlyMatrix.constData();
+    bool differs = false;
+    for(int i = 0; i < 16; ++i) {
+        if(qAbs(emitted[i] - declOnly[i]) > 1e-4f) {
+            differs = true;
+        }
+    }
+    CHECK(differs);
 }
 
 TEST_CASE("cwNoteLiDARManager triangulates LiDAR notes and keeps geometry accessible", "[cwNoteLiDARManager]")

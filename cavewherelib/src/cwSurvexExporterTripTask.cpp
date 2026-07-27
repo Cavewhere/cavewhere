@@ -100,7 +100,9 @@ void cwSurvexExporterTripTask::writeCalibrations(QTextStream& stream,
     if (calibrations->autoDeclination() && declinationContext) {
         cwSurvexExporterUtils::writeDeclinationAuto(stream, *declinationContext);
     } else {
-        writeCalibration(stream, QStringLiteral("DECLINATION"), calibrations->declination());
+        writeCalibration(stream, QStringLiteral("DECLINATION"),
+                         cwSurvexExporterUtils::manualDeclinationForGrid(
+                             stream, calibrations->declination(), declinationContext));
     }
 }
 
