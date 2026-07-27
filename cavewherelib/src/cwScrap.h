@@ -176,6 +176,13 @@ public:
     cwNoteTranformation* noteTransformation() const;
     cwNoteTransformationData noteTransformAdjustedDeclination() const;
 
+    // View matrix with a manual projected-profile azimuth resolved to grid
+    // north; the stored view matrix unchanged for every other scrap type and
+    // for auto azimuths. Callers placing scrap geometry or stations into the
+    // grid-aligned 3D plot use these, not the raw viewMatrix() (issue #644).
+    QMatrix4x4 resolvedViewMatrix() const;
+    cwAbstractScrapViewMatrix::Data* resolvedViewMatrixData() const;
+
     // Seed the note-transformation scale's display units from a project unit
     // system (metric cm/m, imperial in/ft) for a new scrap. The scale's value is
     // still driven by auto-calculation; this only sets the units it reads in.
@@ -353,6 +360,14 @@ private:
     /// subtracts this and the read side adds it back, so the store/read
     /// round-trip cancels.
     double planGridConvergence() const;
+
+    /// Grid-north adjustment (degrees) applied to a manual projected-profile
+    /// azimuth before it drives the plot. A typed or drawn azimuth is a compass
+    /// bearing (magnetic); the plotted stations are grid-aligned, so resolve
+    /// grid = magnetic + declination - convergence. Returns 0.0 for
+    /// non-projected scraps, for auto azimuths (already grid from the minimizer
+    /// fit), and when there's no trip calibration (issue #644).
+    double projectedProfileAzimuthAdjustment() const;
 
 private slots:
 //    void updateStationsWithNewCave();

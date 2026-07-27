@@ -644,6 +644,38 @@ double cwScrap::planGridConvergence() const
     return cwGridConvergence::angleForCave(parentCave());
 }
 
+double cwScrap::projectedProfileAzimuthAdjustment() const
+{
+    if(type() != ProjectedProfile) { return 0.0; }
+    if(calculateNoteTransform()) { return 0.0; } //Auto azimuth is already grid north
+    cwTripCalibration* calibration = tripCalibration();
+    if(calibration == nullptr) { return 0.0; }
+    return calibration->declination() - cwGridConvergence::angleForCave(parentCave());
+}
+
+cwAbstractScrapViewMatrix::Data* cwScrap::resolvedViewMatrixData() const
+{
+    cwAbstractScrapViewMatrix::Data* data = viewMatrix()->data()->clone();
+
+    if(type() == ProjectedProfile) {
+        //Cast is gated on the type, so it is always safe. The adjustment is 0.0
+        //for auto azimuths and uncalibrated scraps, leaving the stored value be.
+        const double adjustment = projectedProfileAzimuthAdjustment();
+        if(adjustment != 0.0) {
+            auto* projected = static_cast<cwProjectedProfileScrapViewMatrix::Data*>(data);
+            projected->setAzimuth(cwWrapDegrees360(projected->azimuth() + adjustment));
+        }
+    }
+
+    return data;
+}
+
+QMatrix4x4 cwScrap::resolvedViewMatrix() const
+{
+    std::unique_ptr<cwAbstractScrapViewMatrix::Data> data(resolvedViewMatrixData());
+    return data->matrix();
+}
+
 cwNoteTransformationData cwScrap::noteTransformAdjustedDeclination() const {
     return noteTransformAdjustedDeclination(noteTransformation()->data());
 }
@@ -969,7 +1001,7 @@ QMatrix4x4 cwScrap::mapWorldToNoteMatrix(const cwNoteStation& referenceStation) 
     QMatrix4x4 toNormalizedNote = noteStationOffset
             * dotsOnPageMatrix
             * noteTransformMatrix
-            * viewMatrix()->matrix(); //Change the view passed on the projection
+            * resolvedViewMatrix(); //Change the view passed on the projection
 
     return toNormalizedNote;
 }

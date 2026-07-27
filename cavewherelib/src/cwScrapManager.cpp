@@ -1163,7 +1163,7 @@ void cwScrapManager::updateScrapGeometryHelper(QList<cwScrap *> scraps)
 cwTriangulateInData cwScrapManager::mapScrapToTriangulateInData(cwScrap *scrap) const {
     cwTriangulateInData data;
     data.setOutline(scrap->points());
-    data.setViewMatrix(scrap->viewMatrix()->data()->clone());
+    data.setViewMatrix(scrap->resolvedViewMatrixData());
     data.setLeads(scrap->leads());
     data.setMorphingSettings(m_warpingSettings->data());
 

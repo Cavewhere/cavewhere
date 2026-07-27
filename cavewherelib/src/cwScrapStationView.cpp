@@ -199,7 +199,7 @@ void cwScrapStationView::updateShotLines() {
                 dotPerMeter *
                 notePageAspect *
                 noteTransformMatrix *
-                scrap()->viewMatrix()->matrix() *
+                scrap()->resolvedViewMatrix() *
                 offsetMatrix;
 
         //Only used if the scrap is in running profile
