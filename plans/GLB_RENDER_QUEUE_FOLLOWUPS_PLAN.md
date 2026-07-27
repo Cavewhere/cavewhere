@@ -50,7 +50,17 @@ keyword-item wiring (`addKeywordItemForNote`), and picking registration. Does
 *not* avoid the re-triangulation itself (still done in the worker) — only the
 downstream id churn.
 
-### Commit 2 — Replace the hand-coalesced queue with an id-keyed map
+### Commit 2 (done) — Replace the hand-coalesced queue with an id-keyed map
+
+**Status: implemented.** `m_pendingChanges` is now a
+`QHash<uint32_t, PendingItemState>` (per-id lifecycle Add/Remove/Update + dirty
+flags + one payload), so coalescing is a data-structure invariant — the O(n)
+`findPending` scan and the O(N²) drain are gone. `cwRhiTexturedItems::synchronize`
+walks the keyed map. A symmetric `updateItem(uint32_t id, const Item&)` was added
+and the Commit 1 reuse path in `runBatch()` collapses to a single call per item.
+E1 (texture cacheKey gate) was **deferred** — re-triangulation decodes a fresh
+`QImage` per run, so its `cacheKey()` changes every edit and the gate would never
+fire; revisit only if the triangulator starts returning a stable texture handle.
 
 `cavewherelib/src/cwRenderTexturedItems.cpp:127` — `addCommand()` maintains
 coalescing by hand over a flat `QVector`, with an O(n) `pendingIndexOfType`

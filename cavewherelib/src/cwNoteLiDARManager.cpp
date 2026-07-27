@@ -637,13 +637,7 @@ void cwNoteLiDARManager::runBatch()
                                  // unchanged, so the note's keyword/visibility binding
                                  // still holds and needs no rebind.
                                  for (int itemIndex = 0; itemIndex < items.size(); ++itemIndex) {
-                                     const uint32_t id = oldIds.at(itemIndex);
-                                     const auto& item = items.at(itemIndex);
-                                     m_render->updateGeometry(id, item.geometry);
-                                     m_render->updateTexture(id, item.texture);
-                                     m_render->setMaterial(id, item.material);
-                                     m_render->setUniformBlock(id, item.uniformBlock);
-                                     m_render->setModelMatrix(id, item.modelMatrix);
+                                     m_render->updateItem(oldIds.at(itemIndex), items.at(itemIndex));
                                  }
                              } else {
                                  // First build, or the item count changed (e.g. the note's
