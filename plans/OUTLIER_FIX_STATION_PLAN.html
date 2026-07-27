@@ -774,13 +774,39 @@ mode combo (<code>:62-101</code>), UTM zone <code>SpinBox</code> (<code>:103-119
     <code>tst_FixStationPage.qml</code>). (2) <code>isFixed()</code> alone can't drive the badge: it's a lookup, not a
     bindable property, so a new <code>fixedStationsChanged()</code> signal covers every way the answer can move.
     <code>countChanged()</code> can't stand in — <b>renaming</b> a fix changes which station shows as Fixed without
-    changing how many fixes there are.</li>
+    changing how many fixes there are. <span class="mono-note"><b>Both halves of (2) were superseded by the
+    <code>StationFixedRole</code> follow-up below — see correction (3).</b></span></li>
+    <li><b>(3) Correction added 2026-07-26 — the badge is a model role, not a QML lookup.</b> Commit 10 shipped the badge
+    as an imperative <code>fixStations.isFixed(name)</code> call in <code>StationBox.qml</code>, made reactive by a
+    <code>_fixStationsRevision</code> counter bumped from <code>fixedStationsChanged</code>. The follow-up moved the
+    question onto <code>cwSurveyEditorModel</code> as a derived read-only <code>StationFixedRole</code>
+    (<code>roleNames()</code> = <code>"stationFixed"</code>), read by <code>DrySurveyComponent</code>'s
+    <code>required property bool stationFixed</code> and passed to <code>StationBox.stationIsFixed</code>; the counter,
+    the <code>Connections</code> and the cell's borrowed <code>fixStations</code> handle are all deleted. Three claims
+    above are now wrong:
+      <ul>
+        <li><code>fixedStationsChanged()</code> does <b>not</b> cover every way the answer can move. Renaming the
+        <b>station</b> is a chunk edit that fires no fix-model signal at all. That is why
+        <code>cwSurveyEditorModel::changedRolesFor()</code> exists — it adds <code>StationFixedRole</code> to the
+        <code>dataChanged</code> a <code>StationNameRole</code> edit already emits, at both emit sites. Commit 10's QML
+        got away with it only because <code>stationNameValue</code> was independently reactive.</li>
+        <li><code>isFixed()</code> has no QML caller left. It is called once, in C++, inside <code>data()</code>;
+        reactivity is ordinary <code>dataChanged</code>.</li>
+        <li><code>canFix</code> no longer consults a model — it is <code>fixStationPopup !== null</code> plus a non-empty
+        name — and <b>Remove Fix</b> calls a new <code>FixStationPopup.removeFixFor(name)</code> rather than reaching
+        through the popup for <code>removeFixStation</code>. The cell holds no <code>FixStationModel</code> handle.</li>
+      </ul>
+      Cave lookup rides <code>cwTrip::parentCaveChanged</code>, so a trip reparented or attached after
+      <code>setTrip</code> repoints at the right cave's fixes. Tests: thirteen sections in
+      <code>test_cwSurveyEditorModel.cpp</code>, mutation-checked against removal of the connection and of either emit
+      site's role list.</li>
     <li><b>Caret only, not <code>StationMenu</code>.</b> The section offers "and/or"; the caret is what mirrors the
     Exclude-distance template it calls the one to copy, and duplicating the action into the right-click menu would mean
     two paths to keep in step. <code>StationBox</code> gained a focus-activated <code>ContextMenuButton</code> with
     <b>Mark Station as Fixed</b> / <b>Edit Fixed Coordinates...</b> (one action, two labels — opening the editor creates
     the fix when there isn't one) plus <b>Remove Fix</b>. Gated on <code>canFix</code>: a non-empty name and a
-    resolvable model, so the trailing virtual row offers nothing.</li>
+    resolvable model, so the trailing virtual row offers nothing. <span class="mono-note">The "resolvable model" half is
+    now "a wired-up popup" — see correction (3).</span></li>
     <li><b>The pill was extracted, not copied.</b> New shared <code>DataBoxBadge.qml</code> carries the cell-state pill;
     <code>ShotDistanceDataBox</code>'s "Excluded" badge now uses it too, and <code>StationBox</code>'s "Fixed" badge is
     three lines rather than a second copy of the same rectangle.</li>
@@ -1219,6 +1245,28 @@ conspicuously ignores the errors sitting right next to it.
 itself is ambivalent about it ("might pollute the tool bar with a tool that won't be used that much"). Left open; it is
 a 3D-view interaction, not a coordinate-entry one, and shares nothing with U11 beyond the subject.</p>
 
+<div class="callout">
+<b>Decide while you're in here: is <code>FixStationPopup</code> still the right owner?</b> <i>Raised 2026-07-26 by the
+<code>StationFixedRole</code> review; noted here because U11/U12 is the next thing to touch this file.</i>
+The cell's <b>read</b> path is now a model role (§13.3 correction (3)), but its <b>write</b> path calls sideways into a
+sibling view component: <code>StationBox.qml:143,150</code> reach <code>fixStationPopup.openFor()</code> and
+<code>fixStationPopup.removeFixFor()</code>, so a <code>QC.Popup</code> is the cell's API for adding and removing cave
+data. Two consequences worth weighing before adding a third responsibility:
+<ul>
+  <li><code>canFix</code> now derives "may the user fix this station" from "is a popup wired up"
+  (<code>StationBox.qml:32</code>) — a presentation fact standing in for a capability. With the cell's
+  <code>fixStations</code> handle deleted, invoking actions is the <i>only</i> remaining reason a station cell holds a
+  <code>FixStationPopup</code> at all.</li>
+  <li><code>removeFixFor</code> has to open-code a "close if I'm showing that row" guard
+  (<code>FixStationPopup.qml:81-83</code>) purely because the mutation is hosted by the view that displays it.</li>
+</ul>
+U11/U12 gives this popup a parser and an error surface — a third role. If a non-visual controller (or invokables on
+<code>cwSurveyEditorModel</code>, which is already cave-aware after the follow-up) is ever going to happen, doing it
+<i>with</i> U11 is cheaper than after. Blast radius either way: <code>StationBox</code>,
+<code>DrySurveyComponent</code>, <code>SurveyEditor</code>, <code>FixStationPopup</code>,
+<code>tst_MarkStationFixed</code>.
+</div>
+
 <h2 id="commit9followups">14. Follow-ups raised by the Commit 9 review</h2>
 <p>Recorded from the pre-commit review of Commit 9. None is in scope for Commit 9 itself; all were left as code-untouched
 notes. Ordered by payoff-vs-cost, not by confidence.</p>
@@ -1319,6 +1367,28 @@ notes. Ordered by payoff-vs-cost, not by confidence.</p>
   invariant. Consistent with §13.6, which prescribed this back-reference deliberately. Revisit only if the proxy ever
   needs to <i>write</i> to the cave, or is handed a cave it does not belong to.</span></td>
   <td>Closed by design decision — no code change</td></tr>
+
+  <tr><td><b>A5 — No stated rule for where a computed model role lives</b>
+  (<code>cwSurveyEditorModel.h:138</code>) — <i>added 2026-07-26</i></td>
+  <td>The feature now ships <b>two opposite answers</b> and neither is written down. A1 concluded that computed roles
+  must not ride the data model's <code>dataChanged</code> and resolved it structurally, with a
+  <code>QIdentityProxyModel</code> (<code>cwFixStationDiagnosticsModel</code>) owning the computed roles, the cave
+  back-reference and both refresh triggers. The <code>StationFixedRole</code> follow-up (§13.3 correction (3)) does the
+  identical job for the survey table the other way: role, <code>QPointer&lt;cwFixStationModel&gt;</code>, sync wiring and
+  a role-dependency branch all baked into the base model.
+  <span class="mono-note">Both are defensible <i>here</i> — <code>cwSurveyEditorModel</code> has zero non-view consumers
+  of <code>dataChanged</code>, so A1's failure mode (a computed-role emit mistaken for a user edit) cannot bite, and the
+  model is already a pure view transform rather than persisted data. But note A3's closure criteria do <b>not</b>
+  transfer: A3 accepted its cave back-reference because it was <code>const cwCave* const</code> and strictly
+  lifetime-nested inside the cave, whereas <code>m_fixStations</code> is a non-const <code>QPointer</code> on a
+  QML-owned object that can outlive the cave. It is still safe, just safe for different reasons than the ones A3
+  recorded — so neither A1 nor A3 should be read as covering this site.</span>
+  The next cave-scoped derived role for the survey table is easy to name (station absent from the cave's
+  <code>cwSurveyNetwork</code>, station missing from the plot's position lookup). Landing it the current way costs a
+  second <code>QPointer</code>, a second <code>sync*Signals()</code>, a second <code>invalidate*()</code> and a second
+  <code>if</code> in <code>changedRolesFor()</code>. Decide the criterion — <i>proxy when the base model is persisted
+  data, in-model when it is already a view transform</i>, or whatever replaces it — before that second role lands.</td>
+  <td><code>cwSurveyEditorModel</code>, <code>cwFixStationDiagnosticsModel</code>, 3 QML sites, 2 test files</td></tr>
 
   <tr><td><b>A4 — No first-class scoped view of an <code>errorModel</code></b>
   (<code>cwErrorListModel.h:44</code>)</td>

@@ -34,6 +34,7 @@ Item {
     required property cwSurveyEditorBoxData stationRight;
     required property cwSurveyEditorBoxData stationUp;
     required property cwSurveyEditorBoxData stationDown;
+    required property bool stationFixed;
     required property cwSurveyEditorBoxData shotDistance;
     required property bool shotDistanceIncluded;
     required property cwSurveyEditorBoxData shotCompass;
@@ -89,6 +90,7 @@ Item {
                 view: itemId.ListView.view
                 dataValidator: stationValidator
                 fixStationPopup: itemId.fixStationPopup
+                stationIsFixed: itemId.stationFixed
             }
 
 

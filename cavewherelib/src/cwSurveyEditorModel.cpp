@@ -1,6 +1,8 @@
 //Our includes
 #include "cwSurveyEditorModel.h"
 #include "cwTrip.h"
+#include "cwCave.h"
+#include "cwFixStationModel.h"
 #include "cwSurveyChunk.h"
 #include "cwTripCalibration.h"
 #include "cwSurveyEditorBoxData.h"
@@ -55,7 +57,7 @@ void cwSurveyEditorModel::connectChunkSignals(cwSurveyChunk* chunk)
             syncVirtualRows(chunk);
             return;
         }
-        emit dataChanged(modelIndex, modelIndex, {toModelRole(role)});
+        emit dataChanged(modelIndex, modelIndex, changedRolesFor(role));
         syncVirtualRows(chunk);
     };
 
@@ -99,6 +101,48 @@ void cwSurveyEditorModel::connectChunkSignals(cwSurveyChunk* chunk)
                 }
                 m_removeToken = {};
             });
+}
+
+/**
+ * Points StationFixedRole at the fixes of whichever cave the current trip
+ * belongs to. Re-run whenever the trip or its cave changes — a trip can be
+ * reparented, and a trip loaded before its cave is attached has no fixes yet.
+ */
+void cwSurveyEditorModel::syncFixStationSignals()
+{
+    auto cave = m_trip ? m_trip->parentCave() : nullptr;
+    auto fixStations = cave ? cave->fixStations() : nullptr;
+
+    if(m_fixStations == fixStations) {
+        return;
+    }
+
+    if(m_fixStations) {
+        disconnect(m_fixStations, &cwFixStationModel::fixedStationsChanged,
+                   this, &cwSurveyEditorModel::invalidateStationFixed);
+    }
+
+    m_fixStations = fixStations;
+
+    if(m_fixStations) {
+        connect(m_fixStations, &cwFixStationModel::fixedStationsChanged,
+                this, &cwSurveyEditorModel::invalidateStationFixed);
+    }
+
+    invalidateStationFixed();
+}
+
+/**
+ * A fix was added, removed or renamed, so any station row could have changed
+ * its answer. Which ones isn't knowable without re-reading every name, and the
+ * role is a single lookup, so the whole model is invalidated instead.
+ */
+void cwSurveyEditorModel::invalidateStationFixed()
+{
+    const int rows = rowCount();
+    if(rows > 0) {
+        emit dataChanged(index(0), index(rows - 1), {StationFixedRole});
+    }
 }
 
 void cwSurveyEditorModel::setTrip(cwTrip* trip) {
@@ -183,6 +227,9 @@ void cwSurveyEditorModel::setTrip(cwTrip* trip) {
                         endRemoveRows();
                     });
 
+            connect(m_trip, &cwTrip::parentCaveChanged, this,
+                    &cwSurveyEditorModel::syncFixStationSignals);
+
             // Connect signals for all existing chunks.
             const auto chunks = m_trip->chunks();
             for (cwSurveyChunk* chunk : chunks) {
@@ -192,6 +239,7 @@ void cwSurveyEditorModel::setTrip(cwTrip* trip) {
 
         endResetModel();
         syncFocusedCellSignals();
+        syncFixStationSignals();
 
         emit tripChanged();
     }
@@ -310,11 +358,14 @@ QVariant cwSurveyEditorModel::data(const QModelIndex& index, int role) const
             ));
     };
 
-    auto stationData = [index, role, data](const cwSurveyEditorRowIndex& chunkIndex)->QVariant {
+    auto stationData = [this, index, role, data](const cwSurveyEditorRowIndex& chunkIndex)->QVariant {
         const auto chunk = chunkIndex.chunk();
         const int stationIndex = chunkIndex.indexInChunk();
         if(stationIndex == chunk->stationCount()) {
             switch(role) {
+            case StationFixedRole:
+                //The trailing virtual row has no name, so nothing can anchor it
+                return false;
             case StationNameRole:
                 return data(cwSurveyChunk::StationNameRole, [&]() { return cwReading(QString()); });
             case StationLeftRole:
@@ -330,6 +381,9 @@ QVariant cwSurveyEditorModel::data(const QModelIndex& index, int role) const
             }
         }
         switch(role) {
+        case StationFixedRole:
+            return m_fixStations != nullptr
+                    && m_fixStations->isFixed(chunk->station(stationIndex).name());
         case StationNameRole:
             return data(cwSurveyChunk::StationNameRole, [&]() { return cwReading(chunk->station(stationIndex).name()); });
         case StationLeftRole:
@@ -467,7 +521,7 @@ bool cwSurveyEditorModel::setDataAt(const cwSurveyEditorCellIndex& cell, const Q
 
         const auto changedModelIndex = toModelIndex({chunk, indexInChunk, rowIndex.rowType()});
         if(changedModelIndex.isValid()) {
-            emit dataChanged(changedModelIndex, changedModelIndex, {toModelRole(cell.dataRole())});
+            emit dataChanged(changedModelIndex, changedModelIndex, changedRolesFor(cell.dataRole()));
         }
 
         beginInsertRows(QModelIndex(), oldRowCount, oldRowCount + 1);
@@ -841,6 +895,7 @@ QHash<int, QByteArray> cwSurveyEditorModel::roleNames() const
     roles.insert(StationRightRole, "stationRight");
     roles.insert(StationUpRole, "stationUp");
     roles.insert(StationDownRole, "stationDown");
+    roles.insert(StationFixedRole, "stationFixed");
     roles.insert(ShotDistanceRole, "shotDistance");
     roles.insert(ShotDistanceIncludedRole, "shotDistanceIncluded");
     roles.insert(ShotCompassRole, "shotCompass");
@@ -1532,6 +1587,19 @@ cwSurveyEditorModel::Role cwSurveyEditorModel::toModelRole(cwSurveyChunk::DataRo
         Q_ASSERT(false);
         return StationNameRole;
     }
+}
+
+/**
+ * The model roles a chunk-level change to \a chunkRole invalidates. Renaming a
+ * station also moves it into or out of the cave's fixes, which no chunk role
+ * reports — the fixes aren't the chunk's data.
+ */
+QList<int> cwSurveyEditorModel::changedRolesFor(cwSurveyChunk::DataRole chunkRole) const
+{
+    if(chunkRole == cwSurveyChunk::StationNameRole) {
+        return {StationNameRole, StationFixedRole};
+    }
+    return {toModelRole(chunkRole)};
 }
 
 /**

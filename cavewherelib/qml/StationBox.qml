@@ -14,38 +14,23 @@ DataBox {
 
     // property var window: QQ.Window.window
 
-    // The page-level inline fix editor this cell's caret opens. Null leaves the
-    // caret and badge off, so a host that doesn't offer fixing loses nothing.
+    // The page-level inline fix editor this cell's caret opens, and the one
+    // handle the cell has on the cave's fixes. Null leaves the caret off, so a
+    // host that offers no way to edit a fix simply doesn't offer the actions.
     property FixStationPopup fixStationPopup: null
 
-    readonly property FixStationModel fixStations: stationBox.fixStationPopup !== null
-                                                   ? stationBox.fixStationPopup.fixStations
-                                                   : null
+    // Whether one of the cave's fixes anchors this station. Read from the survey
+    // model's StationFixedRole rather than looked up here — see
+    // DrySurveyComponent. Independent of the caret above: a badge is worth
+    // showing even where fixing isn't offered.
+    property bool stationIsFixed: false
 
     readonly property string stationNameValue: stationBox.dataValue.reading.value
 
     // A blank name has nothing to anchor — that's the trailing virtual station
     // row, which shouldn't offer to fix itself.
-    readonly property bool canFix: stationBox.fixStations !== null
+    readonly property bool canFix: stationBox.fixStationPopup !== null
                                    && stationBox.stationNameValue.trim() !== ""
-
-    // isFixed() is a lookup, not a bindable property, so there is nothing for a
-    // binding to depend on when a fix is added, removed or renamed. Bumping this
-    // from fixedStationsChanged supplies that dependency — the `>= 0` term below
-    // is always true, and is load-bearing: drop it and the badge goes stale.
-    // (The station name and the model are already reactive on their own.)
-    property int _fixStationsRevision: 0
-
-    readonly property bool stationIsFixed: stationBox._fixStationsRevision >= 0
-                                           && stationBox.canFix
-                                           && stationBox.fixStations.isFixed(stationBox.stationNameValue)
-
-    QQ.Connections {
-        target: stationBox.fixStations
-        function onFixedStationsChanged() {
-            stationBox._fixStationsRevision++
-        }
-    }
 
     StationMenu {
         id: removeMenuId
@@ -162,7 +147,7 @@ DataBox {
                 objectName: "removeStationFixMenuItem"
                 text: qsTr("Remove Fix")
                 enabled: stationBox.stationIsFixed
-                onTriggered: stationBox.fixStations.removeFixStation(stationBox.stationNameValue)
+                onTriggered: stationBox.fixStationPopup.removeFixFor(stationBox.stationNameValue)
             }
         }
     }

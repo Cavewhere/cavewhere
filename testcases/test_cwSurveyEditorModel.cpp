@@ -8,6 +8,7 @@
 #include "cwSurveyChunk.h"
 #include "cwSurveyEditorBoxData.h"
 #include "cwErrorListModel.h"
+#include "cwFixStationModel.h"
 #include "cwProject.h"
 #include "cwCavingRegion.h"
 #include "cwCave.h"
@@ -19,6 +20,29 @@
 #include "SpyChecker.h"
 #include "TestHelper.h"
 
+namespace {
+
+/**
+ * True when \a spy saw a dataChanged whose row range covers \a row and whose
+ * roles include \a role. An empty roles list is Qt's spelling of "every role",
+ * so it counts as covering anything.
+ */
+bool dataChangedCovers(const QSignalSpy& spy, int row, cwSurveyEditorModel::Role role)
+{
+    for(const auto& call : spy) {
+        const auto topLeft = call.at(0).toModelIndex();
+        const auto bottomRight = call.at(1).toModelIndex();
+        const auto roles = call.at(2).value<QList<int>>();
+        if(row >= topLeft.row() && row <= bottomRight.row()
+            && (roles.contains(role) || roles.isEmpty()))
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+}
 
 TEST_CASE("cwSurveyEditorModel new chunk should work correctly", "[cwSurveyEditorModel]") {
     cwTrip trip;
@@ -734,23 +758,212 @@ TEST_CASE("cwSurveyEditorModel updates box indices after insertStation", "[cwSur
     CHECK(shot10Row.data(cwSurveyEditorModel::ShotDistanceRole).value<cwSurveyEditorBoxData>().rowIndex().indexInChunk() == 0);
     CHECK(shot20Row.data(cwSurveyEditorModel::ShotDistanceRole).value<cwSurveyEditorBoxData>().rowIndex().indexInChunk() == 2);
 
-    auto dataChangedCovers = [&](int row, cwSurveyEditorModel::Role role) {
-        for(const auto& call : dataChangedSpy) {
-            const auto topLeft = call.at(0).toModelIndex();
-            const auto bottomRight = call.at(1).toModelIndex();
-            const auto roles = call.at(2).value<QVector<int>>();
-            if(row >= topLeft.row() && row <= bottomRight.row()
-                && (roles.contains(role) || roles.isEmpty()))
-            {
-                return true;
-            }
-        }
-        return false;
+    CHECK(dataChangedCovers(dataChangedSpy, a1Row.row(), cwSurveyEditorModel::StationNameRole));
+    CHECK(dataChangedCovers(dataChangedSpy, a2Row.row(), cwSurveyEditorModel::StationNameRole));
+    CHECK(dataChangedCovers(dataChangedSpy, shot20Row.row(), cwSurveyEditorModel::ShotDistanceRole));
+}
+
+TEST_CASE("cwSurveyEditorModel reports which stations the cave's fixes anchor",
+          "[cwSurveyEditorModel][FixStation]")
+{
+    cwCave cave;
+    cave.addTrip();
+    auto trip = cave.trip(0);
+    REQUIRE(trip != nullptr);
+
+    trip->addNewChunk();
+    auto chunk = trip->chunk(0);
+    REQUIRE(chunk != nullptr);
+
+    cwSurveyEditorModel model;
+    model.setTrip(trip);
+    model.setFocusedChunk(chunk);
+
+    auto stationRow = [&model, chunk](int indexInChunk) {
+        const int row = model.toModelRow(model.rowIndex(chunk, indexInChunk, cwSurveyEditorRowIndex::StationRow));
+        REQUIRE(row >= 0);
+        return model.index(row, 0);
     };
 
-    CHECK(dataChangedCovers(a1Row.row(), cwSurveyEditorModel::StationNameRole));
-    CHECK(dataChangedCovers(a2Row.row(), cwSurveyEditorModel::StationNameRole));
-    CHECK(dataChangedCovers(shot20Row.row(), cwSurveyEditorModel::ShotDistanceRole));
+    auto isFixed = [](const QModelIndex& index) {
+        return index.data(cwSurveyEditorModel::StationFixedRole).toBool();
+    };
+
+    REQUIRE(model.setDataAt(model.cellIndex(stationRow(0).row(), cwSurveyChunk::StationNameRole), "A1"));
+    REQUIRE(model.setDataAt(model.cellIndex(stationRow(1).row(), cwSurveyChunk::StationNameRole), "A2"));
+
+    auto fixStations = cave.fixStations();
+    REQUIRE(fixStations != nullptr);
+
+    SECTION("no fixes means no fixed stations") {
+        CHECK_FALSE(isFixed(stationRow(0)));
+        CHECK_FALSE(isFixed(stationRow(1)));
+    }
+
+    SECTION("a fix marks its station, and only its station") {
+        cwSignalSpy dataChangedSpy(&model, &QAbstractItemModel::dataChanged);
+
+        fixStations->addFixStation("A1");
+
+        CHECK(isFixed(stationRow(0)));
+        CHECK_FALSE(isFixed(stationRow(1)));
+
+        //The rows are invalidated so a view can rebind, not just re-read. Every
+        //row is covered, not only the one that changed: which stations moved
+        //isn't knowable without re-reading them all.
+        REQUIRE(dataChangedSpy.count() >= 1);
+        CHECK(dataChangedSpy.last().at(2).value<QList<int>>()
+              == QList<int>({cwSurveyEditorModel::StationFixedRole}));
+        CHECK(dataChangedSpy.last().at(0).toModelIndex().row() == 0);
+        CHECK(dataChangedSpy.last().at(1).toModelIndex().row() == model.rowCount() - 1);
+    }
+
+    SECTION("matching is case-insensitive") {
+        fixStations->addFixStation("a1");
+        CHECK(isFixed(stationRow(0)));
+    }
+
+    SECTION("matching ignores space around the stored fix name") {
+        //addFixStation trims, so the untrimmed name has to be set directly for
+        //the match itself to be the thing under test
+        fixStations->addFixStation("A1");
+        fixStations->setData(fixStations->index(0), "  a1  ", cwFixStationModel::StationNameRole);
+
+        CHECK(isFixed(stationRow(0)));
+    }
+
+    SECTION("removing the fix clears its station") {
+        fixStations->addFixStation("A1");
+        REQUIRE(isFixed(stationRow(0)));
+
+        fixStations->removeFixStation("A1");
+        CHECK_FALSE(isFixed(stationRow(0)));
+    }
+
+    SECTION("renaming the fix moves it to the other station") {
+        fixStations->addFixStation("A1");
+        REQUIRE(isFixed(stationRow(0)));
+
+        fixStations->setData(fixStations->index(0), "A2", cwFixStationModel::StationNameRole);
+
+        CHECK_FALSE(isFixed(stationRow(0)));
+        CHECK(isFixed(stationRow(1)));
+    }
+
+    SECTION("renaming the station moves the badge with it") {
+        fixStations->addFixStation("A1");
+        REQUIRE(isFixed(stationRow(0)));
+
+        //Spied only from here: adding the fix above already invalidated every
+        //row, so a spy opened before it would report the rename's own emission
+        //as seen no matter what the rename emits
+        cwSignalSpy dataChangedSpy(&model, &QAbstractItemModel::dataChanged);
+
+        const int renamedRow = stationRow(0).row();
+        REQUIRE(model.setDataAt(model.cellIndex(renamedRow, cwSurveyChunk::StationNameRole), "B1"));
+        CHECK_FALSE(isFixed(stationRow(0)));
+
+        //A rename is a chunk edit, so nothing else would tell a view the answer moved
+        CHECK(dataChangedCovers(dataChangedSpy, renamedRow, cwSurveyEditorModel::StationFixedRole));
+    }
+
+    SECTION("renaming a station onto an existing fix turns the badge on") {
+        fixStations->addFixStation("B1");
+        REQUIRE_FALSE(isFixed(stationRow(0)));
+
+        cwSignalSpy dataChangedSpy(&model, &QAbstractItemModel::dataChanged);
+
+        const int renamedRow = stationRow(0).row();
+        REQUIRE(model.setDataAt(model.cellIndex(renamedRow, cwSurveyChunk::StationNameRole), "B1"));
+
+        CHECK(isFixed(stationRow(0)));
+        CHECK(dataChangedCovers(dataChangedSpy, renamedRow, cwSurveyEditorModel::StationFixedRole));
+    }
+
+    SECTION("naming the trailing virtual row onto a fix turns its badge on") {
+        fixStations->addFixStation("A3");
+
+        //The virtual row commits through setDataAt's own dataChanged rather
+        //than the chunk's, so it needs the roles list to be right there too
+        const int virtualRow = model.toModelRow(model.rowIndex(chunk,
+                                                               chunk->stationCount(),
+                                                               cwSurveyEditorRowIndex::StationRow));
+        REQUIRE(virtualRow >= 0);
+
+        cwSignalSpy dataChangedSpy(&model, &QAbstractItemModel::dataChanged);
+
+        REQUIRE(model.setDataAt(model.cellIndex(virtualRow, cwSurveyChunk::StationNameRole), "A3"));
+
+        CHECK(isFixed(model.index(virtualRow, 0)));
+        CHECK(dataChangedCovers(dataChangedSpy, virtualRow, cwSurveyEditorModel::StationFixedRole));
+    }
+
+    SECTION("the trailing virtual station row is never fixed") {
+        fixStations->addFixStation("A1");
+
+        const int virtualRow = model.toModelRow(model.rowIndex(chunk,
+                                                               chunk->stationCount(),
+                                                               cwSurveyEditorRowIndex::StationRow));
+        REQUIRE(virtualRow >= 0);
+        CHECK_FALSE(isFixed(model.index(virtualRow, 0)));
+    }
+
+    SECTION("a trip with no cave has no fixes to read") {
+        cwTrip orphan;
+        orphan.addNewChunk();
+
+        cwSurveyEditorModel orphanModel;
+        orphanModel.setTrip(&orphan);
+
+        const int row = orphanModel.toModelRow(orphanModel.rowIndex(orphan.chunk(0), 0,
+                                                                    cwSurveyEditorRowIndex::StationRow));
+        REQUIRE(row >= 0);
+        CHECK_FALSE(isFixed(orphanModel.index(row, 0)));
+    }
+
+    SECTION("moving the trip to another cave reads that cave's fixes") {
+        fixStations->addFixStation("A1");
+        REQUIRE(isFixed(stationRow(0)));
+
+        cwCave otherCave;
+        otherCave.fixStations()->addFixStation("A2");
+        otherCave.addTrip(trip);
+
+        //The fixes follow the trip's new parent, not the cave it was loaded in
+        CHECK_FALSE(isFixed(stationRow(0)));
+        CHECK(isFixed(stationRow(1)));
+    }
+
+    SECTION("switching to a trip in another cave reads that cave's fixes") {
+        fixStations->addFixStation("A1");
+        REQUIRE(isFixed(stationRow(0)));
+
+        cwCave otherCave;
+        otherCave.addTrip();
+        auto otherTrip = otherCave.trip(0);
+        REQUIRE(otherTrip != nullptr);
+        otherTrip->addNewChunk();
+        auto otherChunk = otherTrip->chunk(0);
+
+        model.setTrip(otherTrip);
+        model.setFocusedChunk(otherChunk);
+
+        auto otherStationRow = [&model, otherChunk](int indexInChunk) {
+            const int row = model.toModelRow(model.rowIndex(otherChunk, indexInChunk,
+                                                            cwSurveyEditorRowIndex::StationRow));
+            REQUIRE(row >= 0);
+            return model.index(row, 0);
+        };
+
+        REQUIRE(model.setDataAt(model.cellIndex(otherStationRow(0).row(),
+                                                cwSurveyChunk::StationNameRole), "A1"));
+
+        //Same station name, different cave: the first cave's fix must not follow
+        CHECK_FALSE(isFixed(otherStationRow(0)));
+
+        otherCave.fixStations()->addFixStation("A1");
+        CHECK(isFixed(otherStationRow(0)));
+    }
 }
 
 TEST_CASE("cwSurveyEditorModel should update when survey data changes", "[cwSurveyEditorModel]") {
@@ -941,7 +1154,15 @@ TEST_CASE("cwSurveyEditorModel should update when survey data changes", "[cwSurv
         CHECK(dataChangedSpy.first().at(0).toModelIndex() == index);
         // qDebug() << "dataChange1:" << dataChangedSpy.last().at(1).toModelIndex() << index;
         CHECK(dataChangedSpy.first().at(1).toModelIndex() == index);
-        CHECK(dataChangedSpy.first().at(2).value<QVector<int>>() == QVector<int>({role}));
+        //Renaming a station also moves whether the cave's fixes anchor it, so
+        //that edit carries StationFixedRole alongside the role that changed.
+        //Checked as a set: Qt's roles argument carries no ordering promise, and
+        //every consumer reads it with contains().
+        const bool renamesStation = (role == cwSurveyEditorModel::StationNameRole);
+        const auto actualRoles = dataChangedSpy.first().at(2).value<QList<int>>();
+        CHECK(actualRoles.size() == (renamesStation ? 2 : 1));
+        CHECK(actualRoles.contains(role));
+        CHECK(actualRoles.contains(cwSurveyEditorModel::StationFixedRole) == renamesStation);
 
         spyChecker.clearSpyCounts();
     };

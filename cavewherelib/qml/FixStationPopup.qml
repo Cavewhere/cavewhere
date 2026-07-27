@@ -51,7 +51,7 @@ QC.Popup {
     // Opens the editor for `name`, anchored under `anchorItem`, marking the
     // station Fixed first if it isn't already — for an unfixed station, creating
     // the fix is the point of opening this.
-    function openFor(name, anchorItem) {
+    function openFor(name: string, anchorItem: QQ.Item): void {
         const model = popupId.fixStations
         if (model === null) {
             return
@@ -68,10 +68,26 @@ QC.Popup {
         popupId.open()
     }
 
+    // Drops the fix anchoring `name`. The survey table's Remove Fix goes through
+    // the editor rather than reaching past it for the model, so a cell only ever
+    // needs the one handle. Closes first when it's the row on screen — the popup
+    // edits by row index, which the removal invalidates.
+    function removeFixFor(name: string): void {
+        const model = popupId.fixStations
+        if (model === null) {
+            return
+        }
+
+        if (popupId.opened && popupId.stationName === name) {
+            popupId.close()
+        }
+        model.removeFixStation(name)
+    }
+
     // Positioned by hand rather than with a parent anchor: the caret that opens
     // this lives in a cell that can be destroyed while the popup is still up, so
     // the position is taken once and not tracked.
-    function moveTo(anchorItem) {
+    function moveTo(anchorItem: QQ.Item): void {
         if (anchorItem === null || popupId.parent === null) {
             return
         }
@@ -83,7 +99,7 @@ QC.Popup {
     // Fields are filled on open instead of bound to the model: the roles are
     // read through data(), which no binding can depend on. Nothing else edits
     // these rows while the popup is up, so one read is enough.
-    function reload() {
+    function reload(): void {
         const model = popupId.fixStations
         if (model === null || popupId.row < 0) {
             return
@@ -96,7 +112,7 @@ QC.Popup {
         elevationFieldId.text = model.data(modelIndex, FixStationModel.ElevationRole)
     }
 
-    function commit(role, value) {
+    function commit(role: int, value: var): void {
         const model = popupId.fixStations
         if (model === null || popupId.row < 0) {
             return

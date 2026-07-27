@@ -14,6 +14,8 @@
 #include <QPersistentModelIndex>
 #include <QQmlEngine>
 
+class cwFixStationModel;
+
 /**
  * @brief The cwSurveyEditorModel class
  *
@@ -57,6 +59,11 @@ public:
         StationRightRole,
         StationUpRole,
         StationDownRole,
+
+        //True when this station is anchored by one of its cave's fix stations.
+        //Read-only and derived: the fixes live in cwFixStationModel, not in the
+        //chunk, so this role is the survey table's only view of them.
+        StationFixedRole,
 
         //Shot Data Roles
         ShotDistanceRole,
@@ -128,6 +135,7 @@ private:
     };
 
     QPointer<cwTrip> m_trip; //!<
+    QPointer<cwFixStationModel> m_fixStations; //!< The trip's cave's fixes, for StationFixedRole
     QPointer<cwSurveyChunk> m_focusedChunk;
     QPointer<cwSurveyChunk> m_virtualRowsVisibleChunk;
     QPersistentModelIndex m_focusedRowIndex;
@@ -150,6 +158,7 @@ private:
     QModelIndex toModelIndex(const cwSurveyEditorRowIndex& rowIndex) const;
 
     Role toModelRole(cwSurveyChunk::DataRole chunkRole) const;
+    QList<int> changedRolesFor(cwSurveyChunk::DataRole chunkRole) const;
     cwSurveyEditorRowIndex::RowType toRowType(cwSurveyChunk::DataRole chunkRole) const;
     int stationCount(const cwSurveyChunk* chunk) const;
     int shotCount(const cwSurveyChunk* chunk) const;
@@ -160,6 +169,8 @@ private:
     void syncVirtualRows(cwSurveyChunk* chunk);
     void connectChunkSignals(cwSurveyChunk* chunk);
     void disconnectChunkSignals(cwSurveyChunk* chunk);
+    void syncFixStationSignals();
+    void invalidateStationFixed();
     void syncFocusedCellSignals();
     static bool isStationShotEmpty(cwSurveyChunk* chunk, int stationIndex);
     static void trim(cwSurveyChunk* chunk, TrimType trimType);
