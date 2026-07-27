@@ -26,7 +26,7 @@ Before a project has a remote the icon shows an upload cloud instead, and a
 click starts [setting one up](share-a-project.md#step-1-give-the-project-a-remote).
 That is the state ringed in orange, see below.
 
-![The CaveWhere window with the Sync button ringed at the right end of the top bar, showing an upload-cloud icon.](../images/collaboration-set-up-remote.png)
+![The CaveWhere window with the Sync button ringed near the right end of the top bar, showing an upload-cloud icon.](../images/collaboration-set-up-remote.png)
 *The Sync button, before this project has a remote.*
 
 ## What one click does
