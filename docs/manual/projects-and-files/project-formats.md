@@ -3,7 +3,7 @@ title: Choose a Project Format
 summary: The difference between a .cwproj directory and a bundled .cw file, which one to pick, how to convert, and what CaveWhere does with an old .cw.
 problem: Pick the project format that suits how you work, and understand what happened to the .cw file you have had for years.
 keywords: [format, cwproj, cw, bundle, directory, zip, sqlite, legacy, convert, save as, git, version history]
-related: [save-a-project.md, open-a-project.md, ../concepts/why-cavewhere.md]
+related: [save-a-project.md, open-a-project.md, ../getting-started/why-cavewhere.md]
 ---
 
 # Choose a Project Format

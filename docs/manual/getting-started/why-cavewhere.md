@@ -3,7 +3,7 @@ title: Why CaveWhere
 summary: The problems CaveWhere solves for cave surveyors, and how its main features map to them.
 problem: Understand what CaveWhere is for before learning how to use it.
 keywords: [overview, morphing, loop closure, git sync, lidar, keywords, layers, project format, why]
-related: [glossary.md]
+related: [../concepts/glossary.md]
 ---
 
 # Why CaveWhere
@@ -20,7 +20,7 @@ it.
 I built CaveWhere to answer one question fast: **where is there more cave to
 find?** A map that takes weeks of drafting is a historical record. A map that
 updates the moment you enter your survey is a *tool*. You can see the
-[leads](glossary.md#lead) and which way the surveyed passages head, before the
+[leads](../concepts/glossary.md#lead) and which way the surveyed passages head, before the
 next trip.
 
 The rest follows from that. 2D-to-3D [morphing](#from-a-2d-sketch-to-a-3d-cave)
@@ -50,9 +50,9 @@ dimensions. Traditionally it stays that way: the sketches never become a 3D
 model, and even the 2D map gets redrawn by hand every time the survey data
 changes.
 
-CaveWhere's signature feature, *[carpeting](glossary.md#carpeting)*, morphs
+CaveWhere's signature feature, *[carpeting](../concepts/glossary.md#carpeting)*, morphs
 those sketches into 3D. You digitize pieces of a sketch as
-[scraps](glossary.md#scrap), tie them to survey [stations](glossary.md#station),
+[scraps](../concepts/glossary.md#scrap), tie them to survey [stations](../concepts/glossary.md#station),
 and CaveWhere deforms each scrap onto the 3D survey line so the drawing carpets
 the passage. The model comes out of the drawings you already
 make in the cave.
@@ -62,7 +62,7 @@ make in the cave.
 **The problem:** Every instrument reading carries a little error. When a survey
 route comes back to a station it already visited, a *loop*, those errors add up
 and the two paths don't quite meet. A large mismatch usually means a
-[blunder](glossary.md#loop-closure): a transposed digit, a compass read
+[blunder](../concepts/glossary.md#loop-closure): a transposed digit, a compass read
 backwards, a mistyped distance.
 
 **What CaveWhere does:** CaveWhere finds the loops and reports the misclosure as
@@ -73,7 +73,7 @@ When the survey shifts, CaveWhere re-carpets the affected scraps on its own. You
 don't redraw anything.
 
 **Powered by Survex:** CaveWhere doesn't reinvent the survey math. It embeds
-[Survex](glossary.md#survex) 1.4.21, the open-source engine cavers use on the
+[Survex](../concepts/glossary.md#survex) 1.4.21, the open-source engine cavers use on the
 world's largest and most complex cave systems. Its `cavern` solver runs a real
 least-squares network adjustment: instead of dumping all the misclosure on the
 last shot, it spreads the error across the loop, weighted by each leg, to land
@@ -136,7 +136,7 @@ paper.
 Scan a passage in seconds with a LiDAR-capable phone (or build a photogrammetry
 model from photographs), export it as `.glb`, and drop it into your trip notes
 next to the sketches. Scans tie to stations and get
-[carpeted](glossary.md#carpeting) into the model just like sketched scraps.
+[carpeted](../concepts/glossary.md#carpeting) into the model just like sketched scraps.
 
 A scan doesn't replace sketching. It records surfaces, and only surfaces:
 airflow never shows up in a scan, or how good a lead is. PolyCam works best,
@@ -150,12 +150,12 @@ As a project grows to dozens of trips and hundreds of stations, it gets hard to
 focus on the part you care about.
 
 Tag caves, trips, teams, notes, and scraps with
-[keywords](glossary.md#keyword), then [filter on them](../view-3d/layers-and-keywords.md)
+[keywords](../concepts/glossary.md#keyword), then [filter on them](../view-3d/layers-and-keywords.md)
 to hide everything in the 3D view except the section that matters.
 
 ## Where to go next
 
-- New to the vocabulary? Start with the [glossary](glossary.md).
+- New to the vocabulary? Start with the [glossary](../concepts/glossary.md).
 - Ready to survey? The Getting Started and Survey Data chapters walk through a
   first project. (Still in progress; see [the manual index](../index.md) for
   what exists so far.)

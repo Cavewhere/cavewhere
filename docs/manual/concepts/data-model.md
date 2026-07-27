@@ -3,7 +3,7 @@ title: How a Project Is Organized
 summary: The Region → Cave → Trip → Survey chunk → Shot / Note → Scrap hierarchy: what each level holds, what decision it encodes, and why an edit low in the tree ripples upward.
 problem: Know where each kind of data lives and why editing one shot can re-close a loop and re-carpet a sketch.
 keywords: [data model, region, cave, trip, survey chunk, shot, note, scrap, station, hierarchy, structure, keywords]
-related: [glossary.md, why-cavewhere.md, ../survey-data/caves-and-trips.md]
+related: [glossary.md, ../getting-started/why-cavewhere.md, ../survey-data/caves-and-trips.md]
 ---
 
 # How a Project Is Organized
@@ -144,7 +144,7 @@ nearest stations usually clears them. See
 [Troubleshoot Carpeting](../scraps/troubleshoot-carpeting.md).
 
 For the mechanism behind the solve, see
-[Why CaveWhere](why-cavewhere.md#keeping-the-map-correct-loop-closure); for the
+[Why CaveWhere](../getting-started/why-cavewhere.md#keeping-the-map-correct-loop-closure); for the
 re-carpeting, see [Scraps and Carpeting](../scraps/carpeting.md).
 
 ## What cuts across the tree

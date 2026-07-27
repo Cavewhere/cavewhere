@@ -3,7 +3,7 @@ title: Scraps and Carpeting
 summary: How carpeting morphs a flat sketch onto the 3D survey, and how the chapter fits together.
 problem: Turn flat passage sketches into a 3D model that stays correct as the survey changes.
 keywords: [scrap, carpet, carpeting, morphing, warping, sketch, note, digitize, triangulation, compute scraps]
-related: [../concepts/why-cavewhere.md, ../concepts/glossary.md, ../view-3d/the-3d-view.md]
+related: [../getting-started/why-cavewhere.md, ../concepts/glossary.md, ../view-3d/the-3d-view.md]
 ---
 
 # Scraps and Carpeting
@@ -23,7 +23,7 @@ You trace pieces of your sketch as [scraps](../concepts/glossary.md#scrap) and
 tie them to survey [stations](../concepts/glossary.md#station). CaveWhere bends
 each scrap onto the 3D survey line, so the drawing lies over the real passage
 like a carpet, as shown above, and rebuilds it whenever the survey moves. See
-also [Why CaveWhere](../concepts/why-cavewhere.md#from-a-2d-sketch-to-a-3d-cave).
+also [Why CaveWhere](../getting-started/why-cavewhere.md#from-a-2d-sketch-to-a-3d-cave).
 
 The toolbar button that opens this workflow is labeled **Carpet**; this manual
 calls it *Carpet mode*.

@@ -3,7 +3,7 @@ title: The 3D View
 summary: Navigate the 3D cave model, aim the camera, and control what's shown with layers.
 problem: See your survey as a 3D cave and aim the view to answer where passages go and where the leads are.
 keywords: [3d view, navigation, turntable, camera, azimuth, vertical angle, plan, profile, projection, compass, scale bar, layers, keyword]
-related: [layers-and-keywords.md, perspective-and-field-of-view.md, ../measurement/measure-distance-and-bearing.md, ../concepts/why-cavewhere.md, ../concepts/glossary.md]
+related: [layers-and-keywords.md, perspective-and-field-of-view.md, ../measurement/measure-distance-and-bearing.md, ../getting-started/why-cavewhere.md, ../concepts/glossary.md]
 ---
 
 # The 3D View
@@ -15,7 +15,7 @@ lands here in the [line plot](../concepts/glossary.md#loop-closure), which you
 can orbit and zoom from any angle. Look and you see where the cave heads, which
 passages line up, and where the [leads](../concepts/glossary.md#lead) point
 before you plan the next trip. It updates as you survey, the argument
-[Why CaveWhere](../concepts/why-cavewhere.md) makes at length.
+[Why CaveWhere](../getting-started/why-cavewhere.md) makes at length.
 
 ![The 3D view: a carpeted survey plot at center under blue lead markers, the View panel on the right, the compass and scale bar at bottom right.](../images/view-3d-overview.png)
 *The 3D view in plan, looking straight down. The compass sits at the bottom

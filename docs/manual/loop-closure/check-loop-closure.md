@@ -3,7 +3,7 @@ title: Check Loop Closure and Find Blunders
 summary: Read the Cavern Output page to see whether your loops close, and use Survex's loop-closure report to find the blunder behind a bad one.
 problem: A survey that returns to a station it already visited should close on itself. When it does not, one reading is wrong, and you want it before the error reaches the map.
 keywords: [loop closure, misclosure, blunder, tie-in error, cavern, cavern log, err file, survex, network adjustment, error percent, traverse, articulation, survey error, backsight]
-related: [../survey-data/survey-errors.md, ../concepts/why-cavewhere.md, ../concepts/glossary.md, ../concepts/data-model.md, ../survey-data/enter-survey-data.md]
+related: [../survey-data/survey-errors.md, ../getting-started/why-cavewhere.md, ../concepts/glossary.md, ../concepts/data-model.md, ../survey-data/enter-survey-data.md]
 ---
 
 # Check Loop Closure and Find Blunders
@@ -216,7 +216,7 @@ shot both ways.
 
 - **[Fix Survey Errors](../survey-data/survey-errors.md)**: survey-table errors
   and warnings, including the 2° front and back sight check.
-- **[Why CaveWhere](../concepts/why-cavewhere.md#keeping-the-map-correct-loop-closure)**:
+- **[Why CaveWhere](../getting-started/why-cavewhere.md#keeping-the-map-correct-loop-closure)**:
   the reasoning behind an always-current, always-closed 3D map.
 - **[How a Project Is Organized](../concepts/data-model.md#why-an-edit-ripples)**:
   why fixing one shot moves stations elsewhere and re-carpets old sketches.

@@ -3,7 +3,7 @@ title: Glossary
 summary: Definitions of the cave-surveying and CaveWhere terms used throughout the manual.
 problem: Understand the survey and CaveWhere vocabulary the rest of the manual assumes.
 keywords: [glossary, terms, station, shot, lrud, scrap, declination, grid convergence, loop closure, backsight, trip, lead, morphing, warping]
-related: [why-cavewhere.md]
+related: [../getting-started/why-cavewhere.md]
 ---
 
 # Glossary
@@ -113,7 +113,7 @@ into 3D by deforming it so its drawn [stations](#station) land on the real 3D
 carpet. The same process handles [LiDAR notes](#lidar-note) and photogrammetry
 models, which carpet into the cave model just like sketched scraps. Also called
 *warping* or *morphing*. See
-[Why CaveWhere](why-cavewhere.md#from-a-2d-sketch-to-a-3d-cave).
+[Why CaveWhere](../getting-started/why-cavewhere.md#from-a-2d-sketch-to-a-3d-cave).
 
 ### Lead
 A noted unexplored passage, a "go", recorded so a future trip knows where more

@@ -5,11 +5,11 @@ mapping**: it turns the hand-drawn sketches — or digital scraps exported as SV
 from apps like TopoDroid — and instrument readings surveyors collect
 underground into an accurate, shareable 3D cave map.
 
-New here? Start with **Getting Started** below, and keep the
-**[Glossary](concepts/glossary.md)** handy for survey vocabulary. The
-**[Concepts](concepts/why-cavewhere.md)** chapter near the end of this list
-covers why CaveWhere works the way it does, worth a read once you have
-survey data of your own to relate it to.
+New here? Start with **Getting Started** below, which opens with
+**[Why CaveWhere](getting-started/why-cavewhere.md)**, the problems it solves.
+Keep the **[Glossary](concepts/glossary.md)** handy for survey vocabulary; the
+rest of **Concepts**, near the end of this list, is reference material worth a
+read once you have survey data of your own to relate it to.
 
 > This manual is written as task-focused chapters. Every link below points to a
 > page that exists today. (For AI agents: [`llms.txt`](llms.txt) is the
@@ -18,6 +18,8 @@ survey data of your own to relate it to.
 ## Available now
 
 ### Getting Started
+- [Why CaveWhere](getting-started/why-cavewhere.md) — the problems CaveWhere
+  solves.
 - [Install CaveWhere](getting-started/install-cavewhere.md) — where to download
   it, and what installing registers on your system.
 - [Set Up Your Identity](getting-started/set-up-your-identity.md) — the name and
@@ -138,7 +140,6 @@ survey data of your own to relate it to.
   the file-by-file diffs, and rolling back.
 
 ### Concepts
-- [Why CaveWhere](concepts/why-cavewhere.md) — the problems CaveWhere solves.
 - [How a Project Is Organized](concepts/data-model.md) — the Region → Cave →
   Trip → Shot / Note → Scrap tree, and why an edit ripples through it.
 - [Directions and Coordinate Systems](concepts/coordinate-systems.md) — the

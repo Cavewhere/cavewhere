@@ -3,7 +3,7 @@ title: How Collaboration Works
 summary: The idea behind CaveWhere's sync: Git without having to know Git, one shared copy on GitHub reached through a remote named origin, and a three-way merge that matches objects by id rather than settling them as text.
 problem: Understand how a team can all work on the same cave without emailing files around or overwriting each other's work.
 keywords: [collaboration, sync, git, github, remote, merge, team, share, version, how it works]
-related: [../concepts/why-cavewhere.md, ../projects-and-files/save-a-project.md, ../projects-and-files/project-formats.md, sign-in-to-github.md, sync-your-changes.md]
+related: [../getting-started/why-cavewhere.md, ../projects-and-files/save-a-project.md, ../projects-and-files/project-formats.md, sign-in-to-github.md, sync-your-changes.md]
 ---
 
 # How Collaboration Works
@@ -109,4 +109,4 @@ same history; its drawback is the zip, which every save repacks whole.
   changed, and rolling back.
 
 Why sync exists at all:
-[Working as a team](../concepts/why-cavewhere.md#working-as-a-team-sync).
+[Working as a team](../getting-started/why-cavewhere.md#working-as-a-team-sync).
