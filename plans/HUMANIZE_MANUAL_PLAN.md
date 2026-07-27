@@ -648,14 +648,112 @@ Legend: `[ ]` open · `[~]` reported, awaiting review · `[x]` committed
 
 ### Import and Export
 
-- [ ] **41. `import-export/export-surveys.md`** — 787 wds, score 56.9 — 45.7 to-be
-- [ ] **42. `import-export/import-surveys.md`** — 1024 wds, score 51.1 — 0 digits
-- [ ] **43. `import-export/import-csv.md`** — 735 wds, score 39.2
-- [ ] **44. `import-export/export-a-map.md`** — 879 wds, score 34.3 — 18.2 em dash
+- [x] **41. `import-export/export-surveys.md`** — 876 → 875 wds (`3f28be91`).
+      **Found a shipping regression:** Survex **Current trip** writes an empty
+      file. `cwSurvexExporterTripTask::runTask()` builds a fresh `cwTrip` and
+      never uses the one `setData()` stored, so you get a `*date` and a
+      `*data normal` line and no shots. Broke in `43f7cf34`; the tests call
+      `writeTrip()` directly, so nothing caught it. Two more silent failures:
+      `canExport` / `exportDisabledReason` are bound by no QML, so the
+      external-centerline guard leaves the menu items live and the export
+      quietly declines after the save dialog; and a file that will not open
+      files `Open file <name>` in an error list nothing reads.
+      The role filter holds **35 of the 36** keywords `role_tab` accepts
+      (`survex/src/commands.c:2200-2237`), missing `gps`, though the comment at
+      `cwSurvexExporterUtils.h:103` claims the lists match — worth a code fix.
+      Corrected: menu items gray on an empty **name**, not on selection;
+      **Region (all caves)** is a plain item that never grays; the cave page
+      pairs Export with **Import Survex**, not Import, because `importVisible`
+      is set only by `DataMainPage.qml:243`; an Auto trip with no fixed station
+      exports the *manual* declination, and a manual 0.0 writes no line at all.
+      Verified as already right: Chipdata 5 chars, Compass 12 and uppercase,
+      region-only `*cs out`, no extension appended for Chipdata.
+      The cavern-refuses claim rests on a code comment, not an observation, and
+      is attributed that way on the page.
+- [x] **42. `import-export/import-surveys.md`** — 1109 → 1107 wds (`1729673b`).
+      Had **0 digits in 1109 words**. The carry-forward Walls field names found
+      a home: `INCD` tape, `INCA`/`INCV` front, `INCAB`/`INCVB` back,
+      `TYPEAB`/`TYPEVB` the corrected-backsight boxes. Correction to the
+      handoff: these are **Walls `#units` keywords only** — Compass has no
+      equivalent, its backsight signal being the 14th char of the format string
+      (`cwCompassImporter.cpp:579-581`). The 2° tolerance is a dewalls
+      parse-time check that never reaches CaveWhere, so it is not on the page.
+      Corrected: shift-click does **not** mark a run of blocks — the dropdown
+      goes dead unless exactly 1 index is newly selected
+      (`cwImportTreeDataDialog.cpp:210-237`); the cascade goes one level, not
+      all the way down; one `.dat` yields exactly one cave from a single-file
+      dialog; dedup appends " 2", " 3" after rewriting `\ / : * ? " < > |` to
+      `_`, so `Fisher/Ridge` collides with `Fisher_Ridge`; a `#units` block
+      splits a trip only when the calibration actually **changes**; the error
+      tally sits *beside* the button, not above; and most Compass messages name
+      the file **or** the line, few both. TopoDroid stays — sourced in-repo at
+      `test-qml/tst_ManualScreenshots.qml:2518`.
+- [x] **43. `import-export/import-csv.md`** — 797 → 797 wds (`22f3df74`).
+      **Two app bugs found.** `CSVImporterPage.qml:211` declares
+      `property int index`, shadowing the attached index, so the CSV Text line
+      gutter prints `1` on every row; the page tells you to read line numbers
+      out of the errors instead. And a row whose **Length** is 0, blank, or
+      unparseable is rerouted to LRUD — silently when a matching shot exists —
+      except on a trip's first row, where `cwCSVImporterTask.cpp:212` gates on
+      `chunkCount() > 0` and it imports as a distanceless shot.
+      Corrected: the cave is hardcoded **Imported CSV Cave** and never takes the
+      file's name; **Seperator** (spelled that way) takes any string with no
+      validator and warns on *every* line, not silently; **Success** needs zero
+      errors *and* zero warnings while **Import** is gated only on `fatalCount`,
+      whose only source is a file that will not open; the dialog's second filter
+      is `All files (*)`, so any extension opens; the 20-line cap covers the CSV
+      Text pane and counts header lines. Both quoted error strings now match the
+      instantiation the tests pin.
+- [x] **44. `import-export/export-a-map.md`** — 957 → 955 wds (`09bbd230`).
+      The app's own memory warning (`MapOptions.qml:170`) — *"Using more memory
+      than what's on computer my cause your computer to hang!"* — **existed
+      nowhere in `docs/manual/` before this**, and it is one of the strings the
+      humanize skill quotes as the real voice. Now block-quoted with its
+      disk-space sentence.
+      The memory story needed care: the render buffer is a memory-mapped temp
+      file (`cwCaptureManager.cpp:496`), so free **disk** is the constraint and
+      an oversized render raises a fatal error into a dialog rather than
+      hanging; the final `QImageWriter::write` still copies the whole image into
+      RAM (`:511-517`). Only 32-bit builds disable **Export**, at 1 GB
+      (`:826-831`).
+      Corrected: the **File type** combo is a `QMap`'s keys, so it opens on
+      **JPG**, not PNG; the scale readout drops a trailing zero, so 1 in against
+      50 ft reads **1:600**, not 1:600.0 (`Utils.js:9-11`); **Memory Required**
+      sits *below* the Export button; exporting with no layers still draws the
+      page outline, because the `setVisible(false)` at
+      `cwCaptureManager.cpp:468` is commented out; and the projection label is
+      the app's misspelled **Orthognal**, so the page says "orthogonal
+      projection" in prose and links out rather than quoting a label wrong.
+      Real paper dimensions and the 100–600-by-100 DPI range are now on the page.
 
 ### Special cases — do these last
 
-- [ ] **45. `keyboard-shortcuts/keyboard-shortcuts.md`** — 864 wds, score 69.5 — mostly tables; the 26.6 em-dash rate is largely table cells, so judge the prose separately
+- [x] **45. `keyboard-shortcuts/keyboard-shortcuts.md`** — 1002 → 1001 wds
+      (`59e021a7`). **The plan's em-dash reading was wrong for this page:** of
+      23, **19 were connecting prose** and only 3 were table cells, so this was
+      an ordinary prose page after all.
+      The page promises "the honest, complete list", so the work was auditing
+      that promise. **It was neither.** The wrong "only Esc leaves the tool" at
+      `:110-111` is fixed — clicking **Measure** again exits, and so does
+      starting **Pick** or **Clip**. And the docs viewer's find keys were
+      missing entirely: `DocsPage.qml:114-136` declares Find / FindNext /
+      FindPrevious and `:432-443` adds Enter and Shift+Enter in the field. They
+      get their own section, and they are the only bindings where the *key*
+      changes per platform, not just the modifier — so the page no longer
+      promises its table holds on every desktop.
+      Corrected: survey-table **Delete**/**Backspace** work only inside the
+      editor; "any letter or digit" is gated by the cell's validator; the
+      team-table **Delete** removes a focused **Role** chip, not the member row
+      (`TeamTable.qml:68,296,305`); the **Press Tab** hint is the bold *gray*
+      label while the guess renders plain (`StationBox.qml:87-99`); hold-**P**
+      takes the wheel with or without a cloud loaded; the File menu is a real
+      menu bar only on macOS, which also moves Quit to the application menu.
+      `Ctrl+P` and `Ctrl+.` are named as commented-out dead keys rather than
+      listed. The completeness claim is scoped to what CaveWhere binds itself,
+      since Qt supplies clipboard, focus-chain and button activation with no
+      handler in this tree.
+      No images on this page and none can be generated without a build, so
+      points-at-figure stays 0.
 - [ ] **46. `index.md`** — 894 wds, score 71.2 — **50 em dashes, one per link entry.** This is a list format, not prose. Needs a format decision from Philip (keep the dash, switch to a colon, or drop the gloss), not a rewrite
 
 ---
