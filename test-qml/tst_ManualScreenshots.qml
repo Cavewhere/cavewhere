@@ -1913,7 +1913,7 @@ MainWindowTest {
         // zone / hemisphere / resolved-EPSG fields are all showing.
         // Backs docs/manual/georeferencing/georeference-a-cave.md.
         //
-        // Cropped to the Geospatial group box (label + control) rather than grabbed
+        // Cropped to the Project group box (label + control) rather than grabbed
         // whole-window: the control is one small row on an otherwise full Data page,
         // so a cropped shot reads in the manual's narrow column where a whole-window
         // one would not.
@@ -1923,8 +1923,8 @@ MainWindowTest {
 
             RootData.region.geoReference.globalCoordinateSystem = georefCS;
 
-            let group = findByName(page, "geospatialGroupBox");
-            verify(group, "found the Geospatial group box");
+            let group = findByName(page, "regionInfoBox");
+            verify(group, "found the Project group box");
             let combo = findByName(page, "globalCoordinateSystemComboBox");
             verify(combo, "found the coordinate system combo box");
 

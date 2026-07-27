@@ -97,8 +97,6 @@ it is what makes everything line up.
 Fixing a cave to the world stays optional, and plenty of projects never need it. It
 earns its keep when the cave has to meet things outside itself:
 
-- **Overlay on surface maps and imagery.** See what sits above a passage, and
-  whether a lead heads toward a sink or a neighboring cave.
 - **Keep multiple caves apart.** Every unfixed cave starts at the *same* local
   origin. Add several caves to one project without georeferencing them and they
   pile up on that shared origin, overlapping in the 3D view. Fixing each cave to
