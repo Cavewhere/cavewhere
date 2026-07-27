@@ -847,7 +847,8 @@ bool cwTrip::isScoped() const { return !m_externalCenterline.isEmpty() || !m_sta
   set &times; iteration order)</em>. The habit is no longer safe.
 </p>
 <p>
-  Three consequences were found; the first two are fixed, the third is open:
+  Three consequences were found; the first two were fixed inside Fork&nbsp;A, the
+  third in the A1 commit that followed it:
 </p>
 <ul>
   <li><strong>Fixed.</strong> <code>ExternalCenterlineTripPanel.qml</code> bound
@@ -864,26 +865,104 @@ bool cwTrip::isScoped() const { return !m_externalCenterline.isEmpty() || !m_sta
     equate operands, and the geometry pass all pass it a pool computed once per
     cave (this also removed an O(trips&sup2;) per solve and an
     O(equates&nbsp;&times;&nbsp;handles&nbsp;&times;&nbsp;trips) per export).</li>
-  <li><strong>Open.</strong> <code>scopeChanged</code> fires for a trip's
-    <em>own</em> rename but cannot fire when a <em>sibling</em> is renamed, added,
-    or removed &mdash; which is exactly what moves this trip's collision suffix.
-    No signal exists that could carry it; it needs a change signal on the cave's
-    trip list. Latent today (nothing consumes <code>scopeChanged</code>), and the
-    header now says so rather than promising exhaustiveness. <strong>Commit&nbsp;6's
-    tie-in editor is the first likely consumer &mdash; close this before it binds
-    a scope label.</strong></li>
+  <li><strong>Fixed (A1 commit&nbsp;A, 2026-07-26).</strong>
+    <code>scopeChanged</code> fired for a trip's <em>own</em> rename but could not
+    fire when a <em>sibling</em> was renamed, added, or removed &mdash; which is
+    exactly what moves this trip's collision suffix. Closed by putting each cache
+    where its uniqueness rule already lives; see below.</li>
 </ul>
 <p>
-  The shape worth considering when it is time: a <code>cwScopeLabels</code> value
-  type (cave map + per-cave trip maps) built once from a
-  <code>cwCavingRegionData</code> and <em>received</em> by the exporter, the
-  worker, the geometry pass and both equate renderers instead of re-derived, plus
-  a region-owned cache on the live side with one <code>scopeLabelsChanged()</code>
-  that <code>cwTrip::scopePrefix</code>'s NOTIFY chains to. Blast radius ~7 source
-  files, one QML binding, ~6 test files. Deliberately not done inside Fork&nbsp;A:
-  Commit&nbsp;6's suggester and Commit&nbsp;8's dotted names both add consumers,
-  and the type should be designed with their requirements visible.
+  <strong>What shipped (A1 commit&nbsp;A).</strong> The sibling set that can move
+  a label is owned by the <em>parent</em>, but only the child had a change signal
+  &mdash; so the fix was to give each parent the cache and the pulse for exactly
+  the set it defines:
 </p>
+<ul>
+  <li><code>cwCave::tripScopeLabels()</code> caches its trips' labels and
+    <code>tripScopeLabelsChanged()</code> fires on insert, remove, or a held
+    trip's rename. The wiring lives in <code>cwCave::connectTrip/disconnectTrip</code>,
+    called from <code>InsertRemoveTrip::insertTrips/removeTrips</code> &mdash; the
+    one funnel every mutation (including <code>setData</code>'s load path) already
+    goes through. <code>cwCavingRegion::connectCave/disconnectCave</code> mirror it
+    one level up. Keeping the wiring in named methods rather than inline in the
+    undo commands is what made the missing teardown visible: writing
+    <code>disconnectCave</code> is what surfaced that the pre-existing
+    grid-convergence connect had never had one.</li>
+  <li><strong>Invalidate before the first emit, pulse after the last.</strong> Both
+    funnels mark the cache stale immediately after mutating the list, then emit
+    the model signals, then pulse <code>*ScopeLabelsChanged</code> last. A handler
+    woken by <code>insertedTrips</code> can reach <code>cwTrip::scopePrefix()</code>
+    (<code>cwLinePlotLabelView</code> does, through <code>solvedStations</code>), and
+    a cache still marked fresh would answer it from the list as it stood
+    <em>before</em> the insert.</li>
+  <li><code>cwCavingRegion::caveScopeLabels()</code> does the same for cave
+    labels, and <code>scopeLabelsChanged()</code> aggregates its own cave
+    insert/remove/rename <em>plus</em> every cave's
+    <code>tripScopeLabelsChanged</code> &mdash; the single region-wide pulse a
+    consumer showing labels across more than one cave needs (Commit&nbsp;6's ties
+    audit and suggester).</li>
+  <li><code>cwTrip::scopeChanged</code> chains off its cave's signal, so the
+    <code>Q_PROPERTY</code> stops lying, and <code>scopePrefix()</code> is now an
+    O(1) lookup instead of walking every sibling on each read.</li>
+  <li><strong>The two cave-less cases are not the same case</strong> (settled in
+    review, 2026-07-27). A trip with <em>no cave at all</em> &mdash; being built, or
+    imported before it is parented &mdash; has no sibling set, so its own sanitized
+    name is unique by construction and stays its label. A trip its cave still
+    <em>parents but no longer lists</em> (removed; <code>InsertRemoveTrip</code>
+    leaves the parent set so undo can restore it) now reports <strong>no scope</strong>.
+    A self-derived label there is precisely the label a live sibling may already
+    hold, and the <code>solved*</code> accessors would strip by it and hand back
+    that sibling's stations as this trip's. The earlier "keeps the self-only
+    fallback" wording collapsed both cases and was wrong for the second.</li>
+  <li><code>cwExternalCenterlineManager::scopePrefixForTrip</code> &mdash; the
+    sixth derivation site &mdash; now reads the region cache, which orphaned
+    <code>cwCavernNaming::scopePrefix(id,&nbsp;siblings)</code>; it was reshaped
+    into <code>scopePrefix(label)</code>, the one place the <code>.</code>
+    separator is spelled (three sites had it inline).</li>
+</ul>
+<p>
+  <strong>The one thing Commit&nbsp;6 must still be careful about.</strong>
+  <code>cwTrip::scopeChanged</code> deliberately means "<em>this trip's own</em>
+  prefix may have moved" &mdash; it does <em>not</em> fire when the <em>cave</em>
+  is renamed, because that moves the <em>qualified</em> name
+  (<code>scopePrefixForTrip</code> = cave label + trip prefix) while leaving
+  <code>scopePrefix()</code> itself untouched. Anything binding a qualified name
+  must use <code>cwCavingRegion::scopeLabelsChanged</code>, which covers both
+  halves. <code>ExternalCenterlineTripPanel.qml</code> is correct today only
+  because it names the re-solved <code>network</code> as its pulse and a cave
+  rename re-solves; a consumer that does not re-solve has no such luck.
+</p>
+<p>
+  <strong>What shipped (A1 commit&nbsp;B, 2026-07-26).</strong> The snapshot half.
+  <code>cwScopeLabels</code> is a value type built once from a
+  <code>cwCavingRegionData</code> and <em>received</em> by the exporter, the
+  worker, the geometry pass and both equate renderers, replacing the derivation
+  each of them ran for itself. No bug was behind it &mdash; that side was already
+  correct, being a pure function over an ordered snapshot &mdash; so this is
+  drift-prevention, not a fix.
+</p>
+<ul>
+  <li>It holds both levels (<code>caveLabel</code>/<code>cavePrefix</code>,
+    <code>tripLabels</code> per cave) plus the label&nbsp;&rarr;&nbsp;cave inverse
+    the worker's decode needs, so <code>cwLinePlotTask</code>'s two hashes and
+    their hand-built inverse collapsed to one member.</li>
+  <li><code>cwScopeLabels::forCave()</code> names a cave standing alone. The
+    single-cave exporter has no region, so nothing can say its cave label is
+    unique &mdash; it gets none, and <code>writeCave</code> keeps its existing
+    fallback to the cave's own sanitized name. Its trips still get labels, since
+    a trip label is unique within its cave with or without a region. That
+    asymmetry is the whole reason the fallback is safe.</li>
+  <li><code>cwSurvexExporterRegion::Options::caveLabels</code> became
+    <code>scopeLabels</code>, which also hands <code>writeCave</code> the trip
+    pool it used to build itself.</li>
+  <li>Closes A2: the <code>scopeEntries</code> adapters moved into
+    <code>cwScopeLabels.cpp</code> as file-local helpers, so
+    <code>cwCavernNaming.h</code> dropped
+    <code>cwCaveData.h</code>/<code>cwTripData.h</code> and is UUID-only again.</li>
+  <li>Removed on the way: <code>cwTrip::scopePrefix(data,&nbsp;siblingTrips)</code>,
+    the convenience overload that pooled labels per call &mdash; it had no callers
+    left once the pooled overload took over.</li>
+</ul>
 
 <h3>Layering: cwCavernNaming stopped being UUID-only</h3>
 <p>
@@ -903,6 +982,100 @@ bool cwTrip::isScoped() const { return !m_externalCenterline.isEmpty() || !m_sta
   Small either way (2 files + ~4 call sites); flagged so it is a decision rather
   than a drift.
 </p>
+<p>
+  <strong>Decided (2026-07-26): keep the boundary &mdash; and closed in A1
+  commit&nbsp;B.</strong> The adapters existed only for the snapshot side, which
+  is exactly what commit&nbsp;B moved onto <code>cwScopeLabels</code> &mdash; that
+  type may depend on <code>cwCaveData</code>/<code>cwTripData</code>, the naming
+  grammar may not. Commit&nbsp;A had already removed the live side's need for them
+  (the live side builds its <code>ScopeEntry</code> lists from its own children),
+  so commit&nbsp;B inherited no live-side callers to reroute.
+  <code>cwCavernNaming.h</code> is UUID-only again and the C5 rationale stands
+  unamended.
+</p>
+<h3>cwSiblingLabelCache &mdash; the live half, extracted</h3>
+<p>
+  <strong>Added in review (2026-07-27).</strong> <code>cwCave</code> and
+  <code>cwCavingRegion</code> had each grown the same pair of members
+  (<code>mutable QHash&lt;QUuid,&nbsp;QString&gt;</code> plus a
+  <code>mutable bool&nbsp;…Stale</code>) and the same rebuild loop. That pair is now
+  one value type, <code>cwSiblingLabelCache</code> (header-only,
+  <code>cavewherelib/src/cwSiblingLabelCache.h</code>), holding a parent's memoized
+  labels for <em>one sibling set</em> &mdash; a region over its caves, a cave over
+  its trips. <code>mutable</code> appears once in the codebase instead of twice per
+  owner, and each owner's accessor is three lines.
+</p>
+<ul>
+  <li><strong>It is lazy on purpose.</strong> Rebuilding eagerly on every change
+    would be O(n&sup2;) on load, where <code>cwCave::setData</code> calls
+    <code>addTrip()</code> per trip and each pushes its own
+    <code>InsertTripCommand</code>. It rebuilds once, on the first read after an
+    <code>invalidate()</code>.</li>
+  <li><strong>Named for the set, not the answer.</strong> It sat briefly as
+    <code>cwScopeLabelCache</code>, one word from <code>cwScopeLabels</code>; the
+    compiler catches a wrong <em>call</em> but will not tell the next author which
+    file to open. <code>cwSiblingLabelCache</code> (live, mutable, one sibling set,
+    main thread) vs <code>cwScopeLabels</code> (immutable, whole region, built from
+    a snapshot, crosses to the worker).</li>
+  <li><strong>The equivalence between the two is the invariant the design rests
+    on</strong> and is now pinned by a test that builds a live region and compares
+    every label against a <code>cwScopeLabels</code> made from its
+    <code>data()</code>. Nothing is carried between them &mdash; the export/decode
+    round trip is correct only because both evaluate the same function over the
+    same order, so neither can drift alone.</li>
+</ul>
+
+<h3 id="a1-review-followups">Follow-ups surfaced by the A1 review (2026-07-27)</h3>
+<p>
+  Triaged into the plan rather than fixed, because each is outside a diff about
+  extracting a cache. The first two are one piece of work and should be done
+  together.
+</p>
+<ul>
+  <li><strong>Two producers for one snapshot.</strong>
+    <code>cwLinePlotGeometry</code> builds its <code>cwScopeLabels</code> from
+    <code>Region.data()</code> while the exporter builds one from
+    <code>InputData.regionData</code>;
+    <code>cwSanitizedNameSet::deduplicateName</code> can rewrite names in between,
+    so the two can disagree and the geometry would label stations under a name
+    cavern never emitted. Alongside it,
+    <code>cwLinePlotTask.cpp:78</code>'s <code>StationTripScrapLookup</code> still
+    reads <code>trip-&gt;scopePrefix()</code> off the worker's mirrored <em>live</em>
+    region while the decode beside it reads the snapshot pool &mdash; they agree
+    only because <code>Region.setData</code> happens to preserve order. That is the
+    one place the live/snapshot invariant is upheld by two mechanisms inside a
+    single function. Reconcile both onto one snapshot.</li>
+  <li><strong><code>cwSanitizedNameSet</code> inverts the ownership this work
+    established.</strong> It answers the identical "unique among exactly these
+    siblings" question over the identical set, but push-style: the <em>child's</em>
+    undo command reaches up into the parent. It is now the only one of the two that
+    does, and it already diverges &mdash; a removed cave's rename still mutates the
+    parent's name set. Converge it onto the pull-style cache.</li>
+  <li><strong><code>cwScopeStationListModel</code> bakes in a stale prefix.</strong>
+    <code>cwScopeStationListModel.cpp:180</code> writes <code>scopePrefix()</code>
+    into every row and rebuilds only on
+    <code>setTrip</code>/<code>setScopePrefix</code>/<code>setNetwork</code>, never on
+    <code>scopeChanged</code>. This is exactly the hazard already written up for
+    <code>ExternalCenterlineTripPanel.qml</code>, but in C++ &mdash; and
+    <code>qualifiedName</code> is what commit&nbsp;6 turns into a stored handle, so
+    it wants fixing <em>before</em> that.</li>
+  <li><strong>Nothing owns the <em>qualified</em> name.</strong> The live side
+    exposes both halves (<code>caveScopeLabels</code>,
+    <code>tripScopeLabels</code>) but nothing that assembles them:
+    <code>cwExternalCenterlineManager::scopePrefixForTrip</code> hand-composes cave
+    prefix + trip prefix, and commit&nbsp;6 would be the third site to do it.
+    Letting <code>cwCavingRegion</code> hand out a <code>cwScopeLabels</code> built
+    from its live caches would give both sides one read interface. Worth deciding
+    <em>before</em> commit&nbsp;6 starts, not after. Blast radius:
+    <code>cwCavingRegion</code>&nbsp;+1 method,
+    <code>cwExternalCenterlineManager</code>, commit&nbsp;6's UI.</li>
+  <li><strong><code>cwSurvexExporterRule.cpp:88</code> changed shape.</strong> Still
+    <code>caveName.remove(" ")</code>, and already tracked &mdash; but fixing it no
+    longer means "call <code>sanitizeToCavernIdentifier</code>". It means
+    <code>writeCave</code> must <em>receive</em> a <code>cwScopeLabels</code>, since
+    a label assigned without the region's siblings is not unique. Recorded so the
+    naive fix does not get written and reintroduce collisions.</li>
+</ul>
 <p class="note">
   <strong>Also settled here:</strong> <code>cwExternalCenterlineManager::scopePrefixForTrip</code>
   now returns empty for a trip that is not scoped. It used to hand back
@@ -910,6 +1083,28 @@ bool cwTrip::isScoped() const { return !m_externalCenterline.isEmpty() || !m_sta
   plain native one &mdash; a prefix naming a scope the driver never opened. The
   fixture in <code>test_cwExternalCenterlineAttach.cpp</code> was asserting that
   behaviour, so it was attaching nothing and checking the shape of a lie.
+</p>
+<p class="note">
+  <strong>scopePrefixForTrip has a second empty case</strong> (recorded 2026-07-27).
+  Beyond "the trip is not scoped", it also returns empty when the <em>region does
+  not list the cave</em> &mdash; parented but already removed. The trip keeps its
+  own trip-scope label, so only the cave half goes missing, and answering with the
+  bare trip prefix would name a scope no exported file ever opened. Now covered by
+  a case in <code>test_cwExternalCenterlineAttach.cpp</code> (mutation-verified:
+  deleting the guard fails it).
+</p>
+<p class="note">
+  <strong>Cave removal also tears down the grid-convergence drive</strong>
+  (2026-07-27). <code>cwCavingRegion::connectCave</code> absorbed the pre-existing
+  <code>geoReference()-&gt;globalCoordinateSystemChanged &rarr;
+  cwCave::recomputeGridConvergence</code> connect, which had never had a matching
+  disconnect &mdash; and since <code>removeCaves</code> deliberately leaves the
+  parent set, the region kept driving caves it no longer listed. This is the one
+  <em>pre-existing</em> behavior the scoping work changes, so it is called out
+  rather than folded in. Covered in <code>test_cwCavingRegion.cpp</code> by
+  removing a cave and then clearing the region CS: a listed cave falls to
+  <code>NoCoordinateSystem</code>, the removed one holds its angle
+  (mutation-verified).
 </p>
 <p class="note">
   <strong>Scope-label spike (A vs B) &mdash; RESOLVED 2026-07-22: Fork&nbsp;A.</strong>

@@ -99,19 +99,12 @@ public:
     QString scopePrefix() const;
 
     //! Snapshot overload: the same policy computed from a cwTripData, so the
-    //! worker-thread geometry pass shares this one source of truth. An external
-    //! trip's label is only unique among its cave's trips, so \a siblingTrips
-    //! must be the whole cwCaveData::trips list this trip belongs to.
-    //!
-    //! Pools the sibling labels on every call. Prefer the overload below in a
-    //! loop over a cave's trips, which is otherwise quadratic.
-    static QString scopePrefix(const cwTripData& data, const QList<cwTripData>& siblingTrips);
-
-    //! Pooled-label overload, and the one place the policy actually lives. Takes
-    //! the labels cwCavernNaming::scopeLabels assigned for the whole cave, so an
-    //! emitter that already holds that map — the survex exporter's "*begin"
-    //! loop, its equate operands, the geometry pass — names the very same scope
-    //! it opened rather than deriving a second answer that has to agree.
+    //! worker-thread geometry pass shares this one source of truth. Takes the
+    //! labels cwScopeLabels assigned for the whole cave — an external trip's
+    //! label is unique only among its cave's trips — so an emitter that already
+    //! holds that pool (the survex exporter's "*begin" loop, its equate
+    //! operands, the geometry pass) names the very same scope it opened rather
+    //! than deriving a second answer that then has to agree.
     static QString scopePrefix(const cwTripData& data, const QHash<QUuid, QString>& tripLabels);
 
     //! True when this trip's stations carry a scope prefix (external or prefixed).
@@ -206,15 +199,15 @@ signals:
     void externalCenterlineChanged();
     void stationPrefixChanged();
 
-    //! Fired when this trip's own scope inputs change — externalCenterline,
-    //! stationPrefix, or (since an external trip's scope is its own survey
-    //! label) its name. The NOTIFY for both derived properties.
+    //! Fired when this trip's scope may have moved: its own externalCenterline,
+    //! stationPrefix or name changed, or — chained from
+    //! cwCave::tripScopeLabelsChanged — a *sibling* was renamed, added or
+    //! removed, which can move this trip's collision suffix. The NOTIFY for both
+    //! derived properties, and safe to bind against.
     //!
-    //! Not exhaustive for scopePrefix(): a label is unique among the cave's
-    //! trips, so renaming, adding, or removing a *sibling* can move this trip's
-    //! collision suffix without this firing. Covering that needs a change
-    //! signal on the cave's trip list, which nothing consumes yet — read
-    //! scopePrefix() fresh rather than caching it off this signal.
+    //! Like most NOTIFY signals it may fire when nothing actually moved (a
+    //! sibling's rename pulses every trip in the cave), so consumers must be
+    //! idempotent. A trip its cave no longer lists gets only the first half.
     void scopeChanged();
 
 public slots:

@@ -12,6 +12,7 @@
 
 //Qt inculdes
 #include "cwSignalSpy.h"
+#include <QUndoStack>
 #include <QVector3D>
 
 TEST_CASE("cwTrip should strip the datestamp away from date", "[cwTrip]") {
@@ -65,6 +66,19 @@ TEST_CASE("cwTrip::scopePrefix unifies the three trip kinds", "[cwTrip][scope]")
     }
 }
 
+namespace {
+
+cwTrip* addExternalTrip(cwCave* cave, const QString& name)
+{
+    cwTrip* trip = new cwTrip();
+    trip->setName(name);
+    cave->addTrip(trip);
+    trip->setExternalCenterline(cwExternalCenterline(QStringLiteral("/tmp/cave.svx")));
+    return trip;
+}
+
+} // namespace
+
 TEST_CASE("Two like-named external trips in one cave get different scopes",
           "[cwTrip][scope]")
 {
@@ -76,19 +90,247 @@ TEST_CASE("Two like-named external trips in one cave get different scopes",
     cave->setName(QStringLiteral("Fisher Ridge"));
     region.addCave(cave);
 
-    auto addExternalTrip = [cave](const QString& name) {
-        cwTrip* trip = new cwTrip();
-        trip->setName(name);
-        cave->addTrip(trip);
-        trip->setExternalCenterline(cwExternalCenterline(QStringLiteral("/tmp/cave.svx")));
-        return trip;
-    };
-
-    cwTrip* first = addExternalTrip(QStringLiteral("Topo 1"));
-    cwTrip* second = addExternalTrip(QStringLiteral("Topo-1"));
+    cwTrip* first = addExternalTrip(cave, QStringLiteral("Topo 1"));
+    cwTrip* second = addExternalTrip(cave, QStringLiteral("Topo-1"));
 
     CHECK(first->scopePrefix() == QStringLiteral("topo_1."));
     CHECK(second->scopePrefix() == QStringLiteral("topo_1_2."));
+}
+
+TEST_CASE("A sibling's rename moves this trip's scope and fires scopeChanged",
+          "[cwTrip][scope]")
+{
+    // The gap the cave-owned labels close: a trip cannot see its own collision
+    // suffix move, because what moved it is a name the trip does not hold.
+    cwCavingRegion region;
+    cwCave* cave = new cwCave();
+    cave->setName(QStringLiteral("Fisher Ridge"));
+    region.addCave(cave);
+
+    cwTrip* first = addExternalTrip(cave, QStringLiteral("Topo 1"));
+    cwTrip* second = addExternalTrip(cave, QStringLiteral("Topo-1"));
+    REQUIRE(second->scopePrefix() == QStringLiteral("topo_1_2."));
+
+    cwSignalSpy secondScopeSpy(second, &cwTrip::scopeChanged);
+    cwSignalSpy regionSpy(&region, &cwCavingRegion::scopeLabelsChanged);
+
+    // Renaming the *first* trip clears the collision, so the second drops its
+    // suffix — a move nothing on the second trip caused.
+    first->setName(QStringLiteral("Alpha"));
+
+    CHECK(second->scopePrefix() == QStringLiteral("topo_1."));
+    CHECK(secondScopeSpy.count() == 1);
+    CHECK(regionSpy.count() == 1);
+}
+
+TEST_CASE("Inserting and removing a sibling moves an existing trip's scope",
+          "[cwTrip][scope]")
+{
+    cwCavingRegion region;
+    cwCave* cave = new cwCave();
+    cave->setName(QStringLiteral("Fisher Ridge"));
+    region.addCave(cave);
+
+    cwTrip* existing = addExternalTrip(cave, QStringLiteral("Topo 1"));
+    REQUIRE(existing->scopePrefix() == QStringLiteral("topo_1."));
+
+    cwSignalSpy scopeSpy(existing, &cwTrip::scopeChanged);
+
+    // Labels are assigned in list order, so a like-named trip inserted *ahead*
+    // of this one takes the bare label and pushes this one onto the suffix.
+    cwTrip* inserted = new cwTrip();
+    inserted->setName(QStringLiteral("Topo-1"));
+    cave->insertTrip(0, inserted);
+
+    CHECK(existing->scopePrefix() == QStringLiteral("topo_1_2."));
+    CHECK(scopeSpy.count() == 1);
+
+    cave->removeTrip(0);
+
+    CHECK(existing->scopePrefix() == QStringLiteral("topo_1."));
+    CHECK(scopeSpy.count() == 2);
+}
+
+TEST_CASE("A trip removed from its cave reports no scope", "[cwTrip][scope]")
+{
+    // cwCave deliberately leaves the parent set on remove, so the trip still
+    // answers parentCave() while the cave no longer lists it. Deriving a label
+    // from the trip alone would hand it "topo_1" — the label the *live* sibling
+    // holds — and the solved-* accessors would strip by it and return that
+    // sibling's stations as this trip's.
+    //
+    // The undo stack is the configuration this matters in: it owns the removed
+    // trip and keeps it alive. Without one, cwUndoer::pushUndo runs the command
+    // and deletes it, which deleteLater()s the trip out from under the
+    // assertions below. It only reaches the children that exist when it is set,
+    // so it goes on after the cave is built.
+    cwCavingRegion region;
+    cwCave* cave = new cwCave();
+    cave->setName(QStringLiteral("Fisher Ridge"));
+    region.addCave(cave);
+
+    cwTrip* staying = addExternalTrip(cave, QStringLiteral("Topo 1"));
+    cwTrip* removed = addExternalTrip(cave, QStringLiteral("Topo-1"));
+    REQUIRE(removed->scopePrefix() == QStringLiteral("topo_1_2."));
+
+    QUndoStack undoStack;
+    region.setUndoStack(&undoStack);
+
+    cave->removeTrip(cave->indexOf(removed));
+
+    REQUIRE(removed->parentCave() == cave);
+    // Still scoped by its own fields. The mismatch is deliberate: carrying a
+    // scope is a property of the trip, having a *place* in the cave's namespace
+    // is not, and only the cave can grant the second.
+    CHECK(removed->isScoped());
+    CHECK(removed->scopePrefix().isEmpty());
+    // The label it would take alone, and so the one it must not answer with.
+    CHECK(staying->scopePrefix() == QStringLiteral("topo_1."));
+}
+
+TEST_CASE("A trip the cave no longer lists stops dirtying its labels",
+          "[cwTrip][scope]")
+{
+    // The other half of the insert/remove funnel. Without cwCave::disconnectTrip
+    // a removed trip's rename would keep throwing away the cave's cache and
+    // pulsing every trip still in it — and once it is re-parented, one rename
+    // would pulse two caves.
+    cwCavingRegion region;
+    cwCave* cave = new cwCave();
+    cave->setName(QStringLiteral("Fisher Ridge"));
+    region.addCave(cave);
+
+    cwTrip* staying = addExternalTrip(cave, QStringLiteral("Topo 1"));
+    cwTrip* removed = addExternalTrip(cave, QStringLiteral("Topo-1"));
+    REQUIRE(staying->scopePrefix() == QStringLiteral("topo_1."));
+
+    // The stack keeps the removed trip alive to be renamed below.
+    QUndoStack undoStack;
+    region.setUndoStack(&undoStack);
+
+    cave->removeTrip(cave->indexOf(removed));
+
+    cwSignalSpy caveSpy(cave, &cwCave::tripScopeLabelsChanged);
+    cwSignalSpy stayingSpy(staying, &cwTrip::scopeChanged);
+    cwSignalSpy regionSpy(&region, &cwCavingRegion::scopeLabelsChanged);
+
+    removed->setName(QStringLiteral("Beta"));
+
+    CHECK(caveSpy.count() == 0);
+    CHECK(stayingSpy.count() == 0);
+    CHECK(regionSpy.count() == 0);
+    CHECK(staying->scopePrefix() == QStringLiteral("topo_1."));
+}
+
+TEST_CASE("A cave the region no longer lists stops pulsing it", "[cwCavingRegion][scope]")
+{
+    cwCavingRegion region;
+
+    cwCave* staying = new cwCave();
+    staying->setName(QStringLiteral("Fisher Ridge"));
+    region.addCave(staying);
+
+    cwCave* removed = new cwCave();
+    removed->setName(QStringLiteral("Fisher-Ridge"));
+    region.addCave(removed);
+    REQUIRE(region.caveScopeLabels().value(removed->id()) == QStringLiteral("fisher_ridge_2"));
+
+    // The stack keeps the removed cave alive to be renamed below.
+    QUndoStack undoStack;
+    region.setUndoStack(&undoStack);
+
+    region.removeCave(region.indexOf(removed));
+    REQUIRE_FALSE(region.caveScopeLabels().contains(removed->id()));
+
+    cwSignalSpy regionSpy(&region, &cwCavingRegion::scopeLabelsChanged);
+
+    removed->setName(QStringLiteral("Beta"));
+    CHECK(regionSpy.count() == 0);
+
+    // A trip moving inside the removed cave must not reach the region either.
+    addExternalTrip(removed, QStringLiteral("Topo 1"));
+    CHECK(regionSpy.count() == 0);
+}
+
+TEST_CASE("Undo and redo of a trip insert leave exactly one connection",
+          "[cwTrip][scope]")
+{
+    // Undo and redo drive removeTrips and insertTrips on the *same* trip, so the
+    // wiring has to survive a round trip through both. If disconnectTrip missed
+    // one, or connectTrip doubled one, a later sibling rename would fire
+    // scopeChanged the wrong number of times — and compound on every cycle.
+    // (Qt::UniqueConnection is a second guard on the same property; the
+    // connect/disconnect symmetry alone is enough to keep this passing.)
+    cwCavingRegion region;
+    cwCave* cave = new cwCave();
+    cave->setName(QStringLiteral("Fisher Ridge"));
+    region.addCave(cave);
+
+    cwTrip* first = addExternalTrip(cave, QStringLiteral("Topo 1"));
+
+    // The stack only reaches the children that exist when it is set, so it goes
+    // on here — after the first trip, before the one being undone.
+    QUndoStack undoStack;
+    region.setUndoStack(&undoStack);
+
+    // Adding a trip pushes more than one command, so anchor on the stack index
+    // rather than counting undo() calls.
+    cwTrip* second = addExternalTrip(cave, QStringLiteral("Topo-1"));
+    const int afterSecond = undoStack.index();
+    REQUIRE(afterSecond > 0);
+    REQUIRE(second->scopePrefix() == QStringLiteral("topo_1_2."));
+
+    undoStack.setIndex(0);
+    REQUIRE(cave->tripCount() == 1);
+    undoStack.setIndex(afterSecond);
+    REQUIRE(cave->tripCount() == 2);
+    REQUIRE(second->scopePrefix() == QStringLiteral("topo_1_2."));
+
+    cwSignalSpy secondScopeSpy(second, &cwTrip::scopeChanged);
+    cwSignalSpy regionSpy(&region, &cwCavingRegion::scopeLabelsChanged);
+
+    first->setName(QStringLiteral("Alpha"));
+
+    CHECK(second->scopePrefix() == QStringLiteral("topo_1."));
+    CHECK(secondScopeSpy.count() == 1);
+    CHECK(regionSpy.count() == 1);
+}
+
+TEST_CASE("cwCavingRegion::scopeLabelsChanged covers cave and trip label moves",
+          "[cwCavingRegion][scope]")
+{
+    cwCavingRegion region;
+    cwCave* first = new cwCave();
+    first->setName(QStringLiteral("Fisher Ridge"));
+    region.addCave(first);
+
+    cwSignalSpy regionSpy(&region, &cwCavingRegion::scopeLabelsChanged);
+
+    // A second cave whose name sanitizes alike takes the collision suffix, and
+    // the region is the only object that can see that happen.
+    cwCave* second = new cwCave();
+    second->setName(QStringLiteral("Fisher-Ridge"));
+    region.addCave(second);
+
+    CHECK(regionSpy.count() == 1);
+    CHECK(region.caveScopeLabels().value(first->id()) == QStringLiteral("fisher_ridge"));
+    CHECK(region.caveScopeLabels().value(second->id()) == QStringLiteral("fisher_ridge_2"));
+
+    first->setName(QStringLiteral("Alpha"));
+
+    CHECK(regionSpy.count() == 2);
+    CHECK(region.caveScopeLabels().value(second->id()) == QStringLiteral("fisher_ridge"));
+
+    // A trip label moves inside its cave: the cave labels are untouched, but a
+    // qualified station name still moved, so the region pulses too.
+    cwTrip* trip = new cwTrip();
+    trip->setName(QStringLiteral("Topo 1"));
+    second->addTrip(trip);
+
+    CHECK(regionSpy.count() == 3);
+    CHECK(second->tripScopeLabels().value(trip->id()) == QStringLiteral("topo_1"));
+    // The pulse is region-wide, but the cave labels themselves did not move.
+    CHECK(region.caveScopeLabels().value(second->id()) == QStringLiteral("fisher_ridge"));
 }
 
 TEST_CASE("cwTrip scope changes emit stationPrefixChanged and scopeChanged", "[cwTrip][scope]")

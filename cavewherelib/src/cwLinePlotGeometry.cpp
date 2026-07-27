@@ -6,7 +6,7 @@
 **************************************************************************/
 
 #include "cwLinePlotGeometry.h"
-#include "cwCavernNaming.h"
+#include "cwScopeLabels.h"
 #include "cwStation.h"
 #include "cwTrip.h"
 
@@ -130,8 +130,7 @@ cwLinePlotGeometry::generate(const cwCavingRegionData& region,
 
     // The same labels the exporter wrote, rebuilt from the same ordered
     // snapshot rather than carried across the boundary (see cwCavernNaming).
-    const QHash<QUuid, QString> caveLabels =
-        cwCavernNaming::scopeLabels(cwCavernNaming::scopeEntries(region.caves));
+    const cwScopeLabels scopeLabels(region);
 
     for (int caveIndex = 0; caveIndex < caveCount; caveIndex++) {
         const cwCaveData& cave = region.caves.at(caveIndex);
@@ -140,12 +139,8 @@ cwLinePlotGeometry::generate(const cwCavingRegionData& region,
         // Network keys are region-wide ("fisher_ridge.topo1.<tail>"); the
         // cave-local lookup strips this cave prefix, so external scopes bridge
         // through it.
-        const QString cavePrefix = caveLabels.value(cave.id) + QLatin1Char('.');
-
-        // Pooled once for the cave: a trip label is unique among its siblings,
-        // so asking per trip would re-pool the whole cave on every iteration.
-        const QHash<QUuid, QString> tripLabels =
-            cwCavernNaming::scopeLabels(cwCavernNaming::scopeEntries(cave.trips));
+        const QString cavePrefix = scopeLabels.cavePrefix(cave.id);
+        const QHash<QUuid, QString>& tripLabels = scopeLabels.tripLabels(cave.id);
 
         double minDepth = std::numeric_limits<double>::max();
         double maxDepth = -std::numeric_limits<double>::max();

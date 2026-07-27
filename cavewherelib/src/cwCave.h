@@ -36,8 +36,11 @@ class cwKeywordModel;
 #include <QWeakPointer>
 #include <QVariant>
 #include <QAbstractListModel>
+#include <QHash>
 #include <QQmlEngine>
 #include <QUuid>
+
+#include "cwSiblingLabelCache.h"
 
 
 class CAVEWHERE_LIB_EXPORT cwCave : public QAbstractListModel, public cwUndoer
@@ -115,6 +118,14 @@ public:
     cwSanitizedNameSet& tripNameSet() { return m_tripNames; }
     const cwSanitizedNameSet& tripNameSet() const { return m_tripNames; }
 
+    //! The cavern survey label each of this cave's trips takes, keyed by trip
+    //! id. cwCavernNaming assigns them across the whole sibling set, so adding,
+    //! removing, or renaming any one trip can move another trip's collision
+    //! suffix — this cave is the only object that can see that happen, and
+    //! tripScopeLabelsChanged() is how it says so. Cached, so cwTrip::scopePrefix()
+    //! costs a lookup rather than a walk over every sibling.
+    const QHash<QUuid, QString>& tripScopeLabels() const;
+
     cwCavingRegion* parentRegion() const;
 
     //! The unit system in effect for this cave: its region's, or Metric when the
@@ -150,6 +161,12 @@ signals:
     void removedTrips(int begin, int end);
 
     void nameChanged();
+
+    //! Some trip label in this cave may have moved: a trip was added, removed,
+    //! or renamed. Chained to each held trip's cwTrip::scopeChanged, so a trip
+    //! learns when a *sibling* moved its label — which the trip cannot see for
+    //! itself.
+    void tripScopeLabelsChanged();
 
     void stationPositionPositionChanged();
     void surveyNetworkChanged();
@@ -188,6 +205,15 @@ private:
 
     cwKeywordModel* m_keywordModel = nullptr;
     void updateKeywords();
+
+    cwSiblingLabelCache m_tripScopeLabels;
+    void invalidateTripScopeLabels();
+
+    //! Wire a trip this cave now lists, and unwire one it no longer does.
+    //! Called from InsertRemoveTrip, the single funnel every insert and remove
+    //! passes through.
+    void connectTrip(cwTrip* trip);
+    void disconnectTrip(cwTrip* trip);
 
     cwCave& Copy(const cwCave& object);
     void addTripNullHelper();

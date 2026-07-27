@@ -27,6 +27,7 @@
 #include "cwCave.h"
 #include "cwCavingRegion.h"
 #include "cwCavernNaming.h"
+#include "cwScopeLabels.h"
 #include "cwEquate.h"
 #include "cwEquateModel.h"
 #include "cwExternalCenterline.h"
@@ -90,26 +91,15 @@ QString tripScopePrefix(const cwTrip* trip)
     return trip->scopePrefix();
 }
 
-QList<cwCavernNaming::ScopeEntry> caveEntries(const cwCavingRegion& region)
-{
-    QList<cwCavernNaming::ScopeEntry> entries;
-    const QList<cwCave*> caves = region.caves();
-    entries.reserve(caves.size());
-    for (const cwCave* cave : caves) {
-        entries.append({cave->id(), cave->name()});
-    }
-    return entries;
-}
-
-//! The survey label this cave's *begin block carries, as the exporter derives it
+//! The survey label this cave's *begin block carries, as the exporter assigns it
 QString caveLabel(const cwCavingRegion& region, const cwCave* cave)
 {
-    return cwCavernNaming::scopeLabel(cave->id(), caveEntries(region));
+    return cwScopeLabels(region.data()).caveLabel(cave->id());
 }
 
 QString caveScopePrefix(const cwCavingRegion& region, const cwCave* cave)
 {
-    return caveLabel(region, cave) + QLatin1Char('.');
+    return cwScopeLabels(region.data()).cavePrefix(cave->id());
 }
 
 // Runs the driver export the worker would run and returns the emitted .svx text.

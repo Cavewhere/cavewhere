@@ -174,14 +174,15 @@ TEST_CASE("scopeLabels gives every sibling its own label", "[LinePlot][CavernNam
 
     SECTION("an id that is not a sibling has no label") {
         const QList<cwCavernNaming::ScopeEntry> siblings = {entry(QStringLiteral("Alpha"))};
-        CHECK(cwCavernNaming::scopeLabel(QUuid::createUuid(), siblings).isEmpty());
-        CHECK(cwCavernNaming::scopePrefix(QUuid::createUuid(), siblings).isEmpty());
+        CHECK(cwCavernNaming::scopeLabels(siblings).value(QUuid::createUuid()).isEmpty());
     }
 
     SECTION("scopePrefix is the label plus the separator") {
-        const QList<cwCavernNaming::ScopeEntry> siblings = {entry(QStringLiteral("Fisher Ridge"))};
-        CHECK(cwCavernNaming::scopePrefix(siblings.at(0).id, siblings)
+        CHECK(cwCavernNaming::scopePrefix(QStringLiteral("fisher_ridge"))
               == QStringLiteral("fisher_ridge."));
+        // A scope nothing named has no prefix, rather than a bare separator that
+        // would open a survey level with an empty name.
+        CHECK(cwCavernNaming::scopePrefix(QString()).isEmpty());
     }
 }
 

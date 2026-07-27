@@ -8,6 +8,7 @@
 // Our includes
 #include "cwLinePlotTask.h"
 #include "cwCavernNaming.h"
+#include "cwScopeLabels.h"
 #include "cwConcurrent.h"
 #include "cwSurvexExporterRegion.h"
 #include "cwCavernRunner.h"
@@ -200,13 +201,12 @@ private:
     // Built once in initializeCaveStationLookups() so the rest of the worker
     // can stay UUID-keyed.
     QHash<QUuid, cwCave*> InternalCaveByUuid;
-    // The survey label each cave's "*begin" carries, and its inverse. The
-    // exporter derives the same labels from the same ordered snapshot, so this
-    // is not a map handed across a boundary — it is the same pure function
-    // evaluated on both sides, which is what lets the decode below recover
-    // cwCave::id() from a name cavern echoed back.
-    QHash<QUuid, QString> CaveLabels;
-    QHash<QString, QUuid> CaveIdByLabel;
+    // The survey label each cave's and trip's "*begin" carries. The exporter
+    // assigns the same labels from the same ordered snapshot, so this is not a
+    // map handed across a boundary — it is the same pure function evaluated on
+    // both sides, which is what lets the decode below recover cwCave::id() from
+    // a name cavern echoed back.
+    cwScopeLabels ScopeLabels;
 
     void initializeCaveLabels()
     {
@@ -217,13 +217,7 @@ private:
             Q_ASSERT(!cave.id.isNull());
         }
 
-        CaveLabels = cwCavernNaming::scopeLabels(
-            cwCavernNaming::scopeEntries(InputData.regionData.caves));
-
-        CaveIdByLabel.reserve(CaveLabels.size());
-        for (auto iter = CaveLabels.constBegin(); iter != CaveLabels.constEnd(); ++iter) {
-            CaveIdByLabel.insert(iter.value(), iter.key());
-        }
+        ScopeLabels = cwScopeLabels(InputData.regionData);
     }
 
     // The labels of this cave's externally-attached trips, which are the only
@@ -232,17 +226,10 @@ private:
     // exporter emits unscoped.
     QSet<QString> externalTripLabelsFor(cwCave* cave) const
     {
-        const QList<cwTrip*> trips = cave->trips();
-
-        QList<cwCavernNaming::ScopeEntry> entries;
-        entries.reserve(trips.size());
-        for (const cwTrip* trip : trips) {
-            entries.append({trip->id(), trip->name()});
-        }
-        const QHash<QUuid, QString> labels = cwCavernNaming::scopeLabels(entries);
+        const QHash<QUuid, QString>& labels = ScopeLabels.tripLabels(cave->id());
 
         QSet<QString> externalLabels;
-        for (const cwTrip* trip : trips) {
+        for (const cwTrip* trip : cave->trips()) {
             if (!trip->externalCenterline().isEmpty()) {
                 externalLabels.insert(labels.value(trip->id()));
             }
@@ -449,7 +436,7 @@ private:
                 continue;
             }
 
-            const QUuid caveId = CaveIdByLabel.value(caveLabel);
+            const QUuid caveId = ScopeLabels.caveId(caveLabel);
             if (caveId.isNull() || !InternalCaveByUuid.contains(caveId)) {
                 qDebug() << "Cavern emitted station with unknown cave scope:" << caveLabel << LOCATION;
                 continue;
@@ -619,7 +606,7 @@ private:
             // one: a trip label is an ordinary survey name, so nothing about
             // "topo1.a1" marks it as scoped except that this cave has a trip
             // labeled topo1.
-            const QString cavePrefix = CaveLabels.value(cave->id()) + QLatin1Char('.');
+            const QString cavePrefix = ScopeLabels.cavePrefix(cave->id());
             const QSet<QString> externalTripLabels = externalTripLabelsFor(cave);
 
             for (const QString& scopedStation : regionNetwork.stations()) {

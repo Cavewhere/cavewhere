@@ -45,8 +45,8 @@ public:
     // the owning cave's own label to qualify the same operand across caves.
     //
     // `tripLabels` must be the pool writeCave opened its "*begin" blocks from
-    // (cwCavernNaming::scopeLabels over cave.trips) — an operand deriving its
-    // own answer could name a scope the file never opened.
+    // (cwScopeLabels::tripLabels for this cave) — an operand deriving its own
+    // answer could name a scope the file never opened.
     static QString equateOperand(const cwStationHandle& handle,
                                  const cwCaveData& cave,
                                  const QHash<QUuid, QString>& tripLabels);

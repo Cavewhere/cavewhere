@@ -393,6 +393,50 @@ void cwCavingRegion::setUndoStackForChildren() {
 }
 
 
+const QHash<QUuid, QString>& cwCavingRegion::caveScopeLabels() const
+{
+    return m_caveScopeLabels.labels(m_caves);
+}
+
+void cwCavingRegion::invalidateCaveScopeLabels()
+{
+    //See cwCave::invalidateTripScopeLabels — insertCaves/removeCaves split the
+    //stale flag from the pulse; a rename does not need to.
+    m_caveScopeLabels.invalidate();
+    emit scopeLabelsChanged();
+}
+
+void cwCavingRegion::connectCave(cwCave* cave)
+{
+    // The cave's grid-convergence readout depends on the region's globalCS when
+    // a fix station omits its own inputCS. UniqueConnection keeps re-insert/undo
+    // paths from doubling up.
+    connect(geoReference(), &cwGeoReference::globalCoordinateSystemChanged,
+            cave, &cwCave::recomputeGridConvergence, Qt::UniqueConnection);
+
+    //A cave label is unique among the region's caves, so a rename here moves
+    //labels this region assigned.
+    connect(cave, &cwCave::nameChanged,
+            this, &cwCavingRegion::invalidateCaveScopeLabels, Qt::UniqueConnection);
+    //A trip label moving leaves the cave labels alone, but it still moves a
+    //qualified station name this region publishes, so it rides the same pulse.
+    connect(cave, &cwCave::tripScopeLabelsChanged,
+            this, &cwCavingRegion::scopeLabelsChanged, Qt::UniqueConnection);
+}
+
+void cwCavingRegion::disconnectCave(cwCave* cave)
+{
+    disconnect(geoReference(), &cwGeoReference::globalCoordinateSystemChanged,
+               cave, &cwCave::recomputeGridConvergence);
+
+    //A cave this region no longer lists must not dirty its labels or pulse
+    //through it.
+    disconnect(cave, &cwCave::nameChanged,
+               this, &cwCavingRegion::invalidateCaveScopeLabels);
+    disconnect(cave, &cwCave::tripScopeLabelsChanged,
+               this, &cwCavingRegion::scopeLabelsChanged);
+}
+
 /**
   \brief Unparents the cave
   */
@@ -437,24 +481,25 @@ void cwCavingRegion::InsertRemoveCave::insertCaves() {
     emit regionPtr->beginInsertRows(QModelIndex(), BeginIndex, EndIndex);
     for(int i = 0; i < Caves.size(); i++) {
         int index = BeginIndex + i;
-        regionPtr->m_caves.insert(index, Caves.at(i));
-        regionPtr->m_caveNames.insert(Caves.at(i)->name());
-        Caves.at(i)->setParent(regionPtr);
-
-        // The cave's grid-convergence readout depends on the region's
-        // globalCS when a fix station omits its own inputCS. UniqueConnection
-        // keeps re-insert/undo paths from doubling up.
-        QObject::connect(regionPtr->geoReference(), &cwGeoReference::globalCoordinateSystemChanged,
-                         Caves.at(i), &cwCave::recomputeGridConvergence,
-                         Qt::UniqueConnection);
-        Caves.at(i)->recomputeGridConvergence();
+        cwCave* cave = Caves.at(i);
+        regionPtr->m_caves.insert(index, cave);
+        regionPtr->m_caveNames.insert(cave->name());
+        cave->setParent(regionPtr);
+        regionPtr->connectCave(cave);
+        cave->recomputeGridConvergence();
     }
 
     OwnsCaves = false;
 
+    //Stale before the first emit, pulsed after the last — see
+    //cwCave::InsertRemoveTrip::insertTrips for why the two are separated.
+    regionPtr->m_caveScopeLabels.invalidate();
+
     emit regionPtr->insertedCaves(BeginIndex, EndIndex);
     emit regionPtr->endInsertRows();
     emit regionPtr->caveCountChanged();
+
+    emit regionPtr->scopeLabelsChanged();
 }
 
 /**
@@ -469,18 +514,25 @@ void cwCavingRegion::InsertRemoveCave::removeCaves() {
 
     for(int i = Caves.size() - 1; i >= 0; i--) {
         int index = BeginIndex + i;
-        regionPtr->m_caveNames.remove(regionPtr->m_caves.at(index)->name());
+        cwCave* cave = regionPtr->m_caves.at(index);
+        regionPtr->m_caveNames.remove(cave->name());
         regionPtr->m_caves.removeAt(index);
 
         //Do NOT uncomment, qml engine may garbage collect objects that aren't parented, and can cause double free problem
         // Caves[i]->setParent(nullptr);
+
+        regionPtr->disconnectCave(cave);
     }
 
     OwnsCaves = true;
 
+    regionPtr->m_caveScopeLabels.invalidate();
+
     emit regionPtr->removedCaves(BeginIndex, EndIndex);
     emit regionPtr->endRemoveRows();
     emit regionPtr->caveCountChanged();
+
+    emit regionPtr->scopeLabelsChanged();
 }
 
 

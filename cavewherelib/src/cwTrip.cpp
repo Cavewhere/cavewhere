@@ -33,24 +33,17 @@ namespace {
     // "<prefix>.", else unscoped.
     //
     // The label arrives as a callable because only the first branch needs it:
-    // this is a Q_PROPERTY read, and pooling a whole cave's trip labels to
-    // answer "unscoped" for an ordinary native trip is the common case.
+    // this is a Q_PROPERTY read, and an ordinary native trip should not make its
+    // cave build a label map only to be told it has no scope.
     template <typename LabelProvider>
     QString computeScopePrefix(bool hasExternalCenterline,
                                const QString& stationPrefix,
                                LabelProvider&& label)
     {
         if (hasExternalCenterline) {
-            const QString scopeLabel = label();
-            if (scopeLabel.isEmpty()) {
-                return QString();
-            }
-            return scopeLabel + QLatin1Char('.');
+            return cwCavernNaming::scopePrefix(label());
         }
-        if (!stationPrefix.isEmpty()) {
-            return stationPrefix + QLatin1Char('.');
-        }
-        return QString();
+        return cwCavernNaming::scopePrefix(stationPrefix);
     }
 }
 
@@ -190,42 +183,28 @@ void cwTrip::setStationPrefix(const QString& stationPrefix)
 
 QString cwTrip::scopePrefix() const
 {
-    //A trip's label is only unique among the trips of its cave, so the siblings
-    //are part of the question.
-    const auto label = [this]() {
-        QList<cwCavernNaming::ScopeEntry> entries;
-        bool listed = false;
-
+    //A trip's label is only unique among the trips of its cave, so the cave owns
+    //the assignment and this is a lookup in the map it keeps.
+    const auto label = [this]() -> QString {
         const cwCave* cave = parentCave();
-        if (cave != nullptr) {
-            const QList<cwTrip*> trips = cave->trips();
-            entries.reserve(trips.size());
-            for (const cwTrip* trip : trips) {
-                entries.append({trip->id(), trip->name()});
-                listed = listed || trip->id() == id();
-            }
+        if (cave == nullptr) {
+            //No cave means no sibling set, so this trip's own label is unique by
+            //construction — it is what it would take on being added to a cave
+            //with no name clash, and the only sensible answer for a trip being
+            //built or imported before it is parented.
+            return cwCavernNaming::sanitizeToCavernIdentifier(name());
         }
 
-        //A trip its cave doesn't list — an orphan, or one an undo command still
-        //holds after a remove, since cwCave leaves the parent set — is its own
-        //only sibling, which gives it the label it would take once (re)added to
-        //a cave with no name clash. Without this it would report a scope by
-        //isScoped() and no prefix to strip by, and every solved-* accessor would
-        //read it as a flat native trip and hand back the whole cave lookup.
-        if (!listed) {
-            entries.append({id(), name()});
-        }
-
-        return cwCavernNaming::scopeLabel(id(), entries);
+        //Empty for a trip the cave still parents but no longer lists —
+        //InsertRemoveTrip leaves the parent set so undo can restore it. Here a
+        //self-derived label would *not* be unique: it is exactly the label a live
+        //sibling may now hold, and the solved-* accessors would strip by it and
+        //hand back that sibling's stations as this trip's. Answering "no scope"
+        //resolves nothing rather than the wrong thing.
+        return cave->tripScopeLabels().value(id());
     };
 
     return computeScopePrefix(!m_externalCenterline.isEmpty(), m_stationPrefix, label);
-}
-
-QString cwTrip::scopePrefix(const cwTripData& data, const QList<cwTripData>& siblingTrips)
-{
-    return scopePrefix(data, cwCavernNaming::scopeLabels(
-                                 cwCavernNaming::scopeEntries(siblingTrips)));
 }
 
 QString cwTrip::scopePrefix(const cwTripData& data, const QHash<QUuid, QString>& tripLabels)

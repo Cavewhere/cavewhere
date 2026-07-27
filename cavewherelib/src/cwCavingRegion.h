@@ -15,9 +15,13 @@
 #include <QWeakPointer>
 #include <QAbstractListModel>
 #include <QDebug>
+#include <QHash>
 #include <QSharedPointer>
 #include <QQmlEngine>
 #include <QObjectBindableProperty>
+#include <QUuid>
+
+#include "cwSiblingLabelCache.h"
 
 //Our includes
 class cwCave;
@@ -108,6 +112,12 @@ public:
     cwSanitizedNameSet& caveNameSet() { return m_caveNames; }
     const cwSanitizedNameSet& caveNameSet() const { return m_caveNames; }
 
+    //! The cavern survey label each cave takes, keyed by cave id. Assigned
+    //! across the whole region (cwCavernNaming), so adding, removing, or
+    //! renaming any cave can move another cave's collision suffix. Cached; see
+    //! cwCave::tripScopeLabels() for the per-cave half.
+    const QHash<QUuid, QString>& caveScopeLabels() const;
+
     cwProject* parentProject() const;
 
     void setData(const cwCavingRegionData &data);
@@ -124,6 +134,14 @@ signals:
     void removedCaves(int begin, int end);
 
     void caveCountChanged();
+
+    //! Some scope label anywhere in this region may have moved — a cave or a
+    //! trip was added, removed, or renamed. The one pulse for a consumer that
+    //! shows labels across more than one cave (the ties audit, the tie-in
+    //! suggester); a consumer watching a single trip binds cwTrip::scopeChanged
+    //! instead. A label has no NOTIFY of its own, so anything that caches one
+    //! must invalidate on this.
+    void scopeLabelsChanged();
 
 public slots:
 
@@ -149,6 +167,15 @@ private:
 
     void unparentCave(cwCave* cave);
     void addCaveHelper();
+
+    cwSiblingLabelCache m_caveScopeLabels;
+    void invalidateCaveScopeLabels();
+
+    //! Wire a cave this region now lists, and unwire one it no longer does.
+    //! Called from InsertRemoveCave, the single funnel every insert and remove
+    //! passes through.
+    void connectCave(cwCave* cave);
+    void disconnectCave(cwCave* cave);
 
     ////////////////////// Undo Redo commands ///////////////////////////////////
     class InsertRemoveCave : public QUndoCommand {

@@ -84,14 +84,8 @@ QHash<QUuid, QString> cwCavernNaming::scopeLabels(const QList<ScopeEntry>& sibli
     return labels;
 }
 
-QString cwCavernNaming::scopeLabel(const QUuid& id, const QList<ScopeEntry>& siblings)
+QString cwCavernNaming::scopePrefix(const QString& label)
 {
-    return scopeLabels(siblings).value(id);
-}
-
-QString cwCavernNaming::scopePrefix(const QUuid& id, const QList<ScopeEntry>& siblings)
-{
-    const QString label = scopeLabel(id, siblings);
     if (label.isEmpty()) {
         return QString();
     }
@@ -114,24 +108,4 @@ QString cwCavernNaming::removeScopeHead(const QString& scopedName)
         return scopedName;
     }
     return scopedName.sliced(separator + 1);
-}
-
-QList<cwCavernNaming::ScopeEntry> cwCavernNaming::scopeEntries(const QList<cwCaveData>& caves)
-{
-    QList<ScopeEntry> entries;
-    entries.reserve(caves.size());
-    for (const cwCaveData& cave : caves) {
-        entries.append({cave.id, cave.name});
-    }
-    return entries;
-}
-
-QList<cwCavernNaming::ScopeEntry> cwCavernNaming::scopeEntries(const QList<cwTripData>& trips)
-{
-    QList<ScopeEntry> entries;
-    entries.reserve(trips.size());
-    for (const cwTripData& trip : trips) {
-        entries.append({trip.id, trip.name});
-    }
-    return entries;
 }

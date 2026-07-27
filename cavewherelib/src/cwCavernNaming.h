@@ -3,8 +3,6 @@
 
 //Our includes
 #include "cwGlobals.h"
-#include "cwCaveData.h"
-#include "cwTripData.h"
 
 //Qt includes
 #include <QString>
@@ -51,12 +49,10 @@ CAVEWHERE_LIB_EXPORT QString sanitizeToCavernIdentifier(const QString& name);
 //! A unique label per sibling, assigned in iteration order.
 CAVEWHERE_LIB_EXPORT QHash<QUuid, QString> scopeLabels(const QList<ScopeEntry>& siblings);
 
-//! The label \a id takes among \a siblings. Empty when \a id is not one of them.
-CAVEWHERE_LIB_EXPORT QString scopeLabel(const QUuid& id, const QList<ScopeEntry>& siblings);
-
-//! "<label>." — the prefix a name nested in \a id's scope carries. Empty when
-//! \a id is not among \a siblings.
-CAVEWHERE_LIB_EXPORT QString scopePrefix(const QUuid& id, const QList<ScopeEntry>& siblings);
+//! "<label>." — the prefix a name nested in \a label's scope carries, or empty
+//! when \a label is. The one place the separator is spelled, so a caller that
+//! holds a label never has to.
+CAVEWHERE_LIB_EXPORT QString scopePrefix(const QString& label);
 
 //! The leading "<label>" of a scoped name, or empty when the name carries no
 //! scope at all. Only the first segment is returned: nested scopes and dotted
@@ -66,9 +62,6 @@ CAVEWHERE_LIB_EXPORT QString scopeHeadOf(const QString& scopedName);
 //! \a scopedName with its leading scope removed, or \a scopedName unchanged
 //! when it carries none.
 CAVEWHERE_LIB_EXPORT QString removeScopeHead(const QString& scopedName);
-
-CAVEWHERE_LIB_EXPORT QList<ScopeEntry> scopeEntries(const QList<cwCaveData>& caves);
-CAVEWHERE_LIB_EXPORT QList<ScopeEntry> scopeEntries(const QList<cwTripData>& trips);
 
 }
 

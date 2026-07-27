@@ -278,6 +278,45 @@ void cwCave::clearTrips() {
     }
 }
 
+const QHash<QUuid, QString>& cwCave::tripScopeLabels() const
+{
+    return m_tripScopeLabels.labels(Trips);
+}
+
+void cwCave::invalidateTripScopeLabels()
+{
+    //The two halves are separable, and insertTrips/removeTrips separate them:
+    //the cache goes stale the instant the trip list changes, while the pulse
+    //waits for the model to settle. A rename needs no such split — the new name
+    //is in place before nameChanged reaches here.
+    m_tripScopeLabels.invalidate();
+    emit tripScopeLabelsChanged();
+}
+
+void cwCave::connectTrip(cwTrip* trip)
+{
+    //A trip's label is unique among its cave's trips, so this cave is the only
+    //object that can see a rename move one — and the only one that can tell the
+    //*siblings* their labels moved with it. UniqueConnection because undo/redo
+    //re-inserts the same trip.
+    connect(trip, &cwTrip::nameChanged,
+            this, &cwCave::invalidateTripScopeLabels, Qt::UniqueConnection);
+    connect(this, &cwCave::tripScopeLabelsChanged,
+            trip, &cwTrip::scopeChanged, Qt::UniqueConnection);
+}
+
+void cwCave::disconnectTrip(cwTrip* trip)
+{
+    //A trip this cave no longer lists must not dirty its labels, and must not be
+    //told they moved. Its own rename still reaches scopeChanged through
+    //NameCommand, though scopePrefix() answers empty for it either way — the
+    //cave is what grants a place in the namespace, and it no longer does.
+    disconnect(trip, &cwTrip::nameChanged,
+               this, &cwCave::invalidateTripScopeLabels);
+    disconnect(this, &cwCave::tripScopeLabelsChanged,
+               trip, &cwTrip::scopeChanged);
+}
+
 cwCavingRegion *cwCave::parentRegion() const
 {
     return dynamic_cast<cwCavingRegion*>(parent());
@@ -419,16 +458,27 @@ void cwCave::InsertRemoveTrip::insertTrips() {
     emit cave->beginInsertRows(QModelIndex(), BeginIndex, EndIndex);
     for(int i = 0; i < Trips.size(); i++) {
         int index = BeginIndex + i;
-        cave->Trips.insert(index, Trips[i]);
-        cave->m_tripNames.insert(Trips[i]->name());
-        Trips[i]->setParentCave(cave);
-        Trips[i]->errorModel()->setParentModel(cave->errorModel());
+        cwTrip* trip = Trips.at(i);
+        cave->Trips.insert(index, trip);
+        cave->m_tripNames.insert(trip->name());
+        trip->setParentCave(cave);
+        trip->errorModel()->setParentModel(cave->errorModel());
+        cave->connectTrip(trip);
     }
 
     OwnsTrips = false;
 
+    //Stale before the first emit: a handler woken by insertedTrips can reach
+    //cwTrip::scopePrefix() (cwLinePlotLabelView does, through solvedStations),
+    //and a cache still marked fresh would answer it from the trip list as it
+    //stood before this insert.
+    cave->m_tripScopeLabels.invalidate();
+
     emit cave->endInsertRows();
     emit cave->insertedTrips(BeginIndex, EndIndex);
+
+    //Pulsed last, so a consumer woken by it reads a cave whose trip list is settled.
+    emit cave->tripScopeLabelsChanged();
 }
 
 void cwCave::InsertRemoveTrip::removeTrips() {
@@ -439,19 +489,25 @@ void cwCave::InsertRemoveTrip::removeTrips() {
     //Remove all the trips from the back to the front
     for(int i = Trips.size() - 1; i >= 0; i--) {
         int index = BeginIndex + i;
-        cave->m_tripNames.remove(cave->Trips.at(index)->name());
+        cwTrip* trip = cave->Trips.at(index);
+        cave->m_tripNames.remove(trip->name());
         cave->Trips.removeAt(index);
 
         //Do NOT uncomment, qml engine may garbage collect objects that aren't parented, and can cause double free problem
         // Trips[i]->setParentCave(nullptr);
 
-        Trips[i]->errorModel()->setParentModel(nullptr);
+        trip->errorModel()->setParentModel(nullptr);
+        cave->disconnectTrip(trip);
     }
 
     OwnsTrips = true;
 
+    cave->m_tripScopeLabels.invalidate();
+
     emit cave->endRemoveRows();
     emit cave->removedTrips(BeginIndex, EndIndex);
+
+    emit cave->tripScopeLabelsChanged();
 }
 
 

@@ -720,13 +720,15 @@ QString cwExternalCenterlineManager::scopePrefixForTrip(cwTrip* trip) const
         return QString();
     }
 
-    QList<cwCavernNaming::ScopeEntry> caveEntries;
-    const QList<cwCave*> caves = region->caves();
-    caveEntries.reserve(caves.size());
-    for (const cwCave* sibling : caves) {
-        caveEntries.append({sibling->id(), sibling->name()});
+    //Empty when the region does not list the cave — parented but already
+    //removed, say. There is no cave scope to qualify against, and answering
+    //with the bare trip prefix would name a scope no file ever opened.
+    const QString cavePrefix =
+        cwCavernNaming::scopePrefix(region->caveScopeLabels().value(cave->id()));
+    if (cavePrefix.isEmpty()) {
+        return QString();
     }
 
-    return cwCavernNaming::scopePrefix(cave->id(), caveEntries) + tripPrefix;
+    return cavePrefix + tripPrefix;
 }
 

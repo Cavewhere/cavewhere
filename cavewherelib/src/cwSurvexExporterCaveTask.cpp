@@ -99,12 +99,17 @@ bool cwSurvexExporterCaveTask::writeCave(QTextStream& stream, const cwCaveData& 
         return false;
     }
 
-    // The region exporter decides this, because uniqueness spans the region; a
-    // single-cave export has no siblings, so its own sanitized name is right.
-    QString caveName = ExportOptions.caveLabels.value(cave.id);
-    if (caveName.isEmpty()) {
-        caveName = cwCavernNaming::sanitizeToCavernIdentifier(cave.name);
-    }
+    // The region exporter assigns the scopes, because cave-label uniqueness
+    // spans the region. A single-cave export has no region and no siblings, so
+    // the cave stands alone: its own sanitized name, and trip labels assigned
+    // from its own trips, which need no region to be unique.
+    const QString assignedCaveName = ExportOptions.scopeLabels.caveLabel(cave.id);
+    const bool standalone = assignedCaveName.isEmpty();
+
+    const cwScopeLabels scopeLabels =
+        standalone ? cwScopeLabels::forCave(cave) : ExportOptions.scopeLabels;
+    const QString caveName =
+        standalone ? cwCavernNaming::sanitizeToCavernIdentifier(cave.name) : assignedCaveName;
 
     stream << "*begin " << caveName << " ;" << cave.name << Qt::endl << Qt::endl;
 
@@ -133,8 +138,7 @@ bool cwSurvexExporterCaveTask::writeCave(QTextStream& stream, const cwCaveData& 
     //Haven't done anything
     TotalProgress = 0;
 
-    const QHash<QUuid, QString> tripLabels =
-        cwCavernNaming::scopeLabels(cwCavernNaming::scopeEntries(cave.trips));
+    const QHash<QUuid, QString>& tripLabels = scopeLabels.tripLabels(cave.id);
 
     //Go throug all the trips and save them
     for(int i = 0; i < cave.trips.size(); i++) {

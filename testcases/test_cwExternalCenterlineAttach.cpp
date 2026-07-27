@@ -806,6 +806,22 @@ TEST_CASE("scopePrefixForTrip derives the driver's qualified-station prefix",
     // A trip outside any cave has no qualified prefix.
     cwTrip orphan;
     CHECK(manager->scopePrefixForTrip(&orphan).isEmpty());
+
+    // A cave the region no longer lists is the third empty case: removed, but
+    // still parenting its trips, so the trip keeps answering parentCave() and
+    // keeps its own trip-scope label. There is no cave scope left to qualify
+    // against, and answering with the bare trip prefix would name a scope no
+    // exported file ever opened. The project's undo stack owns the removed cave
+    // and keeps it alive across the assertions.
+    cwCavingRegion* region = fixture->project->cavingRegion();
+    REQUIRE(region->caveScopeLabels().contains(fixture->cave->id()));
+    region->removeCave(region->indexOf(fixture->cave));
+
+    REQUIRE(fixture->trip->parentCave() == fixture->cave);
+    REQUIRE_FALSE(region->caveScopeLabels().contains(fixture->cave->id()));
+    // The trip half is still there — this is the cave half going missing.
+    REQUIRE_FALSE(fixture->trip->scopePrefix().isEmpty());
+    CHECK(manager->scopePrefixForTrip(fixture->trip).isEmpty());
 }
 
 TEST_CASE("attachment dirs derive from the save/load pipeline at load time",

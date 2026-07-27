@@ -11,6 +11,7 @@
 #include "CaveWhereLibExport.h"
 #include "Monad/Result.h"
 #include "cwCavingRegionData.h"
+#include "cwScopeLabels.h"
 
 #include <QHash>
 #include <QString>
@@ -61,21 +62,21 @@ public:
      * the file's own directive would override an injected value anyway
      * (cavern-verified, master plan §8.8 q7).
      *
-     * \c caveLabels maps \c cwCave::id() to the survey label that cave's
-     * \c *begin block uses. Filled by \c exportRegion itself rather than by the
-     * caller: a cave label has to be unique across the whole region (see
-     * cwCavernNaming), which is a question only the region exporter can answer.
-     * A cave missing from the map falls back to its own sanitized name when a
-     * \c *begin block is written for it, which is correct for the single-cave
-     * exporter, where there are no siblings to collide with. A cross-cave
-     * \c *equate operand takes no such fallback — it drops the tie rather than
-     * name a scope whose uniqueness nothing established.
+     * \c scopeLabels carries the survey label every \c *begin block in the file
+     * opens with. Filled by \c exportRegion itself rather than by the caller: a
+     * cave label has to be unique across the whole region (see cwCavernNaming),
+     * which is a question only the region exporter can answer. A cave the pool
+     * does not name falls back to its own sanitized name when a \c *begin block
+     * is written for it, which is correct for the single-cave exporter, where
+     * there are no siblings to collide with. A cross-cave \c *equate operand
+     * takes no such fallback — it drops the tie rather than name a scope whose
+     * uniqueness nothing established.
      */
     struct CAVEWHERE_LIB_EXPORT Options {
         QHash<QUuid, QString> caveAttachmentDirs;
         QHash<QUuid, QString> tripAttachmentDirs;
         QHash<QUuid, double> tripInjectedDeclinations;
-        QHash<QUuid, QString> caveLabels;
+        cwScopeLabels scopeLabels;
     };
 
     cwSurvexExporterRegion() = delete;

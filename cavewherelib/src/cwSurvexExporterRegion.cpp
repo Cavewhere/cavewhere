@@ -6,7 +6,6 @@
 **************************************************************************/
 
 #include "cwSurvexExporterRegion.h"
-#include "cwCavernNaming.h"
 #include "cwLinePlotErrorCodes.h"
 #include "cwStationHandle.h"
 #include "cwSurvexExporterCaveTask.h"
@@ -52,23 +51,22 @@ const cwCaveData* owningCave(const cwStationHandle& handle, const cwCavingRegion
 // an operand naming a scope the file never opened resolves to nothing.
 QString qualifiedOperand(const cwStationHandle& handle,
                          const cwCavingRegionData& region,
-                         const QHash<QUuid, QString>& caveLabels,
-                         const QHash<QUuid, QHash<QUuid, QString>>& tripLabelsByCave)
+                         const cwScopeLabels& scopeLabels)
 {
     const cwCaveData* cave = owningCave(handle, region);
     if (cave == nullptr) {
         return QString();
     }
     const QString relative = cwSurvexExporterCaveTask::equateOperand(
-        handle, *cave, tripLabelsByCave.value(cave->id));
+        handle, *cave, scopeLabels.tripLabels(cave->id));
     if (relative.isEmpty()) {
         return QString();
     }
-    const QString caveLabel = caveLabels.value(cave->id);
-    if (caveLabel.isEmpty()) {
+    const QString cavePrefix = scopeLabels.cavePrefix(cave->id);
+    if (cavePrefix.isEmpty()) {
         return QString();
     }
-    return caveLabel + QLatin1Char('.') + relative;
+    return cavePrefix + relative;
 }
 
 // Emit each cross-cave tie as a fully-qualified "*equate" at region scope,
@@ -77,22 +75,12 @@ QString qualifiedOperand(const cwStationHandle& handle,
 // each qualified name back to its cave, landing the tie as a position-alias in
 // both.
 void writeRegionEquates(QTextStream& stream, const cwCavingRegionData& region,
-                        const QHash<QUuid, QString>& caveLabels)
+                        const cwScopeLabels& scopeLabels)
 {
-    // Pooled once per cave rather than per operand: a label is unique among a
-    // cave's trips, so answering one handle costs the whole cave either way.
-    QHash<QUuid, QHash<QUuid, QString>> tripLabelsByCave;
-    tripLabelsByCave.reserve(region.caves.size());
-    for (const cwCaveData& cave : std::as_const(region.caves)) {
-        tripLabelsByCave.insert(cave.id,
-                                cwCavernNaming::scopeLabels(
-                                    cwCavernNaming::scopeEntries(cave.trips)));
-    }
-
     cwSurvexExporterCaveTask::writeEquates(
         stream, region.equates,
-        [&region, &caveLabels, &tripLabelsByCave](const cwStationHandle& handle) {
-            return qualifiedOperand(handle, region, caveLabels, tripLabelsByCave);
+        [&region, &scopeLabels](const cwStationHandle& handle) {
+            return qualifiedOperand(handle, region, scopeLabels);
         });
 }
 
@@ -123,12 +111,11 @@ cwSurvexExporterRegion::exportRegion(const cwCavingRegionData& region,
         stream << "*cs out " << outputCS << Qt::endl;
     }
 
-    // Cave labels are decided here and nowhere else: uniqueness is a property of
-    // the whole region, and the "*begin" lines and the equate operands below
-    // both have to name the same scopes.
+    // Scopes are assigned here and nowhere else: cave-label uniqueness is a
+    // property of the whole region, and the "*begin" lines and the equate
+    // operands below both have to name the same ones.
     Options labeledOptions = options;
-    labeledOptions.caveLabels = cwCavernNaming::scopeLabels(
-        cwCavernNaming::scopeEntries(region.caves));
+    labeledOptions.scopeLabels = cwScopeLabels(region);
 
     cwSurvexExporterCaveTask caveExporter;
     caveExporter.setExportOptions(labeledOptions);
@@ -151,7 +138,7 @@ cwSurvexExporterRegion::exportRegion(const cwCavingRegionData& region,
 
     // Cross-cave ties emit here, after every cave's "*begin" sibling is declared
     // and closed, so both fully-qualified operands are in scope.
-    writeRegionEquates(stream, region, labeledOptions.caveLabels);
+    writeRegionEquates(stream, region, labeledOptions.scopeLabels);
 
     stream << "*end" << Qt::endl;
     stream.flush();
