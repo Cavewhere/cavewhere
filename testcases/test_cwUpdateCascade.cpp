@@ -9,6 +9,7 @@
 #include <QCoreApplication>
 
 using FakeUpdatableTest::settle;
+using FakeUpdatableTest::dirtyWhenWorking;
 
 namespace {
 
@@ -112,8 +113,8 @@ TEST_CASE("A pipeline already working when the cascade starts isn't restarted",
 
     cwUpdateCascade cascade(coordinate({&busy}), {});
 
-    //Put it in Working outside the cascade, the way rerunSurvex() and
-    //updateAllScraps() do when they bypass the coordinator entirely.
+    //Put it in Working outside the cascade, the way updateAllScraps() does when it
+    //bypasses the coordinator entirely.
     busy.markDirty();
     busy.run();
     REQUIRE(busy.updateState() == cwUpdatable::State::Working);
@@ -132,6 +133,36 @@ TEST_CASE("A pipeline already working when the cascade starts isn't restarted",
     CHECK(busy.updateState() == cwUpdatable::State::Clean);
 }
 
+TEST_CASE("runIfNeeded reads the state the way a driver has to", "[cwUpdatable]")
+{
+    //The cascade's per-node drive is this call, and so are the managers' force
+    //paths. Pinning it here rather than only through a cascade is what stops the
+    //next caller from re-deriving the branch — and getting the Working case wrong,
+    //which for a real manager cancels the work already doing the job.
+    FakeUpdatable pipeline(false);
+    pipeline.setCoordinated(true);
+
+    REQUIRE(pipeline.updateState() == cwUpdatable::State::Clean);
+    CHECK(pipeline.runIfNeeded().isFinished());
+    CHECK(pipeline.driveCount() == 0);
+
+    pipeline.markDirty();
+    const QFuture<void> run = pipeline.runIfNeeded();
+    CHECK(pipeline.updateCount() == 1);
+    CHECK_FALSE(run.isFinished());
+
+    //Working: what comes back is the run in flight, and nothing is started over.
+    REQUIRE(pipeline.updateState() == cwUpdatable::State::Working);
+    const QFuture<void> attached = pipeline.runIfNeeded();
+    CHECK(pipeline.driveCount() == 1);
+    CHECK(pipeline.updateCount() == 1);
+    CHECK_FALSE(attached.isFinished());
+
+    pipeline.finish();
+    CHECK(run.isFinished());
+    CHECK(attached.isFinished());
+}
+
 TEST_CASE("A cascade with nothing to do finishes before it returns",
           "[cwUpdateCascade]")
 {
@@ -144,6 +175,103 @@ TEST_CASE("A cascade with nothing to do finishes before it returns",
     cwUpdateCascade cascade(coordinate({&root, &dependent}), {{&dependent, {&root}}});
 
     CHECK(cascade.start().isFinished());
+}
+
+TEST_CASE("A forced pass runs a clean pipeline and carries the result onward",
+          "[cwUpdateCascade]")
+{
+    //The "Solve" button. Nothing is dirty, so an ordinary pass would do nothing at
+    //all; the point of forcing is that solving dirties what consumes the solve,
+    //and the declared edges are what recompute it. Before this the button forced
+    //the manager directly and left its dependents holding stale output.
+    FakeUpdatable root;
+    FakeUpdatable dependent;
+    root.setRunsWhenClean(true);
+    const QList<cwUpdatable*> pipelines = coordinate({&root, &dependent});
+
+    dirtyWhenWorking(&root, &dependent);
+
+    REQUIRE(root.updateState() == cwUpdatable::State::Clean);
+
+    cwUpdateCascade cascade(&root, pipelines, {{&dependent, {&root}}});
+    cascade.start();
+    settle();
+
+    CHECK(root.updateCount() == 1);
+    CHECK(dependent.updateCount() == 1);
+    CHECK(dependent.updateState() == cwUpdatable::State::Clean);
+}
+
+TEST_CASE("A forced pass leaves the pipelines it doesn't reach alone",
+          "[cwUpdateCascade]")
+{
+    //Scoping is the difference between this and a plain Run: forcing the scraps
+    //must not drag in an unrelated pipeline just because it happens to be dirty.
+    FakeUpdatable forced;
+    FakeUpdatable unrelated;
+    forced.setRunsWhenClean(true);
+
+    cwUpdateCascade cascade(&forced, coordinate({&forced, &unrelated}), {});
+
+    unrelated.markDirty();
+    cascade.start();
+    settle();
+
+    CHECK(forced.updateCount() == 1);
+    CHECK(unrelated.driveCount() == 0);
+    CHECK(unrelated.updateState() == cwUpdatable::State::Dirty);
+}
+
+TEST_CASE("A forced pipeline's own dependencies are still driven ahead of it",
+          "[cwUpdateCascade]")
+{
+    //Narrowed on the consuming side only. Forcing the scraps while the line plot
+    //has fallen behind has to solve first, or the triangulation is fitted to
+    //station positions the survey has already moved.
+    FakeUpdatable upstream(false); //Held in Working so the ordering is observable
+    FakeUpdatable forced;
+    forced.setRunsWhenClean(true);
+
+    cwUpdateCascade cascade(&forced, coordinate({&upstream, &forced}),
+                            {{&forced, {&upstream}}});
+
+    upstream.markDirty();
+    cascade.start();
+    settle();
+
+    REQUIRE(upstream.updateState() == cwUpdatable::State::Working);
+    CHECK(forced.driveCount() == 0);
+
+    upstream.finish();
+    settle();
+
+    CHECK(forced.updateCount() == 1);
+}
+
+TEST_CASE("A forced pipeline is forced once, not every time its node is read",
+          "[cwUpdateCascade]")
+{
+    //The node re-reads its pipeline when the run ends, to catch an edit made
+    //while it was going. That second read has to be the ordinary one: a force
+    //that renewed itself would run a clean pipeline again for as long as its runs
+    //kept succeeding, which for a real solve never terminates.
+    FakeUpdatable forced(false);
+    forced.setRunsWhenClean(true);
+
+    cwUpdateCascade cascade(&forced, coordinate({&forced}), {});
+
+    cascade.start();
+    settle();
+
+    REQUIRE(forced.updateCount() == 1);
+    REQUIRE(forced.updateState() == cwUpdatable::State::Working);
+
+    forced.finish();
+    settle();
+
+    CHECK(forced.updateCount() == 1);
+    CHECK(forced.driveCount() == 1);
+    CHECK(forced.updateState() == cwUpdatable::State::Clean);
 }
 
 TEST_CASE("A mis-registered dependency cycle still terminates", "[cwUpdateCascade]")

@@ -325,7 +325,10 @@ void cwNoteLiDARManager::updateAllLiDAR()
         markDirty(note);
     }
     emit updateStateChanged();
-    run();
+    //Marking is the force, so the drive is the ordinary reading: notes with no
+    //LiDAR to process leave nothing runnable, and run() would cancel a batch in
+    //flight to start an empty one.
+    runIfNeeded();
 }
 
 void cwNoteLiDARManager::updateLiDARForCave(cwCave* cave)

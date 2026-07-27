@@ -86,6 +86,34 @@ public:
     }
 
     /**
+        Brings the pipeline up to date the way a driver should, and returns the
+        future for whatever that leaves in flight.
+
+        Not a force, and that is the whole point: Working attaches to the run
+        already covering the current data instead of restarting it, which for the
+        real managers would cancel a solve that was doing the job. A caller whose
+        purpose is to recompute regardless — the "Solve" button on an already-clean
+        line plot — wants run(); one that first marks its inputs dirty gets the same
+        effect from here.
+
+        Says nothing about whether the pipeline is clean afterwards: a run can end
+        with the pipeline dirty again, so a driver that must reach Clean calls this
+        again when the future settles.
+    */
+    QFuture<void> runIfNeeded()
+    {
+        switch(updateState()) {
+        case State::Clean:
+            return QtFuture::makeReadyVoidFuture();
+        case State::Working:
+            return currentRun();
+        case State::Dirty:
+            return run();
+        }
+        Q_UNREACHABLE_RETURN(QtFuture::makeReadyVoidFuture());
+    }
+
+    /**
         The future for the run in flight, or an already-finished future when
         nothing is running. Waiting on it is how a driver lets a run that already
         covers the current data finish, rather than canceling it by forcing

@@ -85,12 +85,38 @@ void cwUpdateCoordinator::updateNow()
         return;
     }
 
+    startCascade(new cwUpdateCascade(m_updatables, m_dependencies, this));
+}
+
+void cwUpdateCoordinator::updateNow(QObject* pipeline)
+{
+    if(m_shuttingDown) {
+        return;
+    }
+
+    //cwUpdatable is not a QObject, so the pointer QML hands over has to be
+    //recovered rather than converted. See A4 in the plan: giving cwUpdatable a
+    //QObject identity would remove this cast, and the matching one in the cascade.
+    auto* updatable = dynamic_cast<cwUpdatable*>(pipeline);
+    if(updatable == nullptr || !m_updatables.contains(updatable)) {
+        //Not something this coordinator has edges for, so there is no cascade to
+        //build. Forcing it here anyway would run it with its dependents left
+        //behind, which is the defect this overload exists to fix.
+        qWarning("cwUpdateCoordinator::updateNow: %s is not a registered pipeline",
+                 pipeline != nullptr ? pipeline->metaObject()->className() : "nullptr");
+        return;
+    }
+
+    startCascade(new cwUpdateCascade(updatable, m_updatables, m_dependencies, this));
+}
+
+void cwUpdateCoordinator::startCascade(cwUpdateCascade* cascade)
+{
     //Pressing Run twice supersedes the first cascade rather than racing a second
-    //one alongside it. The incumbent is given up on before the replacement exists,
+    //one alongside it. The incumbent is given up on before the replacement runs,
     //so no pipeline is ever driven by two passes at once.
     dropRunningCascade();
 
-    auto* cascade = new cwUpdateCascade(m_updatables, m_dependencies, this);
     m_cascade = cascade;
     m_cascadeRunning = true;
 
@@ -156,10 +182,11 @@ void cwUpdateCoordinator::onChildStateChanged(cwUpdatable* updatable)
         return;
     }
 
-    //Guard on Dirty so run()'s own Working transition (dirty cleared) doesn't
-    //re-enter and re-run.
-    if(automaticUpdate() && updatable->updateState() == cwUpdatable::State::Dirty) {
-        updatable->run();
+    //runIfNeeded() rather than run(): the transition being reported is often the
+    //pipeline's own Working one, and re-running there would restart the work that
+    //just started.
+    if(automaticUpdate()) {
+        updatable->runIfNeeded();
     }
     refreshNeedsUpdate();
 }

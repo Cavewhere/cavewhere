@@ -139,6 +139,12 @@ signals:
 public slots:
     void updateAllScraps();
 
+    //Marks every scrap in the region dirty without running anything. Public so a
+    //caller can pair it with cwUpdateCoordinator::updateNow(this) — the marking is
+    //what makes "Compute Scraps" mean every scrap rather than the dirty ones, and
+    //the coordinator is what carries the result into whatever consumes it.
+    void markAllScrapsDirty();
+
 private:
     cwUpdatable::State doUpdateState() const override;
     QFuture<void> doRun() override;
@@ -217,7 +223,6 @@ private:
     // outlives.
     void markScrapDirty(cwScrap* scrap);
 
-    void markAllScrapsDirty();
     void updateScrapGeometry(QList<cwScrap *> scraps = QList<cwScrap*>());
     QFuture<void> updateScrapGeometryHelper(QList<cwScrap *> scraps);
     cwTriangulateInData mapScrapToTriangulateInData(cwScrap *scrap) const;

@@ -462,17 +462,6 @@ void cwLinePlotManager::clearUnconnectedChunkErrors()
 }
 
 /**
- * @brief cwLinePlotManager::rerunSurvex
- *
- * Forces a solve now, ignoring the auto-update policy. This is the "Solve"
- * button path, so it must recompute even when automatic update is off.
- */
-void cwLinePlotManager::rerunSurvex()
-{
-    run();
-}
-
-/**
   \brief Marks the line plot dirty in response to a survey edit.
 
   Pure mechanism: it records that a solve is pending and notifies. Whether the

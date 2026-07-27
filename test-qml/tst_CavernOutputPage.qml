@@ -108,10 +108,11 @@ MainWindowTest {
         }
 
         function test_rerunButtonInvokesManager() {
-            // The Re-run solve button calls linePlotManager.rerunSurvex();
-            // observe stationPositionInCavesChanged (fires per successful
-            // solve regardless of whether log content changed) as proof a
-            // new solve happened.
+            // The Solve button forces the line plot through
+            // updateCoordinator.updateNow(linePlotManager), which must solve even
+            // though nothing is dirty. Observe stationPositionInCavesChanged
+            // (fires per successful solve regardless of whether log content
+            // changed) as proof a new solve happened.
             TestHelper.loadProjectFromFile(
                 RootData.project,
                 TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"))
@@ -132,7 +133,7 @@ MainWindowTest {
             RootData.futureManagerModel.waitForFinished()
 
             tryVerify(() => spy.count >= 1, 5000,
-                      "stationPositionInCavesChanged should fire after rerunSurvex()")
+                      "stationPositionInCavesChanged should fire after the forced solve")
 
             // After the rerun the cavern log is still populated (unchanged or
             // identical content — either way the manager state must hold).

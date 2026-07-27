@@ -805,6 +805,8 @@ Running       : !taskManagerModel.isIdle
   <code>cwUpdatable::runIfNeeded()</code> returning the run's future would hold the branch once and stop the cascade being its keeper. The extraction is what
   made this visible: the switch is now the entire payload of a separate class, so its not being reusable is conspicuous. Pairs naturally with the scoped-force
   commit below, which would otherwise duplicate the branch a sixth time.
+  <span class="hist">DONE 2026-07-27, paired with the scoped force exactly as predicted &mdash; see the DONE block on that commit for what the five call sites
+  became, and why <code>rerunSurvex</code> was the one that kept <code>run()</code>.</span>
   <b>(2) <code>withLog()</code> shipped unconditional debug output.</b> It has no logging category of its own (plain <code>qDebug</code>, confirmed in
   <code>qtasktree.cpp</code>), so a released CaveWhere printed two lines per pipeline per cascade. It is now attached only when
   <code>cw.updateCascade</code> is at debug level, matching the house <code>cw.*</code> convention — the ordering trace that produced the evidence above is
@@ -995,6 +997,37 @@ Running       : !taskManagerModel.isIdle
   which keeps only the decision to start it. Blast radius: <code>cwUpdateCascade.{h,cpp}</code>, <code>cwUpdateCoordinator.{h,cpp}</code>, the two QML call
   sites, <code>cwRootData</code>'s QML surface, and both test suites. Natural pairing: CP6's footer <b>Run</b>,
   which is the trigger that makes the scoped API worth having.</p>
+
+  <p><b>DONE 2026-07-27, together with the <code>runIfNeeded()</code> seam it depends on.</b> Two pieces, in that order.</p>
+  <p><b>(a) <code>cwUpdatable::runIfNeeded()</code></b> — non-virtual, on the base beside <code>run()</code>, returning the run's future. It is the
+  Clean-skip / Working-attach / Dirty-run reading, held once. <code>driveToClean()</code>, <code>onChildStateChanged()</code>,
+  <code>cwScrapManager::updateAllScraps</code> and <code>cwNoteLiDARManager::updateAllLiDAR</code> all call it now.
+  <code>cwLinePlotManager::rerunSurvex</code> deliberately does <em>not</em>: the Solve button means "solve again" whether or not the survey changed, so a
+  clean line plot must still solve — which is the distinction between a <em>drive</em> and a <em>force</em>, and the reason this seam is not simply
+  "everyone stops calling run()". The cascade's per-branch trace survives as a <code>driveVerb()</code> helper, now behind
+  <code>isDebugEnabled()</code> — <code>pipelineName()</code> costs a <code>dynamic_cast</code> and a <code>QString</code>, and was unguarded before.</p>
+  <p><b>(b) Scoped force.</b> <code>cwUpdateCascade</code> gained a second constructor taking a <code>forcedRoot</code>; the coordinator gained
+  <code>updateNow(QObject*)</code> plus a shared <code>startCascade()</code> that both overloads run through. Three things worth writing down:</p>
+  <p>&bull; <b>The scope is narrowed on the consuming side only.</b> <code>m_pipelines</code> becomes root + its transitive dependents
+  (<code>reachableFrom()</code>, a repeated sweep since <code>m_dependencies</code> is indexed consumer&rarr;consumed and there is no reverse index), but
+  <code>m_dependencies</code> is kept whole — <code>buildNode()</code> still pulls a forced pipeline's own dependencies in and drives them the ordinary way.
+  So forcing the scraps while the line plot has fallen behind solves first, rather than triangulating onto stale stations.</p>
+  <p>&bull; <b>The force is one-shot.</b> <code>driveToClean()</code> is re-entered when a run ends, to catch an edit made while it was going; a force that
+  renewed itself there would restart a clean pipeline for as long as its runs kept succeeding, which for a real solve never terminates. Mutation-checked:
+  removing the clear fails 5 cases.</p>
+  <p>&bull; <b>QML reaches it through <code>QObject*</code>.</b> <code>cwUpdatable</code> has no QObject identity (see A4), so the overload takes
+  <code>QObject*</code> and recovers the interface with a <code>dynamic_cast</code>, mirroring <code>pipelineName()</code>. An unregistered pointer is
+  warned about and ignored rather than force-run alone, since running it without its dependents is the exact defect this fixes.</p>
+  <p><b>Call sites:</b> <code>CavernOutputPage.qml</code>'s Solve button is now
+  <code>RootData.updateCoordinator.updateNow(root.linePlotManager)</code>. <code>FileMenu.qml</code>'s <b>Compute Scraps</b> is
+  <code>markAllScrapsDirty()</code> (promoted from private to a public slot) followed by <code>updateNow(RootData.scrapManager)</code> — marking is what makes
+  it mean <em>every</em> scrap, and the coordinator is what orders it behind the line plot. <b>The reach gap is closed: a UI control now reaches the DAG.</b></p>
+  <p><b>Tests:</b> five new <code>[cwUpdateCascade]</code> cases (the <code>runIfNeeded()</code> reading itself; force-a-clean-root-and-carry-onward;
+  leave-the-unreached-alone; dependencies-still-ordered-ahead; forced-once-not-every-read) and three <code>[cwUpdateCoordinator]</code> cases (force one
+  pipeline and its consumers; ignore an unregistered one; a forced pass is superseded like any other). <code>FakeUpdatable</code> gained
+  <code>setRunsWhenClean()</code>: the shared fake modelled <code>cwScrapManager</code>, where a run with nothing dirty has nothing to compute, and a force
+  test needs <code>cwLinePlotManager</code>'s behavior instead. Both new invariants are mutation-checked. 81 C++ cases green across the coordinator, cascade
+  and three manager tags; <code>tst_CavernOutputPage</code> 6/6.</p>
 
   <p><b>DAG re-arch — <code>QBarrier</code> makes a true DAG expressible (found 2026-07-25).</b> The obvious reading of TaskTree is that nested
   <code>Group</code>s can only describe series-parallel graphs, so per-node readiness would have to be hand-rolled in <code>cwUpdatableTask</code> — which

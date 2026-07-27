@@ -217,7 +217,7 @@ TEST_CASE("Editing the in-project copy triggers a re-run that picks up the new s
 
     // Now overwrite the in-project copy with content that adds an a4
     // station. The watcher should fire (project-side path), recompute the
-    // watch set, and trigger rerunSurvex; the next solve adds a4 to the
+    // watch set, and trigger a re-solve; the next solve adds a4 to the
     // lookup.
     overwriteFile(copyPath, simpleSvxWithExtraShot());
 

@@ -121,6 +121,23 @@ public slots:
     //Recompute every dirty pipeline now, ignoring the automatic-update flag.
     void updateNow();
 
+    /**
+        Recompute one pipeline now whether or not it is dirty, then carry the
+        result through everything that consumes it.
+
+        This is what a "Solve" / "Compute Scraps" button wants, and the reason it
+        is not the same as calling the manager's own force method: forcing a
+        pipeline directly leaves its dependents holding output that has just gone
+        stale, so with automatic update off, solving used to dirty the scraps and
+        nothing recomputed them.
+
+        pipeline must be a registered cwUpdatable; anything else is ignored with a
+        warning, since the coordinator can only order what it has edges for. Takes
+        a QObject* rather than a cwUpdatable*, which is not a QObject and so cannot
+        cross into QML.
+    */
+    void updateNow(QObject* pipeline);
+
 signals:
     void automaticUpdateChanged();
     void needsUpdateChanged();
@@ -130,6 +147,9 @@ private:
     void onAutomaticUpdateChanged();
     void refreshNeedsUpdate();
 
+    //Takes over a freshly built pass: supersedes whatever was running, adopts it,
+    //and arranges for finishCascade() once it settles. Takes ownership.
+    void startCascade(cwUpdateCascade* cascade);
     void finishCascade();
 
     bool cascadeRunning() const { return m_cascadeRunning; }

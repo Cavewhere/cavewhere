@@ -40,7 +40,9 @@ StandardPage {
                 objectName: "rerunSolveButton"
                 enabled: root.linePlotManager !== null
                 text: qsTr("Solve")
-                onClicked: root.linePlotManager.rerunSurvex()
+                // Through the coordinator so the scraps and LiDAR notes the solve
+                // dirties recompute behind it.
+                onClicked: RootData.updateCoordinator.updateNow(root.linePlotManager)
             }
         }
 

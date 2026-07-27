@@ -51,6 +51,11 @@ public:
     int updateCount() const { return m_updateCount; }
     int driveCount() const { return m_driveCount; }
 
+    //Off by default, which is cwScrapManager: a run with no dirty scrap has
+    //nothing to triangulate. On models cwLinePlotManager, which solves whether or
+    //not the survey changed — the property that makes it forceable by a button.
+    void setRunsWhenClean(bool runsWhenClean) { m_runsWhenClean = runsWhenClean; }
+
     //Protected on the real thing, since it is a pipeline's statement about
     //itself. Exposed here so a case can check the latch head-on rather than only
     //through a destructor.
@@ -70,7 +75,7 @@ protected:
         //pipelines too (cwLinePlotManager restarts its solve unconditionally), so
         //a redundant drive would restart real work.
         m_driveCount++;
-        if(!m_pending) { return currentRun(); }
+        if(!m_pending && !m_runsWhenClean) { return currentRun(); }
         m_pending = false;
         const QFuture<void> future = beginRun();
         m_updateCount++;
@@ -84,6 +89,7 @@ protected:
 
 private:
     bool m_autoFinish;
+    bool m_runsWhenClean = false;
     bool m_pending = false;
     int m_updateCount = 0;
     int m_driveCount = 0;
@@ -108,6 +114,19 @@ namespace FakeUpdatableTest {
         for(int i = 0; i < kSettleTurns; i++) {
             QCoreApplication::processEvents();
         }
+    }
+
+    //Models a dependency edge the way the real managers have one — "the solve
+    //dirtied the scraps". The fake has no data of its own, so the edge is
+    //exercised by dirtying the consumer once the producer starts running.
+    inline void dirtyWhenWorking(FakeUpdatable* producer, FakeUpdatable* consumer)
+    {
+        QObject::connect(producer, &FakeUpdatable::updateStateChanged, consumer,
+                         [producer, consumer]() {
+            if(producer->updateState() == cwUpdatable::State::Working) {
+                consumer->markDirty();
+            }
+        });
     }
 }
 

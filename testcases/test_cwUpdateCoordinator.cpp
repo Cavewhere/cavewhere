@@ -11,6 +11,7 @@
 #include <QCoreApplication>
 
 using FakeUpdatableTest::settle;
+using FakeUpdatableTest::dirtyWhenWorking;
 
 TEST_CASE("A pipeline dirtied after its node finished is picked up when the cascade ends",
           "[cwUpdateCoordinator]")
@@ -676,4 +677,99 @@ TEST_CASE("A coordinator torn down during shutdown leaves its pipelines inert",
     pipeline.markDirty();
     settle();
     CHECK(pipeline.updateCount() == 0);
+}
+
+TEST_CASE("Forcing one pipeline recomputes it and everything that consumes it",
+          "[cwUpdateCoordinator]")
+{
+    //The "Solve" button, with automatic update off. Forcing the manager directly
+    //is what it used to do, and that left the scraps holding output the solve had
+    //just made stale with nothing to recompute them.
+    cwJobSettings::initialize();
+    cwJobSettings::instance()->setAutomaticUpdate(false);
+
+    FakeUpdatable root;
+    FakeUpdatable dependent;
+    FakeUpdatable unrelated;
+    root.setRunsWhenClean(true);
+
+    cwUpdateCoordinator coordinator;
+    coordinator.add(&root);
+    coordinator.add(&dependent, {&root});
+    coordinator.add(&unrelated);
+
+    dirtyWhenWorking(&root, &dependent);
+
+    unrelated.markDirty();
+    REQUIRE(root.updateState() == cwUpdatable::State::Clean);
+
+    coordinator.updateNow(&root);
+    settle();
+
+    CHECK(root.updateCount() == 1);
+    CHECK(dependent.updateCount() == 1);
+    //Scoped: a pipeline the forced one doesn't reach is left for the normal
+    //policy, which with automatic update off means left dirty.
+    CHECK(unrelated.updateCount() == 0);
+    CHECK(coordinator.needsUpdate());
+}
+
+TEST_CASE("Forcing a pipeline the coordinator doesn't know starts nothing",
+          "[cwUpdateCoordinator]")
+{
+    //There are no edges for it, so a cascade built around it could only run it
+    //alone — which is the thing this overload exists to stop callers doing.
+    cwJobSettings::initialize();
+    cwJobSettings::instance()->setAutomaticUpdate(false);
+
+    FakeUpdatable registered;
+    FakeUpdatable stranger;
+    stranger.setRunsWhenClean(true);
+
+    cwUpdateCoordinator coordinator;
+    coordinator.add(&registered);
+
+    coordinator.updateNow(&stranger);
+    coordinator.updateNow(nullptr);
+    settle();
+
+    CHECK(stranger.driveCount() == 0);
+    CHECK(registered.driveCount() == 0);
+}
+
+TEST_CASE("A forced pass is superseded by the next one, like any other",
+          "[cwUpdateCoordinator]")
+{
+    //Scoped or not, only one pass owns the pipelines at a time: the incumbent is
+    //given up on before the replacement is built, and the one given up on must
+    //not report itself finished from under it.
+    cwJobSettings::initialize();
+    cwJobSettings::instance()->setAutomaticUpdate(false);
+
+    FakeUpdatable root(false); //Held in Working so the first pass stays open
+    FakeUpdatable dependent;
+    root.setRunsWhenClean(true);
+
+    cwUpdateCoordinator coordinator;
+    coordinator.add(&root);
+    coordinator.add(&dependent, {&root});
+
+    coordinator.updateNow(&root);
+    settle();
+
+    REQUIRE(root.updateState() == cwUpdatable::State::Working);
+    REQUIRE(dependent.updateCount() == 0);
+
+    coordinator.updateNow();
+    dependent.markDirty();
+    settle();
+
+    //The replacement owns the run decision now, so the edit waits for it rather
+    //than being driven by the pass that was dropped.
+    CHECK(dependent.updateCount() == 0);
+
+    root.finish();
+    settle();
+
+    CHECK(dependent.updateCount() == 1);
 }

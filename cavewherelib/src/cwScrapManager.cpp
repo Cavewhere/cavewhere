@@ -355,7 +355,10 @@ void cwScrapManager::markAllScrapsDirty() {
   */
 void cwScrapManager::updateAllScraps() {
     markAllScrapsDirty();
-    run();
+    //Marking is the force, so the drive is the ordinary reading: a region with no
+    //runnable scrap stays Clean, and run() would cancel a triangulation in flight
+    //to start an empty one.
+    runIfNeeded();
 }
 
 cwUpdatable::State cwScrapManager::doUpdateState() const {

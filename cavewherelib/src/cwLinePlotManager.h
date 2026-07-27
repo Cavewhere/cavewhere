@@ -100,7 +100,7 @@ public:
 
     // Optional cwSaveLoad used to enqueue reconcile copy/remove jobs when
     // a live-link source changes on disk. Without it the source-side
-    // watcher path still fires rerunSurvex but skips the reconcile; this
+    // watcher path still re-solves but skips the reconcile; this
     // is the test mode used by the simpler [Attach][Watcher] cases.
     void setSaveLoad(cwSaveLoad* saveLoad);
 
@@ -139,9 +139,6 @@ signals:
     // Emitted whenever the set of owners with a missing live-link source
     // changes. The set itself is read via missingSourceOwners().
     void missingSourceOwnersChanged();
-
-public slots:
-    void rerunSurvex();
 
 private:
     cwUpdatable::State doUpdateState() const override;
