@@ -53,7 +53,8 @@ void cwScenePicker::setScene(cwScene* scene)
     emit sceneChanged();
 }
 
-cwScenePick::Result cwScenePicker::snapPick(QPointF screenPoint) const
+cwScenePick::Result cwScenePicker::snapPick(QPointF screenPoint,
+                                            cwPickQuery::Kinds kinds) const
 {
     if (!m_camera || !m_scene) {
         return cwScenePick::Result();
@@ -64,5 +65,5 @@ cwScenePick::Result cwScenePicker::snapPick(QPointF screenPoint) const
     }
     return cwScenePick::snappedPoint(
                 screenPoint, *m_camera, *intersecter,
-                pixelsForMillimeters(kDefaultPickRadiusMillimeters));
+                pixelsForMillimeters(kDefaultPickRadiusMillimeters), kinds);
 }

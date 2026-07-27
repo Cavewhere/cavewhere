@@ -58,8 +58,10 @@ protected:
     //! Ray-casts screenPoint (Qt viewport pixels) against the scene and snaps to
     //! the nearest survey station within the shared pick tolerance. Returns a
     //! default Result (hit == false) when the camera, scene, or its intersecter
-    //! is unavailable.
-    cwScenePick::Result snapPick(QPointF screenPoint) const;
+    //! is unavailable. kinds narrows which primitive kinds the ray tests; pass
+    //! cwPickQuery::Kind::Lines to pick the centerline through occluders.
+    cwScenePick::Result snapPick(QPointF screenPoint,
+                                 cwPickQuery::Kinds kinds = cwPickQuery::All) const;
 
 private:
     QPointer<cwCamera> m_camera;

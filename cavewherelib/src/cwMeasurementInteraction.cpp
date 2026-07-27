@@ -249,7 +249,13 @@ void cwMeasurementInteraction::clearMeasurementValues()
 
 void cwMeasurementInteraction::hover(QPointF screenPoint)
 {
-    const cwScenePick::Result pick = snapPick(screenPoint);
+    // Station-only picks just the centerline, so the ray passes through any
+    // scrap or wall geometry in front of a station and still snaps to it.
+    // Free mode picks the nearest of every kind by depth (occlusion applies).
+    const cwPickQuery::Kinds kinds = m_mode == Mode::StationOnly
+            ? cwPickQuery::Kind::Lines
+            : cwPickQuery::All;
+    const cwScenePick::Result pick = snapPick(screenPoint, kinds);
 
     m_hoverScreenPoint = screenPoint;
     m_hoverSnapped = pick.hit && pick.snappedToStation;

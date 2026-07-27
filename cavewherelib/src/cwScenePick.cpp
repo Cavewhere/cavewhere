@@ -21,12 +21,14 @@
 cwScenePick::Result cwScenePick::snappedPoint(QPointF screenPoint,
                                               const cwCamera& camera,
                                               cwGeometryItersecter& intersecter,
-                                              double linePixelRadius)
+                                              double linePixelRadius,
+                                              cwPickQuery::Kinds kinds)
 {
     Result result;
 
     const QRay3D ray = camera.rayFromQtViewport(screenPoint);
-    const cwPickQuery query = camera.pickQuery(linePixelRadius);
+    cwPickQuery query = camera.pickQuery(linePixelRadius);
+    query.kinds = kinds;
 
     const cwRayHit hit = intersecter.intersectsDetailed(ray, query);
     if (!hit.hit()) {

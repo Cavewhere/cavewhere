@@ -224,6 +224,39 @@ TEST_CASE("cwMeasurementInteraction measures between two stations", "[cwMeasurem
         CHECK(interaction.hasFirst());
     }
 
+    SECTION("Station-only picks a station through occluding geometry") {
+        // #610: a scrap/wall triangle in front of a station must not block a
+        // Station-only pick. The ray ignores solid geometry and snaps to the
+        // station behind it; in Free mode that same triangle occludes it.
+        // Owner is null so the triangle hit reports no object (never a line
+        // plot), matching a non-centerline surface. z = -50 sits halfway
+        // between the eye and the station at z = -100, covering the ray to a.
+        QVector<QVector3D> occluder;
+        occluder << QVector3D(-25.0f, -15.0f, -50.0f)
+                 << QVector3D(-5.0f, -15.0f, -50.0f)
+                 << QVector3D(-15.0f, 15.0f, -50.0f);
+        scene.geometryItersecter()->addObject(
+                    cwGeometryItersecter::Object(nullptr, 1,
+                        cwTestGeometry::triangles(occluder, {0, 1, 2}, false)));
+        scene.geometryItersecter()->waitForFinish();
+
+        const QPointF stationPixel = camera.project(a);
+
+        // Free mode: the nearer triangle wins by depth, so the pick never
+        // reaches the station — placeable as a free point, but not snapped.
+        interaction.setMode(cwMeasurementInteraction::Mode::Free);
+        interaction.hover(stationPixel);
+        CHECK(interaction.hoverValid());
+        CHECK_FALSE(interaction.hoverSnapped());
+        CHECK(interaction.hoverPoint() != a);
+
+        // Station-only: the ray passes through the triangle and snaps to a.
+        interaction.setMode(cwMeasurementInteraction::Mode::StationOnly);
+        interaction.place(stationPixel);
+        CHECK(interaction.hasFirst());
+        CHECK(interaction.firstPoint() == a);
+    }
+
     SECTION("a click after Complete restarts the measurement") {
         interaction.place(camera.project(a));
         interaction.place(camera.project(b));
