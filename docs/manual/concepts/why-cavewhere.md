@@ -80,9 +80,8 @@ last shot, it spreads the error across the loop, weighted by each leg, to land
 on the most likely position for every station.
 
 Two things follow. Your caves close the way the rest of the caving world expects
-(same solver as Survex's own `aven` viewer). And since CaveWhere links Survex in
-as a library rather than running it as a separate program, it re-solves the
-whole network on every edit. The loop closure and the 3D line plot stay current,
+(same solver as Survex's own `aven` viewer). And CaveWhere re-solves the whole
+network on every edit, so the loop closure and the 3D line plot stay current,
 with no export step.
 
 ## Working as a team: sync
