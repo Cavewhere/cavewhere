@@ -10,171 +10,157 @@ related: [project-formats.md, open-a-project.md, ../concepts/glossary.md]
 
 ## Why / when you need this
 
-CaveWhere saves differently from most apps, and the difference is worth two
-minutes of your attention — because it works in your favour, and because it
-changes what Save is for.
-
-In most apps, what you type lives in memory until you save it — and memory doesn't
+In most apps what you type lives in memory until you save it, and memory does not
 survive accidents. The app crashes. The battery dies. The generator at camp cuts
-out. Any of those takes everything since your last save, because until you saved,
-it existed nowhere but RAM. The usual defence is a habit: press `Ctrl+S` often
-enough and an accident only costs you a little. That's a bet, and it's one you're
-re-making every few minutes of an evening spent typing up a trip.
+out. Each one takes everything since your last save. Most apps leave you one
+defense: press `Ctrl+S` often enough that an accident only costs a little. That is
+a bet, and you re-make it every few minutes of an evening spent typing up a trip.
 
-**CaveWhere is built so you never have to make that bet.** A survey costs far too
-much to collect — days underground, often across years — to sit in memory waiting
-for you to remember it. So your work goes to disk as you type it, from the moment
-the app opens: the gap between entering a reading and it being written is measured
-in moments, not in however long it's been since you last reached for `Ctrl+S`. And
-CaveWhere stops to ask before letting you walk away from anything unsaved, rather
-than deciding for you.
+**CaveWhere never asks you to make that bet.** A survey costs too much to collect,
+days underground across years, to sit in RAM waiting for you to remember it.
+CaveWhere queues every edit to disk as you make it, from the moment the app opens.
 
-Save, then, isn't there to rescue your data. It does something more useful, and
-the rest of this page is about what.
+So Save does not rescue your data. It does something more useful, and the rest of
+this page covers what.
 
 ## Your project already exists
 
-Open CaveWhere and you already have a project. Not a blank waiting to be filled
-in — a **real one**, already on disk, already recording every change you make.
+Open CaveWhere and you already have a project. Not a blank to fill in: a real one,
+on disk, already recording every change you make.
 
-What it doesn't have yet is a home. Until you save it, it lives in a **temporary
-folder** under a placeholder name CaveWhere picks at random — *Misty Cavern*,
-*Thunder Ridge* — so there's something to call it in the meantime.
+It lacks a home. Until you save it, it sits in a temporary folder under a
+placeholder name CaveWhere picks, *Misty Cavern* or *Thunder Ridge*, so you have
+something to call it meanwhile.
 
-Saving gives it a permanent place and a real name. It's worth doing early, not
-because the project is fragile but because everything afterwards is easier once it
-sits where you'd look for it and is called what you'd call it — and because that's
-the point where it starts keeping the history every later save adds to.
+Saving gives it a permanent place and a real name. Do it early, not because the
+project might break but because everything afterward gets easier once it sits where
+you would look for it and answers to the name you would call it. The first save
+also starts the history that every later save adds to.
 
-CaveWhere won't let the temporary state catch you out. Quit, or open something
-else, with work in a temporary project and it stops to ask rather than deciding
-for you, saying plainly where things stand: *"This project lives in a temporary
-folder. Save to move it somewhere permanent."* A temporary project is only
-discarded if you choose to discard it. (CaveWhere won't ask if you never put
-anything in it — no caves, never saved — since there's nothing there to keep.)
+The temporary state will not catch you out. Quit, or open something else, with work
+in a temporary project and CaveWhere stops to ask, saying plainly where things
+stand: *"This project lives in a temporary folder. Save to move it somewhere
+permanent"*. A temporary project only goes away if you choose to delete it.
+CaveWhere skips the question when you never put anything in it: no caves, no saved
+versions, nothing to keep.
 
 ## What Save actually does
 
-Once a project is saved somewhere permanent, **Save** (`Ctrl+S`) stops being about
-getting your data onto disk. Your data is already on disk — CaveWhere wrote it
-there as you typed.
+Once a project has a permanent home, **Save** (`Ctrl+S`) no longer means getting
+your data onto disk. CaveWhere already wrote it there as you typed.
 
-Save **marks a version**. It takes everything that has changed since the last one
-and records it as a point in the project's history that you can come back to,
-compare against, and roll back to. It's the survey equivalent of finishing a page
-in the book and dating it.
+Save **marks a version**. It gathers everything that changed since the last one and
+records it as a point in the project's history you can return to, compare against,
+and roll back to. Every save carries the same subject, *"Save from CaveWhere"*.
+The description reads *"Automatic commit at"* plus the UTC time in ISO 8601. So the
+date and the changed-file list tell two saves apart. Reading them, comparing them,
+restoring one: that gets a chapter of its own,
+[Review Project History](../collaboration/review-history.md).
 
-Those versions are real, and you can go and look at them. **Right-click the sync
-button** in the top-right corner and choose **History…**: every save is listed,
-newest first, with who made it, when, and exactly which files it changed.
-CaveWhere titles them all *"Save from CaveWhere"*, so what tells one from another
-is its date and its list of changes.
-
-![The History page. A list of three saves, each titled "Save from CaveWhere" by Philip Schuchardt, each with a short commit hash and the date 2026-07-15, joined by a line down the left; the newest carries a "main" badge and is selected. A panel on the right shows the selected save's author, date, full hash, and "1 changed file(s)" naming the one trip file that changed.](../images/project-git-history.png)
-*Three saves, three points this project can be taken back to. The panel on the
-right unpacks whichever one you select.*
-
-Working through that history — reading a save, comparing two, restoring an old
-one — is a chapter of its own:
-[Review Project History](../collaboration/review-history.md). What matters here is
-that it exists, and that every Save you press adds to it.
-
-That reframes two things people expect from other apps:
+That reframes 2 habits other apps taught you:
 
 - **Forgetting to save costs you the checkpoint, not the work.** In a
-  [directory project](project-formats.md#directory-cwproj) the edits are already
-  written; what an unexpected shutdown takes with it is the *marker*, not the
-  survey.
-- **Discard means more than "don't save".** It's a rollback to your last save, so
-  it also undoes work CaveWhere had already written for you. That's the real
-  argument for saving at the points you'd want to come back to — it's what gives
-  Discard somewhere sensible to land.
+  [directory project](project-formats.md#directory-cwproj) the edits already sit on
+  disk, so an unexpected shutdown takes the marker, not the survey.
+- **Discard means far more than "don't save".** It hard-resets the project to your
+  last save, which throws away work CaveWhere had already written for you! Save at
+  the points you'd want to return to and Discard has somewhere sensible to land.
 
-The one exception is a [bundle](project-formats.md#bundle-cw). A `.cw` is unpacked
-into a temporary folder while you work, so its auto-saves land *there* and Save is
-what repacks them into the file you named. With a bundle, Save is the step that
-puts your work back in the file — and CaveWhere asks for it before you close.
+A Save can quietly do nothing in 2 ways. When no file on disk actually changed,
+CaveWhere records no version at all. And when you haven't set your name and email,
+it stops with *"Git account is not configured. Please set your name and email in
+CaveWhere."*
+
+The exception to all of this is a [bundle](project-formats.md#bundle-cw). A `.cw`
+gets unpacked into a temporary folder while you work, so the running auto-saves
+land *there* and Save repacks them into the file you named. The repack guards the
+old file: CaveWhere zips to `.cw.tmp`, renames your existing `.cw` to `.cw.bak`,
+swaps the new one in, and deletes the backup only then. A save interrupted halfway
+leaves the old bundle intact.
 
 ## Save it for the first time
 
-**Save** (`Ctrl+S`) or **Save As** both open the same dialog, because there's
-nothing to save over yet.
+**Save** (`Ctrl+S`) and **Save As** open the same dialog, shown below, because
+nothing exists to save over yet.
 
-![The Save CaveWhere Project As dialog. A Project Name field reads "Phake Cave 3000"; below it two radio buttons, Directory (.cwproj) selected and Bundle (.cw) not, with a ? button beside them; below that a Location field reading /Users/cave/Desktop with a Browse button, and under it the full path /Users/cave/Desktop/Phake Cave 3000/Phake Cave 3000.cwproj. Cancel and Save buttons sit at the bottom.](../images/project-save-as.png)
-*The three decisions of a first save, in one dialog. The path underneath is worth
-reading before you commit to it: the name you typed became the folder, and the
-Location you chose is only its parent.*
+![The Save CaveWhere Project As dialog: a Project Name field reading "Phake Cave 3000", radio buttons for Directory (.cwproj) and Bundle (.cw) with a ? button, a Location field with Browse, and the resulting full path underneath.](../images/project-save-as.png)
+*Three decisions in one dialog. Read the path underneath before committing to it:
+your project name became the folder, and Location names only its parent.*
 
 ### Name the project
 
-The **Project Name** field is pre-filled with the random stand-in name. Replace it
-with the name of the cave, or the area, or whatever you'd search for in two years.
+The **Project Name** field arrives pre-filled with the random stand-in. Replace it
+with the cave, the area, or whatever you'd search for in 2 years.
 
-The name is load-bearing: it names the folder your project goes into and the data
-folder inside it, so it's worth typing rather than accepting. Characters a
-filesystem won't take are cleaned up for you.
+The name does real work. It names the folder the project goes into, the data folder
+inside that, and the `.cwproj` file itself, so type it rather than accept it.
+Characters a filesystem won't take become underscores.
 
-**This field only appears on the first save.** After that the project's name is set
-by double-clicking it at the top of the **Data** page, not through this dialog —
-see [Save a copy](#save-a-copy-of-a-project) for why that matters.
+**This field appears on the first save only.** Afterward, renaming happens by
+double-clicking the name at the top of the **Data** page, never here. See
+[Save a copy](#save-a-copy-of-a-project) for why that matters.
 
 ### Choose the format and where it goes
 
-Pick **Directory (`.cwproj`)** or **Bundle (`.cw`)** —
-[Choose a Project Format](project-formats.md) covers the decision, and the **?**
-button beside the picker gives CaveWhere's own summary. Directory is the default
-and the right answer for a cave you're still surveying.
+Pick **Directory (`.cwproj`)** or **Bundle (`.cw`)**; check out the comparison
+table behind the **?** button beside them, and
+[Choose a Project Format](project-formats.md) covers the decision. The picker
+preselects whatever the project already is, so a fresh project starts on Directory
+while a legacy or bundled one starts on Bundle. **I recommend Directory for any
+cave you are still surveying**: a bundle Save re-zips the entire project folder
+every time, where a directory save writes only what changed.
 
-Then set **Location**, by typing it or with **Browse…**. What you're choosing
-differs by format, which is easy to misread:
+Then set **Location**, by typing it or with **Browse…**. The choice differs by
+format, which trips people up. In directory mode you pick the **parent folder**;
+CaveWhere creates a folder named after the project inside it and shows the
+resulting full path underneath, as shown above. In bundle mode you pick the
+**whole path**, filename included. Trailing `.cw` and `.cwproj` extensions get
+stripped and a single `.cw` added, so `cave.cwproj.cw` cannot happen.
 
-- **Directory** — you pick the **parent folder**. CaveWhere makes a folder named
-  after the project inside it, and shows you the full path underneath so you can
-  check. You don't name the folder here; the project name did that.
-- **Bundle** — you pick the **whole path**, filename and all. The `.cw` extension
-  is added and de-duplicated for you, so you can't end up with `cave.cwproj.cw`.
+Under the path, 3 messages can appear, and they do not mean the same thing:
 
-Two messages can appear under the path, and they don't mean the same thing:
+- **"A folder … already exists in this location. Choose a different name or
+  location."** Red, and it **blocks Save**. CaveWhere will not merge a project into
+  an existing folder.
+- **"The destination folder does not exist. Choose an existing folder or browse to
+  one."** Also red, also blocks Save. Usually a typo in a hand-edited path.
+- **"An existing bundle will be overwritten."** Orange, and it **allows Save**.
+  Intentional when you are re-saving, worth a second look when you are not.
 
-- **"A folder … already exists in this location"** — red, and it **blocks Save**.
-  CaveWhere won't merge a project into an existing folder. Pick another name or
-  another place.
-- **"An existing bundle will be overwritten"** — orange, and it **allows Save**.
-  You're about to replace that `.cw`. Intentional when you're re-saving; worth a
-  second look when you're not.
+One thing happens on a first directory save and never again: CaveWhere **moves**
+the temporary folder to the place you chose instead of copying it. On a
+cloud-synced volume that move sometimes fails and falls back to a copy. If the
+temp folder then can't be deleted, you get a warning saying so, not an error.
 
 ## Save again later
 
-After the first save, `Ctrl+S` just saves — no dialog, no questions. Each one adds
-a version to the history.
+After the first save, `Ctrl+S` just saves. No dialog, no questions, one more
+version whenever something changed.
 
-There's no rule about how often. A reasonable habit is to save at the point you'd
-want to come back to: after entering a trip, after finishing a scrap, before you
-try something you're unsure about.
+No rule governs how often. I save at the point I'd want to come back to: after
+entering a trip, after finishing a scrap, before trying something I'm unsure about.
 
 ## Save a copy of a project
 
 **Save As** on an already-saved project makes a **copy** and leaves the original
-alone, exactly where it was and exactly as it was at its last save. You carry on
-working in the **new** copy.
+where it sits. You carry on in the **new** copy.
 
 ### It's also how you change format
 
-The dialog's format picker applies to the copy, so **Save As is the way to turn a
-directory project into a bundle, or a bundle back into a directory** — there's no
-separate Export, and nothing is lost either way. Two moments when you'll want it:
+The dialog's format picker applies to the copy, so **Save As turns a directory
+project into a bundle, or a bundle back into a directory**. No separate Export
+exists, and nothing gets lost either way. Two moments to reach for it:
 
-- **A cave is finished.** You surveyed it as a `.cwproj` directory, you're not
-  going back, and now you want one file to send to the survey archive or the
-  landowner. Save As → **Bundle (`.cw`)**.
-- **A `.cw` someone sent you turns into real work.** It came as a bundle, but
-  you've started adding trips and it's growing. Save As → **Directory
-  (`.cwproj`)** and work in that instead, so saves stop recompressing the whole
-  cave every time.
+- **A cave is finished.** You surveyed it as a `.cwproj`, you are not going back,
+  and now you want one file for the survey archive or the landowner. Save As →
+  **Bundle (`.cw`)**.
+- **A `.cw` someone sent you turns into real work.** It arrived as a bundle, you
+  have started adding trips, and it keeps growing. Save As → **Directory
+  (`.cwproj`)**, so saves stop recompressing the whole cave.
 
-[Choose a Project Format](project-formats.md) covers which way to jump, and
-remember the copy is a copy: after switching you're working in the new one, and the
-old file stays behind exactly as it was.
+Either direction, the copy carries the full history, because the entire project
+folder goes across with the Git repository inside it. A bundle leaves out only
+the `.cw_cache` scratch folder and `.DS_Store`.
 
 ### It doesn't rename anything
 
@@ -183,58 +169,64 @@ The part that surprises people:
 > **Save As does not rename your project.** It copies it. The copy is still called
 > what the original was called, and CaveWhere still shows that name.
 
-That's why the name field is missing from the dialog once a project has been
-saved, and why a directory Save As only lets you choose the parent folder — the
-folder it creates is named after the project, not after anything you type here.
-Look inside a copy you made under a new folder name and you'll find the data folder
-still carrying the old project name. Nothing is wrong; the copy simply kept its
+That explains the missing name field, and why a directory Save As only offers the
+parent folder: the folder it creates takes its name from the project, not from
+anything typed here. Look inside a bundle saved under a new file name and the data
+folder still carries the old project name. Nothing broke. The copy kept its
 identity.
 
 **To actually rename a project**, double-click its name at the top of the **Data**
-page. That renames the project everywhere, folders included.
-
-The copy carries the full history, so a Save As is a genuine snapshot of the whole
-project and not just of today.
+page. That renames the data folder and the `.cwproj` file, not the outer folder.
 
 ## When you quit
 
-CaveWhere asks before closing if there's anything unsaved, and the buttons depend
-on where the project lives.
+CaveWhere asks before closing whenever something sits unsaved, and the buttons
+depend on where the project lives. The title reads *"Save before quiting?"*, or
+*"Save temporary project before quiting?"* when the project has no saves yet.
+The same prompt covers creating a new file, opening a project, and opening a cloned
+repository, with the wording swapped to match.
 
-**A saved project** gets **Discard**, **Cancel**, and **Save**. Remember that
-Discard rolls back to your last save rather than merely closing quietly.
+**A saved project** offers **Discard**, **Cancel**, and **Save**, under *"Do you
+want to save your changes before quiting?"*
 
-**A project that has been set up to sync** gets a fourth button, **Save & Sync**,
-which saves and then pushes to the remote before letting the app close — the right
-one to reach for if someone else is waiting on your data. If the sync fails, you're
-told your changes are still saved locally, and offered **Close anyway** or **Stay
-open**. Nothing you did is at risk either way; only the push didn't happen.
+**A project set up to sync** gets a 4th button, **Save & Sync**, which saves and
+then syncs before letting the app close. Reach for it when someone else waits on
+your data. It shows up only when the project has a remote. If the push fails you
+get *"Sync failed: …"* followed by *"Your changes are saved locally."*, or, when
+your GitHub token has expired, *"GitHub access has expired.
+Your changes are saved locally."* Either way the buttons become **Close anyway**
+and **Stay open**. Your work survived; only the push didn't happen.
 
-**A temporary project** — one that has never been saved — gets **Delete**,
-**Cancel**, and **Save** instead. There's no Discard, because there's no earlier
-save to roll back to: the choice is to give the project a home or let it go.
-**Delete** removes the temporary folder and the project in it — the button for
-when you were only trying something out. If you're not sure, **Cancel** and decide
-later; nothing is decided until you pick.
+**A temporary project** offers **Delete**, **Cancel**, and **Save**. No Discard,
+because no earlier save exists to roll back to: give the project a home or let it
+go. **Delete** drops the temporary folder and the project in it, the button for
+when you were only trying something out. **Save** here opens the Save As dialog,
+and canceling that dialog cancels the quit along with it rather than returning you
+to the 3 buttons.
 
-You won't be asked at all if nothing has changed since your last save, or if the
-project is empty and never saved.
+CaveWhere won't ask at all when nothing changed since your last save, or when the
+project sits empty and never saved.
 
 ## Read-only projects
 
-If a project was made by a **newer version of CaveWhere** than the one you're
-running, a **Read-only** banner appears in the corner telling you which version you
-need, and **Save** and **Save As** are both greyed out.
+A project written by a newer CaveWhere than yours opens read-only. This build reads
+and writes file version 9, shipped as 2026.4; anything above that gets a
+**Read-only** banner telling you to upgrade, and **Save** and **Save As** both go
+gray. The banner names no version; it cannot read a format it has never seen, so
+it says *"Upgrade to CaveWhere vUnknown Version to edit"*.
 
-This is deliberate protection, not a limitation. A newer CaveWhere may have stored
-things this one doesn't know how to represent, and saving would quietly drop them —
-so it refuses rather than silently damaging a survey someone else is relying on.
-You can look around all you like. To edit, upgrade to the version named in the
-banner.
+Deliberate protection, not a limitation. A newer CaveWhere may store things this
+one cannot represent, and saving would quietly drop them, so it refuses rather than
+damaging a survey someone else depends on. Look around all you like. To edit,
+install a newer CaveWhere.
+
+The banner's **Dismiss** button hides the banner and nothing else, so Save stays
+disabled. And because you can't save, CaveWhere never prompts on the way out, so
+whatever you typed goes when the next project loads. See
+[Open a Project](open-a-project.md#what-happens-to-the-project-you-had-open).
 
 ## Next steps
 
-- [Choose a Project Format](project-formats.md) — directory versus bundle, and
-  what happens to a legacy `.cw`.
-- [Open a Project](open-a-project.md) — the Open dialog and the recent projects
-  list.
+- [Choose a Project Format](project-formats.md): directory versus bundle, and what
+  happens to a legacy `.cw` from CaveWhere v6 or older.
+- [Open a Project](open-a-project.md): the Open dialog and the recent projects list.
