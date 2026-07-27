@@ -129,6 +129,113 @@ TEST_CASE("The staleness aggregate signals only when it changes", "[cwUpdateCoor
     CHECK(spy.count() == 2);
 }
 
+TEST_CASE("The running aggregate follows the pass a Run started", "[cwUpdateCoordinator]")
+{
+    //The footer's third state, and needsUpdate can't stand in for it: that one is
+    //"any pipeline Dirty", which goes false the moment the work starts.
+    cwJobSettings::initialize();
+    cwJobSettings::instance()->setAutomaticUpdate(false);
+
+    FakeUpdatable first(false);
+    FakeUpdatable second(false);
+
+    cwUpdateCoordinator coordinator;
+    coordinator.add(&first);
+    coordinator.add(&second);
+
+    cwSignalSpy spy(&coordinator, &cwUpdateCoordinator::runningChanged);
+
+    //Stale with automatic update off: there is work to do and nothing doing it.
+    first.markDirty();
+    CHECK(coordinator.needsUpdate());
+    CHECK_FALSE(coordinator.running());
+    CHECK(spy.count() == 0);
+
+    coordinator.updateNow();
+    settle();
+
+    CHECK(coordinator.running());
+    CHECK_FALSE(coordinator.needsUpdate());
+    CHECK(spy.count() == 1);
+
+    //A second pipeline joining work already in flight doesn't change the
+    //aggregate, so the footer mustn't be told it did.
+    second.markDirty();
+    coordinator.updateNow();
+    settle();
+
+    CHECK(coordinator.running());
+    CHECK(spy.count() == 1);
+
+    first.finish();
+    settle();
+
+    CHECK(coordinator.running());
+    CHECK(spy.count() == 1);
+
+    second.finish();
+    settle();
+
+    CHECK_FALSE(coordinator.running());
+    CHECK(spy.count() == 2);
+}
+
+TEST_CASE("The running aggregate covers a pipeline the automatic policy drove",
+          "[cwUpdateCoordinator]")
+{
+    //No cascade is involved on this path — onChildStateChanged drives the
+    //pipeline itself — so a running flag that only followed the pass would report
+    //idle for the whole of an automatic solve.
+    cwJobSettings::initialize();
+    cwJobSettings::instance()->setAutomaticUpdate(true);
+
+    FakeUpdatable pipeline(false);
+
+    cwUpdateCoordinator coordinator;
+    coordinator.add(&pipeline);
+
+    cwSignalSpy spy(&coordinator, &cwUpdateCoordinator::runningChanged);
+
+    pipeline.markDirty();
+
+    REQUIRE(pipeline.updateState() == cwUpdatable::State::Working);
+    CHECK(coordinator.running());
+    CHECK(spy.count() == 1);
+
+    pipeline.finish();
+
+    CHECK_FALSE(coordinator.running());
+    CHECK(spy.count() == 2);
+}
+
+TEST_CASE("A pipeline re-edited mid-run still reports running", "[cwUpdateCoordinator]")
+{
+    //Dirty takes priority over Working on the pipeline itself, so reading the
+    //pipelines alone would drop the footer back to "update needed" while the task
+    //it started is still churning. The pass in flight is what covers this window.
+    cwJobSettings::initialize();
+    cwJobSettings::instance()->setAutomaticUpdate(false);
+
+    FakeUpdatable pipeline(false);
+
+    cwUpdateCoordinator coordinator;
+    coordinator.add(&pipeline);
+
+    pipeline.markDirty();
+    coordinator.updateNow();
+    settle();
+
+    REQUIRE(pipeline.updateState() == cwUpdatable::State::Working);
+    REQUIRE(coordinator.running());
+
+    //The edit arrives before the run covering the previous one has ended.
+    pipeline.markDirty();
+
+    CHECK(pipeline.updateState() == cwUpdatable::State::Dirty);
+    CHECK(coordinator.needsUpdate());
+    CHECK(coordinator.running());
+}
+
 TEST_CASE("A pipeline stops self-driving once the coordinator takes it over",
           "[cwUpdateCoordinator]")
 {

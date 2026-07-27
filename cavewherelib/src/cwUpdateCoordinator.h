@@ -15,7 +15,8 @@
 class cwUpdateCascade;
 
 /**
-    Single owner of the derived-data update policy and staleness aggregate.
+    Single owner of the derived-data update policy and the aggregates the UI
+    binds to.
 
     Registered pipelines (cwUpdatable) report when they go dirty; the
     coordinator decides what happens: with automaticUpdate on, a dirty pipeline
@@ -23,6 +24,11 @@ class cwUpdateCascade;
     becomes true, which the UI surfaces as "update needed". updateNow()
     recomputes every dirty pipeline regardless of the flag (the footer / Solve /
     Compute-Scraps "Run" path).
+
+    Two aggregates are published, and neither implies the other: needsUpdate is
+    "something is stale", running is "something is being recomputed". A footer
+    showing one of idle / update-needed / running reads running first, since a
+    pipeline re-edited mid-run is both.
 
     Policy is all this class is. Deciding *when* to recompute lives here; working
     out what to recompute in what order is a cwUpdateCascade, which updateNow()
@@ -40,6 +46,7 @@ class CAVEWHERE_LIB_EXPORT cwUpdateCoordinator : public QObject
 
     Q_PROPERTY(bool automaticUpdate READ automaticUpdate WRITE setAutomaticUpdate NOTIFY automaticUpdateChanged)
     Q_PROPERTY(bool needsUpdate READ needsUpdate NOTIFY needsUpdateChanged)
+    Q_PROPERTY(bool running READ running NOTIFY runningChanged)
 
 public:
     explicit cwUpdateCoordinator(QObject* parent = nullptr);
@@ -77,7 +84,7 @@ public:
             for(auto it = m_dependencies.begin(); it != m_dependencies.end(); ++it) {
                 it.value().removeAll(u);
             }
-            refreshNeedsUpdate();
+            refreshAggregates();
             //Dropping the pass gave up on every *other* pipeline's ordered work
             //too, and unlike a supersede nothing is being built to replace it. So
             //re-apply policy to the survivors rather than leaving them for whatever
@@ -92,6 +99,9 @@ public:
 
     bool automaticUpdate() const;
     bool needsUpdate() const;
+
+    //True while derived data is being recomputed, whichever path started it.
+    bool running() const;
 
     /**
         Announces that the application is going down: no further derived-data
@@ -147,11 +157,17 @@ public slots:
 signals:
     void automaticUpdateChanged();
     void needsUpdateChanged();
+    void runningChanged();
 
 private:
     void onChildStateChanged(cwUpdatable* updatable);
     void onAutomaticUpdateChanged();
-    void refreshNeedsUpdate();
+
+    //Call wherever a pipeline's state can have changed — neither aggregate is a
+    //stored value.
+    void refreshAggregates();
+
+    bool anyPipelineIs(cwUpdatable::State state) const;
 
     //Takes over a freshly built pass: supersedes whatever was running, adopts it,
     //and arranges for finishCascade() once it settles. Takes ownership.
@@ -170,6 +186,7 @@ private:
     //Pipeline -> the pipelines whose output it consumes. Absent or empty is a root.
     QHash<cwUpdatable*, QList<cwUpdatable*>> m_dependencies;
     bool m_lastNeedsUpdate = false;
+    bool m_lastRunning = false;
 
     //The pass in flight, parented here so it goes away with the coordinator. A
     //cascade is superseded by dropping it, and only ever one at a time: the
@@ -180,6 +197,15 @@ private:
     //Run replaces it — the coordinator has nothing to gain from deleting it
     //promptly, and doing so would mean destroying it from inside its own
     //completion handler.
+    //
+    //An input to running(), but writing it deliberately does not announce: a pass
+    //really in flight always has a pipeline that reported its own Dirty -> Working
+    //transition, and one that turns out to have nothing to do ends in
+    //finishCascade(), which does refresh. Announcing at the set would flash
+    //running true and back on a Run that found nothing. The one write left silent
+    //on purpose is dropRunningCascade() during beginShutdown(): re-reading the
+    //aggregates means asking every pipeline for its state, which is the walk
+    //beginShutdown() exists to stop.
     bool m_cascadeRunning = false;
     bool m_shuttingDown = false;
 };

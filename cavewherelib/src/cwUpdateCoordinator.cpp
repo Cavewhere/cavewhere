@@ -15,6 +15,7 @@ cwUpdateCoordinator::cwUpdateCoordinator(QObject* parent) :
 {
     cwJobSettings::initialize();
     m_lastNeedsUpdate = needsUpdate();
+    m_lastRunning = running();
 
     connect(cwJobSettings::instance(), &cwJobSettings::automaticUpdateChanged,
             this, &cwUpdateCoordinator::onAutomaticUpdateChanged);
@@ -73,10 +74,25 @@ void cwUpdateCoordinator::setAutomaticUpdate(bool automaticUpdate)
     cwJobSettings::instance()->setAutomaticUpdate(automaticUpdate);
 }
 
-bool cwUpdateCoordinator::needsUpdate() const
+bool cwUpdateCoordinator::anyPipelineIs(cwUpdatable::State state) const
 {
     return std::any_of(m_updatables.begin(), m_updatables.end(),
-                       [](const cwUpdatable* u) { return u->updateState() == cwUpdatable::State::Dirty; });
+                       [state](const cwUpdatable* u) { return u->updateState() == state; });
+}
+
+bool cwUpdateCoordinator::needsUpdate() const
+{
+    return anyPipelineIs(cwUpdatable::State::Dirty);
+}
+
+bool cwUpdateCoordinator::running() const
+{
+    //Both halves are load-bearing. A pass in flight covers the window where its
+    //next pipeline hasn't started yet, and the one where a pipeline re-edited
+    //mid-run reports Dirty rather than Working; reading the pipelines covers the
+    //automatic path, which drives one straight from onChildStateChanged with no
+    //pass involved at all.
+    return cascadeRunning() || anyPipelineIs(cwUpdatable::State::Working);
 }
 
 void cwUpdateCoordinator::updateNow()
@@ -164,7 +180,7 @@ void cwUpdateCoordinator::startCascade(cwUpdateCascade* cascade)
 void cwUpdateCoordinator::finishCascade()
 {
     m_cascadeRunning = false;
-    refreshNeedsUpdate();
+    refreshAggregates();
     //Queued so the next cascade starts from a clean stack rather than from
     //inside the finishing one's own continuation.
     QMetaObject::invokeMethod(this, &cwUpdateCoordinator::flushAfterCascade,
@@ -182,7 +198,7 @@ void cwUpdateCoordinator::onChildStateChanged(cwUpdatable* updatable)
     //pipeline dirty again, so driving it here would only duplicate that.
     //flushAfterCascade() picks up anything dirtied after its node had finished.
     if(cascadeRunning()) {
-        refreshNeedsUpdate();
+        refreshAggregates();
         return;
     }
 
@@ -192,7 +208,7 @@ void cwUpdateCoordinator::onChildStateChanged(cwUpdatable* updatable)
     if(automaticUpdate()) {
         updatable->runIfNeeded();
     }
-    refreshNeedsUpdate();
+    refreshAggregates();
 }
 
 void cwUpdateCoordinator::onAutomaticUpdateChanged()
@@ -203,12 +219,18 @@ void cwUpdateCoordinator::onAutomaticUpdateChanged()
     }
 }
 
-void cwUpdateCoordinator::refreshNeedsUpdate()
+void cwUpdateCoordinator::refreshAggregates()
 {
-    const bool current = needsUpdate();
-    if(current != m_lastNeedsUpdate) {
-        m_lastNeedsUpdate = current;
+    const bool currentNeedsUpdate = needsUpdate();
+    if(currentNeedsUpdate != m_lastNeedsUpdate) {
+        m_lastNeedsUpdate = currentNeedsUpdate;
         emit needsUpdateChanged();
+    }
+
+    const bool currentRunning = running();
+    if(currentRunning != m_lastRunning) {
+        m_lastRunning = currentRunning;
+        emit runningChanged();
     }
 }
 
