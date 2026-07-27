@@ -373,11 +373,94 @@ Legend: `[ ]` open · `[~]` reported, awaiting review · `[x]` committed
       `text: "Save && Sync"`. Qt Quick Controls does no mnemonic processing on
       `AbstractButton.text`, so that button most likely renders a literal doubled
       ampersand. It is the only one in any QML button text in the repo.
-- [ ] **29. `collaboration/review-history.md`** — 1066 wds, score 56.3 — 21.8 sent
-- [ ] **30. `collaboration/how-sync-works.md`** — 868 wds, score 55.3 — 0 digits
-- [ ] **31. `collaboration/open-a-shared-project.md`** — 726 wds, score 51.2 — 23.4 em dash
-- [ ] **32. `collaboration/share-a-project.md`** — 820 wds, score 46.2 — 28.0 em dash
-- [ ] **33. `collaboration/sign-in-to-github.md`** — 1045 wds, score 44.2 — 0 digits
+- [x] **29. `collaboration/review-history.md`** — 1126 -> 1105 wds. em dash
+      22.4 -> 0.0, digits 0.0 -> 16.4, points-at-figure 0.0 -> 3.9, mean
+      sentence 24.4 -> 17.4. Four wrong claims found by reading
+      `project-git-history.png` and the QML beside it: the branch badge prints
+      the ref name (`main`), never "local"/"remote" — those are tooltip-only
+      (`GitHistoryRow.qml:113`); a note image is never tagged `binary`, which
+      is `isBinary && !isImage` (`GitCommitDetailPanel.qml:266`); clicking a
+      true binary is a silent no-op with no else branch
+      (`GitHistoryPage.qml:18-46`); and Restore is `GIT_CHECKOUT_FORCE |
+      GIT_CHECKOUT_REMOVE_UNTRACKED` (`GitRepository.cpp:4729`), so it deletes
+      untracked files. Also struck: "the one row that does not read Save from
+      CaveWhere" — sync commits as `Sync from CaveWhere` and reconcile as
+      `Sync Reconcile from CaveWhere` (`cwSaveLoad.cpp:590,1695,4900`).
+      **Before**/**After** are literal labels (`GitImageComparePage.qml:72,88`)
+      and had been demoted to prose. `llms.txt:61` re-synced — it was stale on
+      the badge, on binary note images, and on the Restore quote.
+- [x] **30. `collaboration/how-sync-works.md`** — 930 -> 930 wds. em dash
+      21.8 -> 0.0, digits 0.0 -> 11.9, contractions 17.0 -> 7.1, mean sentence
+      19.7 -> 16.7. Two wrong claims: a new project has **no** remote (`origin`
+      is added by sharing, `cwRemoteAccountCoordinator.cpp:136`), and
+      "CaveWhere never merges the project as raw text" — the rebase runs
+      libgit2's content merge and can return `MergeConflicts`
+      (`GitRepository.cpp:1868-1930`), which is exactly the warning
+      `sync-your-changes.md:137` documents. The frozen heading "not just text"
+      was right; the body had overstated it. New sourced substance: libgit2
+      1.9.1 (`conanfile.py:19`), 9 merge handlers matching the 9 named objects,
+      id matching by `QUuid`, the same-field rule from
+      `cwSyncMergeApplyUtils.h:24-33`, and exactly 24 LFS extensions
+      (`cwSaveLoad.cpp:329-361`) — which is why "photographs and point clouds"
+      was wrong, since the list covers PDFs and SVGs too. Digits land at 11.9
+      not 20.3; the rest would have been invented or were already owned by a
+      sibling. Rejected a reviewer call to cut "Why Git? Two reasons." —
+      `SKILL.md` quotes that exact sentence as the model of the voice.
+- [x] **31. `collaboration/open-a-shared-project.md`** — 797 -> 795 wds. em
+      dash 24.9 -> 0.0, digits 0.0 -> 4.5, points-at-figure 0.0 -> 1.5, mean
+      sentence 21.3 -> 17.4. The page had never read the clone code. Corrected:
+      the **Clone Repository** dialog is the deep-link route only, since Open
+      from Online clones in place (`RemoteRepositoryPage.qml:135`); the
+      ask-to-save prompt fires *after* the download
+      (`CavewhereMainWindow.qml:173-182`); and credentials are set before every
+      clone when an account is signed in
+      (`cwRemoteRepositoryCloner.cpp:163-166`), so the no-credentials first
+      attempt only happens when nobody is. New: the 3-host allowlist, 4 failure
+      kinds with `Auth` alone auto-retrying (`cwRemoteRepositoryCloner.h:23-29`,
+      `.cpp:319-324`), the half-downloaded folder being deleted (`.cpp:344-346`),
+      and the 404 collaborator-invitation string quoted in full for the first
+      time. `DeepLinkConfirmDialog.qml:92-96` reopens the dialog on reject, but
+      that path is unreachable — Cancel is the only reject route and it is
+      disabled while cloning, with `NoAutoClose` blocking Escape and outside
+      clicks. Old alt text named a **Connect to GitHub** button the body never
+      mentioned, against `AUTHORING.md:114`. `llms.txt:60` re-synced.
+- [x] **32. `collaboration/share-a-project.md`** — 902 -> 902 wds. em dash
+      29.7 -> 0.0 (the chapter's worst), digits 0.0 -> 5.1, to-be 17.7 -> 11.2,
+      mean sentence 19.4 -> 17.0. Headline correction: share links are **not**
+      GitHub-only. `cwGitHostingProvider.cpp:36,54` allowlists 3 hosts and
+      `ShareDialog.qml:45` says so in the dialog's own words. The invite link
+      names whichever host you use, and the access path differs per host
+      (`:22-23,37-38,55-56`). Also: the wizard opens from 4 places, not 3;
+      the menu item is `Remote settings…` (`SyncButton.qml:180`); the name
+      prefill strips more than spaces (`SetupRemoteWizard.qml:39-44`). The
+      screenshot check found the alt text placing the Sync button at the far
+      right when a Discord button sits to its right
+      (`LinkBar.qml:284-288`) — fixed here and on `sync-your-changes.md:29`,
+      which carried the same wrong alt for the same image. `llms.txt:58`
+      re-synced on 5 points.
+      **Flagged, not a doc fix**: `CreateGitHubRepoForm.qml:102-105` tells the
+      user to "use 'Connect existing'", but the control is labeled
+      `Already have a remote? →` (`SetupRemoteWizard.qml:139`). No control
+      named "Connect existing" exists.
+- [x] **33. `collaboration/sign-in-to-github.md`** — 1112 -> 1088 wds. em
+      dash 17.5 -> 1.9, digits 0.0 -> 8.4, contractions 19.5 -> 7.3, mean
+      sentence 18.7 -> 16.0. Two behavioral corrections, both from the code:
+      polling starts on **Copy and Open GitHub**, whose
+      `markVerificationOpened` (`cwGitHubIntegration.cpp:469`) is the only
+      reachable caller and gates `:413`, so approving in a browser you opened
+      yourself leaves CaveWhere waiting forever; and the install wait gives up
+      after 3 minutes (`kPollWindowMs`, `:212`) with a banner the page never
+      mentioned. Struck: the keychain key was `RemoteAccount/github/<username>`,
+      but `accountId` is a generated `QUuid`
+      (`cwRemoteAccountModel.cpp:89`, `cwRemoteCredentialStore.cpp:86-96`), so
+      a reader searching for their username would find nothing. Also struck:
+      "GitHub gives that code 15 minutes" — the 900 at
+      `cwGitHubDeviceAuth.cpp:78` is only a fallback for `expires_in` and is
+      read nowhere else. `Remote Settings` is an internal page id
+      (`MainContent.qml:217`); the page is `Remote Management`. The 2 residual
+      em dashes are inside quoted app strings (`SyncButton.qml:43`,
+      `GitHubInstallPrompt.qml:45`) and stand under house decision 4.
+      `llms.txt:57` re-synced on 3 points.
 
 ### 3D View, Point Clouds, Leads, Settings
 
