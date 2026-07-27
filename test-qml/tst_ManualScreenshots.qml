@@ -1624,13 +1624,14 @@ MainWindowTest {
         // The Automatic Update checkbox in the lower-left sidebar, highlighted
         // and cropped. Backs the "Carpeting is automatic" section of
         // docs/manual/scraps/carpeting.md — the switch gates the survey solve
-        // (loop closure) and carpet re-morphing together.
+        // (loop closure) and carpet re-morphing together. It lives in the update
+        // footer's idle state, which is what an untouched project shows.
         function test_automaticUpdate() {
             let regionViewer = loadRhiViewer();
             if (!regionViewer) { return; }
 
-            let container = findByName(rootId.mainWindow, "autoUpdateContainer");
-            verify(container, "found the Automatic Update container");
+            let container = findByName(rootId.mainWindow, "updateFooter");
+            verify(container, "found the update footer");
 
             let tabBar = sidePanelTabBar();
             if (tabBar) { tabBar.currentIndex = 0; }

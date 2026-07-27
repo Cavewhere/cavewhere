@@ -7,7 +7,6 @@
 
 import QtQuick as QQ
 import QtQuick.Controls as QC
-import QtQuick.Layouts
 import cavewherelib
 
 QQ.Rectangle {
@@ -202,7 +201,6 @@ QQ.Rectangle {
     }
 
     SideBarToolRail {
-        id: toolRailId
         objectName: "sideBarToolRail"
         anchors.left: parent.left
         anchors.right: parent.right
@@ -217,65 +215,19 @@ QQ.Rectangle {
         toolModel: ActiveTools.tools
     }
 
-    TaskListView {
-        id: taskListView
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.top: toolRailId.bottom
-        anchors.bottom: autoSwitchId.top
-    }
-
-    QQ.Rectangle {
-        id: autoSwitchId
-        objectName: "autoUpdateContainer"
+    SideBarUpdateFooter {
+        objectName: "updateFooter"
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
-        implicitHeight: autoSwitchLayoutId.height
 
-        color: Theme.sidebar.panel
+        compact: sidebarArea._compactMode
+        running: RootData.updateCoordinator.running
+        needsUpdate: RootData.updateCoordinator.needsUpdate
+        automaticUpdate: RootData.updateCoordinator.automaticUpdate
 
-        ColumnLayout {
-            id: autoSwitchLayoutId
-            anchors.left: parent.left
-            anchors.right: parent.right
-            spacing: 2
-
-            // Wide: label + checkbox
-            QC.Label {
-                text: "Automatic\nUpdate"
-                id: labelTextId
-                objectName: "autoUpdateLabel"
-                visible: sidebarArea.layoutSize >= Theme.LayoutSize.Wide
-                horizontalAlignment: QC.Label.AlignHCenter
-                Layout.fillWidth: true
-            }
-
-            QC.CheckBox {
-                id: autoCheckboxId
-                objectName: "autoUpdateCheckbox"
-                visible: sidebarArea.layoutSize >= Theme.LayoutSize.Wide
-                checked: RootData.settings.jobSettings.automaticUpdate
-                onToggled: RootData.settings.jobSettings.automaticUpdate = checked
-                Layout.alignment: Qt.AlignHCenter
-            }
-
-            // Compact: toggle button with icon
-            RoundButton {
-                id: autoUpdateToggleId
-                objectName: "autoUpdateToggle"
-                visible: sidebarArea._compactMode
-                checkable: true
-                checked: RootData.settings.jobSettings.automaticUpdate
-                onToggled: RootData.settings.jobSettings.automaticUpdate = checked
-                icon.source: "qrc:/twbs-icons/icons/arrow-repeat.svg"
-                icon.color: checked ? Theme.accent : Theme.text
-                Layout.alignment: Qt.AlignHCenter
-
-                QC.ToolTip.visible: hovered
-                QC.ToolTip.text: checked ? "Automatic updates on" : "Automatic updates off"
-            }
-        }
+        onRunRequested: RootData.updateCoordinator.updateNow()
+        onAutomaticUpdateToggled: (enabled) => RootData.updateCoordinator.automaticUpdate = enabled
     }
 
     QQ.Rectangle {

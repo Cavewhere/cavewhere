@@ -75,8 +75,8 @@ QQ.Item {
                     text: "Automatic Update"
                     icon.source: "qrc:/twbs-icons/icons/arrow-repeat.svg"
                     checkable: true
-                    checked: RootData.settings.jobSettings.automaticUpdate
-                    onTriggered: RootData.settings.jobSettings.automaticUpdate = checked
+                    checked: RootData.updateCoordinator.automaticUpdate
+                    onTriggered: RootData.updateCoordinator.automaticUpdate = checked
                 }
             }
         }

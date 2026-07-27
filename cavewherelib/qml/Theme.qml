@@ -30,6 +30,11 @@ QtObject {
     readonly property color accentMuted: "#8AC6FF"
     readonly property color success: dark ? "#76e596" : "#4caf50"
     readonly property color warning: dark ? "#6b643e" : "#FF9C14"
+    // A warning-toned card: a tinted ground, its outline, and text that reads on
+    // it. Used where a warning has to be a legible block rather than a fill.
+    readonly property color warningSurface: dark ? "#3a3524" : "#fff3df"
+    readonly property color warningBorder: dark ? "#8a8250" : "#e0a64b"
+    readonly property color warningText: dark ? "#f0d9a0" : "#7a4b00"
     readonly property color danger: dark ? "#6f312e" : "#FF6736"
     readonly property color info: dark ? "#1f3f61" : "#85c1f4"
     readonly property color highlight: dark ? "#314f78" : "#a5cdff"
@@ -117,6 +122,11 @@ QtObject {
     readonly property int toolFlyoutWidth: 220
     readonly property int toolFlyoutGap: 8
     readonly property int toolFlyoutPadding: 11
+
+    // Sidebar update footer: the one control at the bottom of the sidebar that
+    // shows whichever derived-data state the update coordinator is in.
+    readonly property int updateFooterPadding: 5
+    readonly property int updateFooterSpacing: 3
 
     // Icon sizes
     readonly property int iconSizeButton: 16
