@@ -423,7 +423,7 @@ MainWindowTest {
         // azimuth. gen-manual-screenshots.sh assembles the frames into
         // scraps-carpet-orbit.gif and deletes them — the animated "why" hero
         // for the Scraps / Carpeting overview (docs/manual/scraps/carpeting.md):
-        // it shows the flat sketches morphed and draped on the 3D survey line,
+        // it shows the flat sketches morphed and carpeted on the 3D survey line,
         // turning so the 3D relief reads.
         //
         // Framing is computed ONCE, then the orbit only changes azimuth: a fixed
@@ -458,7 +458,7 @@ MainWindowTest {
             const prevPitchLocked = tt.pitchLocked;
 
             // Carpets on; survey chrome (leads, station labels) off so the orbit
-            // reads as pure morphed sketch draped on the line plot.
+            // reads as pure morphed sketch carpeted on the line plot.
             RootData.regionSceneManager.scraps.visible = true;
             RootData.leadsVisible = false;
             RootData.stationsVisible = false;
