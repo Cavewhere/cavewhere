@@ -18,9 +18,6 @@ You can survey, plot, and close loops without answering either, because the cave
 *shape* holds up regardless. The answers start to matter the moment the cave has
 to meet the outside world: a surface map you overlay it on, a LiDAR point cloud
 you combine it with, a neighboring survey that needs coordinates matching yours.
-This page carries the mental model
-behind [declination](../survey-data/declination.md), grid convergence, and
-georeferencing, so those pages read as adjustments to a picture you already hold.
 
 ## Three norths
 
@@ -34,8 +31,7 @@ directions, and they disagree.
 | **Grid** | "Up" on a flat map projection's grid | Straight up the grid columns |
 
 Your instrument reads the first, the world references the second, and the map you
-overlay onto uses the third. Turning a raw reading into something that lines up
-with a map means stepping across all three.
+overlay onto uses the third.
 
 ## Magnetic to true: declination
 
@@ -68,24 +64,25 @@ spans 6° of longitude, and the lean grows the further you sit from its center
 line. See [Grid Convergence](../georeferencing/grid-convergence.md).*
 
 Grid convergence only shows up once a cave gets georeferenced, because until then
-no projection exists to converge on. Once a cave sits on a coordinate system,
-CaveWhere folds convergence into the bearing correction for you. The total applied
-to each reading comes to *(declination − grid convergence)*, so corrected bearings
-land on **grid** north and match the projected coordinates you work against.
-CaveWhere shows the value it used, reading something like `0.74° at a1`. You never
-compute it yourself. You only need to know it exists, which is why a georeferenced
-cave's bearing correction differs from its plain declination.
+no projection exists to converge on. The cave page reports the angle it computed,
+reading something like `-1.08° at a1`.
+
+Whether the solve *uses* that angle depends on the trip. On **Auto** declination
+the correction comes to *(declination − grid convergence)*, so bearings land on
+**grid** north and match the projected coordinates you work against. On Manual
+they carry the declination alone and the reported convergence changes nothing.
+[Auto](../survey-data/declination.md#let-cavewhere-work-it-out-auto) is the
+default on new trips.
 
 ## Local vs. georeferenced
 
 Every cave starts in a **local** frame. The survey holds together internally, with
 every station in the right place relative to every other, but the whole thing
 floats. Its absolute position on Earth and its rotation to true north stay unset,
-because nothing has told CaveWhere where it sits. A local cave describes its own
-shape completely. It simply has no *place*.
+because nothing has told CaveWhere where it sits.
 
-**Georeferencing** gives it one. You **[fix](glossary.md#fixed-station)** one or
-more stations to known real-world coordinates in a chosen **coordinate system**,
+**Georeferencing** gives it a place. You **[fix](glossary.md#fixed-station)** one
+or more stations to known real-world coordinates in a chosen **coordinate system**,
 which pins the floating survey to the ground: position, and, together with
 declination and convergence, orientation.
 
@@ -115,9 +112,8 @@ earns its keep when the cave has to meet things outside itself:
 - **Coordinates others can use.** A fixed survey hands real positions to rescue
   teams, landowners, and adjacent projects, instead of a shape floating in space.
 
-Georeferencing has its own chapter, unfortunately still unwritten: fixing
-stations, choosing a coordinate system, and reading grid convergence in the
-editor. This page holds the concept behind it.
+[Georeference a Cave](../georeferencing/georeference-a-cave.md) covers fixing
+stations and choosing a coordinate system.
 
 ## Next steps
 
