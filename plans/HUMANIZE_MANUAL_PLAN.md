@@ -754,7 +754,18 @@ Legend: `[ ]` open · `[~]` reported, awaiting review · `[x]` committed
       handler in this tree.
       No images on this page and none can be generated without a build, so
       points-at-figure stays 0.
-- [ ] **46. `index.md`** — 894 wds, score 71.2 — **50 em dashes, one per link entry.** This is a list format, not prose. Needs a format decision from Philip (keep the dash, switch to a colon, or drop the gloss), not a rewrite
+- [x] **46. `index.md`** — **not rewritten, by decision.** The page is 1025
+      words and 46 link entries, and its em-dash count splits cleanly: **46 on
+      entry lines, exactly one per entry, used as a separator**, plus 4 in the
+      intro prose as 2 appositive pairs. Philip was given 4 options (keep the
+      dash; switch to a colon, matching the `- [Title](path): gloss` shape
+      `llms.txt` already uses; drop the gloss; recast the gloss as its own
+      sentence) and **chose to keep the em dash**: a list separator is not the
+      "shout" house rule 10 is about, and the humanize em-dash metric is a
+      prose measure that does not really apply to this page. No edit made.
+      Still open, and *not* covered by that decision: the **4 em dashes in the
+      intro prose** at `index.md:3-4` and `:8-9`, which are ordinary
+      appositives and would fall under rule 10 if anyone wants them gone.
 
 ---
 
