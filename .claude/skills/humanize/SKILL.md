@@ -53,7 +53,8 @@ the manual manages one in five. He recommends things; the manual never does, not
 once in 50,000 words. It has 60+ generated screenshots and its prose almost never
 refers to one. So it reads like an impression of a friendly technical writer with
 everything worth reading left out. Fixing that is not a rewrite, it is going and
-finding the numbers.
+finding the numbers — and then making room for them. Read the length budget
+below before you write a word.
 
 **On the em dash specifically:** it is not banned, it is a shout. Philip uses one
 "extremely rarely... basically screaming" - rarely enough that 10,240 words of
@@ -62,6 +63,46 @@ clause that genuinely needs the volume. The manual's 19.73 per 1k are all routin
 appositives, which is the same as never shouting at all. In a UI string there is
 no room for emphasis, so every em dash there is the habit, not the intent;
 `slopcheck` flags those individually.
+
+## The length budget
+
+Every rate on this page is per 1000 words, which makes all of them gameable from
+the wrong end. Append 500 words of well-sourced numbers and the digit rate climbs,
+the em-dash rate drops, the score improves, and the page got worse. That is not
+hypothetical. Items 11–23 of the manual sweep did exactly this and took
+`docs/manual/` from 59,418 words to 68,729; several pages roughly doubled. Undoing
+it cost a compression pass over 10 pages and 12 commits.
+
+**So a rewritten page may not come out longer than it went in.** `wc -w` before,
+`wc -w` after, and the second number is the smaller one. That is a ceiling, not a
+target to spend up to.
+
+The substance **replaces** prose, it does not append to it. Every paragraph of
+sourced numbers is paid for by a paragraph carrying nothing. The usual donors, in
+the order I would cut them:
+
+- The roadmap sentence opening a section: "This page shows where CaveWhere reports
+  closure and how to run the bad reading down." The headings already said it.
+- Whatever check 2 catches — the sentence after the useful one.
+- Anything restating a page this one already links to. Link, don't summarize.
+- Alt text past about 25 words, and toolbar inventories the screenshot shows.
+- Layout and breakpoint trivia, pixel sizes of decorations.
+
+Past roughly a 35% cut, wording alone runs out and you are choosing which facts
+survive. Keep, in this order: quoted UI strings a reader might search for;
+corrections to what previously shipped; silent failures and destructive actions;
+concrete numbers the reader can act on.
+
+**Two things you may never cut to buy room.** A caption: `AUTHORING.md:108`
+requires descriptive alt text *and* an italic caption on every image, and `:114`
+forbids either from carrying a fact the body prose doesn't — so you cannot move a
+fact into a caption to save space either. Drop the whole image or keep both lines.
+And a block quote of the app's own words: deleting one is not the conservative
+reading of "never reword a quote", it is the expensive one. `grep -rn` the string
+across `docs/` first. Twice now an agent has deleted the manual's only copy.
+
+If a correction genuinely will not fit under the ceiling, say so in the report and
+stop. Do not spend the budget quietly.
 
 ## Conciseness: cut to-be verbs
 
@@ -183,6 +224,9 @@ Each names the finding in the paper and what it looks like in a manual page.
 spent on mechanical hits:
 
 ```bash
+# the ceiling, before you touch anything
+wc -w docs/manual/collaboration/how-sync-works.md
+
 # mechanical tells + American English
 python3 .claude/skills/humanize/scripts/slopcheck.py docs/manual
 
@@ -227,7 +271,8 @@ actionable — never report "consider varying the tone".
 Report only; do not rewrite files unless the user asks. When they do ask, change
 the flagged spans and leave everything else alone — a full-page rewrite loses
 whatever human texture was already there, which is exactly the failure this
-skill exists to prevent.
+skill exists to prevent. Run `wc -w` again when you finish and report both
+numbers; the length budget applies to a span-level fix as much as to a rewrite.
 
 ## Writing something new
 
@@ -245,6 +290,9 @@ most of the distance.
 - **Use "I" for judgment calls.** "I recommend disabling Mipmaps." "I generated
   this benchmark with..." The manual currently never does this, and it is the
   cheapest way to sound like a person.
+- **Know the ceiling before the first sentence.** On a rewrite it is the page's
+  current `wc -w`; on a genuinely new page, pick one and write to it. Deciding
+  afterward means deciding never.
 - **Give the sentence a real verb.** Before settling for `is`, check whether the
   verb is hiding in a noun ("is the groundwork for" → "lays the groundwork for")
   or whether the subject got dropped ("is written to disk" → "CaveWhere writes
