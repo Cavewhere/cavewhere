@@ -30,10 +30,11 @@ struct CAVEWHERE_LIB_EXPORT cwGeoPoint
     cwGeoPoint() = default;
     cwGeoPoint(double x_, double y_, double z_) : x(x_), y(y_), z(z_) {}
 
-    QVector3D toVector3D() const {
-        return QVector3D(float(x), float(y), float(z));
-    }
-
+    //! Narrows to a worldOrigin-relative scene point. There is deliberately no
+    //! no-argument overload: a float32 cannot hold an absolute UTM coordinate
+    //! (the ULP is 0.5m at a 5.5e6 northing), so the subtraction has to happen
+    //! in double. A point already known to be origin-relative passes a
+    //! default-constructed cwGeoPoint, which states that at the call site.
     QVector3D toVector3D(const cwGeoPoint& worldOrigin) const {
         return QVector3D(float(x - worldOrigin.x),
                          float(y - worldOrigin.y),

@@ -993,13 +993,13 @@ TEST_CASE("cwLinePlotManager re-runs cavern when globalCS or fix stations change
         // precision (see cwSurvex3DFileReader). Add the current worldOrigin
         // back to recover absolute projected coords.
         const auto absolutePosition = [&](const QString& station) {
-            return cave->stationPositionLookup().position(station)
-                + region.geoReference()->worldOrigin().toVector3D();
+            return cwGeoPoint::fromSceneLocal(cave->stationPositionLookup().position(station),
+                                              region.geoReference()->worldOrigin());
         };
 
         CHECK(positionSpy.count() > spyAfterGlobalCS);
-        CHECK(absolutePosition("a1") == QVector3D(100.0f, 200.0f, 50.0f));
-        CHECK(absolutePosition("a2") == QVector3D(100.0f, 210.0f, 50.0f));
+        CHECK(absolutePosition("a1") == cwGeoPoint(100.0, 200.0, 50.0));
+        CHECK(absolutePosition("a2") == cwGeoPoint(100.0, 210.0, 50.0));
 
         SECTION("setData on the fix-station model triggers a re-run") {
             const int spyBefore = positionSpy.count();
@@ -1013,8 +1013,8 @@ TEST_CASE("cwLinePlotManager re-runs cavern when globalCS or fix stations change
             plotManager->waitToFinish();
 
             CHECK(positionSpy.count() > spyBefore);
-            CHECK(absolutePosition("a1") == QVector3D(300.0f, 200.0f, 50.0f));
-            CHECK(absolutePosition("a2") == QVector3D(300.0f, 210.0f, 50.0f));
+            CHECK(absolutePosition("a1") == cwGeoPoint(300.0, 200.0, 50.0));
+            CHECK(absolutePosition("a2") == cwGeoPoint(300.0, 210.0, 50.0));
         }
 
         SECTION("removeAt on the fix-station model triggers a re-run") {
@@ -1026,8 +1026,8 @@ TEST_CASE("cwLinePlotManager re-runs cavern when globalCS or fix stations change
             CHECK(positionSpy.count() > spyBefore);
             // Without explicit fixes the legacy fallback (*fix a1 0 0 0)
             // re-anchors the cave at the origin.
-            CHECK(absolutePosition("a1") == QVector3D(0.0f, 0.0f, 0.0f));
-            CHECK(absolutePosition("a2") == QVector3D(0.0f, 10.0f, 0.0f));
+            CHECK(absolutePosition("a1") == cwGeoPoint(0.0, 0.0, 0.0));
+            CHECK(absolutePosition("a2") == cwGeoPoint(0.0, 10.0, 0.0));
         }
     }
 }

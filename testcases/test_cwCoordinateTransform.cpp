@@ -22,10 +22,10 @@ using Catch::Matchers::WithinAbs;
 
 TEST_CASE("cwGeoPoint converts to QVector3D with worldOrigin offset", "[cwGeoPoint]")
 {
-    SECTION("toVector3D with no offset narrows to float")
+    SECTION("A zero worldOrigin just narrows to float")
     {
         cwGeoPoint p(1.5, 2.5, 3.5);
-        QVector3D v = p.toVector3D();
+        QVector3D v = p.toVector3D(cwGeoPoint());
         CHECK(v.x() == 1.5f);
         CHECK(v.y() == 2.5f);
         CHECK(v.z() == 3.5f);
