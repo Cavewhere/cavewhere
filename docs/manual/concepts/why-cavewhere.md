@@ -57,12 +57,6 @@ and CaveWhere deforms each scrap onto the 3D survey line so the drawing carpets
 the passage. The model comes out of the drawings you already
 make in the cave.
 
-Carpeting doesn't always come out clean. Sometimes a plan scrap pulls in
-stations it shouldn't and you get small vertical bumps; a running profile drawn
-over stacked stations creases. You can fix both, usually by tightening the
-default of 10 nearest stations or splitting the scrap. See
-[Troubleshoot Carpeting](../scraps/troubleshoot-carpeting.md).
-
 ## Keeping the map correct: loop closure
 
 **The problem:** Every instrument reading carries a little error. When a survey
