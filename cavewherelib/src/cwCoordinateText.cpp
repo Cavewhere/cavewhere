@@ -165,6 +165,7 @@ cwCoordinateText::parse(const QString& text, cwUnits::UnitSystem units, AxisOrde
     coordinate.hasElevation = hasElevation;
     if (hasElevation) {
         const Component& elevation = components.at(kMaxComponents - 1);
+        coordinate.hasElevationUnit = !elevation.unit.isEmpty();
         const cwUnits::LengthUnit unit = elevation.unit.isEmpty()
                                              ? elevationUnit(units)
                                              : cwUnits::toLengthUnit(elevation.unit);
@@ -195,6 +196,17 @@ QString cwCoordinateText::format(double easting,
              shortestNumber(second),
              shortestNumber(elevation),
              cwUnits::unitName(unit));
+}
+
+QString cwCoordinateText::textToStore(const QString& text,
+                                      const Coordinate& coordinate,
+                                      cwUnits::UnitSystem units)
+{
+    const QString trimmed = text.trimmed();
+    if (!coordinate.hasElevation || coordinate.hasElevationUnit) {
+        return trimmed;
+    }
+    return trimmed + cwUnits::unitName(elevationUnit(units));
 }
 
 cwCoordinateTextValidator::cwCoordinateTextValidator(QObject* parent) :

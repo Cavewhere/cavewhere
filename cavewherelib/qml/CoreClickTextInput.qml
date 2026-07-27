@@ -12,6 +12,10 @@ QQ.Item {
     id: clickTextInput
     objectName: "coreTextInput"
     property alias text: textAreaId.text
+    //! What the editor opens on, when that isn't what the field displays.
+    //! Defaults to the displayed text, so a field that has no separate edit form
+    //! behaves exactly as before.
+    property string editText: clickTextInput.text
     property alias font: textAreaId.font
     property alias style: textAreaId.style
     property alias styleColor: textAreaId.styleColor
@@ -96,7 +100,7 @@ QQ.Item {
 
         textAreaId.visible = false
 
-        GlobalShadowTextInput.textInput.text = clickTextInput.text
+        GlobalShadowTextInput.textInput.text = clickTextInput.editText
         GlobalShadowTextInput.textInput.font = textAreaId.font
         GlobalShadowTextInput.editor.visible = true
         GlobalShadowTextInput.textInput.forceActiveFocus()

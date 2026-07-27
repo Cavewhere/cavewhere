@@ -76,8 +76,16 @@ StandardPage {
         //! reaches the validator because a refusal has to name the axes the row
         //! actually wants — the verdict is order-independent, the message isn't.
         property int axisOrder: CoordinateText.EastingNorthing
+        //! The string the user typed this value as, when the row kept one (U14).
+        //! Empty ⇒ the editor opens on what the cell displays, which is what
+        //! every field other than the coordinate does.
+        property string editValue: ""
 
         text: value
+        //! Display and edit are deliberately different for a coordinate: the
+        //! column renders every row in the project's units so it can be scanned,
+        //! while an edit starts from what the user wrote.
+        editText: field.editValue !== "" ? field.editValue : field.text
         color: field.error ? Theme.errorText : Theme.text
         validator: field.coordinate ? coordinateValidatorId : null
 
@@ -106,6 +114,7 @@ StandardPage {
         property alias error: field.error
         property alias coordinate: field.coordinate
         property alias axisOrder: field.axisOrder
+        property alias editValue: field.editValue
         //! Names the inner editable field rather than this wrapper, so callers
         //! reach the same item the narrow layout exposes directly.
         property alias fieldObjectName: field.objectName
@@ -287,6 +296,7 @@ StandardPage {
             required property double easting
             required property double northing
             required property double elevation
+            required property string coordinateText
             required property string domainError
             required property bool eastingDomainError
             required property bool northingDomainError
@@ -345,6 +355,9 @@ StandardPage {
                                                  wideDelegateId.elevation,
                                                  ProjectUnits.unitSystem,
                                                  CoordinateText.axisOrderFor(wideDelegateId.inputCS))
+                    // What the user typed, when this row kept it: the cell above
+                    // renders the numbers, the editor re-offers the string (U14).
+                    editValue: wideDelegateId.coordinateText
                     rowIndex: wideDelegateId.index
                     coordinate: true
                     axisOrder: CoordinateText.axisOrderFor(wideDelegateId.inputCS)
@@ -383,6 +396,7 @@ StandardPage {
             required property double easting
             required property double northing
             required property double elevation
+            required property string coordinateText
             required property string domainError
             required property bool eastingDomainError
             required property bool northingDomainError
@@ -457,6 +471,7 @@ StandardPage {
                                                  narrowDelegateId.elevation,
                                                  ProjectUnits.unitSystem,
                                                  CoordinateText.axisOrderFor(narrowDelegateId.inputCS))
+                    editValue: narrowDelegateId.coordinateText
                     rowIndex: narrowDelegateId.index
                     coordinate: true
                     axisOrder: CoordinateText.axisOrderFor(narrowDelegateId.inputCS)

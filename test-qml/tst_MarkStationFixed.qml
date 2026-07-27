@@ -300,6 +300,51 @@ MainWindowTest {
             tryCompare(popup, "opened", false)
         }
 
+        function test_popupShowsTheStringTheUserTyped() {
+            // U14. This field is always an editor — there is no display half to
+            // keep in project units — so it shows the user's own string
+            // throughout, and falls back to rendering the numbers only for a row
+            // that never had one.
+            const context = gotoSurveyTable()
+            const popup = popupForA1(context)
+
+            const coordinate = findChild(popup, "fixStationPopupCoordinate")
+            verify(coordinate !== null, "popup should offer the coordinate field")
+
+            // The project is metric, so this elevation is stored as 838.2 m and
+            // would read back as "838.2m" if the string weren't kept.
+            coordinate.text = "500200.5, 4194100, 2750ft"
+            coordinate.editingFinished()
+
+            const model = context.cave.fixStations
+            const modelIndex = model.index(0)
+            fuzzyCompare(model.data(modelIndex, FixStationModel.ElevationRole),
+                         2750 * 0.3048, 1e-9)
+
+            const done = findChild(popup, "fixStationPopupDone")
+            done.clicked()
+            tryCompare(popup, "opened", false)
+
+            openFixMenu(focusedStationBox(context, 0)).mark.triggered()
+            tryCompare(popup, "opened", true)
+            compare(coordinate.text, "500200.5, 4194100, 2750ft",
+                    "re-opening offers what was typed, not a conversion of it")
+
+            // A number written from anywhere else invalidates the string, and
+            // the field drops back to rendering the row.
+            model.setData(modelIndex, 1000.0, FixStationModel.ElevationRole)
+            done.clicked()
+            tryCompare(popup, "opened", false)
+
+            openFixMenu(focusedStationBox(context, 0)).mark.triggered()
+            tryCompare(popup, "opened", true)
+            compare(coordinate.text, "500200.5, 4194100, 1000m",
+                    "with no string of its own the field renders the numbers")
+
+            done.clicked()
+            tryCompare(popup, "opened", false)
+        }
+
         function test_popupRejectsAPasteItCantRead() {
             // U11/U12 — free-form entry creates an error class ("couldn't make
             // sense of that") the popup had nowhere to put before this.
@@ -468,15 +513,26 @@ MainWindowTest {
             compare(model.data(modelIndex, FixStationModel.EastingRole), 478000.0)
             compare(model.data(modelIndex, FixStationModel.NorthingRole), 4430000.0)
 
-            // Switching to lat/long re-renders the field in the other order
-            // without touching the stored coordinate.
+            // Switching to lat/long changes what the field *asks* for, and
+            // nothing else: not the numbers, and not the string the user typed
+            // (U14 Trap 2). Someone correcting a CS is fixing metadata, not
+            // data, and re-emitting their own numbers in the other order hands
+            // them back something they never wrote.
             picker.committed("EPSG:4326")
             tryCompare(label, "text", "Lat, Long, Elev", 2000,
                        "a geographic CS asks for latitude first")
-            tryCompare(coordinate, "text", "4430000, 478000, 1655m", 2000,
-                       "and the field swaps to match")
+            compare(coordinate.text, "478000, 4430000, 1655m",
+                    "the string the user typed stays exactly as they typed it")
             compare(model.data(modelIndex, FixStationModel.EastingRole), 478000.0,
-                    "re-rendering wrote nothing to the model")
+                    "and the CS change wrote nothing to the model")
+
+            // Committing that same string is now a real edit, because the order
+            // it is read under changed underneath it — this is the keystroke
+            // that corrects a fix the domain warning has just flagged.
+            coordinate.editingFinished()
+            compare(model.data(modelIndex, FixStationModel.NorthingRole), 478000.0,
+                    "re-committing under the new order reads latitude first")
+            compare(model.data(modelIndex, FixStationModel.EastingRole), 4430000.0)
 
             coordinate.text = "46.12113, -115.59902, 304m"
             coordinate.editingFinished()

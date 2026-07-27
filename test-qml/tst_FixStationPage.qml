@@ -46,6 +46,18 @@ MainWindowTest {
             return findChild(fixPage, "inputCSComboBox." + rowIndex)
         }
 
+        //! Row \a rowIndex's coordinate cell, once the delegate carrying it
+        //! exists — the row is added to the model before the view has built it.
+        function findCoordinateCell(rowIndex) {
+            let cell = null
+            tryVerify(() => {
+                cell = findChild(RootData.pageView.currentPageItem,
+                                 "coordinateCell." + rowIndex)
+                return cell !== null
+            }, 5000, "row " + rowIndex + " coordinate cell should be reachable")
+            return cell
+        }
+
         function test_emptyStateShowsHelpBox() {
             gotoFixStations()
 
@@ -456,6 +468,99 @@ MainWindowTest {
             fixPage.commitCoordinate(0, coordinateCell.text)
             fuzzyCompare(model.data(idx, FixStationModel.NorthingRole), 46.12113, 1e-9)
             fuzzyCompare(model.data(idx, FixStationModel.EastingRole), -115.59902, 1e-9)
+        }
+
+        function test_coordinateEditorOffersTheStringTheUserTyped() {
+            // U14. The two halves are deliberately different: the column renders
+            // every row in the project's units so it can be scanned, while an
+            // edit starts from what was written. Being handed a machine's
+            // rounding of your own number and told to correct it is the
+            // complaint this exists to answer.
+            const cave = gotoFixStations()
+            cave.fixStations.addFixStation()
+            tryCompare(cave.fixStations, "count", 1)
+
+            const fixPage = RootData.pageView.currentPageItem
+            const coordinateCell = findCoordinateCell(0)
+
+            fixPage.commitCoordinate(0, "46.12113, -115.59902, 30ft")
+
+            tryCompare(coordinateCell, "text", "46.12113, -115.59902, 9.144m", 5000,
+                       "the cell renders the row in the project's units")
+            tryCompare(coordinateCell, "editText", "46.12113, -115.59902, 30ft", 5000,
+                       "the editor re-offers what was typed, feet and all")
+
+            // And through the real path, since editText is only a property until
+            // openEditor() puts it in the shadow input.
+            coordinateCell.openEditor()
+            compare(GlobalShadowTextInput.textInput.text, "46.12113, -115.59902, 30ft",
+                    "the editor opens on the user's own string")
+            coordinateCell.closeEditor()
+        }
+
+        function test_coordinateEditorFallsBackToTheCellForARowNobodyTyped() {
+            // Which is most rows: a fix imported from svx/Compass/Walls, one
+            // loaded from a project written before the string was kept, or one
+            // whose numbers were set from anywhere but this field.
+            const cave = gotoFixStations()
+            cave.fixStations.addFixStation()
+            tryCompare(cave.fixStations, "count", 1)
+
+            const model = cave.fixStations
+            const idx = model.index(0)
+            model.setData(idx, 46.12113, FixStationModel.EastingRole)
+            model.setData(idx, -115.59902, FixStationModel.NorthingRole)
+            model.setData(idx, 304.0, FixStationModel.ElevationRole)
+
+            const fixPage = RootData.pageView.currentPageItem
+            const coordinateCell = findCoordinateCell(0)
+
+            tryCompare(coordinateCell, "text", "46.12113, -115.59902, 304m", 5000)
+            tryCompare(coordinateCell, "editText", "46.12113, -115.59902, 304m", 5000,
+                       "with no string of its own, the editor opens on the cell")
+
+            // A component written elsewhere invalidates a string that was there,
+            // so the editor drops back to the cell rather than offering one that
+            // no longer describes the row.
+            fixPage.commitCoordinate(0, "46.12113, -115.59902, 30ft")
+            tryCompare(coordinateCell, "editText", "46.12113, -115.59902, 30ft", 5000)
+
+            model.setData(idx, 500.0, FixStationModel.ElevationRole)
+            tryCompare(coordinateCell, "editText", "46.12113, -115.59902, 500m", 5000,
+                       "the string went with the number it described")
+        }
+
+        function test_coordinateCellOpenedAndLeftWritesNothing() {
+            // The commonest gesture on this page, and the one the no-op rule
+            // exists for. In an imperial project the offered string crosses a
+            // unit conversion in each direction, and m→ft→m is not an identity
+            // in IEEE arithmetic — so a commit that trusted the numbers would
+            // drift the fix by an ulp, dirty the project and re-solve the plot.
+            const cave = gotoFixStations()
+            cave.fixStations.addFixStation()
+            tryCompare(cave.fixStations, "count", 1)
+
+            const previousUnits = RootData.region.unitSystem
+            RootData.region.unitSystem = Units.Imperial
+
+            const model = cave.fixStations
+            const idx = model.index(0)
+            model.setData(idx, 46.12113, FixStationModel.EastingRole)
+            model.setData(idx, -115.59902, FixStationModel.NorthingRole)
+            model.setData(idx, 1.0, FixStationModel.ElevationRole)
+
+            const coordinateCell = findCoordinateCell(0)
+            tryCompare(coordinateCell, "text", "46.12113, -115.59902, 3.280839895013123ft", 5000)
+
+            coordinateCell.openEditor()
+            compare(coordinateCell.commitChanges(), true, "an untouched field commits")
+
+            compare(model.data(idx, FixStationModel.ElevationRole), 1.0,
+                    "and the elevation is exactly where it was, to the last bit")
+            compare(model.data(idx, FixStationModel.CoordinateTextRole), "",
+                    "the machine's own rendering is not a string worth keeping")
+
+            RootData.region.unitSystem = previousUnits
         }
 
         function test_coordinateValidatorHoldsBackTextItCantRead() {

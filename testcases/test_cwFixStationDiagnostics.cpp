@@ -48,6 +48,16 @@ cwFixStation makeFix(const QString& cs, double easting, double northing = kNorth
     return fix;
 }
 
+//! Whether the first row of \a cave's diagnostics carries a domain complaint —
+//! what FixStationPage tints the cell on.
+bool rowFlagged(cwCave* cave)
+{
+    cwFixStationDiagnosticsModel* diagnostics = cave->fixStationDiagnostics();
+    return !diagnostics->data(diagnostics->index(0, 0),
+                              cwFixStationDiagnosticsModel::DomainErrorRole)
+                .toString().isEmpty();
+}
+
 } // namespace
 
 TEST_CASE("cwFixStationDiagnostics::domainCheck resolves the CS it judges under",
@@ -156,13 +166,6 @@ TEST_CASE("the inline row flag and the cave warning reach the same verdict",
         return cave->errorModel()->toStringList().join(QChar(' '))
             .contains(QStringLiteral("outside the valid range"));
     };
-    const auto rowFlagged = [](cwCave* cave) {
-        cwFixStationDiagnosticsModel* diagnostics = cave->fixStationDiagnostics();
-        return !diagnostics->data(diagnostics->index(0, 0),
-                                  cwFixStationDiagnosticsModel::DomainErrorRole)
-                    .toString().isEmpty();
-    };
-
     // Three caves under one staging: a clean fix, a bad one under its own CS, and
     // a bad one relying on the region's global CS. The fallback case is the one
     // most likely to drift apart again, since it is where the two paths used to
@@ -192,4 +195,50 @@ TEST_CASE("the inline row flag and the cave warning reach the same verdict",
     // every assertion above.
     CHECK_FALSE(domainWarned(goodCave));
     CHECK_FALSE(rowFlagged(goodCave));
+}
+
+TEST_CASE("the domain warning is what carries a coordinate read in the wrong axis order",
+          "[FixStation][cwFixStationDiagnostics]")
+{
+    // U14's Trap 2, end to end. Changing a fix's CS writes nothing — not the
+    // numbers, not the string — because the user changing it is correcting
+    // metadata, not data. The case that rule gives up on is the one where the
+    // axes swap: a UTM pair pasted into a geographic row is read latitude first
+    // and lands transposed. Nothing compensates for that; the domain check
+    // catches it, and the string the user typed is still sitting in the editor,
+    // one keystroke from fixing it.
+    cwCavingRegion region;
+    region.addCave();
+    cwCave* cave = region.cave(0);
+    REQUIRE(cave != nullptr);
+
+    cwFixStationModel* fixes = cave->fixStations();
+    fixes->addFixStation();
+    const QModelIndex idx = fixes->index(0);
+    fixes->setData(idx, QStringLiteral("EPSG:4326"), cwFixStationModel::InputCSRole);
+
+    // A UTM zone 11N coordinate, pasted into a row whose CS says geographic —
+    // so the field reads it latitude first and the two horizontals swap.
+    const QString typed = QStringLiteral("610016.792, 5615117.075, 304m");
+    REQUIRE(fixes->setCoordinateText(0, typed, cwUnits::Metric,
+                                     cwCoordinateText::LatitudeLongitude) == QString());
+    REQUIRE(fixes->fixStationAt(0).northing() == 610016.792);
+    CHECK(rowFlagged(cave));
+
+    // Correcting the CS moves nothing, so the fix is still transposed and still
+    // flagged. This is the rule working, not failing: the alternative was to
+    // rewrite a coordinate under a user who never asked for one.
+    fixes->setData(idx, QStringLiteral("EPSG:32611"), cwFixStationModel::InputCSRole);
+    CHECK(fixes->fixStationAt(0).northing() == 610016.792);
+    CHECK(fixes->fixStationAt(0).coordinateText() == typed);
+    CHECK(rowFlagged(cave));
+
+    // And the keystroke: the editor still holds what was typed, and committing
+    // it unchanged under the row's new order is what puts the fix right.
+    REQUIRE(fixes->setCoordinateText(0, fixes->fixStationAt(0).coordinateText(),
+                                     cwUnits::Metric,
+                                     cwCoordinateText::EastingNorthing) == QString());
+    CHECK(fixes->fixStationAt(0).easting() == 610016.792);
+    CHECK(fixes->fixStationAt(0).northing() == 5615117.075);
+    CHECK_FALSE(rowFlagged(cave));
 }

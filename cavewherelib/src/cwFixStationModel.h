@@ -47,7 +47,14 @@ public:
         ElevationRole,
         HorizontalVarianceRole,
         VerticalVarianceRole,
-        IdRole
+        IdRole,
+        //! Read-only through setData(): the string the user typed this
+        //! coordinate as, or empty when nobody typed it here. An editor opens
+        //! on it and falls back to cwCoordinateText::format() when it's empty;
+        //! the *cell* renders from the numbers either way, so display and edit
+        //! deliberately differ (U14). It is written only by setCoordinateText(),
+        //! which is the one path that can read a string back into numbers.
+        CoordinateTextRole
     };
     Q_ENUM(Roles)
 
@@ -92,6 +99,13 @@ public:
     //! suffix, and \a order says whether the text leads with the easting or the
     //! latitude — it must be the same order the field was rendered with, or the
     //! coordinate comes back transposed. See cwCoordinateText for both.
+    //!
+    //! \a text is kept on the row (CoordinateTextRole) so an editor can re-offer
+    //! it, unless it reads back as exactly what the row already renders — that
+    //! string is the machine's, not the user's, and a row with none of its own
+    //! renders the same thing anyway. Committing an unchanged field is therefore
+    //! a no-op whether or not the row has stored text, which it has to be: the
+    //! field is opened and left far more often than it is edited.
     Q_INVOKABLE QString setCoordinateText(int row,
                                           const QString& text,
                                           cwUnits::UnitSystem units,

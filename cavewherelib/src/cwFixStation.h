@@ -15,6 +15,7 @@
 #include <QMetaType>
 
 //Our includes
+#include "cwCoordinateText.h"
 #include "cwGlobals.h"
 
 class cwFixStationData;
@@ -54,6 +55,11 @@ public:
     //! convergence and auto-declination must all judge it under the same one.
     QString effectiveCS(const QString& globalCS) const;
 
+    //! The three components. <b>Writing any of them drops coordinateText()</b>
+    //! — a number written by some path other than the coordinate field makes
+    //! the stored string a lie about this fix, and the row is better off
+    //! rendering from its numbers than offering an editor a string that no
+    //! longer describes it. Set the text last when writing both.
     double easting() const;
     void setEasting(double v);
 
@@ -62,6 +68,24 @@ public:
 
     double elevation() const;
     void setElevation(double v);
+
+    //! What the user typed this coordinate as, empty when nobody typed it here
+    //! — a fix imported from svx/Compass/Walls, loaded from a project written
+    //! before this field existed, or one whose numbers were set directly. The
+    //! numbers above stay authoritative for everything downstream; this is
+    //! display state, so that an *editor* can re-offer the user their own
+    //! string rather than a machine rendering of it (U14, #621).
+    QString coordinateText() const;
+
+    //! Which axis coordinateText() leads with. Kept beside the text because the
+    //! row's CS can change after the text was typed, and the same string under
+    //! the other order is a different coordinate — not a no-op.
+    cwCoordinateText::AxisOrder coordinateTextAxisOrder() const;
+
+    //! Keep \a text, read under \a order, as the string this coordinate was
+    //! entered as. An empty \a text means the fix has none; the order goes back
+    //! to the default with it, so "no stored text" is a single state.
+    void setCoordinateText(const QString& text, cwCoordinateText::AxisOrder order);
 
     double horizontalVariance() const;
     void setHorizontalVariance(double v);

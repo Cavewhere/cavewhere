@@ -1093,7 +1093,7 @@ in chunks at all, so the chunk set would miss those stations entirely. Do not sw
   <tr><td><b>9</b> — Error surfacing <span class="pill ok">implemented</span></td><td>U9, U4, U10</td><td>All three are “show the error where it belongs”: U9 the CavePage line badge, U4 the per-component red cell, U10 the empty/unknown-station flag — each is a model role + inline indicator (new <code>cwErrorTypeId::FixStationReference</code>=598 for U10). See the Implemented callouts in §13.5 / §13.6 / §13.2.</td></tr>
   <tr><td><b>10</b> — Mark Fixed inline <span class="pill ok">implemented</span></td><td>U2</td><td>Largest, standalone feature (model API + caret + badge + inline coords); its own commit(s). See the Implemented callout in §13.3.</td></tr>
   <tr><td><b>11</b> — Free-form coordinates <span class="pill ok">implemented</span></td><td>U11, U12</td><td>One parser feeding both entry surfaces, plus the error line that a parse failure needs somewhere to land. See §13.8 for why U12 rides along rather than waiting, and the Implemented callout there for the two decisions that shaped it.</td></tr>
-  <tr><td><b>12</b> — Keep what the user typed</td><td>U14</td><td>Stores the raw coordinate string beside the numbers, so the <i>editor</i> re-offers what was typed while the cell keeps rendering in project units (§13.10). Its own commit: it touches the model, <code>cavewhere.proto</code> and both entry surfaces, and it supersedes A6 rather than sitting beside it. A CS change deliberately writes <b>nothing</b> — the stored axis order exists so the no-op guard can tell a re-commit under a new order apart from a genuine no-op.</td></tr>
+  <tr><td><b>12</b> — Keep what the user typed <span class="pill ok">implemented</span></td><td>U14</td><td>Stores the raw coordinate string beside the numbers, so the <i>editor</i> re-offers what was typed while the cell keeps rendering in project units (§13.10). Its own commit: it touches the model, <code>cavewhere.proto</code> and both entry surfaces, and it supersedes A6 rather than sitting beside it. A CS change deliberately writes <b>nothing</b> — the stored axis order exists so the no-op guard can tell a re-commit under a new order apart from a genuine no-op.</td></tr>
   <tr><td><b>13</b> — Remove Fix into the popup</td><td>U13</td><td>Small, self-contained QML (§13.9) — delete the cell menu item, add the action to the editor; the caret and its menu stay. Deliberately <i>after</i> U14 only because both edit <code>FixStationPopup</code>; nothing else couples them, so the order is reversible.</td></tr>
   <tr><td><b>—</b> — Tab order</td><td>U3</td><td>Separate: it edits the <i>shared</i> table-input stack used by other tables, so it stands alone with its own blast-radius review; not gated on the fix-station work.</td></tr>
 </table>
@@ -1330,13 +1330,20 @@ indices passing through unchanged. Because the popup fills itself imperatively r
 (§13.3), the warnings are re-read from a <code>Connections</code> on the proxy's <code>dataChanged</code>,
 not only on open: a re-solve or a CS change moves them with nobody touching the popup.</p>
 
-<p class="mono-note"><b>Verification.</b> C++: <code>test_cwCoordinateText.cpp</code> (new, 9 cases) and 2 new
-cases in <code>test_cwFixStationModel.cpp</code>. QML: 4 new cases in <code>tst_FixStationPage.qml</code>,
-3 new in <code>tst_MarkStationFixed.qml</code>, plus both files' existing coordinate tests rewritten for the
-single field. Eight mutants were injected and all eight killed — the reactive error refresh, the popup's
-<code>parseError</code> assignment, <code>reload()</code>'s error reset, the northing term of the domain
+<p class="mono-note"><b>Verification</b> <span class="pill new">counts corrected 2026-07-27 · P6</span>. The figures
+first written here were taken mid-implementation and never revised, so every one of them undercounted the shipped
+commit. As of <code>4f59d8ba</code>: C++ — <code>test_cwCoordinateText.cpp</code> (new, <b>13 cases / 33
+sections</b>), <b>3 new cases / 11 sections</b> in <code>test_cwFixStationModel.cpp</code>, and <b>1 new section</b>
+in <code>test_cwFixStationDiagnostics.cpp</code> (the origin guard, which the original note omitted entirely
+because it was added later). QML — <b>9 new cases</b> in <code>tst_FixStationPage.qml</code> and <b>5 new</b> in
+<code>tst_MarkStationFixed.qml</code>, plus both files' existing coordinate tests rewritten for the single field.
+<b>23 mutants were injected across three passes and all 23 killed</b>: 8 during implementation, 10 during the
+review, 5 during the 🟡 triage that followed it. The implementation eight were the reactive error refresh, the
+popup's <code>parseError</code> assignment, <code>reload()</code>'s error reset, the northing term of the domain
 tint, the unchanged-coordinate short-circuit, <code>format()</code>'s unit suffix, <code>axisOrderFor()</code>
 never reporting geographic, and <code>format()</code> swapping the axes when <code>parse()</code> doesn't.
+<b>Take the ratio seriously: the later fifteen mutants exist because the first eight tests were written by the same
+person who wrote the code, and ten of the review's findings were tests that could not fail.</b>
 Worth recording: the round-trip test does <i>not</i> catch a missing suffix (a suffix-less format still
 round-trips, since parse falls back to the same unit) — the explicit <code>format()</code> assertions are what
 cover it. For the same reason the round trip is run under <i>both</i> axis orders: a swap that format and parse
@@ -1373,8 +1380,30 @@ third role. Two reasons. First, the parser itself did <i>not</i> land in the pop
 <code>cwCoordinateText</code>, reached through <code>cwFixStationModel::setCoordinateText()</code>, so the popup holds
 one <code>commitCoordinate()</code> forwarder and no parsing logic; the accumulation this callout warned about went to
 C++ instead. Second, moving the write path is a pure refactor across five files with no user-visible effect, and
-folding it into an already-large feature commit would have buried the feature in it. The cost of deferring is
-unchanged, because the third role turned out thin — so this stays open at the same weight it had before.
+folding it into an already-large feature commit would have buried the feature in it.
+<br><br>
+<b>Correction, 2026-07-27 <span class="pill new">P1</span> — the sentence that closed this paragraph said "the cost of
+deferring is unchanged, because the third role turned out thin". That was wrong, and it was wrong in the direction
+that matters: it argued for deferring on the strength of a measurement nobody took.</b> The popup went
+<b>211 → 318 lines</b> (+137/−30 in <code>4f59d8ba</code>). What arrived is not bulk — it is <i>policy</i>, which is
+exactly the accumulation this callout was watching for:
+<ul>
+  <li><b>An error-precedence chain</b> — <code>parseError</code> &gt; <code>domainError</code> &gt;
+  <code>stationError</code>, resolved in an <code>errorMessage</code> binding. Which of three simultaneous complaints
+  a user is shown is a product decision, and it is now written in QML, in one of the two entry surfaces.</li>
+  <li><b>An axis-order derivation</b> (<code>axisOrderFor(csPickerId.value)</code>) driving the field label and every
+  <code>format()</code>/<code>parse()</code> call — the rule whose violation transposes a coordinate.</li>
+  <li><b>A non-obvious invariant found only in review:</b> <code>reload()</code> had to split into
+  <code>reloadCoordinate()</code> / <code>reloadErrors()</code> so a CS change does not re-render over text the model
+  refused. That is a state machine about pending-but-uncommitted input, living in a <code>QC.Popup</code>.</li>
+  <li><b>A subscription to the diagnostics proxy's <code>dataChanged</code></b>, because the popup fills itself
+  imperatively and its warnings move without anyone touching it.</li>
+</ul>
+None of that is reachable from <code>FixStationPage</code>, which grew its own answers to the same questions —
+<b>which is §14 A3's point, and the two surfaces diverged inside a single commit</b>. So the honest reading is the
+opposite of the original: the deferral was still <i>right</i> (a pure five-file refactor does not belong inside a
+large feature commit), but its <b>cost went up, not sideways</b>. Re-weight this item accordingly — it is no longer
+"same weight as before", and U14 will add a fourth surface's worth of state to the same file.
 </div>
 
 <h3 id="removefix">13.9 — <b>Remove Fix</b> moves out of the survey-table menu and into the popup (U13)
@@ -1551,6 +1580,39 @@ rather than thrown away — and the <i>editor</i>, not the cell, is where it com
   will pass with either deleted.</li>
 </ul>
 
+<div class="callout ok">
+  <b>Implemented 2026-07-27 (Commit 12).</b> <code>cwFixStation</code> gained <code>coordinateText()</code> +
+  <code>coordinateTextAxisOrder()</code>, with the three component setters clearing the text so the invariant holds for
+  call sites that don't exist yet; <code>CoordinateTextRole</code> carries it to QML;
+  <code>CoreClickTextInput</code> gained a generic <code>editText</code> (defaults to <code>text</code>) so the page's
+  cell and editor can differ at all. Persisted as <code>FixStation.coordinateText</code> + a nested
+  <code>AxisOrder</code> enum, written <i>after</i> the components on load for the same reason.
+  <ul>
+    <li><b>The no-op guard needed three comparisons, not one.</b> Raw text vs. stored (so a stored string that no longer
+    parses still round-trips), then the <i>normalized</i> text vs. stored — which is where re-typing <code>304</code>
+    against a stored <code>304m</code> lands — and only then the numbers. Writing the first two as one check let a
+    plain re-commit of a bare elevation clear the stored string and dirty the project; the test that caught it is
+    "a bare elevation is stored with the unit it was read in".</li>
+    <li><b>Text that renders the row as-is is stored as <i>no</i> text</b>, rather than kept. A row holding none renders
+    exactly that string through <code>format()</code>, so the two states are indistinguishable to the user — and this
+    is what keeps "open the editor and leave" free for a row that never had a string, which is most rows. It also
+    subsumes the old numeric ulp guard: the components are left untouched rather than round-tripped.</li>
+    <li><b>A two-component paste is stored as two components</b>, so the editor re-offers two while the cell keeps
+    showing three. Faithful to what was typed and a true no-op on re-commit, at the cost of an editor that shows less
+    than the cell. The alternative — appending the elevation the row kept — rewrites more of the user's string than
+    Trap 1 asks for.</li>
+    <li><b>The §13.10 test sketch for the flip case was half a case.</b> "Paste a UTM pair under a geographic CS, then
+    correct the CS and the warning clears" cannot happen: the geographic row reads the paste <i>latitude first</i>, so
+    the fix lands transposed and correcting the CS — which writes nothing, by Trap 2 — leaves it transposed and still
+    flagged. What actually clears it is the next keystroke: re-committing the stored string under the row's new order.
+    The test in <code>test_cwFixStationDiagnostics.cpp</code> asserts all three steps. The plan's simpler version
+    describes the <i>projected → projected</i> case (wrong UTM zone), which is covered in the model tests.</li>
+    <li><b>One existing QML assertion inverted.</b> <code>tst_MarkStationFixed.qml</code> asserted that a CS change
+    re-renders the popup field in the new order; with a stored string that is precisely the rewrite Trap 2 rejects, so
+    it now asserts the field is byte-identical and that <i>committing</i> it is what transposes the numbers.</li>
+  </ul>
+</div>
+
 <h2 id="commit9followups">14. Follow-ups raised by the Commit 9 review</h2>
 <p>Recorded from the pre-commit review of Commit 9. None is in scope for Commit 9 itself; all were left as code-untouched
 notes. Ordered by payoff-vs-cost, not by confidence.</p>
@@ -1641,7 +1703,20 @@ notes. Ordered by payoff-vs-cost, not by confidence.</p>
   it is a documented decision rather than drift.</span>
   <span class="mono-note"><b>Closed 2026-07-26 — the coupling that had teeth is gone; what remains is acceptable.</b>
   A1 removed the part that was actually wrong: <code>cwFixStationModel</code>, whose job is holding what the user typed,
-  no longer depends on cave, region, network or PROJ at all. The back-reference now lives on
+  no longer depends on cave, region or network. <b>Amended 2026-07-27 <span class="pill new">P4</span>:</b> this
+  sentence originally ended "…cave, region, network or PROJ <i>at all</i>", and Commit 11 falsified the last term.
+  <code>cwFixStationModel.h</code> now includes <code>cwCoordinateText.h</code> (for the <code>AxisOrder</code> enum in
+  <code>setCoordinateText</code>'s signature), and <code>cwCoordinateText::axisOrderFor()</code> calls into
+  <code>cwCoordinateTransform</code>, which is PROJ. <b>Three qualifications keep this from re-opening A3, and they are
+  the reason the item stays closed rather than the reason to ignore it:</b> (1) the new header does <i>not</i> transit
+  PROJ — <code>cwCoordinateText.h</code> includes only <code>Monad/Result.h</code>, <code>cwGlobals.h</code>,
+  <code>cwUnits.h</code>, <code>cwValidator.h</code>; (2) the model calls only <code>parse()</code> and
+  <code>format()</code>, neither of which touches PROJ — <code>axisOrderFor()</code> is called by the <i>callers</i>;
+  (3) it is a dependency on a <b>leaf utility passed its context as arguments</b>, the exact opposite of A3's subject,
+  which was a child reaching <i>up</i> to its owner for ambient state. <b>What it does raise is a different item:
+  <code>units</code> and <code>order</code> are ambient project context now threaded through a persistence model's
+  signature. That belongs to A5, and is filed there — do not re-litigate it here.</b>
+  The back-reference now lives on
   <code>cwFixStationDiagnosticsModel</code>, and three properties make it fine rather than merely tolerated —
   (1) <b>lifetime is strictly nested</b>: parented to the cave, destroyed with it, can never outlive it;
   (2) it is <b>read-only and compiler-enforced</b> (<code>const cwCave* const m_cave</code>), so the two failure modes
@@ -1688,7 +1763,13 @@ notes. Ordered by payoff-vs-cost, not by confidence.</p>
   metric-entered data viewed in an imperial project, and it is cosmetic, not wrong.
   <br><b>Superseded 2026-07-27 by U14 (§13.10)</b> — keeping the user's own string subsumes this: the text
   short-circuit falls out of storing the text, and the field shows what was typed rather than a prettier machine
-  rendering of it. Strike A6 when U14 lands; don't implement both.</td>
+  rendering of it. Strike A6 when U14 lands; don't implement both.
+  <br><b>Closed 2026-07-27 with U14 — but only the half about round-tripping.</b> The no-op guard no longer depends on
+  the rendering being exact, and any row whose elevation was <i>typed</i> now reads back as it was typed. What is
+  <b>still on screen</b> is the original complaint: a row with no stored string — an import, an old project, a
+  coordinate set from anywhere but this field — still renders <code>1000.6561679790026ft</code> in the cell. U14 is what
+  makes the fix cheap rather than what applies it: the cell and the editor are now separate strings, so the cell can
+  round while the editor's fallback keeps rendering exact. That is a new, smaller item, not this one.</td>
   <td><code>cwCoordinateText</code>, <code>cwFixStationModel</code>, 2 test files</td></tr>
 
   <tr><td><b>A4 — No first-class scoped view of an <code>errorModel</code></b>
@@ -1704,9 +1785,21 @@ notes. Ordered by payoff-vs-cost, not by confidence.</p>
 <h3>Refactors</h3>
 <ul>
   <li><b>R1 — Promote <code>InlineWarning</code> to a shared component + add <code>Theme.tooltipDelay</code></b>
-  (<code>FixStationPage.qml:83</code> vs <code>FixStationErrorBadge.qml:38</code>). The badge re-implements the
+  (<code>FixStationPage.qml:139</code> vs <code>FixStationErrorBadge.qml:43</code>). The badge re-implements the
   component near-verbatim (warning.svg + <code>HoverHandler</code> + <code>ToolTip{delay:300}</code> +
-  hidden-means-zero-width). See also the §11 tooltip-delay nit, which this would close.</li>
+  hidden-means-zero-width). See also the §11 tooltip-delay nit, which this would close.
+  <span class="mono-note"><b>Restated 2026-07-27 <span class="pill new">P3</span> — there are now three sites, and
+  the third breaks the shape this item assumed.</b> Commit 11 added <code>FixStationPopup.qml:294</code>: the same
+  <code>warning.svg</code> at the same <code>Theme.iconSizeButton</code>, carrying the same class of message — but
+  <b>inline and always visible</b>, next to a wrapping <code>QC.Label</code>, not on hover in a tooltip. So
+  "promote <code>InlineWarning</code>" no longer describes the refactor. The thing actually duplicated three ways is
+  <i>"warning icon + explanatory text about this fix"</i>, and it has <b>two legitimate presentations</b> — tooltip
+  where space is one cell (page rows, CavePage badge), inline where the message is the point (popup). A single
+  component with a <code>presentation</code> knob is the shape; a shared component that only does tooltips would
+  leave the popup out and quietly become the fourth copy's excuse.
+  <br><b>The popup site also carries the <code>PlainText</code> pin</b> that R6/A1 are about, so whatever component
+  absorbs these three owns the escaping decision for all of them — which is the strongest argument yet for doing R1
+  and A1 as one piece of work rather than two.</span></li>
   <li><b>R2 — CavePage's wide/narrow layouts are hand-mirrored</b> (<code>CavePage.qml:167</code> vs <code>:771</code>).
   Every stat row must be added twice; the narrow badge silently lost its <code>objectName</code>, so only the wide one is
   test-reachable. A shared <code>FixStationsStat</code>-style component would make the mirror structural.</li>
@@ -1749,10 +1842,11 @@ notes. Ordered by payoff-vs-cost, not by confidence.</p>
   <br><b>Not folded in: the <code>tr()</code> asymmetry.</b> The row message goes through
   <code>cwFixStationDiagnosticsModel::tr()</code> while these cave-level messages are raw <code>QStringLiteral</code>.
   Checked before deciding: CaveWhere has <i>no</i> translation infrastructure — no <code>.ts</code> files, no
-  <code>qt_add_translations</code>, no <code>lupdate</code>, and only 27 <code>tr()</code> calls in all of
-  <code>cavewherelib/src/*.cpp</code> across 5 files (one of them the <code>tr()</code> A1 itself added). Marking four
-  more strings would make nothing translatable; whether to ship translations at all is a project-level call, not R3's.
-  Logged as a §14 item instead.
+  <code>qt_add_translations</code>, no <code>lupdate</code>, and <b>(as of 2026-07-26)</b> only 27 <code>tr()</code>
+  calls in all of <code>cavewherelib/src/*.cpp</code> across 5 files (one of them the <code>tr()</code> A1 itself
+  added). Marking four more strings would make nothing translatable; whether to ship translations at all is a
+  project-level call, not R3's. Logged as a §14 item instead. <b>That count has since moved — see R5, which carries
+  the current figure and a constraint this note did not know about; do not cite the 27 as live.</b>
   <br><b>Test cleanup in the same pass.</b> <code>cave-&gt;errorModel()-&gt;toStringList().join(QChar(' '))</code> appeared
   nine times in <code>test_cwFixStationValidator.cpp</code>, and the new assertions were about to make it eleven with two
   spellings (some inline, some bound to a local). Extracted as <code>warningText(cave)</code> in the file's existing
@@ -1770,6 +1864,20 @@ notes. Ordered by payoff-vs-cost, not by confidence.</p>
   needed rich text; it was inheriting it. <code>HelpArea</code> gained a <code>textFormat</code> alias and the banner
   declares <code>QC.Label.PlainText</code>, joining its messages with <code>\n</code> instead of <code>&lt;br&gt;</code>.
   Nothing builds markup any more, so no escape helper was written and none is needed.
+  <br><b>Re-opened and re-closed within one commit — 2026-07-27 <span class="pill new">P2</span>. Downgrade this from
+  DONE to RECURRING.</b> Commit 11 added a brand-new error label to <code>FixStationPopup</code>, and it defaulted to
+  <code>AutoText</code> over text that quotes what the user just typed: a coordinate pasted as
+  <code>1, 2, 3 &lt;b&gt;x</code> came back rendered as markup inside the very message explaining it was rejected. The
+  review caught it and pinned <code>PlainText</code>. <b>The sentence above — "nothing builds markup any more" — was
+  true when written and stopped being true the next time somebody added a label.</b> That is the actual finding:
+  R6's fix is <i>per surface</i>, and the codebase has no mechanism that makes a new surface inherit it. There were
+  three known surfaces; there are four; the fifth will arrive the same way.
+  <br><b>The safe default is backwards, and that is the root cause.</b> <code>AutoText</code> guesses via
+  <code>Qt::mightBeRichText()</code>, so a label is rich-text-by-accident precisely when its content contains a tag —
+  i.e. exactly in the case that hurts. Every fix so far has been to state the format explicitly at one more site.
+  <b>§14 A1's structured/escaped error contract is what actually closes this</b>; until then, treat "does this new
+  label render user data, and has it stated its <code>textFormat</code>?" as a standing review question, and expect
+  U14 to add another one — it stores and re-displays the user's raw typed string by design.
   <br><b>Why <code>ErrorHelpArea</code> couldn't just be flipped wholesale.</b> The obvious move — make the error variant
   plain for everyone — breaks a real caller: <code>CloneArea.qml:132</code> shows
   <code>cwGitHostingProvider::notFoundOrAccessMessage()</code>, which appends an <code>&lt;a href&gt;</code> (already
@@ -1870,12 +1978,27 @@ notes. Ordered by payoff-vs-cost, not by confidence.</p>
   <li><b>R5 — Decide whether user-facing strings are translatable at all</b> (project-level, surfaced by R3).
   This feature ships both conventions: the row messages use <code>cwFixStationDiagnosticsModel::tr()</code>, the
   cave-level warnings use raw <code>QStringLiteral</code>. Neither is wrong today because <b>nothing is translated</b> —
-  there are no <code>.ts</code> files, no <code>qt_add_translations</code>, no <code>lupdate</code> step, and only 27
-  <code>tr()</code> calls across 5 files in <code>cavewherelib/src</code>. So the real question is not which convention
-  this feature should follow but whether CaveWhere intends to be localizable. <i>Yes</i> ⇒ a wrapping pass plus a
-  <code>.ts</code>/<code>lupdate</code> build step, and the <code>tr()</code> calls that exist become meaningful;
-  <i>no</i> ⇒ drop the stray <code>tr()</code> calls so the codebase stops implying a pipeline that isn't there.
-  Worth answering once, region-wide — not per feature, which is how the split arose.</li>
+  there are no <code>.ts</code> files, no <code>qt_add_translations</code> and no <code>lupdate</code> step. So the real
+  question is not which convention this feature should follow but whether CaveWhere intends to be localizable.
+  <i>Yes</i> ⇒ a wrapping pass plus a <code>.ts</code>/<code>lupdate</code> build step, and the <code>tr()</code> calls
+  that exist become meaningful; <i>no</i> ⇒ drop the stray <code>tr()</code> calls so the codebase stops implying a
+  pipeline that isn't there. Worth answering once, region-wide — not per feature, which is how the split arose.
+  <span class="mono-note"><b>Updated 2026-07-27 <span class="pill new">P5</span> — the count is stale, and the framing
+  missed a constraint that outranks all of it.</b> The tally above read "27 <code>tr()</code> calls across 5 files";
+  it is now <b>38 across 6</b>, and <b>11 of the 11 new ones are in <code>cwCoordinateText.cpp</code> alone</b> — a
+  single commit moved the needle by 40%, because free-form parsing needs a lot of ways to say "I couldn't read that".
+  Expect this number to keep drifting; do not re-cite it without re-running the grep.
+  <br><b>The constraint: <code>cwCoordinateText::parse()</code> is C-locale only.</b> It reads numbers via
+  <code>QString::toDouble</code> and writes them via <code>QLocale::c()</code> — deliberately, and there is a test
+  pinning it under a German default locale, because a field that refuses to read its own output is worse than one that
+  is merely untranslated. <b>The consequence is that localizing CaveWhere is not a string-wrapping exercise here.</b>
+  A user in a comma-decimal locale (de, fr, es — most of Europe) cannot paste a coordinate the way their own tools
+  emit it: <code>46,12113</code> would tokenize as two components, and <code>46,12113, -115,59902</code> as four. They
+  get a rejection message that, once translated, would be in their language and still wrong about their numbers.
+  <br><b>So R5 has a hard sub-question that must be answered first:</b> does a localized CaveWhere accept
+  locale-formatted <i>numeric input</i>, or only locale-formatted <i>prose</i>? Accepting both means the comma can no
+  longer be a separator, which changes the format #621 asked for. That is a design decision about coordinate entry,
+  not a build-system one — and it lands on U14, which is about to persist the user's typed string verbatim.</span></li>
 </ul>
 
 <h3>Known gaps left open</h3>

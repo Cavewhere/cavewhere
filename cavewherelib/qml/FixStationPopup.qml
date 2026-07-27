@@ -149,12 +149,19 @@ QC.Popup {
         //by however long the user spends typing.
         const inputCS = model.data(modelIndex, FixStationModel.InputCSRole)
         csPickerId.value = inputCS
-        coordinateFieldId.text = CoordinateText.format(
-                    model.data(modelIndex, FixStationModel.EastingRole),
-                    model.data(modelIndex, FixStationModel.NorthingRole),
-                    model.data(modelIndex, FixStationModel.ElevationRole),
-                    ProjectUnits.unitSystem,
-                    CoordinateText.axisOrderFor(inputCS))
+
+        //This field is always an editor — there is no display half to keep in
+        //project units — so it shows the user's own string whenever the row kept
+        //one, and falls back to rendering the numbers when it didn't (U14).
+        const typed = model.data(modelIndex, FixStationModel.CoordinateTextRole)
+        coordinateFieldId.text = typed !== ""
+                ? typed
+                : CoordinateText.format(
+                      model.data(modelIndex, FixStationModel.EastingRole),
+                      model.data(modelIndex, FixStationModel.NorthingRole),
+                      model.data(modelIndex, FixStationModel.ElevationRole),
+                      ProjectUnits.unitSystem,
+                      CoordinateText.axisOrderFor(inputCS))
     }
 
     // The derived warnings, unlike the coordinate, change without anyone

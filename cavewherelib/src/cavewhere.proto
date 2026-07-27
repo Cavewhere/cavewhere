@@ -63,6 +63,14 @@ message DoubleVector3d {
 }
 
 message FixStation {
+    // Which axis coordinateText leads with. The numbers alone can't say — a
+    // geographic system is written latitude first, a projected one easting
+    // first — so the order the text was read under travels with it.
+    enum AxisOrder {
+        EastingNorthing = 0;
+        LatitudeLongitude = 1;
+    }
+
     optional string id = 1;
     optional string stationName = 2;
     optional string inputCS = 3;
@@ -71,6 +79,14 @@ message FixStation {
     optional double elevation = 6;
     optional double horizontalVariance = 7;
     optional double verticalVariance = 8;
+
+    // What the user typed this coordinate as, kept so an editor can re-offer
+    // their own string instead of a machine rendering of it. Display state
+    // only — the three numbers above stay authoritative. Absent for every fix
+    // written before this field, and for every fix imported rather than typed,
+    // which is not a migration: those rows render from their numbers.
+    optional string coordinateText = 9;
+    optional AxisOrder coordinateTextAxisOrder = 10;
 }
 
 message ExternalCenterline {

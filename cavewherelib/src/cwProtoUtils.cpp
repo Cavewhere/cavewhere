@@ -821,6 +821,13 @@ void saveFixStation(CavewhereProto::FixStation* protoFix, const cwFixStation& fi
     protoFix->set_elevation(fix.elevation());
     protoFix->set_horizontalvariance(fix.horizontalVariance());
     protoFix->set_verticalvariance(fix.verticalVariance());
+    if (!fix.coordinateText().isEmpty()) {
+        saveString(protoFix->mutable_coordinatetext(), fix.coordinateText());
+        protoFix->set_coordinatetextaxisorder(
+            fix.coordinateTextAxisOrder() == cwCoordinateText::LatitudeLongitude
+                ? CavewhereProto::FixStation_AxisOrder_LatitudeLongitude
+                : CavewhereProto::FixStation_AxisOrder_EastingNorthing);
+    }
 }
 
 cwFixStation fromProtoFixStation(const CavewhereProto::FixStation& protoFix)
@@ -842,6 +849,14 @@ cwFixStation fromProtoFixStation(const CavewhereProto::FixStation& protoFix)
     fix.setElevation(protoFix.elevation());
     fix.setHorizontalVariance(protoFix.horizontalvariance());
     fix.setVerticalVariance(protoFix.verticalvariance());
+    //After the components, which each clear the text (see cwFixStation).
+    if (protoFix.has_coordinatetext()) {
+        fix.setCoordinateText(
+            QString::fromStdString(protoFix.coordinatetext()),
+            protoFix.coordinatetextaxisorder() == CavewhereProto::FixStation_AxisOrder_LatitudeLongitude
+                ? cwCoordinateText::LatitudeLongitude
+                : cwCoordinateText::EastingNorthing);
+    }
     return fix;
 }
 

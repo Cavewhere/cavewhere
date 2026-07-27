@@ -90,6 +90,10 @@ public:
         //! says nothing about elevation, so a caller must leave the one it has
         //! alone rather than reading this zero as an instruction.
         bool hasElevation = false;
+        //! Whether that third component spelled out its own unit. A bare
+        //! elevation means "in the project's units", which is a *different*
+        //! coordinate once the project's unit system changes — see textToStore().
+        bool hasElevationUnit = false;
     };
 
     explicit cwCoordinateText(QObject* parent = nullptr) : QObject(parent) {}
@@ -119,6 +123,21 @@ public:
                                       double elevationInMeters,
                                       cwUnits::UnitSystem units,
                                       AxisOrder order);
+
+    //! The form of \a text to keep as what the user typed (U14): trimmed, and
+    //! with the elevation's unit spelled out when it was written bare.
+    //! \a coordinate is what parse() made of \a text.
+    //!
+    //! Appending the unit is the only edit this makes to the user's own words,
+    //! and it exists because a bare elevation doesn't survive a change of
+    //! project units: "46.1, -115.6, 304" stored verbatim in a metric project
+    //! re-reads as 304 ft once the project goes imperial, moving the fix 213 m
+    //! the next time the string is accepted unchanged. Nothing else about the
+    //! text can change meaning that way — the horizontal components carry their
+    //! coordinate system's own units, which no setting here can flip.
+    static QString textToStore(const QString& text,
+                               const Coordinate& coordinate,
+                               cwUnits::UnitSystem units);
 
     //! The unit a bare elevation is read in, and the one format() writes.
     static cwUnits::LengthUnit elevationUnit(cwUnits::UnitSystem units)

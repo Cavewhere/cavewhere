@@ -69,6 +69,7 @@ QVariant cwFixStationModel::data(const QModelIndex& index, int role) const
     case HorizontalVarianceRole: return fix.horizontalVariance();
     case VerticalVarianceRole:   return fix.verticalVariance();
     case IdRole:                 return fix.id();
+    case CoordinateTextRole:     return fix.coordinateText();
     default:                     return QVariant();
     }
 }
@@ -81,6 +82,7 @@ bool cwFixStationModel::setData(const QModelIndex& index, const QVariant& value,
 
     cwFixStation& fix = m_fixStations[index.row()];
     bool changed = false;
+    const bool hadCoordinateText = !fix.coordinateText().isEmpty();
 
     switch (role) {
     case StationNameRole: {
@@ -152,7 +154,13 @@ bool cwFixStationModel::setData(const QModelIndex& index, const QVariant& value,
     }
 
     if (changed) {
-        emit dataChanged(index, index, {role});
+        QList<int> roles = {role};
+        //Writing a component drops the stored coordinate text (see
+        //cwFixStation), so a view offering that text has to hear about it.
+        if (hadCoordinateText && fix.coordinateText().isEmpty()) {
+            roles.append(CoordinateTextRole);
+        }
+        emit dataChanged(index, index, roles);
     }
     return changed;
 }
@@ -167,7 +175,8 @@ QHash<int, QByteArray> cwFixStationModel::roleNames() const
         {ElevationRole,          "elevation"},
         {HorizontalVarianceRole, "horizontalVariance"},
         {VerticalVarianceRole,   "verticalVariance"},
-        {IdRole,                 "id"}
+        {IdRole,                 "id"},
+        {CoordinateTextRole,     "coordinateText"}
     };
 }
 
@@ -222,17 +231,9 @@ QString cwFixStationModel::setCoordinateText(int row,
         return QString();
     }
 
-    //Text the field would have rendered anyway is a no-op, checked before the
-    //numbers because the numbers can't see it: the elevation crosses a unit
-    //conversion in each direction, and (meters/0.3048)*0.3048 differs from
-    //meters for about an eighth of all doubles. Without this, opening an
-    //imperial project's coordinate cell and leaving it untouched would rewrite
-    //the fix, dirty the project and re-solve the line plot.
-    const cwFixStation& current = m_fixStations.at(row);
-    if (text == cwCoordinateText::format(current.easting(), current.northing(),
-                                         current.elevation(), units, order)) {
-        return QString();
-    }
+    //Copied rather than referenced: writing the row below detaches the list
+    //when it is shared, which would leave a reference into the old block.
+    const cwFixStation current = m_fixStations.at(row);
 
     const auto result = cwCoordinateText::parse(text, units, order);
     if (result.hasError()) {
@@ -240,25 +241,71 @@ QString cwFixStationModel::setCoordinateText(int row,
     }
 
     const cwCoordinateText::Coordinate coordinate = result.value();
-    cwFixStation& fix = m_fixStations[row];
+    const QString typed = cwCoordinateText::textToStore(text, coordinate, units);
+
+    //The row's own string handed straight back — the editor opens on it, so this
+    //is the commonest commit there is. Compared in stored form, which is what
+    //makes re-typing "304" against a stored "304m" a no-op as well: the unit was
+    //spelled out when the string was first kept, not added by an edit. Identity
+    //has to include the axis order, though: once the row's CS flips between
+    //geographic and projected the same text means a different coordinate, and
+    //re-committing it byte-identical is exactly the gesture that corrects it.
+    if (typed == current.coordinateText() && order == current.coordinateTextAxisOrder()) {
+        return QString();
+    }
+
+    //Text that reads back as what this row already renders is the machine's
+    //string rather than the user's, and a row that stores none renders exactly
+    //that anyway — so keep none. This is also what makes opening a cell and
+    //leaving it free: the numbers are left alone instead of being round-tripped
+    //through a unit conversion, and m→ft→m is not an identity in IEEE
+    //arithmetic (it lands one ulp out for about an eighth of all doubles).
+    const bool rendersRowAsIs =
+        (typed == cwCoordinateText::format(current.easting(), current.northing(),
+                                           current.elevation(), units, order));
 
     //Two components say nothing about elevation — that is the shape a coordinate
     //copied from a map arrives in — so the one already on the fix stands. To
     //clear it the user types it: "46.2, -115.6, 0".
-    const double elevation = coordinate.hasElevation ? coordinate.elevation : fix.elevation();
+    const double elevation = coordinate.hasElevation ? coordinate.elevation
+                                                     : current.elevation();
 
-    if (fix.easting() == coordinate.easting
-        && fix.northing() == coordinate.northing
-        && fix.elevation() == elevation) {
+    const bool componentsChanged = !rendersRowAsIs
+                                   && (current.easting() != coordinate.easting
+                                       || current.northing() != coordinate.northing
+                                       || current.elevation() != elevation);
+
+    //The pair as cwFixStation will actually hold it — an empty text takes the
+    //order back to the default with it — so this compares what would be stored
+    //against what is stored, rather than restating that normalization here.
+    const QString keptText = rendersRowAsIs ? QString() : typed;
+    const cwCoordinateText::AxisOrder keptOrder =
+        keptText.isEmpty() ? cwCoordinateText::EastingNorthing : order;
+    const bool textChanged = keptText != current.coordinateText()
+                             || keptOrder != current.coordinateTextAxisOrder();
+
+    if (!componentsChanged && !textChanged) {
         return QString();
     }
 
-    fix.setEasting(coordinate.easting);
-    fix.setNorthing(coordinate.northing);
-    fix.setElevation(elevation);
+    cwFixStation& fix = m_fixStations[row];
+    QList<int> roles;
+    if (componentsChanged) {
+        fix.setEasting(coordinate.easting);
+        fix.setNorthing(coordinate.northing);
+        fix.setElevation(elevation);
+        roles = {EastingRole, NorthingRole, ElevationRole};
+    }
+
+    //After the components, never before: each of those setters drops the stored
+    //text, which is the point of them (see cwFixStation).
+    fix.setCoordinateText(keptText, order);
+    if (textChanged) {
+        roles.append(CoordinateTextRole);
+    }
 
     const QModelIndex changed = index(row);
-    emit dataChanged(changed, changed, {EastingRole, NorthingRole, ElevationRole});
+    emit dataChanged(changed, changed, roles);
     return QString();
 }
 

@@ -146,6 +146,55 @@ TEST_CASE("cwCoordinateText reads a bare elevation in the project's units",
         CHECK(parsed("46.12113, -115.59902, 304ft", cwUnits::Metric).elevation
               == tight(304.0 * kFeetToMeters));
     }
+
+    SECTION("and says which of the two it was") {
+        //Whether the unit was written or inferred is the difference between a
+        //string that keeps its meaning and one that changes it when the project
+        //flips units — see textToStore().
+        CHECK_FALSE(parsed("46.12113, -115.59902, 304").hasElevationUnit);
+        CHECK(parsed("46.12113, -115.59902, 304m").hasElevationUnit);
+        CHECK(parsed("46.12113, -115.59902, 304 ft").hasElevationUnit);
+        CHECK_FALSE(parsed("46.12113, -115.59902").hasElevationUnit);
+    }
+}
+
+TEST_CASE("cwCoordinateText spells out the unit a bare elevation was read in",
+          "[FixStation][cwCoordinateText]") {
+    //U14's Trap 1. "304" means "304 in the project's units" at the moment it is
+    //typed; stored verbatim it silently becomes 304 ft once the project turns
+    //imperial. Appending the unit that was actually resolved is the only edit
+    //this feature makes to the user's own words.
+    const auto stored = [](const QString& text, cwUnits::UnitSystem units) {
+        return cwCoordinateText::textToStore(text, parsed(text, units), units);
+    };
+
+    SECTION("a bare elevation gets the project's unit") {
+        CHECK(stored("46.12113, -115.59902, 304", cwUnits::Metric)
+              == QStringLiteral("46.12113, -115.59902, 304m"));
+        CHECK(stored("46.12113, -115.59902, 304", cwUnits::Imperial)
+              == QStringLiteral("46.12113, -115.59902, 304ft"));
+    }
+
+    SECTION("text that already says so is left as it was written") {
+        //Including the unit the user chose rather than the project's: the point
+        //is to keep their string, not to restate it.
+        CHECK(stored("46.12113, -115.59902, 304ft", cwUnits::Metric)
+              == QStringLiteral("46.12113, -115.59902, 304ft"));
+        CHECK(stored("46.12113, -115.59902, 304 m", cwUnits::Imperial)
+              == QStringLiteral("46.12113, -115.59902, 304 m"));
+    }
+
+    SECTION("a two-component paste has no elevation to describe") {
+        CHECK(stored("46.12113, -115.59902", cwUnits::Imperial)
+              == QStringLiteral("46.12113, -115.59902"));
+    }
+
+    SECTION("surrounding whitespace goes, so a re-commit matches what was stored") {
+        CHECK(stored("  46.12113, -115.59902, 304m  ", cwUnits::Metric)
+              == QStringLiteral("46.12113, -115.59902, 304m"));
+        CHECK(stored("  46.12113, -115.59902, 304  ", cwUnits::Metric)
+              == QStringLiteral("46.12113, -115.59902, 304m"));
+    }
 }
 
 TEST_CASE("cwCoordinateText accepts the separators a paste actually arrives with",
