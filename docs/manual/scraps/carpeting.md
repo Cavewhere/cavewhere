@@ -10,8 +10,8 @@ related: [../concepts/why-cavewhere.md, ../concepts/glossary.md, ../view-3d/the-
 
 ## Why / when you need this
 
-![A 3D view of a cave: hand-drawn passage sketches morphed and draped as textured carpets over the red survey line, across two levels.](../images/scraps-carpet-orbit-poster.png)
-*The payoff. Flat sketches morphed onto the 3D survey and draped like carpets.
+![A 3D view of a cave: hand-drawn passage sketches morphed and carpeted over the red survey line, their texture visible across two levels.](../images/scraps-carpet-orbit-poster.png)
+*The payoff. Flat sketches morphed onto the 3D survey and carpeted over the line.
 Everything in this chapter builds toward it.*
 
 A surveyor's sketch is a flat drawing of a passage that twists, climbs, and
@@ -124,8 +124,8 @@ Building a carpet is 4 tasks, each on its own page:
 4. **[Tune the warping settings](warping-settings.md)**: grid density and
    smoothing.
 
-The carpets appear in the [3D view](../view-3d/the-3d-view.md) draped over the
-survey line plot, and keyword layers hide and show them.
+The carpets appear in the [3D view](../view-3d/the-3d-view.md) over the survey
+line plot, and keyword layers hide and show them.
 
 ## Advanced: recompute and visibility toggles
 

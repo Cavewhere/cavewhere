@@ -109,7 +109,7 @@ projected profile), tells CaveWhere how to project the drawing.
 ### Carpeting
 CaveWhere's name for its signature capability: morphing a flat [scrap](#scrap)
 into 3D by deforming it so its drawn [stations](#station) land on the real 3D
-[shot](#shot) positions, draping the sketch over the actual passage like a
+[shot](#shot) positions, laying the sketch over the actual passage like a
 carpet. The same process handles [LiDAR notes](#lidar-note) and photogrammetry
 models, which carpet into the cave model just like sketched scraps. Also called
 *warping* or *morphing*. See

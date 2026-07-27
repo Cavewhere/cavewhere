@@ -106,7 +106,7 @@ A **[scrap](glossary.md#scrap)** covers one piece of that drawing,
 [digitized](../scraps/digitize-a-scrap.md) into an outline you trace and tie to the
 stations inside it. One note usually splits into several scraps. The scrap is where
 the drawing meets the survey: CaveWhere [carpets](glossary.md#carpeting) it onto
-the 3D shots so the sketch drapes over the real passage. Each scrap also carries
+the 3D shots so the sketch follows the real passage. Each scrap also carries
 its own [type](../scraps/scrap-types.md), because the projection describes that
 drawing and not the whole trip. CaveWhere handles 3 of them today (plan, running
 profile, projected profile); cross-sections remain a known limitation.

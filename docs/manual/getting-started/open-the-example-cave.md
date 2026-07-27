@@ -20,7 +20,7 @@ scraps are already morphed onto a 3D model. This manual's screenshots all come
 from it, so opening it gives you the same data the rest of these pages describe.
 See below.
 
-![A 3D view of Phake Cave 3000: hand-drawn passage sketches morphed and draped as textured carpets over the red survey line, its two levels and the vertical connection between them visible in three dimensions.](../images/scraps-carpet-orbit-poster.png)
+![A 3D view of Phake Cave 3000: hand-drawn passage sketches morphed and carpeted over the red survey line, its two levels and the vertical connection between them visible in three dimensions.](../images/scraps-carpet-orbit-poster.png)
 *Phake Cave 3000 once you have downloaded it and started orbiting.*
 
 ## On macOS and Windows: click to open

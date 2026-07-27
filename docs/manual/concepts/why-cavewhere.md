@@ -50,8 +50,8 @@ changes.
 CaveWhere's signature feature, *[carpeting](glossary.md#carpeting)*, morphs
 those sketches into 3D. You digitize pieces of a sketch as
 [scraps](glossary.md#scrap), tie them to survey [stations](glossary.md#station),
-and CaveWhere deforms each scrap onto the 3D survey line so the drawing drapes
-over the passage like a carpet. The model comes out of the drawings you already
+and CaveWhere deforms each scrap onto the 3D survey line so the drawing carpets
+the passage. The model comes out of the drawings you already
 make in the cave.
 
 Carpeting doesn't always come out clean. Sometimes a plan scrap pulls in
