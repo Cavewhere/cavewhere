@@ -395,26 +395,26 @@ public:
     template&lt;class T&gt; void add(T* u, QList&lt;cwUpdatable*&gt; dependsOn = {}); // register + connect + declare edges
     bool needsUpdate() const;           // any registered updatable is Dirty
 public slots:
-    void updateNow();                   // bump the generation, build the future DAG, observe it
+    void updateNow();                   // give up on the pass in flight, build its replacement, observe it
     void setAutomaticUpdate(bool on);   // toggling ON flushes everything dirty
 private:
     void onChildStateChanged(cwUpdatable* u); // step aside if a cascade runs; else honour automaticUpdate()
-    QFuture&lt;void&gt; startCascade(quint64 generation);  // one memoized node per pipeline
-    void finishCascade(quint64 generation);          // no-op if a newer cascade superseded this one
-    QFuture&lt;void&gt; cascadeNode(cwUpdatable*, quint64, QHash&lt;...&gt;&amp; built, QSet&lt;...&gt;&amp; building);
-    QFuture&lt;void&gt; driveToClean(cwUpdatable*, quint64);  // Clean skip / Working wait / Dirty run
-    QFuture&lt;void&gt; waitForRun(cwUpdatable*, const QFuture&lt;void&gt;&amp;, quint64);
+    void finishCascade();               // clear the running flag, re-apply policy; skipped if the pass was given up on
     bool cascadeRunning() const;
-    void dropRunningCascade();          // abandon by generation when a registered pipeline is destroyed
+    void dropRunningCascade();          // abandon() then deleteLater() the pass in flight
     void flushAfterCascade();           // re-apply policy to anything dirtied after its own node finished
-    quint64 m_cascadeGeneration = 0;
+    QPointer&lt;cwUpdateCascade&gt; m_cascade;
 };</code></pre>
-  <p class="note"><b>Superseded twice.</b> This sketch originally showed the <code>m_forcing</code> run-until-settled
+  <p class="note"><b>Superseded three times.</b> This sketch originally showed the <code>m_forcing</code> run-until-settled
   latch (<code>anyWorking()</code>, <code>clearForcingIfSettled()</code>), deleted when the Stage-2 task tree was adopted
   2026-07-25. It then showed that tree's surface (<code>buildCascadeRecipe()</code>, <code>taskTreeRunning()</code>,
   <code>m_taskTreeRunner</code>), all of which was deleted 2026-07-26 when the cascade moved to a pure AsyncFuture future
-  DAG &mdash; see "TaskTree removed" below. The shape above is what the coordinator actually has: no recipe, no runner, and
-  no depth layering. Ordering is the dependency edges themselves, and supersede/abandon is a generation bump.</p>
+  DAG &mdash; see "TaskTree removed" below. It then showed the graph itself (<code>startCascade</code>,
+  <code>cascadeNode</code>, <code>driveToClean</code>, <code>waitForRun</code>, and the <code>quint64 generation</code>
+  threaded through them, plus <code>m_cascadeGeneration</code>), all of which moved out to <code>cwUpdateCascade</code>
+  when the DAG was extracted 2026-07-26 &mdash; see "Extract the cascade DAG" below. The shape above is what the
+  coordinator actually has: <b>policy only</b>. Ordering is the dependency edges themselves, and it is the cascade that
+  follows them; supersede/abandon is dropping the pass object, not bumping a counter.</p>
   <p>It owns the <b>policy</b> (the <code>automaticUpdate</code> flag, persisted to the same QSettings key so existing
   prefs migrate) <em>and</em> the <b>aggregation</b>. Auto-on: a child going dirty runs immediately. Auto-off:
   accumulate, and expose <code>needsUpdate</code>.</p>
@@ -655,11 +655,14 @@ Running       : !taskManagerModel.isIdle
   <code>onSetup</code> dereference freed memory. Latent today: the managers are children of <code>Project</code> (<code>cwRootData.cpp:113/119/127</code>),
   the coordinator is a child of <code>cwRootData</code> (line 208), <code>Project</code> is created first (line 81) so it dies first, and nothing deletes
   <code>Project</code> during a session. Guard is one line — <code>m_taskTreeRunner-&gt;cancel()</code> in the destroyed handler.
-  <b>MECHANISM REPLACED 2026-07-26 (hazard unchanged in kind).</b> <code>cwUpdatableTask</code> is gone; the raw <code>cwUpdatable*</code> now lives in the
-  coordinator's own continuation lambdas (<code>cascadeNode</code>'s dependency handler, <code>waitForRun</code>'s completion handler), which survive
-  event-loop turns. The guard is <b>not</b> a cancel: a canceled continuation still runs its body, and it is exactly the one holding the destroyed pointer.
-  Instead <code>dropRunningCascade()</code> bumps <code>m_cascadeGeneration</code>, and <code>driveToClean()</code> compares the generation
-  <em>before</em> dereferencing the pipeline &mdash; so a stale continuation returns without touching it. Same three-pipeline latency argument as above still
+  <b>MECHANISM REPLACED TWICE (hazard unchanged in kind).</b> <code>cwUpdatableTask</code> is gone; the raw <code>cwUpdatable*</code> lives in the
+  continuation lambdas (<code>buildNode</code>'s dependency handler, <code>waitForRun</code>'s completion handler), which survive event-loop turns, and
+  since the DAG was extracted 2026-07-26 those lambdas belong to <code>cwUpdateCascade</code> rather than the coordinator &mdash; along with the pipeline
+  <em>snapshot</em> the pass took at construction, which is the other holder of raw pointers. The guard is <b>not</b> a cancel: a canceled continuation still
+  runs its body, and it is exactly the one holding the destroyed pointer. There are now two defenses, and they are different in kind. <b>Structural:</b> every
+  continuation is bound to the pass as its context object, so destroying the pass drops them unrun. <b>Explicit:</b> <code>dropRunningCascade()</code> calls
+  <code>abandon()</code>, and <code>driveToClean()</code> checks <code>m_abandoned</code> <em>before</em> dereferencing the pipeline &mdash; which is what
+  covers the window where the pass cannot yet be deleted, because it was given up on from inside its own walk. Same three-pipeline latency argument as above still
   makes it latent in production. <b>But see H7:</b> the generation is bumped on <code>destroyed()</code>, which is <em>too late</em> for a pipeline that pumps
   an event loop in its destructor body &mdash; that gap is confirmed by test. <b>CLOSED 2026-07-26 by H7's fix, from the other side:</b> the generation is still
   bumped too late, but it no longer has to be early. A stale continuation reaching <code>driveToClean()</code> now finds the pipeline reporting
@@ -701,8 +704,11 @@ Running       : !taskManagerModel.isIdle
   <code>dropRunningCascade()</code> on <code>QObject::destroyed</code>, which <code>~QObject</code> emits <em>after</em> the derived destructor body — but all
   three pipelines pump their nested event loop <em>in</em> that body (<code>cwLinePlotManager.cpp:133-138</code> → <code>:389</code>,
   <code>cwScrapManager.cpp:111-115</code> → <code>:1712</code>, <code>cwNoteLiDARManager.cpp:143-147</code> → <code>:351</code>). So a queued node
-  continuation delivered inside that loop still passes <code>driveToClean()</code>'s generation check and calls <code>run()</code> on a pipeline that is
-  already dying. <b>Confirmed</b> by "A pipeline destroyed with a continuation queued isn't driven while it dies" in
+  continuation delivered inside that loop still passes the pass's own staleness guard <span class="hist">(<code>driveToClean()</code>'s generation check at
+  the time; its <code>m_abandoned</code> check since the DAG was extracted 2026-07-26 &mdash; same position, same role, armed from the same place, so the gap
+  is identical)</span> and calls <code>run()</code> on a pipeline that is already dying. <b>The loop-level rule is what makes this window real rather than a
+  test artifact:</b> a <code>DeferredDelete</code> posted at loop level <em>N</em> is not delivered inside a nested loop at <em>N+1</em>, so a pass dropped
+  from a destructor that pumps cannot be destroyed there &mdash; which is exactly why <code>abandon()</code> has to exist beside the deletion. <b>Confirmed</b> by "A pipeline destroyed with a continuation queued isn't driven while it dies" in
   <code>testcases/test_cwUpdateCoordinator.cpp</code>, carried as <code>[!shouldfail]</code>: a fake pipeline that pumps in its destructor body records
   <code>run()</code> being called after destruction began. It is a tripwire — Catch2 fails a <code>!shouldfail</code> test that starts passing, so the guard
   landing will flag it for removal. Consequence for the fix: the guard has to be armed <em>earlier</em> than <code>destroyed()</code> — teardown must be
@@ -791,6 +797,14 @@ Running       : !taskManagerModel.isIdle
   automatic update on, and the solve restarted from zero. The pre-adoption <code>updateNow()</code> drove only <code>Dirty</code>, so this was a regression
   the latch had not had. <code>start()</code> now drives only <code>Dirty</code> and otherwise attaches and waits; new test "A pipeline already working when
   the cascade starts isn't restarted", negative-checked.
+  <b>Structural follow-up (added 2026-07-27 by review, no deadline): give <code>cwUpdatable</code> one "drive me correctly" entry point.</b> The fix above put
+  the Clean-skip / Working-attach / Dirty-run branch in <code>cwUpdateCascade::driveToClean()</code>, and that is now the <em>only</em> correct version of it
+  in the tree. Five force paths still call bare <code>run()</code>, which for the real managers means <code>Restarter::restart()</code> on work already in
+  flight &mdash; exactly the defect above, one layer out: <code>cwLinePlotManager::rerunSurvex</code>, <code>cwScrapManager::updateAllScraps</code>,
+  <code>cwNoteLiDARManager::updateAllLiDAR</code>, <code>CavernOutputPage.qml:45</code>, <code>FileMenu.qml:151</code>. A non-virtual
+  <code>cwUpdatable::runIfNeeded()</code> returning the run's future would hold the branch once and stop the cascade being its keeper. The extraction is what
+  made this visible: the switch is now the entire payload of a separate class, so its not being reusable is conspicuous. Pairs naturally with the scoped-force
+  commit below, which would otherwise duplicate the branch a sixth time.
   <b>(2) <code>withLog()</code> shipped unconditional debug output.</b> It has no logging category of its own (plain <code>qDebug</code>, confirmed in
   <code>qtasktree.cpp</code>), so a released CaveWhere printed two lines per pipeline per cascade. It is now attached only when
   <code>cw.updateCascade</code> is at debug level, matching the house <code>cw.*</code> convention — the ordering trace that produced the evidence above is
@@ -923,10 +937,14 @@ Running       : !taskManagerModel.isIdle
 
   <p><b>Also recorded 2026-07-26 (no deadline).</b>
   <b>(1) <code>cwUpdatable</code> should carry a QObject identity</b> — beside H2. The contract is a plain abstract class, so lifetime is <em>inexpressible</em>
-  for any holder outside the coordinator: <code>cwUpdatableTask</code> keeps a raw <code>cwUpdatable*</code> and the recipe's setup lambda captures one for the
-  whole run, and neither can watch destruction. <code>add()</code>'s destroyed handler can only scrub its own containers, which is why the guard had to be the
-  blunt <code>dropRunningCascade()</code>. An <code>asQObject()</code> on the interface (or <code>QPointer</code> storage) would make it expressible, and would
-  also retire the <code>dynamic_cast&lt;const QObject*&gt;</code> in <code>pipelineName()</code>. Blast radius: the interface, three managers, coordinator, task.
+  for any holder outside the coordinator. Since the DAG was extracted 2026-07-26 that holder is <code>cwUpdateCascade</code>, and it keeps raw
+  <code>cwUpdatable*</code> two ways: the graph <em>snapshot</em> taken at construction (<code>m_pipelines</code>, <code>m_dependencies</code>) and the
+  continuation lambdas that outlive event-loop turns. Neither can watch destruction. <code>add()</code>'s destroyed handler can only scrub its own containers,
+  never the pass's copy, which is why the guard has to be the blunt all-or-nothing <code>dropRunningCascade()</code>: the pass gives up on every pipeline
+  because it cannot tell which one died. An <code>asQObject()</code> on the interface (or <code>QPointer</code> storage in the snapshot) would make it
+  expressible, and would let a pass skip the dead node and carry on rather than discarding work already in flight. It would also retire the
+  <code>dynamic_cast&lt;const QObject*&gt;</code> in <code>pipelineName()</code>, now in <code>cwUpdateCascade.cpp</code>. Blast radius: the interface, three
+  managers, coordinator, cascade.
   <b>(2) The node's Dirty re-drive was recursion, not a spin — FIXED by D1, 2026-07-26</b> — beside H4. It used to be that on a Dirty transition
   <code>cwUpdatableTask</code> called <code>update()</code> again, and because the managers emit <code>updateStateChanged()</code> <em>synchronously</em>
   inside it, the chain <code>update() → onChildStateChanged → pipelineStateChanged → onPipelineStateChanged → update()</code> was direct recursion: a pipeline
@@ -970,8 +988,12 @@ Running       : !taskManagerModel.isIdle
   automatic update off, <b>Rerun</b> solves, dirties the scraps, and nothing recomputes them — F1's "one press resolves the chain" does not apply to that
   button. This is more than a QML redirect, which is why it is its own commit: the coordinator has no <em>scoped</em> force API. <code>updateNow()</code> runs
   everything dirty, whereas Rerun means "force this one pipeline even if it is clean, then let the declared edges carry its dependents". That needs
-  <code>updateNow(cwUpdatable*)</code> running the sub-DAG rooted at one node (with the root forced to <code>SetupResult::Continue</code>), plus tests. Blast
-  radius: <code>cwUpdateCoordinator.{h,cpp}</code>, the two QML call sites, <code>cwRootData</code>'s QML surface. Natural pairing: CP6's footer <b>Run</b>,
+  <code>updateNow(cwUpdatable*)</code> running the sub-DAG rooted at one node, plus tests. <span class="hist">This originally prescribed forcing the root to
+  <code>SetupResult::Continue</code>; that is a QtTaskTree type and TaskTree is gone.</span> Against the extracted DAG the shape is instead a
+  <code>cwUpdateCascade</code> built over the sub-graph rooted at that node, with the root driven unconditionally rather than read through
+  <code>driveToClean()</code>'s Clean-skip &mdash; so <b>the graph half of this commit now lands in <code>cwUpdateCascade</code>, not the coordinator</b>,
+  which keeps only the decision to start it. Blast radius: <code>cwUpdateCascade.{h,cpp}</code>, <code>cwUpdateCoordinator.{h,cpp}</code>, the two QML call
+  sites, <code>cwRootData</code>'s QML surface, and both test suites. Natural pairing: CP6's footer <b>Run</b>,
   which is the trigger that makes the scoped API worth having.</p>
 
   <p><b>DAG re-arch — <code>QBarrier</code> makes a true DAG expressible (found 2026-07-25).</b> The obvious reading of TaskTree is that nested
@@ -1044,7 +1066,10 @@ Running       : !taskManagerModel.isIdle
   over per-key restarts, which is most of what batching already provides.</p>
 
   <h4 style="margin:18px 0 4px;font-size:14px">Invariants the AsyncFuture cascade introduced (added 2026-07-26)</h4>
-  <p>Four things the code now depends on that are not obvious from reading it, recorded because each one is easy to "simplify" back into a bug.</p>
+  <p>Four things the code now depends on that are not obvious from reading it, recorded because each one is easy to "simplify" back into a bug.
+  <b>Where they live:</b> <code>waitForRun()</code>, <code>completeWith()</code>, <code>joinNodes()</code>, <code>driveToClean()</code> and
+  <code>pipelineName()</code> all moved from <code>cwUpdateCoordinator.cpp</code> to <code>cwUpdateCascade.cpp</code> when the DAG was extracted
+  2026-07-26; the names below are unchanged, only the file is.</p>
   <p><b>(1) A pipeline's run future is shared, and no consumer may cancel it.</b> <code>run()</code> and <code>currentRun()</code> hand out the pipeline's own
   <code>QPromise</code> future, and AsyncFuture's <code>observe().context()</code> pushes a cancel back up the chain it observed &mdash; so one node giving up
   would cancel the run itself, and with it every other waiter's work. This is why <code>waitForRun()</code> observes
@@ -1058,29 +1083,78 @@ Running       : !taskManagerModel.isIdle
   below for why the naive version of that breaks things.</p>
   <p><b>(2) "Already finished &rArr; complete synchronously" is correctness, not optimization.</b> <code>completeWith()</code> and
   <code>joinNodes()</code>'s all-settled short-circuit exist because <code>Deferred::complete(QFuture)</code> and <code>combine()</code> always install a
-  <code>QFutureWatcher</code>, even for a finished input &mdash; and <code>updateNow()</code>'s <code>cascade.isFinished()</code> branch depends on that
+  <code>QFutureWatcher</code>, even for a finished input &mdash; and <code>updateNow()</code>'s <code>pass.isFinished()</code> branch depends on that
   short-circuit reaching it. A cascade that found nothing to do <b>must</b> end synchronously: otherwise it is still "running" for one event-loop turn, and an
   edit arriving in that turn is deferred by <code>onChildStateChanged()</code> to a cascade that has already ended, so the edit never runs. This regression was
   real and was caught only by a <code>cwLinePlotManager</code> test, never by a coordinator test; there is now a coordinator case for it ("A cascade with
   nothing to do ends before the next edit arrives", negative-checked &mdash; removing the shortcut gives <code>updateCount</code> 0 vs 1).</p>
-  <p><b>(3) Supersede and abandon are one mechanism: the generation counter.</b> <code>m_cascadeGeneration</code> covers pressing Run twice, a registered
-  pipeline being destroyed, and the coordinator's own destruction. It is deliberately <em>not</em> a cancel: a canceled continuation still runs its body, and
-  it is exactly the one that would read the pipeline the cascade was dropped because of. <code>driveToClean()</code>'s generation compare, placed before any
-  dereference, is what makes a stale continuation a no-op &mdash; which makes it load-bearing for memory safety, not just tidiness.</p>
+  <p><b>(3) Supersede and abandon are one mechanism, and it takes two halves: <code>abandon()</code> <em>then</em> <code>deleteLater()</code>.</b>
+  <span class="hist">This was the generation counter, <code>m_cascadeGeneration</code>, until the DAG was extracted 2026-07-26.</span> It covers the same
+  three cases &mdash; pressing Run twice, a registered pipeline being destroyed, and the coordinator's own destruction &mdash; and is still deliberately
+  <em>not</em> a cancel: a canceled continuation still runs its body, and it is exactly the one that would read the pipeline the pass was dropped because of.
+  Destroying the cascade is what drops those queued continuations unrun, since each is bound to it as its context object. But destruction alone is not
+  enough, because a pass can be given up on <em>while its own walk is still on the stack</em> &mdash; driving a pipeline can destroy one, which lands in
+  <code>dropRunningCascade()</code> &mdash; so the object has to outlive that frame. <code>abandon()</code> is what keeps it inert while it does:
+  <code>driveToClean()</code>'s <code>if(m_abandoned)</code> check, placed before any dereference, is what makes the rest of the walk a no-op over a snapshot
+  that may now hold a freed pointer &mdash; load-bearing for memory safety, not tidiness. <b>Both halves are pinned by test:</b> removing the check
+  <em>segfaults</em> "A pass given up on from inside its own walk stops reading its snapshot". <code>updateNow()</code> checks
+  <code>isAbandoned()</code> on <em>both</em> its completion paths for the same reason &mdash; a pass given up on must not report itself finished from under
+  the replacement that superseded it.</p>
   <p><b>(4) The cascade has no failure channel.</b> With <code>AllSettled</code> joins and <code>node.complete()</code> on cancel, a cascade always succeeds;
   staleness is the only report of what still needs work. That is continuity with TaskTree's <code>finishAllAndSuccess</code>, not a change &mdash; but with
   <code>DoneResult</code>/<code>DoneWith</code> gone there is no longer anywhere in the code that says so.</p>
 
   <h4 style="margin:18px 0 4px;font-size:14px">Follow-ups from the 2026-07-26 review</h4>
-  <p><b>Extract the cascade DAG out of <code>cwUpdateCoordinator</code> (highest payoff).</b> The class is now ~172 of 324 lines of graph/future algebra
-  (<code>completeWith</code>, <code>joinNodes</code>, <code>startCascade</code>, <code>cascadeNode</code>, <code>driveToClean</code>,
-  <code>waitForRun</code>, <code>dropRunningCascade</code>) against ~90 lines of actual policy. A <code>cwUpdateCascade</code> built from
-  <code>(QList&lt;cwUpdatable*&gt;, QHash&lt;cwUpdatable*, QList&lt;cwUpdatable*&gt;&gt;)</code> and returning one <code>QFuture&lt;void&gt;</code>, whose
-  <b>lifetime is the epoch</b>, would delete <code>m_cascadeGeneration</code> and the <code>quint64 generation</code> parameter currently threaded through
-  four signatures &mdash; destroying the cascade would <em>be</em> superseding it. It would also let graph ordering be tested without
-  <code>cwJobSettings::initialize()</code>, which every case in <code>test_cwUpdateCoordinator.cpp</code> calls purely as setup. Not done in the swap commit
-  because splitting the file in the same change makes it unreviewable against the engine it replaced. Note the scoped-force follow-up below adds more graph
-  code to this same place.</p>
+  <p><b>Extract the cascade DAG out of <code>cwUpdateCoordinator</code> &mdash; DONE 2026-07-26.</b> The class had grown to ~172 of 324 lines of
+  graph/future algebra (<code>completeWith</code>, <code>joinNodes</code>, <code>startCascade</code>, <code>cascadeNode</code>, <code>driveToClean</code>,
+  <code>waitForRun</code>) against ~90 lines of actual policy. That algebra now lives in <code>cwUpdateCascade</code> (<code>cwUpdateCascade.{h,cpp}</code>),
+  built from <code>(QList&lt;cwUpdatable*&gt;, QHash&lt;cwUpdatable*, QList&lt;cwUpdatable*&gt;&gt;)</code> and driven by one <code>start()</code> returning one
+  <code>QFuture&lt;void&gt;</code>. The coordinator is down to policy: automatic-update flag, staleness aggregate, registration, and the decision to start a
+  pass. <b>The object is the epoch</b>, as planned: <code>m_cascadeGeneration</code> and the <code>quint64 generation</code> parameter threaded through four
+  signatures are gone, every continuation is bound to the cascade as its context object, and superseding a pass is dropping it.</p>
+  <p><b>One thing the plan did not anticipate: destruction alone is not enough, so the epoch needs <code>abandon()</code> alongside it.</b>
+  <code>start()</code> drives pipelines synchronously, and a pipeline destroyed from inside a drive reaches
+  <code>cwUpdateCoordinator::dropRunningCascade()</code> &mdash; so a pass can be given up on while its own walk is still on the stack, which is exactly when
+  the object must <em>not</em> be deleted. <code>dropRunningCascade()</code> therefore sets the flag, then <code>deleteLater()</code>s: the flag makes
+  <code>driveToClean()</code> a no-op from that instant (the same role the generation compare had, in the same place, before any dereference), and the
+  deletion is what drops the queued continuations. The two are not redundant. The window between them is real and is <em>not</em> only a test artifact: a
+  deferred delete posted at loop level <em>N</em> is not delivered inside a nested loop at <em>N+1</em>, and the pipeline destructors pump exactly such a loop
+  (#638). <code>updateNow()</code>'s completion handler checks <code>isAbandoned()</code> for the same reason &mdash; a superseded pass that settles in that
+  window would otherwise clear <code>m_cascadeRunning</code> out from under its replacement, handing the run decision back to
+  <code>onChildStateChanged()</code> while a cascade is still driving. Both halves are mutation-checked (removing either fails a case; removing
+  <code>abandon()</code> fails two).</p>
+  <p><b>Two behavior changes the 2026-07-27 review pass added, both in the coordinator's policy half.</b>
+  <b>(1) Both completion paths are guarded, not one.</b> The extraction moved the supersede check out of <code>finishCascade()</code> and re-attached it only
+  to the asynchronous handler, so the synchronous <code>pass.isFinished()</code> branch lost a guard the generation compare had covered. A pass given up on
+  during its own walk finishes immediately &mdash; every node left short-circuits &mdash; so that branch is exactly the one an abandoned pass takes. Latent
+  rather than live: nothing re-enters <code>updateNow()</code> synchronously today (<code>onChildStateChanged</code> steps aside on
+  <code>cascadeRunning()</code>, <code>flushAfterCascade</code> is queued, the destroyed handler only drops), and CP6's <b>Run</b> button is the caller that
+  would make it reachable.
+  <b>(2) Giving up on a pass now re-applies policy to the survivors.</b> <code>dropRunningCascade()</code> served two meanings &mdash; "a replacement is
+  coming" (<code>updateNow</code>) and "give up entirely" (the destroyed handler) &mdash; and only the first left anything to pick the work back up. So
+  destroying one registered pipeline gave up on every <em>other</em> pipeline's ordered work too, and with automatic update on those survivors waited for
+  whatever edit happened to arrive next, having already been told their edit was in hand. The destroyed handler now queues a <code>flushAfterCascade()</code>
+  after scrubbing; queued both so the fresh pass starts off a clean stack rather than inside a destructor, and so it is dropped if the coordinator is going
+  down too. This is what makes (1) safe: the guard stops the give-up path reporting a finish, and the flush is what replaces it. Pre-existing &mdash; the
+  generation bump had the same hole &mdash; but the extraction made it cheap to see and to close.</p>
+
+  <p><b>Tests.</b> Graph ordering now has its own suite, <code>test_cwUpdateCascade.cpp</code> (<code>[cwUpdateCascade]</code>), with no
+  <code>cwJobSettings::initialize()</code> anywhere in it &mdash; four cases moved over from <code>test_cwUpdateCoordinator.cpp</code> (multi-parent joins,
+  re-edit during a run, don't-restart-a-working-pipeline, cycle termination) plus three new ones (synchronous finish on a clean graph, an abandoned pass drives
+  nothing, destroying a pass doesn't cancel the run it was waiting on). <code>FakeUpdatable</code> moved out of the coordinator suite into
+  <code>testcases/FakeUpdatable.h</code> so both suites share one fake. The coordinator suite keeps every policy case and gained "A superseded cascade doesn't
+  report the one that replaced it finished".
+  <b>Review pass 2026-07-27 added four more</b>, three of them closing gaps the review found rather than restating cover already there:
+  "A pass given up on from inside its own walk stops reading its snapshot" (the scenario <code>abandon()</code> exists for, and the only case that pins the
+  guard's <em>memory-safety</em> role &mdash; removing the guard segfaults it, in Release, without a sanitizer);
+  "Destroying a pipeline mid-pass doesn't strand the survivors" (pins the give-up path re-applying policy, below);
+  "A destroyed pipeline is pruned from every other dependency list" (the two-parent <code>add()</code> left with the move, so the coordinator's own
+  multi-parent plumbing and its prune loop had stopped being exercised); plus a positive pin inside the superseded-cascade case, which had rested on a
+  negative assertion that under-settling would have satisfied vacuously.
+  <b>Test evidence:</b> <code>[cwUpdateCascade]</code> + <code>[cwUpdateCoordinator]</code> alone &mdash; 25 cases / 96 assertions, green, and green across
+  25 randomized seeds. Together with the manager, root-data, job-settings and project tags &mdash; <b>210 cases / 11159 assertions, green</b>. Both new
+  guards and the give-up flush are mutation-checked (removing any one fails or segfaults a case). <b>Not done here:</b> the scoped-force follow-up (routing the UI force paths through a scoped
+  <code>updateNow(cwUpdatable*)</code>) still adds graph code, and it belongs in <code>cwUpdateCascade</code> now rather than in the coordinator.</p>
   <p><b>Move <code>shield()</code> to the producer.</b> Today it is at the consumer (<code>waitForRun</code>), so the invariant in (1) above is one every
   future consumer must remember &mdash; CP6's footer, the scoped force, a test. It belongs to the owner of the run. <b>The naive version breaks
   correctness:</b> <code>shield()</code> always routes through a watcher (<code>watch()</code> never short-circuits on <code>isFinished()</code>), so a

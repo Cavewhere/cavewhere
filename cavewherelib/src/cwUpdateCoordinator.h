@@ -3,14 +3,16 @@
 
 //Qt includes
 #include <QObject>
+#include <QPointer>
 #include <QQmlEngine>
 #include <QList>
 #include <QHash>
-#include <QSet>
 
 //Our includes
 #include "cwGlobals.h"
 #include "cwUpdatable.h"
+
+class cwUpdateCascade;
 
 /**
     Single owner of the derived-data update policy and staleness aggregate.
@@ -21,6 +23,10 @@
     becomes true, which the UI surfaces as "update needed". updateNow()
     recomputes every dirty pipeline regardless of the flag (the footer / Solve /
     Compute-Scraps "Run" path).
+
+    Policy is all this class is. Deciding *when* to recompute lives here; working
+    out what to recompute in what order is a cwUpdateCascade, which updateNow()
+    builds from the registered pipelines and their edges and then follows.
 
     The automaticUpdate flag is persisted by cwJobSettings (same QSettings key,
     so existing preferences carry over); the coordinator is the API surface QML
@@ -44,10 +50,10 @@ public:
     //QObject deriving cwUpdatable that declares a void updateStateChanged() signal.
     //
     //dependsOn lists the pipelines whose output this one consumes (scraps consume
-    //the line plot's station positions). Those edges order the forced cascade: a
-    //dependent only runs once every pipeline it depends on is finished, so the
-    //"solve dirties scraps" handoff is a declared edge rather than something the
-    //run-until-settled latch rediscovers at runtime.
+    //the line plot's station positions). Those edges order each cwUpdateCascade a
+    //Run starts: a dependent only runs once every pipeline it depends on is
+    //finished, so the "solve dirties scraps" handoff is a declared edge rather
+    //than something the run-until-settled latch rediscovers at runtime.
     template<class T>
     void add(T* updatable, QList<cwUpdatable*> dependsOn = {})
     {
@@ -72,6 +78,14 @@ public:
                 it.value().removeAll(u);
             }
             refreshNeedsUpdate();
+            //Dropping the pass gave up on every *other* pipeline's ordered work
+            //too, and unlike a supersede nothing is being built to replace it. So
+            //re-apply policy to the survivors rather than leaving them for whatever
+            //edit happens to arrive next. Queued, both so the fresh pass starts
+            //from a clean stack rather than from inside a destructor, and so it is
+            //dropped if the coordinator is going down too.
+            QMetaObject::invokeMethod(this, &cwUpdateCoordinator::flushAfterCascade,
+                                      Qt::QueuedConnection);
         });
         onChildStateChanged(u);
     }
@@ -116,30 +130,7 @@ private:
     void onAutomaticUpdateChanged();
     void refreshNeedsUpdate();
 
-    //The cascade is a future DAG: one node per pipeline, waiting on the nodes of
-    //the pipelines it consumes. The dependency edges *are* the ordering, so
-    //nothing re-derives it — a pipeline waits for its own dependencies rather
-    //than for every pipeline that happens to sit at the same depth.
-    QFuture<void> startCascade(quint64 generation);
-    void finishCascade(quint64 generation);
-
-    //The node for one pipeline, memoized in built so a shared dependency is
-    //waited on rather than driven twice. building carries the recursion's own
-    //path, which is how a mis-registered cycle is caught.
-    QFuture<void> cascadeNode(cwUpdatable* pipeline,
-                              quint64 generation,
-                              QHash<cwUpdatable*, QFuture<void>>& built,
-                              QSet<cwUpdatable*>& building);
-
-    //Reads the pipeline's state and returns a future that finishes once it has
-    //nothing left to do. The state is read as late as the edges allow: at build
-    //time only when the dependencies are already finished — which is to say they
-    //had nothing to do and so dirtied nothing — and otherwise from inside their
-    //continuation, so a pipeline they just dirtied is still seen as Dirty here.
-    QFuture<void> driveToClean(cwUpdatable* pipeline, quint64 generation);
-    QFuture<void> waitForRun(cwUpdatable* pipeline,
-                             const QFuture<void>& run,
-                             quint64 generation);
+    void finishCascade();
 
     bool cascadeRunning() const { return m_cascadeRunning; }
     void dropRunningCascade();
@@ -154,11 +145,15 @@ private:
     QHash<cwUpdatable*, QList<cwUpdatable*>> m_dependencies;
     bool m_lastNeedsUpdate = false;
 
-    //A cascade is superseded by bumping the generation, which makes every
-    //continuation left over from the previous one a no-op. Canceling the cascade
-    //would not do it: the queued continuation still runs, and it is the one that
-    //would read a pipeline the cascade was dropped because of.
-    quint64 m_cascadeGeneration = 0;
+    //The pass in flight, parented here so it goes away with the coordinator. A
+    //cascade is superseded by dropping it, and only ever one at a time: the
+    //replacement is built after the incumbent has been given up on, so nothing
+    //below is driven by two passes at once.
+    QPointer<cwUpdateCascade> m_cascade;
+    //Separate from m_cascade being set, because a finished pass is kept until a
+    //Run replaces it — the coordinator has nothing to gain from deleting it
+    //promptly, and doing so would mean destroying it from inside its own
+    //completion handler.
     bool m_cascadeRunning = false;
     bool m_shuttingDown = false;
 };
