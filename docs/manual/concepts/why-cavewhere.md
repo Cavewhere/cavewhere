@@ -31,13 +31,16 @@ the whole team on the same current map.
 
 ## The long-term goal: salon-quality maps in CaveWhere
 
-CaveWhere should eventually draw **award-winning, salon-quality 2D cave maps**
-on its own: finished cartography, good enough to publish or hang in a map salon.
+Cave survey is a team effort in CaveWhere. Everyone captures data,
+[Sync](#working-as-a-team-sync) merges it without a merge conflict to resolve
+by hand, and the working map stays current for the whole team. Then, at
+cartography, the team effort ends: today one person exports a view and
+redraws it alone, by hand, in Adobe Illustrator or Inkscape.
 
-**This does not exist yet.** Today CaveWhere gives you the *working* map, the
-fast always-current draft you survey from. For a presentation-quality final map,
-you export a view and redraw it in Adobe Illustrator or Inkscape. Closing that
-gap remains a long-term goal.
+**Cartography should be a team effort too.** That's the long-term goal:
+digital survey from a phone or tablet underground, synced the moment you're
+back on the surface, and drawn by CaveWhere into an award-winning,
+salon-quality 2D cave map. Finished by the team, not redrawn by one person.
 
 ## From a 2D sketch to a 3D cave
 
