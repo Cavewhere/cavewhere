@@ -488,11 +488,136 @@ Legend: `[ ]` open · `[~]` reported, awaiting review · `[x]` committed
       digits since `'g'` drops trailing zeros.
       **Invented number struck**: "spread over a dozen notes" put a count on
       nothing. `llms.txt:50` re-synced — stale on 11 points, silent on 4 more.
-- [ ] **35. `view-3d/layers-and-keywords.md`** — 1449 wds, score 58.6 — 33 em dash
-- [ ] **36. `view-3d/perspective-and-field-of-view.md`** — 692 wds, score 50.3 — 22.1 sent
-- [ ] **37. `view-3d/the-3d-view.md`** — 1187 wds, score 48.6 — 2 spans
-- [ ] **38. `point-clouds/add-a-point-cloud.md`** — 1196 wds, score 52.8 — 32.6 to-be
-- [ ] **39. `point-clouds/clip-a-point-cloud.md`** — 762 wds, score 45.5 — 0 digits
+- [x] **35. `view-3d/layers-and-keywords.md`** — words **1593 → 1575**, score 58.6 — commit `aeaec7d0`.
+      Em dash 22.8 → **0.00**, digits 0.00 → 11.3, fig 0.00 → 2.1, mean sentence
+      23.0 → 18.1. 43 claims checked, 3 wrong.
+      **Lead catch: the page promised that "nothing ever silently disappears from
+      the filter" because unmatched objects land in a catch-all called Others.
+      The opposite is true.** `cwKeywordGroupByKeyModel::setKey` runs
+      `setData(otherIndex(), mKey.isEmpty(), AcceptedRole)` (`:163`), so choosing
+      any key unchecks Others and hides every object lacking that key — and the
+      shipped screenshot has always shown `Others (0)` as the one unticked row.
+      Now a stated drawback with a worked example: group by `Caver` and the point
+      clouds vanish, since a LAZ layer emits no `Caver` tag.
+      Also corrected: the reset is wired to `cwProject::filenameChanged`
+      (`cwRootData.cpp:216`), which fires on **Save As** too (`cwProject.cpp:748,792`),
+      so saving wipes the filter — and the rebuilt column immediately sets
+      key=Type, so the reset state is not "all-visible" either; `Name` is
+      generated only by point clouds (`cwLazLayer.cpp:315`, the sole site) while
+      `Object id` covers scraps as well (`cwScrap.cpp:1354`); 320 px is the
+      SplitView pane's *starting* width, and the page's own drilldown shot shows
+      it dragged to ~477. Two alt texts were wrong about their own images (a
+      "Running Profile" row that isn't there; "the surveyors" where one value
+      appears).
+      **Recommendation struck**: "prefer Also Include over a deeper drill-down"
+      rested on a void premise (an Or box is wiped by the same reset) and the code
+      inverts it — an `Or` row re-scans the whole keyword model
+      (`cwKeywordFilterPipelineModel.cpp:353`) while an `And` row filters only its
+      predecessor's accepted set (`:340`).
+- [x] **36. `view-3d/perspective-and-field-of-view.md`** — words **779 → 777**, score 50.3 — commit `cca3e8c4`.
+      Mean sentence 22.4 → 15.9 (the headline defect), em dash 21.58 → **0.00**,
+      digits 10.07 → 22.22, fig 0.00 → 2.96. 45 claims checked across this page
+      and item 39, 10 wrong.
+      **Two shipped-string bugs found.** The left switch setting is labeled
+      **Orthognal**, misspelled (`ProjectionSlider.qml:28`) — a reader searching
+      the panel for "Orthogonal" would miss it. And the FOV help text is built by
+      `+` concatenation across 3 literals with no space at either seam
+      (`CameraProjectionSettings.qml:60-62`), so it renders `view.The FOV` and
+      `while ahigh FOV`; the block quote reproduces the second verbatim. The
+      doubled space in the source is *not* reproduced — `HelpArea.qml:74` sets
+      `RichText`, which collapses it.
+      Corrections: the FOV field has no validator (`CoreClickTextInput.qml:22`
+      leaves it null) and no clamp (`cwPerspectiveProjection.cpp:22`), and the two
+      ends of the documented 0.0–180.0° range fail differently — 0.0° gives a
+      zero-volume frustum that `QMatrix4x4::frustum` refuses, blanking the plot,
+      while past 180.0° `tan` goes negative and the cave renders upside down
+      (`cwProjection.cpp:29,51`); release sends the handle to whichever end is
+      nearer with no memory of where the drag began, so "snaps back" was only true
+      starting from Orthogonal (`ToggleSlider.qml:136-145`); and the blend
+      reconciles zoom **once**, on leaving a settled endpoint, not continuously
+      (`cwProjectionTransition.cpp:65-102`).
+      New sourced numbers: near/far clip 1 m and 10,000 m in perspective against
+      -10,000/10,000 in ortho (`cwCamera.cpp:281,292`), and the 200 ms InOutQuad
+      ease on a typed angle.
+- [x] **37. `view-3d/the-3d-view.md`** — words **1264 → 1191**, score 48.6 — commit `f04995fc`.
+      Em dash 17.48 → **0.00**, digits 2.62 → 22.67, fig 0.00 → 4.20, mean
+      sentence 20.1 → 14.9. 58 claims checked across this page and item 38,
+      13 wrong.
+      **Stale screenshot found.** The page cited its own overview shot as evidence
+      for the scale bar: "runs 25 m a cell, 125 m end to end". The bar can only
+      print 1, 2 or 5 times a power of ten (`cwScaleBarSelector.cpp:21,34-46`), so
+      25 is not a reading the current code produces. `view-3d-overview.png` was
+      committed in `e0d2fda7` (07-14), five days before the rounding rule landed
+      in `c83dee49` (07-19). Sentence deleted; **the image needs regenerating**
+      before any cell size can be quoted again.
+      Corrections: the azimuth buttons read **North/East/South/West**, not
+      N/E/S/W; Projection is one switch whose left label ships misspelled
+      *Orthognal*, and it blends live while dragged; **Reset** frames the
+      *visible* geometry with an 8% margin over 1 s
+      (`cwBaseTurnTableInteraction.cpp:435`, `.h:57,67`), not "the whole cave";
+      Animate is a Start/Stop button looping at 10 s a turn; the unit-menu entry
+      is *tagged* `Project Default`, it does not read it (`ScaleBar.qml:54-55`);
+      **View** is not at the top of the rail off macOS, where **File** sits above
+      it (`MainSideBar.qml:130-133`); and "Where to go next" promised 3 chapters
+      that already exist.
+      **Invented claim struck**: "Cavers have always drawn cave maps at those 2
+      angles" had nothing behind it. Also cut "which trips people up", an
+      unsourced assertion about user behavior.
+      I restored `view-3d-camera-controls.png`, which the writer had dropped to
+      buy room while landing 109 words under ceiling — it rings the exact panel
+      the section describes, and shows North and Plan grayed at 0.0°/90.0°.
+- [x] **38. `point-clouds/add-a-point-cloud.md`** — words **1284 → 1284**, score 52.8 — commit `031a041b`.
+      To-be 32.6 → 14.9 (the headline defect, now under threshold), em dash 17.73
+      → 0.88 (the survivor is the front-matter `problem` field), digits 0.00 →
+      12.30, mean sentence 22.1 → 17.4.
+      Corrections: the Data page box is **Project** (Units / Coordinate system /
+      Layers), not "Geospatial", and the CS editor is gated behind a pencil
+      toggle; the drawn point radius is a **fixed 1.29 m** for every cloud
+      (`cwLazLayersSceneNode.h:108`, `cwRenderPointCloud.h:127`), not derived from
+      the scan's average spacing — mean spacing sizes the invisible pick spheres
+      (`cwRenderPointCloud.h:56-61`, "Deliberately NOT tied to worldRadius"); the
+      "no embedded coordinate system" case is really "CaveWhere decodes only the
+      OGC WKT VLR, so GeoTIFF GeoKey files look unreferenced whether or not they
+      are" (`cwLazLoader.cpp:32-44`); the worker count is capped at one per core,
+      not one per 262,144 points unbounded (`cwLazLoader.cpp:84-94`); and the
+      LASlib version is a `>=2.0.2` range in `conanfile.py:25`, not a pin, so it
+      is no longer printed (PROJ 9.3.1 *is* pinned, `:42`).
+      **App bug found**: the no-coordinate-system help box is keyed to the
+      *project* lacking a CS, never to the layer
+      (`GeospatialLayerPage.qml:147-153`), so a GeoKey-only second tile added
+      after the first already gave the project its grid draws no warning at all,
+      while the box's own wording claims otherwise.
+      **Two silent failures added at full volume**: a transform PROJ cannot build
+      writes the points untransformed with no message
+      (`cwCoordinateTransform.cpp:169-172`), and an unreadable file leaves `0`
+      under **Points** because `cwLazLayer::errorMessage` has no QML consumer.
+      Remove now says plainly that it deletes the project's only copy.
+- [x] **39. `point-clouds/clip-a-point-cloud.md`** — words **815 → 813**, score 45.5 — commit `5d2e15bd`.
+      Digits 1.36 → 12.03 (the page stated no checkable number at all), em dash
+      19.10 → 0.00 (the survivor is the frozen heading), to-be 21.0 → 9.0, names
+      36.83 → 54.81.
+      **Clipping is not destructive** — sources are opened read-only
+      (`cwLazClipOperation.cpp:210-212,386-388`) and the only write target is
+      `request.outputPath` — so the page now says that up front, along with "no
+      undo, because nothing gets overwritten".
+      Corrections: the output is `clip_001.laz` in `GIS Layers`, 3-digit padded
+      and one past the *highest* index present rather than the lowest gap
+      (`cwLazClipInteraction.cpp:34,388-397`), not `clip_1`/`clip_2`; "every point
+      attribute is passed straight through" is false for extra-byte and waveform
+      data on a mixed-format merge; the page claimed CaveWhere locks rotation and
+      tilt while you draw, but it sets only `pitchLocked`, so the
+      **North/South/East/West** and azimuth **Animate** controls still turn the
+      view; **panning does not stay live** — activating the tool disables the
+      turntable's drag and pinch handlers (`InteractionManager.qml:21-33`) and
+      left-drag draws; and a turn does not *drag* placed corners (they keep their
+      world positions, `cwLazClipInteraction.cpp:351-361`), it skews the outline
+      in the eye frame captured at commit.
+      **Invented figures struck**: "the output still holds nearly the whole scan"
+      put a fraction on nothing, and "points stream 65,536 at a time off disk" was
+      wrong — both read loops pull one point per call (`:317,339`); 64 Ki is the
+      PROJ batch and progress interval, absent entirely on an identity CS. The
+      0.001 output scale buys millimeters only when the project CS is metric,
+      which nothing constrains it to be.
 - [x] **40. `settings/change-settings.md`** — words **1476 → 1413**, score 52.0 — commit `a0850f54`.
       **Mean sentence 26.5 → 19.1** (slopcheck 23.8 → 17.1), the longest sentences
       in the manual, fixed. Em dash 18.46 → 0.00, digits 10.34 → **28.09**, fig
