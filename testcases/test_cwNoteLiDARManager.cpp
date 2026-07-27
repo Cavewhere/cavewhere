@@ -30,6 +30,7 @@
 #include "cwFutureManagerModel.h"
 #include "cwLinePlotManager.h"
 #include "cwNoteLiDARStation.h"
+#include "cwTripCalibration.h"
 
 TEST_CASE("cwNoteLiDARManager no crash when caves cleared during triangulation", "[cwNoteLiDARManager][Issue371]")
 {
@@ -310,5 +311,90 @@ TEST_CASE("cwNoteLiDARManager triangulates LiDAR notes and keeps geometry access
         const QVector3D stationWorld = lookup.position(station.name());
         const float distance = (centroid - stationWorld).length();
         CHECK(distance < 0.03f); //Only 3cm off
+    }
+}
+
+TEST_CASE("cwNoteLiDARManager reuses render ids when re-triangulating a note", "[cwNoteLiDARManager]")
+{
+    cwJobSettings::initialize();
+
+    auto root = std::make_unique<cwRootData>();
+    REQUIRE(root != nullptr);
+
+    TestHelper helper;
+    helper.loadProjectFromZip(root->project(), testcasesDatasetPath("lidarProjects/jaws of the beast.zip"));
+    root->project()->waitLoadToFinish();
+    root->futureManagerModel()->waitForFinished();
+    root->linePlotManager()->waitToFinish();
+
+    auto* cave = root->region()->cave(0);
+    REQUIRE(cave != nullptr);
+    auto* trip = cave->trip(0);
+    REQUIRE(trip != nullptr);
+    auto* lidarModel = trip->notesLiDAR();
+    REQUIRE(lidarModel != nullptr);
+    REQUIRE(cave->stationPositionLookup().positions().size() == 10);
+
+    const QString lidarFile = helper.copyToTempDir(testcasesDatasetPath("lidarProjects/9_15_2025 3.glb"));
+    REQUIRE_FALSE(lidarFile.isEmpty());
+
+    QSignalSpy rowsInsertedSpy(lidarModel, &QAbstractItemModel::rowsInserted);
+    lidarModel->addFromFiles({ QUrl::fromLocalFile(lidarFile) });
+    root->futureManagerModel()->waitForFinished();
+    if (rowsInsertedSpy.isEmpty()) {
+        rowsInsertedSpy.wait(1000);
+    }
+    REQUIRE(lidarModel->rowCount() == 1);
+
+    auto* note = qobject_cast<cwNoteLiDAR*>(
+        lidarModel->data(lidarModel->index(0, 0), cwSurveyNoteModelBase::NoteObjectRole).value<QObject*>());
+    REQUIRE(note != nullptr);
+
+    const struct { const char* name; QVector3D pos; } stations[] = {
+        {"6", QVector3D(0.19147f, -0.720703f, -2.15723f)},
+        {"7", QVector3D(3.51028f, -0.0917969f, 5.39945f)},
+        {"5", QVector3D(-3.48475f, -1.92188f, -3.38263f)}
+    };
+    for (const auto& s : stations) {
+        cwNoteLiDARStation station;
+        station.setName(QString::fromUtf8(s.name));
+        station.setPositionOnNote(s.pos);
+        note->addStation(station);
+    }
+
+    auto* manager = root->noteLiDARManager();
+    REQUIRE(manager != nullptr);
+
+    auto settle = [&]() {
+        root->linePlotManager()->waitToFinish();
+        manager->waitForFinish();
+        root->futureManagerModel()->waitForFinished();
+        QCoreApplication::processEvents();
+    };
+
+    settle();
+
+    const QVector<uint32_t> idsBefore = manager->renderItemIds(note);
+    REQUIRE_FALSE(idsBefore.isEmpty());
+
+    // A declination change re-runs the line plot and re-triangulates the note
+    // into the same number of items. The manager must update those items in
+    // place, reusing their render ids rather than removing and re-adding them
+    // (which would mint fresh monotonic ids and churn the picker/visibility
+    // bindings). Reusing ids is also what lets the render queue coalesce
+    // repeated edits and keeps memory bounded (issue #629).
+    QSignalSpy updatedSpy(manager, &cwNoteLiDARManager::liDARNotesUpdated);
+    trip->calibrations()->setDeclinationManual(5.0);
+    settle();
+
+    CHECK(updatedSpy.count() > 0); // the note actually re-triangulated
+
+    const QVector<uint32_t> idsAfter = manager->renderItemIds(note);
+    REQUIRE(idsAfter == idsBefore);
+
+    auto* renderItems = root->regionSceneManager()->items();
+    REQUIRE(renderItems != nullptr);
+    for (uint32_t id : idsAfter) {
+        CHECK(renderItems->hasItem(id));
     }
 }

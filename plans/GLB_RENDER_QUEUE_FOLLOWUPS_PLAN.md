@@ -21,7 +21,13 @@ doing.
 
 ## Commit sequence
 
-### Commit 1 (next) — Reuse render ids in `cwNoteLiDARManager::runBatch()`
+### Commit 1 (done) — Reuse render ids in `cwNoteLiDARManager::runBatch()`
+
+**Status: implemented.** `runBatch()` now updates render items in place via
+`updateGeometry`/`updateTexture`/`setMaterial`/`setUniformBlock`/`setModelMatrix`
+when the item count is unchanged, and only falls back to remove-all/re-add when
+the count changes (or on first build). Guarded by
+`test_cwNoteLiDARManager.cpp` "reuses render ids when re-triangulating a note".
 
 `cavewherelib/src/cwNoteLiDARManager.cpp:636` — on every line-plot re-run,
 `runBatch()` removes all of a note's old render ids and re-adds fresh ones (its
@@ -58,6 +64,19 @@ plus an Add/Remove flag — so coalescing becomes a data-structure invariant
 rather than maintained logic (the shape `cwRenderBillboards` already uses via its
 `std::unordered_map<cwBillboardId, Entry>`). Removes the O(n) scan and the
 O(N²) drain.
+
+**Also fold in — a symmetric `updateItem(uint32_t id, const Item&)`** on
+`cwRenderTexturedItems`. Today `addItem(const Item&)` takes a packed `Item`, but
+the Commit 1 reuse path in `cwNoteLiDARManager::runBatch()` has to unpack it into
+five separate setter calls (`updateGeometry`/`updateTexture`/`setMaterial`/
+`setUniformBlock`/`setModelMatrix`). That asymmetry is a latent trap: a field
+added to `Item` gets wired into `addItem` but is easily forgotten in the manager's
+update loop. A single `updateItem` keeps the note→id identity decision in the
+manager (its proper altitude) while making add/update symmetric and
+field-complete by construction. Optionally gate the texture push inside it on
+`QImage::cacheKey()` so an unchanged texture isn't re-uploaded (efficiency item
+E1). This belongs here rather than standalone because the keyed-map rewrite
+already reworks how a payload is assembled per id.
 
 **Blast radius:** changes the on-the-wire contract with
 `cwRhiTexturedItems::synchronize()` (`cavewherelib/src/cwRhiTexturedItems.cpp:64`),

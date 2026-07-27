@@ -625,30 +625,41 @@ void cwNoteLiDARManager::runBatch()
                                  }
                              }
 
-                             auto addItems = [this, note](const QVector<cwRenderTexturedItems::Item>& items) {
-                                 QVector<uint32_t> newIds = cw::transform(items, [this](const cwRenderTexturedItems::Item& item) {
-                                     return m_render->addItem(item);
-                                 });
+                             const QVector<uint32_t> oldIds = m_noteToRender.value(note);
 
-                                 m_noteToRender[note] = newIds;
-                             };
-
-                             if(m_noteToRender.contains(note)) {
-                                 //Update the existing note
-                                 auto renderIds = m_noteToRender.value(note);
-
-                                 //For now just remove all the old ids
-                                 //not very efficient
-                                 for(auto id : renderIds) {
+                             if (oldIds.size() == items.size() && !items.isEmpty()) {
+                                 // Re-triangulation from a declination or transform edit
+                                 // produces the same number of items with new geometry.
+                                 // Update them in place: reusing the render ids lets
+                                 // cwRenderTexturedItems coalesce repeated edits onto a
+                                 // stable id and skips the picker/visibility churn of
+                                 // tearing every item down and re-adding it. The ids are
+                                 // unchanged, so the note's keyword/visibility binding
+                                 // still holds and needs no rebind.
+                                 for (int itemIndex = 0; itemIndex < items.size(); ++itemIndex) {
+                                     const uint32_t id = oldIds.at(itemIndex);
+                                     const auto& item = items.at(itemIndex);
+                                     m_render->updateGeometry(id, item.geometry);
+                                     m_render->updateTexture(id, item.texture);
+                                     m_render->setMaterial(id, item.material);
+                                     m_render->setUniformBlock(id, item.uniformBlock);
+                                     m_render->setModelMatrix(id, item.modelMatrix);
+                                 }
+                             } else {
+                                 // First build, or the item count changed (e.g. the note's
+                                 // GLB was replaced): tear down the old items and add fresh
+                                 // ones, then rebind the keyword item to the new ids.
+                                 for (uint32_t id : oldIds) {
                                      m_render->removeItem(id);
                                  }
 
-                                 addItems(items);
-                             } else {
-                                 addItems(items);
-                             }
+                                 const QVector<uint32_t> newIds = cw::transform(items, [this](const cwRenderTexturedItems::Item& item) {
+                                     return m_render->addItem(item);
+                                 });
+                                 m_noteToRender[note] = newIds;
 
-                             addKeywordItemForNote(note);
+                                 addKeywordItemForNote(note);
+                             }
                          }
 
                          // Remove processed from dirty, clear deleted set entries

@@ -124,19 +124,30 @@ void cwRenderTexturedItems::addCommand(const PendingCommand&& command)
     const uint32_t id = command.id();
     const auto type = command.type();
 
-    const auto pendingIndexOfType = [this, id](PendingCommand::Type wanted) -> int {
+    // One pass over the queue collects both indices this id's coalescing needs:
+    // a still-pending Add to fold the update into, and a pending command of the
+    // same update type to replace. Add/Unknown skip the scan entirely — ids are
+    // monotonic so an Add never collides, which keeps a bulk initial add O(n)
+    // rather than O(n^2).
+    const auto findPending = [this, id, type]() {
+        struct { int addIndex = -1; int sameTypeIndex = -1; } indices;
         for (int i = 0; i < m_pendingChanges.size(); ++i) {
             const auto& pending = m_pendingChanges.at(i);
-            if (pending.id() == id && pending.type() == wanted) {
-                return i;
+            if (pending.id() != id) {
+                continue;
+            }
+            if (pending.type() == PendingCommand::Add) {
+                indices.addIndex = i;
+            } else if (pending.type() == type) {
+                indices.sameTypeIndex = i;
             }
         }
-        return -1;
+        return indices;
     };
 
     switch (type) {
     case PendingCommand::Remove: {
-        const bool hadPendingAdd = pendingIndexOfType(PendingCommand::Add) >= 0;
+        const bool hadPendingAdd = findPending().addIndex >= 0;
         // Drop every still-pending command for this id: its updates are moot,
         // and a pending Add means the item never reached the render thread, so
         // the Add+Remove pair annihilates and no Remove need be recorded.
@@ -155,17 +166,16 @@ void cwRenderTexturedItems::addCommand(const PendingCommand&& command)
     case PendingCommand::UpdateMaterial:
     case PendingCommand::UpdateUniformBlock:
     case PendingCommand::UpdateModelMatrix: {
-        const int addIndex = pendingIndexOfType(PendingCommand::Add);
-        if (addIndex >= 0) {
+        const auto indices = findPending();
+        if (indices.addIndex >= 0) {
             // Fold the update into the not-yet-synced Add so its single payload
             // carries the latest state.
-            m_pendingChanges[addIndex].mergeUpdatePayload(type, command.payload());
+            m_pendingChanges[indices.addIndex].mergeUpdatePayload(type, command.payload());
             break;
         }
-        const int sameTypeIndex = pendingIndexOfType(type);
-        if (sameTypeIndex >= 0) {
+        if (indices.sameTypeIndex >= 0) {
             // Replace the previous same-field update with the latest value.
-            m_pendingChanges[sameTypeIndex] = command;
+            m_pendingChanges[indices.sameTypeIndex] = command;
             break;
         }
         m_pendingChanges.append(command);
