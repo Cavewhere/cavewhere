@@ -17,44 +17,25 @@
 #include "cwSurveyNoteModel.h"
 #include "cwTripCalibration.h"
 #include "cwProjectedProfileScrapViewMatrix.h"
-#include "cwFixStation.h"
-#include "cwFixStationModel.h"
-#include "cwGridConvergence.h"
-#include "cwCoordinateTransform.h"
-#include "cwGeoPoint.h"
 #include "cwMath.h"
-
-//Qt includes
-#include <memory>
+#include "GeoreferenceFixtureHelper.h"
 
 namespace {
-    const QString kUtm13N = QStringLiteral("EPSG:32613"); // central meridian -105°
     constexpr double kStoredAzimuth = 90.0;
 
     // Georeferences the cave east of the central meridian so grid convergence
     // is a non-trivial positive angle, mirroring the #628 test fixtures.
     double georeferenceCave(cwCave* cave) {
-        cwCoordinateTransform geoToUtm(QStringLiteral("EPSG:4326"), kUtm13N);
-        REQUIRE(geoToUtm.isValid());
-        const cwGeoPoint fixPoint = geoToUtm.transform(cwGeoPoint(-104.0, 40.015, 1655.0));
-
-        cwFixStation fix;
-        fix.setStationName(QStringLiteral("a1"));
-        fix.setInputCS(kUtm13N);
-        fix.setEasting(fixPoint.x);
-        fix.setNorthing(fixPoint.y);
-        fix.setElevation(fixPoint.z);
-        cave->fixStations()->appendFixStation(fix);
-
-        const double convergence = cave->gridConvergence()->angle();
+        const double convergence =
+                cwGeoreferenceFixture::georeferenceEastOfUtm13N(cave, QStringLiteral("a1"));
         REQUIRE(convergence > 0.1);
         return convergence;
     }
 
     // Reads the azimuth off the scrap's resolved (grid-aligned) view matrix.
     double resolvedAzimuth(cwScrap* scrap) {
-        std::unique_ptr<cwAbstractScrapViewMatrix::Data> data(scrap->resolvedViewMatrixData());
-        auto* projected = dynamic_cast<cwProjectedProfileScrapViewMatrix::Data*>(data.get());
+        cwScrap::ResolvedPlacement placement = scrap->resolvedPlacement();
+        auto* projected = dynamic_cast<cwProjectedProfileScrapViewMatrix::Data*>(placement.viewMatrix.get());
         REQUIRE(projected != nullptr);
         return projected->azimuth();
     }
@@ -146,7 +127,7 @@ TEST_CASE("Projected-profile azimuth resolution is a no-op without georeference 
     viewMatrix->setAzimuth(kStoredAzimuth);
 
     CHECK(resolvedAzimuth(scrap) == viewMatrix->azimuth());
-    CHECK(scrap->resolvedViewMatrix() == viewMatrix->matrix());
+    CHECK(scrap->resolvedPlacement().viewMatrix->matrix() == viewMatrix->matrix());
 }
 
 TEST_CASE("Running-profile scraps ignore azimuth resolution", "[cwProjectedProfileAzimuth]") {
@@ -169,5 +150,5 @@ TEST_CASE("Running-profile scraps ignore azimuth resolution", "[cwProjectedProfi
 
     georeferenceCave(&cave);
 
-    CHECK(scrap->resolvedViewMatrix() == scrap->viewMatrix()->matrix());
+    CHECK(scrap->resolvedPlacement().viewMatrix->matrix() == scrap->viewMatrix()->matrix());
 }

@@ -86,31 +86,50 @@ reusing the `EPSG:32613` fixture from `test_cwScrap.cpp`:
 - Running profile untouched.
 - Non-georeferenced, no-declination project is a bit-for-bit no-op.
 
-## Follow-up: unified resolver (out of scope, not in this commit)
+## Follow-up: unified resolver (DONE, separate commit)
 
 Plan north and projected azimuth are the same conceptual operation —
 "resolve the scrap's stored magnetic frame into the grid-aligned plot
-frame" — but they resolve through two separate accessors:
+frame" — but they used to resolve through two separate accessors
+(`noteTransformAdjustedDeclination()` for north, `resolvedViewMatrix()`
+/ `resolvedViewMatrixData()` for azimuth). A placement consumer had to
+remember to call **both**, and `cwScrap::mapWorldToNoteMatrix` got it
+half-right: it resolved the azimuth while using the raw
+`noteTransformation()->matrix()` for north.
 
-- `cwScrap::noteTransformAdjustedDeclination()` folds declination +
-  convergence into the note transform (north lives on
-  `cwNoteTransformationData`).
-- `cwScrap::resolvedViewMatrix()` / `resolvedViewMatrixData()` fold the
-  azimuth into the view matrix (azimuth lives on the projected view
-  matrix `Data`).
+That half-application was a **real, pre-existing bug**, not a deliberate
+frame choice. A scrap is stored in the note's local frame (no
+declination, no convergence) while the plotted stations are grid
+aligned, so *every* mapping between the two has to strip both.
+`mapWorldToNoteMatrix` backs `guessNeighborStationName`, so with the raw
+north a georeferenced plan note names the wrong station — measured on
+`scrapGuessNeigborPlan.cw` with a 12.5° declination, `a1`'s neighbor
+`a2` is guessed as `a3`. The shot leaders (which already resolved) then
+point at one station while the click names another.
 
-A consumer that places a scrap into the grid plot must remember to call
-**both**. Every plot-placement site does so today
-(`mapScrapToTriangulateInData`, `cwScrapStationView::updateShotLines`),
-but the split is a footgun: `cwScrap::mapWorldToNoteMatrix` already
-resolves the azimuth (`resolvedViewMatrix()`) while using the raw
-`noteTransformation()->matrix()` for north. That is harmless — north
-resolution is a no-op for non-Plan scraps, and this predates #644 — but
-it demonstrates the "must apply both, at every site" fragility.
+Resolved by bundling both resolutions behind one accessor:
 
-Deeper alternative: a single resolved-scrap-placement accessor (or a
-small struct bundling the resolved note transform + resolved view
-matrix) that consumers cannot half-apply. Bigger than #644 — the three
-consumers layer different per-site factors between the two transforms,
-so it is not a trivial merge. Deferred; capture as its own issue if
-picked up.
+- `cwScrap::ResolvedPlacement` bundles the resolved note transform
+  (north) and an owned clone of the resolved view matrix `Data`
+  (azimuth), plus `caveToPageMatrix()` (running profiles, which build
+  their own per-shot rotation) and `worldToPageMatrix()` (plan /
+  projected — folds **both** resolutions into one matrix).
+- `cwScrap::resolvedPlacement()` is the single public placement
+  accessor. `resolvedViewMatrix()` was removed and
+  `resolvedViewMatrixData()` made private (it now only builds the view
+  half of the bundle). `noteTransformAdjustedDeclination()` stays public
+  as the #628-tested resolved-north primitive.
+- All three consumers route through it:
+  `cwScrapManager::mapScrapToTriangulateInData` (pulls both pieces from
+  one call), `cwScrapStationView::updateShotLines`, and
+  `cwScrap::mapWorldToNoteMatrix` — the last now resolves north too,
+  fixing the half-applied footgun.
+- Tests: `testcases/test_cwScrapResolvedPlacement.cpp` verifies
+  `worldToPageMatrix()` folds the resolved north (plan) and resolved
+  azimuth (projected), and is never the raw composition.
+  `testcases/test_cwScrapNoteFrame.cpp` covers the behavior end to end on
+  real notes, freezing the fitted transform so the stored north acts like
+  a hand-drawn arrow and then adding declination and a CS: shot leaders
+  must keep landing on the drawn stations (worst error stays ~0.004
+  normalized note units; the raw frame drifts to ~0.19), and every
+  neighbor must still be guessed by name.

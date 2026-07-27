@@ -176,12 +176,31 @@ public:
     cwNoteTranformation* noteTransformation() const;
     cwNoteTransformationData noteTransformAdjustedDeclination() const;
 
-    // View matrix with a manual projected-profile azimuth resolved to grid
-    // north; the stored view matrix unchanged for every other scrap type and
-    // for auto azimuths. Callers placing scrap geometry or stations into the
-    // grid-aligned 3D plot use these, not the raw viewMatrix() (issue #644).
-    QMatrix4x4 resolvedViewMatrix() const;
-    cwAbstractScrapViewMatrix::Data* resolvedViewMatrixData() const;
+    // A scrap is stored in the note's local frame - no declination, no grid
+    // convergence - while the plotted stations are grid aligned. Both
+    // resolutions that bridge the two, bundled so a consumer takes them
+    // together: the note transform (north; #628) and the view matrix (a manual
+    // projected-profile azimuth; #644). Where a resolution is a no-op - other
+    // scrap types, auto azimuths - the bundle carries the stored value.
+    struct ResolvedPlacement {
+        cwNoteTransformationData noteTransform;
+        std::unique_ptr<cwAbstractScrapViewMatrix::Data> viewMatrix;
+
+        /// Cave coordinates -> page (meters). Running profiles build their own
+        /// per-shot view rotation, so they place stations with this alone.
+        QMatrix4x4 caveToPageMatrix() const;
+
+        /// World -> page (meters) for plan and projected profiles: the resolved
+        /// view projection composed with caveToPageMatrix(), so a page-space
+        /// consumer can't apply one resolution without the other.
+        QMatrix4x4 worldToPageMatrix() const;
+    };
+
+    // Callers placing scrap geometry or stations into the grid-aligned 3D plot
+    // use this, not the raw noteTransformation()/viewMatrix() (issues #628, #644).
+    // Triangulation is the one consumer that unbundles it, because the worker
+    // recomposes the two halves itself deep inside cwTriangulateTask.
+    ResolvedPlacement resolvedPlacement() const;
 
     // Seed the note-transformation scale's display units from a project unit
     // system (metric cm/m, imperial in/ft) for a new scrap. The scale's value is
@@ -368,6 +387,11 @@ private:
     /// non-projected scraps, for auto azimuths (already grid from the minimizer
     /// fit), and when there's no trip calibration (issue #644).
     double projectedProfileAzimuthAdjustment() const;
+
+    /// Clone of the view matrix Data with a manual projected-profile azimuth
+    /// resolved to grid; identical to the stored data for every other case.
+    /// Builds the view half of resolvedPlacement() (issue #644).
+    std::unique_ptr<cwAbstractScrapViewMatrix::Data> resolvedViewMatrixData() const;
 
 private slots:
 //    void updateStationsWithNewCave();

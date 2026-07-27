@@ -1162,8 +1162,9 @@ void cwScrapManager::updateScrapGeometryHelper(QList<cwScrap *> scraps)
   */
 cwTriangulateInData cwScrapManager::mapScrapToTriangulateInData(cwScrap *scrap) const {
     cwTriangulateInData data;
+    cwScrap::ResolvedPlacement placement = scrap->resolvedPlacement();
     data.setOutline(scrap->points());
-    data.setViewMatrix(scrap->resolvedViewMatrixData());
+    data.setViewMatrix(placement.viewMatrix.release());
     data.setLeads(scrap->leads());
     data.setMorphingSettings(m_warpingSettings->data());
 
@@ -1227,7 +1228,7 @@ cwTriangulateInData cwScrapManager::mapScrapToTriangulateInData(cwScrap *scrap) 
     data.setNoteStation(scrap->stations());
     data.setStationLookup(cave->stationPositionLookup());
     data.setSurveyNetwork(cave->network());
-    data.setNoteTransform(scrap->noteTransformAdjustedDeclination());
+    data.setNoteTransform(placement.noteTransform);
 
     double dotsPerMeter = scrap->parentNote()->imageResolution()->convertTo(cwUnits::DotsPerMeter).value;
     data.setNoteImageResolution(dotsPerMeter);

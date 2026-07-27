@@ -653,16 +653,16 @@ double cwScrap::projectedProfileAzimuthAdjustment() const
     return calibration->declination() - cwGridConvergence::angleForCave(parentCave());
 }
 
-cwAbstractScrapViewMatrix::Data* cwScrap::resolvedViewMatrixData() const
+std::unique_ptr<cwAbstractScrapViewMatrix::Data> cwScrap::resolvedViewMatrixData() const
 {
-    cwAbstractScrapViewMatrix::Data* data = viewMatrix()->data()->clone();
+    std::unique_ptr<cwAbstractScrapViewMatrix::Data> data(viewMatrix()->data()->clone());
 
     if(type() == ProjectedProfile) {
         //Cast is gated on the type, so it is always safe. The adjustment is 0.0
         //for auto azimuths and uncalibrated scraps, leaving the stored value be.
         const double adjustment = projectedProfileAzimuthAdjustment();
         if(adjustment != 0.0) {
-            auto* projected = static_cast<cwProjectedProfileScrapViewMatrix::Data*>(data);
+            auto* projected = static_cast<cwProjectedProfileScrapViewMatrix::Data*>(data.get());
             projected->setAzimuth(cwWrapDegrees360(projected->azimuth() + adjustment));
         }
     }
@@ -670,10 +670,23 @@ cwAbstractScrapViewMatrix::Data* cwScrap::resolvedViewMatrixData() const
     return data;
 }
 
-QMatrix4x4 cwScrap::resolvedViewMatrix() const
+cwScrap::ResolvedPlacement cwScrap::resolvedPlacement() const
 {
-    std::unique_ptr<cwAbstractScrapViewMatrix::Data> data(resolvedViewMatrixData());
-    return data->matrix();
+    ResolvedPlacement placement;
+    placement.noteTransform = noteTransformAdjustedDeclination();
+    placement.viewMatrix = resolvedViewMatrixData();
+    return placement;
+}
+
+QMatrix4x4 cwScrap::ResolvedPlacement::caveToPageMatrix() const
+{
+    //noteTransform maps page -> cave; invert it for cave -> page.
+    return cwNoteTranformation::matrix(noteTransform).inverted();
+}
+
+QMatrix4x4 cwScrap::ResolvedPlacement::worldToPageMatrix() const
+{
+    return caveToPageMatrix() * viewMatrix->matrix();
 }
 
 cwNoteTransformationData cwScrap::noteTransformAdjustedDeclination() const {
@@ -989,19 +1002,16 @@ QMatrix4x4 cwScrap::mapWorldToNoteMatrix(const cwNoteStation& referenceStation) 
     if(parentNote()->parentTrip() == nullptr) { return QMatrix4x4(); }
     if(parentNote()->parentTrip()->parentCave() == nullptr) { return QMatrix4x4(); }
 
-    //Create the matrix to covert global position into note position
-    QMatrix4x4 noteTransformMatrix = noteTransformation()->matrix(); //Matrix from page coordinates to cave coordinates
-    noteTransformMatrix = noteTransformMatrix.inverted(); //From cave coordinates to page coordinates
-
     QMatrix4x4 dotsOnPageMatrix = parentNote()->metersOnPageMatrix().inverted();
 
     QMatrix4x4 noteStationOffset;
     noteStationOffset.translate(QVector3D(referenceStation.positionOnNote()));
 
+    //The stations are grid aligned but the scrap is local, so worldToPageMatrix()
+    //strips the declination and the grid convergence on the way in.
     QMatrix4x4 toNormalizedNote = noteStationOffset
             * dotsOnPageMatrix
-            * noteTransformMatrix
-            * resolvedViewMatrix(); //Change the view passed on the projection
+            * resolvedPlacement().worldToPageMatrix();
 
     return toNormalizedNote;
 }
