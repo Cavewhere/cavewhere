@@ -14,7 +14,6 @@ MainWindowTest {
     ScopeStationListModel {
         id: scopeModelId
         trip: rootId.trip
-        network: RootData.linePlotManager.regionNetwork
     }
 
     QQ.Column {
@@ -213,7 +212,7 @@ MainWindowTest {
             tryVerify(() => RootData.linePlotManager.lastSolveStationCount > 0,
                       10000, "the attach-chained solve should publish stations")
             tryVerify(() => stationsListId.count > 0, 10000,
-                      "rows appear once the network lands in the scope model")
+                      "rows appear once the solve lands in the cave's lookup")
 
             const listView = findChild(stationsListId, "stationsListView")
             verify(listView !== null, "stationsListView must exist")

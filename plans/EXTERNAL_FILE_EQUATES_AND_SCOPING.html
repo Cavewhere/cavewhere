@@ -854,9 +854,12 @@ bool cwTrip::isScoped() const { return !m_externalCenterline.isEmpty() || !m_sta
   <li><strong>Fixed.</strong> <code>ExternalCenterlineTripPanel.qml</code> bound
     <code>scopePrefixForTrip(trip)</code> with <code>trip</code> as its only
     declared dependency, so a rename left it filtering the re-solved network on a
-    dead prefix and the station list silently emptied. It now names the network
-    &mdash; every rename re-solves, so that is the pulse that says the prefix may
-    have moved. <em>Any future binding on a scope label needs the same care;</em>
+    dead prefix and the station list silently emptied. It named the network
+    instead &mdash; every rename re-solves, so that is the pulse that says the
+    prefix may have moved. (Superseded: the panel now passes only
+    <code>trip</code> and the model subscribes to the re-solve itself &mdash; see
+    <a href="#network-pulse">The model owns its own pulse</a>.)
+    <em>Any future binding on a scope label needs the same care;</em>
     a <code>Q_INVOKABLE</code> returning a name-derived value has no NOTIFY of its
     own.</li>
   <li><strong>Fixed.</strong> The trip label had four independent derivations
@@ -929,8 +932,8 @@ bool cwTrip::isScoped() const { return !m_externalCenterline.isEmpty() || !m_sta
   <code>scopePrefix()</code> itself untouched. Anything binding a qualified name
   must use <code>cwCavingRegion::scopeLabelsChanged</code>, which covers both
   halves. <code>ExternalCenterlineTripPanel.qml</code> is correct today only
-  because it names the re-solved <code>network</code> as its pulse and a cave
-  rename re-solves; a consumer that does not re-solve has no such luck.
+  because its station list refreshes on the re-solve and a cave rename
+  re-solves; a consumer that does not re-solve has no such luck.
 </p>
 <p>
   <strong>What shipped (A1 commit&nbsp;B, 2026-07-26).</strong> The snapshot half.
@@ -1287,18 +1290,16 @@ bool cwTrip::isScoped() const { return !m_externalCenterline.isEmpty() || !m_sta
     hold <code>{handle, position}</code> and the display name <em>is</em>
     <code>handle.tail()</code>; sorting moved to the tail, which is equivalent
     because every row in a trip shares one prefix.</li>
-  <li><strong>Step&nbsp;3 was only half done, deliberately: the panel still binds
-    <code>network:</code>.</strong> It is the model's only re-solve pulse &mdash;
+  <li><strong>Step&nbsp;3 was only half done, deliberately: the panel still bound
+    <code>network:</code>.</strong> It was the model's only re-solve pulse &mdash;
     <code>solvedStations()</code> is pulled, not pushed, so without a change
-    signal the rows never refresh after a solve. Its <em>value</em> is now
-    unread, which is a vestigial property and reads as one. The fix that would
-    retire it is for the model to subscribe itself to
-    <code>cwCave::stationPositionPositionChanged</code> when its trip is set,
-    making the pulse correct-by-construction instead of something four call
-    sites have to remember. That is a separate change &mdash; it removes a
-    public property, touches every consumer
-    (<code>StationDoubleClickTextInput.qml</code> included), and needs its own
-    re-parenting story &mdash; so it is <em>not</em> in this working tree.</li>
+    signal the rows never refresh after a solve. Its <em>value</em> was already
+    unread, which is a vestigial property and reads as one.
+    <strong>Done in the follow-up commit</strong> (see <a href="#network-pulse">The
+    model owns its own pulse</a>): the model subscribes itself to
+    <code>cwCave::stationPositionPositionChanged</code> when its trip is set, so
+    the pulse is correct-by-construction rather than something four call sites
+    have to remember.</li>
   <li><strong>The handle rule lives on <code>cwTrip</code>, not in the model.</strong>
     A cleanup pass moved the scope/containerId derivation to
     <code>cwTrip::stationHandle(tail)</code>, next to the
@@ -1498,6 +1499,77 @@ bool cwTrip::isScoped() const { return !m_externalCenterline.isEmpty() || !m_sta
   (commit&nbsp;7) for the autocomplete that resolves a typed tail to a handle.
 </p>
 
+<h3 id="network-pulse">The model owns its own pulse &mdash; DONE 2026-07-27</h3>
+<p>
+  <code>cwScopeStationListModel::network</code> is gone, and so is
+  <code>cwLinePlotManager</code>'s <code>regionNetwork</code> Q_PROPERTY and
+  <code>regionNetworkChanged</code> signal &mdash; that binding was their last
+  consumer. (<code>m_lastPublishedNetwork</code> and its inequality gate stay;
+  they still feed <code>m_surveyNetworkArtifact</code>. The C++
+  <code>regionNetwork()</code> accessor stays as a snapshot getter.) The three
+  <code>network:</code> bindings
+  (<code>StationDoubleClickTextInput.qml</code>,
+  <code>ExternalCenterlineTripPanel.qml</code>,
+  <code>tst_ExternalCenterlinePanelComponents.qml</code>) are deleted.
+</p>
+<p>
+  <strong>The pulse landed on <code>cwTrip</code>, not in the model.</strong>
+  The first cut had the model reach through its trip to
+  <code>parentCave()</code> and subscribe to
+  <code>cwCave::stationPositionPositionChanged</code> itself, re-pointing on
+  <code>cwTrip::parentCaveChanged</code>. That put the getter
+  (<code>cwTrip::solvedStations()</code>) and its invalidation at different
+  altitudes, so every consumer had to independently learn that a trip's
+  positions physically live in its cave &mdash;
+  <code>cwLinePlotLabelView.cpp:199/226</code> already hand-rolls the same join
+  from the other side. Instead <code>cwTrip</code> gained
+  <code>solvedStationsChanged()</code>, chained from the cave in
+  <code>cwCave::connectTrip</code> / <code>disconnectTrip</code> &mdash; which
+  <em>already</em> does exactly this for scope
+  (<code>tripScopeLabelsChanged&nbsp;&rarr;&nbsp;cwTrip::scopeChanged</code>,
+  <code>Qt::UniqueConnection</code>). The model is now one
+  <code>connect</code> in <code>setTrip()</code>: no <code>m_cave</code>, no
+  <code>resubscribe()</code>, no <code>parentCaveChanged</code> bookkeeping.
+  Membership tracking is free, because a trip its cave no longer lists is cut
+  off from the pulse by the same call that already cuts it off from
+  <code>scopeChanged</code>. <code>cwLinePlotLabelView</code> can follow later.
+</p>
+<p>
+  <strong>It was not only vestigial &mdash; it was wrong.</strong>
+  <code>cwSurveyNetwork::operator==</code> compares station and neighbor sets
+  only, so a <em>positions-only</em> re-solve (a re-surveyed shot moves stations
+  without changing what connects to what) compares <em>equal</em>,
+  <code>regionNetworkChanged</code> never fires, and the rows kept stale
+  <code>PositionRole</code> values. A regression test pins the refresh.
+  The removed binding also cost real work per solve: the unequal path of that
+  operator builds QSets of every station in both region-wide networks, and
+  <code>StationDoubleClickTextInput</code> instantiates one model
+  <em>per station field</em>.
+</p>
+<p class="note">
+  <strong>Deliberately not chained: <code>cwTrip::scopeChanged</code>.</strong>
+  It fires on a scope move <em>before</em> the re-solve lands, so
+  <code>solvedStations()</code> would match the new prefix against the old
+  lookup keys and come back empty &mdash; the list would blank and then refill.
+  Holding the stale-but-populated rows until the solve arrives is the better
+  failure. That decision now lives once, on
+  <code>cwTrip::solvedStationsChanged</code>'s declaration, instead of being
+  restated at each subscription site.
+</p>
+<p class="note">
+  <strong>Found while reviewing this, not fixed:
+  <code>stationPrefixChanged</code> triggers no re-solve.</strong> The signaler
+  table in <code>cwLinePlotManager</code>'s constructor
+  (<code>cwLinePlotManager.cpp:104-123</code>) covers cave/trip
+  <code>nameChanged</code>, chunk edits, calibration and declination &mdash; but
+  not <code>cwTrip::stationPrefixChanged</code>, whose only listener is
+  <code>cwSaveLoad.cpp:4183</code>. So for a native-prefixed (Scope) trip,
+  editing <code>stationPrefix</code> moves <code>scopePrefix()</code> with no
+  solve behind it, and nothing refreshes. Harmless while
+  <code>stationPrefix</code> does not yet reach the exporter; it becomes a real
+  staleness bug at <a href="#c9">commit&nbsp;9</a>, which should add the trigger.
+</p>
+
 <h3 id="c7">Commit 7 &mdash; Scope lens (reference / autocomplete / prefix-free typing)</h3>
 <p>
   Distinct from equate (a <em>join</em> that affects the solve): the scope lens
@@ -1539,7 +1611,9 @@ bool cwTrip::isScoped() const { return !m_externalCenterline.isEmpty() || !m_sta
   deletion, and calling it "legacy" was wrong: <code>scopePrefix</code> has never
   shipped. See <a href="#qualified-name-ownership">Who owns the qualified
   name</a>.
-  <code>network</code> is the re-solve pulse in trip mode. Added
+  <code>network</code> was the re-solve pulse in trip mode; it has since been
+  retired in favor of the model's own subscription (see
+  <a href="#network-pulse">The model owns its own pulse</a>). Added
   <code>Q_INVOKABLE containsStation()</code> (advisory) and
   <code>matchingStations(prefix)</code> (dropdown filter), both
   canonical-key case-insensitive. <strong>(2)</strong> Autocomplete is a new

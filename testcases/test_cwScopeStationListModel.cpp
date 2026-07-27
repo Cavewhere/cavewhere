@@ -2,12 +2,13 @@
 #include <catch2/catch_test_macros.hpp>
 
 //Qt includes
+#include <QPointer>
 #include <QSignalSpy>
+#include <QUndoStack>
 #include <QVector3D>
 
 //Our includes
 #include "cwScopeStationListModel.h"
-#include "cwSurveyNetwork.h"
 #include "cwCave.h"
 #include "cwTrip.h"
 #include "cwStation.h"
@@ -216,12 +217,23 @@ TEST_CASE("Clearing the trip empties the model", "[Model][ScopeStations]")
 
     model.setTrip(nullptr);
     CHECK(model.rowCount() == 0);
+
+    // Clearing drops the subscription with the trip, so a later solve in the
+    // cave it used to watch cannot reach the model.
+    QSignalSpy resetSpy(&model, &QAbstractItemModel::modelReset);
+
+    cwStationPositionLookup grown = cave.stationPositionLookup();
+    grown.setPosition(QStringLiteral("A.s2"), QVector3D(4, 5, 6));
+    cave.setStationPositionLookup(grown);
+
+    CHECK(resetSpy.count() == 0);
 }
 
-TEST_CASE("A network change re-pulls the trip's solved stations", "[Model][ScopeStations]")
+TEST_CASE("A re-solve re-pulls the trip's solved stations", "[Model][ScopeStations]")
 {
-    // The network's value is unused, but its change is the re-solve pulse: the
-    // model re-reads solvedStations() and picks up the new lookup.
+    // Setting the trip is the whole contract: the model subscribes to that
+    // trip's solvedStationsChanged, which its cave pulses when the solve lands
+    // in the lookup — so the rows refresh with no help from the caller.
     cwCave cave;
     cwTrip* trip = addPrefixedTrip(&cave, { QStringLiteral("A.s1") });
 
@@ -229,23 +241,95 @@ TEST_CASE("A network change re-pulls the trip's solved stations", "[Model][Scope
     model.setTrip(trip);
     REQUIRE(model.rowCount() == 1);
 
+    QSignalSpy resetSpy(&model, &QAbstractItemModel::modelReset);
+
     // The solve advances: a second station appears in the cave lookup.
     cwStationPositionLookup second = cave.stationPositionLookup();
     second.setPosition(QStringLiteral("A.s2"), QVector3D(4, 5, 6));
     cave.setStationPositionLookup(second);
 
-    QSignalSpy resetSpy(&model, &QAbstractItemModel::modelReset);
-    cwSurveyNetwork pulse;
-    pulse.addShot(QStringLiteral("ignored.a"), QStringLiteral("ignored.b"));
-    model.setNetwork(pulse);
-
     CHECK(resetSpy.count() == 1);
     CHECK(roleValues(model, cwScopeStationListModel::StationNameRole)
           == QStringList({ QStringLiteral("s1"), QStringLiteral("s2") }));
+}
 
-    // Setting an equal network is a no-op: no reset, no signal.
-    QSignalSpy networkSpy(&model, &cwScopeStationListModel::networkChanged);
-    model.setNetwork(pulse);
-    CHECK(resetSpy.count() == 1);
-    CHECK(networkSpy.count() == 0);
+TEST_CASE("A positions-only re-solve refreshes the rows", "[Model][ScopeStations]")
+{
+    // Re-surveying a shot moves stations without changing which stations exist
+    // or what they connect to. The region network compares equal across such a
+    // solve, so a network-change pulse would never fire and the rows would keep
+    // stale positions. The cave's lookup is the pulse, so this lands.
+    cwCave cave;
+    cwTrip* trip = addPrefixedTrip(&cave, { QStringLiteral("A.s1") });
+
+    cwScopeStationListModel model;
+    model.setTrip(trip);
+    REQUIRE(model.data(model.index(0, 0), cwScopeStationListModel::PositionRole)
+            .value<QVector3D>() == QVector3D(0, 0, 0));
+
+    cwStationPositionLookup moved = cave.stationPositionLookup();
+    moved.setPosition(QStringLiteral("A.s1"), QVector3D(9, 9, 9));
+    cave.setStationPositionLookup(moved);
+
+    CHECK(model.data(model.index(0, 0), cwScopeStationListModel::PositionRole)
+          .value<QVector3D>() == QVector3D(9, 9, 9));
+}
+
+TEST_CASE("A foreign cave's solve leaves the model alone", "[Model][ScopeStations]")
+{
+    // Two caves solve independently. Because the cave pulses only the trips it
+    // lists, a solve in one cannot reach a model watching a trip in the other.
+    cwCave first;
+    cwTrip* firstTrip = addPrefixedTrip(&first, { QStringLiteral("A.s1") });
+
+    cwCave second;
+    addPrefixedTrip(&second, { QStringLiteral("A.s9") });
+
+    cwScopeStationListModel model;
+    model.setTrip(firstTrip);
+    REQUIRE(roleValues(model, cwScopeStationListModel::StationNameRole)
+            == QStringList({ QStringLiteral("s1") }));
+
+    QSignalSpy resetSpy(&model, &QAbstractItemModel::modelReset);
+
+    cwStationPositionLookup elsewhere = second.stationPositionLookup();
+    elsewhere.setPosition(QStringLiteral("A.s8"), QVector3D(1, 1, 1));
+    second.setStationPositionLookup(elsewhere);
+
+    CHECK(resetSpy.count() == 0);
+}
+
+TEST_CASE("A cave pulses solvedStationsChanged only on the trips it lists",
+          "[Trip][ScopeStations]")
+{
+    // The forwarding the model rides on: the trip owns solvedStations() but the
+    // cave owns the lookup it reads, so the cave is what says the answer moved.
+    // A removed trip is cut off, the same way cwCave::disconnectTrip already
+    // cuts it off from scopeChanged.
+    //
+    // The undo stack is what keeps the removed trip alive here — without one,
+    // pushUndo redoes and deletes the command, which owns the trip it removed.
+    QUndoStack undoStack;
+    cwCave cave;
+    cave.setUndoStack(&undoStack);
+
+    cwTrip* trip = addPrefixedTrip(&cave, { QStringLiteral("A.s1") });
+    QPointer<cwTrip> tripGuard(trip);
+
+    const auto advanceSolve = [&cave](const QString& station) {
+        cwStationPositionLookup grown = cave.stationPositionLookup();
+        grown.setPosition(station, QVector3D(4, 5, 6));
+        cave.setStationPositionLookup(grown);
+    };
+
+    QSignalSpy pulseSpy(trip, &cwTrip::solvedStationsChanged);
+
+    advanceSolve(QStringLiteral("A.s2"));
+    CHECK(pulseSpy.count() == 1);
+
+    cave.removeTrip(0);
+    REQUIRE_FALSE(tripGuard.isNull());
+
+    advanceSolve(QStringLiteral("A.s3"));
+    CHECK(pulseSpy.count() == 1);
 }

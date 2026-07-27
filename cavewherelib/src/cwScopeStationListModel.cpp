@@ -123,18 +123,20 @@ void cwScopeStationListModel::setTrip(cwTrip* trip)
     if (m_trip == trip) {
         return;
     }
-    m_trip = trip;
-    emit tripChanged();
-    rebuildRows();
-}
 
-void cwScopeStationListModel::setNetwork(const cwSurveyNetwork& network)
-{
-    if (m_network == network) {
-        return;
+    if (m_trip != nullptr) {
+        disconnect(m_trip, &cwTrip::solvedStationsChanged,
+                   this, &cwScopeStationListModel::rebuildRows);
     }
-    m_network = network;
-    emit networkChanged();
+
+    m_trip = trip;
+
+    if (m_trip != nullptr) {
+        connect(m_trip, &cwTrip::solvedStationsChanged,
+                this, &cwScopeStationListModel::rebuildRows);
+    }
+
+    emit tripChanged();
     rebuildRows();
 }
 

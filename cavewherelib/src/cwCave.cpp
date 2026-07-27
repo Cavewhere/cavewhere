@@ -303,6 +303,11 @@ void cwCave::connectTrip(cwTrip* trip)
             this, &cwCave::invalidateTripScopeLabels, Qt::UniqueConnection);
     connect(this, &cwCave::tripScopeLabelsChanged,
             trip, &cwTrip::scopeChanged, Qt::UniqueConnection);
+
+    //The trip owns solvedStations() but this cave owns the lookup it reads, so
+    //this cave is the only object that can say when the answer moved.
+    connect(this, &cwCave::stationPositionPositionChanged,
+            trip, &cwTrip::solvedStationsChanged, Qt::UniqueConnection);
 }
 
 void cwCave::disconnectTrip(cwTrip* trip)
@@ -315,6 +320,8 @@ void cwCave::disconnectTrip(cwTrip* trip)
                this, &cwCave::invalidateTripScopeLabels);
     disconnect(this, &cwCave::tripScopeLabelsChanged,
                trip, &cwTrip::scopeChanged);
+    disconnect(this, &cwCave::stationPositionPositionChanged,
+               trip, &cwTrip::solvedStationsChanged);
 }
 
 cwCavingRegion *cwCave::parentRegion() const

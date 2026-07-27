@@ -30,7 +30,6 @@ DoubleClickTextInput {
     ScopeStationListModel {
         id: scopeStationModel
         trip: stationName.trip
-        network: RootData.linePlotManager.regionNetwork
     }
 
     // anchors.verticalCenter: stationImage.verticalCenter

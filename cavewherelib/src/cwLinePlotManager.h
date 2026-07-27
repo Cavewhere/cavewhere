@@ -54,7 +54,6 @@ class CAVEWHERE_LIB_EXPORT cwLinePlotManager : public QObject
     Q_PROPERTY(QString cavernLog READ cavernLog NOTIFY cavernOutputChanged FINAL)
     Q_PROPERTY(QString loopClosureStats READ loopClosureStats NOTIFY cavernOutputChanged FINAL)
     Q_PROPERTY(QString driverSource READ driverSource NOTIFY cavernOutputChanged FINAL)
-    Q_PROPERTY(cwSurveyNetwork regionNetwork READ regionNetwork NOTIFY regionNetworkChanged FINAL)
     Q_PROPERTY(double lastSolveDuration READ lastSolveDuration NOTIFY cavernOutputChanged FINAL)
     Q_PROPERTY(int lastSolveStationCount READ lastSolveStationCount NOTIFY cavernOutputChanged FINAL)
     Q_PROPERTY(int lastSolveWarningCount READ lastSolveWarningCount NOTIFY cavernOutputChanged FINAL)
@@ -108,8 +107,9 @@ public:
 
     // Region-wide qualified survey network ("<caveLabel>.<tripLabel>.<station>"
     // keys) parsed from cavern's .3d output on the most recent solve. Empty
-    // until the first solve completes. Bind cwScopeStationListModel::network
-    // to this.
+    // until the first solve completes. A plain snapshot accessor with no change
+    // signal of its own: surveyNetworkArtifact() is the channel consumers watch,
+    // and a trip's solved stations are pulsed by cwTrip::solvedStationsChanged.
     cwSurveyNetwork regionNetwork() const { return m_lastPublishedNetwork; }
 
     void waitToFinish();
@@ -120,8 +120,6 @@ signals:
     void stationPositionInScrapsChanged(QList<cwScrap*>);
     void automaticUpdateChanged();
     void cavernOutputChanged();
-
-    void regionNetworkChanged();
 
 public slots:
     void rerunSurvex();

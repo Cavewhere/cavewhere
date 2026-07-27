@@ -659,13 +659,14 @@ void cwLinePlotManager::updateLinePlot(cwLinePlotTask::LinePlotResultData result
     // that are currently hidden.
     reconcileTripKeywordItems(tripUuids, tripVertexRanges);
 
-    // Skip emission when the network hasn't changed so 2D-geometry rules
+    // Skip publication when the network hasn't changed so 2D-geometry rules
     // don't rebuild on every line-plot completion triggered by unrelated
-    // cave data (labels, calibration, etc.).
+    // cave data (labels, calibration, etc.). Note this compares topology only —
+    // a positions-only re-solve lands here equal, which is why anything that
+    // cares about where a station moved watches the cave's lookup instead.
     const cwSurveyNetwork newNetwork = results.regionNetwork();
     if (newNetwork != m_lastPublishedNetwork) {
         m_lastPublishedNetwork = newNetwork;
-        emit regionNetworkChanged();
         m_surveyNetworkArtifact->setSurveyNetwork(
             QtFuture::makeReadyValueFuture(Monad::Result<cwSurveyNetwork>(newNetwork)));
     }

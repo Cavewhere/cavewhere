@@ -106,10 +106,6 @@ QQ.Item {
         id: scopeStationModelId
 
         trip: root.trip
-
-        //The network's value is unused here; its change is the re-solve pulse
-        //that re-pulls the trip's solved stations.
-        network: root.linePlotManager.regionNetwork
     }
 
     ColumnLayout {

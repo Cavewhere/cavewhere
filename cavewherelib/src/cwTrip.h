@@ -219,6 +219,18 @@ signals:
     //! idempotent. A trip its cave no longer lists gets only the first half.
     void scopeChanged();
 
+    //! The NOTIFY solvedStations() never had. Chained from the owning cave's
+    //! stationPositionPositionChanged in cwCave::connectTrip, because a trip's
+    //! solved positions physically live in its cave's lookup — so the getter is
+    //! here but only the cave knows when it moved.
+    //!
+    //! Deliberately not chained from scopeChanged: a scope move lands before the
+    //! re-solve that follows it, and solvedStations() would match the new prefix
+    //! against the old keys and answer empty until the solve catches up. Holding
+    //! the stale-but-populated answer is the better failure. A trip its cave no
+    //! longer lists is cut off from this, as it is from the cave's other pulses.
+    void solvedStationsChanged();
+
 public slots:
     void setChucks(QList<cwSurveyChunk*> chunks);
 
