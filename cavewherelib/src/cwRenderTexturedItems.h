@@ -97,6 +97,20 @@ private:
         uint32_t id() const { return m_id; }
         const ItemPayload& payload() const { return m_payload; }
 
+        // Merge one field of an Update* command into this command's payload,
+        // used by addCommand() to coalesce a later update into a still-pending
+        // Add (or an earlier update of the same type) so the queue holds one
+        // command per field instead of stacking full payloads (issue #629).
+        void mergeUpdatePayload(Type updateType, const ItemPayload& source) {
+            switch (updateType) {
+            case UpdateGeometry:     m_payload.geometry = source.geometry; break;
+            case UpdateTexture:      m_payload.texture = source.texture; break;
+            case UpdateMaterial:     m_payload.material = source.material; break;
+            case UpdateUniformBlock: m_payload.uniformBlock = source.uniformBlock; break;
+            case UpdateModelMatrix:  m_payload.modelMatrix = source.modelMatrix; break;
+            default: break;
+            }
+        }
 
     private:
         ItemPayload m_payload;

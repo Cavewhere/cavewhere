@@ -115,7 +115,70 @@ cwRHIObject* cwRenderTexturedItems::createRHIObject()
 
 void cwRenderTexturedItems::addCommand(const PendingCommand&& command)
 {
-    m_pendingChanges.append(command);
+    // Coalesce per id so the queue holds the *latest* state for each item
+    // rather than a running log of every edit. Without this, re-triangulation
+    // driven by repeated line-plot runs (e.g. stepping a trip's declination)
+    // stacks a full-mesh cwGeometry payload per edit, and the queue is only
+    // drained when the 3D view renders a frame — so editing while the view is
+    // hidden grows memory without bound (issue #629).
+    const uint32_t id = command.id();
+    const auto type = command.type();
+
+    const auto pendingIndexOfType = [this, id](PendingCommand::Type wanted) -> int {
+        for (int i = 0; i < m_pendingChanges.size(); ++i) {
+            const auto& pending = m_pendingChanges.at(i);
+            if (pending.id() == id && pending.type() == wanted) {
+                return i;
+            }
+        }
+        return -1;
+    };
+
+    switch (type) {
+    case PendingCommand::Remove: {
+        const bool hadPendingAdd = pendingIndexOfType(PendingCommand::Add) >= 0;
+        // Drop every still-pending command for this id: its updates are moot,
+        // and a pending Add means the item never reached the render thread, so
+        // the Add+Remove pair annihilates and no Remove need be recorded.
+        m_pendingChanges.removeIf([id](const PendingCommand& pending) {
+            return pending.id() == id;
+        });
+        if (!hadPendingAdd) {
+            // The item was already synced to the render thread; record the
+            // removal so the next sync tears it down.
+            m_pendingChanges.append(command);
+        }
+        break;
+    }
+    case PendingCommand::UpdateGeometry:
+    case PendingCommand::UpdateTexture:
+    case PendingCommand::UpdateMaterial:
+    case PendingCommand::UpdateUniformBlock:
+    case PendingCommand::UpdateModelMatrix: {
+        const int addIndex = pendingIndexOfType(PendingCommand::Add);
+        if (addIndex >= 0) {
+            // Fold the update into the not-yet-synced Add so its single payload
+            // carries the latest state.
+            m_pendingChanges[addIndex].mergeUpdatePayload(type, command.payload());
+            break;
+        }
+        const int sameTypeIndex = pendingIndexOfType(type);
+        if (sameTypeIndex >= 0) {
+            // Replace the previous same-field update with the latest value.
+            m_pendingChanges[sameTypeIndex] = command;
+            break;
+        }
+        m_pendingChanges.append(command);
+        break;
+    }
+    case PendingCommand::Add:
+    case PendingCommand::Unknown:
+        // Ids are unique and monotonic, so an Add never collides with a
+        // pending command for the same id.
+        m_pendingChanges.append(command);
+        break;
+    }
+
     update(); // schedule a render sync just like cwRenderScraps
 }
 
