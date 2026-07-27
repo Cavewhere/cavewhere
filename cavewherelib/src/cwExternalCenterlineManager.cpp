@@ -7,7 +7,6 @@
 
 //Our includes
 #include "cwExternalCenterlineManager.h"
-#include "cwCavernNaming.h"
 #include "cwCave.h"
 #include "cwCavingRegion.h"
 #include "cwConcurrent.h"
@@ -701,34 +700,5 @@ QFuture<Monad::ResultBase> cwExternalCenterlineManager::detachCenterline(cwTrip*
         guard->finish(cwExternalCenterlineReport::wasCanceled(ownerId));
     });
     return future;
-}
-
-QString cwExternalCenterlineManager::scopePrefixForTrip(cwTrip* trip) const
-{
-    cwCave* cave = (trip == nullptr) ? nullptr : trip->parentCave();
-    if (cave == nullptr) {
-        return QString();
-    }
-
-    const QString tripPrefix = trip->scopePrefix();
-    if (tripPrefix.isEmpty()) {
-        return QString();
-    }
-
-    cwCavingRegion* region = cave->parentRegion();
-    if (region == nullptr) {
-        return QString();
-    }
-
-    //Empty when the region does not list the cave — parented but already
-    //removed, say. There is no cave scope to qualify against, and answering
-    //with the bare trip prefix would name a scope no file ever opened.
-    const QString cavePrefix =
-        cwCavernNaming::scopePrefix(region->caveScopeLabels().value(cave->id()));
-    if (cavePrefix.isEmpty()) {
-        return QString();
-    }
-
-    return cavePrefix + tripPrefix;
 }
 

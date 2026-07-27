@@ -11,6 +11,7 @@
 //Qt includes
 #include <QHashFunctions>
 #include <QMetaType>
+#include <QQmlEngine>
 #include <QString>
 #include <QUuid>
 
@@ -37,6 +38,8 @@
 class CAVEWHERE_LIB_EXPORT cwStationHandle
 {
     Q_GADGET
+    QML_VALUE_TYPE(cwStationHandle)
+
     Q_PROPERTY(Scope scope READ scope WRITE setScope FINAL)
     Q_PROPERTY(QUuid containerId READ containerId WRITE setContainerId FINAL)
     Q_PROPERTY(QString tail READ tail WRITE setTail FINAL)
@@ -58,7 +61,7 @@ public:
     QUuid containerId() const { return m_containerId; }
     void setContainerId(const QUuid& containerId) { m_containerId = containerId; }
 
-    QString tail() const { return m_tail; }
+    const QString& tail() const { return m_tail; }
     void setTail(const QString& tail) { m_tail = tail; }
 
     //! A handle is structurally valid once it names a container and a station
@@ -81,6 +84,19 @@ private:
 };
 
 CAVEWHERE_LIB_EXPORT size_t qHash(const cwStationHandle& value, size_t seed = 0) noexcept;
+
+//For exposing Scope to qml — a value type is lower case in qml, so its
+//enumeration needs an element of its own. See cwError for the same pattern.
+class cwStationHandleDerived : public cwStationHandle
+{
+    Q_GADGET
+};
+
+namespace cwStationHandleDerivedForeign {
+    Q_NAMESPACE
+    QML_NAMED_ELEMENT(CwStationHandle)
+    QML_FOREIGN_NAMESPACE(cwStationHandleDerived)
+}
 
 Q_DECLARE_METATYPE(cwStationHandle)
 

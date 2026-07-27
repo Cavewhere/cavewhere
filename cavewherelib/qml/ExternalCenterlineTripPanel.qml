@@ -53,7 +53,7 @@ QQ.Item {
     property string missingSourcePath: ""
 
     signal relinkRequested()
-    signal stationClicked(string qualifiedName)
+    signal stationClicked(cwStationHandle stationHandle)
 
     function updateOwnerBusy() {
         ownerBusy = trip !== null && externalCenterlineManager.isOwnerBusy(trip.id)
@@ -105,17 +105,11 @@ QQ.Item {
     ScopeStationListModel {
         id: scopeStationModelId
 
-        network: root.linePlotManager.regionNetwork
+        trip: root.trip
 
-        //scopePrefixForTrip() is derived from the cave's and the trip's names,
-        //so a rename moves it — and a plain call would bind only to root.trip
-        //and hold the old prefix forever, filtering the re-solved network with a
-        //scope no station carries. Every rename re-solves, so the network is the
-        //pulse that says the prefix may have moved; naming it here is what makes
-        //this re-evaluate.
-        scopePrefix: root.trip !== null && scopeStationModelId.network !== null
-                     ? root.externalCenterlineManager.scopePrefixForTrip(root.trip)
-                     : ""
+        //The network's value is unused here; its change is the re-solve pulse
+        //that re-pulls the trip's solved stations.
+        network: root.linePlotManager.regionNetwork
     }
 
     ColumnLayout {
@@ -156,7 +150,7 @@ QQ.Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
             stationModel: scopeStationModelId
-            onStationClicked: (qualifiedName) => root.stationClicked(qualifiedName)
+            onStationClicked: (stationHandle) => root.stationClicked(stationHandle)
         }
 
         RowLayout {

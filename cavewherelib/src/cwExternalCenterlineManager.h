@@ -201,12 +201,6 @@ public:
         return m_fileOwnsDeclination.value(ownerId, true);
     }
 
-    // The qualified-station prefix the line-plot driver gives an
-    // attached trip's stations ("<caveLabel>.<tripLabel>."), for
-    // cwScopeStationListModel::scopePrefix. Empty for a null trip or a
-    // trip without a parent cave.
-    Q_INVOKABLE QString scopePrefixForTrip(cwTrip* trip) const;
-
     // One row per attached external centerline, rebuilt on every watch-set
     // recompute. Always non-null; owned by this object.
     cwAttachedCenterlinesModel* attachedCenterlinesModel() const { return m_attachedCenterlinesModel; }

@@ -13,9 +13,7 @@ MainWindowTest {
 
     ScopeStationListModel {
         id: scopeModelId
-        scopePrefix: rootId.trip !== null
-                     ? RootData.externalCenterlineManager.scopePrefixForTrip(rootId.trip)
-                     : ""
+        trip: rootId.trip
         network: RootData.linePlotManager.regionNetwork
     }
 
@@ -224,12 +222,14 @@ MainWindowTest {
 
             mouseClick(listView.itemAtIndex(0))
             compare(stationClickSpyId.count, 1, "clicking a station emits stationClicked")
-            const qualifiedName = stationClickSpyId.signalArguments[0][0]
-            const scopePrefix =
-                RootData.externalCenterlineManager.scopePrefixForTrip(rootId.trip)
-            verify(scopePrefix.length > 0, "the attached trip has a scope prefix")
-            verify(qualifiedName.indexOf(scopePrefix) === 0,
-                   "signal carries the qualified name; got: " + qualifiedName)
+            const handle = stationClickSpyId.signalArguments[0][0]
+            compare(handle.scope, CwStationHandle.Trip,
+                    "an attached trip's stations live in the trip's scope")
+            // QUuid reaches JS as an opaque wrapper, so compare the string forms.
+            compare(String(handle.containerId), String(rootId.trip.id),
+                    "the handle names the clicked station's trip")
+            compare(handle.tail, listView.itemAtIndex(0).text,
+                    "the handle carries the row's scope-relative tail")
         }
 
         function test_tripMetadataDateAndDeclination() {

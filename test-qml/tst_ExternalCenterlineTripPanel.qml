@@ -134,7 +134,7 @@ MainWindowTest {
                       "declination editor shows when CaveWhere owns declination")
         }
 
-        function test_stationClickForwardsQualifiedName() {
+        function test_stationClickForwardsStationHandle() {
             attachAndBind("trip-panel-stations")
 
             const stationsList = findChild(panelId, "stationsList")
@@ -147,15 +147,12 @@ MainWindowTest {
 
             mouseClick(listView.itemAtIndex(0))
             compare(stationClickSpyId.count, 1, "panel forwards the click")
-            const clickedName = stationClickSpyId.signalArguments[0][0]
+            const handle = stationClickSpyId.signalArguments[0][0]
 
-            const scopePrefix =
-                RootData.externalCenterlineManager.scopePrefixForTrip(rootId.trip)
-            verify(scopePrefix.length > 0, "the attached trip has a scope prefix")
-            verify(clickedName.indexOf(scopePrefix) === 0,
-                   "panel forwards the qualified name; got: " + clickedName)
-            verify(clickedName.length > scopePrefix.length,
-                   "the qualified name carries a station after its scope; got: " + clickedName)
+            // Identity derivation is the stations list's own test; the panel's
+            // job is forwarding, so pin that the handle is the clicked row's.
+            compare(handle.tail, listView.itemAtIndex(0).text,
+                    "the panel forwards the clicked row's handle")
         }
 
         function test_reloadRerunsSolve() {

@@ -1058,7 +1058,9 @@ bool cwTrip::isScoped() const { return !m_externalCenterline.isEmpty() || !m_sta
     <code>scopeChanged</code>. This is exactly the hazard already written up for
     <code>ExternalCenterlineTripPanel.qml</code>, but in C++ &mdash; and
     <code>qualifiedName</code> is what commit&nbsp;6 turns into a stored handle, so
-    it wants fixing <em>before</em> that.</li>
+    it wants fixing <em>before</em> that.
+    <strong>&rarr; RESOLVED 2026-07-27 by deletion, not by a fix &mdash; see
+    <a href="#qualified-name-ownership">Who owns the qualified name</a>.</strong></li>
   <li><strong>Nothing owns the <em>qualified</em> name.</strong> The live side
     exposes both halves (<code>caveScopeLabels</code>,
     <code>tripScopeLabels</code>) but nothing that assembles them:
@@ -1068,7 +1070,10 @@ bool cwTrip::isScoped() const { return !m_externalCenterline.isEmpty() || !m_sta
     from its live caches would give both sides one read interface. Worth deciding
     <em>before</em> commit&nbsp;6 starts, not after. Blast radius:
     <code>cwCavingRegion</code>&nbsp;+1 method,
-    <code>cwExternalCenterlineManager</code>, commit&nbsp;6's UI.</li>
+    <code>cwExternalCenterlineManager</code>, commit&nbsp;6's UI.
+    <strong>&rarr; RESOLVED 2026-07-27 &mdash; the answer is that the live side
+    stops composing qualified names at all; see
+    <a href="#qualified-name-ownership">Who owns the qualified name</a>.</strong></li>
   <li><strong><code>cwSurvexExporterRule.cpp:88</code> changed shape.</strong> Still
     <code>caveName.remove(" ")</code>, and already tracked &mdash; but fixing it no
     longer means "call <code>sanitizeToCavernIdentifier</code>". It means
@@ -1106,6 +1111,246 @@ bool cwTrip::isScoped() const { return !m_externalCenterline.isEmpty() || !m_sta
   <code>NoCoordinateSystem</code>, the removed one holds its angle
   (mutation-verified).
 </p>
+<h3 id="qualified-name-ownership">Who owns the qualified name &mdash; RESOLVED 2026-07-27</h3>
+<p>
+  Follow-ups&nbsp;3 and&nbsp;4 above were taken together, before commit&nbsp;6
+  starts, and the answer turned out to be <em>nobody, on the live side</em>. Three
+  facts, in the order they landed:
+</p>
+<ul>
+  <li><strong>There was never duplication to consolidate.</strong>
+    <code>cwExternalCenterlineManager.cpp:726&ndash;732</code> is the <em>only</em>
+    live site that joins a cave prefix to a trip prefix; the QML panel and the
+    tests all call it. The problem was placement and shape, not repetition.</li>
+  <li><strong>Its shape does not fit commit&nbsp;6.</strong>
+    <code>scopePrefixForTrip(cwTrip*)</code> answers "what prefix do this trip's
+    stations carry". Commit&nbsp;6 holds a <code>cwStationHandle</code>, whose
+    <code>NativeCave</code> case has no trip at all. The badge popover, the Ties
+    page and the suggester all want
+    <em>handle&nbsp;&rarr;&nbsp;qualified&nbsp;name</em>, which no live API
+    answers.</li>
+  <li><strong>The snapshot side already answers it.</strong>
+    <code>cwSurvexExporterRegion.cpp:56&ndash;69</code> composes exactly that,
+    parameterised by <code>cwScopeLabels</code>. It is exporter-private and
+    snapshot-only, and it blanks a malformed handle &mdash; right for emission,
+    wrong for a UI whose job is to show you the broken tie.</li>
+</ul>
+<p>
+  <strong>Decision: the live side stops composing qualified names entirely.</strong>
+  <code>cwScopeStationListModel</code>'s second mode
+  (<code>scopePrefix</code>&nbsp;+&nbsp;<code>network</code>) is deleted, the panel
+  drives the model by <code>trip</code>, and <code>scopePrefixForTrip</code> goes
+  with them &mdash; it has no other caller. What remains of "who owns the qualified
+  name" is only <em>handle&nbsp;&rarr;&nbsp;display&nbsp;name</em> for
+  commit&nbsp;6's Ties page, which is the exporter-side renderer, reached once
+  rather than reimplemented.
+</p>
+<p class="note">
+  <strong>The load-bearing rule: identity never round-trips through a string.</strong>
+  <code>cwStationHandle</code> already says it &mdash; a station is named "by the
+  scope it lives in plus the tail, never by a fully-qualified flat string"
+  (<code>cwStationHandle.h:21&ndash;24</code>). Parsing
+  <code>fisher_ridge.topo_1.a1</code> back into a handle would reintroduce exactly
+  that, and it does not even work: a native-prefixed trip's prefix is
+  <code>stationPrefix</code>, arbitrary user text that can contain dots and collide
+  with a cave label. So the picker carries <code>(containerId, tail)</code> and
+  commit&nbsp;6 reads them directly. This is <em>why</em> no inverse map is needed,
+  and it is what retires follow-up&nbsp;3 rather than fixing it: rows sourced from
+  <code>solvedStations()</code> carry no baked qualified prefix to go stale.
+</p>
+<p>
+  <strong>Rejected: a region-owned live <code>cwScopeLabels</code>.</strong>
+  Building the pool from the two live caches and invalidating on
+  <code>scopeLabelsChanged</code> would give both sides one read interface, but
+  costs an O(total&nbsp;trips) rebuild per pulse &mdash; a rename emits one per
+  keystroke &mdash; and makes a third copy of every label. Its one real draw was
+  materialising the <em>inverse</em> (label&nbsp;&rarr;&nbsp;id) that a
+  string-parsing picker would need; the rule above removes that need. Note the
+  inverse already exists in another form: <code>StationTripScrapLookup</code>
+  (<code>cwLinePlotTask.cpp:63&ndash;113</code>) materialises
+  station-name&nbsp;&rarr;&nbsp;tripId per cave &mdash; that is follow-up&nbsp;1's
+  problem, not something commit&nbsp;6 should reach into.
+</p>
+<p class="note">
+  <strong>Cost correction.</strong> Resolving a handle's owning container live is
+  <strong>O(total trips)</strong>, not O(caves&nbsp;&times;&nbsp;trips) &mdash;
+  <code>owningCave</code>'s inner loop is bounded by <em>that</em> cave's trips, so
+  the visits sum to the region's trip count. A Ties page rendering M ties is
+  M&nbsp;&times;&nbsp;O(T): milliseconds at realistic sizes. A
+  trip&nbsp;&rarr;&nbsp;cave index is a profile-driven addition, not a design
+  requirement.
+</p>
+
+<h4>Verified, not assumed (probes, 2026-07-27)</h4>
+<p>
+  Deleting a mode needs proof the survivor sees the same stations. Two throwaway
+  Catch2 probes ran a real attach through the full scan&nbsp;+&nbsp;solve pipeline,
+  then drove both modes off the same trip and compared
+  <code>StationNameRole</code> and <code>PositionRole</code>. Both green; probes
+  deleted (the same disposable pattern as the C1 equate spike).
+</p>
+<ul>
+  <li><strong>One cave.</strong> Identical tails (<code>simple.a1/a2/a3</code>) and
+    identical positions.</li>
+  <li><strong>Two caves, each with a trip of the same name</strong> &mdash; so
+    <code>trip-&gt;scopePrefix()</code> is the literal string
+    <code>"attachtrip."</code> in both. Each trip's rows were its own three
+    stations; no cross-contamination, and both modes agreed.</li>
+  <li><strong>Why that holds is not luck.</strong> The two modes are isolated by
+    <em>different</em> mechanisms: prefix mode by the cave label inside the
+    qualified prefix, trip mode because
+    <code>cave-&gt;stationPositionLookup()</code> is cave-scoped by construction.
+    Same answer, different route.</li>
+</ul>
+<p class="note">
+  <strong>One role legitimately differs, and it has a consumer.</strong>
+  <code>QualifiedNameRole</code> is cave-local in trip mode
+  (<code>attachtrip.simple.a1</code>) and region-qualified in prefix mode
+  (<code>attachcave.attachtrip.simple.a1</code>).
+  <code>ExternalCenterlineStationsList.qml:53</code> emits it as
+  <code>stationClicked(qualifiedName)</code> and the panel forwards it
+  (<code>:159</code>) &mdash; but nothing above the panel handles that signal; the
+  only listeners are two QML tests. It is a signal built <em>for</em>
+  commit&nbsp;6 and not yet wired, which is exactly where the identity rule gets
+  applied: change it to carry <code>(containerId, tail)</code> and the mode
+  difference becomes unobservable.
+</p>
+
+<h4>What is <em>not</em> changing</h4>
+<ul>
+  <li><strong>Native station prefixing stays</strong>, untouched.
+    <code>cwTrip::m_stationPrefix</code> and <code>scopePrefix()</code> are not in
+    scope. Trip mode is in fact the only mode that ever served native trips: a
+    plain native trip's empty prefix yields <em>zero</em> rows in prefix mode by
+    design (<code>test_cwScopeStationListModel.cpp:159</code>), while trip mode
+    lists its chunk stations (<code>:185</code>) and a native-prefixed Scope trip's
+    scope-relative tails (<code>:249</code>). The deletion removes the mode that
+    <em>cannot</em> do native prefixing. (Those line numbers are pre-deletion: the
+    prefix-mode cases are gone and the survivors were re-expressed trip-driven,
+    the dotted-tail and natural-order ones included.)</li>
+  <li><strong>The <code>*begin &lt;tripLabel&gt;</code> wrap around an attached
+    <code>*include</code> stays</strong>, and is <em>the</em> guarantee &mdash; not
+    a redundancy on top of the file's own namespacing.
+    <code>cwSurvexExporterCaveTask.cpp:153&ndash;174</code> emits it
+    unconditionally. Every external-centerline dataset happens to carry an internal
+    <code>*begin</code> (<code>Simple</code>, <code>NoMetadata</code>,
+    <code>Entrance</code>, <code>Passage</code>), which is why stations read
+    <code>attachcave.attachtrip.simple.a1</code> &mdash; the file's level nested
+    inside ours. A <code>.svx</code> with bare <code>a1</code> is perfectly legal,
+    and without the wrap would land at <code>attachcave.a1</code>, colliding with
+    the cave's own native <code>a1</code> and with every other bare-station
+    attachment. <strong>Gap:</strong> that safety is by construction, not by test
+    &mdash; no dataset exercises an attachment with no internal
+    <code>*begin</code>.</li>
+</ul>
+
+<h4>Consequence for commit&nbsp;6: the tail is not a bare station name</h4>
+<p>
+  Because a tail is everything below <em>our</em> scope, an attached trip's tails
+  carry the included file's own prefix &mdash; <code>simple.a1</code>, not
+  <code>a1</code>. <code>cwStationHandle::tail</code> holding that is correct and
+  consistent, but two commit&nbsp;6 designs assumed a bare name:
+</p>
+<ul>
+  <li><strong>The suggester "ranks candidate partners by tail match".</strong> A
+    native <code>a1</code> and an attached <code>simple.a1</code> are the
+    same-looking station with non-matching tails, so a naive tail comparison misses
+    the most common tie the suggester exists to propose. Matching has to consider
+    the last dot-segment, not the whole tail.</li>
+  <li><strong>The station-cell badge shows "only its tail"</strong>
+    (<code>a1&nbsp;&#8627;&nbsp;tied</code>). For an attached station that renders
+    <code>simple.a1&nbsp;&#8627;&nbsp;tied</code>, wider than the cell budget the
+    design assumed.</li>
+</ul>
+
+<h4>Implementation sequence &mdash; IMPLEMENTED 2026-07-27</h4>
+<p class="note">
+  All five steps are in the working tree, both suites green. Two shapes the
+  sequence left open got settled while implementing:
+</p>
+<ul>
+  <li><strong>Identity travels to QML as the handle itself</strong>, not as a pair
+    of roles. <code>cwStationHandle</code> gained
+    <code>QML_VALUE_TYPE(cwStationHandle)</code> plus the
+    <code>QML_FOREIGN_NAMESPACE</code> element that exposes its <code>Scope</code>
+    enum (the <code>cwError</code> pattern &mdash; a value type is lower case in
+    QML, so its enumeration needs an element of its own). The model has one
+    <code>StationHandleRole</code>, and <code>stationClicked</code> is typed
+    <code>signal stationClicked(cwStationHandle stationHandle)</code> at both the
+    list and the panel. Commit&nbsp;6's Ties page consumes handles in QML anyway,
+    so registering the type is the investment that keeps the picker strictly
+    typed rather than passing <code>var</code>.</li>
+  <li><strong><code>QualifiedNameRole</code> went too</strong>, not just the
+    second mode. Its trip-mode value was
+    <code>trip-&gt;scopePrefix()&nbsp;+&nbsp;tail</code> &mdash; a live-composed
+    qualified name, which is precisely what the decision above retires. Rows now
+    hold <code>{handle, position}</code> and the display name <em>is</em>
+    <code>handle.tail()</code>; sorting moved to the tail, which is equivalent
+    because every row in a trip shares one prefix.</li>
+  <li><strong>Step&nbsp;3 was only half done, deliberately: the panel still binds
+    <code>network:</code>.</strong> It is the model's only re-solve pulse &mdash;
+    <code>solvedStations()</code> is pulled, not pushed, so without a change
+    signal the rows never refresh after a solve. Its <em>value</em> is now
+    unread, which is a vestigial property and reads as one. The fix that would
+    retire it is for the model to subscribe itself to
+    <code>cwCave::stationPositionPositionChanged</code> when its trip is set,
+    making the pulse correct-by-construction instead of something four call
+    sites have to remember. That is a separate change &mdash; it removes a
+    public property, touches every consumer
+    (<code>StationDoubleClickTextInput.qml</code> included), and needs its own
+    re-parenting story &mdash; so it is <em>not</em> in this working tree.</li>
+  <li><strong>The handle rule lives on <code>cwTrip</code>, not in the model.</strong>
+    A cleanup pass moved the scope/containerId derivation to
+    <code>cwTrip::stationHandle(tail)</code>, next to the
+    <code>solvedStations()</code> whose tails it names. The two must branch on
+    the same predicate, and keeping them one file apart invited a specific wrong
+    edit: <code>scopePrefix().isEmpty()</code> looks like it should be the
+    cheaper <code>isScoped()</code>, but they diverge for a trip its cave no
+    longer lists (<code>isScoped()</code> true, prefix empty), and
+    <code>solvedStations()</code> takes its <em>native</em> branch there. Swapping
+    would silently mint <code>Trip</code>-scoped handles over cave-scope tails.
+    The factory now carries that reasoning in a comment, and it is the single
+    live-object&nbsp;&rarr;&nbsp;handle producer commit&nbsp;6 should call.</li>
+</ul>
+<p class="note">
+  <strong>Gap found while reviewing the pulse, not yet fixed.</strong>
+  <code>cwSurveyNetwork::operator==</code> compares station sets and neighbor
+  sets only, so a re-solve that <em>moves positions without changing topology</em>
+  compares equal, <code>cwLinePlotManager</code> never emits
+  <code>regionNetworkChanged</code>, and the model's rows keep stale
+  <code>PositionRole</code> values. The header's &ldquo;its change is the
+  re-solve pulse&rdquo; contract therefore does not hold for positions-only
+  re-solves &mdash; an independent reason the
+  <code>stationPositionPositionChanged</code> subscription above is the right
+  end state, since that signal fires on the lookup the model actually reads.
+</p>
+<ol>
+  <li><code>cwScopeStationListModel</code> grows container-id and tail roles (or a
+    <code>Q_INVOKABLE</code> returning the handle).</li>
+  <li><code>stationClicked</code> carries identity instead of a qualified string;
+    update the assertion at
+    <code>tst_ExternalCenterlinePanelComponents.qml:231</code>.</li>
+  <li><code>ExternalCenterlineTripPanel.qml</code> sets <code>trip:</code> instead
+    of <code>scopePrefix:</code>&nbsp;+&nbsp;<code>network:</code>.</li>
+  <li>Delete the <code>scopePrefix</code>&nbsp;+&nbsp;<code>network</code> mode,
+    <code>m_scopePrefix</code>, and the "legacy" comments at
+    <code>cwScopeStationListModel.h:38</code> and <code>.cpp:187</code> &mdash;
+    <em>nothing here is legacy</em>. <code>scopePrefix</code> has never shipped, so
+    there is no compatibility obligation and no reason to keep a mode for one; the
+    word implies an obligation that would stop the next reader from deleting
+    it.</li>
+  <li>Delete <code>scopePrefixForTrip</code> and its test at
+    <code>test_cwExternalCenterlineAttach.cpp:778</code>, now callerless. The two
+    notes above about its empty cases become history at that point.</li>
+</ol>
+<p class="note">
+  <strong>Coverage gap left open:</strong> the probes exercised
+  <code>survex_simple.svx</code> only, and no native-prefixed
+  (<code>stationPrefix</code>) trip went through a real solve &mdash; the existing
+  synthetic model test covers that mode, and the panel is external-only, so it is
+  not the panel's case. Worth one more probe if the deletion is to rest on it.
+</p>
+
 <p class="note">
   <strong>Scope-label spike (A vs B) &mdash; RESOLVED 2026-07-22: Fork&nbsp;A.</strong>
   A stored human-readable slug replaces <code>cave_&lt;hex&gt;</code>/<code>trip_&lt;hex&gt;</code>
@@ -1288,8 +1533,12 @@ bool cwTrip::isScoped() const { return !m_externalCenterline.isEmpty() || !m_sta
   <strong>(1)</strong> <code>cwScopeStationListModel</code> is now trip-driven:
   set a <code>trip</code> and it lists <code>cwTrip::solvedStations()</code>,
   unifying native (bare chunk names, empty prefix) and scoped/external
-  (prefix-stripped tails) — the legacy <code>scopePrefix</code>+<code>network</code>
+  (prefix-stripped tails) — the <code>scopePrefix</code>+<code>network</code>
   path stays for the external panel and a set trip takes precedence.
+  <strong>Superseded 2026-07-27</strong> — that second path is now slated for
+  deletion, and calling it "legacy" was wrong: <code>scopePrefix</code> has never
+  shipped. See <a href="#qualified-name-ownership">Who owns the qualified
+  name</a>.
   <code>network</code> is the re-solve pulse in trip mode. Added
   <code>Q_INVOKABLE containsStation()</code> (advisory) and
   <code>matchingStations(prefix)</code> (dropdown filter), both

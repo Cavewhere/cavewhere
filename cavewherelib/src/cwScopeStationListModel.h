@@ -18,37 +18,27 @@
 
 //Our includes
 #include "cwGlobals.h"
+#include "cwStationHandle.h"
 #include "cwSurveyNetwork.h"
 
 class cwTrip;
 
 /**
  * Read-only list model exposing a trip's post-solve stations by their
- * scope-relative (prefix-stripped) name, for autocomplete / reference
- * entry at the note, scrap, and LiDAR sites.
+ * scope-relative name, for autocomplete / reference entry at the note,
+ * scrap, and LiDAR sites.
  *
- * Two ways to drive it, most-general first:
+ * Set trip and the model lists that trip's solved stations, one row each:
+ * the name is the scope-relative tail cwTrip::solvedStations() yields, and
+ * the handle is the identity cwTrip::stationHandle() gives that tail — what
+ * an equate stores and the only thing a picker should hand on. The model
+ * never composes a qualified name; that is the exporter's job.
  *
- *  - trip: set a cwTrip and the model lists that trip's solved stations
- *    via cwTrip::solvedStations(), which speaks scope-relative names for
- *    *both* native trips (bare chunk-station names) and scoped/external
- *    trips (prefix-stripped tails). This is the general path; a native
- *    trip has an empty scope prefix and could not be selected by the
- *    scopePrefix path below.
- *
- *  - scopePrefix + network: the legacy path — list the network stations
- *    whose qualified name starts with scopePrefix (e.g.
- *    "<caveLabel>.<tripLabel>."), prefix-stripped. Used where only a
- *    prefix and a network are on hand (the external-centerline panel).
- *    An empty scopePrefix yields zero rows rather than every station.
- *
- * When a trip is set it takes precedence over scopePrefix. Bind network
- * to cwLinePlotManager::regionNetwork in either mode: its value feeds the
- * legacy path, and its change is the re-solve pulse that re-pulls
- * solvedStations() in trip mode (a full modelReset, no incremental diff).
- * Rows are sorted in natural order by qualified name (trailing station
- * numbers ascend numerically, so "a2" precedes "a10") so consumers stay
- * deterministic.
+ * Bind network to cwLinePlotManager::regionNetwork: its value is unused,
+ * but its change is the re-solve pulse that re-pulls solvedStations() (a
+ * full modelReset, no incremental diff). Rows are sorted in natural order
+ * by station name (trailing station numbers ascend numerically, so "a2"
+ * precedes "a10") so consumers stay deterministic.
  */
 class CAVEWHERE_LIB_EXPORT cwScopeStationListModel : public QAbstractListModel
 {
@@ -56,14 +46,13 @@ class CAVEWHERE_LIB_EXPORT cwScopeStationListModel : public QAbstractListModel
     QML_NAMED_ELEMENT(ScopeStationListModel)
 
     Q_PROPERTY(cwTrip* trip READ trip WRITE setTrip NOTIFY tripChanged)
-    Q_PROPERTY(QString scopePrefix READ scopePrefix WRITE setScopePrefix NOTIFY scopePrefixChanged)
     Q_PROPERTY(cwSurveyNetwork network READ network WRITE setNetwork NOTIFY networkChanged)
 
 public:
     enum Roles {
-        StationNameRole = Qt::UserRole + 1, //prefix-stripped display name
-        QualifiedNameRole,                  //full qualified name
-        PositionRole                        //QVector3D from the network
+        StationNameRole = Qt::UserRole + 1, //scope-relative name, the handle's tail
+        StationHandleRole,                  //cwStationHandle, the station's identity
+        PositionRole                        //solved QVector3D
     };
     Q_ENUM(Roles)
 
@@ -75,9 +64,6 @@ public:
 
     cwTrip* trip() const { return m_trip; }
     void setTrip(cwTrip* trip);
-
-    QString scopePrefix() const { return m_scopePrefix; }
-    void setScopePrefix(const QString& scopePrefix);
 
     cwSurveyNetwork network() const { return m_network; }
     void setNetwork(const cwSurveyNetwork& network);
@@ -95,20 +81,17 @@ public:
 
 signals:
     void tripChanged();
-    void scopePrefixChanged();
     void networkChanged();
 
 private:
     struct Row {
-        QString displayName;
-        QString qualifiedName;
+        cwStationHandle handle;
         QVector3D position;
     };
 
     void rebuildRows();
 
     QPointer<cwTrip> m_trip;
-    QString m_scopePrefix;
     cwSurveyNetwork m_network;
     QList<Row> m_rows;
 };

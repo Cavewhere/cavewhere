@@ -470,10 +470,9 @@ MainWindowTest {
                       "stations list shows after expanding")
 
             // survex_simple.svx solves to exactly A1/A2/A3. The rows come
-            // from cwScopeStationListModel's prefix-scoped slice of the
-            // post-solve network - the attached trip has no native shots
-            // (chunkCount 0), so cwTrip::stations() could never produce
-            // them.
+            // from cwScopeStationListModel's read of the trip's solved
+            // stations - the attached trip has no native shots (chunkCount
+            // 0), so cwTrip::stations() could never produce them.
             tryVerify(() => stationsList.count === 3, 10000,
                       "carpet picker lists the scoped stations; got: "
                       + stationsList.count)

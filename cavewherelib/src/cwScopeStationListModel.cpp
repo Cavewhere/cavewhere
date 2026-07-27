@@ -17,8 +17,8 @@ namespace {
 
 //! Natural-order compare: walk both strings run-by-run, comparing digit runs by
 //! numeric value (so "a2" sorts before "a10") and everything else by case-folded
-//! character. Station names are typically <tripPrefix>.<stationPrefix><number>,
-//! and the trailing number must ascend numerically, not lexically.
+//! character. Station tails are typically <stationPrefix><number> and may nest
+//! ("sidepassage.b1"); the trailing number must ascend numerically, not lexically.
 bool naturalLess(const QString& a, const QString& b)
 {
     int i = 0;
@@ -99,9 +99,9 @@ QVariant cwScopeStationListModel::data(const QModelIndex& index, int role) const
     const Row& row = m_rows.at(index.row());
     switch (role) {
     case StationNameRole:
-        return row.displayName;
-    case QualifiedNameRole:
-        return row.qualifiedName;
+        return row.handle.tail();
+    case StationHandleRole:
+        return QVariant::fromValue(row.handle);
     case PositionRole:
         return row.position;
     default:
@@ -113,7 +113,7 @@ QHash<int, QByteArray> cwScopeStationListModel::roleNames() const
 {
     return {
         { StationNameRole, "stationName" },
-        { QualifiedNameRole, "qualifiedName" },
+        { StationHandleRole, "stationHandle" },
         { PositionRole, "stationPosition" }
     };
 }
@@ -125,16 +125,6 @@ void cwScopeStationListModel::setTrip(cwTrip* trip)
     }
     m_trip = trip;
     emit tripChanged();
-    rebuildRows();
-}
-
-void cwScopeStationListModel::setScopePrefix(const QString& scopePrefix)
-{
-    if (m_scopePrefix == scopePrefix) {
-        return;
-    }
-    m_scopePrefix = scopePrefix;
-    emit scopePrefixChanged();
     rebuildRows();
 }
 
@@ -152,7 +142,7 @@ bool cwScopeStationListModel::containsStation(const QString& displayName) const
 {
     const QString key = cwStation::canonicalKey(displayName);
     return std::any_of(m_rows.cbegin(), m_rows.cend(), [&key](const Row& row) {
-        return cwStation::canonicalKey(row.displayName) == key;
+        return cwStation::canonicalKey(row.handle.tail()) == key;
     });
 }
 
@@ -161,8 +151,8 @@ QStringList cwScopeStationListModel::matchingStations(const QString& prefix) con
     const QString key = cwStation::canonicalKey(prefix);
     QStringList matches;
     for (const Row& row : m_rows) {
-        if (cwStation::canonicalKey(row.displayName).startsWith(key)) {
-            matches.append(row.displayName);
+        if (cwStation::canonicalKey(row.handle.tail()).startsWith(key)) {
+            matches.append(row.handle.tail());
         }
     }
     return matches;
@@ -174,31 +164,16 @@ void cwScopeStationListModel::rebuildRows()
     m_rows.clear();
 
     if (m_trip != nullptr) {
-        //Trip-driven (general): solvedStations() speaks scope-relative names
-        //for native and scoped trips alike. The qualified name is the scope
-        //prefix (empty for native) plus the relative tail.
-        const QString prefix = m_trip->scopePrefix();
         const QList<QPair<QString, QVector3D>> solved = m_trip->solvedStations();
         m_rows.reserve(solved.size());
         for (const QPair<QString, QVector3D>& station : solved) {
-            m_rows.append({ station.first, prefix + station.first, station.second });
-        }
-    } else if (!m_scopePrefix.isEmpty()) {
-        //Legacy: filter the network by scope prefix.
-        const QString prefix = cwStation::canonicalKey(m_scopePrefix);
-        const QStringList stations = m_network.stations();
-        for (const QString& qualifiedName : stations) {
-            if (qualifiedName.startsWith(prefix)) {
-                m_rows.append({ qualifiedName.mid(prefix.size()),
-                                qualifiedName,
-                                m_network.position(qualifiedName) });
-            }
+            m_rows.append({ m_trip->stationHandle(station.first), station.second });
         }
     }
 
     std::stable_sort(m_rows.begin(), m_rows.end(),
                      [](const Row& left, const Row& right) {
-        return naturalLess(left.qualifiedName, right.qualifiedName);
+        return naturalLess(left.handle.tail(), right.handle.tail());
     });
 
     endResetModel();

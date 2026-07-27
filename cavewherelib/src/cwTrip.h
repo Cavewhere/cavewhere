@@ -12,6 +12,7 @@
 
 //Our includes
 #include "cwStation.h"
+#include "cwStationHandle.h"
 #include "cwGlobals.h"
 #include "cwExternalCenterline.h"
 #include "cwStationPositionLookup.h"
@@ -176,6 +177,14 @@ public:
     //! authoritative answer to "what are my stations, and where are they?" for
     //! the line-plot geometry and label views, native or external alike.
     QList<QPair<QString, QVector3D>> solvedStations() const;
+
+    //! The identity of one of this trip's stations, named by the tail
+    //! solvedStations() yields. Branches on the same scopePrefix() emptiness
+    //! that solvedStations() does, so a tail and the handle naming it can never
+    //! disagree about which scope it came from: a native trip's stations belong
+    //! to the cave's scope, a scoped trip's to the trip's. The one producer of
+    //! a cwStationHandle from a live object.
+    cwStationHandle stationHandle(const QString& tail) const;
 
     // void stationPositionModelUpdated();
 

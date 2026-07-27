@@ -17,7 +17,6 @@
 #include "cwExternalSourceSettings.h"
 #include "cwFutureManagerModel.h"
 #include "cwLinePlotManager.h"
-#include "cwCavernNaming.h"
 #include "cwProject.h"
 #include "cwRootData.h"
 #include "cwSaveLoad.h"
@@ -40,7 +39,6 @@
 #include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
-#include <QRegularExpression>
 #include <QTemporaryDir>
 #include <QThreadPool>
 
@@ -773,55 +771,6 @@ TEST_CASE("cancelAttach is a no-op for idle owners and non-attach operations",
     CHECK(detachReport.success());
     CHECK_FALSE(detachReport.canceled());
     drainPipelines(fixture.get());
-}
-
-TEST_CASE("scopePrefixForTrip derives the driver's qualified-station prefix",
-          "[Attach][Manager][ScopeStations]")
-{
-    auto fixture = makeSavedProject(QStringLiteral("manager-scope-prefix"));
-    auto manager = managerOf(fixture.get());
-
-    // A native trip's stations sit at cave scope, so there is no qualified
-    // prefix to hand the station-list model — only an attached trip has one.
-    CHECK(manager->scopePrefixForTrip(fixture->trip).isEmpty());
-
-    fixture->trip->setExternalCenterline(
-        cwExternalCenterline(QStringLiteral("survex_simple.svx")));
-
-    const QString prefix = manager->scopePrefixForTrip(fixture->trip);
-    // The cave and trip are the only ones in this project, so neither label
-    // needs a collision suffix and each is its name folded to an identifier.
-    CHECK(prefix == cwCavernNaming::sanitizeToCavernIdentifier(fixture->cave->name())
-                    + QLatin1Char('.')
-                    + cwCavernNaming::sanitizeToCavernIdentifier(fixture->trip->name())
-                    + QLatin1Char('.'));
-    // Shape contract independent of the helpers: what
-    // cwScopeStationListModel::scopePrefix expects — two legal cavern
-    // identifiers, readable rather than hex.
-    CHECK(QRegularExpression(QStringLiteral("^[a-z0-9_]+\\.[a-z0-9_]+\\.$"))
-              .match(prefix).hasMatch());
-
-    CHECK(manager->scopePrefixForTrip(nullptr).isEmpty());
-
-    // A trip outside any cave has no qualified prefix.
-    cwTrip orphan;
-    CHECK(manager->scopePrefixForTrip(&orphan).isEmpty());
-
-    // A cave the region no longer lists is the third empty case: removed, but
-    // still parenting its trips, so the trip keeps answering parentCave() and
-    // keeps its own trip-scope label. There is no cave scope left to qualify
-    // against, and answering with the bare trip prefix would name a scope no
-    // exported file ever opened. The project's undo stack owns the removed cave
-    // and keeps it alive across the assertions.
-    cwCavingRegion* region = fixture->project->cavingRegion();
-    REQUIRE(region->caveScopeLabels().contains(fixture->cave->id()));
-    region->removeCave(region->indexOf(fixture->cave));
-
-    REQUIRE(fixture->trip->parentCave() == fixture->cave);
-    REQUIRE_FALSE(region->caveScopeLabels().contains(fixture->cave->id()));
-    // The trip half is still there — this is the cave half going missing.
-    REQUIRE_FALSE(fixture->trip->scopePrefix().isEmpty());
-    CHECK(manager->scopePrefixForTrip(fixture->trip).isEmpty());
 }
 
 TEST_CASE("attachment dirs derive from the save/load pipeline at load time",

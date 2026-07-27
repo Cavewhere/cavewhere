@@ -581,6 +581,19 @@ QList<QPair<QString, QVector3D>> cwTrip::solvedStations() const {
     return solved;
 }
 
+cwStationHandle cwTrip::stationHandle(const QString& tail) const
+{
+    //Deliberately scopePrefix() and not isScoped(): the two disagree for a trip
+    //its cave no longer lists, and solvedStations() above splits on the prefix.
+    if(scopePrefix().isEmpty()) {
+        cwCave* cave = parentCave();
+        return cwStationHandle(cwStationHandle::NativeCave,
+                               cave != nullptr ? cave->id() : QUuid(),
+                               tail);
+    }
+    return cwStationHandle(cwStationHandle::Trip, id(), tail);
+}
+
 /**
  * @brief cwTrip::stationPositionModelUpdated
  *

@@ -13,7 +13,8 @@ import QtQuick.Layouts
 import cavewherelib
 
 // Read-only list of the post-solve stations in this panel's scope,
-// backed by cwScopeStationListModel (prefix-stripped display names).
+// backed by cwScopeStationListModel (scope-relative names). A click
+// hands on the station's identity, not its name.
 ColumnLayout {
     id: root
     objectName: "stationsList"
@@ -24,7 +25,7 @@ ColumnLayout {
 
     spacing: Theme.tightSpacing
 
-    signal stationClicked(string qualifiedName)
+    signal stationClicked(cwStationHandle stationHandle)
 
     QC.Label {
         objectName: "stationsListHeader"
@@ -45,12 +46,12 @@ ColumnLayout {
 
         delegate: QC.ItemDelegate {
             required property string stationName
-            required property string qualifiedName
+            required property cwStationHandle stationHandle
 
             width: QQ.ListView.view.width
             text: stationName
 
-            onClicked: root.stationClicked(qualifiedName)
+            onClicked: root.stationClicked(stationHandle)
         }
     }
 }
