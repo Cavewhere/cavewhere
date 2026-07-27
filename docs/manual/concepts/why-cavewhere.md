@@ -150,8 +150,8 @@ As a project grows to dozens of trips and hundreds of stations, it gets hard to
 focus on the part you care about.
 
 Tag caves, trips, teams, notes, and scraps with
-[keywords](glossary.md#keyword), then filter on them to hide everything in the
-3D view except the section that matters.
+[keywords](glossary.md#keyword), then [filter on them](../view-3d/layers-and-keywords.md)
+to hide everything in the 3D view except the section that matters.
 
 ## Where to go next
 
