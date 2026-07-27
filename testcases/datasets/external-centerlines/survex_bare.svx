@@ -1,0 +1,11 @@
+; The one fixture with NO *begin / *end of its own, so its stations
+; arrive unqualified and collide with a cave's natives unless the
+; exporter wraps the *include. Station names are chosen to match the
+; natives its test gives the cave.
+;
+; The *fix makes a lost wrap loud: the cave's first native station is
+; already auto-fixed at the origin, so an unwrapped "a1" here fixes it
+; twice and cavern refuses the driver instead of merging in silence.
+*fix a1 100 0 0
+*data normal from to tape compass clino
+a1 a2 5.0 0 0

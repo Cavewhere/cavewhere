@@ -238,6 +238,92 @@ TEST_CASE("Trip-attached centerline resolves stations under <caveLabel>.<tripLab
     }
 }
 
+TEST_CASE("A bare external file cannot collide with the cave's native stations",
+          "[Attach][Trip]")
+{
+    // The "*begin <tripLabel>" wrap around an attached *include is the only
+    // thing keeping an unqualified station out of the cave's own namespace.
+    // Every other fixture opens its own *begin, so none of them would notice
+    // if the wrap vanished; survex_bare.svx has none, and names its stations
+    // to collide with the natives below.
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    const QString attachDir = seedAttachment(tempSubdir(tempRoot, QStringLiteral("bare-attach")),
+                                             fixturePath(QStringLiteral("survex_bare.svx")));
+
+    cwCavingRegion region;
+    cwCave* cave = addEmptyCave(region, QStringLiteral("Alpha"));
+
+    cwTrip* nativeTrip = addTripWithShot(cave,
+                                         QStringLiteral("Native"),
+                                         QStringLiteral("A1"),
+                                         QStringLiteral("A2"),
+                                         15.0);
+    // Both declinations pinned to 0 so the geometry below is the raw compass
+    // bearings, whatever the auto-declination default becomes.
+    nativeTrip->calibrations()->setAutoDeclination(false);
+    nativeTrip->calibrations()->setDeclinationManual(0.0);
+
+    cwTrip* attached = addEmptyTrip(cave, QStringLiteral("Attached"));
+    attached->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_bare.svx")));
+    attached->calibrations()->setAutoDeclination(false);
+    attached->calibrations()->setDeclinationManual(0.0);
+
+    const QString tripLabel = tripScopeLabel(attached);
+
+    QHash<QUuid, QString> tripDirs;
+    tripDirs.insert(attached->id(), attachDir);
+
+    // Assert the wrap on the driver text as well as through the solve: when it
+    // goes missing this fails first and names the cause, where the solve below
+    // only reports the consequence.
+    cwSurvexExporterRegion::Options options;
+    options.tripAttachmentDirs = tripDirs;
+    const QString driver =
+        writeDriverFor(region,
+                       options,
+                       QDir(tempRoot.path()).absoluteFilePath(QStringLiteral("driver.svx")));
+    CHECK(driver.contains(QStringLiteral("*begin %1").arg(tripLabel)));
+    CHECK(driver.contains(QStringLiteral("*end %1").arg(tripLabel)));
+
+    cwLinePlotManager manager;
+    manager.externalCenterlineManager()->setTripAttachmentDirs(tripDirs);
+    manager.setRegion(&region);
+    manager.waitToFinish();
+
+    // Cavern names both colliding sites, so surface its text on failure.
+    INFO("solve error: " << manager.solveErrorMessage().toStdString());
+    REQUIRE_FALSE(manager.hasSolveError());
+
+    const cwStationPositionLookup& lookup = cave->stationPositionLookup();
+
+    // Four distinct keys: the natives keep the cave-local bare names, the
+    // external pair sits one scope deeper with no *begin of its own to add.
+    const QString externalA1 = tripLabel + QStringLiteral(".a1");
+    const QString externalA2 = tripLabel + QStringLiteral(".a2");
+    REQUIRE(lookup.hasPosition(QStringLiteral("a1")));
+    REQUIRE(lookup.hasPosition(QStringLiteral("a2")));
+    REQUIRE(lookup.hasPosition(externalA1));
+    REQUIRE(lookup.hasPosition(externalA2));
+
+    // Separate keys alone would not prove separate stations — cavern could
+    // still have merged them onto one point. The geometry is what settles it:
+    // the external component sits at its own fix 100 m east, the native
+    // component at the origin, and each keeps its own leg length (5 m vs 15 m
+    // north) rather than being pulled toward the other.
+    CHECK(lookup.position(QStringLiteral("a1")).x() == Catch::Approx(0.0).margin(0.01));
+    CHECK(lookup.position(QStringLiteral("a2")).x() == Catch::Approx(0.0).margin(0.01));
+    CHECK(lookup.position(externalA1).x() == Catch::Approx(100.0).margin(0.01));
+    CHECK(lookup.position(externalA2).x() == Catch::Approx(100.0).margin(0.01));
+
+    const float nativeLeg = lookup.position(QStringLiteral("a2")).y()
+                            - lookup.position(QStringLiteral("a1")).y();
+    const float externalLeg = lookup.position(externalA2).y() - lookup.position(externalA1).y();
+    CHECK(nativeLeg == Catch::Approx(15.0).margin(0.01));
+    CHECK(externalLeg == Catch::Approx(5.0).margin(0.01));
+}
+
 TEST_CASE("Two trips whose names sanitize alike keep separate scopes end to end",
           "[Attach][Trip]")
 {

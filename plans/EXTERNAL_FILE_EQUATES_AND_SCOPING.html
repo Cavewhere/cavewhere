@@ -1242,9 +1242,19 @@ bool cwTrip::isScoped() const { return !m_externalCenterline.isEmpty() || !m_sta
     inside ours. A <code>.svx</code> with bare <code>a1</code> is perfectly legal,
     and without the wrap would land at <code>attachcave.a1</code>, colliding with
     the cave's own native <code>a1</code> and with every other bare-station
-    attachment. <strong>Gap:</strong> that safety is by construction, not by test
-    &mdash; no dataset exercises an attachment with no internal
-    <code>*begin</code>.</li>
+    attachment. <strong>Gap closed 2026-07-27:</strong>
+    <code>testcases/datasets/external-centerlines/survex_bare.svx</code> is the
+    first fixture with no internal <code>*begin</code>, and
+    <em>&ldquo;A bare external file cannot collide with the cave's native
+    stations&rdquo;</em> (<code>[Attach][Trip]</code>) attaches it to a cave whose
+    native trip already owns <code>a1</code>/<code>a2</code>. Deleting the wrap
+    fails it twice over: the driver text loses <code>*begin
+    &lt;tripLabel&gt;</code>, and cavern then refuses the driver with
+    <em>&ldquo;Station already fixed or equated to a control point&rdquo;</em>
+    &mdash; <code>writeFixStations</code> auto-fixes the cave's first native
+    station at the origin, and the fixture's <code>*fix a1 100 0 0</code> lands on
+    that same station. (Its stats also show the merge outright: two stations
+    instead of four, the 15&nbsp;m and 5&nbsp;m legs averaged to 10&nbsp;m.)</li>
 </ul>
 
 <h4>Consequence for commit&nbsp;6: the tail is not a bare station name</h4>
