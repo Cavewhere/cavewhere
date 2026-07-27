@@ -116,9 +116,6 @@ public:
     // plan. Empty when no live-link attachment is configured.
     QList<QUuid> missingSourceOwners() const { return m_missingSourceOwners; }
 
-    cwUpdatable::State updateState() const override;
-    QFuture<void> run() override;
-
     // Region-wide survey network artifact, updated whenever the line-plot
     // pipeline completes. Shared across every consumer (sketches today; future
     // 2D views). Always non-null after construction; its future may be
@@ -147,6 +144,9 @@ public slots:
     void rerunSurvex();
 
 private:
+    cwUpdatable::State doUpdateState() const override;
+    QFuture<void> doRun() override;
+
     QPointer<cwCavingRegion> Region; //The main
     QList<QPointer<cwErrorListModel>> UnconnectedChunks; //Current unconnected chunks
 
@@ -255,7 +255,7 @@ private slots:
 //This needs to be here for moc to generate correctly and we can forward declare cwRenderLinePlot
 #include "cwRenderLinePlot.h"
 
-inline cwUpdatable::State cwLinePlotManager::updateState() const {
+inline cwUpdatable::State cwLinePlotManager::doUpdateState() const {
     // Dirty takes priority over Working: a survey edit that arrives mid-solve
     // isn't covered by the solve in flight, so it reports Dirty and the driver
     // runs it again. See cwUpdatable::State.

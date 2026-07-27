@@ -661,7 +661,9 @@ Running       : !taskManagerModel.isIdle
   Instead <code>dropRunningCascade()</code> bumps <code>m_cascadeGeneration</code>, and <code>driveToClean()</code> compares the generation
   <em>before</em> dereferencing the pipeline &mdash; so a stale continuation returns without touching it. Same three-pipeline latency argument as above still
   makes it latent in production. <b>But see H7:</b> the generation is bumped on <code>destroyed()</code>, which is <em>too late</em> for a pipeline that pumps
-  an event loop in its destructor body &mdash; that gap is confirmed by test.
+  an event loop in its destructor body &mdash; that gap is confirmed by test. <b>CLOSED 2026-07-26 by H7's fix, from the other side:</b> the generation is still
+  bumped too late, but it no longer has to be early. A stale continuation reaching <code>driveToClean()</code> now finds the pipeline reporting
+  <code>Clean</code> and starting nothing, because the pipeline itself announced its teardown before it began pumping.
   <b>(H3) It is a forest, not a DAG.</b> <span class="hist"><code>QHash&lt;cwUpdatable*, cwUpdatable*&gt;</code> permits exactly one dependency per pipeline</span> (fixed — it is now <code>QHash&lt;cwUpdatable*, QList&lt;cwUpdatable*&gt;&gt;</code>; see "(a) DONE" below), so "depends on A
   <em>and</em> B" is inexpressible; and depth-layering is a barrier, so a slow independent root blocks unrelated depth-1 work. Fine at three pipelines, but
   the plan calls Stage 2 "dependency-DAG" and this is not yet one. <b>RESOLVED 2026-07-26:</b> it is now a real DAG. <code>dependencyDepth()</code> is
@@ -688,11 +690,13 @@ Running       : !taskManagerModel.isIdle
   mechanism: emitting <code>updateStateChanged()</code> from a note-removal path re-enters <code>onChildStateChanged()</code>, which with automatic update on
   calls <code>update()</code> → <code>runBatch()</code> over notes that are being destroyed. Every LiDAR removal site has this shape, including the
   <code>destroyed()</code> handler. <b>The general lesson:</b> any transition announced during destruction is a request to start work during destruction,
-  because the coordinator's whole job is to turn a transition into a run. <b>Fix direction:</b> a coordinator-level guard so nothing is driven once teardown
-  has begun (or a deferred/queued announcement that cannot land inside a nested teardown loop) — not a per-call-site workaround.
+  because the coordinator's whole job is to turn a transition into a run. <b>Fix direction <span class="warn">[SUPERSEDED — the placement below is wrong;
+  see RESOLVED]</span>:</b> a coordinator-level guard so nothing is driven once teardown has begun (or a deferred/queued announcement that cannot land inside
+  a nested teardown loop) — not a per-call-site workaround.
   <b>D1 did NOT fix this (checked 2026-07-26).</b> The seam changed how the <em>node</em> learns a run is over; it did not change
   <code>onChildStateChanged()</code>, which still calls <code>run()</code> on a Dirty transition when automatic update is on. A transition announced during
-  teardown is therefore still a request to start work during teardown, and the fix is still a coordinator-level teardown guard.
+  teardown is therefore still a request to start work during teardown, and the fix is still a teardown guard
+  <span class="warn">[SUPERSEDED — it went on <code>cwUpdatable</code>, not the coordinator; see RESOLVED]</span>.
   <b>The AsyncFuture cascade did not fix it either, and the window is wider than written above (confirmed by test, 2026-07-26).</b> The guard is armed by
   <code>dropRunningCascade()</code> on <code>QObject::destroyed</code>, which <code>~QObject</code> emits <em>after</em> the derived destructor body — but all
   three pipelines pump their nested event loop <em>in</em> that body (<code>cwLinePlotManager.cpp:133-138</code> → <code>:389</code>,
@@ -709,6 +713,35 @@ Running       : !taskManagerModel.isIdle
   It belongs to <em>this</em> commit rather than its own because the obvious fix is unsafe on its own: clearing the flag in
   <code>~cwUpdateCoordinator</code> hands a pipeline back its eager behavior during shutdown, which is precisely the H7 crash shape. The teardown guard is
   what makes "hand the pipeline back" safe, so the two land together.
+  <b>RESOLVED 2026-07-26 — the guard went into <code>cwUpdatable</code>, not the coordinator.</b> The fix direction written above ("a coordinator-level
+  guard") was <em>wrong on placement</em>, and the call graph is what settled it: <code>run()</code> has five callers, and three of them are inside the
+  pipelines themselves (<code>cwLinePlotManager.cpp:468</code>, <code>cwScrapManager.cpp:344</code>, <code>cwNoteLiDARManager.cpp:323</code>, plus
+  <code>runIfStandalone()</code>). A coordinator-side check covers two, and <em>which</em> two is engine-shaped: TaskTree had three doors, the AsyncFuture
+  cascade has two. A guard whose coverage must be re-derived every time the engine changes belongs on the other side of the call.
+  So <code>cwUpdatable::updateState()</code> and <code>run()</code> became non-virtual wrappers over <code>doUpdateState()</code> / <code>doRun()</code>: a
+  pipeline that has called <code>beginTeardown()</code> reports <code>Clean</code> and starts nothing, for every caller. Non-virtual, with the flag on
+  <code>cwUpdatable</code> rather than a subclass, because the driver reads it while a derived destructor is unwinding — a <code>virtual</code>
+  <code>isTearingDown()</code> would dispatch through the very vtable the guard exists to protect. <b>The coordinator needed no safety changes at all.</b>
+  Each of the three destructors calls <code>beginTeardown()</code> as its first statement; <code>~cwUpdatableBase</code> carries a
+  <code>Q_ASSERT_X</code> so a pipeline that forgets fails loudly on the first test run instead of silently at the wrong timing.
+  <b>F14 dissolved rather than being guarded around.</b> With <code>run()</code> gated, <code>setCoordinated(false)</code> on a dying pipeline is a no-op, so
+  the hand-back in <code>~cwUpdateCoordinator</code> needs no per-pipeline teardown check. It is still skipped during shutdown, but for a different and
+  narrower reason: eager means "recompute on the next source edit", and during shutdown those edits come from the survey data being dismantled — objects that
+  are not pipelines and have nothing to announce.
+  <b><code>beginShutdown()</code> is mostly policy — but don't read it as decoration.</b> Armed by <em>both</em> of <code>cwRootData</code>'s exit paths:
+  <code>shutdown()</code> (<code>cwRootData.cpp:498</code>), the user-facing one that drains tasks and futures asynchronously behind the shutdown screen, and
+  <code>shutdownBlocking()</code> (<code>:523</code>), which runs from <code>~cwRootData</code> ahead of its three pumping waits. Arming only the second would
+  leave the whole async drain window open. Either way a task or save completing in there can't start a solve nothing will read, and the H7 crash is fixed
+  without it. What it also does, which "policy" understates: <code>onChildStateChanged()</code>'s early return skips <code>refreshNeedsUpdate()</code>, and
+  that walks <em>every still-alive</em> pipeline's dirty set — scraps and notes whose trips are already being dismantled. So during the drain it suppresses
+  exactly the chain walk that <a href="https://github.com/Cavewhere/cavewhere/issues/637">#637</a> is about. Don't delete it as redundant.
+  <b>Verified by mutation, not just by green.</b> Deleting <code>beginTeardown()</code> from <code>~PumpingPipeline</code> fails the case — and it fails with
+  <code>~FakePipeline</code>'s own <code>beginTeardown()</code> still in place, which is the direct proof that a base destructor is too late: base destructors
+  run after the derived body, and the derived body is where the pumping happens. The <code>[!shouldfail]</code> tag is gone.
+  <b>The alternatives considered and rejected:</b> <code>QPointer</code> (nulls in <code>~QObject</code> — same too-late timing, no gain); a coordinator-side
+  flag (misses the self-drive sites); "never emit from a destructor" (the root-cause rule for the synchronous door, but unenforceable and does nothing for the
+  queued continuation); an early <code>tearingDown()</code> signal that drops the pipeline from the registry (stronger than a flag <em>within</em> the
+  coordinator, still misses self-drive); ownership inversion (blast radius); idle/queued driving (a nested loop's job is to run the queue).
   <b>(H6) Dead latch code. RESOLVED 2026-07-25</b> — the <code>#ifdef</code>, the <code>#else</code> latch branch and every symbol that fed it are gone;
   see the adoption note below. This was the "two implementations behind an #ifdef" cost of tradeoff (2), made concrete.</p>
 
@@ -774,7 +807,8 @@ Running       : !taskManagerModel.isIdle
   <b>Scraps: fixed and pinned.</b> <code>cwScrapManager::scrapDeleted()</code> now compares state across the removal and emits on a real transition; new test
   "Deleting the last dirty scrap announces the pipeline is clean" in <code>test_cwScrapManager.cpp</code> failed 4 assertions before the fix (state stayed
   Dirty, no pipeline signal, no aggregate signal) and passes after. It is safe because that slot is connected to <code>cwScrap::destroyed</code>, i.e. it runs
-  <em>after</em> the object is gone. (Test note: <code>cwNote::removeScraps</code> uses <code>deleteLater()</code>, and plain <code>processEvents()</code> does
+  <em>after</em> the object is gone <span class="warn">[SUPERSEDED — this rationale is backwards, and the state-comparison it justifies was itself the
+  use-after-free; see the 2026-07-26 correction below]</span>. (Test note: <code>cwNote::removeScraps</code> uses <code>deleteLater()</code>, and plain <code>processEvents()</code> does
   not flush deferred deletes — the test asks for <code>QEvent::DeferredDelete</code> explicitly.)
   <b>LiDAR: attempted, reverted, still open.</b> The equivalent fix in <code>cwNoteLiDARManager</code> <b>SIGSEGVs the <code>[cwProject]</code> suite</b>
   (verified by bisecting the two managers: without the LiDAR change the tag passes 10665 assertions / 137 cases; with it, a hard crash inside the LFS
@@ -784,7 +818,79 @@ Running       : !taskManagerModel.isIdle
   <code>cwUpdateCoordinator::onChildStateChanged()</code>, which with automatic update on drives <code>update()</code> → <code>runBatch()</code> over
   half-destroyed notes. This is hazard <b>H4/F10 territory</b> (a self-driven continuation delivered during teardown), so the fix is not a fourth emission
   site: it needs either a queued/deferred announcement or a coordinator-level guard against driving work during destruction. Left unfixed deliberately rather
-  than piling on variants. Consequence today: deleting the last dirty LiDAR note can leave the footer offering Run for nothing.</p>
+  than piling on variants. Consequence today: deleting the last dirty LiDAR note can leave the footer offering Run for nothing.
+  <b>LiDAR: FIXED 2026-07-26 — and the diagnosis above was wrong.</b> The crash was never the coordinator re-entering. With the teardown guard in place the
+  restored emissions still crashed <code>[cwProject]</code> (<code>SIGBUS</code>), and the stack named the real mechanism:
+  <code>noteDestroyed()</code> → <code>doUpdateState()</code> → <code>isRunnableNote(note)</code>, under <code>cwNoteLiDAR::~cwNoteLiDAR</code> inside
+  <code>~cwRootData</code>'s child-delete cascade. Taking a "state before the removal" snapshot walks <code>m_dirtyNotes</code>, which still holds the note whose
+  destructor has already run — <code>destroyed()</code> is emitted by <code>~QObject</code>, after the derived destructor. The use-after-free was in reading the
+  dying note, not in anything the coordinator did with the announcement. <b>The teardown guard does not cover this and could not:</b> the dying object is a
+  <em>note</em>, and the guard lives on the pipeline.
+  <b>The fix is to never evaluate the dying note.</b> <code>noteDestroyed()</code> decides from <code>QSet::remove()</code>'s return — was this note pending —
+  instead of comparing state across the removal. Every note still in the set has not begun destructing, so the state read <em>after</em> the removal is safe,
+  which is also why <code>runBatch()</code> over the remainder is safe. The other two sites (<code>liDARRowsAboutToBeRemoved()</code>,
+  <code>disconnectTrip()</code>) run while their notes are fully alive, so they keep the state-comparison shape via a shared
+  <code>announceStateChange()</code> helper, announcing once after their removals rather than per note.
+  New test "Deleting the last dirty LiDAR note announces the pipeline is clean" in <code>test_cwNoteLiDARManager.cpp</code>; dropping the site-1 announcement
+  fails exactly 2 assertions (the pipeline signal and the aggregate signal) while <code>updateState()</code> still reads Clean — the defect was always the
+  missing announcement, not the derived state. <code>[cwProject]</code> green: 10689 assertions / 137 cases.
+  <b>Scraps had the same use-after-free, and the rationale in <code>6295ed75</code> was backwards.</b> That commit justified its "before" snapshot as
+  "safe because the slot is connected to <code>cwScrap::destroyed</code>, so it runs <em>after</em> the object is gone" — after the object is gone is exactly when
+  reading it is a use-after-free. ASAN catches it in <code>[cwProject]</code>; release only survives because the memory has not been reused.
+  <code>scrapDeleted()</code> now uses <code>QSet::remove()</code>'s return, same shape as the LiDAR fix.
+  <b>Corrected in review (2026-07-26): <code>wasPending</code> alone was too loud, and the "every note/scrap still in the set is alive" claim is too broad.</b>
+  The old snapshot comparison stayed silent when a removal left the pipeline still Dirty; announcing on <em>any</em> pending item leaving the set does not,
+  and <code>onChildStateChanged()</code> answers a Dirty reading by calling <code>run()</code>. So deleting one scrap of a note whose siblings are still dirty
+  dispatched a triangulation <em>synchronously from inside <code>cwScrap::destroyed</code></em>, over scraps still on their way out; the LiDAR twin is worse,
+  since <code>mapNoteToInData()</code> reads each surviving note's trip and cave — the very ancestors being torn down. Both sites now gate on
+  <code>wasPending &amp;&amp; updateState() != Dirty</code>, which restores the old semantics without the use-after-free the snapshot caused. Still Dirty means
+  nothing changed, because removals only shrink the set and <code>m_workPending</code> is untouched. Separately, the aliveness claim only holds for items wired
+  to the <code>destroyed()</code> slot: <code>markAllScrapsDirty()</code> inserts into <code>DirtyScraps</code> without connecting one
+  (<code>cwScrapManager.cpp:322</code>), which is #637 family and is left open.
+  <b>Not covered by a test:</b> pinning the Dirty→Dirty suppression needs two dirty scraps, and the fixture has one — a freshly added scrap is not
+  geometry-valid, so it never becomes dirty. Likewise <code>noteDestroyed()</code>'s branch needs a trip torn down with notes still dirty, which is #637's
+  window. Both belong with #637's commit.</p>
+
+  <p><b>Test evidence for this commit (2026-07-26).</b> <code>[cwUpdateCoordinator]</code> + the three manager tags: 421 assertions / 59 cases.
+  <code>[cwProject],[cwRootData]</code> + those tags: 11138 assertions / 201 cases. QML suite: 743 passed / 5 failed / 83 skipped — the 5
+  (<code>tst_ResponsiveLayout</code>, <code>tst_ResponsiveViewPage</code>) are pre-existing, confirmed byte-identical on a <code>git stash</code>ed baseline, and
+  belong to the CP3/CP4 sidebar work rather than to derived data.
+  <b>Mutation-verified, not just green:</b> deleting <code>dropRunningCascade()</code> from <code>beginShutdown()</code> fails exactly the new
+  "An in-flight cascade stops driving once shutdown is announced" case — a running cascade drives its nodes from its own continuations, passing through neither
+  <code>onChildStateChanged()</code> nor <code>updateNow()</code>, so that call is the only thing that stops it. Removing either teardown latch alone fails
+  "A pipeline that has announced teardown reports Clean and starts nothing"; removing both additionally fails the two destructor cases.</p>
+
+  <p class="warn"><b>OPEN, PRE-EXISTING — <code>isRunnableScrap()</code> / <code>isRunnableNote()</code> walk a chain whose middle link can already be freed
+  (found 2026-07-26 by ASAN, confirmed at baseline). Filed as
+  <a href="https://github.com/Cavewhere/cavewhere/issues/637">#637</a>, milestone Summer 2026.</b> Independent of the teardown-guard work: a <code>git stash</code>ed baseline crashes with a byte-identical
+  stack, so this is not a regression and is not fixed here.
+  <code>isRunnableScrap()</code> (<code>cwScrapManager.cpp:71</code>) does <code>scrap-&gt;parentCave()</code>, which is
+  <code>parentTrip()-&gt;parentCave()</code> — scrap → trip → cave. During a trip teardown the middle link dies first: <code>~cwTrip</code>'s body destroys the
+  trip's <code>QPointer&lt;cwCave&gt;</code>, and only then does <code>~QObject</code> run <code>deleteChildren()</code> to delete the notes and their scraps. So a
+  sibling scrap still in <code>DirtyScraps</code> is <em>alive</em> while its parent trip is <em>gone</em>, and any <code>updateState()</code> during that window
+  reads the dead trip. <code>isRunnableNote()</code> has the same shape (<code>note-&gt;parentCave()-&gt;stationPositionLookup()</code>).
+  <b>Why the teardown guard does not cover it:</b> the guard makes a dying <em>pipeline</em> inert, and neither the trip nor the scrap is a pipeline. Nothing
+  announces a trip's teardown to the managers before its children start dying.
+  <b>Fix direction (its own commit):</b> either purge the dirty set when a trip/note is removed rather than waiting for each scrap's own
+  <code>destroyed()</code>, or make the runnable predicates not walk upward at all — cache the owning cave on the scrap at dirty time, so the predicate reads only
+  the scrap. The second is more likely right: a predicate that dereferences three objects to answer a question about one is the actual defect.
+  <b>Probably the same family as #570</b> (<code>cwLinePlotTask</code> derefs a freed <code>cwCave*</code>) — region-tree teardown ordering — but a different
+  site; worth checking whether one fix closes both.
+  <b>This commit grew the exposure slightly:</b> two new <code>updateState()</code> snapshot reads on removal paths
+  (<code>cwNoteLiDARManager.cpp:494</code>, <code>:761</code>), each walking the whole dirty set. Both are on <code>rowsAboutToBeRemoved</code>-shaped paths
+  where the notes are still alive, so neither is newly broken — but the count of places walking the chain went up in the same commit that documented why the
+  chain is unsafe.</p>
+
+  <p class="warn"><b>OPEN — pipeline destructors pump a nested event loop, which <code>CLAUDE.md</code> forbids. Filed 2026-07-26 as
+  <a href="https://github.com/Cavewhere/cavewhere/issues/638">#638</a>, milestone Summer 2026.</b> This is the root cause behind the whole H7 family, and the
+  reason the teardown guard has to exist as mitigation rather than as a nicety. <code>CLAUDE.md</code> is explicit — "<code>AsyncFuture::waitForFinished</code>
+  is test-only … destructors just call <code>future.cancel()</code>" — yet all three managers wait on a nested <code>QEventLoop</code> in their destructor
+  bodies (<code>cwLinePlotManager.cpp:391</code>, <code>cwScrapManager.cpp:1723</code>, <code>cwNoteLiDARManager.cpp:353</code>), and
+  <code>waitToFinish()</code>'s own docstring says "useful for unit testing". Remove the pump and the first-statement ordering requirement disappears along
+  with it. It cannot simply be deleted: <code>cwConcurrent::run</code> workers capture <code>this</code> and never poll <code>isCanceled()</code>, so the wait
+  is currently a real defense — the prerequisite is cooperative cancellation, or detaching the work from the manager's lifetime.
+  <b>Add to "alternatives considered and rejected":</b> that list carries "never emit from a destructor", but not the stronger and actually enforceable
+  "never <em>pump</em> in a destructor", which is the rule the project already has written down.</p>
 
   <p class="hist"><b>D1 SEAM — DONE 2026-07-26.</b> <code>cwUpdatable</code> now reads
   <code>State updateState() const</code> + <code>QFuture&lt;void&gt; run()</code> + <code>QFuture&lt;void&gt; currentRun() const</code>. <code>update()</code>
@@ -827,7 +933,36 @@ Running       : !taskManagerModel.isIdle
   that ever returned from <code>update()</code> still Dirty would overflow the stack rather than merely spin. The re-drive branch still exists, but it now
   hangs off the run's future instead of the signal, so the same bad pipeline spins through the event loop instead of overflowing — the same failure H4
   documents for the queued <code>flushAfterCascade()</code> variant. Still a note for whoever adds the fourth pipeline; the invariant it must uphold is
-  written on <code>cwUpdatable::run()</code>.</p>
+  written on <code>cwUpdatable::run()</code>.
+  <b>(3) Hoist the destructor teardown sequence into <code>cwUpdatableBase</code></b> — recorded by the 2026-07-26 review. The three destructors are now three
+  copies of <code>beginTeardown(); cancel(); wait…()</code> (<code>cwLinePlotManager.cpp:133</code>, <code>cwScrapManager.cpp:111</code>,
+  <code>cwNoteLiDARManager.cpp:143</code>), differing only in the restarter's name and <code>waitToFinish()</code> vs <code>waitForFinish()</code>. A
+  non-virtual <code>teardownPipeline()</code> calling protected <code>cancelWork()</code> / <code>waitForWork()</code> hooks would put the <em>ordering</em> in
+  one place and make the compiler prompt a fourth pipeline for the hooks. It also fixes the backstop's real weakness: <code>Q_ASSERT_X</code> only checks that
+  <code>beginTeardown()</code> was called <em>at all</em>, so a destructor calling it <em>after</em> its wait passes the assert and still has the bug — and the
+  assert lives on <code>cwUpdatableBase</code> while the flag lives on <code>cwUpdatable</code>, so a direct <code>cwUpdatable</code> implementer gets no check.
+  Sequence it after <a href="https://github.com/Cavewhere/cavewhere/issues/638">#638</a>, which may subsume it: with the pump gone the hooks reduce to a cancel.
+  Blast radius: three managers plus the <code>waitToFinish</code>/<code>waitForFinish</code> naming that many test call sites use.
+  <b>(4) Hoist the dirty-set bookkeeping out of the two note-based managers</b> — recorded by the 2026-07-26 review. <code>cwScrapManager</code> and
+  <code>cwNoteLiDARManager</code> each carry the same machinery: a dirty set, a deleted set, <code>m_workPending</code>, a runnable predicate, emit-on-transition,
+  and a <code>Dirty &gt; Working &gt; Clean</code> <code>doUpdateState()</code>. The evidence is this commit: the identical removal-path use-after-free had to be
+  fixed twice, in two files, and then the identical Dirty→Dirty over-announcement had to be fixed twice again on review. A <code>cwDirtySet&lt;T&gt;</code> owned
+  by <code>cwUpdatableBase</code> would have made each a one-place fix. Blast radius: the two managers plus <code>cwUpdatableBase</code>.
+  <b>(5) Give <code>cwRootData</code> one shutdown prologue</b> — recorded by the 2026-07-26 review. Two exit paths now arm the coordinator
+  (<code>cwRootData.cpp:498</code>, <code>:523</code>), so any future subsystem needing "stop on shutdown" must remember both. They also disagree about
+  <code>cwRootData</code>'s own flag: <code>shutdownBlocking()</code> does not set <code>m_shuttingDown</code> (<code>:492</code> is its only writer), so a
+  <code>~cwRootData</code> without a graceful exit leaves cwRootData reading not-shutting-down while the coordinator reads shutting-down. No live defect; small
+  blast radius (<code>cwRootData.{h,cpp}</code>).</p>
+
+  <p><b>Recorded 2026-07-26 (review): <code>beginTeardown()</code> changes the staleness aggregate without announcing it.</b> Belongs with the H7 RESOLVED
+  block. <code>needsUpdate()</code> goes true → false the instant a pipeline latches, with no <code>needsUpdateChanged()</code> — the new case "A pipeline that
+  has announced teardown reports Clean and starts nothing" asserts exactly that. It self-heals when <code>destroyed()</code> reaches
+  <code>refreshNeedsUpdate()</code>, so the stale window is bounded and harmless today, when pipelines are only torn down at shutdown. It would leave the footer
+  stale if one is ever destroyed while the app keeps running, and it is the same "aggregate changed, nobody told" class this very commit fixed twice (F11).
+  The honest reading: the flag makes <code>updateState()</code> return a <em>policy</em> answer wearing a <em>state</em> type, and the aggregate is then built on
+  a pipeline misreporting itself. The composable fix is not to replace the flag — an early <code>tearingDown()</code> signal was rejected because it misses the
+  self-drive doors, which is true — but to add the other half: let the pipeline announce teardown so the coordinator <em>deregisters</em> it and refreshes,
+  keeping the flag for the doors a signal cannot reach.</p>
 
   <p><b>Follow-up promoted to the commit sequence (2026-07-26): route the UI force paths through the coordinator.</b> The reach check below is confirmed
   accurate — <code>CavernOutputPage.qml:45</code> calls <code>linePlotManager.rerunSurvex()</code> and <code>FileMenu.qml:151</code> calls

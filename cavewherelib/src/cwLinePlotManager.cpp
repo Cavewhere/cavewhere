@@ -131,6 +131,10 @@ cwLinePlotManager::cwLinePlotManager(QObject *parent) :
 }
 
 cwLinePlotManager::~cwLinePlotManager() {
+    //Ahead of the wait below, which pumps the event loop: see
+    //cwUpdatable::beginTeardown().
+    beginTeardown();
+
     m_restarter.future().cancel();
     waitToFinish();
 
@@ -489,7 +493,7 @@ void cwLinePlotManager::runSurvex() {
 /**
   \brief Runs the line plot task now, unconditionally.
   */
-QFuture<void> cwLinePlotManager::run() {
+QFuture<void> cwLinePlotManager::doRun() {
     // Enter Working and drop the pending-dirty marker in one step: a solve now
     // covers the current data, so the pipeline is Working (not Dirty) until it
     // completes. Reporting Working — not the synchronously-cleared Dirty — is

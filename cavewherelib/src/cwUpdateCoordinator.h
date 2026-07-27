@@ -79,6 +79,28 @@ public:
     bool automaticUpdate() const;
     bool needsUpdate() const;
 
+    /**
+        Announces that the application is going down: no further derived-data
+        work is started from here on, and the cascade in flight is abandoned.
+
+        Armed by both of cwRootData's exit paths: shutdown(), which drains tasks
+        and futures asynchronously behind the shutdown screen, and
+        shutdownBlocking(), which waits on the task manager, the future manager
+        and the save flush from ~cwRootData. A task or a save completing in either
+        window can dirty a pipeline, and starting a fresh solve while the app is
+        being dismantled is work whose results nothing will read. Idempotent, so
+        both paths can call it.
+
+        Mostly policy: a pipeline that is being destroyed is already inert
+        (cwUpdatable::beginTeardown()), and this stops the coordinator from
+        beginning work in the window before that. It does more than that during
+        the drain, though, so don't read it as decoration — a pipeline that is
+        still alive keeps answering updateState(), and answering means walking a
+        dirty set whose scraps and notes belong to a region already being
+        dismantled. Latching here stops those walks for the rest of the exit.
+    */
+    void beginShutdown();
+
 public slots:
     void setAutomaticUpdate(bool automaticUpdate);
 
@@ -138,6 +160,7 @@ private:
     //would read a pipeline the cascade was dropped because of.
     quint64 m_cascadeGeneration = 0;
     bool m_cascadeRunning = false;
+    bool m_shuttingDown = false;
 };
 
 #endif // CWUPDATECOORDINATOR_H

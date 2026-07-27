@@ -37,6 +37,8 @@
 #include "cwCoordinateTransform.h"
 #include "cwGeoPoint.h"
 #include "cwMath.h"
+#include "cwUpdateCoordinator.h"
+#include "cwProject.h"
 
 TEST_CASE("cwNoteLiDARManager no crash when caves cleared during triangulation", "[cwNoteLiDARManager][Issue371]")
 {
@@ -490,4 +492,91 @@ TEST_CASE("cwNoteLiDARManager reuses render ids when re-triangulating a note", "
     for (uint32_t id : idsAfter) {
         CHECK(renderItems->hasItem(id));
     }
+}
+
+TEST_CASE("Deleting the last dirty LiDAR note announces the pipeline is clean",
+          "[cwNoteLiDARManager]")
+{
+    // Mirrors cwScrapManager: removing a note drops it from the dirty set, which
+    // can take the pipeline Dirty -> Clean. The coordinator only re-reads its
+    // staleness aggregate when a transition is announced, so without that the
+    // footer keeps offering Run for a note that no longer exists.
+    cwJobSettings::initialize();
+
+    auto root = std::make_unique<cwRootData>();
+
+    TestHelper helper;
+    helper.loadProjectFromZip(root->project(),
+                              testcasesDatasetPath("lidarProjects/jaws of the beast.zip"));
+    root->project()->waitLoadToFinish();
+    root->futureManagerModel()->waitForFinished();
+    root->linePlotManager()->waitToFinish();
+
+    REQUIRE(root->region()->caveCount() == 1);
+    auto* cave = root->region()->cave(0);
+    REQUIRE(cave->tripCount() == 1);
+
+    auto* lidarModel = cave->trip(0)->notesLiDAR();
+    REQUIRE(lidarModel != nullptr);
+
+    const QString lidarFile = helper.copyToTempDir(testcasesDatasetPath("lidarProjects/9_15_2025 3.glb"));
+    REQUIRE_FALSE(lidarFile.isEmpty());
+
+    QSignalSpy rowsInsertedSpy(lidarModel, &QAbstractItemModel::rowsInserted);
+    lidarModel->addFromFiles({ QUrl::fromLocalFile(lidarFile) });
+    root->futureManagerModel()->waitForFinished();
+    if (rowsInsertedSpy.isEmpty()) {
+        rowsInsertedSpy.wait(1000);
+    }
+    REQUIRE(lidarModel->rowCount() == 1);
+
+    QObject* noteObject = lidarModel->data(lidarModel->index(0, 0),
+                                           cwSurveyNoteModelBase::NoteObjectRole).value<QObject*>();
+    auto* note = qobject_cast<cwNoteLiDAR*>(noteObject);
+    REQUIRE(note != nullptr);
+
+    // One station is all it takes for the note to be worth running.
+    cwNoteLiDARStation station;
+    station.setName(QStringLiteral("6"));
+    station.setPositionOnNote(QVector3D(0.19147f, -0.720703f, -2.15723f));
+    note->addStation(station);
+
+    auto* manager = root->noteLiDARManager();
+    auto* coordinator = root->updateCoordinator();
+    REQUIRE(manager != nullptr);
+
+    // Settle to Clean so the dirty set holds exactly what this test puts in it.
+    manager->waitForFinish();
+    root->futureManagerModel()->waitForFinished();
+    QCoreApplication::processEvents();
+    REQUIRE(manager->updateState() == cwUpdatable::State::Clean);
+
+    coordinator->setAutomaticUpdate(false);
+
+    // Dirty the note without running it: with automatic update off the coordinator
+    // owns the run decision, which is the state the footer's Run offer is built on.
+    cwNoteLiDARStation second;
+    second.setName(QStringLiteral("7"));
+    second.setPositionOnNote(QVector3D(3.51028f, -0.0917969f, 5.39945f));
+    note->addStation(second);
+
+    REQUIRE(manager->updateState() == cwUpdatable::State::Dirty);
+    REQUIRE(coordinator->needsUpdate());
+
+    QSignalSpy pipelineSpy(manager, &cwNoteLiDARManager::updateStateChanged);
+    QSignalSpy aggregateSpy(coordinator, &cwUpdateCoordinator::needsUpdateChanged);
+
+    // The announcement is synchronous, from liDARRowsAboutToBeRemoved: that
+    // handler drops the note from the dirty set and disconnects it, so the
+    // note's own destroyed() is never what reports this. removeNote uses
+    // deleteLater, and plain processEvents() doesn't flush deferred deletes, so
+    // ask for them explicitly to get the note actually destroyed inside the test.
+    lidarModel->removeNote(0);
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    QCoreApplication::processEvents();
+
+    CHECK(manager->updateState() == cwUpdatable::State::Clean);
+    CHECK(pipelineSpy.count() == 1);
+    CHECK_FALSE(coordinator->needsUpdate());
+    CHECK(aggregateSpy.count() == 1);
 }

@@ -111,6 +111,10 @@ cwScrapManager::cwScrapManager(QObject *parent) :
 
 cwScrapManager::~cwScrapManager()
 {
+    //Ahead of the wait below, which pumps the event loop: see
+    //cwUpdatable::beginTeardown().
+    beginTeardown();
+
     TriangulateRestarter.future().cancel();
     waitForFinish();
 }
@@ -311,6 +315,15 @@ void cwScrapManager::setKeywordItemModel(cwKeywordItemModel *keywordItemModel)
     }
 }
 
+void cwScrapManager::markScrapDirty(cwScrap* scrap)
+{
+    connect(scrap, &cwScrap::destroyed,
+            this, &cwScrapManager::scrapDeleted,
+            Qt::UniqueConnection);
+
+    DirtyScraps.insert(scrap);
+}
+
 /**
   Marks every scrap in the region dirty, without running. Callers that honour
   the auto-update policy (e.g. a warping-settings change) route through the
@@ -326,7 +339,7 @@ void cwScrapManager::markAllScrapsDirty() {
         foreach(cwTrip* trip, cave->trips()) {
             foreach(cwNote* note, trip->notes()->notes()) {
                 for(cwScrap* scrap : note->scraps()) {
-                    DirtyScraps.insert(scrap);
+                    markScrapDirty(scrap);
                 }
             }
         }
@@ -345,7 +358,7 @@ void cwScrapManager::updateAllScraps() {
     run();
 }
 
-cwUpdatable::State cwScrapManager::updateState() const {
+cwUpdatable::State cwScrapManager::doUpdateState() const {
     // Dirty takes priority over Working: a scrap (re)dirtied but not yet handed
     // to a task (m_workPending) reports Dirty even while an earlier task runs, so
     // whoever is driving runs the pipeline again once that task is over. Once
@@ -358,7 +371,7 @@ cwUpdatable::State cwScrapManager::updateState() const {
     return cwUpdatable::State::Clean;
 }
 
-QFuture<void> cwScrapManager::run() {
+QFuture<void> cwScrapManager::doRun() {
     return updateScrapGeometryHelper(cw::toList(DirtyScraps));
 }
 
@@ -396,17 +409,30 @@ void cwScrapManager::rerunDirtyScraps()
 void cwScrapManager::scrapDeleted(QObject *scrapObj)
 {
     cwScrap* scrap = static_cast<cwScrap*>(scrapObj);
-    const cwUpdatable::State previousState = updateState();
 
     addToDeletedScraps(scrap);
-    DirtyScraps.remove(scrap); //scrapObj);
+    //Whether this scrap was pending, not a state comparison across the removal.
+    //This slot runs from cwScrap::destroyed, i.e. from ~QObject after ~cwScrap has
+    //already run, so a "before" state would walk DirtyScraps with the dying scrap
+    //still in it and isRunnableScrap() would read it — a use-after-free that ASAN
+    //catches in [cwProject], which a release build survives only until the memory
+    //is reused.
+    const bool wasPending = DirtyScraps.remove(scrap);
     m_sketchScrapBoundingBox.remove(scrap);
 
     //Deleting the last dirty scrap takes the pipeline Dirty -> Clean, which the
     //coordinator's staleness aggregate has to hear about like any other
     //transition; otherwise the footer keeps offering to compute work that no
     //longer exists.
-    if(updateState() != previousState) {
+    //
+    //Still Dirty afterwards means nothing changed — removals only shrink the set,
+    //and m_workPending is untouched — so the announcement would be redundant. It
+    //would also be unsafe: the coordinator answers a Dirty reading by running the
+    //pipeline, so announcing one from here dispatches a triangulation over the
+    //surviving dirty scraps from inside a scrap's destructor, while the rest of a
+    //deleted note's scraps are still on their way out. The state read is safe
+    //because the dying scrap has already left the set.
+    if(wasPending && updateState() != cwUpdatable::State::Dirty) {
         emit updateStateChanged();
     }
 }
@@ -1078,11 +1104,7 @@ void cwScrapManager::detachScrap(cwScrap* scrap)
 void cwScrapManager::updateScrapGeometry(QList<cwScrap *> scraps) {
 
     for(cwScrap* scrap : std::as_const(scraps)) {
-        connect(scrap, &cwScrap::destroyed,
-                this, &cwScrapManager::scrapDeleted,
-                Qt::UniqueConnection);
-
-        DirtyScraps.insert(scrap);
+        markScrapDirty(scrap);
     }
 
     m_workPending = true;

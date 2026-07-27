@@ -491,6 +491,12 @@ void cwRootData::shutdown()
     }
     m_shuttingDown = true;
 
+    //The user-facing exit path, and the earlier of the two: this drains tasks and
+    //futures asynchronously behind the shutdown screen, so stop the coordinator
+    //before that rather than in shutdownBlocking(), which only runs later from
+    //~cwRootData. See cwUpdateCoordinator::beginShutdown().
+    updateCoordinator()->beginShutdown();
+
     auto checkComplete = [this]() {
         if (!m_shutdownCompleted
             && taskManagerModel()->isIdle()
@@ -511,6 +517,11 @@ void cwRootData::shutdown()
 
 void cwRootData::shutdownBlocking()
 {
+    //Idempotent, and shutdown() has normally armed it already; this covers a
+    //cwRootData destroyed without a graceful exit. Either way it has to precede
+    //the three waits below, each of which pumps the event loop.
+    updateCoordinator()->beginShutdown();
+
     taskManagerModel()->waitForTasks();
     futureManagerModel()->waitForFinished();
     project()->waitSaveToFinish();

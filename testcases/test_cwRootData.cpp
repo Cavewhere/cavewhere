@@ -14,6 +14,13 @@
 #include "cwRemoteAccountModel.h"
 #include "cwRemoteBindingStore.h"
 #include "cwRemoteAccountCoordinator.h"
+#include "cwUpdateCoordinator.h"
+#include "cwCavingRegion.h"
+#include "cwCave.h"
+#include "cwTrip.h"
+#include "cwSurveyChunk.h"
+#include "cwStation.h"
+#include "cwShot.h"
 #include "LfsBatchClient.h"
 
 //Qt includes
@@ -134,6 +141,50 @@ TEST_CASE("cwRootData should update the managers with auto update correctly", "[
     cwJobSettings::instance()->setAutomaticUpdate(true);
 
     CHECK(rootData.updateCoordinator()->automaticUpdate() == true);
+}
+
+TEST_CASE("cwRootData::shutdown() stops the coordinator driving derived data", "[cwRootData]") {
+
+    //shutdown() is the user-facing exit and the earlier of the two paths: it
+    //drains tasks and futures asynchronously behind the shutdown screen, so a
+    //Run arriving in that window would otherwise start a solve nothing will read.
+    //Arming only shutdownBlocking(), which runs later from ~cwRootData, would
+    //leave the whole drain open.
+    cwJobSettings::initialize();
+    cwJobSettings::instance()->setAutomaticUpdate(false);
+
+    cwRootData rootData;
+    auto* coordinator = rootData.updateCoordinator();
+    auto* plotManager = rootData.linePlotManager();
+
+    cwCave* cave = new cwCave();
+    cave->setName("Cave 1");
+    rootData.region()->addCave(cave);
+
+    cwTrip* trip = new cwTrip();
+    cave->addTrip(trip);
+
+    cwSurveyChunk* chunk = new cwSurveyChunk();
+    trip->addChunk(chunk);
+
+    cwShot shot;
+    shot.setDistance(cwDistanceReading("10.0"));
+    shot.setCompass(cwCompassReading("0.0"));
+    shot.setClino(cwClinoReading("0.0"));
+    chunk->appendShot(cwStation("a1"), cwStation("a2"), shot);
+
+    plotManager->waitToFinish();
+    REQUIRE(plotManager->updateState() == cwUpdatable::State::Dirty);
+    REQUIRE(coordinator->needsUpdate());
+
+    rootData.shutdown();
+
+    coordinator->updateNow();
+    QCoreApplication::processEvents();
+    plotManager->waitToFinish();
+
+    //Still owed, never started: the solve is what shutdown declines to begin.
+    CHECK(plotManager->updateState() == cwUpdatable::State::Dirty);
 }
 
 TEST_CASE("cwRootData should install GitHub LFS auth provider", "[cwRootData]")

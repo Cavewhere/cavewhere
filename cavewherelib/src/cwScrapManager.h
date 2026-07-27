@@ -113,9 +113,6 @@ public:
 
     Q_INVOKABLE void setRenderScraps(cwRenderTexturedItems* glScraps);
 
-    cwUpdatable::State updateState() const override;
-    QFuture<void> run() override;
-
     void waitForFinish();
 
     QList<cwScrap*> dirtyScraps() const;
@@ -143,6 +140,9 @@ public slots:
     void updateAllScraps();
 
 private:
+    cwUpdatable::State doUpdateState() const override;
+    QFuture<void> doRun() override;
+
     QPointer<cwRegionTreeModel> RegionModel;
     cwLinePlotManager* LinePlotManager;
 
@@ -211,6 +211,11 @@ private:
     // QObjects of the note; sketch scraps need an explicit deleteLater).
     void attachScrap(cwScrap* scrap);
     void detachScrap(cwScrap* scrap);
+
+    // The only way into DirtyScraps. Wiring the scrap's destroyed() is what lets
+    // it take itself back out, so inserting without it leaves a pointer the set
+    // outlives.
+    void markScrapDirty(cwScrap* scrap);
 
     void markAllScrapsDirty();
     void updateScrapGeometry(QList<cwScrap *> scraps = QList<cwScrap*>());

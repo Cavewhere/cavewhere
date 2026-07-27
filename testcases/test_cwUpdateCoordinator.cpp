@@ -44,30 +44,11 @@ namespace {
         {
         }
 
-        cwUpdatable::State updateState() const override
-        {
-            if(m_pending) { return cwUpdatable::State::Dirty; }
-            if(isRunning()) { return cwUpdatable::State::Working; }
-            return cwUpdatable::State::Clean;
-        }
-
-        QFuture<void> run() override
-        {
-            //Counted before the early return: run() is a force path on the real
-            //pipelines too (cwLinePlotManager::run() restarts its solve
-            //unconditionally), so a redundant drive would restart real work.
-            m_driveCount++;
-            if(!m_pending) { return currentRun(); }
-            m_pending = false;
-            const QFuture<void> future = beginRun();
-            m_updateCount++;
-            emit updateStateChanged();
-
-            if(m_autoFinish) {
-                QMetaObject::invokeMethod(this, &FakePipeline::finish, Qt::QueuedConnection);
-            }
-            return future;
-        }
+        //Mirrors the real managers, whose destructors announce teardown before
+        //doing anything else. A subclass that pumps in its own destructor has to
+        //repeat this, since a base destructor runs too late to help — see
+        //PumpingPipeline.
+        ~FakePipeline() override { beginTeardown(); }
 
         void markDirty()
         {
@@ -87,6 +68,37 @@ namespace {
         //Runs started, versus every run() call including ones that started nothing.
         int updateCount() const { return m_updateCount; }
         int driveCount() const { return m_driveCount; }
+
+        //Protected on the real thing, since it is a pipeline's statement about
+        //itself. Exposed here so a case can check the latch head-on rather than
+        //only through a destructor.
+        using cwUpdatable::beginTeardown;
+
+    protected:
+        cwUpdatable::State doUpdateState() const override
+        {
+            if(m_pending) { return cwUpdatable::State::Dirty; }
+            if(isRunning()) { return cwUpdatable::State::Working; }
+            return cwUpdatable::State::Clean;
+        }
+
+        QFuture<void> doRun() override
+        {
+            //Counted before the early return: run() is a force path on the real
+            //pipelines too (cwLinePlotManager restarts its solve
+            //unconditionally), so a redundant drive would restart real work.
+            m_driveCount++;
+            if(!m_pending) { return currentRun(); }
+            m_pending = false;
+            const QFuture<void> future = beginRun();
+            m_updateCount++;
+            emit updateStateChanged();
+
+            if(m_autoFinish) {
+                QMetaObject::invokeMethod(this, &FakePipeline::finish, Qt::QueuedConnection);
+            }
+            return future;
+        }
 
     private:
         bool m_autoFinish;
@@ -503,14 +515,28 @@ namespace {
 
         ~PumpingPipeline() override
         {
+            //First statement, exactly as the real managers do it: ~FakePipeline
+            //also announces teardown, but base destructors run after this body,
+            //which is where the pumping happens. Dropping this line is enough to
+            //fail both cases below.
+            beginTeardown();
+
             m_destructing = true;
+
+            //Both doors a dying pipeline can be driven through. markDirty() emits,
+            //which is the synchronous one — the real managers do exactly this when
+            //a canceled run's completion handler reaches the coordinator from the
+            //destructor body. settle() delivers the queued cascade continuation,
+            //which is the one that needs the nested loop the pumping provides.
+            markDirty();
             settle();
         }
 
-        QFuture<void> run() override
+    protected:
+        QFuture<void> doRun() override
         {
             if(m_destructing) { *m_ranWhileDestructing = true; }
-            return FakePipeline::run();
+            return FakePipeline::doRun();
         }
 
     private:
@@ -520,7 +546,7 @@ namespace {
 }
 
 TEST_CASE("A pipeline destroyed with a continuation queued isn't driven while it dies",
-          "[cwUpdateCoordinator][!shouldfail]")
+          "[cwUpdateCoordinator]")
 {
     cwJobSettings::initialize();
     cwJobSettings::instance()->setAutomaticUpdate(false);
@@ -542,9 +568,168 @@ TEST_CASE("A pipeline destroyed with a continuation queued isn't driven while it
     pipeline->markDirty();
     REQUIRE(pipeline->updateState() == cwUpdatable::State::Dirty);
 
-    //The destructor pumps, which delivers that continuation. dropRunningCascade()
-    //has not run yet — destroyed() comes later — so the generation still matches.
+    //The destructor pumps, which delivers that continuation. The coordinator's
+    //own defenses are both still down at this point — dropRunningCascade() runs
+    //off destroyed(), which comes later, so the generation still matches — so
+    //what has to stop the drive is the pipeline reporting itself torn down.
     delete pipeline;
 
     CHECK_FALSE(ranWhileDestructing);
+}
+
+TEST_CASE("A pipeline announcing from inside its destructor isn't driven by it",
+          "[cwUpdateCoordinator]")
+{
+    //The other door, and the one that needs no event loop at all: a state change
+    //emitted from a destructor body reaches onChildStateChanged() synchronously,
+    //and with automatic update on a Dirty reading there is answered by running the
+    //pipeline. Only the teardown latch making that reading Clean stops it.
+    cwJobSettings::initialize();
+    cwJobSettings::instance()->setAutomaticUpdate(true);
+
+    bool ranWhileDestructing = false;
+    auto* pipeline = new PumpingPipeline(&ranWhileDestructing);
+
+    cwUpdateCoordinator coordinator;
+    coordinator.add(pipeline);
+
+    delete pipeline;
+
+    CHECK_FALSE(ranWhileDestructing);
+}
+
+TEST_CASE("A pipeline that has announced teardown reports Clean and starts nothing",
+          "[cwUpdateCoordinator]")
+{
+    //The guard the case above depends on, checked directly rather than through a
+    //destructor: it is the pipeline's own answer, so it holds for every caller
+    //including the pipeline's internal force paths.
+    cwJobSettings::initialize();
+    cwJobSettings::instance()->setAutomaticUpdate(false);
+
+    FakePipeline pipeline;
+    cwUpdateCoordinator coordinator;
+    coordinator.add(&pipeline);
+
+    pipeline.markDirty();
+    REQUIRE(pipeline.updateState() == cwUpdatable::State::Dirty);
+    REQUIRE(coordinator.needsUpdate());
+
+    pipeline.beginTeardown();
+
+    CHECK(pipeline.updateState() == cwUpdatable::State::Clean);
+    //A pipeline on its way out drops out of the staleness aggregate too: there is
+    //no point telling the user an update is needed for something that is leaving.
+    CHECK_FALSE(coordinator.needsUpdate());
+
+    pipeline.run();
+    CHECK(pipeline.updateCount() == 0);
+}
+
+TEST_CASE("Nothing is driven once shutdown has been announced",
+          "[cwUpdateCoordinator]")
+{
+    cwJobSettings::initialize();
+    cwJobSettings::instance()->setAutomaticUpdate(true);
+
+    FakePipeline pipeline;
+    cwUpdateCoordinator coordinator;
+    coordinator.add(&pipeline);
+
+    coordinator.beginShutdown();
+
+    //Automatic update is on, so without the shutdown latch this edit would run
+    //the pipeline the moment it announced itself dirty.
+    pipeline.markDirty();
+    settle();
+    CHECK(pipeline.updateCount() == 0);
+
+    //The forced Run path is closed as well, not just the automatic one.
+    coordinator.updateNow();
+    settle();
+    CHECK(pipeline.updateCount() == 0);
+}
+
+TEST_CASE("An in-flight cascade stops driving once shutdown is announced",
+          "[cwUpdateCoordinator]")
+{
+    //Those early returns only close the doors a *new* cascade comes through. A
+    //cascade already running owns the run decision for every node in it and drives
+    //them from its own continuations, which pass through neither
+    //onChildStateChanged() nor updateNow() — so dropping the cascade is what
+    //actually stops work during the shutdown drain.
+    cwJobSettings::initialize();
+    cwJobSettings::instance()->setAutomaticUpdate(false);
+
+    FakePipeline root(false); //Held in Working so the cascade stays open
+    FakePipeline dependent;
+
+    cwUpdateCoordinator coordinator;
+    coordinator.add(&root);
+    coordinator.add(&dependent, {&root});
+
+    root.markDirty();
+    dependent.markDirty();
+    coordinator.updateNow();
+    settle();
+
+    REQUIRE(root.updateState() == cwUpdatable::State::Working);
+    REQUIRE(dependent.updateCount() == 0);
+
+    coordinator.beginShutdown();
+
+    //Releasing the root would otherwise let the cascade's own continuation run the
+    //dependent, on the way out.
+    root.finish();
+    settle();
+
+    CHECK(dependent.updateCount() == 0);
+}
+
+TEST_CASE("A pipeline outliving its coordinator drives itself again",
+          "[cwUpdateCoordinator]")
+{
+    //add() hands the run decision to the coordinator; giving it back is what
+    //keeps a pipeline whose coordinator is gone from marking itself dirty
+    //forever with nothing left to run it.
+    cwJobSettings::initialize();
+    cwJobSettings::instance()->setAutomaticUpdate(false);
+
+    FakePipeline pipeline;
+    {
+        cwUpdateCoordinator coordinator;
+        coordinator.add(&pipeline);
+        REQUIRE(pipeline.isCoordinated());
+    }
+
+    CHECK_FALSE(pipeline.isCoordinated());
+
+    //Standalone again: the edit recomputes on the spot, with automatic update
+    //off and no coordinator involved.
+    pipeline.markDirty();
+    CHECK(pipeline.updateCount() == 1);
+}
+
+TEST_CASE("A coordinator torn down during shutdown leaves its pipelines inert",
+          "[cwUpdateCoordinator]")
+{
+    //The exception to the hand-back above. Eager means "recompute on the next
+    //source edit", and during shutdown those edits come from the survey data
+    //being dismantled — so a pipeline handed back here would solve against a
+    //region already coming apart.
+    cwJobSettings::initialize();
+    cwJobSettings::instance()->setAutomaticUpdate(false);
+
+    FakePipeline pipeline;
+    {
+        cwUpdateCoordinator coordinator;
+        coordinator.add(&pipeline);
+        coordinator.beginShutdown();
+    }
+
+    CHECK(pipeline.isCoordinated());
+
+    pipeline.markDirty();
+    settle();
+    CHECK(pipeline.updateCount() == 0);
 }

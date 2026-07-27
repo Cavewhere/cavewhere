@@ -143,6 +143,10 @@ cwNoteLiDARManager::cwNoteLiDARManager(QObject* parent) :
 
 cwNoteLiDARManager::~cwNoteLiDARManager()
 {
+    //Ahead of the wait below, which pumps the event loop: see
+    //cwUpdatable::beginTeardown().
+    beginTeardown();
+
     m_restarter.future().cancel();
     waitForFinish();
 }
@@ -291,7 +295,7 @@ bool cwNoteLiDARManager::keepRenderGeometry() const
     return m_keepRenderGeometry;
 }
 
-cwUpdatable::State cwNoteLiDARManager::updateState() const
+cwUpdatable::State cwNoteLiDARManager::doUpdateState() const
 {
     // Dirty takes priority over Working: a note (re)dirtied but not yet handed to
     // a batch (m_workPending) reports Dirty even while an earlier batch runs, so
@@ -305,7 +309,7 @@ cwUpdatable::State cwNoteLiDARManager::updateState() const
     return cwUpdatable::State::Clean;
 }
 
-QFuture<void> cwNoteLiDARManager::run()
+QFuture<void> cwNoteLiDARManager::doRun()
 {
     return runBatch();
 }
@@ -488,6 +492,8 @@ void cwNoteLiDARManager::liDARRowsAboutToBeRemoved(const QModelIndex& parent, in
         return;
     }
 
+    const cwUpdatable::State previousState = updateState();
+
     for (int i = begin; i <= end; i++) {
         const QModelIndex idx = model->index(i, 0);
         if (!idx.isValid()) {
@@ -505,6 +511,8 @@ void cwNoteLiDARManager::liDARRowsAboutToBeRemoved(const QModelIndex& parent, in
             disconnect(note, nullptr, this, nullptr);
         }
     }
+
+    announceStateChange(previousState);
 }
 
 // ---------------------- Centerline trigger ----------------------
@@ -520,9 +528,22 @@ void cwNoteLiDARManager::noteDestroyed(QObject* noteObj)
 {
     if (auto* note = static_cast<cwNoteLiDAR*>(noteObj)) {
         m_deletedNotes.insert(note);
-        m_dirtyNotes.remove(note);
+        //Whether this note was pending, not a state comparison across the removal:
+        //destroyed() is emitted by ~QObject, so ~cwNoteLiDAR has already run and
+        //reading the note — which updateState() would do while it is still in the
+        //dirty set — is a use-after-free.
+        const bool wasPending = m_dirtyNotes.remove(note);
         removeKeywordItemForNote(note);
         m_noteToRender.remove(note);
+
+        //Only once the pipeline has actually left Dirty. Still Dirty means nothing
+        //changed, and announcing it would have the coordinator dispatch a batch
+        //from inside a note's destructor — mapNoteToInData() reads each surviving
+        //note's trip and cave, which on this path are the ancestors being torn
+        //down. The state read is safe now that the dying note has left the set.
+        if (wasPending && updateState() != cwUpdatable::State::Dirty) {
+            emit updateStateChanged();
+        }
     }
 }
 
@@ -703,6 +724,13 @@ QFuture<void> cwNoteLiDARManager::runBatch()
     return batch;
 }
 
+void cwNoteLiDARManager::announceStateChange(cwUpdatable::State previousState)
+{
+    if (updateState() != previousState) {
+        emit updateStateChanged();
+    }
+}
+
 void cwNoteLiDARManager::finishBatch()
 {
     if (!isRunning()) {
@@ -746,6 +774,8 @@ void cwNoteLiDARManager::disconnectTrip(cwTrip* trip)
     }
 
     if (auto* model = trip->notesLiDAR()) {
+        const cwUpdatable::State previousState = updateState();
+
         // remove() tears down the model↔this row connections wholesale (equivalent to
         // the two specific disconnects this replaced).
         m_connectionRegistry.remove(model);
@@ -760,6 +790,8 @@ void cwNoteLiDARManager::disconnectTrip(cwTrip* trip)
             removeKeywordItemForNote(note);
             m_noteToRender.remove(note);
         }
+
+        announceStateChange(previousState);
     }
 }
 

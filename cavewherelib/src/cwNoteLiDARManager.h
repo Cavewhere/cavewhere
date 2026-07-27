@@ -67,9 +67,6 @@ public:
     void setKeepRenderGeometry(bool keepGeometry);
     bool keepRenderGeometry() const;
 
-    cwUpdatable::State updateState() const override;
-    QFuture<void> run() override;
-
     // Useful in tests or manual recompute. Forces a recompute regardless of the
     // auto-update policy (the "Compute" force path).
     Q_INVOKABLE void updateAllLiDAR();
@@ -110,12 +107,30 @@ private slots:
     void noteDestroyed(QObject* noteObj);
 
 private:
+    cwUpdatable::State doUpdateState() const override;
+    QFuture<void> doRun() override;
 
     // Batch scheduling
     void markDirty(cwNoteLiDAR* note);
     // Notifies the coordinator of dirtiness and, when standalone, recomputes now.
     void notifyDirty();
     QFuture<void> runBatch();
+
+    // Announces a state change, if there was one, after a note left the dirty set.
+    // Removing the last runnable dirty note takes the pipeline Dirty -> Clean, and
+    // the coordinator's staleness aggregate has to hear about that like any other
+    // transition — otherwise the footer keeps offering to compute notes that are
+    // gone.
+    //
+    // Every caller announces once, after its removals, never per note: the
+    // coordinator may run the pipeline in response, and a dirty set only half
+    // walked still holds notes on their way out.
+    //
+    // Only for removals whose notes are still alive — the model's
+    // rowsAboutToBeRemoved and the explicit trip disconnect. Taking the "before"
+    // state means reading every note in the dirty set, so a path reached from a
+    // note's own destroyed() has to decide without it (see noteDestroyed()).
+    void announceStateChange(cwUpdatable::State previousState);
 
     // Leaves Working: finishes the run's future and emits updateStateChanged.
     // That future is what whoever asked for the batch waits on, so every

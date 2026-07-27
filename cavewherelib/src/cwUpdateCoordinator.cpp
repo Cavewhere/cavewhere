@@ -7,6 +7,7 @@
 
 //Std includes
 #include <algorithm>
+#include <utility>
 
 //Qt includes
 #include <QLoggingCategory>
@@ -69,6 +70,37 @@ cwUpdateCoordinator::~cwUpdateCoordinator()
     //object, so they are torn down with it. Bumping the generation as well keeps
     //anything already queued from touching a half-destroyed coordinator.
     dropRunningCascade();
+
+    //Hand each surviving pipeline back to its standalone eager default, so one
+    //that outlives its coordinator isn't left marking itself dirty forever with
+    //no driver to run it.
+    //
+    //Nothing survives today: cwRootData creates the managers as children of
+    //Project and the coordinator after it, and QObject destroys children in
+    //creation order, so this list is already empty here. That is an ownership
+    //accident rather than a guarantee, and it is the whole reason a pipeline may
+    //outlive a coordinator at all — so this stays as the answer for when it does.
+    //
+    //Not during shutdown, and this is the one case the pipeline's own teardown
+    //guard cannot cover: eager means "recompute on the next source edit", and
+    //the next edits during shutdown come from the survey data itself being
+    //dismantled. Those objects aren't pipelines and have nothing to announce, so
+    //a pipeline made eager here would solve against a region already coming
+    //apart.
+    if(!m_shuttingDown) {
+        for(cwUpdatable* pipeline : std::as_const(m_updatables)) {
+            pipeline->setCoordinated(false);
+        }
+    }
+}
+
+void cwUpdateCoordinator::beginShutdown()
+{
+    if(m_shuttingDown) {
+        return;
+    }
+    m_shuttingDown = true;
+    dropRunningCascade();
 }
 
 bool cwUpdateCoordinator::automaticUpdate() const
@@ -91,6 +123,10 @@ bool cwUpdateCoordinator::needsUpdate() const
 
 void cwUpdateCoordinator::updateNow()
 {
+    if(m_shuttingDown) {
+        return;
+    }
+
     //Pressing Run twice supersedes the first cascade rather than racing a second
     //one alongside it: the older generation's continuations still fire, but every
     //one of them returns without touching a pipeline.
@@ -135,6 +171,10 @@ void cwUpdateCoordinator::finishCascade(quint64 generation)
 
 void cwUpdateCoordinator::onChildStateChanged(cwUpdatable* updatable)
 {
+    if(m_shuttingDown) {
+        return;
+    }
+
     //A running cascade owns the run decision for every node in it: each node
     //waits on its pipeline's run future and re-runs it if the run ends with the
     //pipeline dirty again, so driving it here would only duplicate that.
@@ -327,7 +367,7 @@ void cwUpdateCoordinator::flushAfterCascade()
     //Only the automatic path chases leftovers. A forced Run resolves the cascade
     //it started — including everything that run dirties downstream, which the
     //dependency edges already order — but not edits the user made after it.
-    if(cascadeRunning() || !automaticUpdate() || !needsUpdate()) {
+    if(m_shuttingDown || cascadeRunning() || !automaticUpdate() || !needsUpdate()) {
         return;
     }
     updateNow();

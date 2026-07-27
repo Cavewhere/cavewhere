@@ -23,6 +23,10 @@
     run() / currentRun() says when the work in flight is over. A run can finish
     with the pipeline Dirty again, because the source was edited while it ran.
 
+    updateState() and run() are non-virtual. They answer for a pipeline that is
+    being torn down (see beginTeardown()) and otherwise forward to
+    doUpdateState() / doRun(), which is what implementers provide.
+
     The concrete QObject subclass also declares a  void updateStateChanged()
     signal; cwUpdateCoordinator::add() connects it via the concrete type.
 */
@@ -54,8 +58,10 @@ public:
 
     virtual ~cwUpdatable() = default;
 
-    //The pipeline's current state (see State) — the one thing the coordinator reads.
-    virtual State updateState() const = 0;
+    //The pipeline's current state (see State) — the one thing the coordinator
+    //reads. Clean once the pipeline is tearing down: whatever it still owed,
+    //nothing can act on it any more.
+    State updateState() const { return m_tearingDown ? State::Clean : doUpdateState(); }
 
     /**
         Recomputes now, unconditionally, and returns the future for that run.
@@ -68,14 +74,16 @@ public:
         The future finishes when the run is over, which is the same instant the
         pipeline stops reporting Working. A call with nothing to do returns an
         already-finished future, so callers never need a separate "did it start
-        anything" question.
-
-        Implementers owe one invariant: a pipeline reporting Dirty must start
-        work here. A driver waits on the future and runs the pipeline again if
-        it is still Dirty afterwards, so one that reported Dirty and handed back
-        an already-finished future would be asked again immediately, forever.
+        anything" question. A pipeline that is tearing down starts nothing and
+        takes that same path.
     */
-    virtual QFuture<void> run() = 0;
+    QFuture<void> run()
+    {
+        if(m_tearingDown) {
+            return QtFuture::makeReadyVoidFuture();
+        }
+        return doRun();
+    }
 
     /**
         The future for the run in flight, or an already-finished future when
@@ -91,6 +99,50 @@ public:
     //and leaves the run decision to the coordinator. This is a driver handoff,
     //not the automatic-update policy — that lives entirely in the coordinator.
     virtual void setCoordinated(bool coordinated) = 0;
+
+protected:
+    /**
+        Announces that this pipeline is being torn down: from here on
+        updateState() reports Clean and run() starts nothing.
+
+        Call it as the first statement of the destructor, ahead of anything that
+        pumps an event loop. Every pipeline cancels its run and waits for the
+        worker to stop on the way out, and that wait runs the event queue, so a
+        driver's queued continuation can land inside the destructor body — while
+        a state transition emitted from that same body reaches a driver
+        synchronously, with no loop involved at all. QObject::destroyed is
+        emitted by ~QObject, after the derived destructor body has finished, so
+        it is too late to be the latch.
+
+        The guard lives on this side of the call rather than in the driver
+        because a pipeline also drives itself — runIfStandalone(), and each
+        manager's own force path — so there is no single caller to guard. It is
+        non-virtual, with the flag on this class rather than a subclass, so
+        reading it while a derived destructor unwinds does not dispatch through a
+        vtable that is already coming apart.
+
+        Protected because it is a pipeline's statement about itself, and a
+        one-way one: there is no untearing down, and nothing outside would have
+        anything to say here that the pipeline doesn't already know.
+    */
+    void beginTeardown() { m_tearingDown = true; }
+    bool isTearingDown() const { return m_tearingDown; }
+
+    //The implementer's half of updateState(), called only while the pipeline is
+    //not tearing down. Overriding it privately is fine, and preferred: dispatch
+    //happens through this class, so the derived access level never applies.
+    virtual State doUpdateState() const = 0;
+
+    //The implementer's half of run(), same access note as doUpdateState().
+    //
+    //One invariant is owed here: a pipeline reporting Dirty must start work. A
+    //driver waits on the future and runs the pipeline again if it is still Dirty
+    //afterwards, so one that reported Dirty and handed back an already-finished
+    //future would be asked again immediately, forever.
+    virtual QFuture<void> doRun() = 0;
+
+private:
+    bool m_tearingDown = false;
 };
 
 /**
@@ -100,7 +152,7 @@ public:
     Holds the coordinated flag, the shared "recompute now unless a coordinator is
     driving" idiom, and the run's promise, so each cwUpdatable implementer (line
     plot, scraps, LiDAR) doesn't repeat them. Implementers still provide
-    updateState()/run() and, being QObjects, declare their own void
+    doUpdateState()/doRun() and, being QObjects, declare their own void
     updateStateChanged() signal.
 
     The Working bit lives in that promise rather than in a bool each pipeline
@@ -113,7 +165,15 @@ public:
 class cwUpdatableBase : public cwUpdatable
 {
 public:
-    ~cwUpdatableBase() override { endRun(); }
+    ~cwUpdatableBase() override
+    {
+        //Every pipeline has to announce teardown before its destructor pumps an
+        //event loop; a miss is a use-after-free waiting for the right timing, so
+        //fail here where the cause is obvious rather than there.
+        Q_ASSERT_X(isTearingDown(), "~cwUpdatableBase",
+                   "the destructor must call beginTeardown() first");
+        endRun();
+    }
 
     void setCoordinated(bool coordinated) override { m_coordinated = coordinated; }
     bool isCoordinated() const { return m_coordinated; }
@@ -132,8 +192,8 @@ protected:
     //True between beginRun() and endRun(): the Working bit.
     bool isRunning() const { return m_run.has_value(); }
 
-    //Enters a run and returns the future to hand back from run(). While a run is
-    //in flight it returns that run's future, so a restart coalescing into work
+    //Enters a run and returns the future to hand back from doRun(). While a run
+    //is in flight it returns that run's future, so a restart coalescing into work
     //already going keeps the same handle.
     QFuture<void> beginRun()
     {
@@ -150,9 +210,11 @@ protected:
     //Call it from the pipeline's own thread: the promise's interior is
     //thread-safe, but the optional holding it is not. Note the destructor path
     //reports the run *finished*, not canceled, so a driver waiting on it takes
-    //its success branch — safe only because that branch is delivered through the
-    //event loop, by which time ~QObject has announced destroyed() and the driver
-    //has dropped the pipeline.
+    //its success branch — safe because that branch is delivered through the event
+    //loop, by which time the pipeline has announced its teardown and the driver
+    //reads it as Clean, and by which time ~QObject has emitted destroyed() and the
+    //driver has dropped the pipeline outright. The second guarantee is Qt's and
+    //holds even for an implementer that forgets beginTeardown().
     void endRun()
     {
         if(!m_run.has_value()) {
