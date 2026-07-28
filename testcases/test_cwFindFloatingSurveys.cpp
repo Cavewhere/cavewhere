@@ -23,14 +23,10 @@
 #include "cwCavingRegion.h"
 #include "cwEquate.h"
 #include "cwEquateModel.h"
-#include "cwExternalCenterlineManager.h"
 #include "cwFindFloatingSurveys.h"
 #include "cwLinePlotManager.h"
 #include "cwScopeLabels.h"
-#include "cwShot.h"
-#include "cwStation.h"
 #include "cwStationHandle.h"
-#include "cwSurveyChunk.h"
 #include "cwSurveyNetwork.h"
 #include "cwTrip.h"
 
@@ -49,57 +45,6 @@ namespace {
 
 using Result = cwFindFloatingSurveys::Result;
 
-cwTrip* addNativeTripWithShot(cwCave* cave,
-                              const QString& name,
-                              const QString& fromName,
-                              const QString& toName)
-{
-    cwTrip* trip = addEmptyTrip(cave, name);
-    cwSurveyChunk* chunk = new cwSurveyChunk();
-    trip->addChunk(chunk);
-    cwShot shot;
-    shot.setDistance(cwDistanceReading(QStringLiteral("10.0")));
-    shot.setCompass(cwCompassReading(QStringLiteral("0.0")));
-    shot.setClino(cwClinoReading(QStringLiteral("0.0")));
-    chunk->appendShot(cwStation(fromName), cwStation(toName), shot);
-    return trip;
-}
-
-// Copies `fixture` into its own subdirectory of `tempRoot` and registers that
-// directory for `trip`, which is what makes the driver's *include resolve.
-void attachFixture(const QTemporaryDir& tempRoot,
-                   const cwTrip* trip,
-                   const QString& fixture,
-                   QHash<QUuid, QString>& tripDirs)
-{
-    const QString attachDir = tempSubdir(tempRoot, trip->name());
-    seedAttachment(attachDir, fixturePath(fixture));
-    tripDirs.insert(trip->id(), attachDir);
-}
-
-struct AttachedSetup {
-    cwCave* cave = nullptr;
-    cwTrip* attached = nullptr;
-    QHash<QUuid, QString> tripDirs;
-};
-
-// The shape every attachment case here starts from: one cave holding a native
-// trip that anchors it and one attached centerline that may or may not join.
-// `region` is an out-parameter because cwCavingRegion is a QAbstractListModel
-// and so cannot be returned by value.
-AttachedSetup setupNativeAndAttached(const QTemporaryDir& tempRoot,
-                                     cwCavingRegion& region,
-                                     const QString& fixture)
-{
-    AttachedSetup setup;
-    setup.cave = addEmptyCave(region, QStringLiteral("Alpha"));
-    addNativeTripWithShot(setup.cave, QStringLiteral("Native"),
-                          QStringLiteral("A1"), QStringLiteral("A2"));
-    setup.attached = addAttachedTrip(setup.cave, QStringLiteral("Attached"), fixture);
-    attachFixture(tempRoot, setup.attached, fixture, setup.tripDirs);
-    return setup;
-}
-
 // Solves `region` with the given trip attachments and returns the manager's
 // floating-survey answer. The manager outlives the call through the reference
 // the caller holds, so a caller can go on to assert on its solve state.
@@ -107,9 +52,7 @@ QList<Result> solveAndFindFloating(cwLinePlotManager& manager,
                                    cwCavingRegion& region,
                                    const QHash<QUuid, QString>& tripDirs)
 {
-    manager.externalCenterlineManager()->setTripAttachmentDirs(tripDirs);
-    manager.setRegion(&region);
-    manager.waitToFinish();
+    solveRegion(manager, region, tripDirs);
     return manager.floatingSurveys();
 }
 

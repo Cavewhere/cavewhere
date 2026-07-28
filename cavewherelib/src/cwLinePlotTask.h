@@ -129,8 +129,6 @@ public:
     public:
         LinePlotResultData() { }
 
-        void clear();
-
         void setPositions(QVector<QVector3D> positions);
         void setTripVertexRanges(QVector<cwLinePlotGeometry::VertexRange> tripVertexRanges);
         void setTripUuids(QVector<QUuid> tripUuids);

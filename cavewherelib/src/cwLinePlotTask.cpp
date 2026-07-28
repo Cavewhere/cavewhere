@@ -50,16 +50,6 @@ cwLinePlotTask::LinePlotCaveData::LinePlotCaveData() :
     NetworkChanged(false)
 {
 }
-void cwLinePlotTask::LinePlotResultData::clear()
-{
-    Caves.clear();
-    Trips.clear();
-    Scraps.clear();
-    StationPositions.clear();
-    TripVertexRanges.clear();
-    TripUuids.clear();
-}
-
 cwLinePlotTask::StationTripScrapLookup::StationTripScrapLookup(cwCave *cave)
 {
     // Keys are matched against the changed-station names reported by

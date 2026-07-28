@@ -50,6 +50,12 @@ MainWindowTest {
             width: parent.width
             trip: rootId.trip
         }
+
+        FloatingSurveyBanner {
+            id: floatingBannerId
+            width: parent.width
+            floating: false
+        }
     }
 
     ExternalCenterlineTestCase {
@@ -287,6 +293,37 @@ MainWindowTest {
 
             tripMetadataId.fileOwnsDeclination = false
             dateSpyId.target = null
+        }
+
+        function test_floatingBannerSpeaksForBothWaysASurveyFloats() {
+            verify(!floatingBannerId.visible, "a survey that is tied in shows nothing")
+
+            floatingBannerId.floating = true
+            floatingBannerId.stations = ["a1", "a2"]
+
+            verify(floatingBannerId.visible, "a floating survey banners itself")
+            const detail = findChild(floatingBannerId, "floatingSurveyDetail")
+            verify(detail !== null, "floatingSurveyDetail must exist")
+            verify(detail.text.indexOf("frame of their own") >= 0,
+                   "solved-but-adrift copy; got: " + detail.text)
+
+            const stations = findChild(floatingBannerId, "floatingSurveyStations")
+            verify(stations !== null, "floatingSurveyStations must exist")
+            verify(stations.visible, "the stations line lists what floats")
+            verify(stations.text.indexOf("a1, a2") >= 0,
+                   "stations render in the survey's own namespace; got: " + stations.text)
+
+            // The other shape: cavern drops a survey nothing fixes and nothing
+            // ties in, so it floats with no station to name. Which is why the
+            // banner is driven by `floating` and not by the station list.
+            floatingBannerId.stations = []
+            verify(floatingBannerId.visible, "a dropped survey still banners")
+            verify(detail.text.indexOf("none of its stations were placed") >= 0,
+                   "dropped copy; got: " + detail.text)
+            verify(!stations.visible, "no stations line when nothing was placed")
+
+            floatingBannerId.floating = false
+            verify(!floatingBannerId.visible)
         }
     }
 }

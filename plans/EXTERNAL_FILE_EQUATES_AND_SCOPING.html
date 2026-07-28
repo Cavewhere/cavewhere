@@ -786,7 +786,7 @@ bool cwTrip::isScoped() const { return !m_externalCenterline.isEmpty() || !m_sta
   join).
 </p>
 
-<h4 id="c6a">6a &mdash; the unified "trip is floating" signal &mdash; DONE 2026-07-27</h4>
+<h4 id="c6a">6a &mdash; the unified "trip is floating" signal &mdash; DONE 2026-07-27, GREEN</h4>
 <p>
   The headless spine, ahead of any UI: <code>cwFindFloatingSurveys</code>
   (<code>cavewherelib/src/</code>) folds both triggers into one
@@ -797,8 +797,13 @@ bool cwTrip::isScoped() const { return !m_externalCenterline.isEmpty() || !m_sta
   <code>floatingSurveysChanged()</code> publish it. Every record names a trip
   &mdash; a native chunk is owned by the trip holding it and an external scope
   <em>is</em> a trip &mdash; so 6b should not branch on a cave-owned float; the
-  one case that would be cave-owned is out of reach here (see below). 6b's banner
-  and suggester bind to this list and never learn which pass answered. Tests:
+  one case that would be cave-owned is out of reach here (see below).
+  <em>Corrected by 6b:</em> production does not bind this list &mdash; it binds
+  <code>cwFloatingSurveyModel</code>, and <code>floatingSurveys()</code> /
+  <code>floatingSurveysChanged()</code> ended up with no production consumer at all.
+  Nor is the trigger hidden: the model exports a QML-visible <code>Trigger</code> enum
+  and a <code>TriggerRole</code>. What holds is the weaker, and sufficient, claim
+  &mdash; no consumer <em>has to</em> branch on which pass answered. Tests:
   <code>testcases/test_cwFindFloatingSurveys.cpp</code>
   (<code>[FloatingSurveys]</code>), plus the fixture
   <code>datasets/external-centerlines/survex_hanging.svx</code> &mdash; the first
@@ -893,13 +898,31 @@ bool cwTrip::isScoped() const { return !m_externalCenterline.isEmpty() || !m_sta
     always runs, and <code>publishFloatingSurveys</code> replaces the list
     wholesale &mdash; so an unconnected chunk in cave A erases a still-true
     floating record for cave B's attachment, and the banner blinks out until the
-    next clean solve. The narrow fix is an explicit "did the post-solve pass run"
-    flag so <em>cleared</em> and <em>unknown</em> are distinguishable; the real fix
-    is publishing the run as one immutable snapshot with an explicit
-    <code>lastRun</code> vs <code>lastGood</code> split, making "which run is this
-    field from" a type-level answer instead of a per-field convention. Blast
-    radius: <code>cwLinePlotManager</code>, <code>CavernOutputPage.qml</code>,
-    <code>cwRootData</code>, 6b's banner, the manager tests.</li>
+    next clean solve. <strong>The narrow fix SHIPPED in <code>26f8a492</code></strong>
+    &mdash; <code>LinePlotResultData::ExternalScopesChecked</code> plus
+    <code>cleared()</code> and the carry-forward in
+    <code>publishFloatingSurveys</code>, so <em>cleared</em> and <em>unknown</em>
+    are now distinguishable; the blink-out defect is closed and pinned by "A run
+    that stops before the solve keeps the answer it could not recheck". <strong>Still
+    open:</strong> the real fix, publishing the run as one immutable snapshot with an
+    explicit <code>lastRun</code> vs <code>lastGood</code> split, making "which run is
+    this field from" a type-level answer instead of a per-field convention &mdash;
+    now more urgent, since <code>m_floatingSurveys</code> is the one member that can
+    legitimately hold two runs at once and 6b hands that mixed list straight to a view
+    model whose rows the user reads. Blast radius:
+    <code>cwLinePlotManager</code>, <code>CavernOutputPage.qml</code>,
+    <code>cwRootData</code>, 6b's banner, the manager tests.
+    <br><br>
+    <strong>Sub-item (from the 6b review):</strong> a run is resolved against the live
+    region <em>three</em> separate times per publish &mdash;
+    <code>liveByUuid</code> (<code>cwLinePlotManager.cpp:256</code>), the chunk-marker
+    walk (<code>:644</code>), and <code>cwFloatingSurveyModel::rebuildRows</code>
+    &mdash; each with its own skip-the-dead rule. The new one is the sharper cost: it
+    builds a full cave+trip index on <em>every</em> <code>scopeLabelsChanged</code>,
+    which a cave rename emits per keystroke, whenever anything is floating.
+    <code>m_results</code> is a handful of ids, so resolving those directly needs no
+    region-wide index. Deferred because doing it properly means deciding where a
+    shared live-resolution helper lives.</li>
   <li><strong>Promote the equate graph before 6b re-implements it.</strong>
     <code>ScopeIndex</code> and <code>ScopeTies</code>
     (<code>cwFindFloatingSurveys.cpp</code>, anonymous namespace) answer the two
@@ -911,18 +934,136 @@ bool cwTrip::isScoped() const { return !m_externalCenterline.isEmpty() || !m_sta
     both want a queryable <code>cwEquateGraph</code> over
     <code>cwCavingRegionData</code>, not a fifth copy. Deferred because the query
     shape is 6b's to pin down.</li>
-  <li><strong>"This survey is floating" already has two homes with independent
-    lifetimes.</strong> One <code>cwFindUnconnectedSurveyChunks</code> answer feeds
-    both the per-chunk <code>cwError</code> markers (wiped and rebuilt on every
-    publish, only for caves still live) and
+  <li><strong>"This survey is floating" now has <em>three</em> homes with independent
+    lifetimes</strong> (two before 6b). One <code>cwFindUnconnectedSurveyChunks</code>
+    answer feeds the per-chunk <code>cwError</code> markers (wiped and rebuilt on every
+    publish, only for caves still live, native trigger only) and
     <code>LinePlotResultData::FloatingSurveys</code> (replaced only when it
-    compares unequal). Different clearing rules mean the
-    <code>SurveyDataEditor</code> cell marker and the 6b banner can legitimately
-    disagree about the same trip &mdash; which is exactly what "three surfaces, one
+    compares unequal, now with carry-forward); 6b added a third,
+    <code>cwFloatingSurveyModel</code>'s rows (additionally filtered by live-region
+    resolution and re-rendered on <code>scopeLabelsChanged</code>). Three clearing
+    rules for one fact. 6b made the divergence <strong>structural rather than
+    theoretical</strong>: after a run that stops early, cave B's chunk markers are
+    rebuilt from run N while the banner still shows cave A's run N&minus;1 record. So
+    the <code>SurveyDataEditor</code> cell marker and the 6b banner can legitimately
+    disagree about the same trip &mdash; exactly what "three surfaces, one
     shared banner&rarr;suggester spine" above promises they cannot. One derived
     survey-health model with the chunk markers as a view over it removes the
-    possibility.</li>
+    possibility.
+    <br><br>
+    <strong>The ownership question underneath it (from the 6b review):</strong> should
+    the solve orchestrator own a view model at all? The sibling model in the same
+    subsystem is passive &mdash; <code>cwAttachedCenterlinesModel</code> holds no region
+    pointer, connects to nothing, and is fed rows by
+    <code>cwExternalCenterlineManager</code>, itself carved out of
+    <code>cwLinePlotManager</code>. <code>cwFloatingSurveyModel</code> instead holds a
+    <code>QPointer&lt;cwCavingRegion&gt;</code>, subscribes to region signals, and owns
+    display policy (the <code>localStations()</code> prefix arithmetic). So the manager
+    now carries solve orchestration <em>plus</em> a second region observer <em>plus</em>
+    a view model. Supporting evidence the boundary already blurred:
+    <code>floatingSurveys()</code>/<code>floatingSurveysChanged()</code> have
+    <strong>zero production consumers</strong> after 6b &mdash; tests only &mdash; so one
+    answer ships through two public surfaces. The alternative is a
+    <code>cwSurveyHealth</code>-style subsystem owning the floating answer, the chunk
+    markers, and later the equate graph, with the manager handing it results &mdash; the
+    same shape as the external-centerline extraction.</li>
 </ul>
+
+<h4 id="c6b">6b &mdash; the banner &mdash; DONE 2026-07-27, GREEN</h4>
+<p>
+  6a's answer, rendered. <code>cwFloatingSurveyModel</code>
+  (<code>cavewherelib/src/</code>, owned by <code>cwLinePlotManager</code> and
+  reached as <code>linePlotManager.floatingSurveyModel</code>) resolves each
+  record's uuids against the live region into rows a view binds: cave name,
+  trip name, trigger, and the floating stations <em>in the trip's own
+  namespace</em>. That last one is what makes the two triggers name a station
+  alike &mdash; an external scope's record is cave-local
+  (<code>&lt;tripLabel&gt;.a2</code>) while a native chunk's is already bare, so
+  the model strips <code>cwTrip::scopePrefix()</code>.
+  <code>FloatingSurveyBanner.qml</code> is a dumb presenter of
+  <code>floating</code> + <code>stations</code>;
+  <code>ExternalCenterlineTripPanel</code> does the lookup
+  (<code>isFloating()</code> / <code>floatingStations()</code>) and shows it
+  above the attached header. Tests:
+  <code>testcases/test_cwFloatingSurveyModel.cpp</code>
+  (<code>[FloatingSurveyModel]</code>),
+  <code>tst_ExternalCenterlinePanelComponents</code> for the copy, and
+  <code>tst_ExternalCenterlineTripPanel</code> for the wiring.
+</p>
+<p class="note">
+  <strong>Two ways the rows and the region disagree, both pinned by tests.</strong>
+  The answer always describes a <em>finished run</em> while the region keeps
+  being edited, so a row can name a cave the user has since renamed or a trip the
+  user has since deleted &mdash; the latter now more easily, since <em>6a's</em>
+  carry-forward (<code>publishFloatingSurveys(&hellip;, externalScopesChecked)</code>)
+  lets an external record outlive its trip by a run.
+  <code>cwCavingRegion::scopeLabelsChanged</code> is the one pulse that covers
+  both: it is the region's aggregate "a cave or trip was named, added or
+  removed", so the model re-resolves on it and a record that no longer resolves
+  simply produces no row. Rows must not wait on a whole cavern run to stop
+  showing a name the user already replaced.
+</p>
+<p class="note">
+  <strong>The banner's driver is <code>floating</code>, never the station list.</strong>
+  A survey nothing fixes and nothing ties in is <em>dropped</em> by cavern, so it
+  floats with no station to name &mdash; the case
+  <code>survex_hanging.svx</code> pins. A surface that keys visibility off
+  "are there stations" is silent for exactly the worst failure.
+</p>
+<p class="note">
+  <strong>GREEN (6a and 6b together, after the 2026-07-28 pre-commit review).</strong>
+  C++ 1711 cases / 1710 passed / 1 skipped, 314,561 assertions, 0 failed. QML 837
+  passed / 0 failed / 83 skipped. One QML run showed three note-image click failures
+  (<code>NoteNorthInteraction</code>, <code>NoteOutsideScrapWarning</code>&nbsp;&times;2)
+  that passed in isolation and in a clean full re-run &mdash; a known flake cluster,
+  disjoint from this work.
+</p>
+<p class="note">
+  <strong>Still 6c's:</strong> the suggester (ranked candidate partners and
+  one-click connect), the <code>SurveyDataEditor</code> cell marker for the
+  native trigger, and the read-only Health/Ties page. The banner is read-only
+  until the suggester lands. Note the "two triggers, one banner" promise is only
+  half-delivered today: the model produces and tests both, but
+  <code>ExternalCenterlineTripPanel</code> is instantiated for external trips only
+  (<code>TripPage.qml:180,196</code>), so a <em>native</em> floating trip still gets
+  nothing but the old chunk error marker until 6c's cell marker lands.
+</p>
+<p class="note">
+  <strong>Two prerequisites 6c should settle before adding surfaces</strong> (from the
+  6b review).
+  <br><br>
+  <strong>1. Stop pulling; bind.</strong>
+  <code>ExternalCenterlineTripPanel</code> now carries <em>four</em>
+  <code>updateX()</code>&nbsp;+&nbsp;<code>Connections</code> refresh idioms, from three
+  different root causes &mdash; <code>isOwnerBusy</code> has a signal whose payload the
+  panel ignores, <code>sourcePathFor</code> has no notify at all, and the floating
+  queries have only <code>modelReset</code>. 6c adds two more surfaces that each need
+  the same per-key answer, which would make it six. The fix precedent is six lines below
+  in the same file: <code>ScopeStationListModel { trip: root.trip }</code> &mdash; a
+  QML-instantiable object keyed by trip that binds declaratively. A
+  <code>FloatingSurveyStatus { trip }</code> (or the answer as a <code>cwTrip</code>
+  property, which already has <code>scopeChanged</code> and
+  <code>solvedStationsChanged</code> wired by <code>cwCave::connectTrip</code>) makes the
+  banner a pure binding and gives both scheduled surfaces the same answer for free.
+  Related trap: the two sibling models disagree on update strategy &mdash;
+  <code>cwAttachedCenterlinesModel::setRows</code> diffs and emits
+  <code>rowsInserted</code>/<code>dataChanged</code>, while
+  <code>cwFloatingSurveyModel::rebuildRows</code> always resets &mdash; and the panel is
+  coupled to reset-only. If the floating model ever gains a diff for the Health page,
+  the panel silently stops updating.
+  <br><br>
+  <strong>2. The suggester needs station <em>identity</em>, not display strings.</strong>
+  <code>StationsRole</code> and <code>floatingStations()</code> return tails produced by
+  stripping <code>cwTrip::scopePrefix()</code>, with a documented "if it doesn't match,
+  keep what the run said" fallback &mdash; a display string with no container attached.
+  The suggester lands in this same banner and needs
+  (<code>containerId</code>,&nbsp;<code>tail</code>) to propose a tie, and the plan's own
+  resolved rule is that identity never round-trips through a string (see
+  &sect;"Who owns the qualified name" and &sect;"the tail is not a bare station name").
+  <code>ExternalCenterlineTripPanel.qml:63</code> already emits
+  <code>stationClicked(cwStationHandle)</code>, so the shape exists. Add a handle role
+  alongside the display strings rather than re-deriving identity from a tail.
+</p>
 
 <p class="note">
   <strong>Fork&nbsp;A &mdash; BUILT 2026-07-26, GREEN, not committed.</strong>
@@ -1317,6 +1458,18 @@ bool cwTrip::isScoped() const { return !m_externalCenterline.isEmpty() || !m_sta
   (<code>cwLinePlotTask.cpp:63&ndash;113</code>) materialises
   station-name&nbsp;&rarr;&nbsp;tripId per cave &mdash; that is follow-up&nbsp;1's
   problem, not something commit&nbsp;6 should reach into.
+</p>
+<p class="note">
+  <strong>6b takes this rebuild cost anyway &mdash; deliberately, not by
+  oversight.</strong> <code>cwFloatingSurveyModel::rebuildRows</code> does exactly the
+  O(total&nbsp;trips) per-pulse walk rejected above, on the same
+  <code>scopeLabelsChanged</code>. The difference that makes it acceptable is the
+  guard: the walk is behind <code>!m_results.isEmpty()</code>, so on the
+  overwhelmingly common "nothing floats" path a pulse costs one empty-list compare,
+  and the walk only happens while the user is being shown something to fix. The
+  rejection above stands for a cache that would pay the cost <em>always</em>; it is
+  not a blanket rule 6b broke. If profiling ever disagrees, the fix is the
+  targeted-resolution sub-item under follow-up&nbsp;1, not a third label copy.
 </p>
 <p class="note">
   <strong>Cost correction.</strong> Resolving a handle's owning container live is

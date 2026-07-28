@@ -23,6 +23,8 @@ class cwExternalCenterlineManager;
 class cwKeywordItem;
 class cwKeywordItemModel;
 class cwLinePlotTripVisibility;
+
+#include "cwFloatingSurveyModel.h"
 #include "cwLinePlotTask.h"
 #include "cwSurveyNetwork.h"
 #include "cwSurveyNetworkArtifact.h"
@@ -48,6 +50,7 @@ class CAVEWHERE_LIB_EXPORT cwLinePlotManager : public QObject
     QML_NAMED_ELEMENT(LinePlotManager)
 
     Q_PROPERTY(bool automaticUpdate READ automaticUpdate WRITE setAutomaticUpdate NOTIFY automaticUpdateChanged)
+    Q_PROPERTY(cwFloatingSurveyModel* floatingSurveyModel READ floatingSurveyModel CONSTANT FINAL)
     Q_PROPERTY(cwSurveyNetworkArtifact* surveyNetworkArtifact READ surveyNetworkArtifact CONSTANT)
     Q_PROPERTY(bool hasSolveError READ hasSolveError NOTIFY cavernOutputChanged FINAL)
     Q_PROPERTY(QString solveErrorMessage READ solveErrorMessage NOTIFY cavernOutputChanged FINAL)
@@ -119,6 +122,10 @@ public:
     // single banner speak for both. Empty until the first run completes.
     QList<cwFindFloatingSurveys::Result> floatingSurveys() const { return m_floatingSurveys; }
 
+    //! The same answer as rows a view can bind to, with each record's cave and
+    //! trip resolved against the live region. Always non-null.
+    cwFloatingSurveyModel* floatingSurveyModel() const { return m_floatingSurveyModel; }
+
     void waitToFinish();
 
 signals:
@@ -146,6 +153,7 @@ private:
     cwSurveyNetwork m_lastPublishedNetwork;
 
     QList<cwFindFloatingSurveys::Result> m_floatingSurveys;
+    cwFloatingSurveyModel* m_floatingSurveyModel;
 
     std::optional<cwLinePlotTask::SolveError> m_lastSolveError;
     QString m_lastCavernLog;

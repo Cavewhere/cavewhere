@@ -93,6 +93,8 @@ cwLinePlotManager::cwLinePlotManager(QObject *parent) :
     m_surveyNetworkArtifact = new cwSurveyNetworkArtifact(this);
     m_surveyNetworkArtifact->setName(QStringLiteral("LinePlotManager Survey Network"));
 
+    m_floatingSurveyModel = new cwFloatingSurveyModel(this);
+
     // The external-centerline subsystem owns the watcher, the async scan
     // pipeline, the attachment dirs, and the attached-centerlines model.
     // Its apply requests a solve through solveNeeded after the member
@@ -156,6 +158,12 @@ void cwLinePlotManager::setRegion(cwCavingRegion* region) {
     // results also clear per-chunk error markers. Safe even when region is
     // nullptr (publishPerCaveErrors no-ops without a Region).
     publishResults(cwLinePlotTask::LinePlotResultData::cleared());
+
+    // After the clear, never before: cave and trip uuids are persisted, so
+    // reopening a project would otherwise let the outgoing region's records
+    // resolve against the incoming one and publish a run's worth of rows that
+    // describe neither.
+    m_floatingSurveyModel->setRegion(region);
 
     if(Region == nullptr) {
         SurveySignaler->setRegion(nullptr);
@@ -583,6 +591,7 @@ void cwLinePlotManager::publishFloatingSurveys(QList<cwFindFloatingSurveys::Resu
         return;
     }
     m_floatingSurveys = std::move(floatingSurveys);
+    m_floatingSurveyModel->setResults(m_floatingSurveys);
     emit floatingSurveysChanged();
 }
 

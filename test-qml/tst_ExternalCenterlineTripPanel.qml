@@ -243,5 +243,51 @@ MainWindowTest {
             tryVerify(() => !banner.visible, 10000,
                       "banner hides once the owner has no remembered source")
         }
+
+        function test_aSecondAttachmentNothingTiesInBannersItself() {
+            const fixture = attachAndBind("trip-panel-floating")
+            const cave = RootData.region.cave(0)
+
+            const banner = findChild(panelId, "floatingSurveyBanner")
+            verify(banner !== null, "floatingSurveyBanner must exist")
+
+            // Gate on the solve first: "not visible" before any answer has
+            // landed is silence, not a negative, and would pass even if the
+            // sole attachment in a cave started reporting itself floating.
+            tryVerify(() => RootData.linePlotManager.lastSolveStationCount > 0, 10000,
+                      "the anchoring attachment solved")
+            verify(!banner.visible,
+                   "the only attachment in a cave anchors it, so nothing floats")
+
+            // A second centerline in the same cave. The first solved, so it is
+            // what the cave is measured against, and no equate joins the second
+            // to it — the silent failure this banner exists for.
+            //
+            // Bound before the attach on purpose: the banner has to appear on
+            // the panel the user is already looking at, which is the solve's
+            // answer arriving rather than a trip change asking for it.
+            cave.addTrip()
+            const second = cave.trip(1)
+            rootId.trip = second
+            verify(!banner.visible, "a trip with no centerline yet floats nothing")
+
+            RootData.attachTripCenterline(second, fixture.source)
+            tryVerify(() => banner.visible, 10000,
+                      "the untied second attachment banners itself")
+
+            const stations = findChild(banner, "floatingSurveyStations")
+            verify(stations !== null, "floatingSurveyStations must exist")
+            // Pinned whole rather than searched: a qualified spelling contains
+            // the trip-local one as a substring, so indexOf cannot tell the two
+            // apart and would pass on exactly the regression this guards.
+            compare(stations.text, "Floating: simple.a1, simple.a2, simple.a3",
+                    "stations render in the trip's own namespace")
+
+            // Binding back to the anchor must clear it — the banner is about
+            // the trip on screen, not about the cave holding a floating one.
+            rootId.trip = fixture.trip
+            tryVerify(() => !banner.visible, 5000,
+                      "the anchoring attachment is not floating")
+        }
     }
 }

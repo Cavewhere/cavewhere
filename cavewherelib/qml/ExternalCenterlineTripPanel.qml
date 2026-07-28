@@ -52,6 +52,13 @@ QQ.Item {
     // ExternalCenterlineAttachedHeader.
     property string missingSourcePath: ""
 
+    // The floating-survey answer for this trip. Two queries rather than one
+    // because a survey cavern dropped outright floats with no stations to name,
+    // and they are invokables with no NOTIFY of their own — the model's reset
+    // is the pulse, same imperative idiom as ownerBusy above.
+    property bool tripFloating: false
+    property list<string> floatingStations: []
+
     signal relinkRequested()
     signal stationClicked(cwStationHandle stationHandle)
 
@@ -70,16 +77,24 @@ QQ.Item {
                 : ""
     }
 
+    function updateFloating() {
+        let model = root.linePlotManager.floatingSurveyModel
+        tripFloating = trip !== null && model.isFloating(trip.id)
+        floatingStations = trip !== null ? model.floatingStations(trip.id) : []
+    }
+
     onTripChanged: {
         updateOwnerBusy()
         updateFileOwnsDeclination()
         updateMissingSourcePath()
+        updateFloating()
     }
 
     QQ.Component.onCompleted: {
         updateOwnerBusy()
         updateFileOwnsDeclination()
         updateMissingSourcePath()
+        updateFloating()
     }
 
     QQ.Connections {
@@ -102,6 +117,16 @@ QQ.Item {
         }
     }
 
+    QQ.Connections {
+        target: root.linePlotManager.floatingSurveyModel
+
+        // The model rebuilds its rows wholesale, so its reset is the one pulse
+        // that covers a new run, a rename and a deleted trip alike.
+        function onModelReset() {
+            root.updateFloating()
+        }
+    }
+
     ScopeStationListModel {
         id: scopeStationModelId
 
@@ -121,6 +146,13 @@ QQ.Item {
             sourcePath: root.missingSourcePath
             onRelinkRequested: root.relinkRequested()
             onForgetSourceRequested: root.externalSourceSettings.clearSourcePath(root.trip.id)
+        }
+
+        FloatingSurveyBanner {
+            id: floatingBannerId
+            Layout.fillWidth: true
+            floating: root.tripFloating
+            stations: root.floatingStations
         }
 
         QQ.Loader {
