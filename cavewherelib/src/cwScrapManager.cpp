@@ -11,6 +11,7 @@
 #include "cwCavingRegion.h"
 #include "cwCave.h"
 #include "cwTrip.h"
+#include "cwTripCalibration.h"
 #include "cwSurveyNoteModel.h"
 #include "cwNote.h"
 #include "cwScrap.h"
@@ -527,6 +528,17 @@ void cwScrapManager::connectNote(cwNote *note) {
  * @param scraps
  */
 void cwScrapManager::connectScrap(cwScrap* scrap) {
+    //The scrap is in the region tree by now, so its parents finally resolve — one
+    //loaded before that read the fallback for its display units
+    scrap->updateNoteTransformUnits();
+
+    if(cwTrip* trip = scrap->parentTrip()) {
+        //An auto-calculated scale reads in the trip's survey unit, so switching
+        //that unit relabels the scale without touching its ratio
+        connect(trip->calibrations(), &cwTripCalibration::distanceUnitChanged,
+                scrap, &cwScrap::updateNoteTransformUnits);
+    }
+
     connect(scrap->noteTransformation(), &cwNoteTranformation::scaleChanged, this, &cwScrapManager::updateScrapWithNewNoteTransform); //Morph only
     connect(scrap->noteTransformation(), &cwNoteTranformation::northUpChanged, this, &cwScrapManager::updateScrapWithNewNoteTransform);
     connect(scrap, &cwScrap::insertedPoints, this, &cwScrapManager::updateScrapPoints);
@@ -579,6 +591,11 @@ void cwScrapManager::disconnectNote(cwNote *note)
  */
 void cwScrapManager::disconnectScrap(cwScrap* scrap)
 {
+    if(cwTrip* trip = scrap->parentTrip()) {
+        disconnect(trip->calibrations(), &cwTripCalibration::distanceUnitChanged,
+                   scrap, &cwScrap::updateNoteTransformUnits);
+    }
+
     disconnect(scrap->noteTransformation(), &cwNoteTranformation::scaleChanged, this, &cwScrapManager::updateExistingScrapGeometry); //Morph only
     disconnect(scrap->noteTransformation(), &cwNoteTranformation::northUpChanged, this, &cwScrapManager::updateExistingScrapGeometry);
     disconnect(scrap, &cwScrap::insertedPoints, this, &cwScrapManager::updateScrapPoints);

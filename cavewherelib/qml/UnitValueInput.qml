@@ -16,33 +16,11 @@ QQ.Row {
     property UnitValue unitValue: null
     property alias valueVisible: clickInput.visible
     property alias valueReadOnly: clickInput.readOnly
+    property alias unitReadOnly: unitInput.readOnly
     property int defaultUnit
     property alias unitModel: unitInput.unitModel
     property alias validator: clickInput.validator
     //property bool useCustomUnitModel: false  //Allows you use only subsection of the units
-
-    function updateMap() {
-
-        if(typeof unitModel === "undefined" ||
-                typeof unitValue === "undefined") {
-            return;
-        }
-
-        if(unitValue !== null && unitModel) {
-
-            //Clear the privateData
-            privateData.customUnitsToValue = []
-            privateData.valueToCustomUnits = []
-
-            for(var i = 0; i < unitModel.length; i++) {
-                var type = unitValue.toUnitType(unitModel[i]);
-                privateData.customUnitsToValue[i] = type;
-                privateData.valueToCustomUnits[type] = i;
-            }
-        }
-
-        unitInput.unit = unitInput.updateUnit();
-    }
 
     ClickTextInput {
         id: clickInput
@@ -56,14 +34,6 @@ QQ.Row {
         id: unitInput
         objectName: "unitInput"
 
-        function updateUnit() {
-            if(itemId.unitValue !== null && privateData.customUnitsToValue.length > 0) {
-                return privateData.valueToCustomUnits[unitValue.unit];
-            } else {
-                return defaultUnit
-            }
-        }
-
         unitModel: {
             if(itemId.unitValue !== null) {
                 return itemId.unitValue.unitNames;
@@ -72,31 +42,45 @@ QQ.Row {
             }
         }
 
-        unit: updateUnit()
+        // A binding, never an assignment. The displayed unit is derived from
+        // unitValue, so it has to keep tracking it — this used to be refreshed by
+        // writing unitInput.unit from a function, which overwrote the binding on
+        // the first run and froze the display. Anything that moved the unit from
+        // C++ afterward (a trip switching survey units, say) never showed up.
+        unit: {
+            if(itemId.unitValue === null) { return itemId.defaultUnit }
+            let index = privateData.valueToCustomUnits[itemId.unitValue.unit]
+            return index === undefined ? itemId.defaultUnit : index
+        }
 
         onNewUnit: function(unit) {
             if(itemId.unitValue !== null) {
                 itemId.unitValue.unit = privateData.customUnitsToValue[unit]
-                unitInput.unit = updateUnit()
             }
         }
     }
 
     QQ.QtObject {
         id: privateData
-        property var customUnitsToValue: []
-        property var valueToCustomUnits: []
-    }
 
-    onUnitValueChanged: {
-        updateMap()
-    }
+        // Both maps are rebuilt whole rather than written element by element:
+        // QML sees the reassignment, not an in-place edit, so the unit binding
+        // above re-evaluates when the model changes.
+        readonly property var customUnitsToValue: {
+            let map = []
+            if(itemId.unitValue === null || !itemId.unitModel) { return map }
+            for(let i = 0; i < itemId.unitModel.length; i++) {
+                map[i] = itemId.unitValue.toUnitType(itemId.unitModel[i])
+            }
+            return map
+        }
 
-    onUnitModelChanged: {
-        updateMap()
-    }
-
-    QQ.Component.onCompleted: {
-        updateMap()
+        readonly property var valueToCustomUnits: {
+            let map = []
+            for(let i = 0; i < privateData.customUnitsToValue.length; i++) {
+                map[privateData.customUnitsToValue[i]] = i
+            }
+            return map
+        }
     }
 }

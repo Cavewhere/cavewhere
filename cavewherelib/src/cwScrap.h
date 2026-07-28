@@ -135,6 +135,17 @@ public:
     cwCave* parentCave() const;
     cwTripCalibration* tripCalibration() const;
 
+    //! The project's unit system, or Metric when the scrap isn't under a trip
+    //! yet. Delegates up to cwTrip::unitSystem() — the project default.
+    cwUnits::UnitSystem unitSystem() const;
+
+    //! The unit the trip's shots were surveyed in — the in-cave half of an
+    //! auto-calculated paper scale. Reads meters until the scrap is under a
+    //! trip, which cwScrapManager corrects on attach.
+    cwUnits::LengthUnit distanceUnit() const;
+
+    void updateNoteTransformUnits();
+
     cwAbstractScrapViewMatrix* viewMatrix() const;
     ScrapType type() const;
     void setType(ScrapType type);

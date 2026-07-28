@@ -101,6 +101,12 @@ public:
     //! (m / ft) below one large unit, the large unit (km / mi) at or above it.
     //! Drives the cave-length stat and both scale bars.
     static constexpr cwUnits::LengthUnit magnitudeUnit(double meters, cwUnits::UnitSystem system);
+    //! The unit a length measured on paper is shown in for \a system
+    //! (centimeters / inches) — the on-paper half of a paper scale, whose
+    //! in-cave half is whatever unit the survey was recorded in.
+    static constexpr cwUnits::LengthUnit paperUnit(cwUnits::UnitSystem system);
+    //! The system \a unit belongs to. Unitless has no system and reads Metric.
+    static constexpr cwUnits::UnitSystem unitSystem(cwUnits::LengthUnit unit);
     //! The display name of a unit system ("Metric" / "Imperial").
     static QString unitName(cwUnits::UnitSystem system);
     //! The unit-system names in enum order — a combobox model.
@@ -216,6 +222,29 @@ inline constexpr cwUnits::LengthUnit cwUnits::magnitudeUnit(double meters, cwUni
     // 1.0 of the large unit (e.g. 999 m stays "999 m", 1000 m becomes "1 km").
     const cwUnits::LengthUnit large = largeLengthUnit(system);
     return qAbs(meters) >= LengthUnitsToMeters[large] ? large : smallLengthUnit(system);
+}
+
+inline constexpr cwUnits::LengthUnit cwUnits::paperUnit(cwUnits::UnitSystem system)
+{
+    return system == Imperial ? Inches : Centimeters;
+}
+
+inline constexpr cwUnits::UnitSystem cwUnits::unitSystem(cwUnits::LengthUnit unit)
+{
+    switch(unit) {
+    case Inches:
+    case Feet:
+    case Yards:
+    case Miles:
+        return Imperial;
+    case Meters:
+    case Millimeters:
+    case Centimeters:
+    case Kilometers:
+    case LengthUnitless:
+        return Metric;
+    }
+    return Metric;
 }
 
 inline constexpr double cwUnits::convert(double value,

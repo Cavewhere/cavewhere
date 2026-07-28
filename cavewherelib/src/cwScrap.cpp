@@ -37,24 +37,26 @@
 #include <functional>
 
 namespace {
-    // Re-express an auto-computed note transform (produced by the calculator in
-    // raw inches) in the given display units, preserving the scale ratio. Shared
-    // by the load path and the live recompute so an auto-scaled scrap keeps its
-    // display units instead of snapping back to inches. A unitless display unit
-    // leaves the value untouched (cwUnits::convert is a no-op through unitless).
+    // Relabel an auto-computed transform to read in \a caveUnit (the trip's survey
+    // unit) over its paper companion, cm or in. The calculator emits 1 in : N in,
+    // so converting both sides would leave the on-paper side reading one inch in
+    // the new unit (issue #646's "0.03 m = 2.54 m"); pin it to 1 and let the
+    // in-cave side carry the ratio.
     cwNoteTransformationData scaleInDisplayUnits(cwNoteTransformationData transform,
-                                                 cwUnits::LengthUnit numeratorUnit,
-                                                 cwUnits::LengthUnit denominatorUnit)
+                                                 cwUnits::LengthUnit caveUnit)
     {
-        const auto currentNumeratorUnit = static_cast<cwUnits::LengthUnit>(transform.scale.scaleNumerator.unit);
-        const auto currentDenominatorUnit = static_cast<cwUnits::LengthUnit>(transform.scale.scaleDenominator.unit);
+        const cwUnits::LengthUnit paperUnit = cwUnits::paperUnit(cwUnits::unitSystem(caveUnit));
 
-        transform.scale.scaleNumerator.value = cwUnits::convert(transform.scale.scaleNumerator.value,
-                                                                currentNumeratorUnit, numeratorUnit);
-        transform.scale.scaleNumerator.unit = numeratorUnit;
-        transform.scale.scaleDenominator.value = cwUnits::convert(transform.scale.scaleDenominator.value,
-                                                                  currentDenominatorUnit, denominatorUnit);
-        transform.scale.scaleDenominator.unit = denominatorUnit;
+        const double ratio = cwScale::scale(transform.scale);
+        const double paperInMeters = cwUnits::convert(1.0, paperUnit, cwUnits::Meters);
+        const double caveInMeters = paperInMeters / ratio;
+
+        transform.scale.scaleNumerator = { paperUnit, 1.0, false };
+        transform.scale.scaleDenominator = {
+            caveUnit,
+            cwUnits::convert(caveInMeters, cwUnits::Meters, caveUnit),
+            false
+        };
         return transform;
     }
 }
@@ -614,14 +616,7 @@ void cwScrap::updateNoteTransformation() {
     averageTransformation.north =
         cwWrapDegrees360(averageTransformation.north - planGridConvergence());
 
-    // The calculator emits the scale in raw inches; re-express it in the units
-    // the scrap currently shows (seeded from the project unit system for new
-    // scraps) so a live recompute doesn't snap the display back to inches. This
-    // is a no-op when those units are already inches — the existing default.
-    averageTransformation = scaleInDisplayUnits(
-        averageTransformation,
-        static_cast<cwUnits::LengthUnit>(NoteTransformation->scaleNumerator()->unit()),
-        static_cast<cwUnits::LengthUnit>(NoteTransformation->scaleDenominator()->unit()));
+    averageTransformation = scaleInDisplayUnits(averageTransformation, distanceUnit());
 
     NoteTransformation->setData(averageTransformation);
 }
@@ -855,13 +850,13 @@ void cwScrap::setCalculateNoteTransform(bool calculateNoteTransform) {
     if(CalculateNoteTransform != calculateNoteTransform) {
         CalculateNoteTransform = calculateNoteTransform;
 
+        // The scale's units used to be an input to the recompute — it re-expressed
+        // the computed ratio in whatever units the scrap held, so a unit change had
+        // to trigger one. updateNoteTransformation() now writes the units itself,
+        // from the trip, which makes listening for unitChanged() a cycle: the
+        // recompute's own write would re-enter it and run the whole minimizer again.
         if(CalculateNoteTransform) {
-            connect(noteTransformation()->scaleDenominator(), SIGNAL(unitChanged()), SLOT(updateNoteTransformation()));
-            connect(noteTransformation()->scaleNumerator(), SIGNAL(unitChanged()), SLOT(updateNoteTransformation()));
             updateNoteTransformation();
-        } else {
-            disconnect(noteTransformation()->scaleDenominator(), nullptr, this, nullptr);
-            disconnect(noteTransformation()->scaleNumerator(), nullptr, this, nullptr);
         }
 
         emit calculateNoteTransformChanged();
@@ -1077,6 +1072,44 @@ cwTrip* cwScrap::parentTrip() const {
 cwCave* cwScrap::parentCave() const {
     cwTrip* trip = parentTrip();
     return trip == nullptr ? nullptr : trip->parentCave();
+}
+
+cwUnits::UnitSystem cwScrap::unitSystem() const
+{
+    cwTrip* trip = parentTrip();
+    return trip != nullptr ? trip->unitSystem() : cwUnits::Metric;
+}
+
+cwUnits::LengthUnit cwScrap::distanceUnit() const
+{
+    cwTrip* trip = parentTrip();
+    //No trip means no survey unit to read and no path to the project either, so
+    //this is a placeholder — cwScrapManager relabels once the scrap is attached
+    return trip != nullptr ? trip->calibrations()->distanceUnit() : cwUnits::Meters;
+}
+
+/**
+Re-resolves an auto-calculated scale's display units against the trip.
+
+The units go stale whenever the trip switches survey units, or when a load reads
+them before the scrap's parents are attached. The ratio is untouched — this only
+relabels — so cwScale keeps scaleChanged quiet and no geometry is rebuilt.
+*/
+void cwScrap::updateNoteTransformUnits()
+{
+    if(!calculateNoteTransform()) {
+        return;
+    }
+
+    const cwNoteTransformationData current = NoteTransformation->data();
+    const cwNoteTransformationData resolved = scaleInDisplayUnits(current, distanceUnit());
+
+    if(resolved.scale.scaleNumerator.unit == current.scale.scaleNumerator.unit &&
+       resolved.scale.scaleDenominator.unit == current.scale.scaleDenominator.unit) {
+        return;
+    }
+
+    NoteTransformation->setData(resolved);
 }
 
 
@@ -1311,15 +1344,11 @@ void cwScrap::setData(const cwScrapData &data)
     setCalculateNoteTransform(data.calculateNoteTransform);
 
     if(calculateNoteTransform()) {
-        // Re-express the freshly computed transform (raw inches) in the saved
-        // display units, so a loaded auto-scaled scrap keeps the units it was
-        // saved with.
-        const cwNoteTransformationData computedTransform = scaleInDisplayUnits(
-            NoteTransformation->data(),
-            static_cast<cwUnits::LengthUnit>(data.noteTransformation.scale.scaleNumerator.unit),
-            static_cast<cwUnits::LengthUnit>(data.noteTransformation.scale.scaleDenominator.unit));
-
-        NoteTransformation->setData(computedTransform);
+        // An auto-scaled transform is derived, never adopted, so
+        // data.noteTransformation is ignored on purpose — the proto loader doesn't
+        // write one for an auto scrap, and cwScrapMergeApplier's is re-derived from
+        // the shots anyway. Keep the live transform, relabeled in the trip's units.
+        NoteTransformation->setData(scaleInDisplayUnits(NoteTransformation->data(), distanceUnit()));
         return;
     }
 

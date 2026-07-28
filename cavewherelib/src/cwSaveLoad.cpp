@@ -4246,7 +4246,9 @@ void cwSaveLoad::connectScrap(cwScrap *scrap)
         saveNote();
     };
     connect(scrap->noteTransformation(), &cwNoteTranformation::northUpChanged, this, saveManualScrapTransform);
-    connect(scrap->noteTransformation(), &cwNoteTranformation::scaleChanged, this, saveManualScrapTransform);
+    //A manual scale's units are stored data, so persist on the data signal — the
+    //ratio-only scaleChanged would miss the user picking ft over m
+    connect(scrap->noteTransformation(), &cwNoteTranformation::scaleDataChanged, this, saveManualScrapTransform);
 
     auto connectProjectedViewMatrixSignals = [this, saveManualScrapTransform, scrap]() {
         if (auto projected = qobject_cast<cwProjectedProfileScrapViewMatrix*>(scrap->viewMatrix()))
@@ -4316,7 +4318,7 @@ void cwSaveLoad::connectNoteLiDAR(cwNoteLiDAR *lidarNote)
     connect(lidarNote->noteTransformation(), &cwNoteLiDARTransformation::upModeChanged, this, saveNote);
     connect(lidarNote->noteTransformation(), &cwNoteLiDARTransformation::upCustomChanged, this, saveNote);
     connect(lidarNote->noteTransformation(), &cwNoteLiDARTransformation::northUpChanged, this, saveNote);
-    connect(lidarNote->noteTransformation(), &cwNoteLiDARTransformation::scaleChanged, this, saveNote);
+    connect(lidarNote->noteTransformation(), &cwNoteLiDARTransformation::scaleDataChanged, this, saveNote);
 }
 
 void cwSaveLoad::connectSketch(cwSketch *sketch)
@@ -4346,7 +4348,7 @@ void cwSaveLoad::connectSketch(cwSketch *sketch)
     if (auto* scale = sketch->mapScale()) {
         if (d->trackConnected(scale)) {
             d->connectionChecker.add(scale);
-            connect(scale, &cwScale::scaleChanged, this, saveSketch);
+            connect(scale, &cwScale::dataChanged, this, saveSketch);
         }
     }
 }
