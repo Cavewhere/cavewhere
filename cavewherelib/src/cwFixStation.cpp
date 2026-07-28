@@ -57,6 +57,14 @@ public:
             return;
         }
 
+        // No system, no axis order — there is no reading of the text to make.
+        // Checked before parse() rather than after, so an easting-first guess
+        // never reaches the components and gets treated as a coordinate.
+        if (InputCS.trimmed().isEmpty()) {
+            State = cwFixStation::NoSystem;
+            return;
+        }
+
         const auto result = cwCoordinateText::parse(Coordinate, kStoredUnits,
                                                     cwCoordinateText::axisOrderFor(InputCS));
         if (result.hasError()) {
@@ -72,17 +80,25 @@ public:
         State = cwFixStation::Valid;
     }
 
-    //! refresh() the other way: the three numbers written back out as the
-    //! coordinate, for the callers that set one component at a time.
+    //! write() for a caller that set one component at a time: the two it left
+    //! in place, plus the one it just changed.
+    void reformat() { write(Easting, Northing, Elevation); }
+
+    //! refresh() the other way: three numbers written back out as the
+    //! coordinate.
     //!
     //! It reads its own output back rather than asserting what it just wrote,
     //! so the derived fields stay a pure function of the coordinate even when
     //! format() produces something parse() won't take — a non-finite component
     //! renders as "inf", and a fix carrying one is honestly Unreadable rather
-    //! than Valid with a string that disagrees with it.
-    void reformat()
+    //! than Valid with a string that disagrees with it. That read-back is also
+    //! why a caller holding all three numbers has to come through here in one
+    //! call: on a fix with no InputCS the read finds no axis order and returns
+    //! nothing, so three reformat()s in a row would each spell out what the one
+    //! before it lost.
+    void write(double easting, double northing, double elevation)
     {
-        Coordinate = cwCoordinateText::format(Easting, Northing, Elevation, kStoredUnits,
+        Coordinate = cwCoordinateText::format(easting, northing, elevation, kStoredUnits,
                                               cwCoordinateText::axisOrderFor(InputCS));
         refresh();
     }
@@ -148,18 +164,17 @@ void cwFixStation::setInputCS(const QString& cs)
     data->refresh();
 }
 
-QString cwFixStation::effectiveCS(const QString& globalCS) const
-{
-    const QString own = data->InputCS.trimmed();
-    return own.isEmpty() ? globalCS.trimmed() : own;
-}
-
 QString cwFixStation::coordinate() const { return data->Coordinate; }
 
 void cwFixStation::setCoordinate(const QString& text)
 {
     data->Coordinate = text;
     data->refresh();
+}
+
+void cwFixStation::setCoordinate(double easting, double northing, double elevation)
+{
+    data->write(easting, northing, elevation);
 }
 
 cwFixStation::CoordinateState cwFixStation::state() const { return data->State; }

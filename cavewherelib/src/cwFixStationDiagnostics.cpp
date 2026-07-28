@@ -14,7 +14,7 @@
 
 namespace cwFixStationDiagnostics {
 
-cwCoordinateTransform::DomainCheck domainCheck(const cwFixStation& fix, const QString& globalCS)
+cwCoordinateTransform::DomainCheck domainCheck(const cwFixStation& fix)
 {
     // There has to be a coordinate before there is anything to judge. "Mark
     // Station as Fixed" creates the row before the user types anything, and a
@@ -32,17 +32,16 @@ cwCoordinateTransform::DomainCheck domainCheck(const cwFixStation& fix, const QS
         return {};
     }
 
-    // An absent CS needs no guard here: cwCoordinateTransform::domainCheck defers
-    // on an empty one, which is the verdict we want.
-    return cwCoordinateTransform::domainCheck(fix.effectiveCS(globalCS),
+    // An absent CS is already excluded above — state() is NoSystem, not Valid.
+    return cwCoordinateTransform::domainCheck(fix.inputCS(),
                                               cwGeoPoint(fix.easting(),
                                                          fix.northing(),
                                                          fix.elevation()));
 }
 
-bool isDomainValid(const cwFixStation& fix, const QString& globalCS)
+bool isDomainValid(const cwFixStation& fix)
 {
-    const cwCoordinateTransform::DomainCheck check = domainCheck(fix, globalCS);
+    const cwCoordinateTransform::DomainCheck check = domainCheck(fix);
     return check.eastingValid && check.northingValid;
 }
 

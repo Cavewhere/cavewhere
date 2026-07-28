@@ -285,16 +285,9 @@ cwUnits::UnitSystem cwCave::unitSystem() const
 void cwCave::recomputeGridConvergence()
 {
     // The readout owns the PROJ work and change detection; we just feed it the
-    // current fix stations plus the region CS to fall back on when a fix
-    // station omits its own input CS.
-    const cwCavingRegion* region = parentRegion();
-    const QString fallbackCS = region ? region->geoReference()->globalCoordinateSystem() : QString();
-    m_gridConvergence->update(FixStations->fixStations(), fallbackCS);
-}
-
-void cwCave::refreshFixStationDomainErrors()
-{
-    m_fixStationDiagnostics->refreshDomainErrors();
+    // current fix stations. It reads the first one's own input CS — a fix that
+    // declares none has no grid to converge to, not the project's.
+    m_gridConvergence->update(FixStations->fixStations());
 }
 
 /**

@@ -1581,6 +1581,28 @@ TEST_CASE("An empty fix station must not trigger endless line-plot re-solves",
     cwSignalSpy solveSpy(plotManager.get(),
                          &cwLinePlotManager::stationPositionInCavesChanged);
 
+    // Runs the event loop until nothing has solved for a whole quiet window, and
+    // answers how many solves have landed in total. Used before each measurement
+    // so a solve set off by the previous edit can never be counted as, or
+    // mistaken for, the one being measured next.
+    const auto pumpUntilQuiet = [&]() {
+        QElapsedTimer quietTimer;
+        QElapsedTimer totalTimer;
+        quietTimer.start();
+        totalTimer.start();
+        int solves = solveSpy.count();
+        while (quietTimer.elapsed() < kQuietWindowMs && totalTimer.elapsed() < kSolveTimeoutMs) {
+            QCoreApplication::processEvents();
+            QThread::msleep(2);
+            if (solveSpy.count() > solves) {
+                solves = solveSpy.count();
+                quietTimer.restart();
+            }
+        }
+        CHECK(quietTimer.elapsed() >= kQuietWindowMs);  // settled rather than spinning
+        return solves;
+    };
+
     // Anchor on the row-insert solve first. Without this the quiet window below
     // could be satisfied simply because the first solve hadn't landed yet —
     // passing whether or not the re-solve loop exists.
@@ -1588,25 +1610,28 @@ TEST_CASE("An empty fix station must not trigger endless line-plot re-solves",
         REQUIRE(solveSpy.wait(kSolveTimeoutMs));
     }
 
-    QElapsedTimer quietTimer;
-    QElapsedTimer totalTimer;
-    quietTimer.start();
-    totalTimer.start();
-    int totalSolves = solveSpy.count();
-    while (quietTimer.elapsed() < kQuietWindowMs && totalTimer.elapsed() < kSolveTimeoutMs) {
-        QCoreApplication::processEvents();
-        QThread::msleep(2);
-        if (solveSpy.count() > totalSolves) {
-            totalSolves = solveSpy.count();
-            quietTimer.restart();
-        }
-    }
+    const int totalSolves = pumpUntilQuiet();
     INFO("total solves after adding an empty fix: " << totalSolves);
-    CHECK(quietTimer.elapsed() >= kQuietWindowMs);  // settled rather than spinning
     CHECK(totalSolves <= 2);    // one legitimate solve, not an endless run
 
     // Naming the fix is a real edit and must still re-solve — proving the loop
     // fix didn't over-filter genuine fix-station changes.
+    //
+    // On a projected CS, because that is the only kind survex can produce output
+    // in. A new row starts on WGS84, and once such a row is named it is exported
+    // as a real fix — at which point cavern refuses the whole solve, so no
+    // positions are published and this signal would never arrive. That is the
+    // project's missing output CS, not an over-filtered edit, and it is what
+    // cwFixStationValidator's needsOutputCS prompt exists to resolve.
+    cave->fixStations()->setData(cave->fixStations()->index(0),
+                                 QStringLiteral("EPSG:32612"),
+                                 cwFixStationModel::InputCSRole);
+
+    // Setting the CS is itself an edit worth re-solving for. Let that one land
+    // and settle before the spy opens, or its solve would satisfy the wait below
+    // no matter what the name edit did — which is the assertion this test is.
+    pumpUntilQuiet();
+
     cwSignalSpy editSpy(plotManager.get(),
                         &cwLinePlotManager::stationPositionInCavesChanged);
     cave->fixStations()->setData(cave->fixStations()->index(0),

@@ -25,7 +25,36 @@ QQ.Item {
     property string value: ""
     property bool allowGeographic: true
 
-    readonly property int currentMode: CoordinateSystem.modeFor(rootId.value)
+    // Which modes this host offers. A project that isn't georeferenced needs
+    // Local to say so; a fix-station row does not — it needs Project, which is
+    // meaningless on the project's own picker. See issues #618 and #625.
+    property bool allowLocal: true
+    property bool allowProject: false
+
+    // The project's global CS, so Project has something to stamp in. Only the
+    // fix-station hosts supply it.
+    property string projectCS: ""
+
+    // Project is a display rule, not stored state: the row shows it whenever it
+    // holds the project's CS, and stops showing it the moment the project moves
+    // to something else — the row stays put, which is the point. The non-empty
+    // guard keeps an unset row out of Project when the project has no CS either.
+    readonly property int currentMode: rootId.allowProject
+                                       && rootId.value !== ""
+                                       && rootId.value === rootId.projectCS
+                                       ? CoordinateSystem.Project
+                                       : CoordinateSystem.modeFor(rootId.value)
+
+    // Whether the zone and hemisphere controls apply — the row's CS is a UTM
+    // zone, whatever the combo labels it. A row holding the project's CS reads
+    // as Project, but when that CS is a UTM zone the zone is still the thing to
+    // edit; keying the controls off the label alone would hide them and leave
+    // the zone unreachable except through the Custom dialog. Editing it commits
+    // a different zone, which no longer matches the project, so the label falls
+    // back to UTM on its own.
+    readonly property bool showsUtm: rootId.currentMode === CoordinateSystem.UTM
+                                     || (rootId.currentMode === CoordinateSystem.Project
+                                         && CoordinateSystem.modeFor(rootId.value) === CoordinateSystem.UTM)
 
     // The width the visible controls need on a single line, summed generically
     // from the Flow's children (their explicit/implicit widths and spacing) so
@@ -64,6 +93,9 @@ QQ.Item {
                 zoneSpinId.value,
                 hemiComboId.currentIndex === 0))
             return
+        case CoordinateSystem.Project:
+            rootId.committed(rootId.projectCS)
+            return
         case CoordinateSystem.Custom:
             customDialogLoader.active = true
             customDialogLoader.item.open()
@@ -82,33 +114,49 @@ QQ.Item {
             id: modeComboId
             objectName: "csModePicker"
 
-            // allowGeographic == false hides LatLon — survex's cavern can't
-            // emit geographic output.
-            readonly property bool hideGeographic: !rootId.allowGeographic
+            // One ordered list, filtered by the host's flags, rather than a
+            // literal per combination — allowGeographic (survex's cavern can't
+            // emit geographic output), allowLocal and allowProject already make
+            // eight, and the next flag would double that again.
+            readonly property var entries: [
+                { mode: CoordinateSystem.Local,   label: qsTr("Local"),            allowed: rootId.allowLocal },
+                { mode: CoordinateSystem.LatLon,  label: qsTr("Lat/Lon (WGS84)"),  allowed: rootId.allowGeographic },
+                { mode: CoordinateSystem.UTM,     label: qsTr("UTM"),              allowed: true },
+                // Hidden while the project has no CS of its own — picking it
+                // then would commit the blank this whole change exists to retire.
+                { mode: CoordinateSystem.Project, label: qsTr("Project"),          allowed: rootId.allowProject && rootId.projectCS !== "" },
+                { mode: CoordinateSystem.Custom,  label: qsTr("Custom..."),        allowed: true }
+            ].filter((e) => e.allowed)
 
-            readonly property var modes: hideGeographic
-                ? [CoordinateSystem.Local,
-                   CoordinateSystem.UTM,
-                   CoordinateSystem.Custom]
-                : [CoordinateSystem.Local,
-                   CoordinateSystem.LatLon,
-                   CoordinateSystem.UTM,
-                   CoordinateSystem.Custom]
+            readonly property var modes: entries.map((e) => e.mode)
 
-            model: hideGeographic
-                ? [qsTr("Local"), qsTr("UTM"), qsTr("Custom...")]
-                : [qsTr("Local"), qsTr("Lat/Lon (WGS84)"), qsTr("UTM"), qsTr("Custom...")]
+            model: entries.map((e) => e.label)
 
             function modeAt(index) {
                 return modes[index]
             }
 
+            // -1, not 0, when this host doesn't offer the value's mode — the
+            // combo then shows nothing rather than naming a system the row is
+            // not on. Reachable from a hand-edited file: a fix-station row
+            // carrying the blank CS that Local used to mean.
             function indexForMode(mode) {
-                const i = modes.indexOf(mode)
-                return i >= 0 ? i : 0
+                return modes.indexOf(mode)
             }
 
             currentIndex: indexForMode(rootId.currentMode)
+
+            // A ComboBox resets currentIndex to the top of the list whenever its
+            // model is replaced, and it writes the value straight in rather than
+            // through the property system — so the binding above is left intact
+            // but not dirty, and never recovers. The model is replaced whenever
+            // Project appears or disappears (the project gaining or losing a CS),
+            // which would silently relabel every row to the first entry. Restore
+            // the binding after the reset.
+            onModelChanged: Qt.callLater(() => {
+                modeComboId.currentIndex = Qt.binding(
+                            () => modeComboId.indexForMode(rootId.currentMode))
+            })
 
             onActivated: (index) => {
                 const mode = modeAt(index)
@@ -122,7 +170,7 @@ QQ.Item {
         QC.SpinBox {
             id: zoneSpinId
             objectName: "csUtmZone"
-            visible: rootId.currentMode === CoordinateSystem.UTM
+            visible: rootId.showsUtm
             width: Theme.csZoneFieldWidth
             // The native macOS style sizes a SpinBox shorter than a ComboBox (24
             // vs 32); QQ.Flow top-aligns a row, so the shorter box would ride
@@ -137,7 +185,7 @@ QQ.Item {
             }
             editable: true
             onValueModified: {
-                if (rootId.currentMode === CoordinateSystem.UTM) {
+                if (rootId.showsUtm) {
                     rootId.commitMode(CoordinateSystem.UTM)
                 }
             }
@@ -146,12 +194,12 @@ QQ.Item {
         QC.ComboBox {
             id: hemiComboId
             objectName: "csUtmHemisphere"
-            visible: rootId.currentMode === CoordinateSystem.UTM
+            visible: rootId.showsUtm
             width: Theme.csHemisphereFieldWidth
             model: ["N", "S"]
             currentIndex: CoordinateSystem.utmNorthFor(rootId.value) ? 0 : 1
             onActivated: {
-                if (rootId.currentMode === CoordinateSystem.UTM) {
+                if (rootId.showsUtm) {
                     rootId.commitMode(CoordinateSystem.UTM)
                 }
             }

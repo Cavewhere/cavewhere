@@ -171,6 +171,7 @@ StandardPage {
             anchors.verticalCenter: parent.verticalCenter
             value: csCell.value
             allowGeographic: true
+            projectCS: RootData.region.geoReference.globalCoordinateSystem
             onCommitted: (newCS) => fixStationPage.commitEdit(
                 csCell.rowIndex, FixStationModel.InputCSRole, newCS)
         }
@@ -452,6 +453,7 @@ StandardPage {
                     objectName: "inputCSComboBox." + narrowDelegateId.index
                     value: narrowDelegateId.inputCS
                     allowGeographic: true
+                    projectCS: RootData.region.geoReference.globalCoordinateSystem
                     onCommitted: (newCS) => fixStationPage.commitEdit(
                         narrowDelegateId.index, FixStationModel.InputCSRole, newCS)
                 }

@@ -50,7 +50,23 @@ public:
         //! repaired. <b>Nothing surfaces this state yet</b>: such a row renders
         //! and solves as a fix at the origin, and only an editor shows the text
         //! that was kept. Writing any component discards it.
-        Unreadable
+        Unreadable,
+        //! There is text, but no inputCS() to read it under — so it has no axis
+        //! order, and its numbers can't be said to mean anything. Behaviorally
+        //! Unreadable (string kept, components 0) but for a different reason,
+        //! and it wants a different message: <i>choose a coordinate system</i>,
+        //! not <i>this text can't be read</i>. Rows created in the app start on
+        //! WGS84, so this arrives from elsewhere: an older project, a hand edit,
+        //! or an svx whose <tt>*fix</tt> had no <tt>*cs</tt> before it — a local
+        //! grid, which is ordinary.
+        //!
+        //! The numbers are kept as text, so naming a <i>projected</i> system
+        //! reads all three straight back. Naming a geographic one does not:
+        //! nothing records which axis order the text was written in, and there
+        //! was none to record — so a coordinate stored easting-first is read
+        //! back latitude-first and the first two components transpose. Whoever
+        //! offers the choice has to say so.
+        NoSystem
     };
 
     cwFixStation();
@@ -67,6 +83,12 @@ public:
     QString stationName() const;
     void setStationName(const QString& name);
 
+    //! The coordinate system this fix is expressed in — <b>its own, always</b>.
+    //! There is no fallback to the region's global CS: a row that declares none
+    //! is an error (state() == NoSystem), not one that quietly follows the
+    //! project, so changing the project's projection never moves a station that
+    //! was entered under some other system.
+    //!
     //! <b>Set this before any component.</b> It decides which axis the
     //! coordinate leads with, so writing a component while it is still empty
     //! spells the coordinate out easting-first; setting a geographic CS
@@ -74,13 +96,6 @@ public:
     //! horizontals swap. Both importers already set it first.
     QString inputCS() const;
     void setInputCS(const QString& cs);
-
-    //! The coordinate system this fix is actually expressed in: its own inputCS,
-    //! or `globalCS` when it declares none. Trimmed; empty when neither supplies
-    //! one. Every consumer of a fix's coordinate has to answer this the same way
-    //! — the survex export anchors it under this CS, so the domain check, grid
-    //! convergence and auto-declination must all judge it under the same one.
-    QString effectiveCS(const QString& globalCS) const;
 
     //! The coordinate, written out — the whole of what this class stores.
     //! Kept exactly as it was given, including when it doesn't parse.
@@ -95,6 +110,15 @@ public:
 
     //! What coordinate() amounts to. The components are 0 unless this is Valid.
     CoordinateState state() const;
+
+    //! All three components at once, written out as one coordinate — <b>what a
+    //! caller holding three numbers should use</b>. The one-at-a-time setters
+    //! below each write the coordinate and read it straight back, so calling
+    //! them in sequence on a fix with no inputCS() loses the earlier two: there
+    //! is no axis order to read them back under, so each write returns nothing
+    //! and the next spells that nothing out. This writes once, and the numbers
+    //! survive as text on a row that says it has no system.
+    void setCoordinate(double easting, double northing, double elevation);
 
     //! The three components, read out of coordinate(). <b>Writing one writes
     //! the coordinate back out</b> as all three numbers under inputCS()'s axis

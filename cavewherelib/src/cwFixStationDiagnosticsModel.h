@@ -80,12 +80,6 @@ public:
     explicit cwFixStationDiagnosticsModel(cwCave* cave);
     ~cwFixStationDiagnosticsModel() override;
 
-    //! Re-emit the domain roles for every row. The per-row check falls back to
-    //! the region's global CS for a fix that omits its own, so a change to that
-    //! CS moves rows in and out of the flagged state with no edit to the model.
-    //! Wired by cwCavingRegion alongside cwCave::recomputeGridConvergence.
-    void refreshDomainErrors();
-
     //! Overridden only for the column default QAbstractItemModel::index lacks,
     //! so QML can write index(row) as it does on cwFixStationModel. data() and
     //! setData() are inherited — the base already declares both Q_INVOKABLE, so
@@ -110,10 +104,6 @@ private:
     //! Empty when the reference is Ok (or there is no cave); distinct messages
     //! for an Unknown name and a missing one.
     QString stationErrorMessage(const cwFixStation& fix) const;
-
-    //! The region's global CS, for a fix that omits its own input CS. Empty when
-    //! the proxy has no cave, or its cave no region, or the region no global CS.
-    QString fallbackCS() const;
 
     //! The source row's fix, or null when there is no source model or the index
     //! is out of range.

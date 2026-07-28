@@ -1,5 +1,6 @@
 //Our includes
 #include "cwCoordinateText.h"
+#include "cwCoordinateTransform.h"
 #include "cwFixStation.h"
 #include "cwFixStationModel.h"
 #include "cwProtoUtils.h"
@@ -72,8 +73,11 @@ TEST_CASE("cwFixStationModel setData edits a cell and emits dataChanged",
 
     const QModelIndex idx = model.index(0);
     REQUIRE(model.setData(idx, QStringLiteral("A1"), cwFixStationModel::StationNameRole));
-    REQUIRE(model.setData(idx, 500000.0, cwFixStationModel::EastingRole));
+    //The CS before the component, as cwFixStation documents: it decides which
+    //axis the coordinate leads with, so writing one first and naming the system
+    //afterwards re-reads the same text the other way round.
     REQUIRE(model.setData(idx, QStringLiteral("EPSG:32612"), cwFixStationModel::InputCSRole));
+    REQUIRE(model.setData(idx, 500000.0, cwFixStationModel::EastingRole));
 
     CHECK(model.data(idx, cwFixStationModel::StationNameRole).toString() == QStringLiteral("A1"));
     CHECK(model.data(idx, cwFixStationModel::EastingRole).toDouble() == 500000.0);
@@ -440,6 +444,7 @@ TEST_CASE("cwFixStation loads from a project written before the coordinate was a
     //They become a coordinate spelled out from those numbers, in metres, and
     //land on exactly the doubles they were saved as.
     CavewhereProto::FixStation proto;
+    proto.set_inputcs("EPSG:32611");
     proto.set_easting(610016.792);
     proto.set_northing(5615117.075);
     proto.set_elevation(304.0);
@@ -449,6 +454,32 @@ TEST_CASE("cwFixStation loads from a project written before the coordinate was a
     CHECK(restored.northing() == 5615117.075);
     CHECK(restored.elevation() == 304.0);
     CHECK(restored.coordinate() == QStringLiteral("610016.792, 5615117.075, 304m"));
+}
+
+TEST_CASE("cwFixStation keeps the numbers of a row that never declared a coordinate system",
+          "[FixStation][proto]") {
+    //The old picker's "Local" wrote a blank input CS, so rows like this exist.
+    //There is no axis order to read them under, so they come back with nothing
+    //derived — but the numbers themselves must survive as the text they were,
+    //or opening and saving a project would quietly empty the row. The user
+    //picks the system the row was always in and the coordinate is there.
+    CavewhereProto::FixStation proto;
+    proto.set_easting(610016.792);
+    proto.set_northing(5615117.075);
+    proto.set_elevation(304.0);
+
+    const cwFixStation restored = cwProtoUtils::fromProtoFixStation(proto);
+    CHECK(restored.state() == cwFixStation::NoSystem);
+    CHECK(restored.coordinate() == QStringLiteral("610016.792, 5615117.075, 304m"));
+    CHECK(restored.easting() == 0.0);
+
+    //Naming the system it was written in is all it takes to get them back.
+    cwFixStation named = restored;
+    named.setInputCS(QStringLiteral("EPSG:32611"));
+    CHECK(named.state() == cwFixStation::Valid);
+    CHECK(named.easting() == 610016.792);
+    CHECK(named.northing() == 5615117.075);
+    CHECK(named.elevation() == 304.0);
 }
 
 TEST_CASE("cwFixStation loads a row nobody ever filled in as having no coordinate",
@@ -497,6 +528,7 @@ TEST_CASE("cwFixStation load prefers the numbers over a string that disagrees wi
 
     SECTION("a two-component string beside an elevation the row still has") {
         CavewhereProto::FixStation proto;
+        cwProtoUtils::saveString(proto.mutable_inputcs(), QStringLiteral("EPSG:32611"));
         proto.set_easting(1.0);
         proto.set_northing(2.0);
         proto.set_elevation(304.0);
@@ -511,6 +543,7 @@ TEST_CASE("cwFixStation load prefers the numbers over a string that disagrees wi
         //The common case, and the one the others must not swallow: a coordinate
         //the user wrote comes back as they wrote it, feet and all.
         CavewhereProto::FixStation proto;
+        cwProtoUtils::saveString(proto.mutable_inputcs(), QStringLiteral("EPSG:32611"));
         proto.set_easting(1.0);
         proto.set_northing(2.0);
         proto.set_elevation(30.0 * 0.3048);
@@ -525,6 +558,7 @@ TEST_CASE("cwFixStation load prefers the numbers over a string that disagrees wi
         //text is all there is — dropping it would leave the row saying nothing
         //about a coordinate its owner clearly meant to write.
         CavewhereProto::FixStation proto;
+        cwProtoUtils::saveString(proto.mutable_inputcs(), QStringLiteral("EPSG:32611"));
         cwProtoUtils::saveString(proto.mutable_coordinatetext(),
                                  QStringLiteral("N 46 07 16 W 115 35 56"));
 
@@ -617,6 +651,10 @@ TEST_CASE("cwFixStationModel setCoordinateText writes the whole coordinate at on
     cwFixStationModel model;
     model.addFixStation();
     REQUIRE(model.rowCount() == 1);
+    //A projected system, so the coordinates below read easting-first. New rows
+    //start on WGS84, where the same text would lead with the latitude.
+    model.setData(model.index(0), QStringLiteral("EPSG:32611"),
+                  cwFixStationModel::InputCSRole);
 
     QSignalSpy dataChangedSpy(&model, &QAbstractItemModel::dataChanged);
 
@@ -832,6 +870,8 @@ TEST_CASE("cwFixStationModel setCoordinateText writes the row it was given",
     REQUIRE(model.addFixStation(QStringLiteral("A1")) == 0);
     REQUIRE(model.addFixStation(QStringLiteral("A2")) == 1);
     REQUIRE(model.addFixStation(QStringLiteral("A3")) == 2);
+    model.setData(model.index(2), QStringLiteral("EPSG:32611"),
+                  cwFixStationModel::InputCSRole);
 
     QSignalSpy dataChangedSpy(&model, &QAbstractItemModel::dataChanged);
     REQUIRE(model.setCoordinateText(2, QStringLiteral("11, 22, 33m"),
@@ -855,6 +895,9 @@ TEST_CASE("cwFixStationModel keeps the coordinate as it was written",
     REQUIRE(model.rowCount() == 1);
 
     const QModelIndex idx = model.index(0);
+    //A projected system, so the coordinates below read easting-first. New rows
+    //start on WGS84, where the same text would lead with the latitude.
+    model.setData(idx, QStringLiteral("EPSG:32611"), cwFixStationModel::InputCSRole);
 
     SECTION("the editor gets the user's string, the cell the project's units") {
         REQUIRE(model.setCoordinateText(0, QStringLiteral("46.12113, -115.59902, 30ft"),
@@ -1003,4 +1046,28 @@ TEST_CASE("cwFixStationModel setCoordinateText leaves the station name alone",
 
     CHECK(model.fixStationAt(0).stationName() == QStringLiteral("A1"));
     CHECK(fixedStationsSpy.count() == 0);
+}
+
+TEST_CASE("cwFixStationModel gives a new row a coordinate system to start on",
+          "[FixStation][cwFixStationModel]") {
+    // Without one there is no axis order, so the row could not read a coordinate
+    // back at all (#625). Both entry points have to agree, since "Mark Station as
+    // Fixed" comes in through the named overload and the page's "+" through the
+    // other. Deliberately not cwFixStation's own default: a row that really does
+    // arrive blank, from an old file or a hand edit, must stay blank so it can be
+    // flagged rather than silently reinterpreted.
+    cwFixStationModel model;
+
+    model.addFixStation();
+    REQUIRE(model.count() == 1);
+    CHECK(model.fixStationAt(0).inputCS() == cwCoordinateTransform::Wgs84);
+
+    model.addFixStation(QStringLiteral("A1"));
+    REQUIRE(model.count() == 2);
+    CHECK(model.fixStationAt(1).stationName() == QStringLiteral("A1"));
+    CHECK(model.fixStationAt(1).inputCS() == cwCoordinateTransform::Wgs84);
+
+    // A default-constructed fix is still blank, which is what makes NoSystem a
+    // state that arrives from elsewhere rather than one the app can create.
+    CHECK(cwFixStation().inputCS().isEmpty());
 }

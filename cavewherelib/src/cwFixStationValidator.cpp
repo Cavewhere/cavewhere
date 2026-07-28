@@ -235,8 +235,18 @@ cwFixStationValidator::gatherCandidates() const
             continue;
         }
         for (const cwFixStation& fix : cave->fixStations()->fixStations()) {
-            const QString inputCS = fix.effectiveCS(globalCSTrimmed);
-            if (inputCS.isEmpty() || !cwCoordinateTransform::isValidCS(inputCS)) {
+            // Only a Valid fix has components — every other state reads 0,
+            // because cwFixStation::refresh() zeroes them before it branches.
+            // A row that carries a coordinate system but no coordinate yet is
+            // what "Mark Station as Fixed" makes, so without this the ordinary
+            // half-finished row enters the cluster at its CS's origin, drags the
+            // robust world origin toward it, and can push real fixes outside the
+            // outlier radius. Valid also implies a non-empty inputCS.
+            if (fix.state() != cwFixStation::Valid) {
+                continue;
+            }
+            const QString inputCS = fix.inputCS().trimmed();
+            if (!cwCoordinateTransform::isValidCS(inputCS)) {
                 continue;
             }
 
@@ -245,7 +255,7 @@ cwFixStationValidator::gatherCandidates() const
             // Part A: does the raw coordinate even belong to its own CS? This is
             // independent of the global CS and of any cluster, so it catches the
             // single-cave, single-fix typo the cluster rule structurally can't.
-            const bool domainValid = cwFixStationDiagnostics::isDomainValid(fix, globalCSTrimmed);
+            const bool domainValid = cwFixStationDiagnostics::isDomainValid(fix);
 
             // currentClassification() guarantees globalCSTrimmed is non-empty.
             cwGeoPoint global;
@@ -457,21 +467,25 @@ void cwFixStationValidator::updateOutputCSPrompt()
     // CS clears the state (globalCoordinateSystemChanged re-runs revalidate).
     if (m_region != nullptr
         && m_region->geoReference()->globalCoordinateSystem().trimmed().isEmpty()) {
-        // A fix that carries an input CS is the signal that real fix data is
-        // being entered (a blank scaffold row has none). The suggestion comes
-        // from the first such fix that also has a coordinate: a fix still at the
-        // origin counts as "not entered yet", so a freshly picked CS doesn't
-        // momentarily read as an invalid coordinate.
+        // A fix with a coordinate that reads back is the signal that real fix
+        // data is being entered. Carrying an input CS no longer says anything on
+        // its own: "Mark Station as Fixed" creates a row that has one from the
+        // moment it exists, and prompting for that would put the banner up — and
+        // hide the project's own CS control behind it — before the user has
+        // typed a thing. A coordinate is also exactly when the missing output CS
+        // starts to matter. The suggestion then comes from the first such fix; a
+        // fix still at the origin counts as "not entered yet", so a freshly
+        // picked CS doesn't momentarily read as an invalid coordinate.
         const auto scan = [&]() {
             for (cwCave* cave : m_region->caves()) {
                 if (cave == nullptr || cave->fixStations() == nullptr) {
                     continue;
                 }
                 for (const cwFixStation& fix : cave->fixStations()->fixStations()) {
-                    const QString inputCS = fix.inputCS().trimmed();
-                    if (inputCS.isEmpty()) {
+                    if (fix.state() != cwFixStation::Valid) {
                         continue;
                     }
+                    const QString inputCS = fix.inputCS().trimmed();
                     needs = true;
                     const cwGeoPoint p(fix.easting(), fix.northing(), fix.elevation());
                     if (p.x == 0.0 && p.y == 0.0) {
@@ -481,9 +495,7 @@ void cwFixStationValidator::updateOutputCSPrompt()
                     // coordinate outside its own CS's valid domain is almost
                     // certainly a data-entry error, so offer no suggestion and
                     // flag it — the prompt grays out and points at the coordinate.
-                    // No global CS exists — that is this prompt's precondition —
-                    // so the fix is judged under its own inputCS.
-                    if (cwFixStationDiagnostics::isDomainValid(fix, QString())) {
+                    if (cwFixStationDiagnostics::isDomainValid(fix)) {
                         suggested = cwCoordinateTransform::deriveProjectedOutputCS(inputCS, p);
                     } else {
                         coordinateInvalid = true;

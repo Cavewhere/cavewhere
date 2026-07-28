@@ -235,6 +235,9 @@ QC.Popup {
                 id: csPickerId
                 objectName: "fixStationPopupCS"
                 allowGeographic: true
+                allowLocal: false
+                allowProject: true
+                projectCS: RootData.region.geoReference.globalCoordinateSystem
                 // CSPicker doesn't own its value — the table rows feed it back from
                 // the model role they're bound to. This editor fills its fields by
                 // hand, so it has to close that loop itself or the controls would

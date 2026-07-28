@@ -398,18 +398,12 @@ void cwCavingRegion::InsertRemoveCave::insertCaves() {
         regionPtr->m_caveNames.insert(Caves.at(i)->name());
         Caves.at(i)->setParent(regionPtr);
 
-        // The cave's grid-convergence readout depends on the region's
-        // globalCS when a fix station omits its own inputCS. UniqueConnection
-        // keeps re-insert/undo paths from doubling up.
-        QObject::connect(regionPtr->geoReference(), &cwGeoReference::globalCoordinateSystemChanged,
-                         Caves.at(i), &cwCave::recomputeGridConvergence,
-                         Qt::UniqueConnection);
-        // The per-row domain warnings fall back to the same globalCS, so they
-        // move in and out of the flagged state with it.
-        QObject::connect(regionPtr->geoReference(), &cwGeoReference::globalCoordinateSystemChanged,
-                         Caves.at(i), &cwCave::refreshFixStationDomainErrors,
-                         Qt::UniqueConnection);
-        Caves.at(i)->recomputeGridConvergence();
+        // Nothing here follows the region's globalCS any more: a fix station is
+        // judged, converged and exported under its own inputCS, so changing the
+        // project's projection leaves every cave's readouts where they were, and
+        // joining a region can no longer change what a cave converges to. The
+        // cave keeps that current itself, from its own constructor and its fix
+        // stations' signals.
     }
 
     OwnsCaves = false;

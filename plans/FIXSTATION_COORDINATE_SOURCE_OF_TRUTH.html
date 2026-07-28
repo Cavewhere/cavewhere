@@ -87,7 +87,7 @@ partly reverses.</p>
 <div class="toc">
   <a href="#why">2. Why — the duplication and what it cost</a><br>
   <a href="#model">3. The data model after the change</a><br>
-  <a href="#states">4. Three coordinate states</a><br>
+  <a href="#states">4. Coordinate states</a><br>
   <a href="#proto">5. Proto schema</a><br>
   <a href="#script">5b. The migration script</a><br>
   <a href="#setters">6. Component setters and the CS-first precondition</a><br>
@@ -96,7 +96,9 @@ partly reverses.</p>
   <a href="#commits">9. Commit sequence</a><br>
   <a href="#tests">10. Test plan</a><br>
   <a href="#open">11. Open decisions</a><br>
+  <a href="#picker">11.1 The coordinate-system picker</a><br>
   <a href="#risks">12. Risks &amp; rejected alternatives</a><br>
+  <a href="#followups">13. Follow-ups from the commit 3 review</a><br>
 </div>
 
 <h2 id="why">2. Why — the duplication and what it cost</h2>
@@ -269,7 +271,7 @@ function of <code>(Coordinate, InputCS)</code>, both already compared, so includ
 redundant — and would make an equality that could never fail into one that silently depends on
 <code>refresh()</code> having run.</p>
 
-<h2 id="states">4. Three coordinate states</h2>
+<h2 id="states">4. Coordinate states</h2>
 
 <p>The <code>Unreadable</code> state exists because of a requirement that arrived late and is easy to
 under-serve:</p>
@@ -293,6 +295,35 @@ under-serve:</p>
       <td>0, 0, 0</td><td><b>Cell tinted, parse error shown</b></td><td><b>The same string, verbatim</b></td></tr>
 </table>
 
+<div class="callout ok">
+  <b>§11's resolution adds a fourth condition. <span class="pill ok">shipped in §11.1 as
+  <code>NoSystem</code></span></b> A row with a blank <code>inputCS</code> is an <i>error</i>: with no
+  coordinate system there is no axis order, so the two numbers cannot be said to mean anything. The
+  string is kept and the components are <b>not</b> derived — behaviorally identical to
+  <code>Unreadable</code>, but for a different reason, and it wants a different message ("choose a
+  coordinate system", not "this text can't be read"). It went in as the fourth <code>state()</code>
+  value rather than a separate predicate, with <code>refresh()</code> returning early on a blank CS:
+  every consumer already switches on <code>state()</code>, and the guard <code>state() != Valid</code>
+  that <code>cwFixStationDiagnostics</code> uses picks it up for free.
+</div>
+
+<div class="callout bad">
+  <b>This row is <i>not</i> rare, and an earlier draft of this section said it was.</b> The claim was
+  "only reachable from a hand-edited file once §11.1 lands, since new rows default to Lat/Long".
+  <b>Three ordinary paths produce a <code>NoSystem</code> row:</b> <code>fromProtoFixStation</code> on
+  any project saved before this work, <code>cwSurvexImporter::parseFix</code> on an svx whose
+  <code>*fix</code> has no <code>*cs</code> before it (<b>the ordinary local-grid survey</b>), and every
+  row the old picker's <b>Local</b> mode wrote, which is what a blank CS used to mean. Only the last of
+  those is anything like a hand edit.
+  <br><br>
+  That understatement had a cost: it is why nothing checked <code>state()</code> before writing
+  <code>*fix</code>, and a CS-less fix exported as <code>*fix &lt;name&gt; 0 0 0</code> — silently moving
+  the whole cave to the origin — until the §11.1 review caught it. <b>Treat "the numbers are kept as
+  text" as a claim about storage only.</b> Every consumer that reads
+  <code>easting()/northing()/elevation()</code> gets <code>0</code> on any state but <code>Valid</code>,
+  so each one needs its own guard until <a href="#followups">R1</a> gives them a shared predicate.
+</div>
+
 <h3>4.1 The elevation has its own "not entered"</h3>
 
 <p><span class="pill ok">decided</span> A two-component string — <code>"46.1, -115.6"</code>, the shape a
@@ -302,7 +333,7 @@ transient parse detail to a persistent property of the fix, and it settles the o
 two-component paste does to an elevation already on the row: nothing, because the string now says so
 out loud.</p>
 
-<pre><code>enum CoordinateState { Empty, Valid, Unreadable };
+<pre><code>enum CoordinateState { Empty, Valid, Unreadable, NoSystem };
 
 CoordinateState state() const;
 bool hasElevation() const;   // false for a two-component coordinate
@@ -565,14 +596,29 @@ current values under <code>axisOrderFor(inputCS())</code>, in <code>Metric</code
 
 <p>This introduces a precondition that did not exist before and must be documented on the header:</p>
 
+<div class="callout bad">
+  <b>An earlier draft said "so no importer change is needed". That was wrong, and §11.1 had to change
+  <code>cwSurvexImporter</code> anyway.</b> Setting the CS first is necessary but not sufficient: on a fix
+  that has <i>no</i> CS at all, the one-at-a-time setters don't compose. Each writes the string and reads
+  it straight back, and with no axis order the read returns nothing — so the second setter spells out what
+  the first lost, and the third spells out what the second lost. Three writes leave one number.
+  <br><br>
+  An svx <code>*fix</code> with no <code>*cs</code> before it is exactly that case, and it is the ordinary
+  local-grid survey. The fix is <code>cwFixStation::setCoordinate(double, double, double)</code> — one
+  write, one read-back — and <b>any caller holding three numbers must use it</b>. Three real callers were
+  hit: <code>fromProtoFixStation</code>, <code>cwSurvexImporter::parseFix</code>, and a test helper whose
+  silent zeroing of a survey's world origin is how the whole thing was noticed. Walls is genuinely
+  unchanged, since it always sets a CS first — so the statement about Walls survives; the one about svx
+  does not.
+</div>
+
 <div class="callout warn">
   <b>Set <code>inputCS</code> before any component.</b> A bare number has no meaning without an axis order,
   and the order comes from the CS. Writing a component while <code>inputCS</code> is still empty formats the
   string as easting-first; setting a geographic CS afterwards then re-reads it latitude-first and the two
-  horizontals swap. <b>Both importers already do this correctly</b> —
-  <code>cwSurvexImporter.cpp:1106</code> and <code>cwWallsImporter.cpp:85,96</code> each set the CS on the
-  line before the components — so no importer change is needed, but a test should pin that ordering so a
-  future edit can't quietly reverse it.
+  horizontals swap. Both importers set the CS on the line before the components —
+  <code>cwSurvexImporter.cpp:1106</code> and <code>cwWallsImporter.cpp:85,96</code> — and a test should pin
+  that ordering so a future edit can't quietly reverse it.
 </div>
 
 <p>The Walls geographic path is worth tracing because it looks wrong and is right:
@@ -644,12 +690,27 @@ ever observed.</p>
   <tr><td><code>FixStationPage.qml</code>, <code>FixStationPopup.qml</code></td>
     <td><span class="pill edit">small</span> Parse-error surface for <code>Unreadable</code>; popup unit
     question (§11 Q2).</td></tr>
-  <tr><td><code>cwSurvexImporter.cpp</code>, <code>cwWallsImporter.cpp</code></td>
-    <td><span class="pill ok">no change</span> Ordering already correct — pin it with a test.</td></tr>
-  <tr><td>~30 test call sites</td><td><span class="pill ok">no change</span> The component setters keep
-    their signatures. Only tests asserting on <code>coordinateText()</code> /
-    <code>coordinateTextAxisOrder()</code> move.</td></tr>
+  <tr><td><code>cwSurvexImporter.cpp</code></td>
+    <td><span class="pill edit">changed</span> Ordering was already correct, but a <code>*fix</code> with
+    no <code>*cs</code> needs the one-call <code>setCoordinate(e, n, z)</code> — see §6.</td></tr>
+  <tr><td><code>cwWallsImporter.cpp</code></td>
+    <td><span class="pill ok">no change</span> Always sets a CS first. Now the <b>only</b> production
+    caller still writing components one at a time.</td></tr>
+  <tr><td>~30 test call sites</td><td><span class="pill edit">11 files changed</span> The component
+    setters keep their signatures, but any helper building a <b>CS-less</b> fix has to move to
+    <code>setCoordinate(e, n, z)</code> or it silently produces <code>0, 0</code> — two
+    <code>makeFix</code> helpers did, which made every assertion around them vacuous.</td></tr>
 </table>
+
+<div class="callout bad">
+  <b>This table undercounts §11.1 badly — it lists 10 files against 24 actually touched.</b> Missing
+  entirely: <code>cwCave</code>, <code>cwCavingRegion</code>, <code>cwCoordinateTransform</code>,
+  <code>cwGridConvergence</code>, <code>cwTripCalibration</code>, <code>cwFixStationValidator</code>,
+  <code>cwFixStationDiagnosticsModel</code>, all three survex exporter files, <code>CSPicker.qml</code>
+  and <code>CSComboBox.qml</code>. The cause is §11 Q5's undercount of
+  <code>effectiveCS()</code>'s callers — deleting the fallback pulled four parameters and a whole
+  signal-wiring path out with it.
+</div>
 
 <h2 id="commits">9. Commit sequence</h2>
 
@@ -682,10 +743,17 @@ proto untouched, so a bisect can separate "the derivation is wrong" from "the mi
     <code>.cwcave</code> fixture. Deletes <code>coordinateTextAxisOrder</code> end to end, and
     <code>fromProtoFixStation</code>'s reconciliation with it: after this commit the loader reads field 9
     and nothing else.</td></tr>
-  <tr><td><b>3</b></td><td>Flag a coordinate that can't be read</td>
-    <td>Origin guard moves to <code>state()</code>; <code>Unreadable</code> reaches the page and the popup;
-    the hand-edit round trip gets its test.</td></tr>
-  <tr><td><b>4</b></td><td>Re-read a coordinate when its system changes</td>
+  <tr><td><b>3</b></td><td>Remove Local from the coordinate-system picker, add Project
+    <span class="pill">#618 · #625</span></td>
+    <td>§11.1: four modes, Lat/Long by default, <code>Project</code> copying the project's CS into the row.
+    With that, a blank <code>inputCS</code> becomes an <b>error</b> rather than a fallback — §4's fourth
+    condition — so this commit also lands Q5's answer: <code>cwFixStationDiagnostics</code> and
+    <code>cwSurvexExporterUtils::writeFixStations</code> judge under <code>inputCS()</code>, and
+    <code>cwFixStation::effectiveCS()</code> is deleted.</td></tr>
+  <tr><td><b>4</b></td><td>Flag a coordinate that can't be read</td>
+    <td>Origin guard moves to <code>state()</code>; <code>Unreadable</code> — and the no-system state
+    commit 3 introduces — reach the page and the popup; the hand-edit round trip gets its test.</td></tr>
+  <tr><td><b>5</b></td><td>Re-read a coordinate when its system changes</td>
     <td><b>Reduced by commit 1</b>, which already landed the re-read and its role emission (see above).
     What is left: §13.10 of the outlier plan is rewritten, and the QML check that correcting a row's CS
     after a transposed paste clears the domain tint with no retype.</td></tr>
@@ -706,6 +774,14 @@ proto untouched, so a bisect can separate "the derivation is wrong" from "the mi
   <i>working tree</i>, not of a commit boundary: write the script, run it on a copy, check the result, and
   stage the whole thing as one commit once it's right. The bisect separation this plan cares about is
   commit 1's — the risky derivation, landing alone with the proto untouched — and that is unaffected.
+</div>
+
+<div class="callout">
+  <b>2 and 3 are independent, and the order between them is free.</b> Q5's resolution removed the
+  dependency that used to tie them: the migration script writes the same bytes under either reading of the
+  axis order (§11), so the picker work does not gate the schema change and the schema change does not gate
+  the picker work. Commit 3 is the one with an issue number attached and the one a user would notice, so
+  it is reasonable to do first.
 </div>
 
 <h2 id="tests">10. Test plan</h2>
@@ -808,16 +884,231 @@ line plot — must stay green untouched.</p>
   out easting-first, and the moment the user corrects the row to <code>EPSG:4326</code> — which they
   must, since <code>LONG-LAT</code> is unusable downstream — the horizontals swap and the cave moves
   ~12,000&nbsp;km. Before commit 1, <code>setInputCS</code> wrote nothing and the numbers survived.</p>
-  <p><b>Commit 1 closed off the cheap fix.</b> The order used to be a call-site parameter, correctable
-  by passing <code>effectiveCS</code> at three sites. It now lives inside a <code>QSharedData</code>
-  value type that structurally cannot see the region's global CS — and the invariant this plan just
-  bought ("the numbers are a pure function of <code>(Coordinate, InputCS)</code>") is what forbids it
-  seeing one. The two answers are: <code>cwFixStation</code> takes the effective CS on write, giving up
-  some of that purity; or the derivation moves up to <code>cwFixStationModel</code>, which knows its
-  cave. Either touches <code>cwFixStation</code>, the model, the <code>cwCave</code> wiring and the
-  <code>globalCS</code>-changed path. <b>Recommendation: decide before commit 2</b> — every later commit
-  builds on the current answer, and commit 2's migration script <i>encodes it on disk</i>. Deciding after
-  it has run means writing a second migration to undo the first.</p>
+  <p><b>Resolved: <code>inputCS()</code>. Commit 1 was right and the other two call sites are wrong.</b>
+  <span class="pill ok">2026-07-27</span> Both candidate answers on the table — <code>cwFixStation</code>
+  takes the effective CS on write, or the derivation moves up to <code>cwFixStationModel</code> — existed
+  only to serve an implicit fallback that should not exist. <b>A blank <code>inputCS</code> is an error,
+  not a request to use the project's CS.</b> Without a coordinate system there is no axis order, so there
+  is nothing the two numbers can be said to mean; the string is kept and the components are not derived.
+  Once blank stops being a fallback, nothing consults <code>globalCS</code> on a fix station's behalf, and
+  the fix is subtraction rather than plumbing:</p>
+  <ul>
+    <li><code>cwFixStationDiagnostics::domainCheck</code> — judge under <code>inputCS()</code>.</li>
+    <li><code>cwSurvexExporterUtils::writeFixStations</code>
+        (<code>cwSurvexExporterUtils.h:214</code>, reached from <code>cwSurvexExporterCaveTask</code>;
+        the <code>cwSurvexExporterRule</code> copy is a dead prototype) — emit <code>*cs</code> from
+        <code>inputCS()</code>. No spelling change is needed: it already writes the row's CS verbatim, so
+        a row holding <code>EPSG:32613</code> emits <code>*cs EPSG:32613</code>.</li>
+    <li><code>cwFixStation::effectiveCS()</code> — <b>deleted</b>, not reinterpreted.
+        <b>It had six callers, not none</b> — this bullet originally said "it has no callers left", and
+        that undercount is why §8's blast radius is short by fourteen files. The six:
+        <code>cwFixStationValidator</code> (twice), <code>cwFixStationDiagnostics</code>,
+        <code>cwGridConvergence</code>, <code>cwTripCalibration</code>, and
+        <code>cwSurvexExporterUtils</code>. Removing it also deleted both
+        <code>globalCoordinateSystemChanged</code> connections in <code>cwCavingRegion</code>,
+        <code>cwCave::refreshFixStationDomainErrors()</code>, and
+        <code>cwFixStationDiagnosticsModel::fallbackCS()</code>.</li>
+  </ul>
+  <p><b>The picker rework is what makes a blank unreachable</b> — see §11.1. And the deadline lifted:
+  <b>Q5 no longer gates commit 2.</b> The migration script converts each row under
+  <code>axisOrderFor(&lt;that row's CS&gt;)</code>, and the two readings can only differ on a row with no
+  CS of its own — where today's <code>axisOrderFor("")</code> is <code>EastingNorthing</code> and
+  <code>axisOrderFor(globalCS)</code> is <i>also</i> <code>EastingNorthing</code>, because the project's
+  CS is constrained to projected (<code>DataMainPage.qml:199</code> sets
+  <code>allowGeographic: false</code> — survex's cavern only emits projected output). They agree on every
+  row the UI can produce, so the script writes the same bytes either way. <i>Caveat:</i> that constraint
+  is enforced in the picker only — <code>cwGeoReference::setGlobalCoordinateSystem</code> does not check
+  it — so a hand-edited geographic <code>globalCS</code> would break the equivalence.</p>
+</div>
+
+<div class="q">
+  <h4 id="picker">11.1 — The coordinate-system picker: remove Local, add Project</h4>
+  <p><span class="pill ok">decided 2026-07-27</span> Issues
+  <a href="https://github.com/Cavewhere/cavewhere/issues/625">#625</a> (remove the local option) and
+  <a href="https://github.com/Cavewhere/cavewhere/issues/618">#618</a> (make it easy to match the
+  project's CS) are the same change, and it is what retires the blank <code>inputCS</code>.</p>
+  <p>Today <code>Local</code> literally commits the empty string (<code>CSPicker.qml:56</code>), and
+  <code>effectiveCS()</code> then falls back to <code>globalCS</code>. So <b>blank means two contradictory
+  things at once</b> — "this row has no coordinate system" and "this row follows the project's" — which is
+  the whole of Q5. Splitting them apart:</p>
+  <table>
+    <tr><th>Mode</th><th>Commits</th></tr>
+    <tr><td><b>Lat/Long</b> <span class="pill ok">default</span></td>
+        <td><code>EPSG:4326</code>. New rows start here, so a blank is never created.</td></tr>
+    <tr><td><b>UTM</b></td><td><code>EPSG:326NN</code>/<code>327NN</code> from the zone and hemisphere
+        controls, unchanged.</td></tr>
+    <tr><td><b>Project</b> <span class="pill">new</span></td>
+        <td>The project's global CS, <b>copied into the row</b>.</td></tr>
+    <tr><td><b>Custom</b></td><td>Arbitrary EPSG via <code>CSCustomDialog</code>, unchanged — it is the
+        only route to British National Grid, state plane, and the rest.</td></tr>
+  </table>
+
+  <div class="callout ok">
+    <b>Project copies, it does not link.</b> Once a coordinate has been entered under a system, that row
+    stays on that system — changing the project's projection afterward must not move a fix station that
+    was entered in UTM. So <code>Project</code> is an <i>action</i>, not a stored mode: it stamps the
+    project's CS into <code>inputCS</code> and the row holds it from then on. This is also why there is no
+    <code>resolvedCS</code> member and no <code>globalCS</code>-changed re-derivation path —
+    <code>inputCS</code> is always already resolved.
+    <br><br>
+    <b>Displaying it needs no stored state either.</b> The picker shows <code>Project</code> whenever the
+    row's value equals the project's global CS, and the action stamps that value in. Change the project's
+    projection and the row no longer matches, so it displays as UTM — or Custom, if the project moved to
+    something the picker has no mode for. "It basically becomes Custom" falls out of a display rule
+    rather than a migration.
+  </div>
+
+  <div class="callout warn">
+    <b><code>Local</code> stays for the project, goes for fix stations.</b>
+    <span class="pill ok">decided 2026-07-27</span> <code>CSPicker</code> is shared: <code>DataMainPage</code>
+    drives the <i>project's</i> global CS with it, <code>CSComboBox</code> drives <i>fix-station rows</i>.
+    #625 is scoped to fixed stations, and a project that isn't georeferenced — the normal state for most
+    caves — needs <code>Local</code> to say so. <code>Project</code> is the mirror image: meaningless on
+    the project's own picker. So the mode list becomes <b>per-host</b>, exactly as
+    <code>allowGeographic</code> already is:
+    <table>
+      <tr><th>Host</th><th>Modes</th></tr>
+      <tr><td><code>DataMainPage</code> (project globalCS)</td>
+          <td>Local · UTM · Custom &nbsp;<span class="pill">unchanged</span></td></tr>
+      <tr><td><code>CSComboBox</code> (fix-station row)</td>
+          <td>Lat/Long <span class="pill ok">default</span> · UTM · Project · Custom</td></tr>
+    </table>
+    Two more booleans beside <code>allowGeographic</code> (<code>allowLocal</code>,
+    <code>allowProject</code>) is the consistent move, but three flags means eight combinations and
+    <code>CSPicker.qml:89-100</code> currently hardcodes <i>two</i> array literals for
+    <code>modes</code>/<code>model</code> in parallel. <b>Build both by filtering one ordered
+    (mode, label) list instead</b>, so a future flag needs no new literal — the same spirit as
+    <code>oneLineWidth</code>, which already sums the Flow's children generically rather than naming them.
+  </div>
+
+  <h5>Implementation notes — gathered 2026-07-27, before any code was written</h5>
+  <ul>
+    <li><b>The C++ enum only grows.</b> <code>Mode { Local, LatLon, UTM, Custom }</code> →
+        <b>append</b> <code>Project</code>, keeping existing values stable. <code>Local</code> is
+        <i>not</i> removed — the project picker still needs it, and
+        <code>parseCS</code> (anonymous namespace, <code>cwCoordinateTransform.cpp:449</code>) defaults
+        <code>mode = Local</code> for an empty string, which <code>modeFor()</code> returns verbatim.
+        Removing it would have needed a new answer there.</li>
+    <li><b><code>modeFor()</code> can never return <code>Project</code></b> — it doesn't know the
+        project's CS. Worth a doc line on the enum, since it breaks the round-trip property the other
+        three modes have. The display rule lives in <code>CSPicker.currentMode</code> instead:
+        <code>value !== "" &amp;&amp; value === projectCS ? Project : modeFor(value)</code>. The
+        <code>value !== ""</code> guard keeps an unset row out of <code>Project</code> when the project
+        has no CS either.</li>
+    <li><b><code>CSPicker</code> has no access to the project's CS today</b> — it needs a new
+        <code>projectCS</code> property, passed by the three fix-station hosts
+        (<code>FixStationPage.qml:173</code> and <code>:454</code>,
+        <code>FixStationPopup.qml:237</code> — the same three that set
+        <code>allowGeographic: true</code>). <b>Where they read it from is not a walk up the object
+        tree</b>: <code>RootData.region.geoReference.globalCoordinateSystem</code> is a singleton path
+        reachable from any QML file, and <code>FixStationPage.qml:234</code> already writes through it.
+        Passed as a property rather than read inside the picker, so a picker stays testable without a
+        region behind it.</li>
+    <li><code>Local</code> is referenced in exactly three places, all in <code>CSPicker.qml</code>
+        (lines 56, 90, 93). The blast radius really is that small.</li>
+    <li><b>Don't disturb the lazy <code>CSCustomDialog</code> loader</b>
+        (<code>CSPicker.qml:164</code>). Every fix-station row instantiates a picker, and the dialog's
+        <code>CRSSearchModel</code> loads ~7000 EPSG rows from <code>proj.db</code> on first use.</li>
+  </ul>
+
+  <h5>What the implementation found — 2026-07-27, both suites green</h5>
+  <div class="callout warn">
+    <b><code>effectiveCS()</code> had six callers, not two.</b> The plan said "<code>cwFixStationDiagnostics</code>
+    and <code>cwSurvexExporterUtils::writeFixStations</code>" and undercounted by four:
+    <code>makeDeclinationContext</code> (<code>cwSurvexExporterUtils.h:45</code>),
+    <code>cwTripCalibration::resolveAuto</code>, <code>cwFixStationValidator.cpp:238</code> and
+    <code>cwGridConvergence::update</code>. Each took a <code>globalCS</code>/<code>fallbackCS</code>
+    parameter that existed <i>only</i> to feed <code>effectiveCS()</code>, so deleting it deleted the
+    parameter too — and with it <code>cwFixStationDiagnosticsModel::fallbackCS()</code>,
+    <code>refreshDomainErrors()</code>, <code>cwCave::refreshFixStationDomainErrors()</code> and the two
+    <code>globalCoordinateSystemChanged</code> connections in <code>cwCavingRegion::insertCaves</code>.
+    Nothing in a cave follows the region's CS any more, which is the design stated as a property of the
+    signal graph rather than of a function.
+  </div>
+  <div class="callout warn">
+    <b>The component setters don't compose on a row with no CS — three callers hit it, one of them the
+    ordinary local-grid survey.</b> <code>setEasting</code>/<code>setNorthing</code>/<code>setElevation</code>
+    each write the coordinate out and read it straight back, so once <code>refresh()</code> returns early
+    for a blank CS the first write comes back as nothing and the next two spell that nothing out:
+    <code>610016.792, 5615117.075, 304m</code> becomes <code>0, 0, 304m</code>. Three callers do exactly
+    this — <code>fromProtoFixStation</code>, <code>cwSurvexImporter::parseFix</code>
+    (<b>a <code>*fix</code> with no <code>*cs</code> before it is a local grid, which is the common
+    case</b>), and <code>test_cwCavingRegion_worldOrigin</code>'s <code>makeFix</code>. The last one is
+    how it was caught: the fix silently placed the whole survey's world origin at 0.
+    <p>Fixed at the class rather than at each call site — <b><code>cwFixStation::setCoordinate(double,
+    double, double)</code></b>, one write for a caller that holds all three numbers. The one-at-a-time
+    setters keep their existing contract and their existing documented caveat. The numbers then survive as
+    text on a row that says it has no system, which is what §4 asks for: naming the system the row was
+    always in brings all three back, and there is a test for exactly that on each of the two production
+    paths.</p>
+    <p><b>This is a data-loss trap, not a cosmetic one.</b> It is the same shape the header already
+    documented for <code>Unreadable</code>, but reachable from ordinary files rather than only from a hand
+    edit — which is why the fix is an API and not a comment.</p>
+  </div>
+  <div class="callout">
+    <b>Defaulting new rows to WGS84 flips the axis order under every test that assumed a blank CS.</b>
+    A blank CS reads easting-first (<code>axisOrderFor("") == EastingNorthing</code>), so a row created
+    by <code>addFixStation()</code> and then handed <code>46.12113, -115.59902</code> used to land
+    easting-first and now lands latitude-first. Seven QML cases and four C++ ones asserted the old
+    reading; each now names a projected CS explicitly. Two of them — the diagnostics fallback tests —
+    were testing the deleted rule and were rewritten rather than repaired.
+  </div>
+  <div class="callout warn">
+    <b>Two more consumers resolved the CS themselves and had to change with the rest.</b>
+    <code>cwCavingRegion::recomputeWorldOrigin</code> reaches the fixes through
+    <code>cwFixStationValidator::candidates()</code>, so it inherited the fallback without naming it —
+    a fix with no CS used to place the whole survey's world origin under the region's projection, and now
+    is skipped. <code>cwCave::recomputeGridConvergence</code> is the other. Both had tests asserting the
+    fallback; both were rewritten, and each now asserts the positive half too so it can't pass by always
+    deferring.
+  </div>
+  <div class="callout warn">
+    <b>Defaulting a new row to WGS84 broke the survex export in two ways, and only the full suite
+    caught them.</b> Both are real bugs the old blank CS was hiding, not test churn:
+    <ul>
+      <li><b><code>makeDeclinationContext</code> read the first fix whether or not it had a
+        coordinate.</b> "Mark Station as Fixed" makes a row before the user types anything, and that
+        row now carries a CS from birth — so the export emitted
+        <code>*declination auto 0 0 0</code> under <code>*cs EPSG:4326</code>: the Gulf of Guinea, not
+        the cave (cavern duly reported <i>grid convergence: inf°</i>). Worse, that <code>*cs</code>
+        lands after the fallback <code>*fix</code>, which cavern rejects outright — <i>"Station … fixed
+        before CS command first used"</i>. Now it skips to the first fix that has both a CS and a
+        readable coordinate.</li>
+      <li><b><code>resolveOutputCS</code> fell back to a geographic fix CS.</b> Cavern refuses one:
+        <i>"Coordinate system unsuitable for output"</i>, the <code>ok_for_output == NO</code> branch
+        at <code>survex/src/commands.c:2672</code>. So <code>*cs out EPSG:4326</code> fails the whole
+        solve, and the fallback now skips geographic and emits nothing —
+        <code>cwFixStationValidator::needsOutputCS</code> already exists to ask the user for a
+        projected one.</li>
+    </ul>
+    <p><b>Verify this against cavern's source, not by inspection.</b> A grep for
+    <code>proj_angular_output</code> finds nothing and reads as "survex accepts geographic output";
+    the check is there under another name, and the error only appears once you read a real cavern
+    log. Both bugs were found from the log, not from the diff.</p>
+  </div>
+  <div class="callout warn">
+    <b>A consequence the user will see: an ungeoreferenced project plus one named fix station no
+    longer solves.</b> The row is on WGS84, cavern can't output geographic, and there is no project CS
+    to fall back to — so the line plot fails until the output CS is picked. That is what
+    <code>needsOutputCS</code> and <code>OutputCSPrompt</code> are for, and the prompt now fires as
+    soon as a fix row exists rather than once it has a coordinate. Defaulting a new row to the
+    <i>project's</i> CS when it has one would avoid the prompt in the common case, but
+    <code>cwFixStationModel</code> has no route to the region, so it is a separate change.
+  </div>
+  <div class="callout">
+    <b>A mode this host doesn't offer shows an empty combo, not the first entry.</b>
+    <code>indexForMode</code> returned <code>0</code> for an unknown mode, which after this change would
+    have labelled a blank fix-station row "Lat/Lon" — naming a system the row is not on. It now returns
+    <code>-1</code>, so the combo shows nothing. The same applies to the project picker if a globalCS is
+    hand-edited to a geographic CRS.
+  </div>
+
+  <p><b>Out of scope</b> <span class="pill">decided 2026-07-27</span>: the survex importer. It stores
+  <code>*cs</code> spellings verbatim (<code>cwSurvexImporter.cpp:1069</code>), so
+  <code>LONG-LAT</code> — whose datum is anyone's guess — and <code>UTM13N</code> both arrive as strings
+  <code>isGeographic()</code> reads as projected. Mapping them onto real EPSG codes on import is the
+  right fix and is <i>not</i> part of this work. Nor is migrating existing <code>Local</code> rows: no
+  such files exist.</p>
 </div>
 
 <h2 id="risks">12. Risks &amp; rejected alternatives</h2>
@@ -840,8 +1131,10 @@ line plot — must stay green untouched.</p>
     <td>Real, and the reason <code>refresh()</code> has exactly two callers and the fields are private with
     no setter. Worth a test that calls every mutator and asserts the numbers agree with the string.</td></tr>
   <tr><td>Component-setter ordering</td>
-    <td>§6. Both current call sites are correct; the risk is a future one, so it gets a test rather than a
-    comment.</td></tr>
+    <td><b>Materialized — this row said "the risk is a future one" and it was already present.</b> Not a
+    call-site ordering risk at all: on a CS-less fix the setters don't compose, so three writes keep one
+    number. It cost silent data loss on three real callers and needed a new API
+    (<code>setCoordinate(double, double, double)</code>), not a test. See §6.</td></tr>
 </table>
 
 <h3>Rejected: keep the numbers as a cache</h3>
@@ -854,6 +1147,94 @@ two stored fields — the exact cost this change exists to remove — in exchang
 <p><code>easting()</code> parses on demand instead of caching. Rejected: <code>easting()</code> is called
 per-station in the solve and per-frame in the plot, and a regex parse behind a const getter is a
 performance trap disguised as simplicity. Deriving on write is one parse per edit.</p>
+
+<h2 id="followups">13. Follow-ups from the commit 3 review</h2>
+
+<p>Triaged 2026-07-28. Commit 3's review found 19 defects and fixed 18; what follows is what was
+deliberately left, in the order it should be picked up.</p>
+
+<h3>R1 — one predicate for "are this fix's numbers usable?" <span class="pill new">next</span></h3>
+
+<p>The blank-CS fallback is gone, so <b>eight consumers</b> now re-derive the same question and no two
+spell it alike: <code>cwSurvexExporterUtils</code> (three sites, all different),
+<code>cwFixStationValidator</code> (two), <code>cwGridConvergence</code>,
+<code>cwTripCalibration</code>, <code>cwFixStationDiagnostics</code>. The site that had <i>no</i> check
+is the one that regressed — a CS-less fix exported as <code>*fix &lt;name&gt; 0 0 0</code>.</p>
+
+<p>Owner is <code>cwFixStation</code>: a <code>hasUsableCoordinate()</code>, or making
+<code>state() == Valid</code> the single accepted spelling. Note the invariant that makes this safe —
+<b><code>Valid</code> implies a non-empty <code>inputCS()</code></b>, since a blank CS returns
+<code>NoSystem</code> before <code>parse()</code> runs — so every <code>cs.isEmpty() || state() !=
+Valid</code> pair in the tree collapses to its second half.</p>
+
+<div class="callout warn">
+  <b>Sequence this after commit 4</b>, which moves at least two of the eight consumers again.
+</div>
+
+<h3>F22 — naming a geographic CS on a <code>NoSystem</code> row transposes it</h3>
+
+<p>The <code>NoSystem</code> doc claimed the numbers are kept as text either way, "so naming the system
+reads all three straight back." That holds only for a <b>projected</b> system. A CS-less row has no axis
+order and nothing records the one its text was written in — <code>cwSurvexImporter::parseFix</code>
+stores a <code>*fix</code> with no preceding <code>*cs</code> easting-first — so choosing a geographic CS
+afterward reads it latitude-first and the first two components swap. The doc is corrected; the behavior
+is not.</p>
+
+<p>The fix needs the axis order the text was written under to be persisted and read back. Commit 2 already
+adds <code>coordinateTextAxisOrder</code> to the proto for exactly this class of problem, so <b>do it
+there</b> rather than bolting a second mechanism onto commit 3. Until then, whichever surface offers the
+choice has to say what it will do — which is commit 4's territory, since commit 4 is what surfaces
+<code>NoSystem</code> in the page and the popup.</p>
+
+<h3>R3 — a named <code>FixStationCSPicker</code></h3>
+
+<p><code>CSComboBox</code> claims the host policy is "fixed by this shell rather than left to each host",
+but <code>FixStationPopup.qml:238</code> repeats <code>allowLocal: false</code> /
+<code>allowProject: true</code> by hand, and
+<code>projectCS: RootData.region.geoReference.globalCoordinateSystem</code> is now written at three
+sites (<code>FixStationPage.qml:174</code>, <code>:456</code>, <code>FixStationPopup.qml:240</code>).
+Four host-policy flags is where "one component, N booleans" stops paying. One new QML file plus three
+host edits — and commit 4 touches the same three hosts, so do it once, after.</p>
+
+<h3>A1 — a <code>cwCoordinateSystem</code> value type</h3>
+
+<p>A coordinate system is a bare <code>QString</code> with no normalization owner, and commit 3 made
+string identity load-bearing: <code>CSPicker.qml:44</code> decides the <code>Project</code> display with
+<code>value === projectCS</code> (exact, case-sensitive, untrimmed) while
+<code>cwFixStationValidator</code> asks whether the same two strings are the same system with
+<code>compare(..., Qt::CaseInsensitive)</code>. Add seven fresh <code>.trimmed().isEmpty()</code> sites
+and an <code>isGeographic()</code> that answers <code>false</code> for anything PROJ can't parse — that
+last one has already cost a workaround: <code>cwSurvexExporterUtils::isUnusableAsSurvexOutputCS</code> is
+a hand-kept list of survex's own CS keywords, living in the exporter because there is no type to hang it
+on. A value type owning trim, case and spelling collapses all of it. <b>Blast radius: large</b> —
+<code>cwFixStation</code>, the transform, the validator, both exporters, the picker, ~40 tests.</p>
+
+<h3>A2 — enforce "the project's CS is projected"</h3>
+
+<p><code>DataMainPage.qml</code> sets <code>allowGeographic: false</code>;
+<code>cwGeoReference::setGlobalCoordinateSystem</code> does not check. Commit 3 raised the stakes twice:
+<code>Project</code> copies <code>globalCS</code> verbatim into a fix row, and
+<code>resolveOutputCS</code> now silently emits <i>nothing</i> when the only candidate is geographic. So
+a hand-edited or imported geographic <code>globalCS</code> propagates into fix rows and then vanishes
+from <code>*cs out</code> with no diagnostic. <b>Blast radius: small</b> — a validity check plus an error
+surface — but it needs a decision about existing files that already carry one.</p>
+
+<h3>Accepted, not defects</h3>
+
+<table>
+  <tr><th>Item</th><th>Decision</th></tr>
+  <tr><td><b>New rows default to WGS84</b>, not to the project's CS</td>
+    <td><span class="pill ok">kept</span> Most people take points off WGS84, so it is the right default.
+    The consequence is real and accepted: an ungeoreferenced project with a <i>filled-in</i> geographic
+    fix emits <code>*cs</code> with no <code>*cs out</code>, cavern refuses the solve, and the plot stays
+    blank until an output CS is picked — which is what <code>needsOutputCS</code> prompts for. An empty
+    scaffold row no longer triggers it, since such a row is now dropped from the export. Superseded in
+    future by automatic project-level CS selection, which may need a <b>custom local CS with no EPSG
+    code</b> rather than anything in the registry.</td></tr>
+  <tr><td><code>Mode</code> mixes "what this CS is" with "how it was chosen"</td>
+    <td><span class="pill ok">kept</span> <code>Project</code> is the one value <code>modeFor()</code>
+    can never return. Asymmetric but correct, and the enum is <code>Q_ENUM</code>'d across C++ and QML.</td></tr>
+</table>
 
 <hr>
 <p class="mono-note">Follows <span class="commit">bca9c14f</span> · reverses §13.10 of

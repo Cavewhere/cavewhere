@@ -251,6 +251,19 @@ MainWindowTest {
             verify(title !== null, "popup should name the station being fixed")
             compare(title.text, "Fix station A1")
 
+            // The input CS comes from the shared picker, the same one the
+            // FixStationPage rows use. Picked before the coordinate is typed,
+            // as cwFixStation asks: the system decides which axis the text leads
+            // with, and a new row starts on WGS84, where the UTM pair below
+            // would be read latitude first.
+            const model = context.cave.fixStations
+            const modelIndex = model.index(0)
+
+            const picker = findChild(popup, "fixStationPopupCS")
+            verify(picker !== null, "popup should offer the shared CS picker")
+            picker.committed("EPSG:26916")
+            compare(model.data(modelIndex, FixStationModel.InputCSRole), "EPSG:26916")
+
             // Typing a coordinate: editingFinished is the same handler a keyboard
             // commit runs. One field takes the whole thing (#621).
             const coordinate = findChild(popup, "fixStationPopupCoordinate")
@@ -259,19 +272,10 @@ MainWindowTest {
             coordinate.text = "500200.5, 4194100, 2750m"
             coordinate.editingFinished()
 
-            const model = context.cave.fixStations
-            const modelIndex = model.index(0)
             compare(model.data(modelIndex, FixStationModel.EastingRole), 500200.5)
             compare(model.data(modelIndex, FixStationModel.NorthingRole), 4194100.0)
             compare(model.data(modelIndex, FixStationModel.ElevationRole), 2750.0)
             compare(popup.parseError, "", "a coordinate it could read leaves no complaint")
-
-            // The input CS comes from the shared picker, the same one the
-            // FixStationPage rows use.
-            const picker = findChild(popup, "fixStationPopupCS")
-            verify(picker !== null, "popup should offer the shared CS picker")
-            picker.committed("EPSG:26916")
-            compare(model.data(modelIndex, FixStationModel.InputCSRole), "EPSG:26916")
 
             // The picker has to show what the fix now carries: it doesn't own its
             // own value, so without the editor feeding the commit back its controls
@@ -351,6 +355,11 @@ MainWindowTest {
             const context = gotoSurveyTable()
             const popup = popupForA1(context)
 
+            // A projected system first: a new row starts on WGS84, where these
+            // numbers are not a coordinate at all — 500200.5 is no latitude —
+            // and the popup would rightly complain about the readable half too.
+            findChild(popup, "fixStationPopupCS").committed("EPSG:26916")
+
             const coordinate = findChild(popup, "fixStationPopupCoordinate")
             verify(coordinate !== null, "popup should offer the coordinate field")
 
@@ -407,7 +416,14 @@ MainWindowTest {
 
             const picker = findChild(popup, "fixStationPopupCS")
             verify(picker !== null, "popup should offer a CS picker")
-            picker.committed("EPSG:4326")
+
+            // A new row starts on WGS84, so commit something else — committing
+            // the CS it already holds would leave the model untouched and prove
+            // nothing about what a CS change does to the pending text.
+            const model = context.cave.fixStations
+            compare(model.data(model.index(0), FixStationModel.InputCSRole), "EPSG:4326",
+                    "a new row starts on WGS84")
+            picker.committed("EPSG:32611")
 
             compare(coordinate.text, "46.12113 N, 115.59902 W",
                     "the refused text survives the CS change")
@@ -415,12 +431,68 @@ MainWindowTest {
                       "and so does the reason it was refused")
 
             // The CS itself still landed, and a good coordinate still commits.
-            const model = context.cave.fixStations
-            compare(model.data(model.index(0), FixStationModel.InputCSRole), "EPSG:4326")
+            tryVerify(() => model.data(model.index(0),
+                                       FixStationModel.InputCSRole) === "EPSG:32611",
+                      2000, "the CS the user picked must reach the row")
 
-            coordinate.text = "46.12113, -115.59902, 304m"
+            coordinate.text = "478000, 4430000, 304m"
             coordinate.editingFinished()
             tryVerify(() => !errorRow.visible, 2000)
+
+            findChild(popup, "fixStationPopupDone").clicked()
+            tryCompare(popup, "opened", false)
+        }
+
+        function test_popupCSPickerOffersTheModesTheFixStationPageDoes() {
+            // The popup is the second entry surface for a fix, and it sets its
+            // picker's flags by hand rather than sharing a configured component
+            // with FixStationPage. Deleting all three — allowLocal, allowProject,
+            // projectCS — used to turn nothing red here, so the two surfaces
+            // could drift apart without a test noticing.
+            RootData.region.geoReference.globalCoordinateSystem = ""
+
+            const context = gotoSurveyTable()
+            const popup = popupForA1(context)
+
+            const picker = findChild(popup, "fixStationPopupCS")
+            verify(picker !== null, "popup should offer a CS picker")
+
+            // A fix station always has a coordinate system, so there is no
+            // "Local" here — that is the project's way of saying it isn't
+            // georeferenced, and it is what a blank input CS used to mean.
+            verify(picker.allowGeographic, "the popup must allow a geographic fix CS")
+            verify(!picker.allowLocal, "a fix-station row must not offer Local")
+
+            const modeCombo = findChild(picker, "csModePicker")
+            verify(modeCombo !== null, "csModePicker should be reachable")
+            verify(modeCombo.model.indexOf("Local") < 0,
+                   "a fix-station row must not offer Local")
+            verify(modeCombo.model.indexOf("Project") < 0,
+                   "Project must not be offered while the project has no CS to copy")
+            compare(modeCombo.model.length, 3,
+                    "Lat/Lon / UTM / Custom while the project has no CS of its own")
+
+            // Project appears only once there is a project CS to copy.
+            RootData.region.geoReference.globalCoordinateSystem = "EPSG:32613"
+            tryVerify(() => modeCombo.model.length === 4, 5000,
+                      "Project must be offered once the project has a CS")
+            compare(picker.projectCS, "EPSG:32613",
+                    "the popup must hand the picker the project's CS")
+
+            const projectIndex = modeCombo.model.indexOf("Project")
+            verify(projectIndex >= 0, "the fourth mode must be Project")
+
+            // Picking it stamps that CS onto the row rather than linking to it...
+            const model = context.cave.fixStations
+            modeCombo.activated(projectIndex)
+            tryVerify(() => model.data(model.index(0),
+                                       FixStationModel.InputCSRole) === "EPSG:32613",
+                      5000, "picking Project copies the project's CS onto the row")
+
+            // ...so re-projecting the project leaves the row where it was entered.
+            RootData.region.geoReference.globalCoordinateSystem = "EPSG:32614"
+            compare(model.data(model.index(0), FixStationModel.InputCSRole), "EPSG:32613",
+                    "re-projecting the project must not move a fix that copied it")
 
             findChild(popup, "fixStationPopupDone").clicked()
             tryCompare(popup, "opened", false)

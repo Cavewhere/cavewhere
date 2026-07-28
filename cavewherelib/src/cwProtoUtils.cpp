@@ -883,9 +883,11 @@ cwFixStation fromProtoFixStation(const CavewhereProto::FixStation& protoFix)
     if (!text.isEmpty() && (!hasNumbers || saysWhatTheNumbersSay())) {
         fix.setCoordinate(text);
     } else if (hasNumbers) {
-        fix.setEasting(protoFix.easting());
-        fix.setNorthing(protoFix.northing());
-        fix.setElevation(protoFix.elevation());
+        //All three at once: this format allowed a fix with no input CS, and one
+        //written a component at a time would lose the first two (see
+        //cwFixStation::setCoordinate). The numbers survive as text either way;
+        //the row is then flagged for the CS it never declared.
+        fix.setCoordinate(protoFix.easting(), protoFix.northing(), protoFix.elevation());
     }
 
     return fix;

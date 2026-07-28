@@ -228,7 +228,7 @@ TEST_CASE("cwSurvexExporterTripTask: writeTrip with no DeclinationContext falls 
     CHECK(output.contains(QStringLiteral("-4.00")));
 }
 
-TEST_CASE("cwSurvexExporterUtils::makeDeclinationContext picks first fix and prefers fix's inputCS",
+TEST_CASE("cwSurvexExporterUtils::makeDeclinationContext picks the first fix and its own inputCS",
           "[cwSurvexExporter_Auto]")
 {
     cwFixStation a;
@@ -245,7 +245,7 @@ TEST_CASE("cwSurvexExporterUtils::makeDeclinationContext picks first fix and pre
     b.setNorthing(456.0);
     b.setElevation(789.0);
 
-    const auto ctx = cwSurvexExporterUtils::makeDeclinationContext({ a, b }, QStringLiteral("EPSG:4326"));
+    const auto ctx = cwSurvexExporterUtils::makeDeclinationContext({ a, b });
     REQUIRE(ctx.has_value());
     CHECK(ctx->inputCS == kUtmZ13N);
     CHECK(ctx->easting == 478000.0);
@@ -253,33 +253,34 @@ TEST_CASE("cwSurvexExporterUtils::makeDeclinationContext picks first fix and pre
     CHECK(ctx->elevation == 1655.0);
 }
 
-TEST_CASE("cwSurvexExporterUtils::makeDeclinationContext falls back to globalCS when fix has no inputCS",
+TEST_CASE("cwSurvexExporterUtils::makeDeclinationContext does not borrow the project's CS",
           "[cwSurvexExporter_Auto]")
 {
+    // The region's CS is not a stand-in for one the fix never declared: survex
+    // would then anchor the station under a projection nobody chose for it.
     cwFixStation a;
     a.setStationName(QStringLiteral("a1"));
-    // No inputCS on the fix.
-    a.setEasting(1.0);
-    a.setNorthing(2.0);
-    a.setElevation(3.0);
+    // Written in one call so the numbers actually survive a fix with no CS to
+    // read them under — set one at a time they would collapse to 0, and this
+    // would be a test about an empty fix rather than a CS-less one.
+    a.setCoordinate(478000.0, 4430000.0, 1655.0);
+    REQUIRE(a.inputCS().isEmpty());
+    REQUIRE(a.coordinate() == QStringLiteral("478000, 4430000, 1655m"));
 
-    const auto ctx = cwSurvexExporterUtils::makeDeclinationContext({ a }, kUtmZ13N);
-    REQUIRE(ctx.has_value());
-    CHECK(ctx->inputCS == kUtmZ13N);
+    CHECK_FALSE(cwSurvexExporterUtils::makeDeclinationContext({ a }).has_value());
+
+    // The numbers were never the problem — naming the system is all it takes,
+    // which is what makes the case above a refusal rather than an empty fix.
+    a.setInputCS(kUtmZ13N);
+    const auto named = cwSurvexExporterUtils::makeDeclinationContext({ a });
+    REQUIRE(named.has_value());
+    CHECK(named->inputCS == kUtmZ13N);
+    CHECK(named->easting == 478000.0);
 }
 
-TEST_CASE("cwSurvexExporterUtils::makeDeclinationContext is invalid with no fix or no CS",
+TEST_CASE("cwSurvexExporterUtils::makeDeclinationContext is invalid with no fix",
           "[cwSurvexExporter_Auto]")
 {
-    SECTION("Empty fix list") {
-        const auto ctx = cwSurvexExporterUtils::makeDeclinationContext({}, kUtmZ13N);
-        CHECK_FALSE(ctx.has_value());
-    }
-
-    SECTION("Fix without inputCS and no globalCS") {
-        cwFixStation a;
-        a.setStationName(QStringLiteral("a1"));
-        const auto ctx = cwSurvexExporterUtils::makeDeclinationContext({ a }, QString());
-        CHECK_FALSE(ctx.has_value());
-    }
+    const auto ctx = cwSurvexExporterUtils::makeDeclinationContext({});
+    CHECK_FALSE(ctx.has_value());
 }

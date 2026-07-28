@@ -1104,9 +1104,12 @@ void cwSurvexImporter::parseFix(QString line)
     cwFixStation fix;
     fix.setStationName(fullStationName(parts.first()));
     fix.setInputCS(CurrentInputCS);
-    fix.setEasting(parts.at(coordStart).toDouble());
-    fix.setNorthing(parts.at(coordStart + 1).toDouble());
-    fix.setElevation(parts.at(coordStart + 2).toDouble());
+    //All three at once: a *fix with no *cs before it is the ordinary local-grid
+    //case, and a fix with no CS written a component at a time would keep only
+    //the last (see cwFixStation::setCoordinate).
+    fix.setCoordinate(parts.at(coordStart).toDouble(),
+                      parts.at(coordStart + 1).toDouble(),
+                      parts.at(coordStart + 2).toDouble());
     if (coordStart + 4 < parts.size() && isNumber(parts.at(coordStart + 3)) && isNumber(parts.at(coordStart + 4))) {
         fix.setHorizontalVariance(parts.at(coordStart + 3).toDouble());
         fix.setVerticalVariance(parts.at(coordStart + 4).toDouble());

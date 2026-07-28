@@ -48,6 +48,17 @@ MainWindowTest {
             return cave
         }
 
+        //! Add a row on a projected system, so its coordinate leads with the
+        //! easting. New rows start on WGS84, where the same text would be read
+        //! latitude first.
+        function addProjectedFixStation(cave) {
+            cave.fixStations.addFixStation()
+            const row = cave.fixStations.count - 1
+            cave.fixStations.setData(cave.fixStations.index(row), "EPSG:32611",
+                                     FixStationModel.InputCSRole)
+            return row
+        }
+
         function findPicker(rowIndex) {
             const fixPage = RootData.pageView.currentPageItem
             return findChild(fixPage, "inputCSComboBox." + rowIndex)
@@ -133,9 +144,9 @@ MainWindowTest {
                 return picker !== null
             }, 5000, "row 0 inputCSComboBox should be reachable")
 
-            // The picker emits committed(newCS) from any of its modes
-            // (Local / Lat-Lon / UTM / Custom). Driving the signal exercises
-            // the same handler that mouse interaction would.
+            // The picker emits committed(newCS) from any of its modes. Driving
+            // the signal exercises the same handler that mouse interaction
+            // would — including the blank an older file can still carry.
             const m = cave.fixStations
             const idx = m.index(0)
 
@@ -149,7 +160,9 @@ MainWindowTest {
             tryVerify(() => m.data(idx, FixStationModel.InputCSRole) === "")
         }
 
-        function test_inputCSPickerAllowsGeographic() {
+        function test_inputCSPickerModes() {
+            RootData.region.geoReference.globalCoordinateSystem = ""
+
             const cave = gotoFixStations()
             cave.fixStations.addFixStation()
             tryCompare(cave.fixStations, "count", 1)
@@ -160,14 +173,133 @@ MainWindowTest {
                 return picker !== null
             }, 5000, "row 0 inputCSComboBox should be reachable")
 
-            // allowGeographic defaults to true on FixStationPage rows so the
-            // user can mark a fix in raw lat/lon (EPSG:4326). The picker's
-            // mode list must therefore include LatLon.
+            // A fix station always has a coordinate system, so there is no
+            // "Local" here — that is the project's way of saying it isn't
+            // georeferenced, and it is what a blank input CS used to mean.
             verify(picker.allowGeographic, "FixStationPage CSComboBox should allow geographic")
             const modeCombo = findChild(picker, "csModePicker")
             verify(modeCombo !== null, "csModePicker should be reachable")
-            compare(modeCombo.model.length, 4,
-                    "Local / Lat-Lon / UTM / Custom (4 modes) when allowGeographic")
+            verify(modeCombo.model.indexOf("Local") < 0,
+                   "a fix-station row must not offer Local")
+            verify(modeCombo.model.indexOf("Project") < 0,
+                   "Project must not be offered while the project has no CS to copy")
+            compare(modeCombo.model.length, 3,
+                    "Lat/Lon / UTM / Custom while the project has no CS of its own")
+
+            // Project appears only once there is a project CS to copy — offering
+            // it sooner would commit the blank this all exists to retire.
+            RootData.region.geoReference.globalCoordinateSystem = "EPSG:32613"
+            tryVerify(() => modeCombo.model.length === 4, 5000,
+                      "Project must be offered once the project has a CS")
+            verify(modeCombo.model.indexOf("Project") >= 0,
+                   "the fourth mode must be Project")
+        }
+
+        function test_inputCSPickerProjectModeCopiesAndKeeps() {
+            RootData.region.geoReference.globalCoordinateSystem = "EPSG:32613"
+
+            const cave = gotoFixStations()
+            cave.fixStations.addFixStation()
+            tryCompare(cave.fixStations, "count", 1)
+
+            let picker = null
+            tryVerify(() => {
+                picker = findPicker(0)
+                return picker !== null
+            }, 5000, "row 0 inputCSComboBox should be reachable")
+
+            const inputCS = () => cave.fixStations.data(cave.fixStations.index(0),
+                                                        FixStationModel.InputCSRole)
+
+            const modeCombo = findChild(picker, "csModePicker")
+            const projectIndex = modeCombo.model.indexOf("Project")
+            verify(projectIndex >= 0, "Project must be offered")
+
+            // Project stamps the project's CS in rather than linking to it...
+            modeCombo.activated(projectIndex)
+            tryVerify(() => inputCS() === "EPSG:32613", 5000,
+                      "picking Project copies the project's CS onto the row")
+            tryCompare(picker, "currentMode", CoordinateSystem.Project)
+
+            // ...so re-projecting the project leaves the row exactly where it
+            // was entered. It stops reading as Project because it no longer
+            // matches, which is the display saying so, not the row moving.
+            RootData.region.geoReference.globalCoordinateSystem = "EPSG:32614"
+            compare(inputCS(), "EPSG:32613")
+            tryCompare(picker, "currentMode", CoordinateSystem.UTM)
+        }
+
+        //! Project appearing in the list must not drag the combo off the mode the
+        //! row is actually on. Adding an entry rewrites the whole model, and a
+        //! ComboBox resets its currentIndex when that happens.
+        function test_inputCSPickerKeepsItsModeWhenProjectAppears() {
+            RootData.region.geoReference.globalCoordinateSystem = ""
+
+            const cave = gotoFixStations()
+            addProjectedFixStation(cave)
+            tryCompare(cave.fixStations, "count", 1)
+
+            let picker = null
+            tryVerify(() => {
+                picker = findPicker(0)
+                return picker !== null
+            }, 5000, "row 0 inputCSComboBox should be reachable")
+
+            const modeCombo = findChild(picker, "csModePicker")
+            compare(modeCombo.model.length, 3, "no Project entry yet")
+            const utmIndex = modeCombo.model.indexOf("UTM")
+            tryCompare(modeCombo, "currentIndex", utmIndex)
+
+            // Project slots in ahead of Custom, so UTM keeps its index — only a
+            // reset to the top of the list can move it. The combo does reset, and
+            // the binding is restored a turn later, so this settles rather than
+            // holding from the first frame.
+            RootData.region.geoReference.globalCoordinateSystem = "EPSG:32613"
+            tryVerify(() => modeCombo.model.length === 4, 5000,
+                      "Project must be offered once the project has a CS")
+            compare(modeCombo.model.indexOf("UTM"), utmIndex,
+                    "UTM must keep its place when Project appears")
+            tryCompare(modeCombo, "currentIndex", utmIndex, 5000,
+                       "the row is still on UTM, so the combo must still say UTM")
+            compare(picker.currentMode, CoordinateSystem.UTM)
+        }
+
+        //! A row that happens to hold the project's CS reads as Project, but when
+        //! that CS is a UTM zone the zone is still the thing to edit — the
+        //! controls have to stay reachable, and editing one moves the row off the
+        //! project rather than doing nothing.
+        function test_inputCSPickerZoneStaysEditableOnAProjectRow() {
+            RootData.region.geoReference.globalCoordinateSystem = "EPSG:32613"
+
+            const cave = gotoFixStations()
+            cave.fixStations.addFixStation()
+            tryCompare(cave.fixStations, "count", 1)
+            cave.fixStations.setData(cave.fixStations.index(0), "EPSG:32613",
+                                     FixStationModel.InputCSRole)
+
+            let picker = null
+            tryVerify(() => {
+                picker = findPicker(0)
+                return picker !== null
+            }, 5000, "row 0 inputCSComboBox should be reachable")
+
+            tryCompare(picker, "currentMode", CoordinateSystem.Project)
+
+            const zoneSpin = findChild(picker, "csUtmZone")
+            verify(zoneSpin !== null, "csUtmZone should be reachable")
+            tryVerify(() => zoneSpin.visible, 5000,
+                      "the zone control must stay visible on a UTM-backed Project row")
+            compare(zoneSpin.value, 13)
+
+            zoneSpin.value = 14
+            zoneSpin.valueModified()
+
+            const inputCS = () => cave.fixStations.data(cave.fixStations.index(0),
+                                                       FixStationModel.InputCSRole)
+            tryVerify(() => inputCS() === "EPSG:32614", 5000,
+                      "editing the zone must commit the new zone onto the row")
+            // No longer the project's CS, so it stops reading as Project.
+            tryCompare(picker, "currentMode", CoordinateSystem.UTM)
         }
 
         function test_removeFixConfirmed() {
@@ -257,11 +389,24 @@ MainWindowTest {
             compare(diagnostics.data(proxyIdx, FixStationDiagnosticsModel.DomainErrorRole), "",
                     "an in-range coordinate raises no domain error")
 
-            // No input CS to judge against → the row never flags on its own.
-            model.setData(idx, "", FixStationModel.InputCSRole)
+            // A transposed easting, and then the system taken away. The numbers
+            // stay in the row's text, but with no axis order to read them under
+            // there is no point to place inside or outside a domain — so the row
+            // reports nothing rather than guessing. Clearing the CS last is what
+            // keeps the coordinate: writing a component without one discards it.
             model.setData(idx, 1478000.0, FixStationModel.EastingRole)
+            model.setData(idx, "", FixStationModel.InputCSRole)
+            verify(model.data(idx, FixStationModel.CoordinateTextRole).length > 0,
+                   "the coordinate text must survive losing the CS")
             compare(diagnostics.data(proxyIdx, FixStationDiagnosticsModel.DomainErrorRole), "",
-                    "a blank input CS defers to the region-level check")
+                    "a row that declares no CS is not judged at all")
+
+            // The premise: that same coordinate does flag once the row says what
+            // system it is in, so the check above can't pass for free.
+            model.setData(idx, "EPSG:32613", FixStationModel.InputCSRole)
+            tryVerify(() => diagnostics.data(proxyIdx,
+                                             FixStationDiagnosticsModel.DomainErrorRole) !== "",
+                      5000, "naming the CS flags the transposed easting")
         }
 
         function test_domainWarningIconShowsInline() {
@@ -352,13 +497,11 @@ MainWindowTest {
             // renders has to be text the parser reads back unchanged — otherwise
             // opening the editor and pressing Enter would drift the fix.
             const cave = gotoFixStations()
-            cave.fixStations.addFixStation()
+            addProjectedFixStation(cave)
             tryCompare(cave.fixStations, "count", 1)
 
             const model = cave.fixStations
             const idx = model.index(0)
-            // No input CS, so the row falls back to the region's global one and
-            // is written easting first.
             model.setData(idx, 46.12113, FixStationModel.EastingRole)
             model.setData(idx, -115.59902, FixStationModel.NorthingRole)
             model.setData(idx, 304.0, FixStationModel.ElevationRole)
@@ -397,7 +540,7 @@ MainWindowTest {
             // The paste path, end to end through the page: one string in, three
             // model roles out, with the ft suffix converted on the way.
             const cave = gotoFixStations()
-            cave.fixStations.addFixStation()
+            addProjectedFixStation(cave)
             tryCompare(cave.fixStations, "count", 1)
 
             const fixPage = RootData.pageView.currentPageItem
@@ -512,7 +655,7 @@ MainWindowTest {
             // loaded from a project written before the string was kept, or one
             // whose numbers were set from anywhere but this field.
             const cave = gotoFixStations()
-            cave.fixStations.addFixStation()
+            addProjectedFixStation(cave)
             tryCompare(cave.fixStations, "count", 1)
 
             const model = cave.fixStations
@@ -546,7 +689,7 @@ MainWindowTest {
             // in IEEE arithmetic — so a commit that trusted the numbers would
             // drift the fix by an ulp, dirty the project and re-solve the plot.
             const cave = gotoFixStations()
-            cave.fixStations.addFixStation()
+            addProjectedFixStation(cave)
             tryCompare(cave.fixStations, "count", 1)
 
             const previousUnits = RootData.region.unitSystem
@@ -587,7 +730,7 @@ MainWindowTest {
             // being typed — so partial text is Intermediate, which
             // CoreClickTextInput refuses to commit while showing the reason.
             const cave = gotoFixStations()
-            cave.fixStations.addFixStation()
+            addProjectedFixStation(cave)
             tryCompare(cave.fixStations, "count", 1)
 
             const fixPage = RootData.pageView.currentPageItem
@@ -632,7 +775,7 @@ MainWindowTest {
             compare(model.data(idx, FixStationModel.EastingRole), 0,
                     "nothing reached the model")
 
-            // The row declares no CS, so the field reads easting first.
+            // The row is on a projected system, so the field reads easting first.
             GlobalShadowTextInput.textInput.text = "610016.792, 5615117.075, 304m"
             compare(coordinateCell.commitChanges(), true, "correcting it commits")
             verify(!coordinateCell.isEditting, "and closes the editor")
@@ -646,7 +789,7 @@ MainWindowTest {
             // easting and a northing", with a UTM worked example, is worse off
             // than with no message at all.
             const cave = gotoFixStations()
-            cave.fixStations.addFixStation()
+            addProjectedFixStation(cave)
             tryCompare(cave.fixStations, "count", 1)
 
             const model = cave.fixStations
@@ -659,7 +802,7 @@ MainWindowTest {
                 return coordinateCell !== null
             }, 5000, "row 0 coordinate cell should be reachable")
 
-            // No CS yet: the row falls back to easting-first.
+            // A projected row leads with the easting.
             tryCompare(coordinateCell, "axisOrder", CoordinateText.EastingNorthing, 5000)
             coordinateCell.validator.validate("46.12113")
             verify(coordinateCell.validator.errorText.indexOf("easting") >= 0,
@@ -682,7 +825,7 @@ MainWindowTest {
             // the only thing routing a coordinate cell past commitEdit(). Its
             // own signal is what makes the branch load-bearing.
             const cave = gotoFixStations()
-            cave.fixStations.addFixStation()
+            addProjectedFixStation(cave)
             tryCompare(cave.fixStations, "count", 1)
 
             const fixPage = RootData.pageView.currentPageItem

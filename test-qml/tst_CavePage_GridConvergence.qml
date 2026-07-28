@@ -203,42 +203,58 @@ MainWindowTest {
                       "label must recompute when fix coords change")
         }
 
-        // ── Updates when fix's inputCS is cleared (falls back to globalCS) ───
+        // ── A fix with no inputCS has no grid to converge to ─────────────────
 
-        function test_textFallsBackToGlobalCsWhenFixHasNoInputCs() {
-            cave.fixStations.addFixStation()
-            const idx = cave.fixStations.index(0)
-            cave.fixStations.setData(idx, "a1", FixStationModel.StationNameRole)
-            cave.fixStations.setData(idx, "", FixStationModel.InputCSRole)
+        //! Enter the coordinate under a real system, then take the system away.
+        //! The numbers stay in the row's text, so this is a fix that has a
+        //! coordinate and no grid — not an empty row, which would read the same
+        //! way for a much less interesting reason.
+        function enterThenClearTheCs(idx) {
+            cave.fixStations.setData(idx, "EPSG:32613", FixStationModel.InputCSRole)
             cave.fixStations.setData(idx, 478000.0, FixStationModel.EastingRole)
             cave.fixStations.setData(idx, 4430000.0, FixStationModel.NorthingRole)
             cave.fixStations.setData(idx, 1655.0, FixStationModel.ElevationRole)
-
-            // globalCS is EPSG:32613 from init(); convergence should be numeric.
-            verify(cave.gridConvergence.text.indexOf("a1") >= 0)
-            verify(cave.gridConvergence.text.indexOf("°") >= 0)
+            cave.fixStations.setData(idx, "", FixStationModel.InputCSRole)
+            verify(cave.fixStations.data(idx, FixStationModel.CoordinateTextRole).length > 0,
+                   "the coordinate text must survive losing the CS")
         }
 
-        // ── Updates when the region's globalCS changes ───────────────────────
-
-        function test_textUpdatesWhenGlobalCsChanges() {
+        function test_textIsNotAvailableWhenFixHasNoInputCs() {
             cave.fixStations.addFixStation()
             const idx = cave.fixStations.index(0)
             cave.fixStations.setData(idx, "a1", FixStationModel.StationNameRole)
-            cave.fixStations.setData(idx, "", FixStationModel.InputCSRole)
-            cave.fixStations.setData(idx, 478000.0, FixStationModel.EastingRole)
-            cave.fixStations.setData(idx, 4430000.0, FixStationModel.NorthingRole)
-            cave.fixStations.setData(idx, 1655.0, FixStationModel.ElevationRole)
+            enterThenClearTheCs(idx)
+
+            // globalCS is EPSG:32613 from init(), and it is not a stand-in for
+            // a system the fix never declared — there is no grid to converge to.
+            compare(cave.gridConvergence.text, "n/a (no coordinate system)")
+        }
+
+        // ── The region's globalCS does not reach a cave's fix stations ───────
+
+        function test_textIgnoresAGlobalCsChange() {
+            // Start with no project CS, so the only thing that could give this
+            // row a grid is the change made below.
+            RootData.region.geoReference.globalCoordinateSystem = ""
+
+            cave.fixStations.addFixStation()
+            const idx = cave.fixStations.index(0)
+            cave.fixStations.setData(idx, "a1", FixStationModel.StationNameRole)
+            enterThenClearTheCs(idx)
 
             const before = cave.gridConvergence.text
+            compare(before, "n/a (no coordinate system)")
 
-            // Switch to a geographic global CS — fix falls back to globalCS
-            // since inputCS is empty, so the readout flips to "geographic CS".
-            RootData.region.geoReference.globalCoordinateSystem = "EPSG:4326"
+            // Giving the project a CS must not hand one to a fix that declares
+            // none — the row keeps saying it has no grid.
+            RootData.region.geoReference.globalCoordinateSystem = "EPSG:32613"
+            compare(cave.gridConvergence.text, before)
 
-            tryVerify(() => cave.gridConvergence.text === "n/a (geographic CS)", 500,
-                      "label must recompute when globalCS changes")
-            verify(before !== cave.gridConvergence.text)
+            // The premise: the readout does move when the row itself gains a
+            // system, so the check above can't pass for free.
+            cave.fixStations.setData(idx, "EPSG:32613", FixStationModel.InputCSRole)
+            tryVerify(() => cave.gridConvergence.text.indexOf("°") >= 0, 5000,
+                      "naming the row's own CS must give it a convergence angle")
         }
     }
 }

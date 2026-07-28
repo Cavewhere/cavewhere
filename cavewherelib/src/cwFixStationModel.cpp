@@ -9,9 +9,23 @@
 
 //Our includes
 #include "cwCoordinateText.h"
+#include "cwCoordinateTransform.h"
 #include "cwStation.h"
 
 namespace {
+
+//! A row created through the UI, which always starts on a coordinate system.
+//! Without one there is no axis order, so a fix's numbers can't be said to mean
+//! anything (#625) — a new row picks the system that needs no further choice
+//! rather than starting blank. Deliberately not cwFixStation's own default: a
+//! row that really does arrive blank, from an old file or a hand edit, has to
+//! stay blank so it can be flagged instead of silently reinterpreted.
+cwFixStation newFixStation()
+{
+    cwFixStation fix;
+    fix.setInputCS(cwCoordinateTransform::Wgs84);
+    return fix;
+}
 
 //! The key a fix's station name matches on. See cwFixStationModel::indexOf().
 QString fixKey(const QString& stationName)
@@ -207,7 +221,7 @@ QHash<int, QByteArray> cwFixStationModel::roleNames() const
 
 void cwFixStationModel::addFixStation()
 {
-    appendFixStation(cwFixStation());
+    appendFixStation(newFixStation());
 }
 
 int cwFixStationModel::indexOf(const QString& stationName) const
@@ -241,7 +255,7 @@ int cwFixStationModel::addFixStation(const QString& stationName)
         return existingRow;
     }
 
-    cwFixStation fix;
+    cwFixStation fix = newFixStation();
     fix.setStationName(trimmedName);
     appendFixStation(fix);
     return m_fixStations.size() - 1;

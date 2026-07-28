@@ -17,6 +17,7 @@
 #include "cwSurveyDataArtifact.h"
 #include "cwCavingRegion.h"
 #include "cwCave.h"
+#include "cwCoordinateTransform.h"
 #include "cwTrip.h"
 #include "cwSurveyChunk.h"
 #include "cwFixStation.h"
@@ -56,9 +57,9 @@ cwFixStation makeFix(const QString& name, const QString& cs, double e, double n,
     cwFixStation f;
     f.setStationName(name);
     f.setInputCS(cs);
-    f.setEasting(e);
-    f.setNorthing(n);
-    f.setElevation(el);
+    // One call, so the numbers survive even when cs is blank — set one at a
+    // time they would collapse to 0 and the fix would be about nothing.
+    f.setCoordinate(e, n, el);
     return f;
 }
 
@@ -166,6 +167,95 @@ TEST_CASE("cwSurvexExporterRule derives *cs out from the first fix's inputCS whe
         const QString output = writeRegionToString(region);
         INFO(output.toStdString());
         CHECK(output.contains(QStringLiteral("*cs out EPSG:32616")));
+    }
+
+    SECTION("a geographic fix CS is no fallback — cavern refuses it for output") {
+        // "Coordinate system unsuitable for output" (survex/src/commands.c:2672)
+        // fails the entire solve, so emitting one is worse than emitting none.
+        // New fix-station rows start on WGS84, making this the ordinary shape of
+        // a project whose global CS was never set; cwFixStationValidator's
+        // needsOutputCS prompt is what asks the user to pick a projected one.
+        cwSurveyDataArtifact::Region region;
+
+        cwSurveyDataArtifact::Cave cave;
+        cave.name = QStringLiteral("Geographic");
+        cave.fixStations.append(makeFix("a1", QStringLiteral("EPSG:4326"),
+                                        -115.59902, 46.12113, 300.0));
+        region.caves.append(cave);
+
+        const QString output = writeRegionToString(region);
+        INFO(output.toStdString());
+        CHECK_FALSE(output.contains(QStringLiteral("*cs out")));
+    }
+
+    SECTION("a projected fix behind a geographic one is still found") {
+        // The premise for the section above: geographic is skipped, not a stop.
+        cwSurveyDataArtifact::Region region;
+
+        cwSurveyDataArtifact::Cave cave;
+        cave.name = QStringLiteral("Mixed");
+        cave.fixStations.append(makeFix("a1", QStringLiteral("EPSG:4326"),
+                                        -115.59902, 46.12113, 300.0));
+        cave.fixStations.append(makeFix("a2", QStringLiteral("EPSG:32616"),
+                                        500000.0, 4000000.0, 0.0));
+        region.caves.append(cave);
+
+        const QString output = writeRegionToString(region);
+        INFO(output.toStdString());
+        CHECK(output.contains(QStringLiteral("*cs out EPSG:32616")));
+    }
+
+    SECTION("a survex keyword cavern won't output is skipped too") {
+        // LONG-LAT and JTSK are survex's own spellings, and cavern refuses both
+        // for output (ok_for_output == NO, survex/src/commands.c:2521-2540).
+        // PROJ can't create either, and isGeographic() answers false for
+        // anything it fails to create — so before this they read as projected
+        // and were picked for *cs out, failing the solve even though a usable
+        // CS sat right behind them. An svx import stores *cs verbatim, so this
+        // is what round-tripping such a file looks like.
+        // The premise: neither is something PROJ can answer for, so
+        // isGeographic() alone can never rule them out.
+        REQUIRE_FALSE(cwCoordinateTransform::isValidCS(QStringLiteral("LONG-LAT")));
+        REQUIRE_FALSE(cwCoordinateTransform::isValidCS(QStringLiteral("JTSK")));
+
+        cwSurveyDataArtifact::Region region;
+
+        cwSurveyDataArtifact::Cave cave;
+        cave.name = QStringLiteral("Keyword");
+        cave.fixStations.append(makeFix("a1", QStringLiteral("LONG-LAT"),
+                                        -115.59902, 46.12113, 300.0));
+        cave.fixStations.append(makeFix("a2", QStringLiteral("JTSK"),
+                                        -700000.0, -1000000.0, 400.0));
+        cave.fixStations.append(makeFix("a3", QStringLiteral("EPSG:32616"),
+                                        500000.0, 4000000.0, 0.0));
+        region.caves.append(cave);
+
+        const QString output = writeRegionToString(region);
+        INFO(output.toStdString());
+        CHECK(output.contains(QStringLiteral("*cs out EPSG:32616")));
+        CHECK_FALSE(output.contains(QStringLiteral("*cs out LONG-LAT")));
+        CHECK_FALSE(output.contains(QStringLiteral("*cs out JTSK")));
+    }
+
+    SECTION("a survex keyword cavern will output is still a fallback") {
+        // The premise for the section above: PROJ failing to parse a CS is not
+        // itself a reason to skip it. UTM16N, S-MERC, OSGB and EUR79Z30 are all
+        // unknown to PROJ and all fine for cavern's output, so a blanket
+        // "PROJ must understand it" gate would leave these exports with no
+        // *cs out at all — the very failure the fallback exists to prevent.
+        REQUIRE_FALSE(cwCoordinateTransform::isValidCS(QStringLiteral("UTM16N")));
+
+        cwSurveyDataArtifact::Region region;
+
+        cwSurveyDataArtifact::Cave cave;
+        cave.name = QStringLiteral("Keyword");
+        cave.fixStations.append(makeFix("a1", QStringLiteral("UTM16N"),
+                                        500000.0, 4000000.0, 0.0));
+        region.caves.append(cave);
+
+        const QString output = writeRegionToString(region);
+        INFO(output.toStdString());
+        CHECK(output.contains(QStringLiteral("*cs out UTM16N")));
     }
 
     SECTION("explicit globalCS overrides any fix inputCS") {
@@ -312,4 +402,53 @@ TEST_CASE("cwSurveyDataArtifact::Cave validates fixes and appends cwError",
     // Two errors: unknown station + duplicate.
     auto* errors = cave->errorModel()->errors();
     REQUIRE(errors->rowCount(QModelIndex()) == 2);
+}
+
+TEST_CASE("cwSurveyDataArtifact::Cave drops a fix whose coordinate can't be read",
+          "[cwSurvexExporterRule_fix]") {
+    // Only a Valid fix has components — every other state reads 0. Writing one
+    // anyway would emit `*fix a1 0 0 0` and move the whole cave to the origin,
+    // silently, so it is dropped with a reason instead. The row a2 keeps its
+    // numbers as text; what it lacks is a system to read them under.
+    cwCavingRegion region;
+    auto cave = new cwCave(&region);
+    cave->setName(QStringLiteral("T"));
+
+    auto trip = new cwTrip();
+    auto chunk = new cwSurveyChunk();
+    chunk->appendNewShot();
+    chunk->appendNewShot();
+    chunk->setStation(makeStation("a1"), 0);
+    chunk->setStation(makeStation("a2"), 1);
+    trip->addChunk(chunk);
+    cave->addTrip(trip);
+
+    cave->fixStations()->appendFixStation(
+        makeFix("a1", QStringLiteral("EPSG:32616"), 500000, 4000000, 100));
+
+    const cwFixStation noSystem = makeFix("a2", QString(), 610016.792, 5615117.075, 304);
+    REQUIRE(noSystem.state() == cwFixStation::NoSystem);
+    REQUIRE_FALSE(noSystem.coordinate().isEmpty());
+    cave->fixStations()->appendFixStation(noSystem);
+
+    region.addCave(cave);
+
+    cwSurveyDataArtifact::Region snapshot(&region);
+
+    REQUIRE(snapshot.caves.size() == 1);
+    const auto& snapshotCave = snapshot.caves.at(0);
+    REQUIRE(snapshotCave.fixStations.size() == 1);
+    CHECK(snapshotCave.fixStations.first().stationName() == QStringLiteral("a1"));
+
+    auto* errors = cave->errorModel()->errors();
+    REQUIRE(errors->rowCount(QModelIndex()) == 1);
+
+    // And the station it dropped never reaches the file, at the origin or
+    // anywhere else — the good fix is still written in full.
+    cwSurveyDataArtifact::Region exported;
+    exported.caves.append(snapshotCave);
+    const QString output = writeRegionToString(exported);
+    INFO(output.toStdString());
+    CHECK(output.contains(QStringLiteral("*fix a1 500000.000000 4000000.000000 100.000000")));
+    CHECK_FALSE(output.contains(QStringLiteral("a2")));
 }

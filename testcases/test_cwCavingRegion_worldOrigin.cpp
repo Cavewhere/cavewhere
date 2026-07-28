@@ -26,9 +26,9 @@ cwFixStation makeFix(const QString& name,
     cwFixStation fix;
     fix.setStationName(name);
     fix.setInputCS(cs);
-    fix.setEasting(easting);
-    fix.setNorthing(northing);
-    fix.setElevation(elevation);
+    // All three at once — the cases below pass an empty cs, where writing them
+    // one at a time would keep only the last (see cwFixStation::setCoordinate).
+    fix.setCoordinate(easting, northing, elevation);
     return fix;
 }
 
@@ -132,9 +132,12 @@ TEST_CASE("recomputeWorldOrigin ignores an outlier fix when centering",
     CHECK_THAT(origin.z, WithinAbs(2705.75, 1e-6));
 }
 
-TEST_CASE("recomputeWorldOrigin falls back to globalCS when fix inputCS is empty",
+TEST_CASE("recomputeWorldOrigin does not borrow globalCS for a fix with no inputCS",
           "[cwCavingRegion][worldOrigin]")
 {
+    // The region's CS is not a stand-in for one the fix never declared — those
+    // numbers have no axis order, so placing the whole survey on them would put
+    // it wherever a guess landed. The row is skipped and the origin untouched.
     cwCavingRegion region;
     region.geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32612"));
 
@@ -145,8 +148,18 @@ TEST_CASE("recomputeWorldOrigin falls back to globalCS when fix inputCS is empty
         makeFix(QStringLiteral("A1"), QString(),
                 500000.0, 4194000.0, 2700.0));
 
+    QSignalSpy spy(region.geoReference(), &cwGeoReference::worldOriginChanged);
     region.recomputeWorldOrigin();
 
+    CHECK(region.geoReference()->worldOrigin() == cwGeoPoint{});
+    CHECK(spy.count() == 0);
+
+    // The premise: the same fix under a CS it declares does move the origin, so
+    // the checks above can't pass for free.
+    cave->fixStations()->setData(cave->fixStations()->index(0),
+                                 QStringLiteral("EPSG:32612"),
+                                 cwFixStationModel::InputCSRole);
+    region.recomputeWorldOrigin();
     CHECK_THAT(region.geoReference()->worldOrigin().x, WithinAbs(500000.0, 1e-6));
 }
 

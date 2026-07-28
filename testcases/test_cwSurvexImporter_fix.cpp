@@ -100,5 +100,17 @@ TEST_CASE("Survex importer captures *fix without preceding *cs as empty inputCS"
     const QList<cwFixStation> fixes = importer.capturedFixStations();
     REQUIRE(fixes.size() == 1);
     CHECK(fixes.first().inputCS().isEmpty());
-    CHECK(fixes.first().easting() == 1.0);
+
+    // A local grid is the ordinary reason an svx has *fix and no *cs, so all
+    // three numbers have to reach the row even though nothing can be derived
+    // from them yet — the fix says it has no system, and naming one reads them
+    // straight back out.
+    CHECK(fixes.first().state() == cwFixStation::NoSystem);
+    CHECK(fixes.first().coordinate() == QStringLiteral("1, 2, 3m"));
+
+    cwFixStation named = fixes.first();
+    named.setInputCS(QStringLiteral("EPSG:32611"));
+    CHECK(named.easting() == 1.0);
+    CHECK(named.northing() == 2.0);
+    CHECK(named.elevation() == 3.0);
 }

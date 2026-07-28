@@ -42,9 +42,11 @@ cwFixStation makeFix(const QString& cs, double easting, double northing = kNorth
     cwFixStation fix;
     fix.setStationName(QStringLiteral("A"));
     fix.setInputCS(cs);
-    fix.setEasting(easting);
-    fix.setNorthing(northing);
-    fix.setElevation(kElevation);
+    // All three at once: on a fix with no CS the one-at-a-time setters each read
+    // their own output back, find no axis order, and keep nothing — so a
+    // CS-less fix built that way would carry 0, 0 rather than the numbers this
+    // helper was asked for, and every assertion about them would be vacuous.
+    fix.setCoordinate(easting, northing, kElevation);
     return fix;
 }
 
@@ -60,25 +62,32 @@ bool rowFlagged(cwCave* cave)
 
 } // namespace
 
-TEST_CASE("cwFixStationDiagnostics::domainCheck resolves the CS it judges under",
+TEST_CASE("cwFixStationDiagnostics::domainCheck judges a fix under its own CS",
           "[FixStation][cwFixStationDiagnostics]")
 {
-    SECTION("A fix's own input CS wins over the region's global CS") {
-        // The fix is fine for UTM 13N; the global CS is a zone it would fail in,
-        // and must be ignored while the fix carries its own.
+    SECTION("A fix is judged under its own input CS") {
         const cwFixStation fix = makeFix(QStringLiteral("EPSG:32613"), kGoodEasting);
-        CHECK(cwFixStationDiagnostics::isDomainValid(fix, QStringLiteral("EPSG:32601")));
+        CHECK(cwFixStationDiagnostics::isDomainValid(fix));
+
+        // The premise: the same coordinate under a zone it doesn't belong to
+        // really is flagged, so the check above can't pass for free.
+        CHECK_FALSE(cwFixStationDiagnostics::isDomainValid(
+            makeFix(QStringLiteral("EPSG:32613"), kBadEasting)));
     }
 
-    SECTION("A fix with no input CS is judged under the global CS") {
+    SECTION("A fix with no input CS has no coordinate to judge") {
+        // Not judged under the region's CS — the region's is not a stand-in for
+        // one the row never declared. Nothing is derived from the text at all,
+        // so there is nothing to place inside or outside a domain.
         const cwFixStation fix = makeFix(QString(), kBadEasting);
-        CHECK(cwFixStationDiagnostics::isDomainValid(fix, QString()));
-        CHECK_FALSE(cwFixStationDiagnostics::isDomainValid(fix, QStringLiteral("EPSG:32613")));
+        CHECK(fix.state() == cwFixStation::NoSystem);
+        CHECK(cwFixStationDiagnostics::isDomainValid(fix));
     }
 
     SECTION("Whitespace-only CS strings count as absent") {
         const cwFixStation fix = makeFix(QStringLiteral("   "), kBadEasting);
-        CHECK(cwFixStationDiagnostics::isDomainValid(fix, QStringLiteral("  ")));
+        CHECK(fix.state() == cwFixStation::NoSystem);
+        CHECK(cwFixStationDiagnostics::isDomainValid(fix));
     }
 
     SECTION("A fix still on the origin has no coordinate to judge") {
@@ -97,13 +106,13 @@ TEST_CASE("cwFixStationDiagnostics::domainCheck resolves the CS it judges under"
         cwFixStation untouched;
         untouched.setStationName(QStringLiteral("A"));
         untouched.setInputCS(cs);
-        CHECK(cwFixStationDiagnostics::isDomainValid(untouched, QString()));
+        CHECK(cwFixStationDiagnostics::isDomainValid(untouched));
 
         // One zero is not two. A real easting with the northing still at zero is
         // a half-entered coordinate, not an unentered one, and stays flagged.
         cwFixStation halfEntered = untouched;
         halfEntered.setEasting(kGoodEasting);
-        CHECK_FALSE(cwFixStationDiagnostics::isDomainValid(halfEntered, QString()));
+        CHECK_FALSE(cwFixStationDiagnostics::isDomainValid(halfEntered));
 
         // And a coordinate someone actually wrote at the origin is judged like
         // any other. Some local grids really do put a station there; deferring
@@ -111,7 +120,7 @@ TEST_CASE("cwFixStationDiagnostics::domainCheck resolves the CS it judges under"
         cwFixStation atOrigin = untouched;
         atOrigin.setCoordinate(QStringLiteral("0, 0, 0m"));
         REQUIRE(atOrigin.state() == cwFixStation::Valid);
-        CHECK_FALSE(cwFixStationDiagnostics::isDomainValid(atOrigin, QString()));
+        CHECK_FALSE(cwFixStationDiagnostics::isDomainValid(atOrigin));
 
         // A row whose text can't be read has no coordinate to judge either, and
         // must not be reported as one sitting out of domain at 0, 0 — the text
@@ -119,7 +128,7 @@ TEST_CASE("cwFixStationDiagnostics::domainCheck resolves the CS it judges under"
         cwFixStation unreadable = untouched;
         unreadable.setCoordinate(QStringLiteral("N 46 07 16 W 115 35 56"));
         REQUIRE(unreadable.state() == cwFixStation::Unreadable);
-        CHECK(cwFixStationDiagnostics::isDomainValid(unreadable, QString()));
+        CHECK(cwFixStationDiagnostics::isDomainValid(unreadable));
     }
 
     SECTION("Per-axis attribution survives the fix-level wrapper") {
@@ -127,7 +136,7 @@ TEST_CASE("cwFixStationDiagnostics::domainCheck resolves the CS it judges under"
         // collapse to one bool the way isDomainValid() does.
         const cwFixStation fix = makeFix(QStringLiteral("EPSG:32613"), kBadEasting);
         const cwCoordinateTransform::DomainCheck check =
-            cwFixStationDiagnostics::domainCheck(fix, QString());
+            cwFixStationDiagnostics::domainCheck(fix);
         CHECK_FALSE(check.eastingValid);
         CHECK(check.northingValid);
     }
@@ -182,10 +191,10 @@ TEST_CASE("the inline row flag and the cave warning reach the same verdict",
         return cave->errorModel()->toStringList().join(QChar(' '))
             .contains(QStringLiteral("outside the valid range"));
     };
-    // Three caves under one staging: a clean fix, a bad one under its own CS, and
-    // a bad one relying on the region's global CS. The fallback case is the one
-    // most likely to drift apart again, since it is where the two paths used to
-    // resolve the CS independently.
+    // Three caves under one staging: a clean fix, a bad one, and one with no CS
+    // at all. The last is the case most likely to drift apart, since it is where
+    // the two paths used to resolve the CS independently — and it must now agree
+    // that there is nothing to complain about, the region's CS notwithstanding.
     cwCavingRegion region;
     region.geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32613"));
 
@@ -199,18 +208,18 @@ TEST_CASE("the inline row flag and the cave warning reach the same verdict",
 
     cwCave* goodCave = addCaveWithFix(makeFix(QStringLiteral("EPSG:32613"), kGoodEasting));
     cwCave* badOwnCS = addCaveWithFix(makeFix(QStringLiteral("EPSG:32613"), kBadEasting));
-    cwCave* badFallback = addCaveWithFix(makeFix(QString(), kBadEasting));
+    cwCave* noCS = addCaveWithFix(makeFix(QString(), kBadEasting));
 
     CHECK(domainWarned(badOwnCS));
     CHECK(rowFlagged(badOwnCS));
-
-    CHECK(domainWarned(badFallback));
-    CHECK(rowFlagged(badFallback));
 
     // The negative half matters as much: a rule that always flagged would satisfy
     // every assertion above.
     CHECK_FALSE(domainWarned(goodCave));
     CHECK_FALSE(rowFlagged(goodCave));
+
+    CHECK_FALSE(domainWarned(noCS));
+    CHECK_FALSE(rowFlagged(noCS));
 }
 
 TEST_CASE("correcting a fix's coordinate system clears a coordinate read the wrong way round",

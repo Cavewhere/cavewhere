@@ -82,9 +82,10 @@ public:
     /// Matches text() for n/a cases (nothing extra to surface).
     QString detailText() const;
 
-    /// Recompute from the cave's fix stations, falling back to the region's
-    /// coordinate system when the first fix station has no input CS of its own.
-    void update(const QList<cwFixStation>& fixStations, const QString& fallbackCoordinateSystem);
+    /// Recompute from the cave's fix stations, under the first one's own input
+    /// CS. A fix that declares none reads NoCoordinateSystem — there is no grid
+    /// to converge to, and the region's is not a stand-in for one.
+    void update(const QList<cwFixStation>& fixStations);
 
     /// Pure, stateless math: (location, sourceCS) → convergence degrees.
     static Monad::Result<double> computeAt(const cwGeoPoint& location,

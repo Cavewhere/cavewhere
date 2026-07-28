@@ -17,7 +17,7 @@ namespace {
 
 //! The diagnostics proxy for a cave that already carries one blank fix, plus the
 //! source model and the region behind it — the shape every check below starts
-//! from. A region is always present so the global-CS fallback is reachable.
+//! from.
 struct FixFixture {
     cwCavingRegion region;
     cwCave* cave = nullptr;
@@ -201,15 +201,17 @@ TEST_CASE("cwFixStationDiagnosticsModel StationErrorRole defers a named fix when
     CHECK(fixture.stationError().isEmpty());
 }
 
-TEST_CASE("cwFixStationDiagnosticsModel domain roles fall back to the region global CS",
+TEST_CASE("cwFixStationDiagnosticsModel domain roles are judged under the row's own CS",
           "[FixStation][cwFixStationDiagnosticsModel]") {
-    // A row that omits its own CS is judged against the region's globalCS, the
-    // same fallback cwFixStationValidator and recomputeGridConvergence use.
-    // Without it the cave-level warning would fire with no cell to point at.
+    // The row is judged under the system it declares and nothing else. The
+    // region's is geographic, where the corrected easting below is nowhere near
+    // a valid longitude — so a build that judged under the region's CS would
+    // flag the coordinate this test ends by clearing.
     FixFixture fixture;
-    fixture.setGlobalCS(QStringLiteral("EPSG:32613"));
+    fixture.setGlobalCS(QStringLiteral("EPSG:4326"));
 
-    // No per-row CS, but a transposed-digit easting for the global CS.
+    fixture.edit(cwFixStationModel::InputCSRole, QStringLiteral("EPSG:32613"));
+    // A transposed leading digit on the easting — out of zone 13's area of use.
     fixture.edit(cwFixStationModel::EastingRole, 1478000.0);
     fixture.edit(cwFixStationModel::NorthingRole, 4430000.0);
     CHECK(fixture.eastingFlagged());
@@ -218,12 +220,28 @@ TEST_CASE("cwFixStationDiagnosticsModel domain roles fall back to the region glo
     // Correcting it clears the flag.
     fixture.edit(cwFixStationModel::EastingRole, 478000.0);
     CHECK_FALSE(fixture.eastingFlagged());
+}
 
-    // A row's own CS still wins over the fallback.
-    fixture.edit(cwFixStationModel::InputCSRole, QStringLiteral("EPSG:4326"));
-    fixture.edit(cwFixStationModel::EastingRole, -105.25);
-    fixture.edit(cwFixStationModel::NorthingRole, 40.02);
+TEST_CASE("cwFixStationDiagnosticsModel does not judge a row that declares no CS",
+          "[FixStation][cwFixStationDiagnosticsModel]") {
+    // The region's CS is not a stand-in for one the row never declared: nothing
+    // is derived from the coordinate at all, so there is no point to place
+    // inside or outside a domain. Such a row wants a different complaint.
+    FixFixture fixture;
+    fixture.setGlobalCS(QStringLiteral("EPSG:32613"));
+
+    fixture.edit(cwFixStationModel::InputCSRole, QString());
+    REQUIRE(fixture.source->setCoordinateText(0, QStringLiteral("1478000, 4430000, 1655m"),
+                                              cwUnits::Metric) == QString());
+    REQUIRE(fixture.source->fixStationAt(0).state() == cwFixStation::NoSystem);
+
     CHECK_FALSE(fixture.eastingFlagged());
+    CHECK(fixture.domainError().isEmpty());
+
+    // The premise: naming the system really does flag it, so the checks above
+    // can't pass for free.
+    fixture.edit(cwFixStationModel::InputCSRole, QStringLiteral("EPSG:32613"));
+    CHECK(fixture.eastingFlagged());
 }
 
 TEST_CASE("A solve refreshes the diagnostics without touching the source model",
@@ -250,25 +268,26 @@ TEST_CASE("A solve refreshes the diagnostics without touching the source model",
     CHECK(rolesSeen(proxySpy) == QList<int>{cwFixStationDiagnosticsModel::StationErrorRole});
 }
 
-TEST_CASE("A global CS change refreshes the domain roles on the proxy alone",
+TEST_CASE("A global CS change leaves the fix stations alone",
           "[FixStation][cwFixStationDiagnosticsModel]") {
-    // Same guarantee for the other refresh trigger: a fix that omits its own CS
-    // is judged against the region's, so changing that CS moves rows in and out
-    // of the flagged state with no edit to persist.
+    // Rows follow their own CS, so re-projecting the project must not disturb
+    // them — not the persisted data, and not the warnings drawn on it. This is
+    // what "the fix station stays where it was entered" amounts to in signals.
     FixFixture fixture;
+    fixture.edit(cwFixStationModel::InputCSRole, QStringLiteral("EPSG:32613"));
+    fixture.edit(cwFixStationModel::EastingRole, 478000.0);
+    fixture.edit(cwFixStationModel::NorthingRole, 4430000.0);
 
     QSignalSpy sourceSpy(fixture.source, &QAbstractItemModel::dataChanged);
     QSignalSpy proxySpy(fixture.diagnostics, &QAbstractItemModel::dataChanged);
 
-    fixture.setGlobalCS(QStringLiteral("EPSG:32613"));
+    // Geographic, so a build that re-judged the row under it would find this
+    // easting far outside any valid longitude and flag it.
+    fixture.setGlobalCS(QStringLiteral("EPSG:4326"));
 
     CHECK(sourceSpy.count() == 0);
-    REQUIRE(proxySpy.count() >= 1);
-    const QList<int> roles = proxySpy.first().at(2).value<QList<int>>();
-    CHECK(roles.contains(cwFixStationDiagnosticsModel::DomainErrorRole));
-    CHECK(roles.contains(cwFixStationDiagnosticsModel::EastingDomainErrorRole));
-    CHECK(roles.contains(cwFixStationDiagnosticsModel::NorthingDomainErrorRole));
-    CHECK_FALSE(roles.contains(cwFixStationDiagnosticsModel::StationErrorRole));
+    CHECK(proxySpy.count() == 0);
+    CHECK_FALSE(fixture.eastingFlagged());
 }
 
 TEST_CASE("A persisted edit re-emits the derived roles it invalidates",

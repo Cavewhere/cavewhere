@@ -9,12 +9,10 @@
 
 //Our includes
 #include "cwCave.h"
-#include "cwCavingRegion.h"
 #include "cwCoordinateTransform.h"
 #include "cwFixStation.h"
 #include "cwFixStationDiagnostics.h"
 #include "cwFixStationModel.h"
-#include "cwGeoReference.h"
 
 using cwFixStationDiagnostics::StationReference;
 
@@ -24,9 +22,9 @@ namespace {
 //! explanation. Scoped to a single row: an absent or unparseable CS never flags,
 //! so this only speaks up when the CS is known and the point is well outside its
 //! declared area of use.
-QString domainErrorMessage(const cwFixStation& fix, const QString& fallbackCS)
+QString domainErrorMessage(const cwFixStation& fix)
 {
-    if (cwFixStationDiagnostics::isDomainValid(fix, fallbackCS)) {
+    if (cwFixStationDiagnostics::isDomainValid(fix)) {
         return QString();
     }
     return cwFixStationDiagnosticsModel::tr(
@@ -54,11 +52,6 @@ cwFixStationDiagnosticsModel::cwFixStationDiagnosticsModel(cwCave* cave) :
 }
 
 cwFixStationDiagnosticsModel::~cwFixStationDiagnosticsModel() = default;
-
-void cwFixStationDiagnosticsModel::refreshDomainErrors()
-{
-    refreshRoles({DomainErrorRole, EastingDomainErrorRole, NorthingDomainErrorRole});
-}
 
 void cwFixStationDiagnosticsModel::augmentSourceChange(const QModelIndex& topLeft,
                                                        const QModelIndex& bottomRight,
@@ -94,12 +87,6 @@ void cwFixStationDiagnosticsModel::refreshRoles(const QList<int>& roles)
         return;
     }
     emit dataChanged(index(0, 0), index(rows - 1, 0), roles);
-}
-
-QString cwFixStationDiagnosticsModel::fallbackCS() const
-{
-    const cwCavingRegion* region = m_cave != nullptr ? m_cave->parentRegion() : nullptr;
-    return region != nullptr ? region->geoReference()->globalCoordinateSystem() : QString();
 }
 
 QString cwFixStationDiagnosticsModel::stationErrorMessage(const cwFixStation& fix) const
@@ -156,7 +143,7 @@ QVariant cwFixStationDiagnosticsModel::data(const QModelIndex& index, int role) 
     }
 
     switch (role) {
-    case DomainErrorRole:  return domainErrorMessage(*fix, fallbackCS());
+    case DomainErrorRole:  return domainErrorMessage(*fix);
     case StationErrorRole: return stationErrorMessage(*fix);
     default:               break;
     }
@@ -166,7 +153,7 @@ QVariant cwFixStationDiagnosticsModel::data(const QModelIndex& index, int role) 
     // three times; this only keeps that from being four. The check is cached per
     // (CS, coordinate) inside cwCoordinateTransform, so the repeats are hits.
     const cwCoordinateTransform::DomainCheck check =
-        cwFixStationDiagnostics::domainCheck(*fix, fallbackCS());
+        cwFixStationDiagnostics::domainCheck(*fix);
     return role == EastingDomainErrorRole ? !check.eastingValid : !check.northingValid;
 }
 

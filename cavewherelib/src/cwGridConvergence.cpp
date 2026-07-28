@@ -118,8 +118,7 @@ QString cwGridConvergence::detailText() const
     return text();
 }
 
-void cwGridConvergence::update(const QList<cwFixStation>& fixStations,
-                               const QString& fallbackCoordinateSystem)
+void cwGridConvergence::update(const QList<cwFixStation>& fixStations)
 {
     // 0.0 / empty for every non-Valid case — no grid means no rotation.
     struct Resolved { double angle; State state; QString station; QString cs; QString error; };
@@ -129,7 +128,7 @@ void cwGridConvergence::update(const QList<cwFixStation>& fixStations,
         }
 
         const cwFixStation& first = fixStations.first();
-        const QString sourceCS = first.effectiveCS(fallbackCoordinateSystem);
+        const QString sourceCS = first.inputCS().trimmed();
 
         if (sourceCS.isEmpty()) {
             return { 0.0, NoCoordinateSystem, QString(), QString(), QString() };

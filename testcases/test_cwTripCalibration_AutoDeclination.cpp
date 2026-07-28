@@ -160,3 +160,68 @@ TEST_CASE("cwTripCalibration: setData round-trips the autoDeclination flag throu
     CHECK(sink.autoDeclination() == false);
     CHECK(sink.declinationManual() == 3.25);
 }
+
+TEST_CASE("cwTripCalibration: a fix row with no coordinate yet resolves nothing",
+          "[cwTripCalibration_Auto]")
+{
+    // "Mark Station as Fixed" creates a row that carries a coordinate system
+    // from the moment it exists, before the user has typed anything. Reading its
+    // components anyway resolves IGRF at (0, 0) — the Gulf of Guinea — and
+    // silently rotates every trip in the cave away from the manual value.
+    auto region = std::make_unique<cwCavingRegion>();
+    auto* cave = new cwCave();
+    region->addCave(cave);
+    cave->addTrip();
+    cwTrip* trip = cave->trip(0);
+    trip->setDate(makeUtcDate(2024, 6, 1));
+
+    cwTripCalibration* calibration = trip->calibrations();
+    calibration->setDeclinationManual(7.5);
+
+    cave->fixStations()->addFixStation(QStringLiteral("Entrance"));
+    REQUIRE(cave->fixStations()->count() == 1);
+    REQUIRE(cave->fixStations()->fixStationAt(0).inputCS() == cwCoordinateTransform::Wgs84);
+    REQUIRE(cave->fixStations()->fixStationAt(0).state() == cwFixStation::Empty);
+
+    CHECK(calibration->autoDeclinationAvailable() == false);
+    CHECK(calibration->declination() == 7.5);
+
+    // The premise: a row that does carry a coordinate still resolves, so the
+    // checks above are about the missing coordinate and not about the row.
+    const QModelIndex index = cave->fixStations()->index(0);
+    cave->fixStations()->setData(index, -105.27, cwFixStationModel::EastingRole);
+    cave->fixStations()->setData(index, 40.015, cwFixStationModel::NorthingRole);
+    cave->fixStations()->setData(index, 1655.0, cwFixStationModel::ElevationRole);
+
+    CHECK(calibration->autoDeclinationAvailable() == true);
+    CHECK(calibration->declination() > 5.0);
+}
+
+TEST_CASE("cwTripCalibration: a later fix supplies the declination when the first can't",
+          "[cwTripCalibration_Auto]")
+{
+    // The first row is the scaffold one; the real fix is behind it. Taking row 0
+    // and giving up would leave the whole cave on its manual declination.
+    auto region = std::make_unique<cwCavingRegion>();
+    auto* cave = new cwCave();
+    region->addCave(cave);
+    cave->addTrip();
+    cwTrip* trip = cave->trip(0);
+    trip->setDate(makeUtcDate(2024, 6, 1));
+
+    cwTripCalibration* calibration = trip->calibrations();
+    calibration->setDeclinationManual(7.5);
+
+    cave->fixStations()->addFixStation(QStringLiteral("Scaffold"));
+
+    cwFixStation real;
+    real.setStationName(QStringLiteral("Entrance"));
+    real.setInputCS(kWgs84);
+    // Easting is the longitude on a geographic system.
+    real.setCoordinate(-105.27, 40.015, 1655.0);
+    cave->fixStations()->appendFixStation(real);
+
+    CHECK(calibration->autoDeclinationAvailable() == true);
+    CHECK(calibration->declination() > 5.0);
+    CHECK(calibration->declination() != 7.5);
+}

@@ -95,8 +95,7 @@ bool cwSurvexExporterCaveTask::writeCave(QTextStream& stream, const cwCaveData& 
 
     writeFixStations(stream, cave, globalCS);
 
-    const auto declinationContext = cwSurvexExporterUtils::makeDeclinationContext(
-        cave.fixStations, globalCS);
+    const auto declinationContext = cwSurvexExporterUtils::makeDeclinationContext(cave.fixStations);
 
     //Haven't done anything
     TotalProgress = 0;

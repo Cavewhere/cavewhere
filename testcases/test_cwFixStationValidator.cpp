@@ -26,6 +26,9 @@
 #include <QSignalSpy>
 #include <QUuid>
 
+//Std includes
+#include <algorithm>
+
 namespace {
 
 using FixCandidate = cwFixStationValidator::FixCandidate;
@@ -46,9 +49,9 @@ cwFixStation makeFix(const QString& name,
     cwFixStation fix;
     fix.setStationName(name);
     fix.setInputCS(cs);
-    fix.setEasting(easting);
-    fix.setNorthing(northing);
-    fix.setElevation(elevation);
+    // All three at once — cases below pass an empty cs, where writing them one
+    // at a time would keep only the last (see cwFixStation::setCoordinate).
+    fix.setCoordinate(easting, northing, elevation);
     return fix;
 }
 
@@ -315,12 +318,13 @@ TEST_CASE("currentClassification reprojects a fix entered in a different CS",
     CHECK(result.inliers.size() == 5);
 }
 
-TEST_CASE("currentClassification drops invalid-CS fixes and falls back for empty CS",
+TEST_CASE("currentClassification drops fixes with no usable CS of their own",
           "[cwFixStationValidator]")
 {
-    // Global CS is UTM 12N. Four good fixes, plus one with an EMPTY inputCS (should
-    // fall back to the global CS and be kept) and one with a GARBAGE inputCS placed
-    // far away (should be dropped entirely — never a candidate, so never flagged).
+    // Global CS is UTM 12N. Four good fixes, plus one with an EMPTY inputCS and
+    // one with a GARBAGE inputCS placed far away. Both are dropped entirely —
+    // never a candidate, so never flagged. The empty one is not judged under the
+    // region's CS: that is not a stand-in for a system the row never declared.
     cwCavingRegion region;
     region.geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32612"));
 
@@ -335,7 +339,9 @@ TEST_CASE("currentClassification drops invalid-CS fixes and falls back for empty
         makeFix(QStringLiteral("A3"), QStringLiteral("EPSG:32612"), 499900.0, 4193900.0, 2705.0));
     cave->fixStations()->appendFixStation(
         makeFix(QStringLiteral("A4"), QStringLiteral("EPSG:32612"), 500100.0, 4193950.0, 2708.0));
-    // Empty inputCS → falls back to the region global CS → kept as an inlier.
+    // Empty inputCS → no system to read the coordinate under → dropped. Placed
+    // among the others, so keeping it would go unnoticed if the count were the
+    // only assertion.
     cave->fixStations()->appendFixStation(
         makeFix(QStringLiteral("E1"), QString(), 500050.0, 4194050.0, 2703.0));
     // Garbage CS, far away → must be dropped, not flagged as an outlier.
@@ -345,7 +351,65 @@ TEST_CASE("currentClassification drops invalid-CS fixes and falls back for empty
     const auto result = region.fixStationValidator()->currentClassification();
 
     CHECK(result.outliers.isEmpty());
-    CHECK(result.inliers.size() == 5);
+    CHECK(result.inliers.size() == 4);
+
+    // By identity, not by count: E1 sits inside the cluster, so a count alone
+    // would not say which four survived.
+    const auto kept = [&](int row) {
+        const QUuid id = cave->fixStations()->fixStationAt(row).id();
+        return std::any_of(result.inliers.begin(), result.inliers.end(),
+                           [&](const FixCandidate& c) { return c.fixId == id; });
+    };
+    CHECK(kept(0));       // A1
+    CHECK_FALSE(kept(4)); // E1, no CS at all
+    CHECK_FALSE(kept(5)); // Bad, a CS PROJ can't read
+}
+
+TEST_CASE("currentClassification drops a fix that has a CS but no coordinate yet",
+          "[cwFixStationValidator]")
+{
+    // "Mark Station as Fixed" makes exactly this row: a coordinate system, and
+    // no coordinate until the user types one. Its components are 0 — every
+    // state but Valid reads 0 — so admitting it would enter the cluster at
+    // WGS84's origin, reprojected into UTM 13N some 5000 km away, flag the row
+    // the user just created as an outlier, and drag the world origin with it.
+    cwCavingRegion region;
+    region.geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32613"));
+
+    region.addCave();
+    auto* cave = region.cave(0);
+    REQUIRE(cave != nullptr);
+    cave->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("A1"), QStringLiteral("EPSG:32613"), 478000.0, 4430000.0, 1655.0));
+    cave->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("A2"), QStringLiteral("EPSG:32613"), 478100.0, 4430100.0, 1656.0));
+    cave->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("A3"), QStringLiteral("EPSG:32613"), 477900.0, 4429900.0, 1654.0));
+    cave->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("A4"), QStringLiteral("EPSG:32613"), 478050.0, 4430050.0, 1655.0));
+
+    const int blankRow = cave->fixStations()->addFixStation(QStringLiteral("A5"));
+    REQUIRE(blankRow == 4);
+    const cwFixStation blank = cave->fixStations()->fixStationAt(blankRow);
+    REQUIRE(blank.state() == cwFixStation::Empty);
+    REQUIRE_FALSE(blank.inputCS().isEmpty());
+    REQUIRE(cwCoordinateTransform::isValidCS(blank.inputCS()));
+
+    const auto result = region.fixStationValidator()->currentClassification();
+
+    CHECK(result.outliers.isEmpty());
+    CHECK(result.inliers.size() == 4);
+
+    const QUuid blankId = blank.id();
+    CHECK_FALSE(std::any_of(result.inliers.begin(), result.inliers.end(),
+                            [&](const FixCandidate& c) { return c.fixId == blankId; }));
+
+    // And the origin stays on the four real fixes rather than being pulled
+    // toward the empty row's projected (0, 0).
+    const auto origin = region.fixStationValidator()->robustWorldOrigin();
+    REQUIRE(origin.has_value());
+    CHECK(origin->x > 470000.0);
+    CHECK(origin->x < 490000.0);
 }
 
 TEST_CASE("revalidate attributes an outlier warning to its cave",

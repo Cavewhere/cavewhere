@@ -85,14 +85,16 @@ public:
     /// The fix stations plus their read-only, computed warnings (coordinate
     /// domain, station reference). A proxy over fixStations() that the
     /// FixStationPage delegates bind to; the warnings are derived from the solve
-    /// and the region CS, so they deliberately do not reach fixStations()'
-    /// dataChanged, which means "persisted data changed" and nothing else.
+    /// and each row's own inputCS(), so they deliberately do not reach
+    /// fixStations()' dataChanged, which means "persisted data changed" and
+    /// nothing else.
     cwFixStationDiagnosticsModel* fixStationDiagnostics() const { return m_fixStationDiagnostics; }
 
     /// Per-cave grid-convergence readout (angle + state + display text).
-    /// Recomputed from the fix stations / region CS via recomputeGridConvergence();
-    /// cwScrap reads gridConvergence()->angle() to remove grid rotation from the
-    /// note transform.
+    /// Recomputed from the fix stations via recomputeGridConvergence() — under
+    /// the first fix's own inputCS(), never the region's; cwScrap reads
+    /// gridConvergence()->angle() to remove grid rotation from the note
+    /// transform.
     cwGridConvergence* gridConvergence() const { return m_gridConvergence; }
 
     int tripCount() const;
@@ -151,18 +153,10 @@ signals:
     void externalCenterlineChanged();
 
 public slots:
-    /// Feed the cave's current fix stations and region coordinate system into
-    /// the gridConvergence() readout, which caches the PROJ result and only
-    /// re-emits when it actually changes. Wired to fix-station edits (here) and
-    /// the region's globalCS changes (in cwCavingRegion).
+    /// Feed the cave's current fix stations into the gridConvergence() readout,
+    /// which caches the PROJ result and only re-emits when it actually changes.
+    /// Wired to fix-station edits.
     void recomputeGridConvergence();
-
-    /// Re-evaluate the fix stations' per-row domain warnings. A fix that omits
-    /// its own input CS is judged against the region's globalCS, so a change to
-    /// that CS moves rows in and out of the flagged state. Wired next to
-    /// recomputeGridConvergence (in cwCavingRegion), which needs it for the
-    /// same reason.
-    void refreshFixStationDomainErrors();
 
 private:
     QList<cwTrip*> Trips;

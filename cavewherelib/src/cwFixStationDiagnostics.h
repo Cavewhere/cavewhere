@@ -39,17 +39,18 @@ class cwSurveyNetwork;
 namespace cwFixStationDiagnostics {
 
 //! Which of the fix's horizontal coordinates are plausible for the CS it is
-//! judged under (cwFixStation::effectiveCS with `globalCS` as the fallback), so a
-//! caller can tint just the offending cell. Deferral is
-//! cwCoordinateTransform::domainCheck's — an absent or un-checkable CS flags
-//! nothing — plus one of this layer's own: a fix still on the origin is one
-//! nobody has typed a coordinate into yet, and flags nothing either.
-CAVEWHERE_LIB_EXPORT cwCoordinateTransform::DomainCheck domainCheck(const cwFixStation& fix,
-                                                                   const QString& globalCS);
+//! judged under — its own cwFixStation::inputCS(), never the region's, since a
+//! fix that declares no system has no coordinate to judge rather than one to
+//! judge under the project's. Split per axis so a caller can tint just the
+//! offending cell. Deferral is cwCoordinateTransform::domainCheck's — an absent
+//! or un-checkable CS flags nothing — plus one of this layer's own: a fix
+//! without a readable coordinate is one nobody has typed one into yet, and
+//! flags nothing either.
+CAVEWHERE_LIB_EXPORT cwCoordinateTransform::DomainCheck domainCheck(const cwFixStation& fix);
 
 //! domainCheck() collapsed to "the coordinate is plausible" — both axes valid —
 //! for callers with no cell to tint.
-CAVEWHERE_LIB_EXPORT bool isDomainValid(const cwFixStation& fix, const QString& globalCS);
+CAVEWHERE_LIB_EXPORT bool isDomainValid(const cwFixStation& fix);
 
 //! How a fix's station name measures up against a cave's survey network.
 //! A named fix defers to Ok while the network is empty (nothing to check

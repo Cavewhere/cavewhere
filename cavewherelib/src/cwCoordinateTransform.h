@@ -142,8 +142,18 @@ public:
 
     /**
      * Picker modes. Custom is the escape hatch that opens the CSCustomDialog.
+     *
+     * Which modes a picker offers is per-host: the project's global CS keeps
+     * Local (a cave that isn't georeferenced has to be able to say so) and
+     * never offers Project; a fix-station row is the mirror image.
+     *
+     * Project is an action, not a stored mode — it stamps the project's global
+     * CS into the row, which then holds it whatever the project does later. So
+     * modeFor() can never return it: the CS string alone doesn't say whether
+     * it was picked that way, and the picker decides by comparing against the
+     * project's CS.
      */
-    enum Mode { Local, LatLon, UTM, Custom };
+    enum Mode { Local, LatLon, UTM, Custom, Project };
     Q_ENUM(Mode)
 
     Q_INVOKABLE static bool isValidCS(const QString& cs);
@@ -168,9 +178,9 @@ public:
 
     /**
      * Round-trip a CS string back to a picker mode (Local / LatLon / UTM /
-     * Custom). Splitting the parse into three Q_INVOKABLEs lets QML bind
-     * each slice as a strict-typed property. utmZoneFor returns -1 and
-     * utmNorthFor returns true when mode is not UTM.
+     * Custom — never Project, see the enum). Splitting the parse into three
+     * Q_INVOKABLEs lets QML bind each slice as a strict-typed property.
+     * utmZoneFor returns -1 and utmNorthFor returns true when mode is not UTM.
      */
     Q_INVOKABLE static Mode modeFor(const QString& cs);
     Q_INVOKABLE static int  utmZoneFor(const QString& cs);

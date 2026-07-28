@@ -72,6 +72,7 @@ TEST_CASE("cwFixStation reads its numbers out of the coordinate it was given",
 
     SECTION("an elevation in feet is converted, because nothing downstream carries a unit") {
         cwFixStation fix;
+        fix.setInputCS(kUtmZ11N);
         fix.setCoordinate(QStringLiteral("1, 2, 304ft"));
         //Exactly, not approximately: cwUnits::convert multiplies by the same
         //0.3048 this line does. Approx's default epsilon is relative, so at
@@ -83,6 +84,7 @@ TEST_CASE("cwFixStation reads its numbers out of the coordinate it was given",
 
     SECTION("two components mean the elevation was never entered") {
         cwFixStation fix;
+        fix.setInputCS(kUtmZ11N);
         fix.setCoordinate(QStringLiteral("610016.792, 5615117.075"));
 
         CHECK(fix.state() == cwFixStation::Valid);
@@ -98,6 +100,7 @@ TEST_CASE("cwFixStation reads its numbers out of the coordinate it was given",
         //clear actually did. From a fresh fix they are the constructor's, and
         //every one of these checks would pass with the reset deleted.
         cwFixStation fix;
+        fix.setInputCS(kUtmZ11N);
         fix.setCoordinate(QStringLiteral("610016.792, 5615117.075, 304m"));
         REQUIRE(fix.easting() == 610016.792);
 
@@ -113,6 +116,7 @@ TEST_CASE("cwFixStation reads its numbers out of the coordinate it was given",
         //The distinction the state exists for: some local grids really do put a
         //station at 0, 0, and a row that says so is not an unfilled row.
         cwFixStation fix;
+        fix.setInputCS(kUtmZ11N);
         fix.setCoordinate(QStringLiteral("0, 0, 0m"));
         CHECK(fix.state() == cwFixStation::Valid);
     }
@@ -123,6 +127,7 @@ TEST_CASE("cwFixStation reads its numbers out of the coordinate it was given",
         //previous coordinate left behind are not kept: a fix whose text can't
         //be read must not go on plotting where it used to be.
         cwFixStation fix;
+        fix.setInputCS(kUtmZ11N);
         fix.setCoordinate(QStringLiteral("610016.792, 5615117.075, 304m"));
         REQUIRE(fix.easting() == 610016.792);
 
@@ -207,6 +212,7 @@ TEST_CASE("cwFixStation writes the coordinate back out when a component is set",
         };
         for (double value : awkward) {
             cwFixStation fix;
+            fix.setInputCS(kUtmZ11N);
             fix.setEasting(value);
             fix.setNorthing(value);
             fix.setElevation(value);
@@ -220,6 +226,7 @@ TEST_CASE("cwFixStation writes the coordinate back out when a component is set",
 
     SECTION("a component written onto a two-component coordinate enters an elevation") {
         cwFixStation fix;
+        fix.setInputCS(kUtmZ11N);
         fix.setCoordinate(QStringLiteral("1, 2"));
         REQUIRE_FALSE(fix.hasElevation());
 
@@ -242,25 +249,27 @@ TEST_CASE("cwFixStation writes the coordinate back out when a component is set",
         //and operator==, which compares only the string, would equate two fixes
         //sitting in different places.
         cwFixStation fix;
+        fix.setInputCS(kUtmZ11N);
         fix.setEasting(std::numeric_limits<double>::infinity());
 
         CHECK(fix.state() == cwFixStation::Unreadable);
         CHECK(fix.easting() == 0.0);
     }
 
-    SECTION("the CS has to be set first, and this is what goes wrong when it isn't") {
+    SECTION("the CS has to be set first, and a component written before it reads back as nothing") {
         //The precondition inputCS() documents, exercised in the order that
-        //breaks it. A component written while the CS is still empty is spelled
-        //out easting-first; setting a geographic CS afterwards reads that same
-        //text latitude-first and the two horizontals swap.
+        //breaks it. Writing components while the CS is still empty used to
+        //spell them out easting-first, so setting a geographic CS afterwards
+        //read that same text latitude-first and the two horizontals swapped
+        //silently. Now there is no axis order to guess with, so the numbers
+        //never come back at all — the row says it has no system instead of
+        //quietly reporting a coordinate somewhere else.
         cwFixStation late;
         late.setEasting(-105.27);
         late.setNorthing(40.015);
-        REQUIRE(late.coordinate() == QStringLiteral("-105.27, 40.015, 0m"));
-
-        late.setInputCS(kWgs84);
-        CHECK(late.easting() == 40.015);
-        CHECK(late.northing() == -105.27);
+        CHECK(late.state() == cwFixStation::NoSystem);
+        CHECK(late.easting() == 0.0);
+        CHECK(late.northing() == 0.0);
 
         //The same numbers written in the order the importers use.
         cwFixStation early;
@@ -269,6 +278,27 @@ TEST_CASE("cwFixStation writes the coordinate back out when a component is set",
         early.setNorthing(40.015);
         CHECK(early.easting() == -105.27);
         CHECK(early.northing() == 40.015);
+    }
+
+    SECTION("three numbers at once survive a fix that has no CS to read them under") {
+        //What a caller holding all three should use, and the reason it exists:
+        //writing them one at a time here would keep only the last, since each
+        //write reads its own string back and finds no axis order to read it
+        //under. The svx importer and the project loader both hit this — a *fix
+        //with no *cs is an ordinary local grid.
+        cwFixStation fix;
+        fix.setCoordinate(610016.792, 5615117.075, 304.0);
+
+        CHECK(fix.state() == cwFixStation::NoSystem);
+        CHECK(fix.coordinate() == QStringLiteral("610016.792, 5615117.075, 304m"));
+        CHECK(fix.easting() == 0.0);
+
+        //And naming the system they were written in reads all three back.
+        fix.setInputCS(kUtmZ11N);
+        CHECK(fix.state() == cwFixStation::Valid);
+        CHECK(fix.easting() == 610016.792);
+        CHECK(fix.northing() == 5615117.075);
+        CHECK(fix.elevation() == 304.0);
     }
 }
 
@@ -282,6 +312,7 @@ TEST_CASE("cwFixStation reads a stored elevation in meters whatever the project 
     //comes back as itself rather than one foot-conversion away. (That a "ft"
     //suffix is honored on the way in is covered above.)
     cwFixStation written;
+    written.setInputCS(kUtmZ11N);
     written.setElevation(304.0);
     CHECK(written.coordinate().endsWith(cwUnits::unitName(cwUnits::Meters)));
     CHECK(reread(written).elevation() == 304.0);
@@ -318,6 +349,7 @@ TEST_CASE("cwFixStation setters round-trip", "[FixStation][cwFixStation]") {
 TEST_CASE("cwFixStation copy semantics: COW", "[FixStation][cwFixStation]") {
     cwFixStation a;
     a.setStationName(QStringLiteral("A1"));
+    a.setInputCS(kUtmZ11N);
     a.setEasting(123.0);
 
     cwFixStation b = a;

@@ -1,33 +1,36 @@
 #ifndef CWSURVEXEXPORTERUTILS_H
 #define CWSURVEXEXPORTERUTILS_H
 
-#include <QtGlobal>
+//Qt includes
+#include <QList>
+#include <QSet>
 #include <QString>
 #include <QStringList>
-#include <QSet>
-#include <QList>
-#include <QTextStream>
+
+//Std includes
 #include <optional>
 
-#include "cwClinoReading.h"
-#include "cwCompassReading.h"
-#include "cwDistanceReading.h"
+//Our includes
+#include "cwCoordinateTransform.h"
 #include "cwFixStation.h"
-#include "cwStation.h"
-#include "cwShot.h"
+
+class cwClinoReading;
+class cwShot;
+class cwStation;
+class QTextStream;
 
 namespace cwSurvexExporterUtils {
 
-inline void writeCoordTriplet(QTextStream& stream, double e, double n, double z)
-{
-    stream << QString::number(e, 'f', 6) << ' '
-           << QString::number(n, 'f', 6) << ' '
-           << QString::number(z, 'f', 6);
-}
+//! `<e> <n> <z>`, each fixed to six decimals — survex's parser rejects
+//! scientific notation.
+void writeCoordTriplet(QTextStream& stream, double e, double n, double z);
 
-// Representative location for a `*declination auto X Y Z` directive, derived
-// from a cave's first fix station. Survex IGRF only needs one representative
-// point per scope, so additional fixes are intentionally ignored.
+//! Representative location for a `*declination auto X Y Z` directive, derived
+//! from the first fix station that actually gives one — it needs both a CS to
+//! read the coordinate under and a coordinate to read. Survex IGRF only needs
+//! one representative point per scope, so later fixes are ignored once one
+//! qualifies. A fix with no CS of its own yields nothing rather than borrowing
+//! the project's.
 struct DeclinationContext {
     QString inputCS;
     double easting = 0.0;
@@ -35,30 +38,19 @@ struct DeclinationContext {
     double elevation = 0.0;
 };
 
-inline std::optional<DeclinationContext> makeDeclinationContext(
-    const QList<cwFixStation>& fixes, const QString& globalCS)
-{
-    if (fixes.isEmpty()) {
-        return std::nullopt;
-    }
-    const cwFixStation& fix = fixes.first();
-    const QString cs = fix.effectiveCS(globalCS);
-    if (cs.isEmpty()) {
-        return std::nullopt;
-    }
-    return DeclinationContext{ cs, fix.easting(), fix.northing(), fix.elevation() };
-}
+//! The first fix in `fixes` that can stand for the whole scope, or nothing when
+//! none can.
+std::optional<DeclinationContext> makeDeclinationContext(const QList<cwFixStation>& fixes);
 
-// Emit `*cs <inputCS>` + `*declination auto X Y Z` inside the current trip
-// block. Survex re-evaluates IGRF for the trip's `*date`, so the literal
-// `*calibrate DECLINATION` line is suppressed by the caller.
-inline void writeDeclinationAuto(QTextStream& stream, const DeclinationContext& ctx)
-{
-    stream << "*cs " << ctx.inputCS << Qt::endl;
-    stream << "*declination auto ";
-    writeCoordTriplet(stream, ctx.easting, ctx.northing, ctx.elevation);
-    stream << Qt::endl;
-}
+//! Emit `*cs <inputCS>` + `*declination auto X Y Z` inside the current trip
+//! block. Survex re-evaluates IGRF for the trip's `*date`, so the literal
+//! `*calibrate DECLINATION` line is suppressed by the caller.
+void writeDeclinationAuto(QTextStream& stream, const DeclinationContext& ctx);
+
+//! True for survex's own keyword coordinate systems that cavern refuses as an
+//! output system — see the definition for which, and why the test can't be
+//! "PROJ doesn't understand it".
+bool isUnusableAsSurvexOutputCS(const QString& cs);
 
 /**
  * Survex requires *cs out whenever any *cs appears, so when the user hasn't
@@ -66,10 +58,23 @@ inline void writeDeclinationAuto(QTextStream& stream, const DeclinationContext& 
  * for *cs out — otherwise cavern errors with "input projection is set but
  * output projection isn't" the moment the per-cave *cs is emitted.
  *
+ * <b>Only a projected fix CS will do.</b> Cavern refuses a geographic output
+ * system outright ("Coordinate system unsuitable for output" —
+ * survex/src/commands.c:2672, the `ok_for_output == NO` branch), so a
+ * geographic fix is no fallback at all; emitting it fails the whole solve.
+ * That covers both ways a fix can be geographic: one PROJ recognizes, and one
+ * spelled as a survex keyword PROJ can't parse (see isUnusableAsSurvexOutputCS).
+ * Fix stations, unlike the project's own CS, may legitimately be geographic and
+ * new rows start that way, so this is the ordinary shape of a project whose
+ * global CS was never set, not an exotic one. With nothing projected to fall
+ * back to we emit no *cs out, and cwFixStationValidator's needsOutputCS prompt
+ * is what asks the user to choose one.
+ *
  * The Region template parameter is duck-typed: it must expose
  * `.globalCoordinateSystem` and `.caves`, and each cave must expose
  * `.fixStations`. This works for both cwSurveyDataArtifact::Region
- * (Rule export path) and cwCavingRegionData (line-plot export path).
+ * (Rule export path) and cwCavingRegionData (line-plot export path), which is
+ * why this one is a template and lives here rather than beside the rest.
  */
 template <typename Region>
 QString resolveOutputCS(const Region& region)
@@ -80,7 +85,9 @@ QString resolveOutputCS(const Region& region)
     for (const auto& cave : region.caves) {
         for (const cwFixStation& fix : cave.fixStations) {
             const QString cs = fix.inputCS().trimmed();
-            if (!cs.isEmpty()) {
+            if (!cs.isEmpty()
+                && !cwCoordinateTransform::isGeographic(cs)
+                && !isUnusableAsSurvexOutputCS(cs)) {
                 return cs;
             }
         }
@@ -88,60 +95,20 @@ QString resolveOutputCS(const Region& region)
     return QString();
 }
 
-// Valid survex *team role keywords (must match role_tab in survex/src/commands.c)
-inline bool isValidSurvexRole(const QString& role)
-{
-    static const QSet<QString> validRoles = {
-        "instruments", "insts", "tape", "length", "compass", "bearing",
-        "clino", "gradient", "backtape", "backlength", "backcompass",
-        "backbearing", "backclino", "backgradient", "station", "position",
-        "notes", "notebook", "pictures", "pics", "assistant", "dog",
-        "explorer", "altitude", "dz", "dimensions", "left", "right",
-        "up", "ceiling", "down", "floor", "count", "counter", "depth"
-    };
-    return validRoles.contains(role.toLower());
-}
+//! Valid survex *team role keywords (must match role_tab in
+//! survex/src/commands.c)
+bool isValidSurvexRole(const QString& role);
 
-//Survex's parser rejects scientific notation (e.g. "1.1e+02"). A reading's
-//stored string can be in that form (older imports formatted LRUD with
-//QString::number(value, 'g', 2)), so rewrite just those as a plain decimal.
-//Two decimals matches the source granularity of such values (Compass stores
-//hundredths); any string without an exponent is returned untouched.
-inline QString toSurvexNumber(const QString& value)
-{
-    constexpr int SurvexDecimalPlaces = 2;
+//! `value` with any exponent rewritten as a plain decimal, since survex's
+//! parser rejects scientific notation.
+QString toSurvexNumber(const QString& value);
 
-    if(!value.contains(QLatin1Char('e'), Qt::CaseInsensitive)) {
-        return value;
-    }
+//! "UP" or "DOWN" for a plumbed clino reading, or an empty string when the
+//! reading isn't vertical.
+QString verticalClinoText(const cwClinoReading& reading);
 
-    bool ok = false;
-    const double number = value.toDouble(&ok);
-    if(!ok) {
-        return value;
-    }
-
-    return QString::number(number, 'f', SurvexDecimalPlaces);
-}
-
-inline QString verticalClinoText(const cwClinoReading& reading)
-{
-    if(reading.state() != cwClinoReading::State::Valid) {
-        return QString();
-    }
-
-    bool ok = false;
-    const double value = reading.toDouble(&ok);
-    if(!ok) {
-        return QString();
-    }
-
-    if(qAbs(qAbs(value) - 90.0) >= 0.001) {
-        return QString();
-    }
-
-    return value >= 0.0 ? QStringLiteral("UP") : QStringLiteral("DOWN");
-}
+//! Why a fix can't be written out, or an empty string when it can.
+QString fixUnusableReason(const cwFixStation& fix);
 
 /**
  * Filter fix stations against the cave's actual stations and dedupe by
@@ -152,103 +119,44 @@ inline QString verticalClinoText(const cwClinoReading& reading)
  *   stationNamesLower is dropped with "fix references unknown station".
  * - A fix whose (lowercased) stationName collides with an earlier kept fix
  *   is dropped with "duplicate fix on station".
+ * - A fix whose coordinate can't be read — no CS to read it under, unreadable
+ *   text, or no text at all — is dropped with what's wrong with it. Its
+ *   components are 0, so writing it would silently relocate the cave.
  */
-inline QList<cwFixStation> validateFixStations(const QList<cwFixStation>& fixes,
-                                               const QSet<QString>& stationNamesLower,
-                                               QStringList& errors)
-{
-    QList<cwFixStation> kept;
-    QSet<QString> seenLower;
-    kept.reserve(fixes.size());
-    for (const cwFixStation& fix : fixes) {
-        const QString lower = cwStation::canonicalKey(fix.stationName().trimmed());
-        if (lower.isEmpty() || !stationNamesLower.contains(lower)) {
-            errors.append(QStringLiteral("Fix references unknown station: \"%1\"")
-                              .arg(fix.stationName()));
-            continue;
-        }
-        if (seenLower.contains(lower)) {
-            errors.append(QStringLiteral("Duplicate fix on station: \"%1\"")
-                              .arg(fix.stationName()));
-            continue;
-        }
-        seenLower.insert(lower);
-        kept.append(fix);
-    }
-    return kept;
-}
+QList<cwFixStation> validateFixStations(const QList<cwFixStation>& fixes,
+                                        const QSet<QString>& stationNamesLower,
+                                        QStringList& errors);
 
 /**
  * Emit the per-cave *cs / *fix block.
  *
  * - When fixes is non-empty: group by inputCS, emitting `*cs <inputCS>`
- *   before each group and `*fix` per fix. If a fix has empty inputCS but
- *   globalCS is set, globalCS is used as the fallback so survex (which
- *   requires *cs to precede *fix once *cs out is in scope) accepts the
- *   block.
+ *   before each group and `*fix` per fix.
+ *
+ *   <b>Pass only fixes that validateFixStations kept.</b> This writes
+ *   `fix.easting()/northing()/elevation()`, which are 0 for every state but
+ *   Valid, so an unreadable or CS-less fix reaching here anchors its station at
+ *   the origin and takes the cave with it. validateFixStations drops those with
+ *   an error; a caller that skips it gets no such protection.
  * - When fixes is empty: fall back to `*fix <fallbackFirstStation> 0 0 0`.
  *   When globalCS is set, prefix it with `*cs <globalCS>` so the legacy
  *   fallback survives the *cs out scope. With no globalCS, no *cs is
  *   emitted (un-fixed projects keep their pre-CS behavior).
  */
-inline void writeFixStations(QTextStream& stream,
-                             const QList<cwFixStation>& fixes,
-                             const QString& fallbackFirstStation,
-                             const QString& globalCS = QString())
-{
-    const QString globalCSTrimmed = globalCS.trimmed();
+void writeFixStations(QTextStream& stream,
+                      const QList<cwFixStation>& fixes,
+                      const QString& fallbackFirstStation,
+                      const QString& globalCS = QString());
 
-    if (fixes.isEmpty()) {
-        if (!fallbackFirstStation.isEmpty()) {
-            if (!globalCSTrimmed.isEmpty()) {
-                stream << "*cs " << globalCSTrimmed << Qt::endl;
-            }
-            stream << "*fix " << fallbackFirstStation << " 0 0 0" << Qt::endl;
-        }
-        return;
-    }
+//! True when a shot only carries passage dimensions: a valid zero-length
+//! distance with no compass or clino (front or back). Compass records LRUD on
+//! dead-end stations this way, e.g. "ALT13LRUD ALT13 0 - - - -". Survex rejects
+//! such a leg (omitted compass on a non-plumbed shot), so it's exported as an
+//! *equate of the two stations instead.
+bool isLrudOnlyShot(const cwShot& shot);
 
-    QString currentCS;
-    bool csEmitted = false;
-    for (const cwFixStation& fix : fixes) {
-        const QString cs = fix.effectiveCS(globalCSTrimmed);
-        if (!csEmitted || cs != currentCS) {
-            if (!cs.isEmpty()) {
-                stream << "*cs " << cs << Qt::endl;
-            }
-            currentCS = cs;
-            csEmitted = true;
-        }
-        stream << "*fix " << fix.stationName() << ' ';
-        writeCoordTriplet(stream, fix.easting(), fix.northing(), fix.elevation());
-        stream << Qt::endl;
-    }
-}
+bool stationHasLrudData(const cwStation& station);
 
-//True when a shot only carries passage dimensions: a valid zero-length
-//distance with no compass or clino (front or back). Compass records LRUD on
-//dead-end stations this way, e.g. "ALT13LRUD ALT13 0 - - - -". Survex rejects
-//such a leg (omitted compass on a non-plumbed shot), so it's exported as an
-//*equate of the two stations instead.
-inline bool isLrudOnlyShot(const cwShot& shot)
-{
-    const cwDistanceReading distance = shot.distance();
-    const bool distanceIsZero = distance.state() == cwDistanceReading::State::Valid
-                                && qFuzzyIsNull(distance.toDouble());
-    return distanceIsZero
-        && shot.compass().state()     == cwCompassReading::State::Empty
-        && shot.backCompass().state() == cwCompassReading::State::Empty
-        && shot.clino().state()       == cwClinoReading::State::Empty
-        && shot.backClino().state()   == cwClinoReading::State::Empty;
-}
-
-inline bool stationHasLrudData(const cwStation& station)
-{
-    return station.left().state()  == cwDistanceReading::State::Valid
-        || station.right().state() == cwDistanceReading::State::Valid
-        || station.up().state()    == cwDistanceReading::State::Valid
-        || station.down().state()  == cwDistanceReading::State::Valid;
-}
 } // namespace cwSurvexExporterUtils
 
 #endif // CWSURVEXEXPORTERUTILS_H

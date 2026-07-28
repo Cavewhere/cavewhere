@@ -92,8 +92,7 @@ ResultBase cwSurvexExporterRule::writeCave(QTextStream& stream,
 
     writeFixStations(stream, cave, globalCS);
 
-    const auto declinationContext = cwSurvexExporterUtils::makeDeclinationContext(
-        cave.fixStations, globalCS);
+    const auto declinationContext = cwSurvexExporterUtils::makeDeclinationContext(cave.fixStations);
 
     for(int i = 0; i < cave.trips.size(); i++) {
         const cwSurveyDataArtifact::Trip& trip = cave.trips.at(i);
