@@ -34,7 +34,7 @@ Always redirect test output to a log file so failures can be inspected without r
 
 ### Entry Point and Root Singleton
 
-`main.cpp` sets up the QML engine and exposes `cwRootData` as a QML singleton — the central hub that owns and exposes all major subsystems to QML: `cwProject`, `cwCavingRegion`, `cwScrapManager`, `cwLinePlotManager`, `cwSurveyImportManager`, `cwSurveyExportManager`, `cwRemoteServices`, `cwPageSelectionModel`, `cwSettings`, and more.
+`main.cpp` sets up the QML engine and exposes `cwRootData` as a QML singleton — the central hub that owns and exposes all major subsystems to QML.
 
 ### Data Model Hierarchy
 
@@ -54,21 +54,16 @@ Handles all file I/O and Git integration. Three formats: legacy `.cw` (JSON + SQ
 
 ### Rendering
 
-Uses Qt's RHI (Rendering Hardware Interface). Key classes: `cwRegionSceneManager`, `cwRhiScene`, `cwRhiItemRenderer`. Line plots are handled by `cwLinePlotManager`. 3D math is in the `QMath3d` submodule.
+Uses Qt's RHI (Rendering Hardware Interface).
 
 ### Survey Import/Export
 
 `cwSurveyImportManager` handles Compass, Survex, and Walls formats via the `dewalls` submodule. `cwSurveyExportManager` outputs Survex and Compass; Compass station names are written in uppercase (Compass is case-sensitive; CaveWhere is not). `cwSurveyNetwork` performs loop closure detection.
 
-### Remote/Git Features
-
-`QQuickGit` submodule wraps libgit2. `cwGitHubDeviceAuth` handles OAuth. Credentials are stored via `qtkeychain`. `cwRemoteRepositoryCloner` and `cwRemoteAccountModel` manage remote repository workflows.
-
 ### UI Structure
 
 - **Page navigation**: `cwPageSelectionModel` manages multi-page routing
 - **Keyword filtering**: `cwKeywordItemModel` / `cwKeywordFilterPipelineModel` for hierarchical search
-- **Themes**: All colors go through `Theme.qml` tokens — never hardcode hex values in component QML files
 
 ## Coding Conventions
 
@@ -129,21 +124,6 @@ Uses Qt's RHI (Rendering Hardware Interface). Key classes: `cwRegionSceneManager
 - Body: what changed, why, build/test commands run
 - Attach screenshots for QML UI changes; link related issues; note submodule/dependency changes explicitly
 - Do not mention Claude or add Co-Authored-By lines
-
-## Key Source Locations
-
-| Path | Purpose |
-|------|---------|
-| `cavewherelib/src/` | All C++ engine code |
-| `cavewherelib/qml/` | All QML components |
-| `cavewherelib/shaders/` | GLSL/RHI shaders |
-| `testcases/` | C++ unit tests (Catch2) |
-| `test-qml/tst_*.qml` | QML test suite |
-| `test-qml/datasets/` | Deterministic test data |
-| `testlib/` | Shared test infrastructure |
-| `cavewhere.proto` | Protobuf serialization schema |
-| `conanfile.py` | Conan dependency manifest |
-| `installer/` | Platform packaging scripts |
 
 ## Dependencies
 
