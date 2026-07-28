@@ -283,6 +283,17 @@ MainWindowTest {
             compare(stations.text, "Floating: simple.a1, simple.a2, simple.a3",
                     "stations render in the trip's own namespace")
 
+            // The identity behind those strings. The suggester that lands in
+            // this banner ties stations, and a tail on its own names no
+            // container — so the handles have to reach qml, in step with the
+            // strings and pointing at the trip whose scope they live in.
+            const status = findChild(panelId, "floatingSurveyStatus")
+            verify(status !== null, "floatingSurveyStatus must exist")
+            compare(status.stationHandles.length, 3, "one handle per floating station")
+            compare(status.stationHandles[0].tail, "simple.a1")
+            compare(String(status.stationHandles[0].containerId), String(second.id),
+                    "the handle names the trip whose scope the station lives in")
+
             // Binding back to the anchor must clear it — the banner is about
             // the trip on screen, not about the cave holding a floating one.
             rootId.trip = fixture.trip

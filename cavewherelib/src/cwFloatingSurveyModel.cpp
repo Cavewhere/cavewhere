@@ -29,23 +29,33 @@ cwFloatingSurveyModel::Trigger triggerOf(cwFindFloatingSurveys::Result::Trigger 
     return cwFloatingSurveyModel::ExternalScope;
 }
 
-//! The station names in the trip's own namespace, which is the spelling every
-//! trip-level surface shows. An external scope's records are cave-local
-//! ("<tripLabel>.a2") while a native chunk's are already bare, so stripping the
-//! trip's own prefix is what makes the two triggers name a station alike. A
-//! record written before a rename no longer matches the prefix and keeps the
-//! spelling the run recorded — stale, but never wrong about which run said it.
-QStringList localStations(const cwTrip* trip, const QStringList& stations)
+//! The run's stations as identities whose tails are the trip's own namespace,
+//! which is the spelling every trip-level surface shows. An external scope's
+//! records are cave-local ("<tripLabel>.a2") while a native chunk's are already
+//! bare, so stripping the trip's own prefix is what makes the two triggers name
+//! a station alike. A record written before a rename no longer matches the
+//! prefix and keeps the spelling the run recorded — stale, but never wrong
+//! about which run said it, and the handle is exactly as stale as its tail. The
+//! trip decides scope and container, so this never composes a handle itself.
+QList<cwStationHandle> localStations(const cwTrip* trip, const QStringList& stations)
 {
     const QString prefix = cwStation::canonicalKey(trip->scopePrefix());
-    if (prefix.isEmpty()) {
-        return stations;
-    }
 
+    QList<cwStationHandle> handles;
+    handles.reserve(stations.size());
+    for (const QString& station : stations) {
+        handles.append(trip->stationHandle(
+            station.startsWith(prefix) ? station.mid(prefix.size()) : station));
+    }
+    return handles;
+}
+
+QStringList tailsOf(const QList<cwStationHandle>& stations)
+{
     QStringList tails;
     tails.reserve(stations.size());
-    for (const QString& station : stations) {
-        tails.append(station.startsWith(prefix) ? station.mid(prefix.size()) : station);
+    for (const cwStationHandle& station : stations) {
+        tails.append(station.tail());
     }
     return tails;
 }
@@ -80,7 +90,9 @@ QVariant cwFloatingSurveyModel::data(const QModelIndex& index, int role) const
     case TriggerRole:
         return QVariant::fromValue(row.trigger);
     case StationsRole:
-        return row.stations;
+        return tailsOf(row.stations);
+    case StationHandlesRole:
+        return QVariant::fromValue(row.stations);
     case CaveIdRole:
         return row.caveId;
     case TripIdRole:
@@ -96,24 +108,35 @@ QHash<int, QByteArray> cwFloatingSurveyModel::roleNames() const
         { TripNameRole, QByteArrayLiteral("tripName") },
         { TriggerRole, QByteArrayLiteral("trigger") },
         { StationsRole, QByteArrayLiteral("stations") },
+        { StationHandlesRole, QByteArrayLiteral("stationHandles") },
         { CaveIdRole, QByteArrayLiteral("caveId") },
         { TripIdRole, QByteArrayLiteral("tripId") }
     };
 }
 
-bool cwFloatingSurveyModel::isFloating(const QUuid& tripId) const
-{
-    return std::any_of(m_rows.cbegin(), m_rows.cend(), [&tripId](const Row& row) {
-        return row.tripId == tripId;
-    });
-}
-
-QStringList cwFloatingSurveyModel::floatingStations(const QUuid& tripId) const
+const cwFloatingSurveyModel::Row* cwFloatingSurveyModel::rowForTrip(const QUuid& tripId) const
 {
     const auto found = std::find_if(m_rows.cbegin(), m_rows.cend(), [&tripId](const Row& row) {
         return row.tripId == tripId;
     });
-    return found == m_rows.cend() ? QStringList() : found->stations;
+    return found == m_rows.cend() ? nullptr : &*found;
+}
+
+bool cwFloatingSurveyModel::isFloating(const QUuid& tripId) const
+{
+    return rowForTrip(tripId) != nullptr;
+}
+
+QStringList cwFloatingSurveyModel::floatingStations(const QUuid& tripId) const
+{
+    const Row* row = rowForTrip(tripId);
+    return row == nullptr ? QStringList() : tailsOf(row->stations);
+}
+
+QList<cwStationHandle> cwFloatingSurveyModel::floatingStationHandles(const QUuid& tripId) const
+{
+    const Row* row = rowForTrip(tripId);
+    return row == nullptr ? QList<cwStationHandle>() : row->stations;
 }
 
 void cwFloatingSurveyModel::setRegion(cwCavingRegion* region)

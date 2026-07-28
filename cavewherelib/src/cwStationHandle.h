@@ -10,6 +10,7 @@
 
 //Qt includes
 #include <QHashFunctions>
+#include <QList>
 #include <QMetaType>
 #include <QQmlEngine>
 #include <QString>
@@ -97,6 +98,17 @@ namespace cwStationHandleDerivedForeign {
     QML_NAMED_ELEMENT(CwStationHandle)
     QML_FOREIGN_NAMESPACE(cwStationHandleDerived)
 }
+
+//A list of handles is how identity travels in bulk — the stations of an
+//equate, the stations of a floating survey — so qml has to be able to walk
+//one. See CaveListRegistration in cwQMLRegister.h for the same pattern.
+class cwStationHandleListRegistration
+{
+    Q_GADGET
+    QML_FOREIGN(QList<cwStationHandle>)
+    QML_ANONYMOUS
+    QML_SEQUENTIAL_CONTAINER(cwStationHandle)
+};
 
 Q_DECLARE_METATYPE(cwStationHandle)
 

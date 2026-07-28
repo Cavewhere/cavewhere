@@ -11,6 +11,7 @@
 //Our includes
 #include "cwFindFloatingSurveys.h"
 #include "cwGlobals.h"
+#include "cwStationHandle.h"
 class cwCavingRegion;
 
 //Qt includes
@@ -50,6 +51,7 @@ public:
         TripNameRole,
         TriggerRole,
         StationsRole,
+        StationHandlesRole,
         CaveIdRole,
         TripIdRole
     };
@@ -70,13 +72,20 @@ public:
     QHash<int, QByteArray> roleNames() const override;
 
     //! True when the last run found \a tripId floating, whichever pass found
-    //! it. The per-trip surfaces ask this; the whole-region ones bind the rows.
-    Q_INVOKABLE bool isFloating(const QUuid& tripId) const;
+    //! it. Deliberately not Q_INVOKABLE: the per-trip surfaces bind
+    //! cwFloatingSurveyStatus, and the whole-region ones bind the rows.
+    bool isFloating(const QUuid& tripId) const;
 
-    //! \a tripId's floating stations, in the trip's own namespace. Empty both
-    //! for a trip that is not floating and for one cavern dropped outright, so
-    //! it can never stand in for isFloating().
-    Q_INVOKABLE QStringList floatingStations(const QUuid& tripId) const;
+    //! \a tripId's stations, in the trip's own namespace — the whole trip's,
+    //! since a trip floats as a unit. Empty both for a trip that is not
+    //! floating and for one cavern dropped outright, so it can never stand in
+    //! for isFloating().
+    QStringList floatingStations(const QUuid& tripId) const;
+
+    //! The same stations as floatingStations(), in the same order, as the
+    //! identities a tie stores. A suggester proposes an equate from these; the
+    //! strings are for showing, and only for showing.
+    QList<cwStationHandle> floatingStationHandles(const QUuid& tripId) const;
 
     //! The region every record's uuids are resolved against. Rows follow it: a
     //! cave or trip that is renamed, added or removed re-renders them.
@@ -95,7 +104,10 @@ private:
         QString caveName;
         QString tripName;
         Trigger trigger = ExternalScope;
-        QStringList stations;
+        //Stored as identities, never as display strings: the tail is the
+        //spelling a label shows, so the two can never disagree or fall out of
+        //step with each other.
+        QList<cwStationHandle> stations;
 
         bool operator==(const Row& other) const = default;
     };
@@ -104,6 +116,7 @@ private:
     QList<cwFindFloatingSurveys::Result> m_results;
     QList<Row> m_rows;
 
+    const Row* rowForTrip(const QUuid& tripId) const;
     void rebuildRows();
 };
 

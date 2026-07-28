@@ -63,9 +63,11 @@ public:
 
         Trigger trigger = Trigger::ExternalScope;
 
-        //! The floating station names, sorted. Cave-local and canonical (the
-        //! same spelling cwStationPositionLookup and cwTrip::solvedStations use),
-        //! so a caller can look each one up without re-deriving a scope.
+        //! The floating survey's station names, sorted — all of them, since a
+        //! survey floats as a unit and no station of it floats on its own.
+        //! Cave-local and canonical (the same spelling cwStationPositionLookup
+        //! and cwTrip::solvedStations use), so a caller can look each one up
+        //! without re-deriving a scope.
         //!
         //! Empty means the survey produced no solved station at all: cavern
         //! dropped it as hanging, which is what an attached centerline with no

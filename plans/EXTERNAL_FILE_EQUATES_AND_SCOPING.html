@@ -1029,8 +1029,40 @@ bool cwTrip::isScoped() const { return !m_externalCenterline.isEmpty() || !m_sta
   nothing but the old chunk error marker until 6c's cell marker lands.
 </p>
 <p class="note">
-  <strong>Two prerequisites 6c should settle before adding surfaces</strong> (from the
-  6b review).
+  <strong>Two prerequisites 6c should settle before adding surfaces &mdash; BOTH DONE
+  2026-07-28</strong> (from the 6b review). What shipped, against what was asked for:
+  <br><br>
+  <strong>1&nbsp;&mdash;&nbsp;DONE.</strong> <code>cwFloatingSurveyStatus</code>
+  (QML <code>FloatingSurveyStatus { trip; model }</code>) is the per-trip lens, so the
+  banner is now <code>floating: floatingStatusId.floating</code> and the panel is down to
+  three pull idioms from four. The other three are untouched and stay open: they are the
+  external-centerline manager's and the settings store's missing notifies, not the
+  floating answer's, and each needs its own C++ change (see &sect;15 for
+  <code>sourcePathFor</code>). The reset-only coupling is gone at the root rather than at
+  the call site: <code>setModelConnected</code> names <em>every</em> way a
+  <code>QAbstractItemModel</code>'s content can move &mdash;
+  <code>modelReset</code>, <code>dataChanged</code>, <code>rowsInserted</code>,
+  <code>rowsRemoved</code>, <code>destroyed</code> &mdash; so a later row diff for the
+  Health page cannot freeze a bound surface. The <code>cwTrip</code>-property alternative
+  was rejected on inspection: <code>cwTrip::solvedStations()</code> works because the
+  <em>cave</em> holds the solve answer and the trip is a lens on it, but the floating
+  answer lives in <code>cwLinePlotManager</code>, which a trip cannot reach.
+  <br><br>
+  <strong>2&nbsp;&mdash;&nbsp;DONE, and stronger than asked.</strong> Rather than a handle
+  role <em>alongside</em> the strings, <code>Row::stations</code> is now
+  <code>QList&lt;cwStationHandle&gt;</code> and <code>StationsRole</code> is its tails, so
+  there is one list and the two spellings cannot disagree or fall out of order.
+  <code>StationHandlesRole</code> and <code>floatingStationHandles()</code> serve the
+  identity; <code>cwTrip::stationHandle()</code> makes the NativeCave-vs-Trip call, which
+  this never duplicates. <code>QList&lt;cwStationHandle&gt;</code> is registered as a
+  QML sequential container in <code>cwStationHandle.h</code>, which also makes
+  <code>cwEquate::stations</code> walkable from QML for the first time.
+  <br><br>
+  Also folded in: <code>isFloating()</code> and <code>floatingStations()</code> lost their
+  <code>Q_INVOKABLE</code>. QML cannot pull the per-trip answer at all now &mdash; the
+  only way in is the binding.
+  <br><br>
+  <em>What each item originally said:</em>
   <br><br>
   <strong>1. Stop pulling; bind.</strong>
   <code>ExternalCenterlineTripPanel</code> now carries <em>four</em>

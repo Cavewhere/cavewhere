@@ -23,6 +23,7 @@
 #include "cwFindFloatingSurveys.h"
 #include "cwFloatingSurveyModel.h"
 #include "cwLinePlotManager.h"
+#include "cwStationHandle.h"
 #include "cwTrip.h"
 
 // Test helpers
@@ -45,6 +46,15 @@ QString stringAt(const cwFloatingSurveyModel* model, int row, int role)
 QStringList stationsAt(const cwFloatingSurveyModel* model, int row)
 {
     return roleAt(model, row, cwFloatingSurveyModel::StationsRole).toStringList();
+}
+
+QList<cwStationHandle> handlesAt(const cwFloatingSurveyModel* model, int row)
+{
+    const QVariant handles = roleAt(model, row, cwFloatingSurveyModel::StationHandlesRole);
+    //An unserved role converts to an empty list just as a row with no stations
+    //does, so without this every alignment check below passes vacuously.
+    REQUIRE(handles.isValid());
+    return handles.value<QList<cwStationHandle>>();
 }
 
 cwFloatingSurveyModel::Trigger triggerAt(const cwFloatingSurveyModel* model, int row)
@@ -95,12 +105,28 @@ TEST_CASE("An attached centerline that floats becomes one readable row",
                                  QStringLiteral("simple.a3")});
     CHECK(stationsAt(model, 0) == tripLocal);
 
-    // The per-trip surfaces ask through these two rather than the rows, so they
+    // What a tie is actually made of. The strings above are for showing; a
+    // suggester has to name the same stations by scope and container, and an
+    // attached trip owns its own scope, so its stations belong to the trip and
+    // never to the cave. The two lists are one list at rest, so they cannot
+    // disagree in content or in order.
+    const QList<cwStationHandle> handles = handlesAt(model, 0);
+    REQUIRE(handles.size() == tripLocal.size());
+    for (int i = 0; i < handles.size(); ++i) {
+        INFO("station " << i);
+        CHECK(handles.at(i).scope() == cwStationHandle::Trip);
+        CHECK(handles.at(i).containerId() == setup.attached->id());
+        CHECK(handles.at(i).tail() == tripLocal.at(i));
+    }
+
+    // The per-trip surfaces ask through these rather than the rows, so they
     // have to agree with them — and with each other.
     CHECK(model->isFloating(setup.attached->id()));
     CHECK(model->floatingStations(setup.attached->id()) == tripLocal);
+    CHECK(model->floatingStationHandles(setup.attached->id()) == handles);
     CHECK_FALSE(model->isFloating(setup.cave->trip(0)->id()));
     CHECK(model->floatingStations(setup.cave->trip(0)->id()).isEmpty());
+    CHECK(model->floatingStationHandles(setup.cave->trip(0)->id()).isEmpty());
 }
 
 TEST_CASE("A native floating chunk becomes a row named the same way",
@@ -124,6 +150,16 @@ TEST_CASE("A native floating chunk becomes a row named the same way",
     CHECK(triggerAt(model, 0) == cwFloatingSurveyModel::UnconnectedChunks);
     CHECK(stationsAt(model, 0) == QStringList({QStringLiteral("z1"),
                                                QStringLiteral("z2")}));
+
+    // The other half of the identity split: a native trip has no scope of its
+    // own, so its stations are the cave's. The trip makes that call for every
+    // surface, and this row is no exception to it.
+    const QList<cwStationHandle> handles = handlesAt(model, 0);
+    REQUIRE(handles.size() == 2);
+    CHECK(handles.at(0).scope() == cwStationHandle::NativeCave);
+    CHECK(handles.at(0).containerId() == cave->id());
+    CHECK(handles.at(0).tail() == QStringLiteral("z1"));
+    CHECK(handles.at(1).tail() == QStringLiteral("z2"));
 }
 
 TEST_CASE("Renaming a cave re-renders its floating rows before the re-solve lands",
