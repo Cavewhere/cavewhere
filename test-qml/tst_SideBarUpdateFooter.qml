@@ -18,7 +18,7 @@ Item {
         anchors.right: parent.right
         anchors.bottom: parent.bottom
 
-        running: false
+        busy: false
         needsUpdate: false
         automaticUpdate: false
     }
@@ -46,12 +46,13 @@ Item {
         when: windowShown
 
         function init() {
-            footerId.running = false
+            // Busy and the count are pinned rather than left bound to the live
+            // coordinator and task models, so a job the rest of the suite happens
+            // to be running can't move them. tst_ActiveTasks covers the defaults.
+            footerId.busy = false
             footerId.needsUpdate = false
             footerId.automaticUpdate = false
             footerId.compact = false
-            // Pinned rather than left bound to the live task/future models, so a
-            // task the rest of the suite happens to be running can't move it.
             footerId.taskCount = 0
             footerId.tasksShown = false
             footerId.busyRowHovered = false
@@ -97,31 +98,21 @@ Item {
             compare(runSpy.count, 1, "pressing Run asks for the update once")
         }
 
-        // The whole reason the coordinator publishes running separately: a
-        // pipeline re-edited mid-run reports Dirty while its task is still
-        // churning, so both aggregates are true and the footer has to pick one.
-        function test_runningWinsOverNeedsUpdate() {
+        // The whole reason busy is read before stale: a pipeline re-edited
+        // mid-run reports Dirty while its task is still churning, so both
+        // aggregates are true and the footer has to pick one.
+        function test_busyWinsOverNeedsUpdate() {
             footerId.needsUpdate = true
-            footerId.running = true
+            footerId.busy = true
 
             verify(find("updateRunningIndicator") !== null, "the busy indicator is shown")
             verify(find("updateRunButton") === null, "Run is not offered while running")
         }
 
-        // Jobs that never reach the update coordinator still have to read as busy;
-        // see the component header for which ones and why.
-        function test_aJobOutsideTheCoordinatorStillReadsAsBusy() {
-            footerId.taskCount = 1
-
-            verify(!footerId.running, "the coordinator reports nothing running")
-            verify(footerId.busy, "a tracked job counts as busy")
-            verify(find("updateRunningIndicator") !== null, "the busy indicator is shown")
-        }
-
         // The count can be zero while work really is in flight, so the label has
         // to survive that; see the component header for how it happens.
         function test_runningLabelDropsTheCountWhenNoTaskIsListed() {
-            footerId.running = true
+            footerId.busy = true
 
             let label = find("updateRunningLabel")
             verify(label !== null, "updateRunningLabel not found")
@@ -137,7 +128,7 @@ Item {
         // The busy row is the way into the task flyout; the footer only reports
         // the tap, since the flyout is the host's to own.
         function test_tappingTheBusyRowAsksForTheTaskList() {
-            footerId.running = true
+            footerId.busy = true
             waitForRendering(footerId)
 
             let indicator = find("updateRunningIndicator")
@@ -150,7 +141,7 @@ Item {
         // The chevron is the row's only cue that there is more behind it, and it
         // points at the flyout, so it lights up while that flyout is on screen.
         function test_busyRowShowsAnExpandChevron() {
-            footerId.running = true
+            footerId.busy = true
             footerId.taskCount = 1
 
             let chevron = find("updateRunningExpandIcon")
@@ -167,7 +158,7 @@ Item {
         // A cascade between pipelines is busy with nothing listed yet, and the
         // flyout cannot show an empty list — so the chevron must not promise one.
         function test_chevronHidesWhenThereIsNothingToExpand() {
-            footerId.running = true
+            footerId.busy = true
             footerId.taskCount = 0
 
             let chevron = find("updateRunningExpandIcon")
@@ -181,7 +172,7 @@ Item {
         // Hovering the busy row is what peeks the task flyout open, so the footer
         // has to publish the hover — the host has no other way to see it.
         function test_hoveringTheBusyRowReportsIt() {
-            footerId.running = true
+            footerId.busy = true
             waitForRendering(footerId)
 
             let indicator = find("updateRunningIndicator")
@@ -199,11 +190,10 @@ Item {
         // The row is destroyed when work finishes, taking its HoverHandler with
         // it, so nothing would ever report the hover ending.
         function test_leavingBusyClearsTheHoverOutput() {
-            footerId.running = true
+            footerId.busy = true
             footerId.busyRowHovered = true
 
-            footerId.running = false
-            verify(!footerId.busy, "no longer busy")
+            footerId.busy = false
             verify(!footerId.busyRowHovered, "the hover output cleared with the row")
         }
 

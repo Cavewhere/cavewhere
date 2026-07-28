@@ -21,16 +21,16 @@ import cavewherelib
 // scraps, LiDAR); a point-cloud load, a picking BVH rebuild, an import or a save
 // register with the future manager and nothing else. Reading only the
 // coordinator would leave the footer showing "Automatic Update" through all of
-// them — so any tracked job puts the footer in the busy state, which also keeps
-// the state and the count in the label talking about the same thing.
+// them — so any tracked job puts the footer in the busy state. Both that state
+// and the count in the label default to the same shared source, which is what
+// keeps them talking about the same thing.
 //
-// The coordinator's state is injected rather than read here, so the footer is a
-// view of it and can be driven directly. The task count defaults to the shared
-// ActiveTasks model but stays overridable for the same reason. A job whose
-// future is already finished is never admitted, and a cascade is briefly
-// running between pipelines with no future yet — so the count can be zero while
-// work really is in flight, and the label says "Running…" rather than
-// "Running 0 Tasks".
+// Busy and the task count both default to the shared ActiveTasks state and both
+// stay overridable, so the footer is a view of that state and a test can drive
+// it directly. A job whose future is already finished is never admitted, and a
+// cascade is briefly running between pipelines with no future yet — so the
+// count can be zero while work really is in flight, and the label says
+// "Running…" rather than "Running 0 Tasks".
 //
 // The busy row is a button into the task flyout, which lists what those jobs
 // actually are; the host owns the flyout, because it has to composite above the
@@ -38,10 +38,10 @@ import cavewherelib
 QQ.Rectangle {
     id: footerId
 
-    required property bool running
     required property bool needsUpdate
     required property bool automaticUpdate
     property bool compact: false
+    property bool busy: ActiveTasks.busy
     property int taskCount: ActiveTasks.count
 
     // Output: the busy row is under the pointer, so the host can peek the task
@@ -52,8 +52,6 @@ QQ.Rectangle {
     // Input: whether the task flyout the busy row opens is currently on screen,
     // so the row's chevron can point at it and light up.
     property bool tasksShown: false
-
-    readonly property bool busy: footerId.running || footerId.taskCount > 0
 
     signal runRequested()
     signal automaticUpdateToggled(bool enabled)

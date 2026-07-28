@@ -232,7 +232,6 @@ QQ.Rectangle {
         anchors.bottom: parent.bottom
 
         compact: sidebarArea._compactMode
-        running: RootData.updateCoordinator.running
         needsUpdate: RootData.updateCoordinator.needsUpdate
         automaticUpdate: RootData.updateCoordinator.automaticUpdate
 

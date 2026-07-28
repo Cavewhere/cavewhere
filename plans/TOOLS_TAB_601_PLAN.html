@@ -109,8 +109,12 @@
   .runrow{display:flex;align-items:center;gap:5px;justify-content:center;font-size:9px;font-weight:700;color:#bfe3ff}
   .spinner{width:13px;height:13px;border:2px solid rgba(255,255,255,.25);border-top-color:#7cb7f2;border-radius:50%;animation:spin .8s linear infinite;flex:0 0 auto}
   @keyframes spin{to{transform:rotate(360deg)}}
-  .sidebar.mid .autotoggle .lbl,.sidebar.mid .pendbox .t,.sidebar.mid .runrow span{display:none}
+  /* Mid drops the captions, never the spinner — :not(.spinner) matters. */
+  .sidebar.mid .autotoggle .lbl,.sidebar.mid .pendbox .t,.sidebar.mid .runrow span:not(.spinner){display:none}
   .badge{position:absolute;top:-4px;right:-2px;background:var(--accent);color:#fff;font-size:8px;font-weight:800;border-radius:9px;padding:0 4px}
+  /* The accent is light in dark mode, so the badge's foreground has to flip with
+     it — a real constraint for any accent-filled count chip, not just here. */
+  html[data-theme="dark"] .badge{color:#0d1117}
 
   /* center */
   .view{position:relative;flex:1;min-width:0;overflow:hidden}
@@ -139,6 +143,7 @@
   .tkrow:last-child{margin-bottom:0}
   .tkrow .bar{height:5px;border-radius:3px;background:var(--cw-border);margin-top:3px;overflow:hidden}
   .tkrow .bar i{display:block;height:100%;background:var(--accent)}
+  .tkrow .bar i.indet{animation:hairslide 1.4s cubic-bezier(.5,0,.5,1) infinite}
   .fauxrow{height:9px;border-radius:5px;background:var(--cw-border);margin:7px 0;opacity:.7} .fauxrow.s{width:60%}.fauxrow.m{width:82%}
   .btnrow{display:flex;gap:6px;flex-wrap:wrap}
   .cwbtn{border:1px solid var(--cw-border);background:var(--cw-surface);border-radius:6px;padding:6px 10px;font-size:12px;color:var(--cw-text);cursor:pointer;display:flex;align-items:center;gap:6px} .cwbtn svg{width:14px;height:14px}
@@ -191,6 +196,57 @@
   .popgrp{font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--ink3);padding:7px 8px 3px}
   .poprow{display:flex;align-items:center;gap:9px;padding:8px;border-radius:9px;font-size:12.5px;color:var(--cw-text);cursor:pointer} .poprow:hover{background:var(--cw-surface-muted)} .poprow.on{background:var(--cw-highlight)} .poprow svg{width:16px;height:16px} .poprow.ghost{opacity:.5}
 
+  /* §3b — compact task-progress options */
+  .picon{position:relative}
+  .pdot{position:absolute;top:-3px;right:-3px;width:9px;height:9px;border-radius:50%;background:var(--accent);border:2px solid var(--cw-surface)}
+  .pdot.warn{background:var(--warn)}
+  .phair{position:relative;height:3px;background:color-mix(in srgb,var(--accent) 16%,transparent);overflow:hidden;flex:0 0 auto;z-index:9;cursor:pointer}
+  .phair i{display:block;height:100%;background:var(--accent)}
+  .phair i.indet{width:36%;animation:hairslide 1.4s cubic-bezier(.5,0,.5,1) infinite}
+  @keyframes hairslide{0%{margin-left:-36%}100%{margin-left:100%}}
+  .phair.stale{background:color-mix(in srgb,var(--warn) 24%,transparent)} .phair.stale i{background:var(--warn);width:100%}
+  /* Clears the compass (70px at bottom:12) and the scale bar — the phone's
+     bottom-center is already contested, which is part of option C's cost. */
+  .ppill{position:absolute;left:50%;transform:translateX(-50%);bottom:92px;display:flex;align-items:center;gap:8px;max-width:90%;padding:7px 8px 7px 12px;border-radius:22px;background:var(--cw-surface);border:1px solid var(--cw-border);box-shadow:var(--shadow);font-size:11.5px;font-weight:600;color:var(--cw-text);cursor:pointer;z-index:12}
+  .ppill .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ppill .ct{background:var(--cw-highlight);color:var(--accent);border-radius:11px;padding:1px 7px;font-size:10px;font-weight:800;flex:0 0 auto}
+  .ppill.pend{border-color:color-mix(in srgb,var(--warn) 65%,transparent);color:var(--warn)}
+  .ppill .runbtn{width:auto;padding:3px 11px;flex:0 0 auto}
+  .ppill .spinner,.pmenu .spinner,.pfbtn .spinner{border-color:color-mix(in srgb,var(--ink3) 32%,transparent);border-top-color:var(--accent);width:13px;height:13px}
+  .pfbtn .fbadge{position:absolute;top:-3px;right:-3px;background:var(--accent);color:#fff;font-size:9px;font-weight:800;border-radius:10px;padding:0 5px;border:2px solid var(--cw-surface)}
+  .pmenu{position:absolute;left:9px;top:50px;width:238px;background:var(--cw-surface);border:1px solid var(--cw-border);border-radius:11px;box-shadow:var(--shadow);z-index:24;padding:6px;color:var(--cw-text)}
+  .pmenu .mi{font-size:12px;padding:7px 9px;border-radius:7px;display:flex;align-items:center;gap:9px} .pmenu .mi svg{width:15px;height:15px}
+  .pmenu .sep{height:1px;background:var(--cw-border);margin:5px 2px}
+  .pmenu .tkrow{padding:2px 9px 6px}
+  .optnote{font-size:12.5px;margin:8px 2px 0;display:flex;gap:7px;align-items:flex-start}
+  .optnote b{flex:0 0 auto}
+  .optnote.gap{color:var(--warn)} .optnote.ok{color:var(--ink3)}
+  .midrow{display:flex;gap:20px;flex-wrap:wrap;justify-content:center;padding:24px 18px;background:
+     repeating-linear-gradient(45deg,transparent,transparent 10px,color-mix(in srgb,var(--ink3) 6%,transparent) 10px,color-mix(in srgb,var(--ink3) 6%,transparent) 11px)}
+  .midcard{display:flex;flex-direction:column;align-items:center;gap:9px;width:150px}
+  .midcard .sidebar.mid{height:274px;border-radius:11px;overflow:hidden;box-shadow:var(--shadow)}
+  .midcard .sbfooter{flex:0 0 auto;padding-bottom:9px}
+  .midcard .cap{font-size:12px;font-weight:700;text-align:center}
+  .midcard .sub{font-size:11px;color:var(--ink3);text-align:center;line-height:1.45}
+  .midnum{font-size:12px;font-weight:800;color:#bfe3ff;text-align:center;margin-top:2px;font-variant-numeric:tabular-nums}
+  .midring{width:22px;height:22px;flex:0 0 auto}
+  .midring text{font-size:9px;font-weight:800;fill:#bfe3ff}
+  .midring .track{stroke:rgba(255,255,255,.22)} .midring .arc{stroke:#7cb7f2}
+  .midring .arc.indet{transform-origin:12px 12px;animation:spin 1.1s linear infinite}
+  /* Same ring on a light ground — the chip in the top bar. */
+  .midring.onlight .track{stroke:color-mix(in srgb,var(--ink3) 32%,transparent)}
+  .midring.onlight .arc{stroke:var(--accent)} .midring.onlight text{fill:var(--accent)}
+  .pchip .midring{width:14px;height:14px}
+  .midcard .sidebar.wide{height:274px;border-radius:11px;overflow:hidden;box-shadow:var(--shadow)}
+  .midcard.pick .cap{color:var(--good)}
+  .midcard.pick .sidebar{outline:2px solid var(--good);outline-offset:2px}
+  .picktag{display:inline-block;font-size:9.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:var(--good);border:1px solid color-mix(in srgb,var(--good) 45%,transparent);border-radius:20px;padding:0 7px;margin-left:5px;vertical-align:1px}
+  .sheetauto{display:flex;align-items:center;gap:9px;padding:10px 12px;border-top:1px solid var(--cw-border);font-size:12px;font-weight:600;color:var(--cw-text);cursor:pointer}
+  .sheetauto .sw{width:32px;height:18px;border-radius:20px;background:var(--accent);position:relative;flex:0 0 auto;transition:.15s}
+  .sheetauto .sw::after{content:"";position:absolute;top:2px;left:16px;width:14px;height:14px;border-radius:50%;background:#fff;transition:.15s}
+  .sheetauto.off .sw{background:color-mix(in srgb,var(--ink3) 45%,transparent)} .sheetauto.off .sw::after{left:2px}
+  .decided{border:1px solid color-mix(in srgb,var(--good) 45%,transparent);border-left-width:4px;border-left-color:var(--good);border-radius:10px;padding:14px 18px;margin:18px 0;background:color-mix(in srgb,var(--good) 6%,var(--panel))}
+  .decided h4{margin:0 0 6px;font-size:14px;text-transform:uppercase;letter-spacing:.6px;color:var(--good)}
   .capt{font-size:12.5px;color:var(--ink3);margin:8px 2px 0}
   .appnav-base{width:64px;flex:0 0 64px;background:linear-gradient(160deg,var(--cw-sidebar-top),var(--cw-sidebar-bot));display:flex;flex-direction:column;align-items:center;padding-top:10px;gap:4px}
   .appnav-base .nb{width:52px;height:50px;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:9.5px;color:#cfd6df} .appnav-base .nb.on{background:rgba(255,255,255,.16);color:#fff} .appnav-base .nb svg{width:18px;height:18px}
@@ -237,6 +293,7 @@
     <a href="#proto">1 · The design — interactive prototype</a>
     <a href="#tasks">2 · Task flyout (replaces inline expand)</a>
     <a href="#phone">3 · Compact / phone — no sidebar</a>
+    <a href="#progress">3b · Task progress in compact — the chosen surfaces</a>
     <a href="#contract">4 · Per-page tool contract</a>
     <a href="#baseline">5 · Why — the overlap today</a>
     <a href="#impl">6 · Implementation plan</a>
@@ -273,7 +330,9 @@
     <tr><td><b>Update needed</b></td><td>Amber "Update needed" + <b>Run</b>.</td><td>Run kicks off the update (→ Running).</td></tr>
     <tr><td><b>Running</b></td><td><b>⟳ Running n Tasks ›</b>.</td><td><b>Hover peeks the task flyout</b> open beside the sidebar (progress per task); <b>click pins</b> it, and × or a second click closes it. <span class="muted">The prototype below still models the original click-only behavior.</span></td></tr>
   </table>
-  <p class="muted">Mid collapses each state to an icon (toggle / amber dot / spinner+badge); the flyout still pops to the side. On phone the equivalent is a status chip in the top bar that opens a task sheet.</p>
+  <p class="muted">Mid collapses each state to an icon (toggle / amber dot / <b>progress ring</b> — see the decision in
+  <a href="#progress">§3b</a>; the ring is used at Wide too, and "spinner+badge" is no longer the plan); the flyout
+  still pops to the side. On phone the equivalent is a status chip in the top bar that opens a task sheet.</p>
 
   <h2 id="phone">3 · Compact / phone — Tools drawer beside View &amp; Layers</h2>
   <p>At <code>LayoutSize.Narrow</code> the app hides <code>MainSideBar</code> and moves View/Data/Map into the top
@@ -291,6 +350,175 @@
   <p class="muted">Rejected: a bottom tool tray (covers the view, doesn't match the app's mobile idiom) and a top-left
   button (hard to reach, hides active state). Per-tool live readouts that must stay visible during interaction
   (e.g. the measurement distance) remain small scene overlays; only the <em>editable</em> options live in the drawer.</p>
+
+  <h2 id="progress">3b · Task progress in compact — pick a surface</h2>
+  <p>CP6 gave background work a good home <em>and only one</em>: the sidebar footer. <code>MainSideBar</code> is
+  <code>visible: layoutSize &gt;= Medium</code>, so at Narrow that home does not exist — a save, a sync, a
+  <code>.laz</code> load or an import runs with nothing on screen at all. This section is the design pass the plan
+  calls for before any of it is written.</p>
+
+  <div class="decided"><h4>✓ Decided 2026-07-28</h4>
+    <ul style="margin:.3em 0">
+      <li><b>Narrow → option A, the top-bar chip.</b> Two states (busy / stale), tap opens the task sheet.</li>
+      <li><b>The sheet also carries Automatic Update</b>, and the hamburger <b>keeps its copy</b> — both read and write
+      <code>updateCoordinator.automaticUpdate</code>, so there is one value and two ways to reach it. The sheet is
+      where you already are when you are thinking about background work; the hamburger is where you look when you are
+      not. (Toggle it in the frame below.)</li>
+      <li><b>Medium → M3, the determinate ring</b> — <b>and the ring is used at Wide too</b>, replacing the footer's
+      plain <code>QC.BusyIndicator</code>. <b>The chip wears the same ring</b>, recolored for the light top bar, so
+      there is one busy mark at every size rather than three. <span class="muted">(The chip's is the one extension
+      beyond what was asked — say so if you would rather the phone kept a plain spinner.)</span></li>
+      <li><b>Follows from M3:</b> the ring is determinate only when jobs report steps, and <b>spins when none do</b>
+      rather than drawing an arc it cannot back up — the same rule <code>TaskListView</code>'s delegate already applies
+      (<code>indeterminate: numberOfStepsRole &lt;= 0</code>). Try <b>3 · no steps</b> in the count selector.</li>
+      <li><b>At Wide the ring drops its inner number</b> and the existing "Running 3 Tasks" label carries the count;
+      at Medium, where that label is hidden, the number moves into the ring. The ring's job is progress, and it only
+      doubles as a counter where nothing else can.</li>
+    </ul>
+    <p style="margin:.5em 0 0"><b>What this costs, and it is worth knowing up front:</b> CaveWhere bans QML
+    <code>Canvas</code> and <code>Shapes</code> in new code, so a determinate ring is <b>a new
+    <code>QCanvasPainterItem</code> subclass in C++</b> — the same base <code>cwSketchCanvas</code>,
+    <code>cwLazClipPolygonCanvas</code> and <code>cwMeasurementLineCanvas</code> use. (Two legacy
+    <code>QtQuick.Shapes</code> imports survive in <code>QuoteBox.qml</code> and <code>WelcomePage.qml</code>; they are
+    not a precedent for new work.) M3 is the only candidate here that needs C++ at all — that is the price of the pick,
+    not a reason to revisit it.</p></div>
+
+  <div class="callout info"><h4>Two facts that narrow the field</h4>
+    <ul style="margin:.3em 0">
+      <li><b>The idle state already has a phone home.</b> <code>LinkBar</code>'s hamburger menu carries the
+      <b>Automatic Update</b> checkbox (<code>LinkBar.qml:74-80</code>). So the phone surface does <em>not</em> need to
+      carry all three footer states — only <b>Update needed</b> (an action) and <b>Running</b> (a report). Every option
+      below shows nothing at idle for that reason.</li>
+      <li><b>Job progress is <em>already</em> in the top bar at every size.</b> <code>SyncButton</code> takes
+      <code>syncInProgress</code> (<code>LinkBar.qml:199</code>) and spins in place. One job class has window-level
+      chrome and the other twenty are sidebar-only — which is the inconsistency underneath this whole gap, not just a
+      phone problem.</li>
+    </ul>
+  </div>
+
+  <h3>Narrow (phone) — five candidates</h3>
+  <p>Switch <b>option</b> and <b>state</b> below. Tap the busy surface to open the task list; tap <b>Run</b> in the
+  stale state. The caption under the frame calls out what each option leaves unsolved.</p>
+
+  <div class="protobar" id="pgbar">
+    <div class="ctl"><label>Option</label>
+      <div class="seg" id="segPgOpt"><button data-v="chip" class="on">A · Top-bar chip</button><button data-v="hair">B · Hairline</button><button data-v="both">A+B</button><button data-v="pill">C · Pill</button><button data-v="float">D · Float column</button><button data-v="menu">E · Hamburger</button></div></div>
+    <div class="ctl"><label>State</label>
+      <div class="seg" id="segPgState"><button data-v="idle">Idle</button><button data-v="pend">Update needed</button><button data-v="run0">Running · 0 listed</button><button data-v="run1">Running · 1</button><button data-v="run3" class="on">Running · 3</button></div></div>
+  </div>
+
+  <div class="stage"><div class="osframe" id="framePg"></div></div>
+  <p class="capt" id="pgCapt"></p>
+  <p class="optnote" id="pgNote"></p>
+
+  <table>
+    <tr><th style="width:120px">Option</th><th>What it is</th><th>Earns it</th><th>Costs</th><th style="width:74px">Call</th></tr>
+    <tr><td><b>A · Top-bar chip</b></td><td>A chip in <code>LinkBar</code> between the breadcrumb and
+      <code>SyncButton</code>: the M3 ring + count while busy, amber <b>! Update</b> when stale. Tap opens a bottom
+      task sheet; tapping the amber form runs the update. <span class="hist">Drawn here as a plain spinner + count
+      when the options were first laid out; the decision box above settled on the ring.</span></td>
+      <td>Window chrome — present on every page and, if we want, every size. Lands next to <code>SyncButton</code>,
+      which is already the top bar's progress indicator, so it reads as the same family. Carries the action state,
+      which nothing else on the phone can.</td>
+      <td>The phone bar is already hamburger + back + forward + breadcrumb + <code>…</code> + sync; the breadcrumb is
+      <code>Layout.fillWidth</code> and gives up ~50px for this. Count is a number, not progress.</td>
+      <td class="c"><span class="tag rec">✓ Chosen</span></td></tr>
+    <tr><td><b>B · Hairline</b></td><td>A 3px bar directly under <code>LinkBar</code>, full window width.
+      Indeterminate stripe when no job reports steps, filled proportionally when they do.</td>
+      <td>Costs zero horizontal room, reads pre-attentively, and is the only option that shows <em>how far along</em>
+      rather than <em>how many</em>. Identical at every size.</td>
+      <td>Cannot name a job, cannot hold a count, and 3px is not a tap target — it needs a partner to open the list.
+      <b>Has no way to express "Update needed"</b>, which is an action, not progress.</td>
+      <td class="c"><span class="tag maybe">Pair it</span></td></tr>
+    <tr><td><b>A+B</b></td><td>Both: chip for identity and the tap target, hairline for the ambient signal.</td>
+      <td>Each covers the other's hole — the chip answers <em>what and how many</em>, the bar answers <em>is it moving</em>.
+      Same two pieces the desktop footer already has (label + indicator), just unstacked.</td>
+      <td>Two surfaces for one state; if the count and the bar ever disagree it will show. Slightly more chrome on the
+      smallest screen we have.</td>
+      <td class="c"><span class="tag maybe">If A alone reads thin</span></td></tr>
+    <tr><td><b>C · Pill</b></td><td>A floating pill over the view, bottom-center: spinner + the leading job's
+      <em>name</em> + an overflow count. Tap opens the sheet.</td>
+      <td>The only option that answers <b>why is it busy</b> without a tap — on a phone, "Loading entrance.laz" beats
+      "3". Big, comfortable touch target.</td>
+      <td>Covers the scene, and it has to live in <code>MainContent</code> to appear on the Data and Source pages
+      where saves actually happen. Needs enter/exit animation and an auto-hide rule to not be in the way.
+      <b>The phone's bottom-center is already taken</b> — the compass and scale bar sit there, so the pill has to
+      float above them (the frame shows it clearing both).</td>
+      <td class="c"><span class="tag maybe">Strong second</span></td></tr>
+    <tr><td><b>D · Float column</b></td><td>A busy button added to <code>RenderingView</code>'s existing top-right
+      floating column, under the CP7 Tools button.</td>
+      <td>Zero new chrome; reuses exactly the pattern CP7 is already adding.</td>
+      <td><b>View page only.</b> The jobs that most need reporting — saving, syncing, importing, cloning — happen on
+      Data and Source, where that column does not exist. It fails the gap it is meant to close.</td>
+      <td class="c"><span class="tag no">Reject</span></td></tr>
+    <tr><td><b>E · Hamburger</b></td><td>A dot on the hamburger; the task list and a <b>Run</b> item live inside the
+      menu that already holds Automatic Update.</td>
+      <td>Truly zero new chrome, and it puts all three footer states in one place — the menu is already the phone's
+      footer, in effect.</td>
+      <td>Progress you cannot see without opening a menu is barely progress; a <code>QC.Menu</code> closes on any tap,
+      so watching a job means holding it open. A dot says "something", never "what".</td>
+      <td class="c"><span class="tag no">Reject alone</span></td></tr>
+  </table>
+
+  <h3 id="midhead">Medium (50px sidebar) — what replaces the hidden label</h3>
+  <p>Second, smaller gap: §2 promised Mid would collapse the running state to <b>spinner + badge</b>. What shipped is
+  spinner + chevron with <code>updateRunningLabel</code> hidden (<code>visible: !footerId.compact</code>), so the count
+  is reachable only by hovering the row open. All four candidates below, driven by the same count — <b>including 0</b>,
+  which is a real state (a cascade between pipelines is running with no future registered yet) — plus
+  <b>3 · no steps</b>, the state that decides whether a ring can be honest. The fifth column is the chosen ring at
+  <b>Wide</b>, where it replaces the plain <code>QC.BusyIndicator</code>.</p>
+  <p><b>M3 needs an aggregate the app did not compute</b> <span class="hist">— it does now; step 2 of the build
+  order below shipped it 2026-07-28.</span> Each row carries <code>progressRole</code> and
+  <code>numberOfStepsRole</code> (<code>cwFutureManagerModel::defaultRoles()</code>); the ring wants one number over
+  all of them — <b>the mean of the per-job fractions</b> across the rows that report steps, and <em>indeterminate</em>
+  when none do. <span class="hist">This was first written as <code>Σprogress / Σsteps</code>, which is wrong: steps
+  are not a shared unit. A point cloud's steps are points and a scrap's are outlines, so summing them lets whichever
+  job chose the finer unit own the number — a 2M-point LAZ load would make a concurrent 12-outline scrap job
+  invisible. Each measured job counts once instead.</span> That belongs beside the busy bit on <code>ActiveTasks</code>, computed in C++ over the combined model
+  (<code>cwTaskFutureCombineModel</code> already derives its notifying <code>count</code> from
+  <code>rowsInserted</code>/<code>rowsRemoved</code>/<code>modelReset</code>; an aggregate additionally needs
+  <code>dataChanged</code>, since progress moves without the row count changing). Note the coordinator's
+  <code>running</code> is not a row at all, so the count-0 case has no aggregate by construction — which is exactly
+  when the ring spins.</p>
+
+  <div class="protobar">
+    <div class="ctl"><label>Task count</label>
+      <div class="seg" id="segMidCount"><button data-v="0">0</button><button data-v="1">1</button><button data-v="3" class="on">3</button><button data-v="12">12</button><button data-v="3ns">3 · no steps</button></div></div>
+  </div>
+  <div class="stage"><div class="midrow" id="frameMid"></div></div>
+  <p class="capt">All four at the same count, so the difference is the only variable. The count-0 column is the one
+  worth staring at: it is the state the shipped chevron already hides for.</p>
+
+  <h3>The question under both — now answered</h3>
+  <p>Where does <b>"is anything happening"</b> belong? Two answers were on the table:</p>
+  <ul>
+    <li><b>Window chrome.</b> The chip lives in <code>LinkBar</code> at <em>every</em> size and the sidebar footer drops
+    the busy state to become what its name says — the update control. One surface, no layout condition. Cost: it partly
+    undoes C2/C3, and the flyout would rehome to the top bar.</li>
+    <li><b>Layout-conditional.</b> <b>← this is what the decisions above choose.</b> The footer keeps busy at
+    Medium/Wide, now with the ring; the chip appears only at Narrow. Nothing already shipped moves, and each size gets
+    the surface that fits it — a 50px rail cannot hold a chip, and a phone has no rail.</li>
+  </ul>
+  <p><b>So the prerequisite is now mandatory, not advisable. ✅ DONE 2026-07-28 (build-order steps 1–2).</b> Two
+  surfaces render one state, which is precisely the copy the C3 review warned about: <span class="hist">
+  <code>running || taskCount &gt; 0</code> lived as an expression inside <code>SideBarUpdateFooter.qml</code>,</span>
+  and the chip would be its second writer. It got one home first — <code>readonly property bool busy</code> on
+  <code>ActiveTasks</code>, which already owns half the inputs — joined by <code>progress</code> and
+  <code>progressKnown</code> for the ring, since <em>those</em> would otherwise be copied twice over as well.
+  <b>But re-examine what <code>busy</code> unions, now that three surfaces render it.</b> It ORs
+  <code>updateCoordinator.running</code> — derived-data recompute, user-triggerable, the thing "Update needed" refers
+  to — with any tracked job at all: file I/O, imports, BVH rebuilds, none of them triggerable and none related to
+  staleness. CP6 accepted that cost <em>for one surface</em> ("a long save masks the Run button"). The chip's other
+  state is "Update needed", so on the phone the same conflation reads as <b>saving the file suppresses the stale
+  indicator</b>. The structural fix is a job <em>category</em> on <code>cwFuture</code> (derived-data / persistence /
+  import) exposed as a role, letting each surface choose what it reports while <code>busy</code> stays the union;
+  blast radius is a defaultable argument at ~25 <code>addJob</code> call sites plus one new role. Explicitly
+  <b>not</b> to be unified with <code>cwRootData::shutdown()</code>'s <code>isIdle() &amp;&amp; isEmpty()</code>: that
+  one is a termination condition deciding whether the app may exit, and folding <code>updateCoordinator.running</code>
+  into it would let a wedged state bit refuse to quit.</p>
+  <p><b>One consequence to accept with the chip:</b> the phone sheet is the <b>third</b> card in this chrome, after
+  <code>ToolPropertyFlyout</code> and <code>TaskFlyout</code> — which is the trigger the follow-up list already names
+  for extracting a shared <code>FlyoutCard.qml</code>. Do that extraction as part of building the sheet, not after.</p>
 
   <h2 id="contract">4 · Per-page tool contract</h2>
   <p>The sidebar doesn't hardcode 3D tools — the <b>page</b> hands it a model; the sidebar (and the phone tray)
@@ -328,17 +556,96 @@ Repeater {
     <li><b>CP3 — Rail in <code>MainSideBar.qml</code> ✅ DONE.</b> New <code>SideBarToolRail.qml</code> (grouped <code>Repeater</code> of <code>ToolRailButton</code>, caption per group) sits between the nav and <code>TaskListView</code>; reads the active page's tools + interactionManager via <code>RootData.pageView.currentPageItem</code> (guarded ternaries, empty rail for Data/Map). <b>In Medium (compact) the rail is shown, not hidden</b> — the per-group grid flips from 2 columns to 1 (<code>columns: compact ? 1 : 2</code>), captions still shown; the sidebar itself is already absent at Narrow, so there's nothing to hide. <code>InteractionManager.toggle()</code> added. <code>ToolItem</code> gained <code>groupId</code> (stable group key) + <code>buttonObjectName</code> (kept off the holder's own objectName to avoid a duplicate in the tree). The per-page tool contract is now the typed <code>ToolProviderPage.qml</code> base (typed <code>tools</code> + <code>interactionManager</code>); <code>RenderingView</code> inherits it. Bottom-left <code>bottomToolbarId</code> deleted from <code>GLTerrainRenderer</code>; the two readout popups now key off <code>interactionManager.activeInteraction</code>. Tests repointed to the sidebar (<code>findChild</code>/<code>findByName</code> on <code>mainWindow</code>): Coordinate 4/4, Measurement 8/8, ManualScreenshots clip+measure PASS. <b>Follow-up:</b> the manual .md text still says "bottom toolbar" — update text + regenerate <code>measurement-tool.png</code>/<code>point-clouds-clip-tool.png</code> on the manual branch.</li>
     <li><b>CP4 — <code>ToolPropertyFlyout.qml</code></b> hinged to the sidebar; migrate the Clip Crop/Erase actions into it (Cancel is dropped — the flyout's own × and Esc exit). <b>Bind the flyout's active-tool state off <code>InteractionManager.activeInteraction</code></b> (the same channel the rail and both readout popups already use) rather than inventing a parallel channel — <code>activeInteraction</code> + <code>toggle()</code>/<code>activate()</code>/<code>deactivate()</code> is now the de-facto tool-state API. <b>Note:</b> the Measure readout does <em>not</em> migrate — per the design section above, live per-tool readouts (the measurement distance) stay small scene overlays and only <em>editable options</em> live in the drawer; Measure has no editable options, so it keeps its scene-overlay readout and CP4 is complete once Clip's actions are moved.</li>
     <li><b>CP5 — Update coordinator ✅ DONE.</b> New <code>cwUpdatable</code> contract (<code>needsUpdate()</code> / <code>update()</code> / <code>setCoordinated()</code>) + <code>cwUpdateCoordinator</code> (<code>QML_NAMED_ELEMENT(UpdateCoordinator)</code>) that owns the <code>automaticUpdate</code> policy surface QML binds and the aggregate <code>needsUpdate</code> + <code>updateNow()</code>. <b>Persistence stayed in <code>cwJobSettings</code></b> (Option A, user-chosen): the coordinator is a facade — <code>automaticUpdate()</code>/<code>setAutomaticUpdate()</code> read/write the existing <code>cwJobSettings</code> QSettings key, and it listens to <code>cwJobSettings::automaticUpdateChanged</code> to re-emit + flush. This kept the ~13 jobSettings-based tests and the current QML checkbox bindings untouched (the footer repoint to <code>RootData.updateCoordinator</code> is CP6's job). <code>cwLinePlotManager</code> + <code>cwScrapManager</code> implement <code>cwUpdatable</code>, dropped their <code>automaticUpdate</code> mirror/gate, and are <b>eager-until-coordinated</b>: a bare manager still recomputes on edit (keeps ~18 standalone manager tests green), but once <code>cwRootData</code> registers it with the coordinator (<code>add()</code> → <code>setCoordinated(true)</code>, replacing the old fan-out lambda) the coordinator owns the run decision. <code>rerunSurvex()</code> (Solve) and <code>updateAllScraps()</code> (Compute Scraps) now call <code>update()</code> unconditionally — <b>the no-op-while-auto-off bug is fixed</b>. Scope: line plot + scraps; <b>LiDAR was folded in during the CP5 /cavewhere-review</b> (its old <code>m_automaticUpdate</code> island was wired to nothing, so it ignored the global setting — now coordinated, and <code>updateAllLiDAR()</code> forces like Compute-Scraps). Also from that review: the eager-until-coordinated boilerplate now lives in a shared <code>cwUpdatableBase</code> (holds <code>m_coordinated</code> + <code>runIfStandalone()</code>), and <code>cwUpdateCoordinator::add()</code> drops a registered pipeline from <code>m_updatables</code> on its <code>destroyed()</code> so a manager outliving the coordinator can't dangle. <b>Sketch</b> still adopts <code>cwUpdatable</code> later with zero coordinator changes. Tests green: full C++ suites [LinePlotManager]/[cwLinePlotManager]/[Attach]/[cwScrapManager]/[cwScrap]/[cwRootData]/[cwSaveLoad]/[cwProject]/[Compass]/[FixStation] + tst_JobSettingsItem 7/7. <b>Note (needs update transient) — resolved by R1 (2026-07-22):</b> originally scraps held <code>DirtyScraps</code> to <code>taskFinished</code> and so reported dirty (not running) mid-solve. R1 gave scraps and LiDAR a real in-flight bit (<code>m_taskRunning</code>), so each now reports <code>Working</code> while its task runs and <code>Dirty</code> only for an uncovered edit — the CP6 footer reads <code>Working</code> directly instead of having to combine dirty-with-running.</li>
-    <li><b>CP6 — Merged footer + task flyout.</b> Replace the Auto-update box &amp; separate <code>TaskListView</code> with the three-state footer, driven by <code>updateCoordinator.needsUpdate</code> + the task model; the running state opens a task flyout (a card in the same chrome as <code>ToolPropertyFlyout</code> — <b>duplicated, not reused</b>; extracting a shared <code>FlyoutCard.qml</code> is an open follow-up). <b>From the CP5 review — the footer "Run" (<code>updateNow()</code>) was one-shot:</b> with auto off, a single Run solves the line plot async, whose completion then dirties scraps <em>after</em> <code>updateNow()</code> already iterated, so <code>needsUpdate</code> flipped back and the user had to press Run twice. <b>F1 — DECIDED &amp; IMPLEMENTED (one press resolves the whole cascade), then SUPERSEDED 2026-07-25 by the Stage-2 task tree.</b> <span class="hist">Historical: F1 shipped as a forced-cascade latch — <code>updateNow()</code> set <code>m_forcing</code>, <code>onChildStateChanged</code> drove a dirty pipeline regardless of the auto flag while it was held, and <code>clearForcingIfSettled()</code> dropped it once <code>!needsUpdate() &amp;&amp; !anyWorking()</code>. <code>m_forcing</code>, <code>anyWorking()</code> and <code>clearForcingIfSettled()</code> no longer exist.</span> <b>Now:</b> "one press resolves the chain" is a graph property, not a settle-latch effect — <code>updateNow()</code> starts a recipe whose layers are ordered by declared dependency edges, so the line plot's completion is what releases the scrap/LiDAR layer. <b>The invariant that carried over unchanged</b> (and is what made Stage 2 possible): every async pipeline reports <code>Working</code> from <code>updateState()</code> while its task runs and <code>Dirty</code> for an uncovered edit, with <code>finishSolving()</code> (line plot) and the scrap/LiDAR completion callbacks emitting <code>updateStateChanged</code> on the real <code>Working→Clean/Dirty</code> transition — that transition is now each node's done signal. <b>(Names updated by Stage 1 / A1, 2026-07-22: the original F1 used <code>onChildDirty</code>/<code>anyUpdating()</code>/<code>isUpdating()</code>; those are gone.)</b> Regression test: "A single Run resolves the line-plot to scraps cascade with automatic update off" in <code>test_cwScrapManager.cpp</code> (negative-checked against the pre-fix code; asserts the specific scrap appears in a <code>stationPositionInScrapsChanged</code> payload). <b>Remaining CP6 work, split into three commits: C1 running aggregate ✅ DONE, C2 three-state footer, C3 task flyout.</b> <b>C1 (2026-07-27):</b> <code>needsUpdate</code> alone cannot drive the footer — it is "any pipeline <em>Dirty</em>", so it goes false the instant work starts and can't tell pending from running. Added <code>Q_PROPERTY(bool running)</code> = <code>cascadeRunning() || any pipeline Working</code>. Both halves are load-bearing and mutation-checked (dropping either kills a case): reading the pipelines alone misses one re-edited mid-run, which reports <em>Dirty</em> while its task is still churning; following the pass alone misses the automatic path, which drives a pipeline straight from <code>onChildStateChanged</code> with no pass involved. <code>refreshNeedsUpdate()</code> became <code>refreshAggregates()</code> (recomputes both, emits whichever moved); no extra refresh was needed in <code>startCascade()</code>, since a pass really in flight always has a pipeline that announced its own Dirty→Working transition. <b>The footer reads <code>running</code> first</b>, since a pipeline re-edited mid-run is both stale and busy. Tests: 3 new cases in <code>test_cwUpdateCoordinator.cpp</code>; 1349 assertions green across coordinator / cascade / updatable / line plot / LiDAR / rootData / jobSettings, plus [cwScrapManager] 230. <b>C2 ✅ DONE (2026-07-27):</b> new <code>SideBarUpdateFooter.qml</code> — one control that swaps a <code>Loader</code> between three components: the automatic-update toggle (idle), a warning-toned "Update needed · Run" card (stale), and a busy row (running). <code>MainSideBar</code>'s Auto-update box and its <code>TaskListView</code> are gone, and <code>LinkBar</code>'s Automatic Update menu item now reads/writes <code>RootData.updateCoordinator.automaticUpdate</code>; <code>TaskListView.qml</code> stays, since <code>ShutdownScreen.qml</code> still uses it. <b>The coordinator's state is injected, not read.</b> The footer takes <code>running</code> / <code>needsUpdate</code> / <code>automaticUpdate</code> as properties and emits <code>runRequested</code> / <code>automaticUpdateToggled</code>, wired to <code>RootData.updateCoordinator</code> by <code>MainSideBar</code> (the <code>SyncButton</code> pattern) — which is what lets the footer be driven directly by a test, and is how CP7's phone status chip will reuse it. <b>Busy is checked before stale, and busy is <em>not</em> just the coordinator</b> — see the addJob audit below. <b>C2 design note (from the C1 /simplify altitude pass) — its premise was WRONG, corrected here:</b> that note said the count in "Running <b>n</b> Tasks" would read 0 because <code>cwTaskManagerModel</code> only admits tasks running longer than 2 seconds (<code>cwTaskManagerModel.h:28</code>). <b><code>cwTaskManagerModel::addTask()</code> has zero production callers</b> — only <code>test_cwTaskManagerModel.cpp</code> calls it, so that model is always empty in the running app and its threshold never applies to anything. The whole combined count comes from <code>cwFutureManagerModel</code>, which admits every job immediately. The conclusion still holds for different reasons: <code>addJob</code> early-returns on an already-finished future, and a cascade is briefly running between pipelines with no future yet — so <code>taskCount</code> defaults to a footer-local <code>TaskFutureCombineModel.count</code> and the label degrades to "Running…" at zero. Per-task detail belongs in the flyout, not the label. New Theme tokens: <code>warningSurface</code>/<code>warningBorder</code>/<code>warningText</code> (a warning-toned card, not a fill) and <code>updateFooterPadding</code>/<code>Spacing</code> (there is no <code>updateFooterBusySize</code> — the indicator uses <code>Theme.iconSizeSmall</code>). <b>Gotcha:</b> <code>ObjectFinder.toChain()</code> walks <em>every</em> named ancestor, so an <code>objectName</code> on the footer's <code>Loader</code> or on the pending card silently lengthens the chain and breaks every lookup below it — both were dropped. Tests: new <code>tst_SideBarUpdateFooter.qml</code> (8 cases: each state's controls, Run emits once, running beats needsUpdate, the count's three label forms, compact hides the captions), <code>tst_ResponsiveLayout</code>'s two auto-update cases repointed through the footer (18 green), <code>tst_ManualScreenshots::test_automaticUpdate</code> retargeted at <code>updateFooter</code> and its image regenerated. <b><code>cwFutureManagerToken::addJob</code> audit (2026-07-27) — the footer must not follow the coordinator alone.</b> The coordinator knows about exactly three pipelines, all registered through <code>cwTrackRestarter</code>: <code>"Line plot"</code> (<code>cwLinePlotManager.cpp:130</code>), <code>"Updating Scaps"</code> [sic] (<code>cwScrapManager.cpp:83</code>), <code>"Triangulating LiDAR notes"</code> (<code>cwNoteLiDARManager.cpp:140</code>). <b>Every other job in the app reaches the future manager and nothing else</b>, and the sidebar's <code>TaskListView</code> — which C2 deleted — used to be the only place they showed: <code>"Accelerating picking"</code> (<code>cwGeometryItersecter.cpp:498</code>), <code>"Loading %1.laz"</code> (<code>cwLazLayer.cpp:44</code>), <code>"Loading glTF"</code> (<code>cwRenderGLTF.cpp:28</code>), <code>"Compass import"</code> (<code>cwSurveyImportManager.cpp:226</code>), the lead CSV export (<code>cwLeadCSVExporter.cpp:207</code>), <code>"Cropping/Erasing N LAZ layer(s)"</code> (<code>cwLazClipInteraction.cpp:244</code>), and the whole persistence set — <code>"Saving"</code>&times;4 / <code>"Syncing"</code>&times;3 / <code>"Loading"</code>&times;2 / <code>"Extracting bundled project"</code> / <code>"Converting"</code>&times;2 / <code>"Initial commit"</code> in <code>cwProject.cpp</code>, and <code>"Loading"</code> / <code>"Adding images"</code> / <code>"Bundling project"</code> / <code>"Adding files"</code> / <code>"Discarding changes"</code> / the checkout label / <code>"Finishing saves"</code> in <code>cwSaveLoad.cpp</code>. (The two empty-name <code>addJob</code>s at <code>cwSaveLoad.cpp:3202,3207</code> are on a <em>local</em> model inside <code>waitForFinished()</code> and never reach the UI — not a defect.) <b>Resolution (user-picked precedence, implemented):</b> the footer's busy test is <code>running || taskCount &gt; 0</code>, checked <em>before</em> <code>needsUpdate</code> — so a LAZ load or a save shows as busy, and the state and the count in the label finally describe the same set of work. Accepted cost: a long save masks the <b>Run</b> button until it finishes; the alternative (generic work ranked below "Update needed") was considered and rejected as an extra branch for a rare overlap. New test: "A job outside the coordinator still reads as busy" (<code>tst_SideBarUpdateFooter.qml</code> now 9/9). <b>C3 ✅ DONE (2026-07-27):</b> the task flyout — it lists the whole combined model, not just the coordinated three. New <code>TaskFlyout.qml</code>: a card in the same chrome as <code>ToolPropertyFlyout</code> (<code>surfaceRaised</code> + border + header row with an ×), holding a <code>TaskListView</code> whose height follows <code>contentHeight</code> up to <code>Theme.taskFlyoutMaxListHeight</code> and then scrolls. The footer's busy row became the way in: a <code>TapHandler</code> + <code>HoverHandler</code> (pointing cursor, “Show running tasks” tooltip) emitting <code>tasksRequested()</code>. <b>The shared-model problem C2 left open is resolved:</b> a third consumer made the duplicated <code>TaskFutureCombineModel { models: [taskManagerModel, futureManagerModel] }</code> wiring untenable, so it moved into a new <code>ActiveTasks.qml</code> singleton (registered in <code>qml_singletons</code>, mirroring <code>ActiveTools</code>) exposing <code>model</code> + <code>count</code>. <code>TaskListView</code> now defaults to <code>ActiveTasks.model</code> (still overridable — <code>tst_TaskListView</code> injects a <code>ListModel</code>), and the footer's <code>taskCount</code> defaults to <code>ActiveTasks.count</code>. One proxy, three consumers, no drift. <b>Ownership:</b> the flyout lives in <code>MainContent</code> as a sibling after <code>container</code>, NOT inside the sidebar — same reason as the tool flyout, a child of <code>MainSideBar</code> cannot composite above the page view (z can't lift it past a sibling Item). So the click walks up: footer <code>tasksRequested()</code> → <code>MainSideBar.tasksRequested()</code> → <code>taskFlyout.togglePin()</code>. <span class="hist">Historical: the host first owned the pinned state (<code>MainContent._taskFlyoutOpen</code>, later <code>_taskFlyoutPinned</code>) and the flyout reported <code>closeRequested()</code> rather than hiding itself; <b>the CP6 C3 review found that design broken and removed it</b> — see the review paragraph below. There is no host pin property now.</span> It falls away on its own when the last job finishes (<code>shown = openLatched &amp;&amp; taskCount &gt; 0</code>) and drops the pin with it. Its <code>model</code> is typed <code>QtObject</code>, not <code>TaskFutureCombineModel</code>, so a test can stand in a <code>ListModel</code>. New Theme tokens: <code>taskFlyoutWidth</code> (280 — wider than the tool flyout, job names carry file names) + <code>taskFlyoutMaxListHeight</code> (220). Tests: new <code>tst_TaskFlyout.qml</code> 8/8 (closed-with-tasks stays hidden, open lists them, falls away on the last task, title pluralization, close reports without self-closing, host can hide it), <code>tst_SideBarUpdateFooter</code> 10/10 (+ the busy-row tap). Full QML suite 763 passed / 3 failed / 83 skipped — the 3 are the pre-existing <code>ViewPageResponsive</code> drawer failures, unchanged from the C2 baseline. Visually verified with a throwaway grab (header count, ×, indeterminate vs determinate rows), then deleted. <b>Then reworked on user feedback (same day):</b> the flyout opens on <i>hover</i> and a click <i>pins</i> it. <code>TaskFlyout</code> gained <code>pinned</code> + <code>previewHovered</code> (replacing <code>open</code>), an internal <code>HoverHandler</code> on the card, and <code>wantsOpen = pinned || previewHovered || panelHovered</code> feeding an <code>openLatched</code> bool through a <code>Theme.taskFlyoutHoverCloseDelay</code> (300 ms) Timer. <b>Both the card's own hover and the delay are load-bearing:</b> there is a <code>toolFlyoutGap</code> of dead space between the sidebar and the card, so without them the flyout vanishes while the pointer is crossing to it. The footer publishes <code>busyRowHovered</code> (written by the running row's HoverHandler — it cannot be aliased, it lives inside a Loader component) and <b>clears it in <code>onBusyChanged</code>, because the row is destroyed when work finishes and so never reports a hover-out</b>. Host: <code>MainContent._taskFlyoutPinned</code> toggles on tap; <code>previewHovered</code> binds through <code>MainSideBar.busyRowHovered</code>. The row also grew a <b>chevron-right expand affordance</b> (<code>Theme.updateFooterChevronSize</code> 12, matching <code>FloatingGroupBox</code>'s collapse cue) that colorizes to <code>Theme.accent</code> while the flyout is shown, via a new <code>tasksShown</code> input threaded host → sidebar → footer; the busy row's tooltip was dropped, since hovering now opens the flyout itself. <b>GOTCHA for future screenshot work:</b> <code>Icon</code>'s <code>MultiEffect</code> colorization layer does NOT composite in an offscreen <code>grabToFile</code> — a colorized icon comes out blank while <code>colorizeEnabled: false</code> renders fine. Verified it is a capture artifact (the icon reports w=12 h=12 status=Ready visible=true), not a layout bug. Tests: <code>tst_TaskFlyout</code> 11/11 (+ hover peeks open, unhover closes after the delay, pinned survives the hover ending), <code>tst_SideBarUpdateFooter</code> 12/12 (+ the chevron's resting/lit color, + leaving busy clears the hover output). Full QML suite 768 passed / 3 failed / 83 skipped, same 3 pre-existing failures. <b>Then reviewed (<code>/cavewhere-review</code>, 2026-07-27) — 9 🔴, all fixed. The hover/pin rework had shipped a broken close.</b> Four independent lenses converged on one root cause: <b>both dismiss paths mutated <code>pinned</code>, the one term in <code>wantsOpen</code> that is not holding the card open at the moment the user acts.</b> Pressing × requires the pointer to be on the card, so <code>panelHoverId.hovered</code> kept <code>wantsOpen</code> true and the card did not move — it left 300&nbsp;ms after the pointer wandered off, exactly as if × had never been pressed; a second click on the busy row was invisible for the same reason. <b>Fix:</b> the pin moved <em>into</em> <code>TaskFlyout</code> (<code>togglePin()</code> / <code>dismiss()</code>), and a new <code>dismissed</code> latch suppresses the hover terms until the pointer has actually left everything (<code>openInputs</code>), so an explicit close closes now and stays closed while the pointer sits still. <code>MainContent._taskFlyoutPinned</code> and <code>closeRequested</code> are <b>gone</b>. Three more of the same family: a click during the documented <code>running &amp;&amp; taskCount === 0</code> window banked a pin that later fired on an unrelated job (<code>togglePin()</code> now no-ops with nothing to list, and the chevron hides at count 0 rather than promising a flyout that cannot appear); the pin outlived its work, putting the card over the 3D view minutes later (dropped at count 0); and dropping it left <code>openLatched</code> armed for the full delay, so a job inside that window still popped the card (<b>found by the new test, not by an agent</b>). <b>Two of the review's 🔴 were test defects, both mutation-verified:</b> deleting the footer's <code>onHoveredChanged</code> left the whole suite green while hover-to-peek was dead, and nothing ever hovered the card itself, so <code>|| panelHoverId.hovered</code> and <code>closeDelayId.stop()</code> were both deletable — the old <code>test_closeButtonReportsTheRequest</code> asserted the <em>signal</em> and never <code>shown</code>, which is why the bug shipped. Also: <code>TaskFlyout</code> is now <code>Loader</code>-gated on <code>ActiveTasks.count &gt; 0</code> (a hidden instance still carried a delegate per running job — same reason <code>ShutdownScreen</code>'s copy is gated), dead <code>id: runningColumnId</code> removed, root bindings reordered to the house layout, and <code>TaskListView</code>'s stale <code>BottomToTop</code> default dropped (left over from the sidebar list C2 deleted; both surviving consumers are top-to-bottom). Tests: <code>tst_TaskFlyout</code> 14/14, <code>tst_SideBarUpdateFooter</code> 14/14; full QML suite <b>775 passed / 3 failed / 83 skipped</b>, same 3 pre-existing <code>ViewPageResponsive</code> failures. <b>Declined:</b> the task card and the tool card share a left edge with no mutual awareness and can overlap at 1024×576 with the clip tool armed and 3 jobs running — judged not worth the guard for how rarely both are up.</li>
+    <li><b>CP6 — Merged footer + task flyout.</b> Replace the Auto-update box &amp; separate <code>TaskListView</code> with the three-state footer, driven by <code>updateCoordinator.needsUpdate</code> + the task model; the running state opens a task flyout (a card in the same chrome as <code>ToolPropertyFlyout</code> — <b>duplicated, not reused</b>; extracting a shared <code>FlyoutCard.qml</code> is an open follow-up). <b>From the CP5 review — the footer "Run" (<code>updateNow()</code>) was one-shot:</b> with auto off, a single Run solves the line plot async, whose completion then dirties scraps <em>after</em> <code>updateNow()</code> already iterated, so <code>needsUpdate</code> flipped back and the user had to press Run twice. <b>F1 — DECIDED &amp; IMPLEMENTED (one press resolves the whole cascade), then SUPERSEDED 2026-07-25 by the Stage-2 task tree.</b> <span class="hist">Historical: F1 shipped as a forced-cascade latch — <code>updateNow()</code> set <code>m_forcing</code>, <code>onChildStateChanged</code> drove a dirty pipeline regardless of the auto flag while it was held, and <code>clearForcingIfSettled()</code> dropped it once <code>!needsUpdate() &amp;&amp; !anyWorking()</code>. <code>m_forcing</code>, <code>anyWorking()</code> and <code>clearForcingIfSettled()</code> no longer exist.</span> <b>Now:</b> "one press resolves the chain" is a graph property, not a settle-latch effect — <code>updateNow()</code> starts a recipe whose layers are ordered by declared dependency edges, so the line plot's completion is what releases the scrap/LiDAR layer. <b>The invariant that carried over unchanged</b> (and is what made Stage 2 possible): every async pipeline reports <code>Working</code> from <code>updateState()</code> while its task runs and <code>Dirty</code> for an uncovered edit, with <code>finishSolving()</code> (line plot) and the scrap/LiDAR completion callbacks emitting <code>updateStateChanged</code> on the real <code>Working→Clean/Dirty</code> transition — that transition is now each node's done signal. <b>(Names updated by Stage 1 / A1, 2026-07-22: the original F1 used <code>onChildDirty</code>/<code>anyUpdating()</code>/<code>isUpdating()</code>; those are gone.)</b> Regression test: "A single Run resolves the line-plot to scraps cascade with automatic update off" in <code>test_cwScrapManager.cpp</code> (negative-checked against the pre-fix code; asserts the specific scrap appears in a <code>stationPositionInScrapsChanged</code> payload). <b>Remaining CP6 work, split into three commits: C1 running aggregate ✅ DONE, C2 three-state footer, C3 task flyout.</b> <b>C1 (2026-07-27):</b> <code>needsUpdate</code> alone cannot drive the footer — it is "any pipeline <em>Dirty</em>", so it goes false the instant work starts and can't tell pending from running. Added <code>Q_PROPERTY(bool running)</code> = <code>cascadeRunning() || any pipeline Working</code>. Both halves are load-bearing and mutation-checked (dropping either kills a case): reading the pipelines alone misses one re-edited mid-run, which reports <em>Dirty</em> while its task is still churning; following the pass alone misses the automatic path, which drives a pipeline straight from <code>onChildStateChanged</code> with no pass involved. <code>refreshNeedsUpdate()</code> became <code>refreshAggregates()</code> (recomputes both, emits whichever moved); no extra refresh was needed in <code>startCascade()</code>, since a pass really in flight always has a pipeline that announced its own Dirty→Working transition. <b>The footer reads <code>running</code> first</b>, since a pipeline re-edited mid-run is both stale and busy. Tests: 3 new cases in <code>test_cwUpdateCoordinator.cpp</code>; 1349 assertions green across coordinator / cascade / updatable / line plot / LiDAR / rootData / jobSettings, plus [cwScrapManager] 230. <b>C2 ✅ DONE (2026-07-27):</b> new <code>SideBarUpdateFooter.qml</code> — one control that swaps a <code>Loader</code> between three components: the automatic-update toggle (idle), a warning-toned "Update needed · Run" card (stale), and a busy row (running). <code>MainSideBar</code>'s Auto-update box and its <code>TaskListView</code> are gone, and <code>LinkBar</code>'s Automatic Update menu item now reads/writes <code>RootData.updateCoordinator.automaticUpdate</code>; <code>TaskListView.qml</code> stays, since <code>ShutdownScreen.qml</code> still uses it. <b>The coordinator's state is injected, not read.</b> The footer takes <code>running</code> / <code>needsUpdate</code> / <code>automaticUpdate</code> as properties and emits <code>runRequested</code> / <code>automaticUpdateToggled</code>, wired to <code>RootData.updateCoordinator</code> by <code>MainSideBar</code> (the <code>SyncButton</code> pattern) — which is what lets the footer be driven directly by a test, and is how CP7's phone status chip will reuse it. <b>(Superseded by CP7 step 1, 2026-07-28:</b> <code>running</code> no longer reaches the footer at all. It takes <code>busy</code>, defaulted to <code>ActiveTasks.busy</code> and still overridable, so it stays test-drivable; <code>MainSideBar</code>'s <code>running:</code> line is gone. <code>needsUpdate</code>/<code>automaticUpdate</code> are still injected, which is the mixed wiring style step 4 has to settle.<b>)</b> <b>Busy is checked before stale, and busy is <em>not</em> just the coordinator</b> — see the addJob audit below. <b>C2 design note (from the C1 /simplify altitude pass) — its premise was WRONG, corrected here:</b> that note said the count in "Running <b>n</b> Tasks" would read 0 because <code>cwTaskManagerModel</code> only admits tasks running longer than 2 seconds (<code>cwTaskManagerModel.h:28</code>). <b><code>cwTaskManagerModel::addTask()</code> has zero production callers</b> — only <code>test_cwTaskManagerModel.cpp</code> calls it, so that model is always empty in the running app and its threshold never applies to anything. The whole combined count comes from <code>cwFutureManagerModel</code>, which admits every job immediately. The conclusion still holds for different reasons: <code>addJob</code> early-returns on an already-finished future, and a cascade is briefly running between pipelines with no future yet — so <code>taskCount</code> defaults to a footer-local <code>TaskFutureCombineModel.count</code> and the label degrades to "Running…" at zero. Per-task detail belongs in the flyout, not the label. New Theme tokens: <code>warningSurface</code>/<code>warningBorder</code>/<code>warningText</code> (a warning-toned card, not a fill) and <code>updateFooterPadding</code>/<code>Spacing</code> (there is no <code>updateFooterBusySize</code> — the indicator uses <code>Theme.iconSizeSmall</code>). <b>Gotcha:</b> <code>ObjectFinder.toChain()</code> walks <em>every</em> named ancestor, so an <code>objectName</code> on the footer's <code>Loader</code> or on the pending card silently lengthens the chain and breaks every lookup below it — both were dropped. Tests: new <code>tst_SideBarUpdateFooter.qml</code> (8 cases: each state's controls, Run emits once, running beats needsUpdate, the count's three label forms, compact hides the captions), <code>tst_ResponsiveLayout</code>'s two auto-update cases repointed through the footer (18 green), <code>tst_ManualScreenshots::test_automaticUpdate</code> retargeted at <code>updateFooter</code> and its image regenerated. <b><code>cwFutureManagerToken::addJob</code> audit (2026-07-27) — the footer must not follow the coordinator alone.</b> The coordinator knows about exactly three pipelines, all registered through <code>cwTrackRestarter</code>: <code>"Line plot"</code> (<code>cwLinePlotManager.cpp:130</code>), <code>"Updating Scaps"</code> [sic] (<code>cwScrapManager.cpp:83</code>), <code>"Triangulating LiDAR notes"</code> (<code>cwNoteLiDARManager.cpp:140</code>). <b>Every other job in the app reaches the future manager and nothing else</b>, and the sidebar's <code>TaskListView</code> — which C2 deleted — used to be the only place they showed: <code>"Accelerating picking"</code> (<code>cwGeometryItersecter.cpp:498</code>), <code>"Loading %1.laz"</code> (<code>cwLazLayer.cpp:44</code>), <code>"Loading glTF"</code> (<code>cwRenderGLTF.cpp:28</code>), <code>"Compass import"</code> (<code>cwSurveyImportManager.cpp:226</code>), the lead CSV export (<code>cwLeadCSVExporter.cpp:207</code>), <code>"Cropping/Erasing N LAZ layer(s)"</code> (<code>cwLazClipInteraction.cpp:244</code>), and the whole persistence set — <code>"Saving"</code>&times;4 / <code>"Syncing"</code>&times;3 / <code>"Loading"</code>&times;2 / <code>"Extracting bundled project"</code> / <code>"Converting"</code>&times;2 / <code>"Initial commit"</code> in <code>cwProject.cpp</code>, and <code>"Loading"</code> / <code>"Adding images"</code> / <code>"Bundling project"</code> / <code>"Adding files"</code> / <code>"Discarding changes"</code> / the checkout label / <code>"Finishing saves"</code> in <code>cwSaveLoad.cpp</code>. (The two empty-name <code>addJob</code>s at <code>cwSaveLoad.cpp:3202,3207</code> are on a <em>local</em> model inside <code>waitForFinished()</code> and never reach the UI — not a defect.) <b>Resolution (user-picked precedence, implemented):</b> the footer's busy test is <code>running || taskCount &gt; 0</code>, checked <em>before</em> <code>needsUpdate</code> — so a LAZ load or a save shows as busy, and the state and the count in the label finally describe the same set of work. Accepted cost: a long save masks the <b>Run</b> button until it finishes; the alternative (generic work ranked below "Update needed") was considered and rejected as an extra branch for a rare overlap. New test: "A job outside the coordinator still reads as busy" (<code>tst_SideBarUpdateFooter.qml</code> now 9/9). <b>(Moved by CP7 step 1:</b> the predicate now lives on <code>ActiveTasks</code>, so the test moved with it into <code>tst_ActiveTasks.qml</code>, which drives fake jobs through <code>ActiveTasks.model.models</code>. The footer's own tests drive <code>busy</code> as an input.<b>)</b> <b>C3 ✅ DONE (2026-07-27):</b> the task flyout — it lists the whole combined model, not just the coordinated three. New <code>TaskFlyout.qml</code>: a card in the same chrome as <code>ToolPropertyFlyout</code> (<code>surfaceRaised</code> + border + header row with an ×), holding a <code>TaskListView</code> whose height follows <code>contentHeight</code> up to <code>Theme.taskFlyoutMaxListHeight</code> and then scrolls. The footer's busy row became the way in: a <code>TapHandler</code> + <code>HoverHandler</code> (pointing cursor, “Show running tasks” tooltip) emitting <code>tasksRequested()</code>. <b>The shared-model problem C2 left open is resolved:</b> a third consumer made the duplicated <code>TaskFutureCombineModel { models: [taskManagerModel, futureManagerModel] }</code> wiring untenable, so it moved into a new <code>ActiveTasks.qml</code> singleton (registered in <code>qml_singletons</code>, mirroring <code>ActiveTools</code>) exposing <code>model</code> + <code>count</code>. <code>TaskListView</code> now defaults to <code>ActiveTasks.model</code> (still overridable — <code>tst_TaskListView</code> injects a <code>ListModel</code>), and the footer's <code>taskCount</code> defaults to <code>ActiveTasks.count</code>. One proxy, three consumers, no drift. <b>Ownership:</b> the flyout lives in <code>MainContent</code> as a sibling after <code>container</code>, NOT inside the sidebar — same reason as the tool flyout, a child of <code>MainSideBar</code> cannot composite above the page view (z can't lift it past a sibling Item). So the click walks up: footer <code>tasksRequested()</code> → <code>MainSideBar.tasksRequested()</code> → <code>taskFlyout.togglePin()</code>. <span class="hist">Historical: the host first owned the pinned state (<code>MainContent._taskFlyoutOpen</code>, later <code>_taskFlyoutPinned</code>) and the flyout reported <code>closeRequested()</code> rather than hiding itself; <b>the CP6 C3 review found that design broken and removed it</b> — see the review paragraph below. There is no host pin property now.</span> It falls away on its own when the last job finishes (<code>shown = openLatched &amp;&amp; taskCount &gt; 0</code>) and drops the pin with it. Its <code>model</code> is typed <code>QtObject</code>, not <code>TaskFutureCombineModel</code>, so a test can stand in a <code>ListModel</code>. New Theme tokens: <code>taskFlyoutWidth</code> (280 — wider than the tool flyout, job names carry file names) + <code>taskFlyoutMaxListHeight</code> (220). Tests: new <code>tst_TaskFlyout.qml</code> 8/8 (closed-with-tasks stays hidden, open lists them, falls away on the last task, title pluralization, close reports without self-closing, host can hide it), <code>tst_SideBarUpdateFooter</code> 10/10 (+ the busy-row tap). Full QML suite 763 passed / 3 failed / 83 skipped — the 3 are the pre-existing <code>ViewPageResponsive</code> drawer failures, unchanged from the C2 baseline. Visually verified with a throwaway grab (header count, ×, indeterminate vs determinate rows), then deleted. <b>Then reworked on user feedback (same day):</b> the flyout opens on <i>hover</i> and a click <i>pins</i> it. <code>TaskFlyout</code> gained <code>pinned</code> + <code>previewHovered</code> (replacing <code>open</code>), an internal <code>HoverHandler</code> on the card, and <code>wantsOpen = pinned || previewHovered || panelHovered</code> feeding an <code>openLatched</code> bool through a <code>Theme.taskFlyoutHoverCloseDelay</code> (300 ms) Timer. <b>Both the card's own hover and the delay are load-bearing:</b> there is a <code>toolFlyoutGap</code> of dead space between the sidebar and the card, so without them the flyout vanishes while the pointer is crossing to it. The footer publishes <code>busyRowHovered</code> (written by the running row's HoverHandler — it cannot be aliased, it lives inside a Loader component) and <b>clears it in <code>onBusyChanged</code>, because the row is destroyed when work finishes and so never reports a hover-out</b>. Host: <code>MainContent._taskFlyoutPinned</code> toggles on tap; <code>previewHovered</code> binds through <code>MainSideBar.busyRowHovered</code>. The row also grew a <b>chevron-right expand affordance</b> (<code>Theme.updateFooterChevronSize</code> 12, matching <code>FloatingGroupBox</code>'s collapse cue) that colorizes to <code>Theme.accent</code> while the flyout is shown, via a new <code>tasksShown</code> input threaded host → sidebar → footer; the busy row's tooltip was dropped, since hovering now opens the flyout itself. <b>GOTCHA for future screenshot work:</b> <code>Icon</code>'s <code>MultiEffect</code> colorization layer does NOT composite in an offscreen <code>grabToFile</code> — a colorized icon comes out blank while <code>colorizeEnabled: false</code> renders fine. Verified it is a capture artifact (the icon reports w=12 h=12 status=Ready visible=true), not a layout bug. Tests: <code>tst_TaskFlyout</code> 11/11 (+ hover peeks open, unhover closes after the delay, pinned survives the hover ending), <code>tst_SideBarUpdateFooter</code> 12/12 (+ the chevron's resting/lit color, + leaving busy clears the hover output). Full QML suite 768 passed / 3 failed / 83 skipped, same 3 pre-existing failures. <b>Then reviewed (<code>/cavewhere-review</code>, 2026-07-27) — 9 🔴, all fixed. The hover/pin rework had shipped a broken close.</b> Four independent lenses converged on one root cause: <b>both dismiss paths mutated <code>pinned</code>, the one term in <code>wantsOpen</code> that is not holding the card open at the moment the user acts.</b> Pressing × requires the pointer to be on the card, so <code>panelHoverId.hovered</code> kept <code>wantsOpen</code> true and the card did not move — it left 300&nbsp;ms after the pointer wandered off, exactly as if × had never been pressed; a second click on the busy row was invisible for the same reason. <b>Fix:</b> the pin moved <em>into</em> <code>TaskFlyout</code> (<code>togglePin()</code> / <code>dismiss()</code>), and a new <code>dismissed</code> latch suppresses the hover terms until the pointer has actually left everything (<code>openInputs</code>), so an explicit close closes now and stays closed while the pointer sits still. <code>MainContent._taskFlyoutPinned</code> and <code>closeRequested</code> are <b>gone</b>. Three more of the same family: a click during the documented <code>running &amp;&amp; taskCount === 0</code> window banked a pin that later fired on an unrelated job (<code>togglePin()</code> now no-ops with nothing to list, and the chevron hides at count 0 rather than promising a flyout that cannot appear); the pin outlived its work, putting the card over the 3D view minutes later (dropped at count 0); and dropping it left <code>openLatched</code> armed for the full delay, so a job inside that window still popped the card (<b>found by the new test, not by an agent</b>). <b>Two of the review's 🔴 were test defects, both mutation-verified:</b> deleting the footer's <code>onHoveredChanged</code> left the whole suite green while hover-to-peek was dead, and nothing ever hovered the card itself, so <code>|| panelHoverId.hovered</code> and <code>closeDelayId.stop()</code> were both deletable — the old <code>test_closeButtonReportsTheRequest</code> asserted the <em>signal</em> and never <code>shown</code>, which is why the bug shipped. Also: <code>TaskFlyout</code> is now <code>Loader</code>-gated on <code>ActiveTasks.count &gt; 0</code> (a hidden instance still carried a delegate per running job — same reason <code>ShutdownScreen</code>'s copy is gated), dead <code>id: runningColumnId</code> removed, root bindings reordered to the house layout, and <code>TaskListView</code>'s stale <code>BottomToTop</code> default dropped (left over from the sidebar list C2 deleted; both surviving consumers are top-to-bottom). Tests: <code>tst_TaskFlyout</code> 14/14, <code>tst_SideBarUpdateFooter</code> 14/14; full QML suite <b>775 passed / 3 failed / 83 skipped</b>, same 3 pre-existing <code>ViewPageResponsive</code> failures. <b>Declined:</b> the task card and the tool card share a left edge with no mutual awareness and can overlap at 1024×576 with the clip tool armed and 3 jobs running — judged not worth the guard for how rarely both are up.</li>
     <li><b>CP7 — Compact / phone.</b> No sidebar: add a <b>Tools button</b> to <code>RenderingView</code>'s existing top-right <code>floatingButtonsId</code> column (beside Camera/Layers), opening the same right drawer with the grouped tool list + active tool's options; the button shows the armed tool's icon. Tasks become a top-bar status chip. (Nav already lives in the <code>LinkBar</code> hamburger.)
-      <p><b>⚠️ Task progress in compact — DESIGN FIRST, then implement.</b> C2/C3 left a real hole here, and it is live <em>now</em>, not a future feature. Two distinct sizes, two distinct gaps:</p>
+      <p><b>⚠️ Task progress in compact — DESIGNED 2026-07-28, not yet built.</b> Candidates were drawn and clicked
+      through in <a href="#progress">§3b</a>; <b>the decisions are recorded there</b> and summarized under
+      "Task progress — the build order" below. C2/C3 left a real hole here, and it is live <em>now</em>, not a future
+      feature. Two distinct sizes, two distinct gaps:</p>
       <ul>
         <li><b>Narrow (phone) — there is no progress surface at all.</b> <code>MainSideBar</code> is <code>visible: layoutSize &gt;= Medium</code> (<code>MainContent.qml:48</code>), so the footer does not exist; both flyouts gate on the same expression, and <code>TaskFlyout.hostVisible</code> is false. C2 deleted the sidebar <code>TaskListView</code> and C3 put every non-coordinator job behind the footer's busy row — saves, syncs, LAZ loads, imports, the whole <code>addJob</code> set audited in CP6. At Narrow the app now runs all of them with nothing on screen: the only <code>QC.BusyIndicator</code> in the shell is <code>SideBarUpdateFooter.qml</code>'s, and <code>LinkBar</code> has none. The prototype's <code>phoneStatusChip()</code> / <code>phoneTaskSheet()</code> (§3) is the sketched answer but was never built.</li>
         <li><b>Medium (compact sidebar) — the count is hover-only.</b> §2 says Mid collapses the running state to "spinner+badge"; what shipped is a spinner + chevron with <code>updateRunningLabel</code> hidden (<code>visible: !footerId.compact</code>), so "Running 3 Tasks" is unreadable at 50px and the number is reachable only by hovering the row to open the flyout. The badge was never designed, let alone built.</li>
       </ul>
       <p><b>Prerequisite (from the C3 review) — give "is anything happening" one home before the chip copies it.</b> The footer's <code>running || taskCount &gt; 0</code> (<code>SideBarUpdateFooter.qml</code>) is one expression today; the phone status chip is its second consumer <em>by construction</em>, so it wants a single definition first — most likely a <code>readonly property bool busy</code> on <code>ActiveTasks</code>, which already owns half the inputs. <b>Not</b> to be unified with <code>cwRootData::shutdown()</code>'s <code>isIdle() &amp;&amp; isEmpty()</code>: that one is a <em>termination condition</em> deciding whether the app may exit, and folding <code>updateCoordinator.running</code> into it would let a wedged state bit refuse to quit. (After the <code>cwTaskManagerModel</code> cleanup it collapses to <code>futureManagerModel()-&gt;isEmpty()</code> anyway.) A correction to an earlier note: this was recorded as blocked on <code>cwFutureManagerModel</code> lacking a count signal. It is not — <code>cwTaskFutureCombineModel.cpp:7-9</code> already derives a notifying <code>count</code> from <code>rowsInserted</code>/<code>rowsRemoved</code>/<code>modelReset</code>.</p>
-      <p>Design questions to settle <em>before</em> writing any of it: does "is anything happening" belong to window-level chrome (the <code>LinkBar</code>, visible at every size) with the sidebar footer as one presentation of it, rather than to layout-conditional sidebar chrome? Does the phone sheet reuse <code>TaskFlyout</code>'s card, or is that the third copy that finally justifies extracting <code>FlyoutCard.qml</code>? What does the Medium badge show when the count is legitimately 0 (a cascade between pipelines) — the state the chevron now hides for? Note the footer's own <code>running || taskCount &gt; 0</code> becomes a second consumer's expression at that point, so it wants one home (see the follow-up list).</p></li>
-    <li><b>CP8 — Polish + tests.</b> Light/dark, focus order, <code>QQ.Accessible</code>. QML tests: rail click flips <code>activeInteraction</code>; flyout tracks active tool; footer transitions on <code>updateCoordinator.needsUpdate</code>/<code>running</code> (there is no <code>derivedDataStale</code>); task flyout peeks open on hover, pins on click, and × closes it while the pointer is still on the card; per-page swap on page change. <b>Cleanup (from CP4 review) ✅ DONE.</b> The guarded <code>currentPageItem → {tools, interactionManager}</code> read was duplicated between the flyout (<code>MainContent.qml</code>) and the rail (<code>MainSideBar.qml</code>), each duck-typing an untyped <code>QQuickItem*</code> behind guards. Resolved with a new <code>ActiveTools.qml</code> singleton that narrows <code>RootData.pageView.currentPageItem</code> to the typed <code>ToolProviderPage</code> via an <code>as</code> cast (the narrowing has to live in QML — C++ <code>cwPageView</code> can't reference a QML-defined composite base) and exposes <code>tools</code> + <code>interactionManager</code>. Both read sites now read <code>ActiveTools.tools</code> / <code>ActiveTools.interactionManager</code>; CP6's task-flyout reads the same singleton. (<code>CaveLeadPage</code>'s <code>currentPageItem as RenderingView</code> is left as-is — it wants the concrete view, not the tool contract, and is already a typed cast.) <b>Follow-up from the R1+A1 review (latent C++ behavior the singleton now makes user-visible):</b> <code>cwPageView::clearPageCacheFor</code> (<code>cwPageView.cpp:52-54</code>) clears <code>CurrentPage</code> and emits <code>currentPageItemChanged</code> on <em>any</em> eviction (<code>evicted &amp;&amp; !CurrentPage.isNull()</code>), even when the evicted component isn't the on-screen page. If that fires while the View page is displayed, <code>ActiveTools.provider</code> drops to <code>null</code> and the rail/flyout blank until the next navigation. The singleton faithfully reflects C++, so this is a pre-existing <code>cwPageView</code> defect, not an R1 regression. Verify whether <code>clearPageCacheFor</code> is ever called with a component set that excludes the current page while it's shown; if so, guard the clear/emit to the current page only.</li>
-    <li><b>CLEANUP — remove <code>cwTaskManagerModel</code> (own commit, not part of any CP).</b> Surfaced by the <code>addJob</code> audit above: <code>cwTaskManagerModel::addTask()</code> has <b>zero production callers</b> — only <code>testcases/test_cwTaskManagerModel.cpp</code> calls it — so the model is permanently empty in the running app. It is the older <code>cwTask</code>-based progress path, superseded by <code>cwFutureManagerModel</code>, and every "is anything running" question it answers is already answered <code>false</code>. <b>Note the 11 <code>cwTask</code> subclasses stay</b> (<code>cwProjectIOTask</code>, <code>cwExporterTask</code>, <code>cwSurvexportTask</code>, …) — <code>cwTask</code> itself is alive; only the <em>model</em> that nothing feeds is dead. <b>Blast radius:</b> <em>production</em> — <code>cwRootData</code> owns it (member + <code>Q_PROPERTY taskManagerModel</code> + the <code>becameIdle</code> connect, the <code>isIdle()</code> term and <code>waitForTasks()</code> in <code>cwRootData::shutdown()</code> (around <code>cwRootData.cpp:499-526</code> — the exact lines drift, so search rather than trust them), all of which are constant-<code>true</code>/no-op today); dead references to delete alongside it are <code>cwProject.h:260</code>'s <code>QPointer&lt;cwTaskManagerModel&gt; TaskManager</code> (its setter has been commented out since <code>cwProject.cpp:1278</code>), <code>cwScrapManager</code>'s forward-declare + include, and the commented <code>qmlRegisterType</code> at <code>cwQMLRegister.cpp:117</code>. <em>QML</em> — <b>(Updated by C3:</b> this wiring is no longer duplicated — the single <code>TaskFutureCombineModel</code> now lives in the <code>ActiveTasks.qml</code> singleton, which is the one place passing <code>[RootData.taskManagerModel, RootData.futureManagerModel]</code>. <code>TaskListView</code>, <code>SideBarUpdateFooter</code> and <code>TaskFlyout</code> all read <code>ActiveTasks.model</code>/<code>.count</code>.<b>)</b> That single <code>models</code> list becomes a one-entry list, at which point <b>consider whether <code>TaskFutureCombineModel</code> is still earning its keep</b> (it would be concatenating one model). <em>Tests</em> — <code>test_cwTaskManagerModel.cpp</code> goes; ~11 vestigial <code>root-&gt;taskManagerModel()-&gt;waitForTasks()</code> calls in <code>test_ProtoBufferSaveLoad</code> / <code>test_cwScrap</code> / <code>test_CavewhereMainWindow</code> / <code>test_cwCavePageModel</code> are already no-ops and can simply be deleted. <b>Do this after CP6 lands</b> — C3's flyout reads the combined model, and shrinking that model underneath it mid-checkpoint buys nothing.</li>
+      <p><b>Task progress — the build order</b> (each step is committable on its own, and each is a prerequisite of the
+      next):</p>
+      <ol>
+        <li><b>A1 · <code>ActiveTasks</code> owns the state. ✅ DONE (2026-07-28, with step 2 — the QML cannot compile
+        without the C++ property, so they are one commit).</b> <code>readonly property bool busy</code>
+        (<code>running || count &gt; 0</code>), <code>readonly property real progress</code> forwarding the aggregate,
+        and <code>readonly property bool progressKnown</code> (<code>progress &gt;= 0</code>) — a bare negative
+        sentinel in a <code>real</code> is a trap, since a <code>QC.ProgressBar</code> handed −1 clamps it and claims
+        the work has not started. <b>Only <code>ActiveTasks</code>' copies are <code>readonly</code>.</b> The footer
+        takes <code>property bool busy: ActiveTasks.busy</code> — defaulted but overridable, the same shape as
+        <code>taskCount</code> — because its tests drive it; <code>required property bool running</code> and
+        <code>MainSideBar</code>'s <code>running:</code> wiring are gone. <code>progress</code> is <em>not</em>
+        repointed here: it has no consumer until step 3's ring. No visible change — that is the point; it is the step
+        that stops the chip and the ring from each inventing their own answer.
+        <b>The review caught what that move cost:</b> relocating the predicate into a singleton left it untested —
+        mutating <code>busy</code> to drop <code>|| count &gt; 0</code>, <em>or</em> the footer's default to
+        <code>false</code>, left all 778 tests green, the same class of hole the C3 review hit twice. It turns out a
+        QML test <em>can</em> drive it: <code>cwTaskFutureCombineModel</code> exposes <code>models</code> as a writable
+        <code>Q_PROPERTY</code>, so <code>ActiveTasks.model.models = [aListModel]</code> injects fake jobs (restore the
+        real pair in <code>cleanup()</code> — it is a process-wide singleton). New <code>tst_ActiveTasks.qml</code>
+        covers both, mutation-verified.</li>
+        <li><b>The aggregate, in C++. ✅ DONE (2026-07-28).</b> <b>The mean of the per-job fractions</b> over the rows
+        reporting steps, indeterminate when none do — not <code>Σprogress / Σsteps</code>; see §3b for why. Wants
+        <code>dataChanged</code> as well as the row signals <code>cwTaskFutureCombineModel</code> already tracks for
+        <code>count</code>, <b>filtered by role</b>: the future manager retimes every row 4×/s with
+        <code>{RunTimeRole}</code> just to refresh the elapsed clock, and an unfiltered connection would republish
+        progress that has not moved. <b>Gotcha the review found:</b>
+        <code>QConcatenateTablesProxyModel::addSourceModel</code> publishes a source's rows <em>before</em> its
+        columns, so a model that arrives with jobs already running reads <code>rowCount()==1,
+        columnCount()==0</code> — every index invalid, progress silently indeterminate, and nothing announcing the
+        correction. <code>columnsInserted</code>/<code>columnsRemoved</code> have to reach
+        <code>progressChanged</code> too.</li>
+        <li><b>The ring.</b> A new <code>QCanvasPainterItem</code> subclass (QML <code>Canvas</code>/<code>Shapes</code>
+        are banned in new code) — determinate arc, spinning when indeterminate, optional inner count. Drop it into
+        <code>SideBarUpdateFooter</code>'s busy row in place of <code>QC.BusyIndicator</code>, at <b>both</b> Wide and
+        Medium: number shown at Medium, hidden at Wide where the label already carries it.
+        <p><b>Audit the step counts first — the determinate mode may be nearly unreachable.</b> Only four job classes
+        push progress through <code>cwProgressReporter</code>: <code>cwLazLoader.cpp:287</code>,
+        <code>cwLazClipOperation.cpp:451</code>, <code>cwGeometryItersecter.cpp:2487</code>,
+        <code>cwCompassImporter.cpp:83</code>. Everything else reaches <code>cwFutureManagerModel::data</code> with
+        <code>progressMaximum() == 0</code> and is skipped by the aggregate — <b>saves, syncs, project loads, bundling,
+        converting, discarding, and all three coordinator pipelines</b>. So the ring will <em>spin</em> for most of
+        what CP7 exists to surface. Decide with those numbers in hand before building it; giving the persistence and
+        pipeline workers real unit counts is <a href="https://github.com/Cavewhere/cavewhere/issues/649">#649</a>.</p>
+        <p><b>The aggregate runs backward, and the ring will show it.</b> Jobs are removed on completion, so two jobs
+        at 0.9 and 0.1 read 0.50 — and the moment the 0.9 finishes, 0.10. A determinate arc that visibly rewinds reads
+        as a bug. This is a presentation decision (clamp to max-seen, or ease it); the model should keep reporting the
+        truth rather than having monotonicity baked into it.</p></li>
+        <li><b>The chip.</b> In <code>LinkBar</code> between the breadcrumb and <code>SyncButton</code>, visible at
+        Narrow. Busy → the same ring (recolored) + the count beside it, since 14px cannot hold two digits inside;
+        stale → amber, tap runs the update. Nothing at idle.
+        <p><b>The chip duplicates the <em>precedence</em>, not just the busy bit</b> — <code>busy → needsUpdate →
+        idle</code> is a user-picked ranking (a long save masks the Run button), and the chip re-implements it. Settle
+        the wiring style here too: the footer now carries both idioms side by side, with
+        <code>needsUpdate</code>/<code>automaticUpdate</code> <code>required</code> and injected by
+        <code>MainSideBar</code> while <code>busy</code>/<code>taskCount</code> default to the singleton. Either
+        <code>ActiveTasks</code> grows the stale half as well, or the chip wires the coordinator itself. Cheaper to
+        decide with one consumer than three.</p></li>
+        <li><b>The sheet</b>, opened by the chip: the task list plus an <b>Automatic Update</b> toggle, with the
+        hamburger keeping its own. Extract <code>FlyoutCard.qml</code> here rather than writing the chrome a third
+        time.</li>
+      </ol>
+      <p><b>Watch for:</b> the phone bar is already hamburger + back + forward + breadcrumb + <code>…</code> + sync, and
+      the breadcrumb is <code>Layout.fillWidth</code> — it is what gives up room for the chip. And the three
+      <code>ViewPageResponsive</code> drawer failures are pre-existing in this same territory; expect to meet them.</p>
+      <p>The questions this settled, kept for the reasoning — all five are laid out with drawn candidates in
+      <a href="#progress">§3b</a>: does "is anything happening" belong to window-level chrome (the <code>LinkBar</code>,
+      visible at every size) with the sidebar footer as one presentation of it, rather than to layout-conditional
+      sidebar chrome? Does the phone sheet reuse <code>TaskFlyout</code>'s card, or is that the third copy that finally
+      justifies extracting <code>FlyoutCard.qml</code>? What does the Medium badge show when the count is legitimately
+      0 (a cascade between pipelines) — the state the chevron now hides for? Note the footer's own
+      <code>running || taskCount &gt; 0</code> becomes a second consumer's expression at that point, so it wants one
+      home (see the follow-up list). <b>Two facts §3b turned up that narrow the field:</b> the hamburger menu already
+      carries <b>Automatic Update</b> (<code>LinkBar.qml:74-80</code>), so the phone surface needs only two states, not
+      three; and <code>SyncButton</code> already takes <code>syncInProgress</code> (<code>LinkBar.qml:199</code>), so
+      one job class <em>already</em> has window-level chrome while the other twenty are sidebar-only — that
+      inconsistency, not the phone, is the actual root of this gap.</p></li>
+    <li><b>CP8 — Polish + tests.</b> Light/dark, focus order, <code>QQ.Accessible</code>. QML tests: rail click flips <code>activeInteraction</code>; flyout tracks active tool; footer transitions on <code>ActiveTasks.busy</code> / <code>updateCoordinator.needsUpdate</code> (the footer stopped taking <code>running</code> in CP7 step 1; there is no <code>derivedDataStale</code>); task flyout peeks open on hover, pins on click, and × closes it while the pointer is still on the card; per-page swap on page change. <b>Cleanup (from CP4 review) ✅ DONE.</b> The guarded <code>currentPageItem → {tools, interactionManager}</code> read was duplicated between the flyout (<code>MainContent.qml</code>) and the rail (<code>MainSideBar.qml</code>), each duck-typing an untyped <code>QQuickItem*</code> behind guards. Resolved with a new <code>ActiveTools.qml</code> singleton that narrows <code>RootData.pageView.currentPageItem</code> to the typed <code>ToolProviderPage</code> via an <code>as</code> cast (the narrowing has to live in QML — C++ <code>cwPageView</code> can't reference a QML-defined composite base) and exposes <code>tools</code> + <code>interactionManager</code>. Both read sites now read <code>ActiveTools.tools</code> / <code>ActiveTools.interactionManager</code>; CP6's task-flyout reads the same singleton. (<code>CaveLeadPage</code>'s <code>currentPageItem as RenderingView</code> is left as-is — it wants the concrete view, not the tool contract, and is already a typed cast.) <b>Follow-up from the R1+A1 review (latent C++ behavior the singleton now makes user-visible):</b> <code>cwPageView::clearPageCacheFor</code> (<code>cwPageView.cpp:52-54</code>) clears <code>CurrentPage</code> and emits <code>currentPageItemChanged</code> on <em>any</em> eviction (<code>evicted &amp;&amp; !CurrentPage.isNull()</code>), even when the evicted component isn't the on-screen page. If that fires while the View page is displayed, <code>ActiveTools.provider</code> drops to <code>null</code> and the rail/flyout blank until the next navigation. The singleton faithfully reflects C++, so this is a pre-existing <code>cwPageView</code> defect, not an R1 regression. Verify whether <code>clearPageCacheFor</code> is ever called with a component set that excludes the current page while it's shown; if so, guard the clear/emit to the current page only.</li>
+    <li><b>CLEANUP — remove <code>cwTaskManagerModel</code> (own commit, not part of any CP).</b> Surfaced by the <code>addJob</code> audit above: <code>cwTaskManagerModel::addTask()</code> has <b>zero production callers</b> — only <code>testcases/test_cwTaskManagerModel.cpp</code> calls it — so the model is permanently empty in the running app. It is the older <code>cwTask</code>-based progress path, superseded by <code>cwFutureManagerModel</code>, and every "is anything running" question it answers is already answered <code>false</code>. <b>Note the 11 <code>cwTask</code> subclasses stay</b> (<code>cwProjectIOTask</code>, <code>cwExporterTask</code>, <code>cwSurvexportTask</code>, …) — <code>cwTask</code> itself is alive; only the <em>model</em> that nothing feeds is dead. <b>Blast radius:</b> <em>production</em> — <code>cwRootData</code> owns it (member + <code>Q_PROPERTY taskManagerModel</code> + the <code>becameIdle</code> connect, the <code>isIdle()</code> term and <code>waitForTasks()</code> in <code>cwRootData::shutdown()</code> (around <code>cwRootData.cpp:499-526</code> — the exact lines drift, so search rather than trust them), all of which are constant-<code>true</code>/no-op today); dead references to delete alongside it are <code>cwProject.h:260</code>'s <code>QPointer&lt;cwTaskManagerModel&gt; TaskManager</code> (its setter has been commented out since <code>cwProject.cpp:1278</code>), <code>cwScrapManager</code>'s forward-declare + include, and the commented <code>qmlRegisterType</code> at <code>cwQMLRegister.cpp:117</code>. <em>QML</em> — <b>(Updated by C3:</b> this wiring is no longer duplicated — the single <code>TaskFutureCombineModel</code> now lives in the <code>ActiveTasks.qml</code> singleton, which is the one place passing <code>[RootData.taskManagerModel, RootData.futureManagerModel]</code>. <code>TaskListView</code>, <code>SideBarUpdateFooter</code> and <code>TaskFlyout</code> all read <code>ActiveTasks.model</code>/<code>.count</code>.<b>)</b> That single <code>models</code> list becomes a one-entry list, at which point <b>consider whether <code>TaskFutureCombineModel</code> is still earning its keep</b> (it would be concatenating one model). <b>(Sharpened by the CP7 step 1–2 review:</b> the answer is now stronger than "consider". The <code>progress</code> aggregate added in step 2 has <em>zero</em> dependence on concatenation — it is a fold over <code>cwFutureManagerModel</code>'s own rows, and it hardcodes that class's role enum plus its 250 ms <code>RunTimeRole</code> retimer. So the proxy would be concatenating one model <em>and</em> carrying that model's domain logic. Clean end state: <code>count</code> + <code>progress</code> become <code>Q_PROPERTY</code>s on <code>cwFutureManagerModel</code>, the proxy is deleted, and <code>ActiveTasks</code> binds <code>RootData.futureManagerModel</code> directly — ~120 lines removed, 4 QML read sites, and <code>test_cwTaskFutureCombineModel.cpp</code> folds into <code>test_cwFutureManagerModel.cpp</code>, where it can be driven with real futures instead of a fake.<b>)</b> <em>Tests</em> — <code>test_cwTaskManagerModel.cpp</code> goes; ~11 vestigial <code>root-&gt;taskManagerModel()-&gt;waitForTasks()</code> calls in <code>test_ProtoBufferSaveLoad</code> / <code>test_cwScrap</code> / <code>test_CavewhereMainWindow</code> / <code>test_cwCavePageModel</code> are already no-ops and can simply be deleted. <b>Do this after CP6 lands</b> — C3's flyout reads the combined model, and shrinking that model underneath it mid-checkpoint buys nothing.</li>
   </ol>
 
   <h2 id="open">7 · Still open</h2>
@@ -1419,11 +1726,178 @@ function renderBaseline(){
 }
 document.getElementById('segBaseline').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;baseState=b.dataset.b;[...e.currentTarget.children].forEach(x=>x.classList.toggle('on',x===b));renderBaseline();});
 
+/* ---- §3b · compact task-progress options ---- */
+let PG={opt:'chip',state:'run3',count:3,steps:true,auto:true,sheet:false,menu:false};
+
+const PG_TASKS=[{n:'Loading entrance.laz',p:64},{n:'Line plot',p:-1},{n:'Triangulating LiDAR notes',p:22}];
+function pgBusy(){return PG.state.indexOf('run')===0;}
+function pgStale(){return PG.state==='pend';}
+function pgTasks(){return PG.state==='run1'?[PG_TASKS[0]]:PG.state==='run3'?PG_TASKS:[];}
+function pgAggregate(){const t=pgTasks().filter(x=>x.p>=0);
+  return t.length?Math.round(t.reduce((a,b)=>a+b.p,0)/t.length):-1;}
+function pgTaskRows(){
+  const t=pgTasks();
+  if(!t.length)return `<div class="tkrow" style="color:var(--ink3)">Working — nothing listed yet<div class="bar"><i class="indet" style="width:36%"></i></div></div>`;
+  return t.map(x=>`<div class="tkrow">${x.n}<div class="bar">${x.p<0?`<i class="indet" style="width:36%"></i>`:`<i style="width:${x.p}%"></i>`}</div></div>`).join('');
+}
+
+function pgChip(){
+  if(pgStale())return `<div class="pchip pend" data-pgrun="1">! Update</div>`;
+  if(pgBusy()){const n=pgTasks().length;
+    /* Same ring as the footer, recolored for the light bar; the count sits
+       beside it rather than inside, where 14px cannot hold two digits. */
+    return `<div class="pchip run" data-pgsheet="1">${progressRing(n,pgAggregate()>=0,false,'onlight')}${n>0?n:'…'}</div>`;}
+  return '';
+}
+/* No stale form on purpose: a progress bar cannot carry an action. */
+function pgHair(){
+  if(!pgBusy())return '';
+  const a=pgAggregate();
+  return `<div class="phair" data-pgsheet="1">${a<0?'<i class="indet"></i>':`<i style="width:${a}%"></i>`}</div>`;
+}
+function pgPill(){
+  if(pgStale())return `<div class="ppill pend" data-pgrun="1">⚠ Update needed<button class="runbtn">Run</button></div>`;
+  if(!pgBusy())return '';
+  const t=pgTasks();
+  return `<div class="ppill" data-pgsheet="1"><span class="spinner"></span><span class="nm">${t.length?t[0].n:'Working…'}</span>${t.length>1?`<span class="ct">+${t.length-1}</span>`:''}</div>`;
+}
+function pgFloat(){
+  let extra='';
+  if(PG.opt==='float'){
+    if(pgStale())extra=`<div class="pfbtn" data-pgrun="1" style="border-color:var(--warn);color:var(--warn);font-weight:800">!</div>`;
+    else if(pgBusy()){const n=pgTasks().length;
+      extra=`<div class="pfbtn" data-pgsheet="1"><span class="spinner"></span>${n>0?`<span class="fbadge">${n}</span>`:''}</div>`;}
+  }
+  return `<div class="pfloat"><div class="pfbtn">${IC.box}</div><div class="pfbtn">${IC.layers}</div><div class="pfbtn">${IC.tools}</div>${extra}</div>`;
+}
+function pgMenu(){
+  if(!PG.menu)return '';
+  const run=pgStale()?`<div class="mi" data-pgrun="1" style="color:var(--warn);font-weight:700">${IC.sync}Update needed — Run</div><div class="sep"></div>`:'';
+  const tasks=pgBusy()?`<div class="mi" style="font-size:9.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--ink3);padding-bottom:0">Running</div>${pgTaskRows()}<div class="sep"></div>`:'';
+  return `<div class="pscrim" data-pgclose="1" style="z-index:23"></div><div class="pmenu">${run}${tasks}<div class="mi">${IC.box}View</div><div class="mi">${IC.book}Data</div><div class="mi">${IC.map}Map</div><div class="sep"></div><div class="mi">${IC.sync}Automatic Update ✓</div></div>`;
+}
+function pgSheet(){
+  if(!PG.sheet)return '';
+  const n=pgTasks().length;
+  const ttl=n===0?'Working…':n===1?'1 Task':`${n} Tasks`;
+  /* The sheet is also where Automatic Update lives on the phone — the hamburger
+     keeps its copy, both writing updateCoordinator.automaticUpdate. */
+  const auto=`<div class="sheetauto ${PG.auto?'':'off'}" data-pgauto="1"><div class="sw"></div><span>Automatic Update</span></div>`;
+  return `<div class="pscrim" data-pgclose="1" style="z-index:20"></div><div class="sheet" style="bottom:0;z-index:22"><div class="grab"></div><header>${IC.list}<span>${ttl}</span><span class="x" data-pgclose="1">✕</span></header><div class="fbody">${pgTaskRows()}</div>${auto}</div>`;
+}
+function pgFrame(){
+  const dot=PG.opt==='menu'&&(pgBusy()||pgStale())?`<span class="pdot ${pgStale()?'warn':''}"></span>`:'';
+  const chip=(PG.opt==='chip'||PG.opt==='both')?pgChip():'';
+  const hair=(PG.opt==='hair'||PG.opt==='both')?pgHair():'';
+  const pill=PG.opt==='pill'?pgPill():'';
+  const burger=PG.opt==='menu'?' data-pgmenu="1"':'';
+  return `<div class="devwrap"><div class="device">
+    <div class="ptopbar"><div class="picon"${burger}>${IC.list}${dot}</div>
+      <div class="pcrumb">View ›</div><div class="pspacer"></div>${chip}<div class="picon">${IC.sync}</div></div>
+    ${hair}
+    <div class="pview">${plotSVG()}${scaleSVG()}${compassSVG()}${pgFloat()}${pill}${pgSheet()}${pgMenu()}</div>
+  </div></div>`;
+}
+
+const PG_CAPS={
+  chip:'A · Top-bar chip — window chrome beside SyncButton, present on every page. Spinner + count busy, amber action when stale; tap opens the task sheet.',
+  hair:'B · Hairline — a 3px bar under LinkBar. Determinate when jobs report steps, an indeterminate stripe when they do not.',
+  both:'A+B — the chip holds the count and the tap; the bar holds the motion. The desktop footer’s label + indicator, unstacked.',
+  pill:'C · Pill — floating over the view, bottom-center, naming the leading job. Lives in MainContent so it also appears on Data and Source.',
+  float:'D · Float column — a busy button under CP7’s Tools button, in RenderingView’s existing top-right column.',
+  menu:'E · Hamburger — a dot on the menu that already carries Automatic Update; the task list lives inside it.',
+};
+function pgNoteFor(){
+  const o=PG.opt,s=PG.state;
+  if(s==='idle')return ['ok','Every option shows nothing at idle — <code>LinkBar</code>’s hamburger already carries <b>Automatic Update</b>, so the phone surface only ever has two states to place, not three.'];
+  if(s==='pend'){
+    if(o==='hair')return ['gap','<b>Gap:</b> a progress bar cannot express an action, so option B renders nothing here. On its own it leaves “Update needed · Run” with no home on the phone.'];
+    if(o==='both')return ['ok','This is what the pairing buys: the chip carries the action the bar structurally cannot.'];
+    if(o==='float')return ['gap','<b>Gap:</b> reachable — but only on the View page. A stale line plot noticed while editing on Data still has no Run.'];
+    return ['ok','The stale state is an <em>action</em>, not progress, and this option can hold a Run affordance — which is why it can stand alone.'];
+  }
+  if(s==='run0'){
+    if(o==='hair'||o==='both')return ['ok','Count 0 suits the hairline best: it reports motion without claiming a number the app does not have.'];
+    return ['ok','Count 0 is a real state — a cascade between pipelines, running with no future registered yet. Every surface must mean “working” without a number.'];
+  }
+  if(o==='chip')return ['ok','Count only; names come from the sheet. That is the trade — smallest footprint in the tightest bar we have.'];
+  if(o==='hair')return ['gap','<b>Gap:</b> 3px is not a tap target and it holds no count, so the task list is unreachable from it.'];
+  if(o==='both')return ['ok','Chip for identity, bar for motion. Watch the two together at Running · 0 — the bar keeps meaning something when the count stops meaning anything.'];
+  if(o==='pill')return ['ok','The only surface that answers “why is it busy” with no tap — paid for in covered scene.'];
+  if(o==='float')return ['gap','<b>Gap:</b> View page only. Saving on Data or cloning on Source shows nothing at all — the jobs most worth reporting are the ones it misses.'];
+  return ['gap','<b>Gap:</b> invisible until the menu is opened, and the menu closes on the next tap.'];
+}
+function renderPg(){
+  document.getElementById('framePg').innerHTML=pgFrame();
+  document.getElementById('pgCapt').textContent=PG_CAPS[PG.opt];
+  const n=pgNoteFor(),el=document.getElementById('pgNote');
+  el.className='optnote '+n[0];
+  el.innerHTML=`<b>${n[0]==='gap'?'⚠':'✓'}</b><span>${n[1]}</span>`;
+}
+
+/* Determinate when jobs report steps, spinning when none do — the same rule the
+   per-task QC.ProgressBar already applies (indeterminate: numberOfStepsRole <= 0).
+   showCount false at Wide, where the label carries the number instead. */
+/* One component, three homes: the Wide footer, the Medium rail, and the phone
+   chip (cls "onlight" recolors it for the top bar's light ground). */
+function progressRing(c,steps,showCount,cls){
+  const r=9,C=2*Math.PI*r,pct=58;
+  const open=`<svg class="midring ${cls||''}" viewBox="0 0 24 24">`;
+  const track=`<circle class="track" cx="12" cy="12" r="${r}" fill="none" stroke-width="2.4"/>`;
+  const num=(c>0&&showCount!==false)?`<text x="12" y="15.4" text-anchor="middle">${c}</text>`:'';
+  if(!steps)return `${open}${track}<circle class="arc indet" cx="12" cy="12" r="${r}" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-dasharray="${(C*0.3).toFixed(2)} ${C}"/>${num}</svg>`;
+  const arc=c>0?`<circle class="arc" cx="12" cy="12" r="${r}" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${(C*(1-pct/100)).toFixed(2)}" transform="rotate(-90 12 12)"/>`:'';
+  return `${open}${track}${arc}${num}</svg>`;
+}
+function midSidebar(footerHTML,wide){
+  const nav=[['View',IC.box],['Data',IC.book],['Map',IC.map]].map((n,i)=>
+    `<div class="navbtn ${wide?'':'mid'} ${i===0?'on':''}">${n[1]}${wide?`<span>${n[0]}</span>`:''}</div>`).join('');
+  return `<div class="sidebar ${wide?'wide':'mid'}"><div class="nav">${nav}</div><div class="divider strong"></div>
+    <div class="toolsec"><button class="trbtn">${IC.crosshair}</button><button class="trbtn">${IC.ruler}</button><button class="trbtn">${IC.scissors}</button></div>
+    <div class="sbfooter">${footerHTML}</div></div>`;
+}
+function renderMid(){
+  const c=PG.count,st=PG.steps,chev=IC.chev;
+  const variants=[
+    {cap:'Shipped — chevron only',sub:'The count exists only inside the flyout you hover open.',
+     html:`<div class="runningbox"><div class="runrow"><span class="spinner"></span>${c>0?chev:''}</div></div>`},
+    {cap:'M1 · Badge',sub:'§2’s original promise. Sits over the row’s corner — at 12 it crowds the chevron. Hidden at 0.',
+     html:`<div class="runningbox"><div class="runrow"><span class="spinner"></span>${chev}</div>${c>0?`<span class="badge">${c}</span>`:''}</div>`},
+    {cap:'M2 · Number below',sub:'50px fits two digits at caption size. No overlap, no badge geometry.',
+     html:`<div class="runningbox"><div class="runrow"><span class="spinner"></span>${chev}</div>${c>0?`<div class="midnum">${c}</div>`:''}</div>`},
+    {cap:'M3 · Determinate ring',pick:true,sub:'Progress and count in one mark. Spins instead of lying when no job reports steps — try “3 · no steps”.',
+     html:`<div class="runningbox"><div class="runrow">${progressRing(c,st,true)}${chev}</div></div>`},
+  ];
+  const wide={cap:'Wide — the same ring',sub:'Chosen for full width too. The ring drops its number here; the label already carries the count.',pick:true,
+    html:`<div class="runningbox"><div class="runrow">${progressRing(c,st,false)}${chev}</div><div class="midnum" style="font-weight:600;color:#aeb7c2;font-size:8.5px">${c>0?(c===1?'Running 1 Task':'Running '+c+' Tasks'):'Running…'}</div></div>`};
+  const card=(v,w)=>`<div class="midcard ${v.pick?'pick':''}">${midSidebar(v.html,w)}<div class="cap">${v.cap}${v.pick?'<span class="picktag">chosen</span>':''}</div><div class="sub">${v.sub}</div></div>`;
+  document.getElementById('frameMid').innerHTML=variants.map(v=>card(v,false)).join('')+card(wide,true);
+}
+
+function pgSeg(id,fn){document.getElementById(id).addEventListener('click',e=>{
+  const b=e.target.closest('button');if(!b)return;
+  [...e.currentTarget.children].forEach(x=>x.classList.toggle('on',x===b));
+  fn(b.dataset.v);});}
+pgSeg('segPgOpt',v=>{PG.opt=v;PG.sheet=false;PG.menu=false;renderPg();});
+pgSeg('segPgState',v=>{PG.state=v;PG.sheet=false;PG.menu=false;renderPg();});
+pgSeg('segMidCount',v=>{PG.steps=v!=='3ns';PG.count=PG.steps?+v:3;renderMid();});
+
+document.getElementById('framePg').addEventListener('click',e=>{
+  if(e.target.closest('[data-pgclose]')){PG.sheet=false;PG.menu=false;renderPg();return;}
+  if(e.target.closest('[data-pgmenu]')){PG.menu=!PG.menu;renderPg();return;}
+  if(e.target.closest('[data-pgauto]')){PG.auto=!PG.auto;renderPg();return;}
+  if(e.target.closest('[data-pgsheet]')){PG.sheet=!PG.sheet;renderPg();return;}
+  if(e.target.closest('[data-pgrun]')){
+    PG.state='run3';PG.sheet=false;PG.menu=false;
+    document.querySelectorAll('#segPgState button').forEach(x=>x.classList.toggle('on',x.dataset.v==='run3'));
+    renderPg();return;}
+});
+
 const root=document.documentElement;
 function setTheme(t){root.setAttribute('data-theme',t);try{localStorage.setItem('t601theme',t)}catch(e){}}
 document.getElementById('themeBtn').addEventListener('click',()=>setTheme(root.getAttribute('data-theme')==='dark'?'light':'dark'));
 (function(){let t='light';try{t=localStorage.getItem('t601theme')||(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light')}catch(e){}setTheme(t);})();
-renderProto();renderBaseline();
+renderProto();renderBaseline();renderPg();renderMid();
 </script>
 </body>
 </html>

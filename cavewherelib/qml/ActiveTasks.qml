@@ -24,4 +24,21 @@ QQ.QtObject {
     }
 
     readonly property int count: activeTasks.model.count
+
+    // Whether the app is working, in the widest sense: the update coordinator's
+    // three derived-data pipelines, or any tracked job at all. It lives here
+    // rather than in the sidebar footer that reads it because the footer is not
+    // the only surface that has to answer this — at narrow widths there is no
+    // sidebar at all. A cascade between pipelines is running with no future yet,
+    // so this is true while the count is still zero.
+    readonly property bool busy: RootData.updateCoordinator.running || activeTasks.count > 0
+
+    // How far along, in [0, 1]. Only meaningful when progressKnown — read alone
+    // it is negative whenever no job reports steps, and a progress bar handed
+    // that will clamp it to empty and claim the work has not started.
+    readonly property real progress: activeTasks.model.progress
+
+    // Whether any job can say how far along it is. False is the signal to spin
+    // rather than draw a number nothing measured.
+    readonly property bool progressKnown: activeTasks.progress >= 0
 }
