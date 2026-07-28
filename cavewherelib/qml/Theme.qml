@@ -127,6 +127,15 @@ QtObject {
     // shows whichever derived-data state the update coordinator is in.
     readonly property int updateFooterPadding: 5
     readonly property int updateFooterSpacing: 3
+    readonly property int updateFooterChevronSize: 12
+
+    // Task flyout: the list of running jobs the footer's busy row opens. Wider
+    // than the tool flyout because job names carry file names, and capped so a
+    // burst of imports scrolls instead of running off the top of the window.
+    readonly property int taskFlyoutWidth: 280
+    readonly property int taskFlyoutMaxListHeight: 220
+    // Long enough for the pointer to cross the gap from the sidebar to the card.
+    readonly property int taskFlyoutHoverCloseDelay: 300
 
     // Icon sizes
     readonly property int iconSizeButton: 16

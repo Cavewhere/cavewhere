@@ -286,6 +286,7 @@ file(GLOB cavewhere_QML_FILES CONFIGURE_DEPENDS "qml/*.qml" "qml/*.js")
 
 # Define the list of QML singletons
 set(qml_singletons
+    "qml/ActiveTasks.qml"
     "qml/ActiveTools.qml"
     "qml/GlobalShadowTextInput.qml"
     "qml/NoteToolMode.qml"

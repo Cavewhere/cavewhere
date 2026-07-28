@@ -33,6 +33,15 @@ QQ.Rectangle {
 
     property bool gotoToPage: true
 
+    // The footer's busy row is hovered, and whether the flyout it opens is on
+    // screen. Both cross the sidebar boundary because the task flyout has to
+    // composite above the page view, so the host owns it — see MainContent.
+    readonly property bool busyRowHovered: updateFooterId.busyRowHovered
+    property bool tasksShown: false
+
+    // The footer's busy row was tapped.
+    signal tasksRequested()
+
     /**
       pageType should be either "View" or "Data"
       */
@@ -216,6 +225,7 @@ QQ.Rectangle {
     }
 
     SideBarUpdateFooter {
+        id: updateFooterId
         objectName: "updateFooter"
         anchors.left: parent.left
         anchors.right: parent.right
@@ -226,8 +236,11 @@ QQ.Rectangle {
         needsUpdate: RootData.updateCoordinator.needsUpdate
         automaticUpdate: RootData.updateCoordinator.automaticUpdate
 
+        tasksShown: sidebarArea.tasksShown
+
         onRunRequested: RootData.updateCoordinator.updateNow()
         onAutomaticUpdateToggled: (enabled) => RootData.updateCoordinator.automaticUpdate = enabled
+        onTasksRequested: sidebarArea.tasksRequested()
     }
 
     QQ.Rectangle {

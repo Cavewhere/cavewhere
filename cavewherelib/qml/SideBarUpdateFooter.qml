@@ -25,11 +25,16 @@ import cavewherelib
 // the state and the count in the label talking about the same thing.
 //
 // The coordinator's state is injected rather than read here, so the footer is a
-// view of it and can be driven directly. The task count is the exception: only
-// the task/future models can supply it. A job whose future is already finished
-// is never admitted, and a cascade is briefly running between pipelines with no
-// future yet — so the count can be zero while work really is in flight, and the
-// label says "Running…" rather than "Running 0 Tasks".
+// view of it and can be driven directly. The task count defaults to the shared
+// ActiveTasks model but stays overridable for the same reason. A job whose
+// future is already finished is never admitted, and a cascade is briefly
+// running between pipelines with no future yet — so the count can be zero while
+// work really is in flight, and the label says "Running…" rather than
+// "Running 0 Tasks".
+//
+// The busy row is a button into the task flyout, which lists what those jobs
+// actually are; the host owns the flyout, because it has to composite above the
+// page view and a child of the sidebar cannot.
 QQ.Rectangle {
     id: footerId
 
@@ -37,20 +42,33 @@ QQ.Rectangle {
     required property bool needsUpdate
     required property bool automaticUpdate
     property bool compact: false
-    property int taskCount: taskModelId.count
+    property int taskCount: ActiveTasks.count
+
+    // Output: the busy row is under the pointer, so the host can peek the task
+    // flyout open. Written by the running row's HoverHandler rather than aliased,
+    // because that handler lives inside a Loader component.
+    property bool busyRowHovered: false
+
+    // Input: whether the task flyout the busy row opens is currently on screen,
+    // so the row's chevron can point at it and light up.
+    property bool tasksShown: false
 
     readonly property bool busy: footerId.running || footerId.taskCount > 0
 
     signal runRequested()
     signal automaticUpdateToggled(bool enabled)
+    signal tasksRequested()
 
     implicitHeight: contentLoaderId.implicitHeight + Theme.updateFooterPadding * 2
 
     color: Theme.sidebar.panel
 
-    TaskFutureCombineModel {
-        id: taskModelId
-        models: [RootData.taskManagerModel, RootData.futureManagerModel]
+    // The row is destroyed the moment work finishes, taking its HoverHandler with
+    // it, so leaving busy never reports a hover-out. Clear it here instead.
+    onBusyChanged: {
+        if (!footerId.busy) {
+            footerId.busyRowHovered = false
+        }
     }
 
     QQ.Loader {
@@ -168,11 +186,44 @@ QQ.Rectangle {
         ColumnLayout {
             spacing: Theme.updateFooterSpacing
 
-            QC.BusyIndicator {
-                objectName: "updateRunningIndicator"
-                implicitWidth: Theme.iconSizeSmall
-                implicitHeight: Theme.iconSizeSmall
+            // No tooltip: hovering already opens the task flyout, which says far
+            // more than a tooltip would, and both at once is just noise.
+            QQ.HoverHandler {
+                id: runningHoverId
+                cursorShape: Qt.PointingHandCursor
+
+                onHoveredChanged: footerId.busyRowHovered = runningHoverId.hovered
+            }
+
+            QQ.TapHandler {
+                objectName: "updateRunningTapHandler"
+                onTapped: footerId.tasksRequested()
+            }
+
+            RowLayout {
+                spacing: Theme.tightSpacing
                 Layout.alignment: Qt.AlignHCenter
+
+                QC.BusyIndicator {
+                    objectName: "updateRunningIndicator"
+                    implicitWidth: Theme.iconSizeSmall
+                    implicitHeight: Theme.iconSizeSmall
+                }
+
+                // Points at the flyout it opens, and lights up while that flyout
+                // is on screen — the row's only cue that there is more to see.
+                // Hidden with no jobs listed, since the flyout has nothing to
+                // show then and the chevron would promise something that can't
+                // happen; the footer still reads as busy on the coordinator
+                // alone, which is the state that has a zero count.
+                Icon {
+                    objectName: "updateRunningExpandIcon"
+                    visible: footerId.taskCount > 0
+                    source: "qrc:/twbs-icons/icons/chevron-right.svg"
+                    sourceSize: Qt.size(Theme.updateFooterChevronSize,
+                                        Theme.updateFooterChevronSize)
+                    colorizationColor: footerId.tasksShown ? Theme.accent : Theme.icon
+                }
             }
 
             QC.Label {

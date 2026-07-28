@@ -47,6 +47,14 @@ QQ.Item {
         anchors.top: linkBar.bottom
         fileMenu: mainContentId.fileMenu
 
+        tasksShown: taskFlyoutLoader.item ? taskFlyoutLoader.item.shown : false
+
+        onTasksRequested: {
+            if (taskFlyoutLoader.item) {
+                taskFlyoutLoader.item.togglePin()
+            }
+        }
+
         // //For animating which page is shown
         // property real pageShownReal: pageShown;
 
@@ -92,6 +100,32 @@ QQ.Item {
         hostVisible: mainContentId.layoutSize >= Theme.LayoutSize.Medium
         interactionManager: ActiveTools.interactionManager
         toolModel: ActiveTools.tools
+    }
+
+    // What the sidebar footer's busy row is busy with. Bottom-aligned to the
+    // sidebar so it reads as hinged to the footer that opened it, and a sibling
+    // after `container` for the same compositing reason as the tool flyout.
+    //
+    // Kept out of existence until there is something to list, rather than merely
+    // hidden: the card's list binds to the live task model, so an idle instance
+    // still carries a delegate per running job and re-runs their progress
+    // bindings behind a card nobody can see. ShutdownScreen's copy of the same
+    // list is Loader-gated for the same reason.
+    QQ.Loader {
+        id: taskFlyoutLoader
+        anchors.left: mainSideBar.right
+        anchors.leftMargin: Theme.toolFlyoutGap
+        anchors.bottom: mainSideBar.bottom
+        anchors.bottomMargin: Theme.toolFlyoutGap
+
+        active: ActiveTasks.count > 0
+
+        sourceComponent: TaskFlyout {
+            objectName: "taskFlyout"
+
+            hostVisible: mainContentId.layoutSize >= Theme.LayoutSize.Medium
+            previewHovered: mainSideBar.busyRowHovered
+        }
     }
 
     QQ.Item {

@@ -35,6 +35,12 @@ Item {
         signalName: "automaticUpdateToggled"
     }
 
+    SignalSpy {
+        id: tasksSpy
+        target: footerId
+        signalName: "tasksRequested"
+    }
+
     TestCase {
         name: "SideBarUpdateFooter"
         when: windowShown
@@ -47,8 +53,14 @@ Item {
             // Pinned rather than left bound to the live task/future models, so a
             // task the rest of the suite happens to be running can't move it.
             footerId.taskCount = 0
+            footerId.tasksShown = false
+            footerId.busyRowHovered = false
             runSpy.clear()
             toggleSpy.clear()
+            tasksSpy.clear()
+            // Park the pointer clear of the footer, so a test that hovered the
+            // busy row can't leave it hovered for whatever runs next.
+            mouseMove(rootId, rootId.width - 1, 0)
         }
 
         function find(name) {
@@ -120,6 +132,79 @@ Item {
 
             footerId.taskCount = 3
             compare(label.text, "Running 3 Tasks")
+        }
+
+        // The busy row is the way into the task flyout; the footer only reports
+        // the tap, since the flyout is the host's to own.
+        function test_tappingTheBusyRowAsksForTheTaskList() {
+            footerId.running = true
+            waitForRendering(footerId)
+
+            let indicator = find("updateRunningIndicator")
+            verify(indicator !== null, "updateRunningIndicator not found")
+
+            mouseClick(indicator)
+            compare(tasksSpy.count, 1, "tapping the busy row asks for the tasks once")
+        }
+
+        // The chevron is the row's only cue that there is more behind it, and it
+        // points at the flyout, so it lights up while that flyout is on screen.
+        function test_busyRowShowsAnExpandChevron() {
+            footerId.running = true
+            footerId.taskCount = 1
+
+            let chevron = find("updateRunningExpandIcon")
+            verify(chevron !== null, "updateRunningExpandIcon not found")
+            verify(chevron.visible, "the chevron is shown when there are jobs to list")
+
+            compare(chevron.colorizationColor, Theme.icon, "at rest it is the plain icon color")
+
+            footerId.tasksShown = true
+            compare(chevron.colorizationColor, Theme.accent,
+                    "it lights up while the flyout is shown")
+        }
+
+        // A cascade between pipelines is busy with nothing listed yet, and the
+        // flyout cannot show an empty list — so the chevron must not promise one.
+        function test_chevronHidesWhenThereIsNothingToExpand() {
+            footerId.running = true
+            footerId.taskCount = 0
+
+            let chevron = find("updateRunningExpandIcon")
+            verify(chevron !== null, "updateRunningExpandIcon not found")
+            verify(!chevron.visible, "no chevron while the count is zero")
+
+            footerId.taskCount = 2
+            verify(chevron.visible, "it appears once there is something to list")
+        }
+
+        // Hovering the busy row is what peeks the task flyout open, so the footer
+        // has to publish the hover — the host has no other way to see it.
+        function test_hoveringTheBusyRowReportsIt() {
+            footerId.running = true
+            waitForRendering(footerId)
+
+            let indicator = find("updateRunningIndicator")
+            verify(indicator !== null, "updateRunningIndicator not found")
+
+            mouseMove(indicator, indicator.width / 2, indicator.height / 2)
+            tryVerify(function() { return footerId.busyRowHovered },
+                      1000, "hovering the busy row is reported to the host")
+
+            mouseMove(rootId, rootId.width - 1, 0)
+            tryVerify(function() { return !footerId.busyRowHovered },
+                      1000, "and the hover ending is reported too")
+        }
+
+        // The row is destroyed when work finishes, taking its HoverHandler with
+        // it, so nothing would ever report the hover ending.
+        function test_leavingBusyClearsTheHoverOutput() {
+            footerId.running = true
+            footerId.busyRowHovered = true
+
+            footerId.running = false
+            verify(!footerId.busy, "no longer busy")
+            verify(!footerId.busyRowHovered, "the hover output cleared with the row")
         }
 
         function test_compactHidesTheLabelsAndSwapsInTheIconToggle() {
