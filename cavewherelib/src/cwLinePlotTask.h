@@ -12,6 +12,7 @@
 class cwCavingRegion;
 #include "cwStationPositionLookup.h"
 #include "cwSurveyNetwork.h"
+#include "cwFindFloatingSurveys.h"
 #include "cwFindUnconnectedSurveyChunks.h"
 #include "cwCavingRegionData.h"
 #include "cwLinePlotGeometry.h"
@@ -187,6 +188,14 @@ public:
         // Cavern's warning tally for this run (0 when cavern failed
         // before reporting or never ran).
         int CavernWarningCount = 0;
+
+        // Every survey this run found floating, from both of the passes that
+        // can find one: the pre-solve native check that also populates
+        // LinePlotCaveData::unconnectedChunkError, and the post-solve topology
+        // check the native pass is blind to. Region-wide rather than per-cave
+        // because each record names its own cave, and because a solve that
+        // never ran still has an answer for the caves it validated.
+        QList<cwFindFloatingSurveys::Result> FloatingSurveys;
 
         friend class cwLinePlotTask;
         friend struct LinePlotWorker;

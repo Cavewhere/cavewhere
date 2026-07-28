@@ -112,6 +112,13 @@ public:
     // and a trip's solved stations are pulsed by cwTrip::solvedStationsChanged.
     cwSurveyNetwork regionNetwork() const { return m_lastPublishedNetwork; }
 
+    // Every survey the most recent run found floating — not joined to the rest
+    // of its cave — from both of the passes that can find one: the pre-solve
+    // native-chunk check and the post-solve topology check. One list so a
+    // consumer never has to know which pass answered, which is what lets a
+    // single banner speak for both. Empty until the first run completes.
+    QList<cwFindFloatingSurveys::Result> floatingSurveys() const { return m_floatingSurveys; }
+
     void waitToFinish();
 
 signals:
@@ -120,6 +127,7 @@ signals:
     void stationPositionInScrapsChanged(QList<cwScrap*>);
     void automaticUpdateChanged();
     void cavernOutputChanged();
+    void floatingSurveysChanged();
 
 public slots:
     void rerunSurvex();
@@ -136,6 +144,8 @@ private:
 
     cwSurveyNetworkArtifact* m_surveyNetworkArtifact;
     cwSurveyNetwork m_lastPublishedNetwork;
+
+    QList<cwFindFloatingSurveys::Result> m_floatingSurveys;
 
     std::optional<cwLinePlotTask::SolveError> m_lastSolveError;
     QString m_lastCavernLog;
@@ -189,6 +199,7 @@ private:
                              int stationCount,
                              int warningCount);
     void publishPerCaveErrors(const cwLinePlotTask::LinePlotResultData& results);
+    void publishFloatingSurveys(QList<cwFindFloatingSurveys::Result> floatingSurveys);
 
 private slots:
     void runSurvex();

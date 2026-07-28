@@ -135,10 +135,12 @@ inline cwTrip* addEmptyTrip(cwCave* cave, const QString& name)
     return trip;
 }
 
-inline cwTrip* addAttachedTrip(cwCave* cave, const QString& name)
+inline cwTrip* addAttachedTrip(cwCave* cave,
+                               const QString& name,
+                               const QString& fixture = QStringLiteral("survex_simple.svx"))
 {
     cwTrip* trip = addEmptyTrip(cave, name);
-    trip->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_simple.svx")));
+    trip->setExternalCenterline(cwExternalCenterline(fixture));
     return trip;
 }
 

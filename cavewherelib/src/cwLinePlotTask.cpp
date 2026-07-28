@@ -173,6 +173,14 @@ struct cwLinePlotTask::LinePlotWorker {
         updateStationPositionForCaves(parsed.lookup, result);
         result.setRegionNetwork(parsed.network);
 
+        // The other half of the floating-survey answer. An attached centerline
+        // owns no chunk, so checkForErrors above never saw it; only a completed
+        // run knows which scopes cavern placed and which it dropped.
+        result.FloatingSurveys.append(
+            cwFindFloatingSurveys::fromExternalScopes(InputData.regionData,
+                                                      parsed.network,
+                                                      ScopeLabels));
+
         // The network carries the shot topology for externally-attached scopes,
         // which have no cwSurveyChunk of their own. cwSurveyNetwork is
         // implicitly shared, so this is a refcount bump, not a deep copy.
@@ -337,8 +345,9 @@ private:
         for (int i = 0; i < Region.caveCount(); i++) {
             cwCave* cave = Region.cave(i);
 
+            const cwCaveData caveSnapshot = cave->data();
             const Monad::Result<QList<cwFindUnconnectedSurveyChunks::Result>> unconnectedResult =
-                cwFindUnconnectedSurveyChunks::find(cave->data());
+                cwFindUnconnectedSurveyChunks::find(caveSnapshot);
             if (unconnectedResult.hasError()) {
                 continue;
             }
@@ -348,6 +357,8 @@ private:
                 caveData.setUnconnectedChunkError(errorResults);
                 unconnectedChunkCount += errorResults.size();
                 offendingCaveNames.append(cave->name());
+                result.FloatingSurveys.append(
+                    cwFindFloatingSurveys::fromUnconnectedChunks(caveSnapshot, errorResults));
             }
         }
 

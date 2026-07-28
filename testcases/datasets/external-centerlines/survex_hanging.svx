@@ -1,0 +1,11 @@
+; An external centerline with no *fix of its own and no station name the
+; parent driver shares. The *begin wrap the exporter puts around the
+; *include keeps its names out of the cave's namespace, so nothing can
+; reach it: cavern warns "Survey not all connected to fixed stations" and
+; then drops the whole survey, which is why these stations never reach the
+; .3d and the trip's floating record carries no station names.
+*begin Hanging
+*data normal from to tape compass clino
+h1 h2 7.0 0 0
+h2 h3 4.0 90 0
+*end Hanging

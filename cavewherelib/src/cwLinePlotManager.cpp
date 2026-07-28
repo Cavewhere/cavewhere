@@ -549,6 +549,24 @@ void cwLinePlotManager::publishResults(const cwLinePlotTask::LinePlotResultData&
                         results.regionNetwork().stationCount(),
                         results.CavernWarningCount);
     publishPerCaveErrors(results);
+    publishFloatingSurveys(results.FloatingSurveys);
+}
+
+/**
+ * @brief cwLinePlotManager::publishFloatingSurveys
+ *
+ * Replaces the floating-survey list wholesale — it describes one run, so a
+ * survey that stopped floating is a survey the new run simply doesn't mention.
+ * Silent when the answer is unchanged, so a solve triggered by unrelated cave
+ * data doesn't re-pulse the banner.
+ */
+void cwLinePlotManager::publishFloatingSurveys(QList<cwFindFloatingSurveys::Result> floatingSurveys)
+{
+    if (floatingSurveys == m_floatingSurveys) {
+        return;
+    }
+    m_floatingSurveys = std::move(floatingSurveys);
+    emit floatingSurveysChanged();
 }
 
 void cwLinePlotManager::publishCavernOutput(QString cavernLog,

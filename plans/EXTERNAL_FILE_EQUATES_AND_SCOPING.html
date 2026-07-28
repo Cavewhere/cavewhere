@@ -741,9 +741,14 @@ bool cwTrip::isScoped() const { return !m_externalCenterline.isEmpty() || !m_sta
     the same bare <code>0</code> living in many trips) list the prefixed
     candidates to choose from.</li>
   <li><strong>Two triggers, one banner.</strong> Native floats are caught
-    <em>pre-solve</em> by <code>cwFindUnconnectedSurveyChunks</code>; external
-    centerlines float <em>inside cavern</em> and surface as a post-run cavern
-    error. Unify both into one "trip is floating" signal that drives the banner.</li>
+    <em>pre-solve</em> by <code>cwFindUnconnectedSurveyChunks</code>, which also
+    gates the solve. External centerlines float <em>silently</em>: cavern either
+    solves a self-fixed attachment happily in a corner of its own and reports
+    nothing at all, or &mdash; with no <code>*fix</code> and nothing tying it in
+    &mdash; warns once and drops it, exiting zero either way. So there is no
+    "post-run cavern error" to key on, which is why the post-solve half is built
+    from the region's declared equates instead; see <a href="#c6a">6a</a>. Unify
+    both into one "trip is floating" signal that drives the banner.</li>
 </ul>
 <p><strong>Three surfaces, one shared banner&rarr;suggester spine:</strong></p>
 <ul>
@@ -780,6 +785,145 @@ bool cwTrip::isScoped() const { return !m_externalCenterline.isEmpty() || !m_sta
   (extra ties past the first also yield the loop misclosure that validates the
   join).
 </p>
+
+<h4 id="c6a">6a &mdash; the unified "trip is floating" signal &mdash; DONE 2026-07-27</h4>
+<p>
+  The headless spine, ahead of any UI: <code>cwFindFloatingSurveys</code>
+  (<code>cavewherelib/src/</code>) folds both triggers into one
+  <code>Result</code> record (<code>caveId</code>, <code>tripId</code>,
+  <code>trigger</code>, <code>stations</code>), the worker fills
+  <code>LinePlotResultData::FloatingSurveys</code> from both, and
+  <code>cwLinePlotManager::floatingSurveys()</code> /
+  <code>floatingSurveysChanged()</code> publish it. Every record names a trip
+  &mdash; a native chunk is owned by the trip holding it and an external scope
+  <em>is</em> a trip &mdash; so 6b should not branch on a cave-owned float; the
+  one case that would be cave-owned is out of reach here (see below). 6b's banner
+  and suggester bind to this list and never learn which pass answered. Tests:
+  <code>testcases/test_cwFindFloatingSurveys.cpp</code>
+  (<code>[FloatingSurveys]</code>), plus the fixture
+  <code>datasets/external-centerlines/survex_hanging.svx</code> &mdash; the first
+  one with no <code>*fix</code> of its own.
+</p>
+<p class="note">
+  <strong>The post-solve half reads the region's <em>declared</em> ties, not
+  cavern's solved graph &mdash; and that is a correction, not a shortcut.</strong>
+  The obvious implementation is a component walk over the parsed
+  <code>cwSurveyNetwork</code>, and it is wrong in the single commonest case
+  there is. <code>cwSurvex3DFileReader</code> resolves a leg's endpoints
+  <em>by coordinate</em>, because a <code>.3d</code> <code>img_LINE</code> item
+  names only the leg's survey prefix and not its two stations. An attachment
+  fixed at its own origin lands exactly on a cave that
+  <code>writeFixStations</code> auto-fixed at the origin, so the two surveys fuse
+  into one component that looks perfectly connected. Measured on the
+  <code>[FloatingSurveys]</code> fixture, the parsed network really does emit
+  <code>alpha.a1&nbsp;&rarr;&nbsp;alpha.attached.simple.a2</code>. Since the
+  exporter's <code>*begin</code> wrap already guarantees a bare name inside an
+  attachment cannot reach the cave by accident, an equate is the <em>only</em>
+  thing that can join the two &mdash; which makes the declared set the exact
+  answer rather than an approximation of one. The network is still consulted, but
+  only for scope membership (a prefix test) and for "solved nothing at all",
+  neither of which touches the unreliable adjacency.
+</p>
+<p class="note">
+  <strong>Latent defect found, deliberately not fixed here:</strong> that same
+  coordinate-keyed endpoint resolution corrupts <code>cwCave::network()</code> for
+  every consumer, not just this one &mdash; two coincident stations get each
+  other's neighbors. The fix is available (<code>img_LINE</code> does carry the
+  leg's survey prefix, so a coordinate with several candidate labels can be
+  disambiguated by which candidate's parent survey <em>is</em> that prefix), but
+  it changes topology everyone reads and wants its own commit and test sweep.
+</p>
+<p class="note">
+  <strong>Out of 6a's reach on purpose:</strong> a <em>cave-level</em> attachment
+  unwraps straight into the cave scope, so it shares a scope with the cave's own
+  chunks and there is nothing scope-level left to compare. Deciding whether it
+  joined needs station-name reasoning <em>inside</em> one scope &mdash; a
+  different question, and one the trip-level surfaces commit&nbsp;6 designs for do
+  not ask.
+</p>
+<p class="note">
+  <strong>Also out of reach: a hanging survey <em>inside</em> an attached
+  file.</strong> 6a reasons at scope granularity, and both of its post-solve tests
+  are all-or-nothing &mdash; <code>solvedAnything()</code> is an <em>any</em> test,
+  and the tie check asks only whether an equate joins the trip's scope to the cave.
+  So an attachment that is tied in (or self-fixed) and solves <em>some</em> stations
+  is skipped outright, and a sub-survey cavern dropped inside it vanishes with no
+  signal. <code>Result</code> cannot express it either: <code>stations</code> holds
+  the scope's <em>solved</em> names, so there is no field meaning "these were
+  dropped". Only the degenerate case &mdash; the whole attachment hangs, zero
+  stations arrive &mdash; is caught today, which is what
+  <code>survex_hanging.svx</code> pins.
+  <br><br>
+  The signal to build it on already reaches us. After warning&nbsp;45
+  <code>netartic.c</code> prints message&nbsp;71 and then one
+  <code>&lt;file&gt;:&lt;line&gt;: info: &lt;name&gt;</code> line per dropped
+  station, with <code>print_prefix</code> emitting the full <code>*begin</code>
+  nesting &mdash; so the cave and trip labels are on every name. Survex defines
+  <code>STDERR=stdout</code> and <code>cwCavernRunner</code> runs with
+  <code>--log</code>, so all of it is already in
+  <code>cwLinePlotManager::cavernLog()</code>, and the same label lookup
+  <code>SolvedScopes</code> does maps each name back to a scope. The cost is
+  scraping translated strings (<code>msg&nbsp;45</code>/<code>71</code>/<code>485</code>);
+  survex is a pinned submodule so the format is stable, but a parser should anchor
+  on the warning line and claim nothing when it matches nothing. The structural
+  alternative &mdash; diffing <em>declared</em> against <em>solved</em> stations
+  &mdash; has no data source: <code>cwExternalCenterlineScanner::ScanResult</code>
+  carries dependencies, warnings and trip metadata only, and never reads station
+  names. Getting one means owning a station-name parser for Survex, Compass and
+  Walls, which is the job CaveWhere delegates to cavern. Worth its own slice after
+  6b; the banner copy differs anyway ("not tied in" vs "3 stations dropped").
+</p>
+<p class="note">
+  <strong>Follow-ups this slice surfaced &mdash; not in 6a, but 6b should not be
+  built without reading them.</strong>
+</p>
+<ul>
+  <li><strong>The manager publishes one run as ~12 loose members across two paths
+    with two staleness policies.</strong> <code>publishResults</code> runs on every
+    path including failures; <code>updateLinePlot</code> only on success, so a
+    failed run does not wipe the last good plot.
+    <code>m_floatingSurveys</code> went on the always-path while
+    <code>m_lastPublishedNetwork</code> &mdash; which the post-solve half of the
+    answer is <em>derived from</em> &mdash; sits on the success-only path. After a
+    failed run the manager reports floating surveys from run N beside a network
+    from run N&minus;1, and no consumer can tell. This is also the shape behind a
+    real defect found in review: every failure path in
+    <code>LinePlotWorker::run()</code> returns <em>before</em>
+    <code>fromExternalScopes</code>, while <code>fromUnconnectedChunks</code>
+    always runs, and <code>publishFloatingSurveys</code> replaces the list
+    wholesale &mdash; so an unconnected chunk in cave A erases a still-true
+    floating record for cave B's attachment, and the banner blinks out until the
+    next clean solve. The narrow fix is an explicit "did the post-solve pass run"
+    flag so <em>cleared</em> and <em>unknown</em> are distinguishable; the real fix
+    is publishing the run as one immutable snapshot with an explicit
+    <code>lastRun</code> vs <code>lastGood</code> split, making "which run is this
+    field from" a type-level answer instead of a per-field convention. Blast
+    radius: <code>cwLinePlotManager</code>, <code>CavernOutputPage.qml</code>,
+    <code>cwRootData</code>, 6b's banner, the manager tests.</li>
+  <li><strong>Promote the equate graph before 6b re-implements it.</strong>
+    <code>ScopeIndex</code> and <code>ScopeTies</code>
+    (<code>cwFindFloatingSurveys.cpp</code>, anonymous namespace) answer the two
+    questions 6b needs most &mdash; "which scope does this handle live in" and
+    "are these two scopes tied" &mdash; and the first is already hand-rolled as an
+    O(trips) scan in three other places (<code>cwCave::validate</code>,
+    <code>cwSurvexExporterCaveTask</code>, <code>cwSurvexExporterRegion</code>),
+    with this slice the fourth. The suggester and the read-only Health/Ties page
+    both want a queryable <code>cwEquateGraph</code> over
+    <code>cwCavingRegionData</code>, not a fifth copy. Deferred because the query
+    shape is 6b's to pin down.</li>
+  <li><strong>"This survey is floating" already has two homes with independent
+    lifetimes.</strong> One <code>cwFindUnconnectedSurveyChunks</code> answer feeds
+    both the per-chunk <code>cwError</code> markers (wiped and rebuilt on every
+    publish, only for caves still live) and
+    <code>LinePlotResultData::FloatingSurveys</code> (replaced only when it
+    compares unequal). Different clearing rules mean the
+    <code>SurveyDataEditor</code> cell marker and the 6b banner can legitimately
+    disagree about the same trip &mdash; which is exactly what "three surfaces, one
+    shared banner&rarr;suggester spine" above promises they cannot. One derived
+    survey-health model with the chunk markers as a view over it removes the
+    possibility.</li>
+</ul>
+
 <p class="note">
   <strong>Fork&nbsp;A &mdash; BUILT 2026-07-26, GREEN, not committed.</strong>
   C++ 1684/1686 (the two known pre-existing <code>[Issue505]</code> BVH failures);
