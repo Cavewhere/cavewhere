@@ -197,6 +197,19 @@ public:
         // never ran still has an answer for the caves it validated.
         QList<cwFindFloatingSurveys::Result> FloatingSurveys;
 
+        // Whether this run reached the post-solve half of that answer. Every
+        // failure path returns before it while the pre-solve half always runs,
+        // so a caller can tell "no external scope is floating" from "nobody
+        // looked". False by default, like every other flag on this struct: a
+        // result no run filled in asserts nothing.
+        bool ExternalScopesChecked = false;
+
+        //! A result asserting "there is nothing, and I looked" — what the
+        //! manager publishes to wipe state on setRegion, and what a region with
+        //! nothing solvable in it produces. Distinct from a default-constructed
+        //! result, which asserts nothing and so leaves the last answer standing.
+        static LinePlotResultData cleared();
+
         friend class cwLinePlotTask;
         friend struct LinePlotWorker;
     };
@@ -252,6 +265,13 @@ public:
 inline QVector<QVector3D> cwLinePlotTask::LinePlotResultData::stationPositions() const
 {
     return StationPositions;
+}
+
+inline cwLinePlotTask::LinePlotResultData cwLinePlotTask::LinePlotResultData::cleared()
+{
+    LinePlotResultData result;
+    result.ExternalScopesChecked = true;
+    return result;
 }
 
 inline void cwLinePlotTask::LinePlotResultData::setRegionNetwork(cwSurveyNetwork network)

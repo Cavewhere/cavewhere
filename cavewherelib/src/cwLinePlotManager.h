@@ -199,7 +199,8 @@ private:
                              int stationCount,
                              int warningCount);
     void publishPerCaveErrors(const cwLinePlotTask::LinePlotResultData& results);
-    void publishFloatingSurveys(QList<cwFindFloatingSurveys::Result> floatingSurveys);
+    void publishFloatingSurveys(QList<cwFindFloatingSurveys::Result> floatingSurveys,
+                                bool externalScopesChecked);
 
 private slots:
     void runSurvex();

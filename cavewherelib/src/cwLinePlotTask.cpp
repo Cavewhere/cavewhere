@@ -121,11 +121,16 @@ struct cwLinePlotTask::LinePlotWorker {
 
     cwLinePlotTask::LinePlotResultData run()
     {
-        cwLinePlotTask::LinePlotResultData result;
-
         if (InputData.regionData.caves.isEmpty()) {
-            return result;
+            //Nothing to solve, so nothing can be floating — a real empty
+            //answer rather than the absence of one.
+            return cwLinePlotTask::LinePlotResultData::cleared();
         }
+
+        // Every return below is a path that never reaches the post-solve
+        // floating-survey pass, and so is any added later: the result asserts
+        // nothing about external scopes until that pass actually runs.
+        cwLinePlotTask::LinePlotResultData result;
 
         // Prepare working copy of region data
         Region.setData(InputData.regionData);
@@ -180,6 +185,7 @@ struct cwLinePlotTask::LinePlotWorker {
             cwFindFloatingSurveys::fromExternalScopes(InputData.regionData,
                                                       parsed.network,
                                                       ScopeLabels));
+        result.ExternalScopesChecked = true;
 
         // The network carries the shot topology for externally-attached scopes,
         // which have no cwSurveyChunk of their own. cwSurveyNetwork is

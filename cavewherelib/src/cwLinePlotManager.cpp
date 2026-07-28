@@ -155,7 +155,7 @@ void cwLinePlotManager::setRegion(cwCavingRegion* region) {
     // CavernOutputPage should start blank for the new project (D-2). Empty
     // results also clear per-chunk error markers. Safe even when region is
     // nullptr (publishPerCaveErrors no-ops without a Region).
-    publishResults(cwLinePlotTask::LinePlotResultData());
+    publishResults(cwLinePlotTask::LinePlotResultData::cleared());
 
     if(Region == nullptr) {
         SurveySignaler->setRegion(nullptr);
@@ -492,7 +492,7 @@ void cwLinePlotManager::runSurvex() {
             // No-shots path must also clear the cached cavern output / solve
             // error so CavernOutputPage doesn't keep showing the previous
             // run's text (D-1).
-            publishResults(cwLinePlotTask::LinePlotResultData());
+            publishResults(cwLinePlotTask::LinePlotResultData::cleared());
             updateLinePlot(cwLinePlotTask::LinePlotResultData());
             return;
         }
@@ -549,7 +549,7 @@ void cwLinePlotManager::publishResults(const cwLinePlotTask::LinePlotResultData&
                         results.regionNetwork().stationCount(),
                         results.CavernWarningCount);
     publishPerCaveErrors(results);
-    publishFloatingSurveys(results.FloatingSurveys);
+    publishFloatingSurveys(results.FloatingSurveys, results.ExternalScopesChecked);
 }
 
 /**
@@ -559,9 +559,26 @@ void cwLinePlotManager::publishResults(const cwLinePlotTask::LinePlotResultData&
  * survey that stopped floating is a survey the new run simply doesn't mention.
  * Silent when the answer is unchanged, so a solve triggered by unrelated cave
  * data doesn't re-pulse the banner.
+ *
+ * The exception is \a externalScopesChecked: a run that stopped before the
+ * post-solve pass carries no answer for the external half rather than an empty
+ * one, so the previous run's external records are carried forward instead of
+ * being replaced by silence. Otherwise an unconnected native chunk in one cave
+ * — which stops the solve region-wide — would blank a still-true floating
+ * record for a different cave's attachment, and the banner would flicker off
+ * until the next clean solve.
  */
-void cwLinePlotManager::publishFloatingSurveys(QList<cwFindFloatingSurveys::Result> floatingSurveys)
+void cwLinePlotManager::publishFloatingSurveys(QList<cwFindFloatingSurveys::Result> floatingSurveys,
+                                               bool externalScopesChecked)
 {
+    if (!externalScopesChecked) {
+        for (const cwFindFloatingSurveys::Result& previous : std::as_const(m_floatingSurveys)) {
+            if (previous.trigger == cwFindFloatingSurveys::Result::Trigger::ExternalScope) {
+                floatingSurveys.append(previous);
+            }
+        }
+    }
+
     if (floatingSurveys == m_floatingSurveys) {
         return;
     }

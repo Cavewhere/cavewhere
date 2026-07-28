@@ -261,6 +261,38 @@ TEST_CASE("A solve that never produced a topology reports nothing floating",
     CHECK(cave->tripCount() == 1);
 }
 
+TEST_CASE("A run that stops before the solve keeps the answer it could not recheck",
+          "[FloatingSurveys]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    cwCavingRegion region;
+    const AttachedSetup setup =
+        setupNativeAndAttached(tempRoot, region, QStringLiteral("survex_simple.svx"));
+
+    cwLinePlotManager manager;
+    REQUIRE(solveAndFindFloating(manager, region, setup.tripDirs).size() == 1);
+
+    // A second cave whose native chunks share no station name. That check runs
+    // instead of the solve, region-wide, so this run never reaches the
+    // post-solve pass that found the attachment above.
+    cwCave* broken = addEmptyCave(region, QStringLiteral("Bravo"));
+    addNativeTripWithShot(broken, QStringLiteral("Main"),
+                          QStringLiteral("B1"), QStringLiteral("B2"));
+    cwTrip* stray = addNativeTripWithShot(broken, QStringLiteral("Stray"),
+                                          QStringLiteral("Z1"), QStringLiteral("Z2"));
+    manager.waitToFinish();
+
+    REQUIRE(manager.hasSolveError());
+
+    // Both halves: Bravo's failure says nothing about Alpha's attachment.
+    const QList<Result> floating = manager.floatingSurveys();
+    CHECK(recordFor(floating, stray).trigger == Result::Trigger::UnconnectedChunks);
+    CHECK(recordFor(floating, setup.attached).trigger == Result::Trigger::ExternalScope);
+    CHECK(floating.size() == 2);
+}
+
 TEST_CASE("The floating-survey signal stays quiet when the answer is unchanged",
           "[FloatingSurveys]")
 {
