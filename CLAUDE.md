@@ -24,11 +24,11 @@ Run the application: `./build/<preset>/CaveWhere`
 Build and run tests:
 ```bash
 cmake --build build/<preset> --target cavewhere-test cavewhere-qml-test
-./build/<preset>/cavewhere-test -d yes 2>&1 | tee /tmp/cavewhere-test.log
-./build/<preset>/cavewhere-qml-test --platform offscreen 2>&1 | tee /tmp/cavewhere-qml-test.log
+./build/<preset>/cavewhere-test -d yes 2>&1 | tee /tmp/cavewhere-test-$$.log
+./build/<preset>/cavewhere-qml-test --platform offscreen 2>&1 | tee /tmp/cavewhere-qml-test-$$.log
 ```
 
-Always redirect test output to a log file so failures can be inspected without re-running. Run a single C++ test with Catch2 tags (`cavewhere-test "[TagName]"`); run a single QML test with `cavewhere-qml-test --platform offscreen -input test-qml/tst_YourTest.qml`. Always run both suites before pushing.
+Always redirect test output to a log file so failures can be inspected without re-running. Keep `$$` (the shell PID) in the log name: sibling checkouts and the nightly runner write to `/tmp` too, and a fixed path lets one run silently clobber another's log — producing a mixed-up log whose failures belong to a different working tree. Run a single C++ test with Catch2 tags (`cavewhere-test "[TagName]"`); run a single QML test with `cavewhere-qml-test --platform offscreen -input test-qml/tst_YourTest.qml`. Always run both suites before pushing.
 
 ## Architecture Overview
 
