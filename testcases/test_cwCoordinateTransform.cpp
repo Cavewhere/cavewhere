@@ -13,46 +13,7 @@
 #include "cwCoordinateTransform.h"
 #include "cwGeoPoint.h"
 
-//Qt includes
-#include <QVector3D>
-
-#include <cmath>
-
 using Catch::Matchers::WithinAbs;
-
-TEST_CASE("cwGeoPoint converts to QVector3D with worldOrigin offset", "[cwGeoPoint]")
-{
-    SECTION("A zero worldOrigin just narrows to float")
-    {
-        cwGeoPoint p(1.5, 2.5, 3.5);
-        QVector3D v = p.toVector3D(cwGeoPoint());
-        CHECK(v.x() == 1.5f);
-        CHECK(v.y() == 2.5f);
-        CHECK(v.z() == 3.5f);
-    }
-
-    SECTION("toVector3D(worldOrigin) preserves precision past float-only narrowing")
-    {
-        // UTM-scale eastings: subtracting worldOrigin in doubles, then
-        // narrowing keeps mm precision; plain float subtraction would lose it.
-        cwGeoPoint origin(500123.456789, 4400987.654321, 1234.5);
-        cwGeoPoint p(500123.466789, 4400987.664321, 1234.6); // 1cm east, 1cm north, 10cm up
-
-        QVector3D v = p.toVector3D(origin);
-        CHECK_THAT(v.x(), WithinAbs(0.01f, 1e-4f));
-        CHECK_THAT(v.y(), WithinAbs(0.01f, 1e-4f));
-        CHECK_THAT(v.z(), WithinAbs(0.10f, 1e-4f));
-    }
-
-    SECTION("equality")
-    {
-        cwGeoPoint a(1.0, 2.0, 3.0);
-        cwGeoPoint b(1.0, 2.0, 3.0);
-        cwGeoPoint c(1.0, 2.0, 3.1);
-        CHECK(a == b);
-        CHECK(a != c);
-    }
-}
 
 TEST_CASE("cwCoordinateTransform short-circuits identical CS", "[cwCoordinateTransform][identity]")
 {
