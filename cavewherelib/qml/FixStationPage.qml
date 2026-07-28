@@ -44,20 +44,13 @@ StandardPage {
             fixStationPage.fixStationsModel.index(rowIndex), newText, role)
     }
 
-    // Easting, northing and elevation in one write, so a pasted coordinate
-    // re-solves the line plot once. Text that won't parse never reaches here:
-    // the field's CoordinateTextValidator holds the editor open and shows the
-    // reason, in the row's own axis order.
-    //
-    // The axis order is re-derived from the row's own CS rather than passed in,
-    // so it can't drift from the one the cell was rendered with — a mismatch
-    // would silently transpose a lat/long.
+    // The whole coordinate in one write, so a pasted one re-solves the line plot
+    // once. Text that won't parse never reaches here: the field's
+    // CoordinateTextValidator holds the editor open and shows the reason, in the
+    // row's own axis order.
     function commitCoordinate(rowIndex, newText) {
-        const model = fixStationPage.fixStationsModel
-        const rowIdx = model.index(rowIndex)
-        model.setCoordinateText(
-            rowIndex, newText, ProjectUnits.unitSystem,
-            CoordinateText.axisOrderFor(model.data(rowIdx, FixStationModel.InputCSRole)))
+        fixStationPage.fixStationsModel.setCoordinateText(
+            rowIndex, newText, ProjectUnits.unitSystem)
     }
 
     component FixField : DoubleClickTextInput {
@@ -76,9 +69,9 @@ StandardPage {
         //! reaches the validator because a refusal has to name the axes the row
         //! actually wants — the verdict is order-independent, the message isn't.
         property int axisOrder: CoordinateText.EastingNorthing
-        //! The string the user typed this value as, when the row kept one (U14).
-        //! Empty ⇒ the editor opens on what the cell displays, which is what
-        //! every field other than the coordinate does.
+        //! The coordinate as it was written, when the row has one. Empty ⇒ the
+        //! editor opens on what the cell displays, which is what every field
+        //! other than the coordinate does.
         property string editValue: ""
 
         text: value
@@ -347,16 +340,17 @@ StandardPage {
                 WideCell {
                     fieldObjectName: "coordinateCell." + wideDelegateId.index
                     columnWidth: coordinateColumn.columnWidth
-                    // Reading inputCS here is what makes the cell re-render
-                    // when the CS flips between geographic and projected — the
-                    // two write their axes in opposite orders.
+                    // The cell renders the numbers, so it needs the same axis
+                    // order they were read under. A CS flip swaps the numbers
+                    // and the render order together, so what this displays
+                    // stays put — it is the meaning underneath that moved.
                     value: CoordinateText.format(wideDelegateId.easting,
                                                  wideDelegateId.northing,
                                                  wideDelegateId.elevation,
                                                  ProjectUnits.unitSystem,
                                                  CoordinateText.axisOrderFor(wideDelegateId.inputCS))
-                    // What the user typed, when this row kept it: the cell above
-                    // renders the numbers, the editor re-offers the string (U14).
+                    // The cell above renders the numbers in the project's
+                    // units; the editor re-offers the coordinate as written.
                     editValue: wideDelegateId.coordinateText
                     rowIndex: wideDelegateId.index
                     coordinate: true

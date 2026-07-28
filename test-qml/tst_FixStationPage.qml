@@ -10,6 +10,13 @@ MainWindowTest {
         name: "FixStationPage"
         when: windowShown
 
+        // Retargeted per test rather than bound: the model belongs to a cave
+        // that init() throws away.
+        SignalSpy {
+            id: dataChangedSpyId
+            signalName: "dataChanged"
+        }
+
         function init() {
             if (GlobalShadowTextInput.coreClickInput !== null) {
                 GlobalShadowTextInput.coreClickInput.closeEditor()
@@ -432,13 +439,15 @@ MainWindowTest {
             tryCompare(coordinateCell, "text", "46.12113, -115.59902, 304m", 5000,
                        "a geographic row leads with the latitude")
 
-            // Switching to a projected CS swaps the two on screen, with the
-            // stored coordinate untouched.
+            // Switching to a projected CS re-reads that same string easting
+            // first, so the text on screen stays put and the components behind
+            // it swap. That is the whole point of the coordinate being the
+            // string: correcting the system corrects how it is read.
             model.setData(idx, "EPSG:32613", FixStationModel.InputCSRole)
-            tryCompare(coordinateCell, "text", "-115.59902, 46.12113, 304m", 5000,
+            tryCompare(coordinateCell, "text", "46.12113, -115.59902, 304m", 5000,
                        "a projected row leads with the easting")
-            compare(model.data(idx, FixStationModel.EastingRole), -115.59902,
-                    "and nothing was written to the model by re-rendering")
+            compare(model.data(idx, FixStationModel.EastingRole), 46.12113,
+                    "and the easting is now what the string leads with")
         }
 
         function test_coordinateCellCommitsLatitudeFirstForAGeographicCS() {
@@ -552,13 +561,22 @@ MainWindowTest {
             const coordinateCell = findCoordinateCell(0)
             tryCompare(coordinateCell, "text", "46.12113, -115.59902, 3.280839895013123ft", 5000)
 
+            // Watched, not just compared afterwards: a commit that rewrote the
+            // row with the identical string would leave every value below
+            // unchanged and still dirty the project and re-solve the plot.
+            dataChangedSpyId.target = model
+            dataChangedSpyId.clear()
+
             coordinateCell.openEditor()
             compare(coordinateCell.commitChanges(), true, "an untouched field commits")
 
+            compare(dataChangedSpyId.count, 0, "leaving an untouched field writes nothing")
             compare(model.data(idx, FixStationModel.ElevationRole), 1.0,
                     "and the elevation is exactly where it was, to the last bit")
-            compare(model.data(idx, FixStationModel.CoordinateTextRole), "",
-                    "the machine's own rendering is not a string worth keeping")
+            compare(model.data(idx, FixStationModel.CoordinateTextRole),
+                    "46.12113, -115.59902, 1m",
+                    "the stored coordinate is untouched — the editor opened on it, "
+                    + "not on the imperial rendering the cell shows")
 
             RootData.region.unitSystem = previousUnits
         }

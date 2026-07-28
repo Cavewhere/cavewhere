@@ -104,6 +104,22 @@ TEST_CASE("cwFixStationDiagnostics::domainCheck resolves the CS it judges under"
         cwFixStation halfEntered = untouched;
         halfEntered.setEasting(kGoodEasting);
         CHECK_FALSE(cwFixStationDiagnostics::isDomainValid(halfEntered, QString()));
+
+        // And a coordinate someone actually wrote at the origin is judged like
+        // any other. Some local grids really do put a station there; deferring
+        // on the numbers couldn't tell it from the untouched row above.
+        cwFixStation atOrigin = untouched;
+        atOrigin.setCoordinate(QStringLiteral("0, 0, 0m"));
+        REQUIRE(atOrigin.state() == cwFixStation::Valid);
+        CHECK_FALSE(cwFixStationDiagnostics::isDomainValid(atOrigin, QString()));
+
+        // A row whose text can't be read has no coordinate to judge either, and
+        // must not be reported as one sitting out of domain at 0, 0 — the text
+        // is what's wrong with it, and that is a different complaint.
+        cwFixStation unreadable = untouched;
+        unreadable.setCoordinate(QStringLiteral("N 46 07 16 W 115 35 56"));
+        REQUIRE(unreadable.state() == cwFixStation::Unreadable);
+        CHECK(cwFixStationDiagnostics::isDomainValid(unreadable, QString()));
     }
 
     SECTION("Per-axis attribution survives the fix-level wrapper") {
@@ -197,16 +213,13 @@ TEST_CASE("the inline row flag and the cave warning reach the same verdict",
     CHECK_FALSE(rowFlagged(goodCave));
 }
 
-TEST_CASE("the domain warning is what carries a coordinate read in the wrong axis order",
+TEST_CASE("correcting a fix's coordinate system clears a coordinate read the wrong way round",
           "[FixStation][cwFixStationDiagnostics]")
 {
-    // U14's Trap 2, end to end. Changing a fix's CS writes nothing — not the
-    // numbers, not the string — because the user changing it is correcting
-    // metadata, not data. The case that rule gives up on is the one where the
-    // axes swap: a UTM pair pasted into a geographic row is read latitude first
-    // and lands transposed. Nothing compensates for that; the domain check
-    // catches it, and the string the user typed is still sitting in the editor,
-    // one keystroke from fixing it.
+    // End to end: a UTM pair pasted into a row whose CS says geographic is read
+    // latitude first and lands transposed, where the domain check catches it.
+    // Correcting the CS is the whole fix — the coordinate is the string, and the
+    // string was right all along; it was only ever being read wrong.
     cwCavingRegion region;
     region.addCave();
     cwCave* cave = region.cave(0);
@@ -217,28 +230,15 @@ TEST_CASE("the domain warning is what carries a coordinate read in the wrong axi
     const QModelIndex idx = fixes->index(0);
     fixes->setData(idx, QStringLiteral("EPSG:4326"), cwFixStationModel::InputCSRole);
 
-    // A UTM zone 11N coordinate, pasted into a row whose CS says geographic —
-    // so the field reads it latitude first and the two horizontals swap.
     const QString typed = QStringLiteral("610016.792, 5615117.075, 304m");
-    REQUIRE(fixes->setCoordinateText(0, typed, cwUnits::Metric,
-                                     cwCoordinateText::LatitudeLongitude) == QString());
+    REQUIRE(fixes->setCoordinateText(0, typed, cwUnits::Metric) == QString());
     REQUIRE(fixes->fixStationAt(0).northing() == 610016.792);
     CHECK(rowFlagged(cave));
 
-    // Correcting the CS moves nothing, so the fix is still transposed and still
-    // flagged. This is the rule working, not failing: the alternative was to
-    // rewrite a coordinate under a user who never asked for one.
     fixes->setData(idx, QStringLiteral("EPSG:32611"), cwFixStationModel::InputCSRole);
-    CHECK(fixes->fixStationAt(0).northing() == 610016.792);
-    CHECK(fixes->fixStationAt(0).coordinateText() == typed);
-    CHECK(rowFlagged(cave));
-
-    // And the keystroke: the editor still holds what was typed, and committing
-    // it unchanged under the row's new order is what puts the fix right.
-    REQUIRE(fixes->setCoordinateText(0, fixes->fixStationAt(0).coordinateText(),
-                                     cwUnits::Metric,
-                                     cwCoordinateText::EastingNorthing) == QString());
     CHECK(fixes->fixStationAt(0).easting() == 610016.792);
     CHECK(fixes->fixStationAt(0).northing() == 5615117.075);
+    // Re-read, not rewritten: the user's own words are still what the row holds.
+    CHECK(fixes->fixStationAt(0).coordinate() == typed);
     CHECK_FALSE(rowFlagged(cave));
 }

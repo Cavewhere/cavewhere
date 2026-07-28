@@ -1,6 +1,7 @@
 #include "cwProtoUtils.h"
 
 //Our includes
+#include "cwCoordinateText.h"
 #include "cwTrip.h"
 #include "cwTripCalibration.h"
 #include "cwSurveyChunk.h"
@@ -821,10 +822,10 @@ void saveFixStation(CavewhereProto::FixStation* protoFix, const cwFixStation& fi
     protoFix->set_elevation(fix.elevation());
     protoFix->set_horizontalvariance(fix.horizontalVariance());
     protoFix->set_verticalvariance(fix.verticalVariance());
-    if (!fix.coordinateText().isEmpty()) {
-        saveString(protoFix->mutable_coordinatetext(), fix.coordinateText());
+    if (!fix.coordinate().isEmpty()) {
+        saveString(protoFix->mutable_coordinatetext(), fix.coordinate());
         protoFix->set_coordinatetextaxisorder(
-            fix.coordinateTextAxisOrder() == cwCoordinateText::LatitudeLongitude
+            cwCoordinateText::axisOrderFor(fix.inputCS()) == cwCoordinateText::LatitudeLongitude
                 ? CavewhereProto::FixStation_AxisOrder_LatitudeLongitude
                 : CavewhereProto::FixStation_AxisOrder_EastingNorthing);
     }
@@ -844,19 +845,49 @@ cwFixStation fromProtoFixStation(const CavewhereProto::FixStation& protoFix)
     if (protoFix.has_inputcs()) {
         fix.setInputCS(QString::fromStdString(protoFix.inputcs()));
     }
-    fix.setEasting(protoFix.easting());
-    fix.setNorthing(protoFix.northing());
-    fix.setElevation(protoFix.elevation());
     fix.setHorizontalVariance(protoFix.horizontalvariance());
     fix.setVerticalVariance(protoFix.verticalvariance());
-    //After the components, which each clear the text (see cwFixStation).
-    if (protoFix.has_coordinatetext()) {
-        fix.setCoordinateText(
-            QString::fromStdString(protoFix.coordinatetext()),
-            protoFix.coordinatetextaxisorder() == CavewhereProto::FixStation_AxisOrder_LatitudeLongitude
-                ? cwCoordinateText::LatitudeLongitude
-                : cwCoordinateText::EastingNorthing);
+
+    //The coordinate string is the fix now, but the numbers in this file were
+    //written when they were the fix — so keep the string only where it still
+    //says exactly what they say, and otherwise spell the numbers out. Loading a
+    //project therefore can't move a station: neither a coordinate typed before
+    //its CS was corrected, nor a two-component paste that left an elevation
+    //standing beside it, is re-read into something else on the way in. The
+    //one-shot migration script applies the same rule; after it there is nothing
+    //here but the string.
+    const QString text = protoFix.has_coordinatetext()
+                             ? QString::fromStdString(protoFix.coordinatetext())
+                             : QString();
+
+    const auto saysWhatTheNumbersSay = [&] {
+        const auto result = cwCoordinateText::parse(text, cwUnits::Metric,
+                                                    cwCoordinateText::axisOrderFor(fix.inputCS()));
+        if (result.hasError()) {
+            return false;
+        }
+        const cwCoordinateText::Coordinate coordinate = result.value();
+        return coordinate.easting == protoFix.easting()
+               && coordinate.northing == protoFix.northing()
+               && (coordinate.hasElevation ? coordinate.elevation : 0.0) == protoFix.elevation();
+    };
+
+    //Three zeros is a row "Mark Station as Fixed" created and nobody filled in.
+    //They have nothing to preserve, and spelling them out as "0, 0, 0m" would
+    //turn *not entered* into *entered at the origin* — which is the distinction
+    //the diagnostics defer on.
+    const bool hasNumbers = protoFix.easting() != 0.0
+                            || protoFix.northing() != 0.0
+                            || protoFix.elevation() != 0.0;
+
+    if (!text.isEmpty() && (!hasNumbers || saysWhatTheNumbersSay())) {
+        fix.setCoordinate(text);
+    } else if (hasNumbers) {
+        fix.setEasting(protoFix.easting());
+        fix.setNorthing(protoFix.northing());
+        fix.setElevation(protoFix.elevation());
     }
+
     return fix;
 }
 

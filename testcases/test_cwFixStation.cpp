@@ -1,11 +1,33 @@
 //Our includes
 #include "cwFixStation.h"
+#include "cwUnits.h"
 
 //Catch includes
 #include <catch2/catch_test_macros.hpp>
 
 //Qt includes
 #include <QUuid>
+
+//Std includes
+#include <limits>
+
+namespace {
+
+const QString kUtmZ11N = QStringLiteral("EPSG:32611");
+const QString kWgs84 = QStringLiteral("EPSG:4326");
+
+//! \a fix's coordinate, read fresh. Setting a component writes the string but
+//! leaves the number it was handed in place, so asserting on that number proves
+//! nothing about the string — this is what forces the text to be read back.
+cwFixStation reread(const cwFixStation& fix)
+{
+    cwFixStation copy;
+    copy.setInputCS(fix.inputCS());
+    copy.setCoordinate(fix.coordinate());
+    return copy;
+}
+
+}
 
 TEST_CASE("cwFixStation defaults are zero/empty", "[FixStation][cwFixStation]") {
     cwFixStation fix;
@@ -17,88 +39,252 @@ TEST_CASE("cwFixStation defaults are zero/empty", "[FixStation][cwFixStation]") 
     CHECK(fix.horizontalVariance() == 0.0);
     CHECK(fix.verticalVariance() == 0.0);
     CHECK(!fix.id().isNull());
-    CHECK(fix.coordinateText().isEmpty());
-    CHECK(fix.coordinateTextAxisOrder() == cwCoordinateText::EastingNorthing);
+    CHECK(fix.coordinate().isEmpty());
+    CHECK(fix.state() == cwFixStation::Empty);
+    CHECK_FALSE(fix.hasElevation());
 }
 
-TEST_CASE("cwFixStation drops the typed coordinate when a component moves",
+TEST_CASE("cwFixStation reads its numbers out of the coordinate it was given",
           "[FixStation][cwFixStation]") {
-    //The invariant U14 rests on: the stored string is a claim about these three
-    //numbers, so any write to one of them makes it false. Clearing it in the
-    //setters rather than at the call sites is what makes the rule hold for the
-    //importers, which write components directly, and for whatever writes them
-    //next.
-    const auto typed = [] {
+    SECTION("a projected coordinate leads with the easting") {
         cwFixStation fix;
-        fix.setEasting(1.0);
-        fix.setNorthing(2.0);
-        fix.setElevation(3.0);
-        fix.setCoordinateText(QStringLiteral("1, 2, 3m"), cwCoordinateText::EastingNorthing);
-        return fix;
-    };
+        fix.setInputCS(kUtmZ11N);
+        fix.setCoordinate(QStringLiteral("610016.792, 5615117.075, 304m"));
 
-    SECTION("the easting") {
-        cwFixStation fix = typed();
+        CHECK(fix.state() == cwFixStation::Valid);
+        CHECK(fix.easting() == 610016.792);
+        CHECK(fix.northing() == 5615117.075);
+        CHECK(fix.elevation() == 304.0);
+        CHECK(fix.hasElevation());
+    }
+
+    SECTION("a geographic one leads with the latitude") {
+        //The same three numbers under the other CS are a different coordinate,
+        //and nothing but the CS says which — 46.12113, -115.59902 is a legal,
+        //if absurd, UTM pair.
+        cwFixStation fix;
+        fix.setInputCS(kWgs84);
+        fix.setCoordinate(QStringLiteral("46.12113, -115.59902, 304m"));
+
+        CHECK(fix.northing() == 46.12113);
+        CHECK(fix.easting() == -115.59902);
+    }
+
+    SECTION("an elevation in feet is converted, because nothing downstream carries a unit") {
+        cwFixStation fix;
+        fix.setCoordinate(QStringLiteral("1, 2, 304ft"));
+        //Exactly, not approximately: cwUnits::convert multiplies by the same
+        //0.3048 this line does. Approx's default epsilon is relative, so at
+        //92 m it would tolerate a millimeter — enough to let a switch to the
+        //US survey foot through unnoticed.
+        CHECK(fix.elevation() == 304.0 * 0.3048);
+        CHECK(fix.hasElevation());
+    }
+
+    SECTION("two components mean the elevation was never entered") {
+        cwFixStation fix;
+        fix.setCoordinate(QStringLiteral("610016.792, 5615117.075"));
+
+        CHECK(fix.state() == cwFixStation::Valid);
+        CHECK(fix.easting() == 610016.792);
+        CHECK_FALSE(fix.hasElevation());
+        //Zero either way for everything downstream — survex's *fix takes three
+        //numbers — so the distinction is one for the diagnostics to draw.
+        CHECK(fix.elevation() == 0.0);
+    }
+
+    SECTION("an empty coordinate is Empty, not a coordinate at the origin") {
+        //Started from a real coordinate so the zeros below are something the
+        //clear actually did. From a fresh fix they are the constructor's, and
+        //every one of these checks would pass with the reset deleted.
+        cwFixStation fix;
+        fix.setCoordinate(QStringLiteral("610016.792, 5615117.075, 304m"));
+        REQUIRE(fix.easting() == 610016.792);
+
+        fix.setCoordinate(QStringLiteral("   "));
+        CHECK(fix.state() == cwFixStation::Empty);
+        CHECK(fix.easting() == 0.0);
+        CHECK(fix.northing() == 0.0);
+        CHECK(fix.elevation() == 0.0);
+        CHECK_FALSE(fix.hasElevation());
+    }
+
+    SECTION("a coordinate at the origin is entered, and says so") {
+        //The distinction the state exists for: some local grids really do put a
+        //station at 0, 0, and a row that says so is not an unfilled row.
+        cwFixStation fix;
+        fix.setCoordinate(QStringLiteral("0, 0, 0m"));
+        CHECK(fix.state() == cwFixStation::Valid);
+    }
+
+    SECTION("text that can't be read is kept, verbatim, and the numbers go with it") {
+        //A project is a file someone can edit. Text that doesn't parse is still
+        //theirs — it is kept, never dropped and never repaired. The numbers a
+        //previous coordinate left behind are not kept: a fix whose text can't
+        //be read must not go on plotting where it used to be.
+        cwFixStation fix;
+        fix.setCoordinate(QStringLiteral("610016.792, 5615117.075, 304m"));
+        REQUIRE(fix.easting() == 610016.792);
+
+        fix.setCoordinate(QStringLiteral("somewhere over there"));
+
+        CHECK(fix.state() == cwFixStation::Unreadable);
+        CHECK(fix.coordinate() == QStringLiteral("somewhere over there"));
+        CHECK(fix.easting() == 0.0);
+        CHECK(fix.northing() == 0.0);
+        CHECK(fix.elevation() == 0.0);
+        CHECK_FALSE(fix.hasElevation());
+    }
+}
+
+TEST_CASE("cwFixStation re-reads its coordinate when the coordinate system changes",
+          "[FixStation][cwFixStation]") {
+    //The whole point of deriving: a coordinate means what its own text says
+    //under the system it is read in, so correcting the system corrects the fix
+    //rather than leaving the numbers where a previous reading put them.
+    cwFixStation fix;
+    fix.setInputCS(kWgs84);
+    fix.setCoordinate(QStringLiteral("610016.792, 5615117.075, 304m"));
+    REQUIRE(fix.northing() == 610016.792);
+
+    fix.setInputCS(kUtmZ11N);
+    CHECK(fix.easting() == 610016.792);
+    CHECK(fix.northing() == 5615117.075);
+    CHECK(fix.coordinate() == QStringLiteral("610016.792, 5615117.075, 304m"));
+
+    SECTION("but a change between two projected systems moves nothing") {
+        //Same axis order, so there is nothing to re-read differently. The
+        //wrong-UTM-zone case has no axis question at all.
+        fix.setInputCS(QStringLiteral("EPSG:32613"));
+        CHECK(fix.easting() == 610016.792);
+        CHECK(fix.northing() == 5615117.075);
+    }
+}
+
+TEST_CASE("cwFixStation writes the coordinate back out when a component is set",
+          "[FixStation][cwFixStation]") {
+    //The importers have numbers rather than a string, and there is only one
+    //place to put a number now. Spelling it out in the setter rather than at the
+    //call sites is what makes the rule hold for call sites that don't exist yet.
+    SECTION("the three numbers round-trip through the string they produce") {
+        cwFixStation fix;
+        fix.setInputCS(kUtmZ11N);
+        fix.setEasting(610016.792);
+        fix.setNorthing(5615117.075);
+        fix.setElevation(304.0);
+
+        CHECK(fix.coordinate() == QStringLiteral("610016.792, 5615117.075, 304m"));
+
+        const cwFixStation read = reread(fix);
+        CHECK(read.easting() == 610016.792);
+        CHECK(read.northing() == 5615117.075);
+        CHECK(read.elevation() == 304.0);
+    }
+
+    SECTION("under a geographic CS too, where the string leads with the latitude") {
+        //cwWallsImporter writes longitude into the easting and latitude into the
+        //northing under a geographic CS. It looks transposed and is not: the
+        //string comes out "lat, lon" and reads straight back.
+        cwFixStation fix;
+        fix.setInputCS(kWgs84);
+        fix.setEasting(-105.27);
+        fix.setNorthing(40.015);
+        fix.setElevation(1655.0);
+
+        CHECK(fix.coordinate() == QStringLiteral("40.015, -105.27, 1655m"));
+
+        const cwFixStation read = reread(fix);
+        CHECK(read.easting() == -105.27);
+        CHECK(read.northing() == 40.015);
+    }
+
+    SECTION("awkward doubles survive the round trip exactly") {
+        //shortestNumber() writes the shortest text that reads back as the same
+        //double, so this is exact rather than close — a fixed precision would
+        //lose the low bits of one of these.
+        const QList<double> awkward = {
+            0.1, 1.0 / 3.0, 46.121129999999997, 1e-7, 123456789.123456789, -0.0000001234
+        };
+        for (double value : awkward) {
+            cwFixStation fix;
+            fix.setEasting(value);
+            fix.setNorthing(value);
+            fix.setElevation(value);
+
+            const cwFixStation read = reread(fix);
+            CHECK(read.easting() == value);
+            CHECK(read.northing() == value);
+            CHECK(read.elevation() == value);
+        }
+    }
+
+    SECTION("a component written onto a two-component coordinate enters an elevation") {
+        cwFixStation fix;
+        fix.setCoordinate(QStringLiteral("1, 2"));
+        REQUIRE_FALSE(fix.hasElevation());
+
         fix.setEasting(9.0);
-        CHECK(fix.coordinateText().isEmpty());
+        CHECK(fix.coordinate() == QStringLiteral("9, 2, 0m"));
+
+        //Read back out of the string rather than off the fix: an elevation the
+        //setter merely left at zero and one the string actually spells out look
+        //identical from here otherwise.
+        const cwFixStation read = reread(fix);
+        CHECK(read.hasElevation());
+        CHECK(read.elevation() == 0.0);
     }
 
-    SECTION("the northing") {
-        cwFixStation fix = typed();
-        fix.setNorthing(9.0);
-        CHECK(fix.coordinateText().isEmpty());
+    SECTION("a component that can't be written as a coordinate leaves the fix Unreadable") {
+        //format() renders a non-finite double as "inf", which parse() won't
+        //take. The state has to follow the string it actually wrote rather than
+        //assert what it meant to write — otherwise the fix claims to be Valid
+        //while its components say one thing and its coordinate says another,
+        //and operator==, which compares only the string, would equate two fixes
+        //sitting in different places.
+        cwFixStation fix;
+        fix.setEasting(std::numeric_limits<double>::infinity());
+
+        CHECK(fix.state() == cwFixStation::Unreadable);
+        CHECK(fix.easting() == 0.0);
     }
 
-    SECTION("the elevation") {
-        cwFixStation fix = typed();
-        fix.setElevation(9.0);
-        CHECK(fix.coordinateText().isEmpty());
+    SECTION("the CS has to be set first, and this is what goes wrong when it isn't") {
+        //The precondition inputCS() documents, exercised in the order that
+        //breaks it. A component written while the CS is still empty is spelled
+        //out easting-first; setting a geographic CS afterwards reads that same
+        //text latitude-first and the two horizontals swap.
+        cwFixStation late;
+        late.setEasting(-105.27);
+        late.setNorthing(40.015);
+        REQUIRE(late.coordinate() == QStringLiteral("-105.27, 40.015, 0m"));
+
+        late.setInputCS(kWgs84);
+        CHECK(late.easting() == 40.015);
+        CHECK(late.northing() == -105.27);
+
+        //The same numbers written in the order the importers use.
+        cwFixStation early;
+        early.setInputCS(kWgs84);
+        early.setEasting(-105.27);
+        early.setNorthing(40.015);
+        CHECK(early.easting() == -105.27);
+        CHECK(early.northing() == 40.015);
     }
+}
 
-    SECTION("but not the name, the CS or a variance — none of those is a component") {
-        cwFixStation fix = typed();
-        fix.setStationName(QStringLiteral("A1"));
-        fix.setInputCS(QStringLiteral("EPSG:4326"));
-        fix.setHorizontalVariance(0.5);
-        fix.setVerticalVariance(1.0);
-        CHECK(fix.coordinateText() == QStringLiteral("1, 2, 3m"));
-    }
-
-    SECTION("clearing the text puts the axis order back with it") {
-        //"No stored text" has to be one state, not two: a leftover order would
-        //make two otherwise identical fixes compare unequal.
-        cwFixStation fix = typed();
-        fix.setCoordinateText(QStringLiteral("46.1, -115.6"), cwCoordinateText::LatitudeLongitude);
-        REQUIRE(fix.coordinateTextAxisOrder() == cwCoordinateText::LatitudeLongitude);
-
-        fix.setCoordinateText(QString(), cwCoordinateText::LatitudeLongitude);
-        CHECK(fix.coordinateTextAxisOrder() == cwCoordinateText::EastingNorthing);
-    }
-
-    SECTION("and so does dropping it by writing a component") {
-        //The same single state, reached by the other path. A component setter
-        //that cleared only the text would leave the order behind, and two fixes
-        //that agree on every number and store no string would compare unequal —
-        //visibly so across a save, since the order is only written out
-        //alongside a non-empty text and comes back as the default.
-        cwFixStation typedGeographic = typed();
-        typedGeographic.setCoordinateText(QStringLiteral("46.1, -115.6"),
-                                          cwCoordinateText::LatitudeLongitude);
-        REQUIRE(typedGeographic.coordinateTextAxisOrder() == cwCoordinateText::LatitudeLongitude);
-
-        typedGeographic.setEasting(9.0);
-        CHECK(typedGeographic.coordinateText().isEmpty());
-        CHECK(typedGeographic.coordinateTextAxisOrder() == cwCoordinateText::EastingNorthing);
-
-        cwFixStation neverTyped = typed();
-        neverTyped.setEasting(9.0);
-
-        //Sharing the id because operator== includes it, and each of these was
-        //default-constructed with its own — the axis order is the only thing
-        //left that could hold them apart.
-        neverTyped.setId(typedGeographic.id());
-        CHECK(typedGeographic == neverTyped);
-    }
+TEST_CASE("cwFixStation reads a stored elevation in meters whatever the project displays",
+          "[FixStation][cwFixStation]") {
+    //Load-bearing: a stored elevation always spells its own unit out, so there
+    //is nothing here for a unit system to resolve — and a fix's *meaning* must
+    //not move when the project's display units change. There is deliberately no
+    //way to hand this class a unit system.
+    //What the component setters write is in meters, so a number set directly
+    //comes back as itself rather than one foot-conversion away. (That a "ft"
+    //suffix is honored on the way in is covered above.)
+    cwFixStation written;
+    written.setElevation(304.0);
+    CHECK(written.coordinate().endsWith(cwUnits::unitName(cwUnits::Meters)));
+    CHECK(reread(written).elevation() == 304.0);
 }
 
 TEST_CASE("cwFixStation setters round-trip", "[FixStation][cwFixStation]") {
@@ -116,11 +302,17 @@ TEST_CASE("cwFixStation setters round-trip", "[FixStation][cwFixStation]") {
     CHECK(fix.id() == id);
     CHECK(fix.stationName() == QStringLiteral("A1"));
     CHECK(fix.inputCS() == QStringLiteral("EPSG:32612"));
-    CHECK(fix.easting() == 500123.456);
-    CHECK(fix.northing() == 4194567.89);
-    CHECK(fix.elevation() == 2750.5);
     CHECK(fix.horizontalVariance() == 0.5);
     CHECK(fix.verticalVariance() == 1.0);
+
+    //Through the string, because that is where the three components now live —
+    //asking the fix for the number it was just handed would pass with the
+    //coordinate never written at all. The non-component setters above must
+    //also leave that string alone.
+    const cwFixStation read = reread(fix);
+    CHECK(read.easting() == 500123.456);
+    CHECK(read.northing() == 4194567.89);
+    CHECK(read.elevation() == 2750.5);
 }
 
 TEST_CASE("cwFixStation copy semantics: COW", "[FixStation][cwFixStation]") {
@@ -148,17 +340,28 @@ TEST_CASE("cwFixStation equality compares all fields", "[FixStation][cwFixStatio
     b.setNorthing(1.0);
     CHECK(a != b);
 
-    SECTION("including the typed string and the order it was read under") {
+    SECTION("including the coordinate, which is what carries the numbers") {
         cwFixStation c;
         cwFixStation d;
         d.setId(c.id());
-        c.setCoordinateText(QStringLiteral("1, 2, 3m"), cwCoordinateText::EastingNorthing);
+        c.setCoordinate(QStringLiteral("1, 2, 3m"));
         CHECK(c != d);
 
-        d.setCoordinateText(QStringLiteral("1, 2, 3m"), cwCoordinateText::LatitudeLongitude);
-        CHECK(c != d);
-
-        d.setCoordinateText(QStringLiteral("1, 2, 3m"), cwCoordinateText::EastingNorthing);
+        d.setCoordinate(QStringLiteral("1, 2, 3m"));
         CHECK(c == d);
     }
+
+    SECTION("and the CS, because the same string under another one is another place") {
+        cwFixStation c;
+        cwFixStation d;
+        d.setId(c.id());
+        c.setInputCS(kUtmZ11N);
+        c.setCoordinate(QStringLiteral("46.12113, -115.59902, 3m"));
+        d.setInputCS(kWgs84);
+        d.setCoordinate(QStringLiteral("46.12113, -115.59902, 3m"));
+
+        REQUIRE(c.easting() != d.easting());
+        CHECK(c != d);
+    }
 }
+

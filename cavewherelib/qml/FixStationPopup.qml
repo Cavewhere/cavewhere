@@ -47,8 +47,9 @@ QC.Popup {
 
     // Which axis the field leads with. A geographic CS is written latitude
     // first, a projected one easting first, and the numbers alone can't say
-    // which — so the label and placeholder below tell the user, and every
-    // format/parse call is handed this same value.
+    // which — so the label below tells the user. It is only the label: the
+    // model reads and writes the coordinate under the row's own CS, so nothing
+    // that decides what a number means comes from this property.
     readonly property int axisOrder: CoordinateText.axisOrderFor(csPickerId.value)
 
     readonly property string errorMessage: popupId.parseError !== ""
@@ -144,15 +145,16 @@ QC.Popup {
 
         const modelIndex = model.index(popupId.row)
         //Read the CS into a local rather than off the picker, so the order this
-        //renders in comes from the same read as the numbers. commitCoordinate()
-        //re-reads it rather than trusting this one — the two reads are separated
-        //by however long the user spends typing.
+        //renders in comes from the same read as the numbers. A commit doesn't
+        //reuse this read at all — setCoordinateText() takes the order from the
+        //row itself, which is what stops a stale picker from deciding what a
+        //coordinate means.
         const inputCS = model.data(modelIndex, FixStationModel.InputCSRole)
         csPickerId.value = inputCS
 
         //This field is always an editor — there is no display half to keep in
-        //project units — so it shows the user's own string whenever the row kept
-        //one, and falls back to rendering the numbers when it didn't (U14).
+        //project units — so it shows the coordinate as it was written. A row
+        //with none has nothing entered yet, and renders as three zeros.
         const typed = model.data(modelIndex, FixStationModel.CoordinateTextRole)
         coordinateFieldId.text = typed !== ""
                 ? typed
@@ -188,7 +190,7 @@ QC.Popup {
         model.setData(model.index(popupId.row), value, role)
     }
 
-    // Writes all three components in one edit, or leaves the row alone and
+    // Writes the whole coordinate in one edit, or leaves the row alone and
     // reports why. No QValidator here on purpose: QC.TextField withholds
     // editingFinished while a validator reports unacceptable input, which would
     // swallow the very message this is here to show (see cwCoordinateText).
@@ -197,10 +199,8 @@ QC.Popup {
         if (model === null || popupId.row < 0) {
             return
         }
-        const inputCS = model.data(model.index(popupId.row), FixStationModel.InputCSRole)
         popupId.parseError = model.setCoordinateText(
-                    popupId.row, text, ProjectUnits.unitSystem,
-                    CoordinateText.axisOrderFor(inputCS))
+                    popupId.row, text, ProjectUnits.unitSystem)
     }
 
     QQ.Connections {
@@ -242,12 +242,13 @@ QC.Popup {
                 onCommitted: (newCS) => {
                     csPickerId.value = newCS
                     popupId.commit(FixStationModel.InputCSRole, newCS)
-                    //Geographic and projected write their axes in opposite
-                    //orders, so the text on screen may have just become a
-                    //transposition of itself — but only text the model actually
-                    //took can be re-rendered. Changing the CS is the natural
-                    //next move after a refusal, and it must not eat the
-                    //coordinate that was refused.
+                    //The CS write re-read the coordinate under the other axis
+                    //order, which moves the numbers and leaves the string
+                    //alone, so this re-render is really about the picker and
+                    //the label. It is still guarded: only text the model
+                    //actually took can be re-rendered, and changing the CS is
+                    //the natural next move after a refusal, so it must not eat
+                    //the coordinate that was refused.
                     if (popupId.parseError === "") {
                         popupId.reloadCoordinate()
                     }

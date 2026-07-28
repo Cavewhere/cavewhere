@@ -7,8 +7,22 @@
 
 #include "cwFixStation.h"
 
+//Our includes
+#include "cwCoordinateText.h"
+#include "cwUnits.h"
+
 //Qt includes
 #include <QSharedData>
+
+namespace {
+
+//! The unit system a stored coordinate is read and written under — never the
+//! project's. A stored elevation always spells its own unit out, so there is
+//! nothing here for a unit system to resolve, and passing one would make what a
+//! fix *means* depend on how the project happens to display it.
+constexpr cwUnits::UnitSystem kStoredUnits = cwUnits::Metric;
+
+}
 
 class cwFixStationData : public QSharedData
 {
@@ -16,21 +30,61 @@ public:
     QUuid Id = QUuid::createUuid();
     QString StationName;
     QString InputCS;
+    double HorizontalVariance = 0.0;
+    double VerticalVariance = 0.0;
+
+    //! The coordinate, as it was written.
+    QString Coordinate;
+
+    //! Read out of Coordinate under InputCS's axis order. refresh() is their
+    //! only writer, which is what keeps them a pure function of the two fields
+    //! above rather than a second copy of the coordinate that could drift.
     double Easting = 0.0;
     double Northing = 0.0;
     double Elevation = 0.0;
-    double HorizontalVariance = 0.0;
-    double VerticalVariance = 0.0;
-    QString CoordinateText;
-    cwCoordinateText::AxisOrder CoordinateTextAxisOrder = cwCoordinateText::EastingNorthing;
+    bool HasElevation = false;
+    cwFixStation::CoordinateState State = cwFixStation::Empty;
 
-    //! The order only means anything alongside the text, so the two go together.
-    //! Keeping "no stored text" a single state is what lets operator== compare
-    //! the pair without two textless fixes coming out unequal.
-    void clearCoordinateText()
+    void refresh()
     {
-        CoordinateText.clear();
-        CoordinateTextAxisOrder = cwCoordinateText::EastingNorthing;
+        Easting = 0.0;
+        Northing = 0.0;
+        Elevation = 0.0;
+        HasElevation = false;
+
+        if (Coordinate.trimmed().isEmpty()) {
+            State = cwFixStation::Empty;
+            return;
+        }
+
+        const auto result = cwCoordinateText::parse(Coordinate, kStoredUnits,
+                                                    cwCoordinateText::axisOrderFor(InputCS));
+        if (result.hasError()) {
+            State = cwFixStation::Unreadable;
+            return;
+        }
+
+        const cwCoordinateText::Coordinate coordinate = result.value();
+        Easting = coordinate.easting;
+        Northing = coordinate.northing;
+        HasElevation = coordinate.hasElevation;
+        Elevation = coordinate.hasElevation ? coordinate.elevation : 0.0;
+        State = cwFixStation::Valid;
+    }
+
+    //! refresh() the other way: the three numbers written back out as the
+    //! coordinate, for the callers that set one component at a time.
+    //!
+    //! It reads its own output back rather than asserting what it just wrote,
+    //! so the derived fields stay a pure function of the coordinate even when
+    //! format() produces something parse() won't take — a non-finite component
+    //! renders as "inf", and a fix carrying one is honestly Unreadable rather
+    //! than Valid with a string that disagrees with it.
+    void reformat()
+    {
+        Coordinate = cwCoordinateText::format(Easting, Northing, Elevation, kStoredUnits,
+                                              cwCoordinateText::axisOrderFor(InputCS));
+        refresh();
     }
 };
 
@@ -58,6 +112,11 @@ cwFixStation::~cwFixStation() = default;
 // two default-constructed cwFixStation values therefore compare unequal (each
 // gets a fresh QUuid in its data block). cwFixStationModel::setData relies on
 // per-field comparison rather than this operator for no-op detection.
+//
+// The components are left out deliberately. They are a pure function of the
+// coordinate and the CS, both compared here, so adding them could only ever
+// restate an answer already given — or, worse, make equality depend on
+// refresh() having run.
 bool cwFixStation::operator==(const cwFixStation& other) const
 {
     if (data == other.data) {
@@ -66,13 +125,9 @@ bool cwFixStation::operator==(const cwFixStation& other) const
     return data->Id == other.data->Id
             && data->StationName == other.data->StationName
             && data->InputCS == other.data->InputCS
-            && data->Easting == other.data->Easting
-            && data->Northing == other.data->Northing
-            && data->Elevation == other.data->Elevation
+            && data->Coordinate == other.data->Coordinate
             && data->HorizontalVariance == other.data->HorizontalVariance
-            && data->VerticalVariance == other.data->VerticalVariance
-            && data->CoordinateText == other.data->CoordinateText
-            && data->CoordinateTextAxisOrder == other.data->CoordinateTextAxisOrder;
+            && data->VerticalVariance == other.data->VerticalVariance;
 }
 
 QUuid cwFixStation::id() const { return data->Id; }
@@ -82,7 +137,16 @@ QString cwFixStation::stationName() const { return data->StationName; }
 void cwFixStation::setStationName(const QString& name) { data->StationName = name; }
 
 QString cwFixStation::inputCS() const { return data->InputCS; }
-void cwFixStation::setInputCS(const QString& cs) { data->InputCS = cs; }
+
+// Re-reads the coordinate: which axis it leads with comes from the CS, so the
+// same text under a new one is a different coordinate. A user correcting a row
+// that was pasted under the wrong system is telling us how to read what they
+// already typed, not asking us to leave it read the old way.
+void cwFixStation::setInputCS(const QString& cs)
+{
+    data->InputCS = cs;
+    data->refresh();
+}
 
 QString cwFixStation::effectiveCS(const QString& globalCS) const
 {
@@ -90,37 +154,30 @@ QString cwFixStation::effectiveCS(const QString& globalCS) const
     return own.isEmpty() ? globalCS.trimmed() : own;
 }
 
-// The three component setters all drop the stored coordinate text: the moment a
-// number is written by any path other than the coordinate field, the string the
-// user typed no longer describes this fix. Clearing it here rather than at the
-// call sites is what makes the invariant hold for call sites that don't exist
-// yet — the survex and Walls importers write components directly, and so will
-// whatever comes next.
+QString cwFixStation::coordinate() const { return data->Coordinate; }
+
+void cwFixStation::setCoordinate(const QString& text)
+{
+    data->Coordinate = text;
+    data->refresh();
+}
+
+cwFixStation::CoordinateState cwFixStation::state() const { return data->State; }
+
+// Each component setter spells the coordinate back out, so the string stays the
+// one thing this class stores. Doing it here rather than at the call sites is
+// what makes it hold for the call sites that don't exist yet — the svx and
+// Walls importers write components directly, and so will whatever comes next.
 double cwFixStation::easting() const { return data->Easting; }
-void cwFixStation::setEasting(double v) { data->Easting = v; data->clearCoordinateText(); }
+void cwFixStation::setEasting(double v) { data->Easting = v; data->reformat(); }
 
 double cwFixStation::northing() const { return data->Northing; }
-void cwFixStation::setNorthing(double v) { data->Northing = v; data->clearCoordinateText(); }
+void cwFixStation::setNorthing(double v) { data->Northing = v; data->reformat(); }
 
 double cwFixStation::elevation() const { return data->Elevation; }
-void cwFixStation::setElevation(double v) { data->Elevation = v; data->clearCoordinateText(); }
+void cwFixStation::setElevation(double v) { data->Elevation = v; data->reformat(); }
 
-QString cwFixStation::coordinateText() const { return data->CoordinateText; }
-
-cwCoordinateText::AxisOrder cwFixStation::coordinateTextAxisOrder() const
-{
-    return data->CoordinateTextAxisOrder;
-}
-
-void cwFixStation::setCoordinateText(const QString& text, cwCoordinateText::AxisOrder order)
-{
-    if (text.isEmpty()) {
-        data->clearCoordinateText();
-        return;
-    }
-    data->CoordinateText = text;
-    data->CoordinateTextAxisOrder = order;
-}
+bool cwFixStation::hasElevation() const { return data->HasElevation; }
 
 double cwFixStation::horizontalVariance() const { return data->HorizontalVariance; }
 void cwFixStation::setHorizontalVariance(double v) { data->HorizontalVariance = v; }

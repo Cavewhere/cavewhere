@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Coordinate String Is the Source of Truth — Implementation Plan</title>
+<style>
+  :root {
+    --bg: #1a1d21; --panel: #23272e; --panel2: #2b3038; --ink: #e6e9ee;
+    --muted: #9aa4b2; --accent: #5aa9e6; --accent2: #7ddc8f; --warn: #e6b35a;
+    --bad: #e66a6a; --line: #3a414b; --code-bg: #15181c;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 48px 28px 120px; }
+  h1 { font-size: 30px; margin: 0 0 6px; letter-spacing: -0.3px; }
+  h2 { font-size: 22px; margin: 52px 0 14px; padding-bottom: 8px;
+    border-bottom: 1px solid var(--line); letter-spacing: -0.2px; }
+  h3 { font-size: 17px; margin: 28px 0 8px; color: var(--accent); }
+  .sub { color: var(--muted); margin: 0 0 8px; }
+  p { margin: 10px 0; }
+  code { font-family: var(--mono); font-size: 13.5px; background: var(--code-bg);
+    padding: 1.5px 6px; border-radius: 4px; color: #d8e0ea; }
+  pre { background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px;
+    padding: 14px 16px; overflow-x: auto; font-family: var(--mono); font-size: 13px; line-height: 1.5; }
+  pre code { background: none; padding: 0; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 18px 20px; margin: 18px 0; }
+  .fig { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 18px; margin: 22px 0; text-align: center; }
+  .fig svg { max-width: 100%; height: auto; }
+  .figcap { color: var(--muted); font-size: 13.5px; margin-top: 12px; text-align: center; }
+  .figcap b { color: var(--ink); }
+  .pill { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 9px;
+    border-radius: 999px; vertical-align: middle; }
+  .pill.ok { background: rgba(125,220,143,.16); color: var(--accent2); }
+  .pill.new { background: rgba(90,169,230,.16); color: var(--accent); }
+  .pill.edit { background: rgba(230,179,90,.16); color: var(--warn); }
+  .pill.del { background: rgba(230,106,106,.16); color: var(--bad); }
+  table { border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 14px; }
+  th, td { border: 1px solid var(--line); padding: 9px 12px; text-align: left; vertical-align: top; }
+  th { background: var(--panel2); font-weight: 600; }
+  td code { font-size: 12.5px; }
+  ul, ol { margin: 10px 0; padding-left: 24px; }
+  li { margin: 5px 0; }
+  .callout { border-left: 3px solid var(--accent); background: var(--panel2);
+    padding: 12px 16px; margin: 16px 0; border-radius: 0 8px 8px 0; }
+  .callout.warn { border-color: var(--warn); }
+  .callout.bad { border-color: var(--bad); }
+  .callout.ok { border-color: var(--accent2); }
+  .toc { columns: 2; column-gap: 32px; font-size: 14px; }
+  .toc a { color: var(--accent); text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+  .commit { display:inline-block; font-family:var(--mono); font-size:12px; font-weight:700;
+    padding:3px 10px; border-radius:6px; background:rgba(90,169,230,.16); color:var(--accent);
+    border:1px solid rgba(90,169,230,.35); }
+  hr { border: none; border-top: 1px solid var(--line); margin: 36px 0; }
+  .mono-note { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .files code { display:block; margin:2px 0; }
+  .q { border-left: 3px solid var(--warn); background: var(--panel2); padding: 14px 18px;
+       margin: 18px 0; border-radius: 0 8px 8px 0; }
+  .q h4 { margin: 0 0 6px; font-size: 15px; color: var(--warn); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>The Coordinate String Is the Source of Truth</h1>
+<p class="sub">A fix station stops storing <code>easting</code>/<code>northing</code>/<code>elevation</code>
+and stores only the string the coordinate was written as. The numbers become a derived, in-memory
+reading of that string under the row's <i>current</i> coordinate system. Follow-on to
+<span class="commit">bca9c14f</span> "Keep the coordinate string the user typed", which this plan
+partly reverses.</p>
+
+<div class="callout">
+  <b>Where this came from.</b> Commit 12 stored the typed string <i>beside</i> the three numbers, which
+  forced a second stored field — <code>coordinateTextAxisOrder</code> — to record which axis the string
+  led with, because the row's CS can change after the text was typed. The question "isn't the axis order
+  implied by the coordinate system?" is the thread that unravelled it: the order <i>is</i> implied, but
+  only if the string is re-read every time the CS changes — which is only safe if the string, not the
+  numbers, is the thing being stored. Removing the duplication removes the field.
+</div>
+
+<h2>1. Contents</h2>
+<div class="toc">
+  <a href="#why">2. Why — the duplication and what it cost</a><br>
+  <a href="#model">3. The data model after the change</a><br>
+  <a href="#states">4. Three coordinate states</a><br>
+  <a href="#proto">5. Proto schema</a><br>
+  <a href="#script">5b. The migration script</a><br>
+  <a href="#setters">6. Component setters and the CS-first precondition</a><br>
+  <a href="#behavior">7. Behavior changes the user will see</a><br>
+  <a href="#blast">8. Blast radius</a><br>
+  <a href="#commits">9. Commit sequence</a><br>
+  <a href="#tests">10. Test plan</a><br>
+  <a href="#open">11. Open decisions</a><br>
+  <a href="#risks">12. Risks &amp; rejected alternatives</a><br>
+</div>
+
+<h2 id="why">2. Why — the duplication and what it cost</h2>
+
+<p>After <span class="commit">bca9c14f</span> a fix station stores <b>two representations of the same
+coordinate</b>: three doubles, and a string. Whenever two fields can disagree, code appears whose only
+job is to stop them disagreeing. All of the following exist for that reason and no other:</p>
+
+<table>
+  <tr><th>Mechanism</th><th>Where</th><th>Exists only because…</th></tr>
+  <tr><td><code>coordinateTextAxisOrder</code></td><td><code>cwFixStation</code>, proto field 10</td>
+    <td>…the string's meaning depends on an order the CS already implies, but the <i>stored</i> string
+    was read under a possibly-older CS.</td></tr>
+  <tr><td><code>clearCoordinateText()</code> in all three component setters</td><td><code>cwFixStation.cpp:100-106</code></td>
+    <td>…any write to a number makes the string a lie.</td></tr>
+  <tr><td><code>rendersRowAsIs</code></td><td><code>cwFixStationModel.cpp:263</code></td>
+    <td>…a machine-generated string must not be mistaken for the user's, or every opened-and-closed cell
+    would store one.</td></tr>
+  <tr><td><code>keptText</code>/<code>keptOrder</code> normalization</td><td><code>cwFixStationModel.cpp:277</code></td>
+    <td>…"no stored text" has to be a single state or two equal fixes compare unequal.</td></tr>
+  <tr><td>The identity guard's order clause</td><td><code>cwFixStationModel.cpp:253</code></td>
+    <td>…re-committing a byte-identical string is a no-op <i>unless</i> the CS flipped underneath it.</td></tr>
+</table>
+
+<p>None of that is wrong. It is all correct, tested, and each piece is individually justified — which is
+exactly what makes it the wrong shape: five interlocking guards maintaining an invariant that disappears
+if the second representation does. The transposition bug they collectively work around is not fixed by
+any of them; it is merely <i>reported</i> (the domain check flags it and the user retypes).</p>
+
+<div class="fig">
+<svg viewBox="0 0 900 340" xmlns="http://www.w3.org/2000/svg" font-family="ui-monospace, Menlo, monospace">
+  <defs>
+    <marker id="ar" markerWidth="9" markerHeight="9" refX="8" refY="3.2" orient="auto">
+      <path d="M0,0 L8,3.2 L0,6.4 z" fill="#9aa4b2"/>
+    </marker>
+    <marker id="arb" markerWidth="9" markerHeight="9" refX="8" refY="3.2" orient="auto">
+      <path d="M0,0 L8,3.2 L0,6.4 z" fill="#e66a6a"/>
+    </marker>
+    <marker id="arg" markerWidth="9" markerHeight="9" refX="8" refY="3.2" orient="auto">
+      <path d="M0,0 L8,3.2 L0,6.4 z" fill="#7ddc8f"/>
+    </marker>
+  </defs>
+
+  <text x="14" y="22" fill="#e6b35a" font-size="13" font-weight="700">BEFORE — two representations, kept in step by guards</text>
+
+  <rect x="14" y="38" width="150" height="46" rx="7" fill="#2b3038" stroke="#3a414b"/>
+  <text x="89" y="60" fill="#e6e9ee" font-size="12" text-anchor="middle">editor text</text>
+  <text x="89" y="76" fill="#9aa4b2" font-size="10.5" text-anchor="middle">"46.1, -115.6, 304m"</text>
+
+  <path d="M164,61 L214,61" stroke="#9aa4b2" stroke-width="1.6" marker-end="url(#ar)"/>
+  <text x="189" y="53" fill="#9aa4b2" font-size="10" text-anchor="middle">parse</text>
+
+  <rect x="216" y="38" width="168" height="46" rx="7" fill="#23272e" stroke="#e66a6a"/>
+  <text x="300" y="58" fill="#e66a6a" font-size="12" text-anchor="middle" font-weight="700">easting/northing/elev</text>
+  <text x="300" y="75" fill="#9aa4b2" font-size="10.5" text-anchor="middle">authoritative · serialized</text>
+
+  <rect x="216" y="100" width="168" height="46" rx="7" fill="#23272e" stroke="#e66a6a"/>
+  <text x="300" y="120" fill="#e66a6a" font-size="12" text-anchor="middle" font-weight="700">coordinateText</text>
+  <text x="300" y="137" fill="#9aa4b2" font-size="10.5" text-anchor="middle">+ axisOrder · serialized</text>
+
+  <path d="M300,84 L300,100" stroke="#e66a6a" stroke-width="1.4" stroke-dasharray="3 3"/>
+  <text x="396" y="98" fill="#e66a6a" font-size="10.5">must not disagree</text>
+  <text x="396" y="113" fill="#9aa4b2" font-size="10">5 guards, 1 extra proto field</text>
+
+  <path d="M384,61 L470,61" stroke="#9aa4b2" stroke-width="1.6" marker-end="url(#ar)"/>
+  <rect x="472" y="38" width="130" height="46" rx="7" fill="#2b3038" stroke="#3a414b"/>
+  <text x="537" y="66" fill="#e6e9ee" font-size="12" text-anchor="middle">solve / export</text>
+
+  <path d="M384,123 L470,123" stroke="#9aa4b2" stroke-width="1.6" marker-end="url(#ar)"/>
+  <rect x="472" y="100" width="130" height="46" rx="7" fill="#2b3038" stroke="#3a414b"/>
+  <text x="537" y="128" fill="#e6e9ee" font-size="12" text-anchor="middle">editor re-opens</text>
+
+  <rect x="628" y="38" width="258" height="108" rx="7" fill="#23272e" stroke="#e66a6a" stroke-dasharray="4 3"/>
+  <text x="757" y="58" fill="#e66a6a" font-size="11.5" text-anchor="middle" font-weight="700">CS changes ⇒ writes NOTHING</text>
+  <text x="757" y="78" fill="#9aa4b2" font-size="10.5" text-anchor="middle">numbers stay as read under the</text>
+  <text x="757" y="93" fill="#9aa4b2" font-size="10.5" text-anchor="middle">old order — transposed and wrong</text>
+  <text x="757" y="115" fill="#e6b35a" font-size="10.5" text-anchor="middle">domain check flags it;</text>
+  <text x="757" y="130" fill="#e6b35a" font-size="10.5" text-anchor="middle">user must retype to fix</text>
+
+  <line x1="14" y1="176" x2="886" y2="176" stroke="#3a414b"/>
+
+  <text x="14" y="204" fill="#7ddc8f" font-size="13" font-weight="700">AFTER — one representation, read on demand</text>
+
+  <rect x="14" y="220" width="150" height="46" rx="7" fill="#2b3038" stroke="#3a414b"/>
+  <text x="89" y="242" fill="#e6e9ee" font-size="12" text-anchor="middle">editor text</text>
+  <text x="89" y="258" fill="#9aa4b2" font-size="10.5" text-anchor="middle">"46.1, -115.6, 304m"</text>
+
+  <path d="M164,243 L214,243" stroke="#9aa4b2" stroke-width="1.6" marker-end="url(#ar)"/>
+  <text x="189" y="235" fill="#9aa4b2" font-size="10" text-anchor="middle">validate</text>
+
+  <rect x="216" y="220" width="168" height="46" rx="7" fill="#23272e" stroke="#7ddc8f"/>
+  <text x="300" y="240" fill="#7ddc8f" font-size="12" text-anchor="middle" font-weight="700">coordinate</text>
+  <text x="300" y="257" fill="#9aa4b2" font-size="10.5" text-anchor="middle">the only stored field</text>
+
+  <path d="M300,266 L300,292" stroke="#7ddc8f" stroke-width="1.6" marker-end="url(#arg)"/>
+  <text x="310" y="284" fill="#7ddc8f" font-size="10.5">parse(axisOrderFor(inputCS))</text>
+
+  <rect x="216" y="294" width="168" height="34" rx="7" fill="#2b3038" stroke="#3a414b"/>
+  <text x="300" y="316" fill="#9aa4b2" font-size="11.5" text-anchor="middle">derived e/n/elev · not saved</text>
+
+  <path d="M384,311 L470,311" stroke="#9aa4b2" stroke-width="1.6" marker-end="url(#ar)"/>
+  <rect x="472" y="288" width="130" height="46" rx="7" fill="#2b3038" stroke="#3a414b"/>
+  <text x="537" y="316" fill="#e6e9ee" font-size="12" text-anchor="middle">solve / export</text>
+
+  <path d="M384,243 L470,243" stroke="#9aa4b2" stroke-width="1.6" marker-end="url(#ar)"/>
+  <rect x="472" y="220" width="130" height="46" rx="7" fill="#2b3038" stroke="#3a414b"/>
+  <text x="537" y="248" fill="#e6e9ee" font-size="12" text-anchor="middle">editor re-opens</text>
+
+  <rect x="628" y="220" width="258" height="108" rx="7" fill="#23272e" stroke="#7ddc8f" stroke-dasharray="4 3"/>
+  <text x="757" y="240" fill="#7ddc8f" font-size="11.5" text-anchor="middle" font-weight="700">CS changes ⇒ RE-READS</text>
+  <text x="757" y="260" fill="#9aa4b2" font-size="10.5" text-anchor="middle">the same string under the new</text>
+  <text x="757" y="275" fill="#9aa4b2" font-size="10.5" text-anchor="middle">order — the axes swap themselves</text>
+  <text x="757" y="297" fill="#7ddc8f" font-size="10.5" text-anchor="middle">correcting the CS fixes the fix.</text>
+  <text x="757" y="312" fill="#7ddc8f" font-size="10.5" text-anchor="middle">No retype, no stored order.</text>
+</svg>
+<div class="figcap"><b>The whole change in one picture.</b> The bottom half has one stored field where the
+top half has two, and the box on the right stops being a defect report and becomes a repair.</div>
+</div>
+
+<h2 id="model">3. The data model after the change</h2>
+
+<pre><code>class cwFixStationData : public QSharedData {
+    QUuid   Id;
+    QString StationName;
+    QString InputCS;
+    double  HorizontalVariance = 0.0;
+    double  VerticalVariance   = 0.0;
+
+    QString Coordinate;                 // the truth
+
+    // Derived from (Coordinate, InputCS). Never serialized. Recomputed by
+    // refresh(), which is the only writer.
+    double  Easting  = 0.0;
+    double  Northing = 0.0;
+    double  Elevation = 0.0;
+    bool    HasElevation = false;
+    cwFixStation::CoordinateState State = cwFixStation::Empty;
+};</code></pre>
+
+<p><code>refresh()</code> is called from exactly two setters — <code>setCoordinate()</code> and
+<code>setInputCS()</code> — and does:</p>
+
+<pre><code>void refresh() {
+    if (Coordinate.trimmed().isEmpty()) { Easting = Northing = Elevation = 0.0;
+                                          State = Empty; return; }
+    const auto result = cwCoordinateText::parse(Coordinate, cwUnits::Metric,
+                                                cwCoordinateText::axisOrderFor(InputCS));
+    if (result.hasError())               { Easting = Northing = Elevation = 0.0;
+                                          State = Unreadable; return; }
+    const auto c = result.value();
+    Easting = c.easting; Northing = c.northing;
+    HasElevation = c.hasElevation;
+    Elevation = c.hasElevation ? c.elevation : 0.0;
+    State = Valid;
+}</code></pre>
+
+<div class="callout">
+  <b>Why <code>cwUnits::Metric</code> and not the project's unit system.</b> A stored string always spells
+  out its elevation unit — <code>textToStore()</code> already guarantees that, and §5's migration and §6's
+  component setters both produce strings that do. A bare elevation therefore cannot reach
+  <code>refresh()</code>, so the unit system it would have been resolved against is irrelevant, and passing
+  <code>Metric</code> unconditionally keeps <code>cwFixStation</code> free of a dependency on project
+  settings it has no business reading. <b>This is load-bearing: it is what makes a fix's meaning independent
+  of the project's display units.</b> Guard it with a test that flips the project to Imperial and asserts
+  the numbers don't move.
+</div>
+
+<p><code>operator==</code> drops the three doubles and compares <code>Coordinate</code>. They are a pure
+function of <code>(Coordinate, InputCS)</code>, both already compared, so including them would be
+redundant — and would make an equality that could never fail into one that silently depends on
+<code>refresh()</code> having run.</p>
+
+<h2 id="states">4. Three coordinate states</h2>
+
+<p>The <code>Unreadable</code> state exists because of a requirement that arrived late and is easy to
+under-serve:</p>
+
+<div class="callout warn">
+  <b>A hand-edited file must not lose the user's text.</b> Projects are readable on disk. If someone edits
+  a coordinate by hand and gets it wrong, CaveWhere flags it in the UI and <b>writes the same bytes back on
+  save</b> — it never drops the string, never "repairs" it, and never silently substitutes a number.
+  <code>parse()</code> is therefore authority on the <i>editor</i> path only
+  (<code>cwFixStationModel::setCoordinateText</code> refuses before storing); on the <i>load</i> path the
+  bytes are taken as-is.
+</div>
+
+<table>
+  <tr><th>State</th><th>When</th><th>Numbers</th><th>UI</th><th>Save writes</th></tr>
+  <tr><td><code>Empty</code></td><td>Row created by "Mark Station as Fixed", nothing typed yet</td>
+      <td>0, 0, 0</td><td>Blank cell, no complaint</td><td>No <code>coordinate</code> field</td></tr>
+  <tr><td><code>Valid</code></td><td>The string parses</td>
+      <td>From the string</td><td>Rendered in project units</td><td>The string</td></tr>
+  <tr><td><code>Unreadable</code></td><td>Hand-edited on disk into something <code>parse()</code> refuses</td>
+      <td>0, 0, 0</td><td><b>Cell tinted, parse error shown</b></td><td><b>The same string, verbatim</b></td></tr>
+</table>
+
+<h3>4.1 The elevation has its own "not entered"</h3>
+
+<p><span class="pill ok">decided</span> A two-component string — <code>"46.1, -115.6"</code>, the shape a
+coordinate copied off a map arrives in — means the elevation <b>was not entered</b>, and stays that way
+across a save. This is <code>parse()</code>'s existing <code>hasElevation</code> flag, promoted from a
+transient parse detail to a persistent property of the fix, and it settles the old question of what a
+two-component paste does to an elevation already on the row: nothing, because the string now says so
+out loud.</p>
+
+<pre><code>enum CoordinateState { Empty, Valid, Unreadable };
+
+CoordinateState state() const;
+bool hasElevation() const;   // false for a two-component coordinate
+double elevation() const;    // 0.0 when !hasElevation()</code></pre>
+
+<div class="callout warn">
+  <b>Downstream this is a diagnostic distinction, not a computational one — say so plainly rather than
+  letting callers discover it.</b> Survex's <code>*fix</code> takes three numbers; there is no way to
+  anchor a station in two. So every consumer —
+  <code>cwSurvexExporterUtils::writeFixStations</code>, <code>cwFixStationValidator.cpp:243,476</code>,
+  <code>cwGridConvergence.cpp:141</code>, <code>cwTripCalibration.cpp:266</code> — keeps reading
+  <code>elevation()</code> and keeps getting <code>0.0</code>, which is exactly what they get today.
+  <b>Nothing about the solve changes.</b> What changes is that the row can now <i>say</i> its elevation is
+  missing instead of claiming it is sea level, so the diagnostics can flag it the way they already flag a
+  half-entered horizontal pair ("One zero is not two" —
+  <code>test_cwFixStationDiagnostics.cpp:103</code>).
+  <br><br>
+  Whether a missing elevation should actually raise a warning is a <b>product</b> question, not a
+  technical one, and it is deliberately <i>not</i> decided here: the state makes the warning
+  <i>possible</i>. Adding it is a one-line follow-up once you have looked at a real project and decided
+  whether it would be useful or merely noisy.
+</div>
+
+<div class="callout bad">
+  <b>The trap this state exists to avoid.</b> <code>cwFixStationDiagnostics</code> currently infers
+  "nothing entered yet" from the coordinate being <i>at the origin</i> — see the section
+  <code>"A fix still on the origin has no coordinate to judge"</code> in
+  <code>test_cwFixStationDiagnostics.cpp:84</code>. If an unreadable string fell back to
+  <code>(0, 0, 0)</code>, that guard would read a <b>corrupted</b> coordinate as an
+  <b>unentered</b> one and show no warning at all — the exact failure the hand-edit requirement is meant to
+  prevent. So the guard must stop inferring intent from a value and ask
+  <code>state() == Empty</code> instead. That is a strictly better rule anyway: it also stops treating a
+  legitimately-entered <code>"0, 0, 0"</code> as unentered, which is a real (if rare) coordinate in some
+  local grids.
+</div>
+
+<h2 id="proto">5. Proto schema</h2>
+
+<h3>5.1 Target shape</h3>
+
+<pre><code>message FixStation {
+    optional string id                 = 1;
+    optional string stationName        = 2;
+    optional string inputCS            = 3;
+
+    reserved 4, 5, 6, 10;
+    reserved "easting", "northing", "elevation", "coordinateTextAxisOrder";
+
+    optional double horizontalVariance = 7;
+    optional double verticalVariance   = 8;
+
+    // The coordinate, as it was written. The only stored form: the three
+    // numbers are read back out of this under the axis order inputCS implies.
+    // Kept verbatim even when it doesn't parse. Absent ⇒ no coordinate.
+    optional string coordinate         = 9;
+}</code></pre>
+
+<p>The <code>AxisOrder</code> enum goes with field 10 — nothing else referenced it.
+Renaming field 9 <code>coordinateText</code> → <code>coordinate</code> is free: protobuf identity is the
+field <i>number</i>, so the rename alone needs no conversion.</p>
+
+<div class="callout ok">
+  <b>No in-app migration.</b> <span class="pill ok">decided</span> The numbers come out of the schema
+  completely, and the one existing project with fix stations is converted once by the script in §5b before
+  it is ever opened by a build that has this change. <code>fromProtoFixStation</code> therefore has no
+  legacy branch at all: it reads field 9 and nothing else. This is what "remove them entirely" buys — the
+  alternative kept four dead fields alive in the schema to serve a conversion that runs exactly once.
+</div>
+
+<div class="callout ok">
+  <b>"Never shipped" is verified, for all five fields.</b> <span class="pill ok">2026-07-27</span> This is
+  the fact the whole removal rests on, and it is easy to talk yourself out of, because
+  <code>origin/dev</code> <i>does</i> carry <code>easting</code>/<code>northing</code>/<code>elevation</code>
+  and the version map labels the current version <code>{9, "2026.4"}</code> — which reads like the fields
+  went out in the 2026.4 release. They did not:
+  <ul>
+    <li><code>git show 2026.4.3:cavewherelib/src/cavewhere.proto | grep FixStation</code> → <b>no match</b>.
+        Same for <code>2026.4</code>, <code>2026.4.1</code>, <code>2026.4.2</code>.</li>
+    <li><code>git ls-tree -r --name-only 2026.4.3 | grep cwFixStation</code> → <b>0 files</b>. No release
+        contains any fix-station code at all.</li>
+    <li><code>git merge-base --is-ancestor 3619b2e3 &lt;tag&gt;</code> → <b>NO</b> for all four tags.
+        "Add fix-station data model…" (2026-05-09) never reached the release branch, even though
+        <code>2026.4.3</code> was cut on 2026-05-24, two weeks later.</li>
+  </ul>
+  So <b>no released build can write a <code>FixStation</code> message</b>, and fields 4, 5, 6, 9 and 10 are
+  equally unshipped. The only files that carry them were written by <code>dev</code>-branch builds since
+  2026-05-09. Nothing here is a compatibility obligation to a user base; the script exists to protect
+  working projects.
+</div>
+
+<div class="callout warn">
+  <b>The consequence: version 9 names two different schemas.</b> <code>protoVersion()</code> was already 9
+  when fix stations landed on <code>dev</code> and was never bumped, so a v9 file written by
+  <code>2026.4.3</code> has <i>no</i> <code>FixStation</code> message while a v9 file written by a
+  <code>dev</code> build has one full of numbers. <b>The version number alone cannot tell them apart</b>, and
+  that is what shapes the gate below — a plain <code>fileVersion &lt; 10 ⇒ refuse</code> would reject every
+  legitimate 2026.4.x project, none of which needs migrating.
+</div>
+
+<div class="callout bad">
+  <b>The hazard this creates, and the guard it needs.</b> <code>loadMessage()</code> parses with
+  <code>ignore_unknown_fields = true</code> (<code>cwSaveLoad.cpp:957</code>). So a build with this change
+  opening an <i>unmigrated</i> project does not fail — it <b>silently discards every
+  <code>easting</code>/<code>northing</code>/<code>elevation</code> key</b>, shows every fix station as
+  having no coordinate, and writes that loss back on the next save. One mis-ordered step (open before
+  migrate) destroys the coordinates.
+  <br><br>
+  <b>So the version gate is not optional and is not a nicety.</b> At cave load
+  (<code>cwSaveLoad.cpp:2751</code>), if <code>fileVersion.version &lt; 10</code> and
+  <code>fixstations_size() &gt; 0</code>, refuse the load with an error naming the script. Build this in
+  the <i>same</i> commit that reserves the fields — never a later one. It is also the only thing standing
+  between a stale checkout and the project, so it should be a hard failure, not a warning that can be
+  clicked through.
+  <br><br>
+  <b>Both halves of that test are load-bearing, and neither can be dropped.</b> Without
+  <code>fixstations_size() &gt; 0</code> the gate rejects every 2026.4.x project, which is at version 9 and
+  has nothing to migrate (see the ambiguity callout above). Without <code>fileVersion &lt; 10</code> it
+  rejects projects it has already migrated. And there is no third, more precise test available: once the
+  fields are reserved, <code>ignore_unknown_fields</code> eats the numbers before the loader can look at
+  them, and a fix station with no <code>coordinate</code> is indistinguishable on the wire from a genuinely
+  empty "Mark Station as Fixed" row. <b>The unit the gate can reason about is the file, not the row</b> —
+  any file that has fix stations and is still at version 9 has not been through the script, and that is
+  exactly the set at risk.
+</div>
+
+<h3 id="script">5b. The migration script</h3>
+
+<p><code>scripts/migrate_fixstation_coordinates.py</code> — run once, by hand, on the one project that has
+fix stations. It needs no protobuf toolchain: CaveWhere writes its objects as <b>pretty-printed JSON</b>
+(<code>MessageToJsonString</code> with <code>add_whitespace</code>, <code>cwSaveLoadPrivate.cpp:520-523</code>),
+so this is a JSON-in / JSON-out transform over plain dictionaries.</p>
+
+<table>
+  <tr><th>Step</th><th>Detail</th></tr>
+  <tr><td>Find the files</td><td>Walk the project directory for <code>*.cwcave</code>
+    (<code>cwSaveLoad.cpp:4502</code>) — fix stations live only on <code>Cave</code>. The
+    <code>.cwproj</code> descriptor carries a <code>version</code> too and needs the same bump.</td></tr>
+  <tr><td>Convert each entry of <code>fixStations[]</code></td>
+    <td>Read <code>easting</code>, <code>northing</code>, <code>elevation</code>,
+    <code>coordinateText</code>, <code>coordinateTextAxisOrder</code>; emit a single
+    <code>coordinate</code>; delete all five old keys. JSON names are lowerCamelCase — protobuf's default,
+    since <code>preserve_proto_field_names</code> is not set. The enum appears as the string
+    <code>"EastingNorthing"</code> / <code>"LatitudeLongitude"</code>, not as a number.</td></tr>
+  <tr><td>Bump</td><td><code>fileVersion.version</code> 9 → 10 in each <code>.cwcave</code>, and
+    <code>version</code> in the <code>.cwproj</code>.</td></tr>
+  <tr><td>Safety</td><td><code>--dry-run</code> that prints every before/after coordinate and writes
+    nothing; refuses to touch a file already at version 10; writes a <code>.bak</code> beside each file it
+    changes. The project is also in git, but the script should not assume it.</td></tr>
+</table>
+
+<p>The conversion rule per fix station, in the order the branches must be tested:</p>
+
+<div class="warn">
+  <b>Commit 1 sharpened the middle test, and the script should follow it.</b> The tree below decides
+  whether to keep the user's string by asking whether <code>coordinateTextAxisOrder</code> matches
+  <code>axisOrderFor(inputCS)</code>. Ask instead whether the string, parsed under
+  <code>axisOrderFor(inputCS)</code>, <i>reproduces the row's three numbers exactly</i> — same question
+  in the common case, but it also catches a case the order test misses: a two-component string
+  (<code>"46.1, -115.6"</code>) sitting beside a non-zero <code>elevation</code>, which
+  <span class="commit">bca9c14f</span> could produce and which the order test would keep, silently
+  dropping the elevation. <code>cwProtoUtils::fromProtoFixStation</code> already applies the sharper
+  rule, so the script and the loader agree branch for branch.</div>
+
+<div class="warn">
+  <b>The tree is missing a branch, and without it the script destroys a hand-edited coordinate.</b>
+  Its first test asks for three zeros <i>and no</i> <code>coordinateText</code>. A row with three
+  zeros and a string that <i>doesn't parse</i> — the hand-edited file §4 is about — therefore falls
+  through to the reproduce-the-numbers test, fails it (unreadable text reproduces nothing), and gets
+  the numbers written out as <code>"0, 0, 0m"</code>. The user's text is gone, which is the one thing
+  §4's callout says must never happen. The loader does not have this hole: its rule is
+  <code>!text.isEmpty() &amp;&amp; (!hasNumbers || saysWhatTheNumbersSay())</code>, so with no numbers
+  to fall back to it keeps the text <i>unconditionally, including text it can't read</i>. Test the
+  branches in this order, which is the order the loader tests them:
+  <ol>
+    <li>No <code>coordinateText</code> and all three numbers zero ⇒ emit no coordinate key
+        (never filled in).</li>
+    <li><code>coordinateText</code> present and all three numbers zero ⇒ <b>keep it verbatim,
+        whether or not it parses</b>. There is nothing else the row could mean.</li>
+    <li><code>coordinateText</code> present and it reproduces the three numbers exactly under
+        <code>axisOrderFor(inputCS)</code> ⇒ keep it verbatim.</li>
+    <li>Otherwise ⇒ write the three numbers out with <code>format()</code>, in meters.</li>
+  </ol>
+  The figure below still draws the old middle test (<code>coordinateTextAxisOrder ==
+  axisOrderFor(inputCS)</code>) and omits branch 2 — read this list, not the diagram.</div>
+
+<div class="fig">
+<svg viewBox="0 0 900 268" xmlns="http://www.w3.org/2000/svg" font-family="ui-monospace, Menlo, monospace">
+  <defs>
+    <marker id="a2" markerWidth="9" markerHeight="9" refX="8" refY="3.2" orient="auto">
+      <path d="M0,0 L8,3.2 L0,6.4 z" fill="#9aa4b2"/>
+    </marker>
+  </defs>
+
+  <rect x="322" y="10" width="256" height="34" rx="7" fill="#2b3038" stroke="#5aa9e6"/>
+  <text x="450" y="32" fill="#e6e9ee" font-size="12" text-anchor="middle">one fixStations[] entry</text>
+
+  <path d="M450,44 L450,64" stroke="#9aa4b2" stroke-width="1.5" marker-end="url(#a2)"/>
+
+  <rect x="286" y="66" width="328" height="34" rx="7" fill="#23272e" stroke="#e66a6a"/>
+  <text x="450" y="88" fill="#e66a6a" font-size="12" text-anchor="middle">easting = northing = elevation = 0, no coordinateText ?</text>
+
+  <path d="M286,83 L150,83 L150,124" stroke="#9aa4b2" stroke-width="1.5" marker-end="url(#a2)"/>
+  <text x="176" y="76" fill="#e66a6a" font-size="11">yes</text>
+
+  <rect x="30" y="126" width="240" height="46" rx="7" fill="#23272e" stroke="#e66a6a"/>
+  <text x="150" y="146" fill="#e66a6a" font-size="11.5" text-anchor="middle" font-weight="700">emit NO coordinate key</text>
+  <text x="150" y="163" fill="#9aa4b2" font-size="10.5" text-anchor="middle">row was never filled in</text>
+
+  <path d="M450,100 L450,124" stroke="#9aa4b2" stroke-width="1.5" marker-end="url(#a2)"/>
+  <text x="466" y="117" fill="#9aa4b2" font-size="11">no</text>
+
+  <rect x="300" y="126" width="300" height="34" rx="7" fill="#23272e" stroke="#e6b35a"/>
+  <text x="450" y="148" fill="#e6b35a" font-size="12" text-anchor="middle">coordinateText present AND its order</text>
+
+  <rect x="300" y="160" width="300" height="24" rx="0" fill="#23272e" stroke="#e6b35a"/>
+  <text x="450" y="177" fill="#e6b35a" font-size="12" text-anchor="middle">== axisOrderFor(inputCS) ?</text>
+
+  <path d="M300,172 L232,172 L232,212" stroke="#9aa4b2" stroke-width="1.5" marker-end="url(#a2)"/>
+  <text x="248" y="203" fill="#7ddc8f" font-size="11">yes</text>
+
+  <path d="M600,172 L668,172 L668,212" stroke="#9aa4b2" stroke-width="1.5" marker-end="url(#a2)"/>
+  <text x="684" y="203" fill="#e6b35a" font-size="11">no</text>
+
+  <rect x="112" y="214" width="240" height="46" rx="7" fill="#2b3038" stroke="#7ddc8f"/>
+  <text x="232" y="234" fill="#7ddc8f" font-size="11.5" text-anchor="middle" font-weight="700">keep coordinateText as-is</text>
+  <text x="232" y="251" fill="#9aa4b2" font-size="10.5" text-anchor="middle">the user's own words survive</text>
+
+  <rect x="548" y="214" width="240" height="46" rx="7" fill="#2b3038" stroke="#5aa9e6"/>
+  <text x="668" y="234" fill="#5aa9e6" font-size="11.5" text-anchor="middle" font-weight="700">render from the numbers</text>
+  <text x="668" y="251" fill="#9aa4b2" font-size="10.5" text-anchor="middle">"e, n, elev m" · metric</text>
+</svg>
+<div class="figcap"><b>The script's decision per fix station.</b> The red branch is the one that is easy to
+get wrong: a row created by "Mark Station as Fixed" and never filled in has three zeros and no string, and
+emitting <code>"0, 0, 0m"</code> for it would convert <i>not entered</i> into <i>entered at the origin</i>.</div>
+</div>
+
+<div class="callout ok">
+  <b>The conversion is bit-exact, and that is checkable rather than hopeful.</b> Python's
+  <code>repr(float)</code> is the shortest round-tripping representation — the same guarantee
+  <code>QLocale::FloatingPointShortest</code> gives <code>shortestNumber()</code> — so each horizontal
+  reproduces the identical double. The elevation is written in metres, so C++ will read it back through
+  <code>convert(x, Meters, Meters)</code> = <code>x * 1.0 / 1.0</code>, exactly <code>x</code>, dodging the
+  m→ft→m ulp loss that costs ~12.5% of doubles an ulp on the imperial path. <b>Verify it rather than
+  asserting it:</b> have the script re-read what it wrote and compare against the original doubles, and
+  fail loudly on any row that doesn't reproduce.
+</div>
+
+<h3>5.3 Version bump</h3>
+
+<p><code>cwRegionIOTask::protoVersion()</code> 9 → 10 (<code>cwRegionIOTask.cpp:54</code>), and a new entry
+in the <code>protoToVersionString</code> map below it. The existing map ends <code>{9, "2026.4"}</code>;
+the new entry's label is your call — <code>{10, "2026.5"}</code> unless you have a release name in mind.</p>
+
+<h2 id="setters">6. Component setters and the CS-first precondition</h2>
+
+<p><code>setEasting()</code> / <code>setNorthing()</code> / <code>setElevation()</code> survive, because
+~30 call sites use them and both importers write components directly. They invert: instead of writing a
+number and <i>clearing</i> the string, they write a number and <b>re-format</b> the string from the three
+current values under <code>axisOrderFor(inputCS())</code>, in <code>Metric</code>.</p>
+
+<p>This introduces a precondition that did not exist before and must be documented on the header:</p>
+
+<div class="callout warn">
+  <b>Set <code>inputCS</code> before any component.</b> A bare number has no meaning without an axis order,
+  and the order comes from the CS. Writing a component while <code>inputCS</code> is still empty formats the
+  string as easting-first; setting a geographic CS afterwards then re-reads it latitude-first and the two
+  horizontals swap. <b>Both importers already do this correctly</b> —
+  <code>cwSurvexImporter.cpp:1106</code> and <code>cwWallsImporter.cpp:85,96</code> each set the CS on the
+  line before the components — so no importer change is needed, but a test should pin that ordering so a
+  future edit can't quietly reverse it.
+</div>
+
+<p>The Walls geographic path is worth tracing because it looks wrong and is right:
+it sets a geographic CS, then <code>setEasting(longitude)</code> and <code>setNorthing(latitude)</code>.
+<code>format()</code> under <code>LatitudeLongitude</code> writes <code>northing</code> first, producing
+<code>"lat, lon, elev"</code> — and <code>parse()</code> under the same order reads it straight back.
+The round trip holds. The intermediate states are nonsense (after
+<code>setEasting()</code> alone the string is <code>"0, &lt;lon&gt;, 0m"</code>) but only the final state is
+ever observed.</p>
+
+<h2 id="behavior">7. Behavior changes the user will see</h2>
+
+<table>
+  <tr><th>Situation</th><th>Today <span class="commit">bca9c14f</span></th><th>After</th></tr>
+  <tr><td>Paste a UTM pair into a row whose CS says geographic, then correct the CS</td>
+      <td>Coordinate stays transposed. Domain check flags it; user must re-commit the field by hand.</td>
+      <td><b>The axes swap themselves.</b> Correcting the CS corrects the fix.</td></tr>
+  <tr><td>Change a row's CS between two projected systems</td>
+      <td>Nothing is written.</td>
+      <td>Nothing moves — same order, same string, same numbers. Unchanged.</td></tr>
+  <tr><td>Import from svx / Compass / Walls</td>
+      <td>Row has numbers and no string; editor renders the numbers.</td>
+      <td>Row has a machine-written string; editor offers it. Same numbers.</td></tr>
+  <tr><td>Two-component paste <code>"46.1, -115.6"</code></td>
+      <td>Existing elevation preserved; string stored as typed.</td>
+      <td><b>The elevation reads as not entered</b> (§4.1). The row can say so; the solve still uses 0,
+      as it does today.</td></tr>
+  <tr><td>Hand-edited garbage in the file</td>
+      <td>Field 9 is display-only, so it is ignored and the numbers win — silent.</td>
+      <td>Flagged in the UI, written back verbatim.</td></tr>
+  <tr><td>Opening a project that was never migrated</td>
+      <td>n/a</td>
+      <td><b>Hard load failure naming the script</b> — the alternative is silent destruction (§5).</td></tr>
+</table>
+
+<div class="callout bad">
+  <b>This reverses plan §13.10 of <code>OUTLIER_FIX_STATION_PLAN.html</code></b>, which states that a CS
+  change "deliberately writes <b>nothing</b>" and justifies the stored axis order on that basis. The
+  reasoning there was sound for a design where the numbers are authoritative — rewriting a user's
+  coordinate because they corrected a metadata field would be presumptuous. It stops applying once the
+  string is the coordinate: re-reading the same string under the right order isn't a rewrite, it's what
+  reading <i>means</i>. §13.10 and the Commit-12 callout both need rewriting as part of this work, and
+  <code>test_cwFixStationDiagnostics.cpp:200</code> — the test that pins the old rule end-to-end — inverts
+  from "still flagged" to "no longer flagged".
+</div>
+
+<h2 id="blast">8. Blast radius</h2>
+
+<table>
+  <tr><th>File</th><th>Change</th></tr>
+  <tr><td><code>cwFixStation.h/.cpp</code></td><td><span class="pill edit">rework</span> String becomes the
+    stored field; numbers derived; <code>CoordinateState</code> enum; <code>refresh()</code>;
+    <code>coordinateTextAxisOrder()</code> deleted; <code>operator==</code> loses three doubles.</td></tr>
+  <tr><td><code>cavewhere.proto</code></td><td><span class="pill edit">rework</span> §5.1.</td></tr>
+  <tr><td><code>cwProtoUtils.cpp</code></td><td><span class="pill del">simplify</span> <code>saveFixStation</code>
+    and <code>fromProtoFixStation</code> each lose four fields and gain nothing — there is no legacy
+    branch, because the script handles the one project that needs one.</td></tr>
+  <tr><td><code>cwRegionIOTask.cpp</code></td><td><span class="pill new">+2 lines</span> version 9 → 10.</td></tr>
+  <tr><td><code>cwSaveLoad.cpp</code></td><td><span class="pill new">new</span> Load-time version gate
+    (~line 2751): refuse a cave with <code>fileVersion &lt; 10</code> and any fix stations. <b>Ships with
+    the schema change, not after it.</b></td></tr>
+  <tr><td><code>scripts/migrate_fixstation_coordinates.py</code></td><td><span class="pill new">new</span>
+    §5b. Pure JSON; no protobuf dependency.</td></tr>
+  <tr><td><code>cwFixStationModel.cpp/.h</code></td><td><span class="pill del">simplify</span> Delete
+    <code>rendersRowAsIs</code>, <code>keptText</code>/<code>keptOrder</code>, the order clause of the
+    identity guard. <code>setInputCS</code> now emits the component roles too, since it moves them.</td></tr>
+  <tr><td><code>cwFixStationDiagnostics.cpp</code></td><td><span class="pill edit">rework</span> Origin guard
+    asks <code>state()</code>; new <code>Unreadable</code> complaint.</td></tr>
+  <tr><td><code>FixStationPage.qml</code>, <code>FixStationPopup.qml</code></td>
+    <td><span class="pill edit">small</span> Parse-error surface for <code>Unreadable</code>; popup unit
+    question (§11 Q2).</td></tr>
+  <tr><td><code>cwSurvexImporter.cpp</code>, <code>cwWallsImporter.cpp</code></td>
+    <td><span class="pill ok">no change</span> Ordering already correct — pin it with a test.</td></tr>
+  <tr><td>~30 test call sites</td><td><span class="pill ok">no change</span> The component setters keep
+    their signatures. Only tests asserting on <code>coordinateText()</code> /
+    <code>coordinateTextAxisOrder()</code> move.</td></tr>
+</table>
+
+<h2 id="commits">9. Commit sequence</h2>
+
+<p>Each commit is independently green. The order is chosen so the risky refactor lands alone, with the
+proto untouched, so a bisect can separate "the derivation is wrong" from "the migration is wrong".</p>
+
+<table>
+  <tr><th>#</th><th>Commit</th><th>Contents</th></tr>
+  <tr><td><b>1</b></td><td>Derive a fix station's numbers from its coordinate string
+    <span class="pill ok">implemented</span></td>
+    <td><code>Coordinate</code> becomes the stored field, numbers derived, <code>CoordinateState</code>
+    added, component setters re-format.
+    <b>Proto untouched</b> — <code>saveFixStation</code> still writes the numbers and reads them back, so
+    persistence is unchanged. This is the whole risk of the change, isolated.
+    <br><br>
+    <b>Two things landed here that this table had scheduled elsewhere</b>, both forced by the same fact —
+    once the numbers are a pure function of (<code>Coordinate</code>, <code>InputCS</code>), a design in
+    which <code>setInputCS</code> does <i>not</i> re-read is not a smaller change, it is an inconsistent
+    one, and <code>operator==</code> (which no longer compares the doubles) would be wrong. So
+    <b>the re-read commit's work moved here</b>, along with the component roles the model has to emit with
+    it — a model that mutates values without notifying is a defect, not a deferred feature — and
+    <code>test_cwFixStationDiagnostics.cpp:200</code> inverted here rather than there.
+    <br><br>
+    The last commit is correspondingly smaller: §13.10 of the outlier plan still needs rewriting, and the
+    QML check that correcting a CS clears the domain tint with no retype still needs writing.</td></tr>
+  <tr><td><b>2</b></td><td>Store only the coordinate string</td>
+    <td>Proto §5.1 (<code>reserved 4,5,6,10</code>), version bump §5.3, the load-time version gate that
+    refuses an unmigrated project, <b>and the migration script itself</b> —
+    <code>scripts/migrate_fixstation_coordinates.py</code> (§5b) plus its test over a hand-built v9
+    <code>.cwcave</code> fixture. Deletes <code>coordinateTextAxisOrder</code> end to end, and
+    <code>fromProtoFixStation</code>'s reconciliation with it: after this commit the loader reads field 9
+    and nothing else.</td></tr>
+  <tr><td><b>3</b></td><td>Flag a coordinate that can't be read</td>
+    <td>Origin guard moves to <code>state()</code>; <code>Unreadable</code> reaches the page and the popup;
+    the hand-edit round trip gets its test.</td></tr>
+  <tr><td><b>4</b></td><td>Re-read a coordinate when its system changes</td>
+    <td><b>Reduced by commit 1</b>, which already landed the re-read and its role emission (see above).
+    What is left: §13.10 of the outlier plan is rewritten, and the QML check that correcting a row's CS
+    after a transposed paste clears the domain tint with no retype.</td></tr>
+</table>
+
+<div class="callout ok">
+  <b>The script no longer gets its own commit, and the reason is not tidiness.</b>
+  <span class="pill ok">2026-07-27</span> It used to land <i>before</i> the schema change, on the argument
+  that you could then migrate a copy and diff it while a build in the tree still read both formats. That
+  argument doesn't hold: the script bumps each file to version 10, and <code>cwSaveLoad</code> refuses any
+  file whose version is <i>greater</i> than <code>protoVersion()</code>
+  (<code>cwSaveLoad.cpp:2675</code>, <code>:2894</code>). At the old commit 2, <code>protoVersion()</code> is
+  still 9 — so <b>the build at that commit would reject the very file the script had just written</b>. The
+  script is unrunnable until the version bump exists, and the gate's error message names a script that
+  doesn't exist yet. The two halves only make sense together.
+  <br><br>
+  The "migrate a copy and diff it" workflow survives intact, because it is a property of the
+  <i>working tree</i>, not of a commit boundary: write the script, run it on a copy, check the result, and
+  stage the whole thing as one commit once it's right. The bisect separation this plan cares about is
+  commit 1's — the risky derivation, landing alone with the proto untouched — and that is unaffected.
+</div>
+
+<h2 id="tests">10. Test plan</h2>
+
+<p>The existing <code>[FixStation]</code> suite is the safety net for commit 1 — but <i>not</i>
+assertion-for-assertion. Roughly a dozen of its cases assert the invariant this change deletes
+("writing a component drops the string", "changing the CS writes nothing", "the machine's own rendering
+is not a string worth keeping"), and those invert rather than survive. The suite is a safety net in the
+sense that everything <i>around</i> the coordinate — persistence, the exporters, the diagnostics, the
+line plot — must stay green untouched.</p>
+
+<p>New coverage:</p>
+
+<h3>C++</h3>
+<ul>
+  <li><b><code>test_cwFixStation.cpp</code></b> — the derivation: a string in, the right numbers out, under
+  both axis orders; <code>setInputCS</code> re-derives; the three states; component setters produce a string
+  that re-reads to the numbers just written (a property test over adversarial doubles, not one example);
+  <b>project units flipped to Imperial does not move any number</b> (§3's load-bearing claim).</li>
+  <li><b><code>test_cwFixStationModel.cpp</code></b> — a fix with an unparseable string survives a
+  save/load round trip <b>byte-identical</b>; a two-component coordinate reloads with
+  <code>hasElevation() == false</code>.</li>
+  <li><b>The version gate</b> — a hand-built v9 <code>.cwcave</code> with a fix station is <i>refused</i>,
+  and the same file with no fix stations still loads. Both halves matter: a gate that refuses everything
+  would pass the first assertion alone.</li>
+  <li><b>The script</b>, tested on its own against a hand-built v9 fixture rather than through the app:
+  each branch of the §5b tree, the zero-row that must stay coordinate-less, idempotency (running it twice
+  changes nothing), and the round-trip check that every migrated double reproduces exactly.</li>
+  <li><b><code>test_cwFixStationDiagnostics.cpp</code></b> — <code>Unreadable</code> is flagged and is
+  <i>not</i> confused with <code>Empty</code>; the origin guard still defers an untouched row; the
+  axis-order case at line 200 inverts to assert the self-heal.</li>
+  <li><b>Importer ordering</b> — an svx and a Walls fix each round-trip to the coordinate they were
+  imported as, which fails if anyone reorders the CS write after the components.</li>
+</ul>
+
+<h3>QML</h3>
+<ul>
+  <li>Correcting a row's CS after a transposed paste clears the domain tint with no retype.</li>
+  <li>An <code>Unreadable</code> row shows its parse error and still shows the offending text.</li>
+</ul>
+
+<div class="callout warn">
+  <b>Mutation-test the assertions, not just the code.</b> The Commit 11 review found <b>ten tests that
+  could not fail</b>, and the <code>StationFixedRole</code> review found four more — every one of them an
+  assertion about an emission or a role list. The migration tests here are the same shape and the same
+  risk: a script test that builds its input by running the <i>script's own</i> writer, rather than from a
+  hand-written v9 <code>.cwcave</code> fixture checked into the repo, will pass no matter what the script
+  does.
+</div>
+
+<h2 id="open">11. Open decisions</h2>
+
+<div class="callout ok">
+  <b>Q1 (component normalization) and Q3 (deprecated vs reserved) are resolved</b>
+  <span class="pill ok">2026-07-27</span> and folded into §4.1 and §5 respectively. Q1 went the opposite
+  way from my recommendation: rather than normalizing a two-component paste up to three, the <b>elevation
+  gets its own "not entered" state</b>, so the string keeps meaning exactly what it says. That is the
+  better answer — normalizing would have invented an elevation the user never typed, and this preserves
+  the original intent (a map coordinate says nothing about elevation) without needing the numbers to
+  remember anything the string doesn't. Q3 resolved to full removal plus an external one-shot script,
+  which is what the "only one project uses fix stations" fact makes affordable — and which §5's tag audit
+  has since <b>verified</b> rather than assumed: no released build contains fix-station code at all.
+</div>
+
+<div class="q">
+  <h4>Q2 — What unit does the popup show for a machine-written string?</h4>
+  <p><code>FixStationPage</code> is unaffected: its cell renders from the numbers in project units and only
+  the <i>editor</i> uses the string. The popup has no display half — one field is both — so it shows the
+  stored string directly. After this change every fix has a string, and an imported fix's string is
+  metric, so an imperial project's popup would read <code>"…, 304m"</code> where the page's cell reads
+  <code>"…, 997.4ft"</code>.</p>
+  <p><b>Recommendation: accept it for now and file it.</b> The value is not wrong and the unit is spelled
+  out, so nothing is ambiguous — it is an inconsistency, not a defect. Fixing it properly means the popup
+  learning the same display/edit split the page has, which is <a href="OUTLIER_FIX_STATION_PLAN.html">A3's
+  "the popup grew a third role"</a> work and does not belong in this change.</p>
+</div>
+
+<div class="q">
+  <h4>Q4 — Should a missing elevation raise a warning?</h4>
+  <p>§4.1 makes the state <i>available</i> without deciding whether the UI acts on it. A fix with no
+  elevation still anchors the survey at elevation 0, which may be exactly what you want for a cave mapped
+  on a local grid, or may be a half-finished entry. <b>Recommendation: ship the state, look at your real
+  project, then decide</b> — this is a one-line follow-up either way and guessing now risks adding noise
+  to a page whose whole purpose is to make real problems visible.</p>
+</div>
+
+<div class="q">
+  <h4>Q5 — Does the axis order follow <code>inputCS()</code> or <code>effectiveCS(globalCS)</code>?</h4>
+  <p><span class="pill">raised by the commit 1 review, 2026-07-27</span> §6 documents the CS-first
+  precondition but assumes the row <i>has</i> a CS. Commit 1 reads and writes the coordinate under
+  <code>axisOrderFor(inputCS())</code> — while <code>cwFixStationDiagnostics::domainCheck</code> and
+  <code>cwSurvexExporterUtils::writeFixStations</code> both judge the same fix under
+  <code>effectiveCS(globalCS)</code>, which <code>cwFixStation.h</code>'s own doc calls a rule every
+  consumer has to answer the same way. A row that leaves its CS blank under a geographic project CS is
+  therefore <i>entered</i> easting-first and <i>exported</i> latitude-first.</p>
+  <p><b>Confirmed, and wider than the blank-CS case.</b>
+  <code>cwCoordinateTransform::isGeographic("LONG-LAT")</code> is <code>false</code> — as is
+  <code>"UTM13N"</code> — and <code>cwSurvexImporter::parseCS</code> stores survex's <code>*cs</code>
+  spellings verbatim by design. So a <code>*cs LONG-LAT</code> / <code>*fix</code> import is spelled
+  out easting-first, and the moment the user corrects the row to <code>EPSG:4326</code> — which they
+  must, since <code>LONG-LAT</code> is unusable downstream — the horizontals swap and the cave moves
+  ~12,000&nbsp;km. Before commit 1, <code>setInputCS</code> wrote nothing and the numbers survived.</p>
+  <p><b>Commit 1 closed off the cheap fix.</b> The order used to be a call-site parameter, correctable
+  by passing <code>effectiveCS</code> at three sites. It now lives inside a <code>QSharedData</code>
+  value type that structurally cannot see the region's global CS — and the invariant this plan just
+  bought ("the numbers are a pure function of <code>(Coordinate, InputCS)</code>") is what forbids it
+  seeing one. The two answers are: <code>cwFixStation</code> takes the effective CS on write, giving up
+  some of that purity; or the derivation moves up to <code>cwFixStationModel</code>, which knows its
+  cave. Either touches <code>cwFixStation</code>, the model, the <code>cwCave</code> wiring and the
+  <code>globalCS</code>-changed path. <b>Recommendation: decide before commit 2</b> — every later commit
+  builds on the current answer, and commit 2's migration script <i>encodes it on disk</i>. Deciding after
+  it has run means writing a second migration to undo the first.</p>
+</div>
+
+<h2 id="risks">12. Risks &amp; rejected alternatives</h2>
+
+<table>
+  <tr><th>Risk</th><th>Assessment</th></tr>
+  <tr><td>A parse regression takes fixes out of the solve</td>
+    <td><b>Not data loss</b> — the string is on disk, on screen, and flagged. The numbers are recomputable
+    from it the moment the parser is right again. This was raised as the strongest objection to the design
+    and does not survive the fact that <code>setCoordinateText</code> refuses to store anything
+    <code>parse()</code> rejected, and that both <code>format()</code> and <code>parse()</code> are C-locale
+    — so there is no write/read asymmetry to regress on.</td></tr>
+  <tr><td><b>An unmigrated project is opened by a new build</b></td>
+    <td><b>The single largest risk in this plan, and the only one that destroys data.</b>
+    <code>ignore_unknown_fields = true</code> turns "old schema" into "no coordinates" with no error, and
+    the next save persists it. Mitigated by the load-time version gate (§5), which must be a hard failure
+    and must ship in the same commit as the schema change. Migrating a <i>copy</i> first, and keeping the
+    original untouched until the migrated copy opens correctly, costs nothing and is worth doing.</td></tr>
+  <tr><td>Derived state goes stale</td>
+    <td>Real, and the reason <code>refresh()</code> has exactly two callers and the fields are private with
+    no setter. Worth a test that calls every mutator and asserts the numbers agree with the string.</td></tr>
+  <tr><td>Component-setter ordering</td>
+    <td>§6. Both current call sites are correct; the risk is a future one, so it gets a test rather than a
+    comment.</td></tr>
+</table>
+
+<h3>Rejected: keep the numbers as a cache</h3>
+<p>Serialize both, treat the string as authoritative, and use the numbers only to detect a parse
+regression. Rejected on the grounds that it keeps every guard in §2 alive to maintain agreement between
+two stored fields — the exact cost this change exists to remove — in exchange for a failure mode that
+§12 shows is already benign.</p>
+
+<h3>Rejected: parse lazily on read</h3>
+<p><code>easting()</code> parses on demand instead of caching. Rejected: <code>easting()</code> is called
+per-station in the solve and per-frame in the plot, and a regex parse behind a const getter is a
+performance trap disguised as simplicity. Deriving on write is one parse per edit.</p>
+
+<hr>
+<p class="mono-note">Follows <span class="commit">bca9c14f</span> · reverses §13.10 of
+OUTLIER_FIX_STATION_PLAN.html · issues #596, #621</p>
+
+</div>
+</body>
+</html>

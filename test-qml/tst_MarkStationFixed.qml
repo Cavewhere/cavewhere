@@ -505,7 +505,10 @@ MainWindowTest {
             tryCompare(label, "text", "East, North, Elev", 2000,
                        "a projected CS asks for easting first")
 
-            coordinate.text = "478000, 4430000, 1655m"
+            // Written without spaces so the field can't be showing a rendering
+            // of the numbers and pass for the text: format() always spaces its
+            // separators, so only the stored string reads back like this.
+            coordinate.text = "478000,4430000,1655m"
             coordinate.editingFinished()
 
             const model = context.cave.fixStations
@@ -513,25 +516,17 @@ MainWindowTest {
             compare(model.data(modelIndex, FixStationModel.EastingRole), 478000.0)
             compare(model.data(modelIndex, FixStationModel.NorthingRole), 4430000.0)
 
-            // Switching to lat/long changes what the field *asks* for, and
-            // nothing else: not the numbers, and not the string the user typed
-            // (U14 Trap 2). Someone correcting a CS is fixing metadata, not
-            // data, and re-emitting their own numbers in the other order hands
-            // them back something they never wrote.
+            // Switching to lat/long changes what the field asks for and how the
+            // string is read — the coordinate *is* the string, so correcting the
+            // system re-reads it rather than leaving it read the old way. The
+            // words the user typed are untouched either way.
             picker.committed("EPSG:4326")
             tryCompare(label, "text", "Lat, Long, Elev", 2000,
                        "a geographic CS asks for latitude first")
-            compare(coordinate.text, "478000, 4430000, 1655m",
+            compare(coordinate.text, "478000,4430000,1655m",
                     "the string the user typed stays exactly as they typed it")
-            compare(model.data(modelIndex, FixStationModel.EastingRole), 478000.0,
-                    "and the CS change wrote nothing to the model")
-
-            // Committing that same string is now a real edit, because the order
-            // it is read under changed underneath it — this is the keystroke
-            // that corrects a fix the domain warning has just flagged.
-            coordinate.editingFinished()
             compare(model.data(modelIndex, FixStationModel.NorthingRole), 478000.0,
-                    "re-committing under the new order reads latitude first")
+                    "and it is now read latitude first")
             compare(model.data(modelIndex, FixStationModel.EastingRole), 4430000.0)
 
             coordinate.text = "46.12113, -115.59902, 304m"

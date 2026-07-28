@@ -206,7 +206,17 @@ QString cwCoordinateText::textToStore(const QString& text,
     if (!coordinate.hasElevation || coordinate.hasElevationUnit) {
         return trimmed;
     }
-    return trimmed + cwUnits::unitName(elevationUnit(units));
+
+    //Separators are allowed to trail the last number, so the unit can't simply
+    //be appended: "46.1, -115.6, 304," would become "…304,m", which parse()
+    //then refuses. The result of this function is what gets stored, and the
+    //stored string is what the components are read back out of, so a form that
+    //doesn't parse would zero the fix it came from.
+    qsizetype end = trimmed.size();
+    while (end > 0 && (trimmed.at(end - 1).isSpace() || trimmed.at(end - 1) == u',')) {
+        end--;
+    }
+    return trimmed.left(end) + cwUnits::unitName(elevationUnit(units));
 }
 
 cwCoordinateTextValidator::cwCoordinateTextValidator(QObject* parent) :

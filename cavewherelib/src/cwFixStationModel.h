@@ -15,7 +15,6 @@
 
 //Our includes
 #include "cwFixStation.h"
-#include "cwCoordinateText.h"
 #include "cwGlobals.h"
 #include "cwUnits.h"
 
@@ -48,12 +47,12 @@ public:
         HorizontalVarianceRole,
         VerticalVarianceRole,
         IdRole,
-        //! Read-only through setData(): the string the user typed this
-        //! coordinate as, or empty when nobody typed it here. An editor opens
-        //! on it and falls back to cwCoordinateText::format() when it's empty;
-        //! the *cell* renders from the numbers either way, so display and edit
-        //! deliberately differ (U14). It is written only by setCoordinateText(),
-        //! which is the one path that can read a string back into numbers.
+        //! Read-only through setData(): the coordinate as it was written, which
+        //! is the whole of what the row stores (the three component roles above
+        //! are read out of it). An editor opens on it; the *cell* renders the
+        //! components in the project's units, so display and edit deliberately
+        //! differ. Written through setCoordinateText(), the one path that
+        //! validates a string before it becomes the coordinate.
         CoordinateTextRole
     };
     Q_ENUM(Roles)
@@ -93,23 +92,20 @@ public:
     //! failure as a bool, and a free-form field has to say what was wrong with
     //! what the user typed.
     //!
-    //! All three components land in a single dataChanged(), so the line plot
-    //! re-solves once for a pasted coordinate rather than three times. \a units
-    //! is the project's unit system, which resolves an elevation with no unit
-    //! suffix, and \a order says whether the text leads with the easting or the
-    //! latitude — it must be the same order the field was rendered with, or the
-    //! coordinate comes back transposed. See cwCoordinateText for both.
+    //! Everything the string moves lands in a single dataChanged(), so the line
+    //! plot re-solves once for a pasted coordinate rather than three times.
+    //! \a units is the project's unit system, and resolves an elevation written
+    //! with no unit suffix — the only thing it decides. Which axis the text
+    //! leads with is <b>not</b> a parameter: it comes from the row's own
+    //! coordinate system, so the reading can't disagree with the row.
     //!
-    //! \a text is kept on the row (CoordinateTextRole) so an editor can re-offer
-    //! it, unless it reads back as exactly what the row already renders — that
-    //! string is the machine's, not the user's, and a row with none of its own
-    //! renders the same thing anyway. Committing an unchanged field is therefore
-    //! a no-op whether or not the row has stored text, which it has to be: the
-    //! field is opened and left far more often than it is edited.
+    //! \a text becomes the row's coordinate, normalized only by
+    //! cwCoordinateText::textToStore(). Committing an unchanged field is
+    //! therefore a no-op, which it has to be: the field is opened and left far
+    //! more often than it is edited.
     Q_INVOKABLE QString setCoordinateText(int row,
                                           const QString& text,
-                                          cwUnits::UnitSystem units,
-                                          cwCoordinateText::AxisOrder order);
+                                          cwUnits::UnitSystem units);
 
     void appendFixStation(const cwFixStation& fix);
     void setFixStations(const QList<cwFixStation>& fixes);

@@ -71,18 +71,23 @@ MainWindowTest {
             mouseClick(addButton)
             tryCompare(cave.fixStations, "count", 2)
 
+            // The CS goes in before the components, always: it decides which
+            // axis the coordinate leads with, so writing numbers first spells
+            // them out easting-first and a geographic CS then re-reads them
+            // latitude-first, swapping the two. Both importers do it in this
+            // order for the same reason (see cwFixStation::setInputCS).
             const m = cave.fixStations
             m.setData(m.index(0), "A1", FixStationModel.StationNameRole)
+            setInputCSViaPicker(0, "EPSG:4326")
             m.setData(m.index(0), 500000.0, FixStationModel.EastingRole)
             m.setData(m.index(0), 4194000.0, FixStationModel.NorthingRole)
             m.setData(m.index(0), 2700.0, FixStationModel.ElevationRole)
-            setInputCSViaPicker(0, "EPSG:4326")
 
             m.setData(m.index(1), "B1", FixStationModel.StationNameRole)
+            setInputCSViaPicker(1, "EPSG:32612")
             m.setData(m.index(1), 500200.0, FixStationModel.EastingRole)
             m.setData(m.index(1), 4194100.0, FixStationModel.NorthingRole)
             m.setData(m.index(1), 2750.0, FixStationModel.ElevationRole)
-            setInputCSViaPicker(1, "EPSG:32612")
 
             // cwFixStation is a value type, so read through the model role API.
             tryVerify(() => m.data(m.index(0), FixStationModel.StationNameRole) === "A1")

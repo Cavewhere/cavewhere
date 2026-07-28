@@ -42,8 +42,10 @@
  * Both coordinate-entry surfaces — the FixStationPage rows and the inline
  * FixStationPopup — go through this one class, so the accepted formats can't
  * drift apart. QML reaches format() off the singleton; parse() is reached
- * through cwFixStationModel::setCoordinateText(), which applies all three
- * components in a single edit, and through cwCoordinateTextValidator below.
+ * through cwFixStationModel::setCoordinateText(), the surface that refuses a
+ * coordinate it can't read, through cwFixStation, which reads its components
+ * back out of a coordinate it has already accepted, and through
+ * cwCoordinateTextValidator below.
  *
  * <b>The elevation is meters, always.</b> Nothing downstream of cwFixStation
  * carries a unit: cwGeoPoint has none, and survex reads a *fix's three numbers
@@ -116,8 +118,8 @@ public:
     //! parse() reads the horizontals back bit-for-bit; the <i>elevation</i>
     //! crosses a unit conversion in each direction, and m→ft→m is not an
     //! identity in IEEE arithmetic, so an imperial round trip can land one ulp
-    //! away. cwFixStationModel::setCoordinateText() therefore treats text equal
-    //! to this output as a no-op rather than trusting the numbers to match.
+    //! away. Nothing stores that round trip: an editor opens on the coordinate
+    //! as it was written, and cwFixStation writes and reads its own in meters.
     Q_INVOKABLE static QString format(double easting,
                                       double northing,
                                       double elevationInMeters,

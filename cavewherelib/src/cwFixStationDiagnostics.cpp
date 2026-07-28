@@ -16,19 +16,19 @@ namespace cwFixStationDiagnostics {
 
 cwCoordinateTransform::DomainCheck domainCheck(const cwFixStation& fix, const QString& globalCS)
 {
-    // A fix sitting exactly on the origin has no coordinate yet, only the one a
-    // default cwFixStation is born with. "Mark Station as Fixed" creates the row
-    // before the user types anything, so without this the popup could open on a
-    // red warning about a coordinate the user has not entered.
+    // There has to be a coordinate before there is anything to judge. "Mark
+    // Station as Fixed" creates the row before the user types anything, and a
+    // row whose text can't be read has no coordinate either — both report all
+    // three components as zero, and neither is a fix at the origin.
     //
-    // Whether it did was up to the CS, which is the worse half: 0, 0 in a
-    // northern UTM zone inverts to just past the zone's western edge and slips
-    // inside the margin, while a southern zone (false northing 10000000) puts it
-    // near the pole and a large false origin (EPSG:2154) puts it thousands of km
-    // away. So the same untouched fix warned in some projects and not others.
-    // Nothing genuine hides behind the guard: projected eastings don't reach
-    // zero (UTM starts at 100000) and 0, 0 geographic is open ocean.
-    if (fix.easting() == 0.0 && fix.northing() == 0.0) {
+    // Asked of the fix rather than of its numbers. The old test was
+    // easting == 0 && northing == 0, and what that decided was up to the CS:
+    // 0, 0 in a northern UTM zone inverts to just past the zone's western edge
+    // and slips inside the margin, while a southern zone (false northing
+    // 10000000) puts it near the pole and a large false origin (EPSG:2154) puts
+    // it thousands of km away. It also could not tell an unfilled row from a
+    // local grid whose station really is at 0, 0 — which now says so.
+    if (fix.state() != cwFixStation::Valid) {
         return {};
     }
 
