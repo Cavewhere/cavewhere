@@ -83,6 +83,29 @@ public:
     //! ties live on each cwCave instead.
     cwEquateModel* equates() const { return m_equates; }
 
+    //! The cave holding the container a handle names, or nullptr when no cave in
+    //! this region does. A NativeCave handle names its cave outright; a Trip
+    //! handle names a trip, and exactly one cave lists that trip.
+    cwCave* caveFor(const cwStationHandle& handle) const;
+
+    //! Record that two stations are one physical point, in the home the pair
+    //! belongs to: both in one cave puts the tie on that cave, one in each puts
+    //! it on this region. The two homes take the same cwEquate — the handles
+    //! carry their own scope — so the choice is only about what the tie travels
+    //! with, and it is not the caller's to make.
+    //!
+    //! Returns true once the region declares the tie, including when it already
+    //! did. False means the pair cannot be tied at all: a handle naming no
+    //! container this region holds, or one station tied to itself.
+    //!
+    //! Always a cwEquate, never a re-scope. Making two stations coincide by
+    //! sharing a qualified name (the D5 implicit tie) needs a per-station scope
+    //! escape that only commit 8's dotted grammar gives, and an attached
+    //! centerline's names belong to its file besides — so the mechanism the
+    //! plan's suggester picks between has one arm built today.
+    Q_INVOKABLE bool tieStations(const cwStationHandle& first,
+                                 const cwStationHandle& second);
+
     //! The project-wide default unit system, persisted with the project. It
     //! seeds the entry unit of new trips but never reinterprets existing ones.
     //! Defaults to Metric; cwProject seeds it from the app-level cwUnitSettings

@@ -22,4 +22,10 @@ CAVEWHERE_LIB_EXPORT QString validateEntityName(const QString& currentName,
                                                  const cwSanitizedNameSet* nameSet,
                                                  const QString& entityLabel);
 
+// Orders two station names the way a surveyor reads them: digit runs compare by
+// numeric value, so "a2" comes before "a10" rather than after it.  Everything
+// else compares case-folded.  Use it wherever station names are listed for a
+// person -- the scope station list and the tie suggester both do.
+CAVEWHERE_LIB_EXPORT bool naturalLess(const QString& left, const QString& right);
+
 } // namespace cwNameUtils

@@ -300,5 +300,45 @@ MainWindowTest {
             tryVerify(() => !banner.visible, 5000,
                       "the anchoring attachment is not floating")
         }
+
+        function test_connectingASuggestionEndsTheFloat() {
+            const fixture = attachAndBind("trip-panel-connect")
+            const cave = RootData.region.cave(0)
+
+            const banner = findChild(panelId, "floatingSurveyBanner")
+            verify(banner !== null, "floatingSurveyBanner must exist")
+            tryVerify(() => RootData.linePlotManager.lastSolveStationCount > 0, 10000,
+                      "the anchoring attachment solved")
+
+            cave.addTrip()
+            const second = cave.trip(1)
+            rootId.trip = second
+            RootData.attachTripCenterline(second, fixture.source)
+            tryVerify(() => banner.visible, 10000,
+                      "the untied second attachment banners itself")
+
+            // Both attachments are the same file, so every station in the second
+            // is named after one in the first — the ordinary case, and the one
+            // the ranking is built for.
+            const suggestionText = findChild(banner, "tieSuggestionText")
+            verify(suggestionText !== null, "a suggestion row must render")
+            tryCompare(suggestionText, "text",
+                       "simple.a1 and simple.a1 in " + fixture.trip.name + " are named alike",
+                       10000,
+                       "the row names the station, its partner, and the trip holding it")
+
+            const connectButton = findChild(banner, "tieSuggestionConnectButton")
+            verify(connectButton !== null, "tieSuggestionConnectButton must exist")
+            compare(cave.equates.count, 0, "nothing is tied until the user says so")
+
+            mouseClick(connectButton)
+
+            // One click is the whole gesture: the equate lands on the cave, the
+            // plot re-solves because of it, and the banner that asked for the
+            // tie takes itself down. Nothing else on this page has to be touched.
+            compare(cave.equates.count, 1, "the click records exactly one tie")
+            tryVerify(() => !banner.visible, 15000,
+                      "the tied attachment is no longer floating")
+        }
     }
 }

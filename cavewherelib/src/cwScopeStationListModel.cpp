@@ -7,75 +7,13 @@
 
 //Our includes
 #include "cwScopeStationListModel.h"
+#include "cwNameUtils.h"
 #include "cwStation.h"
 #include "cwTrip.h"
 
 //Std includes
 #include <algorithm>
 
-namespace {
-
-//! Natural-order compare: walk both strings run-by-run, comparing digit runs by
-//! numeric value (so "a2" sorts before "a10") and everything else by case-folded
-//! character. Station tails are typically <stationPrefix><number> and may nest
-//! ("sidepassage.b1"); the trailing number must ascend numerically, not lexically.
-bool naturalLess(const QString& a, const QString& b)
-{
-    int i = 0;
-    int j = 0;
-    const int n = a.size();
-    const int m = b.size();
-
-    while (i < n && j < m) {
-        const QChar ca = a.at(i);
-        const QChar cb = b.at(j);
-
-        if (ca.isDigit() && cb.isDigit()) {
-            //Span each digit run, then compare by value (skip leading zeros so
-            //"007" and "7" compare equal in magnitude, longer run breaking ties).
-            int ai = i;
-            int bj = j;
-            while (ai < n && a.at(ai).isDigit()) { ++ai; }
-            while (bj < m && b.at(bj).isDigit()) { ++bj; }
-
-            int as = i;
-            int bs = j;
-            while (as < ai - 1 && a.at(as) == QLatin1Char('0')) { ++as; }
-            while (bs < bj - 1 && b.at(bs) == QLatin1Char('0')) { ++bs; }
-
-            const int aLen = ai - as;
-            const int bLen = bj - bs;
-            if (aLen != bLen) {
-                return aLen < bLen;
-            }
-            for (int k = 0; k < aLen; ++k) {
-                const QChar da = a.at(as + k);
-                const QChar db = b.at(bs + k);
-                if (da != db) {
-                    return da < db;
-                }
-            }
-            //Equal magnitude: shorter original run (fewer leading zeros) first.
-            if ((ai - i) != (bj - j)) {
-                return (ai - i) < (bj - j);
-            }
-            i = ai;
-            j = bj;
-        } else {
-            const QChar la = ca.toCaseFolded();
-            const QChar lb = cb.toCaseFolded();
-            if (la != lb) {
-                return la < lb;
-            }
-            ++i;
-            ++j;
-        }
-    }
-
-    return (n - i) < (m - j);
-}
-
-} // namespace
 
 cwScopeStationListModel::cwScopeStationListModel(QObject* parent)
     : QAbstractListModel(parent)
@@ -175,7 +113,7 @@ void cwScopeStationListModel::rebuildRows()
 
     std::stable_sort(m_rows.begin(), m_rows.end(),
                      [](const Row& left, const Row& right) {
-        return naturalLess(left.handle.tail(), right.handle.tail());
+        return cwNameUtils::naturalLess(left.handle.tail(), right.handle.tail());
     });
 
     endResetModel();

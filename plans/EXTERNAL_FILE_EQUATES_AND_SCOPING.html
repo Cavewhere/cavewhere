@@ -1097,6 +1097,77 @@ bool cwTrip::isScoped() const { return !m_externalCenterline.isEmpty() || !m_sta
   alongside the display strings rather than re-deriving identity from a tail.
 </p>
 
+<h4 id="c6c">6c &mdash; the creation path and the suggester &mdash; DONE 2026-07-28, GREEN</h4>
+<p>
+  The loop the whole feature exists for, end to end: a survey lands floating, the
+  banner offers the stations it looks joined to, one click ties it, and the banner
+  takes itself down.
+</p>
+<ul>
+  <li><strong>The creation path is
+    <code>cwCavingRegion::tieStations(a,&nbsp;b)</code></strong>
+    (<code>Q_INVOKABLE</code>). It builds the <code>cwEquate</code> and picks the
+    home &mdash; both handles resolving into one cave puts the tie on that cave,
+    one in each puts it on the region &mdash; via the new
+    <code>cwCavingRegion::caveFor(handle)</code>. Declaring a tie that already
+    stands returns true and adds nothing, checked by <em>membership</em> so an
+    existing three-way equate still answers a two-way ask.
+    <code>cwEquateModel::appendEquate</code> deliberately stayed non-invokable:
+    exposing it would have let qml put a tie in the wrong home, which is the one
+    decision the caller must not make.</li>
+  <li><strong>Only the <code>cwEquate</code> arm of the plan's two mechanisms is
+    built, and the other one is unreachable today.</strong> "Same tail &rarr;
+    re-scope" needs a per-station scope escape, which is commit&nbsp;8's dotted
+    grammar; and for an attached centerline the station names belong to its file,
+    so nothing in Phase&nbsp;2 can re-scope one of them at all. An equate between
+    two same-named stations in different scopes is a perfectly good tie, so
+    nothing is lost by waiting.</li>
+  <li><strong>An equate now re-solves the plot</strong>
+    (<code>cwLinePlotManager::connectEquates</code>, the region's list plus every
+    cave's, mirroring <code>connectFixStations</code>). It was missing outright:
+    an equate is a survey input like a shot or a fix, but nothing watched the two
+    models, so a tie the user made stayed invisible until something unrelated
+    triggered a run. Both the C++ and QML "the float ends" tests fail without it.</li>
+  <li><strong>The suggester is <code>cwTieSuggestionModel</code></strong>
+    (qml <code>TieSuggestionModel&nbsp;{&nbsp;trip&nbsp;}</code>), rows of
+    (station, candidate, candidate's trip, why), with
+    <code>tieAt(row)</code> as the verb. <strong>Names are compared by their last
+    dotted component, never whole</strong> &mdash; an attachment keeps its file's
+    own <code>*begin</code> inside the trip's scope, so its station reads
+    <code>simple.a1</code> beside a native <code>a1</code>, and comparing whole
+    finds nothing for exactly the surveys that float. Ranking is
+    <code>SameName</code> then <code>SameLetterPrefix</code>, and near matches are
+    offered only for a station nothing in the cave is named after. Capped at 10
+    rows with a <code>truncated</code> flag the banner shows, so "no more matches"
+    and "too many to show" cannot look alike.</li>
+  <li><strong>Name-only ranking is the complete answer for this surface, not a
+    first cut.</strong> The tie a row creates <em>ends the float</em>, and a trip
+    that no longer floats has coordinates and no banner. So the proximity ranking
+    and gap read-out the plan describes belong to the panel's persistent
+    Connections list (the 2nd..Nth tie), not here.</li>
+</ul>
+<p class="note">
+  <strong>Reused rather than copied:</strong> <code>naturalLess</code> moved out of
+  <code>cwScopeStationListModel.cpp</code>'s anonymous namespace into
+  <code>cwNameUtils</code>, its second consumer being the suggester. Still
+  <em>not</em> promoted: the "which cave does this handle live in" scan, which
+  <code>caveFor</code> makes the fifth copy of (with
+  <code>cwCave::validate</code>, <code>cwSurvexExporterCaveTask</code>,
+  <code>cwSurvexExporterRegion</code>, <code>cwFindFloatingSurveys</code>'
+  <code>ScopeIndex</code>). <code>caveFor</code> is at least the one on the object
+  that owns the answer, so the deferred <code>cwEquateGraph</code> has an obvious
+  place to absorb the other four.
+</p>
+<p class="note">
+  <strong>Known limits, all deliberate.</strong> A tie is not undoable &mdash;
+  neither is a fix station, its sibling, and adding undo to equates is its own
+  slice. The suggester does not filter out pairs an equate already joins (the
+  trip stops floating, so the surface goes away first) and does not know whether a
+  candidate trip is itself floating. And a survey cavern dropped outright has no
+  station names anywhere in CaveWhere, so it gets a banner and no suggestions
+  &mdash; the parser question 6a's note already parks.
+</p>
+
 <p class="note">
   <strong>Fork&nbsp;A &mdash; BUILT 2026-07-26, GREEN, not committed.</strong>
   C++ 1684/1686 (the two known pre-existing <code>[Issue505]</code> BVH failures);

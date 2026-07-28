@@ -112,6 +112,16 @@ QQ.Item {
         model: root.linePlotManager.floatingSurveyModel
     }
 
+    // The ties that would end the float. Live whether or not the trip floats —
+    // the banner is what decides to show them, and asking only once it floats
+    // would make the suggester's arrival a second thing to wait for.
+    TieSuggestionModel {
+        id: tieSuggestionsId
+        objectName: "tieSuggestions"
+
+        trip: root.trip
+    }
+
     ScopeStationListModel {
         id: scopeStationModelId
 
@@ -138,6 +148,7 @@ QQ.Item {
             Layout.fillWidth: true
             floating: floatingStatusId.floating
             stations: floatingStatusId.stations
+            suggestions: tieSuggestionsId
         }
 
         QQ.Loader {

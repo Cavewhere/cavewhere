@@ -18,6 +18,7 @@ class cwScrap;
 class cwStationReference;
 class cwRenderLinePlot;
 class cwSurveyChunkSignaler;
+class cwEquateModel;
 class cwErrorListModel;
 class cwExternalCenterlineManager;
 class cwKeywordItem;
@@ -176,6 +177,12 @@ private:
 
     void connectCaves(cwCavingRegion* region);
     void connectFixStations(cwCave* cave);
+
+    //! Re-solve when an equate list changes. An equate is a survey input like a
+    //! shot or a fix — it is what joins two scopes cavern would otherwise leave
+    //! in separate frames — so declaring one has to reach the plot the same way
+    //! entering a shot does, or a tie the user just made stays invisible.
+    void connectEquates(cwEquateModel* equates);
 
     void setCaveStationLookupAsStale(bool isStale);
     void updateUnconnectedChunkErrors(cwCave *cave, const cwLinePlotTask::LinePlotCaveData& caveData);

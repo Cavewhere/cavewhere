@@ -17,10 +17,14 @@
 #include "cwProject.h"
 #include "cwData.h"
 #include "cwNameUtils.h"
+#include "cwTrip.h"
 
 //Qt includes
 #include <QThread>
 #include <QDebug>
+
+//Std includes
+#include <algorithm>
 
 cwCavingRegion::cwCavingRegion(QObject *parent) :
     QAbstractListModel(parent),
@@ -369,6 +373,79 @@ void cwCavingRegion::setData(const cwCavingRegionData &data)
         newCaves.append(newCave);
     }
     addCaves(newCaves);
+}
+
+cwCave* cwCavingRegion::caveFor(const cwStationHandle& handle) const
+{
+    if (!handle.isValid()) {
+        return nullptr;
+    }
+
+    for (cwCave* cave : m_caves) {
+        if (cave == nullptr) {
+            continue;
+        }
+
+        switch (handle.scope()) {
+        case cwStationHandle::NativeCave:
+            if (cave->id() == handle.containerId()) {
+                return cave;
+            }
+            break;
+        case cwStationHandle::Trip:
+            for (const cwTrip* trip : cave->trips()) {
+                if (trip != nullptr && trip->id() == handle.containerId()) {
+                    return cave;
+                }
+            }
+            break;
+        default:
+            //An out-of-enum scope (a cast int pushed through qml) names no
+            //container any cave can resolve.
+            return nullptr;
+        }
+    }
+
+    return nullptr;
+}
+
+bool cwCavingRegion::tieStations(const cwStationHandle& first,
+                                 const cwStationHandle& second)
+{
+    const cwEquate equate(QList<cwStationHandle>({first, second}));
+    if (!equate.isValid()) {
+        return false;
+    }
+
+    cwCave* firstCave = caveFor(first);
+    cwCave* secondCave = caveFor(second);
+    if (firstCave == nullptr || secondCave == nullptr) {
+        return false;
+    }
+
+    const bool withinOneCave = (firstCave == secondCave);
+    if (withinOneCave && !firstCave->validate(equate)) {
+        return false;
+    }
+
+    cwEquateModel* home = withinOneCave ? firstCave->equates() : m_equates;
+
+    //A tie is a fact about two stations, so declaring it twice says nothing
+    //more. Checked by membership rather than by equality: an equate that
+    //already ties these two along with a third still says what the caller
+    //asked for.
+    const QList<cwEquate>& declared = home->equates();
+    const bool alreadyTied = std::any_of(declared.cbegin(), declared.cend(),
+                                         [&first, &second](const cwEquate& existing) {
+        const QList<cwStationHandle> stations = existing.stations();
+        return stations.contains(first) && stations.contains(second);
+    });
+    if (alreadyTied) {
+        return true;
+    }
+
+    home->appendEquate(equate);
+    return true;
 }
 
 cwCavingRegionData cwCavingRegion::data() const

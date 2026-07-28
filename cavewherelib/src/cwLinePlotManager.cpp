@@ -27,6 +27,7 @@
 #include "cwErrorModel.h"
 #include "cwErrorListModel.h"
 #include "cwSurveyNetworkArtifact.h"
+#include "cwEquateModel.h"
 #include "cwFixStationModel.h"
 #include "cwKeywordItem.h"
 #include "cwKeywordItemModel.h"
@@ -186,13 +187,19 @@ void cwLinePlotManager::setRegion(cwCavingRegion* region) {
 
     SurveySignaler->setRegion(Region);
 
-    // Hook fix-station edits on every existing cave, plus any future caves.
+    // Hook fix-station and equate edits on every existing cave, plus any future
+    // caves. The region's own equates are cross-cave ties and belong to no cave,
+    // so they are hooked once here.
+    connectEquates(Region->equates());
     for (cwCave* cave : Region->caves()) {
         connectFixStations(cave);
+        connectEquates(cave->equates());
     }
     connect(Region, &cwCavingRegion::insertedCaves, this, [this](int begin, int end) {
         for (int i = begin; i <= end && i < Region->caveCount(); ++i) {
-            connectFixStations(Region->cave(i));
+            cwCave* cave = Region->cave(i);
+            connectFixStations(cave);
+            connectEquates(cave->equates());
         }
     });
 
@@ -217,6 +224,15 @@ void cwLinePlotManager::connectFixStations(cwCave* cave) {
     connect(model, &cwFixStationModel::rowsInserted, this, rerun);
     connect(model, &cwFixStationModel::rowsRemoved,  this, rerun);
     connect(model, &cwFixStationModel::modelReset,   this, rerun);
+}
+
+void cwLinePlotManager::connectEquates(cwEquateModel* equates) {
+    if (!equates) { return; }
+    const auto rerun = [this](){ runSurvex(); };
+    connect(equates, &cwEquateModel::dataChanged,  this, rerun);
+    connect(equates, &cwEquateModel::rowsInserted, this, rerun);
+    connect(equates, &cwEquateModel::rowsRemoved,  this, rerun);
+    connect(equates, &cwEquateModel::modelReset,   this, rerun);
 }
 
 void cwLinePlotManager::setRenderLinePlot(cwRenderLinePlot* linePlot) {
