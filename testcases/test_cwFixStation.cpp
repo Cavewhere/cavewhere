@@ -140,6 +140,43 @@ TEST_CASE("cwFixStation reads its numbers out of the coordinate it was given",
         CHECK(fix.elevation() == 0.0);
         CHECK_FALSE(fix.hasElevation());
     }
+
+    SECTION("with no coordinate system there is no reading to make, whatever the text says") {
+        //NoSystem rather than Unreadable, and the text is what makes the two
+        //hard to tell apart: both keep the string and zero the components, and
+        //they want opposite messages — *choose a coordinate system* against
+        //*this text can't be read*. Nonsense text under no system earns the
+        //first, because naming a system is what it is waiting on; the parser
+        //has not been consulted and has nothing to say yet.
+        cwFixStation fix;
+        fix.setCoordinate(QStringLiteral("somewhere over there"));
+
+        CHECK(fix.state() == cwFixStation::NoSystem);
+        CHECK(fix.coordinate() == QStringLiteral("somewhere over there"));
+        CHECK(fix.easting() == 0.0);
+        CHECK(fix.northing() == 0.0);
+        CHECK(fix.elevation() == 0.0);
+        CHECK_FALSE(fix.hasElevation());
+
+        //Naming one is what lets the text be read at all — and here that only
+        //changes which complaint the row earns.
+        fix.setInputCS(kUtmZ11N);
+        CHECK(fix.state() == cwFixStation::Unreadable);
+        CHECK(fix.coordinate() == QStringLiteral("somewhere over there"));
+    }
+
+    SECTION("a coordinate system of nothing but spaces is no coordinate system") {
+        //The form a hand-edited project arrives in. A blank CaveWhere never
+        //writes — saving omits the field entirely — so this only reaches the
+        //loader from outside, and a row that reads as Valid off whitespace
+        //would be reading a coordinate easting-first on no authority at all.
+        cwFixStation fix;
+        fix.setInputCS(QStringLiteral("   "));
+        fix.setCoordinate(QStringLiteral("610016.792, 5615117.075, 304m"));
+
+        CHECK(fix.state() == cwFixStation::NoSystem);
+        CHECK(fix.easting() == 0.0);
+    }
 }
 
 TEST_CASE("cwFixStation re-reads its coordinate when the coordinate system changes",

@@ -418,11 +418,10 @@ TEST_CASE("cwFixStation proto round-trip preserves all fields", "[FixStation][pr
     CavewhereProto::FixStation proto;
     cwProtoUtils::saveFixStation(&proto, original);
 
-    //The axis order is written for the benefit of a build that still reads it,
-    //and nothing on the way back in checks it — so it is asserted here or not
-    //at all. A geographic row is stored latitude-first.
-    CHECK(proto.coordinatetextaxisorder()
-          == CavewhereProto::FixStation_AxisOrder_LatitudeLongitude);
+    //The string is the only thing stored, and it is stored as it was written:
+    //the numbers below all come back out of it.
+    CHECK(QString::fromStdString(proto.coordinate())
+          == QStringLiteral("46.12113, -115.59902, 30ft"));
 
     cwFixStation restored = cwProtoUtils::fromProtoFixStation(proto);
 
@@ -438,141 +437,64 @@ TEST_CASE("cwFixStation proto round-trip preserves all fields", "[FixStation][pr
     CHECK(restored == original);
 }
 
-TEST_CASE("cwFixStation loads from a project written before the coordinate was a string",
-          "[FixStation][proto]") {
-    //Every fix in every project saved so far is three numbers and no string.
-    //They become a coordinate spelled out from those numbers, in metres, and
-    //land on exactly the doubles they were saved as.
-    CavewhereProto::FixStation proto;
-    proto.set_inputcs("EPSG:32611");
-    proto.set_easting(610016.792);
-    proto.set_northing(5615117.075);
-    proto.set_elevation(304.0);
-
-    const cwFixStation restored = cwProtoUtils::fromProtoFixStation(proto);
-    CHECK(restored.easting() == 610016.792);
-    CHECK(restored.northing() == 5615117.075);
-    CHECK(restored.elevation() == 304.0);
-    CHECK(restored.coordinate() == QStringLiteral("610016.792, 5615117.075, 304m"));
-}
-
-TEST_CASE("cwFixStation keeps the numbers of a row that never declared a coordinate system",
-          "[FixStation][proto]") {
-    //The old picker's "Local" wrote a blank input CS, so rows like this exist.
-    //There is no axis order to read them under, so they come back with nothing
-    //derived — but the numbers themselves must survive as the text they were,
-    //or opening and saving a project would quietly empty the row. The user
-    //picks the system the row was always in and the coordinate is there.
-    CavewhereProto::FixStation proto;
-    proto.set_easting(610016.792);
-    proto.set_northing(5615117.075);
-    proto.set_elevation(304.0);
-
-    const cwFixStation restored = cwProtoUtils::fromProtoFixStation(proto);
-    CHECK(restored.state() == cwFixStation::NoSystem);
-    CHECK(restored.coordinate() == QStringLiteral("610016.792, 5615117.075, 304m"));
-    CHECK(restored.easting() == 0.0);
-
-    //Naming the system it was written in is all it takes to get them back.
-    cwFixStation named = restored;
-    named.setInputCS(QStringLiteral("EPSG:32611"));
-    CHECK(named.state() == cwFixStation::Valid);
-    CHECK(named.easting() == 610016.792);
-    CHECK(named.northing() == 5615117.075);
-    CHECK(named.elevation() == 304.0);
-}
-
 TEST_CASE("cwFixStation loads a row nobody ever filled in as having no coordinate",
           "[FixStation][proto]") {
-    //"Mark Station as Fixed" writes a row before the user types anything, so
-    //three zeros with no string is *not entered* — spelling it out as
-    //"0, 0, 0m" would make it *entered at the origin*, and the diagnostics
-    //defer on exactly that difference.
+    //"Mark Station as Fixed" writes a row before the user types anything, so a
+    //message with no coordinate is *not entered* — reading it as "0, 0, 0m"
+    //would make it *entered at the origin*, and the diagnostics defer on
+    //exactly that difference.
     CavewhereProto::FixStation proto;
-    proto.set_easting(0.0);
-    proto.set_northing(0.0);
-    proto.set_elevation(0.0);
+    cwProtoUtils::saveString(proto.mutable_inputcs(), QStringLiteral("EPSG:32611"));
 
     const cwFixStation restored = cwProtoUtils::fromProtoFixStation(proto);
     CHECK(restored.coordinate().isEmpty());
     CHECK(restored.state() == cwFixStation::Empty);
 }
 
-TEST_CASE("cwFixStation load prefers the numbers over a string that disagrees with them",
+TEST_CASE("cwFixStation round-trips a coordinate that can't be read, byte for byte",
           "[FixStation][proto]") {
-    //Until the one-shot migration runs, a saved fix carries both — and the
-    //numbers are what the project has meant all along. A string that no longer
-    //describes them (typed before its CS was corrected, or a two-component
-    //paste that left an elevation standing beside it) must not be allowed to
-    //move the station on the way in.
-    SECTION("a string read under another axis order than the row's CS now implies") {
-        //The shape this branch exists for: the text was typed while the row was
-        //projected, so it leads with the easting, and the row is geographic
-        //now. Read latitude-first it says something else entirely, and the
-        //numbers are what the project has meant all along.
-        CavewhereProto::FixStation proto;
-        cwProtoUtils::saveString(proto.mutable_inputcs(), QStringLiteral("EPSG:4326"));
-        proto.set_easting(-115.59902);
-        proto.set_northing(46.12113);
-        proto.set_elevation(304.0);
-        cwProtoUtils::saveString(proto.mutable_coordinatetext(),
-                   QStringLiteral("-115.59902, 46.12113, 304m"));
+    //The hand-edited file, and the reason the string is stored rather than the
+    //numbers derived from it: there are no numbers to fall back to, so the text
+    //is all there is. Dropping it would leave the row saying nothing about a
+    //coordinate its owner clearly meant to write, and this is the round trip a
+    //project makes every time it is opened and saved.
+    cwFixStation fix;
+    fix.setInputCS(QStringLiteral("EPSG:32611"));
+    fix.setCoordinate(QStringLiteral("N 46 07 16 W 115 35 56"));
+    REQUIRE(fix.state() == cwFixStation::Unreadable);
 
-        const cwFixStation restored = cwProtoUtils::fromProtoFixStation(proto);
-        CHECK(restored.easting() == -115.59902);
-        CHECK(restored.northing() == 46.12113);
-        //Re-spelled in the order the row now reads, rather than kept as text
-        //that would put the station somewhere else.
-        CHECK(restored.coordinate() == QStringLiteral("46.12113, -115.59902, 304m"));
-    }
+    CavewhereProto::FixStation proto;
+    cwProtoUtils::saveFixStation(&proto, fix);
 
-    SECTION("a two-component string beside an elevation the row still has") {
-        CavewhereProto::FixStation proto;
-        cwProtoUtils::saveString(proto.mutable_inputcs(), QStringLiteral("EPSG:32611"));
-        proto.set_easting(1.0);
-        proto.set_northing(2.0);
-        proto.set_elevation(304.0);
-        cwProtoUtils::saveString(proto.mutable_coordinatetext(), QStringLiteral("1, 2"));
+    const cwFixStation restored = cwProtoUtils::fromProtoFixStation(proto);
+    CHECK(restored.coordinate() == QStringLiteral("N 46 07 16 W 115 35 56"));
+    CHECK(restored.state() == cwFixStation::Unreadable);
+}
 
-        const cwFixStation restored = cwProtoUtils::fromProtoFixStation(proto);
-        CHECK(restored.elevation() == 304.0);
-        CHECK(restored.hasElevation());
-    }
+TEST_CASE("cwFixStation keeps a coordinate it has no system to read",
+          "[FixStation][proto]") {
+    //A row can name a coordinate and no system — the svx importer's `*fix` with
+    //no `*cs` makes one. There is no axis order to read it under, so nothing is
+    //derived, but the text itself must survive or opening and saving a project
+    //would quietly empty the row. Naming the system the row was always in is
+    //all it takes to get the numbers back.
+    cwFixStation fix;
+    fix.setCoordinate(QStringLiteral("610016.792, 5615117.075, 304m"));
+    REQUIRE(fix.state() == cwFixStation::NoSystem);
 
-    SECTION("but a string that does describe them is kept, word for word") {
-        //The common case, and the one the others must not swallow: a coordinate
-        //the user wrote comes back as they wrote it, feet and all.
-        CavewhereProto::FixStation proto;
-        cwProtoUtils::saveString(proto.mutable_inputcs(), QStringLiteral("EPSG:32611"));
-        proto.set_easting(1.0);
-        proto.set_northing(2.0);
-        proto.set_elevation(30.0 * 0.3048);
-        cwProtoUtils::saveString(proto.mutable_coordinatetext(), QStringLiteral("1, 2, 30ft"));
+    CavewhereProto::FixStation proto;
+    cwProtoUtils::saveFixStation(&proto, fix);
 
-        CHECK(cwProtoUtils::fromProtoFixStation(proto).coordinate()
-              == QStringLiteral("1, 2, 30ft"));
-    }
+    cwFixStation restored = cwProtoUtils::fromProtoFixStation(proto);
+    CHECK(restored.state() == cwFixStation::NoSystem);
+    CHECK(restored.coordinate() == QStringLiteral("610016.792, 5615117.075, 304m"));
+    CHECK(restored.easting() == 0.0);
 
-    SECTION("and a string with no numbers beside it is kept even when it can't be read") {
-        //The hand-edited file. There are no numbers to fall back to, so the
-        //text is all there is — dropping it would leave the row saying nothing
-        //about a coordinate its owner clearly meant to write.
-        CavewhereProto::FixStation proto;
-        cwProtoUtils::saveString(proto.mutable_inputcs(), QStringLiteral("EPSG:32611"));
-        cwProtoUtils::saveString(proto.mutable_coordinatetext(),
-                                 QStringLiteral("N 46 07 16 W 115 35 56"));
-
-        const cwFixStation restored = cwProtoUtils::fromProtoFixStation(proto);
-        CHECK(restored.coordinate() == QStringLiteral("N 46 07 16 W 115 35 56"));
-        CHECK(restored.state() == cwFixStation::Unreadable);
-
-        //And it survives being written back out, which is the round trip a
-        //project makes every time it is opened and saved.
-        CavewhereProto::FixStation again;
-        cwProtoUtils::saveFixStation(&again, restored);
-        CHECK(cwProtoUtils::fromProtoFixStation(again).coordinate()
-              == QStringLiteral("N 46 07 16 W 115 35 56"));
-    }
+    restored.setInputCS(QStringLiteral("EPSG:32611"));
+    CHECK(restored.state() == cwFixStation::Valid);
+    CHECK(restored.easting() == 610016.792);
+    CHECK(restored.northing() == 5615117.075);
+    CHECK(restored.elevation() == 304.0);
 }
 
 TEST_CASE("Loading a project does not re-save the cave file",

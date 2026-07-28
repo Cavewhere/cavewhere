@@ -443,10 +443,9 @@ field <i>number</i>, so the rename alone needs no conversion.</p>
   <br><br>
   <b>So the version gate is not optional and is not a nicety.</b> At cave load
   (<code>cwSaveLoad.cpp:2751</code>), if <code>fileVersion.version &lt; 10</code> and
-  <code>fixstations_size() &gt; 0</code>, refuse the load with an error naming the script. Build this in
-  the <i>same</i> commit that reserves the fields — never a later one. It is also the only thing standing
-  between a stale checkout and the project, so it should be a hard failure, not a warning that can be
-  clicked through.
+  <code>fixstations_size() &gt; 0</code>, refuse the load with an error naming the script. It is the only
+  thing standing between a stale checkout and the project, so it should be a hard failure, not a warning
+  that can be clicked through.
   <br><br>
   <b>Both halves of that test are load-bearing, and neither can be dropped.</b> Without
   <code>fixstations_size() &gt; 0</code> the gate rejects every 2026.4.x project, which is at version 9 and
@@ -457,6 +456,25 @@ field <i>number</i>, so the rename alone needs no conversion.</p>
   empty "Mark Station as Fixed" row. <b>The unit the gate can reason about is the file, not the row</b> —
   any file that has fix stations and is still at version 9 has not been through the script, and that is
   exactly the set at risk.
+</div>
+
+<div class="callout warn">
+  <b>Deferred to the pre-release save/load audit: the version bump and the gate.</b>
+  <span class="pill">decided 2026-07-28</span> Commit 2 as built reserves the fields and ships the script,
+  and does <i>not</i> touch <code>cwRegionIOTask::protoVersion()</code> or <code>cwSaveLoad</code>. The
+  version number is being bumped once, deliberately, in a save/load audit before release rather than
+  piecemeal per schema change — and the gate above is written in terms of that number, so it has to travel
+  with it.
+  <br><br>
+  <b>What that leaves standing, stated plainly:</b> the hazard two callouts up is unguarded. A build with
+  this change opening an unmigrated project silently reads every fix station as coordinate-less and writes
+  that loss back on the next save. Until the audit lands, <b>the script is the only protection</b>, and it
+  has to be run before the project is opened rather than after. The one project this applies to is in git,
+  and the script writes a <code>.bak</code> besides, so a mis-ordered step is recoverable — but it is
+  recoverable by hand, not prevented.
+  <br><br>
+  When the audit does bump the number, the gate is the paragraph above, unchanged: the two-part test is
+  what makes it correct, and the ambiguity that forces it does not go away with time.
 </div>
 
 <h3 id="script">5b. The migration script</h3>
@@ -477,12 +495,50 @@ so this is a JSON-in / JSON-out transform over plain dictionaries.</p>
     <code>coordinate</code>; delete all five old keys. JSON names are lowerCamelCase — protobuf's default,
     since <code>preserve_proto_field_names</code> is not set. The enum appears as the string
     <code>"EastingNorthing"</code> / <code>"LatitudeLongitude"</code>, not as a number.</td></tr>
-  <tr><td>Bump</td><td><code>fileVersion.version</code> 9 → 10 in each <code>.cwcave</code>, and
-    <code>version</code> in the <code>.cwproj</code>.</td></tr>
+  <tr><td>Bump</td><td><b>Not done</b> — the version bump moved to the pre-release save/load audit
+    (§5.1). Nothing in the file records that it has been converted, so idempotency keys off the five old
+    keys being absent instead, which is a more direct question than the version number was.</td></tr>
   <tr><td>Safety</td><td><code>--dry-run</code> that prints every before/after coordinate and writes
-    nothing; refuses to touch a file already at version 10; writes a <code>.bak</code> beside each file it
-    changes. The project is also in git, but the script should not assume it.</td></tr>
+    nothing, and a second run over a converted file is a no-op. <b>No <code>.bak</code> files</b>
+    <span class="pill">2026-07-28</span> — an earlier draft wrote one per file "because the script should
+    not assume git". A CaveWhere project <i>is</i> version controlled, so the backup duplicates what
+    <code>git checkout</code> already does and leaves litter in the user's <code>git status</code> at the
+    exact moment they want to read the diff. <code>git diff</code> is the review and
+    <code>git checkout</code> is the undo.</td></tr>
 </table>
+
+<div class="callout ok">
+  <b>Implemented 2026-07-28</b> as <code>scripts/migrate_fixstation_coordinates.py</code>, with
+  <code>scripts/test_migrate_fixstation_coordinates.py</code> (stdlib <code>unittest</code>, 31 cases)
+  over the hand-written fixture <code>scripts/testdata/legacy_fixstations.cwcave</code> — one row per
+  branch below, plus a CS-less row and an imported row with no text.
+  <br><br>
+  <b>A row with no coordinate system is the one the migration has to be most careful with</b>
+  <span class="pill">2026-07-28</span>, and the user's own project has one (an svx <code>*fix</code> with
+  no <code>*cs</code> before it — an ordinary local grid, not corruption). Three things had to hold, and
+  each now has a test that a mutation kills: the numbers are written down easting-first, because they are
+  all that is left of the fix; nothing asks PROJ for an axis order that does not exist, since asking
+  raises <code>MissingProjError</code> and aborts the <i>whole run</i> on a machine with no PROJ, over a
+  row whose answer never depended on it (a CS of nothing but spaces is the same non-answer); and the
+  round-trip check still covers the row, because a silent drop here is invisible to everything else — the
+  application will read no numbers back out of a NoSystem row at all. That last point is the trap worth
+  stating plainly: <b>the script's round-trip check and the application's reading of the row disagree on
+  purpose.</b> The check reads the text easting-first and finds the numbers; the application refuses to
+  read it at all until the user names a system. The numbers survive as <i>text</i>, not as a coordinate.
+  On the C++ side the matching gap was that a CS-less row holding text that <i>also</i> can't be parsed
+  must still be NoSystem, not Unreadable — the two are behaviorally identical (string kept, components 0)
+  and want opposite messages, which is what commit 4 leans on.
+  <br><br>
+  <b>The axis order needs PROJ, and the script gets it from PROJ rather than guessing.</b> This is the one
+  thing a pure JSON transform can't answer for itself: <code>axisOrderFor</code> is
+  <code>cwCoordinateTransform::isGeographic</code>, which is <code>proj_create</code> plus
+  <code>proj_get_type</code>. The script takes <code>pyproj</code> if it is importable and falls back to
+  PROJ's own <code>projinfo</code> command (geographic ⇔ the WKT2 it prints begins <code>GEOGCRS[</code>),
+  and refuses to run rather than assume when it has neither. A CS PROJ can't create at all is <i>not</i>
+  geographic, which is what <code>isGeographic</code> answers and therefore what the application will read
+  the row back under. The conversion tests stub this out, so they run anywhere; one test pins the stub to
+  the real resolver and skips when no PROJ is installed.
+</div>
 
 <p>The conversion rule per fix station, in the order the branches must be tested:</p>
 
@@ -581,11 +637,15 @@ emitting <code>"0, 0, 0m"</code> for it would convert <i>not entered</i> into <i
   fail loudly on any row that doesn't reproduce.
 </div>
 
-<h3>5.3 Version bump</h3>
+<h3>5.3 Version bump <span class="pill">deferred</span></h3>
 
 <p><code>cwRegionIOTask::protoVersion()</code> 9 → 10 (<code>cwRegionIOTask.cpp:54</code>), and a new entry
 in the <code>protoToVersionString</code> map below it. The existing map ends <code>{9, "2026.4"}</code>;
 the new entry's label is your call — <code>{10, "2026.5"}</code> unless you have a release name in mind.</p>
+
+<p><b>Not part of commit 2.</b> <span class="pill">2026-07-28</span> The number is being bumped once, in a
+save/load audit before release, rather than once per schema change — so this and the load gate it enables
+(§5.1) both travel to that audit. Commit 2 ships the reservation and the script alone.</p>
 
 <h2 id="setters">6. Component setters and the CS-first precondition</h2>
 
@@ -676,10 +736,11 @@ ever observed.</p>
   <tr><td><code>cwProtoUtils.cpp</code></td><td><span class="pill del">simplify</span> <code>saveFixStation</code>
     and <code>fromProtoFixStation</code> each lose four fields and gain nothing — there is no legacy
     branch, because the script handles the one project that needs one.</td></tr>
-  <tr><td><code>cwRegionIOTask.cpp</code></td><td><span class="pill new">+2 lines</span> version 9 → 10.</td></tr>
-  <tr><td><code>cwSaveLoad.cpp</code></td><td><span class="pill new">new</span> Load-time version gate
-    (~line 2751): refuse a cave with <code>fileVersion &lt; 10</code> and any fix stations. <b>Ships with
-    the schema change, not after it.</b></td></tr>
+  <tr><td><code>cwRegionIOTask.cpp</code></td><td><span class="pill">deferred</span> version 9 → 10, in the
+    pre-release save/load audit rather than here (§5.3).</td></tr>
+  <tr><td><code>cwSaveLoad.cpp</code></td><td><span class="pill">deferred</span> Load-time version gate
+    (~line 2751): refuse a cave with <code>fileVersion &lt; 10</code> and any fix stations. Written in
+    terms of the version number, so it travels with the bump above. <b>Untouched by commit 2.</b></td></tr>
   <tr><td><code>scripts/migrate_fixstation_coordinates.py</code></td><td><span class="pill new">new</span>
     §5b. Pure JSON; no protobuf dependency.</td></tr>
   <tr><td><code>cwFixStationModel.cpp/.h</code></td><td><span class="pill del">simplify</span> Delete
@@ -736,13 +797,21 @@ proto untouched, so a bisect can separate "the derivation is wrong" from "the mi
     <br><br>
     The last commit is correspondingly smaller: §13.10 of the outlier plan still needs rewriting, and the
     QML check that correcting a CS clears the domain tint with no retype still needs writing.</td></tr>
-  <tr><td><b>2</b></td><td>Store only the coordinate string</td>
-    <td>Proto §5.1 (<code>reserved 4,5,6,10</code>), version bump §5.3, the load-time version gate that
-    refuses an unmigrated project, <b>and the migration script itself</b> —
-    <code>scripts/migrate_fixstation_coordinates.py</code> (§5b) plus its test over a hand-built v9
+  <tr><td><b>2</b></td><td>Store only the coordinate string
+    <span class="pill ok">implemented</span></td>
+    <td>Proto §5.1 (<code>reserved 4,5,6,10</code>), field 9 renamed <code>coordinateText</code> →
+    <code>coordinate</code>, <b>and the migration script itself</b> —
+    <code>scripts/migrate_fixstation_coordinates.py</code> (§5b) plus its test over a hand-written
     <code>.cwcave</code> fixture. Deletes <code>coordinateTextAxisOrder</code> end to end, and
     <code>fromProtoFixStation</code>'s reconciliation with it: after this commit the loader reads field 9
-    and nothing else.</td></tr>
+    and nothing else, with no legacy branch. Four <code>[FixStation][proto]</code> cases went with the
+    branch they were testing — that logic lives in the script's own suite now — leaving the byte-identical
+    round trip of unreadable text, the CS-less row, and the row nobody filled in.
+    <br><br>
+    <b>The version bump §5.3 and the load gate §5.1 are NOT here</b>
+    <span class="pill">2026-07-28</span> — both moved to the pre-release save/load audit, which bumps the
+    number once for everything. The consequence is spelled out in §5.1: until then nothing stops an
+    unmigrated project from being opened and quietly emptied, and the script is the only protection.</td></tr>
   <tr><td><b>3</b></td><td>Remove Local from the coordinate-system picker, add Project
     <span class="pill">#618 · #625</span></td>
     <td>§11.1: four modes, Lat/Long by default, <code>Project</code> copying the project's CS into the row.
@@ -769,6 +838,12 @@ proto untouched, so a bisect can separate "the derivation is wrong" from "the mi
   still 9 — so <b>the build at that commit would reject the very file the script had just written</b>. The
   script is unrunnable until the version bump exists, and the gate's error message names a script that
   doesn't exist yet. The two halves only make sense together.
+  <br><br>
+  <b>Superseded in part.</b> <span class="pill">2026-07-28</span> With the bump deferred (§5.3) the script
+  writes no version at all, so the argument above no longer applies to it — it is runnable at any commit,
+  and a converted file loads in a build from either side of commit 2. The conclusion is unchanged for a
+  different reason: the script and the reservation are one unit of work because a project converted before
+  the reservation lands reads as coordinate-less to the build that converted it.
   <br><br>
   The "migrate a copy and diff it" workflow survives intact, because it is a property of the
   <i>working tree</i>, not of a commit boundary: write the script, run it on a copy, check the result, and
@@ -806,10 +881,15 @@ line plot — must stay green untouched.</p>
   <code>hasElevation() == false</code>.</li>
   <li><b>The version gate</b> — a hand-built v9 <code>.cwcave</code> with a fix station is <i>refused</i>,
   and the same file with no fix stations still loads. Both halves matter: a gate that refuses everything
-  would pass the first assertion alone.</li>
-  <li><b>The script</b>, tested on its own against a hand-built v9 fixture rather than through the app:
-  each branch of the §5b tree, the zero-row that must stay coordinate-less, idempotency (running it twice
-  changes nothing), and the round-trip check that every migrated double reproduces exactly.</li>
+  would pass the first assertion alone. <b>Moves to the save/load audit with the gate itself</b>
+  (§5.3).</li>
+  <li><b>The script</b> <span class="pill ok">done</span>, tested on its own against a hand-written fixture
+  rather than through the app: each branch of the §5b tree, the zero-row that must stay coordinate-less,
+  idempotency (running it twice changes nothing), and the round-trip check that every migrated double
+  reproduces exactly. Two mutants confirm the two assertions that matter — reordering the branches so the
+  reproduce-the-numbers test runs first turns the hand-edited row into <code>"0, 0, 0m"</code>, and
+  dropping the elevation from that test silently loses the 304&nbsp;m beside a two-component paste. Both
+  reddened, and the second was caught twice, by the assertion and by the round-trip verifier.</li>
   <li><b><code>test_cwFixStationDiagnostics.cpp</code></b> — <code>Unreadable</code> is flagged and is
   <i>not</i> confused with <code>Empty</code>; the origin guard still defers an untouched row; the
   axis-order case at line 200 inverts to assert the self-heal.</li>
@@ -1124,9 +1204,11 @@ line plot — must stay green untouched.</p>
   <tr><td><b>An unmigrated project is opened by a new build</b></td>
     <td><b>The single largest risk in this plan, and the only one that destroys data.</b>
     <code>ignore_unknown_fields = true</code> turns "old schema" into "no coordinates" with no error, and
-    the next save persists it. Mitigated by the load-time version gate (§5), which must be a hard failure
-    and must ship in the same commit as the schema change. Migrating a <i>copy</i> first, and keeping the
-    original untouched until the migrated copy opens correctly, costs nothing and is worth doing.</td></tr>
+    the next save persists it. The load-time version gate (§5) is what mitigates it — <b>and that gate is
+    deferred to the pre-release save/load audit</b> (§5.3, decided 2026-07-28), so as of commit 2 this risk
+    is <b>unmitigated in code</b>. What stands between it and the project is procedure: run the script
+    before opening. Migrating a <i>copy</i> first, and keeping the original untouched until the migrated
+    copy opens correctly, costs nothing and is now the difference between a recovery and a loss.</td></tr>
   <tr><td>Derived state goes stale</td>
     <td>Real, and the reason <code>refresh()</code> has exactly two callers and the fields are private with
     no setter. Worth a test that calls every mutator and asserts the numbers agree with the string.</td></tr>
@@ -1180,11 +1262,20 @@ stores a <code>*fix</code> with no preceding <code>*cs</code> easting-first — 
 afterward reads it latitude-first and the first two components swap. The doc is corrected; the behavior
 is not.</p>
 
-<p>The fix needs the axis order the text was written under to be persisted and read back. Commit 2 already
-adds <code>coordinateTextAxisOrder</code> to the proto for exactly this class of problem, so <b>do it
-there</b> rather than bolting a second mechanism onto commit 3. Until then, whichever surface offers the
-choice has to say what it will do — which is commit 4's territory, since commit 4 is what surfaces
-<code>NoSystem</code> in the page and the popup.</p>
+<div class="callout warn">
+  <b>Corrected 2026-07-28.</b> This entry first said the fix belongs in commit 2, "which already adds
+  <code>coordinateTextAxisOrder</code> to the proto for exactly this class of problem". That is backwards:
+  §5.1 shows commit 2 <b>reserving</b> field 10 and deleting the enum end to end. After commit 2 there is
+  no stored axis order at all, by design — the order is derived from <code>inputCS</code>, and a
+  <code>NoSystem</code> row has no <code>inputCS</code> to derive it from. Persisting one would re-add the
+  field commit 2 exists to remove.
+</div>
+
+<p>So this is <b>not</b> a storage problem and it has no schema fix. It is <b>commit 4's</b> work, and it
+is a UI affordance: commit 4 is what brings <code>NoSystem</code> to the page and the popup, and the
+moment it offers a geographic CS on such a row it has to say how the existing text will be read — show
+the reading it is about to commit to, and let the user swap the first two components if that isn't what
+they meant. Nothing else can recover the information, because the information was never written down.</p>
 
 <h3>R3 — a named <code>FixStationCSPicker</code></h3>
 

@@ -1,7 +1,6 @@
 #include "cwProtoUtils.h"
 
 //Our includes
-#include "cwCoordinateText.h"
 #include "cwTrip.h"
 #include "cwTripCalibration.h"
 #include "cwSurveyChunk.h"
@@ -817,17 +816,10 @@ void saveFixStation(CavewhereProto::FixStation* protoFix, const cwFixStation& fi
     if (!fix.inputCS().isEmpty()) {
         saveString(protoFix->mutable_inputcs(), fix.inputCS());
     }
-    protoFix->set_easting(fix.easting());
-    protoFix->set_northing(fix.northing());
-    protoFix->set_elevation(fix.elevation());
     protoFix->set_horizontalvariance(fix.horizontalVariance());
     protoFix->set_verticalvariance(fix.verticalVariance());
     if (!fix.coordinate().isEmpty()) {
-        saveString(protoFix->mutable_coordinatetext(), fix.coordinate());
-        protoFix->set_coordinatetextaxisorder(
-            cwCoordinateText::axisOrderFor(fix.inputCS()) == cwCoordinateText::LatitudeLongitude
-                ? CavewhereProto::FixStation_AxisOrder_LatitudeLongitude
-                : CavewhereProto::FixStation_AxisOrder_EastingNorthing);
+        saveString(protoFix->mutable_coordinate(), fix.coordinate());
     }
 }
 
@@ -848,46 +840,14 @@ cwFixStation fromProtoFixStation(const CavewhereProto::FixStation& protoFix)
     fix.setHorizontalVariance(protoFix.horizontalvariance());
     fix.setVerticalVariance(protoFix.verticalvariance());
 
-    //The coordinate string is the fix now, but the numbers in this file were
-    //written when they were the fix — so keep the string only where it still
-    //says exactly what they say, and otherwise spell the numbers out. Loading a
-    //project therefore can't move a station: neither a coordinate typed before
-    //its CS was corrected, nor a two-component paste that left an elevation
-    //standing beside it, is re-read into something else on the way in. The
-    //one-shot migration script applies the same rule; after it there is nothing
-    //here but the string.
-    const QString text = protoFix.has_coordinatetext()
-                             ? QString::fromStdString(protoFix.coordinatetext())
-                             : QString();
-
-    const auto saysWhatTheNumbersSay = [&] {
-        const auto result = cwCoordinateText::parse(text, cwUnits::Metric,
-                                                    cwCoordinateText::axisOrderFor(fix.inputCS()));
-        if (result.hasError()) {
-            return false;
-        }
-        const cwCoordinateText::Coordinate coordinate = result.value();
-        return coordinate.easting == protoFix.easting()
-               && coordinate.northing == protoFix.northing()
-               && (coordinate.hasElevation ? coordinate.elevation : 0.0) == protoFix.elevation();
-    };
-
-    //Three zeros is a row "Mark Station as Fixed" created and nobody filled in.
-    //They have nothing to preserve, and spelling them out as "0, 0, 0m" would
-    //turn *not entered* into *entered at the origin* — which is the distinction
-    //the diagnostics defer on.
-    const bool hasNumbers = protoFix.easting() != 0.0
-                            || protoFix.northing() != 0.0
-                            || protoFix.elevation() != 0.0;
-
-    if (!text.isEmpty() && (!hasNumbers || saysWhatTheNumbersSay())) {
-        fix.setCoordinate(text);
-    } else if (hasNumbers) {
-        //All three at once: this format allowed a fix with no input CS, and one
-        //written a component at a time would lose the first two (see
-        //cwFixStation::setCoordinate). The numbers survive as text either way;
-        //the row is then flagged for the CS it never declared.
-        fix.setCoordinate(protoFix.easting(), protoFix.northing(), protoFix.elevation());
+    //The string is the whole coordinate — there is nothing to reconcile it
+    //against, and no legacy branch. A file that still carries the three numbers
+    //has them in fields that are reserved now, and loadMessage parses with
+    //ignore_unknown_fields, so it comes back with no coordinate at all: run
+    //scripts/migrate_fixstation_coordinates.py over such a project before
+    //opening it.
+    if (protoFix.has_coordinate()) {
+        fix.setCoordinate(QString::fromStdString(protoFix.coordinate()));
     }
 
     return fix;

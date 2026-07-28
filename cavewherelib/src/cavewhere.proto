@@ -63,30 +63,26 @@ message DoubleVector3d {
 }
 
 message FixStation {
-    // Which axis coordinateText leads with. The numbers alone can't say — a
-    // geographic system is written latitude first, a projected one easting
-    // first — so the order the text was read under travels with it.
-    enum AxisOrder {
-        EastingNorthing = 0;
-        LatitudeLongitude = 1;
-    }
-
     optional string id = 1;
     optional string stationName = 2;
     optional string inputCS = 3;
-    optional double easting = 4;
-    optional double northing = 5;
-    optional double elevation = 6;
+
+    // The three numbers, and the axis order that told a reader how to arrange
+    // them. Both are derived from the coordinate below now rather than stored.
+    // A project written while they were stored must be converted by
+    // scripts/migrate_fixstation_coordinates.py before this build opens it —
+    // the parser ignores unknown fields, so it would otherwise read every fix
+    // station as having no coordinate at all.
+    reserved 4, 5, 6, 10;
+    reserved "easting", "northing", "elevation", "coordinateTextAxisOrder";
+
     optional double horizontalVariance = 7;
     optional double verticalVariance = 8;
 
-    // What the user typed this coordinate as, kept so an editor can re-offer
-    // their own string instead of a machine rendering of it. Display state
-    // only — the three numbers above stay authoritative. Absent for every fix
-    // written before this field, and for every fix imported rather than typed,
-    // which is not a migration: those rows render from their numbers.
-    optional string coordinateText = 9;
-    optional AxisOrder coordinateTextAxisOrder = 10;
+    // The coordinate, as it was written. The only stored form: the three
+    // numbers are read back out of this under the axis order inputCS implies.
+    // Kept verbatim even when it doesn't parse. Absent means no coordinate.
+    optional string coordinate = 9;
 }
 
 message ExternalCenterline {

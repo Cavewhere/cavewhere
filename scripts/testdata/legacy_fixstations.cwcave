@@ -1,0 +1,89 @@
+{
+  "fileVersion": {
+    "version": 9,
+    "cavewhereVersion": "2026.4.3-542-g7dbd98d2"
+  },
+  "name": "Migration Fixture Cave",
+  "id": "{2b6c8f4e-3f1a-4a2d-9c77-6d0a1e5b9f31}",
+  "lengthUnit": "Meters",
+  "depthUnit": "Meters",
+  "fixStations": [
+    {
+      "id": "{11111111-1111-4111-8111-111111111111}",
+      "stationName": "NeverFilledIn",
+      "inputCS": "EPSG:4326",
+      "easting": 0,
+      "northing": 0,
+      "elevation": 0,
+      "horizontalVariance": 0,
+      "verticalVariance": 0
+    },
+    {
+      "id": "{22222222-2222-4222-8222-222222222222}",
+      "stationName": "HandEditedUnreadable",
+      "inputCS": "EPSG:32611",
+      "easting": 0,
+      "northing": 0,
+      "elevation": 0,
+      "horizontalVariance": 0,
+      "verticalVariance": 0,
+      "coordinateText": "N 46 07 16 W 115 35 56",
+      "coordinateTextAxisOrder": "EastingNorthing"
+    },
+    {
+      "id": "{33333333-3333-4333-8333-333333333333}",
+      "stationName": "TypedInFeet",
+      "inputCS": "EPSG:32611",
+      "easting": 610016.792,
+      "northing": 5615117.075,
+      "elevation": 9.144,
+      "horizontalVariance": 0.5,
+      "verticalVariance": 1,
+      "coordinateText": "610016.792, 5615117.075, 30ft",
+      "coordinateTextAxisOrder": "EastingNorthing"
+    },
+    {
+      "id": "{44444444-4444-4444-8444-444444444444}",
+      "stationName": "TransposedByACSChange",
+      "inputCS": "EPSG:4326",
+      "easting": -115.59902,
+      "northing": 46.12113,
+      "elevation": 304,
+      "horizontalVariance": 0,
+      "verticalVariance": 0,
+      "coordinateText": "-115.59902, 46.12113, 304m",
+      "coordinateTextAxisOrder": "EastingNorthing"
+    },
+    {
+      "id": "{55555555-5555-4555-8555-555555555555}",
+      "stationName": "TwoComponentPaste",
+      "inputCS": "EPSG:32611",
+      "easting": 610016.792,
+      "northing": 5615117.075,
+      "elevation": 304,
+      "horizontalVariance": 0,
+      "verticalVariance": 0,
+      "coordinateText": "610016.792, 5615117.075",
+      "coordinateTextAxisOrder": "EastingNorthing"
+    },
+    {
+      "id": "{66666666-6666-4666-8666-666666666666}",
+      "stationName": "ImportedWithNoText",
+      "inputCS": "EPSG:32611",
+      "easting": 500123.456,
+      "northing": 4194567.89,
+      "elevation": 2750.5,
+      "horizontalVariance": 0,
+      "verticalVariance": 0
+    },
+    {
+      "id": "{77777777-7777-4777-8777-777777777777}",
+      "stationName": "NoSystemAtAll",
+      "easting": 610016.792,
+      "northing": 5615117.075,
+      "elevation": 304,
+      "horizontalVariance": 0,
+      "verticalVariance": 0
+    }
+  ]
+}
