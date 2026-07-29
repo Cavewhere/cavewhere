@@ -154,17 +154,34 @@ MainWindowTest {
             let tabBar = findChild(rootId, "renderingTabBar")
             verify(tabBar !== null, "renderingTabBar not found")
 
-            // Selected directly rather than through the floating button, whose
-            // clicks do not land under the offscreen platform this runs on — the
-            // three drawer tests in this file fail for that same reason.
-            tabBar.currentIndex = viewPage.toolsTabIndex
+            let toolsButton = findChild(rootId, "toolsButton")
+            verify(toolsButton !== null, "toolsButton not found")
+            mouseClick(toolsButton)
             compare(tabBar.currentIndex, viewPage.toolsTabIndex, "the Tools tab is selected")
+            viewPage.viewDrawer.close()
 
             rootId.width = 1024
             waitForRendering(rootId)
 
             verify(tabBar.currentIndex !== viewPage.toolsTabIndex,
                    "widening moved the panel off the tab it no longer offers")
+        }
+
+        // The renderer's map overlays fill it and tap away to deselect, so any
+        // chrome left below them never sees a press — which is how these buttons
+        // stopped opening the drawer at all. The three click tests below catch
+        // it, but only as three unrelated failures; this one names the reason.
+        function test_theFloatingButtonsSitAboveTheMapOverlays() {
+            rootId.width = 400
+            waitForRendering(rootId)
+            let viewPage = findViewPage()
+
+            let buttons = findChild(rootId, "floatingButtons")
+            verify(buttons !== null, "floatingButtons not found")
+            verify(viewPage.renderer.zOverlay > viewPage.renderer.zLabels,
+                   "the chrome level is above the label/lead level")
+            compare(buttons.z, viewPage.renderer.zOverlay,
+                    "and the buttons are chrome, not interaction graphics")
         }
 
         function test_drawerOpensOnCameraClick() {

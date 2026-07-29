@@ -72,8 +72,11 @@ Item {
     readonly property int zScene: 0
     readonly property int zInteraction: 1
     readonly property int zLabels: 2
-    // Top of the stack: in-view chrome (compass + scale bar). The tool buttons
-    // that used to live here moved to the sidebar tool rail (see MainSideBar).
+    // Top of the stack: in-view chrome (compass + scale bar, and the floating
+    // Camera/Layers/Tools buttons the View page reparents in at narrow widths).
+    // Chrome has to sit above zLabels, not merely above the scene: LeadView and
+    // LinePlotLabelView fill this item and carry tap-away handlers, so anything
+    // clickable left below them never sees a press.
     readonly property int zOverlay: 3
 
     clip: true

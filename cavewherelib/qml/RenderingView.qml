@@ -123,7 +123,11 @@ ToolProviderPage {
         anchors.top: parent.top
         anchors.right: parent.right
         anchors.margins: 8
-        z: 1
+        // The renderer's own chrome level, shared with the compass and scale
+        // bar. Below it are LeadView and LinePlotLabelView, which fill the
+        // renderer and tap away to deselect — they swallowed every press meant
+        // for these buttons while this column sat at the interaction level.
+        z: rendererId.zOverlay
         spacing: 4
 
         RoundButton {
