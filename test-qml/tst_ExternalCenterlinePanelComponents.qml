@@ -56,6 +56,11 @@ MainWindowTest {
             width: parent.width
             floating: false
         }
+
+        ExternalCenterlineFileErrorBanner {
+            id: fileErrorBannerId
+            width: parent.width
+        }
     }
 
     ExternalCenterlineTestCase {
@@ -304,8 +309,8 @@ MainWindowTest {
             verify(floatingBannerId.visible, "a floating survey banners itself")
             const detail = findChild(floatingBannerId, "floatingSurveyDetail")
             verify(detail !== null, "floatingSurveyDetail must exist")
-            verify(detail.text.indexOf("frame of their own") >= 0,
-                   "solved-but-adrift copy; got: " + detail.text)
+            verify(detail.text.indexOf("can't be placed with the others") >= 0,
+                   "adrift-with-names copy; got: " + detail.text)
 
             const stations = findChild(floatingBannerId, "floatingSurveyStations")
             verify(stations !== null, "floatingSurveyStations must exist")
@@ -313,17 +318,39 @@ MainWindowTest {
             verify(stations.text.indexOf("a1, a2") >= 0,
                    "stations render in the survey's own namespace; got: " + stations.text)
 
-            // The other shape: cavern drops a survey nothing fixes and nothing
-            // ties in, so it floats with no station to name. Which is why the
-            // banner is driven by `floating` and not by the station list.
+            // The other shape: a survey whose file cannot be read at all floats
+            // with no station to name, since neither the solve nor the scan's
+            // harvest could learn one. Which is why the banner is driven by
+            // `floating` and not by the station list.
             floatingBannerId.stations = []
-            verify(floatingBannerId.visible, "a dropped survey still banners")
-            verify(detail.text.indexOf("none of its stations were placed") >= 0,
-                   "dropped copy; got: " + detail.text)
+            verify(floatingBannerId.visible, "a survey with no readable names still banners")
+            verify(detail.text.indexOf("couldn't be read from its file") >= 0,
+                   "unreadable copy; got: " + detail.text)
             verify(!stations.visible, "no stations line when nothing was placed")
 
             floatingBannerId.floating = false
             verify(!floatingBannerId.visible)
+        }
+
+        function test_fileErrorBannerCarriesCavernsOwnText() {
+            verify(!fileErrorBannerId.visible,
+                   "a file cavern read without complaint banners nothing")
+
+            const complaint = "broken.svx:3: Expecting numeric field"
+            fileErrorBannerId.errorMessage = complaint
+            verify(fileErrorBannerId.visible, "a complaint shows itself")
+
+            const title = findChild(fileErrorBannerId, "fileErrorTitle")
+            verify(title !== null && title.visible, "fileErrorTitle must render")
+
+            // Verbatim, and not summarized: the line and column cavern gives are
+            // the whole reason this beats the region-level log.
+            const message = findChild(fileErrorBannerId, "fileErrorMessage")
+            verify(message !== null, "fileErrorMessage must exist")
+            compare(message.text, complaint)
+
+            fileErrorBannerId.errorMessage = ""
+            verify(!fileErrorBannerId.visible, "fixing the file takes the banner down")
         }
     }
 }

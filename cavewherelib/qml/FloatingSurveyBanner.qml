@@ -21,9 +21,9 @@ QQ.Rectangle {
     id: root
     objectName: "floatingSurveyBanner"
 
-    // Whether the survey floats at all. Not derivable from stations: cavern
-    // drops a survey nothing fixes and nothing ties in, and that one floats
-    // with no stations to show.
+    // Whether the survey floats at all. Not derivable from stations: a survey
+    // that is tied in has none to show here, and one whose file cannot be read
+    // has none to show anywhere.
     required property bool floating
 
     // The floating stations, in the survey's own namespace.
@@ -56,9 +56,12 @@ QQ.Rectangle {
             objectName: "floatingSurveyDetail"
             Layout.fillWidth: true
             wrapMode: QC.Label.WordWrap
+            // Says nothing about where the stations ended up: a floating
+            // survey's names now arrive from the scan's harvest as well as from
+            // the solve, and a harvested one was placed nowhere at all.
             text: root.stations.length > 0
-                  ? qsTr("Nothing joins it to the rest of the cave, so its stations were placed in a frame of their own.")
-                  : qsTr("Nothing joins it to the rest of the cave and nothing fixes it, so none of its stations were placed.")
+                  ? qsTr("Nothing joins it to the rest of the cave, so it can't be placed with the others.")
+                  : qsTr("Nothing joins it to the rest of the cave, and its stations couldn't be read from its file.")
         }
 
         QC.Label {
@@ -141,7 +144,7 @@ QQ.Rectangle {
             visible: root.suggestions !== null && suggestionsRepeaterId.count === 0
                      && root.stations.length > 0
             wrapMode: QC.Label.WordWrap
-            text: qsTr("No station in the rest of the cave is named like one of these, so the tie has to be made by hand.")
+            text: qsTr("No station in the rest of the cave is named like one of these. Renaming one to match will connect them.")
         }
     }
 }

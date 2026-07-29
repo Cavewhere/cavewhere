@@ -118,16 +118,21 @@ TEST_CASE("A survey cavern dropped outright still says it floats",
     solveRegion(manager, region, setup.tripDirs);
 
     // Nothing fixes it and nothing ties it in, so none of its stations are
-    // placed. floating has to stand on its own here: a surface keyed off "are
-    // there stations" goes silent for exactly the worst failure.
+    // placed — and the surface still has names to show, because the scan reads
+    // the attachment on its own. floating stays the thing that decides whether
+    // the banner appears: a file cavern cannot read at all leaves this list
+    // empty while floating just as badly.
     cwFloatingSurveyStatus status;
     status.setModel(manager.floatingSurveyModel());
     status.setTrip(setup.attached);
 
     REQUIRE_FALSE(manager.hasSolveError());
+    REQUIRE(setup.attached->solvedStations().isEmpty());
     CHECK(status.floating());
-    CHECK(status.stations().isEmpty());
-    CHECK(status.stationHandles().isEmpty());
+    CHECK(status.stations() == QStringList({QStringLiteral("hanging.h1"),
+                                            QStringLiteral("hanging.h2"),
+                                            QStringLiteral("hanging.h3")}));
+    CHECK(status.stationHandles().size() == 3);
 }
 
 TEST_CASE("Rebinding to another trip re-answers for that one",

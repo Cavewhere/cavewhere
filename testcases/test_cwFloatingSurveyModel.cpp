@@ -219,7 +219,7 @@ TEST_CASE("A record naming a trip the region dropped produces no row",
     CHECK(model->rowCount() == 0);
 }
 
-TEST_CASE("A survey cavern dropped outright floats with no station to name",
+TEST_CASE("A survey cavern dropped outright is named by the scan instead",
           "[FloatingSurveyModel]")
 {
     QTemporaryDir tempRoot;
@@ -232,20 +232,25 @@ TEST_CASE("A survey cavern dropped outright floats with no station to name",
     cwLinePlotManager manager;
     solveRegion(manager, region, setup.tripDirs);
 
-    // Nothing fixes it and nothing ties it in, so cavern drops it and no
-    // station of its is ever placed. This is the worst failure the banner has
-    // to speak for, and it is the one where the station list is empty — so a
-    // surface that keyed off "are there stations" would go silent for exactly
-    // it. The row, and isFloating(), must stand on their own.
+    // Nothing fixes it and nothing ties it in, so cavern drops it and places no
+    // station of it at all. The names come from the scan's harvest of the file
+    // instead, and come out in the trip's own namespace — the row cannot show
+    // which pass named it, and must not need to.
     const cwFloatingSurveyModel* model = manager.floatingSurveyModel();
     REQUIRE_FALSE(manager.hasSolveError());
+    REQUIRE(setup.attached->solvedStations().isEmpty());
+
+    const QStringList harvested = {QStringLiteral("hanging.h1"),
+                                   QStringLiteral("hanging.h2"),
+                                   QStringLiteral("hanging.h3")};
+
     REQUIRE(model->rowCount() == 1);
     CHECK(stringAt(model, 0, cwFloatingSurveyModel::TripNameRole) == setup.attached->name());
     CHECK(triggerAt(model, 0) == cwFloatingSurveyModel::ExternalScope);
-    CHECK(stationsAt(model, 0).isEmpty());
+    CHECK(stationsAt(model, 0) == harvested);
 
     CHECK(model->isFloating(setup.attached->id()));
-    CHECK(model->floatingStations(setup.attached->id()).isEmpty());
+    CHECK(model->floatingStations(setup.attached->id()) == harvested);
 }
 
 TEST_CASE("A station the run named under an old scope keeps the spelling it was given",

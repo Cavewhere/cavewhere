@@ -55,11 +55,16 @@ QString letterKey(const QString& leaf)
 
 //! A trip's stations in its own namespace, as the identities a tie stores.
 //!
-//! Chunks first, and solved stations only for a trip that has none: an
-//! unconnected native chunk stops the solve outright, so the very trips the
+//! Chunks first, and a file-backed trip's names only for a trip that has none:
+//! an unconnected native chunk stops the solve outright, so the very trips the
 //! native half of this surface is for would have no solved station to offer.
 //! An attached centerline is the other way round — its stations live in its
-//! file, so a completed run is the only place its names are known.
+//! file, so they are known only once something has read it.
+//!
+//! Of the two readers, the scan's harvest is preferred: it reads the attachment
+//! on its own, so it has names even for the attachment cavern dropped — which
+//! is every attachment this surface is trying to tie in. The solve is the
+//! fallback, for the window before the first scan applies.
 QList<cwStationHandle> localStations(const cwTrip* trip)
 {
     QList<cwStationHandle> stations;
@@ -72,12 +77,22 @@ QList<cwStationHandle> localStations(const cwTrip* trip)
                 stations.append(trip->stationHandle(station.name()));
             }
         }
-    } else {
-        const QList<QPair<QString, QVector3D>> solved = trip->solvedStations();
-        stations.reserve(solved.size());
-        for (const QPair<QString, QVector3D>& station : solved) {
-            stations.append(trip->stationHandle(station.first));
+        return stations;
+    }
+
+    const QStringList harvested = trip->externalStations();
+    if (!harvested.isEmpty()) {
+        stations.reserve(harvested.size());
+        for (const QString& name : harvested) {
+            stations.append(trip->stationHandle(name));
         }
+        return stations;
+    }
+
+    const QList<QPair<QString, QVector3D>> solved = trip->solvedStations();
+    stations.reserve(solved.size());
+    for (const QPair<QString, QVector3D>& station : solved) {
+        stations.append(trip->stationHandle(station.first));
     }
 
     return stations;
@@ -154,12 +169,14 @@ void cwTieSuggestionModel::setTripConnected(cwTrip* trip, bool connected)
     //to each of its trips, so a candidate trip gaining or losing a station
     //arrives here too. scopeLabelsChanged is the region's aggregate rename: a
     //renamed trip is a row's label, and an added or removed one is a whole
-    //candidate list.
+    //candidate list. externalStationsChanged is the scan's harvest landing,
+    //which for a dropped attachment is the only pulse that brings its names.
     cwCave* cave = trip->parentCave();
     cwCavingRegion* region = cave != nullptr ? cave->parentRegion() : nullptr;
 
     const auto forEachSignal = [trip, region](auto apply) {
         apply(trip, &cwTrip::solvedStationsChanged);
+        apply(trip, &cwTrip::externalStationsChanged);
         apply(trip, &cwTrip::scopeChanged);
         if (region != nullptr) {
             apply(region, &cwCavingRegion::scopeLabelsChanged);

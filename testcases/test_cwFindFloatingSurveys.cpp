@@ -135,7 +135,7 @@ TEST_CASE("An attached centerline nothing ties in floats even when cavern is hap
                                           scope + QStringLiteral("simple.a3")}));
 }
 
-TEST_CASE("An attached centerline cavern dropped as hanging floats with no stations",
+TEST_CASE("An attached centerline cavern dropped as hanging floats with the names its file gave",
           "[FloatingSurveys]")
 {
     QTemporaryDir tempRoot;
@@ -148,17 +148,24 @@ TEST_CASE("An attached centerline cavern dropped as hanging floats with no stati
     cwLinePlotManager manager;
     const QList<Result> floating = solveAndFindFloating(manager, region, setup.tripDirs);
 
-    // Cavern warns and exits zero, so the solve "succeeded" and the trip's
-    // stations simply never arrived — a record with no names is the only thing
-    // that can carry that.
+    // Cavern warns and exits zero, so the solve "succeeded" while placing not
+    // one station of this survey.
     INFO("solve error: " << manager.solveErrorMessage().toStdString());
     REQUIRE_FALSE(manager.hasSolveError());
     CHECK(manager.cavernLog().contains(QStringLiteral("not all connected")));
+    REQUIRE(setup.attached->solvedStations().isEmpty());
 
     REQUIRE(floating.size() == 1);
     const Result result = recordFor(floating, setup.attached);
     CHECK(result.trigger == Result::Trigger::ExternalScope);
-    CHECK(result.stations.isEmpty());
+
+    // Which is the whole reason the scan harvests: the names are read from the
+    // attachment on its own, then scoped to the trip so the record reads
+    // cave-local like one the solve wrote.
+    const QString scope = setup.attached->scopePrefix().toLower();
+    CHECK(result.stations == QStringList({scope + QStringLiteral("hanging.h1"),
+                                          scope + QStringLiteral("hanging.h2"),
+                                          scope + QStringLiteral("hanging.h3")}));
 }
 
 TEST_CASE("An equate that ties an attached centerline in stops it floating",

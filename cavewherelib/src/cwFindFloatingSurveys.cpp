@@ -14,6 +14,7 @@
 #include "cwStation.h"
 #include "cwStationHandle.h"
 #include "cwSurveyNetwork.h"
+#include "cwTrip.h"
 
 #include <QHash>
 #include <QSet>
@@ -217,7 +218,25 @@ ScopeKey anchorScopeOf(const cwCaveData& cave, const SolvedScopes& solved)
     return QUuid();
 }
 
+//! An attachment's harvested names, as the record spells everything else.
+//!
+//! The harvest reads the file on its own, so its names carry only the naming
+//! levels the file itself opens — the trip's own scope, the one the exporter
+//! wraps around the same "*include", has to go back on.
+QStringList caveLocalHarvestOf(const cwTripData& trip, const QHash<QUuid, QString>& tripLabels)
+{
+    const QString prefix = cwStation::canonicalKey(cwTrip::scopePrefix(trip, tripLabels));
+
+    QStringList stations;
+    stations.reserve(trip.externalStations.size());
+    for (const QString& station : trip.externalStations) {
+        stations.append(prefix + station);
+    }
+    return stations;
+}
+
 void appendFloatingSurveysOf(const cwCaveData& cave,
+                             const cwScopeLabels& labels,
                              const SolvedScopes& solved,
                              const ScopeTies& ties,
                              QList<cwFindFloatingSurveys::Result>& results)
@@ -244,7 +263,13 @@ void appendFloatingSurveysOf(const cwCaveData& cave,
         result.caveId = cave.id;
         result.tripId = trip.id;
         result.trigger = Result::Trigger::ExternalScope;
-        result.stations = solved.stations(trip.id);
+        //The solve has no names to give for exactly the attachments this pass
+        //exists to report — cavern drops a survey nothing fixes, so it emits no
+        //station of it at all. The scan's per-file harvest read them straight
+        //out of the attachment, already canonical and sorted.
+        result.stations = solved.solvedAnything(trip.id)
+                ? solved.stations(trip.id)
+                : caveLocalHarvestOf(trip, labels.tripLabels(cave.id));
         results.append(result);
     }
 }
@@ -312,7 +337,7 @@ QList<cwFindFloatingSurveys::Result> cwFindFloatingSurveys::fromExternalScopes(
     const SolvedScopes solved(region, labels, regionNetwork);
 
     for (const cwCaveData& cave : region.caves) {
-        appendFloatingSurveysOf(cave, solved, ties, results);
+        appendFloatingSurveysOf(cave, labels, solved, ties, results);
     }
     return results;
 }

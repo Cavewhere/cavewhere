@@ -277,7 +277,21 @@ station list gains a fallback:
 
 <pre><code>result.stations = solved.solvedAnything(trip.id)
                   ? solved.stations(trip.id)
-                  : trip.externalStations;   // already canonical + sorted</code></pre>
+                  : caveLocalHarvestOf(trip, labels.tripLabels(cave.id));</code></pre>
+
+<div class="note">
+<strong>Settled in H3:</strong> the harvested names cannot be dropped in raw. A record's
+stations are <em>cave-local</em> — <code>SolvedScopes</code> strips only the cave head, so a
+solved attachment reads <code>"&lt;tripLabel&gt;.&lt;fileBegin&gt;.&lt;tail&gt;"</code> —
+while the harvest reads the file on its own and so carries only the levels the file itself
+opens. <code>cwFloatingSurveyModel</code> turns a record into handles by stripping the trip's
+scope prefix, so a trip whose label happens to match the file's own <code>*begin</code> (an
+attachment named after its file — the ordinary case) would have one level too many stripped
+and every tie would name the wrong station. <code>appendFloatingSurveysOf</code> therefore
+puts the trip's scope back on, through the same <code>cwTrip::scopePrefix(data, labels)</code>
+the live side uses, and <code>Result::stations</code> keeps one contract whichever pass named
+it.
+</div>
 
 <p>
 Doc updates ride along: <code>Result::stations</code>' "Empty means the survey produced no
@@ -368,11 +382,10 @@ lands seconds later anyway via the post-attach recompute, and the preview should
 </div>
 
 <div class="callout">
-<div class="title">Open question (carried from 6c, still unanswered)</div>
-The <code>tieSuggestionsEmpty</code> label promises "the tie has to be made by hand" — a path
-that doesn't exist. Proposed copy: <em>"No station in the rest of the cave is named like one of
-these. Renaming one to match will connect them."</em> Cheap to fold into the same QML touch;
-needs a yes/no.
+<div class="title">Open question (carried from 6c) — answered in H3</div>
+The <code>tieSuggestionsEmpty</code> label promised "the tie has to be made by hand" — a path
+that doesn't exist. Replaced with <em>"No station in the rest of the cave is named like one of
+these. Renaming one to match will connect them."</em>
 </div>
 
 <h2 id="commits">4. Commit sequence</h2>
@@ -413,15 +426,20 @@ needs a yes/no.
   <td>Consumers</td>
   <td><code>fromExternalScopes</code> fallback (+ the three header-doc corrections),
       <code>cwTieSuggestionModel</code> preference + signal, banner copy, the
-      <code>ExternalCenterlineTripPanel</code> error callout (§3.7).</td>
+      <code>ExternalCenterlineFileErrorBanner</code> callout on
+      <code>ExternalCenterlineTripPanel</code> (§3.7).
+      <strong>DONE — green.</strong></td>
   <td>C++: dropped-scope result carries harvested stations; suggester offers
       <code>SameName</code> rows for a no-fix attachment beside a native trip sharing a leaf;
-      tie ends the float. QML (<code>tst_ExternalCenterlineTripPanel</code>): attach
-      <code>survex_hanging.svx</code> into a cave whose native trip names <code>h2</code> —
-      banner lists <code>hanging.h1, hanging.h2, hanging.h3</code>, suggestion row appears
-      <em>while the survey is dropped</em>, click Connect, <code>tryVerify</code> the banner
-      goes away. This is the Dusk Butte shape in miniature. Error surface: attach
-      <code>broken.svx</code> → the panel's error callout appears with cavern's text.</td>
+      tie ends the float. QML (<code>tst_ExternalCenterlineTripPanel</code>): the Dusk Butte
+      shape in miniature — an anchoring <code>survex_simple.svx</code> plus a second, unfixed
+      attachment of the new <code>survex_hanging_alike.svx</code> fixture (a hanging survey
+      whose names match the anchor's, since a QML test cannot build a native trip with shots).
+      The banner lists <code>simple.a1..a3</code> while the stations list — what the solve
+      placed — is empty, a suggestion row appears <em>while the survey is dropped</em>, one
+      click on Connect ends the float and the solve then places it. Error surface: attach
+      <code>broken.svx</code> → the panel's error callout appears with cavern's text naming
+      the file.</td>
 </tr>
 </table>
 

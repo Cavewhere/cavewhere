@@ -78,8 +78,9 @@ public:
 
     //! \a tripId's stations, in the trip's own namespace — the whole trip's,
     //! since a trip floats as a unit. Empty both for a trip that is not
-    //! floating and for one cavern dropped outright, so it can never stand in
-    //! for isFloating().
+    //! floating and for one whose stations could not be learned at all (cavern
+    //! dropped it and the scan-time harvest of its file failed too), so it can
+    //! never stand in for isFloating().
     QStringList floatingStations(const QUuid& tripId) const;
 
     //! The same stations as floatingStations(), in the same order, as the

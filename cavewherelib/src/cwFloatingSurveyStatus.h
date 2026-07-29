@@ -74,8 +74,9 @@ public:
     bool floating() const { return m_floating; }
 
     //! This trip's stations, in the trip's own namespace, for showing. Empty
-    //! when the trip does not float, and also when it floats so badly that
-    //! cavern placed none of them.
+    //! when the trip does not float, and also when its stations could not be
+    //! learned at all — cavern placed none of them and the scan-time harvest of
+    //! its file failed too.
     QStringList stations() const { return m_stations; }
 
     //! The same stations as identities, for tying.

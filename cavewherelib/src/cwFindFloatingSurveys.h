@@ -67,11 +67,14 @@ public:
         //! survey floats as a unit and no station of it floats on its own.
         //! Cave-local and canonical (the same spelling cwStationPositionLookup
         //! and cwTrip::solvedStations use), so a caller can look each one up
-        //! without re-deriving a scope.
+        //! without re-deriving a scope. An attachment cavern dropped is named
+        //! by the scan's per-file harvest rather than by the solve, re-scoped
+        //! so it reads the same as every other record.
         //!
-        //! Empty means the survey produced no solved station at all: cavern
-        //! dropped it as hanging, which is what an attached centerline with no
-        //! fix and nothing tying it in does.
+        //! Empty means the survey's stations could not be learned at all —
+        //! cavern dropped it as hanging and the scan-time harvest of its file
+        //! failed too, which for an attachment means the file itself is
+        //! unreadable or broken.
         QStringList stations;
 
         bool operator==(const Result& other) const = default;

@@ -301,6 +301,92 @@ MainWindowTest {
                       "the anchoring attachment is not floating")
         }
 
+        function test_aDroppedAttachmentIsNamedAndTiedFromTheBanner() {
+            const fixture = attachAndBind("trip-panel-dropped")
+            const cave = RootData.region.cave(0)
+
+            const banner = findChild(panelId, "floatingSurveyBanner")
+            verify(banner !== null, "floatingSurveyBanner must exist")
+            tryVerify(() => RootData.linePlotManager.lastSolveStationCount > 0, 10000,
+                      "the anchoring attachment solved")
+
+            // Nothing fixes this second attachment and no equate ties it in, so
+            // cavern drops the whole survey rather than placing it in a corner
+            // of its own. The Dusk Butte shape, in miniature.
+            cave.addTrip()
+            const second = cave.trip(1)
+            rootId.trip = second
+            const dropped = TestHelper.testcasesDatasetPath(
+                "external-centerlines/survex_hanging_alike.svx")
+            RootData.attachTripCenterline(second, dropped)
+            tryVerify(() => banner.visible, 10000,
+                      "the untied second attachment banners itself")
+
+            // The solve placed none of its stations — the list that shows what
+            // it did place stays empty — so every name below came from the scan
+            // reading the attachment on its own.
+            const stationsList = findChild(panelId, "stationsList")
+            verify(stationsList !== null, "stationsList must exist")
+            compare(stationsList.count, 0, "a dropped survey has no solved station")
+
+            const stations = findChild(banner, "floatingSurveyStations")
+            verify(stations !== null, "floatingSurveyStations must exist")
+            tryCompare(stations, "text", "Floating: simple.a1, simple.a2, simple.a3",
+                       10000, "harvested stations render in the trip's own namespace")
+            verify(stations.visible, "the stations line shows what floats")
+
+            const detail = findChild(banner, "floatingSurveyDetail")
+            verify(detail !== null, "floatingSurveyDetail must exist")
+            verify(detail.text.indexOf("can't be placed with the others") >= 0,
+                   "the copy stops short of claiming they were placed; got: " + detail.text)
+
+            // And the names are worth having because they are tieable: before
+            // the harvest this banner listed nothing and offered nothing for
+            // exactly the surveys that most needed tying in.
+            const suggestionText = findChild(banner, "tieSuggestionText")
+            verify(suggestionText !== null, "a suggestion row must render")
+            tryCompare(suggestionText, "text",
+                       "simple.a1 and simple.a1 in " + fixture.trip.name + " are named alike",
+                       10000,
+                       "the row names the station, its partner, and the trip holding it")
+
+            const connectButton = findChild(banner, "tieSuggestionConnectButton")
+            verify(connectButton !== null, "tieSuggestionConnectButton must exist")
+            compare(cave.equates.count, 0, "nothing is tied until the user says so")
+
+            mouseClick(connectButton)
+
+            compare(cave.equates.count, 1, "the click records exactly one tie")
+            tryVerify(() => !banner.visible, 15000,
+                      "the tied attachment is no longer floating")
+            tryVerify(() => stationsList.count > 0, 15000,
+                      "and the solve now places it, so it has stations of its own")
+        }
+
+        function test_aBrokenAttachmentSaysWhichFileIsBroken() {
+            const trip = makeSavedTrip("trip-panel-broken")
+            rootId.trip = trip
+
+            const errorBanner = findChild(panelId, "externalCenterlineFileErrorBanner")
+            verify(errorBanner !== null, "externalCenterlineFileErrorBanner must exist")
+            verify(!errorBanner.visible, "nothing is broken before anything is attached")
+
+            const source = TestHelper.testcasesDatasetPath("external-centerlines/broken.svx")
+            RootData.attachTripCenterline(trip, source)
+
+            // The region solve fails as one run with one log, so it can say the
+            // region is broken but not which attachment broke it. The scan runs
+            // cavern over this file alone, which is what makes the complaint
+            // land on the panel the user just attached from.
+            tryVerify(() => errorBanner.visible, 10000,
+                      "the scan's per-file harvest reports the broken attachment")
+
+            const message = findChild(errorBanner, "fileErrorMessage")
+            verify(message !== null, "fileErrorMessage must exist")
+            verify(message.text.indexOf("broken.svx") >= 0,
+                   "cavern's own text names the file; got: " + message.text)
+        }
+
         function test_connectingASuggestionEndsTheFloat() {
             const fixture = attachAndBind("trip-panel-connect")
             const cave = RootData.region.cave(0)

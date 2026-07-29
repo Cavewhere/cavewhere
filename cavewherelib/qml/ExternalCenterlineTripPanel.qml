@@ -143,6 +143,12 @@ QQ.Item {
             onForgetSourceRequested: root.externalSourceSettings.clearSourcePath(root.trip.id)
         }
 
+        ExternalCenterlineFileErrorBanner {
+            id: fileErrorBannerId
+            Layout.fillWidth: true
+            errorMessage: root.trip !== null ? root.trip.externalStationsError : ""
+        }
+
         FloatingSurveyBanner {
             id: floatingBannerId
             Layout.fillWidth: true

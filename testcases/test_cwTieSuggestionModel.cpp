@@ -167,6 +167,87 @@ TEST_CASE("Only the leaf of a station's name is compared", "[TieSuggestionModel]
     CHECK(matchAt(model, 3) == cwTieSuggestionModel::SameLetterPrefix);
 }
 
+TEST_CASE("A harvest landing on the bound trip rebuilds its suggestions",
+          "[TieSuggestionModel][StationHarvest]")
+{
+    cwCavingRegion region;
+    cwCave* cave = addEmptyCave(region, QStringLiteral("Alpha"));
+    addNativeTripWithShot(cave, QStringLiteral("Native"),
+                          QStringLiteral("H2"), QStringLiteral("H3"));
+    cwTrip* attached = addAttachedTrip(cave, QStringLiteral("Attached"),
+                                       QStringLiteral("survex_hanging.svx"));
+
+    cwTieSuggestionModel model;
+    model.setTrip(attached);
+    REQUIRE(model.rowCount() == 0);
+
+    // The scan applies its harvest well after the panel has bound this model —
+    // and for a dropped attachment no solve follows that would pulse anything
+    // else, so this is the only signal that brings its names.
+    QSignalSpy countSpy(&model, &cwTieSuggestionModel::countChanged);
+    attached->setExternalStations({QStringLiteral("hanging.h2")});
+
+    CHECK(countSpy.count() == 1);
+    REQUIRE(model.rowCount() == 1);
+    CHECK(stationAt(model, 0) == QStringLiteral("hanging.h2"));
+    CHECK(candidateAt(model, 0) == QStringLiteral("H2"));
+    CHECK(matchAt(model, 0) == cwTieSuggestionModel::SameName);
+}
+
+TEST_CASE("An attachment cavern dropped is still offered ties by name",
+          "[TieSuggestionModel][StationHarvest]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    cwCavingRegion region;
+    cwCave* cave = addEmptyCave(region, QStringLiteral("Alpha"));
+    addNativeTripWithShot(cave, QStringLiteral("Native"),
+                          QStringLiteral("H2"), QStringLiteral("H3"));
+    cwTrip* attached = addAttachedTrip(cave, QStringLiteral("Attached"),
+                                       QStringLiteral("survex_hanging.svx"));
+    QHash<QUuid, QString> tripDirs;
+    attachFixture(tempRoot, attached, QStringLiteral("survex_hanging.svx"), tripDirs);
+
+    cwLinePlotManager manager;
+    solveRegion(manager, region, tripDirs);
+    INFO("solve error: " << manager.solveErrorMessage().toStdString());
+    REQUIRE_FALSE(manager.hasSolveError());
+
+    // Nothing fixes this attachment and nothing ties it in, so cavern dropped it
+    // and the solve placed no station of it at all. That is the state this
+    // surface exists for, and until the scan started harvesting names out of the
+    // file it was the one state the suggester had nothing to say about.
+    REQUIRE(attached->solvedStations().isEmpty());
+    REQUIRE(manager.floatingSurveyModel()->isFloating(attached->id()));
+
+    cwTieSuggestionModel model;
+    model.setTrip(attached);
+
+    REQUIRE(model.rowCount() == 4);
+    CHECK(stationAt(model, 0) == QStringLiteral("hanging.h2"));
+    CHECK(candidateAt(model, 0) == QStringLiteral("H2"));
+    CHECK(candidateTripAt(model, 0) == QStringLiteral("Native"));
+    CHECK(matchAt(model, 0) == cwTieSuggestionModel::SameName);
+    CHECK(stationAt(model, 1) == QStringLiteral("hanging.h3"));
+    CHECK(candidateAt(model, 1) == QStringLiteral("H3"));
+    CHECK(matchAt(model, 1) == cwTieSuggestionModel::SameName);
+
+    // hanging.h1 is past the end of the native trip, so it can only be guessed at.
+    CHECK(stationAt(model, 2) == QStringLiteral("hanging.h1"));
+    CHECK(matchAt(model, 2) == cwTieSuggestionModel::SameLetterPrefix);
+
+    // The rows are worth nothing if the identity behind them is wrong, so this
+    // ties one: the survey cavern refused to place joins its cave and stops
+    // being reported adrift.
+    REQUIRE(model.tieAt(0));
+    manager.waitToFinish();
+    INFO("solve error after tie: " << manager.solveErrorMessage().toStdString());
+    REQUIRE_FALSE(manager.hasSolveError());
+    CHECK_FALSE(attached->solvedStations().isEmpty());
+    CHECK_FALSE(manager.floatingSurveyModel()->isFloating(attached->id()));
+}
+
 TEST_CASE("Acting on a suggestion ends the float", "[TieSuggestionModel]")
 {
     QTemporaryDir tempRoot;
