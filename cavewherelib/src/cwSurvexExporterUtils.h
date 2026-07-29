@@ -15,6 +15,8 @@
 #include "cwFixStation.h"
 #include "cwStation.h"
 #include "cwShot.h"
+#include "cwGridConvergence.h"
+#include "cwGeoPoint.h"
 
 namespace cwSurvexExporterUtils {
 
@@ -70,6 +72,39 @@ inline void writeDeclinationAuto(QTextStream& stream, const DeclinationContext& 
     stream << "*declination auto ";
     writeCoordTriplet(stream, ctx.easting, ctx.northing, ctx.elevation);
     stream << Qt::endl;
+}
+
+// CaveWhere's manual declination is a pure magnetic declination (magnetic ->
+// true). Cavern only folds grid convergence (true -> grid) into `*declination
+// auto`, never a literal `*calibrate DECLINATION` (see survex datain.c
+// get_declination), so subtract it here to land the plot in grid north like the
+// auto path does (issue #628). An explanatory comment is emitted so a reader of
+// the export doesn't think their declination is wrong. Returns the value to
+// hand to *calibrate DECLINATION; unchanged when there's no grid (no fix / no CS
+// / geographic CS -> convergence 0).
+inline double manualDeclinationForGrid(QTextStream& stream,
+                                       double manualDeclination,
+                                       const std::optional<DeclinationContext>& ctx)
+{
+    if (!ctx) {
+        return manualDeclination;
+    }
+
+    const cwGeoPoint location(ctx->easting, ctx->northing, ctx->elevation);
+    const auto convergence = cwGridConvergence::computeAt(location, ctx->inputCS);
+    if (convergence.hasError() || convergence.value() == 0.0) {
+        return manualDeclination;
+    }
+
+    stream << QStringLiteral(
+        "; Manual declination %1° is magnetic; %2° grid convergence subtracted "
+        "so the survey plots to grid north (CaveWhere applies this "
+        "automatically - see issue #628).")
+        .arg(manualDeclination, 0, 'f', 2)
+        .arg(convergence.value(), 0, 'f', 2)
+        << Qt::endl;
+
+    return manualDeclination - convergence.value();
 }
 
 /**

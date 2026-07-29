@@ -201,17 +201,16 @@ cwRootData::cwRootData(QObject *parent) :
     // imageUpdater->setFutureToken(FutureManagerModel->token());
     // imageUpdater->setRegionTreeModel(RegionTreeModel);
 
-    auto updateAutomaticUpdate = [this]()
-    {
-        bool autoUpdate = cwJobSettings::instance()->automaticUpdate();
-        LinePlotManager->setAutomaticUpdate(autoUpdate);
-        ScrapManager->setAutomaticUpdate(autoUpdate);
-    };
-
-    updateAutomaticUpdate();
-
-    connect(cwJobSettings::instance(), &cwJobSettings::automaticUpdateChanged,
-            this, updateAutomaticUpdate);
+    // The coordinator owns the auto-update policy and the staleness aggregate;
+    // the managers are pure cwUpdatable mechanism. add() flushes each manager if
+    // it is already dirty (e.g. the line plot marked by setRegion above) and
+    // automatic update is on.
+    UpdateCoordinator = new cwUpdateCoordinator(this);
+    //Scraps and LiDAR notes both consume the line plot's station positions, so a
+    //solve dirties them and they must run after it.
+    UpdateCoordinator->add(LinePlotManager);
+    UpdateCoordinator->add(ScrapManager, {LinePlotManager});
+    UpdateCoordinator->add(NoteLiDARManager, {LinePlotManager});
 
     connect(Project, &cwProject::filenameChanged, this, [this]() {
         // Reset the filter pipeline UI state when the project file changes.
@@ -492,6 +491,12 @@ void cwRootData::shutdown()
     }
     m_shuttingDown = true;
 
+    //The user-facing exit path, and the earlier of the two: this drains tasks and
+    //futures asynchronously behind the shutdown screen, so stop the coordinator
+    //before that rather than in shutdownBlocking(), which only runs later from
+    //~cwRootData. See cwUpdateCoordinator::beginShutdown().
+    updateCoordinator()->beginShutdown();
+
     auto checkComplete = [this]() {
         if (!m_shutdownCompleted
             && taskManagerModel()->isIdle()
@@ -512,6 +517,11 @@ void cwRootData::shutdown()
 
 void cwRootData::shutdownBlocking()
 {
+    //Idempotent, and shutdown() has normally armed it already; this covers a
+    //cwRootData destroyed without a graceful exit. Either way it has to precede
+    //the three waits below, each of which pumps the event loop.
+    updateCoordinator()->beginShutdown();
+
     taskManagerModel()->waitForTasks();
     futureManagerModel()->waitForFinished();
     project()->waitSaveToFinish();

@@ -184,7 +184,9 @@ void cwSurvexExporterRule::writeCalibrations(QTextStream& stream,
     if (calibrations.autoDeclination() && declinationContext) {
         cwSurvexExporterUtils::writeDeclinationAuto(stream, *declinationContext);
     } else {
-        writeCalibration(stream, "DECLINATION", calibrations.declinationManual());
+        writeCalibration(stream, "DECLINATION",
+                         cwSurvexExporterUtils::manualDeclinationForGrid(
+                             stream, calibrations.declinationManual(), declinationContext));
     }
 }
 

@@ -7,7 +7,6 @@
 
 import QtQuick as QQ
 import QtQuick.Controls as QC
-import QtQuick.Layouts
 import cavewherelib
 
 QQ.Rectangle {
@@ -33,6 +32,15 @@ QQ.Rectangle {
     readonly property string _mapPage: mapPage.fullname()
 
     property bool gotoToPage: true
+
+    // The footer's busy row is hovered, and whether the flyout it opens is on
+    // screen. Both cross the sidebar boundary because the task flyout has to
+    // composite above the page view, so the host owns it — see MainContent.
+    readonly property bool busyRowHovered: updateFooterId.busyRowHovered
+    property bool tasksShown: false
+
+    // The footer's busy row was tapped.
+    signal tasksRequested()
 
     /**
       pageType should be either "View" or "Data"
@@ -201,65 +209,36 @@ QQ.Rectangle {
         }
     }
 
-    TaskListView {
-        id: taskListView
+    SideBarToolRail {
+        objectName: "sideBarToolRail"
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: buttonBar.bottom
-        anchors.bottom: autoSwitchId.top
+
+        compact: sidebarArea._compactMode
+
+        // The active page's tool contract. ActiveTools narrows currentPageItem to
+        // the typed ToolProviderPage; pages that don't provide tools (Data, Map)
+        // yield an empty rail.
+        interactionManager: ActiveTools.interactionManager
+        toolModel: ActiveTools.tools
     }
 
-    QQ.Rectangle {
-        id: autoSwitchId
-        objectName: "autoUpdateContainer"
+    SideBarUpdateFooter {
+        id: updateFooterId
+        objectName: "updateFooter"
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
-        implicitHeight: autoSwitchLayoutId.height
 
-        color: Theme.sidebar.panel
+        compact: sidebarArea._compactMode
+        automaticUpdate: RootData.updateCoordinator.automaticUpdate
 
-        ColumnLayout {
-            id: autoSwitchLayoutId
-            anchors.left: parent.left
-            anchors.right: parent.right
-            spacing: 2
+        tasksShown: sidebarArea.tasksShown
 
-            // Wide: label + checkbox
-            QC.Label {
-                text: "Automatic\nUpdate"
-                id: labelTextId
-                objectName: "autoUpdateLabel"
-                visible: sidebarArea.layoutSize >= Theme.LayoutSize.Wide
-                horizontalAlignment: QC.Label.AlignHCenter
-                Layout.fillWidth: true
-            }
-
-            QC.CheckBox {
-                id: autoCheckboxId
-                objectName: "autoUpdateCheckbox"
-                visible: sidebarArea.layoutSize >= Theme.LayoutSize.Wide
-                checked: RootData.settings.jobSettings.automaticUpdate
-                onToggled: RootData.settings.jobSettings.automaticUpdate = checked
-                Layout.alignment: Qt.AlignHCenter
-            }
-
-            // Compact: toggle button with icon
-            RoundButton {
-                id: autoUpdateToggleId
-                objectName: "autoUpdateToggle"
-                visible: sidebarArea._compactMode
-                checkable: true
-                checked: RootData.settings.jobSettings.automaticUpdate
-                onToggled: RootData.settings.jobSettings.automaticUpdate = checked
-                icon.source: "qrc:/twbs-icons/icons/arrow-repeat.svg"
-                icon.color: checked ? Theme.accent : Theme.text
-                Layout.alignment: Qt.AlignHCenter
-
-                QC.ToolTip.visible: hovered
-                QC.ToolTip.text: checked ? "Automatic updates on" : "Automatic updates off"
-            }
-        }
+        onRunRequested: RootData.updateCoordinator.updateNow()
+        onAutomaticUpdateToggled: (enabled) => RootData.updateCoordinator.automaticUpdate = enabled
+        onTasksRequested: sidebarArea.tasksRequested()
     }
 
     QQ.Rectangle {

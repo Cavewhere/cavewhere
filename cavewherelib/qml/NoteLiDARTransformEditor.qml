@@ -271,6 +271,9 @@ QQ.Item {
                     autoScaling: false
                     usingInteraction: !!(editor.interactionManager && editor.scaleInteraction)
                     onPaperLabel: "In Model"
+                    //The scale tool measures in model space, so it writes a
+                    //unitless numerator against a real-world denominator
+                    onPaperHasUnits: false
                     onScaleInteractionActivated: if (editor.interactionManager && editor.scaleInteraction) {
                         editor.interactionManager.active(editor.scaleInteraction)
                     }

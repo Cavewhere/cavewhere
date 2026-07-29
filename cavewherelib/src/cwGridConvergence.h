@@ -22,6 +22,8 @@
 #include <QList>
 #include <QQmlEngine>
 
+class cwCave;
+
 /**
  * Per-cave grid-convergence readout — the angle between true north and grid
  * north for a projected coordinate system at the cave's fix-station location.
@@ -89,6 +91,11 @@ public:
     /// Pure, stateless math: (location, sourceCS) → convergence degrees.
     static Monad::Result<double> computeAt(const cwGeoPoint& location,
                                            const QString& sourceCS);
+
+    /// Cached convergence angle for a cave, or 0.0 when the cave is null.
+    /// Unifies the null-guarded cave->gridConvergence()->angle() readout shared
+    /// by the scrap, LiDAR, and export paths (issue #628).
+    static double angleForCave(const cwCave* cave);
 
 signals:
     void changed();

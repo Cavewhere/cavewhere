@@ -1624,13 +1624,14 @@ MainWindowTest {
         // The Automatic Update checkbox in the lower-left sidebar, highlighted
         // and cropped. Backs the "Carpeting is automatic" section of
         // docs/manual/scraps/carpeting.md — the switch gates the survey solve
-        // (loop closure) and carpet re-morphing together.
+        // (loop closure) and carpet re-morphing together. It lives in the update
+        // footer's idle state, which is what an untouched project shows.
         function test_automaticUpdate() {
             let regionViewer = loadRhiViewer();
             if (!regionViewer) { return; }
 
-            let container = findByName(rootId.mainWindow, "autoUpdateContainer");
-            verify(container, "found the Automatic Update container");
+            let container = findByName(rootId.mainWindow, "updateFooter");
+            verify(container, "found the update footer");
 
             let tabBar = sidePanelTabBar();
             if (tabBar) { tabBar.currentIndex = 0; }
@@ -1995,7 +1996,7 @@ MainWindowTest {
         // coordinates back out" section of georeference-a-cave.md.
         //
         // The popup is a QC.Popup opened by a `visible` binding (hasPick &&
-        // pickButtonId.selected), so it's a QObject child (findChild, not
+        // the picker is the active interaction), so it's a QObject child (findChild, not
         // findByName) and needs popupType = Popup.Item to draw into the window
         // overlay grabWindow can see — the same reason as the Import/Export menus.
         function test_georefCoordinatePicker() {
@@ -2098,11 +2099,11 @@ MainWindowTest {
             restoreDemoProject();
         }
 
-        // The Clip tool in the 3D view's bottom toolbar, highlighted, so the clip
+        // The Clip tool in the main sidebar's tool rail, highlighted, so the clip
         // page can show where the tool lives. Whole-window: the demo cave in the 3D
-        // view is the context, and the toolbar (Pick / Clip / Measure) sits over it.
-        // The button is present with or without a loaded cloud, so no fixture is
-        // needed. Backs the "Open the clip tool" section of
+        // view is the context, and the rail (Pick / Measure / Clip) sits in the
+        // sidebar beside it. The button is present with or without a loaded cloud,
+        // so no fixture is needed. Backs the "Open the clip tool" section of
         // docs/manual/point-clouds/clip-a-point-cloud.md.
         function test_pointCloudClipTool() {
             let regionViewer = loadRhiViewer();
@@ -2112,7 +2113,9 @@ MainWindowTest {
                 "rootId->viewPage->SplitView->renderer");
             verify(glTerrain, "found the GLTerrainRenderer");
 
-            let clipButton = findByName(glTerrain, "lazClipButton");
+            // The tool buttons moved from the view's toolbar to the main sidebar's
+            // tool rail, so search the whole window rather than under the renderer.
+            let clipButton = findByName(rootId.mainWindow, "lazClipButton");
             verify(clipButton, "found the Clip tool button");
             highlightOverlayId.target = clipButton;
             settle();
@@ -2125,8 +2128,8 @@ MainWindowTest {
             highlightOverlayId.target = null;
         }
 
-        // The Measure tool in action: the button highlighted in the 3D view's bottom
-        // toolbar (Pick / Clip / Measure) AND a completed two-point measurement — the
+        // The Measure tool in action: the button highlighted in the main sidebar's
+        // tool rail (Pick / Measure / Clip) AND a completed two-point measurement — the
         // two placed points and the line drawn between them — so the page shows both
         // where the tool lives and what using it looks like. Whole-window for context.
         // Backs the "Open the measurement tool" / "Place two points" sections of
@@ -2146,12 +2149,12 @@ MainWindowTest {
             // Hide the readout popup for this shot so it doesn't cover the measurement
             // line — the line and its endpoints are the point here, and the readout has
             // its own dedicated shot (measurement-readout.png). Assigning visible drops
-            // the popup's `measureButton.selected && hasMeasurement` binding, which is
-            // fine for a one-shot grab; the interaction is torn down right after.
+            // the popup's `activeInteraction === measurement && hasMeasurement` binding,
+            // which is fine for a one-shot grab; the interaction is torn down right after.
             let popup = findChild(glTerrain, "measurementReadoutPopup");
             if (popup) { popup.visible = false; }
 
-            let measureButton = findByName(glTerrain, "measurementButton");
+            let measureButton = findByName(rootId.mainWindow, "measurementButton");
             verify(measureButton, "found the Measure tool button");
             highlightOverlayId.target = measureButton;
             settle();

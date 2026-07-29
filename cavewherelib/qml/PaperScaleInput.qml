@@ -24,16 +24,24 @@ QQ.Item {
     readonly property bool scaleValueValid: scaleObject !== null &&
                                             Number.isFinite(scaleObject.scale) &&
                                             scaleObject.scale > 0
+    // A LiDAR note measures its on-paper side in model space, which carries no
+    // unit, so pairing a bare number with a real in-cave length is correct there.
+    // A paper scale has units on both sides.
+    property bool onPaperHasUnits: true
+
+    // One bare side and one real one is a scale nobody can read — but only when
+    // both sides were supposed to carry units.
     readonly property bool scaleUnitMismatch: scaleObject !== null &&
-                                              (scaleObject.scaleDenominator.unit === Units.Unitless ||
-                                               scaleObject.scaleNumerator.unit === Units.Unitless) &&
-                                              !(scaleObject.scaleDenominator.unit === Units.Unitless &&
-                                                scaleObject.scaleNumerator.unit === Units.Unitless)
+                                              scaleInput.onPaperHasUnits &&
+                                              (scaleObject.scaleNumerator.unit === Units.LengthUnitless) !==
+                                              (scaleObject.scaleDenominator.unit === Units.LengthUnitless)
 
     // Fallback units when no scaleObject is bound yet, matching the project's
     // paper/cave unit pairing (Imperial → in / ft, Metric → cm / m). A bound
-    // scrap scale shows its own stored units (seeded by cwScrap::seedDefaultScale);
-    // these only surface for an unbound input, mirroring ScaleInput.qml.
+    // scale shows its own units — an auto-calculated one reads in the trip's
+    // survey unit and re-derives that on every recompute, which is why the unit
+    // picker is read-only while autoScaling. These only surface for an unbound
+    // input, mirroring ScaleInput.qml.
     readonly property int onPaperDefaultUnit: ProjectUnits.unitSystem === Units.Imperial
         ? Units.Inches : Units.Centimeters
     readonly property int inCaveDefaultUnit: ProjectUnits.unitSystem === Units.Imperial
@@ -75,6 +83,7 @@ QQ.Item {
                     unitValue: null
                     valueVisible: false
                     valueReadOnly: scaleInput.autoScaling
+                    unitReadOnly: scaleInput.autoScaling
                     defaultUnit: scaleInput.onPaperDefaultUnit
                     Layout.alignment: Qt.AlignHCenter
                 }
@@ -93,6 +102,7 @@ QQ.Item {
                     unitValue: null
                     valueVisible: false
                     valueReadOnly: scaleInput.autoScaling
+                    unitReadOnly: scaleInput.autoScaling
                     defaultUnit: scaleInput.inCaveDefaultUnit
                     Layout.alignment: Qt.AlignHCenter
                 }
@@ -127,14 +137,14 @@ QQ.Item {
             QQ.PropertyChanges {
                 onPaperLengthInput {
                     unitValue: scaleObject.scaleNumerator
-                    valueVisible: (!autoScaling || scaleObject.scaleNumerator.unit !== Units.Unitless)
+                    valueVisible: (!autoScaling || scaleObject.scaleNumerator.unit !== Units.LengthUnitless)
                 }
             }
 
             QQ.PropertyChanges {
                 inCaveLengthInput {
                     unitValue: scaleObject.scaleDenominator
-                    valueVisible: (!autoScaling || scaleObject.scaleDenominator.unit !== Units.Unitless)
+                    valueVisible: (!autoScaling || scaleObject.scaleDenominator.unit !== Units.LengthUnitless)
                 }
             }
 

@@ -7,89 +7,47 @@
 
 import QtQuick as QQ
 import QtQuick.Controls as QC
-import QtQuick.Effects
 import cavewherelib
 
-QQ.Rectangle {
+// Icon (optionally with a label and a hover-swap icon) on the shared
+// AbstractIconButton chrome. Legacy MouseArea drives hover + click.
+AbstractIconButton {
     id: container
     property alias iconSource: iconNormal.source
     property alias hoverIconSource: iconHover.source
-    property alias sourceSize: iconNormal.sourceSize;
+    property alias sourceSize: iconNormal.sourceSize
     property alias text: label.text
-    property bool selected: false
     property bool adjustColor: Theme.dark
-    property string toolTip: ""
-
-    signal clicked();
 
     activeFocusOnTab: true
+    hovered: mouseArea.containsMouse
+
     QQ.Accessible.role: QQ.Accessible.Button
     QQ.Accessible.name: container.toolTip !== "" ? container.toolTip : container.text
     QQ.Accessible.onPressAction: container.clicked()
 
-    QC.ToolTip {
-        visible: container.toolTip !== "" && mouseArea.containsMouse
-        text: container.toolTip
-        delay: 500
-    }
-
-    radius: 3
-
     implicitHeight: iconNormal.sourceSize.height + (label.text === "" ? 0 : label.height)
     implicitWidth:  Math.max(iconNormal.sourceSize.width, label.width) + 4
 
-    color: {
-        if (container.selected) {
-            return Theme.highlight
-        }
-        if (mouseArea.containsMouse) {
-            return Theme.hover
-        }
-        return Theme.transparent
-    }
-
-    QQ.Keys.onReturnPressed: container.clicked()
-    QQ.Keys.onEnterPressed: container.clicked()
-    QQ.Keys.onSpacePressed: container.clicked()
-
-
-    QQ.Image {
+    Icon {
         id: iconNormal
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: parent.top
-        sourceSize: container.sourceSize
-        visible: true;
-
-        layer {
-            enabled: container.adjustColor
-            effect: MultiEffect {
-                colorization: 1.0
-                colorizationColor: Theme.icon
-                brightness: 1.0
-            }
-        }
+        colorizeEnabled: container.adjustColor
+        visible: true
     }
 
-    QQ.Image {
+    Icon {
         id: iconHover
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: parent.top
         sourceSize: iconNormal.sourceSize
-        visible: false;
-
-        layer {
-            enabled: container.adjustColor
-            effect: MultiEffect {
-                colorization: 1.0
-                colorizationColor: Theme.icon
-                brightness: 1.0
-            }
-        }
+        colorizeEnabled: container.adjustColor
+        visible: false
     }
 
     QC.Label {
         id: label
-//        anchors.bottom: parent.bottom
         anchors.top: iconNormal.bottom
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.topMargin: 2
@@ -106,18 +64,11 @@ QQ.Rectangle {
         }
     }
 
-    QQ.Behavior on color {
-        QQ.PropertyAnimation { }
-    }
-
     states: [
         QQ.State {
             name: "hover"; when: mouseArea.containsMouse && iconHover.status == QQ.Image.Ready
             QQ.PropertyChanges { iconHover { visible: true } }
             QQ.PropertyChanges { iconNormal { visible: false } }
-            //            QQ.PropertyChanges { target: buttonText; font.bold: true }
         }
-
     ]
-
 }

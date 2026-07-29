@@ -113,9 +113,73 @@ cwRHIObject* cwRenderTexturedItems::createRHIObject()
     return new cwRhiTexturedItems();
 }
 
-void cwRenderTexturedItems::addCommand(const PendingCommand&& command)
+void cwRenderTexturedItems::addCommand(CommandType type, uint32_t id, const ItemPayload& payload)
 {
-    m_pendingChanges.append(command);
+    // The queue is keyed by id, so coalescing is intrinsic: an edit for an id
+    // already pending lands on that id's entry (last-writer-wins per field)
+    // rather than stacking another full payload. This bounds the queue by the
+    // number of live items regardless of render cadence — the fix for the
+    // issue #629 leak, where re-triangulation while the 3D view was hidden (so
+    // nothing drained the queue) grew memory without bound.
+    using Lifecycle = PendingItemState::Lifecycle;
+
+    if (type == CommandType::Add) {
+        // Ids are unique and monotonic, so an Add never collides with pending
+        // state for the same id — overwrite outright with the full payload.
+        PendingItemState state;
+        state.lifecycle = Lifecycle::Add;
+        state.payload = payload;
+        m_pendingChanges.insert(id, state);
+        update();
+        return;
+    }
+
+    if (type == CommandType::Remove) {
+        auto it = m_pendingChanges.find(id);
+        if (it != m_pendingChanges.end() && it->lifecycle == Lifecycle::Add) {
+            // The item never reached the render thread; the Add+Remove pair
+            // annihilates and no Remove need be recorded.
+            m_pendingChanges.erase(it);
+        } else {
+            // Already synced (or nothing pending): its updates are moot, so
+            // record a bare Remove for the next sync to tear it down.
+            PendingItemState state;
+            state.lifecycle = Lifecycle::Remove;
+            m_pendingChanges.insert(id, state);
+        }
+        update();
+        return;
+    }
+
+    // An update to an existing entry keeps its lifecycle (Add stays Add, folding
+    // the field into that payload); a missing entry defaults to Update.
+    PendingItemState& state = m_pendingChanges[id];
+    switch (type) {
+    case CommandType::UpdateGeometry:
+        state.payload.geometry = payload.geometry;
+        state.geometryDirty = true;
+        break;
+    case CommandType::UpdateTexture:
+        state.payload.texture = payload.texture;
+        state.textureDirty = true;
+        break;
+    case CommandType::UpdateMaterial:
+        state.payload.material = payload.material;
+        state.materialDirty = true;
+        break;
+    case CommandType::UpdateUniformBlock:
+        state.payload.uniformBlock = payload.uniformBlock;
+        state.uniformBlockDirty = true;
+        break;
+    case CommandType::UpdateModelMatrix:
+        state.payload.modelMatrix = payload.modelMatrix;
+        state.modelMatrixDirty = true;
+        break;
+    case CommandType::Add:
+    case CommandType::Remove:
+        break; // handled above
+    }
+
     update(); // schedule a render sync just like cwRenderScraps
 }
 
@@ -129,7 +193,7 @@ uint32_t cwRenderTexturedItems::addItem(const Item& item)
     payload.uniformBlock = item.uniformBlock;
     payload.modelMatrix = item.modelMatrix;
 
-    addCommand(PendingCommand(PendingCommand::Add, id, payload));
+    addCommand(CommandType::Add, id, payload);
 
     Item storedItem = item;
     if (!storedItem.storeGeometry) {
@@ -161,6 +225,18 @@ uint32_t cwRenderTexturedItems::addItem(const Item& item)
     return id;
 }
 
+void cwRenderTexturedItems::updateItem(uint32_t id, const Item& item)
+{
+    // Compose the per-field setters so each keeps its own bookkeeping (geometry
+    // re-registers picking, model matrix updates the intersecter). Coalescing
+    // collapses the five commands onto this id's pending entry.
+    updateGeometry(id, item.geometry);
+    updateTexture(id, item.texture);
+    setMaterial(id, item.material);
+    setUniformBlock(id, item.uniformBlock);
+    setModelMatrix(id, item.modelMatrix);
+}
+
 void cwRenderTexturedItems::updateGeometry(uint32_t id, const cwGeometry& geometry)
 {
     auto entry = m_frontState.find(id);
@@ -174,7 +250,7 @@ void cwRenderTexturedItems::updateGeometry(uint32_t id, const cwGeometry& geomet
 
     ItemPayload payload;
     payload.geometry = handleGeometryError(geometryForRender(geometry));
-    addCommand(PendingCommand(PendingCommand::UpdateGeometry, id, payload));
+    addCommand(CommandType::UpdateGeometry, id, payload);
 
     const QMatrix4x4 modelMatrix = entry->modelMatrix;
     if (entry->storeGeometry) {
@@ -224,7 +300,7 @@ void cwRenderTexturedItems::updateTexture(uint32_t id, const QImage& image)
 
     ItemPayload payload;
     payload.texture = image; // geometry left default
-    addCommand(PendingCommand(PendingCommand::UpdateTexture, id, payload));
+    addCommand(CommandType::UpdateTexture, id, payload);
 
     if (entry->storeTexture) {
         entry->texture = image;
@@ -264,7 +340,7 @@ void cwRenderTexturedItems::setCulling(uint32_t id, CullMode culling)
 
     ItemPayload payload;
     payload.material = entry->material;
-    addCommand(PendingCommand(PendingCommand::UpdateMaterial, id, payload));
+    addCommand(CommandType::UpdateMaterial, id, payload);
 }
 
 void cwRenderTexturedItems::setMaterial(uint32_t id, const cwRenderMaterialState& material)
@@ -276,7 +352,7 @@ void cwRenderTexturedItems::setMaterial(uint32_t id, const cwRenderMaterialState
 
     ItemPayload payload;
     payload.material = material;
-    addCommand(PendingCommand(PendingCommand::UpdateMaterial, id, payload));
+    addCommand(CommandType::UpdateMaterial, id, payload);
 
     entry->material = material;
 }
@@ -290,7 +366,7 @@ void cwRenderTexturedItems::setUniformBlock(uint32_t id, const QByteArray& unifo
 
     ItemPayload payload;
     payload.uniformBlock = uniformBlock;
-    addCommand(PendingCommand(PendingCommand::UpdateUniformBlock, id, payload));
+    addCommand(CommandType::UpdateUniformBlock, id, payload);
 
     entry->uniformBlock = uniformBlock;
 }
@@ -304,7 +380,7 @@ void cwRenderTexturedItems::setModelMatrix(uint32_t id, const QMatrix4x4& modelM
 
     ItemPayload payload;
     payload.modelMatrix = modelMatrix;
-    addCommand(PendingCommand(PendingCommand::UpdateModelMatrix, id, payload));
+    addCommand(CommandType::UpdateModelMatrix, id, payload);
 
     entry->modelMatrix = modelMatrix;
 
@@ -319,7 +395,7 @@ void cwRenderTexturedItems::removeItem(uint32_t id)
         return;
     }
 
-    addCommand(PendingCommand(PendingCommand::Remove, id, ItemPayload{}));
+    addCommand(CommandType::Remove, id, ItemPayload{});
 
     unregisterPickable(id);
     if (auto* visibility = sceneVisibility()) {

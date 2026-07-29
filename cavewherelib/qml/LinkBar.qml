@@ -16,6 +16,11 @@ QQ.Item {
     required property string dataPageAddress
     required property string mapPageAddress
 
+    // The status chip was tapped. The task sheet it opens is the host's, for the
+    // same reason the sidebar's task flyout is: it has to composite above the
+    // page view, and a child of the top bar cannot.
+    signal tasksRequested()
+
     RowLayout {
         id: rowLayoutId
         anchors.left: parent.left
@@ -75,8 +80,8 @@ QQ.Item {
                     text: "Automatic Update"
                     icon.source: "qrc:/twbs-icons/icons/arrow-repeat.svg"
                     checkable: true
-                    checked: RootData.settings.jobSettings.automaticUpdate
-                    onTriggered: RootData.settings.jobSettings.automaticUpdate = checked
+                    checked: RootData.updateCoordinator.automaticUpdate
+                    onTriggered: RootData.updateCoordinator.automaticUpdate = checked
                 }
             }
         }
@@ -188,6 +193,21 @@ QQ.Item {
         QQ.Item {
             implicitWidth: 5
             implicitHeight: 1
+        }
+
+        // Only at Narrow: at Medium and above the sidebar footer says all this,
+        // and better. The breadcrumb beside it is Layout.fillWidth, so this is
+        // the thing that gives up room for the chip.
+        TaskStatusChip {
+            objectName: "taskStatusChip"
+            // The chip is shorter than the bar and does not fill it, and a
+            // layout with no vertical alignment set puts such an item at the
+            // top rather than beside the breadcrumb it sits next to.
+            Layout.alignment: Qt.AlignVCenter
+            hostVisible: linkBarId.layoutSize === Theme.LayoutSize.Narrow
+
+            onRunRequested: RootData.updateCoordinator.updateNow()
+            onTasksRequested: linkBarId.tasksRequested()
         }
 
         SyncButton {

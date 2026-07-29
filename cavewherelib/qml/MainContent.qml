@@ -21,6 +21,13 @@ QQ.Item {
         return Theme.LayoutSize.Narrow
     }
 
+    // Whether the sidebar is on screen, which is what every floating surface
+    // here is really asking: the sidebar-hinged ones belong to the widths that
+    // have one, the phone's task sheet to the widths that do not. Named once
+    // because the two have to be exact complements — a surface built for a width
+    // it cannot be reached at is one nobody can close.
+    readonly property bool sidebarShown: mainContentId.layoutSize >= Theme.LayoutSize.Medium
+
     anchors.fill: parent
 
     LinkBar {
@@ -31,21 +38,35 @@ QQ.Item {
         anchors.right: parent.right
 
         layoutSize: mainContentId.layoutSize
-        sidebarWidth: mainContentId.layoutSize >= Theme.LayoutSize.Medium ? mainSideBar.width - 1 : 0
+        sidebarWidth: mainContentId.sidebarShown ? mainSideBar.width - 1 : 0
         viewPageAddress: mainContentId.viewPageAddress
         dataPageAddress: mainContentId.dataPageAddress
         mapPageAddress: mainContentId.mapPageAddress
+
+        onTasksRequested: {
+            if (taskSheetLoader.item) {
+                taskSheetLoader.item.toggle()
+            }
+        }
     }
 
     MainSideBar {
         id: mainSideBar;
-        visible: mainContentId.layoutSize >= Theme.LayoutSize.Medium
+        visible: mainContentId.sidebarShown
         layoutSize: mainContentId.layoutSize
         anchors.bottom: parent.bottom
         anchors.left: parent.left
         anchors.leftMargin: 0
         anchors.top: linkBar.bottom
         fileMenu: mainContentId.fileMenu
+
+        tasksShown: taskFlyoutLoader.item ? taskFlyoutLoader.item.shown : false
+
+        onTasksRequested: {
+            if (taskFlyoutLoader.item) {
+                taskFlyoutLoader.item.togglePin()
+            }
+        }
 
         // //For animating which page is shown
         // property real pageShownReal: pageShown;
@@ -61,7 +82,7 @@ QQ.Item {
         id: container;
         anchors.top: linkBar.bottom
         anchors.bottom: parent.bottom
-        anchors.left: mainContentId.layoutSize >= Theme.LayoutSize.Medium ? mainSideBar.right : parent.left
+        anchors.left: mainContentId.sidebarShown ? mainSideBar.right : parent.left
         anchors.right: parent.right
 
         // property int currentPosition: height * mainSideBar.pageShownReal
@@ -74,6 +95,74 @@ QQ.Item {
             QQ.Component.onCompleted: {
                 RootData.pageView = pageView
             }
+        }
+    }
+
+    // The active page's tool options, hinged to the sidebar's right edge and
+    // drawn above the page view. It reads the same ActiveTools contract the
+    // sidebar tool rail does (tools + interactionManager) and shows only while an
+    // armed tool has options. Kept a sibling after `container` so it composites
+    // above the 3D view; a child of MainSideBar could not, since z can't lift it
+    // past a sibling Item.
+    ToolPropertyFlyout {
+        id: toolPropertyFlyout
+        anchors.left: mainSideBar.right
+        anchors.leftMargin: Theme.toolFlyoutGap
+        anchors.verticalCenter: container.verticalCenter
+
+        hostVisible: mainContentId.sidebarShown
+        interactionManager: ActiveTools.interactionManager
+        toolModel: ActiveTools.tools
+    }
+
+    // What the sidebar footer's busy row is busy with. Bottom-aligned to the
+    // sidebar so it reads as hinged to the footer that opened it, and a sibling
+    // after `container` for the same compositing reason as the tool flyout.
+    //
+    // Kept out of existence until there is something to list and a sidebar to
+    // hinge it to, rather than merely hidden: the card's list binds to the live
+    // task model, so an idle instance still carries a delegate per running job
+    // and re-runs their progress bindings behind a card nobody can see.
+    // ShutdownScreen's copy of the same list is Loader-gated for the same reason.
+    QQ.Loader {
+        id: taskFlyoutLoader
+        anchors.left: mainSideBar.right
+        anchors.leftMargin: Theme.toolFlyoutGap
+        anchors.bottom: mainSideBar.bottom
+        anchors.bottomMargin: Theme.toolFlyoutGap
+
+        active: ActiveTasks.count > 0 && mainContentId.sidebarShown
+
+        sourceComponent: TaskFlyout {
+            objectName: "taskFlyout"
+
+            hostVisible: mainContentId.sidebarShown
+            previewHovered: mainSideBar.busyRowHovered
+        }
+    }
+
+    // The same list, for the widths where the sidebar and its flyout do not
+    // exist. Opened by the top bar's status chip, and a sibling after `container`
+    // for the same compositing reason as the two flyouts — its scrim has to
+    // cover the page view.
+    //
+    // Kept out of existence until there is something to list, for the same
+    // reason as the task flyout: a hidden instance still carries a delegate per
+    // running job. Gated on the sidebar being away as well, which is also what
+    // dismisses it on a widen — the chip that opens it is gone at those widths,
+    // so a sheet left latched open would have nothing to close it with.
+    QQ.Loader {
+        id: taskSheetLoader
+        anchors.fill: container
+
+        active: ActiveTasks.count > 0 && !mainContentId.sidebarShown
+
+        sourceComponent: TaskSheet {
+            objectName: "taskSheet"
+
+            automaticUpdate: RootData.updateCoordinator.automaticUpdate
+
+            onAutomaticUpdateToggled: (enabled) => RootData.updateCoordinator.automaticUpdate = enabled
         }
     }
 

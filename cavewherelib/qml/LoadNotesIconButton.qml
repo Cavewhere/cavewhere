@@ -7,7 +7,7 @@
 
 import cavewherelib
 
-NeutralIconButton {
+IconButton {
     id: buttonId
 
     signal filesSelected(list<url> images)

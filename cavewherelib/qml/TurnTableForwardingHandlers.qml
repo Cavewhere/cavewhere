@@ -8,19 +8,40 @@
 import QtQuick as QQ
 import cavewherelib
 
-// Right-drag rotate + wheel zoom passthrough to a BaseTurnTableInteraction.
+// Left-drag pan + right-drag rotate + wheel zoom passthrough to a
+// BaseTurnTableInteraction.
 //
-// Used by interactions that take over left-click for their own purpose
-// (CoordinatePickerInteraction, LazClipInteractionView) but still want the
-// user to orient and zoom the camera with the same gestures the turn-table
-// uses by default.
+// Used by interactions that take over left-*click* for their own purpose
+// (MeasurementInteractionView, CoordinatePickerInteraction, LazClipInteractionView)
+// but still want the user to move, orient, and zoom the camera with the same
+// gestures the turn-table uses by default. A left click still reaches the host's
+// TapHandler: it keeps only a passive grab, so the pan DragHandler takes over
+// once the pointer passes the drag threshold, and a plain click still fires.
 QQ.Item {
     id: rootId
 
     required property BaseTurnTableInteraction turnTableInteraction
     property bool rotationEnabled: true
+    property bool panEnabled: true
 
     anchors.fill: parent
+
+    QQ.DragHandler {
+        target: null
+        enabled: rootId.panEnabled
+        acceptedButtons: Qt.LeftButton
+        acceptedDevices: QQ.PointerDevice.Mouse | QQ.PointerDevice.TouchPad
+        onActiveChanged: {
+            if (active) {
+                rootId.turnTableInteraction.startPanning(centroid.position)
+            }
+        }
+        onCentroidChanged: {
+            if (active) {
+                rootId.turnTableInteraction.pan(centroid.position)
+            }
+        }
+    }
 
     QQ.DragHandler {
         target: null

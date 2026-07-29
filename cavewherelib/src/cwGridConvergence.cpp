@@ -6,6 +6,7 @@
 **************************************************************************/
 
 #include "cwGridConvergence.h"
+#include "cwCave.h"
 #include "cwCoordinateTransform.h"
 #include "cwCoordinateTransformPrivate.h"
 
@@ -91,6 +92,11 @@ std::shared_ptr<ConvergencePj> cachedConvergencePj(const QString& sourceCS)
 cwGridConvergence::cwGridConvergence(QObject* parent) :
     QObject(parent)
 {
+}
+
+double cwGridConvergence::angleForCave(const cwCave* cave)
+{
+    return cave != nullptr ? cave->gridConvergence()->angle() : 0.0;
 }
 
 QString cwGridConvergence::text() const

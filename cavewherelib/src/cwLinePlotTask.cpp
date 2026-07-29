@@ -192,8 +192,11 @@ struct cwLinePlotTask::LinePlotWorker {
             return result;
         }
 
+        // The reader subtracts worldOrigin in double before narrowing, so both
+        // the lookup and the network come back in scene-local coordinates.
         cwSurvex3DFileReader reader;
-        cwSurvex3DFileReader::NetworkAndLookup parsed = reader.readNetworkAndLookup(output3dPath);
+        cwSurvex3DFileReader::NetworkAndLookup parsed =
+            reader.readNetworkAndLookup(output3dPath, InputData.regionData.worldOrigin);
         if (parsed.lookup.isEmpty()) {
             cwLinePlotTask::SolveError error;
             error.step = cwLinePlotTask::SolveError::Step::Parse;
@@ -201,7 +204,6 @@ struct cwLinePlotTask::LinePlotWorker {
             result.setSolveError(error);
             return result;
         }
-        applyWorldOriginOffset(parsed.lookup, InputData.regionData.worldOrigin);
         updateStationPositionForCaves(parsed.lookup, result);
         result.setRegionNetwork(std::move(parsed.network));
 
@@ -525,25 +527,6 @@ private:
             cwLinePlotTask::LinePlotCaveData& caveData = result.Caves[caveId];
             caveData.setStationPositions(updatedLookup);
             internalCave->setStationPositionLookup(updatedLookup);
-        }
-    }
-
-    // Translate every station in lookup by -worldOrigin in place. Cavern
-    // emits .3d coordinates in our globalCS; subtracting worldOrigin keeps
-    // the position lookup (and downstream geometry) close to (0,0,0) for
-    // float precision in shaders. No-op when worldOrigin == (0,0,0), which
-    // is the un-fixed-project default.
-    static void applyWorldOriginOffset(cwStationPositionLookup& lookup,
-                                       const cwGeoPoint& worldOrigin)
-    {
-        const QVector3D offset = worldOrigin.toVector3D();
-        if (offset.isNull()) {
-            return;
-        }
-        const QMap<QString, QVector3D> positions = lookup.positions();
-        lookup.clearStations();
-        for (auto it = positions.constBegin(); it != positions.constEnd(); ++it) {
-            lookup.setPosition(it.key(), it.value() - offset);
         }
     }
 

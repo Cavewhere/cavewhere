@@ -17,6 +17,7 @@ cwAbstractNoteTransformation::cwAbstractNoteTransformation(QObject* parent)
     , Scale(new cwScale(this))
 {
     connect(Scale, &cwScale::scaleChanged, this, &cwAbstractNoteTransformation::scaleChanged);
+    connect(Scale, &cwScale::dataChanged, this, &cwAbstractNoteTransformation::scaleDataChanged);
 }
 
 cwLength* cwAbstractNoteTransformation::scaleDenominator() const { return Scale->scaleDenominator(); }

@@ -131,6 +131,10 @@ cwLinePlotManager::cwLinePlotManager(QObject *parent) :
 }
 
 cwLinePlotManager::~cwLinePlotManager() {
+    //Ahead of the wait below, which pumps the event loop: see
+    //cwUpdatable::beginTeardown().
+    beginTeardown();
+
     m_restarter.future().cancel();
     waitToFinish();
 
@@ -191,8 +195,8 @@ void cwLinePlotManager::setRegion(cwCavingRegion* region) {
     // region's CS.
     connect(Region->geoReference(), &cwGeoReference::globalCoordinateSystemChanged, this, &cwLinePlotManager::runSurvex);
 
-    // worldOrigin is subtracted by cwLinePlotTask::applyWorldOriginOffset, so
-    // the line plot must re-solve when it changes (auto-compute or manual recenter).
+    // cwSurvex3DFileReader subtracts worldOrigin while parsing the .3d, so the
+    // line plot must re-solve when it changes (auto-compute or manual recenter).
     connect(Region->geoReference(), &cwGeoReference::worldOriginChanged, this, &cwLinePlotManager::runSurvex);
 
     SurveySignaler->setRegion(Region);
@@ -457,23 +461,41 @@ void cwLinePlotManager::clearUnconnectedChunkErrors()
     UnconnectedChunks.clear();
 }
 
-/**
- * @brief cwLinePlotManager::rerunSurvex
- *
- * Re-runs the survex. This simply just calls runSurvex but is useful for debugging
- * if the re-run isn't working correctly.
- */
-void cwLinePlotManager::rerunSurvex()
-{
-    runSurvex();
+void cwLinePlotManager::markNeedsUpdate() {
+    if(!m_needsUpdate) {
+        m_needsUpdate = true;
+        // Clean -> Dirty, or (mid-solve edit) Working -> Dirty. Either is a real
+        // state change; whoever is driving runs the pipeline again on the Dirty.
+        emit updateStateChanged();
+    }
 }
 
 /**
-  \brief Run the line plot task
+  \brief The survey-edit slot: marks the line plot dirty, and solves on the spot
+  while standalone.
+
+  Marking is all this does once a coordinator has taken over — whether the solve
+  runs now or waits is that coordinator's call.
   */
 void cwLinePlotManager::runSurvex() {
-    if(!AutomaticUpdate) {
-        return;
+    markNeedsUpdate();
+    runIfStandalone();
+}
+
+/**
+  \brief Runs the line plot task now, unconditionally.
+  */
+QFuture<void> cwLinePlotManager::doRun() {
+    // Enter Working and drop the pending-dirty marker in one step: a solve now
+    // covers the current data, so the pipeline is Working (not Dirty) until it
+    // completes. Reporting Working — not the synchronously-cleared Dirty — is
+    // what keeps a caller waiting on the returned future from mistaking the
+    // pipeline for "finished" while the solve is still in flight.
+    const cwUpdatable::State previousState = updateState();
+    m_needsUpdate = false;
+    const QFuture<void> solve = beginRun();
+    if(updateState() != previousState) {
+        emit updateStateChanged();
     }
 
     if(Region != nullptr) {
@@ -506,15 +528,17 @@ void cwLinePlotManager::runSurvex() {
         if(!hasAnySolvableInput()) {
             // No-shots path must also clear the cached cavern output / solve
             // error so CavernOutputPage doesn't keep showing the previous
-            // run's text (D-1).
+            // run's text (D-1). No async work, so the solve is already done.
             publishResults(cwLinePlotTask::LinePlotResultData());
             updateLinePlot(cwLinePlotTask::LinePlotResultData());
-            return;
+            finishSolving();
+            return solve;
         }
 
         setCaveStationLookupAsStale(true);
         m_restarter.restart([this]() {
             if (Region.isNull()) {
+                finishSolving();
                 return QFuture<cwLinePlotTask::LinePlotResultData>();
             }
 
@@ -536,12 +560,28 @@ void cwLinePlotManager::runSurvex() {
                     if (!result.hasSolveError()) {
                         updateLinePlot(std::move(result));
                     }
+                    finishSolving();
                 });
 
             return future;
         });
+    } else {
+        // No region: nothing to solve.
+        finishSolving();
     }
 
+    return solve;
+}
+
+void cwLinePlotManager::finishSolving() {
+    if(isRunning()) {
+        // Working -> Clean (or -> Dirty if a survey edit arrived mid-solve).
+        // endRun() finishes the future run() handed out, releasing whoever is
+        // waiting on the solve; the signal is the coordinator's cue to re-check
+        // its staleness aggregate.
+        endRun();
+        emit updateStateChanged();
+    }
 }
 
 /**
@@ -689,14 +729,6 @@ void cwLinePlotManager::updateLinePlot(cwLinePlotTask::LinePlotResultData result
     }
 }
 
-
-void cwLinePlotManager::setAutomaticUpdate(bool automaticUpdate) {
-    if(AutomaticUpdate != automaticUpdate) {
-        AutomaticUpdate = automaticUpdate;
-        emit automaticUpdateChanged();
-        runSurvex();
-    }
-}
 
 void cwLinePlotManager::recomputeWatchSetAndProbeSources()
 {
