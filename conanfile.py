@@ -65,7 +65,7 @@ class CaveWhereConan(ConanFile):
 
         # Or add a new requirement!
         if not self.options.system_qt:
-            self.requires("qt/6.10.1")
+            self.requires("qt/6.11.1")
             self.requires("xkbcommon/[>=1.6.0]", override=True)
             self.requires("sqlite3/[>=3.45.0]") #, override=True) #override seems to use system's sqlite3 and causes issues
         else:
@@ -117,6 +117,8 @@ class CaveWhereConan(ConanFile):
             self.options["qt"].qttools = True
             self.options["qt"].qttranslations = True
             self.options["qt"].qtimageformats = True
+            # Technology Preview module in 6.11; provides Qt6::CanvasPainter
+            self.options["qt"].qtcanvaspainter = True
             self.options["qt"].with_libjpeg = "libjpeg"
             self.options["qt"].with_dbus = True
 
