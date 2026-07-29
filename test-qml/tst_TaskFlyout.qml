@@ -191,8 +191,8 @@ QQ.Item {
             addTask("Saving", 0, 0)
             flyoutId.togglePin()
 
-            let title = find("taskFlyoutTitle")
-            verify(title !== null, "taskFlyoutTitle not found")
+            let title = find("flyoutCardTitle")
+            verify(title !== null, "flyoutCardTitle not found")
             compare(title.text, "1 Task")
 
             addTask("Loading cave.laz", 0, 0)
@@ -207,8 +207,8 @@ QQ.Item {
             flyoutId.togglePin()
             waitForRendering(flyoutId)
 
-            let closeButton = find("taskFlyoutCloseButton")
-            verify(closeButton !== null, "taskFlyoutCloseButton not found")
+            let closeButton = find("flyoutCardCloseButton")
+            verify(closeButton !== null, "flyoutCardCloseButton not found")
 
             mouseClick(closeButton)
             verify(!flyoutId.shown, "× closes the card immediately")

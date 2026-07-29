@@ -129,6 +129,14 @@ QtObject {
     readonly property int updateFooterSpacing: 3
     readonly property int updateFooterChevronSize: 12
 
+    // Task progress ring: the one busy mark, shared by the sidebar footer and
+    // the phone status chip. The track is the part not yet done, so it has to
+    // read as a groove behind the arc rather than as a second arc.
+    readonly property color progressRingTrack: dark ? "#3f4652" : "#c9ced6"
+    // Smaller than fontSizeCaption: the count sits inside the ring, whose inner
+    // opening is only about two thirds of the mark.
+    readonly property int progressRingCountFontSize: Math.round(9 * fontScale)
+
     // Task flyout: the list of running jobs the footer's busy row opens. Wider
     // than the tool flyout because job names carry file names, and capped so a
     // burst of imports scrolls instead of running off the top of the window.

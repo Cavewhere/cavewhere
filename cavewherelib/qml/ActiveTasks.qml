@@ -19,6 +19,9 @@ import cavewherelib
 QQ.QtObject {
     id: activeTasks
 
+    // What the app has to say about background work, in the order it says it.
+    enum Activity { Idle, Stale, Busy }
+
     readonly property TaskFutureCombineModel model: TaskFutureCombineModel {
         models: [RootData.taskManagerModel, RootData.futureManagerModel]
     }
@@ -41,4 +44,30 @@ QQ.QtObject {
     // Whether any job can say how far along it is. False is the signal to spin
     // rather than draw a number nothing measured.
     readonly property bool progressKnown: activeTasks.progress >= 0
+
+    // Whether derived data is out of date — the three pipelines the update
+    // coordinator owns, and nothing else. Defaulted rather than readonly, unlike
+    // everything else here: nothing else in the ranking below can be made stale
+    // from QML, so this is the only way the ranking itself can be exercised.
+    property bool needsUpdate: RootData.updateCoordinator.needsUpdate
+
+    // Busy outranks stale. A pipeline re-edited mid-run is both, and running is
+    // the more useful thing to say: the update it needs is already under way, or
+    // else something unrelated is, and either way pressing Run now would only
+    // queue behind it. The accepted cost is that a long save masks the Run
+    // button until it lands.
+    //
+    // The ranking lives here rather than in the sidebar footer that renders it,
+    // because the footer is not the only surface that renders it — the top bar
+    // chip shows the same three states at widths where there is no sidebar at
+    // all, and two copies of a ranking is two places for it to drift.
+    readonly property int activity: {
+        if (activeTasks.busy) {
+            return ActiveTasks.Activity.Busy
+        }
+        if (activeTasks.needsUpdate) {
+            return ActiveTasks.Activity.Stale
+        }
+        return ActiveTasks.Activity.Idle
+    }
 }

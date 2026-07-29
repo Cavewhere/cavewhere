@@ -17,8 +17,8 @@ QQ.Item {
         id: fakeJobsId
     }
 
-    // No busy or taskCount of its own, so it reports whatever the shared state
-    // says — which is the binding this file exists to hold in place.
+    // No activity or taskCount of its own, so it reports whatever the shared
+    // state says — which is the binding this file exists to hold in place.
     SideBarUpdateFooter {
         id: footerId
         objectName: "updateFooter"
@@ -26,7 +26,6 @@ QQ.Item {
         anchors.right: parent.right
         anchors.bottom: parent.bottom
 
-        needsUpdate: false
         automaticUpdate: false
     }
 
@@ -43,6 +42,8 @@ QQ.Item {
         function cleanup() {
             ActiveTasks.model.models = [RootData.taskManagerModel,
                                         RootData.futureManagerModel]
+            ActiveTasks.needsUpdate = Qt.binding(
+                function() { return RootData.updateCoordinator.needsUpdate })
             fakeJobsId.clear()
         }
 
@@ -64,16 +65,36 @@ QQ.Item {
             verify(ActiveTasks.busy, "a tracked job counts as busy")
         }
 
-        // The footer takes busy as an input so a test can drive it, which only
-        // works because it defaults to the shared state. Nothing else checks
+        // The footer takes the activity as an input so a test can drive it, which
+        // only works because it defaults to the shared state. Nothing else checks
         // that default is still wired.
-        function test_theUpdateFooterFollowsTheSharedBusyState() {
+        function test_theUpdateFooterFollowsTheSharedActivity() {
             verify(find("updateRunningIndicator") === null, "idle to begin with")
 
             fakeJobsId.append({"nameRole": "Saving"})
 
-            verify(footerId.busy, "the footer picked up the shared state")
+            compare(footerId.activity, ActiveTasks.Activity.Busy,
+                    "the footer picked up the shared state")
             verify(find("updateRunningIndicator") !== null, "and shows the busy row")
+        }
+
+        // Busy outranks stale, and both the sidebar footer and the top bar chip
+        // render that ranking — so it is decided once, here.
+        function test_busyOutranksStale() {
+            compare(ActiveTasks.activity, ActiveTasks.Activity.Idle,
+                    "nothing to report to begin with")
+
+            ActiveTasks.needsUpdate = true
+            compare(ActiveTasks.activity, ActiveTasks.Activity.Stale,
+                    "stale derived data is worth saying")
+
+            fakeJobsId.append({"nameRole": "Saving"})
+            compare(ActiveTasks.activity, ActiveTasks.Activity.Busy,
+                    "but running wins while both are true")
+
+            fakeJobsId.clear()
+            compare(ActiveTasks.activity, ActiveTasks.Activity.Stale,
+                    "and the stale state comes back when the work lands")
         }
     }
 }

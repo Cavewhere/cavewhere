@@ -10,6 +10,7 @@ pragma ComponentBehavior: Bound
 import QtQuick as QQ
 import QtQuick.Controls as QC
 import cavewherelib
+import "ToolModelUtils.js" as ToolModelUtils
 
 // The main sidebar's per-page tool rail: the active page's list<ToolItem>
 // rendered as a card of grouped, icon-only, single-arm tool buttons. The card's
@@ -24,23 +25,7 @@ QQ.Item {
     property list<ToolItem> toolModel: []
     property bool compact: false
 
-    // The model grouped by stable groupId, in first-seen order: one entry per
-    // group carrying its (translated) heading and the ToolItems under it.
-    readonly property var groups: {
-        let ordered = []
-        // Null-prototype map so a groupId that collides with an Object.prototype
-        // member name (e.g. "toString") can't poison the lookup and blank the rail.
-        let byId = Object.create(null)
-        for (let i = 0; i < railId.toolModel.length; i++) {
-            let tool = railId.toolModel[i]
-            if (byId[tool.groupId] === undefined) {
-                byId[tool.groupId] = { "group": tool.group, "tools": [] }
-                ordered.push(byId[tool.groupId])
-            }
-            byId[tool.groupId].tools.push(tool)
-        }
-        return ordered
-    }
+    readonly property var groups: ToolModelUtils.groupTools(railId.toolModel)
 
     implicitHeight: railId.toolModel.length > 0 ? panelId.height + Theme.toolRailSpacing : 0
     height: implicitHeight

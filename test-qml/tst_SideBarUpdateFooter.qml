@@ -18,8 +18,7 @@ Item {
         anchors.right: parent.right
         anchors.bottom: parent.bottom
 
-        busy: false
-        needsUpdate: false
+        activity: ActiveTasks.Activity.Idle
         automaticUpdate: false
     }
 
@@ -46,14 +45,15 @@ Item {
         when: windowShown
 
         function init() {
-            // Busy and the count are pinned rather than left bound to the live
-            // coordinator and task models, so a job the rest of the suite happens
-            // to be running can't move them. tst_ActiveTasks covers the defaults.
-            footerId.busy = false
-            footerId.needsUpdate = false
+            // The activity and the count are pinned rather than left bound to
+            // the live coordinator and task models, so a job the rest of the
+            // suite happens to be running can't move them. tst_ActiveTasks
+            // covers the defaults.
+            footerId.activity = ActiveTasks.Activity.Idle
             footerId.automaticUpdate = false
             footerId.compact = false
             footerId.taskCount = 0
+            footerId.progress = -1
             footerId.tasksShown = false
             footerId.busyRowHovered = false
             runSpy.clear()
@@ -87,7 +87,7 @@ Item {
         }
 
         function test_staleShowsRunAndAsksForTheUpdate() {
-            footerId.needsUpdate = true
+            footerId.activity = ActiveTasks.Activity.Stale
             waitForRendering(footerId)
 
             verify(find("autoUpdateCheckbox") === null, "the idle toggle gives way to Run")
@@ -98,12 +98,13 @@ Item {
             compare(runSpy.count, 1, "pressing Run asks for the update once")
         }
 
-        // The whole reason busy is read before stale: a pipeline re-edited
-        // mid-run reports Dirty while its task is still churning, so both
-        // aggregates are true and the footer has to pick one.
-        function test_busyWinsOverNeedsUpdate() {
-            footerId.needsUpdate = true
-            footerId.busy = true
+        // Busy is one state, not two overlaid: a pipeline re-edited mid-run is
+        // both dirty and churning, and the footer shows the run rather than
+        // offering a second one. The ranking that decides that now lives in
+        // ActiveTasks.activity, so this asserts only what the footer does with
+        // the answer — tst_ActiveTasks::test_busyOutranksStale has the ranking.
+        function test_busyLeavesNoRunOnOffer() {
+            footerId.activity = ActiveTasks.Activity.Busy
 
             verify(find("updateRunningIndicator") !== null, "the busy indicator is shown")
             verify(find("updateRunButton") === null, "Run is not offered while running")
@@ -112,7 +113,7 @@ Item {
         // The count can be zero while work really is in flight, so the label has
         // to survive that; see the component header for how it happens.
         function test_runningLabelDropsTheCountWhenNoTaskIsListed() {
-            footerId.busy = true
+            footerId.activity = ActiveTasks.Activity.Busy
 
             let label = find("updateRunningLabel")
             verify(label !== null, "updateRunningLabel not found")
@@ -128,7 +129,7 @@ Item {
         // The busy row is the way into the task flyout; the footer only reports
         // the tap, since the flyout is the host's to own.
         function test_tappingTheBusyRowAsksForTheTaskList() {
-            footerId.busy = true
+            footerId.activity = ActiveTasks.Activity.Busy
             waitForRendering(footerId)
 
             let indicator = find("updateRunningIndicator")
@@ -141,7 +142,7 @@ Item {
         // The chevron is the row's only cue that there is more behind it, and it
         // points at the flyout, so it lights up while that flyout is on screen.
         function test_busyRowShowsAnExpandChevron() {
-            footerId.busy = true
+            footerId.activity = ActiveTasks.Activity.Busy
             footerId.taskCount = 1
 
             let chevron = find("updateRunningExpandIcon")
@@ -158,7 +159,7 @@ Item {
         // A cascade between pipelines is busy with nothing listed yet, and the
         // flyout cannot show an empty list — so the chevron must not promise one.
         function test_chevronHidesWhenThereIsNothingToExpand() {
-            footerId.busy = true
+            footerId.activity = ActiveTasks.Activity.Busy
             footerId.taskCount = 0
 
             let chevron = find("updateRunningExpandIcon")
@@ -172,7 +173,7 @@ Item {
         // Hovering the busy row is what peeks the task flyout open, so the footer
         // has to publish the hover — the host has no other way to see it.
         function test_hoveringTheBusyRowReportsIt() {
-            footerId.busy = true
+            footerId.activity = ActiveTasks.Activity.Busy
             waitForRendering(footerId)
 
             let indicator = find("updateRunningIndicator")
@@ -190,11 +191,29 @@ Item {
         // The row is destroyed when work finishes, taking its HoverHandler with
         // it, so nothing would ever report the hover ending.
         function test_leavingBusyClearsTheHoverOutput() {
-            footerId.busy = true
+            footerId.activity = ActiveTasks.Activity.Busy
             footerId.busyRowHovered = true
 
-            footerId.busy = false
+            footerId.activity = ActiveTasks.Activity.Idle
             verify(!footerId.busyRowHovered, "the hover output cleared with the row")
+        }
+
+        // The count has to live somewhere at every width: the label carries it at
+        // Wide, and compact hides that label, so the ring takes it over.
+        function test_compactMovesTheCountIntoTheRing() {
+            footerId.activity = ActiveTasks.Activity.Busy
+            footerId.taskCount = 3
+
+            let ringCount = ObjectFinder.findObjectByChain(
+                rootId, "rootId->updateFooter->updateRunningIndicator->progressRingCount")
+            verify(ringCount !== null, "progressRingCount not found")
+            verify(!ringCount.visible, "the label carries the count at full width")
+            verify(find("updateRunningLabel").visible, "and that label is shown")
+
+            footerId.compact = true
+            verify(ringCount.visible, "compact moves the count into the ring")
+            compare(ringCount.text, "3")
+            verify(!find("updateRunningLabel").visible, "the label it replaced is hidden")
         }
 
         function test_compactHidesTheLabelsAndSwapsInTheIconToggle() {
@@ -205,7 +224,7 @@ Item {
             verify(!label.visible, "the caption is hidden when compact")
             verify(find("autoUpdateToggle").visible, "the icon toggle takes over when compact")
 
-            footerId.needsUpdate = true
+            footerId.activity = ActiveTasks.Activity.Stale
             verify(!find("updateNeededLabel").visible, "the stale caption is hidden when compact")
             verify(find("updateRunButton").visible, "Run stays reachable when compact")
         }

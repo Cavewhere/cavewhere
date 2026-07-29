@@ -96,7 +96,7 @@ Item {
             toolWithOptionsId.activate()
             tryVerify(() => flyoutId.shown, 2000)
 
-            let closeButton = findChild(flyoutId, "toolFlyoutCloseButton")
+            let closeButton = findChild(flyoutId, "flyoutCardCloseButton")
             verify(closeButton !== null, "close button should be findable")
             mouseClick(closeButton)
 

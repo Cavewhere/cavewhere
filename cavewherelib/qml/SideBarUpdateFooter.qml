@@ -16,21 +16,16 @@ import cavewherelib
 // work: the automatic-update toggle when nothing is happening, "Update needed ·
 // Run" when derived data is stale, and a busy row while anything is in flight.
 //
-// Busy is read before stale, and it covers more than the update coordinator.
-// The coordinator only knows about the three derived-data pipelines (line plot,
-// scraps, LiDAR); a point-cloud load, a picking BVH rebuild, an import or a save
-// register with the future manager and nothing else. Reading only the
-// coordinator would leave the footer showing "Automatic Update" through all of
-// them — so any tracked job puts the footer in the busy state. Both that state
-// and the count in the label default to the same shared source, which is what
-// keeps them talking about the same thing.
+// Which of the three it shows is not this component's call — ActiveTasks ranks
+// them, because the top bar chip shows the same three at widths where there is
+// no sidebar. The activity, the task count and the progress aggregate all
+// default to that shared state and all stay overridable, so the footer is a view
+// of it and a test can drive it directly.
 //
-// Busy and the task count both default to the shared ActiveTasks state and both
-// stay overridable, so the footer is a view of that state and a test can drive
-// it directly. A job whose future is already finished is never admitted, and a
-// cascade is briefly running between pipelines with no future yet — so the
-// count can be zero while work really is in flight, and the label says
-// "Running…" rather than "Running 0 Tasks".
+// A job whose future is already finished is never admitted, and a cascade is
+// briefly running between pipelines with no future yet — so the count can be
+// zero while work really is in flight, and the label says "Running…" rather than
+// "Running 0 Tasks".
 //
 // The busy row is a button into the task flyout, which lists what those jobs
 // actually are; the host owns the flyout, because it has to composite above the
@@ -38,11 +33,13 @@ import cavewherelib
 QQ.Rectangle {
     id: footerId
 
-    required property bool needsUpdate
     required property bool automaticUpdate
     property bool compact: false
-    property bool busy: ActiveTasks.busy
+    property int activity: ActiveTasks.activity
     property int taskCount: ActiveTasks.count
+    property real progress: ActiveTasks.progress
+
+    readonly property bool busy: footerId.activity === ActiveTasks.Activity.Busy
 
     // Output: the busy row is under the pointer, so the host can peek the task
     // flyout open. Written by the running row's HoverHandler rather than aliased,
@@ -77,10 +74,10 @@ QQ.Rectangle {
         anchors.margins: Theme.updateFooterPadding
 
         sourceComponent: {
-            if (footerId.busy) {
+            switch (footerId.activity) {
+            case ActiveTasks.Activity.Busy:
                 return runningComponent
-            }
-            if (footerId.needsUpdate) {
+            case ActiveTasks.Activity.Stale:
                 return pendingComponent
             }
             return idleComponent
@@ -202,10 +199,13 @@ QQ.Rectangle {
                 spacing: Theme.tightSpacing
                 Layout.alignment: Qt.AlignHCenter
 
-                QC.BusyIndicator {
+                // Compact hides the label below, so the count moves inside the
+                // ring — the only place left that can carry it at 50px.
+                TaskProgressRing {
                     objectName: "updateRunningIndicator"
-                    implicitWidth: Theme.iconSizeSmall
-                    implicitHeight: Theme.iconSizeSmall
+                    progress: footerId.progress
+                    count: footerId.taskCount
+                    showCount: footerId.compact
                 }
 
                 // Points at the flyout it opens, and lights up while that flyout

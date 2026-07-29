@@ -65,10 +65,12 @@ QQ.Item {
 
     readonly property int taskCount: flyoutId.model ? flyoutId.model.count : 0
 
-    // Everything that would hold the card open, before the dismissal latch.
+    // Everything that would hold the card open, before the dismissal latch. The
+    // card's own hover counts: it covers the header and the × as well as the
+    // list, so pressing × does not first make the card want to close.
     readonly property bool openInputs: flyoutId.pinned
                                        || flyoutId.previewHovered
-                                       || panelHoverId.hovered
+                                       || panelId.hovered
 
     readonly property bool wantsOpen: flyoutId.openInputs && !flyoutId.dismissed
 
@@ -140,84 +142,31 @@ QQ.Item {
         onTriggered: flyoutId.openLatched = false
     }
 
-    QQ.Rectangle {
+    FlyoutCard {
         id: panelId
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
 
-        height: contentLayoutId.implicitHeight
-        radius: Theme.floatingWidgetRadius
-        color: Theme.surfaceRaised
-        border.width: 1
-        border.color: Theme.border
+        title: flyoutId.taskCount === 1
+               ? qsTr("1 Task")
+               : qsTr("%1 Tasks").arg(flyoutId.taskCount)
 
-        // Keeps the card open while the pointer is on it, so a hover-peeked
-        // flyout can be read, scrolled, and pinned.
-        QQ.HoverHandler {
-            id: panelHoverId
-        }
+        onCloseRequested: flyoutId.dismiss()
 
-        ColumnLayout {
-            id: contentLayoutId
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.top: parent.top
-            spacing: 0
+        TaskListView {
+            id: taskListId
+            objectName: "taskFlyoutList"
+            Layout.fillWidth: true
+            Layout.margins: Theme.toolFlyoutPadding
+            // Grows with the list until it would outgrow the card, then
+            // scrolls. contentHeight is the laid-out total, so a couple of
+            // wrapped job names lift the card rather than clipping them.
+            Layout.preferredHeight: Math.min(taskListId.contentHeight,
+                                             Theme.taskFlyoutMaxListHeight)
 
-            QQ.Rectangle {
-                Layout.fillWidth: true
-                Layout.preferredHeight: headerRowId.implicitHeight + Theme.toolFlyoutPadding
-                color: Theme.surface
-
-                RowLayout {
-                    id: headerRowId
-                    anchors.fill: parent
-                    anchors.leftMargin: Theme.toolFlyoutPadding
-                    anchors.rightMargin: Theme.tightSpacing
-                    spacing: Theme.flowSpacing
-
-                    QC.Label {
-                        objectName: "taskFlyoutTitle"
-                        Layout.fillWidth: true
-                        text: flyoutId.taskCount === 1
-                              ? qsTr("1 Task")
-                              : qsTr("%1 Tasks").arg(flyoutId.taskCount)
-                        color: Theme.text
-                        font.bold: true
-                        elide: QC.Label.ElideRight
-                    }
-
-                    QC.ToolButton {
-                        objectName: "taskFlyoutCloseButton"
-                        text: "×"
-                        font.pixelSize: Theme.fontSizeXLarge
-
-                        onClicked: flyoutId.dismiss()
-                    }
-                }
-            }
-
-            QQ.Rectangle {
-                Layout.fillWidth: true
-                Layout.preferredHeight: 1
-                color: Theme.border
-            }
-
-            TaskListView {
-                id: taskListId
-                objectName: "taskFlyoutList"
-                Layout.fillWidth: true
-                Layout.margins: Theme.toolFlyoutPadding
-                // Grows with the list until it would outgrow the card, then
-                // scrolls. contentHeight is the laid-out total, so a couple of
-                // wrapped job names lift the card rather than clipping them.
-                Layout.preferredHeight: Math.min(taskListId.contentHeight,
-                                                 Theme.taskFlyoutMaxListHeight)
-
-                model: flyoutId.model
-                clip: true
-            }
+            model: flyoutId.model
+            clip: true
         }
     }
 }
