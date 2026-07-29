@@ -227,21 +227,32 @@ MainWindowTest {
             }, 20000, "wait for LiDAR note gallery items")
 
             let galleryView = freshGalleryView()
-            galleryView.currentIndex = -1
 
-            for (let i = 0; i < galleryView.count; ++i) {
-                let galleryItem = ObjectFinder.findObjectByChain(
-                    mainWindow,
-                    "rootId->tripPage->noteGallery->galleryView->noteImage" + i)
-                if (galleryItem === null) {
-                    continue
-                }
-                mouseClick(galleryItem)
+            function alreadyShowing() {
                 let gallery = freshGallery()
-                if (gallery != null
-                        && gallery.currentNoteLiDAR != null
-                        && String(gallery.currentNoteLiDAR.filename) === fileName) {
-                    break
+                return gallery != null
+                       && gallery.currentNoteLiDAR != null
+                       && String(gallery.currentNoteLiDAR.filename) === fileName
+            }
+
+            //Clearing the selection nulls the gallery's note, which empties the
+            //viewer's gltfFilePath and makes reselecting reparse the whole 12MB
+            //glTF - a fixed ~3s even warm. Every round-trip stage calls this, so
+            //only pay it when the note isn't already the one we want.
+            if (!alreadyShowing()) {
+                galleryView.currentIndex = -1
+
+                for (let i = 0; i < galleryView.count; ++i) {
+                    let galleryItem = ObjectFinder.findObjectByChain(
+                        mainWindow,
+                        "rootId->tripPage->noteGallery->galleryView->noteImage" + i)
+                    if (galleryItem === null) {
+                        continue
+                    }
+                    mouseClick(galleryItem)
+                    if (alreadyShowing()) {
+                        break
+                    }
                 }
             }
 
