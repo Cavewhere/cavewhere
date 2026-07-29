@@ -326,7 +326,7 @@ MainWindowTest {
             verify(floatingBannerId.visible, "a survey with no readable names still banners")
             verify(detail.text.indexOf("couldn't be read from its file") >= 0,
                    "unreadable copy; got: " + detail.text)
-            verify(!stations.visible, "no stations line when nothing was placed")
+            verify(!stations.visible, "no stations line when no name could be read")
 
             floatingBannerId.floating = false
             verify(!floatingBannerId.visible)

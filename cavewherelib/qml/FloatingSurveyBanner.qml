@@ -144,7 +144,11 @@ QQ.Rectangle {
             visible: root.suggestions !== null && suggestionsRepeaterId.count === 0
                      && root.stations.length > 0
             wrapMode: QC.Label.WordWrap
-            text: qsTr("No station in the rest of the cave is named like one of these. Renaming one to match will connect them.")
+            // Not "will connect them": this banner only ever describes an
+            // attached survey, and an attachment is always scoped, so matching
+            // names stay separate stations until a tie is made. What a rename
+            // buys is the one-click tie above.
+            text: qsTr("No station in the rest of the cave is named like one of these. Renaming one to match will offer a one-click tie here.")
         }
     }
 }

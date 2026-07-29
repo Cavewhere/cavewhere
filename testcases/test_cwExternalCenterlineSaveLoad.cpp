@@ -304,9 +304,9 @@ TEST_CASE("Loading a project does not re-save the project file",
     const QDateTime mtimeBeforeLoad = QFileInfo(projectFile).lastModified();
 
     // QTemporaryDir lands on APFS (/var/folders), whose mtime resolution is
-    // sub-millisecond, so a 50 ms gap reliably distinguishes a mid-load re-save
+    // sub-millisecond, so this gap reliably distinguishes a mid-load re-save
     // from the baseline.
-    QThread::msleep(50);
+    QThread::msleep(kMtimeGapMs);
 
     auto loaderRoot = std::make_unique<cwRootData>();
     loaderRoot->project()->loadFile(projectFile);

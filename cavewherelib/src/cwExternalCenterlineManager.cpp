@@ -35,7 +35,9 @@ namespace {
 
 // The ownerKind an OwnerScanInput carries for a trip-level attachment. Only
 // those are harvested: a cave-level attachment has no trip to hold the names,
-// and nothing consumes them yet.
+// and nothing consumes them yet. Compare-side spelling only — comparing a
+// QString against this allocates nothing, whereas passing it to appendOwner's
+// QString parameter would convert on every call.
 constexpr QLatin1StringView kTripOwnerKind("Trip");
 
 // Deterministic presentation order: cave display name, then trip
@@ -292,7 +294,7 @@ QVector<cwExternalCenterlineManager::OwnerScanInput> cwExternalCenterlineManager
                             trip->externalCenterline().entryFile(),
                             cave->name(),
                             trip->name(),
-                            kTripOwnerKind);
+                            QStringLiteral("Trip"));
             }
         }
     }

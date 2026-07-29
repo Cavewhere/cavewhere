@@ -234,9 +234,12 @@ signals:
     void externalCenterlineChanged();
     void stationPrefixChanged();
 
-    //! Fired when the scan-time harvest replaced this trip's externalStations()
-    //! or externalStationsError(). Deliberately not wired to anything that saves
-    //! — both are derived from files the project already owns.
+    //! Fired when the scan-time harvest replaced this trip's externalStations().
+    //! A consumer that also cares when cavern's complaint changes wants
+    //! externalStationsErrorChanged() as well — the two fields move
+    //! independently, and each signal covers only its own. Deliberately not
+    //! wired to anything that saves: both are derived from files the project
+    //! already owns.
     void externalStationsChanged();
     void externalStationsErrorChanged();
 

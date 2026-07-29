@@ -1,0 +1,15 @@
+; Two surveys in one file with no leg and no *equate between them. Nothing
+; fixes either, so the harvest driver's implicit origin fix lands in exactly
+; one of them and cavern drops the other as unconnected (warning 45) — which
+; is why the harvest has to fix every component, not just the first.
+*begin PartA
+*data normal from to tape compass clino
+a1 a2 5.0 0 0
+a2 a3 6.0 90 0
+*end PartA
+
+*begin PartB
+*data normal from to tape compass clino
+b1 b2 7.0 180 0
+b2 b3 8.0 270 0
+*end PartB

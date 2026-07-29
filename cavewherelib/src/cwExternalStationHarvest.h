@@ -32,8 +32,15 @@
 namespace cwExternalStationHarvest {
 
 /**
- * Returns every station name that \a entryFile declares, canonicalized with
+ * Returns the station names \a entryFile declares, canonicalized with
  * cwStation::canonicalKey and sorted.
+ *
+ * \warning Only the stations reachable from the one station netskel fixes.
+ * A file holding two surveys with no leg and no "*equate" between them has
+ * two components, netskel's implicit fix lands in one of them, and articulate()
+ * drops the other (warning 45) — so its names come back missing, with no error.
+ * Fixing this means fixing one station per connected component rather than one
+ * per file, which is a change to the vendored cavern — issue #651.
  *
  * The names are in the attachment's own namespace — the file's own "*begin"
  * blocks are the only naming levels, since the harvest driver adds none. That
