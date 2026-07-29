@@ -3,7 +3,7 @@
 ; *include keeps its names out of the cave's namespace, so nothing can
 ; reach it: cavern warns "Survey not all connected to fixed stations" and
 ; then drops the whole survey, which is why these stations never reach the
-; .3d and the trip's floating record carries no station names.
+; .3d and the scan has to read this file on its own to learn their names.
 *begin Hanging
 *data normal from to tape compass clino
 h1 h2 7.0 0 0

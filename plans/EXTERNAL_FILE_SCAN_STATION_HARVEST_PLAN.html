@@ -253,11 +253,15 @@ void externalStationsChanged();</code></pre>
 <ul>
   <li>Plain member + explicit setter with the standard
       <code>if (m_x == x) return;</code> guard (no bindable properties).</li>
-  <li><code>cwTripData</code> gains a <code>QStringList externalStations</code> field, copied by
-      <code>cwTrip::data()</code>/<code>setData()</code> so the value rides the solve's region
-      snapshot into the worker. <strong>Not serialized</strong> — no proto change; it is derived
-      from files the project already owns, and persisting it would only add a staleness
-      channel.</li>
+  <li><code>cwTripData</code> gains a <code>QStringList externalStations</code> field, filled by
+      <code>cwTrip::data()</code> so the value rides the solve's region snapshot into the worker.
+      <strong>Not serialized</strong> — no proto change; it is derived from files the project
+      already owns, and persisting it would only add a staleness channel.
+      <br><strong>Settled in H2:</strong> <code>setData()</code> deliberately does
+      <em>not</em> read it back. Every <code>cwTripData</code> reaching that setter either came
+      off disk — where the field is never written, so it is empty — or was just taken from the
+      same trip, so assigning could only ever wipe the live harvest (on a load, or a sync-driven
+      trip reload) and never carry anything in.</li>
   <li>Setting it must <strong>not</strong> mark the project dirty or trigger a save — it is
       scan output, not user data. (Same reasoning that made the C2 review flag the save-trigger
       bug, from the other direction.)</li>
@@ -395,7 +399,8 @@ needs a yes/no.
   <td><code>cwTrip::externalStations</code> + <code>externalStationsError</code>
       (+ <code>cwTripData</code> field, no proto, no save trigger),
       <code>ExternalScanResult::tripStations</code>/<code>tripHarvestErrors</code>, harvest call
-      in <code>scanOwners</code>, push in <code>applyScanResult</code>.</td>
+      in <code>scanOwners</code>, push in <code>applyScanResult</code>.
+      <strong>DONE — 3 cases, 33 assertions, green.</strong></td>
   <td>Manager test: attach <code>survex_hanging.svx</code>, <code>waitToFinish()</code> →
       <code>trip-&gt;externalStations()</code> populated, error empty; detach → cleared on next
       apply. Attach <code>broken.svx</code> → names empty, <code>externalStationsError()</code>

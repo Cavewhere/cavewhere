@@ -14,6 +14,7 @@
 #include "cwExternalCenterlineAttach.h"
 #include "cwExternalCenterlineScanner.h"
 #include "cwExternalCenterlineSync.h"
+#include "cwExternalStationHarvest.h"
 #include "cwSaveLoad.h"
 #include "cwSurveyChunkSignaler.h"
 #include "cwTrip.h"
@@ -31,6 +32,11 @@
 #include <tuple>
 
 namespace {
+
+// The ownerKind an OwnerScanInput carries for a trip-level attachment. Only
+// those are harvested: a cave-level attachment has no trip to hold the names,
+// and nothing consumes them yet.
+constexpr QLatin1StringView kTripOwnerKind("Trip");
 
 // Deterministic presentation order: cave display name, then trip
 // display name (cave-level owners sort ahead of their trips via the
@@ -286,7 +292,7 @@ QVector<cwExternalCenterlineManager::OwnerScanInput> cwExternalCenterlineManager
                             trip->externalCenterline().entryFile(),
                             cave->name(),
                             trip->name(),
-                            QStringLiteral("Trip"));
+                            kTripOwnerKind);
             }
         }
     }
@@ -323,6 +329,20 @@ cwExternalCenterlineManager::ExternalScanResult cwExternalCenterlineManager::sca
         if (!owner.attachmentDir.isEmpty()) {
             const QString projectEntry = QDir(owner.attachmentDir).filePath(owner.entryFile);
             if (QFileInfo::exists(projectEntry)) {
+                // Station names, from cavern reading this one attachment on its
+                // own — the region solve can't supply them for exactly the
+                // attachments that need tying in, since it drops a survey
+                // nothing fixes. The in-project copy, not the live-link source:
+                // it is the bytes the solve *includes.
+                if (owner.ownerKind == kTripOwnerKind) {
+                    const auto harvest = cwExternalStationHarvest::harvest(projectEntry);
+                    if (harvest.hasError()) {
+                        result.tripHarvestErrors.insert(owner.ownerId, harvest.errorMessage());
+                    } else {
+                        result.tripStations.insert(owner.ownerId, harvest.value());
+                    }
+                }
+
                 const auto scan = cwExternalCenterlineScanner::scan(projectEntry);
                 if (!scan.hasError()) {
                     for (const QString& dep : scan.value().dependencies) {
@@ -452,11 +472,29 @@ void cwExternalCenterlineManager::applyScanResult(ExternalScanResult result)
     m_solveOnScanApply = false;
     m_fileOwnsDeclination = std::move(result.fileOwnsDeclination);
 
+    // Ahead of the solve request, so the solve that follows snapshots the
+    // fresh names rather than the previous scan's.
+    applyHarvestToTrips(result);
+
     m_lastScanRows = result.rows;
     m_attachedCenterlinesModel->setRows(std::move(result.rows));
 
     if (solveNow) {
         emit solveNeeded();
+    }
+}
+
+void cwExternalCenterlineManager::applyHarvestToTrips(const ExternalScanResult& result)
+{
+    if (m_region.isNull()) {
+        return;
+    }
+
+    for (cwCave* cave : m_region->caves()) {
+        for (cwTrip* trip : cave->trips()) {
+            trip->setExternalStations(result.tripStations.value(trip->id()));
+            trip->setExternalStationsError(result.tripHarvestErrors.value(trip->id()));
+        }
     }
 }
 

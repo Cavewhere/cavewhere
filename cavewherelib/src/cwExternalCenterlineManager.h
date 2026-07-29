@@ -282,6 +282,12 @@ private:
         QList<QUuid> missingSourceOwners;
         QList<QUuid> staleSourceOwners;
         QHash<QUuid, bool> fileOwnsDeclination;
+        // Station names harvested from each trip owner's in-project entry
+        // file, and cavern's complaint when that harvest failed. An owner
+        // appears in at most one of them; an owner in neither had no
+        // in-project entry to read.
+        QHash<QUuid, QStringList> tripStations;
+        QHash<QUuid, QString> tripHarvestErrors;
         QVector<cwAttachedCenterlinesModel::Row> rows;
     };
 
@@ -480,6 +486,12 @@ private:
     // solveNeeded() emission when one was requested or the declination
     // flags changed.
     void applyScanResult(ExternalScanResult result);
+
+    // Pushes the scan's harvested station names and harvest errors onto the
+    // live trips. Walks the whole region rather than the result's keys, so a
+    // trip that was detached (or whose entry file vanished) since the last
+    // scan is cleared instead of keeping names it no longer owns.
+    void applyHarvestToTrips(const ExternalScanResult& result);
 
     // Re-arms the watcher for `path` (the file that just fired) so we
     // continue to receive change events for it; on macOS the watcher

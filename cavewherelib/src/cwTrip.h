@@ -44,6 +44,7 @@ class cwKeywordModel;
 #include <QDate>
 #include <QUndoCommand>
 #include <QQmlEngine>
+#include <QStringList>
 #include <QUuid>
 
 
@@ -68,6 +69,8 @@ class CAVEWHERE_LIB_EXPORT cwTrip : public QObject, public cwUndoer
     Q_PROPERTY(QString stationPrefix READ stationPrefix WRITE setStationPrefix NOTIFY stationPrefixChanged)
     Q_PROPERTY(QString scopePrefix READ scopePrefix NOTIFY scopeChanged)
     Q_PROPERTY(bool isScoped READ isScoped NOTIFY scopeChanged)
+    Q_PROPERTY(QStringList externalStations READ externalStations NOTIFY externalStationsChanged FINAL)
+    Q_PROPERTY(QString externalStationsError READ externalStationsError NOTIFY externalStationsErrorChanged FINAL)
 
 public:
     explicit cwTrip(QObject *parent = 0);
@@ -90,6 +93,29 @@ public:
 
     QString stationPrefix() const { return m_stationPrefix; }
     void setStationPrefix(const QString& stationPrefix);
+
+    //! The station names this trip's attached external centerline declares, in
+    //! the trip's own namespace — canonical and sorted, the same spelling
+    //! solvedStations() yields once the region solve does place the survey.
+    //! Learned at scan time by running cavern over the attachment alone
+    //! (cwExternalStationHarvest), so they exist whether or not the region solve
+    //! placed it: cavern drops a survey nothing fixes and nothing ties in, which
+    //! is exactly the survey whose names the user needs in order to tie it in.
+    //!
+    //! Empty for a native trip, and for an attachment cavern cannot read — in
+    //! which case externalStationsError() says why. Derived state: rebuilt
+    //! wholesale by every external-centerline scan, never persisted, and never a
+    //! save trigger.
+    QStringList externalStations() const { return m_externalStations; }
+    void setExternalStations(const QStringList& stations);
+
+    //! Cavern's own complaint about this trip's attached file, from the same
+    //! scan-time run that fills externalStations(); empty when the file read
+    //! cleanly or the trip has no attachment. The two are one fact from one run:
+    //! names empty and this non-empty means cavern rejected the file. Derived
+    //! state, with the same no-persist, no-save rules as externalStations().
+    QString externalStationsError() const { return m_externalStationsError; }
+    void setExternalStationsError(const QString& error);
 
     //! The scope prefix this trip's stations carry in the cave namespace: empty
     //! for a flat native trip, "<tripLabel>." for an externally-attached trip
@@ -208,6 +234,12 @@ signals:
     void externalCenterlineChanged();
     void stationPrefixChanged();
 
+    //! Fired when the scan-time harvest replaced this trip's externalStations()
+    //! or externalStationsError(). Deliberately not wired to anything that saves
+    //! — both are derived from files the project already owns.
+    void externalStationsChanged();
+    void externalStationsErrorChanged();
+
     //! Fired when this trip's scope may have moved: its own externalCenterline,
     //! stationPrefix or name changed, or — chained from
     //! cwCave::tripScopeLabelsChanged — a *sibling* was renamed, added or
@@ -257,6 +289,8 @@ protected:
     QUuid Id;
     cwExternalCenterline m_externalCenterline;
     QString m_stationPrefix;
+    QStringList m_externalStations;
+    QString m_externalStationsError;
 
     //Units
 

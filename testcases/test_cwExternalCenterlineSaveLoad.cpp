@@ -47,6 +47,10 @@ constexpr qint64 kOneHourSeconds = 3600;
 constexpr qint64 kStaleOffsetSeconds = -600;
 constexpr qint64 kFreshOffsetSeconds = 120;
 
+// Pause between an mtime baseline and the change under test, so a rewrite of
+// the file is unambiguous rather than lost to timestamp resolution.
+constexpr unsigned long kMtimeGapMs = 50;
+
 struct SavedProjectFixture {
     QTemporaryDir tempDir;
     std::unique_ptr<cwRootData> rootData;
@@ -150,6 +154,45 @@ TEST_CASE("trip station prefix round-trips through save/load",
     cwTrip* loadedTrip = loadedCave->trip(0);
     CHECK(loadedTrip->stationPrefix() == QString::fromLatin1(kPrefix));
     CHECK(loadedTrip->isScoped());
+}
+
+TEST_CASE("harvested station names never trigger a save",
+          "[SaveLoad][External][StationHarvest]")
+{
+    // externalStations/externalStationsError are scan output — rebuilt from
+    // files the project already owns on every recompute. Wiring either to a
+    // save would rewrite the trip on disk after every attach, every watched-file
+    // edit and every project load, for a value that is never serialized.
+    auto fixture = makeSavedProject(QStringLiteral("harvest-no-save"));
+    REQUIRE_FALSE(fixture->project->modified());
+
+    const QString tripFile = ProjectFilenameTestHelper::absolutePath(fixture->trip);
+    REQUIRE(QFileInfo::exists(tripFile));
+    const QDateTime mtimeBefore = QFileInfo(tripFile).lastModified();
+
+    // APFS keeps sub-millisecond mtimes, but a gap this wide makes a rewrite
+    // unmistakable rather than a timestamp-resolution argument.
+    QThread::msleep(kMtimeGapMs);
+
+    fixture->trip->setExternalStations({QStringLiteral("hanging.h1"),
+                                        QStringLiteral("hanging.h2")});
+    fixture->trip->setExternalStationsError(QStringLiteral("cavern: error: pretend failure"));
+
+    fixture->project->waitSaveToFinish();
+    fixture->rootData->futureManagerModel()->waitForFinished();
+    QCoreApplication::processEvents();
+
+    CHECK_FALSE(fixture->project->modified());
+    CHECK(QFileInfo(tripFile).lastModified() == mtimeBefore);
+
+    // Control: a field that IS a save trigger moves the same file, so the
+    // assertion above can't pass just because nothing ever writes here.
+    fixture->trip->setStationPrefix(QStringLiteral("P"));
+    fixture->project->waitSaveToFinish();
+    fixture->rootData->futureManagerModel()->waitForFinished();
+    QCoreApplication::processEvents();
+
+    CHECK(QFileInfo(tripFile).lastModified() != mtimeBefore);
 }
 
 TEST_CASE("cave and region equates round-trip through save/load",

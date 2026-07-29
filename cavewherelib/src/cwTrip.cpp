@@ -181,6 +181,24 @@ void cwTrip::setStationPrefix(const QString& stationPrefix)
     emit scopeChanged();
 }
 
+void cwTrip::setExternalStations(const QStringList& stations)
+{
+    if (m_externalStations == stations) {
+        return;
+    }
+    m_externalStations = stations;
+    emit externalStationsChanged();
+}
+
+void cwTrip::setExternalStationsError(const QString& error)
+{
+    if (m_externalStationsError == error) {
+        return;
+    }
+    m_externalStationsError = error;
+    emit externalStationsErrorChanged();
+}
+
 QString cwTrip::scopePrefix() const
 {
     //A trip's label is only unique among the trips of its cave, so the cave owns
@@ -620,7 +638,8 @@ cwTripData cwTrip::data() const
         NotesSketch->data(),
         Id,
         m_externalCenterline,
-        m_stationPrefix
+        m_stationPrefix,
+        m_externalStations
     };
 }
 
@@ -631,6 +650,11 @@ void cwTrip::setData(const cwTripData &data)
     setDate(data.date);
     setExternalCenterline(data.externalCenterline);
     setStationPrefix(data.stationPrefix);
+    //externalStations is deliberately not restored. It is scan output, and every
+    //cwTripData that reaches this setter either came off disk — where the field
+    //is never serialized, so it is empty — or was just taken from this same
+    //trip. Assigning it could therefore only ever wipe the live harvest (on a
+    //load or a sync-driven reload) and never carry anything in.
     Team->setData(data.team);
     Calibration->setData(data.calibrations);
     Notes->setData(data.noteModel);
