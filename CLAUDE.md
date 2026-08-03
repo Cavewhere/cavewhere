@@ -32,43 +32,17 @@ Always redirect test output to a log file so failures can be inspected without r
 
 ## Architecture Overview
 
-### Entry Point and Root Singleton
+`main.cpp` exposes `cwRootData` as a QML singleton — the hub owning every major subsystem, and the place to start when looking for one.
 
-`main.cpp` sets up the QML engine and exposes `cwRootData` as a QML singleton — the central hub that owns and exposes all major subsystems to QML: `cwProject`, `cwCavingRegion`, `cwScrapManager`, `cwLinePlotManager`, `cwSurveyImportManager`, `cwSurveyExportManager`, `cwRemoteServices`, `cwPageSelectionModel`, `cwSettings`, and more.
+Data model: `cwCavingRegion` → `cwCave` → `cwTrip` → `cwSurveyChunk` → `cwShot` (from/to station, distance/bearing/inclination) and `cwNote` (2D scan) → `cwScrap` (digitized outlines).
 
-### Data Model Hierarchy
+**Persistence (`cwProject`)**: three formats — legacy `.cw` (JSON + SQLite, auto-converted on load), bundled `.cw` (zip, the default for single-file saves), and `.cwproj` directory (Git-backed, for collaboration). Serialization is Protocol Buffers (`cavewhere.proto`). Save/load is queued through `cwSaveLoad` so it never blocks the UI thread.
 
-```
-cwCavingRegion (root)
-└── cwCave (multiple)
-    └── cwTrip (multiple)
-        └── cwSurveyChunk (shots)
-            ├── cwShot (from/to station, distance/bearing/inclination)
-            └── cwNote (2D scanned image)
-                └── cwScrap (digitized outlines)
-```
+**Rendering**: Qt RHI, never OpenGL directly (`cwRhiScene`, `cwRhiItemRenderer`); 3D math lives in the `QMath3d` submodule.
 
-### Project Persistence (`cwProject`)
+**Import/export**: Compass, Survex, and Walls parsing goes through the `dewalls` submodule. Compass station names are exported uppercase — Compass is case-sensitive, CaveWhere is not. `cwSurveyNetwork` performs loop closure detection.
 
-Handles all file I/O and Git integration. Three formats: legacy `.cw` (JSON + SQLite, auto-converted on load), bundled `.cw` (zip archive, new default for single-file saves), and `.cwproj` directory (Git-backed for collaboration). Serialization uses Protocol Buffers (`cavewhere.proto`). Save/load operations are queued through `cwSaveLoad` to avoid blocking the UI thread.
-
-### Rendering
-
-Uses Qt's RHI (Rendering Hardware Interface). Key classes: `cwRegionSceneManager`, `cwRhiScene`, `cwRhiItemRenderer`. Line plots are handled by `cwLinePlotManager`. 3D math is in the `QMath3d` submodule.
-
-### Survey Import/Export
-
-`cwSurveyImportManager` handles Compass, Survex, and Walls formats via the `dewalls` submodule. `cwSurveyExportManager` outputs Survex and Compass; Compass station names are written in uppercase (Compass is case-sensitive; CaveWhere is not). `cwSurveyNetwork` performs loop closure detection.
-
-### Remote/Git Features
-
-`QQuickGit` submodule wraps libgit2. `cwGitHubDeviceAuth` handles OAuth. Credentials are stored via `qtkeychain`. `cwRemoteRepositoryCloner` and `cwRemoteAccountModel` manage remote repository workflows.
-
-### UI Structure
-
-- **Page navigation**: `cwPageSelectionModel` manages multi-page routing
-- **Keyword filtering**: `cwKeywordItemModel` / `cwKeywordFilterPipelineModel` for hierarchical search
-- **Themes**: All colors go through `Theme.qml` tokens — never hardcode hex values in component QML files
+**UI**: `cwPageSelectionModel` routes pages; `cwKeywordItemModel` / `cwKeywordFilterPipelineModel` drive hierarchical keyword search.
 
 ## Coding Conventions
 
@@ -129,21 +103,6 @@ Uses Qt's RHI (Rendering Hardware Interface). Key classes: `cwRegionSceneManager
 - Body: what changed, why, build/test commands run
 - Attach screenshots for QML UI changes; link related issues; note submodule/dependency changes explicitly
 - Do not mention Claude or add Co-Authored-By lines
-
-## Key Source Locations
-
-| Path | Purpose |
-|------|---------|
-| `cavewherelib/src/` | All C++ engine code |
-| `cavewherelib/qml/` | All QML components |
-| `cavewherelib/shaders/` | GLSL/RHI shaders |
-| `testcases/` | C++ unit tests (Catch2) |
-| `test-qml/tst_*.qml` | QML test suite |
-| `test-qml/datasets/` | Deterministic test data |
-| `testlib/` | Shared test infrastructure |
-| `cavewhere.proto` | Protobuf serialization schema |
-| `conanfile.py` | Conan dependency manifest |
-| `installer/` | Platform packaging scripts |
 
 ## Dependencies
 
