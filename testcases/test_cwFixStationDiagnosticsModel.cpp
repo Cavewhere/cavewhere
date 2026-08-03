@@ -1,6 +1,7 @@
 //Our includes
 #include "cwCave.h"
 #include "cwCavingRegion.h"
+#include "cwCoordinateTransform.h"
 #include "cwFixStation.h"
 #include "cwFixStationDiagnosticsModel.h"
 #include "cwFixStationModel.h"
@@ -55,6 +56,24 @@ struct FixFixture {
     {
         return read(cwFixStationDiagnosticsModel::StationErrorRole).toString();
     }
+    QString coordinateError() const
+    {
+        return read(cwFixStationDiagnosticsModel::CoordinateErrorRole).toString();
+    }
+    bool orderUnknown() const
+    {
+        return read(cwFixStationDiagnosticsModel::CoordinateOrderUnknownRole).toBool();
+    }
+
+    //! Put text on the row that cwFixStationModel::setCoordinateText() would
+    //! refuse. Only the load path produces such a row — a hand-edited project —
+    //! so there is no editing surface to go through.
+    void setStoredCoordinate(const QString& text)
+    {
+        cwFixStation fix = source->fixStationAt(0);
+        fix.setCoordinate(text);
+        source->setFixStations({fix});
+    }
     bool eastingFlagged() const
     {
         return read(cwFixStationDiagnosticsModel::EastingDomainErrorRole).toBool();
@@ -97,10 +116,13 @@ TEST_CASE("cwFixStationDiagnosticsModel merges the source's role names with its 
     CHECK(roles.value(cwFixStationDiagnosticsModel::NorthingDomainErrorRole)
           == "northingDomainError");
     CHECK(roles.value(cwFixStationDiagnosticsModel::StationErrorRole) == "stationError");
+    CHECK(roles.value(cwFixStationDiagnosticsModel::CoordinateErrorRole) == "coordinateError");
+    CHECK(roles.value(cwFixStationDiagnosticsModel::CoordinateOrderUnknownRole)
+          == "coordinateOrderUnknown");
 
     // The two role blocks must not collide, or the merge would silently drop one
     // side: every name in the merged hash is still reachable by its own value.
-    CHECK(roles.size() == fixture.source->roleNames().size() + 4);
+    CHECK(roles.size() == fixture.source->roleNames().size() + 6);
 }
 
 TEST_CASE("cwFixStationDiagnosticsModel passes persisted rows through untouched",
@@ -322,4 +344,227 @@ TEST_CASE("A persisted edit re-emits the derived roles it invalidates",
     fixture.edit(cwFixStationModel::HorizontalVarianceRole, 2.5);
     CHECK(proxySpy.count() == 1);
     CHECK(rolesSeen(proxySpy) == QList<int>{cwFixStationModel::HorizontalVarianceRole});
+}
+
+TEST_CASE("cwFixStationDiagnosticsModel says why a coordinate can't be read",
+          "[FixStation][cwFixStationDiagnosticsModel]") {
+    // Before this role nothing surfaced either failure: such a row renders and
+    // solves as a fix at the origin, and the only place its text appeared was
+    // inside an editor nobody had reason to open.
+    FixFixture fixture;
+
+    SECTION("a row nobody has filled in yet is not a complaint") {
+        REQUIRE(fixture.source->fixStationAt(0).state() == cwFixStation::Empty);
+        CHECK(fixture.coordinateError().isEmpty());
+    }
+
+    SECTION("a coordinate that reads is not a complaint") {
+        fixture.edit(cwFixStationModel::InputCSRole, QStringLiteral("EPSG:32613"));
+        REQUIRE(fixture.source->setCoordinateText(0, QStringLiteral("478000, 4430000, 1655m"),
+                                                  cwUnits::Metric) == QString());
+        REQUIRE(fixture.source->fixStationAt(0).state() == cwFixStation::Valid);
+        CHECK(fixture.coordinateError().isEmpty());
+    }
+
+    SECTION("no coordinate system asks for one, and doesn't blame the text") {
+        fixture.edit(cwFixStationModel::InputCSRole, QString());
+        fixture.setStoredCoordinate(QStringLiteral("610016.792, 5615117.075, 304m"));
+        REQUIRE(fixture.source->fixStationAt(0).state() == cwFixStation::NoSystem);
+
+        CHECK(fixture.coordinateError().contains(QStringLiteral("coordinate system")));
+        // The text is perfectly readable; what is missing is the system to read
+        // it under. Telling the user their coordinate can't be read would send
+        // them to correct a string that has nothing wrong with it.
+        CHECK_FALSE(fixture.coordinateError().contains(QStringLiteral("can't be read")));
+    }
+
+    SECTION("text that won't parse carries the parser's own reason") {
+        fixture.edit(cwFixStationModel::InputCSRole, QStringLiteral("EPSG:32613"));
+
+        fixture.setStoredCoordinate(QStringLiteral("1, 2, 3, 4"));
+        REQUIRE(fixture.source->fixStationAt(0).state() == cwFixStation::Unreadable);
+        const QString tooMany = fixture.coordinateError();
+        CHECK(tooMany.contains(QStringLiteral("at most three numbers")));
+
+        fixture.setStoredCoordinate(QStringLiteral("478000"));
+        REQUIRE(fixture.source->fixStationAt(0).state() == cwFixStation::Unreadable);
+        const QString tooFew = fixture.coordinateError();
+        CHECK(tooFew.contains(QStringLiteral("easting and a northing")));
+
+        // Forwarded, not restated: a message that named the failure in its own
+        // words would be the same string for both of these, and would drift from
+        // what the parser actually refused.
+        CHECK(tooMany != tooFew);
+    }
+
+    SECTION("the parse reason is read in the row's own axis order") {
+        // The same missing component, under a geographic system, is a missing
+        // latitude and longitude — the message has to match the row the user is
+        // looking at, not the model's easting/northing order.
+        fixture.edit(cwFixStationModel::InputCSRole, QStringLiteral("EPSG:4326"));
+        fixture.setStoredCoordinate(QStringLiteral("46.12113"));
+        REQUIRE(fixture.source->fixStationAt(0).state() == cwFixStation::Unreadable);
+
+        CHECK(fixture.coordinateError().contains(QStringLiteral("latitude and a longitude")));
+        CHECK_FALSE(fixture.coordinateError().contains(QStringLiteral("easting")));
+    }
+}
+
+TEST_CASE("cwFixStationDiagnosticsModel never raises both coordinate complaints at once",
+          "[FixStation][cwFixStationDiagnosticsModel]") {
+    // The page gives the two one warning slot between them, which is only sound
+    // because they can't both speak: the domain check judges a coordinate the
+    // row has, and CoordinateErrorRole says there isn't one to judge.
+    FixFixture fixture;
+
+    SECTION("an out-of-domain coordinate is the domain's complaint alone") {
+        fixture.edit(cwFixStationModel::InputCSRole, QStringLiteral("EPSG:32613"));
+        REQUIRE(fixture.source->setCoordinateText(0, QStringLiteral("1478000, 4430000, 1655m"),
+                                                  cwUnits::Metric) == QString());
+        CHECK_FALSE(fixture.domainError().isEmpty());
+        CHECK(fixture.coordinateError().isEmpty());
+    }
+
+    SECTION("a coordinate with no system is the coordinate's complaint alone") {
+        // A row with no CS reaches no domain check at all — cwCoordinateTransform
+        // returns early on an empty key — so "the domain is quiet" holds here
+        // however the fix-level deferral behaves, and asserting only that would
+        // prove nothing. What is worth pinning is the hand-off: naming the system
+        // makes these same numbers the domain's complaint, and silences this one.
+        fixture.edit(cwFixStationModel::InputCSRole, QString());
+        fixture.setStoredCoordinate(QStringLiteral("1478000, 4430000, 1655m"));
+        CHECK_FALSE(fixture.coordinateError().isEmpty());
+        CHECK(fixture.domainError().isEmpty());
+
+        fixture.edit(cwFixStationModel::InputCSRole, QStringLiteral("EPSG:32613"));
+        CHECK(fixture.coordinateError().isEmpty());
+        CHECK_FALSE(fixture.domainError().isEmpty());
+    }
+
+    SECTION("unreadable text is the coordinate's complaint alone") {
+        // A southern-hemisphere zone on purpose. An unreadable row reports three
+        // zeros, and in a northern zone the origin lands inside the area of use —
+        // so the domain would stay quiet whether or not it deferred, and this
+        // would pass for free. Here the origin is out of domain, so the silence
+        // has to come from the deferral.
+        const QString cs = QStringLiteral("EPSG:28355");
+        REQUIRE_FALSE(cwCoordinateTransform::domainCheck(cs, cwGeoPoint(0.0, 0.0, 0.0))
+                          .northingValid);
+
+        fixture.edit(cwFixStationModel::InputCSRole, cs);
+        fixture.setStoredCoordinate(QStringLiteral("N 46 07 16 W 115 35 56"));
+        REQUIRE(fixture.source->fixStationAt(0).state() == cwFixStation::Unreadable);
+        CHECK_FALSE(fixture.coordinateError().isEmpty());
+        CHECK(fixture.domainError().isEmpty());
+    }
+}
+
+TEST_CASE("cwFixStationDiagnosticsModel marks the row whose text has no recorded order",
+          "[FixStation][cwFixStationDiagnosticsModel]") {
+    // What the entry surfaces ask about before they let a geographic system be
+    // named on such a row: naming one reads the text latitude-first whatever it
+    // was written as, and afterwards there is nothing left to detect.
+    FixFixture fixture;
+
+    SECTION("a row that names a system derives its order from it") {
+        fixture.edit(cwFixStationModel::InputCSRole, QStringLiteral("EPSG:32613"));
+        REQUIRE(fixture.source->setCoordinateText(0, QStringLiteral("478000, 4430000, 1655m"),
+                                                  cwUnits::Metric) == QString());
+        CHECK_FALSE(fixture.orderUnknown());
+    }
+
+    SECTION("a row with no coordinate has no order to be unsure of") {
+        // Blank CS, blank coordinate: nothing was written, so nothing is at
+        // stake and there is nothing to ask about.
+        fixture.edit(cwFixStationModel::InputCSRole, QString());
+        REQUIRE(fixture.source->fixStationAt(0).state() == cwFixStation::Empty);
+        CHECK_FALSE(fixture.orderUnknown());
+    }
+
+    SECTION("text with no system to read it under is the one case") {
+        fixture.edit(cwFixStationModel::InputCSRole, QString());
+        fixture.setStoredCoordinate(QStringLiteral("610016.792, 5615117.075, 304m"));
+        CHECK(fixture.orderUnknown());
+
+        // And naming a system settles it, which is why the surfaces have to read
+        // this before they commit one rather than after.
+        fixture.edit(cwFixStationModel::InputCSRole, QStringLiteral("EPSG:4326"));
+        CHECK_FALSE(fixture.orderUnknown());
+    }
+
+    SECTION("unreadable text under a system still has an order") {
+        // Unreadable is not this: the row knows how it would read the text if
+        // the text were readable, so there is no question to put to the user.
+        fixture.edit(cwFixStationModel::InputCSRole, QStringLiteral("EPSG:32613"));
+        fixture.setStoredCoordinate(QStringLiteral("N 46 07 16 W 115 35 56"));
+        REQUIRE(fixture.source->fixStationAt(0).state() == cwFixStation::Unreadable);
+        CHECK_FALSE(fixture.orderUnknown());
+    }
+}
+
+TEST_CASE("A coordinate or CS edit re-emits what the row's coordinate amounts to",
+          "[FixStation][cwFixStationDiagnosticsModel]") {
+    // Both roles are read through data(), so a delegate only re-reads them when
+    // the proxy says to. Naming a system is the case that would be missed by
+    // keying on the coordinate text alone: it turns unreadable text into a
+    // coordinate without touching a character of it.
+    FixFixture fixture;
+    fixture.edit(cwFixStationModel::InputCSRole, QStringLiteral("EPSG:32613"));
+
+    QSignalSpy proxySpy(fixture.diagnostics, &QAbstractItemModel::dataChanged);
+
+    REQUIRE(fixture.source->setCoordinateText(0, QStringLiteral("478000, 4430000, 1655m"),
+                                              cwUnits::Metric) == QString());
+    QList<int> seen = rolesSeen(proxySpy);
+    CHECK(seen.contains(cwFixStationDiagnosticsModel::CoordinateErrorRole));
+    CHECK(seen.contains(cwFixStationDiagnosticsModel::CoordinateOrderUnknownRole));
+
+    proxySpy.clear();
+    fixture.edit(cwFixStationModel::InputCSRole, QStringLiteral("EPSG:4326"));
+    seen = rolesSeen(proxySpy);
+    CHECK(seen.contains(cwFixStationDiagnosticsModel::CoordinateErrorRole));
+    CHECK(seen.contains(cwFixStationDiagnosticsModel::CoordinateOrderUnknownRole));
+
+    // A variance edit moves neither, so the delegates are not woken for it.
+    proxySpy.clear();
+    fixture.edit(cwFixStationModel::HorizontalVarianceRole, 2.5);
+    seen = rolesSeen(proxySpy);
+    CHECK_FALSE(seen.contains(cwFixStationDiagnosticsModel::CoordinateErrorRole));
+    CHECK_FALSE(seen.contains(cwFixStationDiagnosticsModel::CoordinateOrderUnknownRole));
+}
+
+TEST_CASE("A text edit that moves no component still re-emits the domain verdict",
+          "[FixStation][cwFixStationDiagnosticsModel]") {
+    // The domain verdict defers on any state but Valid, so it moves with the
+    // state, and the state comes from the text. Keying the domain roles on the
+    // components alone misses the case where the text changes what the row *is*
+    // without changing a number: an unreadable row already reports three zeros,
+    // so becoming a coordinate at the origin moves nothing.
+    //
+    // A southern-hemisphere zone, where the origin really is out of domain —
+    // in a northern one the row would end up valid *and* unflagged, and the
+    // missing emission would have nothing to show for it.
+    const QString cs = QStringLiteral("EPSG:28355");
+    REQUIRE_FALSE(cwCoordinateTransform::domainCheck(cs, cwGeoPoint(0.0, 0.0, 0.0))
+                      .northingValid);
+
+    FixFixture fixture;
+    fixture.edit(cwFixStationModel::InputCSRole, cs);
+    fixture.setStoredCoordinate(QStringLiteral("N 46 07 16 W 115 35 56"));
+    REQUIRE(fixture.source->fixStationAt(0).state() == cwFixStation::Unreadable);
+    REQUIRE_FALSE(fixture.northingFlagged());
+
+    QSignalSpy proxySpy(fixture.diagnostics, &QAbstractItemModel::dataChanged);
+
+    REQUIRE(fixture.source->setCoordinateText(0, QStringLiteral("0, 0, 0m"),
+                                              cwUnits::Metric) == QString());
+    REQUIRE(fixture.source->fixStationAt(0).state() == cwFixStation::Valid);
+
+    // The verdict really did move, so a delegate that isn't told is showing a
+    // stale one.
+    CHECK(fixture.northingFlagged());
+    const QList<int> seen = rolesSeen(proxySpy);
+    CHECK(seen.contains(cwFixStationDiagnosticsModel::DomainErrorRole));
+    CHECK(seen.contains(cwFixStationDiagnosticsModel::EastingDomainErrorRole));
+    CHECK(seen.contains(cwFixStationDiagnosticsModel::NorthingDomainErrorRole));
 }

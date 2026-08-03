@@ -100,10 +100,17 @@ public:
 
     explicit cwCoordinateText(QObject* parent = nullptr) : QObject(parent) {}
 
-    //! How a coordinate in \a cs is written out. Geographic ⇒ latitude first.
-    //! An empty or unresolvable \a cs is EastingNorthing: a fix that declares
-    //! no CS falls back to the region's global one, which survex requires to be
-    //! projected, so there is no geographic case hiding behind the empty string.
+    //! How a coordinate in \a cs is written out. Geographic ⇒ latitude first;
+    //! anything else, including an empty or unresolvable \a cs, is
+    //! EastingNorthing.
+    //!
+    //! <b>An empty \a cs is not a coordinate system, and the answer here is not
+    //! a reading of one.</b> A fix that declares none has no axis order at all
+    //! (cwFixStation::NoSystem) and derives nothing from its text; the fallback
+    //! exists only so that a caller writing three numbers into a CS-less row
+    //! spells them out in some fixed order rather than none. Which order that is
+    //! goes unrecorded, which is why naming a geographic system afterwards
+    //! transposes the row — see swapHorizontal().
     Q_INVOKABLE static AxisOrder axisOrderFor(const QString& cs);
 
     //! The coordinate \a text spells out, or the reason it couldn't be read.
@@ -125,6 +132,22 @@ public:
                                       double elevationInMeters,
                                       cwUnits::UnitSystem units,
                                       AxisOrder order);
+
+    //! \a text with its first two numbers exchanged and everything else left
+    //! exactly as written — the separators, the elevation, its unit, and the
+    //! absence of an elevation. <b>Empty when \a text doesn't read as a
+    //! coordinate</b>, which is not the same as holding fewer than two numbers:
+    //! "N 46 07 16 W 115 35 56" holds six and is not a coordinate.
+    //!
+    //! Textual on purpose, so it takes neither an axis order nor a unit system:
+    //! which axis a number <i>is</i> has no bearing on moving it, applying this
+    //! twice returns the original string, and a coordinate whose text is all it
+    //! has keeps that text's own shape. It exists for the one case nothing else
+    //! can recover — a coordinate stored under no coordinate system, whose axis
+    //! order was never written down (cwFixStation::NoSystem). Naming a
+    //! geographic system on such a row reads it latitude-first whatever it was
+    //! written as, and only the user knows which was meant.
+    Q_INVOKABLE static QString swapHorizontal(const QString& text);
 
     //! The form of \a text to keep as what the user typed (U14): trimmed, and
     //! with the elevation's unit spelled out when it was written bare.

@@ -368,6 +368,123 @@ TEST_CASE("cwFixStations and globalCS survive a project save/load",
     CHECK(loadedUnfixed->fixStations()->count() == 0);
 }
 
+TEST_CASE("A hand-edited coordinate survives a project save and load, byte for byte",
+          "[FixStation][cwSaveLoad]") {
+    // §4's hand-edit requirement, end to end rather than at the proto boundary:
+    // projects are readable on disk, so someone will edit a coordinate by hand
+    // and get it wrong, and what they wrote has to come back exactly. Never
+    // dropped, never "repaired", and never replaced by the zeros the row reports
+    // — those would turn a coordinate that needs correcting into a fix at the
+    // origin that nobody would think to look at.
+    //
+    // Both unreadable shapes go through together, because they are kept for
+    // different reasons: one has text the parser refuses, the other text no
+    // system will read.
+    const QString unreadableText = QStringLiteral("N 46 07 16 W 115 35 56");
+    const QString systemlessText = QStringLiteral("610016.792, 5615117.075, 304m");
+
+    auto creatorRoot = std::make_unique<cwRootData>();
+    auto creatorProject = creatorRoot->project();
+    auto creatorRegion = creatorProject->cavingRegion();
+    creatorRegion->addCave();
+    cwCave* cave = creatorRegion->cave(0);
+    cave->setName(QStringLiteral("Hand Edited"));
+
+    cwFixStation unreadable;
+    unreadable.setStationName(QStringLiteral("A1"));
+    unreadable.setInputCS(QStringLiteral("EPSG:32611"));
+    unreadable.setCoordinate(unreadableText);
+    REQUIRE(unreadable.state() == cwFixStation::Unreadable);
+
+    cwFixStation systemless;
+    systemless.setStationName(QStringLiteral("B2"));
+    systemless.setCoordinate(systemlessText);
+    REQUIRE(systemless.state() == cwFixStation::NoSystem);
+
+    // The row nobody filled in rides along, because it is the one thing that
+    // must *not* come back as text: a loader that wrote out its rendering would
+    // turn "not entered" into "entered at the origin".
+    cwFixStation untouched;
+    untouched.setStationName(QStringLiteral("C3"));
+    untouched.setInputCS(QStringLiteral("EPSG:32611"));
+    REQUIRE(untouched.state() == cwFixStation::Empty);
+
+    cave->fixStations()->setFixStations({unreadable, systemless, untouched});
+
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    const QString projectPath = QDir(tempDir.path())
+                                    .filePath(QStringLiteral("fixstations-handedit-%1.cwproj")
+                                                  .arg(QCoreApplication::applicationPid()));
+    REQUIRE(creatorProject->saveAs(projectPath));
+    creatorRoot->futureManagerModel()->waitForFinished();
+    creatorProject->waitSaveToFinish();
+
+    auto loaderRoot = std::make_unique<cwRootData>();
+    auto loaderProject = loaderRoot->project();
+    addTokenManager(loaderProject);
+    loaderProject->loadOrConvert(creatorProject->filename());
+    loaderRoot->futureManagerModel()->waitForFinished();
+    loaderProject->waitLoadToFinish();
+
+    REQUIRE(loaderProject->cavingRegion()->caveCount() == 1);
+    cwFixStationModel* loaded = loaderProject->cavingRegion()->cave(0)->fixStations();
+    REQUIRE(loaded->count() == 3);
+
+    CHECK(loaded->fixStationAt(0).coordinate() == unreadableText);
+    CHECK(loaded->fixStationAt(0).state() == cwFixStation::Unreadable);
+
+    CHECK(loaded->fixStationAt(1).coordinate() == systemlessText);
+    CHECK(loaded->fixStationAt(1).state() == cwFixStation::NoSystem);
+    // And naming the system it was always in reads the numbers straight back out
+    // of the text that survived — which is the whole reason keeping it matters.
+    cwFixStation named = loaded->fixStationAt(1);
+    named.setInputCS(QStringLiteral("EPSG:32611"));
+    CHECK(named.state() == cwFixStation::Valid);
+    CHECK(named.easting() == 610016.792);
+
+    CHECK(loaded->fixStationAt(2).coordinate().isEmpty());
+    CHECK(loaded->fixStationAt(2).state() == cwFixStation::Empty);
+}
+
+TEST_CASE("Re-storing a coordinate the row already held reads it in stored units",
+          "[FixStation]") {
+    // What the axis-order swap relies on. swapHorizontal() exchanges two numbers
+    // in text the row already had and changes nothing else, but the result still
+    // has to be committed, and setCoordinateText() reads a *bare* elevation in
+    // whatever unit system it is handed. A stored coordinate's bare elevation
+    // means meters — cwFixStation reads it that way — so the entry surfaces
+    // commit a swap in metric rather than in the project's display units.
+    //
+    // Only the load path can produce a bare elevation: setCoordinateText()
+    // spells the unit out before storing. So this is exactly the population the
+    // hand-edit requirement exists for, and the mistake is silent — both
+    // readings are plausible elevations.
+    const QString bareElevation = QStringLiteral("610016.792, 5615117.075, 304");
+
+    cwFixStation loaded;
+    loaded.setInputCS(QStringLiteral("EPSG:32611"));
+    loaded.setCoordinate(bareElevation);
+    REQUIRE(loaded.state() == cwFixStation::Valid);
+    REQUIRE(loaded.elevation() == 304.0);
+
+    cwFixStationModel model;
+    model.setFixStations({loaded});
+
+    SECTION("metric leaves the elevation where the fix already read it") {
+        REQUIRE(model.setCoordinateText(0, bareElevation, cwUnits::Metric) == QString());
+        CHECK(model.fixStationAt(0).elevation() == 304.0);
+    }
+
+    SECTION("the project's units would move it, which is the mistake being avoided") {
+        // Asserted rather than assumed: without it the section above could pass
+        // because nothing re-reads the elevation at all.
+        REQUIRE(model.setCoordinateText(0, bareElevation, cwUnits::Imperial) == QString());
+        CHECK(model.fixStationAt(0).elevation()
+              == cwUnits::convert(304.0, cwUnits::Feet, cwUnits::Meters));
+    }
+}
+
 TEST_CASE("Changing globalCS marks the project modified",
           "[FixStation][cwSaveLoad][globalCS]") {
     // Regression: cwSaveLoad::connectObjects() wires cave / trip / note /

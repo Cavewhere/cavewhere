@@ -198,6 +198,53 @@ QString cwCoordinateText::format(double easting,
              cwUnits::unitName(unit));
 }
 
+QString cwCoordinateText::swapHorizontal(const QString& text)
+{
+    //Text that isn't a coordinate has no first two components to exchange, and
+    //counting numbers is not the same question: "N 46 07 16 W 115 35 56" holds
+    //six of them and is not a coordinate at all. The verdict is independent of
+    //both the unit system and the axis order — they decide what the numbers
+    //mean, never whether they can be read (see cwCoordinateTextValidator) — so
+    //these two stand in for whatever the caller's row uses.
+    if (parse(text, cwUnits::Metric, EastingNorthing).hasError()) {
+        return QString();
+    }
+
+    //Spans of the number alone (capture 1), not of the whole match. parse()
+    //above refuses a unit on a horizontal component, so the two coincide for the
+    //first two components of anything that gets this far — capturing the number
+    //states what is being moved without leaning on that.
+    struct Span {
+        qsizetype start = 0;
+        qsizetype length = 0;
+    };
+
+    QList<Span> numbers;
+    QRegularExpressionMatchIterator iterator = componentExpression().globalMatch(text);
+    while (iterator.hasNext() && numbers.size() < kMinComponents) {
+        const QRegularExpressionMatch match = iterator.next();
+        numbers.append(Span{match.capturedStart(1), match.capturedLength(1)});
+    }
+
+    //The bound the indexing below needs. Reaching it would mean parse() accepted
+    //text the expression it parses with finds fewer than two components in.
+    if (numbers.size() < kMinComponents) {
+        return QString();
+    }
+
+    const Span& first = numbers.at(0);
+    const Span& second = numbers.at(1);
+    const QString firstText = text.mid(first.start, first.length);
+    const QString secondText = text.mid(second.start, second.length);
+
+    //The later span first: replacing the earlier one can change the string's
+    //length and would leave the second offset pointing somewhere else.
+    QString swapped = text;
+    swapped.replace(second.start, second.length, firstText);
+    swapped.replace(first.start, first.length, secondText);
+    return swapped;
+}
+
 QString cwCoordinateText::textToStore(const QString& text,
                                       const Coordinate& coordinate,
                                       cwUnits::UnitSystem units)

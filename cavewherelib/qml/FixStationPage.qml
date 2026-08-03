@@ -53,6 +53,28 @@ StandardPage {
             rowIndex, newText, ProjectUnits.unitSystem)
     }
 
+    // Re-stores text the row already held, rather than text someone typed — so
+    // it is read back in the units it was stored under, not the ones on display.
+    // A stored elevation may be bare (the load path takes a hand-edited string
+    // as-is), and cwFixStation reads a bare one as meters; committing it in an
+    // imperial project would re-read the same digits as feet and move the fix
+    // vertically, which is not something the user asked for by exchanging two
+    // horizontal numbers.
+    function commitStoredCoordinate(rowIndex: int, newText: string): void {
+        fixStationPage.fixStationsModel.setCoordinateText(rowIndex, newText, Units.Metric)
+    }
+
+    // Both coordinate-system cells commit through here so the transposition
+    // question is asked once rather than per layout. `orderWasUnknown` and
+    // `coordinateText` are the row as it stood *before* this write — the write
+    // is what gives a system-less row an axis order, and afterwards nothing
+    // remembers it never had one.
+    function commitCS(rowIndex: int, newCS: string, orderWasUnknown: bool,
+                      coordinateText: string): void {
+        fixStationPage.commitEdit(rowIndex, FixStationModel.InputCSRole, newCS)
+        coordinateOrderAskId.askAbout(rowIndex, coordinateText, newCS, orderWasUnknown)
+    }
+
     component FixField : DoubleClickTextInput {
         id: field
         property string value
@@ -75,6 +97,12 @@ StandardPage {
         property string editValue: ""
 
         text: value
+        //! A coordinate cell now shows the row's own text when that text can't
+        //! be read (see the value bindings below), and such text is by
+        //! definition unvalidated — it reached the project by hand. AutoText
+        //! would render "<b>610016" as markup and show the user something other
+        //! than what is stored.
+        textFormat: QC.Label.PlainText
         //! Display and edit are deliberately different for a coordinate: the
         //! column renders every row in the project's units so it can be scanned,
         //! while an edit starts from what the user wrote.
@@ -125,9 +153,10 @@ StandardPage {
     }
 
     // Inline per-row warning icon with a hover tooltip, driven by a message
-    // string (empty ⇒ hidden and zero-width). Shared by the coordinate-domain
-    // flag (DomainErrorRole) and the station-reference flag (StationErrorRole),
-    // so the two read the same but carry distinct messages.
+    // string (empty ⇒ hidden and zero-width). One of these carries whatever is
+    // wrong with the row's coordinate — it can't be read at all
+    // (CoordinateErrorRole) or it falls outside its own CS (DomainErrorRole),
+    // never both — and another carries the station reference (StationErrorRole).
     component InlineWarning : QQ.Item {
         id: inlineWarning
         property string message: ""
@@ -150,6 +179,15 @@ StandardPage {
             visible: warningHover.hovered && inlineWarning.message !== ""
             text: inlineWarning.message
             delay: 300
+
+            // Every message this carries quotes something the user supplied — a
+            // station name, the unit token the parser refused — and the default
+            // content item reads its text as AutoText, so a name like A<b>B
+            // becomes a tag. Same reason the coordinate cell declares PlainText.
+            contentItem: QC.Label {
+                text: inlineWarning.message
+                textFormat: QC.Label.PlainText
+            }
         }
     }
 
@@ -158,6 +196,10 @@ StandardPage {
         property int columnWidth: 0
         property string value
         property int rowIndex
+        //! The row's own coordinate and whether anything records which axis it
+        //! leads with — see fixStationPage.commitCS().
+        property string coordinateText: ""
+        property bool orderUnknown: false
 
         implicitWidth: columnWidth
         implicitHeight: combo.implicitHeight
@@ -172,14 +214,24 @@ StandardPage {
             value: csCell.value
             allowGeographic: true
             projectCS: RootData.region.geoReference.globalCoordinateSystem
-            onCommitted: (newCS) => fixStationPage.commitEdit(
-                csCell.rowIndex, FixStationModel.InputCSRole, newCS)
+            onCommitted: (newCS) => fixStationPage.commitCS(
+                csCell.rowIndex, newCS, csCell.orderUnknown, csCell.coordinateText)
         }
     }
 
     RemoveAskBox {
         id: removeChallengeId
         onRemove: fixStationPage.removeFix(indexToRemove)
+    }
+
+    // Page-level, not per row: a table delegate is destroyed as its row scrolls
+    // out of view, which would take the open question down with it. The row it
+    // is asking about therefore travels with the question.
+    CoordinateOrderAskBox {
+        id: coordinateOrderAskId
+
+        onSwapRequested: (row, swappedCoordinate) => fixStationPage.commitStoredCoordinate(
+            row, swappedCoordinate)
     }
 
     TableStaticColumnModel {
@@ -294,7 +346,17 @@ StandardPage {
             required property string domainError
             required property bool eastingDomainError
             required property bool northingDomainError
+            required property string coordinateError
+            required property bool coordinateOrderUnknown
             required property string stationError
+
+            // The two coordinate complaints can't both speak: the domain check
+            // judges a coordinate the row has, and this one says there isn't one
+            // to judge. So they share the single warning beside the row rather
+            // than competing for space that only ever holds one of them.
+            readonly property string coordinateWarning: wideDelegateId.coordinateError !== ""
+                                                        ? wideDelegateId.coordinateError
+                                                        : wideDelegateId.domainError
 
             implicitHeight: rowLayoutId.implicitHeight + Theme.tightSpacing * 2
             implicitWidth: rowLayoutId.implicitWidth
@@ -336,20 +398,30 @@ StandardPage {
                     columnWidth: csColumn.columnWidth
                     value: wideDelegateId.inputCS
                     rowIndex: wideDelegateId.index
+                    coordinateText: wideDelegateId.coordinateText
+                    orderUnknown: wideDelegateId.coordinateOrderUnknown
                 }
 
                 WideCell {
                     fieldObjectName: "coordinateCell." + wideDelegateId.index
                     columnWidth: coordinateColumn.columnWidth
-                    // The cell renders the numbers, so it needs the same axis
-                    // order they were read under. A CS flip swaps the numbers
-                    // and the render order together, so what this displays
-                    // stays put — it is the meaning underneath that moved.
-                    value: CoordinateText.format(wideDelegateId.easting,
-                                                 wideDelegateId.northing,
-                                                 wideDelegateId.elevation,
-                                                 ProjectUnits.unitSystem,
-                                                 CoordinateText.axisOrderFor(wideDelegateId.inputCS))
+                    // Normally the cell renders the numbers, so it needs the
+                    // same axis order they were read under. A CS flip swaps the
+                    // numbers and the render order together, so what this
+                    // displays stays put — it is the meaning underneath that
+                    // moved.
+                    //
+                    // A row with a coordinate error has no numbers: it reports
+                    // three zeros, and rendering those would hide the very text
+                    // that is wrong with it behind a coordinate at the origin.
+                    // So it shows what was written, which is all such a row has.
+                    value: wideDelegateId.coordinateError !== ""
+                           ? wideDelegateId.coordinateText
+                           : CoordinateText.format(wideDelegateId.easting,
+                                                   wideDelegateId.northing,
+                                                   wideDelegateId.elevation,
+                                                   ProjectUnits.unitSystem,
+                                                   CoordinateText.axisOrderFor(wideDelegateId.inputCS))
                     // The cell above renders the numbers in the project's
                     // units; the editor re-offers the coordinate as written.
                     editValue: wideDelegateId.coordinateText
@@ -357,8 +429,10 @@ StandardPage {
                     coordinate: true
                     axisOrder: CoordinateText.axisOrderFor(wideDelegateId.inputCS)
                     // One field now holds both horizontal components, so the
-                    // two per-axis domain flags share the one tint.
-                    error: wideDelegateId.eastingDomainError
+                    // two per-axis domain flags share the one tint — and so does
+                    // a coordinate that couldn't be read at all.
+                    error: wideDelegateId.coordinateError !== ""
+                           || wideDelegateId.eastingDomainError
                            || wideDelegateId.northingDomainError
                 }
 
@@ -370,10 +444,10 @@ StandardPage {
                 }
 
                 InlineWarning {
-                    objectName: "domainWarning." + wideDelegateId.index
+                    objectName: "coordinateWarning." + wideDelegateId.index
                     Layout.leftMargin: Theme.tightSpacing
                     Layout.alignment: Qt.AlignVCenter
-                    message: wideDelegateId.domainError
+                    message: wideDelegateId.coordinateWarning
                 }
             }
         }
@@ -395,7 +469,14 @@ StandardPage {
             required property string domainError
             required property bool eastingDomainError
             required property bool northingDomainError
+            required property string coordinateError
+            required property bool coordinateOrderUnknown
             required property string stationError
+
+            //! Mutually exclusive with the domain error — see the wide delegate.
+            readonly property string coordinateWarning: narrowDelegateId.coordinateError !== ""
+                                                        ? narrowDelegateId.coordinateError
+                                                        : narrowDelegateId.domainError
 
             width: QQ.ListView.view ? QQ.ListView.view.width : 0
             implicitHeight: narrowFlow.implicitHeight + Theme.delegatePadding * 2
@@ -434,8 +515,8 @@ StandardPage {
                 }
 
                 InlineWarning {
-                    objectName: "domainWarning." + narrowDelegateId.index
-                    message: narrowDelegateId.domainError
+                    objectName: "coordinateWarning." + narrowDelegateId.index
+                    message: narrowDelegateId.coordinateWarning
                 }
 
                 FixField {
@@ -454,24 +535,31 @@ StandardPage {
                     value: narrowDelegateId.inputCS
                     allowGeographic: true
                     projectCS: RootData.region.geoReference.globalCoordinateSystem
-                    onCommitted: (newCS) => fixStationPage.commitEdit(
-                        narrowDelegateId.index, FixStationModel.InputCSRole, newCS)
+                    onCommitted: (newCS) => fixStationPage.commitCS(
+                        narrowDelegateId.index, newCS,
+                        narrowDelegateId.coordinateOrderUnknown,
+                        narrowDelegateId.coordinateText)
                 }
 
                 QC.Label { text: "·"; color: Theme.textSubtle }
 
                 FixField {
                     objectName: "coordinateCell." + narrowDelegateId.index
-                    value: CoordinateText.format(narrowDelegateId.easting,
-                                                 narrowDelegateId.northing,
-                                                 narrowDelegateId.elevation,
-                                                 ProjectUnits.unitSystem,
-                                                 CoordinateText.axisOrderFor(narrowDelegateId.inputCS))
+                    //! The text itself when there are no numbers to render —
+                    //! see the wide delegate.
+                    value: narrowDelegateId.coordinateError !== ""
+                           ? narrowDelegateId.coordinateText
+                           : CoordinateText.format(narrowDelegateId.easting,
+                                                   narrowDelegateId.northing,
+                                                   narrowDelegateId.elevation,
+                                                   ProjectUnits.unitSystem,
+                                                   CoordinateText.axisOrderFor(narrowDelegateId.inputCS))
                     editValue: narrowDelegateId.coordinateText
                     rowIndex: narrowDelegateId.index
                     coordinate: true
                     axisOrder: CoordinateText.axisOrderFor(narrowDelegateId.inputCS)
-                    error: narrowDelegateId.eastingDomainError
+                    error: narrowDelegateId.coordinateError !== ""
+                           || narrowDelegateId.eastingDomainError
                            || narrowDelegateId.northingDomainError
                 }
             }

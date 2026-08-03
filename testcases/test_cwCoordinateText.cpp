@@ -482,3 +482,85 @@ TEST_CASE("cwCoordinateTextValidator judges readability, not meaning",
     CHECK(static_cast<QValidator::State>(validator.validate(QStringLiteral("1")))
           == QValidator::Intermediate);
 }
+
+TEST_CASE("cwCoordinateText swaps the first two numbers and nothing else",
+          "[FixStation][cwCoordinateText]") {
+    //The only recovery there is for a coordinate stored with no coordinate
+    //system: nothing recorded which axis its text led with, so after a
+    //geographic system is named, the user's answer is the only evidence left.
+    SECTION("the two horizontals trade places") {
+        CHECK(cwCoordinateText::swapHorizontal(QStringLiteral("46.12113, -115.59902, 304m"))
+              == QStringLiteral("-115.59902, 46.12113, 304m"));
+    }
+
+    SECTION("the elevation stays where it is, unit and all") {
+        //The reason this is textual rather than a re-render through format():
+        //re-rendering would convert the elevation into the project's units and
+        //spell out a new suffix, editing a part of the string nobody asked to
+        //move.
+        CHECK(cwCoordinateText::swapHorizontal(QStringLiteral("1, 2, 2545.34 feet"))
+              == QStringLiteral("2, 1, 2545.34 feet"));
+    }
+
+    SECTION("a coordinate that never had an elevation doesn't grow one") {
+        //format() always writes three components, so this is the case a
+        //re-render would silently turn into an elevation of zero — the
+        //distinction §4.1 exists to keep.
+        CHECK(cwCoordinateText::swapHorizontal(QStringLiteral("46.12113, -115.59902"))
+              == QStringLiteral("-115.59902, 46.12113"));
+    }
+
+    SECTION("the separators are the user's, not ours") {
+        CHECK(cwCoordinateText::swapHorizontal(QStringLiteral("610016.792  5615117.075  304m"))
+              == QStringLiteral("5615117.075  610016.792  304m"));
+    }
+
+    SECTION("swapping twice is the string it started as") {
+        //Which is the property that makes the offer safe to take: a user who
+        //swaps and changes their mind is one swap from where they were, with no
+        //rounding or reformatting in between.
+        for (const auto& text : {QStringLiteral("46.12113, -115.59902, 304m"),
+                                 QStringLiteral("1e3, -2.5, 0"),
+                                 QStringLiteral(" 5,6 ")}) {
+            CHECK(cwCoordinateText::swapHorizontal(cwCoordinateText::swapHorizontal(text))
+                  == text);
+        }
+    }
+
+    SECTION("digits of different lengths don't corrupt the tail") {
+        //The offsets move as the string is rewritten: the longer number lands
+        //where the shorter one was. Replacing the earlier span first would
+        //leave the later one pointing into the middle of a number.
+        CHECK(cwCoordinateText::swapHorizontal(QStringLiteral("1, 5615117.075, 304m"))
+              == QStringLiteral("5615117.075, 1, 304m"));
+        CHECK(cwCoordinateText::swapHorizontal(QStringLiteral("5615117.075, 1, 304m"))
+              == QStringLiteral("1, 5615117.075, 304m"));
+    }
+
+    SECTION("text that isn't a coordinate has nothing to swap") {
+        //Empty is the answer, not the input back: a caller has to be able to
+        //tell "already the way it was" from "there was no swap to make", since
+        //the second means the row is Unreadable and says so on its own.
+        CHECK(cwCoordinateText::swapHorizontal(QStringLiteral("46.12113")).isEmpty());
+        CHECK(cwCoordinateText::swapHorizontal(QString()).isEmpty());
+
+        //Counting numbers is the wrong test, and this is the string that shows
+        //it: six of them, no coordinate. Exchanging the first two would rewrite
+        //a degrees-minutes-seconds reading into a different one that is just as
+        //unreadable, and offer it to the user as a correction.
+        CHECK(cwCoordinateText::swapHorizontal(
+                  QStringLiteral("N 46 07 16 W 115 35 56")).isEmpty());
+    }
+
+    SECTION("what comes out is still readable as a coordinate") {
+        //The result is committed straight back through setCoordinateText(), so
+        //a swap that produced something the parser refuses would turn a
+        //recoverable row into an unreadable one.
+        const QString swapped =
+            cwCoordinateText::swapHorizontal(QStringLiteral("46.12113, -115.59902, 304m"));
+        const auto coordinate = parsed(swapped, cwUnits::Metric,
+                                       cwCoordinateText::LatitudeLongitude);
+        CHECK(coordinate.northing == tight(-115.59902));
+        CHECK(coordinate.easting == tight(46.12113));
+    }
+}

@@ -17,6 +17,10 @@ QQ.Item {
     //! behaves exactly as before.
     property string editText: clickTextInput.text
     property alias font: textAreaId.font
+    //! How the displayed text is read. AutoText by default, as QC.Label is —
+    //! a field showing anything the user typed or a file supplied should say
+    //! PlainText, or a stray "<" turns the value into markup.
+    property alias textFormat: textAreaId.textFormat
     property alias style: textAreaId.style
     property alias styleColor: textAreaId.styleColor
     property alias color: textAreaId.color

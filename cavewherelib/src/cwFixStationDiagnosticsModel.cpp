@@ -9,6 +9,7 @@
 
 //Our includes
 #include "cwCave.h"
+#include "cwCoordinateText.h"
 #include "cwCoordinateTransform.h"
 #include "cwFixStation.h"
 #include "cwFixStationDiagnostics.h"
@@ -30,6 +31,34 @@ QString domainErrorMessage(const cwFixStation& fix)
     return cwFixStationDiagnosticsModel::tr(
         "This coordinate is outside the valid range for its coordinate system "
         "— check for a transposed digit or the wrong CS/zone.");
+}
+
+//! Empty when the row's coordinate can be read, otherwise why it can't. See
+//! CoordinateErrorRole for why this and the domain message can't both speak.
+QString coordinateErrorMessage(const cwFixStation& fix)
+{
+    switch (fix.state()) {
+    case cwFixStation::Empty:
+    case cwFixStation::Valid:
+        return QString();
+    case cwFixStation::NoSystem:
+        return cwFixStationDiagnosticsModel::tr(
+            "This coordinate has no coordinate system, so there is no way to tell "
+            "what its numbers mean — choose the system they were measured in.");
+    case cwFixStation::Unreadable:
+        //The reason comes from the same parser that refused the text, rather
+        //than being restated here where it would drift. Metric stands in for the
+        //project's unit system exactly as cwFixStation does when it reads the
+        //stored coordinate: a stored elevation spells its own unit out, so there
+        //is nothing left for a unit system to resolve, and this is what makes
+        //the message the same one the row was judged by.
+        return cwFixStationDiagnosticsModel::tr("This coordinate can't be read: %1")
+            .arg(cwCoordinateText::parse(fix.coordinate(),
+                                         cwUnits::Metric,
+                                         cwCoordinateText::axisOrderFor(fix.inputCS()))
+                     .errorMessage());
+    }
+    return QString();
 }
 
 }
@@ -64,12 +93,27 @@ void cwFixStationDiagnosticsModel::augmentSourceChange(const QModelIndex& topLef
     }
 
     QList<int> derived;
+    // The domain verdict defers on any state but Valid, so it moves with the
+    // state as well as with the numbers — and the state is a function of the
+    // text. A text edit that leaves the components where they were still
+    // changes it: editing an unreadable row to "0, 0, 0m" moves nothing (all
+    // three were already 0) but turns a row with no domain verdict into one
+    // that has, and could have, an out-of-domain origin.
     if (roles.contains(cwFixStationModel::EastingRole)
         || roles.contains(cwFixStationModel::NorthingRole)
+        || roles.contains(cwFixStationModel::CoordinateTextRole)
         || roles.contains(cwFixStationModel::InputCSRole)) {
         derived.append(DomainErrorRole);
         derived.append(EastingDomainErrorRole);
         derived.append(NorthingDomainErrorRole);
+    }
+    // What the row's coordinate amounts to is a function of the text and the CS
+    // together — naming a system turns unreadable text into a coordinate without
+    // touching a character of it, and a component edit rewrites the text.
+    if (roles.contains(cwFixStationModel::CoordinateTextRole)
+        || roles.contains(cwFixStationModel::InputCSRole)) {
+        derived.append(CoordinateErrorRole);
+        derived.append(CoordinateOrderUnknownRole);
     }
     if (roles.contains(cwFixStationModel::StationNameRole)) {
         derived.append(StationErrorRole);
@@ -131,6 +175,8 @@ QVariant cwFixStationDiagnosticsModel::data(const QModelIndex& index, int role) 
     case DomainErrorRole:
     case EastingDomainErrorRole:
     case NorthingDomainErrorRole:
+    case CoordinateErrorRole:
+    case CoordinateOrderUnknownRole:
     case StationErrorRole:
         break;
     default:
@@ -143,9 +189,11 @@ QVariant cwFixStationDiagnosticsModel::data(const QModelIndex& index, int role) 
     }
 
     switch (role) {
-    case DomainErrorRole:  return domainErrorMessage(*fix);
-    case StationErrorRole: return stationErrorMessage(*fix);
-    default:               break;
+    case DomainErrorRole:            return domainErrorMessage(*fix);
+    case CoordinateErrorRole:        return coordinateErrorMessage(*fix);
+    case CoordinateOrderUnknownRole: return fix->state() == cwFixStation::NoSystem;
+    case StationErrorRole:           return stationErrorMessage(*fix);
+    default:                         break;
     }
 
     // Both coordinate flags come from one verdict rather than one each. data() is
@@ -163,6 +211,8 @@ QHash<int, QByteArray> cwFixStationDiagnosticsModel::roleNames() const
     names.insert(DomainErrorRole, "domainError");
     names.insert(EastingDomainErrorRole, "eastingDomainError");
     names.insert(NorthingDomainErrorRole, "northingDomainError");
+    names.insert(CoordinateErrorRole, "coordinateError");
+    names.insert(CoordinateOrderUnknownRole, "coordinateOrderUnknown");
     names.insert(StationErrorRole, "stationError");
     return names;
 }

@@ -10,6 +10,13 @@ MainWindowTest {
         name: "FixStationPage"
         when: windowShown
 
+        // Captured once, not bound: a binding to rootId.width would follow the
+        // window when a test narrows it, and "restore the default" would then
+        // restore the narrow width.
+        property int defaultWindowWidth: 0
+
+        Component.onCompleted: defaultWindowWidth = rootId.width
+
         // Retargeted per test rather than bound: the model belongs to a cave
         // that init() throws away.
         SignalSpy {
@@ -32,6 +39,10 @@ MainWindowTest {
         }
 
         function cleanup() {
+            // Restored here as well as in the test that narrows it: QtTest runs
+            // functions alphabetically, so a width left behind would silently
+            // put every later test in the other layout.
+            rootId.width = defaultWindowWidth
             RootData.pageSelectionModel.currentPageAddress = "View"
             RootData.newProject()
         }
@@ -62,6 +73,18 @@ MainWindowTest {
         function findPicker(rowIndex) {
             const fixPage = RootData.pageView.currentPageItem
             return findChild(fixPage, "inputCSComboBox." + rowIndex)
+        }
+
+        //! Row \a rowIndex's coordinate-system picker, once the delegate
+        //! carrying it exists — the row is added to the model before the view
+        //! has built it.
+        function waitForPicker(rowIndex) {
+            let picker = null
+            tryVerify(() => {
+                picker = findPicker(rowIndex)
+                return picker !== null
+            }, 5000, "row " + rowIndex + " inputCSComboBox should be reachable")
+            return picker
         }
 
         //! Row \a rowIndex's coordinate cell, once the delegate carrying it
@@ -409,7 +432,7 @@ MainWindowTest {
                       5000, "naming the CS flags the transposed easting")
         }
 
-        function test_domainWarningIconShowsInline() {
+        function test_coordinateWarningIconShowsInline() {
             const cave = gotoFixStations()
             cave.fixStations.addFixStation()
             tryCompare(cave.fixStations, "count", 1)
@@ -424,7 +447,7 @@ MainWindowTest {
             const fixPage = RootData.pageView.currentPageItem
             let warning = null
             tryVerify(() => {
-                warning = findChild(fixPage, "domainWarning.0")
+                warning = findChild(fixPage, "coordinateWarning.0")
                 return warning !== null
             }, 5000, "row 0 domain warning indicator should be reachable")
             verify(!warning.visible, "warning is hidden for a well-formed row")
@@ -918,6 +941,239 @@ MainWindowTest {
             model.setData(model.index(0), "A1", FixStationModel.StationNameRole)
             tryVerify(() => !warning.visible, 5000,
                       "a named fix with no network defers and clears the warning")
+        }
+
+
+        //! A row carrying a coordinate with no system to read it under. The
+        //! ordinary shape of one — an svx `*fix` with no `*cs`, or any project
+        //! saved before fixes carried their own system — and reachable from here
+        //! because such a row's text still parses; it is only meaningless.
+        function makeSystemlessRow(cave, coordinate) {
+            const model = cave.fixStations
+            model.addFixStation()
+            const row = model.count - 1
+            model.setData(model.index(row), "", FixStationModel.InputCSRole)
+            compare(model.setCoordinateText(row, coordinate, ProjectUnits.unitSystem), "",
+                    "the text itself has to be readable, or the row would be Unreadable")
+            return row
+        }
+
+        function test_aCoordinateWithNoSystemShowsItsTextAndSaysWhatIsMissing() {
+            // Until this, such a row rendered as "0, 0, 0m" with no complaint —
+            // indistinguishable from a fix genuinely entered at the origin, and
+            // with the text that is actually on it visible only to whoever
+            // thought to open the editor.
+            const cave = gotoFixStations()
+            // Space-separated on purpose: the row's own text and the rendering
+            // of the numbers read out of it are then different strings, so the
+            // two assertions below can tell each other apart. Comma-separated
+            // text renders back identically and would let the cell go on showing
+            // raw text after the system is named without anything failing.
+            const row = makeSystemlessRow(cave, "610016.792 5615117.075 304m")
+
+            const cell = findCoordinateCell(row)
+            // The cell shows the text, as written, since there are no numbers.
+            tryCompare(cell, "value", "610016.792 5615117.075 304m", 5000)
+            verify(cell.error, "and flags it, because the row anchors nothing")
+            compare(cell.color, Theme.errorText)
+
+            const warning = findChild(RootData.pageView.currentPageItem, "coordinateWarning." + row)
+            verify(warning !== null, "row " + row + " warning should be reachable")
+            tryVerify(() => warning.visible, 5000, "the warning shows for a row with no system")
+            verify(warning.message.indexOf("coordinate system") >= 0,
+                   "and asks for the system rather than blaming the text: " + warning.message)
+
+            // Naming the system it was always in is all it takes: the same text,
+            // now read, renders as numbers and the complaint goes away.
+            waitForPicker(row).committed("EPSG:32611")
+            tryVerify(() => !cell.error, 5000, "naming the system clears the flag")
+            compare(cell.value, "610016.792, 5615117.075, 304m",
+                    "and the cell now renders the numbers it read out of that text, "
+                    + "rather than going on showing the text")
+            tryVerify(() => !warning.visible, 5000, "and the warning goes with it")
+        }
+
+        function test_aCoordinateThatCantBeReadShowsTheTextAndTheReason() {
+            // The hand-edited file, which this surface has no way to write —
+            // setCoordinateText() refuses anything the parser won't take. A
+            // non-finite component is the one door left: the fix spells it out
+            // as "inf" and then reads its own output back, so the row is
+            // honestly Unreadable rather than Valid with a string that disagrees
+            // with it (see cwFixStation::write).
+            const cave = gotoFixStations()
+            const row = addProjectedFixStation(cave)
+            const model = cave.fixStations
+            model.setData(model.index(row), Infinity, FixStationModel.EastingRole)
+
+            const stored = model.data(model.index(row), FixStationModel.CoordinateTextRole)
+            verify(stored.indexOf("inf") >= 0, "the row should be carrying unreadable text")
+
+            const cell = findCoordinateCell(row)
+            // The offending text is shown, not the zeros the row reports.
+            tryCompare(cell, "value", stored, 5000)
+            verify(cell.error, "and it is flagged")
+            compare(cell.color, Theme.errorText)
+
+            const warning = findChild(RootData.pageView.currentPageItem, "coordinateWarning." + row)
+            tryVerify(() => warning.visible, 5000, "the warning shows for unreadable text")
+            verify(warning.message.indexOf("can't be read") >= 0,
+                   "and blames the text: " + warning.message)
+            verify(warning.message.indexOf("coordinate system") < 0,
+                   "the row has a system — asking for one would send the user nowhere")
+        }
+
+        function test_namingAGeographicCSOnASystemlessRowAsksWhichWayRound() {
+            // The one thing nothing can recover afterwards. The text was written
+            // easting first and no one wrote that down, so reading it latitude
+            // first transposes the fix — and both readings are numbers that look
+            // like a coordinate, so nothing downstream can tell.
+            const cave = gotoFixStations()
+            const row = makeSystemlessRow(cave, "46.12113, -115.59902, 304m")
+            const model = cave.fixStations
+
+            const askBox = findChild(RootData.pageView.currentPageItem, "coordinateOrderAskBox")
+            verify(askBox !== null, "the page should host the order question")
+            verify(!askBox.opened, "nothing has been asked yet")
+
+            waitForPicker(row).committed("EPSG:4326")
+            tryVerify(() => askBox.opened, 5000,
+                      "naming a geographic system on such a row has to ask")
+
+            const asWritten = findChild(askBox, "coordinateOrderAskAsWritten")
+            const swapped = findChild(askBox, "coordinateOrderAskSwapped")
+            compare(asWritten.text, "46.12113, -115.59902, 304m",
+                    "the reading it just committed to")
+            compare(swapped.text, "-115.59902, 46.12113, 304m",
+                    "and the other one, as the user's own text")
+
+            findChild(askBox, "coordinateOrderSwapButton").clicked()
+            tryVerify(() => !askBox.opened, 5000, "answering closes the question")
+            tryCompare(model, "count", 1)
+            compare(model.data(model.index(row), FixStationModel.CoordinateTextRole),
+                    "-115.59902, 46.12113, 304m", "the swap is written to the row")
+            // Which is the whole point: the numbers now mean what the user says
+            // they mean.
+            compare(model.data(model.index(row), FixStationModel.NorthingRole), -115.59902)
+            compare(model.data(model.index(row), FixStationModel.EastingRole), 46.12113)
+        }
+
+        function test_keepingTheOrderAsWrittenChangesNothing() {
+            const cave = gotoFixStations()
+            const row = makeSystemlessRow(cave, "46.12113, -115.59902, 304m")
+            const model = cave.fixStations
+
+            const askBox = findChild(RootData.pageView.currentPageItem, "coordinateOrderAskBox")
+            waitForPicker(row).committed("EPSG:4326")
+            tryVerify(() => askBox.opened, 5000)
+
+            findChild(askBox, "coordinateOrderKeepButton").clicked()
+            tryVerify(() => !askBox.opened, 5000)
+            compare(model.data(model.index(row), FixStationModel.CoordinateTextRole),
+                    "46.12113, -115.59902, 304m",
+                    "the text stays exactly as it was — the reading was already committed")
+        }
+
+        function test_theOrderQuestionIsOnlyAskedWhenItCanBeAnswered() {
+            const cave = gotoFixStations()
+            const askBox = findChild(RootData.pageView.currentPageItem, "coordinateOrderAskBox")
+
+            // A projected system reads the text in the order it was written, so
+            // there is nothing at stake and nothing to ask.
+            const projected = makeSystemlessRow(cave, "610016.792, 5615117.075, 304m")
+            waitForPicker(projected).committed("EPSG:32611")
+            wait(50)
+            verify(!askBox.opened, "a projected system reads the text straight back")
+
+            // Nor is a row that already had a system: whatever order its text is
+            // in, that order is recorded, so changing systems re-reads rather
+            // than guesses.
+            const model = cave.fixStations
+            waitForPicker(projected).committed("EPSG:4326")
+            wait(50)
+            verify(!askBox.opened, "a row with a system has an order already")
+
+            // And a row nobody typed into has no text to be unsure about.
+            model.addFixStation()
+            const blank = model.count - 1
+            model.setData(model.index(blank), "", FixStationModel.InputCSRole)
+            waitForPicker(blank).committed("EPSG:4326")
+            wait(50)
+            verify(!askBox.opened, "an empty row has nothing to transpose")
+
+            // The positive control, in this same test: the box does open when
+            // the question can be answered. Without it the three silences above
+            // would also be satisfied by a dialog that never opens at all, or by
+            // 50 ms that was never long enough to see one.
+            const systemless = makeSystemlessRow(cave, "610016.792, 5615117.075, 304m")
+            waitForPicker(systemless).committed("EPSG:4326")
+            tryVerify(() => askBox.opened, 5000,
+                      "a system-less row about to be read latitude-first is asked about")
+            askBox.close()
+        }
+
+        function test_theNarrowLayoutAsksWhichWayRoundAsWell() {
+            // The narrow layout is a separate delegate with its own
+            // coordinate-system cell and its own call into commitCS(), and
+            // nothing else in this file exercises it. A transposition it failed
+            // to ask about would be exactly as unrecoverable as one the wide
+            // layout missed.
+            const cave = gotoFixStations()
+            const page = RootData.pageView.currentPageItem
+            const askBox = findChild(page, "coordinateOrderAskBox")
+            const row = makeSystemlessRow(cave, "610016.792, 5615117.075, 304m")
+
+            rootId.width = Theme.breakpointPanelCollapse - 100
+            tryVerify(() => page.isNarrow, 5000, "the page should be in its narrow layout")
+
+            waitForPicker(row).committed("EPSG:4326")
+            tryVerify(() => askBox.opened, 5000,
+                      "the narrow layout asks which way round too")
+            compare(askBox.row, row, "and asks about the row whose cell was committed")
+
+            // And the answer gets back to the model from here, not just onto the
+            // dialog — the narrow delegate's warning and cell read it back.
+            const swapButton = findChild(askBox, "coordinateOrderSwapButton")
+            verify(swapButton !== null, "the swap button should be reachable")
+            mouseClick(swapButton)
+
+            const model = cave.fixStations
+            tryCompare(model, "count", row + 1, 5000)
+            tryVerify(() => model.data(model.index(row), FixStationModel.CoordinateTextRole)
+                            === "5615117.075, 610016.792, 304m",
+                      5000, "the swap reaches the row from the narrow layout")
+
+            rootId.width = defaultWindowWidth
+            tryVerify(() => !page.isNarrow, 5000, "and the layout goes back")
+        }
+
+        function test_aQuestionThatCantBeAskedLeavesTheOpenOneAlone() {
+            // askAbout() decides whether to ask, and a call that decides not to
+            // must leave without touching anything — otherwise it repoints a
+            // question already on screen at a row it declined to ask about, and
+            // the answer lands on the wrong fix.
+            //
+            // Driven through askAbout() directly: the dialog is modal, so no
+            // sequence of clicks can currently reach a second commit while it is
+            // up. That modality is what makes this unreachable today, and the
+            // ordering is what keeps it from being the only thing holding it up.
+            const cave = gotoFixStations()
+            const askBox = findChild(RootData.pageView.currentPageItem, "coordinateOrderAskBox")
+
+            const asked = makeSystemlessRow(cave, "610016.792, 5615117.075, 304m")
+            waitForPicker(asked).committed("EPSG:4326")
+            tryVerify(() => askBox.opened, 5000, "the question is up")
+            compare(askBox.row, asked)
+
+            // Text no arrangement can read, so there is nothing to offer and
+            // this call bails — after the first guard, which it passes.
+            askBox.askAbout(asked + 1, "N 46 07 16 W 115 35 56", "EPSG:4326", true)
+
+            compare(askBox.row, asked,
+                    "the open question still points at the row it was asked about")
+            compare(askBox.coordinate, "610016.792, 5615117.075, 304m",
+                    "and still shows that row's text")
+            verify(askBox.opened, "and is still up")
+            askBox.close()
         }
 
         function test_fixStationsLinkCount() {

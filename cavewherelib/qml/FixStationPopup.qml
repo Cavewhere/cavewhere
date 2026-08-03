@@ -37,13 +37,21 @@ QC.Popup {
                                                               ? popupId.cave.fixStationDiagnostics
                                                               : null
 
-    // What's wrong with this fix right now, worst first: text that wouldn't
-    // parse beats a coordinate outside its CS, which beats a station name the
-    // cave doesn't have. Before U12 the popup showed none of these, so a fix
+    // What's wrong with this fix right now, worst first: text the user just
+    // typed and this surface refused beats a stored coordinate that can't be
+    // read, which beats a coordinate outside its CS, which beats a station name
+    // the cave doesn't have. Before U12 the popup showed none of these, so a fix
     // typed here looked identical whether or not it was usable.
     property string parseError: ""
+    property string coordinateError: ""
     property string domainError: ""
     property string stationError: ""
+
+    // Whether anything records which axis the stored coordinate leads with.
+    // False for every row that names a coordinate system, which is all a row
+    // created here ever is — this speaks for the ones that arrive from an older
+    // project, a hand edit, or an svx `*fix` with no `*cs`.
+    property bool coordinateOrderUnknown: false
 
     // Which axis the field leads with. A geographic CS is written latitude
     // first, a projected one easting first, and the numbers alone can't say
@@ -52,11 +60,18 @@ QC.Popup {
     // that decides what a number means comes from this property.
     readonly property int axisOrder: CoordinateText.axisOrderFor(csPickerId.value)
 
-    readonly property string errorMessage: popupId.parseError !== ""
-                                           ? popupId.parseError
-                                           : (popupId.domainError !== ""
-                                              ? popupId.domainError
-                                              : popupId.stationError)
+    readonly property string errorMessage: {
+        if (popupId.parseError !== "") {
+            return popupId.parseError
+        }
+        if (popupId.coordinateError !== "") {
+            return popupId.coordinateError
+        }
+        if (popupId.domainError !== "") {
+            return popupId.domainError
+        }
+        return popupId.stationError
+    }
 
     // Which station is being fixed, and the row that anchors it. Both are set by
     // openFor(); the row is re-resolved on every open rather than kept, since a
@@ -166,18 +181,34 @@ QC.Popup {
                       CoordinateText.axisOrderFor(inputCS))
     }
 
+    // The coordinate as the model holds it, which is not always what the field
+    // shows: text this surface refused never reached the model, and the field is
+    // still holding it for the user to correct.
+    function storedCoordinate(): string {
+        const model = popupId.fixStations
+        if (model === null || popupId.row < 0) {
+            return ""
+        }
+        return model.data(model.index(popupId.row), FixStationModel.CoordinateTextRole)
+    }
+
     // The derived warnings, unlike the coordinate, change without anyone
     // touching this popup — a re-solve or a CS change moves them — so they are
     // re-read whenever the proxy says so, not only on open.
     function reloadErrors(): void {
         const model = popupId.diagnostics
         if (model === null || popupId.row < 0) {
+            popupId.coordinateError = ""
+            popupId.coordinateOrderUnknown = false
             popupId.domainError = ""
             popupId.stationError = ""
             return
         }
 
         const modelIndex = model.index(popupId.row)
+        popupId.coordinateError = model.data(modelIndex, FixStationDiagnosticsModel.CoordinateErrorRole)
+        popupId.coordinateOrderUnknown = model.data(
+                    modelIndex, FixStationDiagnosticsModel.CoordinateOrderUnknownRole)
         popupId.domainError = model.data(modelIndex, FixStationDiagnosticsModel.DomainErrorRole)
         popupId.stationError = model.data(modelIndex, FixStationDiagnosticsModel.StationErrorRole)
     }
@@ -213,6 +244,35 @@ QC.Popup {
         }
     }
 
+    CoordinateOrderAskBox {
+        id: coordinateOrderAskId
+
+        // Written to the row the question was asked about, not to whatever this
+        // popup is showing by the time it is answered — the answer is worthless
+        // applied to the wrong row, and there would be nothing to detect after.
+        //
+        // Stored units, not the project's: this is text the row already held,
+        // and a bare elevation in it means meters (see cwFixStation). Re-reading
+        // it in display units would move the fix vertically for a swap of two
+        // horizontal numbers.
+        //
+        // The field is filled by hand rather than bound, so it has to be re-read
+        // — but only when it is that row's coordinate on screen, and only when
+        // the field isn't holding text the model refused. Naming a system is the
+        // natural next move after a refusal, and the question follows the naming,
+        // so answering it must not eat the coordinate still waiting to be fixed.
+        onSwapRequested: (row, swappedCoordinate) => {
+            const model = popupId.fixStations
+            if (model === null) {
+                return
+            }
+            model.setCoordinateText(row, swappedCoordinate, Units.Metric)
+            if (row === popupId.row && popupId.parseError === "") {
+                popupId.reloadCoordinate()
+            }
+        }
+    }
+
     contentItem: ColumnLayout {
         spacing: Theme.tightSpacing
 
@@ -243,6 +303,13 @@ QC.Popup {
                 // hand, so it has to close that loop itself or the controls would
                 // keep showing the CS the fix had before the user changed it.
                 onCommitted: (newCS) => {
+                    //Both read before the write. Committing the system is what
+                    //gives a system-less row an axis order, so afterwards
+                    //nothing remembers it never had one — and the stored
+                    //coordinate is about to be re-read under the new order.
+                    const orderWasUnknown = popupId.coordinateOrderUnknown
+                    const written = popupId.storedCoordinate()
+
                     csPickerId.value = newCS
                     popupId.commit(FixStationModel.InputCSRole, newCS)
                     //The CS write re-read the coordinate under the other axis
@@ -256,6 +323,7 @@ QC.Popup {
                         popupId.reloadCoordinate()
                     }
                     popupId.reloadErrors()
+                    coordinateOrderAskId.askAbout(popupId.row, written, newCS, orderWasUnknown)
                 }
             }
 
@@ -272,7 +340,12 @@ QC.Popup {
 
                 Layout.preferredWidth: Theme.fixPopupCoordinateWidth
 
-                color: popupId.parseError !== "" ? Theme.errorText : Theme.text
+                //Tinted for text this surface refused, and for a stored
+                //coordinate that can't be read either — the field is showing
+                //that text, so the complaint belongs on it.
+                color: popupId.parseError !== "" || popupId.coordinateError !== ""
+                       ? Theme.errorText
+                       : Theme.text
 
                 onEditingFinished: popupId.commitCoordinate(coordinateFieldId.text)
             }

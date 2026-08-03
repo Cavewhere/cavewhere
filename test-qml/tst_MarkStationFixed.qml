@@ -611,6 +611,117 @@ MainWindowTest {
             tryCompare(popup, "opened", false)
         }
 
+//! Give A1 a fix carrying \a coordinate with no coordinate system to
+        //! read it under — the shape a project saved before fixes carried their
+        //! own system arrives in, and the one the popup can't create itself.
+        //! Built before the popup opens, since the popup fills its fields once.
+        function fixA1WithNoSystem(context, coordinate) {
+            const model = context.cave.fixStations
+            const row = model.addFixStation("A1")
+            compare(row, 0)
+            model.setData(model.index(row), "", FixStationModel.InputCSRole)
+            compare(model.setCoordinateText(row, coordinate, ProjectUnits.unitSystem), "")
+            return model
+        }
+
+        function test_popupSaysWhenACoordinateHasNoSystemToReadItUnder() {
+            // The popup showed nothing for such a row: the field carried the
+            // text, the row anchored no station, and the two facts never met.
+            const context = gotoSurveyTable()
+            const model = fixA1WithNoSystem(context, "610016.792, 5615117.075, 304m")
+            const popup = popupForA1(context)
+
+            const coordinate = findChild(popup, "fixStationPopupCoordinate")
+            const errorRow = findChild(popup, "fixStationPopupError")
+            const errorText = findChild(popup, "fixStationPopupErrorText")
+
+            compare(coordinate.text, "610016.792, 5615117.075, 304m",
+                    "the text is still the user's")
+            tryVerify(() => errorRow.visible, 5000, "and the popup says it can't be used")
+            verify(popup.coordinateError !== "", "the complaint is the coordinate's")
+            compare(errorText.text, popup.coordinateError)
+            verify(errorText.text.indexOf("coordinate system") >= 0,
+                   "and asks for the system: " + errorText.text)
+            compare(coordinate.color, Theme.errorText, "the field carrying it is tinted")
+
+            // Naming the system it was always in clears it, with no retyping.
+            findChild(popup, "fixStationPopupCS").committed("EPSG:32611")
+            tryVerify(() => !errorRow.visible, 5000, "naming the system clears the complaint")
+            compare(model.data(model.index(0), FixStationModel.EastingRole), 610016.792)
+            compare(coordinate.color, Theme.text)
+
+            findChild(popup, "fixStationPopupDone").clicked()
+            tryCompare(popup, "opened", false)
+        }
+
+        function test_popupAsksWhichWayRoundBeforeReadingASystemlessRowLatitudeFirst() {
+            // The transposition nothing can detect afterwards, on the surface
+            // that creates fixes for people who never open FixStationPage.
+            const context = gotoSurveyTable()
+            const model = fixA1WithNoSystem(context, "46.12113, -115.59902, 304m")
+            const popup = popupForA1(context)
+
+            const askBox = findChild(popup, "coordinateOrderAskBox")
+            verify(askBox !== null, "the popup should host the order question")
+            verify(!askBox.opened, "nothing has been asked yet")
+
+            findChild(popup, "fixStationPopupCS").committed("EPSG:4326")
+            tryVerify(() => askBox.opened, 5000,
+                      "naming a geographic system on such a row has to ask")
+            compare(findChild(askBox, "coordinateOrderAskSwapped").text,
+                    "-115.59902, 46.12113, 304m")
+
+            findChild(askBox, "coordinateOrderSwapButton").clicked()
+            tryVerify(() => !askBox.opened, 5000)
+
+            compare(model.data(model.index(0), FixStationModel.CoordinateTextRole),
+                    "-115.59902, 46.12113, 304m", "the swap reaches the row")
+            // And the field the user is looking at, which fills itself by hand
+            // and would otherwise still show the coordinate they just replaced.
+            tryCompare(findChild(popup, "fixStationPopupCoordinate"), "text",
+                       "-115.59902, 46.12113, 304m", 5000)
+
+            findChild(popup, "fixStationPopupDone").clicked()
+            tryCompare(popup, "opened", false)
+        }
+
+        function test_answeringTheOrderQuestionKeepsTextTheModelRefused() {
+            // Naming a coordinate system is the natural next move after the
+            // model refuses a coordinate, and the order question follows the
+            // naming — so answering it must not overwrite the text the user is
+            // still being asked to correct. The CS commit itself already guards
+            // this; the swap has to as well, or the guard only half exists.
+            const context = gotoSurveyTable()
+            const model = fixA1WithNoSystem(context, "46.12113, -115.59902, 304m")
+            const popup = popupForA1(context)
+
+            const field = findChild(popup, "fixStationPopupCoordinate")
+            const askBox = findChild(popup, "coordinateOrderAskBox")
+
+            // Refused, so the model still holds the original and the row is
+            // still system-less — which is what leaves the question askable.
+            field.text = "not a coordinate"
+            field.editingFinished()
+            tryVerify(() => popup.parseError !== "", 5000, "the model should refuse this")
+            compare(model.data(model.index(0), FixStationModel.CoordinateTextRole),
+                    "46.12113, -115.59902, 304m", "and keep what it had")
+
+            findChild(popup, "fixStationPopupCS").committed("EPSG:4326")
+            tryVerify(() => askBox.opened, 5000, "the question is still asked")
+            findChild(askBox, "coordinateOrderSwapButton").clicked()
+            tryVerify(() => !askBox.opened, 5000)
+
+            // The row took the swap...
+            compare(model.data(model.index(0), FixStationModel.CoordinateTextRole),
+                    "-115.59902, 46.12113, 304m", "the swap still reaches the row")
+            // ...and the field still holds what the user has to fix.
+            compare(field.text, "not a coordinate",
+                    "the refused text survives the answer")
+
+            findChild(popup, "fixStationPopupDone").clicked()
+            tryCompare(popup, "opened", false)
+        }
+
         function test_popupErrorsFollowTheRowWhenItIsReopened() {
             // The popup fills itself imperatively, so a stale complaint from the
             // previous row would otherwise survive the next open.

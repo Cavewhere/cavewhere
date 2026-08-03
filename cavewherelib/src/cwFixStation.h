@@ -47,9 +47,11 @@ public:
         //! The string is kept, verbatim, but cannot be read as a coordinate,
         //! and the components are all 0. Reachable by hand-editing the project
         //! file — the text is the user's, so it is kept rather than dropped or
-        //! repaired. <b>Nothing surfaces this state yet</b>: such a row renders
-        //! and solves as a fix at the origin, and only an editor shows the text
-        //! that was kept. Writing any component discards it.
+        //! repaired. Writing any component discards it.
+        //!
+        //! Both entry surfaces show the text rather than the zeros the row
+        //! reports, tint it, and give the parser's own reason for refusing it
+        //! (cwFixStationDiagnosticsModel::CoordinateErrorRole).
         Unreadable,
         //! There is text, but no inputCS() to read it under — so it has no axis
         //! order, and its numbers can't be said to mean anything. Behaviorally
@@ -64,8 +66,14 @@ public:
         //! reads all three straight back. Naming a geographic one does not:
         //! nothing records which axis order the text was written in, and there
         //! was none to record — so a coordinate stored easting-first is read
-        //! back latitude-first and the first two components transpose. Whoever
-        //! offers the choice has to say so.
+        //! back latitude-first and the first two components transpose.
+        //!
+        //! There is no detecting that afterwards, so both entry surfaces ask
+        //! before they let it happen: they show the reading they are about to
+        //! commit to and offer the user's own text with its first two numbers
+        //! exchanged (CoordinateOrderAskBox.qml, over
+        //! cwFixStationDiagnosticsModel::CoordinateOrderUnknownRole and
+        //! cwCoordinateText::swapHorizontal()).
         NoSystem
     };
 
