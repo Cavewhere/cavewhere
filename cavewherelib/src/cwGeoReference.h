@@ -207,6 +207,4 @@ private:
     void setLocalProjection(const LocalProjectionState& state);
 };
 
-Q_DECLARE_METATYPE(cwGeoReference::Anchor)
-
 #endif // CWGEOREFERENCE_H

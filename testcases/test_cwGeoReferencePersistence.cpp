@@ -112,6 +112,29 @@ TEST_CASE("A project with no local projection loads ungeoreferenced",
     CHECK_FALSE(reloaded->anchor().isValid());
 }
 
+TEST_CASE("A vertical datum survives save/load with no local projection",
+          "[cwGeoReference]")
+{
+    // The vertical datum isn't part of the frame: elevations, and whatever they
+    // are heights above, exist before anything anchors the project. Persisting
+    // it only alongside an LDP would drop what lidar declared about a project
+    // that hasn't been georeferenced yet.
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    auto root = std::make_unique<cwRootData>();
+    root->project()->cavingRegion()->geoReference()->setVerticalDatum(
+        QStringLiteral("NAVD88"));
+
+    const QString path = saveProject(root.get(), tempDir, QStringLiteral("ldp-datum-only"));
+
+    auto reloadedRoot = reload(path);
+    auto* reloaded = reloadedRoot->project()->cavingRegion()->geoReference();
+    CHECK(reloaded->verticalDatum() == QStringLiteral("NAVD88"));
+    CHECK(reloaded->state() == cwGeoReference::Ungeoreferenced);
+    CHECK(reloaded->localCoordinateSystem().isEmpty());
+}
+
 TEST_CASE("A local projection change reaches disk without an explicit save",
           "[cwGeoReference]")
 {

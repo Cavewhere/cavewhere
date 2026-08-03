@@ -103,6 +103,23 @@ using namespace Monad;
 
 namespace {
 
+// The geo-reference enums cross into the proto by static_cast, so their values
+// are file format. Reordering either C++ enum — inserting a state, adding an
+// anchor kind that isn't last — would silently re-read every existing project's
+// frame as something else. Pin them here so that becomes a compile error.
+static_assert(static_cast<int>(cwGeoReference::Ungeoreferenced)
+              == CavewhereProto::GeoReference_State_UNGEOREFERENCED);
+static_assert(static_cast<int>(cwGeoReference::Anchored)
+              == CavewhereProto::GeoReference_State_ANCHORED);
+static_assert(static_cast<int>(cwGeoReference::Frozen)
+              == CavewhereProto::GeoReference_State_FROZEN);
+static_assert(static_cast<int>(cwGeoReference::Anchor::None)
+              == CavewhereProto::GeoReference_AnchorKind_NO_ANCHOR);
+static_assert(static_cast<int>(cwGeoReference::Anchor::FixStation)
+              == CavewhereProto::GeoReference_AnchorKind_FIX_STATION);
+static_assert(static_cast<int>(cwGeoReference::Anchor::LazLayer)
+              == CavewhereProto::GeoReference_AnchorKind_LAZ_LAYER);
+
 QDir projectRootDirForFile(const QString& projectFileName)
 {
     QFileInfo info(projectFileName);
@@ -1843,11 +1860,15 @@ std::unique_ptr<CavewhereProto::Project> cwSaveLoad::toProtoProject(const cwCavi
                                      region->geoReference()->globalCoordinateSystem());
         }
 
-        // The local projection: written whole, and only once there is one, so a
-        // project that has never been georeferenced keeps a metadata file with
-        // nothing to say about its frame.
+        // The local projection: written whole, and only once there is something
+        // to say, so a project that has never been georeferenced keeps a
+        // metadata file with nothing to say about its frame. The vertical datum
+        // is not part of the frame — elevations, and whatever they are heights
+        // above, exist before any anchor does — so it keeps the message alive on
+        // its own.
         const auto* geoReference = region->geoReference();
-        if (!geoReference->localCoordinateSystem().isEmpty()) {
+        if (!geoReference->localCoordinateSystem().isEmpty()
+            || !geoReference->verticalDatum().isEmpty()) {
             auto protoGeoReference = protoMetadata->mutable_georeference();
             protoGeoReference->set_state(
                 static_cast<CavewhereProto::GeoReference_State>(geoReference->state()));

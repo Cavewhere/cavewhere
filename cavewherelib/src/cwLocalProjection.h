@@ -48,21 +48,31 @@ class CAVEWHERE_LIB_EXPORT cwLocalProjection
 public:
     /**
      * The LDP centered on (\a latitude, \a longitude) — degrees, on the datum
-     * of \a datumSourceCS. An empty or unparseable \a datumSourceCS falls back
-     * to WGS84, which is what a typed coordinate means when nothing says
-     * otherwise.
+     * of \a datumSourceCS. An empty \a datumSourceCS falls back to WGS84, which
+     * is what a typed coordinate means when nothing says otherwise.
      *
-     * Returns "" for a latitude/longitude that isn't a location, or when PROJ
-     * can't express the result — callers must treat that as "no LDP" rather
-     * than storing it.
+     * Returns "" for a latitude/longitude that isn't a location, when PROJ
+     * can't express the result, or when \a datumSourceCS says something PROJ
+     * can't read — that last one is not the same as saying nothing: the data is
+     * on some datum we failed to identify, and quietly pinning WGS84 instead
+     * would bake a datum-sized shift into a string that is never re-derived.
+     * Callers must treat "" as "no LDP" rather than storing it.
      */
     static QString derive(double latitude, double longitude, const QString& datumSourceCS);
 
     /**
-     * The LDP centered on \a anchorPoint, which is given in \a anchorCS's own
-     * axis order and units. Converts the point to geographic coordinates on
-     * \a anchorCS's own datum and hands both to derive() — the datum is the
-     * anchor's, so nothing is converted between datums here.
+     * The LDP centered on \a anchorPoint, in \a anchorCS's units. Converts the
+     * point to geographic coordinates on \a anchorCS's own datum and hands both
+     * to derive() — the datum is the anchor's, so nothing is converted between
+     * datums here.
+     *
+     * <b>\a anchorPoint is always x-first</b>: x is the easting or the
+     * longitude and y the northing or the latitude, whatever axis order the CRS
+     * itself declares. This is the convention cwCoordinateTransform hands its
+     * callers, and the one every cwGeoPoint in the codebase is in — but a
+     * geographic CRS's own order is latitude-first, so handing this function a
+     * point in the CRS's declared order transposes the origin, and the wrong
+     * frame is then stored for good.
      */
     static QString deriveFrom(const QString& anchorCS, const cwGeoPoint& anchorPoint);
 };

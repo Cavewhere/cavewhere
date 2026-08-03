@@ -72,12 +72,34 @@ namespace {
         return twoDimensional ? std::move(twoDimensional) : std::move(crs);
     }
 
+    //! Whether \a object is a CRS the LDP can be built on top of — one that
+    //! carries a datum and an ellipsoid.
+    bool isGeodeticCrs(PJ* object)
+    {
+        switch (proj_get_type(object)) {
+        case PJ_TYPE_GEODETIC_CRS:
+        case PJ_TYPE_GEOCENTRIC_CRS:
+        case PJ_TYPE_GEOGRAPHIC_CRS:
+        case PJ_TYPE_GEOGRAPHIC_2D_CRS:
+        case PJ_TYPE_GEOGRAPHIC_3D_CRS:
+            return true;
+        default:
+            return false;
+        }
+    }
+
     //! The geographic CRS \a horizontal is built on — the datum the LDP inherits.
     PjPtr geodeticBase(PJ_CONTEXT* context, PJ* horizontal)
     {
         PjPtr base(proj_crs_get_geodetic_crs(context, horizontal));
         if (!base) {
-            // Already geographic: it is its own base.
+            // Either it is already geographic and is its own base, or it isn't a
+            // CRS at all — proj_create accepts a bare "+proj=utm +zone=16" as a
+            // transformation, and a transformation cloned into the base slot
+            // would put a projection on top of something with no datum.
+            if (!isGeodeticCrs(horizontal)) {
+                return {};
+            }
             base = PjPtr(proj_clone(context, horizontal));
         }
         if (!base) {
@@ -101,12 +123,15 @@ QString cwLocalProjection::derive(double latitude, double longitude, const QStri
         return {};
     }
 
-    PjPtr horizontal = horizontalCrs(context.get(), datumSourceCS);
-    if (!horizontal) {
-        // Nothing said which datum this is, or PROJ couldn't read what did.
-        // WGS84 is what a typed coordinate means when nothing says otherwise.
-        horizontal = horizontalCrs(context.get(), cwCoordinateTransform::Wgs84);
-    }
+    // Nothing said which datum this is: WGS84 is what a typed coordinate means
+    // when nothing says otherwise. A system that says something PROJ can't read
+    // is the opposite case and is refused — the data is on some datum we failed
+    // to identify, and pinning WGS84 anyway would bake a datum-sized shift into
+    // a frame that is never re-derived.
+    const QString datumCS = datumSourceCS.trimmed().isEmpty() ? cwCoordinateTransform::Wgs84
+                                                              : datumSourceCS;
+
+    PjPtr horizontal = horizontalCrs(context.get(), datumCS);
     if (!horizontal) {
         return {};
     }
@@ -182,12 +207,17 @@ QString cwLocalProjection::deriveFrom(const QString& anchorCS, const cwGeoPoint&
         return {};
     }
 
-    // Normalized, so the answer is longitude-first whatever the CRS's own axis
-    // order is — the same convention cwCoordinateTransform hands its callers.
+    // Normalized, so the transform reads x-first and answers longitude-first
+    // whatever the CRS's own axis order is — the same convention
+    // cwCoordinateTransform hands its callers. Without it the transform would
+    // take a geographic anchor latitude-first and silently center the frame on
+    // the transposed point, so a failure here is fatal rather than something to
+    // fall back from (cwCoordinateTransform treats it the same way).
     PjPtr normalized(proj_normalize_for_visualization(context.get(), toGeographic.get()));
-    if (normalized) {
-        toGeographic = std::move(normalized);
+    if (!normalized) {
+        return {};
     }
+    toGeographic = std::move(normalized);
 
     const PJ_COORD source = proj_coord(anchorPoint.x, anchorPoint.y, 0.0, 0.0);
     const PJ_COORD geographic = proj_trans(toGeographic.get(), PJ_FWD, source);

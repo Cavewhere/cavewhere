@@ -138,7 +138,7 @@ TEST_CASE("cwLocalProjection pins the datum from the anchor's own system",
         const QString ldp = cwLocalProjection::derive(kAnchorLatitude, kAnchorLongitude,
                                                       cwCoordinateTransform::Wgs84);
         REQUIRE_FALSE(ldp.isEmpty());
-        CHECK_THAT(ldp.toStdString(), ContainsSubstring("WGS"));
+        CHECK_THAT(ldp.toStdString(), ContainsSubstring("+datum=WGS84"));
     }
 
     SECTION("nothing said means WGS84 — what a typed coordinate means")
@@ -149,13 +149,24 @@ TEST_CASE("cwLocalProjection pins the datum from the anchor's own system",
                                                            cwCoordinateTransform::Wgs84);
         REQUIRE_FALSE(ldp.isEmpty());
         CHECK(ldp == wgs84Ldp);
+
+        // Whitespace is nothing said too, not an unreadable system.
+        CHECK(cwLocalProjection::derive(kAnchorLatitude, kAnchorLongitude,
+                                        QStringLiteral("   ")) == wgs84Ldp);
     }
 
-    SECTION("an unreadable system falls back rather than failing")
+    SECTION("an unreadable system is refused, not quietly called WGS84")
     {
-        const QString ldp = cwLocalProjection::derive(kAnchorLatitude, kAnchorLongitude,
-                                                      QStringLiteral("not a coordinate system"));
-        CHECK_FALSE(ldp.isEmpty());
+        // Saying something PROJ can't read is not the same as saying nothing:
+        // the data is on a datum we failed to identify, and a WGS84 frame would
+        // bake that datum's offset into a string nothing ever re-derives.
+        CHECK(cwLocalProjection::derive(kAnchorLatitude, kAnchorLongitude,
+                                        QStringLiteral("not a coordinate system")).isEmpty());
+
+        // Parses, but as a transformation rather than a CRS — so it names no
+        // datum for the frame to inherit.
+        CHECK(cwLocalProjection::derive(kAnchorLatitude, kAnchorLongitude,
+                                        QStringLiteral("+proj=utm +zone=16")).isEmpty());
     }
 }
 
