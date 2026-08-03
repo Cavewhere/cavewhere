@@ -25,6 +25,12 @@ QQ.Rectangle {
     // which is what hides the banner.
     property string errorMessage: ""
 
+    // Cavern reports every complaint in a file, not the first, and a badly
+    // broken one runs to dozens of lines. Past this the log scrolls instead of
+    // growing, so it can't push the panel's Reload and Detach buttons — the
+    // only way out of the state the log is describing — off the bottom.
+    readonly property real maximumMessageHeight: 120
+
     visible: errorMessage.length > 0
     color: Theme.errorBackground
     radius: 5
@@ -44,12 +50,34 @@ QQ.Rectangle {
             text: qsTr("This file has errors")
         }
 
-        BodyText {
-            objectName: "fileErrorMessage"
+        QQ.Flickable {
+            id: messageAreaId
+            objectName: "fileErrorMessageArea"
+
             Layout.fillWidth: true
-            wrapMode: QC.Label.WordWrap
-            font.pixelSize: Theme.fontSizeSmall
-            text: root.errorMessage
+            Layout.preferredHeight: Math.min(messageId.implicitHeight,
+                                             root.maximumMessageHeight)
+
+            contentWidth: width
+            contentHeight: messageId.implicitHeight
+            clip: true
+            boundsBehavior: QQ.Flickable.StopAtBounds
+
+            QC.ScrollBar.vertical: QC.ScrollBar {
+                policy: messageAreaId.contentHeight > messageAreaId.height
+                        ? QC.ScrollBar.AlwaysOn
+                        : QC.ScrollBar.AlwaysOff
+            }
+
+            BodyText {
+                id: messageId
+                objectName: "fileErrorMessage"
+
+                width: messageAreaId.width
+                wrapMode: QC.Label.WordWrap
+                font.pixelSize: Theme.fontSizeSmall
+                text: root.errorMessage
+            }
         }
     }
 }

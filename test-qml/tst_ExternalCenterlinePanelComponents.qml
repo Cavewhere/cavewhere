@@ -51,6 +51,12 @@ MainWindowTest {
             trip: rootId.trip
         }
 
+        // No trip, so it never has a row — which is the state the banner's
+        // "nothing to tie to" copy exists for.
+        TieSuggestionModel {
+            id: emptySuggestionsId
+        }
+
         FloatingSurveyBanner {
             id: floatingBannerId
             width: parent.width
@@ -318,6 +324,19 @@ MainWindowTest {
             verify(stations.text.indexOf("a1, a2") >= 0,
                    "stations render in the survey's own namespace; got: " + stations.text)
 
+            const noTies = findChild(floatingBannerId, "tieSuggestionsEmpty")
+            verify(noTies !== null, "tieSuggestionsEmpty must exist")
+            verify(!noTies.visible,
+                   "a surface that offers no suggestions at all stays read-only")
+
+            floatingBannerId.suggestions = emptySuggestionsId
+            verify(noTies.visible, "a suggester that found nothing says so")
+            // Pinned because it is a claim about what a rename buys, not a
+            // label: an attachment is always scoped, so matching names stay
+            // separate stations until a tie is actually made.
+            verify(noTies.text.indexOf("Renaming one to match will offer a one-click tie") >= 0,
+                   "no-tie copy promises a suggestion, not a connection; got: " + noTies.text)
+
             // The other shape: a survey whose file cannot be read at all floats
             // with no station to name, since neither the solve nor the scan's
             // harvest could learn one. Which is why the banner is driven by
@@ -327,7 +346,10 @@ MainWindowTest {
             verify(detail.text.indexOf("couldn't be read from its file") >= 0,
                    "unreadable copy; got: " + detail.text)
             verify(!stations.visible, "no stations line when no name could be read")
+            verify(!noTies.visible,
+                   "no names to tie means nothing to say about renaming them")
 
+            floatingBannerId.suggestions = null
             floatingBannerId.floating = false
             verify(!floatingBannerId.visible)
         }
@@ -348,6 +370,26 @@ MainWindowTest {
             const message = findChild(fileErrorBannerId, "fileErrorMessage")
             verify(message !== null, "fileErrorMessage must exist")
             compare(message.text, complaint)
+
+            // A file cavern hates produces a complaint per problem, and the
+            // panel's way out of that state — Reload, Detach — sits below this
+            // banner. So the log scrolls past a point instead of growing.
+            const shortHeight = fileErrorBannerId.height
+            let manyComplaints = []
+            for (let i = 1; i <= 60; i++) {
+                manyComplaints.push("broken.svx:" + i + ": Expecting numeric field")
+            }
+            fileErrorBannerId.errorMessage = manyComplaints.join("\n")
+
+            const messageArea = findChild(fileErrorBannerId, "fileErrorMessageArea")
+            verify(messageArea !== null, "fileErrorMessageArea must exist")
+            tryVerify(() => messageArea.contentHeight > messageArea.height, 1000,
+                      "60 complaints overflow the area, so there is something to scroll")
+            verify(fileErrorBannerId.height
+                   < shortHeight + fileErrorBannerId.maximumMessageHeight,
+                   "the banner stops growing; got: " + fileErrorBannerId.height)
+            compare(message.text, manyComplaints.join("\n"),
+                    "and every line is still there to scroll to")
 
             fileErrorBannerId.errorMessage = ""
             verify(!fileErrorBannerId.visible, "fixing the file takes the banner down")

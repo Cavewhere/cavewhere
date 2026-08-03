@@ -49,6 +49,10 @@ namespace cwExternalStationHarvest {
  * in the cave's and trip's "*begin" blocks, and cwTrip::solvedStations()
  * strips exactly that wrapper back off.
  *
+ * A successful result always names at least one station, and empty names always
+ * come with an error — a caller cannot otherwise tell "this file declares
+ * nothing" from "reading it failed".
+ *
  * On a file cavern cannot read, the error carries cavern's own log text, minus
  * the lines naming the throwaway driver — the per-file verdict the region solve
  * can only give for the region as a whole.

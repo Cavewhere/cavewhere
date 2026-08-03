@@ -87,17 +87,23 @@ Monad::Result<QStringList> cwExternalStationHarvest::harvest(const QString& entr
     if(!QFileInfo::exists(absoluteEntry)) {
         return harvestError(QStringLiteral("External centerline entry file does not exist: %1")
                                 .arg(absoluteEntry),
-                            LinePlotErrorCode::ExportFailed);
+                            LinePlotErrorCode::ValidationFailed);
     }
 
-    //Survex *include has no escape for an embedded double quote or newline, so
-    //such a path would break the driver or smuggle in a second *include token.
-    //The same refusal cwSurvexExporterCaveTask::writeExternalInclude makes.
-    if(absoluteEntry.contains(QLatin1Char('"')) || absoluteEntry.contains(QLatin1Char('\n'))) {
+    //Survex *include has no escape for an embedded double quote, and treats
+    //'\n', '\r' and '\032' alike as end of line (datain.c's SPECIAL_EOL table),
+    //so such a path would break the driver or smuggle in a second *include
+    //token. The same refusal cwSurvexExporterCaveTask::writeExternalInclude
+    //makes.
+    if(absoluteEntry.contains(QLatin1Char('"'))
+       || absoluteEntry.contains(QLatin1Char('\n'))
+       || absoluteEntry.contains(QLatin1Char('\r'))
+       || absoluteEntry.contains(QLatin1Char('\032'))) {
         return harvestError(QStringLiteral("External centerline path contains characters that "
-                                           "Survex *include cannot quote (\" or newline): %1")
+                                           "Survex *include cannot quote (\", newline, carriage "
+                                           "return or Ctrl-Z): %1")
                                 .arg(absoluteEntry),
-                            LinePlotErrorCode::ExportFailed);
+                            LinePlotErrorCode::ValidationFailed);
     }
 
     QTemporaryDir workingDirectory;
@@ -124,6 +130,16 @@ Monad::Result<QStringList> cwExternalStationHarvest::harvest(const QString& entr
         //level the region solve doesn't have.
         QTextStream stream(&driver);
         stream << "*include \"" << absoluteEntry << "\"" << Qt::endl;
+
+        //A driver that only partly reached the disk is still valid Survex — an
+        //empty or truncated one just includes nothing — so without this the
+        //user's entry file gets blamed for the "No survey data" a full disk
+        //caused.
+        if(stream.status() != QTextStream::Ok || !driver.flush()) {
+            return harvestError(QStringLiteral("Couldn't write %1: %2")
+                                    .arg(driverPath, driver.errorString()),
+                                LinePlotErrorCode::ExportFailed);
+        }
     }
 
     const auto cavernResult =
@@ -137,6 +153,18 @@ Monad::Result<QStringList> cwExternalStationHarvest::harvest(const QString& entr
     cwSurvex3DFileReader reader;
     const cwStationPositionLookup lookup =
         reader.readStationPositions(cavernResult.value().output3dPath);
+
+    //cwSurvex3DFileReader only warns when it can't read a .3d and hands back an
+    //empty lookup, which would leave this function reporting success with no
+    //names — the one answer it must never give, since a caller can't tell it
+    //apart from a file that declares nothing. Cavern never writes an empty .3d:
+    //a run with no survey data is fatalerror 43 (netskel.c:93), so an empty
+    //lookup after a successful run means the read failed.
+    if(lookup.positions().isEmpty()) {
+        return harvestError(QStringLiteral("Couldn't read the station names Survex solved for %1")
+                                .arg(absoluteEntry),
+                            LinePlotErrorCode::ParseFailed);
+    }
 
     //cwStationPositionLookup canonicalizes on insert and keeps its stations in
     //a QMap, so its keys are already canonical and sorted.

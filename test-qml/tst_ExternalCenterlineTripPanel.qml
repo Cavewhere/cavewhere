@@ -343,8 +343,11 @@ MainWindowTest {
             // And the names are worth having because they are tieable: before
             // the harvest this banner listed nothing and offered nothing for
             // exactly the surveys that most needed tying in.
+            // Waited for: the suggester runs off the solve this test just
+            // kicked, so the row is created some frames after its banner.
+            tryVerify(() => findChild(banner, "tieSuggestionText") !== null, 10000,
+                      "a suggestion row must render")
             const suggestionText = findChild(banner, "tieSuggestionText")
-            verify(suggestionText !== null, "a suggestion row must render")
             tryCompare(suggestionText, "text",
                        "simple.a1 and simple.a1 in " + fixture.trip.name + " are named alike",
                        10000,
@@ -385,6 +388,17 @@ MainWindowTest {
             verify(message !== null, "fileErrorMessage must exist")
             verify(message.text.indexOf("broken.svx") >= 0,
                    "cavern's own text names the file; got: " + message.text)
+
+            // And it is the only banner up: a file cavern cannot read fails the
+            // region driver as a whole, so the cave solves nothing, no scope is
+            // the anchor, and cwFindFloatingSurveys returns before it can name
+            // anything adrift. Which is the point — a broken file gets one
+            // complaint about the file, not a second one about a float that is
+            // really just the first problem seen from the other side.
+            const floatingBanner = findChild(panelId, "floatingSurveyBanner")
+            verify(floatingBanner !== null, "floatingSurveyBanner must exist")
+            verify(!floatingBanner.visible,
+                   "a broken file is reported once, as a broken file")
         }
 
         function test_connectingASuggestionEndsTheFloat() {
@@ -406,8 +420,11 @@ MainWindowTest {
             // Both attachments are the same file, so every station in the second
             // is named after one in the first — the ordinary case, and the one
             // the ranking is built for.
+            // Waited for: the suggester runs off the solve this test just
+            // kicked, so the row is created some frames after its banner.
+            tryVerify(() => findChild(banner, "tieSuggestionText") !== null, 10000,
+                      "a suggestion row must render")
             const suggestionText = findChild(banner, "tieSuggestionText")
-            verify(suggestionText !== null, "a suggestion row must render")
             tryCompare(suggestionText, "text",
                        "simple.a1 and simple.a1 in " + fixture.trip.name + " are named alike",
                        10000,
