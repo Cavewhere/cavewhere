@@ -316,6 +316,10 @@ void cwCavingRegion::setData(const cwCavingRegionData &data)
     if (data.worldOrigin != cwGeoPoint{}) {
         m_geoReference->setWorldOrigin(data.worldOrigin);
     }
+    m_geoReference->restore(data.geoReference.state,
+                            data.geoReference.localCoordinateSystem,
+                            data.geoReference.anchor,
+                            data.geoReference.verticalDatum);
 
     clearCaves();
 
@@ -332,11 +336,17 @@ void cwCavingRegion::setData(const cwCavingRegionData &data)
 cwCavingRegionData cwCavingRegion::data() const
 {
     return {
-        m_name.value(),
-        cwData::toDataList<cwCaveData>(m_caves),
-        m_geoReference->globalCoordinateSystem(),
-        m_geoReference->worldOrigin(),
-        m_unitSystem
+        .name = m_name.value(),
+        .caves = cwData::toDataList<cwCaveData>(m_caves),
+        .globalCoordinateSystem = m_geoReference->globalCoordinateSystem(),
+        .worldOrigin = m_geoReference->worldOrigin(),
+        .unitSystem = m_unitSystem,
+        .geoReference = {
+            .state = m_geoReference->state(),
+            .localCoordinateSystem = m_geoReference->localCoordinateSystem(),
+            .anchor = m_geoReference->anchor(),
+            .verticalDatum = m_geoReference->verticalDatum()
+        }
     };
 }
 

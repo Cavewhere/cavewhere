@@ -18,6 +18,33 @@ message FileVersion {
     optional string cavewhereVersion = 2;
 }
 
+// The project's working frame: an automatically derived local projection (LDP)
+// centered on the project, plus the lifecycle state that decides when it is
+// allowed to move. The string is stored rather than re-derived on load —
+// two machines with different PROJ data must not disagree about where the
+// project is. See plans/LDP_AUTO_COORDINATE_SYSTEM_PLAN.html.
+message GeoReference {
+    enum State {
+        UNGEOREFERENCED = 0; // no LDP; nothing georeferenced has been entered
+        ANCHORED = 1;        // derived from an input that still exists
+        FROZEN = 2;          // no anchor left; moves only when asked
+    }
+
+    enum AnchorKind {
+        NO_ANCHOR = 0;
+        FIX_STATION = 1;
+        LAZ_LAYER = 2;
+    }
+
+    optional State state = 1;
+    optional string localCoordinateSystem = 2; // PROJ string
+    optional AnchorKind anchorKind = 3;
+    optional string anchorId = 4;              // cwFixStation / cwLazLayer UUID
+    // The vertical datum the project's elevations are in, as declared by
+    // whatever supplied them. Recorded, never applied — see the plan's §5.
+    optional string verticalDatum = 5;
+}
+
 message ProjectMetadata {
     optional string dataRoot = 1;
     reserved 2; // Removed: GitMode enum (only ManagedNew was ever used)
@@ -29,6 +56,7 @@ message ProjectMetadata {
     // Project-wide default unit system. Absent (old files) loads as Metric and
     // never retroactively reinterprets existing trips — it only seeds new ones.
     optional Units.UnitSystem unitSystem = 8;
+    optional GeoReference geoReference = 9;
 }
 
 // Per-LAZ-layer persistent state. Stored as <basename>.cwlaz next to the

@@ -1843,6 +1843,30 @@ std::unique_ptr<CavewhereProto::Project> cwSaveLoad::toProtoProject(const cwCavi
                                      region->geoReference()->globalCoordinateSystem());
         }
 
+        // The local projection: written whole, and only once there is one, so a
+        // project that has never been georeferenced keeps a metadata file with
+        // nothing to say about its frame.
+        const auto* geoReference = region->geoReference();
+        if (!geoReference->localCoordinateSystem().isEmpty()) {
+            auto protoGeoReference = protoMetadata->mutable_georeference();
+            protoGeoReference->set_state(
+                static_cast<CavewhereProto::GeoReference_State>(geoReference->state()));
+            cwProtoUtils::saveString(protoGeoReference->mutable_localcoordinatesystem(),
+                                     geoReference->localCoordinateSystem());
+
+            const auto anchor = geoReference->anchor();
+            protoGeoReference->set_anchorkind(
+                static_cast<CavewhereProto::GeoReference_AnchorKind>(anchor.kind));
+            if (anchor.isValid()) {
+                cwProtoUtils::saveString(protoGeoReference->mutable_anchorid(),
+                                         anchor.id.toString(QUuid::WithoutBraces));
+            }
+
+            if (!geoReference->verticalDatum().isEmpty()) {
+                cwProtoUtils::saveString(protoGeoReference->mutable_verticaldatum(),
+                                         geoReference->verticalDatum());
+            }
+        }
     }
 
     return protoProject;
@@ -2922,6 +2946,20 @@ Monad::Result<cwSaveLoad::ProjectLoadData> cwSaveLoad::loadProject(const QString
                 loadData.region.globalCoordinateSystem =
                     QString::fromStdString(metadataProto.globalcoordinatesystem());
             }
+            if (metadataProto.has_georeference()) {
+                const auto& geoReferenceProto = metadataProto.georeference();
+                auto& geoReference = loadData.region.geoReference;
+                geoReference.state =
+                    static_cast<cwGeoReference::State>(geoReferenceProto.state());
+                geoReference.localCoordinateSystem =
+                    QString::fromStdString(geoReferenceProto.localcoordinatesystem());
+                geoReference.anchor.kind =
+                    static_cast<cwGeoReference::Anchor::Kind>(geoReferenceProto.anchorkind());
+                geoReference.anchor.id =
+                    QUuid::fromString(QString::fromStdString(geoReferenceProto.anchorid()));
+                geoReference.verticalDatum =
+                    QString::fromStdString(geoReferenceProto.verticaldatum());
+            }
             if (metadataProto.has_unitsystem()) {
                 loadData.region.unitSystem =
                     static_cast<cwUnits::UnitSystem>(metadataProto.unitsystem());
@@ -3511,6 +3549,13 @@ void cwSaveLoad::connectTreeModel()
             saveProject(projectRootDir(), region);
         };
         connect(region->geoReference(), &cwGeoReference::globalCoordinateSystemChanged, this, saveMetadata);
+
+        // The local projection lives in the same file and is the one piece of
+        // geo-reference state that is *not* recomputable from the data — it is
+        // deliberately stored rather than re-derived — so a change to it that
+        // never reached disk would be lost outright.
+        connect(region->geoReference(), &cwGeoReference::localProjectionChanged, this, saveMetadata);
+        connect(region->geoReference(), &cwGeoReference::verticalDatumChanged, this, saveMetadata);
 
         // The project's default unitSystem lives in the same metadata file, so it
         // needs the same handler — without it a units change made in the UI never

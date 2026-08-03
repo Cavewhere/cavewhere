@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Automatic Local Coordinate System (LDP) — Plan</title>
+<style>
+  :root {
+    --bg: #1b1d21;
+    --panel: #22252a;
+    --panel2: #26292e;
+    --border: #3a3f47;
+    --text: #e6e8eb;
+    --dim: #9aa0a8;
+    --accent: #61afef;
+    --good: #98c379;
+    --warn: #e5c07b;
+    --bad: #e06c75;
+    --mono: "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 15px/1.55 -apple-system, "Segoe UI", sans-serif;
+    margin: 0; padding: 2rem 1rem 6rem;
+  }
+  main { max-width: 1000px; margin: 0 auto; }
+  h1 { font-size: 1.7rem; margin: 0 0 .2rem; }
+  h2 { font-size: 1.25rem; margin: 2.6rem 0 .8rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+  h3 { font-size: 1.05rem; margin: 1.6rem 0 .5rem; color: var(--accent); }
+  .meta { color: var(--dim); font-size: .9rem; margin-bottom: 1.5rem; }
+  .meta a { color: var(--accent); }
+  code, .mono { font-family: var(--mono); font-size: .86em; }
+  code { background: var(--panel2); border: 1px solid var(--border); border-radius: 4px; padding: .08em .35em; }
+  pre {
+    background: var(--panel2); border: 1px solid var(--border); border-radius: 8px;
+    padding: .9rem 1.1rem; overflow-x: auto; font-family: var(--mono); font-size: .82rem; line-height: 1.5;
+  }
+  pre code { background: none; border: none; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .92rem; }
+  th, td { border: 1px solid var(--border); padding: .5rem .7rem; text-align: left; vertical-align: top; }
+  th { background: var(--panel2); }
+  .pill { display: inline-block; border-radius: 999px; padding: .05rem .6rem; font-size: .75rem; font-weight: 600; letter-spacing: .3px; vertical-align: middle; }
+  .pill.draft { background: #3d3524; color: var(--warn); border: 1px solid var(--warn); }
+  .pill.done { background: #2b3a2b; color: var(--good); border: 1px solid var(--good); }
+  .pill.phase { background: #253141; color: var(--accent); border: 1px solid var(--accent); }
+  .callout { border-left: 3px solid var(--accent); background: var(--panel); padding: .7rem 1rem; border-radius: 0 8px 8px 0; margin: 1rem 0; }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout.bad { border-left-color: var(--bad); }
+  .callout .title { font-weight: 700; margin-bottom: .2rem; }
+  figure { margin: 1.4rem 0; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 1rem; overflow-x: auto; }
+  figcaption { color: var(--dim); font-size: .85rem; margin-top: .6rem; }
+  ul, ol { padding-left: 1.4rem; }
+  li { margin: .3rem 0; }
+  .dim { color: var(--dim); }
+  .good { color: var(--good); }
+  .bad { color: var(--bad); }
+  .warn { color: var(--warn); }
+  /* SVG shared classes */
+  .box   { fill: var(--panel2); stroke: var(--border); rx: 9; }
+  .boxAccent { fill: #253141; stroke: var(--accent); rx: 9; }
+  .boxGood   { fill: #2b3a2b; stroke: var(--good); rx: 9; }
+  .boxWarn   { fill: #3d3524; stroke: var(--warn); rx: 9; }
+  .lbl   { fill: var(--text); font: 600 13px -apple-system, "Segoe UI", sans-serif; }
+  .sub   { fill: var(--dim); font: 11px -apple-system, "Segoe UI", sans-serif; }
+  .edge  { stroke: var(--dim); stroke-width: 1.5; fill: none; }
+  .edgeGood { stroke: var(--good); stroke-width: 1.5; fill: none; }
+  .edgeWarn { stroke: var(--warn); stroke-width: 1.5; fill: none; }
+  .edgeBad  { stroke: var(--bad); stroke-width: 1.5; fill: none; }
+  .elbl  { fill: var(--text); font: 11.5px -apple-system, "Segoe UI", sans-serif; }
+  .elblDim { fill: var(--dim); font: 10.5px -apple-system, "Segoe UI", sans-serif; }
+</style>
+</head>
+<body>
+<main>
+
+<h1>Automatic Local Coordinate System (LDP) <span class="pill draft">DRAFT</span></h1>
+<p class="meta">
+  Replaces the user-chosen project coordinate system with an automatically derived
+  low-distortion projection (LDP). Dissolves
+  <a href="https://github.com/Cavewhere/cavewhere/issues/618">#618</a> rather than solving it.
+  Builds directly on the fix-station coordinate-string source-of-truth work
+  (commits <code>7bd98d2</code>…<code>ad2d6c21</code> on <code>dev_3</code>) — the string stays
+  the only stored form; the LDP is purely derived state downstream of it.
+</p>
+
+<h2 id="decisions">1. Decisions (settled in discussion, 2026-08-03)</h2>
+<table>
+  <tr><th>#</th><th>Decision</th><th>Rationale</th></tr>
+  <tr><td>D1</td><td>The project's working frame is a custom transverse Mercator centered on the project, derived automatically. No user-facing project-CS picker.</td><td>Standard low-distortion-projection (LDP) practice. Kills convergence/scale confusion, GPU float precision problems, and the most error-prone choice in the georeferencing flow.</td></tr>
+  <tr><td>D2</td><td><code>k_0 = 1</code>, <code>x_0 = y_0 = 0</code>. No elevation tuning of <code>k_0</code>, ever.</td><td>Elevation tuning gains ~16 ppm per 100 m — below survey noise. Retuning later would be a re-derive with churn for nothing.</td></tr>
+  <tr><td>D3</td><td>Grid convergence: keep the internal math (line-plot azimuth rotation), delete all user-facing display of it.</td><td>Convergence at 30–50 km reaches ~0.2–0.4°, same order as instrument precision — must stay applied. But no user needs to see it.</td></tr>
+  <tr><td>D4</td><td>Horizontal datum: pinned automatically from the first georeferenced input (LAZ header, else WGS84 for typed coordinates). Displayed read-only; <b>not pickable</b>.</td><td>A datum dropdown is the dialog class this design deletes; a wrong pick is a silent 1–1.5 m shift. Per-input CS already tells PROJ everything it needs.</td></tr>
+  <tr><td>D5</td><td>Vertical frame: geoid ("above sea level") heights, adopted from the lidar. Typed elevations assumed to be the same kind. z is <b>never</b> converted to ellipsoidal height. Reprojection is horizontal-only + z unit scale (survey ft → m).</td><td>Matches lidar, topo maps, and Google Earth. Converting would shift the project ~30 m (geoid separation) and disagree with everything users type. See §5.</td></tr>
+  <tr><td>D6</td><td>Anchor-on-first-input with a distance threshold <code>R</code> (proposed 50 km). See state machine, §4.</td><td>Origin ends up near the data; moves only when it was meaningfully wrong; every move is caused by the user correcting/deleting the input that placed it.</td></tr>
+  <tr><td>D7</td><td>No migration path. Current format is unreleased; existing dev projects switch via the <b>Recenter</b> action.</td><td>User decision 2026-08-03.</td></tr>
+  <tr><td>D8</td><td>Remove the <code>Project</code> mode from the per-fix CS picker.</td><td>Users must not enter coordinates in the LDP frame — Recenter can move its origin out from under them.</td></tr>
+  <tr><td>D9</td><td>Display coordinates are lat/long only (plus each fix's own stored string). No display-CS chooser.</td><td>Matches the Google Earth audience; one less concept.</td></tr>
+  <tr><td>D10</td><td>Anchoring an already-drawn cave keeps it at the scene origin.</td><td>The new LDP is centered on the new fix, so scene-local coordinates barely move by construction.</td></tr>
+  <tr><td>D11</td><td>Re-derive shows a non-cancelable progress bar when reprojection is slow. Disk-cache invalidation is <b>deferred</b> (no disk cache exists yet).</td><td>User decision 2026-08-03. When a cache lands, its key must include the LDP string.</td></tr>
+  <tr><td>D12</td><td>Collaboration: LDP changes are ordinary edits, last-writer-wins on merge.</td><td>Rare; self-healing since everything is derivable from inputs.</td></tr>
+  <tr><td>D13</td><td>Sequencing: this plan lands <b>before</b> R1. R1 = "one predicate for 'are this fix's numbers usable?'" — a follow-up from the source-of-truth work, defined in <a href="FIXSTATION_COORDINATE_SOURCE_OF_TRUTH.html#followups">FIXSTATION_COORDINATE_SOURCE_OF_TRUTH.html §13</a> (11 C++ sites across 8 files + 8 QML expressions, each to be read individually, not sed'd). The <code>cwGridConvergence.cpp:133</code> live bug it carries is expected to die with the display path.</td><td>R1's consumer list shrinks; doing R1 first reworks sites twice.</td></tr>
+  <tr><td>D14</td><td>Everything commit 1–4 built <b>stays</b>: per-fix <code>inputCS</code>, coordinate string as source of truth, <code>NoSystem</code>/<code>Unreadable</code> states, <code>CoordinateOrderAskBox</code>, far-from-origin outlier flagging.</td><td>Those solve input capture. The LDP removes the <i>working/output</i> CS confusion, not the input question.</td></tr>
+</table>
+
+<h2 id="recipe">2. The LDP recipe</h2>
+<p>Derived once at anchor time from the anchor's position (lat₀, lon₀) and datum:</p>
+<pre><code>+proj=tmerc +lat_0=&lt;lat₀&gt; +lon_0=&lt;lon₀&gt; +k_0=1 +x_0=0 +y_0=0
++datum=&lt;from first input: LAZ header datum, else WGS84&gt; +units=m +no_defs +type=crs</code></pre>
+<p>Properties this buys, all consequences of the origin sitting on the data:</p>
+<ul>
+  <li><b>Convergence ≈ 0</b> at the origin (exactly 0 on the central meridian); ~0.14° at 15 km, ~0.4° at 45 km — applied internally, never shown (D3).</li>
+  <li><b>Scale distortion</b>: ~1 ppm at 10 km, ~11 ppm at 30 km, ~120 ppm at 100 km (1 ppm = 1 mm/km). UTM's designed worst case is ~400 ppm.</li>
+  <li><b>Small coordinates</b> → float32-safe on the GPU with no offset hacks; <code>worldOrigin</code> becomes unnecessary (§3).</li>
+  <li><b>Analytic + invertible</b> via the persisted PROJ string — any point round-trips to lat/long/h exactly, which is the single load-bearing requirement for the future VadoseEarth globe morph (§8).</li>
+</ul>
+
+<h2 id="current">3. Current architecture → target</h2>
+<p>Today <code>cwGeoReference</code> (owned by <code>cwCavingRegion</code>) bundles two things:
+a user-or-auto <code>globalCoordinateSystem</code> string and a <code>worldOrigin</code> offset
+(with an <code>explicitlySet</code> flag) that translates scene-local points into that CS.
+<code>cwCavingRegion::recomputeWorldOrigin()</code> <i>averages</i> the fixes (skipping outliers)
+and re-arms on CS change; <code>cwLazLayerModel</code> auto-adopts a LAZ's CS + bbox center into
+an empty project (covered by <code>test_cwLazLayerAutoAdoptCS.cpp</code> and
+<code>test_cwCavingRegion_worldOrigin.cpp</code>).</p>
+<p>The target collapses the pair into one value. The LDP <i>is</i> the origin — scene-local
+coordinates are LDP coordinates directly:</p>
+<table>
+  <tr><th>Concept</th><th>Today</th><th>Target</th></tr>
+  <tr><td>Working CS</td><td><code>globalCoordinateSystem</code> — user-picked or LAZ auto-adopted</td><td>Derived tmerc PROJ string, never user-picked</td></tr>
+  <tr><td>Scene origin</td><td><code>worldOrigin</code> offset inside globalCS, averaged from fixes, <code>explicitlySet</code> flag</td><td>Gone — <code>x_0=y_0=0</code> at the anchor; scene-local = LDP coords</td></tr>
+  <tr><td>Derivation policy</td><td>Average of fixes, re-armed by CS change; LAZ bbox-center adoption</td><td>Anchor-on-first-input state machine (§4); no averaging, no re-arming</td></tr>
+  <tr><td>Stored state</td><td>CS string + origin point + flag</td><td>PROJ string + state (§4) + anchor identity + vertical-datum name (§5)</td></tr>
+  <tr><td>"Is georeferenced?"</td><td><code>hasCoordinateSystem()</code></td><td>Same predicate, now meaning "an LDP exists"</td></tr>
+</table>
+<div class="callout">
+  <div class="title">The LDP is stored, not computed</div>
+  On load, always use the persisted string — never re-derive at load time (two machines with
+  different PROJ data must not disagree, and determinism matters for tests and Git sync).
+  Every state transition in §4 writes the new string <b>transactionally with the edit that
+  caused it</b>, so undo restores the identical LDP. It is a stored value that changes on
+  events, never a live function of the data.
+</div>
+
+<h2 id="statemachine">4. When the LDP updates — the state machine</h2>
+<p>Three states. <b>Anchor</b> = the identity (not the value) of the first georeferenced
+input: the first fix station whose coordinate is <em>readable</em>
+(<code>state() == Valid</code> — an <code>Unreadable</code>/<code>NoSystem</code> row must never
+anchor), or the first LAZ layer with a CRS. Threshold <code>R</code> = 50 km (proposed;
+scale error there ≈ 30 ppm, and real mistakes — zone errors, hemisphere flips — are always
+far larger).</p>
+
+<figure>
+<svg viewBox="0 0 960 560" width="960" height="560" role="img" aria-label="LDP state machine">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#9aa0a8"/>
+    </marker>
+    <marker id="arrG" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#98c379"/>
+    </marker>
+    <marker id="arrW" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#e5c07b"/>
+    </marker>
+    <marker id="arrB" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#e06c75"/>
+    </marker>
+  </defs>
+
+  <!-- S0 Ungeoreferenced -->
+  <rect class="box" x="40" y="60" width="230" height="90"/>
+  <text class="lbl" x="155" y="95" text-anchor="middle">S0 · Ungeoreferenced</text>
+  <text class="sub" x="155" y="115" text-anchor="middle">No LDP. Cave renders in a</text>
+  <text class="sub" x="155" y="130" text-anchor="middle">floating local frame.</text>
+
+  <!-- S1 Anchored -->
+  <rect class="boxAccent" x="380" y="60" width="250" height="90"/>
+  <text class="lbl" x="505" y="95" text-anchor="middle">S1 · Anchored</text>
+  <text class="sub" x="505" y="115" text-anchor="middle">LDP persisted. Anchor identity</text>
+  <text class="sub" x="505" y="130" text-anchor="middle">tracked (first fix or LAZ layer).</text>
+
+  <!-- S2 Frozen -->
+  <rect class="boxGood" x="720" y="60" width="210" height="90"/>
+  <text class="lbl" x="825" y="95" text-anchor="middle">S2 · Frozen</text>
+  <text class="sub" x="825" y="115" text-anchor="middle">LDP persisted, no anchor.</text>
+  <text class="sub" x="825" y="130" text-anchor="middle">Moves only via Recenter.</text>
+
+  <!-- S0 -> S1: first input -->
+  <path class="edgeGood" d="M270 90 L378 90" marker-end="url(#arrG)"/>
+  <text class="elbl" x="324" y="80" text-anchor="middle" fill="#98c379">first georeferenced input</text>
+
+  <!-- S1 self loop: anchor edited beyond R (re-derive) -->
+  <path class="edgeWarn" d="M440 60 C 410 10, 600 10, 570 58" marker-end="url(#arrW)"/>
+  <text class="elbl" x="505" y="22" text-anchor="middle" fill="#e5c07b">anchor location edited &gt; R → re-derive at new location</text>
+
+  <!-- S1 self loop bottom: anchor edited within R (keep) -->
+  <path class="edge" d="M440 150 C 415 195, 595 195, 570 152" marker-end="url(#arr)"/>
+  <text class="elblDim" x="505" y="188" text-anchor="middle">anchor edited ≤ R → keep LDP (no churn)</text>
+
+  <!-- S1 -> S2: anchor deleted, remaining within R -->
+  <path class="edgeGood" d="M630 90 L718 90" marker-end="url(#arrG)"/>
+  <text class="elbl" x="674" y="70" text-anchor="middle" fill="#98c379">anchor deleted,</text>
+  <text class="elbl" x="674" y="84" text-anchor="middle" fill="#98c379">rest ≤ R</text>
+
+  <!-- S1 -> S1 via re-anchor: anchor deleted, remaining beyond R -->
+  <path class="edgeBad" d="M505 150 C 505 250, 505 250, 505 152" opacity="0"/>
+  <path class="edgeBad" d="M460 150 C 430 235, 580 235, 550 152" marker-end="url(#arrB)"/>
+  <text class="elbl" x="505" y="232" text-anchor="middle" fill="#e06c75">anchor deleted, rest &gt; R → re-derive from oldest remaining (new anchor)</text>
+
+  <!-- S1 -> S0 and S2 -> S0: last input deleted -->
+  <path class="edge" d="M380 130 C 330 160, 300 150, 272 132" marker-end="url(#arr)"/>
+  <text class="elblDim" x="308" y="168" text-anchor="middle">last georeferenced</text>
+  <text class="elblDim" x="308" y="182" text-anchor="middle">input deleted</text>
+  <path class="edge" d="M760 150 C 600 330, 240 300, 152 152" marker-end="url(#arr)"/>
+  <text class="elblDim" x="460" y="292" text-anchor="middle">last georeferenced input deleted</text>
+
+  <!-- Recenter: S1/S2 -> S2 -->
+  <path class="edgeGood" d="M680 260 C 760 260, 810 220, 822 152" marker-end="url(#arrG)"/>
+  <rect class="boxGood" x="520" y="240" width="160" height="40"/>
+  <text class="lbl" x="600" y="265" text-anchor="middle">Recenter… (explicit)</text>
+  <text class="elblDim" x="762" y="238" text-anchor="middle">from any state with data → S2</text>
+
+  <!-- Annotation: non-anchor far input -->
+  <rect class="boxWarn" x="40" y="360" width="880" height="80"/>
+  <text class="lbl" x="60" y="388">Not a transition: a non-anchor input added or edited &gt; R from the origin</text>
+  <text class="sub" x="60" y="410">Never moves the LDP. It gets the existing far-from-origin outlier flag (#596 machinery), which now doubles</text>
+  <text class="sub" x="60" y="426">as the projection-validity check. Whichever input is wrong, deleting or correcting it converges via the edges above.</text>
+
+  <!-- Annotation: what a re-derive does -->
+  <rect class="box" x="40" y="460" width="880" height="80"/>
+  <text class="lbl" x="60" y="488">What every re-derive does (all derived state, lossless)</text>
+  <text class="sub" x="60" y="510">Recompute fix locals from their stored strings · reproject LAZ clouds (horizontal-only + z unit scale) · regenerate</text>
+  <text class="sub" x="60" y="526">plots/caches · quiet one-line notice. Progress bar (non-cancelable) when slow. Coordinates users see don't change (D9).</text>
+</svg>
+<figcaption>
+LDP lifecycle. Green edges converge toward a correct origin; the yellow self-loop is the
+only automatic move of an existing origin, and it fires only when the anchor itself was
+corrected by more than R. The invariant: <i>the origin always ends up near the data, moves
+only when it was meaningfully wrong, and every move is caused by the user deleting or
+correcting the input that put it there.</i>
+</figcaption>
+</figure>
+
+<h3>Worked mistake scenarios</h3>
+<table>
+  <tr><th>Scenario</th><th>What happens</th></tr>
+  <tr><td>Wrong entrance typed first (200 km off), then corrected</td><td>Anchor edited &gt; R → re-derive at corrected location. Flags clear. (S1 yellow loop)</td></tr>
+  <tr><td>Entrance refined by 3 m after lidar loaded</td><td>Anchor edited ≤ R → LDP untouched, zero churn. (S1 gray loop)</td></tr>
+  <tr><td>Correct fix first, then wrong county's LAZ tile</td><td>Tile is non-anchor → flagged far-from-origin; LDP never moves. Delete tile, add right one → flag clears.</td></tr>
+  <tr><td>Wrong LAZ tile first (it anchors), then correct fix (gets flagged!), user deletes the tile</td><td>Anchor deleted, remaining fix &gt; R → re-derive from it; it becomes the new anchor; flags clear. (red edge)</td></tr>
+  <tr><td>Anchor fix legitimately deleted, 20 other fixes nearby</td><td>Remaining ≤ R → S2 Frozen. No silent hand-off of the anchor role. (green edge)</td></tr>
+  <tr><td>Everything georeferenced deleted</td><td>Back to S0; next input re-anchors fresh — the "New Project state" reset.</td></tr>
+</table>
+
+<h2 id="vertical">5. Vertical datum (D5, explained)</h2>
+<p>Two different "zero elevation" surfaces exist:</p>
+<ul>
+  <li>The <b>ellipsoid</b> — the smooth mathematical WGS84 surface. GPS chips measure height above this.</li>
+  <li>The <b>geoid</b> — the bumpy mean-sea-level surface. Lidar (NAVD88), topo maps, and Google Earth's displayed altitude are heights above this.</li>
+</ul>
+<p>They disagree by the local <i>geoid separation</i> N — roughly −30 m in the eastern US.
+CaveWhere's z axis is <b>geoid height</b>, adopted from whatever the lidar declares; typed
+elevations are assumed to be the same kind. We never convert z to ellipsoidal height —
+doing so would shift the whole project ~30 m and disagree with every typed elevation.</p>
+<div class="callout warn">
+  <div class="title">PROJ trap: never request a 3D compound transform</div>
+  Handing PROJ the lidar's full compound CRS (e.g. "NAD83 / KY single zone + NAVD88 height")
+  with a 3D target will make it apply the geoid model and return ellipsoidal heights —
+  silently, and only on machines where the geoid grids happen to be installed. Build the
+  transform from the <b>horizontal</b> CRSs only; handle z as a pure unit scale
+  (US survey ft → m). This matches what the existing project-CS reprojection implicitly does.
+</div>
+<p>What we <i>record</i> (not apply): the lidar's vertical-datum name from the LAZ header,
+stored on the geo-reference. That single string is the bridge a future globe renderer needs
+to reconstruct ellipsoidal height (h = H + N) for ECEF placement (§8). Optionally cache N₀
+at the origin when geoid grids are available. Mixed vertical datums across tiles
+(NAVD88 vs NGVD29, ~0.3 m) are detectable from headers → import-time notice, deferred.</p>
+
+<h2 id="removed">6. What this removes vs. keeps</h2>
+<table>
+  <tr><th class="good">Removed</th><th class="good">Kept (unchanged)</th></tr>
+  <tr>
+    <td>
+      <ul>
+        <li>Project CS picker + all its error states (#618 dissolves)</li>
+        <li><code>Project</code> mode in the per-fix CS picker (D8; partial unwind of commit 3's picker)</li>
+        <li>Grid convergence display/warnings (math stays, D3)</li>
+        <li><code>cwGridConvergence.cpp:133</code> origin-convergence bug (dies with the display path)</li>
+        <li><code>worldOrigin</code> + <code>explicitlySet</code> + averaging <code>recomputeWorldOrigin()</code></li>
+        <li>LAZ bbox-center world-origin adoption (subsumed by anchoring)</li>
+        <li><code>horizontalMetersPerUnit()</code> scaling of physical constants (clouds land in meters once, at import)</li>
+        <li>Ground-vs-grid scale and float-precision workarounds</li>
+      </ul>
+    </td>
+    <td>
+      <ul>
+        <li>Per-fix <code>inputCS</code> + coordinate string as source of truth (commits 1–4, all of it)</li>
+        <li><code>NoSystem</code>/<code>Unreadable</code> states + messages</li>
+        <li><code>CoordinateOrderAskBox</code> (axis-order question is about <i>input</i>, unaffected)</li>
+        <li>Far-from-origin outlier flagging (#596) — now also the projection-validity check</li>
+        <li>Convergence + declination applied in the line plot</li>
+        <li>Blank <code>inputCS</code> is an error (Q5); "Project copies, not links" becomes moot</li>
+      </ul>
+    </td>
+  </tr>
+</table>
+
+<h2 id="export">7. Exports</h2>
+<ul>
+  <li><b>Survex</b>: <code>*cs out custom "&lt;LDP proj string&gt;"</code> is accepted by cavern —
+      or export in a derived standard CS. <code>cwCoordinateTransform::deriveProjectedOutputCS()</code>
+      already exists and derives a UTM zone from a point; it becomes the default export CS
+      (auto UTM zone at the origin). The <code>isUnusableAsSurvexOutputCS</code> refusal list stays.</li>
+  <li><b>Compass</b>: only understands UTM — always reproject to the derived UTM zone (already the shape of the current exporter).</li>
+  <li><b>Export CS chooser</b>: the one place a CS choice legitimately survives. Default = auto UTM zone; the GIS crowd can pick.</li>
+</ul>
+
+<h2 id="vadose">8. VadoseEarth openness (future, design-only)</h2>
+<p>VadoseEarth is an ECEF WGS84 globe engine (<code>EarthEllipsoid</code>, <code>Geodetic3D</code>,
+high/low float split). The globe↔LDP zoom morph is proven technique (Cesium's 3D↔Columbus
+morph; Google Maps globe↔Mercator): both worlds map analytically from (lat, lon, h), and a
+per-vertex blend between the two mappings is a smooth deformation. Requirements this plan
+must preserve — all already satisfied by the design above:</p>
+<ol>
+  <li>LDP analytic + invertible via the persisted PROJ string (§3).</li>
+  <li>Vertical-datum name recorded so ellipsoidal height is recoverable (§5).</li>
+  <li>One frozen origin per project = the tangent point (§4).</li>
+  <li>Doubles on CPU interchange types (both projects use <code>QDoubleVector3D</code>).</li>
+</ol>
+
+<h2 id="phases">9. Implementation phases</h2>
+<p class="dim">High-level; per-phase site lists get gathered at implementation time. Each phase
+lands green on both suites before the next.</p>
+<table>
+  <tr><th></th><th>Phase</th><th>Content</th></tr>
+  <tr><td><span class="pill phase">P1</span></td><td>LDP core <b>— done</b></td>
+      <td>Derivation function (anchor point + datum → tmerc PROJ string). Rework
+      <code>cwGeoReference</code>: LDP string + state + anchor identity + vertical-datum name.
+      Proto: add the geo-reference message. The old frame
+      (<code>worldOrigin</code>/<code>explicitlySet</code>, the <code>globalCoordinateSystem</code>
+      field) stays until P2 has an LDP to put in its place.
+      <div class="callout" style="margin-top:10px">
+      <b>What landed, and what moved</b>
+      <ul>
+        <li><code>cwLocalProjection::derive(lat, lon, datumSourceCS)</code> and
+            <code>deriveFrom(anchorCS, point)</code> — PROJ builds the CRS
+            (<code>proj_experimental.h</code>), so the datum is inherited rather than
+            spelled by hand, and a compound CRS contributes its horizontal half only.</li>
+        <li><code>cwGeoReference</code> gained <code>State</code> (S0/S1/S2),
+            <code>localCoordinateSystem</code>, <code>Anchor</code>, <code>verticalDatum</code>,
+            with <code>anchorTo()</code> / <code>freeze()</code> / <code>clear()</code> /
+            <code>restore()</code> as the only ways to move them — all three parts write
+            together, and <code>restore()</code> repairs states a file can't legitimately hold.</li>
+        <li><b>Anchor identity = kind + persisted UUID</b> (<code>cwFixStation::id</code>,
+            <code>cwLazLayer::id</code>) — the open question from §10, settled: both already
+            carry one, so identity survives save/load and outlives a rename.</li>
+        <li><b><code>worldOrigin</code>/<code>explicitlySet</code> moved to P2</b> (user decision,
+            2026-08-03). Deleting the offset is not a local edit to <code>cwGeoReference</code> —
+            it takes <code>recomputeWorldOrigin()</code>, the line-plot first-solve auto-compute,
+            the LAZ bbox-center adopt, and the two test files with it. Doing that before an LDP
+            exists removes a frame without replacing one, so scene-local would be absolute
+            UTM-scale coordinates in float32 (~3 cm at 500 km eastings) for the span of a phase.
+            The two frames sit side by side for exactly one phase.</li>
+      </ul></div></td></tr>
+  <tr><td><span class="pill phase">P2</span></td><td>State machine</td>
+      <td>Anchoring/re-derive/freeze transitions in <code>cwCavingRegion</code>, replacing
+      <code>recomputeWorldOrigin()</code> averaging and the LAZ auto-adopt semantics.
+      Transactional with the causing edit (undo-safe). Threshold R constant. Rewrite
+      <code>test_cwCavingRegion_worldOrigin.cpp</code> / <code>test_cwLazLayerAutoAdoptCS.cpp</code>
+      against the new policy; add the §4 worked scenarios as tests.
+      <b>Deletes <code>worldOrigin</code>/<code>explicitlySet</code> in the same phase</b> — the
+      anchoring is what replaces them, so the old frame goes the moment there is a new one, and
+      there is never a phase with neither. That takes <code>recomputeWorldOrigin()</code>,
+      <code>cwFixStationValidator::robustWorldOrigin()</code>, the <code>cwLinePlotManager</code>
+      first-solve auto-compute + its <code>worldOriginChanged</code> connect,
+      <code>cwLinePlotTask::applyWorldOriginOffset()</code>, the
+      <code>setRegionWorldOrigin</code> push through <code>cwLazLayer</code> →
+      <code>cwLazLoader</code> → <code>cwLazClipOperation</code>, and
+      <code>toGlobal()</code>'s two callers (<code>cwCoordinatePicker</code>,
+      <code>cwMeasurementInteraction</code>).</td></tr>
+  <tr><td><span class="pill phase">P3</span></td><td>Consumers</td>
+      <td>Fix-station locals derive into the LDP; LAZ reprojection targets the LDP
+      (horizontal-only + z unit scale, §5); convergence/declination consume the LDP inverse
+      for lat/long. Progress UI on slow re-derives (D11).</td></tr>
+  <tr><td><span class="pill phase">P4</span></td><td>UI removal</td>
+      <td>Delete the project CS picker (#618); remove <code>Project</code> mode from the fix CS
+      picker (D8); read-only datum display in project info; <b>Recenter…</b> action (D7);
+      lat/long-only display coordinates (D9); delete convergence display (D3).</td></tr>
+  <tr><td><span class="pill phase">P5</span></td><td>Exports</td>
+      <td>Default export CS = derived UTM zone; export CS chooser; survex/Compass exporters
+      read the LDP instead of globalCS.</td></tr>
+  <tr><td><span class="pill phase">P6</span></td><td>Cleanup</td>
+      <td>R1 one-predicate cleanup on the (now smaller) consumer set
+      (<a href="FIXSTATION_COORDINATE_SOURCE_OF_TRUTH.html#followups">FIXSTATION_COORDINATE_SOURCE_OF_TRUTH.html §13</a>,
+      "R1 — one predicate for 'are this fix's numbers usable?'"); retire
+      <code>cwGridConvergence</code> display path and its :133 bug; docs.</td></tr>
+</table>
+
+<h2 id="open">10. Open questions</h2>
+<ul>
+  <li><b>R's exact value</b> — 50 km proposed. Cheap to change; pick during P2.</li>
+  <li><b>Recenter's derivation point</b> — oldest input vs. median of all inputs vs. user-picked. Lean: median of readable fixes + cloud centers (robust, no dialog); decide in P4.</li>
+  <li><b>Anchor identity encoding</b> — <span class="pill">settled in P1</span> kind + UUID. <code>cwFixStation</code> and <code>cwLazLayer</code> both already persist one, so nothing new has to be minted and a rename can't break the reference.</li>
+  <li><b>PROJ grid shipping</b> — proj.db ships already; decide whether to bundle a minimal geoid/datum grid set (cm-level shifts, N₀ recording) or accept meter-level fallback. Not blocking; affects §5's optional N₀ only.</li>
+</ul>
+
+</main>
+</body>
+</html>
