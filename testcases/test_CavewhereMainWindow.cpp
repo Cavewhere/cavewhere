@@ -10,7 +10,6 @@
 #include "TestHelper.h"
 #include "cwImageProvider.h"
 #include "cwSurveyNoteModel.h"
-#include "cwTaskManagerModel.h"
 #include "cwFutureManagerModel.h"
 #include "cwCavingRegion.h"
 #include "cwCave.h"
@@ -196,7 +195,6 @@ TEST_CASE("Load project with no images for scraps", "[CavewhereMainWindow]") {
 
         INFO("Filename:" << project->filename());
 
-        rootData->taskManagerModel()->waitForTasks();
         rootData->futureManagerModel()->waitForFinished();
 
         REQUIRE(project->cavingRegion()->caveCount() == 1);

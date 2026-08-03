@@ -34,7 +34,6 @@
 #include "cwQMLReload.h"
 #include "cwLicenseAgreement.h"
 #include "cwRegionSceneManager.h"
-#include "cwTaskManagerModel.h"
 #include "cwFutureManagerModel.h"
 #include "cwPageSelectionModel.h"
 #include "cwSettings.h"
@@ -76,7 +75,6 @@ class CAVEWHERE_LIB_EXPORT cwRootData : public QObject
     Q_PROPERTY(QString version READ version NOTIFY versionChanged)
     Q_PROPERTY(cwLicenseAgreement* license READ license NOTIFY licenseChanged)
     Q_PROPERTY(cwRegionSceneManager* regionSceneManager READ regionSceneManager NOTIFY regionSceneManagerChanged)
-    Q_PROPERTY(cwTaskManagerModel* taskManagerModel READ taskManagerModel CONSTANT)
     Q_PROPERTY(cwFutureManagerModel* futureManagerModel READ futureManagerModel CONSTANT)
     Q_PROPERTY(QQuickGit::Account* account READ account CONSTANT)
     Q_PROPERTY(cwRecentProjectModel* recentProjectModel READ recentProjectModel CONSTANT)
@@ -123,7 +121,6 @@ public:
     cwLicenseAgreement* license() const;
     cwRegionSceneManager* regionSceneManager() const;
     QScreen* primaryScreen() const;
-    cwTaskManagerModel* taskManagerModel() const;
     cwFutureManagerModel* futureManagerModel() const;
     cwPageSelectionModel* pageSelectionModel() const;
     cwRegionTreeModel* regionTreeModel() const;
@@ -228,7 +225,6 @@ private:
     cwQMLReload* QMLReloader; //!< For reloading the QML data on the fly
     cwLicenseAgreement* License; //!<
     cwRegionSceneManager* RegionSceneManager; //!<
-    cwTaskManagerModel* TaskManagerModel; //!<
     cwFutureManagerModel* FutureManagerModel; //!<
     cwPageSelectionModel* PageSelectionModel; //!<
     cwRegionTreeModel* RegionTreeModel; //!<
@@ -347,14 +343,6 @@ inline cwRegionSceneManager* cwRootData::regionSceneManager() const {
 */
 inline QScreen* cwRootData::primaryScreen() const {
     return QGuiApplication::primaryScreen();
-}
-
-/**
-* @brief cwRootData::taskManagerModel
-* @return The task manager model for visualizing running tasks
-*/
-inline cwTaskManagerModel* cwRootData::taskManagerModel() const {
-    return TaskManagerModel;
 }
 
 /**

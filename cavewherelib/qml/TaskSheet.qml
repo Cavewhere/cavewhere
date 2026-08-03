@@ -30,7 +30,7 @@ import cavewherelib
 QQ.Item {
     id: sheetId
 
-    // QtObject rather than TaskFutureCombineModel so a test can stand in a
+    // QtObject rather than FutureManagerModel so a test can stand in a
     // ListModel; both carry the count and roles this sheet reads.
     property QQ.QtObject model: ActiveTasks.model
     property bool automaticUpdate: false

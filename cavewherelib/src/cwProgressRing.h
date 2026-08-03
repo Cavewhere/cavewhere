@@ -20,9 +20,9 @@
  * A circular busy mark: a full track with an arc drawn over it.
  *
  * The arc is determinate when progress is in [0, 1] and indeterminate when it is
- * negative — the same sentinel cwTaskFutureCombineModel::progress() reports when
- * no job can say how far along it is, so the ring spins rather than drawing an
- * arc it would have to back up.
+ * negative — the same sentinel cwFutureManagerModel::progress() reports when no
+ * job can say how far along it is, so the ring spins rather than drawing an arc
+ * it would have to back up.
  *
  * Spinning is driven from QML by animating spinAngle, so the animation stops on
  * its own the moment a job reports real steps. The count that goes inside the

@@ -24,7 +24,6 @@ class cwCave;
 class cwCavingRegion;
 class cwTrip;
 class cwScrapManager;
-class cwTaskManagerModel;
 class cwRegionLoadTask;
 class cwErrorListModel;
 class cwFutureManagerModel;
@@ -266,8 +265,6 @@ private:
     bool ConvertedFromSqlite; //!< True when a SQLite .cw was auto-converted; distinguishes from a genuine bundled .cw zip
     QString BundledArchivePath;
 
-    //Task manager, for visualizing running tasks
-    QPointer<cwTaskManagerModel> TaskManager;
     cwFutureManagerToken FutureToken; //!<
     QPointer<cwRemoteAuthProvider> m_authProvider;
 

@@ -25,7 +25,6 @@
 #include "cwLazLayersSceneNode.h"
 #include "cwScene.h"
 #include "cwGeometryItersecter.h"
-#include "cwTaskManagerModel.h"
 #include "cwPageSelectionModel.h"
 #include "cwSettings.h"
 #include "cwRemoteServices.h"
@@ -70,8 +69,7 @@ cwRootData::cwRootData(QObject *parent) :
 {
     cwSettings::initialize(); //Init's a singleton
 
-    //Task Manager, allows the users to see running tasks
-    TaskManagerModel = new cwTaskManagerModel(this);
+    //Tracks running jobs, allows the users to see them
     FutureManagerModel = new cwFutureManagerModel(this);
     m_keywordItemModel = new cwKeywordItemModel(this);
     m_keywordFilterPipelineModel = new cwKeywordFilterPipelineModel(this);
@@ -80,7 +78,6 @@ cwRootData::cwRootData(QObject *parent) :
     //Create the project, this saves and load data
     Project = new cwProject(this);
     Project->setGitAccount(m_account);
-    // Project->setTaskManager(TaskManagerModel);
     Project->setFutureManagerToken(FutureManagerModel);
     m_recentProjectModel->setProject(Project);
     // Auto-add to recent list on save (covers save-as path changes).
@@ -498,17 +495,12 @@ void cwRootData::shutdown()
     updateCoordinator()->beginShutdown();
 
     auto checkComplete = [this]() {
-        if (!m_shutdownCompleted
-            && taskManagerModel()->isIdle()
-            && futureManagerModel()->isEmpty())
-        {
+        if (!m_shutdownCompleted && futureManagerModel()->isEmpty()) {
             m_shutdownCompleted = true;
             emit shutdownComplete();
         }
     };
 
-    connect(taskManagerModel(), &cwTaskManagerModel::becameIdle,
-            this, checkComplete);
     connect(futureManagerModel(), &cwFutureManagerModel::allFinished,
             this, checkComplete);
 
@@ -519,10 +511,9 @@ void cwRootData::shutdownBlocking()
 {
     //Idempotent, and shutdown() has normally armed it already; this covers a
     //cwRootData destroyed without a graceful exit. Either way it has to precede
-    //the three waits below, each of which pumps the event loop.
+    //the two waits below, each of which pumps the event loop.
     updateCoordinator()->beginShutdown();
 
-    taskManagerModel()->waitForTasks();
     futureManagerModel()->waitForFinished();
     project()->waitSaveToFinish();
 }

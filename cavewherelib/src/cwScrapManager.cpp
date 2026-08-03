@@ -23,7 +23,6 @@
 #include "cwImageProvider.h"
 #include "cwDiskCacher.h"
 #include "cwLinePlotManager.h"
-#include "cwTaskManagerModel.h"
 #include "cwRegionTreeModel.h"
 #include "cwKeywordItemModel.h"
 #include "cwKeywordItem.h"
