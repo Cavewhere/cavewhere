@@ -75,6 +75,7 @@
   .callout { border-left: 3px solid var(--accent); background: var(--panel); padding: .7rem 1rem; border-radius: 0 8px 8px 0; margin: 1rem 0; }
   .callout.warn { border-left-color: var(--warn); }
   .callout.bad { border-left-color: var(--bad); }
+  .callout.good { border-left-color: var(--good); }
   .callout .title { font-weight: 700; margin-bottom: .2rem; }
   figure { margin: 1.4rem 0; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 1rem; overflow-x: auto; box-shadow: var(--shadow); }
   figcaption { color: var(--dim); font-size: .85rem; margin-top: .6rem; }
@@ -418,7 +419,7 @@ lands green on both suites before the next.</p>
             <code>restore()</code> as the only ways to move them — all three parts write
             together, and <code>restore()</code> repairs states a file can't legitimately hold.</li>
         <li><b>Anchor identity = kind + persisted UUID</b> (<code>cwFixStation::id</code>,
-            <code>cwLazLayer::id</code>) — the open question from §13, settled: both already
+            <code>cwLazLayer::id</code>) — the open question from §14, settled: both already
             carry one, so identity survives save/load and outlives a rename.</li>
         <li><b><code>worldOrigin</code>/<code>explicitlySet</code> moved to P2</b> — since
             re-split: the deletion now lands in P2.2 (user decision,
@@ -441,7 +442,7 @@ lands green on both suites before the next.</p>
         <li><code>cwLocalProjectionManager</code>, owned by <code>cwCavingRegion</code> alongside
             <code>cwFixStationValidator</code> — the states live on <code>cwGeoReference</code>,
             the policy for moving between them needs the region's caves and layers, so it lives
-            there. R = 50&nbsp;km (<code>kAnchorThresholdMeters</code>), settling §13's first
+            there. R = 50&nbsp;km (<code>kAnchorThresholdMeters</code>), settling §14's first
             open question.</li>
         <li>Distance is measured <i>in the current frame</i>: with
             <code>x_0 = y_0 = 0</code> a point's distance from the origin is just its magnitude
@@ -946,6 +947,8 @@ callout. Six new findings, none applied yet — V1 and V2 are the ones that bite
   for exactly this class, and for a PROJ-valid fix whose point <code>deriveFrom</code> can't
   transform. Import a .svx containing <code>*cs UTM16N</code> + <code>*fix</code>: it solved
   before P2.2 and errors after. No test covers keyword-CS fixes under WorkingFrame.</p>
+  <p><b>Fix:</b> normalize at the import boundary — <a href="#survexcs">§13.1</a>, which carries the
+  full mapping table, the axis-order and OSGB traps, and the tests.</p>
 </div>
 
 <div class="callout warn">
@@ -996,7 +999,156 @@ callout. Six new findings, none applied yet — V1 and V2 are the ones that bite
 stale name for what is now an add-fix/add-layer link, and <code>DataMainPage</code>'s edit mode
 kept the narrower 200&nbsp;px width, which clips nothing.</p>
 
-<h2 id="open">13. Open questions</h2>
+<h2 id="importercs">13. Importers normalize the coordinate system (settled 2026-08-04)</h2>
+
+<p><b>Decision:</b> an importer converts its format's coordinate-system spelling into one PROJ can
+parse, or into none at all. <code>cwFixStation::inputCS</code> then carries a single invariant — a
+PROJ string, or empty — instead of the two incompatible contracts it grew: "any survex spelling"
+for the writer, "a PROJ string" for every reader. V2 is where those two met, and V5's verbatim
+fallback exists only to accommodate the un-normalized form.</p>
+
+<p>The premise the survex importer records at <code>cwSurvexImporter.cpp:1055</code> — "the rest of
+the pipeline (export, picker) handles those forms downstream" — is false for both handlers it
+names. <code>cwCoordinateTransform</code>'s <code>parseCS</code> recognizes only
+<code>EPSG:4326</code> and <code>EPSG:326xx/327xx</code>, so the picker shows "Custom…" for what is
+plainly UTM zone 16 North; and P2.2 added a third consumer, the LDP anchor path, which silently
+skips anything PROJ can't read.</p>
+
+<div class="callout good">
+  <div class="title">Walls half — DONE 2026-08-04</div>
+  <p><code>cwWallsImporter</code> wrote <code>EPSG:26900</code> as a deliberate "pick your zone"
+  placeholder. PROJ rejects it ("crs not found") and so does cavern, so it poisoned the solve both
+  before and after P2.2. The datum and zone were available the whole time: dewalls parses the
+  project's <code>.REF</code> line into <code>GeoReference</code> (zone signed positive-north,
+  <code>datumName</code>), and <code>WpjEntry::reference()</code> already inherits it from the
+  parent book — <code>cwWallsImporter::convertEntry</code> was discarding it with a "can't
+  currently be imported" warning.</p>
+  <p>The datum-name-to-CRS mapping is survex's own, reused rather than reinvented:
+  <code>img_parse_compass_datum_string</code> / <code>img_compass_utm_proj_str</code> /
+  <code>img_compass_longlat_epsg_code</code> from <code>img.h</code>, which cavewherelib already
+  links. Walls spells several datums differently from Compass, so the aliases survex's Walls reader
+  carries are repeated (plus a <code>NAD27</code> prefix rule for its regional realizations).</p>
+  <p>A <code>#FIX</code> whose system can't be determined — a bare .srv with no project file, or a
+  datum outside the table — now carries <b>no</b> coordinate system and warns, which reaches
+  <code>state() == NoSystem</code>: the fix drops out of the export cleanly with "declares no
+  coordinate system" instead of emitting a <code>*cs</code> nothing can read. Fixture pair
+  <code>testcases/datasets/walls/georef_cave.wpj</code> + <code>GEOREF.SRV</code> covers both,
+  imported with and without the project file.</p>
+</div>
+
+<h3 id="survexcs">13.1 Survex half — the implementation (this is V2's fix)</h3>
+
+<p><code>cwSurvexImporter::parseCS</code> (<code>cwSurvexImporter.cpp:1063</code>) stores the
+<code>*cs</code> argument verbatim into <code>CurrentInputCS</code>, and
+<code>parseFix</code> (:1105) copies it onto every following fix. Everything below replaces that
+one assignment with a translation.</p>
+
+<p>The mapping is not a judgment call: cavern itself turns each spelling into a PROJ string, and
+those strings are the answer. Read straight off <code>survex/src/commands.c</code> — the parse is
+at :2476–2581 and the PROJ construction at :2589–2660.</p>
+
+<table>
+  <tr><th>survex spelling</th><th>PROJ string cavern builds</th><th>Notes</th></tr>
+  <tr><td><code>UTM&lt;zone&gt;[N|S]</code></td><td><code>EPSG:326&lt;zone&gt;</code> north,
+      <code>EPSG:327&lt;zone&gt;</code> south</td><td>Zone 1–60. Bare <code>UTM16</code> (no
+      hemisphere letter) means north. The common case.</td></tr>
+  <tr><td><code>EPSG:&lt;n&gt;</code> / <code>ESRI:&lt;n&gt;</code></td><td>the same string</td>
+      <td>Already PROJ-spellable; pass through. <code>n &lt; 1000000</code>.</td></tr>
+  <tr><td><code>CUSTOM "…"</code></td><td>the quoted string</td><td>Unwrap the quotes — this is
+      F3, and it is what makes <code>toSurvexCS</code>/<code>fromSurvexCS</code> a real encoding
+      instead of a one-way escape.</td></tr>
+  <tr><td><code>S-MERC</code></td><td><code>EPSG:3857</code></td><td></td></tr>
+  <tr><td><code>LONG-LAT</code></td><td><code>EPSG:4326</code></td><td>Longitude first, which is
+      the order <code>cwCoordinateText</code> calls EastingNorthing.</td></tr>
+  <tr><td><code>LAT-LONG</code></td><td>— none —</td><td>Cavern <b>rejects</b> it (the
+      <code>+axis=neu</code> branch at :2622 is <code>#if 0</code>'d out, so it falls through to
+      error 434). CaveWhere can do better: <code>EPSG:4326</code> with the pair swapped.</td></tr>
+  <tr><td><code>OSGB:&lt;square&gt;</code></td><td><code>+proj=tmerc +lat_0=49 +lon_0=-2
+      +k=0.9996012717 +x_0=&lt;X&gt; +y_0=&lt;Y&gt; +ellps=airy +datum=OSGB36 +units=m
+      +no_defs</code></td><td>The two letters shift the false origin — see the trap below.</td></tr>
+  <tr><td><code>EUR79Z30</code></td><td><code>+proj=utm +zone=30 +ellps=intl
+      +towgs84=-86,-98,-119,0,0,0,0 +no_defs</code></td><td></td></tr>
+  <tr><td><code>IJTSK</code> / <code>IJTSK03</code></td><td><code>+proj=krovak +ellps=bessel
+      +towgs84=…</code> (two different 7-parameter sets)</td><td>Copy the constants verbatim from
+      :2607 and :2610.</td></tr>
+  <tr><td><code>JTSK</code> / <code>JTSK03</code></td><td>as above plus <code>+czech</code></td>
+      <td>Cavern marks these input-only. That is an output restriction, so it doesn't constrain
+      the import — but it means they must never become the shareable output CS.</td></tr>
+  <tr><td><code>LOCAL</code></td><td>— none —</td><td>Means deliberately ungeoreferenced. Maps to
+      an <b>empty</b> CS, not to a CRS. Cavern also builds nothing for it.</td></tr>
+</table>
+
+<p><b>Where the code goes.</b> Preferred: a new <code>cwSurvexCS.{h,cpp}</code> owning both
+directions — <code>toSurvexCS()</code>/<code>writeCsLine()</code> move over from
+<code>cwSurvexExporterUtils</code>, <code>fromSurvexCS()</code> joins them — so the encoding is one
+unit and F3's "write-only" complaint is fixed structurally rather than by adding a second
+half somewhere else. Cheaper alternative if that churn isn't wanted: leave the exporter alone and
+put <code>fromSurvexCS()</code> beside <code>parseCS</code> in the importer. Either way the
+signature wants to carry the axis-order answer, not just the string:</p>
+
+<pre><code>struct cwSurvexCS {
+    QString projCS;        //!- empty when the spelling names no CRS (LOCAL) or we can't map it
+    bool latitudeFirst;    //!- LAT-LONG: the *fix pair is northing-first, swap it
+};
+cwSurvexCS fromSurvexCS(const QString&amp; csArgument);</code></pre>
+
+<p><b>Steps.</b></p>
+<ol>
+  <li>Add <code>fromSurvexCS()</code> with the table above, plus its own unit test — it is a pure
+  string function, so test it directly rather than only through an import.</li>
+  <li><code>parseCS</code> stores the translation instead of the raw text, keeping the raw text
+  only for the warning message. An untranslatable spelling stores an empty CS and warns
+  ("CaveWhere doesn't know the coordinate system <i>X</i>; set one on the fix"), which lands the
+  fix on <code>state() == NoSystem</code> — the same honest outcome the Walls half now produces.</li>
+  <li><code>parseFix</code> swaps the first two numbers when <code>latitudeFirst</code> is set,
+  before calling <code>setCoordinate</code>.</li>
+  <li>Delete <code>shareableCSForFix</code>'s verbatim fallback and its
+  <code>isUnusableAsSurvexOutputCS</code> screen for it, closing V5. Keep the screen for
+  <code>JTSK</code>-class values only if something can still produce them.</li>
+</ol>
+
+<div class="callout warn">
+  <div class="title">Traps</div>
+  <p><b>OSGB's letters are a false origin, not a CRS variant.</b> The square shifts
+  <code>x_0</code>/<code>y_0</code> in 100 km steps, so <code>OSGB:SD</code> is <i>not</i>
+  <code>EPSG:27700</code> — coordinates under it are offsets within that square. Decode as cavern
+  does (:2637–2645): from the letter pair build <code>x</code>, <code>y</code>, then
+  <code>x_0 = (14 - x) × 100000</code> and <code>y_0 = (y - 20) × 100000</code>. Checkable: this
+  yields <code>x_0=400000, y_0=-100000</code> for <code>OSGB:SV</code>, which is exactly
+  EPSG:27700 — so <code>OSGB:SV</code> ≡ <code>EPSG:27700</code> makes a good test.</p>
+  <p><b>Axis order rides on the CS string.</b> <code>cwCoordinateText::axisOrderFor</code> is
+  <code>isGeographic(cs) ? LatitudeLongitude : EastingNorthing</code>, and
+  <code>cwFixStation</code> re-reads its stored coordinate text under whatever the current CS
+  implies. So rewriting the CS silently reinterprets the numbers. <code>LONG-LAT</code> →
+  <code>EPSG:4326</code> needs the pair swapped (survex writes longitude first, EPSG:4326 is read
+  latitude first); <code>LAT-LONG</code> → <code>EPSG:4326</code> does not. Getting this backwards
+  puts the cave in the wrong hemisphere, and nothing downstream can detect it.</p>
+  <p><b>A geographic CS can't be <code>*cs out</code>.</b> Cavern calls
+  <code>proj_get_type</code> and rejects <code>PJ_TYPE_GEOGRAPHIC_2D_CRS</code>/<code>_3D_CRS</code>
+  with error 435 (:2700–2707). So normalizing a fix to <code>EPSG:4326</code> makes it a fine
+  <i>input</i> and still an unusable <i>output</i> — which is what
+  <code>shareableCSForFix</code>'s existing "leave it to the next fix" comment is about. Don't
+  let step 4's cleanup weaken that.</p>
+</div>
+
+<div class="callout">
+  <div class="title">Tests</div>
+  <ul>
+    <li><code>fromSurvexCS()</code> directly: one case per table row, including
+    <code>UTM16S</code> → <code>EPSG:32716</code>, bare <code>UTM16</code> → north,
+    <code>OSGB:SV</code> → the EPSG:27700 parameters, <code>CUSTOM "+proj=…"</code> unwrapped,
+    <code>LOCAL</code> → empty, and an unknown spelling → empty.</li>
+    <li>Round trip: <code>fromSurvexCS(toSurvexCS(x)) == x</code> for a PROJ string containing
+    spaces and <code>+</code> signs — the pairing F3 asks for.</li>
+    <li>The V2 regression itself, end to end: import a .svx carrying <code>*cs UTM16N</code> and a
+    <code>*fix</code>, then run the line plot and assert it solves. This is the test whose absence
+    let V2 through, so write it against the solve, not against the exporter's output string.</li>
+    <li>Axis order: a <code>*cs LONG-LAT</code> fix and a <code>*cs LAT-LONG</code> fix at the same
+    physical place must end up at the same coordinate.</li>
+  </ul>
+</div>
+
+<h2 id="open">14. Open questions</h2>
 <ul>
   <li><s><b>R's exact value</b> — 50 km proposed. Cheap to change; pick during P2.</s>
       Settled in P2: 50 km, as <code>cwLocalProjectionManager::kAnchorThresholdMeters</code>.</li>

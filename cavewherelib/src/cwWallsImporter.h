@@ -35,12 +35,27 @@ typedef QSharedPointer<cwTrip> cwTripPtr;
 
 class cwWallsImporter;
 
+/**
+ * The coordinate systems a Walls project's `.REF` names, as PROJ reads them:
+ * \a rect for `#FIX` lines given as grid coordinates (which need the datum and
+ * the zone), \a geo for the ones given as latitude and longitude (which need
+ * only the datum). Both are empty when the `.REF` said nothing usable — a bare
+ * .srv imported without its project file has none — and \a unmappedDatum then
+ * carries the datum name the file did give, so the warning can name it.
+ */
+struct WallsReferenceCS {
+    QString rect;
+    QString geo;
+    QString unmappedDatum;
+};
+
 class WallsImporterVisitor : public QObject
 {
     Q_OBJECT
 
 public:
-    WallsImporterVisitor(WallsSurveyParser* parser, cwWallsImporter* importer, QString tripNamePrefix);
+    WallsImporterVisitor(WallsSurveyParser* parser, cwWallsImporter* importer, QString tripNamePrefix,
+                         WallsReferenceCS referenceCS);
 
     void clearTrip();
     void ensureValidTrip();
@@ -64,6 +79,7 @@ private:
     QString TripNamePrefix;
     QList<cwTripPtr> Trips;
     cwTripPtr CurrentTrip;
+    WallsReferenceCS ReferenceCS;
 };
 
 class CAVEWHERE_LIB_EXPORT cwWallsImporter : public cwTreeDataImporter
@@ -93,11 +109,11 @@ public:
     QStringList importErrors();
 
     /**
-     * Fix stations captured from `#FIX` directives, including the assumed
-     * inputCS (EPSG:269xx for rect/UTM, EPSG:4326 for geo). Walls files don't
-     * carry an explicit datum, so a datum-assumption warning is appended to
-     * importErrors() when this list is non-empty. The cave-attachment of
-     * these fixes happens in the import-accept flow (follow-up).
+     * Fix stations captured from `#FIX` directives, carrying the coordinate
+     * system the project's `.REF` names (see WallsReferenceCS). A fix whose
+     * system couldn't be determined carries none and warns through
+     * importErrors(). The cave-attachment of these fixes happens in the
+     * import-accept flow (follow-up).
      */
     QList<cwFixStation> capturedFixStations() const { return CapturedFixStations; }
 

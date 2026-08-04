@@ -12,11 +12,13 @@
 #include "wallstypes.h"
 #include "cwTreeImportData.h"
 #include "cwTreeImportDataNode.h"
+#include "img.h"
 
 //Qt includes
 #include <QFileInfo>
 #include <QDir>
 
+#include <cstdlib>
 #include <iostream>
 
 using namespace dewalls;
@@ -29,12 +31,95 @@ cwUnits::LengthUnit cwUnit(Length::Unit dewallsUnit)
     return dewallsUnit == Length::Feet ? cwUnits::LengthUnit::Feet : cwUnits::LengthUnit::Meters;
 }
 
-WallsImporterVisitor::WallsImporterVisitor(WallsSurveyParser* parser, cwWallsImporter* importer, QString tripNamePrefix)
+namespace {
+
+//! The img datum for a Walls datum name.
+//!
+//! img.c matches Compass' spellings exactly and Walls spells several datums
+//! differently, so the ones survex's own Walls reader special-cases are
+//! repeated here (survex/src/datain.c). Walls carries a handful of regional
+//! NAD27 realizations; they differ in how they transform to WGS84, not in which
+//! CRS a coordinate given in them belongs to, so all of them name NAD27.
+img_datum wallsDatum(const QString& name)
+{
+    const QByteArray latin1 = name.toLatin1();
+    const img_datum compassDatum = img_parse_compass_datum_string(latin1.constData(),
+                                                                  static_cast<size_t>(latin1.size()));
+    if (compassDatum != img_DATUM_UNKNOWN) {
+        return compassDatum;
+    }
+
+    if (name.startsWith(QStringLiteral("NAD27"))) {
+        return img_DATUM_NAD27;
+    }
+    if (name == QStringLiteral("NAD83")) {
+        return img_DATUM_NAD83;
+    }
+    if (name == QStringLiteral("Geodetic Datum `49")) {
+        return img_DATUM_NZGD49;
+    }
+    if (name == QStringLiteral("Hu-Tzu-Shan")) {
+        return img_DATUM_HUTZUSHAN1950;
+    }
+    return img_DATUM_UNKNOWN;
+}
+
+//! What \a reference says the project's `#FIX` coordinates are in.
+WallsReferenceCS wallsReferenceCS(const GeoReferencePtr& reference)
+{
+    WallsReferenceCS referenceCS;
+
+    if (reference.isNull()) {
+        return referenceCS;
+    }
+
+    const QString datumName = reference->datumName.trimmed();
+    const img_datum datum = wallsDatum(datumName);
+    if (datum == img_DATUM_UNKNOWN) {
+        referenceCS.unmappedDatum = datumName;
+        return referenceCS;
+    }
+
+    //dewalls signs the zone the way img wants it: positive north, negative
+    //south. img returns null for a zone of 0 — what a .REF with no zone gives
+    //us — for the polar UPS zones, and for a zone outside the datum's area.
+    if (char* utm = img_compass_utm_proj_str(datum, reference->zone)) {
+        referenceCS.rect = QString::fromLatin1(utm);
+        std::free(utm);
+    }
+
+    //Every datum img knows has a geodetic CRS; only img_DATUM_UNKNOWN, which
+    //returned above, has none.
+    referenceCS.geo = QStringLiteral("EPSG:%1").arg(img_compass_longlat_epsg_code(datum));
+
+    return referenceCS;
+}
+
+//! Why \a referenceCS names no system, phrased to finish "#FIX A1 gives grid
+//! coordinates, but ...". The zone reason is reachable only from the rect side;
+//! a lat/long fix needs the datum alone.
+QString missingCSReason(const WallsReferenceCS& referenceCS)
+{
+    if (!referenceCS.unmappedDatum.isEmpty()) {
+        return QString("its datum \"%1\" isn't one CaveWhere can map")
+            .arg(referenceCS.unmappedDatum);
+    }
+    if (referenceCS.geo.isEmpty()) {
+        return QStringLiteral("the project names no datum");
+    }
+    return QStringLiteral("the project names no UTM zone they belong to");
+}
+
+}
+
+WallsImporterVisitor::WallsImporterVisitor(WallsSurveyParser* parser, cwWallsImporter* importer, QString tripNamePrefix,
+                                           WallsReferenceCS referenceCS)
     : Parser(parser),
       Importer(importer),
-      TripNamePrefix(tripNamePrefix),
+      TripNamePrefix(std::move(tripNamePrefix)),
       Trips(QList<cwTripPtr>()),
-      CurrentTrip()
+      CurrentTrip(),
+      ReferenceCS(std::move(referenceCS))
 {
     QObject::connect(parser, &WallsSurveyParser::parsedVector, this, &WallsImporterVisitor::parsedVector);
     QObject::connect(parser, &WallsSurveyParser::parsedFixStation, this, &WallsImporterVisitor::parsedFixStation);
@@ -70,46 +155,57 @@ void WallsImporterVisitor::parsedFixStation(FixStation station)
     const cwStation renamed = Importer->createStation(station.name());
     fix.setStationName(renamed.name());
 
-    // Walls files don't carry a datum/CRS, so we infer one from the fix
-    // shape: rect-style (#FIX east/north) → NAD83 UTM (the typical US Walls
-    // assumption); geo-style (#FIX lat/long) → WGS84. Both carry an explicit
-    // warning so the user can correct the datum on the cwFixStation row.
+    // The coordinate system comes from the project's .REF line, which names the
+    // datum and UTM zone the #FIX coordinates were surveyed in.
     const bool hasRect = station.east().isValid() && station.north().isValid();
     const bool hasGeo  = station.latitude().isValid() && station.longitude().isValid();
 
+    QString inputCS;
+    double easting = 0.0;
+    double northing = 0.0;
+    QString warning;
+
     if (hasRect) {
-        // No way to infer the UTM zone from a Walls #FIX, so we don't pick a
-        // specific EPSG:269nn — the user must finish setting inputCS in the
-        // fix-station editor. EPSG:26900 is intentionally invalid (no zone)
-        // so it's obviously a placeholder rather than a silent guess.
-        fix.setInputCS(QStringLiteral("EPSG:26900"));
-        fix.setEasting(station.east().get(Length::Meters));
-        fix.setNorthing(station.north().get(Length::Meters));
-        if (station.rectUp().isValid()) {
-            fix.setElevation(station.rectUp().get(Length::Meters));
+        inputCS = ReferenceCS.rect;
+        easting = station.east().get(Length::Meters);
+        northing = station.north().get(Length::Meters);
+        if (inputCS.isEmpty()) {
+            warning = QString("#FIX %1 gives grid coordinates, but %2, so they place nothing until "
+                              "you set the coordinate system on the fix in CaveWhere.")
+                          .arg(station.name(), missingCSReason(ReferenceCS));
         }
-        Importer->addImportError(WallsMessage("warning",
-            QString("#FIX %1 is rect-style: assumed NAD83 UTM (EPSG:26900 placeholder; pick the right zone in CaveWhere). "
-                    "If your Walls coords are actually WGS84 UTM (EPSG:326xx) or another datum, change inputCS on the fix.")
-                .arg(station.name())));
     } else if (hasGeo) {
-        fix.setInputCS(cwCoordinateTransform::Wgs84);
-        // FixStation::longitude is east, latitude is north. cwFixStation
-        // stores easting=lon, northing=lat (matches the proj
-        // x=lon/y=lat convention after normalize_for_visualization).
-        fix.setEasting(station.longitude().get(Angle::Degrees));
-        fix.setNorthing(station.latitude().get(Angle::Degrees));
-        if (station.rectUp().isValid()) {
-            fix.setElevation(station.rectUp().get(Length::Meters));
+        // FixStation::longitude is east, latitude is north.
+        inputCS = ReferenceCS.geo;
+        easting = station.longitude().get(Angle::Degrees);
+        northing = station.latitude().get(Angle::Degrees);
+        if (inputCS.isEmpty()) {
+            // Any two datums put the same latitude and longitude within a couple
+            // hundred meters of each other, so assuming one still leaves a usable
+            // coordinate — unlike a grid coordinate, which means nothing without
+            // its zone.
+            inputCS = cwCoordinateTransform::Wgs84;
+            warning = QString("#FIX %1 gives latitude and longitude and %2, so WGS84 (EPSG:4326) "
+                              "is assumed. Change the coordinate system on the fix if it was "
+                              "surveyed in another datum.")
+                          .arg(station.name(), missingCSReason(ReferenceCS));
         }
-        Importer->addImportError(WallsMessage("warning",
-            QString("#FIX %1 is geo-style: assumed WGS84 (EPSG:4326). Change inputCS on the fix if a different datum is required.")
-                .arg(station.name())));
     } else {
         Importer->addImportError(WallsMessage("warning",
             QString("#FIX %1 has neither rect nor geo coordinates; skipped.")
                 .arg(station.name())));
         return;
+    }
+
+    fix.setInputCS(inputCS);
+    //All three components at once: a fix whose CS we couldn't determine has no
+    //axis order to read them back under, so the one-at-a-time setters would
+    //each erase what the one before it stored (see cwFixStation).
+    fix.setCoordinate(easting, northing,
+                      station.rectUp().isValid() ? station.rectUp().get(Length::Meters) : 0.0);
+
+    if (!warning.isEmpty()) {
+        Importer->addImportError(WallsMessage("warning", warning));
     }
 
     Importer->CapturedFixStations.append(fix);
@@ -493,7 +589,9 @@ cwTreeImportDataNode* cwWallsImporter::convertEntry(WpjEntryPtr entry) {
         return nullptr;
     }
     if (shouldWarn(CANT_IMPORT_REFS, !entry->reference().isNull())) {
-        addImportError(WallsMessage("warning", "This data contains geographic references, which can't currently be imported into Cavewhere"));
+        addImportError(WallsMessage("warning", "This data has a .REF geographic reference. Its datum and UTM zone give "
+                                               "the coordinate system for #FIX stations; the reference position itself "
+                                               "isn't imported into Cavewhere"));
     }
     if (entry->isBook()) {
         return convertBook(entry.staticCast<WpjBook>());
@@ -645,7 +743,7 @@ bool cwWallsImporter::parseSrvFile(WpjEntryPtr survey, QList<cwTripPtr>& tripsOu
     QString justFilename = filename.mid(std::max(qsizetype(0), filename.lastIndexOf('/') + 1));
 
     WallsSurveyParser parser;
-    WallsImporterVisitor visitor(&parser, this, justFilename);
+    WallsImporterVisitor visitor(&parser, this, justFilename, wallsReferenceCS(survey->reference()));
 
     foreach (Segment options, survey->allOptions()) {
         try
