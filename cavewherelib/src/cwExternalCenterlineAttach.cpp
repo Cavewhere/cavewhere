@@ -217,6 +217,12 @@ QFuture<Monad::Result<AttachReport>> attach(cwTrip* trip,
                 failures.append(QStringLiteral("%1 was not copied to %2")
                                     .arg(copySource, copyDestination));
             }
+            // A dependency the plan omitted never becomes a pending copy, so
+            // the loop above cannot see it. The entry file still *includes
+            // it, though, which means the copy that landed references a file
+            // nothing brought into the project — an attachment that is
+            // broken the moment it is made. Fail rather than persist it.
+            failures += verifyPlan.warnings;
 
             if (!failures.isEmpty()) {
                 // The model was never touched, so a failed attach leaves
@@ -240,7 +246,9 @@ QFuture<Monad::Result<AttachReport>> attach(cwTrip* trip,
             AttachReport report;
             report.scan = scan;
             report.persisted = trip->externalCenterline();
-            report.warnings = scan.warnings + verifyPlan.warnings;
+            // verifyPlan.warnings are all omissions, and any of those failed
+            // the attach above, so only the scan's advisories reach here.
+            report.warnings = scan.warnings;
             report.metadata = seedTripMetadata(trip, scan.seededMetadata);
 
             settingsPtr->setSourcePath(trip->id(),

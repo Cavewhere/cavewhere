@@ -7,6 +7,10 @@
   body { font-family: -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif; color: #1c1c1c; background: #fff; line-height: 1.5; max-width: 920px; margin: 2.5rem auto; padding: 0 1.5rem 4rem; }
   h1 { font-size: 1.85rem; border-bottom: 2px solid #2451a4; padding-bottom: 0.35rem; }
   h2 { font-size: 1.4rem; margin-top: 2rem; border-bottom: 1px solid #d8d8d8; padding-bottom: 0.25rem; color: #2451a4; }
+  h3 { font-size: 1.08rem; margin-top: 1.6rem; color: #1c1c1c; }
+  table { border-collapse: collapse; margin: 0.9rem 0; font-size: 0.94em; }
+  th, td { border: 1px solid #d8d8d8; padding: 0.32rem 0.7rem; text-align: left; }
+  th { background: #f4f4f6; }
   code { background: #f4f4f6; padding: 0.08rem 0.32rem; border-radius: 3px; font-size: 0.92em; }
   .meta { color: #5a5a5a; font-size: 0.92em; }
   .note { background: #fff7d6; border: 1px solid #e0c346; padding: 0.5rem 0.9rem; border-radius: 4px; margin: 0.8rem 0; }
@@ -41,7 +45,234 @@
   <li>Phase 3 fixture files &mdash; multi-<code>*begin</code> Survex / Walls projects for Scope-trip generation tests.</li>
   <li>QML tests &mdash; <code>tst_ExternalCenterlineAttachCave.qml</code>, <code>tst_NavBadge.qml</code>, Scope-trip auto-creation visibility.</li>
   <li>Phase 3 open UX questions (subset of master &sect;8.8: questions 2, 3, 5, 8, 10 are particularly Phase-3-relevant).</li>
+  <li>Attachment layout for cave-level entries &mdash; see the next section, which is already drafted.</li>
+  <li><strong>A surface for a cave-level owner's file error</strong> &mdash; a
+    prerequisite this phase inherits, not optional polish. See below.</li>
 </ul>
+
+<h3 id="cave-error-surface">Prerequisite: a cave-level owner has nowhere to show a file error</h3>
+
+<p>
+  Carried over from the review of Phase 2 &sect;16 B7 (2026-08-04). B7 drops an
+  owner whose in-project <code>*include</code> reaches outside the data root
+  from the survey solve, and <code>solveInputs()</code> excludes
+  <em>both</em> owner kinds &mdash; but only a trip is ever told why.
+  <code>externalStationsError</code> is a <code>cwTrip</code> property,
+  <code>cwCave</code> has no equivalent, and
+  <code>cwAttachedCenterlinesModel::Row</code> carries no error field. So a
+  cave-level attachment that escapes is silently dropped: the cave's stations
+  vanish from the plot and nothing anywhere says why.
+</p>
+
+<p>
+  It is harmless today only because cave-level attach arrives through a loaded
+  project rather than the UI &mdash; and this phase is what changes that, so
+  the surface has to exist <em>before</em> the attach flow is wired, not after.
+</p>
+
+<p>
+  <strong>Preferred shape:</strong> put the reason on the model row, which
+  already serves both owner kinds, rather than mirroring an error property onto
+  <code>cwCave</code>. That also folds into &sect;15's per-owner status gadget
+  instead of fighting it, and it gives the attachments list somewhere to show
+  <em>any</em> per-owner failure &mdash; see the exportability-state item in
+  &sect;15, which generalizes containment, a missing entry file, an unreadable
+  file, and a cyclic include into one reasoned state.
+</p>
+
+<h2 id="rebase">Rebase the attachment copy to the dependencies' common ancestor</h2>
+
+<p>
+  Cave-level attach cannot ship with the copy layout Phase 2 uses. This
+  section is a design decision made ahead of the rest of Phase 3's planning
+  pass, because it is the difference between the feature working and the
+  feature failing on roughly a quarter of real cave masters.
+</p>
+
+<h3>The defect in the current layout</h3>
+
+<p>
+  <code>cwExternalCenterlineSync::computePlan</code> mirrors every scanned
+  dependency into the attachment directory <em>relative to the entry file's
+  own directory</em> (<code>cwExternalCenterlineSync.cpp:93</code>). A
+  dependency that sits above the entry &mdash; the ordinary
+  <code>*include "../conventions.svx"</code> &mdash; produces a relative path
+  beginning with <code>../</code>, which would land outside the attachment
+  directory. <code>relativeEscapesAttachmentDir</code> catches that and the
+  dependency is dropped with a warning
+  (<code>cwExternalCenterlineSync.cpp:102-107</code>).
+</p>
+
+<p>
+  The copied entry file is byte-identical, so it still contains the literal
+  <code>*include "../conventions.svx"</code> line, which now resolves to a
+  path inside the project where nothing was written. The attachment is
+  broken, and the only signal is a <code>warningCount</code> on the row.
+</p>
+
+<h3>How common this is &mdash; measured, not guessed</h3>
+
+<p>
+  Measured against <code>/Users/cave/Desktop/survex</code> (2111
+  <code>.svx</code> files, 2287 <code>*include</code> directives), classifying
+  each file by role: <em>leaf</em> (includes nothing), <em>cave</em> (includes
+  only leaves), <em>higher</em> (includes other includers).
+</p>
+
+<table>
+  <tr><th>Attach target</th><th>Entries</th><th>Escape their own directory</th></tr>
+  <tr><td>Trip (leaf file)</td><td>1777 (84.2%)</td><td><strong>0 &mdash; 0.0%</strong></td></tr>
+  <tr><td>Cave (master including trip files)</td><td>242 (11.5%)</td><td><strong>56 &mdash; 23.1%</strong></td></tr>
+  <tr><td>Area / region (master of masters)</td><td>92 (4.4%)</td><td>5 &mdash; 5.4%</td></tr>
+</table>
+
+<p>
+  At trip level the case is structurally impossible, which is why Phase 2 can
+  ship without it. At cave level it is not a corner case. The escapes are also
+  strikingly uniform: <strong>97% of escaping entries (59 of 61) escape because
+  of exactly one shared file</strong>, and all 61 climb <strong>exactly one
+  level</strong>. In this dataset that file is almost always
+  <code>&lt;area&gt;/caves/hmg-grade5.svx</code>, a BCRA Grade 5 error model
+  (<code>*sd length</code>, <code>*sd bearing</code>, <code>*sd gradient</code>,
+  <code>*sd position</code>) shared by every cave master beneath it. It feeds
+  loop closure, so losing it is not cosmetic.
+</p>
+
+<div class="note">
+  <strong>Do not over-fit to this measurement.</strong> It is one project
+  curated by one person. It establishes that the shared-error-model idiom is
+  real and common; it does <em>not</em> establish that deep climbs never
+  happen. The climb cap below exists precisely because the sample cannot rule
+  them out.
+</div>
+
+<h3>What "attach the parent instead" would cost</h3>
+
+<p>
+  The obvious workaround &mdash; refuse the attach and tell the user to attach
+  the file that includes both &mdash; usually has no target in this dataset.
+  Nothing includes a cave master and <code>hmg-grade5.svx</code> as siblings,
+  and the region masters escape too (<code>houping/wulong_north.svx</code>
+  reaches into <code>../sanqiao/</code>, <code>../pengshui/</code>). So the
+  error would not redirect the user; it would mean the cave cannot be attached
+  at all short of restructuring the source data or duplicating the error model
+  into every cave directory.
+</p>
+
+<h3>The mechanism</h3>
+
+<p>
+  Choose the mirror base as the <em>longest common ancestor directory of all
+  dependencies</em> rather than the entry file's directory. Every dependency
+  then has a relative path that cannot begin with <code>../</code>, by
+  definition of "ancestor". For an entry
+  <code>DuskButte/trips/trip1.svx</code> that includes
+  <code>../conventions.svx</code>:
+</p>
+
+<table>
+  <tr><th>dependency</th><th>rel today (base = entry dir)</th><th>rel rebased (base = common ancestor)</th></tr>
+  <tr><td><code>trips/trip1.svx</code></td><td><code>trip1.svx</code></td><td><code>trips/trip1.svx</code></td></tr>
+  <tr><td><code>conventions.svx</code></td><td><code>../conventions.svx</code> &rarr; dropped</td><td><code>conventions.svx</code></td></tr>
+</table>
+
+<p>
+  The attachment directory then holds <code>conventions.svx</code> and
+  <code>trips/trip1.svx</code>, and the unmodified <code>../conventions.svx</code>
+  inside the copied entry resolves correctly. <strong>No survey file is
+  rewritten.</strong> A relative include is position-independent as long as the
+  shape of the tree is preserved, and mirroring from the common ancestor
+  preserves the shape.
+</p>
+
+<p>
+  The escape stops being a rule that is enforced and becomes a condition that
+  cannot arise. <code>relativeEscapesAttachmentDir</code> survives only as a
+  defensive assertion that should never fire.
+</p>
+
+<h3>Guards</h3>
+
+<ul>
+  <li><strong>Climb cap.</strong> Refuse when the common ancestor sits more
+    than ~2 levels above the entry's directory. Scattered dependencies could
+    otherwise drag the base to <code>/</code> or the home directory and mirror
+    the author's directory names into a shared project. Costs nothing on the
+    measured dataset (every climb is 1) and still refuses the genuine outliers
+    &mdash; <code>wulong_north.svx</code> carries 894 dependencies and 23
+    outside references, which is "attach the entire project as one cave".</li>
+  <li><strong>Absolute includes have to <em>become</em> an error</strong>
+    &mdash; they are not one today, so this guard is work to build, not a
+    status quo to preserve. Rebasing preserves <em>relative</em> graphs only.
+    A copied file still literally says
+    <code>/opt/shared/conventions.svx</code>, which points outside the
+    attachment on every machine, and inside a bundled <code>.cw</code> it also
+    breaks across re-extraction to a new temp directory. B7's fourth deviation
+    records why it could not be built there:
+    <code>ScanResult::dependencies</code> holds resolved canonical paths and
+    drops the directive as written, so no consumer can currently tell an
+    absolute <code>*include</code> from a relative one. Carrying the raw
+    directive on <code>ScanResult</code> is the prerequisite, and it has two
+    customers &mdash; this guard, and B7's containment message, which would
+    rather name the directive the user typed than a long resolved path.</li>
+  <li><strong>Canonicalize before computing the prefix</strong> &mdash; an
+    uncleaned <code>/a/b/../c/x.svx</code> skews it, and a symlink can step out
+    of the tree lexical comparison thinks it is in.</li>
+  <li><strong>No common ancestor</strong> (different Windows volumes) &mdash;
+    error.</li>
+</ul>
+
+<h3>Ripple</h3>
+
+<p>
+  The geometric change is small: a <code>commonAncestorDir()</code> helper in
+  <code>cwExternalCenterlineSync.cpp</code>'s anonymous namespace, and
+  <code>computePlan</code> swapping <code>entryDir</code> for it. What ripples
+  is that <code>entryFile</code> stops being a bare filename &mdash;
+  <code>cwExternalCenterlineAttach.cpp:237-238</code> stores
+  <code>QFileInfo(&hellip;).fileName()</code> today and would store
+  <code>trips/trip1.svx</code>. Survey of the consumers says that ripple is
+  small:
+</p>
+
+<ul>
+  <li><code>cwExternalCenterlineManager::scanOwners</code> composes it as
+    <code>QDir(attachmentDir).filePath(entryFile)</code>, which already accepts
+    a subpath.</li>
+  <li><code>ExternalCenterlineAttachedHeader.qml:28</code> already strips to a
+    basename for display.</li>
+  <li>The GC already recurses (<code>enumerateFilesRecursively</code> plus full
+    destination paths in <code>expectedSet</code>), so a nested layout needs
+    nothing.</li>
+  <li><code>cwSurvexExporterCaveTask::driverIncludePathFor</code> joins
+    attachment dir and entry file, so it follows automatically.</li>
+  <li><code>CavernOutputPage.qml:128</code> would display a path where it
+    displayed a name &mdash; cosmetic.</li>
+</ul>
+
+<div class="note">
+  <strong>Relationship to Phase 2 &sect;16 B7.</strong> B7 is the
+  <em>read</em>-side containment rule (a dependency of an in-project
+  attachment must resolve inside <code>cwSaveLoad::dataRootDir()</code>) and is
+  independent of this section.
+  <p>
+    <strong>Corrected 2026-08-04, after B7 shipped.</strong> This note used to
+    say B7 "deliberately leaves the attach-side warn-and-omit alone, because
+    rebasing removes the condition rather than the check, and writing a strict
+    attach-side error first would only be deleted here." B7 shipped the strict
+    attach-side error anyway: <code>computePlan</code>'s omission warnings now
+    fail the attach outright
+    (<code>cwExternalCenterlineAttach.cpp:225</code>). So the refusal this
+    section deletes already exists, and
+    <code>relativeEscapesAttachmentDir</code> is a live user-visible refusal
+    until rebasing lands &mdash; not yet the "defensive assertion that should
+    never fire" described above. The practical exposure is nil for what Phase
+    2 ships, since <code>attach()</code> is trip-level only and trip-level
+    escapes measure 0.0%; it is precisely the cave- and area-level masters
+    this section exists to serve (23.1% and 5.4%) that would hit the refusal,
+    which strengthens rather than weakens the case for rebasing.
+  </p>
+</div>
 
 <h2>Key cross-references to the master plan</h2>
 

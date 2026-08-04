@@ -128,6 +128,29 @@ CAVEWHERE_LIB_EXPORT QFuture<Monad::ResultBase> reconcile(
     const cwExternalCenterlineScanner::ScanResult& scan,
     const QString& attachmentDir);
 
+/**
+ * True when `path` resolves at or inside `boundaryDir`.
+ *
+ * This is the portability test for an in-project attachment: a
+ * dependency that resolves inside the project's data root exists on
+ * every machine that has the project, and one that resolves outside it
+ * exists only on the machine that authored it. It is a different
+ * question from the one computePlan asks — computePlan tests whether a
+ * dependency can be *written* under the attachment dir, and works on a
+ * relative path — so the two deliberately do not share a predicate.
+ *
+ * Both sides are canonicalized before comparison. That matters in two
+ * directions: a symlinked ancestor cannot be used to step out of the
+ * boundary, and a project living under a symlinked path (a QTemporaryDir
+ * under macOS's /tmp -> /private/tmp) still matches the scanner's
+ * canonical dependency paths. A path that does not exist is compared
+ * with its nearest existing ancestor canonicalized, so a missing file
+ * still answers the question its location asks.
+ *
+ * Returns false when either argument is empty.
+ */
+CAVEWHERE_LIB_EXPORT bool isContainedIn(const QString& path, const QString& boundaryDir);
+
 } // namespace cwExternalCenterlineSync
 
 #endif // CWEXTERNALCENTERLINESYNC_H

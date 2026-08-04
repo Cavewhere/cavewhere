@@ -55,6 +55,53 @@ bool destinationMatchesSource(const QFileInfo& srcInfo, const QFileInfo& dstInfo
     return srcInfo.lastModified() <= dstInfo.lastModified();
 }
 
+QString canonicalPathOrCleaned(const QString& path)
+{
+    const QFileInfo info(path);
+    const QString canonical = info.canonicalFilePath();
+    if (!canonical.isEmpty()) {
+        return canonical;
+    }
+
+    // Nothing on disk to canonicalize. Walk up to the nearest existing
+    // ancestor, canonicalize that, and re-append the tail, so a symlinked
+    // directory above a file that is not there still resolves to where the
+    // file would be.
+    //
+    // The walk leaves any ".." in place for the filesystem to resolve.
+    // Collapsing it textually first would step over a symlink the OS
+    // would have followed: with "<dir>/link" pointing elsewhere,
+    // "<dir>/link/../x" lexically reads as "<dir>/x" but really lives
+    // beside the link's target. That is also why the walk starts from the
+    // raw string rather than absoluteFilePath(), which does the collapsing
+    // itself. Walking with QFileInfo::path() keeps the loop off bare drive
+    // stubs like "C:", which name the current directory on that drive
+    // rather than its root.
+    const QString absolute = QDir::isAbsolutePath(path)
+        ? path
+        : QDir::current().filePath(path);
+
+    QFileInfo walk(absolute);
+    QString tail;
+    while (true) {
+        const QString parent = walk.path();
+        if (parent.isEmpty() || parent == walk.filePath()) {
+            // Reached the root without finding anything that exists.
+            return QDir::cleanPath(info.absoluteFilePath());
+        }
+        const QString name = walk.fileName();
+        tail = tail.isEmpty() ? name : name + QLatin1Char('/') + tail;
+
+        const QString ancestor = QFileInfo(parent).canonicalFilePath();
+        if (!ancestor.isEmpty()) {
+            return ancestor.endsWith(QLatin1Char('/'))
+                ? ancestor + tail
+                : ancestor + QLatin1Char('/') + tail;
+        }
+        walk = QFileInfo(parent);
+    }
+}
+
 QStringList enumerateFilesRecursively(const QString& dirPath)
 {
     QStringList result;
@@ -159,6 +206,24 @@ QFuture<Monad::ResultBase> reconcile(
             return Monad::ResultBase();
         })
         .future();
+}
+
+bool isContainedIn(const QString& path, const QString& boundaryDir)
+{
+    if (path.isEmpty() || boundaryDir.isEmpty()) {
+        return false;
+    }
+
+    const QString resolved = canonicalPathOrCleaned(path);
+    const QString boundary = canonicalPathOrCleaned(boundaryDir);
+    if (resolved == boundary) {
+        return true;
+    }
+
+    const QString prefix = boundary.endsWith(QLatin1Char('/'))
+        ? boundary
+        : boundary + QLatin1Char('/');
+    return resolved.startsWith(prefix);
 }
 
 } // namespace cwExternalCenterlineSync

@@ -14,6 +14,7 @@
 #include "cwScopeLabels.h"
 
 #include <QHash>
+#include <QSet>
 #include <QString>
 #include <QUuid>
 
@@ -62,6 +63,20 @@ public:
      * the file's own directive would override an injected value anyway
      * (cavern-verified, master plan §8.8 q7).
      *
+     * \c excludedExternalOwners lists caves and trips that carry an
+     * \c externalCenterline whose dependencies reach outside the project's
+     * data root, so the attachment cannot travel with the project. The
+     * exporter emits no \c *include for them and no \c *begin wrapper
+     * around it, and keeps writing the rest of the region, so one
+     * unportable attachment costs its own survey and leaves every other
+     * survey solvable. When it was the region's only data the driver comes
+     * out empty and cavern still fails the run with "No survey data" —
+     * the same way an all-empty region already fails today.
+     *
+     * A trip owner is told why through the file-error banner. A cave owner
+     * has no equivalent surface yet, so a cave-level exclusion is currently
+     * silent (see B7's follow-up in plans/EXTERNAL_FILE_PHASE2.html).
+     *
      * \c scopeLabels carries the survey label every \c *begin block in the file
      * opens with. Filled by \c exportRegion itself rather than by the caller: a
      * cave label has to be unique across the whole region (see cwCavernNaming),
@@ -76,6 +91,7 @@ public:
         QHash<QUuid, QString> caveAttachmentDirs;
         QHash<QUuid, QString> tripAttachmentDirs;
         QHash<QUuid, double> tripInjectedDeclinations;
+        QSet<QUuid> excludedExternalOwners;
         cwScopeLabels scopeLabels;
     };
 

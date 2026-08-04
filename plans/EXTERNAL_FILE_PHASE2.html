@@ -1073,6 +1073,26 @@ public:
     <td>Yellow inline message in the dialog; [Attach] enabled. q18.</td>
   </tr>
   <tr>
+    <td>Attach: a dependency cannot be mirrored under the attachment dir
+      (its path relative to the entry's directory climbs out, e.g. an entry
+      that <code>*include</code>s <code>../shared.svx</code>)</td>
+    <td>Attach fails with the omitted dependency named; nothing persisted and
+      the trip is left exactly as it was. Added by &sect;16 B7 &mdash; this
+      previously succeeded with a yellow warning. Phase 3's common-ancestor
+      rebasing removes the condition rather than the message. Note the files
+      reconcile already copied are currently stranded (B7 open items).</td>
+  </tr>
+  <tr>
+    <td>Solve: an in-project attachment <code>*include</code>s a path outside
+      <code>cwSaveLoad::dataRootDir()</code></td>
+    <td>The owner is dropped from the solve and its <code>*include</code> is
+      never emitted, so the rest of the region still solves. A trip says why
+      through <code>ExternalCenterlineFileErrorBanner</code>; <strong>a cave
+      has no surface yet</strong> and fails silently (see the Phase 3
+      prerequisite). The escaping path is left out of the watch set; the entry
+      file stays in it, so fixing the directive clears the state. &sect;16 B7.</td>
+  </tr>
+  <tr>
     <td>Attach: reconcile failed (disk full, permission)</td>
     <td>Dialog stays open with red message; orchestrator's
       <code>Monad::Result</code> error text shown; no data-model mutation persists (reconcile failure rolls back the
@@ -2556,6 +2576,40 @@ public:
 
 <ul>
   <li>
+    <strong>One owner for "is this path inside that directory".</strong>
+    (From the B7 review, 2026-08-04.) The question is now answered by three
+    independent implementations:
+    <code>cwExternalCenterlineSync::isContainedIn</code> (read side, added by
+    B7), the <code>isInsideRoot</code> lambda in
+    <code>cwSaveLoadPrivate::Job::execute</code>
+    (<code>cwSaveLoadPrivate.cpp:412-425</code>, the write-side guard on job
+    execution), and <code>cwSaveLoadPrivate::normalizeQueuedPath</code>
+    (<code>:1273-1310</code>), which duplicates the
+    walk-up-to-the-nearest-existing-ancestor helper.
+    <strong>They do not agree, and the security-relevant one is the weaker:</strong>
+    <code>isInsideRoot</code> uses <code>QDir::cleanPath</code> only, with no
+    canonicalization, so a symlinked ancestor walks straight out of a boundary
+    that <code>isContainedIn</code> holds. Worth a <code>cwPathUtils</code>-style
+    home so the two guards provably agree, and Phase 3's rebasing gets its
+    "canonicalize before computing the prefix" guard for free. Held out of B7
+    because it moves a guard inside <code>cwSaveLoad</code>'s job execution,
+    which has its own suite and its own failure semantics &mdash; that
+    regression risk belongs in its own commit.
+  </li>
+  <li>
+    <strong>A reasoned per-owner exportability state.</strong> (From the B7
+    review.) B7 built the "leave this owner out of the driver" mechanism but
+    keys it off membership in an error map, so the exclusion and its reason
+    are the same fact. The sibling cases are already live and worse: an
+    in-project entry file deleted on disk still gets an <code>*include</code>
+    emitted at a path that no longer exists, which fails the <em>entire</em>
+    region export at cavern rather than costing its own survey. One reasoned
+    state consumed by both the exporter and the UI would close containment,
+    missing file, unreadable file and cyclic include together &mdash; and it
+    is what the cave-level error surface (Phase 3 prerequisite) wants to read.
+    Needs the failure taxonomy (&sect;10) settled first.
+  </li>
+  <li>
     <strong>Future&rarr;QML bridge for attach/detach results.</strong>
     <code>cwRootData::attachTripCenterline</code>/<code>detachTripCenterline</code>
     return <code>QFuture&lt;Monad::Result&lt;...&gt;&gt;</code>, which
@@ -3671,7 +3725,147 @@ Stations list   &larr; denser rows; consider abbreviated UsedStations view</code
   asserts the resulting external trip has solved stations.
 </p>
 
-<h3 id="bug-b7">B7 &mdash; A project-side <code>*include</code> can escape the attachment directory</h3>
+<h3 id="bug-b7">B7 &mdash; A project-side <code>*include</code> can escape the attachment directory <em>(FIXED 2026-08-04)</em></h3>
+
+<div class="note">
+  <strong>What shipped, and where it differs from the draft below.</strong>
+  Four deviations, each decided deliberately:
+  <ul>
+    <li>
+      <strong>The boundary is <code>cwSaveLoad::dataRootDir()</code>, not the
+      attachment directory.</strong> The question that matters is whether a
+      dependency travels with the project, and an <code>*include</code>
+      pointing at another owner's attachment does travel. Widening the rule
+      keeps that case legal while still refusing anything outside the survey
+      tree. The regression test pins the boundary with a pair that straddles
+      it: five levels of <code>../</code> clears the data root into the
+      project root (refused), four stops on the data root (allowed).
+    </li>
+    <li>
+      <strong>A new helper rather than a promoted one.</strong>
+      <code>relativeEscapesAttachmentDir</code> inspects a <em>relative</em>
+      path and answers "can this be written under the attachment dir"; the
+      read side needs "does this absolute path live inside the data root".
+      Different questions, so
+      <code>cwExternalCenterlineSync::isContainedIn(path, boundaryDir)</code>
+      was added alongside it instead of replacing it. Both sides canonicalize,
+      which also stops a symlinked ancestor from stepping out &mdash; and
+      matters for the project itself, since a <code>QTemporaryDir</code> under
+      macOS's <code>/var</code> is reached through a symlink and would
+      otherwise make every dependency read as an escape.
+      <p class="note">
+        Correction, from the review of this change: the draft below justifies
+        the shared-helper plan by calling this "the same shape as &sect;15's
+        <em>one owner for the <code>*include</code> quote guard</em> item".
+        <strong>There is no such item in &sect;15</strong> &mdash; the draft
+        invented the cross-reference and an earlier version of this note
+        repeated it. What the draft was reaching for does exist, just
+        elsewhere: <code>cwSaveLoadPrivate::Job::execute</code>'s
+        <code>isInsideRoot</code> lambda
+        (<code>cwSaveLoadPrivate.cpp:412-425</code>) asks
+        <em>exactly</em> the question <code>isContainedIn</code> asks, as the
+        write-side guard on job execution, and
+        <code>normalizeQueuedPath</code> (<code>:1273-1310</code>) is the same
+        walk-to-the-nearest-existing-ancestor helper. So there are now three
+        implementations, and the write-side one is the weaker: it uses
+        <code>cleanPath</code> only, with no canonicalization, so a symlinked
+        ancestor defeats it where it does not defeat
+        <code>isContainedIn</code>. Consolidating them is filed under
+        &sect;15 rather than done here &mdash; it moves a security guard
+        inside <code>cwSaveLoad</code>'s job execution, which has its own
+        suite and its own failure semantics.
+      </p>
+    </li>
+    <li>
+      <strong>The attach side became a hard error, which Phase 3 did not
+      expect.</strong> <code>computePlan</code>'s omission warnings are now
+      appended to the attach's failure list
+      (<code>cwExternalCenterlineAttach.cpp:225</code>), so an attach that
+      cannot mirror every dependency under the attachment dir fails and
+      persists nothing, where it previously succeeded with a warning. Phase
+      3's "Relationship to Phase 2 &sect;16 B7" note says the opposite
+      &mdash; that B7 "deliberately leaves the attach-side warn-and-omit
+      alone, because rebasing removes the condition rather than the check".
+      That note is now stale; see the correction recorded in
+      <code>EXTERNAL_FILE_PHASE3.html</code>. The shipped surface is
+      unaffected in practice: <code>attach()</code> takes a
+      <code>cwTrip*</code>, and the dataset measurement behind Phase 3 puts
+      trip-level escapes at 0.0% of 1777 leaf files. It is cave- and
+      area-level masters (23.1% and 5.4%) that would meet the refusal, and
+      those cannot be attached at all until Phase 3.
+    </li>
+    <li>
+      <strong>"Exclude from the solve" had to be built.</strong> The existing
+      suppression hook &mdash; omitting the owner from the attachment-dir map
+      &mdash; routes into <code>writeExternalInclude</code>'s absent-key
+      branch, which returns false, which makes <code>writeCave</code> return
+      false, which makes <code>cwSurvexExporterRegion</code> abort the
+      <em>entire region</em> export (<code>:128-136</code>). One unportable
+      attachment would have blanked every cave. Instead
+      <code>excludedExternalOwners</code> threads from the manager through
+      <code>cwLinePlotTask</code> into the exporter options, and
+      <code>writeCave</code> skips just that owner's block.
+    </li>
+    <li>
+      <strong>The absolute-<code>*include</code> rule was not implemented.</strong>
+      <code>ScanResult::dependencies</code> holds resolved canonical paths and
+      drops the raw directive text, so this layer cannot tell an absolute
+      <code>*include</code> from a relative one. An absolute path pointing
+      <em>outside</em> the data root is already refused by containment; one
+      pointing inside resolves today and would break on another machine and
+      across a bundled <code>.cw</code> re-extraction. Catching that needs
+      <code>ScanResult</code> to carry the directive as written &mdash; see
+      the open items below; the Phase 3 "absolute includes" guard is the
+      other customer for the same prerequisite.
+    </li>
+  </ul>
+
+  <p><strong>Open after the review of this change.</strong></p>
+  <ul>
+    <li>
+      <strong>A cave-level exclusion is silent.</strong>
+      <code>containmentErrors</code> is keyed by cave <em>or</em> trip and
+      <code>solveInputs()</code> excludes both, but only trips get the reason
+      pushed out &mdash; <code>externalStationsError</code> lives on
+      <code>cwTrip</code>, <code>cwCave</code> has no equivalent, and
+      <code>cwAttachedCenterlinesModel::Row</code> carries no error field. So
+      an escaping cave-level attachment is dropped from the solve with nothing
+      anywhere saying why. Exposure today is small (cave-level attach arrives
+      only through a loaded project; &sect;4 wires the UI in Phase 3), which is
+      why the surface was not built here &mdash; but the decision belongs
+      <em>before</em> Phase 3 wires that flow. Preferred shape: put the reason
+      on the model row, which already serves both owner kinds, rather than
+      mirroring an error property onto <code>cwCave</code>. Folds naturally
+      into &sect;15's per-owner status gadget.
+    </li>
+    <li>
+      <strong>Exclusion is known only at the <code>*include</code> site.</strong>
+      <code>writeEquates</code> and <code>writeRegionEquates</code> still emit
+      <code>*equate</code> operands naming an excluded owner's scope, which is
+      no longer in the driver. Cavern binds the dangling operand as a fresh
+      node rather than rejecting it, so a phantom station can appear under the
+      excluded owner's label and the tie-in UI still treats the tie as live.
+      Unverified &mdash; confirm by exporting a region with an excluded trip
+      that has a tie and inspecting the <code>.3d</code>.
+    </li>
+    <li>
+      <strong>A refused attach strands its copied files.</strong> The
+      omission-to-failure promotion above fails <em>after</em>
+      <code>reconcile</code> has already copied everything into the attachment
+      dir. The model is never set, so <code>detach</code> early-returns on the
+      empty <code>externalCenterline</code> and no GC pass ever removes the
+      tree; it is saved into the bundled <code>.cw</code> or committed to the
+      <code>.cwproj</code> repo. Not fixed here because removing the tree is
+      unsafe when the attach was replacing an existing attachment, and because
+      the trigger is effectively unreachable on the shipped surface (trip-level
+      attach, 0.0% escapes measured).
+    </li>
+    <li>
+      <strong>Path containment is now implemented three times.</strong> See the
+      correction under deviation 2. Consolidation is &sect;15 work.
+    </li>
+  </ul>
+</div>
 
 <p>
   <em>(Filed 2026-08-04.)</em> The rule that keeps an attachment's
@@ -3756,8 +3950,25 @@ Stations list   &larr; denser rows; consider abbreviated UsedStations view</code
   <code>watchedFiles()</code>. Assert the last one explicitly &mdash; a
   fix that only blocks the solve while still arming a
   <code>QFileSystemWatcher</code> on a file outside the project has
-  closed the smaller half of the hole. Cover the reconcile side too, so
-  the shared helper is exercised through both callers.
+  closed the smaller half of the hole.
+</p>
+
+<p class="note">
+  <strong>Gate rewritten 2026-08-04</strong>, after the review of what
+  shipped. The draft's last clause &mdash; "Cover the reconcile side too, so
+  the shared helper is exercised through both callers" &mdash; is unmeetable
+  as written, because deviation 2 means there is no shared helper: the
+  reconcile side still uses <code>relativeEscapesAttachmentDir</code> and the
+  read side uses <code>isContainedIn</code>. The reconcile side is covered
+  through its own caller instead: an attach whose source
+  <code>*include</code>s <code>../shared.svx</code> must fail and persist
+  nothing (<code>test_cwExternalCenterlineAttach.cpp</code>). What the shipped
+  suite adds beyond the three original clauses: the entry file must
+  <em>stay</em> in <code>watchedFiles()</code> so the fix clears the state,
+  editing the directive must lift the exclusion without reopening the project,
+  an excluded cave must emit no empty <code>*begin</code>/<code>*end</code>
+  pair, and a tie naming an excluded owner must be dropped rather than
+  emitted.
 </p>
 
 <p>

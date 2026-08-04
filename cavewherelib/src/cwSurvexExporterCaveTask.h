@@ -47,9 +47,15 @@ public:
     // `tripLabels` must be the pool writeCave opened its "*begin" blocks from
     // (cwScopeLabels::tripLabels for this cave) — an operand deriving its own
     // answer could name a scope the file never opened.
+    //
+    // `excludedExternalOwners` drops a tie naming an owner the driver left
+    // out (cwSurvexExporterRegion::Options): cavern creates an unknown equate
+    // operand rather than rejecting it, so such a tie would fabricate a
+    // station under the excluded owner's label.
     static QString equateOperand(const cwStationHandle& handle,
                                  const cwCaveData& cave,
-                                 const QHash<QUuid, QString>& tripLabels);
+                                 const QHash<QUuid, QString>& tripLabels,
+                                 const QSet<QUuid>& excludedExternalOwners = {});
 
     // Emit one "*equate <a> <b> ..." line from pre-rendered operands. An empty
     // operand (an unresolvable handle) drops the whole tie; operands are

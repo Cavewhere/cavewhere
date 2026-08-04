@@ -51,14 +51,20 @@ const cwCaveData* owningCave(const cwStationHandle& handle, const cwCavingRegion
 // an operand naming a scope the file never opened resolves to nothing.
 QString qualifiedOperand(const cwStationHandle& handle,
                          const cwCavingRegionData& region,
-                         const cwScopeLabels& scopeLabels)
+                         const cwScopeLabels& scopeLabels,
+                         const QSet<QUuid>& excludedExternalOwners)
 {
     const cwCaveData* cave = owningCave(handle, region);
     if (cave == nullptr) {
         return QString();
     }
+    // A cross-cave tie into an excluded cave names a "*begin" the driver
+    // never opened, the same way a cave-scope tie into an excluded trip does.
+    if (excludedExternalOwners.contains(cave->id)) {
+        return QString();
+    }
     const QString relative = cwSurvexExporterCaveTask::equateOperand(
-        handle, *cave, scopeLabels.tripLabels(cave->id));
+        handle, *cave, scopeLabels.tripLabels(cave->id), excludedExternalOwners);
     if (relative.isEmpty()) {
         return QString();
     }
@@ -75,12 +81,13 @@ QString qualifiedOperand(const cwStationHandle& handle,
 // each qualified name back to its cave, landing the tie as a position-alias in
 // both.
 void writeRegionEquates(QTextStream& stream, const cwCavingRegionData& region,
-                        const cwScopeLabels& scopeLabels)
+                        const cwScopeLabels& scopeLabels,
+                        const QSet<QUuid>& excludedExternalOwners)
 {
     cwSurvexExporterCaveTask::writeEquates(
         stream, region.equates,
-        [&region, &scopeLabels](const cwStationHandle& handle) {
-            return qualifiedOperand(handle, region, scopeLabels);
+        [&region, &scopeLabels, &excludedExternalOwners](const cwStationHandle& handle) {
+            return qualifiedOperand(handle, region, scopeLabels, excludedExternalOwners);
         });
 }
 
@@ -138,7 +145,8 @@ cwSurvexExporterRegion::exportRegion(const cwCavingRegionData& region,
 
     // Cross-cave ties emit here, after every cave's "*begin" sibling is declared
     // and closed, so both fully-qualified operands are in scope.
-    writeRegionEquates(stream, region, labeledOptions.scopeLabels);
+    writeRegionEquates(stream, region, labeledOptions.scopeLabels,
+                       labeledOptions.excludedExternalOwners);
 
     stream << "*end" << Qt::endl;
     stream.flush();

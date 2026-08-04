@@ -86,7 +86,10 @@ public:
     // solve (dirs + declination flags), for the consumer's buildInput.
     cwLinePlotTask::ExternalCenterlineInputs solveInputs() const
     {
-        return { m_caveAttachmentDirs, m_tripAttachmentDirs, m_fileOwnsDeclination };
+        return { m_caveAttachmentDirs,
+                 m_tripAttachmentDirs,
+                 m_fileOwnsDeclination,
+                 QSet<QUuid>(m_containmentErrors.keyBegin(), m_containmentErrors.keyEnd()) };
     }
 
     // Per-machine state for live-link attachments, owned by cwRootData.
@@ -267,6 +270,11 @@ private:
         QString entryFile;
         QString attachmentDir;
         QString sourcePath;
+        // Containment boundary for this owner's in-project dependencies
+        // (cwSaveLoad::dataRootDir). Empty when no saveLoad is wired, which
+        // disables the check — scan-only tests have no project on disk to
+        // be contained by.
+        QString dataRootDir;
     };
 
     // Everything the worker derives from an OwnerScanInput batch; the
@@ -288,6 +296,14 @@ private:
         // in-project entry to read.
         QHash<QUuid, QStringList> tripStations;
         QHash<QUuid, QString> tripHarvestErrors;
+        // Owners (cave or trip) whose in-project entry file depends on a
+        // path outside the project's data root, with the reason. Such an
+        // owner is dropped from the solve entirely — see B7 in
+        // plans/EXTERNAL_FILE_PHASE2.html. Its dependencies are also kept
+        // out of the watch set, and it is never harvested, because the
+        // harvest runs cavern over the entry file and cavern would read
+        // the escaping path.
+        QHash<QUuid, QString> containmentErrors;
         QVector<cwAttachedCenterlinesModel::Row> rows;
     };
 
@@ -362,6 +378,13 @@ private:
     };
 
     QHash<QUuid, ActiveOperation> m_activeOperations;
+
+    // Per-owner reason its in-project entry file reaches outside the
+    // project's data root, from the most recent recompute. Membership is
+    // what excludes the owner from the solve (solveInputs) and, for a trip,
+    // what the file-error banner shows. Rebuilt wholesale on every
+    // recompute, so fixing the file clears it.
+    QHash<QUuid, QString> m_containmentErrors;
 
     // Per-owner file-owns-declination flag from the most recent recompute;
     // read via fileOwnsDeclination() and baked into each solve's Input by

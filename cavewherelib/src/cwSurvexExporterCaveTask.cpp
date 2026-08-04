@@ -49,8 +49,21 @@ QString driverIncludePathFor(const QString& attachmentDir, const QString& entryF
 // station (the same membership check cwCave::validate performs).
 QString cwSurvexExporterCaveTask::equateOperand(const cwStationHandle& handle,
                                                 const cwCaveData& cave,
-                                                const QHash<QUuid, QString>& tripLabels)
+                                                const QHash<QUuid, QString>& tripLabels,
+                                                const QSet<QUuid>& excludedExternalOwners)
 {
+    // A tie to an owner whose attachment was excluded names a scope the
+    // driver never opened. Cavern does not reject an unknown operand — it
+    // *creates* the station and a zero-length leg (netbits.c
+    // process_equate) — so emitting the tie would fabricate a station under
+    // the excluded owner's label, at the other operand's coordinate, and the
+    // decode would route it back to the very survey that was left out.
+    // containerId is the trip id for a Trip handle and the cave id for a
+    // NativeCave one, and the excluded set holds both kinds.
+    if (excludedExternalOwners.contains(handle.containerId())) {
+        return QString();
+    }
+
     switch (handle.scope()) {
     case cwStationHandle::NativeCave:
         if (handle.containerId() != cave.id) {
@@ -111,6 +124,17 @@ bool cwSurvexExporterCaveTask::writeCave(QTextStream& stream, const cwCaveData& 
     const QString caveName =
         standalone ? cwCavernNaming::sanitizeToCavernIdentifier(cave.name) : assignedCaveName;
 
+    // An excluded cave-level attachment emits nothing at all, not even an
+    // empty *begin / *end pair: cavern fatals with "No survey data" on a
+    // driver that declares only empty scopes, so a project whose one cave
+    // is an excluded attachment would lose the whole solve rather than the
+    // one survey. Skipping the *include through writeExternalInclude's
+    // failure path instead would abort the entire region export.
+    if (!cave.externalCenterline.isEmpty()
+        && ExportOptions.excludedExternalOwners.contains(cave.id)) {
+        return true;
+    }
+
     stream << "*begin " << caveName << " ;" << cave.name << Qt::endl << Qt::endl;
 
     // Cave-level external attachment: skip fix stations, calibrations,
@@ -151,6 +175,14 @@ bool cwSurvexExporterCaveTask::writeCave(QTextStream& stream, const cwCaveData& 
         // asymmetric — on purpose"). Stations from the included file
         // resolve to <caveLabel>.<tripLabel>.<file-tail>.
         if (!tripData.externalCenterline.isEmpty()) {
+            // Excluded attachments emit nothing at all — unlike the
+            // cave-level branch above, whose *begin is already on the
+            // stream by the time exclusion is known and so has to be
+            // closed. The trip contributes no stations either way.
+            if (ExportOptions.excludedExternalOwners.contains(tripData.id)) {
+                continue;
+            }
+
             const QString tripLabel = tripLabels.value(tripData.id);
             stream << "*begin " << tripLabel << " ; " << tripData.name << Qt::endl;
             // CaveWhere-resolved declination for files that carry none of
@@ -186,8 +218,9 @@ bool cwSurvexExporterCaveTask::writeCave(QTextStream& stream, const cwCaveData& 
     // (master plan §C4). Cavern merges the tied stations to one position;
     // the decode side then keys both cave-local names to that shared point.
     writeEquates(stream, cave.equates,
-                 [&cave, &tripLabels](const cwStationHandle& handle) {
-                     return equateOperand(handle, cave, tripLabels);
+                 [this, &cave, &tripLabels](const cwStationHandle& handle) {
+                     return equateOperand(handle, cave, tripLabels,
+                                          ExportOptions.excludedExternalOwners);
                  });
 
     stream << "*end " << caveName << " ; End of " << cave.name << Qt::endl;

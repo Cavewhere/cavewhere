@@ -40,6 +40,45 @@ namespace {
 // QString parameter would convert on every call.
 constexpr QLatin1StringView kTripOwnerKind("Trip");
 
+// How many offending paths the containment message names before it
+// summarizes the rest. One is the overwhelmingly common case; the cap
+// keeps a pathological file from filling the banner.
+constexpr int kMaxNamedEscapingPaths = 3;
+
+// The subset of `dependencies` that resolves outside `boundary`, and so
+// cannot travel with the project. An empty boundary disables the check —
+// see OwnerScanInput::dataRootDir.
+QStringList escapingDependencies(const QStringList& dependencies, const QString& boundary)
+{
+    if (boundary.isEmpty()) {
+        return QStringList();
+    }
+
+    QStringList escaping;
+    for (const QString& dependency : dependencies) {
+        if (!cwExternalCenterlineSync::isContainedIn(dependency, boundary)) {
+            escaping.append(dependency);
+        }
+    }
+    return escaping;
+}
+
+// The reason a non-empty `escaping` list keeps the owner out of the solve.
+QString containmentErrorFor(const QStringList& escaping)
+{
+    QString named = escaping.mid(0, kMaxNamedEscapingPaths).join(QStringLiteral(", "));
+    if (escaping.size() > kMaxNamedEscapingPaths) {
+        named += QStringLiteral(" and %1 more")
+                     .arg(escaping.size() - kMaxNamedEscapingPaths);
+    }
+
+    return QStringLiteral(
+        "Left out of the survey: this file includes data stored outside the "
+        "project folder (%1). Only files inside the project travel with it, so "
+        "copy them in, or point the *include at a copy inside the project.")
+        .arg(named);
+}
+
 // Deterministic presentation order: cave display name, then trip
 // display name (cave-level owners sort ahead of their trips via the
 // empty trip key), with ownerId as a stable tiebreak for duplicates.
@@ -264,6 +303,11 @@ QVector<cwExternalCenterlineManager::OwnerScanInput> cwExternalCenterlineManager
         return owners;
     }
 
+    // One path-math read for the whole batch; empty without a saveLoad,
+    // which leaves the containment check disabled for scan-only tests.
+    const QString dataRootDir =
+        m_saveLoad.isNull() ? QString() : m_saveLoad->dataRootDir().absolutePath();
+
     const auto appendOwner = [&](const QUuid& ownerId,
                                  const QString& attachmentDir,
                                  const QString& entryFile,
@@ -275,7 +319,8 @@ QVector<cwExternalCenterlineManager::OwnerScanInput> cwExternalCenterlineManager
         }
         owners.append(OwnerScanInput { ownerId, caveName, ownerName, ownerKind,
                                        entryFile, attachmentDir,
-                                       sourcePathForOwner(ownerId) });
+                                       sourcePathForOwner(ownerId),
+                                       dataRootDir });
     };
 
     for (cwCave* cave : m_region->caves()) {
@@ -331,12 +376,26 @@ cwExternalCenterlineManager::ExternalScanResult cwExternalCenterlineManager::sca
         if (!owner.attachmentDir.isEmpty()) {
             const QString projectEntry = QDir(owner.attachmentDir).filePath(owner.entryFile);
             if (QFileInfo::exists(projectEntry)) {
-                // Station names, from cavern reading this one attachment on its
-                // own — the region solve can't supply them for exactly the
-                // attachments that need tying in, since it drops a survey
-                // nothing fixes. The in-project copy, not the live-link source:
-                // it is the bytes the solve *includes.
-                if (owner.ownerKind == kTripOwnerKind) {
+                const auto scan = cwExternalCenterlineScanner::scan(projectEntry);
+
+                // Containment is decided before anything reads the file's
+                // dependencies, and a failure keeps the owner out of the
+                // solve. It also skips the harvest below, which runs cavern
+                // over the entry file — cavern follows the very *include
+                // being rejected.
+                const QStringList escaping = scan.hasError()
+                    ? QStringList()
+                    : escapingDependencies(scan.value().dependencies, owner.dataRootDir);
+
+                if (!escaping.isEmpty()) {
+                    result.containmentErrors.insert(owner.ownerId,
+                                                    containmentErrorFor(escaping));
+                } else if (owner.ownerKind == kTripOwnerKind) {
+                    // Station names, from cavern reading this one attachment on its
+                    // own — the region solve can't supply them for exactly the
+                    // attachments that need tying in, since it drops a survey
+                    // nothing fixes. The in-project copy, not the live-link source:
+                    // it is the bytes the solve *includes.
                     const auto harvest = cwExternalStationHarvest::harvest(projectEntry);
                     if (harvest.hasError()) {
                         result.tripHarvestErrors.insert(owner.ownerId, harvest.errorMessage());
@@ -345,10 +404,18 @@ cwExternalCenterlineManager::ExternalScanResult cwExternalCenterlineManager::sca
                     }
                 }
 
-                const auto scan = cwExternalCenterlineScanner::scan(projectEntry);
+                // Everything below describes the file rather than deciding
+                // whether to solve it, so an excluded owner still reports
+                // it. The watch set keeps the dependencies that live inside
+                // the project — the entry file among them, which is the file
+                // the containment message asks the user to edit, and so the
+                // only way the exclusion ever clears itself. The escaping
+                // paths stay unwatched: the project cannot use them.
                 if (!scan.hasError()) {
                     for (const QString& dep : scan.value().dependencies) {
-                        result.watchedFiles.append(dep);
+                        if (!escaping.contains(dep)) {
+                            result.watchedFiles.append(dep);
+                        }
                     }
                     result.fileOwnsDeclination.insert(
                         owner.ownerId, scan.value().seededMetadata.fileOwnsDeclination());
@@ -470,9 +537,14 @@ void cwExternalCenterlineManager::applyScanResult(ExternalScanResult result)
     // leaving the map is a change too (its *include just appeared or
     // vanished).
     const bool solveNow = m_solveOnScanApply
-        || result.fileOwnsDeclination != m_fileOwnsDeclination;
+        || result.fileOwnsDeclination != m_fileOwnsDeclination
+        || result.containmentErrors != m_containmentErrors;
     m_solveOnScanApply = false;
     m_fileOwnsDeclination = std::move(result.fileOwnsDeclination);
+    // An owner entering or leaving the excluded set changes the driver the
+    // same way a declination flag does — its *include just vanished or
+    // reappeared — so the swap lands ahead of the solve request.
+    m_containmentErrors = result.containmentErrors;
 
     // Ahead of the solve request, so the solve that follows snapshots the
     // fresh names rather than the previous scan's.
@@ -495,7 +567,13 @@ void cwExternalCenterlineManager::applyHarvestToTrips(const ExternalScanResult& 
     for (cwCave* cave : m_region->caves()) {
         for (cwTrip* trip : cave->trips()) {
             trip->setExternalStations(result.tripStations.value(trip->id()));
-            trip->setExternalStationsError(result.tripHarvestErrors.value(trip->id()));
+            // A containment failure skipped the harvest, so the two are
+            // never both present; naming it first keeps that explicit.
+            const QString containmentError = result.containmentErrors.value(trip->id());
+            trip->setExternalStationsError(
+                containmentError.isEmpty()
+                    ? result.tripHarvestErrors.value(trip->id())
+                    : containmentError);
         }
     }
 }

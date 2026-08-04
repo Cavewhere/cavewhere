@@ -357,6 +357,37 @@ TEST_CASE("attach fails cleanly when the source file does not exist",
     CHECK_FALSE(fixture->project->modified());
 }
 
+TEST_CASE("attach refuses a source whose *include cannot be mirrored under the attachment",
+          "[Attach][Orchestrator]")
+{
+    auto fixture = makeSavedProject(QStringLiteral("attach-omitted-dep"));
+
+    // The entry sits one level down from the file it includes, so the
+    // dependency's path relative to the entry's directory climbs out of it
+    // — computePlan cannot place it under the attachment dir and omits it.
+    const QString innerDir = QDir(fixture->tempDir.path()).filePath(QStringLiteral("src/inner"));
+    REQUIRE(QDir().mkpath(innerDir));
+    const QString sharedPath =
+        QDir(fixture->tempDir.path()).filePath(QStringLiteral("src/shared.svx"));
+    overwriteFile(sharedPath, QByteArrayLiteral("*begin Shared\n*end Shared\n"));
+
+    const QString entryPath = QDir(innerDir).filePath(QStringLiteral("entry.svx"));
+    overwriteFile(entryPath,
+                  QByteArrayLiteral("*begin Entry\n*include \"../shared.svx\"\n*end Entry\n"));
+
+    const auto result = runAttach(fixture.get(), entryPath);
+
+    // Copying only part of the closure would persist an attachment whose
+    // entry file *includes a file nothing brought into the project — broken
+    // the moment it is made. Refusing is the whole point of the promotion.
+    REQUIRE(result.hasError());
+    CHECK(result.errorMessage().contains(QStringLiteral("shared.svx")));
+
+    // The model is untouched, so the trip is exactly as it was.
+    CHECK(fixture->trip->externalCenterline().isEmpty());
+    CHECK(fixture->settings()->sourcePathFor(fixture->trip->id()).isEmpty());
+}
+
 TEST_CASE("attach never sets the trip centerline when reconcile cannot write",
           "[Attach][Orchestrator]")
 {

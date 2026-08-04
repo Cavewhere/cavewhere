@@ -112,11 +112,15 @@ public:
     QStringList externalStations() const { return m_externalStations; }
     void setExternalStations(const QStringList& stations);
 
-    //! Cavern's own complaint about this trip's attached file, from the same
-    //! scan-time run that fills externalStations(); empty when the file read
-    //! cleanly or the trip has no attachment. The two are one fact from one run:
-    //! names empty and this non-empty means cavern rejected the file. Derived
-    //! state, with the same no-persist, no-save rules as externalStations().
+    //! Why this trip's attached file yielded no station names; empty when the
+    //! file read cleanly or the trip has no attachment. Usually cavern's own
+    //! complaint, from the same scan-time run that fills externalStations().
+    //! It can also be a CaveWhere policy refusal decided before cavern ran at
+    //! all — an attachment whose *include reaches outside the project's data
+    //! root is rejected unread (see B7 in plans/EXTERNAL_FILE_PHASE2.html) — so
+    //! a non-empty error alongside empty names does not imply the file is
+    //! malformed. Derived state, with the same no-persist, no-save rules as
+    //! externalStations().
     QString externalStationsError() const { return m_externalStationsError; }
     void setExternalStationsError(const QString& error);
 

@@ -265,6 +265,7 @@ private:
         exportOptions.caveAttachmentDirs = InputData.caveAttachmentDirs;
         exportOptions.tripAttachmentDirs = InputData.tripAttachmentDirs;
         exportOptions.tripInjectedDeclinations = InputData.tripInjectedDeclinations;
+        exportOptions.excludedExternalOwners = InputData.excludedExternalOwners;
 
         const Monad::ResultBase r =
             cwSurvexExporterRegion::exportRegion(InputData.regionData, svxPath, exportOptions);
@@ -667,6 +668,7 @@ cwLinePlotTask::Input cwLinePlotTask::buildInput(const cwCavingRegion* region,
     Input input = buildInput(region);
     input.caveAttachmentDirs = external.caveAttachmentDirs;
     input.tripAttachmentDirs = external.tripAttachmentDirs;
+    input.excludedExternalOwners = external.excludedExternalOwners;
     const QHash<QUuid, bool>& fileOwnsDeclination = external.fileOwnsDeclination;
 
     if (region != nullptr) {
