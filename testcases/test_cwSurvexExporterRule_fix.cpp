@@ -77,21 +77,7 @@ QString writeRegionToString(const cwSurveyDataArtifact::Region& region)
 
 } // namespace
 
-TEST_CASE("cwSurvexExporterRule emits *cs out at region level when globalCS is set",
-          "[cwSurvexExporterRule_fix]") {
-    cwSurveyDataArtifact::Region region;
-    region.globalCoordinateSystem =QStringLiteral("EPSG:32616");
-
-    cwSurveyDataArtifact::Cave cave;
-    cave.name = QStringLiteral("TestCave");
-    region.caves.append(cave);
-
-    const QString output = writeRegionToString(region);
-    INFO(output.toStdString());
-    CHECK(output.contains(QStringLiteral("*cs out EPSG:32616")));
-}
-
-TEST_CASE("cwSurvexExporterRule emits no *cs out when globalCS is empty and no fix has inputCS",
+TEST_CASE("cwSurvexExporterRule emits no *cs out when no fix has an inputCS",
           "[cwSurvexExporterRule_fix]") {
     cwSurveyDataArtifact::Region region;
 
@@ -103,17 +89,15 @@ TEST_CASE("cwSurvexExporterRule emits no *cs out when globalCS is empty and no f
     CHECK_FALSE(output.contains(QStringLiteral("*cs out")));
 }
 
-TEST_CASE("cwSurvexExporterRule derives *cs out from the first fix's inputCS when globalCS is empty",
+TEST_CASE("cwSurvexExporterRule derives *cs out from the first fix's inputCS",
           "[cwSurvexExporterRule_fix]") {
-    // Reproduces the user's nimbus.cwproj scenario: the picker never set
-    // a region globalCS, but a cave has a fix carrying its own inputCS.
-    // Cavern rejects *cs without *cs out — so the exporter must fall back
-    // to the fix's CS for *cs out, otherwise the line plot fails with
-    // "input projection is set but output projection isn't".
+    // An exported .svx is for somebody else to read, so its *cs out names a
+    // system they can paste somewhere — derived from the fixes, never the
+    // project's own frame, which is a local projection meaningful only here.
+    // Cavern also rejects *cs without *cs out, so there has to be one.
 
     SECTION("single fix — fix.inputCS becomes *cs out") {
         cwSurveyDataArtifact::Region region;
-        // region.globalCS intentionally left empty.
 
         cwSurveyDataArtifact::Cave cave;
         cave.name = QStringLiteral("Nimbus");
@@ -169,12 +153,10 @@ TEST_CASE("cwSurvexExporterRule derives *cs out from the first fix's inputCS whe
         CHECK(output.contains(QStringLiteral("*cs out EPSG:32616")));
     }
 
-    SECTION("a geographic fix CS is no fallback — cavern refuses it for output") {
-        // "Coordinate system unsuitable for output" (survex/src/commands.c:2672)
-        // fails the entire solve, so emitting one is worse than emitting none.
-        // New fix-station rows start on WGS84, making this the ordinary shape of
-        // a project whose global CS was never set; cwFixStationValidator's
-        // needsOutputCS prompt is what asks the user to pick a projected one.
+    SECTION("a geographic fix contributes the UTM zone containing it") {
+        // Cavern refuses a geographic *cs out outright ("Coordinate system
+        // unsuitable for output", survex/src/commands.c:2672), and new rows
+        // start on WGS84 — so the zone containing the fix stands in for one.
         cwSurveyDataArtifact::Region region;
 
         cwSurveyDataArtifact::Cave cave;
@@ -185,24 +167,8 @@ TEST_CASE("cwSurvexExporterRule derives *cs out from the first fix's inputCS whe
 
         const QString output = writeRegionToString(region);
         INFO(output.toStdString());
-        CHECK_FALSE(output.contains(QStringLiteral("*cs out")));
-    }
-
-    SECTION("a projected fix behind a geographic one is still found") {
-        // The premise for the section above: geographic is skipped, not a stop.
-        cwSurveyDataArtifact::Region region;
-
-        cwSurveyDataArtifact::Cave cave;
-        cave.name = QStringLiteral("Mixed");
-        cave.fixStations.append(makeFix("a1", QStringLiteral("EPSG:4326"),
-                                        -115.59902, 46.12113, 300.0));
-        cave.fixStations.append(makeFix("a2", QStringLiteral("EPSG:32616"),
-                                        500000.0, 4000000.0, 0.0));
-        region.caves.append(cave);
-
-        const QString output = writeRegionToString(region);
-        INFO(output.toStdString());
-        CHECK(output.contains(QStringLiteral("*cs out EPSG:32616")));
+        CHECK(output.contains(QStringLiteral("*cs out EPSG:32611")));
+        CHECK_FALSE(output.contains(QStringLiteral("*cs out EPSG:4326")));
     }
 
     SECTION("a survex keyword cavern won't output is skipped too") {
@@ -258,28 +224,11 @@ TEST_CASE("cwSurvexExporterRule derives *cs out from the first fix's inputCS whe
         CHECK(output.contains(QStringLiteral("*cs out UTM16N")));
     }
 
-    SECTION("explicit globalCS overrides any fix inputCS") {
-        cwSurveyDataArtifact::Region region;
-        region.globalCoordinateSystem =QStringLiteral("EPSG:32616");
-
-        cwSurveyDataArtifact::Cave cave;
-        cave.name = QStringLiteral("Override");
-        // Fix uses a different CS — globalCS should still win for *cs out.
-        cave.fixStations.append(makeFix("a1", QStringLiteral("EPSG:32617"),
-                                        500000.0, 4000000.0, 0.0));
-        region.caves.append(cave);
-
-        const QString output = writeRegionToString(region);
-        INFO(output.toStdString());
-        CHECK(output.contains(QStringLiteral("*cs out EPSG:32616")));
-        CHECK_FALSE(output.contains(QStringLiteral("*cs out EPSG:32617")));
-    }
 }
 
 TEST_CASE("cwSurvexExporterRule emits *cs and *fix per fix station",
           "[cwSurvexExporterRule_fix]") {
     cwSurveyDataArtifact::Region region;
-    region.globalCoordinateSystem =QStringLiteral("EPSG:32616");
 
     cwSurveyDataArtifact::Cave cave;
     cave.name = QStringLiteral("Multi");
@@ -321,10 +270,7 @@ TEST_CASE("cwSurvexExporterRule emits *cs and *fix per fix station",
 
 TEST_CASE("cwSurvexExporterRule falls back to *fix firstStation 0 0 0 with no fixes",
           "[cwSurvexExporterRule_fix]") {
-    auto buildRegion = [](const QString& globalCS) {
-        cwSurveyDataArtifact::Region region;
-        region.globalCoordinateSystem =globalCS;
-
+    auto unfixedCave = []() {
         cwSurveyDataArtifact::Cave cave;
         cave.name = QStringLiteral("Legacy");
 
@@ -341,22 +287,33 @@ TEST_CASE("cwSurvexExporterRule falls back to *fix firstStation 0 0 0 with no fi
         chunk.shots.append(shot);
         trip.chunks.append(chunk);
         cave.trips.append(trip);
-
-        region.caves.append(cave);
-        return region;
+        return cave;
     };
 
-    SECTION("no globalCS — pre-CS legacy behavior, no *cs emitted") {
-        const QString output = writeRegionToString(buildRegion(QString()));
+    SECTION("nothing in the region has a CS — pre-CS legacy behavior, no *cs emitted") {
+        cwSurveyDataArtifact::Region region;
+        region.caves.append(unfixedCave());
+
+        const QString output = writeRegionToString(region);
         INFO(output.toStdString());
         CHECK(output.contains(QStringLiteral("*fix a1 0 0 0")));
         CHECK_FALSE(output.contains(QStringLiteral("\n*cs ")));
     }
 
-    SECTION("globalCS set — emit *cs <globalCS> before fallback so survex accepts the *fix under *cs out") {
-        const QString output = writeRegionToString(buildRegion(QStringLiteral("EPSG:32616")));
+    SECTION("another cave's fix supplies *cs out — emit *cs before the fallback so survex accepts it") {
+        cwSurveyDataArtifact::Region region;
+
+        cwSurveyDataArtifact::Cave fixedCave;
+        fixedCave.name = QStringLiteral("Fixed");
+        fixedCave.fixStations.append(makeFix("f1", QStringLiteral("EPSG:32616"),
+                                             500000.0, 4000000.0, 0.0));
+        region.caves.append(fixedCave);
+        region.caves.append(unfixedCave());
+
+        const QString output = writeRegionToString(region);
         INFO(output.toStdString());
-        const int csIdx  = output.indexOf(QStringLiteral("*cs EPSG:32616"));
+        const int csIdx  = output.indexOf(QStringLiteral("*cs EPSG:32616"),
+                                          output.indexOf(QStringLiteral("*fix f1")));
         const int fixIdx = output.indexOf(QStringLiteral("*fix a1 0 0 0"));
         REQUIRE(csIdx >= 0);
         REQUIRE(fixIdx > csIdx);

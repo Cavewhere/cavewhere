@@ -72,12 +72,12 @@ Before that, it explains *why* it has nothing to report:
 |---------|---------|
 | `0.74° at a1` | The convergence CaveWhere is applying, measured at that fixed station. |
 | `n/a (no fix station)` | The cave has a coordinate system but no [fixed station](georeference-a-cave.md#fix-a-station) to compute at. |
-| `n/a (no coordinate system)` | The cave has a fix but no [project coordinate system](georeference-a-cave.md#choose-the-projects-coordinate-system) to converge against. |
+| `n/a (no coordinate system)` | The cave has a fix, but the fix row names no [coordinate system](georeference-a-cave.md#fix-a-station) of its own to converge against. |
 | `n/a (geographic CS)` | The coordinate system is geographic (latitude/longitude), which has no grid, so convergence is zero and there's nothing to correct. |
 
-The first two "n/a" readings are a checklist: georeferencing needs *both* a
-coordinate system and a fixed station, and the readout tells you which one is
-still missing.
+The first two "n/a" readings are a checklist: convergence needs a fixed station
+*and* a coordinate system on that station's row, and the readout tells you which
+one is still missing.
 
 ![The cave page showing the Fix stations count and the Grid convergence readout, with the help panel open explaining the value.](../images/georef-grid-convergence.png)
 *The grid convergence readout on the cave page. The help panel (the **?**) spells
@@ -99,11 +99,10 @@ Chained together, that's the whole correction at once:
 > **grid bearing = magnetic reading + declination − grid convergence**
 
 So the bearing CaveWhere ends up plotting is a *grid* bearing, not a true one —
-and that grid isn't an abstract reference direction. **The grid is the project
-coordinate system you chose** — the UTM zone or projection you set when you
-[georeferenced the cave](georeference-a-cave.md#choose-the-projects-coordinate-system) —
-and that same system is the frame CaveWhere lays the 3D model out in and exports
-to. Look at a georeferenced cave in plan view and north on the screen *is* grid
+and that grid isn't an abstract reference direction. **The grid is the projection
+CaveWhere derived for the project** when you
+[georeferenced the cave](georeference-a-cave.md#fix-a-station), and that same
+frame is the one it lays the 3D model out in. Look at a georeferenced cave in plan view and north on the screen *is* grid
 north; the model's eastings and northings are the grid's. So the second correction
 isn't bending your survey toward some outside grid — it's aligning it to the map
 CaveWhere already draws. On a local (un-georeferenced) cave there's no projection,

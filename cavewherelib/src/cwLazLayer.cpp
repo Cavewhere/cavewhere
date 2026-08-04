@@ -218,23 +218,12 @@ void cwLazLayer::setFutureManagerToken(const cwFutureManagerToken& token)
     m_futureManagerToken = token;
 }
 
-void cwLazLayer::setRegionGlobalCS(const QString& cs)
+void cwLazLayer::setRegionFrameCS(const QString& cs)
 {
-    if (m_regionGlobalCS == cs) {
+    if (m_regionFrameCS == cs) {
         return;
     }
-    m_regionGlobalCS = cs;
-    if (!m_sourcePath.isEmpty()) {
-        reload();
-    }
-}
-
-void cwLazLayer::setRegionWorldOrigin(const cwGeoPoint& origin)
-{
-    if (m_regionWorldOrigin == origin) {
-        return;
-    }
-    m_regionWorldOrigin = origin;
+    m_regionFrameCS = cs;
     if (!m_sourcePath.isEmpty()) {
         reload();
     }
@@ -254,11 +243,7 @@ void cwLazLayer::reload()
     }
 
     qCDebug(lcLazLayer) << QFileInfo(m_sourcePath).fileName()
-                        << "reload() worldOrigin=("
-                        << m_regionWorldOrigin.x << ","
-                        << m_regionWorldOrigin.y << ","
-                        << m_regionWorldOrigin.z << ")"
-                        << "globalCSSet=" << !m_regionGlobalCS.isEmpty();
+                        << "reload() frameCSSet=" << !m_regionFrameCS.isEmpty();
 
     setErrorMessage(QString());
     setLoadStatus(LoadStatus::Loading);
@@ -267,8 +252,7 @@ void cwLazLayer::reload()
         return cwLazLoader::load({
             .path = m_sourcePath,
             .sourceCSOverride = m_sourceCSOverride,
-            .globalCS = m_regionGlobalCS,
-            .worldOrigin = m_regionWorldOrigin
+            .frameCS = m_regionFrameCS
         });
     });
 }

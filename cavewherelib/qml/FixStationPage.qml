@@ -212,8 +212,6 @@ StandardPage {
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
             value: csCell.value
-            allowGeographic: true
-            projectCS: RootData.region.geoReference.globalCoordinateSystem
             onCommitted: (newCS) => fixStationPage.commitCS(
                 csCell.rowIndex, newCS, csCell.orderUnknown, csCell.coordinateText)
         }
@@ -275,17 +273,6 @@ StandardPage {
         anchors.fill: parent
         anchors.margins: Theme.pageMargin
         spacing: Theme.sectionSpacing
-
-        // Entering fixes here without a project output CS leaves the caves
-        // unplaceable; prompt for one right where the fixes are typed.
-        OutputCSPrompt {
-            objectName: "outputCSPrompt"
-            Layout.fillWidth: true
-            visible: RootData.region.fixStationValidator.needsOutputCS
-            suggestedCS: RootData.region.fixStationValidator.suggestedOutputCS
-            coordinateInvalid: RootData.region.fixStationValidator.outputCSCoordinateInvalid
-            onUseSuggested: (cs) => RootData.region.geoReference.globalCoordinateSystem = cs
-        }
 
         LayoutItemProxy {
             target: addFixBar
@@ -533,8 +520,6 @@ StandardPage {
                 CSComboBox {
                     objectName: "inputCSComboBox." + narrowDelegateId.index
                     value: narrowDelegateId.inputCS
-                    allowGeographic: true
-                    projectCS: RootData.region.geoReference.globalCoordinateSystem
                     onCommitted: (newCS) => fixStationPage.commitCS(
                         narrowDelegateId.index, newCS,
                         narrowDelegateId.coordinateOrderUnknown,

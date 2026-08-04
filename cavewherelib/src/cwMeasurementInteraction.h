@@ -38,7 +38,7 @@ class cwMeasurementInteraction : public cwScenePicker
 
     Q_PROPERTY(Mode mode READ mode WRITE setMode NOTIFY modeChanged)
 
-    // The geo-reference slice (CS + worldOrigin) supplies what turns the grid
+    // The geo-reference slice (the project's frame) supplies what turns the grid
     // azimuth into a true/magnetic bearing. Taking the slice rather than the
     // whole region keeps this interaction's dependency to exactly what it reads.
     Q_PROPERTY(cwGeoReference* geoReference READ geoReference WRITE setGeoReference NOTIFY geoReferenceChanged)

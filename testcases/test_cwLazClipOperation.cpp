@@ -1,5 +1,6 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 #include <cmath>
 #include <limits>
@@ -11,11 +12,12 @@
 #include <QTemporaryDir>
 #include <QVector3D>
 
-#include "cwGeoPoint.h"
 #include "cwLazClipOperation.h"
 #include "cwLazLoader.h"
 
 #include "LazFixtureHelper.h"
+
+using Catch::Matchers::WithinAbs;
 
 namespace {
 
@@ -46,22 +48,13 @@ QString outputPath(const QTemporaryDir& dir, const QString& stem)
     return dir.filePath(stem + QStringLiteral(".laz"));
 }
 
-// Streaming sources live on disk in absolute (output-CS) coords. The clip's
-// eye-XY test is run in worldOrigin-relative space, so a source built from
-// worldOrigin-relative points must add worldOrigin back when writing the file.
-cwLazClipSource sourceFromRelative(QTemporaryDir& dir, const QString& tag,
-                                   const QVector<QVector3D>& relPoints,
-                                   const cwGeoPoint& worldOrigin = cwGeoPoint(0, 0, 0))
+// Streaming sources live on disk in the project's local projection, which is
+// also the frame the clip's eye-XY test runs in — no offset either way.
+cwLazClipSource sourceFrom(QTemporaryDir& dir, const QString& tag,
+                           const QVector<QVector3D>& points)
 {
-    QVector<QVector3D> absPoints;
-    absPoints.reserve(relPoints.size());
-    for (const QVector3D& p : relPoints) {
-        absPoints.append(QVector3D(float(double(p.x()) + worldOrigin.x),
-                                   float(double(p.y()) + worldOrigin.y),
-                                   float(double(p.z()) + worldOrigin.z)));
-    }
     const QString path = tempLazPath(dir, tag);
-    REQUIRE(writeSyntheticLazFile(path, absPoints));
+    REQUIRE(writeSyntheticLazFile(path, points));
     return { path, QString() };
 }
 
@@ -101,10 +94,9 @@ TEST_CASE("cwLazClipOperation: keep mode retains points inside polygon", "[cwLaz
     const QString outPath = outputPath(tempDir, QStringLiteral("clip-keep-out"));
 
     cwLazClipOperation::Request req;
-    req.sources.append(sourceFromRelative(tempDir, QStringLiteral("clip-keep-in"), input));
+    req.sources.append(sourceFrom(tempDir, QStringLiteral("clip-keep-in"), input));
     req.polygonWorldXYZ = squareInWorldXY(0.0, 0.0, 10.0);
     req.viewMatrix = topDownView();
-    req.worldOrigin = cwGeoPoint(0.0, 0.0, 0.0);
     req.mode = cwLazClipOperation::Mode::Keep;
     req.outputPath = outPath;
 
@@ -134,7 +126,7 @@ TEST_CASE("cwLazClipOperation: remove mode retains points outside polygon", "[cw
     };
 
     cwLazClipOperation::Request req;
-    req.sources.append(sourceFromRelative(tempDir, QStringLiteral("clip-rm-in"), input));
+    req.sources.append(sourceFrom(tempDir, QStringLiteral("clip-rm-in"), input));
     req.polygonWorldXYZ = squareInWorldXY(0.0, 0.0, 10.0);
     req.viewMatrix = topDownView();
     req.mode = cwLazClipOperation::Mode::Remove;
@@ -189,7 +181,7 @@ TEST_CASE("cwLazClipOperation: polygon with fewer than 3 vertices is rejected", 
     REQUIRE(tempDir.isValid());
 
     cwLazClipOperation::Request req;
-    req.sources.append(sourceFromRelative(tempDir, QStringLiteral("poly2-in"), {{0,0,0}, {1,1,1}}));
+    req.sources.append(sourceFrom(tempDir, QStringLiteral("poly2-in"), {{0,0,0}, {1,1,1}}));
     req.polygonWorldXYZ = {
         QVector3D(0.0f, 0.0f, 0.0f),
         QVector3D(1.0f, 1.0f, 0.0f)
@@ -203,30 +195,13 @@ TEST_CASE("cwLazClipOperation: polygon with fewer than 3 vertices is rejected", 
             == cwLazClipOperation::BadPolygon);
 }
 
-TEST_CASE("cwLazClipOperation: non-finite worldOrigin is rejected", "[cwLazClipOperation]") {
-    QTemporaryDir tempDir;
-    REQUIRE(tempDir.isValid());
-
-    cwLazClipOperation::Request req;
-    req.sources.append(sourceFromRelative(tempDir, QStringLiteral("nan-in"), {{0,0,0}, {1,1,1}, {2,2,2}}));
-    req.polygonWorldXYZ = squareInWorldXY(0.0, 0.0, 1.0);
-    req.viewMatrix = topDownView();
-    req.worldOrigin = cwGeoPoint(std::numeric_limits<double>::quiet_NaN(), 0.0, 0.0);
-    req.outputPath = outputPath(tempDir, QStringLiteral("nan-out"));
-
-    auto future = cwLazClipOperation::run(req);
-    future.waitForFinished();
-    REQUIRE(future.result().errorCodeTo<cwLazClipOperation::ErrorCode>()
-            == cwLazClipOperation::NonFiniteInput);
-}
-
 TEST_CASE("cwLazClipOperation: unions points from multiple sources into one output", "[cwLazClipOperation]") {
     QTemporaryDir tempDir;
     REQUIRE(tempDir.isValid());
 
     cwLazClipOperation::Request req;
-    req.sources.append(sourceFromRelative(tempDir, QStringLiteral("u-a"), {{0,0,0}, {2,2,2}, {100,100,0}}));
-    req.sources.append(sourceFromRelative(tempDir, QStringLiteral("u-b"), {{3,3,3}, {4,4,4}, {200,200,0}}));
+    req.sources.append(sourceFrom(tempDir, QStringLiteral("u-a"), {{0,0,0}, {2,2,2}, {100,100,0}}));
+    req.sources.append(sourceFrom(tempDir, QStringLiteral("u-b"), {{3,3,3}, {4,4,4}, {200,200,0}}));
     req.polygonWorldXYZ = squareInWorldXY(0.0, 0.0, 10.0);
     req.viewMatrix = topDownView();
     req.mode = cwLazClipOperation::Mode::Keep;
@@ -238,26 +213,24 @@ TEST_CASE("cwLazClipOperation: unions points from multiple sources into one outp
     REQUIRE(future.result().value().pointsWritten == 4); // 2 from A + 2 from B
 }
 
-TEST_CASE("cwLazClipOperation: output preserves absolute coords via worldOrigin", "[cwLazClipOperation]") {
+TEST_CASE("cwLazClipOperation: output round-trips the coordinates it was given",
+          "[cwLazClipOperation]") {
     QTemporaryDir tempDir;
     REQUIRE(tempDir.isValid());
 
-    // Source on disk holds absolute coords (local + worldOrigin). The clip
-    // re-anchors the output on the same worldOrigin, so reloading via
-    // cwLazLoader with that origin returns the original local coordinates.
-    const cwGeoPoint worldOrigin(1000.0, 2000.0, 0.0);
+    // The output header carries no offset — the project's frame is centered on
+    // its own anchor — so the kept points reload exactly as they went in.
     const QVector<QVector3D> input = {
-        { 0.0f, 0.0f, 0.0f },    // inside polygon at local origin
+        { 0.0f, 0.0f, 0.0f },    // inside the polygon
         { 5.0f, 5.0f, 0.0f },    // inside
         { 500.0f, 500.0f, 0.0f } // outside
     };
     const QString outPath = outputPath(tempDir, QStringLiteral("origin-out"));
 
     cwLazClipOperation::Request req;
-    req.sources.append(sourceFromRelative(tempDir, QStringLiteral("origin-in"), input, worldOrigin));
+    req.sources.append(sourceFrom(tempDir, QStringLiteral("origin-in"), input));
     req.polygonWorldXYZ = squareInWorldXY(0.0, 0.0, 10.0);
     req.viewMatrix = topDownView();
-    req.worldOrigin = worldOrigin;
     req.mode = cwLazClipOperation::Mode::Keep;
     req.outputPath = outPath;
 
@@ -266,12 +239,14 @@ TEST_CASE("cwLazClipOperation: output preserves absolute coords via worldOrigin"
     REQUIRE_FALSE(future.result().hasError());
     REQUIRE(future.result().value().pointsWritten == 2);
 
-    auto loadFuture = cwLazLoader::load({
-        .path = outPath,
-        .worldOrigin = worldOrigin
-    });
+    auto loadFuture = cwLazLoader::load({.path = outPath});
     loadFuture.waitForFinished();
-    REQUIRE(loadFuture.result().geometry.vertexCount() == 2);
+    const auto out = loadFuture.result().geometry.values<QVector3D>(
+        cwGeometry::Semantic::Position);
+    REQUIRE(out.size() == 2);
+    CHECK_THAT(out[0].x(), WithinAbs(0.0f, 1e-3f));
+    CHECK_THAT(out[1].x(), WithinAbs(5.0f, 1e-3f));
+    CHECK_THAT(out[1].y(), WithinAbs(5.0f, 1e-3f));
 }
 
 // Stacked-along-Z points spread along eye Y under a profile view;
@@ -289,7 +264,7 @@ TEST_CASE("cwLazClipOperation: profile view separates points stacked along world
     };
 
     cwLazClipOperation::Request req;
-    req.sources.append(sourceFromRelative(tempDir, QStringLiteral("profile-in"), input));
+    req.sources.append(sourceFrom(tempDir, QStringLiteral("profile-in"), input));
     req.polygonWorldXYZ = squareInWorldXZ(0.0, 5.0, 1.0);
     req.viewMatrix = profileView();
     req.mode = cwLazClipOperation::Mode::Keep;
@@ -316,7 +291,7 @@ TEST_CASE("cwLazClipOperation: top-down view treats stacked-Z points as one colu
     };
 
     cwLazClipOperation::Request req;
-    req.sources.append(sourceFromRelative(tempDir, QStringLiteral("topdown-in"), input));
+    req.sources.append(sourceFrom(tempDir, QStringLiteral("topdown-in"), input));
     req.polygonWorldXYZ = squareInWorldXY(0.0, 0.0, 1.0);
     req.viewMatrix = topDownView();
     req.mode = cwLazClipOperation::Mode::Keep;
@@ -348,7 +323,7 @@ TEST_CASE("cwLazClipOperation: classification is invariant under view-matrix pan
     panned.lookAt(QVector3D(5, 0, 10), QVector3D(5, 0, 0), QVector3D(0, 1, 0));
 
     cwLazClipOperation::Request reqA;
-    reqA.sources.append(sourceFromRelative(tempDir, QStringLiteral("pan-in"), input));
+    reqA.sources.append(sourceFrom(tempDir, QStringLiteral("pan-in"), input));
     reqA.polygonWorldXYZ = poly;
     reqA.viewMatrix = topDownView();
     reqA.mode = cwLazClipOperation::Mode::Keep;
@@ -380,7 +355,7 @@ TEST_CASE("cwLazClipOperation: non-finite view matrix is rejected",
     nanView(0, 3) = std::numeric_limits<float>::quiet_NaN();
 
     cwLazClipOperation::Request req;
-    req.sources.append(sourceFromRelative(tempDir, QStringLiteral("nan-view-in"), {{0,0,0}, {1,1,1}, {2,2,2}}));
+    req.sources.append(sourceFrom(tempDir, QStringLiteral("nan-view-in"), {{0,0,0}, {1,1,1}, {2,2,2}}));
     req.polygonWorldXYZ = squareInWorldXY(0.0, 0.0, 5.0);
     req.viewMatrix = nanView;
     req.outputPath = outputPath(tempDir, QStringLiteral("nan-view"));

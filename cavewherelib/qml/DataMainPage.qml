@@ -21,9 +21,6 @@ StandardPage {
 
     readonly property bool isNarrow: width < Theme.breakpointPanelCollapse
 
-    // The project has fix stations but no output CS, so the prompt banner is up.
-    readonly property bool needsOutputCS: RootData.region.fixStationValidator.needsOutputCS
-
     function cavePageName(cave) {
         return "Cave=" + cave.name;
     }
@@ -94,9 +91,9 @@ StandardPage {
         }
     }
 
-    // Units and the coordinate system are project-wide choices a user rarely
-    // changes but can wreck a project by flipping. They show read-only until
-    // the user clicks Edit, which is the extra click the design asks for.
+    // The unit system is a project-wide choice a user rarely changes but can
+    // wreck a project by flipping. It shows read-only until the user clicks
+    // Edit, which is the extra click the design asks for.
     QQ.Rectangle {
         id: regionInfoBox
         objectName: "regionInfoBox"
@@ -105,10 +102,6 @@ StandardPage {
         color: Theme.borderSubtle
 
         property bool editMode: settingsEditButton.editMode
-
-        // The project CS. Its human-facing name/code come from CSFormat (the one
-        // presentation source shared with the inline picker). Empty value == Local.
-        readonly property string csValue: RootData.region.geoReference.globalCoordinateSystem
 
         ColumnLayout {
             id: infoColumnId
@@ -162,74 +155,6 @@ StandardPage {
                 QQ.Item { Layout.fillWidth: true }
             }
 
-            // Wrap the GroupBox in a plain Item the outer ColumnLayout manages:
-            // a Control placed directly as a Layout child here lands unmanaged
-            // at the top and overlaps the rows above it.
-            QQ.Item {
-                objectName: "coordinateSystemGroupContainer"
-                // While the output-CS prompt is up, its banner carries the same
-                // picker — hide the GroupBox so the choice isn't shown twice.
-                visible: !RootData.region.fixStationValidator.needsOutputCS
-                Layout.fillWidth: true
-                implicitHeight: coordinateSystemGroupId.implicitHeight
-
-                QC.GroupBox {
-                    id: coordinateSystemGroupId
-                    objectName: "coordinateSystemGroup"
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    title: qsTr("Coordinate system")
-
-                    // The ColumnLayout must BE the contentItem, not a floating
-                    // child of it: a Control resizes contentItem.width to
-                    // availableWidth, so this is what shrinks the picker down to
-                    // the group and lets its controls wrap. A declared child
-                    // instead keeps its implicit width and overflows the frame.
-                    contentItem: ColumnLayout {
-                        spacing: Theme.tightSpacing
-
-                        // Line 1: the bare picker controls (edit mode only). The
-                        // name/code lines below present the CS — the project
-                        // surface needs no inline resolved label.
-                        CSPicker {
-                            objectName: "globalCoordinateSystemComboBox"
-                            visible: regionInfoBox.editMode
-                            Layout.fillWidth: true
-                            value: regionInfoBox.csValue
-                            allowGeographic: false
-                            onCommitted: (newCS) => {
-                                RootData.region.geoReference.globalCoordinateSystem = newCS
-                            }
-                        }
-
-                        // Line 2: friendly name (or "Local" when unset). Hidden for
-                        // a CS with no PROJ name — the code line below carries it,
-                        // so the raw string never renders on both lines. Copyable.
-                        SelectableValue {
-                            objectName: "coordinateSystemValue"
-                            visible: regionInfoBox.csValue === ""
-                                     ? !regionInfoBox.editMode
-                                     : CSFormat.hasName(regionInfoBox.csValue)
-                            Layout.fillWidth: true
-                            text: regionInfoBox.csValue === ""
-                                  ? CSFormat.localLabel()
-                                  : CSFormat.displayName(regionInfoBox.csValue)
-                        }
-
-                        // Line 3: the raw authority code (EPSG:xxxx), hidden for
-                        // Local. Copyable — the code is the thing users paste.
-                        SelectableValue {
-                            objectName: "coordinateSystemCode"
-                            visible: regionInfoBox.csValue !== ""
-                            Layout.fillWidth: true
-                            color: Theme.textSubtle
-                            font.family: Theme.fontFamilyMono
-                            text: regionInfoBox.csValue
-                        }
-                    }
-                }
-            }
-
             RowLayout {
                 Layout.fillWidth: true
                 spacing: Theme.delegatePadding
@@ -250,18 +175,6 @@ StandardPage {
                 QQ.Item { Layout.fillWidth: true }
             }
         }
-    }
-
-    // Fix stations were entered on some cave but the project still has no output
-    // CS, so nothing can be placed on the map. The inline picker adopts a system
-    // directly (the settings box above is the same choice, without the prompt).
-    OutputCSPrompt {
-        id: outputCSPrompt
-        objectName: "outputCSPrompt"
-        suggestedCS: RootData.region.fixStationValidator.suggestedOutputCS
-        coordinateInvalid: RootData.region.fixStationValidator.outputCSCoordinateInvalid
-        onUseSuggested: (cs) => RootData.region.geoReference.globalCoordinateSystem = cs
-        // Visibility is owned by the hosting proxy (visible: needsOutputCS).
     }
 
     QQ.Flow {
@@ -421,21 +334,12 @@ StandardPage {
             spacing: Theme.columnGap
 
             ColumnLayout {
-                Layout.maximumWidth: regionInfoBox.editMode
-                                     ? Theme.infoColumnEditMaxWidth
-                                     : (pageId.needsOutputCS
-                                        ? Theme.infoColumnPromptMaxWidth
-                                        : Theme.infoColumnMaxWidth)
+                Layout.maximumWidth: Theme.infoColumnMaxWidth
                 Layout.alignment: Qt.AlignTop
                 spacing: Theme.sectionSpacing
 
                 LayoutItemProxy { target: titleRow }
                 LayoutItemProxy { target: regionInfoBox }
-                LayoutItemProxy {
-                    target: outputCSPrompt
-                    visible: pageId.needsOutputCS
-                    Layout.fillWidth: true
-                }
             }
 
             ColumnLayout {
@@ -467,11 +371,6 @@ StandardPage {
 
             LayoutItemProxy { target: titleRow }
             LayoutItemProxy { target: regionInfoBox }
-            LayoutItemProxy {
-                target: outputCSPrompt
-                visible: pageId.needsOutputCS
-                Layout.fillWidth: true
-            }
             LayoutItemProxy { target: actionBar }
             LayoutItemProxy { target: caveListId }
         }

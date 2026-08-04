@@ -69,8 +69,7 @@ struct WorkerResult {
 struct WorkerContext {
     QString path;
     QString sourceCS;
-    QString globalCS;
-    cwGeoPoint worldOrigin;
+    QString frameCS;
     std::atomic<qsizetype>* pointsDone;
     std::atomic<bool>* cancel;
 };
@@ -145,7 +144,7 @@ static WorkerResult decodeRange(const WorkerRange& range,
         }
     }
 
-    cwCoordinateTransform transform(ctx.sourceCS, ctx.globalCS);
+    cwCoordinateTransform transform(ctx.sourceCS, ctx.frameCS);
     const bool hasTransform = !transform.isIdentity();
 
     float minX = std::numeric_limits<float>::infinity();
@@ -181,7 +180,7 @@ static WorkerResult decodeRange(const WorkerRange& range,
             }
             transform.transformInPlace(sourceChunk.data(), sourceChunk.size());
             for (const cwGeoPoint& gp : std::as_const(sourceChunk)) {
-                writeOne(gp.toVector3D(ctx.worldOrigin));
+                writeOne(gp.toVector3D());
             }
             ctx.pointsDone->fetch_add(sourceChunk.size(), std::memory_order_relaxed);
             sourceChunk.clear();
@@ -202,12 +201,9 @@ static WorkerResult decodeRange(const WorkerRange& range,
         flushChunk();
     } else {
         // Identity fast path: write straight into dst, no intermediate
-        // cwGeoPoint buffer. This is the common case (most LAZ tiles already
-        // sit in the project's working CS) and removes one full pass over the
-        // chunk plus a per-worker heap allocation.
-        const double ox = ctx.worldOrigin.x;
-        const double oy = ctx.worldOrigin.y;
-        const double oz = ctx.worldOrigin.z;
+        // cwGeoPoint buffer. Reached when the file is already in the project's
+        // frame, or when there is no frame to transform into yet, and removes
+        // one full pass over the chunk plus a per-worker heap allocation.
         qsizetype sinceReport = 0;
         while (written < range.count && reader->read_point()) {
             // Cancel check every chunkSize points — keeps the inner loop
@@ -216,9 +212,9 @@ static WorkerResult decodeRange(const WorkerRange& range,
                 && ctx.cancel->load(std::memory_order_relaxed)) {
                 break;
             }
-            writeOne(QVector3D(float(reader->point.get_x() - ox),
-                               float(reader->point.get_y() - oy),
-                               float(reader->point.get_z() - oz)));
+            writeOne(QVector3D(float(reader->point.get_x()),
+                               float(reader->point.get_y()),
+                               float(reader->point.get_z())));
             ++sinceReport;
             if (sinceReport >= kChunkSize) {
                 ctx.pointsDone->fetch_add(sinceReport, std::memory_order_relaxed);
@@ -248,8 +244,7 @@ QFuture<cwLazLoadResult> cwLazLoader::load(const Request& request)
         {
             const QString& path = request.path;
             const QString& sourceCSOverride = request.sourceCSOverride;
-            const QString& globalCS = request.globalCS;
-            const cwGeoPoint& worldOrigin = request.worldOrigin;
+            const QString& frameCS = request.frameCS;
             const qsizetype maxPoints = request.maxPoints;
 
             cwLazLoadResult result;
@@ -324,8 +319,7 @@ QFuture<cwLazLoadResult> cwLazLoader::load(const Request& request)
             const WorkerContext ctx{
                 .path = path,
                 .sourceCS = result.sourceCS,
-                .globalCS = globalCS,
-                .worldOrigin = worldOrigin,
+                .frameCS = frameCS,
                 .pointsDone = &pointsDone,
                 .cancel = &cancelFlag
             };

@@ -243,7 +243,6 @@ TEST_CASE("currentClassification flags a typo'd fix across caves with provenance
           "[cwFixStationValidator]")
 {
     cwCavingRegion region;
-    region.geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32612"));
 
     // Four good fixes spread across two caves, clustered near one spot.
     region.addCave();
@@ -278,7 +277,6 @@ TEST_CASE("currentClassification is empty on a region with no fixes",
           "[cwFixStationValidator]")
 {
     cwCavingRegion region;
-    region.geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32612"));
 
     const auto result = region.fixStationValidator()->currentClassification();
 
@@ -295,7 +293,6 @@ TEST_CASE("currentClassification reprojects a fix entered in a different CS",
     // classifying it as an inlier proves gatherCandidates() actually ran the
     // cwCoordinateTransform. Exercises the reproject branch the same-CS tests skip.
     cwCavingRegion region;
-    region.geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32612"));
 
     region.addCave();
     auto* cave = region.cave(0);
@@ -326,7 +323,6 @@ TEST_CASE("currentClassification drops fixes with no usable CS of their own",
     // never a candidate, so never flagged. The empty one is not judged under the
     // region's CS: that is not a stand-in for a system the row never declared.
     cwCavingRegion region;
-    region.geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32612"));
 
     region.addCave();
     auto* cave = region.cave(0);
@@ -371,10 +367,9 @@ TEST_CASE("currentClassification drops a fix that has a CS but no coordinate yet
     // "Mark Station as Fixed" makes exactly this row: a coordinate system, and
     // no coordinate until the user types one. Its components are 0 — every
     // state but Valid reads 0 — so admitting it would enter the cluster at
-    // WGS84's origin, reprojected into UTM 13N some 5000 km away, flag the row
-    // the user just created as an outlier, and drag the world origin with it.
+    // WGS84's origin, thousands of km from the project, and flag the row the
+    // user just created as an outlier.
     cwCavingRegion region;
-    region.geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32613"));
 
     region.addCave();
     auto* cave = region.cave(0);
@@ -404,19 +399,18 @@ TEST_CASE("currentClassification drops a fix that has a CS but no coordinate yet
     CHECK_FALSE(std::any_of(result.inliers.begin(), result.inliers.end(),
                             [&](const FixCandidate& c) { return c.fixId == blankId; }));
 
-    // And the origin stays on the four real fixes rather than being pulled
-    // toward the empty row's projected (0, 0).
-    const auto origin = region.fixStationValidator()->robustWorldOrigin();
-    REQUIRE(origin.has_value());
-    CHECK(origin->x > 470000.0);
-    CHECK(origin->x < 490000.0);
+    // And the four real fixes, which sit close together, are all within a few
+    // hundred meters of the frame's origin — the empty row never pulled it.
+    for (const FixCandidate& candidate : result.inliers) {
+        CHECK(std::abs(candidate.global.x) < 1000.0);
+        CHECK(std::abs(candidate.global.y) < 1000.0);
+    }
 }
 
 TEST_CASE("revalidate attributes an outlier warning to its cave",
           "[cwFixStationValidator]")
 {
     cwCavingRegion region;
-    region.geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32612"));
 
     region.addCave();
     auto* cave = region.cave(0);
@@ -439,7 +433,6 @@ TEST_CASE("revalidate clears the warning when the outlier is corrected",
           "[cwFixStationValidator]")
 {
     cwCavingRegion region;
-    region.geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32612"));
 
     region.addCave();
     auto* cave = region.cave(0);
@@ -462,7 +455,6 @@ TEST_CASE("revalidate updates an existing warning in place without re-adding",
           "[cwFixStationValidator]")
 {
     cwCavingRegion region;
-    region.geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32612"));
 
     region.addCave();
     auto* cave = region.cave(0);
@@ -491,7 +483,6 @@ TEST_CASE("revalidate preserves a suppressed outlier warning across edits",
           "[cwFixStationValidator]")
 {
     cwCavingRegion region;
-    region.geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32612"));
 
     region.addCave();
     auto* cave = region.cave(0);
@@ -533,7 +524,6 @@ TEST_CASE("revalidate clears the warning when its cave leaves the region",
           "[cwFixStationValidator]")
 {
     cwCavingRegion region;
-    region.geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32612"));
 
     // Cave 0 stays clean; cave 1 carries an outlier warning.
     region.addCave();
@@ -558,12 +548,12 @@ TEST_CASE("revalidate clears the warning when its cave leaves the region",
     CHECK(keepCave->errorModel()->warningCount() == 0);
 }
 
-TEST_CASE("revalidate raises no warning without a region global CS",
+TEST_CASE("revalidate raises no warning across caves entered in different CSs",
           "[cwFixStationValidator]")
 {
-    // No region global CS: two caves whose fixes are entered in different input
-    // CSs would, compared as raw coordinates, look wildly far apart. Skipping
-    // classification until a global CS exists keeps a legitimate station from
+    // Two caves at the same real-world spot, entered in different input CSs.
+    // Compared as raw coordinates they look ~4000 km apart; reprojecting both
+    // into the project's frame first is what keeps a legitimate station from
     // being flagged as an outlier.
     cwCavingRegion region;
 
@@ -608,7 +598,6 @@ TEST_CASE("revalidate summarizes outliers for the render-view overlay",
           "[cwFixStationValidator]")
 {
     cwCavingRegion region;
-    region.geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32612"));
 
     region.addCave();
     auto* cave = region.cave(0);
@@ -659,7 +648,6 @@ TEST_CASE("revalidate refreshes the summary when the offending cave is renamed",
           "[cwFixStationValidator]")
 {
     cwCavingRegion region;
-    region.geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32612"));
 
     region.addCave();
     auto* cave = region.cave(0);
@@ -690,7 +678,6 @@ TEST_CASE("revalidate flags a fix outside its CS's valid domain with no cluster"
     // the zone). Only one fix is domain-valid, so the cluster rule cannot fire;
     // the per-fix domain check (Part A) is what catches it.
     cwCavingRegion region;
-    region.geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32613"));
 
     region.addCave();
     auto* goodCave = region.cave(0);
@@ -722,7 +709,6 @@ TEST_CASE("revalidate flags a distant in-domain cave once a two-cave majority ex
     // in-zone location), so this is caught only by the relaxed cluster rule
     // (Part B): with an odd count the median center lands on the majority pair.
     cwCavingRegion region;
-    region.geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32613"));
 
     region.addCave();
     auto* caveA = region.cave(0);
@@ -760,7 +746,6 @@ TEST_CASE("revalidate flags a domain-bad cave in a balanced split the cluster ru
     // cluster rule — the median center sits midway, so neither pair strays — yet
     // Part A still flags the bad cave.
     cwCavingRegion region;
-    region.geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32613"));
 
     region.addCave();
     auto* goodCave = region.cave(0);
@@ -802,7 +787,6 @@ TEST_CASE("revalidate does not flag two legitimately distant caves",
     // Neither the domain check nor the balanced cluster split should fire — a
     // legitimately spread-out survey must not cry wolf.
     cwCavingRegion region;
-    region.geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32613"));
 
     region.addCave();
     auto* westCave = region.cave(0);
@@ -822,205 +806,6 @@ TEST_CASE("revalidate does not flag two legitimately distant caves",
 
     CHECK(westCave->errorModel()->warningCount() == 0);
     CHECK(eastCave->errorModel()->warningCount() == 0);
-}
-
-TEST_CASE("robustWorldOrigin ignores a domain-bad fix",
-          "[cwFixStationValidator]")
-{
-    // Four good fixes plus one transposed-digit typo. The typo is domain-bad, so
-    // it is excluded from the inlier centroid — otherwise it would still drag the
-    // world origin ~200 km east even though it is now flagged.
-    cwCavingRegion region;
-    region.geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32613"));
-
-    region.addCave();
-    auto* cave = region.cave(0);
-    REQUIRE(cave != nullptr);
-    cave->fixStations()->appendFixStation(
-        makeFix(QStringLiteral("A1"), QStringLiteral("EPSG:32613"), 478000.0, 4430000.0, 1655.0));
-    cave->fixStations()->appendFixStation(
-        makeFix(QStringLiteral("A2"), QStringLiteral("EPSG:32613"), 478100.0, 4430100.0, 1656.0));
-    cave->fixStations()->appendFixStation(
-        makeFix(QStringLiteral("A3"), QStringLiteral("EPSG:32613"), 477900.0, 4429900.0, 1654.0));
-    cave->fixStations()->appendFixStation(
-        makeFix(QStringLiteral("A4"), QStringLiteral("EPSG:32613"), 478050.0, 4430050.0, 1655.0));
-    cave->fixStations()->appendFixStation(
-        makeFix(QStringLiteral("Bad"), QStringLiteral("EPSG:32613"), 1478000.0, 4430000.0, 1655.0));
-
-    const auto origin = region.fixStationValidator()->robustWorldOrigin();
-    REQUIRE(origin.has_value());
-    // Centroid of the four good fixes (~478012 E); nowhere near the ~678000 it
-    // would be if the 1478000 typo were averaged in.
-    CHECK(origin->x < 500000.0);
-    CHECK(origin->x > 470000.0);
-}
-
-TEST_CASE("needsOutputCS tracks a project with fixes but no output CS",
-          "[cwFixStationValidator][outputCS]")
-{
-    cwCavingRegion region;  // no global CS
-    auto* validator = region.fixStationValidator();
-
-    // Empty project: nothing to place, no prompt.
-    CHECK_FALSE(validator->needsOutputCS());
-    CHECK(validator->suggestedOutputCS().isEmpty());
-
-    region.addCave();
-    auto* cave = region.cave(0);
-    REQUIRE(cave != nullptr);
-
-    QSignalSpy needsSpy(validator, &cwFixStationValidator::needsOutputCSChanged);
-    QSignalSpy suggestedSpy(validator, &cwFixStationValidator::suggestedOutputCSChanged);
-
-    // A projected fix with no output CS: prompt turns on, suggestion = the input CS.
-    cave->fixStations()->appendFixStation(
-        makeFix(QStringLiteral("A1"), QStringLiteral("EPSG:32612"), 500000.0, 4194000.0, 2700.0));
-
-    CHECK(validator->needsOutputCS());
-    CHECK(validator->suggestedOutputCS() == QStringLiteral("EPSG:32612"));
-    CHECK(needsSpy.count() >= 1);
-    CHECK(suggestedSpy.count() >= 1);
-}
-
-TEST_CASE("needsOutputCS ignores a blank fix row until it has an input CS",
-          "[cwFixStationValidator][outputCS]")
-{
-    cwCavingRegion region;  // no global CS
-    region.addCave();
-    auto* cave = region.cave(0);
-    REQUIRE(cave != nullptr);
-    auto* validator = region.fixStationValidator();
-
-    // A scaffold row with no input CS is the "not started yet" state — no prompt.
-    cave->fixStations()->appendFixStation(
-        makeFix(QStringLiteral(""), QStringLiteral(""), 0.0, 0.0, 0.0));
-    CHECK_FALSE(validator->needsOutputCS());
-}
-
-TEST_CASE("suggestedOutputCS derives a UTM zone from a geographic fix",
-          "[cwFixStationValidator][outputCS]")
-{
-    cwCavingRegion region;  // no global CS
-    region.addCave();
-    auto* cave = region.cave(0);
-    REQUIRE(cave != nullptr);
-    auto* validator = region.fixStationValidator();
-
-    // A lat/long fix at -110 lon, 40 lat can't be the output CS itself; the
-    // suggestion is the WGS84 UTM zone that contains it (12N).
-    cave->fixStations()->appendFixStation(
-        makeFix(QStringLiteral("A1"), cwCoordinateTransform::Wgs84, -110.0, 40.0, 1500.0));
-
-    CHECK(validator->needsOutputCS());
-    CHECK(validator->suggestedOutputCS() == QStringLiteral("EPSG:32612"));
-}
-
-TEST_CASE("setting the output CS clears the prompt",
-          "[cwFixStationValidator][outputCS]")
-{
-    cwCavingRegion region;  // no global CS
-    region.addCave();
-    auto* cave = region.cave(0);
-    REQUIRE(cave != nullptr);
-    auto* validator = region.fixStationValidator();
-
-    cave->fixStations()->appendFixStation(
-        makeFix(QStringLiteral("A1"), QStringLiteral("EPSG:32612"), 500000.0, 4194000.0, 2700.0));
-    REQUIRE(validator->needsOutputCS());
-
-    // Adopting a system (what the prompt's picker does) resolves the condition.
-    region.geoReference()->setGlobalCoordinateSystem(validator->suggestedOutputCS());
-
-    CHECK(region.geoReference()->globalCoordinateSystem() == QStringLiteral("EPSG:32612"));
-    CHECK_FALSE(validator->needsOutputCS());
-    CHECK(validator->suggestedOutputCS().isEmpty());
-}
-
-TEST_CASE("a fix at the origin is treated as not-yet-entered, not invalid",
-          "[cwFixStationValidator][outputCS]")
-{
-    cwCavingRegion region;  // no global CS
-    region.addCave();
-    auto* cave = region.cave(0);
-    REQUIRE(cave != nullptr);
-    auto* validator = region.fixStationValidator();
-
-    // A CS was picked but no coordinate typed yet: the prompt shows, but with no
-    // suggestion and no invalid flag — an empty picker the user can fill in.
-    cave->fixStations()->appendFixStation(
-        makeFix(QStringLiteral("A1"), QStringLiteral("EPSG:32612"), 0.0, 0.0, 0.0));
-
-    CHECK(validator->needsOutputCS());
-    CHECK(validator->suggestedOutputCS().isEmpty());
-    CHECK_FALSE(validator->outputCSCoordinateInvalid());
-}
-
-TEST_CASE("an out-of-domain fix coordinate flags the output-CS prompt as invalid",
-          "[cwFixStationValidator][outputCS]")
-{
-    cwCavingRegion region;  // no global CS
-    region.addCave();
-    auto* cave = region.cave(0);
-    REQUIRE(cave != nullptr);
-    auto* validator = region.fixStationValidator();
-
-    QSignalSpy invalidSpy(validator, &cwFixStationValidator::outputCSCoordinateInvalidChanged);
-
-    // Easting 1478000 is well outside UTM zone 13's valid domain — a data-entry
-    // error. No trustworthy suggestion, so the prompt flags the coordinate.
-    cave->fixStations()->appendFixStation(
-        makeFix(QStringLiteral("B"), QStringLiteral("EPSG:32613"), 1478000.0, 4430000.0, 1655.0));
-
-    CHECK(validator->needsOutputCS());
-    CHECK(validator->outputCSCoordinateInvalid());
-    CHECK(validator->suggestedOutputCS().isEmpty());
-    CHECK(invalidSpy.count() >= 1);
-
-    // Correcting the coordinate clears the flag and restores the suggestion.
-    cave->fixStations()->setData(cave->fixStations()->index(0),
-                                 478000.0, cwFixStationModel::EastingRole);
-
-    CHECK_FALSE(validator->outputCSCoordinateInvalid());
-    CHECK(validator->suggestedOutputCS() == QStringLiteral("EPSG:32613"));
-}
-
-TEST_CASE("needsOutputCS is false when the project already has an output CS",
-          "[cwFixStationValidator][outputCS]")
-{
-    cwCavingRegion region;
-    region.geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32612"));
-    region.addCave();
-    auto* cave = region.cave(0);
-    REQUIRE(cave != nullptr);
-    cave->fixStations()->appendFixStation(
-        makeFix(QStringLiteral("A1"), QStringLiteral("EPSG:32612"), 500000.0, 4194000.0, 2700.0));
-
-    CHECK_FALSE(region.fixStationValidator()->needsOutputCS());
-}
-
-TEST_CASE("suggestedOutputCS is decided by the first cave's fix, not a later cave's",
-          "[cwFixStationValidator][outputCS]")
-{
-    cwCavingRegion region;  // no global CS
-    region.addCave();
-    region.addCave();
-    auto* first = region.cave(0);
-    auto* second = region.cave(1);
-    REQUIRE(first != nullptr);
-    REQUIRE(second != nullptr);
-    auto* validator = region.fixStationValidator();
-
-    // The scan returns on the first non-origin fix carrying an input CS, walking
-    // caves in order — so the first cave's good projected fix decides the
-    // suggestion and a later cave's out-of-domain fix must not override it.
-    first->fixStations()->appendFixStation(
-        makeFix(QStringLiteral("A1"), QStringLiteral("EPSG:32612"), 500000.0, 4194000.0, 2700.0));
-    second->fixStations()->appendFixStation(
-        makeFix(QStringLiteral("B1"), QStringLiteral("EPSG:32613"), 1478000.0, 4430000.0, 1655.0));
-
-    CHECK(validator->needsOutputCS());
-    CHECK(validator->suggestedOutputCS() == QStringLiteral("EPSG:32612"));
-    CHECK_FALSE(validator->outputCSCoordinateInvalid());
 }
 
 TEST_CASE("fixStationErrorTypeIds lists the three fix-station warning kinds",

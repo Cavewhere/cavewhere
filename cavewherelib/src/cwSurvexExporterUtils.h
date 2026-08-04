@@ -53,10 +53,25 @@ void writeDeclinationAuto(QTextStream& stream, const DeclinationContext& ctx);
 //! "PROJ doesn't understand it".
 bool isUnusableAsSurvexOutputCS(const QString& cs);
 
+//! \a cs rendered as survex *cs syntax. Survex names a system by keyword or
+//! authority code; anything else — a raw PROJ string, which the project's own
+//! local projection is — has to be quoted behind the CUSTOM keyword, or cavern
+//! refuses it with "Unknown coordinate system" (survex/src/commands.c, the
+//! CS_CUSTOM branch). The test is what a bare survex name may contain rather
+//! than what a PROJ string looks like, so WKT is quoted too.
+QString toSurvexCS(const QString& cs);
+
+//! Emit a `*cs` (or `*cs out`) line for \a cs, quoted as survex needs. Every
+//! emitter goes through here so a new one can't drop the CUSTOM quoting and
+//! fail the solve.
+void writeCsLine(QTextStream& stream, const QString& cs, bool isOutput = false);
+
 /**
- * Which coordinate system *cs out should name. There is no default: the two
- * answers coincide today only because the project has exactly one coordinate
- * system, so every caller states which question it is asking.
+ * Which coordinate system *cs out should name. There is no default, and the two
+ * answers are now genuinely different systems: the working frame is the
+ * project's local projection, which is a PROJ string centered on this one cave
+ * and no use to anybody else, while a shared file wants a system its reader can
+ * paste somewhere.
  */
 enum class OutputCSPolicy {
     //! A system the file's reader can use elsewhere. What an exported .svx
@@ -70,62 +85,67 @@ enum class OutputCSPolicy {
 
 //! The CS a fix can contribute to a file that leaves the project: the WGS84 UTM
 //! zone containing it, or a projected CS as it stands. A fix that places
-//! nothing contributes nothing — cwFixStation::hasPlacedCoordinate, the same
-//! rule cwFixStationValidator::updateOutputCSPrompt applies to its suggestion.
+//! nothing contributes nothing — cwFixStation::hasPlacedCoordinate.
 inline QString shareableCSForFix(const cwFixStation& fix)
 {
     if (!fix.hasPlacedCoordinate()) {
         return QString();
     }
-    return cwCoordinateTransform::deriveProjectedOutputCS(
+    const QString derived = cwCoordinateTransform::deriveProjectedOutputCS(
         fix.inputCS(), cwGeoPoint(fix.easting(), fix.northing(), fix.elevation()));
-}
-
-//! The CS a fix can contribute to the frame the solve returns positions in.
-//! Only a projected fix CS will do: cavern refuses a geographic output system
-//! outright ("Coordinate system unsuitable for output" —
-//! survex/src/commands.c:2672, the `ok_for_output == NO` branch), so emitting a
-//! geographic one fails the whole solve rather than falling back.
-inline QString workingFrameCSForFix(const cwFixStation& fix)
-{
-    const QString cs = fix.inputCS().trimmed();
-    if (cs.isEmpty() || cwCoordinateTransform::isGeographic(cs)) {
+    if (!derived.isEmpty()) {
+        return derived;
+    }
+    // A system PROJ doesn't know at all is a survex spelling of its own (UTM16N,
+    // S-MERC, OSGB:XX, EUR79Z30) — cavern accepts those for output, and an svx
+    // import stores *cs verbatim — so offer the string as it stands;
+    // isUnusableAsSurvexOutputCS screens the ones cavern refuses. A system PROJ
+    // *does* know yielded nothing for a different reason: the point wouldn't
+    // transform. Falling back there would name a geographic CS as *cs out and
+    // fail the solve, so leave it to the next fix.
+    if (cwCoordinateTransform::isValidCS(fix.inputCS())) {
         return QString();
     }
-    return cs;
+    return fix.inputCS().trimmed();
 }
 
 /**
- * Survex requires *cs out whenever any *cs appears, so when the user hasn't set
- * a globalCS but a fix has one of its own, that fix decides *cs out — otherwise
- * cavern errors with "input projection is set but output projection isn't" the
- * moment the per-cave *cs is emitted. The first fix that yields a CS under
- * \a policy wins; the user's own globalCS outranks all of them for as long as
- * there is one to choose.
+ * Survex requires *cs out whenever any *cs appears, so a project whose fixes
+ * carry a CS of their own must name one — otherwise cavern errors with "input
+ * projection is set but output projection isn't" the moment the per-cave *cs is
+ * emitted.
  *
- * Under WorkingFrame a project whose fixes are all geographic — the shape every
- * new row starts in — yields nothing at all, and the solve fails; that is what
- * cwFixStationValidator's needsOutputCS prompt exists to ask about. Under
- * Shareable the same project yields the UTM zone containing it, which stands in
- * for one perfectly well.
+ * \a frameCS is the project's local projection, which is the whole answer under
+ * WorkingFrame: the solve reports its stations in whatever *cs out names, and
+ * the scene is in the LDP. A fix cannot stand in for it — a fix's own CS is
+ * where its coordinate was typed, not where the scene is — so an
+ * Ungeoreferenced project yields nothing here, which is right: it has no fixes
+ * to place either, and cavern falls back to fixing the first station at the
+ * origin.
  *
- * The Region template parameter is duck-typed: it must expose
- * `.globalCoordinateSystem` and `.caves`, and each cave must expose
- * `.fixStations`. This works for both cwSurveyDataArtifact::Region
- * (Rule export path) and cwCavingRegionData (line-plot export path), which is
- * why this lives here as a template rather than beside the rest.
+ * Shareable ignores \a frameCS for the opposite reason: an LDP is a PROJ string
+ * built around one cave, and pasting it anywhere else is meaningless. The first
+ * fix that yields a shareable system wins — for a geographic fix that is the
+ * UTM zone containing it.
+ *
+ * The Region template parameter is duck-typed: it must expose `.caves`, and
+ * each cave must expose `.fixStations`. This works for both
+ * cwSurveyDataArtifact::Region (Rule export path) and cwCavingRegionData
+ * (line-plot export path), which is why this lives here as a template rather
+ * than beside the rest.
  */
 template <typename Region>
-QString resolveOutputCS(const Region& region, OutputCSPolicy policy)
+QString resolveOutputCS(const Region& region, const QString& frameCS, OutputCSPolicy policy)
 {
-    if (!region.globalCoordinateSystem.isEmpty()) {
-        return region.globalCoordinateSystem;
+    if (policy == OutputCSPolicy::WorkingFrame) {
+        // No screening: the frame is either empty or a local projection PROJ
+        // built, never one of survex's output-refused keywords.
+        return frameCS;
     }
+
     for (const auto& cave : region.caves) {
         for (const cwFixStation& fix : cave.fixStations) {
-            const QString cs = policy == OutputCSPolicy::WorkingFrame
-                                   ? workingFrameCSForFix(fix)
-                                   : shareableCSForFix(fix);
+            const QString cs = shareableCSForFix(fix);
             if (!cs.isEmpty() && !isUnusableAsSurvexOutputCS(cs)) {
                 return cs;
             }

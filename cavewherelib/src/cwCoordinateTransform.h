@@ -160,17 +160,12 @@ public:
     /**
      * Picker modes. Custom is the escape hatch that opens the CSCustomDialog.
      *
-     * Which modes a picker offers is per-host: the project's global CS keeps
-     * Local (a cave that isn't georeferenced has to be able to say so) and
-     * never offers Project; a fix-station row is the mirror image.
-     *
-     * Project is an action, not a stored mode — it stamps the project's global
-     * CS into the row, which then holds it whatever the project does later. So
-     * modeFor() can never return it: the CS string alone doesn't say whether
-     * it was picked that way, and the picker decides by comparing against the
-     * project's CS.
+     * Local is what a blank CS string reads as. The picker doesn't offer it —
+     * every surface that picks a system is a fix station, and a fix station
+     * always has one — but modeFor() still has to name the blank a hand-edited
+     * file can carry.
      */
-    enum Mode { Local, LatLon, UTM, Custom, Project };
+    enum Mode { Local, LatLon, UTM, Custom };
     Q_ENUM(Mode)
 
     Q_INVOKABLE static bool isValidCS(const QString& cs);
@@ -181,8 +176,6 @@ public:
 
     /**
      * True iff cs parses as a geographic CRS (lat/long), e.g. EPSG:4326.
-     * Used by the picker to keep geographic systems out of region-level
-     * globalCS — survex's cavern only emits projected output.
      */
     Q_INVOKABLE static bool isGeographic(const QString& cs);
 
@@ -194,8 +187,7 @@ public:
     Q_INVOKABLE static QString utmZoneToEpsg(int zone, bool north);
 
     /**
-     * Round-trip a CS string back to a picker mode (Local / LatLon / UTM /
-     * Custom — never Project, see the enum). Splitting the parse into three
+     * Round-trip a CS string back to a picker mode. Splitting the parse into three
      * Q_INVOKABLEs lets QML bind each slice as a strict-typed property.
      * utmZoneFor returns -1 and utmNorthFor returns true when mode is not UTM.
      */

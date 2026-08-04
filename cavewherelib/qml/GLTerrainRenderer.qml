@@ -171,11 +171,11 @@ Item {
         pageSelectionModel: RootData.pageSelectionModel
     }
 
-    // A fix-station coordinate typo drags the world origin off the real data and
-    // blows the scene bounds up until the cave is a sub-pixel dot — the 3D view
-    // just looks empty. This top banner names the culprit so an empty render has
-    // a cause the user can act on, instead of looking like a bug, and links
-    // straight to the offending cave's fix stations to fix it.
+    // A fix-station coordinate typo puts one station thousands of kilometers
+    // from the rest and blows the scene bounds up until the cave is a sub-pixel
+    // dot — the 3D view just looks empty. This top banner names the culprit so
+    // an empty render has a cause the user can act on, instead of looking like a
+    // bug, and links straight to the offending cave's fix stations to fix it.
     ErrorHelpBox {
         id: fixStationOutlierBox
         objectName: "fixStationOutlierBox"
@@ -196,21 +196,6 @@ Item {
                 RootData.pageSelectionModel.currentPageAddress = outlierLinkGeneratorId.caveLink(cave)
             }
         }
-    }
-
-    // A project with fix stations but no output CS renders around an untouched
-    // world origin, so the scene looks empty or misplaced. Surface the same
-    // prompt here with its inline picker to adopt an output system in place.
-    OutputCSPrompt {
-        objectName: "outputCSPrompt"
-        anchors.top: fixStationOutlierBox.visible ? fixStationOutlierBox.bottom : parent.top
-        anchors.topMargin: 20
-        anchors.horizontalCenter: parent.horizontalCenter
-        width: Math.min(parent.width - 2 * Theme.pageMargin, Theme.outputCSPromptWidth)
-        visible: RootData.region.fixStationValidator.needsOutputCS
-        suggestedCS: RootData.region.fixStationValidator.suggestedOutputCS
-        coordinateInvalid: RootData.region.fixStationValidator.outputCSCoordinateInvalid
-        onUseSuggested: (cs) => RootData.region.geoReference.globalCoordinateSystem = cs
     }
 
     Row {

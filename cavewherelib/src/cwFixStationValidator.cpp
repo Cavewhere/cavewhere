@@ -24,6 +24,7 @@
 //Std includes
 #include <algorithm>
 #include <cmath>
+#include <optional>
 
 namespace {
 
@@ -135,7 +136,7 @@ cwFixStationValidator::cwFixStationValidator(cwCavingRegion* region) :
     // an outlier under the old CS may cease to be one under the new.
     connect(m_region, &cwCavingRegion::caveCountChanged,
             this, [this] { syncCaveConnections(); revalidate(); });
-    connect(m_region->geoReference(), &cwGeoReference::globalCoordinateSystemChanged,
+    connect(m_region->geoReference(), &cwGeoReference::localProjectionChanged,
             this, &cwFixStationValidator::revalidate);
 
     syncCaveConnections();
@@ -200,24 +201,14 @@ cwFixStationValidator::classifyCandidates(const QList<FixCandidate>& candidates)
 cwFixStationValidator::Classification
 cwFixStationValidator::currentClassification() const
 {
-    // Without a region global CS there is no common frame to reproject into, so
-    // fixes entered in different input CSs would be compared as raw coordinates
-    // and a legitimate station could be flagged. Skip classification entirely
-    // until a global CS exists.
-    if (m_region == nullptr
-        || m_region->geoReference()->globalCoordinateSystem().trimmed().isEmpty()) {
+    // Without a project frame there is nothing to reproject into, so fixes
+    // entered in different input CSs would be compared as raw coordinates and a
+    // legitimate station could be flagged. Skip classification entirely until
+    // the project is georeferenced.
+    if (m_region == nullptr || !m_region->geoReference()->hasCoordinateSystem()) {
         return {};
     }
     return classifyCandidates(gatherCandidates());
-}
-
-std::optional<cwGeoPoint> cwFixStationValidator::robustWorldOrigin() const
-{
-    const QList<FixCandidate> inliers = currentClassification().inliers;
-    if (inliers.isEmpty()) {
-        return std::nullopt;
-    }
-    return centroid(inliers);
 }
 
 QList<cwFixStationValidator::FixCandidate>
@@ -228,7 +219,7 @@ cwFixStationValidator::gatherCandidates() const
         return candidates;
     }
 
-    const QString globalCSTrimmed = m_region->geoReference()->globalCoordinateSystem().trimmed();
+    const QString frameCS = m_region->geoReference()->localCoordinateSystem();
 
     for (cwCave* cave : m_region->caves()) {
         if (cave == nullptr || cave->fixStations() == nullptr) {
@@ -257,18 +248,17 @@ cwFixStationValidator::gatherCandidates() const
             // single-cave, single-fix typo the cluster rule structurally can't.
             const bool domainValid = cwFixStationDiagnostics::isDomainValid(fix);
 
-            // currentClassification() guarantees globalCSTrimmed is non-empty.
-            cwGeoPoint global;
-            if (inputCS.compare(globalCSTrimmed, Qt::CaseInsensitive) == 0) {
-                global = p;
-            } else {
-                cwCoordinateTransform t(inputCS, globalCSTrimmed);
-                if (!t.isValid()) {
-                    continue;
-                }
-                global = t.transform(p);
+            // currentClassification() guarantees frameCS is non-empty. The
+            // memoizing form matters here: frameCS is the derived local
+            // projection, which no fix's inputCS ever equals, so every fix in
+            // every cave needs a real transform — and revalidate() runs on each
+            // fix-station edit and each solve.
+            const std::optional<cwGeoPoint> global =
+                cwCoordinateTransform::transformPoint(inputCS, frameCS, p);
+            if (!global.has_value()) {
+                continue;
             }
-            candidates.append(FixCandidate{cave, fix.id(), global, domainValid});
+            candidates.append(FixCandidate{cave, fix.id(), *global, domainValid});
         }
     }
     return candidates;
@@ -397,8 +387,6 @@ void cwFixStationValidator::revalidate()
                       .arg(firstOffender->name());
     }
     setSummary(summary, total, firstOffender);
-
-    updateOutputCSPrompt();
 }
 
 QHash<cwCave*, QString> cwFixStationValidator::referenceWarnings() const
@@ -455,70 +443,6 @@ QHash<cwCave*, QString> cwFixStationValidator::referenceWarnings() const
         messages.insert(cave, parts.join(kSentenceSeparator));
     }
     return messages;
-}
-
-void cwFixStationValidator::updateOutputCSPrompt()
-{
-    bool needs = false;
-    bool coordinateInvalid = false;
-    QString suggested;
-
-    // Only prompt while there is no output CS to place the caves; a set global
-    // CS clears the state (globalCoordinateSystemChanged re-runs revalidate).
-    if (m_region != nullptr
-        && m_region->geoReference()->globalCoordinateSystem().trimmed().isEmpty()) {
-        // A fix with a coordinate that reads back is the signal that real fix
-        // data is being entered. Carrying an input CS no longer says anything on
-        // its own: "Mark Station as Fixed" creates a row that has one from the
-        // moment it exists, and prompting for that would put the banner up — and
-        // hide the project's own CS control behind it — before the user has
-        // typed a thing. A coordinate is also exactly when the missing output CS
-        // starts to matter. The suggestion then comes from the first such fix; a
-        // fix still at the origin counts as "not entered yet", so a freshly
-        // picked CS doesn't momentarily read as an invalid coordinate.
-        const auto scan = [&]() {
-            for (cwCave* cave : m_region->caves()) {
-                if (cave == nullptr || cave->fixStations() == nullptr) {
-                    continue;
-                }
-                for (const cwFixStation& fix : cave->fixStations()->fixStations()) {
-                    if (fix.state() != cwFixStation::Valid) {
-                        continue;
-                    }
-                    const QString inputCS = fix.inputCS().trimmed();
-                    needs = true;
-                    if (!fix.hasPlacedCoordinate()) {
-                        continue;
-                    }
-                    const cwGeoPoint p(fix.easting(), fix.northing(), fix.elevation());
-                    // The first real coordinate decides the suggestion. A
-                    // coordinate outside its own CS's valid domain is almost
-                    // certainly a data-entry error, so offer no suggestion and
-                    // flag it — the prompt grays out and points at the coordinate.
-                    if (cwFixStationDiagnostics::isDomainValid(fix)) {
-                        suggested = cwCoordinateTransform::deriveProjectedOutputCS(inputCS, p);
-                    } else {
-                        coordinateInvalid = true;
-                    }
-                    return;
-                }
-            }
-        };
-        scan();
-    }
-
-    if (m_needsOutputCS != needs) {
-        m_needsOutputCS = needs;
-        emit needsOutputCSChanged();
-    }
-    if (m_suggestedOutputCS != suggested) {
-        m_suggestedOutputCS = suggested;
-        emit suggestedOutputCSChanged();
-    }
-    if (m_outputCSCoordinateInvalid != coordinateInvalid) {
-        m_outputCSCoordinateInvalid = coordinateInvalid;
-        emit outputCSCoordinateInvalidChanged();
-    }
 }
 
 void cwFixStationValidator::syncCaveConnections()

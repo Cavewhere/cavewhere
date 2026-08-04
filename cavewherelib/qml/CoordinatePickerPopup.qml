@@ -22,33 +22,16 @@ QC.Popup {
     readonly property int _wgsPrecision: 6
     readonly property int _messageWidth: 240
 
-    // True when the region has no coordinate system, so the pick can't be placed
-    // in a real-world CRS.
+    // True when the project has nothing to anchor its local projection to, so the
+    // pick can't be placed in real-world coordinates.
     readonly property bool _needsCoordinateSystem: !picker.hasCoordinateSystem
 
-    // Cache the CRS header so binding evaluations during pick changes don't
-    // re-run the PROJ name lookup + qsTr interpolation each time.
-    readonly property string _crsHeader: {
-        if (!picker.hasCoordinateSystem) {
-            return ""
-        }
-        const name = CoordinateSystem.nameFor(picker.globalCoordinateSystem)
-        return qsTr("Project CRS — %1").arg(name !== "" ? name : picker.globalCoordinateSystem)
-    }
-
-    // Send the user to the Data page, where the region's coordinate system is set
-    // (the "Geospatial" group box). cwLinkGenerator owns the page-address scheme
-    // so this leaf doesn't hardcode the page tree.
+    // Send the user to the Data page, where a fix station or a geospatial layer
+    // gives the project its position. cwLinkGenerator owns the page-address
+    // scheme so this leaf doesn't hardcode the page tree.
     function _gotoCoordinateSystem() {
         root.picker.clearPick()
         RootData.pageSelectionModel.currentPageAddress = linkGeneratorId.dataPageLink()
-    }
-
-    function _formatXYZ(x, y, z, precision) {
-        return "%1, %2, %3"
-            .arg(Number(x).toFixed(precision))
-            .arg(Number(y).toFixed(precision))
-            .arg(Number(z).toFixed(precision))
     }
 
     function _formatLatLon(lat, lon) {
@@ -146,24 +129,14 @@ QC.Popup {
                 Layout.fillWidth: true
                 wrapMode: QQ.Text.WordWrap
                 color: Theme.text
-                text: qsTr("This tool needs a coordinate system to place the pick in real-world coordinates.")
+                text: qsTr("This project isn't positioned yet, so the pick can't be shown in real-world coordinates.")
             }
 
             LinkText {
                 objectName: "coordinateSystemLink"
-                text: qsTr("Set the coordinate system")
+                text: qsTr("Add a fix station or a geospatial layer")
                 onClicked: root._gotoCoordinateSystem()
             }
-        }
-
-        CopySection {
-            visible: root.picker.hasCoordinateSystem
-            objectNameRoot: "CS"
-            headerText: root._crsHeader
-            valueText: root._formatXYZ(root.picker.csX,
-                                       root.picker.csY,
-                                       root.picker.csZ,
-                                       root._coordPrecision)
         }
 
         CopySection {

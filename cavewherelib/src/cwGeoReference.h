@@ -13,29 +13,25 @@
 #include <QQmlEngine>
 #include <QString>
 #include <QUuid>
-#include <QVector3D>
 
 //Our includes
 #include "cwGlobals.h"
-#include "cwGeoPoint.h"
 
 /**
- * The geo-reference slice of a region: the project coordinate system plus the
- * worldOrigin offset that together place scene-local points in a real-world
- * CRS. Extracted from cwCavingRegion so interactions that only need this slice
- * (the azimuth reference, the coordinate pick) can take a cwGeoReference*
- * instead of the whole region.
+ * The geo-reference slice of a region: the project's local projection (LDP),
+ * which is the frame the scene is in. Extracted from cwCavingRegion so
+ * interactions that only need this slice (the azimuth reference, the coordinate
+ * pick) can take a cwGeoReference* instead of the whole region.
  *
  * cwCavingRegion owns one and exposes it as region.geoReference — it is the
  * single home for this state, not a copy the region also mirrors. The
- * region-specific plumbing stays on the region: pushing changes into the LAZ
- * layer model and the cave-based recomputeWorldOrigin() both live there and
- * drive this slice through its public setters.
+ * region-specific plumbing stays on the region: pushing the frame into the LAZ
+ * layer model happens there and drives this slice through its public setters.
  *
- * This class is mid-rework. It carries two frames at once: the
- * user-or-auto globalCoordinateSystem + worldOrigin pair that every consumer
- * still reads, and the automatically derived local projection (LDP) that will
- * replace both — stored here, persisted, and not yet wired to anything. See
+ * There is no separate scene offset. The LDP is a transverse Mercator centered
+ * on the project's anchor with x_0 = y_0 = 0, so a point's LDP coordinates
+ * already are its scene coordinates — there is nothing left to subtract, and
+ * nothing that can disagree about how much was subtracted. See
  * plans/LDP_AUTO_COORDINATE_SYSTEM_PLAN.html.
  */
 class CAVEWHERE_LIB_EXPORT cwGeoReference : public QObject
@@ -44,9 +40,7 @@ class CAVEWHERE_LIB_EXPORT cwGeoReference : public QObject
     QML_NAMED_ELEMENT(GeoReference)
     QML_UNCREATABLE("Owned by CavingRegion; access via region.geoReference")
 
-    Q_PROPERTY(QString globalCoordinateSystem READ globalCoordinateSystem WRITE setGlobalCoordinateSystem NOTIFY globalCoordinateSystemChanged)
-    Q_PROPERTY(bool hasCoordinateSystem READ hasCoordinateSystem NOTIFY globalCoordinateSystemChanged)
-    Q_PROPERTY(cwGeoPoint worldOrigin READ worldOrigin WRITE setWorldOrigin NOTIFY worldOriginChanged)
+    Q_PROPERTY(bool hasCoordinateSystem READ hasCoordinateSystem NOTIFY localProjectionChanged)
     Q_PROPERTY(QString localCoordinateSystem READ localCoordinateSystem NOTIFY localProjectionChanged)
     Q_PROPERTY(State state READ state NOTIFY localProjectionChanged)
     Q_PROPERTY(QString verticalDatum READ verticalDatum WRITE setVerticalDatum NOTIFY verticalDatumChanged)
@@ -96,30 +90,11 @@ public:
 
     explicit cwGeoReference(QObject* parent = nullptr);
 
-    QString globalCoordinateSystem() const { return m_globalCoordinateSystem; }
-    void setGlobalCoordinateSystem(const QString& cs);
-
-    //! Single definition of "this is georeferenced": it has a coordinate system,
-    //! so scene points can be placed in a real-world CRS (true/magnetic north,
-    //! WGS84, export). Consumers should ask this rather than re-deriving the
-    //! empty-CS rule.
-    bool hasCoordinateSystem() const { return !m_globalCoordinateSystem.isEmpty(); }
-
-    cwGeoPoint worldOrigin() const { return m_worldOrigin.value; }
-    void setWorldOrigin(const cwGeoPoint& origin);
-
-    // True iff worldOrigin was set explicitly (by the user, by load, by
-    // recompute) — distinct from the default-constructed (0,0,0) that a fresh
-    // reference carries. Used by cwLazLayerModel to decide whether an incoming
-    // LAZ may auto-adopt its bbox center as the origin.
-    bool hasExplicitWorldOrigin() const { return m_worldOrigin.explicitlySet; }
-
-    //! Widen a worldOrigin-relative scene point back to a global cwGeoPoint in
-    //! this reference's CRS. Thin wrapper over cwGeoPoint::fromSceneLocal so
-    //! callers holding only the slice don't reach for the origin themselves.
-    cwGeoPoint toGlobal(const QVector3D& sceneLocal) const {
-        return cwGeoPoint::fromSceneLocal(sceneLocal, m_worldOrigin.value);
-    }
+    //! Single definition of "this is georeferenced": there is a frame, so scene
+    //! points can be placed in a real-world CRS (true/magnetic north, WGS84,
+    //! export). Consumers should ask this rather than re-deriving the rule from
+    //! the state or the string.
+    bool hasCoordinateSystem() const { return state() != Ungeoreferenced; }
 
     //! The project's derived local projection as a PROJ string, or "" in
     //! Ungeoreferenced. Always the stored string — never re-derived on read, so
@@ -168,31 +143,15 @@ public:
     void setVerticalDatum(const QString& datum);
 
 signals:
-    void globalCoordinateSystemChanged();
-    void worldOriginChanged();
     //! The LDP, the state, or the anchor changed — they move together, so they
     //! report together.
     void localProjectionChanged();
     void verticalDatumChanged();
 
 private:
-    QString m_globalCoordinateSystem;
-
-    // Bundles the origin value with a flag tracking whether anyone has
-    // explicitly chosen it. Glued together so the value and the flag can't
-    // drift: every code path that mutates the value also touches the flag,
-    // and the CS-change reset path (which is *not* a user choice) resets
-    // both atomically.
-    struct WorldOriginState {
-        cwGeoPoint value;
-        bool explicitlySet = false;
-    };
-    WorldOriginState m_worldOrigin;
-
-    // The three parts of the local projection, bundled for the same reason as
-    // the world origin above: a state, the string it stands for, and the input
-    // it came from are only meaningful together, and every path that writes one
-    // writes all three.
+    // The three parts of the local projection, bundled: a state, the string it
+    // stands for, and the input it came from are only meaningful together, and
+    // every path that writes one writes all three.
     struct LocalProjectionState {
         State state = Ungeoreferenced;
         QString coordinateSystem;

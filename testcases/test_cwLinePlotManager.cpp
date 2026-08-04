@@ -10,6 +10,9 @@
 #include "LoadProjectHelper.h"
 #include "BoulderFixtureHelper.h"
 #include <catch2/catch_approx.hpp>
+#include <catch2/matchers/catch_matchers_floating_point.hpp>
+
+using Catch::Matchers::WithinAbs;
 
 //Cavewhere includes
 #include "cwLinePlotManager.h"
@@ -897,14 +900,14 @@ TEST_CASE("cwLinePlotManager skips cavern when cave or trip has no shots", "[Lin
     }
 }
 
-TEST_CASE("cwLinePlotManager re-runs cavern when globalCS or fix stations change",
+TEST_CASE("cwLinePlotManager re-runs cavern when the frame or fix stations change",
           "[LinePlotManager][fix]")
 {
-    // The picker writes to cwCavingRegion::globalCS and the fix-station
-    // editor mutates cave->fixStations(). Both feed the *cs out / *fix
-    // lines in the survex export, so the manager must observe both and
-    // re-run cavern when either changes — otherwise cavern keeps emitting
-    // a stale .3d that doesn't carry the user's CS/fix edits.
+    // The fix-station editor mutates cave->fixStations(), which feeds the
+    // *fix lines in the survex export and, through the projection manager,
+    // the *cs out naming the project's frame. The manager must observe both
+    // and re-run cavern when either changes — otherwise cavern keeps emitting
+    // a stale .3d that doesn't carry the user's edits.
     //
     // We verify the connection in two complementary ways:
     //   (a) a signal spy on stationPositionInCavesChanged fires once per
@@ -935,44 +938,15 @@ TEST_CASE("cwLinePlotManager re-runs cavern when globalCS or fix stations change
     plotManager->setRegion(&region);
     plotManager->waitToFinish();
 
-    // Sanity: with no globalCS / fixes, a1 sits at the origin.
+    // Sanity: with no frame and no fixes, a1 sits at the origin.
     REQUIRE(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
 
     cwSignalSpy positionSpy(plotManager.get(), &cwLinePlotManager::stationPositionInCavesChanged);
 
-    SECTION("region.setGlobalCS triggers a re-run") {
-        REQUIRE(positionSpy.count() == 0);
-        region.geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32616"));
-        plotManager->waitToFinish();
-        CHECK(positionSpy.count() >= 1);
-    }
-
     SECTION("appending a fix station triggers a re-run and moves resolved positions") {
-        // Survex rejects *fix-with-*cs unless *cs out is also set, so the
-        // realistic test scenario is "globalCS is set, then a fix is added".
-        // Set globalCS first; the spy after that captures only fix-related
-        // re-runs. We don't reset the spy between this and the parent
-        // setRegion run, so we tally only what happens after this point.
-        region.geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32616"));
-
-        // Pre-set worldOrigin to a non-sentinel value so the first-solve
-        // auto-compute branch in cwLinePlotManager::publishLinePlotResults
-        // is skipped. Otherwise the first run after the fix is added would
-        // auto-compute worldOrigin and queue a second run via
-        // worldOriginChanged → runSurvex; waitToFinish only blocks on the
-        // first run, so the assertions below would race the second run and
-        // intermittently see un-shifted positions. The value is arbitrary:
-        // the auto-compute guard only checks against the default sentinel.
-        const cwGeoPoint kAutoComputeSuppressor{1.0, 1.0, 1.0};
-        region.geoReference()->setWorldOrigin(kAutoComputeSuppressor);
-
-        plotManager->waitToFinish();
-        const int spyAfterGlobalCS = positionSpy.count();
-        REQUIRE(spyAfterGlobalCS >= 1); // setting globalCS itself triggered a run
-
-        // Fix a1 in EPSG:32616. Cavern propagates the fix through the rest
-        // of the cave: a2 (10m magnetic north of a1) should land 10m
-        // further north than a1 in projected coords.
+        // Fix a1 in EPSG:32616, which also anchors the project's frame on it.
+        // Cavern propagates the fix through the rest of the cave: a2 (10 m
+        // magnetic north of a1) lands 10 m further north.
         cwFixStation fix;
         fix.setStationName(QStringLiteral("a1"));
         fix.setInputCS(QStringLiteral("EPSG:32616"));
@@ -983,17 +957,15 @@ TEST_CASE("cwLinePlotManager re-runs cavern when globalCS or fix stations change
 
         plotManager->waitToFinish();
 
-        // Reported positions are shifted by -worldOrigin for shader float
-        // precision (see cwLinePlotTask::applyWorldOriginOffset). Add the
-        // current worldOrigin back to recover absolute projected coords.
-        const auto absolutePosition = [&](const QString& station) {
-            return cave->stationPositionLookup().position(station)
-                + region.geoReference()->worldOrigin().toVector3D();
+        // Positions come back in the project's frame, which is centered on the
+        // anchor — so a1, the anchor, sits at its own origin.
+        const auto position = [&](const QString& station) {
+            return cave->stationPositionLookup().position(station);
         };
 
-        CHECK(positionSpy.count() > spyAfterGlobalCS);
-        CHECK(absolutePosition("a1") == QVector3D(100.0f, 200.0f, 50.0f));
-        CHECK(absolutePosition("a2") == QVector3D(100.0f, 210.0f, 50.0f));
+        CHECK(positionSpy.count() >= 1);
+        CHECK(position("a1") == QVector3D(0.0f, 0.0f, 50.0f));
+        CHECK(position("a2") == QVector3D(0.0f, 10.0f, 50.0f));
 
         SECTION("setData on the fix-station model triggers a re-run") {
             const int spyBefore = positionSpy.count();
@@ -1006,9 +978,16 @@ TEST_CASE("cwLinePlotManager re-runs cavern when globalCS or fix stations change
 
             plotManager->waitToFinish();
 
+            // 200 m east in the fix's own UTM grid — well inside the threshold
+            // that would re-derive the frame, so the frame stays put and the
+            // station moves within it. The distance is checked loosely on
+            // purpose: the two grids don't share a scale factor, so 200 UTM
+            // meters is not 200 meters in the project's projection.
             CHECK(positionSpy.count() > spyBefore);
-            CHECK(absolutePosition("a1") == QVector3D(300.0f, 200.0f, 50.0f));
-            CHECK(absolutePosition("a2") == QVector3D(300.0f, 210.0f, 50.0f));
+            CHECK_THAT(position("a1").x(), WithinAbs(200.0f, 1.0f));
+            CHECK(position("a1").y() == Catch::Approx(0.0).margin(1e-3));
+            CHECK_THAT(position("a2").x(), WithinAbs(200.0f, 1.0f));
+            CHECK(position("a2").y() == Catch::Approx(10.0).margin(1e-2));
         }
 
         SECTION("removeAt on the fix-station model triggers a re-run") {
@@ -1020,8 +999,8 @@ TEST_CASE("cwLinePlotManager re-runs cavern when globalCS or fix stations change
             CHECK(positionSpy.count() > spyBefore);
             // Without explicit fixes the legacy fallback (*fix a1 0 0 0)
             // re-anchors the cave at the origin.
-            CHECK(absolutePosition("a1") == QVector3D(0.0f, 0.0f, 0.0f));
-            CHECK(absolutePosition("a2") == QVector3D(0.0f, 10.0f, 0.0f));
+            CHECK(position("a1") == QVector3D(0.0f, 0.0f, 0.0f));
+            CHECK(position("a2") == QVector3D(0.0f, 10.0f, 0.0f));
         }
     }
 }
@@ -1039,7 +1018,6 @@ TEST_CASE("cwLinePlotManager re-solves when a trip's date changes (bug #581)",
     const QString utmZ13N = QStringLiteral("EPSG:32613");
 
     cwCavingRegion region;
-    region.geoReference()->setGlobalCoordinateSystem(utmZ13N);
 
     auto* cave = new cwCave();
     cave->setName(QStringLiteral("Cave 1"));
@@ -1069,11 +1047,6 @@ TEST_CASE("cwLinePlotManager re-solves when a trip's date changes (bug #581)",
     // Auto-declination must actually resolve, otherwise a date change couldn't
     // move the plot and the test would pass vacuously.
     REQUIRE(trip->calibrations()->autoDeclinationAvailable() == true);
-
-    // Pre-set worldOrigin off the default sentinel so the first-solve
-    // auto-compute branch doesn't queue a second run that races waitToFinish
-    // (see the fix-station test above for the same guard).
-    region.geoReference()->setWorldOrigin(cwGeoPoint(478000.0, 4430000.0, 1655.0));
 
     auto plotManager = std::make_unique<cwLinePlotManager>();
     plotManager->setRegion(&region);
@@ -1615,14 +1588,9 @@ TEST_CASE("An empty fix station must not trigger endless line-plot re-solves",
     CHECK(totalSolves <= 2);    // one legitimate solve, not an endless run
 
     // Naming the fix is a real edit and must still re-solve — proving the loop
-    // fix didn't over-filter genuine fix-station changes.
-    //
-    // On a projected CS, because that is the only kind survex can produce output
-    // in. A new row starts on WGS84, and once such a row is named it is exported
-    // as a real fix — at which point cavern refuses the whole solve, so no
-    // positions are published and this signal would never arrive. That is the
-    // project's missing output CS, not an over-filtered edit, and it is what
-    // cwFixStationValidator's needsOutputCS prompt exists to resolve.
+    // fix didn't over-filter genuine fix-station changes. The CS is set first so
+    // the fix is the ordinary projected case; the solve no longer depends on it,
+    // since the project's own local projection is always a usable output CS.
     cave->fixStations()->setData(cave->fixStations()->index(0),
                                  QStringLiteral("EPSG:32612"),
                                  cwFixStationModel::InputCSRole);

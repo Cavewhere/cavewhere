@@ -18,6 +18,7 @@
 #include "cwStationPositionLookup.h"
 #include "cwSurveyChunk.h"
 #include "cwSurvexExporterRegion.h"
+#include "cwSurvexExporterUtils.h"
 #include "cwTrip.h"
 
 //Qt includes
@@ -42,10 +43,9 @@ constexpr double kBoulderEasting = 478000.0;
 constexpr double kBoulderNorthing = 4430000.0;
 constexpr double kBoulderElevation = 1655.0;
 
-std::unique_ptr<cwCavingRegion> makeRegion(const QString& globalCS)
+std::unique_ptr<cwCavingRegion> makeRegion()
 {
     auto region = std::make_unique<cwCavingRegion>();
-    region->geoReference()->setGlobalCoordinateSystem(globalCS);
 
     auto* cave = new cwCave();
     cave->setName(QStringLiteral("TestCave"));
@@ -93,8 +93,9 @@ void appendEmptyFix(cwCavingRegion* region,
     region->cave(0)->fixStations()->appendFixStation(fix);
 }
 
-//! What the exported file names as *cs out, or an empty string when it names
-//! nothing.
+//! What the exported file names as *cs out, verbatim — a local projection is
+//! written in survex's CUSTOM form, so compare against toSurvexCS(). Empty when
+//! the file names nothing.
 QString exportedOutputCS(const cwCavingRegion* region,
                          const cwSurvexExporterRegion::Options& options)
 {
@@ -136,38 +137,39 @@ TEST_CASE("cwSurvexExporterRegion resolves *cs out per policy",
 {
     using Policy = cwSurvexExporterRegion::OutputCSPolicy;
 
-    SECTION("the project's own coordinate system outranks a derived one") {
-        auto region = makeRegion(kUtmZone13N);
-        appendFix(region.get(), QStringLiteral("a1"), kWgs84,
-                  kBoulderLongitude, kBoulderLatitude, kBoulderElevation);
-
-        CHECK(exportedOutputCS(region.get(), Policy::Shareable) == kUtmZone13N);
-        CHECK(exportedOutputCS(region.get(), Policy::WorkingFrame) == kUtmZone13N);
-    }
-
     SECTION("a projected fix is shareable as it stands") {
-        auto region = makeRegion(QString());
+        auto region = makeRegion();
         appendFix(region.get(), QStringLiteral("a1"), kUtmZone13N,
                   kBoulderEasting, kBoulderNorthing, kBoulderElevation);
 
         CHECK(exportedOutputCS(region.get(), Policy::Shareable) == kUtmZone13N);
-        CHECK(exportedOutputCS(region.get(), Policy::WorkingFrame) == kUtmZone13N);
+        // The working frame is the project's local projection, which the fix
+        // anchored — never the fix's own zone.
+        const QString frame = region->geoReference()->localCoordinateSystem();
+        REQUIRE_FALSE(frame.isEmpty());
+        CHECK(exportedOutputCS(region.get(), Policy::WorkingFrame)
+              == cwSurvexExporterUtils::toSurvexCS(frame));
     }
 
-    // The whole point of the split: a geographic fix is no output system at all
-    // to the solve — cavern refuses one — but the UTM zone containing it is a
-    // perfectly good system to hand a reader.
-    SECTION("a geographic fix yields its UTM zone to a shared file and nothing to the solve") {
-        auto region = makeRegion(QString());
+    // The whole point of the split: a geographic fix would be no output system
+    // at all to the solve — cavern refuses one — but the UTM zone containing it
+    // is a perfectly good system to hand a reader, and the solve has the
+    // project's own projection to work in either way.
+    SECTION("a geographic fix yields its UTM zone to a shared file, not to the solve") {
+        auto region = makeRegion();
         appendFix(region.get(), QStringLiteral("a1"), kWgs84,
                   kBoulderLongitude, kBoulderLatitude, kBoulderElevation);
 
         CHECK(exportedOutputCS(region.get(), Policy::Shareable) == kUtmZone13N);
-        CHECK(exportedOutputCS(region.get(), Policy::WorkingFrame).isEmpty());
+        const QString frame = region->geoReference()->localCoordinateSystem();
+        REQUIRE_FALSE(frame.isEmpty());
+        CHECK(frame != kUtmZone13N);
+        CHECK(exportedOutputCS(region.get(), Policy::WorkingFrame)
+              == cwSurvexExporterUtils::toSurvexCS(frame));
     }
 
     SECTION("a fix that places nothing yet doesn't decide, so a later one does") {
-        auto region = makeRegion(QString());
+        auto region = makeRegion();
         appendEmptyFix(region.get(), QStringLiteral("a1"), kWgs84);
         // A coordinate still at the origin is "not entered yet" too — off the
         // west coast of Africa is not where anyone's cave is.
@@ -179,7 +181,7 @@ TEST_CASE("cwSurvexExporterRegion resolves *cs out per policy",
     }
 
     SECTION("no coordinate system anywhere names none") {
-        auto region = makeRegion(QString());
+        auto region = makeRegion();
 
         CHECK(exportedOutputCS(region.get(), Policy::Shareable).isEmpty());
         CHECK(exportedOutputCS(region.get(), Policy::WorkingFrame).isEmpty());
@@ -189,7 +191,7 @@ TEST_CASE("cwSurvexExporterRegion resolves *cs out per policy",
     // File → Export passes a default-constructed Options and never names a
     // policy, so what matters is which system that lands on in the .svx.
     SECTION("a caller that names no policy gets the shareable one") {
-        auto region = makeRegion(QString());
+        auto region = makeRegion();
         appendFix(region.get(), QStringLiteral("a1"), kWgs84,
                   kBoulderLongitude, kBoulderLatitude, kBoulderElevation);
 
@@ -198,17 +200,15 @@ TEST_CASE("cwSurvexExporterRegion resolves *cs out per policy",
     }
 }
 
-TEST_CASE("The solve never borrows the shared-file coordinate system",
+TEST_CASE("The solve runs in the project's own local projection",
           "[cwSurvexExporterRegion_OutputCS]")
 {
     // The driver .svx isn't inspectable from here, so the assertion is on what
-    // the solve does with a region that only the shareable policy can name a
-    // system for: a geographic fix and no project CS. Cavern refuses a *cs
-    // with no *cs out, and stopping is the right answer — solving in a UTM
-    // zone nobody asked for would move every station in the scene. Once the
-    // working frame is the project's own local projection there is always one
-    // to name, and this becomes a test that the solve uses it.
-    auto region = makeRegion(QString());
+    // the solve does with a region only the shareable policy could name a
+    // system for: a geographic fix, which cavern refuses as *cs out. The solve
+    // does not borrow that UTM zone — moving every station in the scene into a
+    // zone nobody asked for — it uses the frame the fix anchored, and lands.
+    auto region = makeRegion();
     appendFix(region.get(), QStringLiteral("a1"), kWgs84,
               kBoulderLongitude, kBoulderLatitude, kBoulderElevation);
 
@@ -216,6 +216,7 @@ TEST_CASE("The solve never borrows the shared-file coordinate system",
     plotManager->setRegion(region.get());
     plotManager->waitToFinish();
 
-    CHECK(plotManager->hasSolveError());
-    CHECK_FALSE(region->cave(0)->stationPositionLookup().hasPosition(QStringLiteral("a2")));
+    INFO(plotManager->solveErrorMessage().toStdString());
+    CHECK_FALSE(plotManager->hasSolveError());
+    CHECK(region->cave(0)->stationPositionLookup().hasPosition(QStringLiteral("a2")));
 }

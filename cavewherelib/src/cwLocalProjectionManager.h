@@ -106,9 +106,15 @@ private:
     //! The three ways the frame moves. Each records what it did, so that
     //! evaluate()'s "an anchor I didn't write came from a load" test can't be
     //! fooled by this class's own writes.
-    void anchorTo(const Input& input);
+    bool anchorTo(const Input& input);
     void freezeFrame();
     void clearFrame();
+
+    //! Anchor on the first of \a inputs a frame can actually be derived from.
+    //! A coordinate PROJ can't place — a UTM easting typed into a row that says
+    //! lat/long, say — yields no projection, and stopping there would leave the
+    //! whole project unplaced while a perfectly good fix sat behind it.
+    void anchorToFirstUsable(const QList<Input>& inputs);
 
     void syncCaveConnections();
     void syncLayerConnections();

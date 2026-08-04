@@ -17,7 +17,6 @@ MainWindowTest {
             RootData.region.addCave()
             cave = RootData.region.cave(0)
             cave.name = "OutlierCave"
-            RootData.region.geoReference.globalCoordinateSystem = "EPSG:32613"
             RootData.pageSelectionModel.currentPageAddress = "View"
             tryVerify(() => RootData.pageView.currentPageItem.objectName === "viewPage")
         }
@@ -27,7 +26,6 @@ MainWindowTest {
             while (cave.fixStations.count > 0) {
                 cave.fixStations.removeAt(0)
             }
-            RootData.region.geoReference.globalCoordinateSystem = "EPSG:32613"
 
             // The overlay quotes the cave name, so a case that renames the cave
             // would otherwise leak that name into the ones after it.

@@ -29,18 +29,6 @@ MainWindowTest {
             RootData.newProject()
         }
 
-        function setGlobalCSViaPicker(cs) {
-            RootData.pageSelectionModel.currentPageAddress = "Source/Data"
-            tryVerify(() => RootData.pageView.currentPageItem !== null
-                            && RootData.pageView.currentPageItem.objectName === "dataMainPage",
-                      5000)
-            const dataPage = RootData.pageView.currentPageItem
-            const picker = findChild(dataPage, "globalCoordinateSystemComboBox")
-            verify(picker !== null, "globalCoordinateSystemComboBox must exist")
-            picker.committed(cs)
-            tryCompare(RootData.region.geoReference, "globalCoordinateSystem", cs)
-        }
-
         function setInputCSViaPicker(rowIndex, cs) {
             const fixPage = RootData.pageView.currentPageItem
             let picker = null
@@ -51,9 +39,7 @@ MainWindowTest {
             picker.committed(cs)
         }
 
-        function test_globalCSAndFixesRoundTrip() {
-            setGlobalCSViaPicker("EPSG:32612")
-
+        function test_theFrameAndFixesRoundTrip() {
             RootData.region.addCave()
             const cave = RootData.region.cave(RootData.region.caveCount - 1)
             cave.name = "RoundTripCave"
@@ -95,6 +81,9 @@ MainWindowTest {
             tryVerify(() => m.data(m.index(1), FixStationModel.StationNameRole) === "B1")
             tryVerify(() => m.data(m.index(1), FixStationModel.InputCSRole) === "EPSG:32612")
 
+            const frameBeforeSave = RootData.region.geoReference.localCoordinateSystem
+            verify(frameBeforeSave.length > 0, "the first fix must have anchored a frame")
+
             // tempDirectoryUrl() is PID-suffixed so parallel test processes don't collide.
             const tempDir = RootData.urlToLocal(TestHelper.tempDirectoryUrl())
             const projectPath = tempDir + "/fix-stations-round-trip.cw"
@@ -108,8 +97,6 @@ MainWindowTest {
             TestHelper.waitForProjectSaveToFinish(RootData.project)
             tryVerify(() => RootData.region.caveCount === 1, 10000,
                       "reloaded project should contain the round-trip cave")
-
-            tryCompare(RootData.region.geoReference, "globalCoordinateSystem", "EPSG:32612")
 
             const reloadedModel = RootData.region.cave(0).fixStations
             tryCompare(reloadedModel, "count", 2)
@@ -128,12 +115,13 @@ MainWindowTest {
             compare(reloadedModel.data(r1, FixStationModel.NorthingRole), 4194100.0)
             compare(reloadedModel.data(r1, FixStationModel.ElevationRole), 2750.0)
 
-            RootData.pageSelectionModel.currentPageAddress = "Source/Data"
-            tryVerify(() => RootData.pageView.currentPageItem !== null
-                            && RootData.pageView.currentPageItem.objectName === "dataMainPage",
-                      5000)
-            const reloadedPicker = findChild(RootData.pageView.currentPageItem, "globalCoordinateSystemComboBox")
-            tryCompare(reloadedPicker, "value", "EPSG:32612")
+            // The frame the first fix anchored comes back with the file, on the
+            // same anchor — a reload that re-derived it would be a different
+            // projection and every station would land somewhere else.
+            verify(RootData.region.geoReference.hasCoordinateSystem,
+                   "the reloaded project must still carry its frame")
+            compare(RootData.region.geoReference.state, GeoReference.Anchored)
+            compare(RootData.region.geoReference.localCoordinateSystem, frameBeforeSave)
         }
     }
 }

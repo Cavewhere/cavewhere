@@ -20,9 +20,9 @@
 
 using Catch::Matchers::WithinAbs;
 
-TEST_CASE("cwGeoPoint converts to QVector3D with worldOrigin offset", "[cwGeoPoint]")
+TEST_CASE("cwGeoPoint converts to QVector3D", "[cwGeoPoint]")
 {
-    SECTION("toVector3D with no offset narrows to float")
+    SECTION("toVector3D narrows to float")
     {
         cwGeoPoint p(1.5, 2.5, 3.5);
         QVector3D v = p.toVector3D();
@@ -31,17 +31,17 @@ TEST_CASE("cwGeoPoint converts to QVector3D with worldOrigin offset", "[cwGeoPoi
         CHECK(v.z() == 3.5f);
     }
 
-    SECTION("toVector3D(worldOrigin) preserves precision past float-only narrowing")
+    SECTION("local-projection magnitudes keep mm precision through the narrowing")
     {
-        // UTM-scale eastings: subtracting worldOrigin in doubles, then
-        // narrowing keeps mm precision; plain float subtraction would lose it.
-        cwGeoPoint origin(500123.456789, 4400987.654321, 1234.5);
-        cwGeoPoint p(500123.466789, 4400987.664321, 1234.6); // 1cm east, 1cm north, 10cm up
+        // The project's frame is centered on its anchor, so scene coordinates
+        // stay small — which is what leaves float room for millimeters. The
+        // same values as UTM eastings would not survive the narrowing.
+        cwGeoPoint p(123.456789, 987.654321, 1234.5);
 
-        QVector3D v = p.toVector3D(origin);
-        CHECK_THAT(v.x(), WithinAbs(0.01f, 1e-4f));
-        CHECK_THAT(v.y(), WithinAbs(0.01f, 1e-4f));
-        CHECK_THAT(v.z(), WithinAbs(0.10f, 1e-4f));
+        QVector3D v = p.toVector3D();
+        CHECK_THAT(v.x(), WithinAbs(123.456789f, 1e-3f));
+        CHECK_THAT(v.y(), WithinAbs(987.654321f, 1e-3f));
+        CHECK_THAT(v.z(), WithinAbs(1234.5f, 1e-3f));
     }
 
     SECTION("equality")

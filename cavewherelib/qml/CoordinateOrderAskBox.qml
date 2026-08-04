@@ -56,7 +56,7 @@ QC.Dialog {
     modal: true
     // Fixed rather than derived from the message: a wrapping label sized to its
     // own container is a binding loop through Dialog's implicitWidth.
-    implicitWidth: Theme.outputCSPromptWidth
+    implicitWidth: Theme.inlineBannerWidth
     title: qsTr("Which way round is this coordinate?")
     // Escape leaves the coordinate as written, which is the reading already
     // committed — the dialog can be dismissed without deciding anything.

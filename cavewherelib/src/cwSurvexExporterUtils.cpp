@@ -17,6 +17,9 @@
 #include <QTextStream>
 #include <QtGlobal>
 
+//Std includes
+#include <algorithm>
+
 namespace {
 
 //Survex's parser rejects scientific notation, and two decimals matches the
@@ -58,9 +61,14 @@ std::optional<DeclinationContext> makeDeclinationContext(const QList<cwFixStatio
     return std::nullopt;
 }
 
+void writeCsLine(QTextStream& stream, const QString& cs, bool isOutput)
+{
+    stream << (isOutput ? "*cs out " : "*cs ") << toSurvexCS(cs) << Qt::endl;
+}
+
 void writeDeclinationAuto(QTextStream& stream, const DeclinationContext& ctx)
 {
-    stream << "*cs " << ctx.inputCS << Qt::endl;
+    writeCsLine(stream, ctx.inputCS);
     stream << "*declination auto ";
     writeCoordTriplet(stream, ctx.easting, ctx.northing, ctx.elevation);
     stream << Qt::endl;
@@ -86,6 +94,25 @@ bool isUnusableAsSurvexOutputCS(const QString& cs)
         QStringLiteral("local")
     };
     return unusable.contains(cs.trimmed().toLower());
+}
+
+QString toSurvexCS(const QString& cs)
+{
+    const QString trimmed = cs.trimmed();
+    const auto isBareName = [](const QString& text) {
+        if (text.isEmpty()) {
+            return true;
+        }
+        return std::all_of(text.cbegin(), text.cend(), [](QChar c) {
+            return c.isLetterOrNumber() || c == QLatin1Char('-') || c == QLatin1Char('_')
+                || c == QLatin1Char(':') || c == QLatin1Char('.');
+        });
+    };
+
+    if (isBareName(trimmed)) {
+        return trimmed;
+    }
+    return QStringLiteral("CUSTOM \"%1\"").arg(trimmed);
 }
 
 bool isValidSurvexRole(const QString& role)
@@ -202,7 +229,7 @@ void writeFixStations(QTextStream& stream,
     if (fixes.isEmpty()) {
         if (!fallbackFirstStation.isEmpty()) {
             if (!globalCSTrimmed.isEmpty()) {
-                stream << "*cs " << globalCSTrimmed << Qt::endl;
+                writeCsLine(stream, globalCSTrimmed);
             }
             stream << "*fix " << fallbackFirstStation << " 0 0 0" << Qt::endl;
         }
@@ -215,7 +242,7 @@ void writeFixStations(QTextStream& stream,
         const QString cs = fix.inputCS().trimmed();
         if (!csEmitted || cs != currentCS) {
             if (!cs.isEmpty()) {
-                stream << "*cs " << cs << Qt::endl;
+                writeCsLine(stream, cs);
             }
             currentCS = cs;
             csEmitted = true;

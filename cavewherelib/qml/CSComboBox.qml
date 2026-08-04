@@ -14,22 +14,17 @@ import cavewherelib
 
 // The compact inline coordinate-system field used in fix-station table rows: the
 // shared CSPicker controls, plus a trailing resolved-name label that appears only
-// in Custom and Project mode. Neither has zone/hemisphere controls to convey the
-// CS — "Project" names where the row got its system, not which one it is — so the
+// in Custom mode. Custom has no zone/hemisphere controls to convey the CS, so the
 // label carries it there; UTM and Lat-Lon are self-describing from the controls
-// alone. The project surface does not use this shell — it drives a CSPicker
-// directly and renders the name/EPSG as its own GroupBox lines.
+// alone.
 QQ.Item {
     id: rootId
 
     property alias value: pickerId.value
-    property alias allowGeographic: pickerId.allowGeographic
-    property alias projectCS: pickerId.projectCS
 
     readonly property int currentMode: pickerId.currentMode
 
     readonly property bool showsResolvedName: rootId.currentMode === CoordinateSystem.Custom
-                                              || rootId.currentMode === CoordinateSystem.Project
 
     signal committed(string newCS)
 
@@ -53,12 +48,6 @@ QQ.Item {
         CSPicker {
             id: pickerId
             Layout.alignment: Qt.AlignVCenter
-
-            // The fix-station split, fixed by this shell rather than left to
-            // each host: a row always has a system (#625), and Project is how
-            // it matches the project's without being tied to it (#618).
-            allowLocal: false
-            allowProject: true
 
             onCommitted: (newCS) => rootId.committed(newCS)
         }

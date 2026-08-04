@@ -21,6 +21,7 @@
 #include "cwError.h"
 #include "cwErrorListModel.h"
 #include "cwLazLoader.h"
+#include "cwLocalProjection.h"
 #include "cwProject.h"
 #include "cwSaveLoad.h"
 
@@ -114,16 +115,9 @@ void cwLazLayerModel::addFromFiles(QList<QUrl> urls)
         return;
     }
 
-    // Auto-adopt CS / worldOrigin from the first incoming file before the
-    // copy, so the region values are set in time for the post-rescan layers
-    // to inherit them. Probing the source path is cheap (header only).
-    for (const QUrl& url : urls) {
-        if (url.isLocalFile()) {
-            maybeAdoptRegionDefaultsFromLaz(url.toLocalFile());
-            break;
-        }
-    }
-
+    // Nothing to seed from the incoming files here: the copy is followed by a
+    // rescan, and that is where each new layer gets its frame — from its own
+    // header, against the layer that will carry the anchor.
     QPointer<cwLazLayerModel> self(this);
     const QDir destinationDir = m_gisLayersDir;
     p->addFiles(urls, destinationDir,
@@ -291,25 +285,14 @@ void cwLazLayerModel::setFutureManagerToken(const cwFutureManagerToken& token)
     }
 }
 
-void cwLazLayerModel::setRegionGlobalCS(const QString& cs)
+void cwLazLayerModel::setRegionFrameCS(const QString& cs)
 {
-    if (m_regionGlobalCS == cs) {
+    if (m_regionFrameCS == cs) {
         return;
     }
-    m_regionGlobalCS = cs;
+    m_regionFrameCS = cs;
     for (cwLazLayer* layer : std::as_const(m_layers)) {
-        layer->setRegionGlobalCS(cs);
-    }
-}
-
-void cwLazLayerModel::setRegionWorldOrigin(const cwGeoPoint& origin)
-{
-    if (m_regionWorldOrigin == origin) {
-        return;
-    }
-    m_regionWorldOrigin = origin;
-    for (cwLazLayer* layer : std::as_const(m_layers)) {
-        layer->setRegionWorldOrigin(origin);
+        layer->setRegionFrameCS(cs);
     }
 }
 
@@ -319,13 +302,12 @@ void cwLazLayerModel::setGisLayersDir(const QDir& dir)
         return;
     }
     m_gisLayersDir = dir;
-    // Defer the rescan to the event loop. During project load, this setter
-    // is called from cwSaveLoad::setFileName which runs *before* cwCavingRegion
-    // ::setData applies the proto's globalCoordinateSystem and worldOrigin.
-    // Running rescan synchronously here makes maybeAutoAdoptCS seed values
-    // that setData then overwrites with proto defaults (worldOrigin isn't
-    // persisted, so it's always {0,0,0} on load). Queuing lets setData run
-    // first; auto-adopt then only fills the gaps the proto left unset.
+    // Defer the rescan to the event loop. During project load, this setter is
+    // called from cwSaveLoad::setFileName, which runs *before* cwCavingRegion
+    // ::setData restores the stored frame. Running rescan synchronously here
+    // would derive a frame from the first layer's header only for the restore
+    // to replace it — and reload every layer twice on the way. Queuing lets
+    // setData run first, after which deriveFrameFromLaz is a no-op.
     QMetaObject::invokeMethod(this, &cwLazLayerModel::rescan, Qt::QueuedConnection);
 }
 
@@ -350,15 +332,6 @@ void cwLazLayerModel::rescan()
                     nameFilters,
                     QDir::Files | QDir::NoDotAndDotDot,
                     QDir::Name);
-    }
-
-    // worldOrigin isn't persisted in the proto, so on every load we'd start
-    // at (0,0,0) and the geometry would sit at raw UTM coords offscreen.
-    // Seeding from the first LAZ's header fills the gap on projects that
-    // have LAZ files but no fix stations. The probe is self-guarded — once
-    // the region has both a CS and an explicit origin it's a no-op.
-    if (!entries.isEmpty()) {
-        maybeAdoptRegionDefaultsFromLaz(entries.first().absoluteFilePath());
     }
 
     // Diff existing layers against the directory listing instead of doing a
@@ -434,20 +407,13 @@ void cwLazLayerModel::rescan()
 
         // New file — create a layer and insert at the current row.
         cwLazLayer* layer = createLayer();
-        // setSourcePath before announcing the row: setSourcePath triggers
-        // updateNameKeyword/updateFileNameKeyword on the layer's keyword
-        // model. Running it after beginInsertRows lets the scene node
-        // register a keyword item carrying only Type+ObjectId, then the
-        // late keyword changes shuttle the same item through both accepted
-        // and rejected filter pipelines, thrashing cwKeywordVisibility
-        // (last-inserted wins).
-        layer->setSourcePath(path);
 
-        // Apply persisted state from the paired <basename>.cwlaz before
-        // announcing the row, so observers wired into rowsInserted (the
-        // scene node, keyword filter pipeline, cwSaveLoad's enabledChanged
-        // hookup) see the final UUID + enabled bit on their first
-        // observation.
+        // Apply persisted state from the paired <basename>.cwlaz first, so the
+        // layer carries its final UUID before anything can anchor to it, and
+        // before observers wired into rowsInserted (the scene node, keyword
+        // filter pipeline, cwSaveLoad's enabledChanged hookup) see it. A layer
+        // the file says is disabled also never starts the load setSourcePath
+        // would otherwise kick off below.
         const QString metadataPath = m_gisLayersDir.absoluteFilePath(
                     QFileInfo(path).completeBaseName() + QStringLiteral(".cwlaz"));
         if (QFileInfo::exists(metadataPath)) {
@@ -475,6 +441,22 @@ void cwLazLayerModel::rescan()
         // a freshly-minted UUID). The next save flush writes the .cwlaz
         // alongside, making the on-disk pair the source of truth from
         // then on.
+
+        // The load below has to have somewhere to load into, and on a project
+        // with no fix stations this layer is the only thing that can say where
+        // that is.
+        deriveFrameFromLaz(path, layer);
+        layer->setRegionFrameCS(m_regionFrameCS);
+
+        // setSourcePath — which starts the load — before announcing the row:
+        // it triggers updateNameKeyword/updateFileNameKeyword on the layer's
+        // keyword model. Running it after beginInsertRows lets the scene node
+        // register a keyword item carrying only Type+ObjectId, then the late
+        // keyword changes shuttle the same item through both accepted and
+        // rejected filter pipelines, thrashing cwKeywordVisibility
+        // (last-inserted wins).
+        layer->setSourcePath(path);
+
         qCDebug(lcLazModel) << "rescan: insert" << shortId(layer)
                             << "file=" << entry.fileName();
         beginInsertRows(QModelIndex(), row, row);
@@ -528,8 +510,6 @@ cwLazLayer* cwLazLayerModel::createLayer()
     auto* layer = new cwLazLayer(this);
     connectLayer(layer);
     layer->setFutureManagerToken(m_futureManagerToken);
-    layer->setRegionGlobalCS(m_regionGlobalCS);
-    layer->setRegionWorldOrigin(m_regionWorldOrigin);
     return layer;
 }
 
@@ -543,39 +523,36 @@ int cwLazLayerModel::indexOf(cwLazLayer* layer) const
     return -1;
 }
 
-void cwLazLayerModel::maybeAdoptRegionDefaultsFromLaz(const QString& sourcePath)
+void cwLazLayerModel::deriveFrameFromLaz(const QString& sourcePath, cwLazLayer* layer)
 {
     auto* region = qobject_cast<cwCavingRegion*>(parent());
-    if (region == nullptr) {
+    if (region == nullptr || layer == nullptr) {
         return;
     }
 
-    const bool needsCS = !region->geoReference()->hasCoordinateSystem();
-    // Use the explicit-set flag, not value-equality with cwGeoPoint{}: a
-    // user (or a test) can deliberately pin the origin to (0, 0, 0), and
-    // that pin is indistinguishable from "never set" by value alone. The
-    // flag tracks intent.
-    const bool needsOrigin = !region->geoReference()->hasExplicitWorldOrigin();
-
-    if (!needsCS && !needsOrigin) {
+    cwGeoReference* geoReference = region->geoReference();
+    if (geoReference->hasCoordinateSystem()) {
+        // The project already knows where it is — from its own fix stations,
+        // from an earlier layer, or from the file it was loaded out of. Nothing
+        // here may move that.
         return;
     }
 
+    // The header alone, because the load this unblocks hasn't run yet: the
+    // layer has no sourceCS or bounding box to read until it has.
     const auto probe = cwLazLoader::probeHeader(sourcePath);
-    if (!probe.valid) {
+    if (!probe.valid || probe.sourceCS.isEmpty()) {
+        // A cloud with no CRS of its own places nothing. It still loads —
+        // untransformed, in whatever units the file is in — exactly as it did
+        // before there was a frame to load into.
         return;
     }
 
-    // setGlobalCoordinateSystem resets worldOrigin to {} internally; the
-    // setWorldOrigin call below restores a meaningful origin from the bbox
-    // center. Order matters — flip these and the origin gets wiped after we
-    // set it.
-    if (needsCS && !probe.sourceCS.isEmpty()) {
-        region->geoReference()->setGlobalCoordinateSystem(probe.sourceCS);
+    const QString localCS = cwLocalProjection::deriveFrom(probe.sourceCS, probe.bboxCenter);
+    if (localCS.isEmpty()) {
+        return;
     }
-    if (needsOrigin) {
-        region->geoReference()->setWorldOrigin(probe.bboxCenter);
-    }
+    geoReference->anchorTo({cwGeoReference::Anchor::LazLayer, layer->id()}, localCS);
 }
 
 cwProject* cwLazLayerModel::project() const

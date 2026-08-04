@@ -30,7 +30,6 @@ class cwProject;
 #include "cwSanitizedNameSet.h"
 #include "cwUndoer.h"
 #include "cwGlobals.h"
-#include "cwGeoPoint.h"
 #include "cwFutureManagerToken.h"
 #include "cwUnits.h"
 
@@ -62,16 +61,12 @@ public:
     void setName(const QString& name) { m_name = name; }
     QBindable<QString> bindableName() { return &m_name; }
 
-    // The geo-reference (CS + worldOrigin) is owned here but is the single home
-    // for that state: consumers read and write it through region.geoReference,
-    // not through the region itself. The region only retains the responsibilities
-    // that genuinely need its other data — the LAZ push (it owns lazLayers) and
-    // the cave-based recomputeWorldOrigin() below.
+    // The geo-reference (the project's local projection) is owned here but is
+    // the single home for that state: consumers read it through
+    // region.geoReference, not through the region itself. The region only
+    // retains the responsibility that genuinely needs its other data — pushing
+    // the frame into lazLayers, which it owns.
     cwGeoReference* geoReference() const { return m_geoReference; }
-
-    //! Recompute the worldOrigin from the caves' fix stations and write it into
-    //! geoReference(). Lives here because it reads the region's caves.
-    Q_INVOKABLE void recomputeWorldOrigin();
 
     //! Detects fix stations whose coordinate is a data-entry error (far from the
     //! rest of the survey). Owned here because the check is region-scoped, but

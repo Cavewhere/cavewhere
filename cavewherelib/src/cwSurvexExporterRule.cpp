@@ -109,15 +109,14 @@ ResultBase cwSurvexExporterRule::writeRegion(QTextStream &stream, const cwSurvey
 {
     stream << "*begin  ;All the caves" << Qt::endl;
 
-    // WorkingFrame preserves what this path has always emitted. It is very
-    // likely the wrong answer — a rule-built .svx is a file for somebody else —
-    // and it becomes visibly wrong once the working frame is a project-local
-    // projection, which is no use to a reader. Named rather than defaulted so
-    // that change is a decision instead of a silent regression.
+    // Shareable, because a rule-built .svx is a file for somebody else: the
+    // working frame is now the project's local projection, which would name a
+    // PROJ string built around this one cave and place the file nowhere a
+    // reader could use.
     const QString outputCS = cwSurvexExporterUtils::resolveOutputCS(
-        region, cwSurvexExporterUtils::OutputCSPolicy::WorkingFrame);
+        region, QString(), cwSurvexExporterUtils::OutputCSPolicy::Shareable);
     if (!outputCS.isEmpty()) {
-        stream << "*cs out " << outputCS << Qt::endl;
+        cwSurvexExporterUtils::writeCsLine(stream, outputCS, true);
     }
 
     for(int i = 0; i < region.caves.size(); i++) {

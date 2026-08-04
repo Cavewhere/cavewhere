@@ -165,16 +165,16 @@ MainWindowTest {
             tryVerify(() => !noCSHelp.visible, 2000,
                       "no-CS hint should be hidden on a fresh project")
 
-            // TestHelper writes a no-CS fixture, so auto-adopt sets a worldOrigin
-            // but leaves globalCoordinateSystem empty — exactly the state that
-            // should surface the hint to the user.
+            // TestHelper writes a no-CS fixture: nothing says where the cloud
+            // is, so the project has no frame to derive — exactly the state
+            // that should surface the hint to the user.
             const lazPath = TestHelper.writeMinimalLazInTempDir("nocshint")
             RootData.region.lazLayers.addFromFiles([Qt.url("file://" + lazPath)])
             tryCompare(RootData.region.lazLayers, "count", 1)
             waitForLazLoadsToFinish()
 
-            compare(RootData.region.geoReference.globalCoordinateSystem, "",
-                    "globalCoordinateSystem must stay empty for a no-CS LAZ")
+            verify(!RootData.region.geoReference.hasCoordinateSystem,
+                   "a no-CS LAZ must leave the project without a frame")
             tryVerify(() => noCSHelp.visible, 2000,
                       "no-CS hint should appear once a no-CS layer is present")
         }

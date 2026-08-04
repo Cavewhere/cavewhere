@@ -86,8 +86,8 @@ TEST_CASE("Changing the region unitSystem persists without an explicit save",
     // Regression: unitSystem lives in the project metadata file, so a change made
     // through the UI (the settings/project combobox) must reach disk on its own —
     // the metadata save handler has to watch unitSystemChanged, exactly as it does
-    // globalCoordinateSystemChanged. Without that wiring the edit is silently lost
-    // on close.
+    // the geo-reference's localProjectionChanged. Without that wiring the edit is
+    // silently lost on close.
     QTemporaryDir tempDir;
     REQUIRE(tempDir.isValid());
 

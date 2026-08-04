@@ -85,8 +85,6 @@ MainWindowTest {
             let popup = findChild(renderer, "coordinatePickerPopup")
             verify(popup !== null, "Coordinate picker popup found")
 
-            compare(RootData.region.geoReference.globalCoordinateSystem, "",
-                    "Fresh project has no coordinate system")
             verify(!RootData.region.geoReference.hasCoordinateSystem,
                    "geoReference reports no coordinate system")
             verify(!popup.picker.hasCoordinateSystem,

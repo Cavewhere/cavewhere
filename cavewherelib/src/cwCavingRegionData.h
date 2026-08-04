@@ -2,7 +2,6 @@
 #define CWCAVINGREGIONDATA_H
 
 #include "cwCaveData.h"
-#include "cwGeoPoint.h"
 #include "cwGeoReference.h"
 #include "cwUnits.h"
 
@@ -20,8 +19,6 @@ struct cwGeoReferenceData {
 struct cwCavingRegionData {
     QString name;
     QList<cwCaveData> caves;
-    QString globalCoordinateSystem;
-    cwGeoPoint worldOrigin;
     cwUnits::UnitSystem unitSystem = cwUnits::Metric;
     cwGeoReferenceData geoReference;
 };

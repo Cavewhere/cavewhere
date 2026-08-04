@@ -1855,11 +1855,6 @@ std::unique_ptr<CavewhereProto::Project> cwSaveLoad::toProtoProject(const cwCavi
         protoMetadata->set_unitsystem(
             static_cast<CavewhereProto::Units_UnitSystem>(region->unitSystem()));
 
-        if (region->geoReference()->hasCoordinateSystem()) {
-            cwProtoUtils::saveString(protoMetadata->mutable_globalcoordinatesystem(),
-                                     region->geoReference()->globalCoordinateSystem());
-        }
-
         // The local projection: written whole, and only once there is something
         // to say, so a project that has never been georeferenced keeps a
         // metadata file with nothing to say about its frame. The vertical datum
@@ -2963,10 +2958,6 @@ Monad::Result<cwSaveLoad::ProjectLoadData> cwSaveLoad::loadProject(const QString
             if (metadataProto.has_syncenabled()) {
                 loadData.metadata.syncEnabled = metadataProto.syncenabled();
             }
-            if (metadataProto.has_globalcoordinatesystem()) {
-                loadData.region.globalCoordinateSystem =
-                    QString::fromStdString(metadataProto.globalcoordinatesystem());
-            }
             if (metadataProto.has_georeference()) {
                 const auto& geoReferenceProto = metadataProto.georeference();
                 auto& geoReference = loadData.region.geoReference;
@@ -3560,21 +3551,16 @@ void cwSaveLoad::connectTreeModel()
             saveProject(projectRootDir(), region);
         });
 
-        // globalCoordinateSystem lives in the project metadata file. Without
-        // this handler the save pipeline wouldn't see the change, so the dirty
-        // bit (and any autosave keyed off it) wouldn't fire and the edit could
-        // be dropped on close. worldOrigin is intentionally not persisted —
-        // it's a derived centroid of fix-station coords, recomputed on the
-        // first line-plot completion of each session.
         const auto saveMetadata = [this, region]() {
             saveProject(projectRootDir(), region);
         };
-        connect(region->geoReference(), &cwGeoReference::globalCoordinateSystemChanged, this, saveMetadata);
 
-        // The local projection lives in the same file and is the one piece of
-        // geo-reference state that is *not* recomputable from the data — it is
-        // deliberately stored rather than re-derived — so a change to it that
-        // never reached disk would be lost outright.
+        // The local projection lives in the project metadata file and is the one
+        // piece of geo-reference state that is *not* recomputable from the data
+        // — it is deliberately stored rather than re-derived — so a change to it
+        // that never reached disk would be lost outright. Without this handler
+        // the save pipeline wouldn't see the change, so the dirty bit (and any
+        // autosave keyed off it) wouldn't fire.
         connect(region->geoReference(), &cwGeoReference::localProjectionChanged, this, saveMetadata);
         connect(region->geoReference(), &cwGeoReference::verticalDatumChanged, this, saveMetadata);
 

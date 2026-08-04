@@ -446,53 +446,23 @@ MainWindowTest {
         function test_popupCSPickerOffersTheModesTheFixStationPageDoes() {
             // The popup is the second entry surface for a fix, and it sets its
             // picker's flags by hand rather than sharing a configured component
-            // with FixStationPage. Deleting all three — allowLocal, allowProject,
-            // projectCS — used to turn nothing red here, so the two surfaces
-            // could drift apart without a test noticing.
-            RootData.region.geoReference.globalCoordinateSystem = ""
-
+            // with FixStationPage — so the two can drift apart without a test
+            // noticing.
             const context = gotoSurveyTable()
             const popup = popupForA1(context)
 
             const picker = findChild(popup, "fixStationPopupCS")
             verify(picker !== null, "popup should offer a CS picker")
 
-            // A fix station always has a coordinate system, so there is no
-            // "Local" here — that is the project's way of saying it isn't
-            // georeferenced, and it is what a blank input CS used to mean.
-            verify(picker.allowGeographic, "the popup must allow a geographic fix CS")
-            verify(!picker.allowLocal, "a fix-station row must not offer Local")
-
+            // A fix station always has a coordinate system of its own, so there
+            // is no "Local" here — that is what a blank input CS used to mean.
             const modeCombo = findChild(picker, "csModePicker")
             verify(modeCombo !== null, "csModePicker should be reachable")
+            verify(modeCombo.model.indexOf("Lat/Lon (WGS84)") >= 0,
+                   "the popup must offer a geographic fix CS")
             verify(modeCombo.model.indexOf("Local") < 0,
                    "a fix-station row must not offer Local")
-            verify(modeCombo.model.indexOf("Project") < 0,
-                   "Project must not be offered while the project has no CS to copy")
-            compare(modeCombo.model.length, 3,
-                    "Lat/Lon / UTM / Custom while the project has no CS of its own")
-
-            // Project appears only once there is a project CS to copy.
-            RootData.region.geoReference.globalCoordinateSystem = "EPSG:32613"
-            tryVerify(() => modeCombo.model.length === 4, 5000,
-                      "Project must be offered once the project has a CS")
-            compare(picker.projectCS, "EPSG:32613",
-                    "the popup must hand the picker the project's CS")
-
-            const projectIndex = modeCombo.model.indexOf("Project")
-            verify(projectIndex >= 0, "the fourth mode must be Project")
-
-            // Picking it stamps that CS onto the row rather than linking to it...
-            const model = context.cave.fixStations
-            modeCombo.activated(projectIndex)
-            tryVerify(() => model.data(model.index(0),
-                                       FixStationModel.InputCSRole) === "EPSG:32613",
-                      5000, "picking Project copies the project's CS onto the row")
-
-            // ...so re-projecting the project leaves the row where it was entered.
-            RootData.region.geoReference.globalCoordinateSystem = "EPSG:32614"
-            compare(model.data(model.index(0), FixStationModel.InputCSRole), "EPSG:32613",
-                    "re-projecting the project must not move a fix that copied it")
+            compare(modeCombo.model.length, 3, "Lat/Lon, UTM and Custom")
 
             findChild(popup, "fixStationPopupDone").clicked()
             tryCompare(popup, "opened", false)

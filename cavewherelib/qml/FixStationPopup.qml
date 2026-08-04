@@ -294,10 +294,6 @@ QC.Popup {
             CSPicker {
                 id: csPickerId
                 objectName: "fixStationPopupCS"
-                allowGeographic: true
-                allowLocal: false
-                allowProject: true
-                projectCS: RootData.region.geoReference.globalCoordinateSystem
                 // CSPicker doesn't own its value — the table rows feed it back from
                 // the model role they're bound to. This editor fills its fields by
                 // hand, so it has to close that loop itself or the controls would
@@ -351,9 +347,8 @@ QC.Popup {
             }
         }
 
-        // Resolves the picker's controls to a concrete system, the same way the
-        // project CS GroupBox and OutputCSPrompt do, so "UTM zone 16 N" reads as
-        // a named CRS before the user commits to it.
+        // Resolves the picker's controls to a concrete system, so "UTM zone 16 N"
+        // reads as a named CRS before the user commits to it.
         QC.Label {
             objectName: "fixStationPopupCSName"
             visible: csPickerId.value !== "" && CSFormat.hasName(csPickerId.value)

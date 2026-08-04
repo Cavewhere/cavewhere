@@ -18,7 +18,6 @@
 //Our includes
 #include "CaveWhereLibExport.h"
 #include "cwFutureManagerToken.h"
-#include "cwGeoPoint.h"
 #include "cwLazLayer.h"
 #include "cwLazLayerData.h"
 
@@ -76,8 +75,8 @@ public:
 
     void setFutureManagerToken(const cwFutureManagerToken& token);
     cwFutureManagerToken futureManagerToken() const { return m_futureManagerToken; }
-    void setRegionGlobalCS(const QString& cs);
-    void setRegionWorldOrigin(const cwGeoPoint& origin);
+    //! Push the region's frame — its local projection — down to every layer.
+    void setRegionFrameCS(const QString& cs);
 
     void setGisLayersDir(const QDir& dir);
     QDir gisLayersDir() const { return m_gisLayersDir; }
@@ -113,14 +112,18 @@ signals:
 private:
     void connectLayer(cwLazLayer* layer);
     int indexOf(cwLazLayer* layer) const;
-    void maybeAdoptRegionDefaultsFromLaz(const QString& sourcePath);
+    //! Give an Ungeoreferenced project a frame from \a sourcePath's header, so
+    //! that a project whose only georeferenced input is a point cloud has
+    //! somewhere to load the cloud into. \a layer is what the frame anchors to.
+    //! A no-op once the project has a frame — including one just restored by a
+    //! load, which is why this is safe to run on every rescan.
+    void deriveFrameFromLaz(const QString& sourcePath, cwLazLayer* layer);
     cwProject* project() const;
     cwLazLayer* createLayer();
 
     QList<cwLazLayer*> m_layers;
     cwFutureManagerToken m_futureManagerToken;
-    QString m_regionGlobalCS;
-    cwGeoPoint m_regionWorldOrigin;
+    QString m_regionFrameCS;
     QDir m_gisLayersDir;
 };
 

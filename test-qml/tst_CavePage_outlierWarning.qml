@@ -19,7 +19,6 @@ MainWindowTest {
             RootData.region.addCave()
             cave = RootData.region.cave(0)
             cave.name = "OutlierCave"
-            RootData.region.geoReference.globalCoordinateSystem = "EPSG:32613"
             RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=OutlierCave"
             tryVerify(() => RootData.pageView.currentPageItem.objectName === "cavePage")
         }
@@ -29,7 +28,6 @@ MainWindowTest {
             while (cave.fixStations.count > 0) {
                 cave.fixStations.removeAt(0)
             }
-            RootData.region.geoReference.globalCoordinateSystem = "EPSG:32613"
         }
 
         function cavePage() {

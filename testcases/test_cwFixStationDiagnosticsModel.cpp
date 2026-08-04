@@ -41,9 +41,11 @@ struct FixFixture {
     //! Edit the row's persisted data, exactly as the page's delegates do.
     void edit(int role, const QVariant& value) { source->setData(sourceIndex, value, role); }
 
-    void setGlobalCS(const QString& cs)
+    //! Pin the project's frame to \a localCS. Frozen, so the projection
+    //! manager leaves it alone and the check below is about the row's own CS.
+    void setFrame(const QString& localCS)
     {
-        region.geoReference()->setGlobalCoordinateSystem(cs);
+        region.geoReference()->restore(cwGeoReference::Frozen, localCS, {}, QString());
     }
 
     QVariant read(int role) const { return diagnostics->data(proxyIndex, role); }
@@ -226,11 +228,11 @@ TEST_CASE("cwFixStationDiagnosticsModel StationErrorRole defers a named fix when
 TEST_CASE("cwFixStationDiagnosticsModel domain roles are judged under the row's own CS",
           "[FixStation][cwFixStationDiagnosticsModel]") {
     // The row is judged under the system it declares and nothing else. The
-    // region's is geographic, where the corrected easting below is nowhere near
-    // a valid longitude — so a build that judged under the region's CS would
-    // flag the coordinate this test ends by clearing.
+    // project's frame is geographic, where the corrected easting below is
+    // nowhere near a valid longitude — so a build that judged under the frame
+    // would flag the coordinate this test ends by clearing.
     FixFixture fixture;
-    fixture.setGlobalCS(QStringLiteral("EPSG:4326"));
+    fixture.setFrame(QStringLiteral("EPSG:4326"));
 
     fixture.edit(cwFixStationModel::InputCSRole, QStringLiteral("EPSG:32613"));
     // A transposed leading digit on the easting — out of zone 13's area of use.
@@ -246,11 +248,11 @@ TEST_CASE("cwFixStationDiagnosticsModel domain roles are judged under the row's 
 
 TEST_CASE("cwFixStationDiagnosticsModel does not judge a row that declares no CS",
           "[FixStation][cwFixStationDiagnosticsModel]") {
-    // The region's CS is not a stand-in for one the row never declared: nothing
+    // The project's frame is not a stand-in for a CS the row never declared: nothing
     // is derived from the coordinate at all, so there is no point to place
     // inside or outside a domain. Such a row wants a different complaint.
     FixFixture fixture;
-    fixture.setGlobalCS(QStringLiteral("EPSG:32613"));
+    fixture.setFrame(QStringLiteral("EPSG:32613"));
 
     fixture.edit(cwFixStationModel::InputCSRole, QString());
     REQUIRE(fixture.source->setCoordinateText(0, QStringLiteral("1478000, 4430000, 1655m"),
@@ -290,7 +292,7 @@ TEST_CASE("A solve refreshes the diagnostics without touching the source model",
     CHECK(rolesSeen(proxySpy) == QList<int>{cwFixStationDiagnosticsModel::StationErrorRole});
 }
 
-TEST_CASE("A global CS change leaves the fix stations alone",
+TEST_CASE("A frame change leaves the fix stations alone",
           "[FixStation][cwFixStationDiagnosticsModel]") {
     // Rows follow their own CS, so re-projecting the project must not disturb
     // them — not the persisted data, and not the warnings drawn on it. This is
@@ -305,7 +307,7 @@ TEST_CASE("A global CS change leaves the fix stations alone",
 
     // Geographic, so a build that re-judged the row under it would find this
     // easting far outside any valid longitude and flag it.
-    fixture.setGlobalCS(QStringLiteral("EPSG:4326"));
+    fixture.setFrame(QStringLiteral("EPSG:4326"));
 
     CHECK(sourceSpy.count() == 0);
     CHECK(proxySpy.count() == 0);

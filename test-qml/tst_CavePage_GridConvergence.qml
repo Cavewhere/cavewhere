@@ -27,8 +27,6 @@ MainWindowTest {
             while (cave.fixStations.count > 0) {
                 cave.fixStations.removeAt(0)
             }
-            RootData.region.geoReference.globalCoordinateSystem = "EPSG:32613"
-
             // Reset the help-area visibility — tests share one CavePage
             // instance, so a previous toggle would otherwise bleed in.
             const helpArea = findChild(cavePage(), "gridConvergenceHelp")
@@ -225,36 +223,10 @@ MainWindowTest {
             cave.fixStations.setData(idx, "a1", FixStationModel.StationNameRole)
             enterThenClearTheCs(idx)
 
-            // globalCS is EPSG:32613 from init(), and it is not a stand-in for
-            // a system the fix never declared — there is no grid to converge to.
+            // A fix that declares no system has no grid to converge to, and
+            // nothing else stands in for one.
             compare(cave.gridConvergence.text, "n/a (no coordinate system)")
         }
 
-        // ── The region's globalCS does not reach a cave's fix stations ───────
-
-        function test_textIgnoresAGlobalCsChange() {
-            // Start with no project CS, so the only thing that could give this
-            // row a grid is the change made below.
-            RootData.region.geoReference.globalCoordinateSystem = ""
-
-            cave.fixStations.addFixStation()
-            const idx = cave.fixStations.index(0)
-            cave.fixStations.setData(idx, "a1", FixStationModel.StationNameRole)
-            enterThenClearTheCs(idx)
-
-            const before = cave.gridConvergence.text
-            compare(before, "n/a (no coordinate system)")
-
-            // Giving the project a CS must not hand one to a fix that declares
-            // none — the row keeps saying it has no grid.
-            RootData.region.geoReference.globalCoordinateSystem = "EPSG:32613"
-            compare(cave.gridConvergence.text, before)
-
-            // The premise: the readout does move when the row itself gains a
-            // system, so the check above can't pass for free.
-            cave.fixStations.setData(idx, "EPSG:32613", FixStationModel.InputCSRole)
-            tryVerify(() => cave.gridConvergence.text.indexOf("°") >= 0, 5000,
-                      "naming the row's own CS must give it a convergence angle")
-        }
     }
 }

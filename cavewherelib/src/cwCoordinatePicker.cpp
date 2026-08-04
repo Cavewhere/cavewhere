@@ -30,12 +30,12 @@ void cwCoordinatePicker::setGeoReference(cwGeoReference* geoReference)
         return;
     }
     if (m_geoReference) {
-        disconnect(m_geoReference, &cwGeoReference::globalCoordinateSystemChanged,
+        disconnect(m_geoReference, &cwGeoReference::localProjectionChanged,
                    this, &cwCoordinatePicker::rebuildWgs84Transform);
     }
     m_geoReference = geoReference;
     if (m_geoReference) {
-        connect(m_geoReference, &cwGeoReference::globalCoordinateSystemChanged,
+        connect(m_geoReference, &cwGeoReference::localProjectionChanged,
                 this, &cwCoordinatePicker::rebuildWgs84Transform);
     }
     // A stale pick from the old geo-reference would silently misreport
@@ -52,10 +52,7 @@ bool cwCoordinatePicker::hasCoordinateSystem() const
 
 void cwCoordinatePicker::rebuildWgs84Transform()
 {
-    const QString cs = m_geoReference ? m_geoReference->globalCoordinateSystem() : QString();
-    // Keep the cache in sync so the globalCoordinateSystem Q_PROPERTY reflects
-    // the current region between picks (the getter reads this cache).
-    m_globalCoordinateSystemCached = cs;
+    const QString cs = m_geoReference ? m_geoReference->localCoordinateSystem() : QString();
     if (cs.isEmpty()) {
         m_wgs84Transform.reset();
     } else {
@@ -65,9 +62,8 @@ void cwCoordinatePicker::rebuildWgs84Transform()
         }
     }
 
-    // A CS change without a new pick must still refresh the CS-derived readouts
-    // (globalCoordinateSystem, hasCoordinateSystem) so an open popup reflects the
-    // current geo-reference.
+    // A frame change without a new pick must still refresh hasCoordinateSystem,
+    // so an open popup reflects the current geo-reference.
     emit coordinateSystemChanged();
 }
 
@@ -85,7 +81,7 @@ void cwCoordinatePicker::pick(QPointF screenPoint)
     m_scenePoint = pick.world;
     m_pickScreenPoint = screenPoint;
 
-    m_globalPoint = m_geoReference->toGlobal(m_scenePoint);
+    const cwGeoPoint globalPoint = cwGeoPoint::fromSceneLocal(m_scenePoint);
 
     m_hasWgs84 = false;
     m_wgs84Lat = 0.0;
@@ -94,7 +90,7 @@ void cwCoordinatePicker::pick(QPointF screenPoint)
     if (m_wgs84Transform) {
         // PROJ is normalized for visualization in cwCoordinateTransform's
         // constructor, so output is x=lon, y=lat.
-        const cwGeoPoint w = m_wgs84Transform->transform(m_globalPoint);
+        const cwGeoPoint w = m_wgs84Transform->transform(globalPoint);
         m_wgs84Lon = w.x;
         m_wgs84Lat = w.y;
         m_hasWgs84 = true;

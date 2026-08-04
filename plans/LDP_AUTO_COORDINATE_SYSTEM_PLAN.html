@@ -145,6 +145,27 @@
       <td>User decision 2026-08-03. The layer already reports a loading state of its own;
       "un-anchored while loading" is not a separate condition worth a second indicator. Staying
       local is the correct answer, not a placeholder for one.</td></tr>
+  <tr><td>D17</td><td><b>Survex names the frame with <code>CUSTOM</code>.</b> The working-frame
+      <code>*cs out</code> is a raw PROJ string, and cavern refuses one bare — it wants
+      <code>*cs out CUSTOM "&lt;proj string&gt;"</code> (survex/src/commands.c, the
+      <code>CS_CUSTOM</code> branch). <code>cwSurvexExporterUtils::toSurvexCS()</code> wraps
+      anything starting with <code>+</code> and passes everything else through; every
+      <code>*cs</code> emission site goes through it.</td>
+      <td>Found while implementing P2.2 (2026-08-03). Without it the solve fails with
+      "Unknown coordinate system" the moment the LDP becomes the working frame, which is
+      every georeferenced project.</td></tr>
+  <tr><td>D18</td><td><b>An input the frame can't be derived from is skipped, not fatal.</b>
+      <code>cwLocalProjectionManager::anchorToFirstUsable()</code> walks the inputs in order and
+      takes the first that yields a projection.</td>
+      <td>Found while implementing P2.2 (2026-08-03). A UTM easting typed into a row that says
+      lat/long is nowhere on Earth, so <code>deriveFrom</code> yields nothing; stopping there
+      left the whole project unplaced with a perfectly good fix sitting behind it.</td></tr>
+  <tr><td>D19</td><td><b>The output-CS prompt is deleted</b> —
+      <code>needsOutputCS</code>/<code>suggestedOutputCS</code>/<code>outputCSCoordinateInvalid</code>,
+      <code>OutputCSPrompt.qml</code> and its three hosts.</td>
+      <td>Structurally unreachable under the LDP (2026-08-03): the prompt asked for an output CS
+      when fixes existed and the project had none, and a fix with a readable coordinate is
+      exactly what anchors the frame. Its accept button also had nowhere left to write.</td></tr>
 </table>
 
 <h2 id="recipe">2. The LDP recipe</h2>
@@ -332,6 +353,7 @@ at the origin when geoid grids are available. Mixed vertical datums across tiles
         <li><code>cwGridConvergence.cpp:133</code> origin-convergence bug (dies with the display path)</li>
         <li><code>worldOrigin</code> + <code>explicitlySet</code> + averaging <code>recomputeWorldOrigin()</code></li>
         <li>LAZ bbox-center world-origin adoption (subsumed by anchoring)</li>
+        <li>The output-CS prompt — <code>needsOutputCS</code> and everything it drove (D19)</li>
         <li><code>horizontalMetersPerUnit()</code> scaling of physical constants (clouds land in meters once, at import)</li>
         <li>Ground-vs-grid scale and float-precision workarounds</li>
       </ul>
@@ -396,7 +418,7 @@ lands green on both suites before the next.</p>
             <code>restore()</code> as the only ways to move them — all three parts write
             together, and <code>restore()</code> repairs states a file can't legitimately hold.</li>
         <li><b>Anchor identity = kind + persisted UUID</b> (<code>cwFixStation::id</code>,
-            <code>cwLazLayer::id</code>) — the open question from §11, settled: both already
+            <code>cwLazLayer::id</code>) — the open question from §13, settled: both already
             carry one, so identity survives save/load and outlives a rename.</li>
         <li><b><code>worldOrigin</code>/<code>explicitlySet</code> moved to P2</b> — since
             re-split: the deletion now lands in P2.2 (user decision,
@@ -419,7 +441,7 @@ lands green on both suites before the next.</p>
         <li><code>cwLocalProjectionManager</code>, owned by <code>cwCavingRegion</code> alongside
             <code>cwFixStationValidator</code> — the states live on <code>cwGeoReference</code>,
             the policy for moving between them needs the region's caves and layers, so it lives
-            there. R = 50&nbsp;km (<code>kAnchorThresholdMeters</code>), settling §11's first
+            there. R = 50&nbsp;km (<code>kAnchorThresholdMeters</code>), settling §13's first
             open question.</li>
         <li>Distance is measured <i>in the current frame</i>: with
             <code>x_0 = y_0 = 0</code> a point's distance from the origin is just its magnitude
@@ -431,14 +453,18 @@ lands green on both suites before the next.</p>
             precisely so opening a project can't move it. The manager tracks whether it has seen
             the current anchor at all, and resets that whenever the anchor changes underneath it
             (which is what a load looks like from here).</li>
-        <li><code>cwCavingRegion::setData()</code> now restores the geo-reference <b>last</b>,
-            after the caves. The caves arriving is an ordinary event the manager reacts to, so
-            restoring first let a re-derivation overwrite the frame the file carried — invisible
-            on the machine that wrote it, and not on the next one.</li>
-        <li>Enumerating inputs early-exits (<code>forEachInput</code>): the common case — anchored,
-            anchor still present — reads one input, not all of them. Reading a fix's coordinate
-            system is a PROJ database lookup, and this runs on every keystroke in a coordinate
-            field.</li>
+        <li><b>A load quiesces the manager.</b> <code>cwCavingRegion::setData()</code> brackets the
+            whole load in <code>cwLocalProjectionManager::setLoading()</code>: evaluation is
+            suspended from <code>clearCaves()</code> until the stored frame is restored, then runs
+            once against it. The caves arriving is an ordinary event the manager reacts to, so
+            without this a re-derivation built a frame that <code>restore()</code> overwrote
+            moments later — invisible on the machine that wrote it, and not on the next one.
+            Statement order inside <code>setData</code> is no longer load-bearing.</li>
+        <li>Inputs are enumerated by one <code>gatherInputs()</code> returning a
+            <code>QList&lt;Input&gt;</code>, in a fixed order so the frame doesn't depend on load
+            timing. Gathering every input on every call is cheap enough for a keystroke in a
+            coordinate field: <code>isValidCS</code> memoizes the PROJ database lookup per thread,
+            so per input it is a hash lookup.</li>
         <li>11 cases in <code>test_cwLocalProjectionManager.cpp</code>, one per §4 scenario plus
             the two load orderings; both load claims mutation-tested.</li>
       </ul>
@@ -455,7 +481,7 @@ lands green on both suites before the next.</p>
       the existing fallback chain untouched. Fully testable against the current code, with
       <code>globalCoordinateSystem</code> still present. Absorbs the "default export CS =
       derived UTM zone" piece of P5.</td></tr>
-  <tr><td><span class="pill phase">P2.2</span></td><td>Frame swap</td>
+  <tr><td><span class="pill phase">P2.2</span></td><td>Frame swap <b>— done</b></td>
       <td>The LDP becomes the working frame; <code>worldOrigin</code>/<code>explicitlySet</code>
       <i>and</i> <code>globalCoordinateSystem</code> are deleted <b>together</b> — they are one
       concept split in half (a frame and an offset into it), and neither is deletable alone:
@@ -507,24 +533,61 @@ lands green on both suites before the next.</p>
             <code>test_cwLazLayerAutoAdoptCS.cpp</code> against the new policy; the ~8 QML
             tests that set <code>globalCoordinateSystem</code> and assert it sticks are
             rewritten here, not in P4.</li>
-      </ul></td></tr>
+      </ul>
+      <div class="callout" style="margin-top:10px">
+      <b>What landed beyond the list above</b>
+      <ul>
+        <li><b>The output-CS prompt went with it</b> (<b>D19</b>) — the whole
+            <code>needsOutputCS</code> machinery, <code>OutputCSPrompt.qml</code>, its three
+            hosts, <code>tst_OutputCSPrompt.qml</code> and the validator's prompt tests.</li>
+        <li><b><code>toSurvexCS()</code></b> (<b>D17</b>) — the LDP has to reach cavern as
+            <code>CUSTOM "…"</code>, or every georeferenced solve fails. The test is what a bare
+            survex name may contain, not what a PROJ string looks like, so
+            <code>cwLocalProjection</code>'s WKT fallback is quoted too; all five
+            <code>*cs</code> emitters route through one <code>writeCsLine()</code>.</li>
+        <li><b><code>anchorToFirstUsable()</code></b> (<b>D18</b>) — an input no projection can
+            be centered on is skipped rather than leaving the project unplaced.</li>
+        <li><b>The picker's <code>Project</code> mode, <code>allowLocal</code> and
+            <code>allowGeographic</code> went too</b> — with the project's own picker gone, every
+            remaining host was a fix-station surface passing the same flags, and Project had no CS
+            to copy. <code>CSPicker</code>'s model is now constant, which also retired the
+            <code>onModelChanged</code> binding-restore workaround.</li>
+        <li><b><code>shareableCSForFix</code> falls back to the fix's own CS string</b> when
+            PROJ can't parse it <i>at all</i>: survex's own spellings (UTM16N, S-MERC, OSGB:XX) are
+            fine for output, and switching the Rule exporter to Shareable had silently dropped them.
+            The fallback is gated on <code>isValidCS</code> — a CS PROJ <i>does</i> know that
+            yielded nothing failed for a different reason (the point wouldn't transform), and
+            falling back there would name a geographic CS as <code>*cs out</code>.</li>
+        <li><b>The manual</b> — <code>georeference-a-cave.md</code> (two steps → one, the world
+            origin section, the picker section), <code>add-a-point-cloud.md</code>,
+            <code>grid-convergence.md</code> and their <code>llms.txt</code> entries.</li>
+      </ul>
+      <p style="margin:.6rem 0 0">A four-angle simplify pass then ran over the result;
+      what it applied and the four follow-ups it deliberately left are in
+      <a href="#p22followups">§11</a>.</p>
+      </div></td></tr>
   <tr><td><span class="pill phase">P3</span></td><td>Consumers</td>
       <td>Fix-station locals derive into the LDP; LAZ reprojection targets the LDP
       (horizontal-only + z unit scale, §5); convergence/declination consume the LDP inverse
       for lat/long. Progress UI on slow re-derives (D11).</td></tr>
   <tr><td><span class="pill phase">P4</span></td><td>UI removal <b>— shrunk by P2.2</b></td>
       <td>Read-only datum display in project info; <b>Recenter…</b> action (D7);
-      remaining lat/long-only display coordinates (D9); delete convergence display (D3).
-      The project CS picker (#618) and the fix-picker <code>Project</code> mode (D8) already
-      left in P2.2.</td></tr>
+      delete convergence display (D3). The project CS picker (#618), the fix-picker
+      <code>Project</code> mode (D8) and the picker popup's lat/long-only collapse (D9)
+      already left in P2.2. Still owed here: a per-layer coordinate-system override, so a
+      <code>.las</code> with no embedded CS has a remedy — the Geospatial Layers help box now
+      only says there is none. Also <a href="#p22followups">§11 F1 + F2</a> (the LAZ bootstrap's
+      anchoring ownership), which touch the same surface.</td></tr>
   <tr><td><span class="pill phase">P5</span></td><td>Exports</td>
       <td>Export CS chooser; Compass exporter CS handling. The default derived-UTM export CS
-      already landed in P2.1.</td></tr>
+      already landed in P2.1. Carry <a href="#p22followups">§11 F3</a> here — the
+      <code>*cs CUSTOM "…"</code> encoding has no importer-side inverse.</td></tr>
   <tr><td><span class="pill phase">P6</span></td><td>Cleanup</td>
       <td>R1 one-predicate cleanup on the (now smaller) consumer set
       (<a href="FIXSTATION_COORDINATE_SOURCE_OF_TRUTH.html#followups">FIXSTATION_COORDINATE_SOURCE_OF_TRUTH.html §13</a>,
       "R1 — one predicate for 'are this fix's numbers usable?'"); retire
-      <code>cwGridConvergence</code> display path and its :133 bug; docs.</td></tr>
+      <code>cwGridConvergence</code> display path and its :133 bug;
+      <a href="#p22followups">§11 F4</a>; docs.</td></tr>
 </table>
 
 <h2 id="cache">10. Cache ownership refactor (decided 2026-08-03, sequenced before P2.2, part B revised 2026-08-03)</h2>
@@ -734,7 +797,206 @@ load, not the insert.</p>
 Run the full C++ suite once after both parts land; QML suite unaffected but run it before any
 push.</p>
 
-<h2 id="open">11. Open questions</h2>
+<h2 id="p22followups">11. Follow-ups from the P2.2 simplify pass (2026-08-04)</h2>
+
+<p>A four-angle review (reuse / simplification / efficiency / altitude) ran over the P2.2
+working tree. Most findings were applied in place — see the list at the end of this section.
+Four were deliberately <b>not</b> applied, because they are behavior or architecture changes
+rather than cleanups. They are recorded here so they aren't lost.</p>
+
+<div class="callout bad">
+  <div class="title">F1 — The LAZ bootstrap anchors from outside <code>cwLocalProjectionManager</code></div>
+  <p><code>cwLazLayerModel::deriveFrameFromLaz</code> calls <code>cwLocalProjection::deriveFrom</code>
+  + <code>cwGeoReference::anchorTo</code> itself, duplicating
+  <code>cwLocalProjectionManager::anchorTo</code> — after this phase those are the only two
+  production callers of <code>anchorTo</code>. The manager documents itself as the single owner of
+  how the frame moves, and this write bypasses it, so the manager's witness bookkeeping
+  (<code>m_lastAnchor</code>, <code>m_anchorSeen</code>) is not updated. Two consequences, both
+  found by reading rather than by a failing test:</p>
+  <ul>
+    <li><code>evaluate()</code> misreads the model's own write as "a load restored this anchor".
+        Self-heals once the layer reaches <code>Loaded</code> and appears in
+        <code>gatherInputs()</code>, so it is latent today.</li>
+    <li><b>The real one:</b> <code>deriveFrameFromLaz</code> runs regardless of the layer's
+        <code>enabled</code> bit, while <code>gatherInputs()</code> only accepts
+        <code>LoadStatus::Loaded</code>. A <i>disabled</i> layer can therefore become the project's
+        anchor but can never be an Input — so <code>m_anchorSeen</code> stays false and
+        <code>clearFrame()</code> is unreachable for it. That violates the
+        "only witnessed deletions count" invariant this plan's §4 rests on.</li>
+  </ul>
+  <p><b>Reachability (re-verified 2026-08-04):</b> narrower than the paragraph above sounds.
+  <code>deriveFrameFromLaz</code> only anchors when the geo-reference has no coordinate system, and
+  a layer that is disabled at insert time means a persisted <code>.cwlaz</code> with
+  <code>enabled=false</code> — so the bad state needs an <i>ungeoreferenced</i> project that already
+  carries a persisted, disabled, CRS-bearing layer (e.g. anchor fix deleted → frame cleared → save
+  → reopen). Re-enabling the layer self-heals it: the load lands, the layer appears in
+  <code>gatherInputs()</code>, and <code>m_anchorSeen</code> flips true. The invariant violation
+  holds only while the layer stays disabled until its deletion.</p>
+  <p><b>Fix (the deeper one):</b> have <code>cwLazLayer::setSourcePath</code> run the header-only
+  <code>probeHeader</code> synchronously and publish <code>sourceCS</code> /
+  <code>sourceBboxCenter</code> immediately, plus a "probed" status that <code>gatherInputs()</code>
+  accepts. The model then does no anchoring at all, one class owns the frame, and the
+  enabled/loaded disagreement disappears. This is the principled way to break the D15 bootstrap
+  cycle — D15's current shape was the expedient one.</p>
+</div>
+
+<div class="callout warn">
+  <div class="title">F2 — Frame derivation inside the rescan insert loop restarts in-flight decodes</div>
+  <p><code>cwLazLayerModel::rescan()</code> derives the frame per file, inside the loop that
+  inserts layers. Anchoring emits <code>localProjectionChanged</code> → <code>setRegionFrameCS</code>
+  → <code>reload()</code> on <i>every</i> layer already in <code>m_layers</code> — including ones
+  whose decode started earlier in the same rescan. Triggers on a mixed multi-file add where the
+  first file carries no usable CRS and a later one does: a 100M-point tile already being read is
+  cancelled and re-decoded, and for a CRS-less source the second decode is byte-identical.
+  Secondary: the probe guard is per-file rather than per-rescan, so a directory of N CRS-less
+  tiles opens N LAZ headers on the GUI thread.</p>
+  <p><b>Fix:</b> establish the frame once before the insert loop (what the pre-P2.2 code did with
+  <code>maybeAdoptRegionDefaultsFromLaz(entries.first())</code>), or skip the reload when the
+  layer's own <code>sourceCS</code> is empty. Naturally folded into F1.</p>
+</div>
+
+<div class="callout warn">
+  <div class="title">F3 — <code>*cs CUSTOM "…"</code> is write-only</div>
+  <p>P2.2 added <code>toSurvexCS()</code>, which quotes a raw PROJ string behind survex's
+  <code>CUSTOM</code> keyword. There is no inverse: <code>cwSurvexImporter::parseCS</code> stores
+  the <code>*cs</code> argument verbatim, so importing a .svx that CaveWhere itself exported puts
+  the literal string <code>CUSTOM "+proj=…"</code> into <code>cwFixStation::inputCS</code>. PROJ
+  can't parse that — <code>isValidCS</code> is false, <code>gatherInputs()</code> skips the fix,
+  and the picker shows nothing.</p>
+  <p><b>Fix:</b> a <code>fromSurvexCS()</code> in the importer that unwraps
+  <code>CUSTOM "…"</code>, making the pair a real encoding rather than a one-way escape. Small and
+  self-contained; belongs with P5's export work.</p>
+</div>
+
+<div class="callout">
+  <div class="title">F4 — <code>anchorToFirstUsable()</code> has no failure memo</div>
+  <p>Each rejected input re-pays a full <code>cwLocalProjection::deriveFrom</code> (two PROJ
+  contexts, ~6 <code>proj_create*</code> calls). Bounded before D18, unbounded after. Low priority:
+  it runs only on the two re-anchor branches of <code>evaluate()</code>, never the common Anchored
+  path. A <code>QSet&lt;QString&gt;</code> of already-failed CS strings caps it.</p>
+</div>
+
+<h3>Two design questions left for the user</h3>
+<ul>
+  <li><b><code>DataMainPage</code>'s edit-toggle apparatus</b> — <code>EditToggleButton</code> +
+      read-only label + combo, ~20 lines, now guards a single <code>UnitSystemComboBox</code>. Its
+      "rarely changes but can wreck a project" rationale applied mostly to the CS that P2.2 deleted.
+      Does the extra click still earn its keep?</li>
+  <li><b><code>Theme.inlineBannerWidth</code></b> — one consumer left
+      (<code>CoordinateOrderAskBox</code>). Keep the token or inline the number?</li>
+</ul>
+
+<h3>What the pass did apply</h3>
+<p>Recorded so a later reader knows these are already done, not owed: the
+<code>toSurvexCS</code> bare-name test (the old <code>startsWith('+')</code> sniff would have
+emitted <code>cwLocalProjection</code>'s WKT fallback unquoted and failed the solve); a single
+<code>writeCsLine()</code> that all five <code>*cs</code> emitters route through;
+<code>shareableCSForFix</code>'s fallback gated on <code>isValidCS</code> so a geographic CS can no
+longer reach <code>*cs out</code>; <code>cwFixStationValidator</code> switched to the memoized
+<code>cwCoordinateTransform::transformPoint</code> (its <code>inputCS == frameCS</code> fast path
+became dead the moment the frame turned into a derived LDP, so every fix was building an uncached
+PROJ pipeline on every <code>revalidate()</code>); and the dead weight the deletion stranded —
+<code>allowGeographic</code> and the <code>onModelChanged</code> binding-restore hack it forced,
+<code>Mode::Project</code>, <code>cwGeoReference::toGlobal</code>,
+<code>cwCoordinatePicker::m_globalPoint</code>, a superseded <code>setRegionFrameCS</code> in
+<code>createLayer</code>, 8 orphaned includes and 7 stale comments.</p>
+
+<h2 id="p22review">12. Code-review findings on the P2.2 working tree (2026-08-04)</h2>
+
+<p>A correctness-focused review ran over the uncommitted P2.2 tree (three reviewers split by
+area, findings re-verified against the code before recording). The QML tree and the rewritten
+tests came back clean — no dangling references to removed API, no weakened tests. F1–F4 above
+were adversarially re-checked and all four hold; F1 gained the reachability paragraph in its
+callout. Six new findings, none applied yet — V1 and V2 are the ones that bite:</p>
+
+<div class="callout bad">
+  <div class="title">V1 — A witnessed LAZ anchor that transiently leaves <code>Loaded</code> is
+  treated as deleted</div>
+  <p><code>gatherInputs()</code> only accepts <code>LoadStatus::Loaded</code>, and its comment
+  promises <code>m_anchorSeen</code> protects a disabled/loading layer from being read as deleted —
+  but it only protects a <i>never-witnessed</i> anchor. Once the anchor layer has been seen,
+  any synchronous drop out of <code>Loaded</code> looks like deletion:
+  <code>setSourceCSOverride</code> / <code>setEnabled</code> / <code>setRegionFrameCS</code> call
+  <code>reload()</code>, which emits <code>loadStatusChanged(Loading)</code> before the load
+  starts, and that signal runs <code>evaluate()</code> mid-reload. With fix stations near the
+  origin the Anchored branch hits <code>freezeFrame()</code> — and Frozen never re-anchors, so a
+  CS correction on the anchor layer silently orphans the frame for good. With no other inputs it
+  hits <code>clearFrame()</code> → the region pushes an empty frame → the in-flight load restarts
+  untransformed → re-anchor → third reload: converges, but the project is transiently
+  un-georeferenced and pays two extra full point loads. No test reloads or disables a witnessed
+  LAZ anchor.</p>
+  <p><b>Fix direction:</b> the evaluate triggered by a status change to <code>Loading</code> must
+  not treat the absent anchor as deleted — e.g. gather layers by "has a probed header" rather than
+  "load finished" (the F1 deeper fix covers this too), or have <code>evaluate()</code> ignore an
+  anchor layer whose status is <code>Loading</code>.</p>
+</div>
+
+<div class="callout bad">
+  <div class="title">V2 — WorkingFrame solve regression for fixes whose CS only survex
+  understands</div>
+  <p>A fix entered under a survex-keyword spelling (<code>UTM16N</code>, <code>S-MERC</code> — the
+  exact round-trip the <code>shareableCSForFix</code> fallback exists for, since
+  <code>parseCS</code> stores <code>*cs</code> verbatim) is <code>Valid</code> (its coordinate
+  parses) but PROJ-invalid, so <code>gatherInputs()</code> skips it and no LDP ever derives. The
+  new <code>resolveOutputCS(WorkingFrame)</code> returns the empty frame with no fix fallback —
+  the deleted <code>workingFrameCSForFix</code> used to supply the fix's own CS — yet
+  <code>writeFixStations</code> still emits the per-fix <code>*cs</code>, so cavern hard-errors
+  with "input projection is set but output projection isn't" and the whole line-plot solve fails.
+  The doc comment's premise ("an Ungeoreferenced project has no fixes to place either") is false
+  for exactly this class, and for a PROJ-valid fix whose point <code>deriveFrom</code> can't
+  transform. Import a .svx containing <code>*cs UTM16N</code> + <code>*fix</code>: it solved
+  before P2.2 and errors after. No test covers keyword-CS fixes under WorkingFrame.</p>
+</div>
+
+<div class="callout warn">
+  <div class="title">V3 — <code>toSurvexCS</code> cannot represent a CS containing a double
+  quote</div>
+  <p>Survex's quoted-string reader has no escape syntax, so <code>CUSTOM "PROJCS["…"]"</code>
+  truncates at the first embedded quote and cavern parses garbage. WKT always contains quotes,
+  and WKT is reachable both as a fix <code>inputCS</code> (the custom dialog accepts anything
+  PROJ parses) and as the frame itself (<code>cwLocalProjection::derive</code>'s WKT fallback —
+  the very case the bare-name test was built for quotes it, but quoting truncates it). Since
+  survex literally cannot carry the string, the fix is to translate (PROJ → <code>+proj</code>
+  spelling) or refuse with an error, never emit a truncated line.</p>
+</div>
+
+<div class="callout warn">
+  <div class="title">V4 — <code>isBareName</code> is wider than survex's name grammar</div>
+  <p>The charset test admits <code>IGNF:LAMB93</code> and
+  <code>urn:ogc:def:crs:EPSG::32612</code>, but cavern's <code>cs_tab</code> only knows
+  CUSTOM/EPSG/ESRI/EUR79Z30/IJTSK/JTSK/LAT-LONG/LOCAL/LONG-LAT/OSGB/S-MERC/UTM — anything else
+  is a hard "Unknown coordinate system". Both spellings are PROJ-valid, so CUSTOM-quoting them
+  would have worked. The test should be "matches a survex spelling" (keyword grammar plus
+  EPSG:/ESRI: codes), not "contains no exotic characters".</p>
+</div>
+
+<div class="callout warn">
+  <div class="title">V5 — <code>shareableCSForFix</code>'s verbatim fallback lets garbage shadow
+  a good fix</div>
+  <p>A PROJ-invalid, non-keyword string (a typo like <code>UTM 16 N</code>, reachable through
+  import or hand-edited data — <code>setInputCS</code> accepts anything and the coordinate still
+  parses) passes the fallback, and first-non-empty-wins makes it <code>*cs out</code> even when a
+  perfectly good <code>EPSG:32616</code> fix sits right behind it. Only the five-entry
+  <code>isUnusableAsSurvexOutputCS</code> list screens it. The old code skipped PROJ-invalid
+  strings, and the test pinning "a bad first fix doesn't stop the search" was deleted with it.</p>
+</div>
+
+<div class="callout">
+  <div class="title">V6 — <code>gatherInputs()</code> anchors on a Valid fix at exactly
+  (0,0)</div>
+  <p>The filter is <code>state() == Valid</code> + <code>isValidCS</code> only, but a user-typed
+  placeholder <code>0 0</code> is Valid at the CS origin — the Null Island case
+  <code>cwFixStation::hasPlacedCoordinate()</code> exists to exclude, which the validator and
+  exporter honor and this gatherer skips. The LDP then anchors at the CS origin until the
+  coordinate is corrected (self-healing via the &gt;50&nbsp;km branch, but each hop reloads every
+  LAZ layer and re-runs the solve). One-line fix: use <code>hasPlacedCoordinate()</code>.</p>
+</div>
+
+<p>Cosmetic, no action needed: <code>CoordinatePickerPopup._gotoCoordinateSystem()</code> is a
+stale name for what is now an add-fix/add-layer link, and <code>DataMainPage</code>'s edit mode
+kept the narrower 200&nbsp;px width, which clips nothing.</p>
+
+<h2 id="open">13. Open questions</h2>
 <ul>
   <li><s><b>R's exact value</b> — 50 km proposed. Cheap to change; pick during P2.</s>
       Settled in P2: 50 km, as <code>cwLocalProjectionManager::kAnchorThresholdMeters</code>.</li>

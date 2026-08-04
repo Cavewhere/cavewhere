@@ -142,17 +142,27 @@ std::optional<double> cwLocalProjectionManager::distanceFromOrigin(const Input& 
     return std::hypot(local->x, local->y);
 }
 
-void cwLocalProjectionManager::anchorTo(const Input& input)
+bool cwLocalProjectionManager::anchorTo(const Input& input)
 {
     const QString localCS = cwLocalProjection::deriveFrom(input.coordinateSystem, input.point);
     if (localCS.isEmpty()) {
         // Nothing to anchor to that we could vouch for. Leave the frame alone
         // rather than half-move it; the next edit tries again.
-        return;
+        return false;
     }
     m_region->geoReference()->anchorTo(input.anchor, localCS);
     m_lastAnchor = m_region->geoReference()->anchor();
     m_anchorSeen = true;
+    return true;
+}
+
+void cwLocalProjectionManager::anchorToFirstUsable(const QList<Input>& inputs)
+{
+    for (const Input& input : inputs) {
+        if (anchorTo(input)) {
+            return;
+        }
+    }
 }
 
 // freezeFrame and clearFrame exist so that every move of the frame records what
@@ -242,7 +252,7 @@ void cwLocalProjectionManager::evaluate()
         if (somethingNearby) {
             freezeFrame();
         } else {
-            anchorTo(inputs.first());
+            anchorToFirstUsable(inputs);
         }
         return;
     }
@@ -256,7 +266,7 @@ void cwLocalProjectionManager::evaluate()
     m_sawAnyInput = true;
 
     if (geoReference->state() == cwGeoReference::Ungeoreferenced) {
-        anchorTo(inputs.first());
+        anchorToFirstUsable(inputs);
     }
     // Frozen: a frame with nothing left to follow. Only the user moves it.
 }

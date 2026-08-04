@@ -186,14 +186,11 @@ void cwLinePlotManager::setRegion(cwCavingRegion* region) {
     connect(Region, SIGNAL(insertedCaves(int,int)), SLOT(runSurvex()));
     connect(Region, SIGNAL(removedCaves(int,int)), SLOT(runSurvex()));
 
-    // globalCoordinateSystem feeds the *cs out / *cs lines on the survex
-    // export, so the line plot needs to re-run when the user changes the
-    // region's CS.
-    connect(Region->geoReference(), &cwGeoReference::globalCoordinateSystemChanged, this, &cwLinePlotManager::runSurvex);
-
-    // worldOrigin is subtracted by cwLinePlotTask::applyWorldOriginOffset, so
-    // the line plot must re-solve when it changes (auto-compute or manual recenter).
-    connect(Region->geoReference(), &cwGeoReference::worldOriginChanged, this, &cwLinePlotManager::runSurvex);
+    // The local projection is what *cs out names, and cavern reports the solved
+    // stations in it — so the scene's coordinates are only meaningful in the
+    // frame that was current when the solve ran. A frame that moves invalidates
+    // every position and has to re-solve.
+    connect(Region->geoReference(), &cwGeoReference::localProjectionChanged, this, &cwLinePlotManager::runSurvex);
 
     SurveySignaler->setRegion(Region);
 
@@ -671,22 +668,6 @@ void cwLinePlotManager::updateLinePlot(cwLinePlotTask::LinePlotResultData result
     emit stationPositionInCavesChanged(resolved.caves.keys());
     emit stationPositionInTripsChanged(cw::toList(resolved.trips));
     emit stationPositionInScrapsChanged(cw::toList(resolved.scraps));
-
-    // First-time auto-compute of worldOrigin: when nobody has explicitly
-    // picked one yet and we now have at least one valid fix, recenter the
-    // scene. recomputeWorldOrigin() is a no-op when no candidates exist,
-    // and the resulting setWorldOrigin() emits worldOriginChanged → re-runs
-    // survex so the lookup positions land in offset-relative coords. Sticky
-    // after: once anyone has set worldOrigin explicitly (user, load, this
-    // recompute, or LAZ auto-adopt), this branch never fires again.
-    //
-    // Uses hasExplicitWorldOrigin() rather than `worldOrigin() == {}`
-    // because an explicit pin to (0,0,0) — e.g. sink-training tests that
-    // align render-space with LAZ-source XY — is a valid origin that must
-    // not be silently overwritten by the fix-station centroid.
-    if (!Region->geoReference()->hasExplicitWorldOrigin()) {
-        Region->recomputeWorldOrigin();
-    }
 }
 
 

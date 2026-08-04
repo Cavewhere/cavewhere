@@ -194,9 +194,9 @@ TEST_CASE("the inline row flag and the cave warning reach the same verdict",
     // Three caves under one staging: a clean fix, a bad one, and one with no CS
     // at all. The last is the case most likely to drift apart, since it is where
     // the two paths used to resolve the CS independently — and it must now agree
-    // that there is nothing to complain about, the region's CS notwithstanding.
+    // that there is nothing to complain about. The clean fix, added first,
+    // anchors the project's frame.
     cwCavingRegion region;
-    region.geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32613"));
 
     const auto addCaveWithFix = [&](const cwFixStation& fix) {
         region.addCave();

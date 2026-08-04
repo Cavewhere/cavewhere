@@ -140,16 +140,9 @@ QtObject {
     readonly property int statsPadding: 10
     readonly property int floatingToolbarPadding: 12
     readonly property int infoColumnMaxWidth: 200
-    // The info column grows while its settings are being edited so the wider
-    // coordinate-system editor (mode + UTM zone + hemisphere) isn't clipped.
-    readonly property int infoColumnEditMaxWidth: 320
-    // The info column also grows while the output-CS prompt banner sits in it, so
-    // its inline picker has more room than the read-only column allows.
-    readonly property int infoColumnPromptMaxWidth: 230
-    // Comfortable width for the output-CS prompt banner where it floats freely
-    // (the 3D view): wide enough to keep its inline CS picker's mode + UTM zone +
-    // hemisphere controls and the "Use this" button on a single line.
-    readonly property int outputCSPromptWidth: 460
+    // Comfortable width for an inline banner that floats over a page: wide
+    // enough to read a sentence or two without crowding the page behind it.
+    readonly property int inlineBannerWidth: 460
 
     // Utility
     readonly property color transparent: "#00000000"

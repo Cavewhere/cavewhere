@@ -13,48 +13,20 @@ import cavewherelib
 
 // The coordinate-system picker controls — mode combo, plus the UTM zone spinbox
 // and N/S hemisphere combo — and nothing else. It is deliberately presentation-
-// free: no resolved-name label, no EPSG line. The two shells wrap it: CSComboBox
-// adds the compact inline label (fix-station rows); DataMainPage's project
-// GroupBox adds the name/EPSG lines. Laid out in a QQ.Flow so a host narrower
-// than the controls (the project's slim info column) wraps the trailing controls
-// onto a second line instead of overflowing; a host at least oneLineWidth wide
-// (a fix-station cell) keeps them on one line.
+// free: no resolved-name label, no EPSG line. CSComboBox wraps it to add the
+// compact inline label used by fix-station rows. Laid out in a QQ.Flow so a host
+// narrower than the controls wraps the trailing controls onto a second line
+// instead of overflowing; a host at least oneLineWidth wide (a fix-station cell)
+// keeps them on one line.
 QQ.Item {
     id: rootId
 
     property string value: ""
-    property bool allowGeographic: true
 
-    // Which modes this host offers. A project that isn't georeferenced needs
-    // Local to say so; a fix-station row does not — it needs Project, which is
-    // meaningless on the project's own picker. See issues #618 and #625.
-    property bool allowLocal: true
-    property bool allowProject: false
+    readonly property int currentMode: CoordinateSystem.modeFor(rootId.value)
 
-    // The project's global CS, so Project has something to stamp in. Only the
-    // fix-station hosts supply it.
-    property string projectCS: ""
-
-    // Project is a display rule, not stored state: the row shows it whenever it
-    // holds the project's CS, and stops showing it the moment the project moves
-    // to something else — the row stays put, which is the point. The non-empty
-    // guard keeps an unset row out of Project when the project has no CS either.
-    readonly property int currentMode: rootId.allowProject
-                                       && rootId.value !== ""
-                                       && rootId.value === rootId.projectCS
-                                       ? CoordinateSystem.Project
-                                       : CoordinateSystem.modeFor(rootId.value)
-
-    // Whether the zone and hemisphere controls apply — the row's CS is a UTM
-    // zone, whatever the combo labels it. A row holding the project's CS reads
-    // as Project, but when that CS is a UTM zone the zone is still the thing to
-    // edit; keying the controls off the label alone would hide them and leave
-    // the zone unreachable except through the Custom dialog. Editing it commits
-    // a different zone, which no longer matches the project, so the label falls
-    // back to UTM on its own.
+    // Whether the zone and hemisphere controls apply.
     readonly property bool showsUtm: rootId.currentMode === CoordinateSystem.UTM
-                                     || (rootId.currentMode === CoordinateSystem.Project
-                                         && CoordinateSystem.modeFor(rootId.value) === CoordinateSystem.UTM)
 
     // The width the visible controls need on a single line, summed generically
     // from the Flow's children (their explicit/implicit widths and spacing) so
@@ -82,9 +54,6 @@ QQ.Item {
 
     function commitMode(mode) {
         switch (mode) {
-        case CoordinateSystem.Local:
-            rootId.committed("")
-            return
         case CoordinateSystem.LatLon:
             rootId.committed(CoordinateSystem.wgs84())
             return
@@ -92,9 +61,6 @@ QQ.Item {
             rootId.committed(CoordinateSystem.utmZoneToEpsg(
                 zoneSpinId.value,
                 hemiComboId.currentIndex === 0))
-            return
-        case CoordinateSystem.Project:
-            rootId.committed(rootId.projectCS)
             return
         case CoordinateSystem.Custom:
             customDialogLoader.active = true
@@ -114,23 +80,13 @@ QQ.Item {
             id: modeComboId
             objectName: "csModePicker"
 
-            // One ordered list, filtered by the host's flags, rather than a
-            // literal per combination — allowGeographic (survex's cavern can't
-            // emit geographic output), allowLocal and allowProject already make
-            // eight, and the next flag would double that again.
-            readonly property var entries: [
-                { mode: CoordinateSystem.Local,   label: qsTr("Local"),            allowed: rootId.allowLocal },
-                { mode: CoordinateSystem.LatLon,  label: qsTr("Lat/Lon (WGS84)"),  allowed: rootId.allowGeographic },
-                { mode: CoordinateSystem.UTM,     label: qsTr("UTM"),              allowed: true },
-                // Hidden while the project has no CS of its own — picking it
-                // then would commit the blank this whole change exists to retire.
-                { mode: CoordinateSystem.Project, label: qsTr("Project"),          allowed: rootId.allowProject && rootId.projectCS !== "" },
-                { mode: CoordinateSystem.Custom,  label: qsTr("Custom..."),        allowed: true }
-            ].filter((e) => e.allowed)
+            readonly property var modes: [
+                CoordinateSystem.LatLon,
+                CoordinateSystem.UTM,
+                CoordinateSystem.Custom
+            ]
 
-            readonly property var modes: entries.map((e) => e.mode)
-
-            model: entries.map((e) => e.label)
+            model: [qsTr("Lat/Lon (WGS84)"), qsTr("UTM"), qsTr("Custom...")]
 
             function modeAt(index) {
                 return modes[index]
@@ -145,18 +101,6 @@ QQ.Item {
             }
 
             currentIndex: indexForMode(rootId.currentMode)
-
-            // A ComboBox resets currentIndex to the top of the list whenever its
-            // model is replaced, and it writes the value straight in rather than
-            // through the property system — so the binding above is left intact
-            // but not dirty, and never recovers. The model is replaced whenever
-            // Project appears or disappears (the project gaining or losing a CS),
-            // which would silently relabel every row to the first entry. Restore
-            // the binding after the reset.
-            onModelChanged: Qt.callLater(() => {
-                modeComboId.currentIndex = Qt.binding(
-                            () => modeComboId.indexForMode(rootId.currentMode))
-            })
 
             onActivated: (index) => {
                 const mode = modeAt(index)

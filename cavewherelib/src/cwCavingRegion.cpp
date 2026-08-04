@@ -27,16 +27,11 @@ cwCavingRegion::cwCavingRegion(QObject *parent) :
     m_fixStationValidator(new cwFixStationValidator(this)),
     m_localProjectionManager(new cwLocalProjectionManager(this))
 {
-    // geoReference owns the CS + worldOrigin; the region only mirrors each change
-    // into the LAZ layer model (it owns lazLayers). Consumers that react to CS /
-    // worldOrigin connect to geoReference directly. The worldOrigin push runs
-    // before the CS push for a CS-driven reset, matching the prior in-setter
-    // ordering.
-    connect(m_geoReference, &cwGeoReference::worldOriginChanged, this, [this] {
-        m_lazLayers->setRegionWorldOrigin(m_geoReference->worldOrigin());
-    });
-    connect(m_geoReference, &cwGeoReference::globalCoordinateSystemChanged, this, [this] {
-        m_lazLayers->setRegionGlobalCS(m_geoReference->globalCoordinateSystem());
+    // geoReference owns the frame; the region only mirrors each change into the
+    // LAZ layer model (it owns lazLayers). Consumers that react to the frame
+    // connect to geoReference directly.
+    connect(m_geoReference, &cwGeoReference::localProjectionChanged, this, [this] {
+        m_lazLayers->setRegionFrameCS(m_geoReference->localCoordinateSystem());
     });
 }
 
@@ -291,33 +286,10 @@ cwProject *cwCavingRegion::parentProject() const
     return dynamic_cast<cwProject*>(parent());
 }
 
-void cwCavingRegion::recomputeWorldOrigin()
-{
-    // The gather + reproject + robust-centroid logic lives in the validator so
-    // the outlier check and the origin share one definition of the cluster. An
-    // empty result (no usable fixes) leaves the origin untouched.
-    if (const auto origin = m_fixStationValidator->robustWorldOrigin()) {
-        m_geoReference->setWorldOrigin(*origin);
-    }
-}
-
 void cwCavingRegion::setData(const cwCavingRegionData &data)
 {
     setName(data.name);
     setUnitSystem(data.unitSystem);
-    m_geoReference->setGlobalCoordinateSystem(data.globalCoordinateSystem);
-    // worldOrigin is intentionally not persisted (see cavewhere.proto:
-    // "reserved 5; // Removed: worldOrigin ... recomputed on load"). On
-    // disk-load, data.worldOrigin is always default-constructed cwGeoPoint{},
-    // and setGlobalCoordinateSystem above already reset our state to match.
-    // Only call setWorldOrigin when the data carries a non-default value —
-    // otherwise we'd flip the explicit-set flag for a value the user never
-    // actually chose, and the next LAZ add would skip its bbox-center
-    // auto-adopt. (In-process data → setData round-trips still work because
-    // a non-default value will be present.)
-    if (data.worldOrigin != cwGeoPoint{}) {
-        m_geoReference->setWorldOrigin(data.worldOrigin);
-    }
 
     // A load must not derive the local projection: it is stored precisely so
     // that opening a project can't move it, and the caves arriving is an event
@@ -349,8 +321,6 @@ cwCavingRegionData cwCavingRegion::data() const
     return {
         .name = m_name.value(),
         .caves = cwData::toDataList<cwCaveData>(m_caves),
-        .globalCoordinateSystem = m_geoReference->globalCoordinateSystem(),
-        .worldOrigin = m_geoReference->worldOrigin(),
         .unitSystem = m_unitSystem,
         .geoReference = {
             .state = m_geoReference->state(),

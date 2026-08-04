@@ -11,11 +11,9 @@ import cavewherelib
 pragma Singleton
 
 // The single source of truth for turning a coordinate-system string into the
-// text a human reads. Both CS surfaces route through here — the compact inline
-// picker (CSComboBox's Custom-mode label) and the project's 3-line GroupBox
-// (name + EPSG) — so a change to how a CS is presented (separator, datum, the
-// nameless-Custom fallback, the Local wording) happens in exactly one place.
-// Backed by CoordinateSystem.nameFor (PROJ proj_get_name).
+// text a human reads, so a change to how a CS is presented (separator, datum,
+// the nameless-Custom fallback, the Local wording) happens in exactly one
+// place. Backed by CoordinateSystem.nameFor (PROJ proj_get_name).
 QQ.QtObject {
     id: format
 

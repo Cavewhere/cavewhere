@@ -184,8 +184,6 @@ MainWindowTest {
         }
 
         function test_inputCSPickerModes() {
-            RootData.region.geoReference.globalCoordinateSystem = ""
-
             const cave = gotoFixStations()
             cave.fixStations.addFixStation()
             tryCompare(cave.fixStations, "count", 1)
@@ -196,68 +194,21 @@ MainWindowTest {
                 return picker !== null
             }, 5000, "row 0 inputCSComboBox should be reachable")
 
-            // A fix station always has a coordinate system, so there is no
-            // "Local" here — that is the project's way of saying it isn't
-            // georeferenced, and it is what a blank input CS used to mean.
-            verify(picker.allowGeographic, "FixStationPage CSComboBox should allow geographic")
+            // A fix station always has a coordinate system of its own, so
+            // there is no "Local" here — that is what a blank input CS used to
+            // mean, and it is what this whole change exists to retire.
             const modeCombo = findChild(picker, "csModePicker")
             verify(modeCombo !== null, "csModePicker should be reachable")
+            verify(modeCombo.model.indexOf("Lat/Lon (WGS84)") >= 0,
+                   "a fix-station row must offer a geographic CS")
             verify(modeCombo.model.indexOf("Local") < 0,
                    "a fix-station row must not offer Local")
-            verify(modeCombo.model.indexOf("Project") < 0,
-                   "Project must not be offered while the project has no CS to copy")
-            compare(modeCombo.model.length, 3,
-                    "Lat/Lon / UTM / Custom while the project has no CS of its own")
-
-            // Project appears only once there is a project CS to copy — offering
-            // it sooner would commit the blank this all exists to retire.
-            RootData.region.geoReference.globalCoordinateSystem = "EPSG:32613"
-            tryVerify(() => modeCombo.model.length === 4, 5000,
-                      "Project must be offered once the project has a CS")
-            verify(modeCombo.model.indexOf("Project") >= 0,
-                   "the fourth mode must be Project")
+            compare(modeCombo.model.length, 3, "Lat/Lon, UTM and Custom")
         }
 
-        function test_inputCSPickerProjectModeCopiesAndKeeps() {
-            RootData.region.geoReference.globalCoordinateSystem = "EPSG:32613"
-
-            const cave = gotoFixStations()
-            cave.fixStations.addFixStation()
-            tryCompare(cave.fixStations, "count", 1)
-
-            let picker = null
-            tryVerify(() => {
-                picker = findPicker(0)
-                return picker !== null
-            }, 5000, "row 0 inputCSComboBox should be reachable")
-
-            const inputCS = () => cave.fixStations.data(cave.fixStations.index(0),
-                                                        FixStationModel.InputCSRole)
-
-            const modeCombo = findChild(picker, "csModePicker")
-            const projectIndex = modeCombo.model.indexOf("Project")
-            verify(projectIndex >= 0, "Project must be offered")
-
-            // Project stamps the project's CS in rather than linking to it...
-            modeCombo.activated(projectIndex)
-            tryVerify(() => inputCS() === "EPSG:32613", 5000,
-                      "picking Project copies the project's CS onto the row")
-            tryCompare(picker, "currentMode", CoordinateSystem.Project)
-
-            // ...so re-projecting the project leaves the row exactly where it
-            // was entered. It stops reading as Project because it no longer
-            // matches, which is the display saying so, not the row moving.
-            RootData.region.geoReference.globalCoordinateSystem = "EPSG:32614"
-            compare(inputCS(), "EPSG:32613")
-            tryCompare(picker, "currentMode", CoordinateSystem.UTM)
-        }
-
-        //! Project appearing in the list must not drag the combo off the mode the
-        //! row is actually on. Adding an entry rewrites the whole model, and a
-        //! ComboBox resets its currentIndex when that happens.
-        function test_inputCSPickerKeepsItsModeWhenProjectAppears() {
-            RootData.region.geoReference.globalCoordinateSystem = ""
-
+        //! The zone and hemisphere controls are the whole point of UTM mode:
+        //! without them the zone is unreachable except through the Custom dialog.
+        function test_inputCSPickerZoneIsEditableOnAUtmRow() {
             const cave = gotoFixStations()
             addProjectedFixStation(cave)
             tryCompare(cave.fixStations, "count", 1)
@@ -268,51 +219,13 @@ MainWindowTest {
                 return picker !== null
             }, 5000, "row 0 inputCSComboBox should be reachable")
 
-            const modeCombo = findChild(picker, "csModePicker")
-            compare(modeCombo.model.length, 3, "no Project entry yet")
-            const utmIndex = modeCombo.model.indexOf("UTM")
-            tryCompare(modeCombo, "currentIndex", utmIndex)
-
-            // Project slots in ahead of Custom, so UTM keeps its index — only a
-            // reset to the top of the list can move it. The combo does reset, and
-            // the binding is restored a turn later, so this settles rather than
-            // holding from the first frame.
-            RootData.region.geoReference.globalCoordinateSystem = "EPSG:32613"
-            tryVerify(() => modeCombo.model.length === 4, 5000,
-                      "Project must be offered once the project has a CS")
-            compare(modeCombo.model.indexOf("UTM"), utmIndex,
-                    "UTM must keep its place when Project appears")
-            tryCompare(modeCombo, "currentIndex", utmIndex, 5000,
-                       "the row is still on UTM, so the combo must still say UTM")
-            compare(picker.currentMode, CoordinateSystem.UTM)
-        }
-
-        //! A row that happens to hold the project's CS reads as Project, but when
-        //! that CS is a UTM zone the zone is still the thing to edit — the
-        //! controls have to stay reachable, and editing one moves the row off the
-        //! project rather than doing nothing.
-        function test_inputCSPickerZoneStaysEditableOnAProjectRow() {
-            RootData.region.geoReference.globalCoordinateSystem = "EPSG:32613"
-
-            const cave = gotoFixStations()
-            cave.fixStations.addFixStation()
-            tryCompare(cave.fixStations, "count", 1)
-            cave.fixStations.setData(cave.fixStations.index(0), "EPSG:32613",
-                                     FixStationModel.InputCSRole)
-
-            let picker = null
-            tryVerify(() => {
-                picker = findPicker(0)
-                return picker !== null
-            }, 5000, "row 0 inputCSComboBox should be reachable")
-
-            tryCompare(picker, "currentMode", CoordinateSystem.Project)
+            tryCompare(picker, "currentMode", CoordinateSystem.UTM)
 
             const zoneSpin = findChild(picker, "csUtmZone")
             verify(zoneSpin !== null, "csUtmZone should be reachable")
             tryVerify(() => zoneSpin.visible, 5000,
-                      "the zone control must stay visible on a UTM-backed Project row")
-            compare(zoneSpin.value, 13)
+                      "the zone control must be visible on a UTM row")
+            compare(zoneSpin.value, 11)
 
             zoneSpin.value = 14
             zoneSpin.valueModified()
@@ -321,8 +234,6 @@ MainWindowTest {
                                                        FixStationModel.InputCSRole)
             tryVerify(() => inputCS() === "EPSG:32614", 5000,
                       "editing the zone must commit the new zone onto the row")
-            // No longer the project's CS, so it stops reading as Project.
-            tryCompare(picker, "currentMode", CoordinateSystem.UTM)
         }
 
         function test_removeFixConfirmed() {

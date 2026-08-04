@@ -1857,11 +1857,10 @@ MainWindowTest {
         readonly property real georefNorthing: 4300000
         readonly property real georefElevation: 1200
 
-        // Set the project coordinate system and fix `page.currentCave`'s first
-        // station to real coordinates, so the cave is georeferenced. Both changes
-        // are undone by the restoreDemoProject() reload each georef shot ends with.
+        // Fix `page.currentCave`'s first station to real coordinates, which
+        // georeferences the cave — the fix anchors the project's frame. Undone
+        // by the restoreDemoProject() reload each georef shot ends with.
         function georeferenceDemoCave(page) {
-            RootData.region.geoReference.globalCoordinateSystem = georefCS;
 
             let model = page.currentCave.fixStations;
             model.addFixStation();
@@ -1913,33 +1912,6 @@ MainWindowTest {
         // zone / hemisphere / resolved-EPSG fields are all showing.
         // Backs docs/manual/georeferencing/georeference-a-cave.md.
         //
-        // Cropped to the Geospatial group box (label + control) rather than grabbed
-        // whole-window: the control is one small row on an otherwise full Data page,
-        // so a cropped shot reads in the manual's narrow column where a whole-window
-        // one would not.
-        function test_georefCoordinateSystem() {
-            let page = openDataPage("Source/Data", "dataMainPage");
-            if (!page) { return; }
-
-            RootData.region.geoReference.globalCoordinateSystem = georefCS;
-
-            let group = findByName(page, "geospatialGroupBox");
-            verify(group, "found the Geospatial group box");
-            let combo = findByName(page, "globalCoordinateSystemComboBox");
-            verify(combo, "found the coordinate system combo box");
-
-            highlightOverlayId.target = combo;
-            settle();
-
-            let path = WindowGrabber.grabItemToFile(group, "georef-coordinate-system",
-                                                    panelCropMargin);
-            verify(path.length > 0, "grabItemToFile wrote the coordinate-system shot");
-            verify(OffscreenRenderTester.imageIsNonUniform(path),
-                   "georef-coordinate-system is not blank");
-
-            restoreDemoProject();
-        }
-
         // Two shots from one georeferenced cave: the Fix Stations page with a fixed
         // station, and the cave page's Grid convergence readout showing a value.
         // Back docs/manual/georeferencing/georeference-a-cave.md and
@@ -2007,10 +1979,9 @@ MainWindowTest {
             verify(glTerrain, "found the GLTerrainRenderer");
 
             // Georeference cave 0 so the picked point resolves to real coordinates:
-            // the popup's CRS / WGS84 / Elevation sections only show with a CS set.
+            // the popup's WGS84 / Elevation sections only show with a frame set.
             let cave = RootData.region.cave(0);
             verify(cave, "found the demo cave");
-            RootData.region.geoReference.globalCoordinateSystem = georefCS;
             let model = cave.fixStations;
             model.addFixStation();
             model.setData(model.index(0), georefStation, FixStationModel.StationNameRole);
@@ -2183,10 +2154,9 @@ MainWindowTest {
             verify(glTerrain, "found the GLTerrainRenderer");
 
             // Georeference cave 0 so the azimuth selector's True and Magnetic options
-            // are enabled (both need a coordinate system). Undone by restoreDemoProject.
+            // are enabled (both need a frame). Undone by restoreDemoProject.
             let cave = RootData.region.cave(0);
             verify(cave, "found the demo cave");
-            RootData.region.geoReference.globalCoordinateSystem = georefCS;
             let model = cave.fixStations;
             model.addFixStation();
             model.setData(model.index(0), georefStation, FixStationModel.StationNameRole);

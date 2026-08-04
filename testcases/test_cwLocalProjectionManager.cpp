@@ -124,6 +124,29 @@ TEST_CASE("A fix with nothing readable in it never anchors",
     CHECK(region.geoReference()->localCoordinateSystem().isEmpty());
 }
 
+TEST_CASE("A first fix that can't be placed hands the anchor to the next one",
+          "[cwLocalProjectionManager]")
+{
+    // A UTM easting typed into a row that says lat/long is nowhere on Earth, so
+    // no projection can be centered on it. Stopping at that row would leave the
+    // whole project unplaced with a perfectly good fix sitting behind it.
+    cwCavingRegion region;
+
+    const cwFixStation unplaceable = makeFix(QStringLiteral("A1"),
+                                             QStringLiteral("EPSG:4326"),
+                                             kAnchorEasting, kAnchorNorthing, kElevation);
+    const cwFixStation good = makeFix(QStringLiteral("A2"), kUtm12N,
+                                      kAnchorEasting, kAnchorNorthing, kElevation);
+    addCaveWithFixes(&region, {unplaceable, good});
+
+    auto* geoReference = region.geoReference();
+    REQUIRE(geoReference->state() == cwGeoReference::Anchored);
+    CHECK(geoReference->anchor()
+          == cwGeoReference::Anchor{cwGeoReference::Anchor::FixStation, good.id()});
+    checkCenteredOn(geoReference->localCoordinateSystem(), kUtm12N,
+                    kAnchorEasting, kAnchorNorthing);
+}
+
 TEST_CASE("Refining the anchor leaves the frame where it is",
           "[cwLocalProjectionManager]")
 {

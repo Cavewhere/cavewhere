@@ -127,10 +127,12 @@ public:
     cwKeywordModel* keywordModel() const { return m_keywordModel; }
 
     void setFutureManagerToken(const cwFutureManagerToken& token);
-    void setRegionGlobalCS(const QString& cs);
-    void setRegionWorldOrigin(const cwGeoPoint& origin);
 
-    /// Kicks off an async load against the current globalCS / worldOrigin.
+    /// The region's frame — its local projection — which the points are loaded
+    /// into. Changing it reloads: the geometry in memory is in the old frame.
+    void setRegionFrameCS(const QString& cs);
+
+    /// Kicks off an async load against the current frame CS.
     /// Re-entrant: rapid restarts coalesce into a single in-flight run.
     void reload();
 
@@ -186,8 +188,7 @@ private:
 
     cwKeywordModel* m_keywordModel = nullptr;
     cwFutureManagerToken m_futureManagerToken;
-    QString m_regionGlobalCS;
-    cwGeoPoint m_regionWorldOrigin;
+    QString m_regionFrameCS;
 
     // Coalesces rapid reload() calls and serializes cancel-then-restart so a
     // new load only begins once the previous one has actually stopped.

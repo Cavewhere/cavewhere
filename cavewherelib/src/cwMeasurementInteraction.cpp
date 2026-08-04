@@ -113,22 +113,18 @@ void cwMeasurementInteraction::setGeoReference(cwGeoReference* geoReference)
     if (m_geoReference == geoReference) {
         return;
     }
-    // The geo-reference supplies the worldOrigin and CRS that turn the grid
-    // azimuth into a true/magnetic bearing. A CRS change can also invalidate the
-    // current reference (a local-only project has none), so it routes through
-    // syncReferenceToGeoReference; an origin change only moves the location.
+    // The geo-reference supplies the frame that turns the grid azimuth into a
+    // true/magnetic bearing. Losing it invalidates the current reference (a
+    // local-only project has none), so it routes through
+    // syncReferenceToGeoReference rather than a plain refresh.
     if (m_geoReference) {
-        disconnect(m_geoReference, &cwGeoReference::globalCoordinateSystemChanged,
+        disconnect(m_geoReference, &cwGeoReference::localProjectionChanged,
                    this, &cwMeasurementInteraction::syncReferenceToGeoReference);
-        disconnect(m_geoReference, &cwGeoReference::worldOriginChanged,
-                   this, &cwMeasurementInteraction::refreshReference);
     }
     m_geoReference = geoReference;
     if (m_geoReference) {
-        connect(m_geoReference, &cwGeoReference::globalCoordinateSystemChanged,
+        connect(m_geoReference, &cwGeoReference::localProjectionChanged,
                 this, &cwMeasurementInteraction::syncReferenceToGeoReference);
-        connect(m_geoReference, &cwGeoReference::worldOriginChanged,
-                this, &cwMeasurementInteraction::refreshReference);
     }
     emit geoReferenceChanged();
     syncReferenceToGeoReference();
@@ -196,9 +192,9 @@ void cwMeasurementInteraction::refreshReference()
 
     // Resolve against the first picked point (per spec). UTC is enough for IGRF
     // (it keys on the decimal year) and is faster and DST-stable versus local.
-    const cwGeoPoint location = m_geoReference ? m_geoReference->toGlobal(m_firstPoint)
+    const cwGeoPoint location = m_geoReference ? cwGeoPoint::fromSceneLocal(m_firstPoint)
                                                : cwGeoPoint{};
-    const QString sourceCS = m_geoReference ? m_geoReference->globalCoordinateSystem()
+    const QString sourceCS = m_geoReference ? m_geoReference->localCoordinateSystem()
                                             : QString{};
     applyReferenceResult(cwAzimuthReference::resolve(
                 m_azimuth, m_azimuthReference, location, sourceCS,

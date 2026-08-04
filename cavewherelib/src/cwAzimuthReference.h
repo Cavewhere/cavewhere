@@ -29,8 +29,8 @@
  *
  * Pure free function — no QObject, no cave/trip dependency. The caller supplies
  * the measurement location as a global cwGeoPoint *in sourceCS* (e.g. the first
- * picked point plus the region's worldOrigin, with sourceCS the region's
- * globalCoordinateSystem); cwGridConvergence / cwDeclination convert it to WGS84
+ * picked point widened to a cwGeoPoint, with sourceCS the region's local
+ * projection); cwGridConvergence / cwDeclination convert it to WGS84
  * internally, so nothing here transforms coordinates. Magnetic additionally
  * needs a date (typically today). The convergence and declination math live in
  * those two units; this only composes them, applies the signs, and wraps to

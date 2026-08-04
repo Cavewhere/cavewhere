@@ -32,8 +32,8 @@ class cwLazLayer;
 class cwLazLayerModel;
 
 /**
- * Polygon clipping for LAZ point clouds. Vertices live in
- * worldOrigin-relative XYZ; on commit, visible layers are unioned and
+ * Polygon clipping for LAZ point clouds. Vertices live in scene XYZ —
+ * the project's local projection; on commit, visible layers are unioned and
  * clipped into one clip_NNN.laz under the project's GIS Layers dir.
  *
  * Clicks unproject to the camera's near plane so vertices stay
@@ -113,7 +113,7 @@ public:
     /// indicator in the canvas.
     Q_INVOKABLE bool isNearFirstPoint(QPointF screenPos, double pixelRadius = 12.0) const;
 
-    /// Project a world XYZ (worldOrigin-relative) point through the
+    /// Project a world XYZ (scene) point through the
     /// camera to screen pixels. Used by the canvas to render the polygon.
     QPointF worldToScreen(QVector3D worldXYZ) const;
 

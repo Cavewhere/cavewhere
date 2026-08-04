@@ -10,7 +10,6 @@
 
 //Our includes
 #include "cwScenePicker.h"
-#include "cwGeoPoint.h"
 class cwCoordinateTransform;
 class cwGeoReference;
 
@@ -42,13 +41,9 @@ class cwCoordinatePicker : public cwScenePicker
     Q_PROPERTY(bool hasPick READ hasPick NOTIFY pickChanged)
     Q_PROPERTY(QPointF pickScreenPoint READ pickScreenPoint NOTIFY pickChanged)
     Q_PROPERTY(QVector3D scenePoint READ scenePoint NOTIFY pickChanged)
-    Q_PROPERTY(double csX READ csX NOTIFY pickChanged)
-    Q_PROPERTY(double csY READ csY NOTIFY pickChanged)
-    Q_PROPERTY(double csZ READ csZ NOTIFY pickChanged)
     Q_PROPERTY(double wgs84Latitude  READ wgs84Latitude  NOTIFY pickChanged)
     Q_PROPERTY(double wgs84Longitude READ wgs84Longitude NOTIFY pickChanged)
     Q_PROPERTY(double elevation READ elevation NOTIFY pickChanged)
-    Q_PROPERTY(QString globalCoordinateSystem READ globalCoordinateSystem NOTIFY coordinateSystemChanged)
     Q_PROPERTY(bool hasCoordinateSystem READ hasCoordinateSystem NOTIFY coordinateSystemChanged)
     Q_PROPERTY(bool hasWgs84 READ hasWgs84 NOTIFY pickChanged)
 
@@ -62,17 +57,13 @@ public:
     bool hasPick() const { return m_hasPick; }
     QPointF pickScreenPoint() const { return m_pickScreenPoint; }
     QVector3D scenePoint() const { return m_scenePoint; }
-    double csX() const { return m_globalPoint.x; }
-    double csY() const { return m_globalPoint.y; }
-    double csZ() const { return m_globalPoint.z; }
     double wgs84Latitude()  const { return m_wgs84Lat; }
     double wgs84Longitude() const { return m_wgs84Lon; }
-    double elevation() const { return m_globalPoint.z; }
-    QString globalCoordinateSystem() const { return m_globalCoordinateSystemCached; }
+    double elevation() const { return double(m_scenePoint.z()); }
 
     //! Whether the pick can be placed in a real-world CRS. Delegates to the
     //! geo-reference's single definition (cwGeoReference::hasCoordinateSystem)
-    //! so consumers don't re-derive the empty-CS rule.
+    //! so consumers don't re-derive the rule.
     bool hasCoordinateSystem() const;
 
     bool hasWgs84() const { return m_hasWgs84; }
@@ -95,13 +86,11 @@ private:
     bool m_hasWgs84 = false;
     QPointF m_pickScreenPoint;
     QVector3D m_scenePoint;
-    cwGeoPoint m_globalPoint;
     double m_wgs84Lat = 0.0;
     double m_wgs84Lon = 0.0;
-    QString m_globalCoordinateSystemCached;
 
     // PROJ setup (proj_create_crs_to_crs + normalize) is non-trivial. Cache the
-    // transform and rebuild only when the geo-reference's CS changes.
+    // transform and rebuild only when the geo-reference's frame changes.
     std::unique_ptr<cwCoordinateTransform> m_wgs84Transform;
 };
 

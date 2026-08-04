@@ -34,9 +34,11 @@ cwSurvexExporterRegion::exportRegion(const cwCavingRegionData& region,
     stream << "*begin  ;All the caves" << Qt::endl;
 
     const QString outputCS =
-        cwSurvexExporterUtils::resolveOutputCS(region, options.outputCSPolicy);
+        cwSurvexExporterUtils::resolveOutputCS(region,
+                                               region.geoReference.localCoordinateSystem,
+                                               options.outputCSPolicy);
     if (!outputCS.isEmpty()) {
-        stream << "*cs out " << outputCS << Qt::endl;
+        cwSurvexExporterUtils::writeCsLine(stream, outputCS, true);
     }
 
     cwSurvexExporterCaveTask caveExporter;

@@ -8,6 +8,7 @@
 #include "cwCave.h"
 #include "cwCavingRegion.h"
 #include "cwGeoReference.h"
+#include "cwLocalProjection.h"
 #include "cwProject.h"
 #include "cwRootData.h"
 #include "cwGeoPoint.h"
@@ -263,18 +264,14 @@ TEST_CASE("cwFixStationModel reports every change to the set of fixed stations",
     }
 }
 
-TEST_CASE("cwFixStations and globalCS survive a project save/load",
+TEST_CASE("cwFixStations and the project frame survive a project save/load",
           "[FixStation][cwSaveLoad]") {
-    // Build a project with two caves: one with two fixes, one with none.
-    // Set globalCS on the region. Save to a temp dir, reload into a fresh
-    // project, and verify everything came back intact. worldOrigin is not
-    // persisted — it's a derived centroid recomputed on the first
-    // line-plot completion of each session.
+    // Build a project with two caves: one with two fixes, one with none. Save
+    // to a temp dir, reload into a fresh project, and verify everything came
+    // back intact — including the local projection the first fix anchored.
     auto creatorRoot = std::make_unique<cwRootData>();
     auto creatorProject = creatorRoot->project();
     auto creatorRegion = creatorProject->cavingRegion();
-
-    creatorRegion->geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32612"));
 
     creatorRegion->addCave();
     auto fixedCave = creatorRegion->cave(0);
@@ -328,7 +325,9 @@ TEST_CASE("cwFixStations and globalCS survive a project save/load",
     auto loadedRegion = loaderProject->cavingRegion();
     REQUIRE(loadedRegion != nullptr);
 
-    CHECK(loadedRegion->geoReference()->globalCoordinateSystem() == QStringLiteral("EPSG:32612"));
+    CHECK(loadedRegion->geoReference()->localCoordinateSystem()
+          == creatorRegion->geoReference()->localCoordinateSystem());
+    CHECK(loadedRegion->geoReference()->anchor() == creatorRegion->geoReference()->anchor());
 
     REQUIRE(loadedRegion->caveCount() == 2);
 
@@ -485,11 +484,11 @@ TEST_CASE("Re-storing a coordinate the row already held reads it in stored units
     }
 }
 
-TEST_CASE("Changing globalCS marks the project modified",
+TEST_CASE("Changing the project's frame marks the project modified",
           "[FixStation][cwSaveLoad][globalCS]") {
     // Regression: cwSaveLoad::connectObjects() wires cave / trip / note /
-    // sketch signals but does not listen to cwCavingRegion::globalCSChanged.
-    // Without that, editing the region CS in an open project leaves
+    // sketch signals but did not listen to the geo-reference. Without that,
+    // re-deriving the project's local projection in an open project leaves
     // cwProject::modified() == false, so an autosave / commit pipeline keyed
     // off the dirty bit never runs and the change can be dropped on close.
     //
@@ -520,7 +519,10 @@ TEST_CASE("Changing globalCS marks the project modified",
 
     REQUIRE(isProjectModified(project.get()) == false);
 
-    region->geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32612"));
+    region->geoReference()->anchorTo(
+        {cwGeoReference::Anchor::FixStation, QUuid::createUuid()},
+        cwLocalProjection::deriveFrom(QStringLiteral("EPSG:32612"),
+                                      cwGeoPoint{500000.0, 4194000.0, 2700.0}));
     CHECK(isProjectModified(project.get()));
 }
 
