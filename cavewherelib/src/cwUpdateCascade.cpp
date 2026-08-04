@@ -38,18 +38,6 @@ namespace {
         Q_UNREACHABLE_RETURN("");
     }
 
-    //Deferred::complete(QFuture) always installs a watcher, so a result that is
-    //already finished — the common case, since most nodes end up with nothing
-    //left to do — would otherwise cost an event-loop turn per link in the chain.
-    void completeWith(AsyncFuture::Deferred<void>& node, const QFuture<void>& next)
-    {
-        if(next.isFinished()) {
-            node.complete();
-        } else {
-            node.complete(next);
-        }
-    }
-
     //Waits for a set of nodes. The sealed combine() closes the input set before
     //anything may settle, so an input that has already finished settles inline
     //rather than through a watcher: a set that is entirely done — a cascade with
@@ -168,8 +156,11 @@ QFuture<void> cwUpdateCascade::buildNode(cwUpdatable* pipeline,
         node = driveToClean(pipeline);
     } else {
         auto deferred = AsyncFuture::deferred<void>();
+        //complete() settles inline when the drive had nothing left to do, which is
+        //the common case: a node whose result is already finished costs no
+        //event-loop turn here.
         const auto onDependenciesSettled = [this, pipeline, deferred]() mutable {
-            completeWith(deferred, driveToClean(pipeline));
+            deferred.complete(driveToClean(pipeline));
         };
         //Both paths run this pipeline: one dependency failing must neither cancel
         //its siblings nor abandon what is below it, so a canceled dependency is
@@ -232,7 +223,7 @@ QFuture<void> cwUpdateCascade::waitForRun(cwUpdatable* pipeline, const QFuture<v
             //it ends as soon as the edits do — provided a pipeline that reports
             //Dirty actually starts work when run(). One that returned an
             //already-finished future while still calling itself Dirty would spin.
-            completeWith(node, driveToClean(pipeline));
+            node.complete(driveToClean(pipeline));
         },
         [pipeline, node]() mutable {
             //Settle rather than cancel, so a run that never reports doesn't take
