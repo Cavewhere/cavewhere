@@ -77,11 +77,17 @@ QQ.Item {
                 QC.MenuSeparator {}
 
                 QC.MenuItem {
+                    id: autoUpdateMenuItemId
                     text: "Automatic Update"
                     icon.source: "qrc:/twbs-icons/icons/arrow-repeat.svg"
                     checkable: true
-                    checked: RootData.updateCoordinator.automaticUpdate
                     onTriggered: RootData.updateCoordinator.automaticUpdate = checked
+
+                    QQ.Binding {
+                        target: autoUpdateMenuItemId
+                        property: "checked"
+                        value: RootData.updateCoordinator.automaticUpdate
+                    }
                 }
             }
         }

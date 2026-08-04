@@ -19,19 +19,12 @@ Item {
         anchors.bottom: parent.bottom
 
         activity: ActiveTasks.Activity.Idle
-        automaticUpdate: false
     }
 
     SignalSpy {
         id: runSpy
         target: footerId
         signalName: "runRequested"
-    }
-
-    SignalSpy {
-        id: toggleSpy
-        target: footerId
-        signalName: "automaticUpdateToggled"
     }
 
     SignalSpy {
@@ -44,20 +37,32 @@ Item {
         name: "SideBarUpdateFooter"
         when: windowShown
 
+        // Automatic Update is a real persisted setting rather than an injected
+        // property, so this file writes the one the whole binary shares. Put
+        // back what it found, or every test file after this one inherits it.
+        property bool originalAutomaticUpdate: false
+
+        function initTestCase() {
+            originalAutomaticUpdate = RootData.updateCoordinator.automaticUpdate
+        }
+
+        function cleanupTestCase() {
+            RootData.updateCoordinator.automaticUpdate = originalAutomaticUpdate
+        }
+
         function init() {
             // The activity and the count are pinned rather than left bound to
             // the live coordinator and task models, so a job the rest of the
             // suite happens to be running can't move them. tst_ActiveTasks
             // covers the defaults.
             footerId.activity = ActiveTasks.Activity.Idle
-            footerId.automaticUpdate = false
+            RootData.updateCoordinator.automaticUpdate = false
             footerId.compact = false
             footerId.taskCount = 0
             footerId.progress = -1
             footerId.tasksShown = false
             footerId.busyRowHovered = false
             runSpy.clear()
-            toggleSpy.clear()
             tasksSpy.clear()
             // Park the pointer clear of the footer, so a test that hovered the
             // busy row can't leave it hovered for whatever runs next.
@@ -74,16 +79,24 @@ Item {
             verify(find("updateRunningIndicator") === null, "no busy indicator when idle")
         }
 
-        function test_togglingAutomaticUpdateReportsTheNewValue() {
+        function test_togglingAutomaticUpdateWritesTheSharedSetting() {
             let checkbox = find("autoUpdateCheckbox")
             verify(checkbox !== null, "autoUpdateCheckbox not found")
+            verify(!checkbox.checked, "starts off, matching the setting")
 
             // The click needs the layout polished, so its coordinates are real.
             waitForRendering(footerId)
             mouseClick(checkbox)
-            compare(toggleSpy.count, 1, "checking the box reports once")
-            compare(toggleSpy.signalArguments[0][0], true,
-                    "checking the box asks for automatic update on")
+
+            verify(RootData.updateCoordinator.automaticUpdate,
+                   "checking the box turns automatic update on")
+
+            // Driven from the other end as well, which is the half that keeps
+            // the four UIs of this one setting from drifting: the box has to
+            // follow a change it did not make, the way it must when the phone
+            // sheet or the hamburger menu is the one that wrote it.
+            RootData.updateCoordinator.automaticUpdate = false
+            verify(!checkbox.checked, "and follows the setting back")
         }
 
         function test_staleShowsRunAndAsksForTheUpdate() {
