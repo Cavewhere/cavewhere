@@ -14,6 +14,7 @@
 #include <QStringList>
 #include <QtQml/qqmlregistration.h>
 #include <memory>
+#include <optional>
 
 //Our includes
 #include "cwGeoPoint.h"
@@ -58,6 +59,22 @@ public:
     static QStringList commonProjectedCSList();
     static bool isValidCS(const QString& cs);
     static bool isGeographic(const QString& cs);
+
+    /**
+     * Transform a point between two systems, memoizing the built transforms
+     * per thread (same pattern and cap as isValidCS). Building one costs
+     * proj_create_crs_to_crs — a proj.db query and a pipeline build, the most
+     * expensive PROJ call there is — while callers like
+     * cwLocalProjectionManager ask this on every keystroke in a coordinate
+     * field.
+     *
+     * Empty when either system is empty, the two can't be related, or the
+     * result's x/y isn't finite — an unanswerable question must not read as an
+     * answer. z passes through untouched by the finiteness check.
+     */
+    static std::optional<cwGeoPoint> transformPoint(const QString& sourceCS,
+                                                    const QString& destCS,
+                                                    const cwGeoPoint& point);
 
     /**
      * Which horizontal components of `point` (in cs's own axis order and units)

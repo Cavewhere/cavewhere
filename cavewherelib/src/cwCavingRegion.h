@@ -21,6 +21,7 @@
 
 //Our includes
 class cwCave;
+class cwLocalProjectionManager;
 class cwProject;
 #include "cwCavingRegionData.h"
 #include "cwFixStationValidator.h"
@@ -143,6 +144,8 @@ private:
     cwLazLayerModel* m_lazLayers = nullptr;
 
     cwFixStationValidator* m_fixStationValidator = nullptr;
+
+    cwLocalProjectionManager* m_localProjectionManager = nullptr;
 
     cwUnits::UnitSystem m_unitSystem = cwUnits::Metric;
 

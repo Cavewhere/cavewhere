@@ -1,0 +1,132 @@
+/**************************************************************************
+**
+**    Copyright (C) 2026 by Philip Schuchardt
+**    www.cavewhere.com
+**
+**************************************************************************/
+
+//Catch includes
+#include <catch2/catch_approx.hpp>
+#include <catch2/catch_test_macros.hpp>
+
+//Our includes
+#include "cwCavingRegion.h"
+#include "cwGeoReference.h"
+#include "cwLazLayer.h"
+#include "cwLazLayerModel.h"
+#include "cwProject.h"
+#include "cwRootData.h"
+
+#include "LazFixtureHelper.h"
+
+//Qt includes
+#include <QStringList>
+#include <QTemporaryDir>
+#include <QVector>
+#include <QVector3D>
+
+#include <memory>
+
+namespace {
+
+// Minimal OGC WKT PROJ accepts, matching test_cwLazLayerAutoAdoptCS's fixture.
+const QString kUtmZone10N = QStringLiteral(
+    "PROJCS[\"WGS 84 / UTM zone 10N\","
+        "GEOGCS[\"WGS 84\","
+            "DATUM[\"WGS_1984\","
+                "SPHEROID[\"WGS 84\",6378137,298.257223563]],"
+            "PRIMEM[\"Greenwich\",0],"
+            "UNIT[\"degree\",0.0174532925199433]],"
+        "PROJECTION[\"Transverse_Mercator\"],"
+        "PARAMETER[\"latitude_of_origin\",0],"
+        "PARAMETER[\"central_meridian\",-123],"
+        "PARAMETER[\"scale_factor\",0.9996],"
+        "PARAMETER[\"false_easting\",500000],"
+        "PARAMETER[\"false_northing\",0],"
+        "UNIT[\"metre\",1]]");
+
+//! A cloud sitting somewhere a UTM zone 10N file plausibly could, so the frame
+//! derived from its bbox center is one PROJ can actually build.
+QVector<QVector3D> pointsInZone10N()
+{
+    return {
+        {500000.0f, 4194000.0f, 100.0f},
+        {500010.0f, 4194010.0f, 110.0f},
+        {500020.0f, 4194020.0f, 120.0f}
+    };
+}
+
+} // namespace
+
+TEST_CASE("A load reports the bounding box in the file's own CRS",
+          "[cwLazSourceBbox][cwLazLayer]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString path = tempLazPath(tempDir, QStringLiteral("source-bbox"));
+    REQUIRE(writeSyntheticLazFile(path, pointsInZone10N(), kUtmZone10N));
+
+    cwLazLayer layer;
+    // No region frame set, so the loaded bboxMin/bboxMax come back in source
+    // coordinates too — but as floats, which is exactly why the raw header
+    // numbers are carried separately.
+    layer.setSourcePath(path);
+    REQUIRE(waitForLazLayerLoaded(&layer));
+    REQUIRE(layer.loadStatus() == cwLazLayer::LoadStatus::Loaded);
+
+    CHECK(layer.sourceCS() == kUtmZone10N);
+    CHECK(layer.sourceBboxMin().x == Catch::Approx(500000.0).margin(0.01));
+    CHECK(layer.sourceBboxMax().x == Catch::Approx(500020.0).margin(0.01));
+    CHECK(layer.sourceBboxCenter().x == Catch::Approx(500010.0).margin(0.01));
+    CHECK(layer.sourceBboxCenter().y == Catch::Approx(4194010.0).margin(0.01));
+}
+
+TEST_CASE("A layer that has never loaded reports no source bounding box",
+          "[cwLazSourceBbox][cwLazLayer]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString path = tempLazPath(tempDir, QStringLiteral("never-loaded"));
+    REQUIRE(writeSyntheticLazFile(path, pointsInZone10N(), kUtmZone10N));
+
+    cwLazLayer layer;
+    layer.setEnabled(false);
+    layer.setSourcePath(path);
+
+    // Disabled layers never spend an async read, so there is nothing to
+    // report — and nothing should invent a position for them.
+    CHECK(layer.loadStatus() == cwLazLayer::LoadStatus::Idle);
+    CHECK(layer.sourceCS().isEmpty());
+    CHECK(layer.sourceBboxCenter() == cwGeoPoint{});
+}
+
+TEST_CASE("A LAZ layer alone anchors the local projection",
+          "[cwLazSourceBbox][cwLocalProjectionManager]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    auto root = std::make_unique<cwRootData>();
+    auto* region = root->project()->cavingRegion();
+    REQUIRE(region->geoReference()->state() == cwGeoReference::Ungeoreferenced);
+
+    const QString path = tempLazPath(tempDir, QStringLiteral("anchor-layer"));
+    REQUIRE(writeSyntheticLazFile(path, pointsInZone10N(), kUtmZone10N));
+
+    addLazAndWait(root.get(), QStringList{path});
+    REQUIRE(region->lazLayers()->count() == 1);
+
+    // The frame follows the load now, not the insert: a layer only becomes an
+    // anchor candidate once its header has actually been read.
+    auto* layer = region->lazLayers()->layerAt(0);
+    REQUIRE(waitForLazLayerLoaded(layer));
+    REQUIRE(layer->loadStatus() == cwLazLayer::LoadStatus::Loaded);
+
+    // No fix stations anywhere, so the layer is the only georeferenced input.
+    CHECK(region->geoReference()->state() == cwGeoReference::Anchored);
+    CHECK(region->geoReference()->anchor().kind == cwGeoReference::Anchor::LazLayer);
+    CHECK(region->geoReference()->anchor().id == region->lazLayers()->layerAt(0)->id());
+    CHECK_FALSE(region->geoReference()->localCoordinateSystem().isEmpty());
+}

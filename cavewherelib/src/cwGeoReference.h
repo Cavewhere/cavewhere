@@ -32,7 +32,7 @@
  * layer model and the cave-based recomputeWorldOrigin() both live there and
  * drive this slice through its public setters.
  *
- * <b>This class is mid-rework.</b> It carries two frames at once: the
+ * This class is mid-rework. It carries two frames at once: the
  * user-or-auto globalCoordinateSystem + worldOrigin pair that every consumer
  * still reads, and the automatically derived local projection (LDP) that will
  * replace both — stored here, persisted, and not yet wired to anything. See
@@ -158,8 +158,8 @@ public:
                  const QString& verticalDatum);
 
     //! The name of the vertical datum the project's elevations are in (e.g.
-    //! "NAVD88"), as declared by whatever supplied them. <b>Recorded, never
-    //! applied</b>: z is a geoid height and stays one, and converting it to an
+    //! "NAVD88"), as declared by whatever supplied them. Recorded, never
+    //! applied: z is a geoid height and stays one, and converting it to an
     //! ellipsoidal height would shift the whole project by the geoid
     //! separation. It is stored so a future globe renderer can reconstruct
     //! ellipsoidal height (h = H + N) when it needs one. Empty when nothing

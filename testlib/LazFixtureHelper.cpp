@@ -15,6 +15,56 @@
 #include <LASlib/lasreader.hpp>
 #include <LASlib/laswriter.hpp>
 
+#include <algorithm>
+#include <cmath>
+
+namespace {
+
+/**
+ * Center the header's offsets on @a points.
+ *
+ * LAS stores each coordinate as an int32 count of scale units from the
+ * header's offset. With the offset left at 0 and a 0.001 scale, anything past
+ * ~2.1e6 wraps silently — a UTM northing of 4194010 comes back as -100957.296,
+ * with no error anywhere. Real-world coordinates need a real offset.
+ */
+template <typename PointRange, typename Getter>
+void centerHeaderOffsets(LASheader* header, const PointRange& points, Getter get)
+{
+    if (points.isEmpty()) {
+        return;
+    }
+
+    double minX = 0.0, minY = 0.0, minZ = 0.0;
+    double maxX = 0.0, maxY = 0.0, maxZ = 0.0;
+    bool first = true;
+    for (const auto& point : points) {
+        const QVector3D position = get(point);
+        const double x = double(position.x());
+        const double y = double(position.y());
+        const double z = double(position.z());
+        if (first) {
+            minX = maxX = x;
+            minY = maxY = y;
+            minZ = maxZ = z;
+            first = false;
+            continue;
+        }
+        minX = std::min(minX, x); maxX = std::max(maxX, x);
+        minY = std::min(minY, y); maxY = std::max(maxY, y);
+        minZ = std::min(minZ, z); maxZ = std::max(maxZ, z);
+    }
+
+    // Whole meters, as the spec asks for "reasonable round numbers". Decoded
+    // coordinates are unaffected, so fixtures that already fit keep their
+    // exact values.
+    header->x_offset = std::floor((minX + maxX) * 0.5);
+    header->y_offset = std::floor((minY + maxY) * 0.5);
+    header->z_offset = std::floor((minZ + maxZ) * 0.5);
+}
+
+} // namespace
+
 bool writeSyntheticLazFile(const QString& outPath,
                            const QVector<QVector3D>& points,
                            const QString& wktCS)
@@ -26,6 +76,7 @@ bool writeSyntheticLazFile(const QString& outPath,
     header.z_scale_factor = 0.001;
     header.point_data_format = 0;
     header.point_data_record_length = 20;
+    centerHeaderOffsets(&header, points, [](const QVector3D& p) { return p; });
 
     QByteArray wktBytes;
     if (!wktCS.isEmpty()) {
@@ -84,6 +135,8 @@ bool writeAttributedLazFile(const QString& outPath,
     header.z_scale_factor = 0.001;
     header.point_data_format = pointDataFormat;
     header.point_data_record_length = recordLength;
+    centerHeaderOffsets(&header, points,
+                        [](const LazAttributePoint& p) { return p.position; });
     // Formats 6+ are LAS 1.4 only; a 1.2 header can't store their point count.
     if (pointDataFormat >= 6) {
         header.version_minor = 4;

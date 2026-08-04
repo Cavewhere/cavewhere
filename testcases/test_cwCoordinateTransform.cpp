@@ -143,6 +143,52 @@ TEST_CASE("cwCoordinateTransform reprojects WGS84 to UTM 12N", "[cwCoordinateTra
     CHECK_THAT(utm.z, WithinAbs(1500.0, 1e-3));
 }
 
+TEST_CASE("cwCoordinateTransform::transformPoint matches a built transform",
+          "[cwCoordinateTransform][transformPoint]")
+{
+    const cwGeoPoint lonLat(-110.0, 40.0, 1500.0);
+
+    SECTION("agrees with constructing the transform by hand") {
+        cwCoordinateTransform t("EPSG:4326", "EPSG:32612");
+        REQUIRE(t.isValid());
+        const cwGeoPoint expected = t.transform(lonLat);
+
+        const auto point = cwCoordinateTransform::transformPoint("EPSG:4326", "EPSG:32612", lonLat);
+        REQUIRE(point.has_value());
+        CHECK_THAT(point->x, WithinAbs(expected.x, 1e-6));
+        CHECK_THAT(point->y, WithinAbs(expected.y, 1e-6));
+        CHECK_THAT(point->z, WithinAbs(expected.z, 1e-6));
+    }
+
+    SECTION("a memo hit returns the same answer as the first call") {
+        const auto first = cwCoordinateTransform::transformPoint("EPSG:4326", "EPSG:32612", lonLat);
+        const auto second = cwCoordinateTransform::transformPoint("EPSG:4326", "EPSG:32612", lonLat);
+        REQUIRE(first.has_value());
+        REQUIRE(second.has_value());
+        CHECK(first->x == second->x);
+        CHECK(first->y == second->y);
+    }
+
+    SECTION("identical systems pass the point through untouched") {
+        const auto point = cwCoordinateTransform::transformPoint("EPSG:32612", " epsg:32612 ",
+                                                                 cwGeoPoint(500000.0, 4427757.0, 1500.0));
+        REQUIRE(point.has_value());
+        CHECK_THAT(point->x, WithinAbs(500000.0, 1e-9));
+        CHECK_THAT(point->y, WithinAbs(4427757.0, 1e-9));
+        CHECK_THAT(point->z, WithinAbs(1500.0, 1e-9));
+    }
+
+    SECTION("an empty system is unanswerable, not an identity") {
+        CHECK_FALSE(cwCoordinateTransform::transformPoint("", "EPSG:32612", lonLat).has_value());
+        CHECK_FALSE(cwCoordinateTransform::transformPoint("EPSG:4326", "   ", lonLat).has_value());
+    }
+
+    SECTION("an unbuildable pair stays empty on the cached second call") {
+        CHECK_FALSE(cwCoordinateTransform::transformPoint("EPSG:4326", "NOT-A-CS", lonLat).has_value());
+        CHECK_FALSE(cwCoordinateTransform::transformPoint("EPSG:4326", "NOT-A-CS", lonLat).has_value());
+    }
+}
+
 TEST_CASE("cwCoordinateTransform round-trip preserves mm precision", "[cwCoordinateTransform][precision]")
 {
     cwCoordinateTransform forward("EPSG:4326", "EPSG:32612");

@@ -13,6 +13,7 @@
 //Our includes
 #include "cwCoordinateTransform.h"
 #include "cwFixStation.h"
+#include "cwGeoPoint.h"
 
 class cwClinoReading;
 class cwShot;
@@ -53,41 +54,79 @@ void writeDeclinationAuto(QTextStream& stream, const DeclinationContext& ctx);
 bool isUnusableAsSurvexOutputCS(const QString& cs);
 
 /**
- * Survex requires *cs out whenever any *cs appears, so when the user hasn't
- * set a globalCS but a fix has its own inputCS, fall back to that fix's CS
- * for *cs out — otherwise cavern errors with "input projection is set but
- * output projection isn't" the moment the per-cave *cs is emitted.
+ * Which coordinate system *cs out should name. There is no default: the two
+ * answers coincide today only because the project has exactly one coordinate
+ * system, so every caller states which question it is asking.
+ */
+enum class OutputCSPolicy {
+    //! A system the file's reader can use elsewhere. What an exported .svx
+    //! wants — it is for somebody else to read.
+    Shareable,
+    //! The frame the caller intends to read the solved positions back in. What
+    //! the line-plot driver wants; it hands cavern's output straight to the
+    //! scene, so *cs out has to name the frame the scene is in.
+    WorkingFrame
+};
+
+//! The CS a fix can contribute to a file that leaves the project: the WGS84 UTM
+//! zone containing it, or a projected CS as it stands. A fix that places
+//! nothing contributes nothing — cwFixStation::hasPlacedCoordinate, the same
+//! rule cwFixStationValidator::updateOutputCSPrompt applies to its suggestion.
+inline QString shareableCSForFix(const cwFixStation& fix)
+{
+    if (!fix.hasPlacedCoordinate()) {
+        return QString();
+    }
+    return cwCoordinateTransform::deriveProjectedOutputCS(
+        fix.inputCS(), cwGeoPoint(fix.easting(), fix.northing(), fix.elevation()));
+}
+
+//! The CS a fix can contribute to the frame the solve returns positions in.
+//! Only a projected fix CS will do: cavern refuses a geographic output system
+//! outright ("Coordinate system unsuitable for output" —
+//! survex/src/commands.c:2672, the `ok_for_output == NO` branch), so emitting a
+//! geographic one fails the whole solve rather than falling back.
+inline QString workingFrameCSForFix(const cwFixStation& fix)
+{
+    const QString cs = fix.inputCS().trimmed();
+    if (cs.isEmpty() || cwCoordinateTransform::isGeographic(cs)) {
+        return QString();
+    }
+    return cs;
+}
+
+/**
+ * Survex requires *cs out whenever any *cs appears, so when the user hasn't set
+ * a globalCS but a fix has one of its own, that fix decides *cs out — otherwise
+ * cavern errors with "input projection is set but output projection isn't" the
+ * moment the per-cave *cs is emitted. The first fix that yields a CS under
+ * \a policy wins; the user's own globalCS outranks all of them for as long as
+ * there is one to choose.
  *
- * <b>Only a projected fix CS will do.</b> Cavern refuses a geographic output
- * system outright ("Coordinate system unsuitable for output" —
- * survex/src/commands.c:2672, the `ok_for_output == NO` branch), so a
- * geographic fix is no fallback at all; emitting it fails the whole solve.
- * That covers both ways a fix can be geographic: one PROJ recognizes, and one
- * spelled as a survex keyword PROJ can't parse (see isUnusableAsSurvexOutputCS).
- * Fix stations, unlike the project's own CS, may legitimately be geographic and
- * new rows start that way, so this is the ordinary shape of a project whose
- * global CS was never set, not an exotic one. With nothing projected to fall
- * back to we emit no *cs out, and cwFixStationValidator's needsOutputCS prompt
- * is what asks the user to choose one.
+ * Under WorkingFrame a project whose fixes are all geographic — the shape every
+ * new row starts in — yields nothing at all, and the solve fails; that is what
+ * cwFixStationValidator's needsOutputCS prompt exists to ask about. Under
+ * Shareable the same project yields the UTM zone containing it, which stands in
+ * for one perfectly well.
  *
  * The Region template parameter is duck-typed: it must expose
  * `.globalCoordinateSystem` and `.caves`, and each cave must expose
  * `.fixStations`. This works for both cwSurveyDataArtifact::Region
  * (Rule export path) and cwCavingRegionData (line-plot export path), which is
- * why this one is a template and lives here rather than beside the rest.
+ * why this lives here as a template rather than beside the rest.
  */
 template <typename Region>
-QString resolveOutputCS(const Region& region)
+QString resolveOutputCS(const Region& region, OutputCSPolicy policy)
 {
     if (!region.globalCoordinateSystem.isEmpty()) {
         return region.globalCoordinateSystem;
     }
     for (const auto& cave : region.caves) {
         for (const cwFixStation& fix : cave.fixStations) {
-            const QString cs = fix.inputCS().trimmed();
-            if (!cs.isEmpty()
-                && !cwCoordinateTransform::isGeographic(cs)
-                && !isUnusableAsSurvexOutputCS(cs)) {
+            const QString cs = policy == OutputCSPolicy::WorkingFrame
+                                   ? workingFrameCSForFix(fix)
+                                   : shareableCSForFix(fix);
+            if (!cs.isEmpty() && !isUnusableAsSurvexOutputCS(cs)) {
                 return cs;
             }
         }
@@ -133,7 +172,7 @@ QList<cwFixStation> validateFixStations(const QList<cwFixStation>& fixes,
  * - When fixes is non-empty: group by inputCS, emitting `*cs <inputCS>`
  *   before each group and `*fix` per fix.
  *
- *   <b>Pass only fixes that validateFixStations kept.</b> This writes
+ *   Pass only fixes that validateFixStations kept. This writes
  *   `fix.easting()/northing()/elevation()`, which are 0 for every state but
  *   Valid, so an unreadable or CS-less fix reaching here anchors its station at
  *   the origin and takes the cave with it. validateFixStations drops those with

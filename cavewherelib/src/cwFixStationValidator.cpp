@@ -487,10 +487,10 @@ void cwFixStationValidator::updateOutputCSPrompt()
                     }
                     const QString inputCS = fix.inputCS().trimmed();
                     needs = true;
-                    const cwGeoPoint p(fix.easting(), fix.northing(), fix.elevation());
-                    if (p.x == 0.0 && p.y == 0.0) {
-                        continue;  // coordinate not entered yet
+                    if (!fix.hasPlacedCoordinate()) {
+                        continue;
                     }
+                    const cwGeoPoint p(fix.easting(), fix.northing(), fix.elevation());
                     // The first real coordinate decides the suggestion. A
                     // coordinate outside its own CS's valid domain is almost
                     // certainly a data-entry error, so offer no suggestion and

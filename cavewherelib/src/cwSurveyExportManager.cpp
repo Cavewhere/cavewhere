@@ -72,7 +72,7 @@ void cwSurveyExportManager::exportSurvexRegion(QString filename) {
 
     const cwCavingRegionData regionData = cavingRegion()->data();
     auto future = cwConcurrent::run([regionData, filename]() {
-        return cwSurvexExporterRegion::exportRegion(regionData, filename);
+        return cwSurvexExporterRegion::exportRegion(regionData, filename, {});
     });
 
     AsyncFuture::observe(future).context(this, [filename](Monad::ResultBase result) {

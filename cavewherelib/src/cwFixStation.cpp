@@ -179,6 +179,11 @@ void cwFixStation::setCoordinate(double easting, double northing, double elevati
 
 cwFixStation::CoordinateState cwFixStation::state() const { return data->State; }
 
+bool cwFixStation::hasPlacedCoordinate() const
+{
+    return data->State == Valid && !(data->Easting == 0.0 && data->Northing == 0.0);
+}
+
 // Each component setter spells the coordinate back out, so the string stays the
 // one thing this class stores. Doing it here rather than at the call sites is
 // what makes it hold for the call sites that don't exist yet — the svx and

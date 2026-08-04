@@ -270,6 +270,10 @@ private:
         cwSurvexExporterRegion::Options exportOptions;
         exportOptions.caveAttachmentDirs = InputData.caveAttachmentDirs;
         exportOptions.tripAttachmentDirs = InputData.tripAttachmentDirs;
+        // Cavern's positions come straight back into the scene, so *cs out has
+        // to name the frame the scene is in, not one a reader would want.
+        exportOptions.outputCSPolicy =
+            cwSurvexExporterRegion::OutputCSPolicy::WorkingFrame;
 
         const Monad::ResultBase r =
             cwSurvexExporterRegion::exportRegion(InputData.regionData, svxPath, exportOptions);

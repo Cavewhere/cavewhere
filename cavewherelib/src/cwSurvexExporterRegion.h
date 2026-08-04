@@ -11,6 +11,7 @@
 #include "CaveWhereLibExport.h"
 #include "Monad/Result.h"
 #include "cwCavingRegionData.h"
+#include "cwSurvexExporterUtils.h"
 
 #include <QHash>
 #include <QString>
@@ -19,13 +20,17 @@
 /**
  * \brief Writes a survex (.svx) file for the entire caving region.
  *
- * Iterates the region's caves and emits a *begin/*end block per cave using
+ * Iterates the region's caves and emits a *begin / *end block per cave using
  * cwSurvexExporterCaveTask::writeCave under the hood. Pure compute on the
  * provided value-snapshot \a region; safe to call from any thread.
  */
 class CAVEWHERE_LIB_EXPORT cwSurvexExporterRegion
 {
 public:
+    //! Which coordinate system *cs out should name — see cwSurvexExporterUtils
+    //! for what the two answers mean and why they differ.
+    using OutputCSPolicy = cwSurvexExporterUtils::OutputCSPolicy;
+
     /**
      * Per-call options for the driver exporter. The default-constructed
      * value reproduces the user-facing exporter's contract (no
@@ -54,13 +59,18 @@ public:
     struct CAVEWHERE_LIB_EXPORT Options {
         QHash<QUuid, QString> caveAttachmentDirs;
         QHash<QUuid, QString> tripAttachmentDirs;
+        OutputCSPolicy outputCSPolicy = OutputCSPolicy::Shareable;
     };
 
     cwSurvexExporterRegion() = delete;
 
+    //! \a options has no default: `= {}` here makes clang error with "default
+    //! member initializer for 'outputCSPolicy' needed within definition of
+    //! enclosing class ... outside of member functions". Callers wanting the
+    //! defaults pass {}.
     static Monad::ResultBase exportRegion(const cwCavingRegionData& region,
                                           const QString& outputPath,
-                                          const Options& options = {});
+                                          const Options& options);
 };
 
 #endif // CWSURVEXEXPORTERREGION_H

@@ -24,7 +24,7 @@ class cwFixStationData;
  * input coordinate system. Lives inside cwFixStationModel; serialized as
  * part of cwCave.
  *
- * <b>The coordinate is a string, and the string is the only thing stored.</b>
+ * The coordinate is a string, and the string is the only thing stored.
  * easting(), northing() and elevation() are read out of it by
  * cwCoordinateText::parse(), under the axis order inputCS() implies — so a
  * coordinate means whatever its own text says it means, and correcting a row's
@@ -91,13 +91,13 @@ public:
     QString stationName() const;
     void setStationName(const QString& name);
 
-    //! The coordinate system this fix is expressed in — <b>its own, always</b>.
+    //! The coordinate system this fix is expressed in — its own, always.
     //! There is no fallback to the region's global CS: a row that declares none
     //! is an error (state() == NoSystem), not one that quietly follows the
     //! project, so changing the project's projection never moves a station that
     //! was entered under some other system.
     //!
-    //! <b>Set this before any component.</b> It decides which axis the
+    //! Set this before any component. It decides which axis the
     //! coordinate leads with, so writing a component while it is still empty
     //! spells the coordinate out easting-first; setting a geographic CS
     //! afterwards re-reads that same text latitude-first and the two
@@ -119,8 +119,16 @@ public:
     //! What coordinate() amounts to. The components are 0 unless this is Valid.
     CoordinateState state() const;
 
-    //! All three components at once, written out as one coordinate — <b>what a
-    //! caller holding three numbers should use</b>. The one-at-a-time setters
+    //! Whether the coordinate places the station anywhere: Valid, and not
+    //! still at (0, 0) — the reading a freshly picked CS gives back before the
+    //! user has typed a coordinate, which counts as "not entered yet" rather
+    //! than a location. The one definition of that rule, shared by
+    //! cwFixStationValidator's output-CS prompt and the Survex exporter's
+    //! shareable-CS derivation.
+    bool hasPlacedCoordinate() const;
+
+    //! All three components at once, written out as one coordinate — what a
+    //! caller holding three numbers should use. The one-at-a-time setters
     //! below each write the coordinate and read it straight back, so calling
     //! them in sequence on a fix with no inputCS() loses the earlier two: there
     //! is no axis order to read them back under, so each write returns nothing
@@ -128,8 +136,8 @@ public:
     //! survive as text on a row that says it has no system.
     void setCoordinate(double easting, double northing, double elevation);
 
-    //! The three components, read out of coordinate(). <b>Writing one writes
-    //! the coordinate back out</b> as all three numbers under inputCS()'s axis
+    //! The three components, read out of coordinate(). Writing one writes
+    //! the coordinate back out as all three numbers under inputCS()'s axis
     //! order — these setters exist for the callers that have numbers rather
     //! than a string, chiefly the svx and Walls importers, and a coordinate
     //! written that way always spells out an elevation, at 0 if it had none.
@@ -150,7 +158,7 @@ public:
     //! level. elevation() is 0 either way, which is what every consumer of it
     //! already gets today: survex's *fix takes three numbers, so this is a
     //! distinction for the diagnostics to draw, not for the solve — and
-    //! <b>nothing draws it yet</b>. Only a typed coordinate can carry it: the
+    //! nothing draws it yet. Only a typed coordinate can carry it: the
     //! component setters spell all three out, so an import has no way to say
     //! its fix had no vertical.
     bool hasElevation() const;

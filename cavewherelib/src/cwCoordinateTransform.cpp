@@ -15,12 +15,20 @@
 //Std includes
 #include <algorithm>
 #include <cmath>
+#include <map>
+#include <utility>
 #include <vector>
 
 const QString cwCoordinateTransform::Wgs84 = QStringLiteral("EPSG:4326");
 
 namespace {
     QStringList g_projSearchPaths;
+
+    //! Cap on the per-thread CS caches below, so browsing CSCustomDialog can't
+    //! grow one unboundedly. Reached by clearing rather than evicting: the
+    //! working set is a handful of systems, so a full clear costs one re-lookup
+    //! each and needs no eviction order.
+    constexpr int kCsCacheLimit = 256;
 
     bool sameCS(const QString& a, const QString& b)
     {
@@ -232,25 +240,90 @@ namespace {
         }
         return tls.ctx;
     }
+
+    // The capped per-thread memo shared by the QHash-backed PROJ query caches
+    // below. On overflow every entry is dropped — values come back by value, so
+    // nothing escapes the cache. Failures are cached too: a CS the user is
+    // still typing would otherwise rebuild and fail on every keystroke.
+    template <typename Value, typename Compute>
+    Value cachedValue(QHash<QString, Value>& cache, const QString& key, Compute compute)
+    {
+        const auto it = cache.constFind(key);
+        if (it != cache.constEnd()) {
+            return *it;
+        }
+        const Value value = compute();
+        if (cache.size() >= kCsCacheLimit) {
+            cache.clear();
+        }
+        cache.insert(key, value);
+        return value;
+    }
 }
 
 bool cwCoordinateTransform::isValidCS(const QString& cs)
 {
-    if (cs.trimmed().isEmpty()) {
+    const QString key = cs.trimmed();
+    if (key.isEmpty()) {
         return false;
     }
 
-    PJ_CONTEXT* ctx = validatorContext();
-    if (!ctx) {
-        return false;
+    // Per-thread cache, same reasoning and same cap as isGeographic below:
+    // CSComboBox asks this on every keystroke, and so does
+    // cwLocalProjectionManager once per fix station per edit. Without it each
+    // call pays proj_create + proj_destroy.
+    thread_local QHash<QString, bool> cache;
+    return cachedValue(cache, key, [&key]() {
+        PJ_CONTEXT* ctx = validatorContext();
+        if (!ctx) {
+            return false;
+        }
+        PJ* p = proj_create(ctx, key.toUtf8().constData());
+        const bool valid = (p != nullptr);
+        if (p) {
+            proj_destroy(p);
+        }
+        return valid;
+    });
+}
+
+std::optional<cwGeoPoint> cwCoordinateTransform::transformPoint(const QString& sourceCS,
+                                                                const QString& destCS,
+                                                                const cwGeoPoint& point)
+{
+    const QString source = sourceCS.trimmed();
+    const QString dest = destCS.trimmed();
+    if (source.isEmpty() || dest.isEmpty()) {
+        return std::nullopt;
     }
 
-    PJ* p = proj_create(ctx, cs.toUtf8().constData());
-    const bool valid = (p != nullptr);
-    if (p) {
-        proj_destroy(p);
+    // std::map rather than QHash because cwCoordinateTransform is move-only
+    // with no default constructor; try_emplace builds it in place. Per-thread,
+    // which is also what the class's one-transform-one-thread contract wants.
+    // Pairs that fail to build are cached too — otherwise a CS the user is
+    // still typing rebuilds and fails on every keystroke.
+    thread_local std::map<std::pair<QString, QString>, cwCoordinateTransform> cache;
+    const auto key = std::make_pair(source, dest);
+
+    auto it = cache.find(key);
+    if (it == cache.end()) {
+        if (cache.size() >= static_cast<size_t>(kCsCacheLimit)) {
+            // Nothing escapes the cache — points come back by value — so
+            // dropping every entry is safe.
+            cache.clear();
+        }
+        it = cache.try_emplace(key, source, dest).first;
     }
-    return valid;
+
+    if (!it->second.isValid()) {
+        return std::nullopt;
+    }
+
+    const cwGeoPoint transformed = it->second.transform(point);
+    if (!std::isfinite(transformed.x) || !std::isfinite(transformed.y)) {
+        return std::nullopt;
+    }
+    return transformed;
 }
 
 bool cwCoordinateTransform::isGeographic(const QString& cs)
@@ -265,32 +338,21 @@ bool cwCoordinateTransform::isGeographic(const QString& cs)
     // proj_create + proj_get_type + proj_destroy. Capped like nameFor's
     // cache so CSCustomDialog browsing can't grow it unboundedly.
     thread_local QHash<QString, bool> cache;
-    auto it = cache.constFind(key);
-    if (it != cache.constEnd()) {
-        return *it;
-    }
-
-    PJ_CONTEXT* ctx = validatorContext();
-    if (!ctx) {
-        return false;
-    }
-
-    PJ* p = proj_create(ctx, key.toUtf8().constData());
-    if (!p) {
-        return false;
-    }
-
-    const PJ_TYPE type = proj_get_type(p);
-    proj_destroy(p);
-    const bool geographic = type == PJ_TYPE_GEOGRAPHIC_2D_CRS
-        || type == PJ_TYPE_GEOGRAPHIC_3D_CRS
-        || type == PJ_TYPE_GEOGRAPHIC_CRS;
-
-    if (cache.size() >= 256) {
-        cache.clear();
-    }
-    cache.insert(key, geographic);
-    return geographic;
+    return cachedValue(cache, key, [&key]() {
+        PJ_CONTEXT* ctx = validatorContext();
+        if (!ctx) {
+            return false;
+        }
+        PJ* p = proj_create(ctx, key.toUtf8().constData());
+        if (!p) {
+            return false;
+        }
+        const PJ_TYPE type = proj_get_type(p);
+        proj_destroy(p);
+        return type == PJ_TYPE_GEOGRAPHIC_2D_CRS
+            || type == PJ_TYPE_GEOGRAPHIC_3D_CRS
+            || type == PJ_TYPE_GEOGRAPHIC_CRS;
+    });
 }
 
 cwCoordinateTransform::DomainCheck
@@ -311,12 +373,7 @@ cwCoordinateTransform::domainCheck(const QString& cs, const cwGeoPoint& point)
     const QString cacheKey = key
         + QLatin1Char('|') + QString::number(point.x, 'g', 17)
         + QLatin1Char('|') + QString::number(point.y, 'g', 17);
-    const auto cached = cache.constFind(cacheKey);
-    if (cached != cache.constEnd()) {
-        return *cached;
-    }
-
-    const DomainCheck result = [&]() -> DomainCheck {
+    return cachedValue(cache, cacheKey, [&]() -> DomainCheck {
         PJ_CONTEXT* ctx = validatorContext();
         if (!ctx) {
             return {};
@@ -395,13 +452,7 @@ cwCoordinateTransform::domainCheck(const QString& cs, const cwGeoPoint& point)
             }
         }
         return fields;
-    }();
-
-    if (cache.size() >= 256) {
-        cache.clear();
-    }
-    cache.insert(cacheKey, result);
-    return result;
+    });
 }
 
 QString cwCoordinateTransform::utmZoneToEpsg(int zone, bool north)
@@ -426,22 +477,19 @@ QString cwCoordinateTransform::deriveProjectedOutputCS(const QString& inputCS,
     }
 
     // A geographic input can't be the output CS; pick the WGS84 UTM zone that
-    // contains the fix. Transforming to WGS84 normalizes the axis order to
-    // x=longitude, y=latitude (normalize_for_visualization in the ctor).
-    cwCoordinateTransform toGeographic(cs, Wgs84);
-    if (!toGeographic.isValid()) {
-        return QString();
-    }
-    const cwGeoPoint geo = toGeographic.transform(point);
-    if (!std::isfinite(geo.x) || !std::isfinite(geo.y)) {
+    // contains the fix. transformPoint memoizes the transform per thread,
+    // normalizes the axis order to x=longitude, y=latitude, and rejects
+    // non-finite results.
+    const auto geo = transformPoint(cs, Wgs84, point);
+    if (!geo.has_value()) {
         return QString();
     }
 
     constexpr double kDegreesPerZone = 6.0;
     constexpr double kZoneOriginLongitude = 180.0;
-    const int rawZone = int(std::floor((geo.x + kZoneOriginLongitude) / kDegreesPerZone)) + 1;
+    const int rawZone = int(std::floor((geo->x + kZoneOriginLongitude) / kDegreesPerZone)) + 1;
     const int zone = qBound(1, rawZone, 60);
-    const bool north = geo.y >= 0.0;
+    const bool north = geo->y >= 0.0;
     return utmZoneToEpsg(zone, north);
 }
 
@@ -502,31 +550,22 @@ QString cwCoordinateTransform::nameFor(const QString& cs)
     // with the thread_local validatorContext() above; no mutex needed. Capped
     // because CSCustomDialog lets users browse all ~7000 EPSG entries.
     thread_local QHash<QString, QString> cache;
-    auto it = cache.constFind(key);
-    if (it != cache.constEnd()) {
-        return *it;
-    }
-
-    PJ_CONTEXT* ctx = validatorContext();
-    if (!ctx) {
-        return QString();
-    }
-
-    PJ* p = proj_create(ctx, key.toUtf8().constData());
-    QString result;
-    if (p) {
-        const char* name = proj_get_name(p);
-        if (name) {
-            result = QString::fromUtf8(name);
+    return cachedValue(cache, key, [&key]() {
+        QString result;
+        PJ_CONTEXT* ctx = validatorContext();
+        if (!ctx) {
+            return result;
         }
-        proj_destroy(p);
-    }
-
-    if (cache.size() >= 256) {
-        cache.clear();
-    }
-    cache.insert(key, result);
-    return result;
+        PJ* p = proj_create(ctx, key.toUtf8().constData());
+        if (p) {
+            const char* name = proj_get_name(p);
+            if (name) {
+                result = QString::fromUtf8(name);
+            }
+            proj_destroy(p);
+        }
+        return result;
+    });
 }
 
 // ---- cwCoordinateSystem (QML singleton facade) ----

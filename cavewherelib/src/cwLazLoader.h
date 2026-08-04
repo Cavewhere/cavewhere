@@ -30,6 +30,14 @@ struct CAVEWHERE_LIB_EXPORT cwLazLoadResult
     QVector3D bboxMin;
     QVector3D bboxMax;
     QString sourceCS; // CS actually used during load (override > LAZ-embedded > "")
+
+    // The header's bounding box in the file's own CRS, before the transform
+    // into globalCS and the worldOrigin subtraction that bboxMin/bboxMax carry.
+    // A cloud's position in its own CRS exists nowhere else in the result, and
+    // deriving a coordinate frame from a cloud needs exactly that. Read during
+    // the header pass, so it costs nothing beyond what the load already does.
+    cwGeoPoint sourceBboxMin;
+    cwGeoPoint sourceBboxMax;
     // Mean planar spacing between points in meters, derived from XY bbox area:
     //   sqrt((dx * dy) / pointCount)
     // Drives world-space point radius in PointCloud.vert so points just touch

@@ -138,6 +138,7 @@ TEST_CASE("Driver *include emits absolute forward-slash quoted path for trip att
 
     cwSurvexExporterRegion::Options options;
     options.tripAttachmentDirs.insert(attached->id(), attachDir);
+    options.outputCSPolicy = cwSurvexExporterRegion::OutputCSPolicy::WorkingFrame;
 
     // Worker rewrites the cave name to cave_<uuid> via encodeCaveNames
     // before calling exportRegion; mirror that here so the driver

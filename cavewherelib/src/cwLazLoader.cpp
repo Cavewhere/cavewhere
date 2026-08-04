@@ -273,6 +273,12 @@ QFuture<cwLazLoadResult> cwLazLoader::load(const Request& request)
 
             const QString embeddedCS = extractEmbeddedCS(headerReader->header);
             result.sourceCS = !sourceCSOverride.isEmpty() ? sourceCSOverride : embeddedCS;
+            result.sourceBboxMin = cwGeoPoint(headerReader->header.min_x,
+                                              headerReader->header.min_y,
+                                              headerReader->header.min_z);
+            result.sourceBboxMax = cwGeoPoint(headerReader->header.max_x,
+                                              headerReader->header.max_y,
+                                              headerReader->header.max_z);
             const I64 totalPoints = headerReader->npoints;
             headerReader->close();
             delete headerReader;

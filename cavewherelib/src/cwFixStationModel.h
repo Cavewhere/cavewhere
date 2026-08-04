@@ -96,7 +96,7 @@ public:
     //! plot re-solves once for a pasted coordinate rather than three times.
     //! \a units is the project's unit system, and resolves an elevation written
     //! with no unit suffix — the only thing it decides. Which axis the text
-    //! leads with is <b>not</b> a parameter: it comes from the row's own
+    //! leads with is not a parameter: it comes from the row's own
     //! coordinate system, so the reading can't disagree with the row.
     //!
     //! \a text becomes the row's coordinate, normalized only by

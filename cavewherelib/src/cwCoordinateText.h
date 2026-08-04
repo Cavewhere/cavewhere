@@ -30,7 +30,7 @@
  *
  *     UTM         610016.792, 5615117.075, 2545.340 feet
  *
- * <b>The first two components are not always the same axis.</b> A geographic CS
+ * The first two components are not always the same axis. A geographic CS
  * is written the way people write it and the way #621 asks for it —
  * <i>latitude first</i> — while a projected one is easting first. The two can't
  * be told apart from the numbers (46.12113, -115.59902 is a legal, if absurd,
@@ -47,7 +47,7 @@
  * back out of a coordinate it has already accepted, and through
  * cwCoordinateTextValidator below.
  *
- * <b>The elevation is meters, always.</b> Nothing downstream of cwFixStation
+ * The elevation is meters, always. Nothing downstream of cwFixStation
  * carries a unit: cwGeoPoint has none, and survex reads a *fix's three numbers
  * raw and hands them straight to proj_trans with no *units scaling
  * (survex/src/commands.c). Every CS CaveWhere offers is 2D, so PROJ passes z
@@ -104,8 +104,8 @@ public:
     //! anything else, including an empty or unresolvable \a cs, is
     //! EastingNorthing.
     //!
-    //! <b>An empty \a cs is not a coordinate system, and the answer here is not
-    //! a reading of one.</b> A fix that declares none has no axis order at all
+    //! An empty \a cs is not a coordinate system, and the answer here is not
+    //! a reading of one. A fix that declares none has no axis order at all
     //! (cwFixStation::NoSystem) and derives nothing from its text; the fallback
     //! exists only so that a caller writing three numbers into a CS-less row
     //! spells them out in some fixed order rather than none. Which order that is
@@ -135,8 +135,8 @@ public:
 
     //! \a text with its first two numbers exchanged and everything else left
     //! exactly as written — the separators, the elevation, its unit, and the
-    //! absence of an elevation. <b>Empty when \a text doesn't read as a
-    //! coordinate</b>, which is not the same as holding fewer than two numbers:
+    //! absence of an elevation. Empty when \a text doesn't read as a
+    //! coordinate, which is not the same as holding fewer than two numbers:
     //! "N 46 07 16 W 115 35 56" holds six and is not a coordinate.
     //!
     //! Textual on purpose, so it takes neither an axis order nor a unit system:
@@ -174,7 +174,7 @@ public:
 /**
  * Installable validator for a free-form coordinate field.
  *
- * <b>Never returns Invalid.</b> CoreClickTextInput hands its validator to the
+ * Never returns Invalid. CoreClickTextInput hands its validator to the
  * live text input, where Invalid rejects the keystroke — and every coordinate
  * is half-typed on its way to being whole, so blocking keystrokes is the wrong
  * mechanism for this field. Incomplete text is Intermediate instead, which

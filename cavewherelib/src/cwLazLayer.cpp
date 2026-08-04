@@ -206,6 +206,13 @@ void cwLazLayer::setSourceCSOverride(const QString& cs)
     reload();
 }
 
+cwGeoPoint cwLazLayer::sourceBboxCenter() const
+{
+    return cwGeoPoint((m_sourceBboxMin.x + m_sourceBboxMax.x) * 0.5,
+                      (m_sourceBboxMin.y + m_sourceBboxMax.y) * 0.5,
+                      (m_sourceBboxMin.z + m_sourceBboxMax.z) * 0.5);
+}
+
 void cwLazLayer::setFutureManagerToken(const cwFutureManagerToken& token)
 {
     m_futureManagerToken = token;
@@ -271,6 +278,8 @@ void cwLazLayer::applyResult(cwLazLoadResult&& result)
     m_geometry = std::move(result.geometry);
     m_bboxMin = result.bboxMin;
     m_bboxMax = result.bboxMax;
+    m_sourceBboxMin = result.sourceBboxMin;
+    m_sourceBboxMax = result.sourceBboxMax;
     m_meanSpacingXY = result.meanSpacingXY;
 
     if (m_sourceCS != result.sourceCS) {

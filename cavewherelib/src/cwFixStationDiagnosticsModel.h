@@ -64,8 +64,8 @@ public:
         EastingDomainErrorRole,
         NorthingDomainErrorRole,
         //! Read-only: a message when the row has no coordinate that can be read
-        //! at all, empty otherwise. <b>Never set at the same time as
-        //! DomainErrorRole</b>, which judges a coordinate the row does have: the
+        //! at all, empty otherwise. Never set at the same time as
+        //! DomainErrorRole, which judges a coordinate the row does have: the
         //! domain check defers whenever state() isn't Valid, which is exactly
         //! when this speaks. So the two can share one warning slot.
         //!
@@ -87,7 +87,7 @@ public:
         //! latitude-first whatever it was written as, and there is no way to
         //! detect the transposition afterwards, so the entry surfaces ask before
         //! they let it happen (cwCoordinateText::swapHorizontal()). Read it
-        //! <b>before</b> the coordinate system is committed: the write is what
+        //! before the coordinate system is committed: the write is what
         //! makes the answer false.
         CoordinateOrderUnknownRole,
         //! Read-only: a message when this fix's station reference is broken,

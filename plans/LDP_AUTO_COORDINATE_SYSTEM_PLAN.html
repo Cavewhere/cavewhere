@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="color-scheme" content="dark light">
 <title>Automatic Local Coordinate System (LDP) — Plan</title>
 <style>
   :root {
@@ -15,7 +16,34 @@
     --good: #98c379;
     --warn: #e5c07b;
     --bad: #e06c75;
+    /* Tints behind pills and SVG boxes — one per accent color. */
+    --tint-accent: #253141;
+    --tint-good: #2b3a2b;
+    --tint-warn: #3d3524;
+    --shadow: none;
     --mono: "SF Mono", Menlo, Consolas, monospace;
+  }
+
+  /* Light mode. Every rule below reads these variables — including the SVG
+     classes — so the whole document, diagrams included, follows the system
+     setting without any per-element overrides. */
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #ffffff;
+      --panel: #f6f7f9;
+      --panel2: #eceff3;
+      --border: #d0d7de;
+      --text: #1c2024;
+      --dim: #59626c;
+      --accent: #0a5fc2;
+      --good: #1a7f37;
+      --warn: #8a6100;
+      --bad: #c1352b;
+      --tint-accent: #e6effb;
+      --tint-good: #e8f4ea;
+      --tint-warn: #fbf2dc;
+      --shadow: 0 1px 2px rgba(16, 22, 26, .06);
+    }
   }
   * { box-sizing: border-box; }
   body {
@@ -33,6 +61,7 @@
   code { background: var(--panel2); border: 1px solid var(--border); border-radius: 4px; padding: .08em .35em; }
   pre {
     background: var(--panel2); border: 1px solid var(--border); border-radius: 8px;
+    box-shadow: var(--shadow);
     padding: .9rem 1.1rem; overflow-x: auto; font-family: var(--mono); font-size: .82rem; line-height: 1.5;
   }
   pre code { background: none; border: none; padding: 0; }
@@ -40,14 +69,14 @@
   th, td { border: 1px solid var(--border); padding: .5rem .7rem; text-align: left; vertical-align: top; }
   th { background: var(--panel2); }
   .pill { display: inline-block; border-radius: 999px; padding: .05rem .6rem; font-size: .75rem; font-weight: 600; letter-spacing: .3px; vertical-align: middle; }
-  .pill.draft { background: #3d3524; color: var(--warn); border: 1px solid var(--warn); }
-  .pill.done { background: #2b3a2b; color: var(--good); border: 1px solid var(--good); }
-  .pill.phase { background: #253141; color: var(--accent); border: 1px solid var(--accent); }
+  .pill.draft { background: var(--tint-warn); color: var(--warn); border: 1px solid var(--warn); }
+  .pill.done { background: var(--tint-good); color: var(--good); border: 1px solid var(--good); }
+  .pill.phase { background: var(--tint-accent); color: var(--accent); border: 1px solid var(--accent); }
   .callout { border-left: 3px solid var(--accent); background: var(--panel); padding: .7rem 1rem; border-radius: 0 8px 8px 0; margin: 1rem 0; }
   .callout.warn { border-left-color: var(--warn); }
   .callout.bad { border-left-color: var(--bad); }
   .callout .title { font-weight: 700; margin-bottom: .2rem; }
-  figure { margin: 1.4rem 0; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 1rem; overflow-x: auto; }
+  figure { margin: 1.4rem 0; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 1rem; overflow-x: auto; box-shadow: var(--shadow); }
   figcaption { color: var(--dim); font-size: .85rem; margin-top: .6rem; }
   ul, ol { padding-left: 1.4rem; }
   li { margin: .3rem 0; }
@@ -57,9 +86,9 @@
   .warn { color: var(--warn); }
   /* SVG shared classes */
   .box   { fill: var(--panel2); stroke: var(--border); rx: 9; }
-  .boxAccent { fill: #253141; stroke: var(--accent); rx: 9; }
-  .boxGood   { fill: #2b3a2b; stroke: var(--good); rx: 9; }
-  .boxWarn   { fill: #3d3524; stroke: var(--warn); rx: 9; }
+  .boxAccent { fill: var(--tint-accent); stroke: var(--accent); rx: 9; }
+  .boxGood   { fill: var(--tint-good); stroke: var(--good); rx: 9; }
+  .boxWarn   { fill: var(--tint-warn); stroke: var(--warn); rx: 9; }
   .lbl   { fill: var(--text); font: 600 13px -apple-system, "Segoe UI", sans-serif; }
   .sub   { fill: var(--dim); font: 11px -apple-system, "Segoe UI", sans-serif; }
   .edge  { stroke: var(--dim); stroke-width: 1.5; fill: none; }
@@ -100,6 +129,22 @@
   <tr><td>D12</td><td>Collaboration: LDP changes are ordinary edits, last-writer-wins on merge.</td><td>Rare; self-healing since everything is derivable from inputs.</td></tr>
   <tr><td>D13</td><td>Sequencing: this plan lands <b>before</b> R1. R1 = "one predicate for 'are this fix's numbers usable?'" — a follow-up from the source-of-truth work, defined in <a href="FIXSTATION_COORDINATE_SOURCE_OF_TRUTH.html#followups">FIXSTATION_COORDINATE_SOURCE_OF_TRUTH.html §13</a> (11 C++ sites across 8 files + 8 QML expressions, each to be read individually, not sed'd). The <code>cwGridConvergence.cpp:133</code> live bug it carries is expected to die with the display path.</td><td>R1's consumer list shrinks; doing R1 first reworks sites twice.</td></tr>
   <tr><td>D14</td><td>Everything commit 1–4 built <b>stays</b>: per-fix <code>inputCS</code>, coordinate string as source of truth, <code>NoSystem</code>/<code>Unreadable</code> states, <code>CoordinateOrderAskBox</code>, far-from-origin outlier flagging.</td><td>Those solve input capture. The LDP removes the <i>working/output</i> CS confusion, not the input question.</td></tr>
+  <tr><td>D15</td><td><b>The LAZ bootstrap reads the header once, before the load</b> (option&nbsp;a).
+      <code>cwLazLayerModel::maybeAdoptRegionDefaultsFromLaz</code> becomes "derive the LDP from
+      the first layer's header" and keeps its single <code>cwLazLoader::probeHeader</code> call.
+      This is the one surviving caller of <code>probeHeader</code>.</td>
+      <td>User decision 2026-08-03. The loader transforms points <i>into</i> the destination
+      frame, so the frame must exist before a load runs — but under the LDP the frame is derived
+      from the layer's own coordinates. Something has to read the header first. A header-only
+      probe is microseconds; the alternatives each pay a full extra pass over every point
+      (two-phase load, or load-then-reproject). One call at add time is not the duplicated-cache
+      problem §10 removed.</td></tr>
+  <tr><td>D16</td><td><b>No "locating…" state.</b> A project whose only georeferenced input is a
+      still-loading LAZ simply stays local until the load completes — or until a fix station
+      arrives first and anchors it.</td>
+      <td>User decision 2026-08-03. The layer already reports a loading state of its own;
+      "un-anchored while loading" is not a separate condition worth a second indicator. Staying
+      local is the correct answer, not a placeholder for one.</td></tr>
 </table>
 
 <h2 id="recipe">2. The LDP recipe</h2>
@@ -153,16 +198,16 @@ far larger).</p>
 <svg viewBox="0 0 960 560" width="960" height="560" role="img" aria-label="LDP state machine">
   <defs>
     <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-      <path d="M0 0 L10 5 L0 10 z" fill="#9aa0a8"/>
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--dim)"/>
     </marker>
     <marker id="arrG" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-      <path d="M0 0 L10 5 L0 10 z" fill="#98c379"/>
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--good)"/>
     </marker>
     <marker id="arrW" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-      <path d="M0 0 L10 5 L0 10 z" fill="#e5c07b"/>
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--warn)"/>
     </marker>
     <marker id="arrB" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-      <path d="M0 0 L10 5 L0 10 z" fill="#e06c75"/>
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--bad)"/>
     </marker>
   </defs>
 
@@ -186,11 +231,11 @@ far larger).</p>
 
   <!-- S0 -> S1: first input -->
   <path class="edgeGood" d="M270 90 L378 90" marker-end="url(#arrG)"/>
-  <text class="elbl" x="324" y="80" text-anchor="middle" fill="#98c379">first georeferenced input</text>
+  <text class="elbl" x="324" y="80" text-anchor="middle" fill="var(--good)">first georeferenced input</text>
 
   <!-- S1 self loop: anchor edited beyond R (re-derive) -->
   <path class="edgeWarn" d="M440 60 C 410 10, 600 10, 570 58" marker-end="url(#arrW)"/>
-  <text class="elbl" x="505" y="22" text-anchor="middle" fill="#e5c07b">anchor location edited &gt; R → re-derive at new location</text>
+  <text class="elbl" x="505" y="22" text-anchor="middle" fill="var(--warn)">anchor location edited &gt; R → re-derive at new location</text>
 
   <!-- S1 self loop bottom: anchor edited within R (keep) -->
   <path class="edge" d="M440 150 C 415 195, 595 195, 570 152" marker-end="url(#arr)"/>
@@ -198,13 +243,13 @@ far larger).</p>
 
   <!-- S1 -> S2: anchor deleted, remaining within R -->
   <path class="edgeGood" d="M630 90 L718 90" marker-end="url(#arrG)"/>
-  <text class="elbl" x="674" y="70" text-anchor="middle" fill="#98c379">anchor deleted,</text>
-  <text class="elbl" x="674" y="84" text-anchor="middle" fill="#98c379">rest ≤ R</text>
+  <text class="elbl" x="674" y="70" text-anchor="middle" fill="var(--good)">anchor deleted,</text>
+  <text class="elbl" x="674" y="84" text-anchor="middle" fill="var(--good)">rest ≤ R</text>
 
   <!-- S1 -> S1 via re-anchor: anchor deleted, remaining beyond R -->
   <path class="edgeBad" d="M505 150 C 505 250, 505 250, 505 152" opacity="0"/>
   <path class="edgeBad" d="M460 150 C 430 235, 580 235, 550 152" marker-end="url(#arrB)"/>
-  <text class="elbl" x="505" y="232" text-anchor="middle" fill="#e06c75">anchor deleted, rest &gt; R → re-derive from oldest remaining (new anchor)</text>
+  <text class="elbl" x="505" y="232" text-anchor="middle" fill="var(--bad)">anchor deleted, rest &gt; R → re-derive from oldest remaining (new anchor)</text>
 
   <!-- S1 -> S0 and S2 -> S0: last input deleted -->
   <path class="edge" d="M380 130 C 330 160, 300 150, 272 132" marker-end="url(#arr)"/>
@@ -337,7 +382,7 @@ lands green on both suites before the next.</p>
       <code>cwGeoReference</code>: LDP string + state + anchor identity + vertical-datum name.
       Proto: add the geo-reference message. The old frame
       (<code>worldOrigin</code>/<code>explicitlySet</code>, the <code>globalCoordinateSystem</code>
-      field) stays until P2 has an LDP to put in its place.
+      field) stays until P2.2 swaps the working frame.
       <div class="callout" style="margin-top:10px">
       <b>What landed, and what moved</b>
       <ul>
@@ -351,9 +396,10 @@ lands green on both suites before the next.</p>
             <code>restore()</code> as the only ways to move them — all three parts write
             together, and <code>restore()</code> repairs states a file can't legitimately hold.</li>
         <li><b>Anchor identity = kind + persisted UUID</b> (<code>cwFixStation::id</code>,
-            <code>cwLazLayer::id</code>) — the open question from §10, settled: both already
+            <code>cwLazLayer::id</code>) — the open question from §11, settled: both already
             carry one, so identity survives save/load and outlives a rename.</li>
-        <li><b><code>worldOrigin</code>/<code>explicitlySet</code> moved to P2</b> (user decision,
+        <li><b><code>worldOrigin</code>/<code>explicitlySet</code> moved to P2</b> — since
+            re-split: the deletion now lands in P2.2 (user decision,
             2026-08-03). Deleting the offset is not a local edit to <code>cwGeoReference</code> —
             it takes <code>recomputeWorldOrigin()</code>, the line-plot first-solve auto-compute,
             the LAZ bbox-center adopt, and the two test files with it. Doing that before an LDP
@@ -361,33 +407,119 @@ lands green on both suites before the next.</p>
             UTM-scale coordinates in float32 (~3 cm at 500 km eastings) for the span of a phase.
             The two frames sit side by side for exactly one phase.</li>
       </ul></div></td></tr>
-  <tr><td><span class="pill phase">P2</span></td><td>State machine</td>
-      <td>Anchoring/re-derive/freeze transitions in <code>cwCavingRegion</code>, replacing
+  <tr><td><span class="pill phase">P2</span></td><td>State machine <b>— anchoring done</b></td>
+      <td>Anchoring/re-derive/freeze transitions, replacing
       <code>recomputeWorldOrigin()</code> averaging and the LAZ auto-adopt semantics.
-      Transactional with the causing edit (undo-safe). Threshold R constant. Rewrite
-      <code>test_cwCavingRegion_worldOrigin.cpp</code> / <code>test_cwLazLayerAutoAdoptCS.cpp</code>
-      against the new policy; add the §4 worked scenarios as tests.
-      <b>Deletes <code>worldOrigin</code>/<code>explicitlySet</code> in the same phase</b> — the
-      anchoring is what replaces them, so the old frame goes the moment there is a new one, and
-      there is never a phase with neither. That takes <code>recomputeWorldOrigin()</code>,
-      <code>cwFixStationValidator::robustWorldOrigin()</code>, the <code>cwLinePlotManager</code>
-      first-solve auto-compute + its <code>worldOriginChanged</code> connect,
-      <code>cwLinePlotTask::applyWorldOriginOffset()</code>, the
-      <code>setRegionWorldOrigin</code> push through <code>cwLazLayer</code> →
-      <code>cwLazLoader</code> → <code>cwLazClipOperation</code>, and
-      <code>toGlobal()</code>'s two callers (<code>cwCoordinatePicker</code>,
-      <code>cwMeasurementInteraction</code>).</td></tr>
+      Threshold R constant; the §4 worked scenarios as tests. The frame swap and the
+      <code>worldOrigin</code>/<code>globalCoordinateSystem</code> deletion move to
+      <span class="pill phase">P2.2</span> (user decision, 2026-08-03) — see below.
+      <div class="callout" style="margin-top:10px">
+      <b>Half landed: the anchoring</b>
+      <ul>
+        <li><code>cwLocalProjectionManager</code>, owned by <code>cwCavingRegion</code> alongside
+            <code>cwFixStationValidator</code> — the states live on <code>cwGeoReference</code>,
+            the policy for moving between them needs the region's caves and layers, so it lives
+            there. R = 50&nbsp;km (<code>kAnchorThresholdMeters</code>), settling §11's first
+            open question.</li>
+        <li>Distance is measured <i>in the current frame</i>: with
+            <code>x_0 = y_0 = 0</code> a point's distance from the origin is just its magnitude
+            once transformed into the LDP, so "did the anchor move more than R" needs no second
+            derivation.</li>
+        <li><b>Only witnessed disappearances count as deletions.</b> LAZ layers are rescanned off
+            disk <i>after</i> the caves load, so an anchor that is merely absent has not
+            necessarily been deleted — and acting on that would move a frame that is stored
+            precisely so opening a project can't move it. The manager tracks whether it has seen
+            the current anchor at all, and resets that whenever the anchor changes underneath it
+            (which is what a load looks like from here).</li>
+        <li><code>cwCavingRegion::setData()</code> now restores the geo-reference <b>last</b>,
+            after the caves. The caves arriving is an ordinary event the manager reacts to, so
+            restoring first let a re-derivation overwrite the frame the file carried — invisible
+            on the machine that wrote it, and not on the next one.</li>
+        <li>Enumerating inputs early-exits (<code>forEachInput</code>): the common case — anchored,
+            anchor still present — reads one input, not all of them. Reading a fix's coordinate
+            system is a PROJ database lookup, and this runs on every keystroke in a coordinate
+            field.</li>
+        <li>11 cases in <code>test_cwLocalProjectionManager.cpp</code>, one per §4 scenario plus
+            the two load orderings; both load claims mutation-tested.</li>
+      </ul>
+      </div></td></tr>
+  <tr><td><span class="pill phase">P2.1</span></td><td>Export CS decoupling</td>
+      <td><code>cwSurvexExporterUtils::resolveOutputCS</code> has two callers with opposite
+      needs, hidden today because the project has one CS. The <b>solve</b>
+      (<code>cwLinePlotTask</code> → <code>cwSurvexExporterRegion</code>) wants its
+      <code>*cs out</code> to be the working frame — exactly what P2.2 makes the LDP. The
+      user's <b>File→Export</b> (<code>cwSurveyExportManager</code>) wants a pasteable UTM
+      zone, never an LDP proj-string. Split them <i>before</i> the frame swap: file export
+      derives its own output CS via <code>cwCoordinateTransform::deriveProjectedOutputCS()</code>
+      (already written, tested, and used by the validator's suggestion path); the solve keeps
+      the existing fallback chain untouched. Fully testable against the current code, with
+      <code>globalCoordinateSystem</code> still present. Absorbs the "default export CS =
+      derived UTM zone" piece of P5.</td></tr>
+  <tr><td><span class="pill phase">P2.2</span></td><td>Frame swap</td>
+      <td>The LDP becomes the working frame; <code>worldOrigin</code>/<code>explicitlySet</code>
+      <i>and</i> <code>globalCoordinateSystem</code> are deleted <b>together</b> — they are one
+      concept split in half (a frame and an offset into it), and neither is deletable alone:
+      dropping the offset while consumers work in UTM puts absolute UTM in float32
+      (~0.25&nbsp;m ulp at a 4,000&nbsp;km northing); dropping the CS first leaves consumers
+      with no frame at all. The LDP kills the offset structurally — <code>x_0 = y_0 = 0</code>
+      at the anchor means LDP coordinates already <i>are</i> scene coordinates; there is
+      nothing left to subtract.
+      <ul>
+        <li><b>Frame consumers</b> (mechanical swap to <code>localCoordinateSystem</code>):
+            survex <code>*cs out</code> connect in <code>cwLinePlotManager</code>, the LAZ
+            reprojection push (<code>setRegionGlobalCS</code>),
+            <code>cwLazClipInteraction</code>'s <code>outputWktCS</code>.</li>
+        <li><b>Scene→global readers</b> (<code>cwCoordinatePicker</code>,
+            <code>cwMeasurementInteraction</code>, <code>cwAzimuthReference</code>): the LDP is
+            just a different source CS, with no offset to add first.</li>
+        <li><b>Validation gates</b> (<code>cwFixStationValidator</code>'s "is a global CS set"):
+            become <code>state() != Ungeoreferenced</code>.</li>
+        <li><b>Offset plumbing deleted</b>: <code>recomputeWorldOrigin()</code>,
+            <code>robustWorldOrigin()</code>, the <code>cwLinePlotManager</code> first-solve
+            auto-compute + <code>worldOriginChanged</code> connect,
+            <code>cwLinePlotTask::applyWorldOriginOffset()</code>, the
+            <code>setRegionWorldOrigin</code> push through <code>cwLazLayer</code> →
+            <code>cwLazLoader</code> → <code>cwLazClipOperation</code> (LAZ header offsets go
+            to zero — LDP coordinates need less int32 range than UTM's did).</li>
+        <li><b>UI pulled forward from P4</b> — only the <i>project's</i> CS surface, not the
+            picker machinery: <code>DataMainPage.qml</code>'s
+            <code>globalCoordinateSystemComboBox</code> group-box entry goes;
+            <code>Project</code> mode leaves the fix CS picker (D8). The reusable
+            <code>CSPicker</code> component stays for fix stations and LAZ overrides.
+            <code>CoordinatePickerPopup</code>'s "Project CRS" coordinate section collapses to
+            lat/long + elevation (D9) — LDP eastings are "meters from the anchor," not a
+            pasteable CRS coordinate.</li>
+        <li><b>The bootstrap cycle</b> <span class="pill">settled — D15</span> — the loader
+            transforms points <i>into</i> the destination frame, so the frame has to exist before
+            a load can run, but under the LDP the frame is derived from the layer's own
+            coordinates. Resolution: <code>maybeAdoptRegionDefaultsFromLaz</code> keeps its single
+            <code>probeHeader</code> call and becomes "derive the LDP from the first layer's
+            header." That call is why <code>cwLazLoader::probeHeader</code> survives §10 — do not
+            delete it while chasing the §10 cleanup.</li>
+        <li><b>Anchoring is load-completion-timed</b>, not insert-timed (a consequence of §10
+            part&nbsp;B: only a finished load has read the header). Per <b>D16</b> this needs no
+            new UI — the project stays local until the load lands or a fix station anchors it
+            first. What it does need: anything asserting on the frame right after an add must
+            wait for the load, since <code>addLazAndWait</code> returns with the layer still
+            <code>Loading</code> (see §10 B5).</li>
+        <li>Proto: reserve field 4 (<code>globalCoordinateSystem</code>) beside the already
+            reserved 5. Rewrite <code>test_cwCavingRegion_worldOrigin.cpp</code> /
+            <code>test_cwLazLayerAutoAdoptCS.cpp</code> against the new policy; the ~8 QML
+            tests that set <code>globalCoordinateSystem</code> and assert it sticks are
+            rewritten here, not in P4.</li>
+      </ul></td></tr>
   <tr><td><span class="pill phase">P3</span></td><td>Consumers</td>
       <td>Fix-station locals derive into the LDP; LAZ reprojection targets the LDP
       (horizontal-only + z unit scale, §5); convergence/declination consume the LDP inverse
       for lat/long. Progress UI on slow re-derives (D11).</td></tr>
-  <tr><td><span class="pill phase">P4</span></td><td>UI removal</td>
-      <td>Delete the project CS picker (#618); remove <code>Project</code> mode from the fix CS
-      picker (D8); read-only datum display in project info; <b>Recenter…</b> action (D7);
-      lat/long-only display coordinates (D9); delete convergence display (D3).</td></tr>
+  <tr><td><span class="pill phase">P4</span></td><td>UI removal <b>— shrunk by P2.2</b></td>
+      <td>Read-only datum display in project info; <b>Recenter…</b> action (D7);
+      remaining lat/long-only display coordinates (D9); delete convergence display (D3).
+      The project CS picker (#618) and the fix-picker <code>Project</code> mode (D8) already
+      left in P2.2.</td></tr>
   <tr><td><span class="pill phase">P5</span></td><td>Exports</td>
-      <td>Default export CS = derived UTM zone; export CS chooser; survex/Compass exporters
-      read the LDP instead of globalCS.</td></tr>
+      <td>Export CS chooser; Compass exporter CS handling. The default derived-UTM export CS
+      already landed in P2.1.</td></tr>
   <tr><td><span class="pill phase">P6</span></td><td>Cleanup</td>
       <td>R1 one-predicate cleanup on the (now smaller) consumer set
       (<a href="FIXSTATION_COORDINATE_SOURCE_OF_TRUTH.html#followups">FIXSTATION_COORDINATE_SOURCE_OF_TRUTH.html §13</a>,
@@ -395,9 +527,217 @@ lands green on both suites before the next.</p>
       <code>cwGridConvergence</code> display path and its :133 bug; docs.</td></tr>
 </table>
 
-<h2 id="open">10. Open questions</h2>
+<h2 id="cache">10. Cache ownership refactor (decided 2026-08-03, sequenced before P2.2, part B revised 2026-08-03)</h2>
+
+<p><code>cwLocalProjectionManager</code> carries three kinds of member state. Only one of them
+belongs there:</p>
+
+<table>
+  <tr><th>State</th><th>What it is</th><th>Verdict</th></tr>
+  <tr><td><code>m_anchorSeen</code> / <code>m_lastAnchor</code> / <code>m_sawAnyInput</code></td>
+      <td>Witness bookkeeping — "not loaded yet" vs. "deleted" is not derivable from current
+      inputs.</td>
+      <td><b>Keep.</b> Irreducible session state; the only data the manager should own.</td></tr>
+  <tr><td><code>m_transform</code> + <code>m_transformSourceCS</code> + <code>m_transformLocalCS</code></td>
+      <td>Single-slot cache of a built PROJ transform (~7.7&nbsp;ms per build, keystroke path).</td>
+      <td><b>Move down</b> into <code>cwCoordinateTransform</code> as a memoized static —
+      part&nbsp;A below. That class already memoizes <code>isValidCS</code> and
+      <code>isGeographic</code> in capped thread-local caches; construction — the most expensive
+      PROJ call of all — is the inconsistency. Other data sources will use
+      <code>cwCoordinateTransform</code> too, so the memo pays for every future caller, and the
+      keyed cache kills the single-slot thrash in the anchor-deleted <code>any_of</code> walk
+      for free.</td></tr>
+  <tr><td><code>m_layerProbes</code> + <code>probe()</code></td>
+      <td>Cache of <code>cwLazLoader::probeHeader()</code> results, keyed by layer id.</td>
+      <td><b>Delete</b> — part&nbsp;B below. The loader already reads every one of these facts
+      while decoding; the layer keeps them from the load and the probe cache goes away entirely,
+      taking the id-keying, the pruning pass, the "never remember a pointer" discipline, and a
+      live staleness bug (see the callout) with it.</td></tr>
+</table>
+
+<div class="callout bad">
+  <div class="title">Live bug fixed by part B: probe() caches a derived value</div>
+  <code>cwLocalProjectionManager.cpp:166</code> writes the user's <code>sourceCSOverride</code>
+  <i>into</i> the cached entry, overwriting the header's own reading. Set an override, then
+  <b>clear</b> it: <code>sourcePath</code> is unchanged so the header is not re-probed, the
+  override branch no longer fires, and the cache returns the old override as if it were the
+  file's own CS — permanently, until the path changes. Part&nbsp;B's revised design removes the
+  bug rather than patching it: the resolved CS comes from the load, which recomputes it from the
+  override every time it runs, so there is no stored derived value anywhere to go stale.
+</div>
+
+<p>End state: the manager keeps <code>m_region</code> plus the three witness fields — nothing
+<code>mutable</code>, no caches, pure policy. Part&nbsp;A moves a cache down to the class that
+should own it; part&nbsp;B deletes a cache outright because the data was never missing, only
+unpublished. They are independent; land them as <b>two separate commits</b>, each green on the
+tagged tests before the next. (Note: <code>cwGridConvergence</code> also builds an uncached
+transform per keystroke at <code>cwGridConvergence.cpp:186</code>; do <b>not</b> port it to
+part&nbsp;A — the whole display path is deleted in P6.)</p>
+
+<h3>Part A — <code>cwCoordinateTransform::transformPoint</code> (memoized static)</h3>
+
+<p><b>A1. API</b> — in <code>cwCoordinateTransform.h</code>, next to the other statics
+(<code>isValidCS</code>/<code>isGeographic</code>). Add <code>#include &lt;optional&gt;</code>
+to the header's Qt/std include block.</p>
+
+<pre><code>/**
+ * Transform a point between two systems, memoizing the built transforms
+ * per thread (same pattern and cap as isValidCS). Empty when either CS is
+ * empty, the systems can't be related, or the result's x/y isn't finite —
+ * an unanswerable question must not read as an answer. z passes through
+ * untouched by the finiteness check.
+ */
+static std::optional&lt;cwGeoPoint&gt; transformPoint(const QString&amp; sourceCS,
+                                                const QString&amp; destCS,
+                                                const cwGeoPoint&amp; point);</code></pre>
+
+<p><b>A2. Implementation</b> — in <code>cwCoordinateTransform.cpp</code>, near
+<code>isValidCS</code>. Constraints that matter:</p>
 <ul>
-  <li><b>R's exact value</b> — 50 km proposed. Cheap to change; pick during P2.</li>
+  <li><b>The memo must be <code>thread_local std::map&lt;std::pair&lt;QString, QString&gt;,
+      cwCoordinateTransform&gt;</code>, not <code>QHash</code>.</b>
+      <code>cwCoordinateTransform</code> is move-only with no default constructor
+      (<code>cwCoordinateTransform.h:42</code>), which <code>QHash</code> can't hold;
+      <code>std::map::try_emplace(key, src, dst)</code> constructs the value in place.
+      <code>QString</code> already has <code>operator&lt;</code>. Thread-local also honors the
+      class's "one transform, one thread" contract.</li>
+  <li>Trim both CS strings first; if either is empty, return <code>std::nullopt</code> without
+      touching the memo.</li>
+  <li>Reuse the existing <code>kCsCacheLimit</code> (anonymous namespace, same file): when
+      <code>map.size() >= kCsCacheLimit</code>, <code>clear()</code> before inserting. Nothing
+      escapes the memo (the point is returned by value), so a full clear is safe.</li>
+  <li><b>Invalid transforms are cached too</b> — negative caching. A pair that fails to build
+      must not re-pay the build cost on every keystroke. A memo hit whose
+      <code>isValid()</code> is false returns <code>std::nullopt</code>.</li>
+  <li>After transforming, return <code>std::nullopt</code> unless <code>std::isfinite</code>
+      holds for <code>x</code> and <code>y</code> (only those two — matches the behavior being
+      replaced).</li>
+</ul>
+
+<p><b>A3. Caller rewrite</b> — <code>cwLocalProjectionManager::distanceFromOrigin</code>
+collapses to:</p>
+
+<pre><code>std::optional&lt;double&gt; cwLocalProjectionManager::distanceFromOrigin(const Input&amp; input) const
+{
+    const QString localCS = m_region-&gt;geoReference()-&gt;localCoordinateSystem();
+    if (localCS.isEmpty()) {
+        return std::nullopt;
+    }
+    const auto local = cwCoordinateTransform::transformPoint(
+        input.coordinateSystem, localCS, input.point);
+    if (!local.has_value()) {
+        return std::nullopt;
+    }
+    // x_0 = y_0 = 0, so a point's distance from the frame's origin is just its
+    // magnitude once it is in the frame.
+    return std::hypot(local-&gt;x, local-&gt;y);
+}</code></pre>
+
+<p><b>A4. Deletions</b> — from <code>cwLocalProjectionManager.h</code>: the three members
+<code>m_transform</code> / <code>m_transformSourceCS</code> / <code>m_transformLocalCS</code>
+with their doc comment, and the <code>#include "cwCoordinateTransform.h"</code> (the .cpp
+already includes it and keeps it).</p>
+
+<p><b>A5. Tests</b> — new cases in <code>test_cwCoordinateTransform.cpp</code> under the
+existing <code>[cwCoordinateTransform]</code> tag: a known UTM→WGS84 point round-trips through
+<code>transformPoint</code>; empty source or dest → <code>nullopt</code>; garbage CS →
+<code>nullopt</code> (call twice — the second call exercises the negative-cache path);
+identical src/dst returns the point unchanged (identity short-circuit). The existing
+<code>[cwLocalProjectionManager]</code> cases must stay green untouched — behavior is
+unchanged by design.</p>
+
+<h3>Part B — the header's facts ride the load <span class="pill">revised 2026-08-03</span></h3>
+
+<div class="callout bad">
+  <div class="title">Supersedes the probe-cache design</div>
+  Part&nbsp;B was originally specified as a lazily probed, fingerprint-keyed
+  <code>cwLazLoader::ProbeResult</code> cached on <code>cwLazLayer</code>. That was still a
+  cache of something the loader already knows. <code>cwLazLoadResult::sourceCS</code> is
+  already the resolved CS (override&nbsp;&gt;&nbsp;embedded&nbsp;&gt;&nbsp;"",
+  <code>cwLazLoader.cpp:275</code>) — byte-for-byte what the probe recomputed. The only fact
+  the load did <i>not</i> carry was the bounding box in the file's own CRS, because
+  <code>bboxMin</code>/<code>bboxMax</code> are written after <code>transformInPlace</code>
+  into the region frame and narrowed to <code>float</code>. So the fix is to widen the load's
+  result, not to cache a second read of the same header.
+</div>
+
+<p><b>B1. <code>cwLazLoadResult</code> carries the source-CRS bbox.</b> Two
+<code>cwGeoPoint</code>s, <code>sourceBboxMin</code> / <code>sourceBboxMax</code>, filled from
+<code>headerReader-&gt;header.min_x</code>&hellip;<code>max_z</code> during the header pass the
+load already performs (<code>cwLazLoader.cpp:263–278</code>). Doubles, untransformed. Free —
+the header is open at that point either way.</p>
+
+<p><b>B2. <code>cwLazLayer</code> stores them from <code>applyResult</code></b> as
+<code>m_sourceBboxMin</code>/<code>m_sourceBboxMax</code>, exposed as
+<code>sourceBboxMin()</code>/<code>sourceBboxMax()</code>/<code>sourceBboxCenter()</code>. No
+<code>mutable</code>, no lazy probe, no fingerprint key, no invalidation rule — the value is
+written by the one event that can change it.</p>
+
+<p><b>B3. The manager gates on a finished load.</b> A layer is an anchor candidate only when
+<code>loadStatus() == Loaded</code> and its <code>sourceCS()</code> is valid; the point is
+<code>sourceBboxCenter()</code>. <code>cwLocalProjectionManager</code> also connects
+<code>loadStatusChanged</code> — <code>sourceCSChanged</code> alone misses a reload that
+resolves to the same CS it had before.</p>
+
+<table>
+  <tr><th>Layer state</th><th>Feeds the LDP?</th><th>Why that's right</th></tr>
+  <tr><td>Enabled, loaded</td><td>Yes</td><td>Its header has actually been read.</td></tr>
+  <tr><td>Disabled</td><td>No</td><td>A disabled cloud isn't consulted for anything else
+      either. <code>setEnabled(false)</code> drops geometry and returns the layer to
+      <code>Idle</code>.</td></tr>
+  <tr><td>Loading / Error / never loaded</td><td>No</td><td>Nothing has read the file, so
+      nothing should invent a position for it.</td></tr>
+</table>
+
+<div class="callout">
+  <div class="title">This composes with the witness invariant rather than fighting it</div>
+  A disabled or not-yet-loaded layer is <i>absent</i>, and absence is not a witnessed deletion
+  — <code>m_anchorSeen</code> stays false, so a frame restored from disk is left exactly as
+  stored. Opening a project whose anchor layer is disabled therefore preserves the stored
+  frame instead of clearing it. The staleness bug the old design had to fix is <b>dissolved</b>:
+  with nothing derived being stored, there is nothing to go stale.
+</div>
+
+<p><b>B4. Deletions.</b> From <code>cwLocalProjectionManager</code>: the <code>LayerProbe</code>
+struct, <code>m_layerProbes</code>, <code>probe()</code>, the probe-pruning tail of
+<code>syncLayerConnections()</code>, and the <code>QHash</code>/<code>QSet</code>/
+<code>QUuid</code>/<code>&lt;iterator&gt;</code> includes those needed. From
+<code>cwLazLayer</code>: <code>headerProbe()</code>, <code>effectiveSourceCS()</code>, and the
+four probe-cache members. <code>cwLazLoader::probeHeader</code> itself <b>stays</b> — see the
+P2.2 note below, it still has one caller that cannot be removed here.</p>
+
+<p><b>B5. Tests</b> — <code>testcases/test_cwLazLayerSourceBbox.cpp</code>, tag
+<code>[cwLazSourceBbox]</code>: a load reports the bbox in the file's own CRS (doubles, not the
+reprojected floats); a never-loaded layer reports nothing; a region with no fix stations and one
+LAZ layer ends up <code>Anchored</code> on a <code>LazLayer</code> anchor. The last one must
+<code>waitForLazLayerLoaded</code> after <code>addLazAndWait</code> — the frame now follows the
+load, not the insert.</p>
+
+<div class="callout bad">
+  <div class="title">Fixture bug found on the way, fixed in testlib</div>
+  <code>writeSyntheticLazFile</code>/<code>writeAttributedLazFile</code> left the LAS header
+  offsets at 0 with a 0.001 scale, so every coordinate is quantized into an int32 count of
+  millimeters from zero. Anything past ~2.1e6 wraps silently: a UTM northing of 4&nbsp;194&nbsp;010
+  reads back as &minus;100&nbsp;957.296, with no error from LASlib. Every existing fixture used
+  coordinates near the origin, so nothing had ever hit it. Both writers now center the header
+  offsets on the point set (<code>centerHeaderOffsets</code>); decoded coordinates are unchanged
+  for data that already fit, so no existing test's values move. <b>Any new LAZ fixture using
+  real-world coordinates depended on this.</b>
+</div>
+
+<h3>Verification (each part separately)</h3>
+<pre><code>cmake --build build/Qt_6_11_1_for_macOS-Debug --target cavewhere-test
+./build/Qt_6_11_1_for_macOS-Debug/cavewhere-test \
+    "[cwCoordinateTransform],[cwLocalProjectionManager],[cwLazAutoAdoptCS],[cwLazSourceBbox],[cwLazLayer],[cwLazLoader],[cwFixStationValidator]" \
+    -d yes 2>&amp;1 | tee /tmp/cw-cache-refactor.log</code></pre>
+<p class="dim">Under ASAN prefix with <code>ASAN_OPTIONS=detect_container_overflow=0</code>.
+Run the full C++ suite once after both parts land; QML suite unaffected but run it before any
+push.</p>
+
+<h2 id="open">11. Open questions</h2>
+<ul>
+  <li><s><b>R's exact value</b> — 50 km proposed. Cheap to change; pick during P2.</s>
+      Settled in P2: 50 km, as <code>cwLocalProjectionManager::kAnchorThresholdMeters</code>.</li>
   <li><b>Recenter's derivation point</b> — oldest input vs. median of all inputs vs. user-picked. Lean: median of readable fixes + cloud centers (robust, no dialog); decide in P4.</li>
   <li><b>Anchor identity encoding</b> — <span class="pill">settled in P1</span> kind + UUID. <code>cwFixStation</code> and <code>cwLazLayer</code> both already persist one, so nothing new has to be minted and a rename can't break the reference.</li>
   <li><b>PROJ grid shipping</b> — proj.db ships already; decide whether to bundle a minimal geoid/datum grid set (cm-level shifts, N₀ recording) or accept meter-level fallback. Not blocking; affects §5's optional N₀ only.</li>

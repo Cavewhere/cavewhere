@@ -105,6 +105,15 @@ public:
     QString sourceCSOverride() const { return m_sourceCSOverride; }
     void setSourceCSOverride(const QString& cs);
 
+    /// The last load's bounding box in the file's own CRS — the raw header
+    /// numbers, before the reprojection into the region's frame that bboxMin
+    /// and bboxMax carry. Empty until a load has finished; a layer that has
+    /// never loaded has no position to report, and nothing should invent one
+    /// for it. Deriving a coordinate frame from this cloud needs these.
+    cwGeoPoint sourceBboxMin() const { return m_sourceBboxMin; }
+    cwGeoPoint sourceBboxMax() const { return m_sourceBboxMax; }
+    cwGeoPoint sourceBboxCenter() const;
+
     LoadStatus loadStatus() const { return m_loadStatus; }
     QString errorMessage() const { return m_errorMessage; }
     qint64 pointCount() const { return m_geometry.vertexCount(); }
@@ -168,6 +177,8 @@ private:
     QString m_errorMessage;
     QVector3D m_bboxMin;
     QVector3D m_bboxMax;
+    cwGeoPoint m_sourceBboxMin;
+    cwGeoPoint m_sourceBboxMax;
     float m_meanSpacingXY = 0.0f;
     QUuid m_id;
 

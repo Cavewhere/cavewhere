@@ -31,7 +31,7 @@
  *   - it is analytic and invertible from the string alone, so any point
  *     round-trips to latitude/longitude exactly.
  *
- * <b>The result is stored, never recomputed.</b> Two machines with different
+ * The result is stored, never recomputed. Two machines with different
  * PROJ data must not disagree about where the project is, and re-deriving at
  * load would make the frame a live function of the data rather than a value
  * that changes only on the events that are allowed to move it. The lifecycle
@@ -66,7 +66,7 @@ public:
      * to derive() — the datum is the anchor's, so nothing is converted between
      * datums here.
      *
-     * <b>\a anchorPoint is always x-first</b>: x is the easting or the
+     * \a anchorPoint is always x-first: x is the easting or the
      * longitude and y the northing or the latitude, whatever axis order the CRS
      * itself declares. This is the convention cwCoordinateTransform hands its
      * callers, and the one every cwGeoPoint in the codebase is in — but a

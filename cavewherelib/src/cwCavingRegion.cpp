@@ -11,6 +11,7 @@
 #include "cwDebug.h"
 #include "cwFixStationValidator.h"
 #include "cwLazLayerModel.h"
+#include "cwLocalProjectionManager.h"
 #include "cwProject.h"
 #include "cwData.h"
 #include "cwNameUtils.h"
@@ -23,7 +24,8 @@ cwCavingRegion::cwCavingRegion(QObject *parent) :
     QAbstractListModel(parent),
     m_geoReference(new cwGeoReference(this)),
     m_lazLayers(new cwLazLayerModel(this)),
-    m_fixStationValidator(new cwFixStationValidator(this))
+    m_fixStationValidator(new cwFixStationValidator(this)),
+    m_localProjectionManager(new cwLocalProjectionManager(this))
 {
     // geoReference owns the CS + worldOrigin; the region only mirrors each change
     // into the LAZ layer model (it owns lazLayers). Consumers that react to CS /
@@ -316,10 +318,13 @@ void cwCavingRegion::setData(const cwCavingRegionData &data)
     if (data.worldOrigin != cwGeoPoint{}) {
         m_geoReference->setWorldOrigin(data.worldOrigin);
     }
-    m_geoReference->restore(data.geoReference.state,
-                            data.geoReference.localCoordinateSystem,
-                            data.geoReference.anchor,
-                            data.geoReference.verticalDatum);
+
+    // A load must not derive the local projection: it is stored precisely so
+    // that opening a project can't move it, and the caves arriving is an event
+    // cwLocalProjectionManager reacts to. Quiescing the manager until the
+    // stored frame is restored keeps it from building a frame that restore()
+    // would overwrite moments later.
+    m_localProjectionManager->setLoading(true);
 
     clearCaves();
 
@@ -331,6 +336,12 @@ void cwCavingRegion::setData(const cwCavingRegionData &data)
         newCaves.append(newCave);
     }
     addCaves(newCaves);
+
+    m_geoReference->restore(data.geoReference.state,
+                            data.geoReference.localCoordinateSystem,
+                            data.geoReference.anchor,
+                            data.geoReference.verticalDatum);
+    m_localProjectionManager->setLoading(false);
 }
 
 cwCavingRegionData cwCavingRegion::data() const
