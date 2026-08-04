@@ -63,13 +63,15 @@ public:
 
         Trigger trigger = Trigger::ExternalScope;
 
-        //! The floating survey's station names, sorted — all of them, since a
-        //! survey floats as a unit and no station of it floats on its own.
+        //! The floating survey's station names, in natural order ("a2" before
+        //! "a10") whichever pass produced them — all of them, since a survey
+        //! floats as a unit and no station of it floats on its own.
         //! Cave-local and canonical (the same spelling cwStationPositionLookup
         //! and cwTrip::solvedStations use), so a caller can look each one up
-        //! without re-deriving a scope. An attachment cavern dropped is named
-        //! by the scan's per-file harvest rather than by the solve, re-scoped
-        //! so it reads the same as every other record.
+        //! without re-deriving a scope. An attachment's names come from
+        //! cwTrip::knownStationNames — the solve and the scan's per-file
+        //! harvest together, re-scoped so the record reads like every other —
+        //! so this agrees with what cwTieSuggestionModel offers ties between.
         //!
         //! Empty means the survey's stations could not be learned at all —
         //! cavern dropped it as hanging and the scan-time harvest of its file

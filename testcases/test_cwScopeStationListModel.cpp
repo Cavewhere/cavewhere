@@ -10,6 +10,7 @@
 //Our includes
 #include "cwScopeStationListModel.h"
 #include "cwCave.h"
+#include "cwExternalCenterline.h"
 #include "cwTrip.h"
 #include "cwStation.h"
 #include "cwShot.h"
@@ -297,6 +298,46 @@ TEST_CASE("A foreign cave's solve leaves the model alone", "[Model][ScopeStation
     second.setStationPositionLookup(elsewhere);
 
     CHECK(resetSpy.count() == 0);
+}
+
+TEST_CASE("A station the solve never placed is still a row", "[Model][ScopeStations]")
+{
+    // The follow-up this model was blind to: an attachment cavern dropped has
+    // no solved station at all, so a model reading only the solve listed
+    // nothing — a dozen lines from a banner naming those very stations. A
+    // person referencing one from a note needs the name then, not after the
+    // tie-in that places it.
+    cwCave cave;
+    cwTrip* trip = new cwTrip();
+    trip->setName(QStringLiteral("Topo 1"));
+    cave.addTrip(trip);
+    trip->setExternalCenterline(cwExternalCenterline(QStringLiteral("/tmp/cave.svx")));
+
+    cwScopeStationListModel model;
+    model.setTrip(trip);
+    REQUIRE(model.rowCount() == 0);
+
+    QSignalSpy resetSpy(&model, &QAbstractItemModel::modelReset);
+    trip->setExternalStations({ QStringLiteral("h1"), QStringLiteral("h2") });
+
+    CHECK(resetSpy.count() == 1);
+    CHECK(roleValues(model, cwScopeStationListModel::StationNameRole)
+          == QStringList({ QStringLiteral("h1"), QStringLiteral("h2") }));
+
+    // Undefined, not the origin — a known station that is nowhere yet must not
+    // read as one placed at 0,0,0.
+    CHECK_FALSE(model.data(model.index(0, 0),
+                           cwScopeStationListModel::PositionRole).isValid());
+
+    // And the solve placing one fills that row's position in without adding a
+    // second row for the same station.
+    cwStationPositionLookup lookup;
+    lookup.setPosition(QStringLiteral("topo_1.h1"), QVector3D(1, 2, 3));
+    cave.setStationPositionLookup(lookup);
+
+    CHECK(model.rowCount() == 2);
+    CHECK(model.data(model.index(0, 0), cwScopeStationListModel::PositionRole)
+          .value<QVector3D>() == QVector3D(1, 2, 3));
 }
 
 TEST_CASE("A cave pulses solvedStationsChanged only on the trips it lists",

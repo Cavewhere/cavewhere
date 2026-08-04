@@ -16,6 +16,9 @@
 #include <QVector3D>
 #include <QtQml/qqmlregistration.h>
 
+//Std includes
+#include <optional>
+
 //Our includes
 #include "cwGlobals.h"
 #include "cwStationHandle.h"
@@ -23,21 +26,26 @@
 class cwTrip;
 
 /**
- * Read-only list model exposing a trip's post-solve stations by their
- * scope-relative name, for autocomplete / reference entry at the note,
- * scrap, and LiDAR sites.
+ * Read-only list model exposing a trip's stations by their scope-relative
+ * name, for autocomplete / reference entry at the note, scrap, and LiDAR
+ * sites.
  *
- * Set trip and the model lists that trip's solved stations, one row each:
- * the name is the scope-relative tail cwTrip::solvedStations() yields, and
- * the handle is the identity cwTrip::stationHandle() gives that tail — what
- * an equate stores and the only thing a picker should hand on. The model
- * never composes a qualified name; that is the exporter's job.
+ * Set trip and the model lists that trip's stations, one row each: the name is
+ * the scope-relative tail cwTrip::knownStations() yields, and the handle is the
+ * identity cwTrip::stationHandle() gives that tail — what an equate stores and
+ * the only thing a picker should hand on. The model never composes a qualified
+ * name; that is the exporter's job.
+ *
+ * Rows cover every station the trip is known to have, not only the placed ones:
+ * a dropped attachment's stations are named by the scan's harvest long before
+ * anything solves them, and a person referencing one from a note needs the name
+ * then, not after the tie-in that placed it.
  *
  * A caller supplies only the trip; the model subscribes itself to that trip's
- * solvedStationsChanged and re-pulls on it (a full modelReset, no incremental
- * diff). Rows are sorted in natural order by station name (trailing station
- * numbers ascend numerically, so "a2" precedes "a10") so consumers stay
- * deterministic.
+ * knownStationsChanged and re-pulls on it (a full modelReset, no incremental
+ * diff). Rows come out in the natural order knownStations() sorts them in
+ * (trailing station numbers ascend numerically, so "a2" precedes "a10") so
+ * consumers stay deterministic.
  */
 class CAVEWHERE_LIB_EXPORT cwScopeStationListModel : public QAbstractListModel
 {
@@ -50,7 +58,7 @@ public:
     enum Roles {
         StationNameRole = Qt::UserRole + 1, //scope-relative name, the handle's tail
         StationHandleRole,                  //cwStationHandle, the station's identity
-        PositionRole                        //solved QVector3D
+        PositionRole                        //solved QVector3D, undefined when unplaced
     };
     Q_ENUM(Roles)
 
@@ -80,7 +88,7 @@ signals:
 private:
     struct Row {
         cwStationHandle handle;
-        QVector3D position;
+        std::optional<QVector3D> position;
     };
 
     void rebuildRows();

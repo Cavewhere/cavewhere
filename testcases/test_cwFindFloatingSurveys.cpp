@@ -20,7 +20,9 @@
 
 // Cavewhere
 #include "cwCave.h"
+#include "cwCaveData.h"
 #include "cwCavingRegion.h"
+#include "cwCavingRegionData.h"
 #include "cwEquate.h"
 #include "cwEquateModel.h"
 #include "cwFindFloatingSurveys.h"
@@ -166,6 +168,48 @@ TEST_CASE("An attached centerline cavern dropped as hanging floats with the name
     CHECK(result.stations == QStringList({scope + QStringLiteral("hanging.h1"),
                                           scope + QStringLiteral("hanging.h2"),
                                           scope + QStringLiteral("hanging.h3")}));
+}
+
+TEST_CASE("A floating attachment is named by the harvest and the solve together",
+          "[FloatingSurveys]")
+{
+    // Issue #651's shape, built directly rather than through cavern: netskel
+    // fixes one station per run and articulate() drops every component that one
+    // cannot reach, so the harvest of a multi-part attachment learns only the
+    // part it fixed — while the region solve, tied in a component at a time,
+    // placed parts the harvest never saw. Preferring either source alone lists
+    // strictly fewer stations than the trip has, and the panel showed both
+    // answers at once: the station list from this pass, the tie suggestions
+    // from cwTieSuggestionModel.
+    cwCavingRegionData region;
+
+    cwCaveData cave;
+    cave.name = QStringLiteral("Alpha");
+    cave.id = QUuid::createUuid();
+
+    cwTripData attached;
+    attached.name = QStringLiteral("Topo 1");
+    attached.id = QUuid::createUuid();
+    attached.externalCenterline = cwExternalCenterline(QStringLiteral("/tmp/two_parts.svx"));
+    attached.externalStations = {QStringLiteral("a1")}; //all the harvest reached
+    cave.trips.append(attached);
+
+    region.caves.append(cave);
+
+    // The cave solved a station of its own, so it anchors; the attachment's own
+    // scope solved a second part the harvest never named.
+    cwSurveyNetwork network;
+    network.addShot(QStringLiteral("alpha.a1"), QStringLiteral("alpha.a2"));
+    network.addShot(QStringLiteral("alpha.topo_1.b1"), QStringLiteral("alpha.topo_1.b2"));
+
+    const QList<Result> floating =
+        cwFindFloatingSurveys::fromExternalScopes(region, network, cwScopeLabels(region));
+
+    REQUIRE(floating.size() == 1);
+    CHECK(floating.first().tripId == attached.id);
+    CHECK(floating.first().stations == QStringList({QStringLiteral("topo_1.a1"),
+                                                    QStringLiteral("topo_1.b1"),
+                                                    QStringLiteral("topo_1.b2")}));
 }
 
 TEST_CASE("An equate that ties an attached centerline in stops it floating",

@@ -10,6 +10,7 @@
 #include "cwCaveData.h"
 #include "cwCavingRegionData.h"
 #include "cwEquate.h"
+#include "cwNameUtils.h"
 #include "cwScopeLabels.h"
 #include "cwStation.h"
 #include "cwStationHandle.h"
@@ -18,6 +19,9 @@
 
 #include <QHash>
 #include <QSet>
+
+//Std includes
+#include <algorithm>
 
 namespace {
 
@@ -179,21 +183,23 @@ public:
             }
             const QString caveLocalName = cwCavernNaming::removeScopeHead(station);
             const auto tripsIt = tripsByCave.constFind(*caveIt);
-            const ScopeKey scope =
-                tripsIt->value(cwCavernNaming::scopeHeadOf(caveLocalName), *caveIt);
-            m_stations[scope].append(caveLocalName);
+            const auto tripIt = tripsIt->constFind(cwCavernNaming::scopeHeadOf(caveLocalName));
+            if (tripIt == tripsIt->constEnd()) {
+                m_stations[*caveIt].append(caveLocalName);
+            } else {
+                //Scope-local, not cave-local: the trip's own "*begin" head comes
+                //off, so every scope's list speaks the namespace that scope
+                //opened and cwTrip::knownStationNames can merge it with names
+                //that never went through cavern at all.
+                m_stations[*tripIt].append(cwCavernNaming::removeScopeHead(caveLocalName));
+            }
         }
     }
 
     bool solvedAnything(const ScopeKey& scope) const { return m_stations.contains(scope); }
 
-    //! Sorted, because the network hands its stations back in hash order.
-    QStringList stations(const ScopeKey& scope) const
-    {
-        QStringList names = m_stations.value(scope);
-        names.sort();
-        return names;
-    }
+    //! The scope's own stations, in the namespace that scope opened.
+    QStringList stations(const ScopeKey& scope) const { return m_stations.value(scope); }
 
 private:
     QHash<ScopeKey, QStringList> m_stations;
@@ -218,19 +224,29 @@ ScopeKey anchorScopeOf(const cwCaveData& cave, const SolvedScopes& solved)
     return QUuid();
 }
 
-//! An attachment's harvested names, as the record spells everything else.
+//! Every station the trip is known to have, as the record spells everything
+//! else — cave-local.
 //!
-//! The harvest reads the file on its own, so its names carry only the naming
-//! levels the file itself opens — the trip's own scope, the one the exporter
-//! wraps around the same "*include", has to go back on.
-QStringList caveLocalHarvestOf(const cwTripData& trip, const QHash<QUuid, QString>& tripLabels)
+//! cwTrip::knownStationNames owns which sources answer that; both of the ones
+//! that reach here speak the trip's own namespace, so the trip's scope — the
+//! one the exporter wraps around the same "*include" — goes back on.
+//!
+//! Canonicalized, because Result::stations promises a spelling a caller can
+//! look up. The accessor keeps the authored spelling instead, which is right for
+//! the surfaces that show a station to a person but not for a record; the
+//! difference is invisible today only because an external scope has no chunks to
+//! author one.
+QStringList caveLocalStationsOf(const cwTripData& trip,
+                                const QHash<QUuid, QString>& tripLabels,
+                                const QStringList& scopeLocalSolved)
 {
     const QString prefix = cwStation::canonicalKey(cwTrip::scopePrefix(trip, tripLabels));
+    const QStringList names = cwTrip::knownStationNames(trip, scopeLocalSolved);
 
     QStringList stations;
-    stations.reserve(trip.externalStations.size());
-    for (const QString& station : trip.externalStations) {
-        stations.append(prefix + station);
+    stations.reserve(names.size());
+    for (const QString& station : names) {
+        stations.append(prefix + cwStation::canonicalKey(station));
     }
     return stations;
 }
@@ -263,13 +279,15 @@ void appendFloatingSurveysOf(const cwCaveData& cave,
         result.caveId = cave.id;
         result.tripId = trip.id;
         result.trigger = Result::Trigger::ExternalScope;
-        //The solve has no names to give for exactly the attachments this pass
-        //exists to report — cavern drops a survey nothing fixes, so it emits no
-        //station of it at all. The scan's per-file harvest read them straight
-        //out of the attachment, already canonical and sorted.
-        result.stations = solved.solvedAnything(trip.id)
-                ? solved.stations(trip.id)
-                : caveLocalHarvestOf(trip, labels.tripLabels(cave.id));
+        //Both sources, because for these attachments neither alone is complete:
+        //cavern drops a survey nothing fixes, so the solve has no name at all
+        //for the plain case this pass reports — while a multi-component
+        //attachment loses components in the harvest (issue #651) that the solve
+        //did place. The scan's per-file harvest read its names straight out of
+        //the attachment.
+        result.stations = caveLocalStationsOf(trip,
+                                              labels.tripLabels(cave.id),
+                                              solved.stations(trip.id));
         results.append(result);
     }
 }
@@ -315,7 +333,14 @@ QList<cwFindFloatingSurveys::Result> cwFindFloatingSurveys::fromUnconnectedChunk
         result.tripId = cave.trips.at(tripIndex).id;
         result.trigger = Result::Trigger::UnconnectedChunks;
         result.stations = stationsByTripIndex.at(tripIndex);
-        result.stations.sort();
+
+        //Natural, not lexicographic: the external-scope pass orders its names
+        //through cwTrip::knownStationNames, and both passes render into the same
+        //banner, so "a2" must precede "a10" whichever one produced the row.
+        //Stable for the reason cwTrip's merge is: two spellings can compare
+        //equivalent without being equal ("a01" and "a1" share a natural order).
+        std::stable_sort(result.stations.begin(), result.stations.end(),
+                         cwNameUtils::naturalLess);
         results.append(result);
     }
     return results;

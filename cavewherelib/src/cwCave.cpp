@@ -308,6 +308,11 @@ void cwCave::connectTrip(cwTrip* trip)
     //this cave is the only object that can say when the answer moved.
     connect(this, &cwCave::stationPositionPositionChanged,
             trip, &cwTrip::solvedStationsChanged, Qt::UniqueConnection);
+
+    //A harvest is one trip's news, but knownStations() is read across the cave,
+    //so this cave is the only object that can say some trip in it learned names.
+    connect(trip, &cwTrip::externalStationsChanged,
+            this, &cwCave::tripExternalStationsChanged, Qt::UniqueConnection);
 }
 
 void cwCave::disconnectTrip(cwTrip* trip)
@@ -322,6 +327,8 @@ void cwCave::disconnectTrip(cwTrip* trip)
                trip, &cwTrip::scopeChanged);
     disconnect(this, &cwCave::stationPositionPositionChanged,
                trip, &cwTrip::solvedStationsChanged);
+    disconnect(trip, &cwTrip::externalStationsChanged,
+               this, &cwCave::tripExternalStationsChanged);
 }
 
 cwCavingRegion *cwCave::parentRegion() const

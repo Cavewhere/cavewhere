@@ -428,6 +428,15 @@ station list gains a fallback:
                   : caveLocalHarvestOf(trip, labels.tripLabels(cave.id));</code></pre>
 
 <div class="note">
+<strong>Superseded by H4.</strong> The fallback above is now a union, and the choice of sources
+is no longer made here: <code>caveLocalStationsOf</code> calls
+<code>cwTrip::knownStationNames(trip, solved.stations(trip.id))</code> and puts the trip's scope
+on the result. <code>SolvedScopes::stations()</code> changed with it — it now hands back
+<em>scope</em>-local names (a trip scope's own "*begin" head comes off), so both sources reaching
+the merge speak one namespace.
+</div>
+
+<div class="note">
 <strong>Settled in H3:</strong> the harvested names cannot be dropped in raw. A record's
 stations are <em>cave-local</em> — <code>SolvedScopes</code> strips only the cave head, so a
 solved attachment reads <code>"&lt;tripLabel&gt;.&lt;fileBegin&gt;.&lt;tail&gt;"</code> —
@@ -479,7 +488,9 @@ class of bug the H3 note exists to prevent. Blast radius: <code>cwFindFloatingSu
       <code>solvedStations()</code> fallback for the window before the first scan applies. (The
       chunk branch is untouched — native trips never harvest.) This upgrades both sides: the
       floating trip's own list <em>and</em> attached candidate trips elsewhere in the
-      cave.</li>
+      cave. <em>Superseded by H4:</em> the whole function is now three lines over
+      <code>cwTrip::knownStations()</code>, which owns the policy and unions the sources rather
+      than choosing between them.</li>
   <li><code>setTripConnected()</code>: add <code>cwTrip::externalStationsChanged</code> to the
       <code>forEachSignal</code> list, so a harvest landing on the bound trip rebuilds rows
       immediately. Candidate trips' harvests arrive through the existing pulses: every scan
@@ -488,11 +499,15 @@ class of bug the H3 note exists to prevent. Blast radius: <code>cwFindFloatingSu
       candidate-only harvest that provokes no re-solve, add a cave-level relay then — not
       preemptively. <em>Review note:</em> the relay is still absent and the gap is still latent —
       no traced path changes a candidate trip's harvest without also requesting a solve — but that
-      invariant is spread across four call sites and nothing enforces it.</li>
+      invariant is spread across four call sites and nothing enforces it.
+      <em>Closed by H4:</em> the list is now <code>knownStationsChanged</code> (this trip's
+      stations, the cave's solve included) plus <code>cwCave::tripExternalStationsChanged</code>
+      (a <em>candidate</em> trip's harvest), so the latent gap is a wire rather than an
+      invariant.</li>
 </ul>
 
-<div class="callout bad">
-<div class="title">Follow-up phase H4 — one accessor owns "this trip's names"</div>
+<div class="callout" id="h4">
+<div class="title">Follow-up phase H4 — one accessor owns "this trip's names" — DONE</div>
 <p>
 <strong>The defect that forces it.</strong> This section prefers the <strong>harvest</strong> over
 the solve; §3.4 prefers the <strong>solve</strong> over the harvest. Both render into the same
@@ -522,6 +537,60 @@ once, and closing any one of them alone would put the policy in a third place:
 <p>
 Sequenced after the C7 scope-lens work, since that model is the third consumer and the accessor
 should land with all three converted rather than leaving a fourth reader of the raw fields.
+</p>
+
+<hr>
+
+<p>
+<strong>What landed.</strong> <code>cwTrip::knownStations()</code> — one entry per station, the
+scope-relative name plus a <code>std::optional&lt;QVector3D&gt;</code> position that is set only
+where the solve placed it. The policy is a <strong>union</strong>, not a precedence: chunks, the
+scan's harvest, and the solve all contribute, deduplicated by canonical key keeping the authored
+spelling, sorted in natural order. Preferring one source was the bug — each of the three knows
+names the others cannot, so any choice among them lists strictly fewer stations than the trip
+has. A static <code>knownStationNames(const cwTripData&amp;, const QStringList&amp;
+scopeLocalSolved)</code> overload does the same for the worker-side snapshot, which carries no
+cave lookup and so is handed the solved names it cannot derive.
+</p>
+<p>
+All three consumers converted: <code>cwTieSuggestionModel::localStations</code> (now three lines),
+<code>cwScopeStationListModel::rebuildRows</code> (which gained known-but-unplaced rows —
+<code>PositionRole</code> is <em>undefined</em> there, not the origin, closing the §6 item), and
+<code>cwFindFloatingSurveys::appendFloatingSurveysOf</code>.
+</p>
+<p>
+The signal came out one step differently from the sketch above. <code>cwTrip</code> gained
+<code>knownStationsChanged</code>, chained from its own <code>solvedStationsChanged</code> and
+<code>externalStationsChanged</code>. The cave-level relay is a new
+<code>cwCave::tripExternalStationsChanged</code> aggregate, chained <em>from</em> each trip's
+harvest but deliberately <strong>not</strong> back <em>into</em> each trip's
+<code>knownStationsChanged</code> the way <code>stationPositionPositionChanged</code> is: a trip's
+harvest is its own field, so it already pulses for itself, and relaying it back doubled every one
+of those pulses (caught by the first run of the new signal test). So a consumer that reads only
+its bound trip subscribes to one signal, and one that reads across the cave — the tie suggester —
+subscribes to two, which is honest, since it genuinely reads two scopes.
+</p>
+<p>
+Tests: <code>[cwTrip][knownStations]</code> pins the union, the authored-spelling rule, natural
+order, snapshot/live parity, and each pulse (including that a sibling's harvest reaches the
+aggregate exactly once and stops on removal from the cave).
+<code>[FloatingSurveys]</code> gains a direct <code>fromExternalScopes</code> case built from a
+hand-made snapshot — issue #651's shape without needing cavern to reproduce it.
+<code>[ScopeStations]</code> gains the known-but-unplaced row.
+<code>[TieSuggestionModel]</code> gains the candidate-trip harvest pulse, which nothing carried
+before.
+</p>
+<p>
+<strong>One gap H4 opened, left open on purpose (🟢).</strong> Chunks are the one source with no
+pulse of their own — nothing on <code>cwTrip</code> watches chunk stations, so a chunk edit
+reaches <code>knownStationsChanged</code> only through the solve that follows it. That was
+invisible while <code>cwScopeStationListModel</code> listed solved stations only, and it is
+visible now that it lists unplaced ones: a station typed into a cave that <em>will not solve</em>
+stays out of the list until one does. Wiring it means per-chunk
+<code>dataChanged</code>/<code>stationsAdded</code>/<code>stationsRemoved</code> connections
+managed across <code>insertChunk</code>/<code>removeChunks</code>, and <code>dataChanged</code>
+fires per keystroke — so a naive wire would reset the autocomplete model under the very cursor
+that is typing into it. Wants debouncing, and is worth its own commit if anyone hits it.
 </p>
 </div>
 
@@ -685,14 +754,14 @@ Both full suites before anything is called done — last full run at <code>26199
 0 failed, 82 skipped.</strong>
 </p>
 
-<div class="callout warn">
-<div class="title">Manual acceptance — STILL OUTSTANDING</div>
-Open <code>/Users/cave/Desktop/svx/Dusk Butte/Dusk Butte.cwproj</code> — both Nimbus banners must
-list their stations and offer <code>g2 ↔ g2</code> (Trip 3) and <code>d4 ↔ d4</code> (Trip 3); two
-clicks must tie the cave together and end both floats. Needs a real window, so no automated run
-can stand in for it, and nothing in H1–H3 records it as done. The QML test covers the
+<div class="callout">
+<div class="title">Manual acceptance — VERIFIED</div>
+<code>/Users/cave/Desktop/svx/Dusk Butte/Dusk Butte.cwproj</code> opens with both Nimbus banners
+listing their stations and offering <code>g2 ↔ g2</code> (Trip 3) and <code>d4 ↔ d4</code>
+(Trip 3), and two clicks tie the cave together and end both floats. Confirmed by hand on
+2026-08-03; it needs a real window, so no automated run stands in for it. The QML test covers the
 <em>shape</em> in miniature (an anchor attachment plus a second unfixed one) but not the
-native-trip-plus-two-attachments case this describes.
+native-trip-plus-two-attachments case this describes, so this gate stays manual.
 </div>
 
 <p class="dim">
@@ -788,7 +857,10 @@ region-level log would also satisfy — per-trip attribution is proven in C++, n
       too. Wants a known-but-unplaced row (no <code>PositionRole</code>) plus an
       <code>externalStationsChanged</code> subscription; a fifth consumer alongside §3.4–§3.7, and
       a natural fit with the C7 scope-lens work. Folded into follow-up phase H4 (§3.5), which is
-      where the accessor it should read lands. <em>Raised by the H1–H3 review.</em></li>
+      where the accessor it should read lands. <em>Raised by the H1–H3 review.</em>
+      <strong>DONE in H4</strong> — it reads <code>cwTrip::knownStations()</code> and subscribes to
+      <code>knownStationsChanged</code>; an unplaced row's <code>PositionRole</code> is undefined
+      rather than the origin.</li>
   <li><strong>One owner for the <code>*include</code> quote guard.</strong> The refusal now lives
       in two places — <code>cwExternalStationHarvest</code> and
       <code>cwSurvexExporterCaveTask::writeExternalInclude</code> — and the review had to widen

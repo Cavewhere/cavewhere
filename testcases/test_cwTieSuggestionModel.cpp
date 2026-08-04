@@ -194,6 +194,35 @@ TEST_CASE("A harvest landing on the bound trip rebuilds its suggestions",
     CHECK(matchAt(model, 0) == cwTieSuggestionModel::SameName);
 }
 
+TEST_CASE("A harvest landing on a candidate trip rebuilds the bound trip's suggestions",
+          "[TieSuggestionModel][StationHarvest]")
+{
+    // The other direction, and the one nothing pulsed before: the partner this
+    // model offers lives in a *different* trip, so a harvest that gives that
+    // trip its names changes this trip's suggestions without touching anything
+    // this trip owns. The cave's aggregate is what carries it.
+    cwCavingRegion region;
+    cwCave* cave = addEmptyCave(region, QStringLiteral("Alpha"));
+    cwTrip* bound = addAttachedTrip(cave, QStringLiteral("Bound"),
+                                    QStringLiteral("survex_hanging.svx"));
+    cwTrip* candidate = addAttachedTrip(cave, QStringLiteral("Candidate"),
+                                        QStringLiteral("survex_simple.svx"));
+    bound->setExternalStations({QStringLiteral("hanging.h2")});
+
+    cwTieSuggestionModel model;
+    model.setTrip(bound);
+    REQUIRE(model.rowCount() == 0); //nothing in the cave shares a name yet
+
+    QSignalSpy countSpy(&model, &cwTieSuggestionModel::countChanged);
+    candidate->setExternalStations({QStringLiteral("simple.h2")});
+
+    CHECK(countSpy.count() == 1);
+    REQUIRE(model.rowCount() == 1);
+    CHECK(stationAt(model, 0) == QStringLiteral("hanging.h2"));
+    CHECK(candidateAt(model, 0) == QStringLiteral("simple.h2"));
+    CHECK(matchAt(model, 0) == cwTieSuggestionModel::SameName);
+}
+
 TEST_CASE("An attachment cavern dropped is still offered ties by name",
           "[TieSuggestionModel][StationHarvest]")
 {

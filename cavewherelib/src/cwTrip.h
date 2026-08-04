@@ -47,6 +47,9 @@ class cwKeywordModel;
 #include <QStringList>
 #include <QUuid>
 
+//Std includes
+#include <optional>
+
 
 class CAVEWHERE_LIB_EXPORT cwTrip : public QObject, public cwUndoer
 {
@@ -204,6 +207,44 @@ public:
     //! the line-plot geometry and label views, native or external alike.
     QList<QPair<QString, QVector3D>> solvedStations() const;
 
+    //! One station this trip is known to have, named by the scope-relative tail
+    //! knownStations() speaks. The position is set only where the region solve
+    //! placed it: a station can be known without being anywhere yet.
+    struct KnownStation {
+        QString name;
+        std::optional<QVector3D> position;
+    };
+
+    //! Every station this trip is known to have, in the trip's own namespace.
+    //!
+    //! The union of every source that knows one — the trip's chunks, the scan's
+    //! per-file harvest (externalStations()), and the region solve
+    //! (solvedStations()) — never a precedence among them, because each of the
+    //! three genuinely knows names the others cannot. Chunks name a station the
+    //! solve dropped for being unreachable; the harvest names an attachment
+    //! cavern dropped whole; and the solve names the parts of a multi-component
+    //! attachment the harvest itself lost (issue #651). Preferring one source
+    //! would make each consumer's answer depend on which one it picked, which is
+    //! the disagreement this accessor exists to end.
+    //!
+    //! Deduplicated by canonical key, keeping the authored spelling where a
+    //! source has one, and sorted in natural order ("a2" before "a10"). The one
+    //! answer to "what stations does this trip have?" — every consumer asking it
+    //! of a live trip calls this, and knownStationsChanged() is the single pulse
+    //! that says the answer moved.
+    QList<KnownStation> knownStations() const;
+
+    //! Snapshot overload: the same union over a cwTripData, for the worker-side
+    //! passes that hold no live trip.
+    //!
+    //! \a scopeLocalSolved is what the solve knows for this trip, in the trip's
+    //! own namespace — a snapshot carries no cave lookup, so the caller that
+    //! already derived the solved names (cwFindFloatingSurveys, off the region
+    //! network) hands them in rather than this deriving a second answer that
+    //! then has to agree. Empty is the honest answer when nothing solved.
+    static QStringList knownStationNames(const cwTripData& trip,
+                                         const QStringList& scopeLocalSolved);
+
     //! The identity of one of this trip's stations, named by the tail
     //! solvedStations() yields. Branches on the same scopePrefix() emptiness
     //! that solvedStations() does, so a tail and the handle naming it can never
@@ -265,6 +306,28 @@ signals:
     //! the stale-but-populated answer is the better failure. A trip its cave no
     //! longer lists is cut off from this, as it is from the cave's other pulses.
     void solvedStationsChanged();
+
+    //! The one pulse for knownStations(), so a consumer subscribes to the
+    //! accessor it reads instead of to the fields behind it and cannot be caught
+    //! out by a source it forgot. May fire spuriously, as scopeChanged() notes.
+    //!
+    //! It speaks for this trip only. A consumer that reads more than the trip it
+    //! is bound to wants cwCave::tripExternalStationsChanged as well — that is
+    //! the cave's aggregate, and the harvest is the one source a sibling can
+    //! move without the cave's lookup moving too.
+    //!
+    //! Deliberately not chained from scopeChanged(), for the reason
+    //! solvedStationsChanged() gives: a scope move lands before the re-solve
+    //! that follows it, and the stale-but-populated answer is the better one to
+    //! hold in that window.
+    //!
+    //! A chunk edit reaches this only through the solve that follows it, since
+    //! nothing here watches chunks station by station. Wiring it would mean
+    //! per-chunk connections plus a debounce — a station's name arrives through
+    //! cwSurveyChunk::dataChanged, which fires per keystroke — so there is no
+    //! cheap structural subset to wire. It is why a station typed into a cave
+    //! that will not solve stays unlisted until one does.
+    void knownStationsChanged();
 
 public slots:
     void setChucks(QList<cwSurveyChunk*> chunks);

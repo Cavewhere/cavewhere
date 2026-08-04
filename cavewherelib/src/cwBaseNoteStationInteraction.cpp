@@ -16,17 +16,18 @@
 #include "cwTrip.h"
 
 namespace {
-//! First solved station in the scrap's trip, by scope-relative name — the same
-//! list the scope autocomplete offers. Pre-filling a new station with it saves
-//! typing when the guess and this agree; falls back to a placeholder when the
-//! trip is unsolved or absent.
+//! First station the scrap's trip is known to have, by scope-relative name —
+//! the same list the scope autocomplete offers, because both ask
+//! cwTrip::knownStations(). Pre-filling a new station with it saves typing when
+//! the guess and this agree; falls back to a placeholder when the trip has no
+//! stations at all, or none the record knows of yet.
 QString defaultStationName(cwScrap* scrap)
 {
     cwTrip* trip = scrap != nullptr ? scrap->parentTrip() : nullptr;
     if (trip != nullptr) {
-        const QList<QPair<QString, QVector3D>> solved = trip->solvedStations();
-        if (!solved.isEmpty()) {
-            return solved.first().first;
+        const QList<cwTrip::KnownStation> known = trip->knownStations();
+        if (!known.isEmpty()) {
+            return known.first().name;
         }
     }
     return QStringLiteral("Station Name");

@@ -322,12 +322,16 @@ MainWindowTest {
             tryVerify(() => banner.visible, 10000,
                       "the untied second attachment banners itself")
 
-            // The solve placed none of its stations — the list that shows what
-            // it did place stays empty — so every name below came from the scan
-            // reading the attachment on its own.
+            // The solve placed none of its stations, so every name here came
+            // from the scan reading the attachment on its own. The list shows
+            // them anyway: it lists what the trip is known to have, not what
+            // was placed, so it cannot contradict the banner a few pixels below
+            // it. Waited for, because the scan's harvest lands well after the
+            // attach that provoked it.
             const stationsList = findChild(panelId, "stationsList")
             verify(stationsList !== null, "stationsList must exist")
-            compare(stationsList.count, 0, "a dropped survey has no solved station")
+            tryCompare(stationsList, "count", 3, 10000,
+                       "the harvested stations are listed even though none solved")
 
             const stations = findChild(banner, "floatingSurveyStations")
             verify(stations !== null, "floatingSurveyStations must exist")

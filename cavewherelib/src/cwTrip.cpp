@@ -23,7 +23,11 @@
 //Qt includes
 #include <QDebug>
 #include <QMap>
+#include <QSet>
 #include <QUuid>
+
+//Std includes
+#include <algorithm>
 
 namespace {
     // The single scope-prefix policy, shared by the instance accessor and the
@@ -44,6 +48,49 @@ namespace {
             return cwCavernNaming::scopePrefix(label());
         }
         return cwCavernNaming::scopePrefix(stationPrefix);
+    }
+
+    // The single "what stations does this trip have?" policy, shared by
+    // knownStations() and its cwTripData overload — which sources answer, and
+    // which one's spelling wins when they disagree.
+    //
+    // The union of all three, never a precedence: one entry per station, the
+    // first spelling seen for a canonical key. \a authored comes first because
+    // a chunk name is the only spelling a person typed, and the two derived
+    // sources echo it back lowercased. Natural order, so a station list reads
+    // the way a caver counts ("a2" before "a10").
+    //
+    // Takes the three lists rather than one concatenation so that adding a
+    // fourth source, or reordering these, is one edit here instead of one per
+    // caller.
+    QStringList mergeStationSpellings(const QStringList& authored,
+                                      const QStringList& harvested,
+                                      const QStringList& solved)
+    {
+        QStringList merged;
+        QSet<QString> seen;
+        merged.reserve(authored.size() + harvested.size() + solved.size());
+
+        const auto mergeSource = [&merged, &seen](const QStringList& spellings) {
+            for (const QString& spelling : spellings) {
+                const QString key = cwStation::canonicalKey(spelling);
+                if (key.isEmpty() || seen.contains(key)) {
+                    continue;
+                }
+                seen.insert(key);
+                merged.append(spelling);
+            }
+        };
+
+        mergeSource(authored);
+        mergeSource(harvested);
+        mergeSource(solved);
+
+        //Stable: two spellings can compare equivalent without being equal
+        //("a01" and "a1" share a natural order), and the caller's source order
+        //is the only tie-break that means anything.
+        std::stable_sort(merged.begin(), merged.end(), cwNameUtils::naturalLess);
+        return merged;
     }
 }
 
@@ -73,6 +120,11 @@ cwTrip::cwTrip(QObject *parent) :
 
     KeywordModel->addExtension(Team->keywordModel());
     updateKeywordMetadata();
+
+    //Two of knownStations()'s three sources; see knownStationsChanged() for why
+    //chunks are not the third wire here.
+    connect(this, &cwTrip::solvedStationsChanged, this, &cwTrip::knownStationsChanged);
+    connect(this, &cwTrip::externalStationsChanged, this, &cwTrip::knownStationsChanged);
 
 //    qDebug() << "Creating:" << this;
 }
@@ -597,6 +649,56 @@ QList<QPair<QString, QVector3D>> cwTrip::solvedStations() const {
         }
     }
     return solved;
+}
+
+QList<cwTrip::KnownStation> cwTrip::knownStations() const
+{
+    const QList<QPair<QString, QVector3D>> solved = solvedStations();
+
+    QHash<QString, QVector3D> placed;
+    placed.reserve(solved.size());
+    for(const QPair<QString, QVector3D>& station : solved) {
+        placed.insert(cwStation::canonicalKey(station.first), station.second);
+    }
+
+    const QList<cwStation> chunkStations = uniqueStations();
+    QStringList authored;
+    authored.reserve(chunkStations.size());
+    for(const cwStation& station : chunkStations) {
+        authored.append(station.name());
+    }
+
+    QStringList solvedNames;
+    solvedNames.reserve(solved.size());
+    for(const QPair<QString, QVector3D>& station : solved) {
+        solvedNames.append(station.first);
+    }
+
+    const QStringList names = mergeStationSpellings(authored, m_externalStations, solvedNames);
+
+    QList<KnownStation> stations;
+    stations.reserve(names.size());
+    for(const QString& name : names) {
+        const auto position = placed.constFind(cwStation::canonicalKey(name));
+        stations.append(KnownStation{name,
+                                     position == placed.constEnd()
+                                         ? std::optional<QVector3D>()
+                                         : std::optional<QVector3D>(*position)});
+    }
+    return stations;
+}
+
+QStringList cwTrip::knownStationNames(const cwTripData& trip,
+                                      const QStringList& scopeLocalSolved)
+{
+    QStringList authored;
+    for(const cwSurveyChunkData& chunk : trip.chunks) {
+        for(const cwStation& station : chunk.stations) {
+            authored.append(station.name());
+        }
+    }
+
+    return mergeStationSpellings(authored, trip.externalStations, scopeLocalSolved);
 }
 
 cwStationHandle cwTrip::stationHandle(const QString& tail) const

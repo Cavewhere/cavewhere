@@ -7,7 +7,6 @@
 
 //Our includes
 #include "cwScopeStationListModel.h"
-#include "cwNameUtils.h"
 #include "cwStation.h"
 #include "cwTrip.h"
 
@@ -41,7 +40,7 @@ QVariant cwScopeStationListModel::data(const QModelIndex& index, int role) const
     case StationHandleRole:
         return QVariant::fromValue(row.handle);
     case PositionRole:
-        return row.position;
+        return row.position.has_value() ? QVariant::fromValue(*row.position) : QVariant();
     default:
         return QVariant();
     }
@@ -63,14 +62,14 @@ void cwScopeStationListModel::setTrip(cwTrip* trip)
     }
 
     if (m_trip != nullptr) {
-        disconnect(m_trip, &cwTrip::solvedStationsChanged,
+        disconnect(m_trip, &cwTrip::knownStationsChanged,
                    this, &cwScopeStationListModel::rebuildRows);
     }
 
     m_trip = trip;
 
     if (m_trip != nullptr) {
-        connect(m_trip, &cwTrip::solvedStationsChanged,
+        connect(m_trip, &cwTrip::knownStationsChanged,
                 this, &cwScopeStationListModel::rebuildRows);
     }
 
@@ -104,17 +103,15 @@ void cwScopeStationListModel::rebuildRows()
     m_rows.clear();
 
     if (m_trip != nullptr) {
-        const QList<QPair<QString, QVector3D>> solved = m_trip->solvedStations();
-        m_rows.reserve(solved.size());
-        for (const QPair<QString, QVector3D>& station : solved) {
-            m_rows.append({ m_trip->stationHandle(station.first), station.second });
+        //Already deduplicated and in natural order — cwTrip::knownStations()
+        //owns both, so every surface reading a trip's stations lists them the
+        //same way.
+        const QList<cwTrip::KnownStation> known = m_trip->knownStations();
+        m_rows.reserve(known.size());
+        for (const cwTrip::KnownStation& station : known) {
+            m_rows.append({ m_trip->stationHandle(station.name), station.position });
         }
     }
-
-    std::stable_sort(m_rows.begin(), m_rows.end(),
-                     [](const Row& left, const Row& right) {
-        return cwNameUtils::naturalLess(left.handle.tail(), right.handle.tail());
-    });
 
     endResetModel();
 }

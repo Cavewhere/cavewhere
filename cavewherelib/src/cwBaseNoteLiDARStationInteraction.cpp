@@ -12,12 +12,14 @@ void cwBaseNoteLiDARStationInteraction::addPoint(QVector3D position, cwNoteLiDAR
     cwNoteLiDARStation station;
     station.setPositionOnNote(position);
 
-    //Pre-fill with the trip's first solved station (scope-relative name) to
-    //save typing; fall back to a placeholder when the trip is unsolved.
+    //Pre-fill with the trip's first known station (scope-relative name) to save
+    //typing; fall back to a placeholder when the record knows of none. Same
+    //accessor the scope autocomplete reads, so the field and the dropdown
+    //offering to complete it cannot disagree.
     cwTrip* trip = noteLiDAR != nullptr ? noteLiDAR->parentTrip() : nullptr;
-    const QList<QPair<QString, QVector3D>> solved =
-        trip != nullptr ? trip->solvedStations() : QList<QPair<QString, QVector3D>>();
-    station.setName(solved.isEmpty() ? QStringLiteral("Station Name") : solved.first().first);
+    const QList<cwTrip::KnownStation> known =
+        trip != nullptr ? trip->knownStations() : QList<cwTrip::KnownStation>();
+    station.setName(known.isEmpty() ? QStringLiteral("Station Name") : known.first().name);
 
     noteLiDAR->addStation(station);
 }

@@ -8,7 +8,10 @@
 #include "cwExternalCenterline.h"
 #include "cwKeywordModel.h"
 #include "cwKeyword.h"
+#include "cwShot.h"
+#include "cwStation.h"
 #include "cwStationPositionLookup.h"
+#include "cwSurveyChunk.h"
 
 //Qt inculdes
 #include "cwSignalSpy.h"
@@ -398,6 +401,198 @@ TEST_CASE("cwTrip solved-* accessors strip a native station prefix", "[cwTrip][s
         CHECK(byName.value(QStringLiteral("s2")) == QVector3D(4, 5, 6));
         CHECK_FALSE(byName.contains(QStringLiteral("outside")));
         CHECK_FALSE(byName.contains(QStringLiteral("A.s1")));
+    }
+}
+
+namespace {
+
+cwShot unitShot()
+{
+    cwShot shot;
+    shot.setDistance(cwDistanceReading("10"));
+    shot.setCompass(cwCompassReading("0"));
+    shot.setBackCompass(cwCompassReading("180"));
+    shot.setClino(cwClinoReading("0"));
+    shot.setBackClino(cwClinoReading("0"));
+    return shot;
+}
+
+void addShot(cwTrip* trip, const QString& from, const QString& to)
+{
+    cwSurveyChunk* chunk = new cwSurveyChunk();
+    trip->addChunk(chunk);
+    chunk->appendShot(cwStation(from), cwStation(to), unitShot());
+}
+
+//! Issue #651's shape: cavern fixes one station per run and drops every
+//! component it cannot reach, so the harvest of a two-part file learns only the
+//! first part ("a1", "a2") — while the region solve, tied in per component,
+//! placed "a2" and "b1". Neither source alone names all three stations.
+cwTrip* attachmentWithSplitSources(cwCave* cave)
+{
+    cwTrip* trip = addExternalTrip(cave, QStringLiteral("Topo 1"));
+    trip->setExternalStations({QStringLiteral("a1"), QStringLiteral("a2")});
+
+    cwStationPositionLookup lookup;
+    lookup.setPosition(QStringLiteral("topo_1.a2"), QVector3D(4, 5, 6));
+    lookup.setPosition(QStringLiteral("topo_1.b1"), QVector3D(7, 8, 9));
+    cave->setStationPositionLookup(lookup);
+    return trip;
+}
+
+QStringList namesOf(const QList<cwTrip::KnownStation>& stations)
+{
+    QStringList names;
+    for (const cwTrip::KnownStation& station : stations) {
+        names.append(station.name);
+    }
+    return names;
+}
+
+std::optional<QVector3D> positionOf(const QList<cwTrip::KnownStation>& stations,
+                                    const QString& name)
+{
+    for (const cwTrip::KnownStation& station : stations) {
+        if (station.name == name) {
+            return station.position;
+        }
+    }
+    return std::optional<QVector3D>();
+}
+
+} // namespace
+
+TEST_CASE("cwTrip::knownStations unions every source that names a station",
+          "[cwTrip][knownStations]")
+{
+    // The defect this accessor exists to end: consumers that each preferred a
+    // different source disagreed about which stations a trip has, on one screen.
+    cwCave cave;
+
+    SECTION("a native trip keeps a chunk station the solve never placed") {
+        cwTrip* trip = new cwTrip();
+        cave.addTrip(trip);
+        addShot(trip, QStringLiteral("s1"), QStringLiteral("s2"));
+
+        cwStationPositionLookup lookup;
+        lookup.setPosition(QStringLiteral("s1"), QVector3D(1, 2, 3));
+        cave.setStationPositionLookup(lookup);
+
+        const QList<cwTrip::KnownStation> known = trip->knownStations();
+        CHECK(namesOf(known) == QStringList({QStringLiteral("s1"), QStringLiteral("s2")}));
+        CHECK(positionOf(known, QStringLiteral("s1")) == QVector3D(1, 2, 3));
+        CHECK_FALSE(positionOf(known, QStringLiteral("s2")).has_value());
+    }
+
+    SECTION("an attachment gets the harvest's names and the solve's alike") {
+        cwTrip* trip = attachmentWithSplitSources(&cave);
+
+        const QList<cwTrip::KnownStation> known = trip->knownStations();
+        CHECK(namesOf(known) == QStringList({QStringLiteral("a1"),
+                                             QStringLiteral("a2"),
+                                             QStringLiteral("b1")}));
+        CHECK_FALSE(positionOf(known, QStringLiteral("a1")).has_value());
+        CHECK(positionOf(known, QStringLiteral("a2")) == QVector3D(4, 5, 6));
+        CHECK(positionOf(known, QStringLiteral("b1")) == QVector3D(7, 8, 9));
+    }
+
+    SECTION("the authored spelling outranks the solver's lowercased echo") {
+        // A person typed "S1"; the cave lookup keys it canonically. Listing the
+        // key back would show the station in a case its author never used.
+        cwTrip* trip = new cwTrip();
+        trip->setStationPrefix(QStringLiteral("A"));
+        cave.addTrip(trip);
+        addShot(trip, QStringLiteral("S1"), QStringLiteral("S2"));
+
+        cwStationPositionLookup lookup;
+        lookup.setPosition(QStringLiteral("a.s1"), QVector3D(1, 2, 3));
+        cave.setStationPositionLookup(lookup);
+
+        const QList<cwTrip::KnownStation> known = trip->knownStations();
+        CHECK(namesOf(known) == QStringList({QStringLiteral("S1"), QStringLiteral("S2")}));
+        CHECK(positionOf(known, QStringLiteral("S1")) == QVector3D(1, 2, 3));
+    }
+
+    SECTION("stations come out in natural order, counting the way a caver does") {
+        cwTrip* trip = addExternalTrip(&cave, QStringLiteral("Topo 1"));
+        trip->setExternalStations({QStringLiteral("a10"),
+                                   QStringLiteral("a2"),
+                                   QStringLiteral("a1")});
+
+        CHECK(namesOf(trip->knownStations()) == QStringList({QStringLiteral("a1"),
+                                                             QStringLiteral("a2"),
+                                                             QStringLiteral("a10")}));
+    }
+}
+
+TEST_CASE("cwTrip::knownStationNames answers for a snapshot as the live trip does",
+          "[cwTrip][knownStations]")
+{
+    // The worker-side passes hold a cwTripData, not a trip. They must not get a
+    // second opinion — a snapshot carries no cave lookup, so the solved names it
+    // cannot derive are handed in.
+    cwCave cave;
+    cwTrip* trip = attachmentWithSplitSources(&cave);
+
+    const QStringList snapshot =
+        cwTrip::knownStationNames(trip->data(), {QStringLiteral("a2"), QStringLiteral("b1")});
+    CHECK(snapshot == namesOf(trip->knownStations()));
+
+    SECTION("with nothing solved it is the harvest alone") {
+        CHECK(cwTrip::knownStationNames(trip->data(), {})
+              == QStringList({QStringLiteral("a1"), QStringLiteral("a2")}));
+    }
+}
+
+TEST_CASE("cwTrip::knownStationsChanged is the one pulse for knownStations",
+          "[cwTrip][knownStations]")
+{
+    cwCavingRegion region;
+    cwCave* cave = new cwCave();
+    cave->setName(QStringLiteral("Fisher Ridge"));
+    region.addCave(cave);
+
+    cwTrip* trip = addExternalTrip(cave, QStringLiteral("Topo 1"));
+    cwTrip* sibling = addExternalTrip(cave, QStringLiteral("Topo 2"));
+
+    cwSignalSpy spy(trip, &cwTrip::knownStationsChanged);
+
+    SECTION("the cave's solve fires it") {
+        cwStationPositionLookup lookup;
+        lookup.setPosition(QStringLiteral("topo_1.a1"), QVector3D(1, 2, 3));
+        cave->setStationPositionLookup(lookup);
+        CHECK(spy.count() == 1);
+    }
+
+    SECTION("a sibling's harvest does not, because it moved no station of this trip's") {
+        // The cave's aggregate carries that instead. Relaying it back into every
+        // trip would double the pulse each trip already fires for itself.
+        cwSignalSpy caveSpy(cave, &cwCave::tripExternalStationsChanged);
+        sibling->setExternalStations({QStringLiteral("b1")});
+        CHECK(spy.count() == 0);
+        CHECK(caveSpy.count() == 1);
+    }
+
+    SECTION("this trip's harvest reaches the cave's aggregate exactly once") {
+        // The tie suggester binds to one trip and reads the whole cave's
+        // stations. Without the aggregate a candidate trip's names arrive only
+        // if the scan happens to request a re-solve as well.
+        cwSignalSpy caveSpy(cave, &cwCave::tripExternalStationsChanged);
+        trip->setExternalStations({QStringLiteral("a1")});
+        CHECK(spy.count() == 1);
+        CHECK(caveSpy.count() == 1);
+    }
+
+    SECTION("a trip the cave no longer lists stops reaching the aggregate") {
+        // The stack keeps the removed trip alive to be spied on; without one
+        // cwUndoer::pushUndo deletes the command and deleteLater()s the trip.
+        QUndoStack undoStack;
+        region.setUndoStack(&undoStack);
+        cave->removeTrip(cave->indexOf(trip));
+
+        cwSignalSpy caveSpy(cave, &cwCave::tripExternalStationsChanged);
+        trip->setExternalStations({QStringLiteral("a1")});
+        CHECK(caveSpy.count() == 0);
     }
 }
 

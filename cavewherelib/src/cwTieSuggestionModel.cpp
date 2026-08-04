@@ -15,7 +15,6 @@
 
 //Qt includes
 #include <QHash>
-#include <QVector3D>
 
 //Std includes
 #include <algorithm>
@@ -55,46 +54,18 @@ QString letterKey(const QString& leaf)
 
 //! A trip's stations in its own namespace, as the identities a tie stores.
 //!
-//! Chunks first, and a file-backed trip's names only for a trip that has none:
-//! an unconnected native chunk stops the solve outright, so the very trips the
-//! native half of this surface is for would have no solved station to offer.
-//! An attached centerline is the other way round — its stations live in its
-//! file, so they are known only once something has read it.
-//!
-//! Of the two readers, the scan's harvest is preferred: it reads the attachment
-//! on its own, so it has names even for the attachment cavern dropped — which
-//! is every attachment this surface is trying to tie in. The solve is the
-//! fallback, for the window before the first scan applies.
+//! cwTrip::knownStations() owns which sources answer that and how they merge —
+//! this surface offers a tie between two stations, so it needs every station
+//! either side is known to have, whether or not the solve placed it.
 QList<cwStationHandle> localStations(const cwTrip* trip)
 {
+    const QList<cwTrip::KnownStation> known = trip->knownStations();
+
     QList<cwStationHandle> stations;
-
-    if (trip->chunkCount() > 0) {
-        const QList<cwStation> unique = trip->uniqueStations();
-        stations.reserve(unique.size());
-        for (const cwStation& station : unique) {
-            if (!station.name().isEmpty()) {
-                stations.append(trip->stationHandle(station.name()));
-            }
-        }
-        return stations;
+    stations.reserve(known.size());
+    for (const cwTrip::KnownStation& station : known) {
+        stations.append(trip->stationHandle(station.name));
     }
-
-    const QStringList harvested = trip->externalStations();
-    if (!harvested.isEmpty()) {
-        stations.reserve(harvested.size());
-        for (const QString& name : harvested) {
-            stations.append(trip->stationHandle(name));
-        }
-        return stations;
-    }
-
-    const QList<QPair<QString, QVector3D>> solved = trip->solvedStations();
-    stations.reserve(solved.size());
-    for (const QPair<QString, QVector3D>& station : solved) {
-        stations.append(trip->stationHandle(station.first));
-    }
-
     return stations;
 }
 
@@ -165,19 +136,25 @@ void cwTieSuggestionModel::setTripConnected(cwTrip* trip, bool connected)
     }
 
     //Every pulse that can move a suggestion, named in one place so connect and
-    //disconnect cannot drift apart. solvedStationsChanged is the cave's, relayed
-    //to each of its trips, so a candidate trip gaining or losing a station
-    //arrives here too. scopeLabelsChanged is the region's aggregate rename: a
-    //renamed trip is a row's label, and an added or removed one is a whole
-    //candidate list. externalStationsChanged is the scan's harvest landing,
-    //which for a dropped attachment is the only pulse that brings its names.
+    //disconnect cannot drift apart. This model reads every trip in the cave, so
+    //it needs cave-wide coverage of the two sources that move: the solve lands
+    //in the cave's lookup for all trips at once, so the bound trip's
+    //solvedStationsChanged speaks for its siblings' solves too, while a harvest
+    //is one trip's own field and only cwCave::tripExternalStationsChanged
+    //carries a sibling's. Subscribing to the bound trip's knownStationsChanged
+    //instead of its solve would rebuild twice for its own harvest, which the
+    //cave's aggregate already delivers. scopeLabelsChanged is the region's
+    //aggregate rename: a renamed trip is a row's label, and an added or removed
+    //one is a whole candidate list.
     cwCave* cave = trip->parentCave();
     cwCavingRegion* region = cave != nullptr ? cave->parentRegion() : nullptr;
 
-    const auto forEachSignal = [trip, region](auto apply) {
+    const auto forEachSignal = [trip, cave, region](auto apply) {
         apply(trip, &cwTrip::solvedStationsChanged);
-        apply(trip, &cwTrip::externalStationsChanged);
         apply(trip, &cwTrip::scopeChanged);
+        if (cave != nullptr) {
+            apply(cave, &cwCave::tripExternalStationsChanged);
+        }
         if (region != nullptr) {
             apply(region, &cwCavingRegion::scopeLabelsChanged);
         }
@@ -255,11 +232,9 @@ void cwTieSuggestionModel::rebuildRows()
             }
         }
 
-        QList<cwStationHandle> stations = localStations(m_trip);
-        std::stable_sort(stations.begin(), stations.end(),
-                         [](const cwStationHandle& left, const cwStationHandle& right) {
-            return cwNameUtils::naturalLess(left.tail(), right.tail());
-        });
+        //Already in natural order — cwTrip::knownStations() owns that, and this
+        //list comes from one trip, unlike the candidates merged above.
+        const QList<cwStationHandle> stations = localStations(m_trip);
 
         //Two passes rather than one sort: a station named alike anywhere in the
         //cave outranks every merely similar name, so the near matches cannot be

@@ -168,6 +168,21 @@ signals:
     //! itself.
     void tripScopeLabelsChanged();
 
+    //! Some trip in this cave replaced its harvested station names — one pulse
+    //! for "a station appeared somewhere in here", for the consumers that read
+    //! more than the trip they are bound to (the tie suggester reads every trip
+    //! in the cave, looking for a partner). Without it the only pulse for a
+    //! *sibling's* harvest is the re-solve a scan happens to request as well,
+    //! which is an invariant spread across the scan's call sites and enforced by
+    //! nothing.
+    //!
+    //! Deliberately not relayed back into each trip's knownStationsChanged, the
+    //! way stationPositionPositionChanged is. A trip's harvest is its own field,
+    //! so it already pulses for itself and the relay would double every one of
+    //! those pulses; the asymmetry is honest, because positions do move for
+    //! every trip at once and a harvest does not.
+    void tripExternalStationsChanged();
+
     void stationPositionPositionChanged();
     void surveyNetworkChanged();
 
