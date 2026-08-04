@@ -35,7 +35,6 @@ TEST_CASE("cwSurvex3DFileReader should read station positions from .3d file", "[
     CHECK(!lookup.isEmpty());
 
     // The test dataset has 6 stations: 26, 26a-26e
-    // Expected positions match the existing cwSurvexportCSVTask test dataset
     auto positions = lookup.positions();
     CHECK(positions.size() == 6);
 

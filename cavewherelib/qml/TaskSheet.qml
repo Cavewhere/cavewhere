@@ -19,10 +19,10 @@ import cavewherelib
 // to — below Medium there is no sidebar — and because a phone-width card off to
 // one side would be most of the window anyway.
 //
-// It carries Automatic Update as well as the list, and the hamburger menu keeps
-// its own copy: both write updateCoordinator.automaticUpdate, so there is one
-// value with two ways to reach it. This is where you already are when you are
-// thinking about background work; the menu is where you look when you are not.
+// It carries Automatic Update as well as the list, and so does the hamburger
+// menu: one value with two ways to reach it, both straight off the update
+// coordinator. This is where you already are when you are thinking about
+// background work; the menu is where you look when you are not.
 //
 // Opening is a latch rather than a bound state so that a tap closes it and it
 // stays closed, and it falls away on its own once the last job finishes, since
@@ -30,10 +30,9 @@ import cavewherelib
 QQ.Item {
     id: sheetId
 
-    // QtObject rather than TaskFutureCombineModel so a test can stand in a
+    // QtObject rather than FutureManagerModel so a test can stand in a
     // ListModel; both carry the count and roles this sheet reads.
     property QQ.QtObject model: ActiveTasks.model
-    property bool automaticUpdate: false
 
     property bool opened: false
 
@@ -43,8 +42,6 @@ QQ.Item {
     // Past this the list scrolls. The sheet spans the window, so it can afford a
     // taller list than the card hinged beside the sidebar.
     readonly property int maxListHeight: 320
-
-    signal automaticUpdateToggled(bool enabled)
 
     visible: sheetId.shown
 
@@ -131,10 +128,16 @@ QQ.Item {
             spacing: Theme.flowSpacing
 
             QC.Switch {
+                id: autoUpdateSwitchId
                 objectName: "taskSheetAutoUpdateSwitch"
-                checked: sheetId.automaticUpdate
 
-                onToggled: sheetId.automaticUpdateToggled(checked)
+                onToggled: RootData.updateCoordinator.automaticUpdate = checked
+
+                QQ.Binding {
+                    target: autoUpdateSwitchId
+                    property: "checked"
+                    value: RootData.updateCoordinator.automaticUpdate
+                }
             }
 
             QC.Label {

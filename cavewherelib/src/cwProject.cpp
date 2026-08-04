@@ -20,7 +20,6 @@
 #include "cwGlobals.h"
 #include "cwDebug.h"
 #include "cwSQLManager.h"
-#include "cwTaskManagerModel.h"
 #include "asyncfuture.h"
 #include "cwError.h"
 #include "cwErrorListModel.h"
@@ -1298,26 +1297,6 @@ void cwProject::seedRegionUnitSystem()
         Region->setUnitSystem(settings->unitSystem());
     }
 }
-
-// /**
-//  * @brief cwProject::setTaskManager
-//  * @param manager
-//  *
-//  * When adding images to the project, this will allow the user to see the image progress
-//  */
-// void cwProject::setTaskManager(cwTaskManagerModel *manager)
-// {
-//     TaskManager = manager;
-// }
-
-// /**
-//  * @brief cwProject::taskManager
-//  * @return Return's the current taskManager
-//  */
-// cwTaskManagerModel *cwProject::taskManager() const
-// {
-//     return TaskManager;
-// }
 
 /**
   Loads the project, loads all the files to the project

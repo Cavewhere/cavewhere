@@ -8,6 +8,11 @@
 //Std includes
 #include <algorithm>
 
+namespace {
+    //! Nothing can say how far along it is, so there is no honest number to give
+    constexpr double kIndeterminateProgress = -1.0;
+}
+
 cwFutureManagerModel::cwFutureManagerModel(QObject *parent) :
     QAbstractListModel(parent),
     Timer(new QTimer(this))
@@ -45,11 +50,14 @@ void cwFutureManagerModel::addJob(const cwFuture &job)
     connect(watcher, &QFutureWatcher<void>::canceled,
             this, remove);
 
+    //Progress is republished from here rather than from dataChanged, which the
+    //timer above fires four times a second just to refresh the elapsed clock —
+    //an unfiltered hookup would announce a number that hasn't moved.
     connect(watcher, &QFutureWatcher<void>::progressValueChanged,
             this, [this, watcher](){
         auto modelIndex = indexOf(watcher);
         emit dataChanged(modelIndex, modelIndex, {ProgressRole});
-
+        emit progressChanged();
     });
 
     connect(watcher, &QFutureWatcher<void>::progressRangeChanged,
@@ -58,6 +66,7 @@ void cwFutureManagerModel::addJob(const cwFuture &job)
         Q_UNUSED(max);
         auto modelIndex = indexOf(watcher);
         emit dataChanged(modelIndex, modelIndex, {NumberOfStepRole});
+        emit progressChanged();
     });
 
     watcher->setFuture(job.future());
@@ -66,6 +75,9 @@ void cwFutureManagerModel::addJob(const cwFuture &job)
     beginInsertRows(QModelIndex(), lastRow, lastRow);
     Watchers.append(container);
     endInsertRows();
+
+    emit countChanged();
+    emit progressChanged();
 
     if(!Timer->isActive()) {
         Timer->start();
@@ -107,6 +119,32 @@ QHash<int, QByteArray> cwFutureManagerModel::roleNames() const
     return defaultRoles();
 }
 
+/**
+ * Averages the jobs that can say how far along they are, ignoring the ones that
+ * can't. Each measured job counts once: a point cloud's steps are points and a
+ * scrap's are outlines, so weighting by step count would just let whichever job
+ * chose the finer unit decide the whole number.
+ */
+double cwFutureManagerModel::progress() const
+{
+    double sum = 0.0;
+    int measured = 0;
+
+    for(const auto& container : Watchers) {
+        const int steps = container.watcher->progressMaximum();
+
+        if(steps <= 0) {
+            continue;
+        }
+
+        const int completed = container.watcher->progressValue();
+        sum += std::clamp(static_cast<double>(completed) / steps, 0.0, 1.0);
+        measured++;
+    }
+
+    return measured > 0 ? sum / measured : kIndeterminateProgress;
+}
+
 void cwFutureManagerModel::waitForFinished()
 {
     while(!Watchers.isEmpty()) {
@@ -140,6 +178,9 @@ void cwFutureManagerModel::removeWatcher(QFutureWatcher<void> *watcher)
     beginRemoveRows(QModelIndex(), modelIndex.row(), modelIndex.row());
     Watchers.removeAt(modelIndex.row());
     endRemoveRows();
+
+    emit countChanged();
+    emit progressChanged();
 
     if(rowCount() == 0) {
         Timer->stop();

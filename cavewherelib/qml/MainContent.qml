@@ -159,10 +159,6 @@ QQ.Item {
 
         sourceComponent: TaskSheet {
             objectName: "taskSheet"
-
-            automaticUpdate: RootData.updateCoordinator.automaticUpdate
-
-            onAutomaticUpdateToggled: (enabled) => RootData.updateCoordinator.automaticUpdate = enabled
         }
     }
 

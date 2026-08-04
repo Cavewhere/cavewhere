@@ -20,7 +20,9 @@ import cavewherelib
 // them, because the top bar chip shows the same three at widths where there is
 // no sidebar. The activity, the task count and the progress aggregate all
 // default to that shared state and all stay overridable, so the footer is a view
-// of it and a test can drive it directly.
+// of it and a test can drive it directly. The Automatic Update setting is read
+// and written straight on the update coordinator instead of being injected —
+// it is a real persisted setting, so a test has no need of a way in.
 //
 // A job whose future is already finished is never admitted, and a cascade is
 // briefly running between pipelines with no future yet — so the count can be
@@ -33,7 +35,6 @@ import cavewherelib
 QQ.Rectangle {
     id: footerId
 
-    required property bool automaticUpdate
     property bool compact: false
     property int activity: ActiveTasks.activity
     property int taskCount: ActiveTasks.count
@@ -51,7 +52,6 @@ QQ.Rectangle {
     property bool tasksShown: false
 
     signal runRequested()
-    signal automaticUpdateToggled(bool enabled)
     signal tasksRequested()
 
     implicitHeight: contentLoaderId.implicitHeight + Theme.updateFooterPadding * 2
@@ -100,12 +100,18 @@ QQ.Rectangle {
             }
 
             QC.CheckBox {
+                id: autoUpdateCheckboxId
                 objectName: "autoUpdateCheckbox"
                 visible: !footerId.compact
-                checked: footerId.automaticUpdate
                 Layout.alignment: Qt.AlignHCenter
 
-                onToggled: footerId.automaticUpdateToggled(checked)
+                onToggled: RootData.updateCoordinator.automaticUpdate = checked
+
+                QQ.Binding {
+                    target: autoUpdateCheckboxId
+                    property: "checked"
+                    value: RootData.updateCoordinator.automaticUpdate
+                }
             }
 
             RoundButton {
@@ -113,7 +119,6 @@ QQ.Rectangle {
                 objectName: "autoUpdateToggle"
                 visible: footerId.compact
                 checkable: true
-                checked: footerId.automaticUpdate
                 icon.source: "qrc:/twbs-icons/icons/arrow-repeat.svg"
                 icon.color: checked ? Theme.accent : Theme.text
                 Layout.alignment: Qt.AlignHCenter
@@ -123,7 +128,13 @@ QQ.Rectangle {
                                  ? qsTr("Automatic updates on")
                                  : qsTr("Automatic updates off")
 
-                onToggled: footerId.automaticUpdateToggled(checked)
+                onToggled: RootData.updateCoordinator.automaticUpdate = checked
+
+                QQ.Binding {
+                    target: autoUpdateToggleId
+                    property: "checked"
+                    value: RootData.updateCoordinator.automaticUpdate
+                }
             }
         }
     }

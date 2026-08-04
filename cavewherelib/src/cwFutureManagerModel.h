@@ -20,10 +20,12 @@ class CAVEWHERE_LIB_EXPORT cwFutureManagerModel : public QAbstractListModel
     QML_NAMED_ELEMENT(FutureManagerModel)
     Q_PROPERTY(int interval READ interval WRITE setInterval NOTIFY intervalChanged)
     Q_PROPERTY(cwFutureManagerToken token READ token CONSTANT)
+    Q_PROPERTY(int count READ count NOTIFY countChanged)
+    Q_PROPERTY(double progress READ progress NOTIFY progressChanged)
 
 public:
     enum Roles {
-        NameRole,
+        NameRole = Qt::UserRole,
         ProgressRole,
         NumberOfStepRole,
         RunTimeRole
@@ -48,10 +50,16 @@ public:
     cwFutureManagerToken token();
 
     bool isEmpty() const;
+    int count() const;
+
+    //! How far along everything is, in [0, 1], or negative when nothing can say
+    double progress() const;
 
 signals:
     void intervalChanged();
     void allFinished();
+    void countChanged();
+    void progressChanged();
 
 private:
     class WatcherContainer {
@@ -76,6 +84,10 @@ inline int cwFutureManagerModel::interval() const {
 
 inline bool cwFutureManagerModel::isEmpty() const {
     return Watchers.isEmpty();
+}
+
+inline int cwFutureManagerModel::count() const {
+    return rowCount();
 }
 
 /**

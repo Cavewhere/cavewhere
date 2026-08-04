@@ -232,12 +232,10 @@ QQ.Rectangle {
         anchors.bottom: parent.bottom
 
         compact: sidebarArea._compactMode
-        automaticUpdate: RootData.updateCoordinator.automaticUpdate
 
         tasksShown: sidebarArea.tasksShown
 
         onRunRequested: RootData.updateCoordinator.updateNow()
-        onAutomaticUpdateToggled: (enabled) => RootData.updateCoordinator.automaticUpdate = enabled
         onTasksRequested: sidebarArea.tasksRequested()
     }
 

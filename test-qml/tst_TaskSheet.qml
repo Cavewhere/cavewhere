@@ -22,24 +22,29 @@ QQ.Item {
         anchors.fill: parent
 
         model: fakeJobsId
-        automaticUpdate: false
-    }
-
-    SignalSpy {
-        id: autoUpdateSpy
-        target: sheetId
-        signalName: "automaticUpdateToggled"
     }
 
     TestCase {
         name: "TaskSheet"
         when: windowShown
 
+        // Automatic Update is a real persisted setting rather than an injected
+        // property, so this file writes the one the whole binary shares. Put
+        // back what it found, or every test file after this one inherits it.
+        property bool originalAutomaticUpdate: false
+
+        function initTestCase() {
+            originalAutomaticUpdate = RootData.updateCoordinator.automaticUpdate
+        }
+
+        function cleanupTestCase() {
+            RootData.updateCoordinator.automaticUpdate = originalAutomaticUpdate
+        }
+
         function init() {
             fakeJobsId.clear()
             sheetId.opened = false
-            sheetId.automaticUpdate = false
-            autoUpdateSpy.clear()
+            RootData.updateCoordinator.automaticUpdate = false
         }
 
         // Everything below the header is inside the card, which is named, so it
@@ -161,15 +166,14 @@ QQ.Item {
             // Driven from both ends, since false is also the switch's own
             // default — asserting only that would agree with a sheet that
             // ignored the setting the hamburger menu shares with it.
-            sheetId.automaticUpdate = true
-            verify(toggle.checked, "it reports the value it was given")
-            sheetId.automaticUpdate = false
+            RootData.updateCoordinator.automaticUpdate = true
+            verify(toggle.checked, "it reports the shared setting")
+            RootData.updateCoordinator.automaticUpdate = false
             verify(!toggle.checked, "and follows it back")
 
             mouseClick(toggle)
-            compare(autoUpdateSpy.count, 1, "toggling it reports once")
-            compare(autoUpdateSpy.signalArguments[0][0], true,
-                    "and asks for automatic update on")
+            verify(RootData.updateCoordinator.automaticUpdate,
+                   "and toggling it turns automatic update on")
         }
     }
 }

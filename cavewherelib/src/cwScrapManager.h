@@ -38,7 +38,6 @@ class cwGLScraps;
 class cwStationPositionLookup;
 class cwRemoveImageTask;
 class cwLinePlotManager;
-class cwTaskManagerModel;
 class cwRegionTreeModel;
 class cwRenderScraps;
 class cwKeywordItemModel;

@@ -14,8 +14,8 @@ import cavewherelib
 
 // The chrome every panel that floats over the page view wears: a raised, bordered
 // card with a titled header, a close button, and a rule under it. Three panels
-// share it — the tool options hinged to the sidebar, the list of running tasks,
-// and the phone's task sheet — and they only differ below that rule.
+// share it — the armed tool's options, the list of running tasks, and the
+// phone's task sheet — and they only differ below that rule.
 //
 // The body is the default property, so a consumer writes its content as ordinary
 // children and sets Layout.* on them; the card is sized by what they ask for.

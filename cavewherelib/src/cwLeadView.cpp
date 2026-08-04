@@ -29,7 +29,7 @@
 #include <QRay3D>
 
 namespace {
-// Pull the lead marker toward the eye along the line of sight (screen position
+// Pull the lead marker toward the viewer along the line of sight (screen position
 // and size unaffected) so local scrap/centerline geometry near the lead doesn't
 // draw over it. Same rationale and value as the station-label bias. The click
 // occlusion test (isOccluded) reuses this as its slack so a click is rejected
@@ -605,8 +605,8 @@ bool cwLeadView::isOccluded(const QVector3D& worldPosition,
     }
     // ray.direction() is unit length (cwCamera::frustumRay normalizes it), so
     // this parameter is a world distance comparable to cwRayHit::tWorld(). The
-    // - kLeadDepthBias slack mirrors the eye-ward shift the billboard renders
-    // with (cwRenderBillboards::buildModelMatrix).
+    // - kLeadDepthBias slack mirrors the line-of-sight shift the billboard
+    // renders with (cwBillboardSightLine).
     const double quadDistance =
         QVector3D::dotProduct(worldPosition - ray.origin(), planeNormal) / denom;
     if(quadDistance <= 0.0) {

@@ -23,7 +23,6 @@
 #include "cwRootData.h"
 #include "cwSurveyChunk.h"
 #include "cwTripCalibration.h"
-#include "cwTaskManagerModel.h"
 #include "cwFutureManagerModel.h"
 #include "cwProjectedProfileScrapViewMatrix.h"
 #include "cwJobSettings.h"
@@ -264,7 +263,6 @@ TEST_CASE("Check that auto calculate work outside of trip", "[cwScrap]") {
 
         // CHECK(!project->cavingRegion()->cave(0)->stationPositionLookup().isEmpty());
 
-        // root->taskManagerModel()->waitForTasks();
         root->futureManagerModel()->waitForFinished();
 
         INFO("Finished after plotManager!");
@@ -312,7 +310,6 @@ TEST_CASE("Auto calculate if survey station change position", "[cwScrap]") {
         auto plotManager = root->linePlotManager();
         plotManager->waitToFinish();
 
-        root->taskManagerModel()->waitForTasks();
         root->futureManagerModel()->waitForFinished();
 
         INFO("Finished after plotManager!");
@@ -343,7 +340,6 @@ TEST_CASE("Auto calculate should work on projected profile azimuth", "[cwScrap]"
         auto plotManager = root->linePlotManager();
         plotManager->waitToFinish();
 
-        root->taskManagerModel()->waitForTasks();
         root->futureManagerModel()->waitForFinished();
 
         //Force recalculation
@@ -371,7 +367,6 @@ TEST_CASE("Auto calculate if the scrap type has changed", "[cwScrap]") {
         auto plotManager = root->linePlotManager();
         plotManager->waitToFinish();
 
-        root->taskManagerModel()->waitForTasks();
         root->futureManagerModel()->waitForFinished();
 
         currentScrap->setCalculateNoteTransform(true);
@@ -633,7 +628,6 @@ TEST_CASE("Auto-calculate scrap transform handles declination correctly", "[cwSc
 
     auto settle = [&]() {
         root->linePlotManager()->waitToFinish();
-        root->taskManagerModel()->waitForTasks();
         root->futureManagerModel()->waitForFinished();
     };
 

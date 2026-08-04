@@ -2,10 +2,6 @@
 #include <catch2/catch_test_macros.hpp>
 
 //Our includes
-#include "cwSurvexportTask.h"
-#include "cwGlobals.h"
-#include "LoadProjectHelper.h"
-#include "cwCavernRunner.h"
 #include "cwSurvexExporterTripTask.h"
 #include "cwSurveyChunk.h"
 #include "cwTrip.h"
@@ -14,71 +10,7 @@
 
 //Qt includes
 #include <QBuffer>
-#include <QFileInfo>
 #include <QTextStream>
-
-TEST_CASE("cwSurvexportTask should initilize correctly", "[cwSurvexportTask]") {
-    cwSurvexportTask task;
-    CHECK(task.outputFilename().toStdString() == "");
-}
-
-TEST_CASE("cwSurvexportTask should produce a CSV file from a .3d file", "[cwSurvexportTask]") {
-    //Run cavern first to get 3d file
-
-    QStringList cavernNames;
-    cavernNames.append("cavern");
-    cavernNames.append("cavern.exe");
-    cavernNames.append("survex/cavern");
-    cavernNames.append("survex/cavern.exe");
-
-    QString cavernPath = cwGlobals::findExecutable(cavernNames, {cwGlobals::survexPath()});
-
-    //If this fails, cavern couldn't be found
-    REQUIRE(cavernPath.isEmpty() == false);
-
-    QString cavernDataFile = copyToTempFolder(testcasesDatasetPath("test_cwSurvexport/data.svx"));
-    QDir tempDir = QFileInfo(cavernDataFile).absoluteDir();
-
-    REQUIRE(QFile::exists(cavernDataFile));
-
-    const QString output3dPath = cavernDataFile + QStringLiteral(".3d");
-    auto cavernResult = cwCavernRunner::run(cavernDataFile, output3dPath);
-
-    REQUIRE_FALSE(cavernResult.hasError());
-    REQUIRE(QFileInfo(cavernResult.value().output3dPath).exists() == true);
-
-    cwSurvexportTask task;
-    task.setSurvex3DFile(cavernResult.value().output3dPath);
-    task.start();
-    task.waitToFinish();
-
-    //If this fails the task didn't create csv
-    REQUIRE(task.outputFilename().isEmpty() == false);
-
-    //Compare the test file with the generated file
-    QFile generatedFile(task.outputFilename());
-    QFile testFile(testcasesDatasetPath("test_cwSurvexport/cwSurvexport_data.3d.csv"));
-    REQUIRE(generatedFile.open(QFile::ReadOnly));
-    REQUIRE(testFile.open(QFile::ReadOnly));
-
-    INFO("GeneratedFile errorStr:" << generatedFile.errorString().toStdString());
-    CHECK(generatedFile.error() == QFile::NoError);
-
-    INFO("TestFile errorStr:" << testFile.errorString().toStdString());
-    CHECK(testFile.error() == QFile::NoError);
-
-    int line = 1;
-    while(!generatedFile.atEnd() && !testFile.atEnd()) {
-        QString generate = generatedFile.readLine();
-        QString test = testFile.readLine();
-        INFO("Line:" << line);
-        CHECK(generate.trimmed().toStdString() == test.trimmed().toStdString());
-        line++;
-    }
-
-    CHECK(generatedFile.atEnd() == true);
-    CHECK(testFile.atEnd() == true);
-}
 
 TEST_CASE("cwSurvexExporterTripTask writes UP/DOWN for vertical shots without azimuth", "[cwSurvexExporterTripTask]") {
     cwTrip trip;

@@ -43,7 +43,7 @@ QQ.Item {
     property bool hostVisible: true
     // Input: the control that opens this flyout is hovered.
     property bool previewHovered: false
-    // QtObject rather than TaskFutureCombineModel so a test can stand in a
+    // QtObject rather than FutureManagerModel so a test can stand in a
     // ListModel; both carry the count and roles this card reads.
     property QQ.QtObject model: ActiveTasks.model
 

@@ -10,11 +10,20 @@ QQ.Item {
     width: Theme.sidebarWidthFull
     height: 200
 
-    // Stands in for the task and future managers, neither of which can be given
-    // a job from QML. ActiveTasks reads its own model, so the only way to drive
-    // it is to swap that model's sources out and put them back.
+    // Stands in for the future manager, which cannot be given a job from QML.
+    // ActiveTasks reads whatever model it is pointed at, so the only way to
+    // drive it is to swap that model out and put it back.
     QQ.ListModel {
         id: fakeJobsId
+    }
+
+    // A stand-in that does report progress, so the fallback below can be watched
+    // displacing a real number rather than the one it happened to start at.
+    QQ.QtObject {
+        id: measuredJobsId
+
+        property int count: 1
+        property real progress: 0.5
     }
 
     // No activity or taskCount of its own, so it reports whatever the shared
@@ -25,8 +34,6 @@ QQ.Item {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
-
-        automaticUpdate: false
     }
 
     TestCase {
@@ -34,14 +41,14 @@ QQ.Item {
         when: windowShown
 
         function init() {
-            ActiveTasks.model.models = [fakeJobsId]
+            ActiveTasks.model = fakeJobsId
         }
 
-        // ActiveTasks is a singleton, so the real managers have to go back before
+        // ActiveTasks is a singleton, so the real manager has to go back before
         // anything else in the suite reads it.
         function cleanup() {
-            ActiveTasks.model.models = [RootData.taskManagerModel,
-                                        RootData.futureManagerModel]
+            ActiveTasks.model = Qt.binding(
+                function() { return RootData.futureManagerModel })
             ActiveTasks.needsUpdate = Qt.binding(
                 function() { return RootData.updateCoordinator.needsUpdate })
             fakeJobsId.clear()
@@ -76,6 +83,25 @@ QQ.Item {
             compare(footerId.activity, ActiveTasks.Activity.Busy,
                     "the footer picked up the shared state")
             verify(find("updateRunningIndicator") !== null, "and shows the busy row")
+        }
+
+        // A model with nothing to say about progress has to read as
+        // indeterminate. QML leaves a real property holding its old value when a
+        // binding evaluates to undefined, so without the fallback the ring would
+        // keep drawing the last job's number over work nobody is measuring.
+        function test_aModelThatCannotMeasureReadsAsIndeterminate() {
+            ActiveTasks.model = measuredJobsId
+
+            compare(ActiveTasks.progress, measuredJobsId.progress,
+                    "a model that measures is read straight through")
+            verify(ActiveTasks.progressKnown, "and drawn as a number")
+
+            ActiveTasks.model = fakeJobsId
+            fakeJobsId.append({"nameRole": "Saving"})
+
+            compare(ActiveTasks.progress, ActiveTasks.indeterminateProgress,
+                    "and a model that cannot measure falls back")
+            verify(!ActiveTasks.progressKnown, "so there is nothing to draw")
         }
 
         // Busy outranks stale, and both the sidebar footer and the top bar chip

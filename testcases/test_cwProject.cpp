@@ -14,7 +14,6 @@ using namespace Catch;
 #include "cwRootData.h"
 #include "cwSurveyNoteModel.h"
 #include "cwSurveyNoteLiDARModel.h"
-#include "cwTaskManagerModel.h"
 #include "cwFutureManagerModel.h"
 #include "cwImageDatabase.h"
 #include "cwPDFSettings.h"
