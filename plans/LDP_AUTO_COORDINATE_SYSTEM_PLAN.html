@@ -857,7 +857,7 @@ rather than cleanups. They are recorded here so they aren't lost.</p>
 </div>
 
 <div class="callout warn">
-  <div class="title">F3 — <code>*cs CUSTOM "…"</code> is write-only</div>
+  <div class="title">F3 — <code>*cs CUSTOM "…"</code> is write-only <span class="pill">fixed in 13.1</span></div>
   <p>P2.2 added <code>toSurvexCS()</code>, which quotes a raw PROJ string behind survex's
   <code>CUSTOM</code> keyword. There is no inverse: <code>cwSurvexImporter::parseCS</code> stores
   the <code>*cs</code> argument verbatim, so importing a .svx that CaveWhere itself exported puts
@@ -934,7 +934,7 @@ callout. Six new findings, none applied yet — V1 and V2 are the ones that bite
 
 <div class="callout bad">
   <div class="title">V2 — WorkingFrame solve regression for fixes whose CS only survex
-  understands</div>
+  understands <span class="pill">fixed in 13.1</span></div>
   <p>A fix entered under a survex-keyword spelling (<code>UTM16N</code>, <code>S-MERC</code> — the
   exact round-trip the <code>shareableCSForFix</code> fallback exists for, since
   <code>parseCS</code> stores <code>*cs</code> verbatim) is <code>Valid</code> (its coordinate
@@ -975,7 +975,7 @@ callout. Six new findings, none applied yet — V1 and V2 are the ones that bite
 
 <div class="callout warn">
   <div class="title">V5 — <code>shareableCSForFix</code>'s verbatim fallback lets garbage shadow
-  a good fix</div>
+  a good fix <span class="pill">fixed in 13.1</span></div>
   <p>A PROJ-invalid, non-keyword string (a typo like <code>UTM 16 N</code>, reachable through
   import or hand-edited data — <code>setInputCS</code> accepts anything and the coordinate still
   parses) passes the fallback, and first-non-empty-wins makes it <code>*cs out</code> even when a
@@ -1037,6 +1037,43 @@ skips anything PROJ can't read.</p>
 </div>
 
 <h3 id="survexcs">13.1 Survex half — the implementation (this is V2's fix)</h3>
+
+<div class="callout good">
+  <div class="title">DONE 2026-08-04 — all four steps, plus F3 and V5</div>
+  <p>The encoding lives in <code>cwSurvexCS.{h,cpp}</code>, the preferred home:
+  <code>toSurvexCS()</code>/<code>writeCsLine()</code> moved over from
+  <code>cwSurvexExporterUtils</code> and <code>fromSurvexCS()</code> joined them, so F3's
+  "write-only" complaint is answered structurally — the round trip is one unit and has a test.
+  <code>parseCS</code> stores the translation and warns by name on a spelling survex doesn't
+  define; <code>parseFix</code> transposes under LAT-LONG; <code>shareableCSForFix</code>'s
+  verbatim fallback and the <code>isUnusableAsSurvexOutputCS</code> screen it needed are both
+  gone, closing V5 (nothing produces a JTSK-class value any more, so the screen had no caller
+  left).</p>
+  <p>Tests: <code>testcases/test_cwSurvexCS.cpp</code> covers one case per table row, plus the
+  <code>OSGB:SV</code> ≡ EPSG:27700 self-check and the PROJ-string round trip; five cases in
+  <code>test_cwSurvexImporter_fix.cpp</code> cover normalization, LOCAL vs. unmapped, the
+  LONG-LAT/LAT-LONG pair landing on the same coordinate, and the V2 regression asserted on the
+  solve. All five fail when <code>parseCS</code> is mutated back to storing the raw text.</p>
+  <p><b>Plus a scoping fix the transposition forced.</b> <code>*cs</code> was a flat importer
+  member, so it survived the <code>*end</code> of the block that named it and reached the next
+  sibling. That used to mislabel a later fix's system; once <code>parseFix</code> transposes
+  under LAT-LONG it silently swaps a later fix's easting and northing instead, which nothing
+  downstream can detect. Cavern scopes <code>*cs</code> to the block — <code>cmd_begin</code>
+  copies <code>proj_str</code> into the child settings and <code>pop_settings</code> restores the
+  parent's — so the parsed CS moved onto <code>BeginEndState</code>, the frame stack the importer
+  already keeps. One subtlety: <code>*begin</code> must copy the CS <em>outside</em> the
+  <code>lastState.Filename == currentFile()</code> guard, because cavern doesn't push settings for
+  <code>*include</code> and the root frame's filename is empty — otherwise both a top-level
+  <code>*cs</code> and an included file lose the system. The dead <code>CurrentState</code> enum
+  went with it: <code>if(InsideBegin)</code> tested the enum constant, not the member, so the gate
+  was always true and the member was never read.</p>
+
+  <p><b>Not reached by this, and worth its own work:</b> neither importer's
+  <code>capturedFixStations()</code> has a production consumer — the survex and Walls importers
+  both collect fixes that the import UI then drops on the floor, so V2's "import a .svx and the
+  solve fails" is reachable only through a hand-built region today. Normalizing the CS is a
+  precondition for wiring that up; the wiring itself is still owed.</p>
+</div>
 
 <p><code>cwSurvexImporter::parseCS</code> (<code>cwSurvexImporter.cpp:1063</code>) stores the
 <code>*cs</code> argument verbatim into <code>CurrentInputCS</code>, and
@@ -1119,10 +1156,12 @@ cwSurvexCS fromSurvexCS(const QString&amp; csArgument);</code></pre>
   <p><b>Axis order rides on the CS string.</b> <code>cwCoordinateText::axisOrderFor</code> is
   <code>isGeographic(cs) ? LatitudeLongitude : EastingNorthing</code>, and
   <code>cwFixStation</code> re-reads its stored coordinate text under whatever the current CS
-  implies. So rewriting the CS silently reinterprets the numbers. <code>LONG-LAT</code> →
-  <code>EPSG:4326</code> needs the pair swapped (survex writes longitude first, EPSG:4326 is read
-  latitude first); <code>LAT-LONG</code> → <code>EPSG:4326</code> does not. Getting this backwards
-  puts the cave in the wrong hemisphere, and nothing downstream can detect it.</p>
+  implies. So rewriting the CS silently reinterprets the numbers. The swap goes the way the struct
+  comment says, not the way an earlier draft of this paragraph did:
+  <code>cwFixStation::setCoordinate</code> takes easting (longitude) first whatever the system, so
+  <code>LONG-LAT</code> — which survex already writes longitude first — passes straight through,
+  and <code>LAT-LONG</code> is the one whose pair transposes. Getting this backwards puts the cave
+  in the wrong hemisphere, and nothing downstream can detect it.</p>
   <p><b>A geographic CS can't be <code>*cs out</code>.</b> Cavern calls
   <code>proj_get_type</code> and rejects <code>PJ_TYPE_GEOGRAPHIC_2D_CRS</code>/<code>_3D_CRS</code>
   with error 435 (:2700–2707). So normalizing a fix to <code>EPSG:4326</code> makes it a fine

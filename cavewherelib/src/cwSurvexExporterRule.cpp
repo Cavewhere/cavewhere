@@ -3,6 +3,7 @@
 #include "cwTrip.h"
 #include "cwTripCalibration.h"
 #include "cwSurvexExporterUtils.h"
+#include "cwSurvexCS.h"
 
 //Qt includes
 #include <QTextStream>
@@ -116,7 +117,7 @@ ResultBase cwSurvexExporterRule::writeRegion(QTextStream &stream, const cwSurvey
     const QString outputCS = cwSurvexExporterUtils::resolveOutputCS(
         region, QString(), cwSurvexExporterUtils::OutputCSPolicy::Shareable);
     if (!outputCS.isEmpty()) {
-        cwSurvexExporterUtils::writeCsLine(stream, outputCS, true);
+        cwSurvexCS::writeCsLine(stream, outputCS, true);
     }
 
     for(int i = 0; i < region.caves.size(); i++) {

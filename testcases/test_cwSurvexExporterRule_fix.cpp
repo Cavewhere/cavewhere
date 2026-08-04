@@ -171,57 +171,29 @@ TEST_CASE("cwSurvexExporterRule derives *cs out from the first fix's inputCS",
         CHECK_FALSE(output.contains(QStringLiteral("*cs out EPSG:4326")));
     }
 
-    SECTION("a survex keyword cavern won't output is skipped too") {
-        // LONG-LAT and JTSK are survex's own spellings, and cavern refuses both
-        // for output (ok_for_output == NO, survex/src/commands.c:2521-2540).
-        // PROJ can't create either, and isGeographic() answers false for
-        // anything it fails to create — so before this they read as projected
-        // and were picked for *cs out, failing the solve even though a usable
-        // CS sat right behind them. An svx import stores *cs verbatim, so this
-        // is what round-tripping such a file looks like.
-        // The premise: neither is something PROJ can answer for, so
-        // isGeographic() alone can never rule them out.
-        REQUIRE_FALSE(cwCoordinateTransform::isValidCS(QStringLiteral("LONG-LAT")));
-        REQUIRE_FALSE(cwCoordinateTransform::isValidCS(QStringLiteral("JTSK")));
+    SECTION("a system PROJ can't read leaves the choice to the next fix") {
+        // Importers translate their format's spelling into PROJ's before a fix
+        // is built, so a system PROJ can't read is one nothing can place —
+        // there is no reading of it that cavern would accept either. Offering
+        // it as *cs out anyway let a typo shadow a perfectly good fix sitting
+        // right behind it, and the whole solve failed on the strength of the
+        // first row.
+        REQUIRE_FALSE(cwCoordinateTransform::isValidCS(QStringLiteral("UTM 16 N")));
 
         cwSurveyDataArtifact::Region region;
 
         cwSurveyDataArtifact::Cave cave;
         cave.name = QStringLiteral("Keyword");
-        cave.fixStations.append(makeFix("a1", QStringLiteral("LONG-LAT"),
-                                        -115.59902, 46.12113, 300.0));
-        cave.fixStations.append(makeFix("a2", QStringLiteral("JTSK"),
-                                        -700000.0, -1000000.0, 400.0));
-        cave.fixStations.append(makeFix("a3", QStringLiteral("EPSG:32616"),
+        cave.fixStations.append(makeFix("a1", QStringLiteral("UTM 16 N"),
+                                        500000.0, 4000000.0, 0.0));
+        cave.fixStations.append(makeFix("a2", QStringLiteral("EPSG:32616"),
                                         500000.0, 4000000.0, 0.0));
         region.caves.append(cave);
 
         const QString output = writeRegionToString(region);
         INFO(output.toStdString());
         CHECK(output.contains(QStringLiteral("*cs out EPSG:32616")));
-        CHECK_FALSE(output.contains(QStringLiteral("*cs out LONG-LAT")));
-        CHECK_FALSE(output.contains(QStringLiteral("*cs out JTSK")));
-    }
-
-    SECTION("a survex keyword cavern will output is still a fallback") {
-        // The premise for the section above: PROJ failing to parse a CS is not
-        // itself a reason to skip it. UTM16N, S-MERC, OSGB and EUR79Z30 are all
-        // unknown to PROJ and all fine for cavern's output, so a blanket
-        // "PROJ must understand it" gate would leave these exports with no
-        // *cs out at all — the very failure the fallback exists to prevent.
-        REQUIRE_FALSE(cwCoordinateTransform::isValidCS(QStringLiteral("UTM16N")));
-
-        cwSurveyDataArtifact::Region region;
-
-        cwSurveyDataArtifact::Cave cave;
-        cave.name = QStringLiteral("Keyword");
-        cave.fixStations.append(makeFix("a1", QStringLiteral("UTM16N"),
-                                        500000.0, 4000000.0, 0.0));
-        region.caves.append(cave);
-
-        const QString output = writeRegionToString(region);
-        INFO(output.toStdString());
-        CHECK(output.contains(QStringLiteral("*cs out UTM16N")));
+        CHECK_FALSE(output.contains(QStringLiteral("*cs out UTM 16 N")));
     }
 
 }

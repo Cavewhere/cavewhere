@@ -12,13 +12,11 @@
 #include "cwDistanceReading.h"
 #include "cwShot.h"
 #include "cwStation.h"
+#include "cwSurvexCS.h"
 
 //Qt includes
 #include <QTextStream>
 #include <QtGlobal>
-
-//Std includes
-#include <algorithm>
 
 namespace {
 
@@ -61,58 +59,12 @@ std::optional<DeclinationContext> makeDeclinationContext(const QList<cwFixStatio
     return std::nullopt;
 }
 
-void writeCsLine(QTextStream& stream, const QString& cs, bool isOutput)
-{
-    stream << (isOutput ? "*cs out " : "*cs ") << toSurvexCS(cs) << Qt::endl;
-}
-
 void writeDeclinationAuto(QTextStream& stream, const DeclinationContext& ctx)
 {
-    writeCsLine(stream, ctx.inputCS);
+    cwSurvexCS::writeCsLine(stream, ctx.inputCS);
     stream << "*declination auto ";
     writeCoordTriplet(stream, ctx.easting, ctx.northing, ctx.elevation);
     stream << Qt::endl;
-}
-
-// The list is survex's own (`ok_for_output == NO`, survex/src/commands.c:2521-2540;
-// LOCAL and LAT-LONG produce no PROJ string at all and are rejected outright).
-//
-// PROJ can't create any of them, and cwCoordinateTransform::isGeographic()
-// answers false for anything it fails to create — "not geographic" there means
-// "couldn't tell", not "projected". So without this list a LONG-LAT fix reads as
-// projected and is picked for *cs out, which fails the whole solve even when a
-// perfectly good projected fix sits later in the same cave. The other survex
-// keywords PROJ can't parse — UTM<zone>N, S-MERC, OSGB:XX, EUR79Z30, IJTSK —
-// are all fine for output, which is why this is a list of what to skip rather
-// than a blanket "PROJ must understand it" gate: such a gate would drop those
-// too and leave the export with no *cs out at all.
-bool isUnusableAsSurvexOutputCS(const QString& cs)
-{
-    static const QSet<QString> unusable = {
-        QStringLiteral("long-lat"), QStringLiteral("lat-long"),
-        QStringLiteral("jtsk"), QStringLiteral("jtsk03"),
-        QStringLiteral("local")
-    };
-    return unusable.contains(cs.trimmed().toLower());
-}
-
-QString toSurvexCS(const QString& cs)
-{
-    const QString trimmed = cs.trimmed();
-    const auto isBareName = [](const QString& text) {
-        if (text.isEmpty()) {
-            return true;
-        }
-        return std::all_of(text.cbegin(), text.cend(), [](QChar c) {
-            return c.isLetterOrNumber() || c == QLatin1Char('-') || c == QLatin1Char('_')
-                || c == QLatin1Char(':') || c == QLatin1Char('.');
-        });
-    };
-
-    if (isBareName(trimmed)) {
-        return trimmed;
-    }
-    return QStringLiteral("CUSTOM \"%1\"").arg(trimmed);
 }
 
 bool isValidSurvexRole(const QString& role)
@@ -229,7 +181,7 @@ void writeFixStations(QTextStream& stream,
     if (fixes.isEmpty()) {
         if (!fallbackFirstStation.isEmpty()) {
             if (!globalCSTrimmed.isEmpty()) {
-                writeCsLine(stream, globalCSTrimmed);
+                cwSurvexCS::writeCsLine(stream, globalCSTrimmed);
             }
             stream << "*fix " << fallbackFirstStation << " 0 0 0" << Qt::endl;
         }
@@ -242,7 +194,7 @@ void writeFixStations(QTextStream& stream,
         const QString cs = fix.inputCS().trimmed();
         if (!csEmitted || cs != currentCS) {
             if (!cs.isEmpty()) {
-                writeCsLine(stream, cs);
+                cwSurvexCS::writeCsLine(stream, cs);
             }
             currentCS = cs;
             csEmitted = true;

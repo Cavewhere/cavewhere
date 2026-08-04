@@ -48,24 +48,6 @@ std::optional<DeclinationContext> makeDeclinationContext(const QList<cwFixStatio
 //! `*calibrate DECLINATION` line is suppressed by the caller.
 void writeDeclinationAuto(QTextStream& stream, const DeclinationContext& ctx);
 
-//! True for survex's own keyword coordinate systems that cavern refuses as an
-//! output system — see the definition for which, and why the test can't be
-//! "PROJ doesn't understand it".
-bool isUnusableAsSurvexOutputCS(const QString& cs);
-
-//! \a cs rendered as survex *cs syntax. Survex names a system by keyword or
-//! authority code; anything else — a raw PROJ string, which the project's own
-//! local projection is — has to be quoted behind the CUSTOM keyword, or cavern
-//! refuses it with "Unknown coordinate system" (survex/src/commands.c, the
-//! CS_CUSTOM branch). The test is what a bare survex name may contain rather
-//! than what a PROJ string looks like, so WKT is quoted too.
-QString toSurvexCS(const QString& cs);
-
-//! Emit a `*cs` (or `*cs out`) line for \a cs, quoted as survex needs. Every
-//! emitter goes through here so a new one can't drop the CUSTOM quoting and
-//! fail the solve.
-void writeCsLine(QTextStream& stream, const QString& cs, bool isOutput = false);
-
 /**
  * Which coordinate system *cs out should name. There is no default, and the two
  * answers are now genuinely different systems: the working frame is the
@@ -91,22 +73,14 @@ inline QString shareableCSForFix(const cwFixStation& fix)
     if (!fix.hasPlacedCoordinate()) {
         return QString();
     }
-    const QString derived = cwCoordinateTransform::deriveProjectedOutputCS(
+    // Empty for a system PROJ can't read, and for one it can read but whose
+    // point wouldn't transform. Both leave the choice to the next fix rather
+    // than offering the string as it stands: importers normalize their format's
+    // spelling to PROJ's, so a system PROJ can't read names nothing cavern
+    // could use either — and a geographic CS as *cs out fails the solve
+    // outright, whatever it is spelled like.
+    return cwCoordinateTransform::deriveProjectedOutputCS(
         fix.inputCS(), cwGeoPoint(fix.easting(), fix.northing(), fix.elevation()));
-    if (!derived.isEmpty()) {
-        return derived;
-    }
-    // A system PROJ doesn't know at all is a survex spelling of its own (UTM16N,
-    // S-MERC, OSGB:XX, EUR79Z30) — cavern accepts those for output, and an svx
-    // import stores *cs verbatim — so offer the string as it stands;
-    // isUnusableAsSurvexOutputCS screens the ones cavern refuses. A system PROJ
-    // *does* know yielded nothing for a different reason: the point wouldn't
-    // transform. Falling back there would name a geographic CS as *cs out and
-    // fail the solve, so leave it to the next fix.
-    if (cwCoordinateTransform::isValidCS(fix.inputCS())) {
-        return QString();
-    }
-    return fix.inputCS().trimmed();
 }
 
 /**
@@ -146,7 +120,7 @@ QString resolveOutputCS(const Region& region, const QString& frameCS, OutputCSPo
     for (const auto& cave : region.caves) {
         for (const cwFixStation& fix : cave.fixStations) {
             const QString cs = shareableCSForFix(fix);
-            if (!cs.isEmpty() && !isUnusableAsSurvexOutputCS(cs)) {
+            if (!cs.isEmpty()) {
                 return cs;
             }
         }

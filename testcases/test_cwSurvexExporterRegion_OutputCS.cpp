@@ -18,7 +18,7 @@
 #include "cwStationPositionLookup.h"
 #include "cwSurveyChunk.h"
 #include "cwSurvexExporterRegion.h"
-#include "cwSurvexExporterUtils.h"
+#include "cwSurvexCS.h"
 #include "cwTrip.h"
 
 //Qt includes
@@ -148,7 +148,7 @@ TEST_CASE("cwSurvexExporterRegion resolves *cs out per policy",
         const QString frame = region->geoReference()->localCoordinateSystem();
         REQUIRE_FALSE(frame.isEmpty());
         CHECK(exportedOutputCS(region.get(), Policy::WorkingFrame)
-              == cwSurvexExporterUtils::toSurvexCS(frame));
+              == cwSurvexCS::toSurvexCS(frame));
     }
 
     // The whole point of the split: a geographic fix would be no output system
@@ -165,7 +165,7 @@ TEST_CASE("cwSurvexExporterRegion resolves *cs out per policy",
         REQUIRE_FALSE(frame.isEmpty());
         CHECK(frame != kUtmZone13N);
         CHECK(exportedOutputCS(region.get(), Policy::WorkingFrame)
-              == cwSurvexExporterUtils::toSurvexCS(frame));
+              == cwSurvexCS::toSurvexCS(frame));
     }
 
     SECTION("a fix that places nothing yet doesn't decide, so a later one does") {
