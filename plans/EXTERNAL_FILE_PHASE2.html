@@ -3671,5 +3671,173 @@ Stations list   &larr; denser rows; consider abbreviated UsedStations view</code
   asserts the resulting external trip has solved stations.
 </p>
 
+<h3 id="bug-b7">B7 &mdash; A project-side <code>*include</code> can escape the attachment directory</h3>
+
+<p>
+  <em>(Filed 2026-08-04.)</em> The rule that keeps an attachment's
+  dependency closure inside its own <code>external-centerline/</code>
+  directory is enforced on <strong>one side only</strong>.
+  <code>relativeEscapesAttachmentDir</code>
+  (<code>cwExternalCenterlineSync.cpp:102</code>) rejects an escaping
+  dependency when reconcile copies <em>from a remembered source</em>. The
+  project-side scan has no equivalent: <code>scanOwners</code> appends
+  every dependency the in-project entry declares straight into the watch
+  set (<code>cwExternalCenterlineManager.cpp:350-352</code>) with no
+  containment test. The solve <code>*include</code>s the in-project copy
+  by absolute path, so cavern resolves a <code>../</code> relative to
+  that copy and follows it out of the project; the per-attachment harvest
+  (<code>cwExternalStationHarvest::harvest</code>) does the same.
+</p>
+
+<p>
+  <strong>Reachable without any exotic step.</strong> It needs neither a
+  hand-edited project nor a malicious one in the usual sense &mdash; the
+  ordinary collaboration path delivers it. One user commits a project
+  copy whose entry file <code>*include</code>s a path outside
+  <code>external-centerline/</code>; a collaborator pulls, and on the
+  next scan that path enters their watch set and their solve. The
+  <code>external-centerline/</code> tree is committed with the project
+  (nothing gitignores it), so the escaping directive travels.
+</p>
+
+<p><strong>Two harms, in order of how often they will bite:</strong></p>
+
+<ul>
+  <li>
+    <strong>Silent non-portability.</strong> The solve depends on a file
+    no other collaborator has. The same project plots differently per
+    machine &mdash; or fails on one and not another &mdash; and nothing
+    on any surface says why, because the dependency is invisible to
+    every consumer that reasons about the attachment directory.
+  </li>
+  <li>
+    <strong>Arbitrary local-file disclosure to whoever opens the
+    project.</strong> Cavern echoes the offending source line and a caret
+    into its diagnostics. The harvest passes that log through
+    <code>withoutDriverNoise</code>, which strips only lines naming the
+    throwaway driver directory, and
+    <code>ExternalCenterlineFileErrorBanner</code> renders what survives
+    verbatim (<code>errorMessage</code> at <code>:26</code> into
+    <code>BodyText</code> at <code>:79</code>). So an entry file that
+    <code>*include</code>s an unrelated local path displays that file's
+    contents in the panel. Low severity &mdash; the content is shown to
+    the victim, not sent to the author &mdash; but it is a real
+    path-traversal read on a file the user never authorized, in a tool
+    whose normal workflow is opening projects other people made.
+  </li>
+</ul>
+
+<p>
+  <strong>Fix.</strong> Promote the containment predicate out of
+  <code>cwExternalCenterlineSync.cpp</code>'s anonymous namespace into a
+  shared helper and apply it to the project-side scan as well. Make the
+  outcome an <strong>error that excludes the attachment from the
+  solve</strong>, not a warning: a warning that is ignored still leaves
+  cavern reading outside the project, which is the whole thing being
+  prevented. The message must name the offending <code>*include</code>
+  target, since &mdash; unlike a cavern syntax error &mdash; the user has
+  no other way to find which directive escaped.
+</p>
+
+<div class="note">
+  This is the same shape as &sect;15's
+  <em>one owner for the <code>*include</code> quote guard</em> item: a
+  single question about what a path may contain, answered independently
+  in two places, where one copy was later widened and the other was not.
+  Fixing B7 by extracting a shared helper closes that item at the same
+  time, and the extracted helper is the natural home for both rules.
+</div>
+
+<p>
+  <strong>Test gate.</strong> A fixture whose entry file
+  <code>*include</code>s <code>../outside.svx</code>, attached and then
+  scanned, must: report an error naming the escaping target; contribute
+  no stations to the cave lookup; and leave the escaping path out of
+  <code>watchedFiles()</code>. Assert the last one explicitly &mdash; a
+  fix that only blocks the solve while still arming a
+  <code>QFileSystemWatcher</code> on a file outside the project has
+  closed the smaller half of the hole. Cover the reconcile side too, so
+  the shared helper is exercised through both callers.
+</p>
+
+<p>
+  <strong>Blocks:</strong> the live-link retirement
+  (<a href="EXTERNAL_FILE_LIVE_LINK_RETIREMENT.html">separate plan</a>)
+  makes editing the in-project copy the sanctioned workflow rather than
+  an unusual one, which turns this from a hole someone has to reach for
+  into one on the main path. B7 should land first regardless of whether
+  that plan is adopted.
+</p>
+
+<h3 id="bug-b8">B8 &mdash; An external edit to an attachment does not mark the project modified</h3>
+
+<p>
+  <em>(Filed 2026-08-04.)</em> Editing an in-project attachment outside CaveWhere
+  &mdash; the <code>external-centerline/</code> copy, in either project format
+  &mdash; fires the watcher, recomputes the dependency set and re-solves
+  (<code>cwExternalCenterlineManager.cpp:576-581</code>), so the plot visibly
+  updates. <strong><code>cwProject::modified()</code> stays false throughout.</strong>
+</p>
+
+<p>
+  <strong>Root cause.</strong> <code>cwProject::setModified(true)</code> is driven
+  by exactly one signal, <code>cwSaveLoad::localMutationOccurred</code>
+  (<code>cwProject.cpp:227-233</code>), and every emitter of that signal is inside
+  <code>cwSaveLoad</code> at the point a job is queued. The manager's recompute
+  path queues no jobs &mdash; it is pure re-derivation &mdash; so nothing on it
+  can reach the dirty bit. The reconcile path does not have this problem because
+  <code>enqueueExternalCenterlineCopyIfNewer</code> emits the signal deliberately,
+  with a comment saying why (<code>cwSaveLoad.cpp:3886-3894</code>): otherwise a
+  live-link refresh is &ldquo;silently lost in a bundled <code>.cw</code> on
+  quit-without-save&rdquo;. That is the same failure, and the watcher path was
+  never given the same treatment.
+</p>
+
+<p><strong>Consequences differ by project format:</strong></p>
+
+<ul>
+  <li>
+    <strong>Bundled <code>.cw</code> &mdash; data loss.</strong> The project
+    extracts to a working tree that is only re-zipped on save. The user edits,
+    watches the plot update, quits, is not prompted because nothing is modified,
+    and the edit is discarded with the tree.
+  </li>
+  <li>
+    <strong><code>.cwproj</code> directory &mdash; sync divergence.</strong> The
+    bytes are already at their final location, so nothing is lost from disk, but
+    the project does not consider itself changed &mdash; so the edit misses
+    whatever the save path does for a Git-backed project, and the plot the user
+    is looking at reflects work the repository does not know about.
+  </li>
+</ul>
+
+<p>
+  <strong>Fix.</strong> The project-side branch of
+  <code>onWatchedFileChanged</code> must mark the project modified, the same way
+  the reconcile path does. Route it through the existing
+  <code>cwSaveLoad::localMutationOccurred</code> channel rather than reaching for
+  <code>cwProject</code> directly, so there stays exactly one way the dirty bit is
+  set. Note the asymmetry to preserve: a <em>source</em>-side event must not mark
+  the project modified, since nothing in the project changed &mdash; and once the
+  <a href="EXTERNAL_FILE_LIVE_LINK_RETIREMENT.html">live-link retirement</a> lands
+  there is no source-side event at all.
+</p>
+
+<p>
+  <strong>Test gate.</strong> Attach a fixture, save, then rewrite the in-project
+  entry file on disk and wait for the re-solve; assert
+  <code>cwProject::modified()</code> is true. Cover both project formats, since
+  the failure modes differ. Add the negative case as well &mdash; a source-side
+  edit leaves <code>modified()</code> false &mdash; so a fix that marks everything
+  dirty does not pass.
+</p>
+
+<p>
+  <strong>Blocks:</strong> the live-link retirement's commit 1. That plan trades
+  the <em>Update</em> button for &ldquo;edits to the in-project copy are
+  live&rdquo;; if those edits do not mark the project dirty, the trade is a
+  downgrade rather than a simplification.
+</p>
+
 </body>
 </html>

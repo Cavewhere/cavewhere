@@ -56,7 +56,7 @@
 <body>
 <main>
 
-<h1>Scan-Time Station Harvest <span class="pill done">H1–H3 DONE</span></h1>
+<h1>Scan-Time Station Harvest <span class="pill done">H1–H4 DONE</span></h1>
 <p class="meta">
 Per-attachment cavern run at scan time, so an attached centerline's station names are known
 <em>before</em> — and independently of — the region solve. Branch <code>externalFiles</code>.
@@ -840,14 +840,22 @@ region-level log would also satisfy — per-trip attribution is proven in C++, n
       banner surface (the tie ends the float); proximity belongs to the future Connections
       list.</li>
   <li><strong>Naming the file the user recognizes in a harvest error.</strong> Cavern's log names
-      the path it opened, which is the in-project copy
-      (<code>&lt;project&gt;/ExternalCenterlines/&lt;uuid&gt;/foo.svx</code>) — a file the user never
-      chose and cannot open. <code>ExternalCenterlineFileErrorBanner</code> shows that text
-      verbatim, so the per-file attribution this feature exists to deliver currently attributes to
-      an internal artifact. Wants a cavern-log → user-facing-text mapper owned by the manager,
-      which is also where §3.1's <code>withoutDriverNoise</code> belongs. Note §3.7 assumes the
-      message is user-facing as-is. Blast radius: harvest (or a new helper), manager, banner, QML
-      test. <em>Raised by the H1–H3 review.</em></li>
+      the path it opened, which is the in-project copy — an <em>absolute</em> path the user did not
+      choose, machine-specific in its prefix, and therefore different for two collaborators looking
+      at the same broken file. <code>ExternalCenterlineFileErrorBanner</code> shows that text
+      verbatim. The tail is legible
+      (<code>&lt;Cave&gt;/trips/&lt;Trip&gt;/external-centerline/foo.svx</code>, built from sanitized
+      owner names in <code>cwSaveLoad::caveDirHelper</code>/<code>tripDirHelper</code>/<code>externalCenterlineDirHelper</code>,
+      <code>cwSaveLoad.cpp:4804-4823</code>), so the fix is to render it project-relative rather
+      than to substitute a different file's name. Wants a cavern-log → user-facing-text mapper
+      owned by the manager, which is also where §3.1's <code>withoutDriverNoise</code> belongs.
+      Note §3.7 assumes the message is user-facing as-is. Blast radius: harvest (or a new helper),
+      manager, banner, QML test. <em>Raised by the H1–H3 review; corrected 2026-08-04 — an earlier
+      draft of this item described the path as
+      <code>&lt;project&gt;/ExternalCenterlines/&lt;uuid&gt;/foo.svx</code>, which was never the
+      layout. Sequencing: do this</em> after <em>the
+      <a href="EXTERNAL_FILE_LIVE_LINK_RETIREMENT.html">live-link retirement</a>, which removes the
+      remembered source and so removes the second candidate for "the file the user recognizes".</em></li>
   <li><strong>Teaching <code>cwScopeStationListModel</code> the harvested names.</strong> It builds
       rows from <code>solvedStations()</code> alone
       (<code>cwScopeStationListModel.cpp:100-111</code>), so a dropped attachment's stations are

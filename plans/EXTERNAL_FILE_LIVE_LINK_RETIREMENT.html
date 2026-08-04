@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Live-Link Retirement — The Project Copy Is The Only File</title>
+<style>
+  :root {
+    --bg: #1b1d21;
+    --panel: #22252a;
+    --panel2: #26292e;
+    --border: #3a3f47;
+    --text: #e6e8eb;
+    --dim: #9aa0a8;
+    --accent: #61afef;
+    --good: #98c379;
+    --warn: #e5c07b;
+    --bad: #e06c75;
+    --mono: "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 15px/1.55 -apple-system, "Segoe UI", sans-serif;
+    margin: 0; padding: 2rem 1rem 6rem;
+  }
+  main { max-width: 1000px; margin: 0 auto; }
+  h1 { font-size: 1.7rem; margin: 0 0 .2rem; }
+  h2 { font-size: 1.25rem; margin: 2.6rem 0 .8rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+  h3 { font-size: 1.05rem; margin: 1.6rem 0 .5rem; color: var(--accent); }
+  .meta { color: var(--dim); font-size: .9rem; margin-bottom: 1.5rem; }
+  code, .mono { font-family: var(--mono); font-size: .86em; }
+  code { background: var(--panel2); border: 1px solid var(--border); border-radius: 4px; padding: .08em .35em; }
+  pre {
+    background: var(--panel2); border: 1px solid var(--border); border-radius: 8px;
+    padding: .9rem 1.1rem; overflow-x: auto; font-family: var(--mono); font-size: .82rem; line-height: 1.5;
+  }
+  pre code { background: none; border: none; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .92rem; }
+  th, td { border: 1px solid var(--border); padding: .5rem .7rem; text-align: left; vertical-align: top; }
+  th { background: var(--panel2); }
+  td code { white-space: nowrap; }
+  .pill { display: inline-block; border-radius: 999px; padding: .05rem .6rem; font-size: .75rem; font-weight: 600; letter-spacing: .3px; vertical-align: middle; }
+  .pill.draft { background: #3d3524; color: var(--warn); border: 1px solid var(--warn); }
+  .pill.done { background: #2b3a2b; color: var(--good); border: 1px solid var(--good); }
+  .callout { border-left: 3px solid var(--accent); background: var(--panel); padding: .7rem 1rem; border-radius: 0 8px 8px 0; margin: 1rem 0; }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout.bad { border-left-color: var(--bad); }
+  .callout .title { font-weight: 700; margin-bottom: .2rem; }
+  ul, ol { padding-left: 1.4rem; }
+  li { margin: .3rem 0; }
+  .dim { color: var(--dim); }
+  .good { color: var(--good); }
+  .bad { color: var(--bad); }
+</style>
+</head>
+<body>
+<main>
+
+<h1>Live-Link Retirement <span class="pill draft">DRAFT</span></h1>
+<p class="meta">
+  The in-project copy becomes the <em>only</em> file. CaveWhere stops watching,
+  probing and offering to re-copy from a remembered external source; the user
+  replaces the attachment explicitly, and edits to the project's own copy are
+  what the watcher reacts to. Filed 2026-08-04.
+  <br>
+  Related: <a href="EXTERNAL_FILE_INTEGRATION_PLAN.html">master plan</a>
+  (&sect;5 copy workflow, &sect;8.8 q16),
+  <a href="EXTERNAL_FILE_PHASE2.html">Phase 2</a>
+  (commit 7 shipped the stale/<code>updateFromSource</code> work; &sect;16 B7 is
+  this plan's prerequisite),
+  <a href="EXTERNAL_FILE_SCAN_STATION_HARVEST_PLAN.html">scan-time station harvest</a>
+  (&sect;6 follow-ups, several of which this collapses).
+</p>
+
+<h2 id="why">1. Why &mdash; two premises are in the codebase at once</h2>
+
+<p>
+  The 2026-07-16 direction change (Phase 2, commit 7) declared the in-project
+  copy the source of truth and dropped auto-reconcile: a source-side edit now
+  only raises a flag, and the user triggers the copy. That was the right
+  direction and it did not go far enough. The watcher, the freshness probe, the
+  <em>Update</em> button and two banners all remain, and every one of them is
+  built on the opposite premise &mdash; that the external file still holds
+  authority and the project copy is a cache of it.
+</p>
+
+<p>
+  The two premises meet in one predicate. Staleness is defined as "the reconcile
+  plan has pending copies" (<code>cwExternalCenterlineManager.cpp:390-399</code>),
+  and a copy is planned whenever <code>destinationMatchesSource</code> is false
+  (<code>cwExternalCenterlineSync.cpp:42-56</code>):
+</p>
+
+<pre><code>if (!dstInfo.exists())                    return false;
+if (srcInfo.size() != dstInfo.size())     return false;
+return srcInfo.lastModified() &lt;= dstInfo.lastModified();</code></pre>
+
+<div class="callout bad">
+  <div class="title">The predicate is symmetric; the affordance is directional.</div>
+  It answers <em>&ldquo;do these two files differ?&rdquo;</em> The button built on
+  it does <em>&ldquo;push the source into the project.&rdquo;</em> The only term
+  carrying direction is the <code>lastModified</code> comparison, and it is ANDed
+  behind size equality &mdash; so for any edit that changes the file's length,
+  which is nearly all of them, the function returns on line 2 and the mtime
+  ordering never runs. The manager therefore cannot distinguish
+  <em>the source moved forward</em> from <em>the project copy moved forward</em>.
+  It sees drift and always attributes it to the source.
+</div>
+
+<h3>1.1 The two hazards that fall out</h3>
+
+<p>
+  Both are the same bug seen from different ends: both mean &ldquo;the copy moved
+  forward,&rdquo; and both are read as &ldquo;the source is newer, offer
+  Update.&rdquo;
+</p>
+
+<table>
+  <tr>
+    <th></th>
+    <th>H&#8209;A &mdash; in-place edit clobber</th>
+    <th>H&#8209;B &mdash; pull-then-Update clobber</th>
+  </tr>
+  <tr>
+    <td><strong>Trace</strong></td>
+    <td>User fixes an error directly in the in-project copy. Sizes now differ, so
+        the probe flags stale and <em>Update</em> appears; clicking it copies the
+        old source back over the fix.</td>
+    <td>User B edits the copy, commits, pushes. User A pulls; the copy carries B's
+        bytes and a checkout mtime. Sizes differ, so A is flagged stale on open;
+        clicking <em>Update</em> writes A's untouched source over B's work, and
+        reconcile's GC (<code>cwExternalCenterlineSync.cpp:121-128</code>) deletes
+        any file B added to the closure.</td>
+  </tr>
+  <tr>
+    <td><strong>What is lost</strong></td>
+    <td>The user's own local edit.</td>
+    <td>A collaborator's committed, pushed work.</td>
+  </tr>
+  <tr>
+    <td><strong>Who notices</strong></td>
+    <td>The person who made it.</td>
+    <td>Possibly nobody. The reversion is a legitimate-looking commit.</td>
+  </tr>
+  <tr>
+    <td><strong>How ordinary</strong></td>
+    <td>Uncommon.</td>
+    <td>The normal collaboration path for a git-backed <code>.cwproj</code>.</td>
+  </tr>
+</table>
+
+<h3>1.2 Why not just fix the predicate</h3>
+
+<p>
+  Because a two-point comparison cannot carry direction. Telling
+  <em>source moved</em> from <em>copy moved</em> needs a third point: a recorded
+  baseline of what the copy was at the last successful reconcile, per machine,
+  maintained across every sync, invalidated correctly on attach, detach, replace,
+  external edit and pull. <code>cwExternalSourceSettings</code> stores an
+  <code>ownerId &rarr; sourcePath</code> and nothing else, so that baseline is
+  new state with new invariants and new ways to be wrong.
+</p>
+
+<p>
+  Deleting the second file deletes the question instead of answering it. That is
+  the whole proposal.
+</p>
+
+<h3>1.3 The asymmetry this also removes</h3>
+
+<p>
+  <code>cwExternalSourceSettings</code> is per-user and per-machine, so it does
+  not travel in the project. Today that gives two people looking at the same
+  attachment structurally different capabilities: whoever attached it has a
+  source, a stale flag and an <em>Update</em> button; whoever cloned the project
+  has none of them and can only edit the copy. Nothing in the UI explains why,
+  and nothing could &mdash; the cause is a settings file one of them happens to
+  have. Under this plan they are the same user.
+</p>
+
+<h2 id="model">2. The model afterwards</h2>
+
+<ul>
+  <li><strong>One file.</strong> The attachment is
+      <code>&lt;project&gt;/&lt;Cave&gt;/trips/&lt;Trip&gt;/external-centerline/&lt;entry&gt;.svx</code>
+      and its closure. It is what the solve includes, what the harvest reads,
+      what the error banner names, and what git versions.</li>
+  <li><strong>Edits to it are live.</strong> Already implemented: a project-side
+      watcher event recomputes the dependency set and re-solves
+      (<code>cwExternalCenterlineManager.cpp:576-581</code>). This half of the
+      proposal is existing behavior, not new work.</li>
+  <li><strong>Replace is explicit.</strong> A new verb re-runs the attach path
+      against a freshly picked file, swapping the closure in one operation. It is
+      the only way an outside file enters the project after the initial attach.</li>
+  <li><strong>The remembered path becomes a breadcrumb.</strong> Kept purely to
+      pre-fill the Replace file dialog. No watching, no probing, no staleness, no
+      banner. When it goes missing, the dialog just opens somewhere unhelpful
+      &mdash; which is all a forgotten path should ever cost.</li>
+</ul>
+
+<div class="callout">
+  <div class="title">What the user gives up, honestly stated</div>
+  The caver who maintains master survey data in Survex text outside CaveWhere
+  goes from <em>edit, click Update</em> to <em>edit, click Replace, confirm the
+  pre-filled path</em>. That is one extra click on a workflow that was already
+  explicit after the 2026-07-16 change. They also gain the option of editing the
+  project's own copy, which re-solves with no click at all.
+</div>
+
+<h2 id="prereq">3. Prerequisites &mdash; Phase 2 &sect;16 B7 and B8</h2>
+
+<p>
+  Both are real defects today, independent of this plan. Both are on the path
+  this plan promotes from &ldquo;possible&rdquo; to &ldquo;sanctioned&rdquo;, so
+  shipping the retirement without them would be advertising a workflow whose
+  guard rails are missing.
+</p>
+
+<p>
+  <a href="EXTERNAL_FILE_PHASE2.html#bug-b7">B7</a> &mdash; a project-side
+  <code>*include</code> can escape the attachment directory. Today someone has to
+  reach for it; afterwards it sits on the main path.
+</p>
+
+<p>
+  <a href="EXTERNAL_FILE_PHASE2.html#bug-b8">B8</a> &mdash; an external edit to
+  the in-project copy does not mark the project modified.
+  <strong>Confirmed 2026-08-04:</strong> <code>cwProject::setModified(true)</code>
+  is driven solely by <code>cwSaveLoad::localMutationOccurred</code>
+  (<code>cwProject.cpp:227-233</code>), and every emitter of that signal lives
+  inside <code>cwSaveLoad</code> where a job is queued. The manager's
+  watcher-driven recompute enqueues no jobs, so the bit never flips &mdash; even
+  though the edit re-solves and the plot visibly updates.
+</p>
+
+<div class="callout bad">
+  <div class="title">This one is load-bearing for the whole plan.</div>
+  &ldquo;Edits to the in-project copy are live&rdquo; is the benefit being traded
+  for the <em>Update</em> button. If those edits do not mark the project dirty,
+  the trade is a downgrade: the user sees the plot update, quits, is not
+  prompted, and &mdash; in a bundled <code>.cw</code>, whose extracted tree is
+  only re-zipped on save &mdash; loses the edit outright. B8 must land before
+  commit 1, not merely before release.
+</div>
+
+<h2 id="delete">4. What comes out</h2>
+
+<p>
+  Mostly subtraction. Roughly 15 files, of which 8 are tests.
+</p>
+
+<table>
+  <tr><th>File</th><th>Removed</th></tr>
+  <tr>
+    <td><code>cwExternalCenterlineManager.h/.cpp</code></td>
+    <td><code>staleSourceOwners</code> + signal + <code>m_staleRaisedSinceSnapshot</code>;
+        <code>missingSourceOwners</code> + signal + <code>isSourceMissing</code>;
+        <code>updateFromSource</code>; <code>m_sourceOwnerForPath</code>; the
+        source branch of the freshness probe
+        (<code>:361-401</code>); the source branch of
+        <code>onWatchedFileChanged</code> (<code>:548-574</code>);
+        <code>ExternalScanResult</code>'s stale/missing/sourceOwner fields and
+        their apply-time union (<code>:429-466</code>).</td>
+  </tr>
+  <tr>
+    <td><code>cwExternalSourceSettings.h/.cpp</code></td>
+    <td>Nothing structurally &mdash; demoted, not deleted. The accessors are
+        renamed to say what they now mean (a picker default, not a link), and the
+        doc comment stops describing a live link.</td>
+  </tr>
+  <tr>
+    <td><code>cwExternalCenterlineSync.cpp</code></td>
+    <td><code>destinationMatchesSource</code> keeps its job inside
+        attach/replace, but stops being the definition of staleness. The GC
+        (<code>:121-128</code>) now only ever runs against a closure the user
+        just picked, which is the context it was safe in all along.</td>
+  </tr>
+  <tr>
+    <td><code>ExternalCenterlineMissingSourceBanner.qml</code></td>
+    <td>Deleted.</td>
+  </tr>
+  <tr>
+    <td><code>ExternalCenterlineAttachedHeader.qml</code>,
+        <code>ExternalCenterlineTripPanel.qml</code></td>
+    <td>The stale/missing state, the <em>Update</em> action, the
+        <code>updateMissingSourcePath</code> polling
+        (<code>ExternalCenterlineTripPanel.qml:67-101</code>, which exists only
+        because <code>sourcePathFor</code> has no property backing). Replaced by
+        a <em>Replace&hellip;</em> action.</td>
+  </tr>
+  <tr>
+    <td><code>cwRootData.h/.cpp</code></td>
+    <td>Nothing removed; the <code>externalSourceSettings</code> property
+        survives as the breadcrumb store. Its member comment
+        (<code>cwRootData.h:229</code>, &ldquo;Per-machine live-link source
+        paths&rdquo;) is now wrong.</td>
+  </tr>
+  <tr>
+    <td>Tests (8 files)</td>
+    <td><code>test_cwExternalSourceSettings.cpp</code>,
+        <code>test_cwLinePlotTask_AttachWatcher.cpp</code>,
+        <code>test_cwLinePlotManager_AsyncScan.cpp</code>,
+        <code>test_cwExternalCenterlineAttach*.cpp</code>,
+        <code>tst_ExternalCenterlineTripPanel.qml</code>,
+        <code>tst_ExternalCenterlinePanelComponents.qml</code>,
+        <code>tst_AddSurveyFileDialog.qml</code>. Cases pinning stale/missing
+        semantics are deleted; cases pinning <em>project-side</em> watch and
+        re-solve are kept and become the load-bearing ones.</td>
+  </tr>
+</table>
+
+<h2 id="add">5. What goes in</h2>
+
+<h3>5.1 Replace</h3>
+
+<p>
+  <code>attachCenterline(cwTrip*, sourcePath)</code> already does the whole job:
+  scan the picked file, reconcile its closure into the owner's attachment dir,
+  GC what is no longer referenced, re-solve. Replace is that call against an
+  owner that already has an attachment, guarded by <code>isOwnerBusy</code> like
+  every other filesystem operation for an owner.
+</p>
+
+<p>
+  The open detail is whether it routes through detach-then-attach or reuses the
+  existing reconcile-with-GC. Reconcile-with-GC is preferable: detach drops the
+  settings entry and attachment-dir map entry synchronously (per the header
+  comment at <code>cwExternalCenterlineManager.h:142-150</code>), so a
+  detach/attach pair briefly leaves the owner in a state where an interleaved
+  scan sees no attachment at all.
+</p>
+
+<h3>5.2 Breadcrumb semantics</h3>
+
+<p>
+  Keep the store, drop the meaning. Nothing reads it except the Replace dialog's
+  initial folder. Detach already clears the entry, which stays correct. A
+  breadcrumb pointing at a file that no longer exists is not an error state and
+  raises no banner &mdash; the dialog opens at the default location instead.
+</p>
+
+<h2 id="sequence">6. Commit sequence</h2>
+
+<table>
+  <tr><th>#</th><th>Commit</th><th>Test gate</th></tr>
+  <tr>
+    <td>0</td>
+    <td><em>(Phase 2 &sect;16 B7 and B8)</em> Shared containment helper, with the
+        project-side scan rejecting an escaping <code>*include</code>; and a
+        watcher-driven recompute marking the project modified.</td>
+    <td>Their own gates. Not part of this plan's commits &mdash; listed so the
+        dependency is visible. B8 in particular blocks commit 1: without it
+        &ldquo;edits to the copy are live&rdquo; is not a benefit worth trading
+        the <em>Update</em> button for.</td>
+  </tr>
+  <tr>
+    <td>1</td>
+    <td><strong>Replace verb.</strong> Manager entry point + panel action. Live
+        alongside the existing Update button, which still works.</td>
+    <td>Replace swaps the closure, GCs a dependency the new file does not
+        reference, and re-solves. Busy-owner refusal. Bundled
+        <code>.cw</code> and <code>.cwproj</code> both covered.</td>
+  </tr>
+  <tr>
+    <td>2</td>
+    <td><strong>Stop watching sources.</strong> Drop the source branch from the
+        probe and from <code>onWatchedFileChanged</code>; drop
+        <code>m_sourceOwnerForPath</code>. <code>staleSourceOwners</code> stays
+        in the API but is now permanently empty.</td>
+    <td>Editing a remembered source file changes nothing observable: no
+        <code>staleSourceOwnersChanged</code>, no watch-set change, no re-solve.
+        Editing the project copy still re-solves &mdash; the existing test,
+        which now carries the weight.</td>
+  </tr>
+  <tr>
+    <td>3</td>
+    <td><strong>Delete the stale/missing surface.</strong> Both properties, both
+        signals, <code>updateFromSource</code>, <code>isSourceMissing</code>, the
+        missing-source banner, the Update action, the panel's polling.</td>
+    <td>Panel renders for an attached owner with no source recorded and one with
+        a source whose file is gone &mdash; identical UI in both cases. QML tests
+        for the removed banner deleted rather than skipped.</td>
+  </tr>
+  <tr>
+    <td>4</td>
+    <td><strong>Demote <code>cwExternalSourceSettings</code>.</strong> Rename the
+        accessors to breadcrumb language; update the class doc and
+        <code>cwRootData.h:229</code>; wire it as the Replace dialog's default
+        folder only.</td>
+    <td>Replace pre-fills from the breadcrumb; a missing breadcrumb falls back
+        without error; detach clears it. Old settings files still load.</td>
+  </tr>
+  <tr>
+    <td>5</td>
+    <td><strong>Plan and doc reconciliation</strong> (&sect;8).</td>
+    <td>None &mdash; documentation only.</td>
+  </tr>
+</table>
+
+<p class="dim">
+  Commits 2 and 3 are deliberately separate: 2 makes the behavior dead, 3 removes
+  the API. Splitting them keeps the diff that changes behavior small enough to
+  review against the tests, and leaves a revert point if a consumer turns up that
+  the file sweep missed.
+</p>
+
+<h2 id="open">7. Open questions</h2>
+
+<ol>
+  <li>
+    <strong>What happens when the in-project copy itself goes missing?</strong>
+    <code>missingSourceOwners</code> covers a missing <em>source</em>; nothing
+    covers a missing <em>copy</em>. Once the copy is the only file, that becomes
+    the state worth surfacing, and it is the one case where a
+    &ldquo;re-attach&rdquo; prompt is genuinely the right answer. Probably one
+    small addition rather than a repurposing of the banner being deleted.
+  </li>
+  <li>
+    <strong>Should Replace warn when the project copy has local changes?</strong>
+    Without a baseline we cannot detect this, which is the point of the plan. The
+    honest answer is a plain confirmation on Replace &mdash; &ldquo;this replaces
+    the attached files&rdquo; &mdash; rather than a conditional warning we cannot
+    compute correctly.
+  </li>
+  <li>
+    <strong>Release note wording</strong> for users whose Update button
+    disappears.
+  </li>
+</ol>
+
+<h2 id="notinphase">8. Not in this plan</h2>
+
+<ul>
+  <li>
+    <strong>Harvest error naming</strong>
+    (<a href="EXTERNAL_FILE_SCAN_STATION_HARVEST_PLAN.html">harvest plan</a>
+    &sect;6). This collapses it: with no source there is no second candidate for
+    &ldquo;the file the user recognizes,&rdquo; and the item reduces to printing
+    the project-relative path. Do it <em>after</em>, when it is smaller.
+  </li>
+  <li>
+    <strong>Three surfaces fire for one broken file</strong> (harvest &sect;6).
+    Deleting two banners changes the precedence problem's shape; re-assess
+    afterwards.
+  </li>
+  <li>
+    <strong>The banner chassis dedup</strong> (harvest &sect;6). One of the five
+    copies is deleted here, so the count changes but the item does not.
+  </li>
+  <li>
+    <strong><code>scanOwners</code> cancellation and the per-file cache</strong>
+    (harvest &sect;6). Independent; dropping the source-side scan does reduce the
+    per-scan cavern work, which makes it less urgent but not resolved.
+  </li>
+</ul>
+
+<h2 id="staleness">9. Documentation this invalidates</h2>
+
+<ul>
+  <li>
+    <strong>Master plan &sect;8.8 q16</strong> defines the missing-source banner
+    as &ldquo;Yellow banner; Re-link / Switch-to-import buttons&rdquo;
+    (<code>EXTERNAL_FILE_INTEGRATION_PLAN.html:2098</code>). The question
+    dissolves rather than being answered &mdash; mark it retired, do not answer
+    it.
+  </li>
+  <li>
+    <strong>Master plan &sect;5</strong> (copy workflow) describes the live link
+    as an ongoing relationship. Needs a note that the copy is terminal.
+  </li>
+  <li>
+    <strong>Phase 2 commit 7</strong> is titled
+    &ldquo;<em>includes the direction-change stale/updateFromSource work</em>&rdquo;
+    (<code>EXTERNAL_FILE_PHASE2.html:1872</code>). Leave the history, add a
+    forward pointer here.
+  </li>
+  <li>
+    <strong><code>cwExternalCenterlineManager.h:121-132</code></strong>, the
+    staleness doc, is the clearest statement of the retired model and goes with
+    the code.
+  </li>
+</ul>
+
+</main>
+</body>
+</html>
