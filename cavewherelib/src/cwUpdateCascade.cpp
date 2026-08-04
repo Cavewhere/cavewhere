@@ -50,23 +50,19 @@ namespace {
         }
     }
 
-    //Waits for a set of nodes, short-circuiting when they are all already done: a
-    //combinator delivers even an all-finished set through a watcher, so a cascade
-    //with nothing to do would otherwise cost an event-loop turn per join. The
-    //empty set takes the same path out of necessity rather than economy — a
-    //combinator with nothing added never finishes at all, and both a pass over no
-    //pipelines and a root's empty dependency list land here.
+    //Waits for a set of nodes. The sealed combine() closes the input set before
+    //anything may settle, so an input that has already finished settles inline
+    //rather than through a watcher: a set that is entirely done — a cascade with
+    //nothing left to do — finishes before this returns, and a partly done one
+    //watches only what is still running. An empty set completes, which is what
+    //both a pass over no pipelines and a root's empty dependency list need; the
+    //incremental combine() << nodes form cancels instead.
+    //
+    //AllSettled so that one node canceling does not release the pipelines waiting
+    //on its siblings early.
     QFuture<void> joinNodes(const QList<QFuture<void>>& nodes)
     {
-        const bool settled = std::all_of(nodes.begin(), nodes.end(),
-                                         [](const QFuture<void>& node) { return node.isFinished(); });
-        if(settled) {
-            return QtFuture::makeReadyVoidFuture();
-        }
-
-        auto join = AsyncFuture::combine(AsyncFuture::AllSettled);
-        join << nodes;
-        return join.future();
+        return AsyncFuture::combine(nodes, AsyncFuture::AllSettled).future();
     }
 }
 
