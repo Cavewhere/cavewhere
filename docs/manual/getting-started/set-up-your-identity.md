@@ -26,9 +26,8 @@ A fresh install opens on **"Let's set you up!"**.
 
 Type your name and your email, then click **Next**.
 
-Neither field carries a label, unfortunately. The gray text inside them, **"Your
-name"** and **"your@email.com"**, is placeholder text that disappears as you
-type.
+The gray text inside the fields, **"Your name"** and **"your@email.com"**, is
+placeholder text that disappears as you type.
 
 **Next only proceeds once both fields validate.** Click it too early and the
 button shakes and marks whatever went wrong:
