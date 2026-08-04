@@ -156,15 +156,15 @@ TEST_CASE("cwDiskCacher concurrent insert and entry", "[cwDiskCacher]") {
         // Concurrent inserts
         QtConcurrent::blockingMap(idxs, [&](int i) {
             cwDiskCacher cacher(tempPath);
-            cacher.insert(keys[i], datas[i]);
+            cacher.insert(keys.at(i), datas.at(i));
         });
 
         // Concurrent entries
         QtConcurrent::blockingMap(idxs, [tempPath, &checkMutex, &checks, keys, datas](int i) {
             cwDiskCacher cacher(tempPath);
-            auto res = cacher.entry(keys[i]);
+            auto res = cacher.entry(keys.at(i));
             QMutexLocker locker(&checkMutex);
-            checks.append(res == datas[i]);
+            checks.append(res == datas.at(i));
         });
     }
 
