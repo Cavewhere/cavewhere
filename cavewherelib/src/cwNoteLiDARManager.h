@@ -153,7 +153,22 @@ private:
     cwFutureManagerToken m_futureManagerToken;
     AsyncFuture::Restarter<void> m_restarter;
 
-    QSet<cwNoteLiDAR*> m_dirtyNotes;
+    // One note waiting to be triangulated, with the trip and cave it hung from
+    // when it was marked. Both are cached so isRunnable() reads only this entry:
+    // a trip destroys its own members before ~QObject deletes the notes it owns,
+    // so walking note -> trip -> cave to answer a question about the note reads
+    // a dead trip (#637). The cave itself is still read through, since whether
+    // its centerline is solved changes after the note is marked.
+    struct DirtyNote {
+        cwNoteLiDAR* note = nullptr;
+        QPointer<cwTrip> trip;
+        QPointer<cwCave> cave;
+
+        bool isRunnable() const;
+        bool operator==(const DirtyNote&) const = default;
+    };
+
+    QHash<cwNoteLiDAR*, DirtyNote> m_dirtyNotes;
     QSet<cwNoteLiDAR*> m_deletedNotes;
 
     // The staleness half of updateState() (see cwUpdatable::State), mirroring the

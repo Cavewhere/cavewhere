@@ -51,18 +51,6 @@ using NotePtrList = QList<cwNoteLiDAR*>;
 
 namespace {
 
-// A dirty note is only worth triangulating once it is attached to a cave/trip,
-// has stations, and its cave centerline is solved. Shared by updateState() and
-// the run path.
-bool isRunnableNote(const cwNoteLiDAR* note)
-{
-    return note != nullptr
-        && note->parentTrip() != nullptr
-        && note->parentCave() != nullptr
-        && note->rowCount() > 0
-        && !note->parentCave()->stationPositionLookup().positions().isEmpty();
-}
-
 cwDiskCacher::Key iconCacheKey(const cwProject* project, const cwNoteLiDAR* note)
 {
     cwDiskCacher::Key key;
@@ -131,6 +119,18 @@ QString cacheUrlForKey(const cwDiskCacher::Key& key)
     return QStringLiteral("image://%1/%2").arg(cwCacheImageProvider::name(), QString::fromLatin1(escaped));
 }
 
+}
+
+// A dirty note is only worth triangulating once it is still attached to a
+// cave/trip, has stations, and its cave centerline is solved. Shared by
+// updateState() and the run path.
+bool cwNoteLiDARManager::DirtyNote::isRunnable() const
+{
+    return note != nullptr
+        && !trip.isNull()
+        && !cave.isNull()
+        && note->rowCount() > 0
+        && !cave->stationPositionLookup().positions().isEmpty();
 }
 
 cwNoteLiDARManager::cwNoteLiDARManager(QObject* parent) :
@@ -303,7 +303,8 @@ cwUpdatable::State cwNoteLiDARManager::doUpdateState() const
     // dispatched, a running batch reports Working until it completes.
     // See cwUpdatable::State.
     const bool runnableDirty =
-        std::any_of(m_dirtyNotes.begin(), m_dirtyNotes.end(), &isRunnableNote);
+        std::any_of(m_dirtyNotes.begin(), m_dirtyNotes.end(),
+                    [](const DirtyNote& dirty) { return dirty.isRunnable(); });
     if(m_workPending && runnableDirty) { return cwUpdatable::State::Dirty; }
     if(isRunning())                    { return cwUpdatable::State::Working; }
     return cwUpdatable::State::Clean;
@@ -518,7 +519,7 @@ void cwNoteLiDARManager::noteDestroyed(QObject* noteObj)
         //destroyed() is emitted by ~QObject, so ~cwNoteLiDAR has already run and
         //reading the note — which updateState() would do while it is still in the
         //dirty set — is a use-after-free.
-        const bool wasPending = m_dirtyNotes.remove(note);
+        const bool wasPending = m_dirtyNotes.remove(note) > 0;
         removeKeywordItemForNote(note);
         m_noteToRender.remove(note);
 
@@ -587,7 +588,8 @@ void cwNoteLiDARManager::markDirty(cwNoteLiDAR* note)
     }
 
     // connect(note, &QObject::destroyed, this, &cwNoteLiDARManager::noteDestroyed, Qt::UniqueConnection);
-    m_dirtyNotes.insert(note);
+    //Overwrites any earlier entry, so a re-mark refreshes the cached ancestors.
+    m_dirtyNotes.insert(note, DirtyNote{note, note->parentTrip(), note->parentCave()});
     m_workPending = true;
 }
 
@@ -606,9 +608,9 @@ QFuture<void> cwNoteLiDARManager::runBatch()
     // Snapshot and clear “deleted” guard
     NotePtrList notes;
     notes.reserve(m_dirtyNotes.size());
-    for (cwNoteLiDAR* note : std::as_const(m_dirtyNotes)) {
-        if (isRunnableNote(note)) {
-            notes.append(note);
+    for (const DirtyNote& dirty : std::as_const(m_dirtyNotes)) {
+        if (dirty.isRunnable()) {
+            notes.append(dirty.note);
         }
     }
 

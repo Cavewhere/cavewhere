@@ -148,7 +148,20 @@ private:
     QPointer<cwRegionTreeModel> RegionModel;
     cwLinePlotManager* LinePlotManager;
 
-    QSet<cwScrap*> DirtyScraps; //These are the scraps that need to be updated
+    // One scrap waiting to be triangulated, with the cave it hung from when it
+    // was marked. The cave is cached so isRunnable() reads only this entry: a
+    // trip destroys its own members before ~QObject deletes the notes holding
+    // its scraps, so walking scrap -> trip -> cave to answer a question about
+    // the scrap reads a dead trip (#637).
+    struct DirtyScrap {
+        cwScrap* scrap = nullptr;
+        QPointer<cwCave> cave;
+
+        bool isRunnable() const;
+        bool operator==(const DirtyScrap&) const = default;
+    };
+
+    QHash<cwScrap*, DirtyScrap> DirtyScraps; //These are the scraps that need to be updated
     QSet<cwScrap*> DeletedScraps; //All the deleted scraps
 
     // The staleness half of updateState() (see cwUpdatable::State), mirroring the
