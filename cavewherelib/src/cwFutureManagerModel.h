@@ -25,7 +25,7 @@ class CAVEWHERE_LIB_EXPORT cwFutureManagerModel : public QAbstractListModel
 
 public:
     enum Roles {
-        NameRole,
+        NameRole = Qt::UserRole,
         ProgressRole,
         NumberOfStepRole,
         RunTimeRole
