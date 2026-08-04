@@ -28,9 +28,6 @@ QQ.Item {
     property list<ToolItem> toolModel: ActiveTools.tools
 
     readonly property var groups: ToolModelUtils.groupTools(toolsTabId.toolModel)
-    readonly property ToolItem activeTool: ToolModelUtils.activeTool(
-                                               toolsTabId.interactionManager,
-                                               toolsTabId.toolModel)
 
     QC.Label {
         objectName: "toolsTabEmptyLabel"
@@ -106,32 +103,15 @@ QQ.Item {
 
             // The armed tool's options, in line under the list rather than in a
             // flyout — there is no edge here to hinge one off.
-            FlyoutCard {
+            ToolOptionsCard {
                 objectName: "toolsTabOptionsCard"
                 Layout.fillWidth: true
                 Layout.leftMargin: Theme.pageMargin
                 Layout.rightMargin: Theme.pageMargin
                 Layout.topMargin: Theme.pageMargin
 
-                visible: optionsLoaderId.sourceComponent !== null
-                title: toolsTabId.activeTool ? toolsTabId.activeTool.flyoutTitle : ""
-                iconSource: toolsTabId.activeTool ? toolsTabId.activeTool.iconSource : ""
-
-                onCloseRequested: {
-                    if (toolsTabId.interactionManager !== null && toolsTabId.activeTool !== null) {
-                        toolsTabId.interactionManager.toggle(toolsTabId.activeTool.interaction)
-                    }
-                }
-
-                QQ.Loader {
-                    id: optionsLoaderId
-                    Layout.fillWidth: true
-                    Layout.margins: Theme.toolFlyoutPadding
-                    Layout.preferredHeight: optionsLoaderId.item
-                                            ? optionsLoaderId.item.implicitHeight : 0
-                    sourceComponent: toolsTabId.activeTool
-                                     ? toolsTabId.activeTool.propertyContent : null
-                }
+                interactionManager: toolsTabId.interactionManager
+                toolModel: toolsTabId.toolModel
             }
 
             QQ.Item {
