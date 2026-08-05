@@ -381,8 +381,25 @@ TEST_CASE("cwCoordinateText reads an angle only where the text says it wrote one
 
     SECTION("six of them are six components, not two angles") {
         //#654's own example of what has to stay refused: without a mark on them,
-        //these are six numbers and a coordinate takes three.
-        rejection(QStringLiteral("46 07 16.1, -115 35 56.5"), cwUnits::Metric, kLatLong);
+        //these are six numbers and a coordinate takes three. Which is also the
+        //message this whole feature is likeliest to be met through, so it teaches
+        //the one thing missing rather than counting the numbers back.
+        const QString reason = rejection(QStringLiteral("46 07 16.1, -115 35 56.5"),
+                                         cwUnits::Metric, kLatLong);
+        CHECK(reason.contains(QStringLiteral("Mark degrees")));
+        CHECK(reason.contains(QStringLiteral("46:07:16.1, -115:35:56.5")));
+        CHECK(reason.contains(QStringLiteral("latitude, longitude, elevation")));
+        //Three placeholders in one sentence, so the count has to be checked to
+        //know it went to the front of it rather than into an example.
+        CHECK(reason.contains(QStringLiteral("this has 6")));
+    }
+
+    SECTION("and the hint stays off a row that couldn't take an angle anyway") {
+        //An angle is refused outright on a projected row, so telling someone to
+        //mark one there is advice for a coordinate they can't have.
+        const QString reason = rejection(QStringLiteral("1, 2, 3, 4"));
+        CHECK(reason.contains(QStringLiteral("easting, northing, elevation")));
+        CHECK_FALSE(reason.contains(QStringLiteral("Mark degrees")));
     }
 
     SECTION("commas don't group either, or an all-spaces paste would break") {
@@ -427,6 +444,24 @@ TEST_CASE("cwCoordinateText refuses an angle on a row that isn't geographic",
         CHECK(rejection(QStringLiteral("500000 E, 4649776 N"))
                   .contains(QStringLiteral("Only the elevation")));
     }
+
+    SECTION("so it doesn't join that row's numbers into an angle either") {
+        //A letter is what makes "46 07.268 N" one angle, and on a projected row
+        //it isn't a letter that says so. Were it, this UTM paste would come back
+        //with "an angle's minutes are less than 60" — true of nothing the user
+        //was doing.
+        CHECK(rejection(QStringLiteral("500000 4649776 N"))
+                  .contains(QStringLiteral("Only the elevation")));
+    }
+
+    SECTION("and says the same thing whichever side of the number it sits on") {
+        //The letter in front used to be answered with "couldn't read", while the
+        //same letter behind the number was answered with what to do about it.
+        //Both are the row being told to remove a letter.
+        const QString leading = rejection(QStringLiteral("N46.12113, W115.59902"));
+        CHECK(leading.contains(QStringLiteral("Only the elevation")));
+        CHECK(leading == rejection(QStringLiteral("46.12113 N, 115.59902 W")));
+    }
 }
 
 TEST_CASE("cwCoordinateText refuses an angle it can't make sense of",
@@ -438,8 +473,14 @@ TEST_CASE("cwCoordinateText refuses an angle it can't make sense of",
     };
 
     SECTION("minutes or seconds at 60 or above") {
-        CHECK(reason(QStringLiteral("46°75', 115°35'")).contains(QStringLiteral("60")));
-        CHECK(reason(QStringLiteral("46°07'60\", 115°35'56\"")).contains(QStringLiteral("60")));
+        //Each names its own place and quotes the number, since what to do about
+        //it differs: 75 minutes is a whole degree the degrees don't have.
+        const QString tooManyMinutes = reason(QStringLiteral("46°75', 115°35'"));
+        CHECK(tooManyMinutes.contains(QStringLiteral("minutes are less than 60")));
+        CHECK(tooManyMinutes.contains(QStringLiteral("75")));
+
+        const QString tooManySeconds = reason(QStringLiteral("46°07'60\", 115°35'56\""));
+        CHECK(tooManySeconds.contains(QStringLiteral("seconds are less than 60")));
     }
 
     SECTION("a fraction on a number that isn't the last") {
@@ -573,6 +614,15 @@ TEST_CASE("cwCoordinateText rejects what it can't make sense of",
     SECTION("numbers with nothing between them") {
         //"46.12-115.6" is two numbers to the tokenizer, and a typo in practice.
         rejection("46.12-115.6, 304m");
+    }
+
+    SECTION("and the example there is in the notation being written") {
+        //"46:07:16.1-115:35:56.5" is one comma short of reading. Answering it
+        //with a decimal example answers a question nobody asked.
+        CHECK(rejection(QStringLiteral("46:07:16.1-115:35:56.5"), cwUnits::Metric, kLatLong)
+                  .contains(QStringLiteral("46:07:16.1, -115:35:56.5")));
+        CHECK(rejection(QStringLiteral("46.12-115.6, 304m"), cwUnits::Metric, kLatLong)
+                  .contains(QStringLiteral("46.12113, -115.59902, 304m")));
     }
 
     SECTION("a unit that isn't a length") {
@@ -901,4 +951,3 @@ TEST_CASE("cwCoordinateText swaps the first two numbers and nothing else",
         CHECK(coordinate.easting == tight(46.12113));
     }
 }
-

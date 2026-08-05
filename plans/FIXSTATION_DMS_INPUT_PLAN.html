@@ -253,7 +253,7 @@ N46 07 16.1, W115 35 56.5              leading letters, glued
 46&deg;, 115&deg;                             degrees alone</code></pre>
 
 <h3><span class="pill del">refused</span>, each with its own reason</h3>
-<pre><code>46 07 16.1, -115 35 56.5     no marker &rarr; "mark them, or write decimal degrees"
+<pre><code>46 07 16.1, -115 35 56.5     no marker &rarr; six numbers, and &sect;7.3's "mark them" message
 46&deg;07'16", -115&deg;35'56"       on a UTM row &rarr; the geographic-CS message
 46&deg;75'                       minutes at 60 or above
 46&deg;07.5'16"                   fraction on a component that is followed by another
@@ -408,7 +408,7 @@ judged purely on "did anything change?".</p>
   <b>Touches</b>
   <code>cavewherelib/src/cwCoordinateText.cpp <span class="pill edit">edit</span></code>
   <code>testcases/test_cwCoordinateText.cpp <span class="pill edit">edit</span></code>
-  <code>test-qml/tst_FixStations_RoundTrip.qml <span class="pill new">+1 case</span></code>
+  <code>testcases/test_cwFixStationModel.cpp <span class="pill edit">+1 fix station</span></code>
 </div>
 
 <ul>
@@ -417,38 +417,74 @@ judged purely on "did anything change?".</p>
       the letters already settle which axis is which. <code>CoordinateOrderAskBox</code> needed no
       change &mdash; it gates on <code>swapped !== ""</code>
       (<code>CoordinateOrderAskBox.qml:49,91</code>), so it goes quiet on lettered text by itself.</li>
-  <li>Message rework, which is where most of this feature's usability actually sits: the
-      "at most three numbers" and "numbers with nothing between them" paths gain the DMS hint;
-      the geographic-CS refusal; the minutes/seconds range refusal. <code>exampleFor()</code> keeps
-      decimal degrees as the canonical worked example &mdash; the DMS form appears only in the messages
-      where it is the likely fix, so the common errors don't grow a paragraph.</li>
-  <li><b>Always read hemisphere letters, and refuse from one site.</b> Recognizing a letter is a purely
-      lexical question &mdash; <code>isHemisphere()</code> needs no axis order &mdash; so
-      <code>splitGroups()</code> should always read one, dropping the <code>readsHemispheres</code>
-      parameter and the <code>order</code> plumbing through <code>groupNumbers()</code>, with
-      <code>Component</code> recording <i>which</i> evidence made it an angle (a marker or a letter).
-      That leaves <code>readCoordinate()</code> as the single place that chooses a refusal, which is
-      the point: today the same coordinate gets one of three unrelated messages depending on where its
-      letter sits.
+  <li><b>Message rework</b>, which is where most of this feature's usability actually sits.
       <table>
-        <tr><th>On a projected row</th><th>Message today</th></tr>
-        <tr><td><code>46&deg;07', -115&deg;35'</code></td>
-            <td>the designed "set this station's coordinate system to a geographic one"</td></tr>
-        <tr><td><code>46.12113 N, 115.59902 W</code></td>
-            <td>"Only the elevation can carry a unit &mdash; Remove <code>N</code>" &mdash; &sect;2's
-            deliberate ruling, so that <code>500000 E</code> keeps accurate advice</td></tr>
-        <tr><td><code>N46.12113, W115.59902</code></td>
-            <td>"Couldn't read <code>N</code> as part of a coordinate." &mdash; nobody designed this one.
-            It exists only because the leading-letter branch sits on the far side of the
-            <code>readsHemispheres</code> decision from the trailing-letter branch.</td></tr>
+        <tr><th>Path</th><th>What it says now</th></tr>
+        <tr><td>more than three numbers,<br>geographic row<br>
+                <span class="mono-note"><code>46 07 16.1, -115 35 56.5</code></span></td>
+            <td>"A coordinate takes at most three numbers (latitude, longitude, elevation) &mdash;
+                this has 6. Mark degrees, minutes and seconds to read them as one angle:
+                <code>46&deg;07'16.1" N, 115&deg;35'56.5" W</code> or
+                <code>46:07:16.1, -115:35:56.5</code>."<br>
+                The message #654 is likeliest to be met through, so it teaches the one thing missing
+                rather than counting the numbers back. The count also names the row's own axes, as
+                every other message here already did. The hint is geographic-only: on a projected row
+                marking them is advice for a coordinate that row can't hold.</td></tr>
+        <tr><td>numbers with nothing between them<br>
+                <span class="mono-note"><code>46:07:16.1-115:35:56.5</code></span></td>
+            <td>The worked example follows the notation being written &mdash; the colon spelling here,
+                decimal degrees everywhere else. That text is one comma short of reading, and a decimal
+                example answers a question nobody asked. Asked on the way out, so the scan carries no
+                state for it.</td></tr>
+        <tr><td>minutes or seconds at 60 or above<br>
+                <span class="mono-note"><code>46&deg;75'</code></span></td>
+            <td>One sentence each, naming the place and quoting the number: "An angle's minutes are
+                less than 60 &mdash; <code>75</code> is a whole degree or more." What to do about it
+                differs between the two &mdash; 75 minutes is a whole degree the degrees don't have
+                &mdash; and one sentence for both left the reader working out which half was theirs.</td></tr>
+        <tr><td>an angle on a row that isn't geographic</td>
+            <td>Left as commit 2 wrote it. It was designed in &sect;2 rather than inherited, and it
+                already says which of the two things to change.</td></tr>
       </table>
-      Belongs here because deciding what each row should say <i>is</i> the message rework, and doing it
-      in one place is what stops the next change to that advice from having to be made twice, in two
-      layers that phrase it differently. Keep &sect;2's ruling &mdash; it becomes one deliberate branch
-      rather than a decision made two layers early. The three other suites that assert on this path
-      (<code>test_cwFixStationModel.cpp</code>, <code>test_cwFixStationDiagnostics.cpp</code>,
-      <code>test_cwFixStationDiagnosticsModel.cpp</code>) check only <code>Unreadable</code> and a
-      non-empty reason, so they need no edit.</li>
+      <code>exampleFor()</code> keeps decimal degrees as the canonical worked example &mdash; the angle
+      examples appear only where writing an angle is what the user was doing, so the common errors don't
+      grow a paragraph. Both angle examples are the same place as the decimal one, so a user who reads
+      two messages reads one coordinate.</li>
+  <li><b>One answer for a hemisphere letter, whichever side of its number it sits on.</b>
+      The plan here was for <code>splitGroups()</code> to always claim a letter, leaving
+      <code>readCoordinate()</code> the single site that chooses a refusal: recognizing a letter is
+      purely lexical, so the layer that groups numbers has no business asking about the row. Written
+      out, it regresses the advice a UTM paste gets. A claimed letter makes its numbers <i>one
+      angle</i>, so <code>500000 4649776 N</code> reaches <code>readAngle()</code> and comes back "An
+      angle's minutes are less than 60 &mdash; <code>4649776</code> is a whole degree or more" &mdash;
+      true of nothing the user was doing. An angle's <i>shape</i> is judged before any row-level ruling
+      can be reached, and deferring those refusals so the row rules first costs more than it buys: on a
+      projected row <code>46.12113, -115.59902, 1000'</code> would then be answered by the coordinate
+      system rather than by the feet-and-inches rule that is actually its problem.
+      <p>So the ruling stays where &sect;2 put it &mdash; one parameter, in one place, named for what it
+      decides &mdash; and the letter that had no answer gets the one its twin already had: on a row that
+      doesn't read hemispheres, a letter written in front of its number becomes the word written on it,
+      exactly as a trailing letter always was. Five lines, and what were three unrelated messages become
+      two deliberate ones.</p>
+      <table>
+        <tr><th>On a projected row</th><th>Before</th><th>Now</th></tr>
+        <tr><td><code>46&deg;07', -115&deg;35'</code></td>
+            <td colspan="2">the designed "set this station's coordinate system to a geographic one"
+                &mdash; a marker says "angle" on any row, so this is the row's own answer</td></tr>
+        <tr><td><code>46.12113 N, 115.59902 W</code></td>
+            <td colspan="2">"Only the elevation can carry a unit &mdash; Remove <code>N</code>"
+                &mdash; &sect;2's deliberate ruling, so that <code>500000 E</code> keeps accurate
+                advice</td></tr>
+        <tr><td><code>N46.12113, W115.59902</code></td>
+            <td>"Couldn't read <code>N</code> as part of a coordinate." &mdash; nobody designed this
+                one; the leading-letter branch sat on the far side of the
+                <code>readsHemispheres</code> decision from the trailing one</td>
+            <td>the same string as the row above it, character for character, which is what the test
+                asserts</td></tr>
+      </table>
+      The three other suites that assert on this path (<code>test_cwFixStationModel.cpp</code>,
+      <code>test_cwFixStationDiagnostics.cpp</code>, <code>test_cwFixStationDiagnosticsModel.cpp</code>)
+      check only <code>Unreadable</code> and a non-empty reason, so they needed no edit.</li>
 </ul>
 
 <h2 id="tests">8. Test plan</h2>
@@ -464,9 +500,15 @@ judged purely on "did anything change?".</p>
       <td>A DMS coordinate keeps its own text verbatim while reporting decimal components; re-committing
       it unchanged is a no-op (&sect;6); naming a projected CS on a DMS row makes it
       <code>Unreadable</code> rather than silently reinterpreting the numbers.</td></tr>
-  <tr><td><code>tst_FixStations_RoundTrip.qml</code></td>
-      <td>One DMS entry through the real field, saved and loaded, proving the string survives and the
-      validator accepts it live.</td></tr>
+  <tr><td><code>test_cwFixStationModel.cpp</code></td>
+      <td>A DMS station rides along in "A coordinate survives a project save and load, byte for byte",
+      which already saves and reloads a project through two <code>cwRootData</code>s. The notation has to
+      come back exactly, and the numbers have to read back out of it &mdash; which also proves the row's
+      own system survived, since without EPSG:4326 the angle is refused outright.
+      <p>Written here rather than as a QML case: entering it through the field would repeat, in the
+      slowest suite, what <code>setCoordinateText()</code> already asserts in C++ and what
+      <code>tst_FixStationPage.qml</code> already asserts about the CS picker &mdash; for a property with
+      no UI content of its own.</p></td></tr>
 </table>
 
 <p class="mono-note">ASAN_OPTIONS=detect_container_overflow=0 for cavewhere-test &mdash; PROJ trips the

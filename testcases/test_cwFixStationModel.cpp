@@ -367,7 +367,7 @@ TEST_CASE("cwFixStations and the project frame survive a project save/load",
     CHECK(loadedUnfixed->fixStations()->count() == 0);
 }
 
-TEST_CASE("A hand-edited coordinate survives a project save and load, byte for byte",
+TEST_CASE("A coordinate survives a project save and load, byte for byte",
           "[FixStation][cwSaveLoad]") {
     // §4's hand-edit requirement, end to end rather than at the proto boundary:
     // projects are readable on disk, so someone will edit a coordinate by hand
@@ -381,6 +381,12 @@ TEST_CASE("A hand-edited coordinate survives a project save and load, byte for b
     // system will read.
     const QString unreadableText = QStringLiteral("N 46 07 16 W 115 35 56");
     const QString systemlessText = QStringLiteral("610016.792, 5615117.075, 304m");
+    // And one the file has to carry for a reason that has nothing to do with
+    // repair: degrees, minutes and seconds are read (#654) and never written, so
+    // the notation lives only in the string. A loader that kept the numbers and
+    // re-rendered them would hand back decimal degrees — the same place, silently
+    // retyped.
+    const QString angleText = QStringLiteral("46°07'16.1\" N, 115°35'56.5\" W, 304m");
 
     auto creatorRoot = std::make_unique<cwRootData>();
     auto creatorProject = creatorRoot->project();
@@ -408,7 +414,16 @@ TEST_CASE("A hand-edited coordinate survives a project save and load, byte for b
     untouched.setInputCS(QStringLiteral("EPSG:32611"));
     REQUIRE(untouched.state() == cwFixStation::Empty);
 
-    cave->fixStations()->setFixStations({unreadable, systemless, untouched});
+    // The system goes in first, and here it has to: an angle is refused outright
+    // on a row that isn't geographic, so this text has nowhere to go until
+    // EPSG:4326 is the row's own system.
+    cwFixStation angle;
+    angle.setStationName(QStringLiteral("D4"));
+    angle.setInputCS(QStringLiteral("EPSG:4326"));
+    angle.setCoordinate(angleText);
+    REQUIRE(angle.state() == cwFixStation::Valid);
+
+    cave->fixStations()->setFixStations({unreadable, systemless, untouched, angle});
 
     QTemporaryDir tempDir;
     REQUIRE(tempDir.isValid());
@@ -428,7 +443,7 @@ TEST_CASE("A hand-edited coordinate survives a project save and load, byte for b
 
     REQUIRE(loaderProject->cavingRegion()->caveCount() == 1);
     cwFixStationModel* loaded = loaderProject->cavingRegion()->cave(0)->fixStations();
-    REQUIRE(loaded->count() == 3);
+    REQUIRE(loaded->count() == 4);
 
     CHECK(loaded->fixStationAt(0).coordinate() == unreadableText);
     CHECK(loaded->fixStationAt(0).state() == cwFixStation::Unreadable);
@@ -444,6 +459,17 @@ TEST_CASE("A hand-edited coordinate survives a project save and load, byte for b
 
     CHECK(loaded->fixStationAt(2).coordinate().isEmpty());
     CHECK(loaded->fixStationAt(2).state() == cwFixStation::Empty);
+
+    const cwFixStation loadedAngle = loaded->fixStationAt(3);
+    CHECK(loadedAngle.coordinate() == angleText);
+    // Accumulated the way parse() accumulates it, so the two agree to the last
+    // bit. Reading these back at all takes the row's system surviving with the
+    // text: without EPSG:4326 the angle is refused, and a projected system would
+    // read the latitude as an easting.
+    CHECK(loadedAngle.state() == cwFixStation::Valid);
+    CHECK(loadedAngle.northing() == 46.0 + 7.0 / 60.0 + 16.1 / 3600.0);
+    CHECK(loadedAngle.easting() == -(115.0 + 35.0 / 60.0 + 56.5 / 3600.0));
+    CHECK(loadedAngle.elevation() == 304.0);
 }
 
 TEST_CASE("Re-storing a coordinate the row already held reads it in stored units",

@@ -170,13 +170,40 @@ QString unreadableText(QStringView word)
         .arg(word.trimmed().toString());
 }
 
+//! Whether a row under \a order can hold an angle at all, which is the one thing
+//! the order settles about what the text *means*: degrees, minutes and seconds
+//! are a latitude and a longitude, and so is a hemisphere letter. Named because
+//! the order is also read for questions it answers differently — which axis
+//! leads, what the two axes are called — and those comparisons are not this one.
+bool readsAngles(cwCoordinateText::AxisOrder order)
+{
+    return order == cwCoordinateText::LatitudeLongitude;
+}
+
 //! An example in the order being read, so the message a user gets back
 //! demonstrates the arrangement their own row wants rather than the other one.
+//!
+//! Decimal degrees, always: the angle examples below appear only in the messages
+//! where writing an angle is what the user was doing.
 QString exampleFor(cwCoordinateText::AxisOrder order)
 {
     return order == cwCoordinateText::LatitudeLongitude
                ? QStringLiteral("46.12113, -115.59902, 304m")
                : QStringLiteral("610016.792, 5615117.075, 2545.34m");
+}
+
+//! The same place as exampleFor()'s geographic example, written as an angle: one
+//! coordinate throughout, so a user who reads two messages reads one example.
+QString symbolAngleExample()
+{
+    return QStringLiteral("46°07'16.1\" N, 115°35'56.5\" W");
+}
+
+//! And the spelling that needs no symbols, which is also how survex and Walls
+//! write it — so it is what a #FIX line pasted out of a project file looks like.
+QString colonAngleExample()
+{
+    return QStringLiteral("46:07:16.1, -115:35:56.5");
 }
 
 //! The shortest text that reads back as the same double, so re-committing an
@@ -206,7 +233,10 @@ struct Number
     qsizetype end = 0;
     Marker marker = Marker::None;
     //! The word written after this number: a unit, or a hemisphere letter that
-    //! splitGroups() hasn't claimed for its group.
+    //! splitGroups() hasn't claimed for its group. On a row that reads no
+    //! hemispheres it also holds a letter written in *front* of the number, which
+    //! splitGroups() moves here so one rule answers both sides — so which side it
+    //! was written on is a question only the scan can still answer.
     QString word;
     //! The hemisphere letter written in front of this number, if any.
     QChar lead;
@@ -216,6 +246,15 @@ struct Number
     bool hasSign = false;
     bool commaBefore = false;
 };
+
+//! Whether any of \a numbers carries an angle marker — the one piece of evidence
+//! that says "angle" wherever it is written, whatever the row it is written on.
+bool hasMarker(const QList<Number>& numbers)
+{
+    return std::any_of(numbers.cbegin(), numbers.cend(), [](const Number& number) {
+        return number.marker != Marker::None;
+    });
+}
 
 //! One component's numbers, and the hemisphere letter that claims them.
 struct NumberGroup
@@ -283,8 +322,14 @@ Monad::Result<QList<Number>> scanNumbers(const QString& text,
         if (!numbers.isEmpty() && gap.isEmpty()
             && numbers.constLast().marker == Marker::None
             && numbers.constLast().word.isEmpty()) {
+            //The example follows the notation the text is already writing:
+            //"46:07:16.1-115:35:56.5" is one comma short of reading, and a
+            //decimal example there answers a question nobody asked. Asked on the
+            //way out only, so the scan itself carries no state for it.
+            const bool writingAnAngle = readsAngles(order) && hasMarker(numbers);
             return ScanResult(cwCoordinateText::tr("Separate the numbers with commas or spaces, "
-                                                   "for example \"%1\".").arg(exampleFor(order)));
+                                                   "for example \"%1\".")
+                                  .arg(writingAnAngle ? colonAngleExample() : exampleFor(order)));
         }
 
         const QStringView digits = match.capturedView(kNumberGroup);
@@ -298,13 +343,14 @@ Monad::Result<QList<Number>> scanNumbers(const QString& text,
         //An unset group captures an empty view, which markerFor() reads as no
         //marker; the end offset is the one answer that needs asking for, since
         //capturedEnd() on an unset group is -1.
-        const bool hasMarker = match.hasCaptured(kMarkerGroup);
+        const bool markerCaptured = match.hasCaptured(kMarkerGroup);
         const QChar sign = digits.at(0);
 
         Number number;
         number.value = value;
         number.start = match.capturedStart(kNumberGroup);
-        number.end = hasMarker ? match.capturedEnd(kMarkerGroup) : match.capturedEnd(kNumberGroup);
+        number.end = markerCaptured ? match.capturedEnd(kMarkerGroup)
+                                    : match.capturedEnd(kNumberGroup);
         number.marker = markerFor(match.capturedView(kMarkerGroup));
         number.word = match.captured(kWordGroup);
         number.lead = match.hasCaptured(kLeadGroup) ? match.capturedView(kLeadGroup).at(0) : QChar();
@@ -331,10 +377,14 @@ Monad::Result<QList<Number>> scanNumbers(const QString& text,
 //! marker that doesn't fit the position it would take, and at three numbers.
 //! Nothing here decides whether a group *is* an angle — isAngleGroup() does.
 //!
-//! \a readsHemispheres says whether a letter is a hemisphere at all: a
-//! hemisphere is a geographic idea, and on a projected row "500000 E" is far
-//! more likely to be labeling an easting, so there a letter stays the unit it
-//! has always been — one a horizontal component may not carry.
+//! \a readsHemispheres says whether a letter is a hemisphere at all, and it is
+//! the one ruling this layer makes about what text means rather than how it is
+//! shaped. A hemisphere is a geographic idea, and on a projected row "500000 E"
+//! is far more likely to be labeling an easting, so there a letter stays the unit
+//! it has always been — one a horizontal component may not carry, on whichever
+//! side of its number it was written. Made here rather than left to
+//! readCoordinate() because it decides whether numbers *combine*, and a UTM paste
+//! read as one angle is answered by an angle's rules instead of its own.
 Monad::Result<QList<NumberGroup>> splitGroups(const QList<Number>& numbers,
                                               bool readsHemispheres)
 {
@@ -356,20 +406,25 @@ Monad::Result<QList<NumberGroup>> splitGroups(const QList<Number>& numbers,
             current = NumberGroup();
         }
 
-        if (!number.lead.isNull()) {
-            if (!readsHemispheres) {
-                return SplitResult(unreadableText(QStringView(&number.lead, 1)));
+        Number part = number;
+
+        if (readsHemispheres) {
+            if (!part.lead.isNull()) {
+                if (!pending.isNull()) {
+                    return SplitResult(unreadableText(QStringView(&pending, 1)));
+                }
+                current.letter = part.lead;
+            } else if (!pending.isNull()) {
+                current.letter = pending;
+                pending = QChar();
             }
-            if (!pending.isNull()) {
-                return SplitResult(unreadableText(QStringView(&pending, 1)));
-            }
-            current.letter = number.lead;
-        } else if (!pending.isNull()) {
-            current.letter = pending;
-            pending = QChar();
+        } else if (!part.lead.isNull() && part.word.isEmpty()) {
+            //A letter that isn't a hemisphere is a unit from either side of its
+            //number, so both sides get the one rule that refuses it. A word
+            //already written here is the more specific answer and keeps its place.
+            part.word = part.lead;
         }
 
-        Number part = number;
         if (readsHemispheres && isHemisphere(part.word)) {
             //The evidence for a group can arrive after its numbers: nothing in
             //"46 07.268 N" joins the two until the letter does. A second letter
@@ -406,10 +461,7 @@ Monad::Result<QList<NumberGroup>> splitGroups(const QList<Number>& numbers,
 //! elevation, not 46°07'16".
 bool isAngleGroup(const NumberGroup& group)
 {
-    return !group.letter.isNull()
-           || std::any_of(group.parts.cbegin(), group.parts.cend(), [](const Number& part) {
-                  return part.marker != Marker::None;
-              });
+    return !group.letter.isNull() || hasMarker(group.parts);
 }
 
 //! The angle \a group spells out, or the reason it isn't one. Its numbers are
@@ -451,10 +503,17 @@ Monad::Result<Component> readAngle(const NumberGroup& group)
             return AngleResult(cwCoordinateText::tr("Only the degrees of an angle carry a sign, "
                                                     "and it negates the whole angle."));
         }
-        if ((i == 1 && part.value >= kMinutesPerDegree)
-            || (i == 2 && part.value >= kSecondsPerMinute)) {
-            return AngleResult(cwCoordinateText::tr("An angle's minutes and seconds are less "
-                                                    "than 60."));
+        //Two sentences rather than one: each names the place that overflowed, and
+        //that is what says how to rewrite it.
+        if (i == 1 && part.value >= kMinutesPerDegree) {
+            return AngleResult(cwCoordinateText::tr("An angle's minutes are less than 60 — \"%1\" is "
+                                                    "a whole degree or more.")
+                                   .arg(shortestNumber(part.value)));
+        }
+        if (i == 2 && part.value >= kSecondsPerMinute) {
+            return AngleResult(cwCoordinateText::tr("An angle's seconds are less than 60 — \"%1\" is "
+                                                    "a whole minute or more.")
+                                   .arg(shortestNumber(part.value)));
         }
         if (i + 1 < parts.size() && part.value != std::trunc(part.value)) {
             return AngleResult(cwCoordinateText::tr("Only the last number of an angle can have a "
@@ -500,7 +559,7 @@ Monad::Result<QList<Component>> groupNumbers(const QList<Number>& numbers,
 {
     using ComponentResult = Monad::Result<QList<Component>>;
 
-    const auto split = splitGroups(numbers, order == cwCoordinateText::LatitudeLongitude);
+    const auto split = splitGroups(numbers, readsAngles(order));
     if (split.hasError()) {
         return ComponentResult(split.errorMessage());
     }
@@ -567,9 +626,23 @@ Monad::Result<QList<Component>> readComponents(const QString& text,
                                          .arg(exampleFor(order)));
     }
     if (components.size() > kMaxComponents) {
-        return ComponentResult(cwCoordinateText::tr("A coordinate takes at most three numbers "
-                                                    "(easting, northing, elevation) — this has %1.")
-                                   .arg(components.size()));
+        //The message #654 opens with lands here: "46 07 16.1, -115 35 56.5" is
+        //six numbers, and the count alone teaches nothing about the one thing
+        //missing from it. The hint is geographic-only because on any other row
+        //marking them would be wrong advice — an angle is refused there outright.
+        return ComponentResult(readsAngles(order)
+                                   ? cwCoordinateText::tr("A coordinate takes at most three numbers "
+                                                          "(latitude, longitude, elevation) — this "
+                                                          "has %1. Mark degrees, minutes and seconds "
+                                                          "to read them as one angle: \"%2\" or "
+                                                          "\"%3\".")
+                                         .arg(QString::number(components.size()),
+                                              symbolAngleExample(),
+                                              colonAngleExample())
+                                   : cwCoordinateText::tr("A coordinate takes at most three numbers "
+                                                          "(easting, northing, elevation) — this "
+                                                          "has %1.")
+                                         .arg(components.size()));
     }
 
     return ComponentResult(components);
@@ -599,7 +672,7 @@ Monad::Result<cwCoordinateText::Coordinate> readCoordinate(const QList<Component
     //serves two rows — a projected one, and one with no system at all, which
     //axisOrderFor() collapses onto the same order — because parse() is handed an
     //axis order and never the coordinate system itself.
-    if (order != cwCoordinateText::LatitudeLongitude
+    if (!readsAngles(order)
         && std::any_of(components.cbegin(), components.cend(), [](const Component& component) {
                return component.isAngle;
            })) {
