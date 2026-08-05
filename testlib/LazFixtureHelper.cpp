@@ -3,6 +3,7 @@
 #include <QByteArray>
 #include <QCoreApplication>
 #include <QSignalSpy>
+#include <QThread>
 #include <QUrl>
 
 #include "cwCavingRegion.h"
@@ -264,6 +265,20 @@ bool waitForLazLayerLoaded(cwLazLayer* layer, int timeoutMs)
         waited += 100;
     }
     return false;
+}
+
+bool waitForLazLayerHeader(cwLazLayer* layer, int timeoutMs)
+{
+    // The probe publishes no signal of its own — an enabled layer is already
+    // Loading when it lands, and its CS may be the one the layer had — so the
+    // wait polls the flag rather than watching for a change.
+    int waited = 0;
+    while (waited < timeoutMs && !layer->hasReadHeader()) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+        QThread::msleep(5);
+        waited += 50;
+    }
+    return layer->hasReadHeader();
 }
 
 void addLazAndWait(cwRootData* root, const QStringList& externalPaths)

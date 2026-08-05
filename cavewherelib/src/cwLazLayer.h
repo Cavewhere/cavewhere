@@ -65,6 +65,10 @@ class CAVEWHERE_LIB_EXPORT cwLazLayer : public QObject
 public:
     enum class LoadStatus {
         Idle,
+        //! The header has been read but the points have not — where a disabled
+        //! layer rests, and where an enabled one passes through on its way to
+        //! Loading. The file's own CRS and bounding box are already known here.
+        Probed,
         Loading,
         Loaded,
         Error
@@ -105,14 +109,21 @@ public:
     QString sourceCSOverride() const { return m_sourceCSOverride; }
     void setSourceCSOverride(const QString& cs);
 
-    /// The last load's bounding box in the file's own CRS — the raw header
-    /// numbers, before the reprojection into the region's frame that bboxMin
-    /// and bboxMax carry. Empty until a load has finished; a layer that has
-    /// never loaded has no position to report, and nothing should invent one
-    /// for it. Deriving a coordinate frame from this cloud needs these.
+    /// The bounding box in the file's own CRS — the raw header numbers, before
+    /// the reprojection into the region's frame that bboxMin and bboxMax carry.
+    /// Filled by the header probe, so they arrive well before the points do.
+    /// Deriving a coordinate frame from this cloud needs these.
     cwGeoPoint sourceBboxMin() const { return m_sourceBboxMin; }
     cwGeoPoint sourceBboxMax() const { return m_sourceBboxMax; }
     cwGeoPoint sourceBboxCenter() const;
+
+    /// True once this file's header has been read, which is the point at which
+    /// sourceCS and the source bounding box carry the file's own numbers. It
+    /// says nothing about the points: a disabled layer decodes none and still
+    /// knows where it is. That is what lets the local projection treat every
+    /// layer as a georeferenced input, and so tell an absent one from a
+    /// merely-unfinished one.
+    bool hasReadHeader() const { return m_hasReadHeader; }
 
     LoadStatus loadStatus() const { return m_loadStatus; }
     QString errorMessage() const { return m_errorMessage; }
@@ -165,6 +176,8 @@ private:
     void updateIdKeyword();
     void updateTypeKeyword();
     void applyResult(cwLazLoadResult&& result);
+    void startHeaderProbe();
+    void applyProbe(const cwLazLoader::ProbeResult& probe);
 
     QString m_sourcePath;
     qint64 m_sourceSize = -1;
@@ -181,6 +194,7 @@ private:
     QVector3D m_bboxMax;
     cwGeoPoint m_sourceBboxMin;
     cwGeoPoint m_sourceBboxMax;
+    bool m_hasReadHeader = false;
     float m_meanSpacingXY = 0.0f;
     QUuid m_id;
 
@@ -193,6 +207,11 @@ private:
     // Coalesces rapid reload() calls and serializes cancel-then-restart so a
     // new load only begins once the previous one has actually stopped.
     AsyncFuture::Restarter<cwLazLoadResult> m_loadRestarter;
+
+    // Its own restarter so probe results arrive in the order they were asked
+    // for: two probes racing on a file rewritten twice could otherwise publish
+    // the older header last.
+    AsyncFuture::Restarter<cwLazLoader::ProbeResult> m_probeRestarter;
 };
 
 #endif // CWLAZLAYER_H

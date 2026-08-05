@@ -677,9 +677,17 @@ lands green on both suites before the next.</p>
             <code>survey-add-trip.png</code> show the old two-decimal cell and need
             regenerating on a GPU-backed platform (<code>tst_ManualScreenshots.qml</code>
             skips under offscreen).</li>
-        <li><b>§11 F1 + F2</b> — the async universal probe with a <code>Probed</code> status;
-            retires V1 and <code>deriveFrameFromLaz</code>'s competing anchoring authority.
-            Prerequisite for step&nbsp;4.</li>
+        <li><b>§11 F1</b> — the async universal probe with a <code>Probed</code> status
+            <span class="pill">done 2026-08-05</span>. <code>cwLazLayer</code> reads every
+            file's header off the GUI thread, enabled or not, and
+            <code>gatherInputs()</code> gathers on <code>hasReadHeader()</code>; retires V1.
+            <b>§11 F2</b> — take <code>deriveFrameFromLaz</code> out of
+            <code>cwLazLayerModel</code> so one class owns the frame. <b>Scope revised
+            2026-08-05: this is a scheduling change, not a deletion</b> — the blocking probe it
+            removes is what currently orders every decode behind the frame and keeps the anchor
+            deterministic. It lands as one commit with the probe barrier, the settled-frame gate on
+            <code>reload()</code>, and the revert of F1's global-pool call; see
+            <a href="#lazchain">§14</a>. Prerequisite for step&nbsp;4.</li>
         <li><b>Automatic recentering</b> (D20) — the "nothing within R → re-derive at the
             median" rule in <code>evaluate()</code>; replaces the manual Recenter action
             and D7's migration path. Requires F1's complete input set.</li>
@@ -931,7 +939,7 @@ Four were deliberately <b>not</b> applied, because they are behavior or architec
 rather than cleanups. They are recorded here so they aren't lost.</p>
 
 <div class="callout bad">
-  <div class="title">F1 — The LAZ bootstrap anchors from outside <code>cwLocalProjectionManager</code></div>
+  <div class="title">F1 — The LAZ bootstrap anchors from outside <code>cwLocalProjectionManager</code> <span class="pill">probe landed 2026-08-05</span></div>
   <p><code>cwLazLayerModel::deriveFrameFromLaz</code> calls <code>cwLocalProjection::deriveFrom</code>
   + <code>cwGeoReference::anchorTo</code> itself, duplicating
   <code>cwLocalProjectionManager::anchorTo</code> — after this phase those are the only two
@@ -985,6 +993,30 @@ rather than cleanups. They are recorded here so they aren't lost.</p>
         <code>.cwlaz</code> never starts a load at all (<code>cwLazLayerModel.cpp:415</code>), which
         is the whole mechanism behind F1's invariant violation and V1's.</li>
   </ul>
+  <p><b>Implemented 2026-08-05 (the probe half).</b> <code>cwLazLayer</code> now runs
+  <code>cwLazLoader::probeHeader</code> off the GUI thread from <code>setSourcePath</code> and
+  <code>setSourceCSOverride</code>, on its own <code>AsyncFuture::Restarter</code> so results
+  arrive in the order they were asked for, and on the global thread pool rather than
+  <code>cwTask</code>'s. <b>That pool choice is scheduled for revert — see <a href="#lazchain">§14</a>.</b>
+  Its stated reason was that a header open queued behind a 100-million-point decode would hold up
+  the frame that decode is waiting on; the decodes turn out not to be waiting, because
+  <code>deriveFrameFromLaz</code> orders them behind the frame with a blocking call. Once
+  <a href="#lazchain">§14</a>'s gate makes that ordering explicit, the probe leaves the critical
+  path and <code>cwConcurrent::run</code> is correct. The result publishes <code>sourceCS</code> (override
+  &gt; embedded, the loader's own precedence) and the source bounding box, sets a new
+  <code>hasReadHeader()</code>, and raises <code>Idle</code> to the new
+  <code>LoadStatus::Probed</code>. <code>setEnabled(false)</code> falls back to
+  <code>Probed</code> rather than <code>Idle</code>, so turning the points off no longer
+  withdraws the layer's position.</p>
+  <p><code>gatherInputs()</code> now tests <code>hasReadHeader()</code> in place of
+  <code>loadStatus() == Loaded</code>. A status enumeration would have left
+  <code>Loading</code> and <code>Error</code> out, and those are exactly the transient
+  absences that read as deletions — so this is V1's and V6's fix as much as F1's. Three tests
+  pin it: a disabled layer reads its header and reports <code>Probed</code>; disabling the
+  only layer leaves the frame anchored while removing it clears the frame; and a reload of the
+  anchor layer leaves the frame untouched for the whole of it. The anchoring half —
+  <code>deriveFrameFromLaz</code>, still in <code>cwLazLayerModel</code> — comes out with
+  F2.</p>
 </div>
 
 <div class="callout warn">
@@ -1012,6 +1044,12 @@ rather than cleanups. They are recorded here so they aren't lost.</p>
   outside the class. F1 retires this half. The <b>secondary</b> half — N header opens on the GUI
   thread — F1 retires only if its probe is async; a synchronous one makes it worse. See F1's
   revised design.</p>
+  <p><b>Scope revised 2026-08-05 — read <a href="#lazchain">§14</a> before implementing this.</b>
+  F2 is not the tidy-up it reads as. <code>deriveFrameFromLaz</code>'s blocking probe is currently
+  the only thing keeping every decode behind the frame, and the only thing making the anchor
+  deterministic rather than a function of which header read finishes first — a frame that is then
+  persisted into a Git-backed project. Deleting it without the barrier and the settled-frame gate
+  in §14 trades a GUI-thread stall for a nondeterministic stored projection.</p>
 </div>
 
 <div class="callout warn">
@@ -1070,7 +1108,7 @@ callout. Six new findings, none applied yet — V1 and V2 are the ones that bite
 
 <div class="callout bad">
   <div class="title">V1 — A witnessed LAZ anchor that transiently leaves <code>Loaded</code> is
-  treated as deleted</div>
+  treated as deleted <span class="pill">fixed 2026-08-05</span></div>
   <p><code>gatherInputs()</code> only accepts <code>LoadStatus::Loaded</code>, and its comment
   promises <code>m_anchorSeen</code> protects a disabled/loading layer from being read as deleted —
   but it only protects a <i>never-witnessed</i> anchor. Once the anchor layer has been seen,
@@ -1088,7 +1126,7 @@ callout. Six new findings, none applied yet — V1 and V2 are the ones that bite
   not treat the absent anchor as deleted — e.g. gather layers by "has a probed header" rather than
   "load finished" (the F1 deeper fix covers this too), or have <code>evaluate()</code> ignore an
   anchor layer whose status is <code>Loading</code>.</p>
-  <p><b>Confirmed retired by F1's revised design (2026-08-04).</b> Once the header numbers are
+  <p><b>Retired by F1, landed 2026-08-05.</b> Once the header numbers are
   published on their own — and stay published across a reload, because a reload re-reads points,
   not the CRS — a layer never leaves the input set for a transient <code>Loading</code>. There is
   no absence to misread, so V1 needs no separate fix and should be closed by F1 rather than
@@ -1360,7 +1398,247 @@ cwSurvexCS fromSurvexCS(const QString&amp; csArgument);</code></pre>
   </ul>
 </div>
 
-<h2 id="open">14. Open questions</h2>
+<h2 id="lazchain">14. The LAZ load chain — what F2 actually removes (settled 2026-08-05)</h2>
+
+<p>F1's async probe landed (§11). The follow-up question was whether the probe needed to be
+<i>faster</i> — it runs on the global thread pool rather than <code>cwTask</code>'s, which is a
+departure from house style — and answering that turned up a bigger finding: <b>the blocking probe
+F2 deletes is currently the only thing that orders the frame ahead of the decode, and the only
+thing that makes the anchor deterministic.</b> F2 was written as a tidy-up ("one class owns the
+frame"). It is really a scheduling change, and it needs a replacement mechanism, not just a
+deletion.</p>
+
+<h3>What the synchronous probe is actually doing</h3>
+
+<p><code>cwLazLayerModel::rescan()</code>, at <code>cwLazLayerModel.cpp:447-458</code>:</p>
+
+<pre><code>// The load below has to have somewhere to load into, and on a project
+// with no fix stations this layer is the only thing that can say where
+// that is.
+deriveFrameFromLaz(path, layer);
+layer-&gt;setRegionFrameCS(m_regionFrameCS);
+...
+layer-&gt;setSourcePath(path);   // starts the load</code></pre>
+
+<p><code>deriveFrameFromLaz</code> runs <code>cwLazLoader::probeHeader</code> <b>synchronously on the
+GUI thread</b>, derives the frame and anchors it, and only then does <code>setSourcePath</code>
+start the decode. That comment is the dependency edge, written in prose.</p>
+
+<p><b>Confirmed by measurement, not by reading.</b> Running the <code>[cwLazSourceBbox]</code> tag
+with <code>QT_LOGGING_RULES="cw.laz.layer.debug=true"</code> prints <code>reload()</code>'s
+<code>frameCSSet</code> flag. Every model-managed layer reports <code>frameCSSet= true</code> on its
+<i>first</i> reload. The only <code>false</code> in the run belongs to a bare
+<code>cwLazLayer</code> constructed with no region at all — not a bootstrap. So the earlier
+suspicion that today's code decodes once into an empty frame and again into the real one is
+<b>wrong</b>: there is no wasted decode, precisely because of the blocking call.</p>
+
+<div class="callout bad">
+  <div class="title">The determinism invariant nobody wrote down</div>
+  <p><code>cwLocalProjectionManager::evaluate()</code> is connected to every layer's
+  <code>sourceCSChanged</code> (<code>cwLocalProjectionManager.cpp:316</code>), and on the
+  Ungeoreferenced path it calls <code>anchorToFirstUsable(inputs)</code> — the first usable input in
+  <code>gatherInputs()</code> order <i>among the layers that hold a header at that instant</i>.</p>
+  <p>Today the synchronous probe guarantees exactly one layer has a header when the frame is
+  derived, and it is the first in rescan order. Make the probes async without a barrier and the
+  anchor becomes <b>whichever header read wins the race</b>. The derived projection is then a
+  function of disk timing — and it is <i>persisted</i>, into a Git-backed <code>.cwproj</code>.
+  Two people importing the same directory get different frames, different scene coordinates, and a
+  diff that looks like real work.</p>
+  <p><b>Invariant to add to §4:</b> the anchor may depend on the <i>set</i> of inputs and on their
+  order in the model, never on the order in which their I/O completes. This is the sibling of §4's
+  "only witnessed deletions count" and of the stored-not-computed rule in §3 — same motivation,
+  different axis.</p>
+</div>
+
+<h3>Three header reads, two of which should go</h3>
+
+<table>
+  <tr><th>#</th><th>Where</th><th>Verdict</th></tr>
+  <tr><td>1</td><td><code>deriveFrameFromLaz</code> → <code>probeHeader</code> — synchronous, GUI
+      thread</td>
+      <td><b>Remove (F2).</b> One file on a normal import, but <i>N</i> when the tiles carry no
+      CRS: <code>probe.sourceCS.isEmpty()</code> returns without anchoring, so the
+      <code>hasCoordinateSystem()</code> guard never trips and every file blocks in turn. This is
+      the last synchronous file read on the rescan path.</td></tr>
+  <tr><td>2</td><td><code>cwLazLayer::startHeaderProbe</code> → <code>probeHeader</code> — async,
+      per layer</td>
+      <td><b>Keep.</b> F1 added it; it becomes the single source of a layer's header facts.</td></tr>
+  <tr><td>3</td><td>inside <code>cwLazLoader::load</code></td>
+      <td><b>Keep.</b> The load opens the file to read points regardless, and the header comes with
+      the open. Threading the probe's result in to skip it would trade a free read for a staleness
+      question — the file can be rewritten between probe and load.</td></tr>
+</table>
+
+<p>So "read the header once" means once <i>per purpose</i>: one probe that establishes where the
+cloud is, one open that decodes it. Until F2 lands, F1 leaves the first layer's header read twice.</p>
+
+<h3>The chain</h3>
+
+<figure>
+<svg viewBox="0 0 940 392" width="100%" role="img"
+     aria-label="Today's blocking probe compared with the target future chain">
+  <defs>
+    <marker id="arrC" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--dim)"/>
+    </marker>
+    <marker id="arrCG" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--good)"/>
+    </marker>
+  </defs>
+
+  <text class="lbl" x="16" y="22">Today — ordering by blocking call</text>
+  <rect class="box" x="16" y="34" width="420" height="44"/>
+  <text class="lbl" x="30" y="54">rescan() insert loop — GUI thread</text>
+  <text class="sub" x="30" y="70">cwLazLayerModel.cpp:447-458</text>
+  <path class="edge" d="M226 78 V94" marker-end="url(#arrC)"/>
+
+  <rect class="boxWarn" x="16" y="98" width="420" height="44"/>
+  <text class="lbl" x="30" y="118">deriveFrameFromLaz → probeHeader()</text>
+  <text class="sub" x="30" y="134">blocks the GUI · 1 file, or N when CRS-less</text>
+  <path class="edge" d="M226 142 V158" marker-end="url(#arrC)"/>
+
+  <rect class="boxGood" x="16" y="162" width="420" height="44"/>
+  <text class="lbl" x="30" y="182">anchorTo() — frame exists</text>
+  <text class="sub" x="30" y="198">deterministic: first in rescan order</text>
+  <path class="edge" d="M226 206 V222" marker-end="url(#arrC)"/>
+
+  <rect class="box" x="16" y="226" width="420" height="44"/>
+  <text class="lbl" x="30" y="246">setSourcePath → reload() → decode</text>
+  <text class="sub" x="30" y="262">frame already non-empty · ungated</text>
+  <path class="edge" d="M226 270 V286" marker-end="url(#arrC)"/>
+
+  <rect class="boxWarn" x="16" y="290" width="420" height="44"/>
+  <text class="lbl" x="30" y="310">startHeaderProbe → probeHeader()</text>
+  <text class="sub" x="30" y="326">async · F1 · reads the same header again</text>
+
+  <text class="lbl" x="504" y="22">Target — ordering by future chain</text>
+  <rect class="box" x="504" y="34" width="420" height="44"/>
+  <text class="lbl" x="518" y="54">setSourcePath → probeHeader ×N</text>
+  <text class="sub" x="518" y="70">async, cwConcurrent — the only probe</text>
+  <path class="edgeGood" d="M714 78 V94" marker-end="url(#arrCG)"/>
+
+  <rect class="boxAccent" x="504" y="98" width="420" height="44"/>
+  <text class="lbl" x="518" y="118">combine(probes) — barrier</text>
+  <text class="sub" x="518" y="134">AsyncFuture::combine()</text>
+  <path class="edgeGood" d="M714 142 V158" marker-end="url(#arrCG)"/>
+
+  <rect class="boxGood" x="504" y="162" width="420" height="44"/>
+  <text class="lbl" x="518" y="182">evaluate() once → anchorToFirstUsable</text>
+  <text class="sub" x="518" y="198">deterministic: model row order</text>
+  <path class="edgeGood" d="M714 206 V222" marker-end="url(#arrCG)"/>
+
+  <rect class="boxGood" x="504" y="226" width="420" height="44"/>
+  <text class="lbl" x="518" y="246">frame settled</text>
+  <text class="sub" x="518" y="262">Anchored | Frozen | all probes in, still Ungeoreferenced</text>
+  <path class="edgeGood" d="M714 270 V286" marker-end="url(#arrCG)"/>
+
+  <rect class="box" x="504" y="290" width="420" height="44"/>
+  <text class="lbl" x="518" y="310">decode ×N</text>
+  <text class="sub" x="518" y="326">async, cwConcurrent, into the settled frame</text>
+</svg>
+<figcaption>The blocking call on the left is doing two jobs at once — keeping the decode behind the
+frame, and keeping the anchor choice deterministic. The barrier on the right is what replaces both.
+A per-layer chain (each layer's decode continuing its own probe) would order the decode correctly
+and still lose the determinism, which is why the barrier is not optional.</figcaption>
+</figure>
+
+<h3>"Settled frame" — the gate's definition</h3>
+
+<p><code>cwLazLayer::reload()</code> gains one precondition: the frame must be <b>settled</b>.
+Three cases, and the third is the whole reason this is a barrier rather than a boolean:</p>
+
+<ul>
+  <li><b>Anchored or Frozen</b> → settled. Dropping one tile into an already-georeferenced project
+      waits for nothing; its decode starts as soon as its own probe lands.</li>
+  <li><b>Ungeoreferenced, and every in-flight probe has landed</b> → settled. Nothing in the project
+      can name a position, so the clouds load untransformed in their own units — exactly what
+      <code>deriveFrameFromLaz</code>'s early return promises today ("A cloud with no CRS of its own
+      places nothing. It still loads — untransformed…").</li>
+  <li><b>Ungeoreferenced with probes still in flight</b> → <b>not</b> settled; the decode waits.</li>
+</ul>
+
+<p>Getting the second and third cases confused is the failure mode: treat "no frame" as settled and
+a CRS-bearing project decodes every tile untransformed before its own headers arrive; treat it as
+unsettled forever and a CRS-less directory never loads at all.</p>
+
+<h3>Revised scope</h3>
+
+<p><b>F1</b> (landed 2026-08-05, uncommitted) stands as written. It carries two debts until the work
+below lands, both deliberate: the duplicate header read on the first layer, and the
+<code>QtConcurrent::run</code> call on the global pool.</p>
+
+<p><b>F2</b> becomes one commit with four parts, in this order:</p>
+<ol>
+  <li><code>cwLazLayer::reload()</code> gates on a settled frame (definition above).</li>
+  <li><code>cwLazLayerModel</code> combines its layers' probe futures and drives one
+      <code>evaluate()</code> when the batch has landed, instead of the manager re-evaluating on
+      each layer's <code>sourceCSChanged</code>. Besides the determinism fix this drops an
+      O(<i>n</i>²) walk — <code>evaluate()</code> re-walks every cave and fix station once per
+      probe today.</li>
+  <li>Delete <code>deriveFrameFromLaz</code>. One class owns the frame, which was F2's original
+      point, and now the guarantee it was silently providing has somewhere to live.</li>
+  <li>Revert <code>startHeaderProbe</code> to <code>cwConcurrent::run</code>. With the gate in
+      place nothing waits on the probe, so it needs neither priority nor a pool of its own.</li>
+</ol>
+
+<div class="callout good">
+  <div class="title">Why not a priority queue or a second pool (researched 2026-08-05)</div>
+  <ul>
+    <li><b>asyncfuture cannot hold priority.</b> <code>asyncfuture.h</code> contains zero references
+        to <code>QtConcurrent</code> or <code>QThreadPool</code>: it composes <i>completion</i> and
+        never schedules anything, and even <code>Restarter</code> takes a lambda returning an
+        already-started future. Priority can only attach where work enters a pool, which is the one
+        line in <code>cwConcurrent::run</code>.</li>
+    <li><b>Adding it there is cheap if ever needed.</b> <code>QTaskBuilder</code> (Qt 6.0+) already
+        has it: <code>QtConcurrent::task(f).onThreadPool(*cwTask::threadPool()).withPriority(p).spawn()</code>
+        returns a <code>QFuture</code>. No custom scheduler.</li>
+    <li><b>But it wouldn't buy the guarantee.</b> Per <code>QThreadPool::start</code>'s docs,
+        priority "can be used to control the run queue's order of execution" — it reorders the
+        <i>queue</i> and never preempts a <i>running</i> thread. With every thread mid-decode on a
+        100M-point tile, a max-priority probe still waits for one to finish.</li>
+    <li><b>The only single-pool mechanism that bounds it</b> is <code>reserveThread()</code> +
+        <code>startOnReservedThread()</code> (6.3+), which runs the probe immediately by exceeding
+        <code>maxThreadCount</code> by one. It returns <code>void</code>, so it would need a
+        hand-rolled <code>QPromise</code> to stay composable.</li>
+    <li><b>The global pool is not free.</b> <code>cwJobSettings::setThreadCountPrivate</code> sets
+        <i>both</i> pools to the user's thread count and <code>threadCount()</code> asserts they are
+        equal — that setting is the app's CPU budget, and riding the global pool quietly spends
+        twice it.</li>
+    <li><b>All of it is moot once the decode can't start early</b>, which is why part 4 above is a
+        revert rather than a redesign.</li>
+  </ul>
+</div>
+
+<h3>Verification</h3>
+<ul>
+  <li><b>Determinism:</b> a project with several CRS-bearing layers anchors to the first in model
+      row order, and repeated imports of the same directory produce a byte-identical stored
+      projection. Worth forcing probe completion out of order rather than trusting that a fast
+      local disk happens to finish them in sequence.</li>
+  <li><b>No decode outruns the frame:</b> with any CRS-bearing layer present, no
+      <code>cwLazLoader::load</code> runs with an empty <code>frameCS</code>. Observable without new
+      scaffolding via <code>QT_LOGGING_RULES="cw.laz.layer.debug=true"</code>, which is how the
+      current ordering was confirmed.</li>
+  <li><b>CRS-less directory still loads:</b> N tiles with no embedded CRS all reach
+      <code>Loaded</code>, untransformed, and rescan performs no synchronous header read.</li>
+  <li><b>No barrier for an anchored project:</b> adding one tile to an Anchored project starts its
+      decode off its own probe without waiting on anything else.</li>
+  <li>F1's three existing tests keep passing unchanged — they pin the probe's own behavior, which
+      this does not alter.</li>
+</ul>
+
+<div class="callout warn">
+  <div class="title">Open for review: what exactly is the barrier over?</div>
+  <p>"All in-flight probes" is written above as though the set is obvious, and it isn't. A single
+  file added to an <i>Ungeoreferenced</i> project is its own one-element batch, so it settles as
+  soon as its probe lands — fine. But two rescans overlapping, or a file added while a directory
+  import is still probing, need a rule. <b>Lean:</b> the barrier is per-rescan-batch, and a batch
+  arriving while another is open joins it rather than starting a second. Cheaper to reason about
+  than a global "no probes anywhere in flight", and it keeps the anchor tied to a batch's row
+  order. Wants a decision before part 2 is written.</p>
+</div>
+
+<h2 id="open">15. Open questions</h2>
 <ul>
   <li><s><b>R's exact value</b> — 50 km proposed. Cheap to change; pick during P2.</s>
       Settled in P2: 50 km, as <code>cwLocalProjectionManager::kAnchorThresholdMeters</code>.</li>

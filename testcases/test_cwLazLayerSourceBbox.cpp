@@ -82,7 +82,7 @@ TEST_CASE("A load reports the bounding box in the file's own CRS",
     CHECK(layer.sourceBboxCenter().y == Catch::Approx(4194010.0).margin(0.01));
 }
 
-TEST_CASE("A layer that has never loaded reports no source bounding box",
+TEST_CASE("A layer that will never load still reads its header",
           "[cwLazSourceBbox][cwLazLayer]")
 {
     QTemporaryDir tempDir;
@@ -95,11 +95,81 @@ TEST_CASE("A layer that has never loaded reports no source bounding box",
     layer.setEnabled(false);
     layer.setSourcePath(path);
 
-    // Disabled layers never spend an async read, so there is nothing to
-    // report — and nothing should invent a position for them.
-    CHECK(layer.loadStatus() == cwLazLayer::LoadStatus::Idle);
-    CHECK(layer.sourceCS().isEmpty());
-    CHECK(layer.sourceBboxCenter() == cwGeoPoint{});
+    // Disabled layers spend no async read on the points, but where the file
+    // sits is a fact about the file: the header probe runs regardless, and
+    // everything the frame is derived from comes out of it.
+    REQUIRE(waitForLazLayerHeader(&layer));
+    CHECK(layer.loadStatus() == cwLazLayer::LoadStatus::Probed);
+    CHECK(layer.sourceCS() == kUtmZone10N);
+    CHECK(layer.sourceBboxCenter().x == Catch::Approx(500010.0).margin(0.01));
+    CHECK(layer.sourceBboxCenter().y == Catch::Approx(4194010.0).margin(0.01));
+    CHECK(layer.pointCount() == 0);
+}
+
+TEST_CASE("A layer that never loads is still an anchor the frame can be lost with",
+          "[cwLazSourceBbox][cwLocalProjectionManager]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    auto root = std::make_unique<cwRootData>();
+    auto* region = root->project()->cavingRegion();
+
+    const QString path = tempLazPath(tempDir, QStringLiteral("disabled-anchor"));
+    REQUIRE(writeSyntheticLazFile(path, pointsInZone10N(), kUtmZone10N));
+
+    addLazAndWait(root.get(), QStringList{path});
+    REQUIRE(region->lazLayers()->count() == 1);
+    auto* layer = region->lazLayers()->layerAt(0);
+    REQUIRE(waitForLazLayerLoaded(layer));
+    REQUIRE(region->geoReference()->state() == cwGeoReference::Anchored);
+
+    // Turning the points off says nothing about where the cloud is, so the
+    // frame it anchors has no reason to move. The header is what makes the
+    // layer an input, and the header is still read.
+    layer->setEnabled(false);
+    REQUIRE(layer->loadStatus() == cwLazLayer::LoadStatus::Probed);
+    CHECK(region->geoReference()->state() == cwGeoReference::Anchored);
+    CHECK(region->geoReference()->anchor().id == layer->id());
+
+    // Deleting it is the other half of the same fact: a layer that counts as
+    // present is a layer whose removal counts as a deletion.
+    region->lazLayers()->removeAt(0);
+    CHECK(region->geoReference()->state() == cwGeoReference::Ungeoreferenced);
+}
+
+TEST_CASE("Reloading the anchor layer leaves the frame where it is",
+          "[cwLazSourceBbox][cwLocalProjectionManager]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    auto root = std::make_unique<cwRootData>();
+    auto* region = root->project()->cavingRegion();
+
+    const QString path = tempLazPath(tempDir, QStringLiteral("reload-anchor"));
+    REQUIRE(writeSyntheticLazFile(path, pointsInZone10N(), kUtmZone10N));
+
+    addLazAndWait(root.get(), QStringList{path});
+    REQUIRE(region->lazLayers()->count() == 1);
+    auto* layer = region->lazLayers()->layerAt(0);
+    REQUIRE(waitForLazLayerLoaded(layer));
+    REQUIRE(region->geoReference()->state() == cwGeoReference::Anchored);
+
+    const QString frame = region->geoReference()->localCoordinateSystem();
+    REQUIRE_FALSE(frame.isEmpty());
+
+    // A reload re-reads points, not the CRS, so the anchor stays an input for
+    // the whole of it. Were it to drop out while Loading, the project would go
+    // transiently un-georeferenced and the reload would restart untransformed.
+    layer->reload();
+    REQUIRE(layer->loadStatus() == cwLazLayer::LoadStatus::Loading);
+    CHECK(region->geoReference()->state() == cwGeoReference::Anchored);
+    CHECK(region->geoReference()->localCoordinateSystem() == frame);
+
+    REQUIRE(waitForLazLayerLoaded(layer));
+    CHECK(region->geoReference()->state() == cwGeoReference::Anchored);
+    CHECK(region->geoReference()->localCoordinateSystem() == frame);
 }
 
 TEST_CASE("A LAZ layer alone anchors the local projection",

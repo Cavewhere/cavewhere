@@ -12,6 +12,7 @@
 #include <QDebug>
 #include <QFileInfo>
 #include <QLoggingCategory>
+#include <QtConcurrent>
 
 //Our includes
 #include "cwCoordinateTransform.h"
@@ -29,7 +30,8 @@ cwLazLayer::cwLazLayer(QObject* parent) :
     QObject(parent),
     m_id(QUuid::createUuid()),
     m_keywordModel(new cwKeywordModel(this)),
-    m_loadRestarter(this)
+    m_loadRestarter(this),
+    m_probeRestarter(this)
 {
     updateTypeKeyword();
     updateIdKeyword();
@@ -58,6 +60,13 @@ cwLazLayer::cwLazLayer(QObject* parent) :
             return;
         }
         applyResult(std::move(result));
+    });
+
+    // Deliberately not registered with the future manager: a header open is
+    // microseconds, and a directory of tiles would flash a progress row per
+    // file for work no one waits on.
+    m_probeRestarter.onResult(this, [this](cwLazLoader::ProbeResult probe) {
+        applyProbe(probe);
     });
 }
 
@@ -117,6 +126,7 @@ void cwLazLayer::setSourcePath(const QString& path)
         updateFileNameKeyword();
     }
 
+    startHeaderProbe();
     reload();
 }
 
@@ -177,7 +187,10 @@ void cwLazLayer::setEnabled(bool enabled)
         m_bboxMax = QVector3D{};
         m_meanSpacingXY = 0.0f;
         setErrorMessage(QString());
-        setLoadStatus(LoadStatus::Idle);
+        // Back to what the header alone established, not to nothing: the file's
+        // CRS and bounding box are still known, and a disabled layer that stops
+        // being a georeferenced input would read as one that was deleted.
+        setLoadStatus(m_hasReadHeader ? LoadStatus::Probed : LoadStatus::Idle);
         if (hadGeometry) {
             emit pointCountChanged();
             emit bboxChanged();
@@ -203,6 +216,9 @@ void cwLazLayer::setSourceCSOverride(const QString& cs)
         return;
     }
     m_sourceCSOverride = cs;
+    // The header hasn't changed, but which CRS the file is read as has, and the
+    // probe is where that precedence is applied.
+    startHeaderProbe();
     reload();
 }
 
@@ -257,6 +273,51 @@ void cwLazLayer::reload()
     });
 }
 
+void cwLazLayer::startHeaderProbe()
+{
+    if (m_sourcePath.isEmpty()) {
+        return;
+    }
+
+    // Runs whether or not the layer is enabled. Where the file sits is a fact
+    // about the file, and the project's local projection is derived from it —
+    // a layer that will never decode a point still has to be able to place one.
+    const QString path = m_sourcePath;
+    m_probeRestarter.restart([path]() {
+        // The global pool rather than cwTask's: that one is where the point
+        // decodes run, and a header open queued behind a 100-million-point tile
+        // would hold up the frame every one of those decodes is waiting on.
+        return QtConcurrent::run([path]() { return cwLazLoader::probeHeader(path); });
+    });
+}
+
+void cwLazLayer::applyProbe(const cwLazLoader::ProbeResult& probe)
+{
+    if (!probe.valid) {
+        // The file wouldn't open. Whatever a previous probe established stands:
+        // rescan is what notices a file that has gone away, and reload() is
+        // about to report the same failure as an Error.
+        return;
+    }
+
+    m_hasReadHeader = true;
+    m_sourceBboxMin = probe.bboxMin;
+    m_sourceBboxMax = probe.bboxMax;
+
+    const QString sourceCS = m_sourceCSOverride.isEmpty() ? probe.sourceCS
+                                                          : m_sourceCSOverride;
+    if (m_sourceCS != sourceCS) {
+        m_sourceCS = sourceCS;
+        emit sourceCSChanged();
+    }
+
+    // Only ever an upgrade from Idle. A load already running or finished has
+    // read the same header and says more than the probe does.
+    if (m_loadStatus == LoadStatus::Idle) {
+        setLoadStatus(LoadStatus::Probed);
+    }
+}
+
 void cwLazLayer::applyResult(cwLazLoadResult&& result)
 {
     m_geometry = std::move(result.geometry);
@@ -282,6 +343,9 @@ void cwLazLayer::applyResult(cwLazLoadResult&& result)
     }
 
     setErrorMessage(QString());
+    // A decode that produced points read the header on its way there, so this
+    // holds even in the rare case where the load beats its own probe home.
+    m_hasReadHeader = true;
     setLoadStatus(LoadStatus::Loaded);
 }
 

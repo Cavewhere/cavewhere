@@ -86,6 +86,13 @@ QString writeMinimalLaz(const QString& path, const QString& wktCS = QString());
 bool waitForLazLayerLoaded(cwLazLayer* layer, int timeoutMs = 5000);
 
 /**
+ * Spin until @a layer's header probe has landed, or @a timeoutMs elapses.
+ * Returns hasReadHeader(). Unlike the load, the probe runs for a disabled
+ * layer too, so this is the wait a test wants when it never enables one.
+ */
+bool waitForLazLayerHeader(cwLazLayer* layer, int timeoutMs = 5000);
+
+/**
  * Hand @a externalPaths to @a root's region.lazLayers via addFromFiles and
  * spin both the project save-flush and the future manager to completion. Each
  * input is copied into the project's GIS Layers folder, then surfaced by

@@ -80,8 +80,9 @@ public:
      * gets a frame at all: the loader transforms points into the project's
      * frame, so the frame has to exist before the load can run, but the frame
      * is derived from the cloud's own coordinates. The probe breaks the cycle
-     * by reading the position out of the header without loading anything
-     * (cwLazLayerModel::deriveFrameFromLaz).
+     * by reading the position out of the header without loading anything.
+     * cwLazLayer runs one per layer off the GUI thread, including for layers
+     * that are disabled and will never decode a point.
      */
     struct ProbeResult {
         bool valid = false;        //!< false if the file could not be opened

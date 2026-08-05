@@ -102,12 +102,14 @@ QList<cwLocalProjectionManager::Input> cwLocalProjectionManager::gatherInputs() 
         if (layer == nullptr) {
             continue;
         }
-        // Only a finished load has read the file's header, and only its
-        // numbers say where the cloud sits in its own CRS. A layer that is
-        // disabled, still loading, or failed has no position to offer — and
-        // must not be treated as deleted either, which is what m_anchorSeen
-        // is for.
-        if (layer->loadStatus() != cwLazLayer::LoadStatus::Loaded) {
+        // The header says where the cloud sits in its own CRS, and it is read
+        // as soon as the layer has a path — before the points decode, and even
+        // for a layer that is disabled and will decode none. Every layer that
+        // has one belongs here, because the questions asked of this list are
+        // about the whole set: a layer missing from it reads as one that was
+        // deleted, and the frame would move for a load that simply hasn't
+        // landed yet.
+        if (!layer->hasReadHeader()) {
             continue;
         }
         const QString layerCS = layer->sourceCS().trimmed();

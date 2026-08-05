@@ -39,7 +39,7 @@ TEST_CASE("cwLazLayer::setEnabled emits enabledChanged on change; nothing on no-
     REQUIRE(layer.enabled() == true);
 }
 
-TEST_CASE("cwLazLayer::setEnabled(false) on a loaded layer drops geometry and resets to Idle",
+TEST_CASE("cwLazLayer::setEnabled(false) on a loaded layer drops geometry and falls back to Probed",
           "[cwLazLayer][cwLazLayerEnabled]") {
     QTemporaryDir tempDir;
     REQUIRE(tempDir.isValid());
@@ -62,10 +62,13 @@ TEST_CASE("cwLazLayer::setEnabled(false) on a loaded layer drops geometry and re
 
     layer.setEnabled(false);
 
-    REQUIRE(layer.loadStatus() == cwLazLayer::LoadStatus::Idle);
+    // Probed, not Idle: the points are gone but the header still says where
+    // the file is, and that is what the project's frame is derived from.
+    REQUIRE(layer.loadStatus() == cwLazLayer::LoadStatus::Probed);
+    REQUIRE(layer.hasReadHeader());
     REQUIRE(layer.pointCount() == 0);
     REQUIRE(layer.errorMessage().isEmpty());
-    REQUIRE(statusSpy.size() >= 1); // Loaded → Idle
+    REQUIRE(statusSpy.size() >= 1); // Loaded → Probed
     REQUIRE(pointCountSpy.size() >= 1); // points dropped
 }
 
@@ -80,10 +83,12 @@ TEST_CASE("cwLazLayer::setEnabled(true) on a disabled layer with a sourcePath re
     layer.setEnabled(false);
     REQUIRE(layer.enabled() == false);
 
-    // setSourcePath on a disabled layer records the path but does not load.
+    // setSourcePath on a disabled layer records the path and reads the header,
+    // but decodes nothing.
     layer.setSourcePath(path);
     REQUIRE(layer.sourcePath() == path);
-    REQUIRE(layer.loadStatus() == cwLazLayer::LoadStatus::Idle);
+    REQUIRE(waitForLazLayerHeader(&layer));
+    REQUIRE(layer.loadStatus() == cwLazLayer::LoadStatus::Probed);
 
     layer.setEnabled(true);
     // Re-enable kicks off a fresh async load.
@@ -93,7 +98,7 @@ TEST_CASE("cwLazLayer::setEnabled(true) on a disabled layer with a sourcePath re
     REQUIRE(layer.pointCount() > 0);
 }
 
-TEST_CASE("cwLazLayer: setSourcePath on a disabled layer captures fingerprint, stays Idle",
+TEST_CASE("cwLazLayer: setSourcePath on a disabled layer captures fingerprint, decodes nothing",
           "[cwLazLayer][cwLazLayerEnabled]") {
     QTemporaryDir tempDir;
     REQUIRE(tempDir.isValid());
@@ -112,12 +117,13 @@ TEST_CASE("cwLazLayer: setSourcePath on a disabled layer captures fingerprint, s
     const QFileInfo info(path);
     REQUIRE(layer.sourceSize() == info.size());
     REQUIRE(layer.sourceMtime() == info.lastModified());
-    // But no async load fired.
-    REQUIRE(layer.loadStatus() == cwLazLayer::LoadStatus::Idle);
+
+    // The header probe is the only async work a disabled layer does, and it
+    // lands on Probed. Loading is the state that must never be reached.
+    REQUIRE(waitForLazLayerHeader(&layer));
+    REQUIRE(layer.loadStatus() == cwLazLayer::LoadStatus::Probed);
     REQUIRE(layer.pointCount() == 0);
 
-    // Sanity: pump the event loop briefly to confirm no transition leaks
-    // through asynchronously.
     QCoreApplication::processEvents();
-    REQUIRE(layer.loadStatus() == cwLazLayer::LoadStatus::Idle);
+    REQUIRE(layer.loadStatus() == cwLazLayer::LoadStatus::Probed);
 }
