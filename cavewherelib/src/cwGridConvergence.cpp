@@ -8,6 +8,7 @@
 #include "cwGridConvergence.h"
 #include "cwCoordinateTransform.h"
 #include "cwCoordinateTransformPrivate.h"
+#include "cwUnits.h"
 
 //Qt includes
 #include <QHash>
@@ -15,14 +16,15 @@
 
 //Std includes
 #include <algorithm>
+#include <cmath>
 #include <memory>
 
 namespace {
 
 // Per-sourceCS PJ cached on the calling thread. proj_factors() is the
 // expensive call (sqlite hit during proj_create plus CRS construction),
-// and convergence is read on every CavePage render — caching keeps it
-// effectively free on the second hit. PJ_CONTEXT is per-instance and
+// and cwAzimuthReference reads convergence once per measurement — caching
+// keeps it effectively free on the second hit. PJ_CONTEXT is per-instance and
 // not thread-safe, so thread_local mirrors cwCoordinateTransform's
 // validatorContext() pattern.
 struct ConvergencePj {
@@ -87,6 +89,32 @@ std::shared_ptr<ConvergencePj> cachedConvergencePj(const QString& sourceCS)
     return *it;
 }
 
+// Convergence grows at tan(latitude)/EarthRadius per meter of east-west offset
+// from the frame's central meridian — 0.0075 degrees per kilometer at 40N. Two
+// decimals would round every cave within 1.3 km of the center to "0.00", which
+// reads as a feature that isn't working rather than one whose whole point is
+// that the angle is small; three resolves 130 m. Six is past anything
+// measurable (13 cm), which is what the tooltip is for.
+constexpr int kCompactDecimals = 3;
+constexpr int kDetailDecimals = 6;
+
+//! True when \a angle has no digits left at \a decimals places — its magnitude
+//! sits below half of the last one printed.
+bool printsAsZero(double angle, int decimals)
+{
+    return qAbs(angle) < 0.5 * std::pow(10.0, -decimals);
+}
+
+//! The reading both precisions share: the angle, and the fix it was read at.
+//! cwUnits::formatAngle drops the sign on a value that prints as zero, which
+//! matters here twice over — a cave a hair west of the central meridian would
+//! read "-0.000°", and PROJ answers the anchor itself with a tiny negative
+//! rather than a true zero.
+QString readoutAt(double angle, const QString& station, int decimals)
+{
+    return QStringLiteral("%1 at %2").arg(cwUnits::formatAngle(angle, decimals), station);
+}
+
 } // namespace
 
 cwGridConvergence::cwGridConvergence(QObject* parent) :
@@ -98,7 +126,7 @@ QString cwGridConvergence::text() const
 {
     switch (m_state) {
     case Valid:
-        return QStringLiteral("%1° at %2").arg(m_angle, 0, 'f', 2).arg(m_station);
+        return readoutAt(m_angle, m_station, kCompactDecimals);
     case NoFixStation:
         return QStringLiteral("n/a (no fix station)");
     case NoCoordinateSystem:
@@ -111,12 +139,22 @@ QString cwGridConvergence::text() const
 
 QString cwGridConvergence::detailText() const
 {
-    if (m_state == Valid) {
-        // The grid is always the same one — naming it beats repeating the proj
-        // string PROJ has no name for.
-        return QStringLiteral("%1, in the project's local projection").arg(text());
+    if (m_state != Valid) {
+        return text();
     }
-    return text();
+
+    // The sentence fires exactly when every digit the tooltip prints is zero —
+    // the anchor cave always, any cave on the meridian besides. That is the one
+    // reading more precision cannot explain, so prose has to. Every other
+    // reading names the grid instead: it is always the same one, and saying so
+    // beats repeating the proj string PROJ has no name for.
+    const QString grid = printsAsZero(m_angle, kDetailDecimals)
+        ? QStringLiteral(" — this cave sits on the local projection's central "
+                         "meridian, where grid north and true north point the "
+                         "same way.")
+        : QStringLiteral(", in the project's local projection");
+
+    return readoutAt(m_angle, m_station, kDetailDecimals) + grid;
 }
 
 void cwGridConvergence::update(const QList<cwFixStation>& fixStations,

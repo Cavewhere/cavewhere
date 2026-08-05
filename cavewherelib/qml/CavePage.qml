@@ -212,9 +212,12 @@ StandardPage {
                     id: gridConvergenceHoverId
                 }
 
+                // The n/a readings have nothing the label doesn't already say —
+                // detailText repeats it verbatim — so only a real angle earns a
+                // tooltip.
                 QC.ToolTip.visible: gridConvergenceHoverId.hovered
                                     && cavePageArea.currentCave
-                                    && cavePageArea.currentCave.gridConvergence.detailText !== cavePageArea.currentCave.gridConvergence.text
+                                    && cavePageArea.currentCave.gridConvergence.state === GridConvergence.Valid
                 QC.ToolTip.text: cavePageArea.currentCave ? cavePageArea.currentCave.gridConvergence.detailText : ""
             }
         }
@@ -331,7 +334,7 @@ StandardPage {
             spacing: Theme.columnGap
 
             ColumnLayout {
-                Layout.minimumWidth: statsColumnId.implicitWidth + Theme.statsPadding
+                Layout.minimumWidth: statsColumnId.implicitWidth + Theme.statsPadding * 2
                 Layout.maximumWidth: Theme.infoColumnMaxWidth
                 Layout.alignment: Qt.AlignTop
                 spacing: Theme.flowSpacing
@@ -351,12 +354,15 @@ StandardPage {
 
                 QQ.Rectangle {
                     Layout.fillWidth: true
-                    implicitHeight: statsColumnId.implicitHeight + Theme.statsPadding
+                    implicitHeight: statsColumnId.implicitHeight + Theme.statsPadding * 2
                     color: Theme.borderSubtle
 
                     ColumnLayout {
                         id: statsColumnId
-                        anchors.centerIn: parent
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.margins: Theme.statsPadding
                         spacing: Theme.tightSpacing
 
                         LayoutItemProxy { target: lengthStat }

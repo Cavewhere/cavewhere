@@ -23,7 +23,9 @@
  * anchor's latitude and longitude, on the anchor's own datum:
  *
  *   - convergence is zero on the central meridian, which runs through the
- *     origin, and stays under half a degree out to ~45 km;
+ *     origin, and grows with east-west distance from it alone: at the 50 km
+ *     kAnchorThresholdMeters allows it is 0.26 degrees at 30N, 0.38 at 40N and
+ *     0.53 at 50N, against 1.93 at a UTM zone edge at 40N;
  *   - scale error is ~1 ppm at 10 km and ~11 ppm at 30 km, against UTM's
  *     designed worst case of ~400 ppm;
  *   - coordinates stay small enough to be float-safe on the GPU without an

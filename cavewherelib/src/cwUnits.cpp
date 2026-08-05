@@ -96,6 +96,16 @@ QString cwUnits::formatLength(double meters, cwUnits::LengthUnit unit,
             .arg(unitName(unit));
 }
 
+QString cwUnits::formatAngle(double degrees, int decimals)
+{
+    // Round to display precision first so the -0 collapse acts on the value the
+    // user will actually see (a tiny -0.004 must print "0.0°", not "-0.0°").
+    const double scale = std::pow(10.0, decimals);
+    double value = std::round(degrees * scale) / scale;
+    value += 0.0; // IEEE: -0.0 + 0.0 == +0.0, so a rounds-to-zero value shows no sign
+    return QStringLiteral("%1°").arg(value, 0, 'f', decimals);
+}
+
 /**
   \brief Converts a string to the enumerate length
 

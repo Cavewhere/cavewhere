@@ -81,11 +81,15 @@ public:
     /// Why the convergence is (or isn't) available.
     State state() const { return m_state; }
 
-    /// Compact readout, e.g. "0.74° at a1", or "n/a (no fix station)".
+    /// Compact readout, e.g. "0.376° at a1", or "n/a (no fix station)". Three
+    /// decimals because the local projection keeps the angle small on purpose —
+    /// see kCompactDecimals for what each digit is worth on the ground.
     QString text() const;
 
-    /// text() plus the grid it is measured in, for tooltip use. Matches text()
-    /// for n/a cases (nothing extra to surface).
+    /// Full-precision readout plus the grid it is measured in, for tooltip use.
+    /// A cave on the central meridian gets that said instead, since it reads as
+    /// zero at every precision. Matches text() for n/a cases (nothing extra to
+    /// surface).
     QString detailText() const;
 
     /// Recompute in the project's frame \a frameCS, at the location of the

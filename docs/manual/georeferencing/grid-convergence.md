@@ -1,7 +1,7 @@
 ---
 title: Understand Grid Convergence
-summary: The per-cave readout that appears once a cave is georeferenced — what its values and "n/a" states mean, and why it changes your bearing correction.
-problem: Read the grid convergence value on the cave page, understand why it's "n/a", and know why correcting for it is what lets multiple fixed stations close and a cave align with aerial LiDAR.
+summary: The correction georeferencing turns on — what grid convergence is, where the grid comes from, and why it changes your bearing correction.
+problem: Understand why a georeferenced cave's bearing correction is more than its declination, and why correcting for grid convergence is what lets multiple fixed stations close and a cave align with aerial LiDAR.
 keywords: [grid convergence, grid north, true north, bearing correction, declination, utm, projection, low-distortion projection, ldp, scale factor, transverse mercator, meridian, georeference, fixed station, loop closure, aerial lidar, point cloud, alignment, grid bearing]
 related: [georeference-a-cave.md, ../concepts/coordinate-systems.md, ../survey-data/declination.md]
 ---
@@ -10,11 +10,12 @@ related: [georeference-a-cave.md, ../concepts/coordinate-systems.md, ../survey-d
 
 ## Why / when you need this
 
-Once you [georeference a cave](georeference-a-cave.md), a new readout appears on
-its page: **Grid convergence**. It's not something you set — CaveWhere computes
-it — but it's worth understanding, because it quietly rotates every compass
-reading in the cave onto the grid, and that rotation is what lets the cave line up
-with anything measured on the grid. Two cases make it matter:
+Once you [georeference a cave](georeference-a-cave.md), a second correction
+switches on: **grid convergence**. It's not something you set or see — CaveWhere
+computes and applies it — but it's worth understanding, because it quietly
+rotates every compass reading in the cave onto the grid, and that rotation is
+what lets the cave line up with anything measured on the grid. Two cases make it
+matter:
 
 - **Fixing more than one station.** When you fix two or more stations to
   real-world coordinates, those coordinates live on the grid, so the direction
@@ -52,7 +53,15 @@ vary by a degree or more between the zone's central meridian and its edge.
 Unlike [declination](../survey-data/declination.md), grid convergence has
 nothing to do with the Earth's magnetic field, so it doesn't drift with time —
 it depends only on location and projection. CaveWhere reads it at the cave's
-first fixed station, in the projection it derived for your project.
+first fixed station, in the
+[projection it derived for your project](#the-grid-is-a-low-distortion-projection) —
+and that choice of projection is what keeps the angle down to a fraction of a
+degree instead of the couple of degrees a UTM zone would hand you.
+
+So it takes two things: a projection for the project, *and* a fixed station that
+says where this cave sits in it. Until both are there — nothing georeferenced
+yet, or a cave with no [fixed station](georeference-a-cave.md#fix-a-station) of
+its own — the convergence is zero and the cave is drawn to true north.
 
 ![A map graticule with two families of north lines: orange true-north meridians that fan out and converge toward the pole, and a blue square UTM grid. Points A and B sit on the same orange meridian (both at longitude 108°E), so a sight from A to B is due true north — but the meridian leans relative to the grid, so B falls to the left of the vertical grid line through A and gets a smaller UTM easting. The angle between grid north and true north at a point is the grid convergence.](../images/illustrations/utm-grid-convergence.svg)
 *Two points at the same longitude lie on one true-north meridian, yet they get
@@ -75,10 +84,16 @@ Three things follow, and they're the reason the LDP exists:
   even 50 km out from its center — about as far as a project ever reaches — the
   error is around 3 cm per kilometer, under the noise of the tape that measured
   it.
-- **Grid north is essentially true north.** Convergence is exactly zero at the
-  center and reaches only a few tenths of a degree at the far edge of a project,
-  where a UTM zone can pass a full degree. The bearing correction stays close to
-  the [declination](../survey-data/declination.md) alone.
+- **Grid north is essentially true north.** Convergence is exactly zero along the
+  meridian running through the LDP's center, and it grows only with **east–west**
+  distance from that line — a cave 50 km due *north* of the center has none at
+  all. Due east or west, 50 km out, it reaches about 0.26° at 30°N, 0.38° at
+  40°N, and 0.53° at 50°N. The same cave placed at the edge of a UTM zone would
+  carry 1.93° at 40°N — five times as much. So the bearing correction stays close
+  to the [declination](../survey-data/declination.md) alone. Small isn't zero,
+  though, so CaveWhere still applies it: a third of a degree is the same order as
+  the precision of the compass that took the reading, and it keeps growing the
+  farther east or west the cave runs.
 - **There are no zone seams.** A cave that straddles a UTM zone boundary would
   otherwise be split between two grids with different norths; the LDP has one
   center and no edges.
@@ -91,15 +106,28 @@ coordinate system rather than the project's own frame.
 ## Reading the value
 
 The **Grid convergence** cell sits next to the **Fix stations** link on the cave
-page. When the cave is georeferenced it reads as an angle at a station —
-for example `0.26° at a1` — and hovering it names the grid the angle is measured
-in.
+page. When the cave is georeferenced it reads as an angle at a station — for
+example `0.376° at a1` — and hovering it gives the value at full precision plus
+the grid it's measured in.
 
-Before that, it explains *why* it has nothing to report:
+The readout carries three decimals because the
+[LDP](#the-grid-is-a-low-distortion-projection) keeps the angle small on
+purpose. Convergence grows by roughly 0.008° per kilometer of east–west distance
+from the projection's center at 40°N, so at coarser precision most caves in a
+project would round to a flat zero — which would read as a correction that isn't
+running, when in fact it's running and tiny. That's the point the cell is making.
+
+The **first** thing you georeference always reads `0.000°`, and that's the right
+answer rather than a missing one: it defines the projection's center, and grid
+north and true north are the same direction along the meridian through it. The
+tooltip says as much, so the zero doesn't look like a failure.
+
+Before a cave is georeferenced, the cell explains *why* it has nothing to report:
 
 | Reading | Meaning |
 |---------|---------|
-| `0.26° at a1` | The convergence CaveWhere is applying, measured at that fixed station. |
+| `0.376° at a1` | The convergence CaveWhere is applying, measured at that fixed station. |
+| `0.000° at a1` | The cave sits on the projection's central meridian — usually because it's the one that defined it. |
 | `n/a (no fix station)` | Nothing places this cave: it has no [fixed station](georeference-a-cave.md#fix-a-station), or the ones it has name no [coordinate system](georeference-a-cave.md#fix-a-station) to read their numbers under. |
 | `n/a (no coordinate system)` | Nothing in the project is georeferenced yet, so there is no projection to converge to and the model is drawn to true north. |
 
@@ -113,7 +141,7 @@ out what the value means and how it's applied.*
 
 ## Why it changes your correction
 
-Here's the part that matters even if you never look at the number. When CaveWhere
+Here's what it does. When CaveWhere
 solves the survey, it turns each magnetic compass reading into a **grid bearing** —
 one that lines up with your projected coordinates. That's two corrections in turn:
 
@@ -145,8 +173,8 @@ aligned with everything else in its coordinate system.
 
 ## Next steps
 
-- [Georeference a Cave](georeference-a-cave.md) — set the coordinate system and
-  fixed station that turn this readout on.
+- [Georeference a Cave](georeference-a-cave.md) — fix the station that turns this
+  correction on.
 - [Set the Declination](../survey-data/declination.md) — the other half of the
   bearing correction.
 - [Directions and Coordinate Systems](../concepts/coordinate-systems.md) — the

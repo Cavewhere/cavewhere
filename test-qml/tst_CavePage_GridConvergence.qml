@@ -87,19 +87,91 @@ MainWindowTest {
             compare(label.text, text)
         }
 
-        // ── Detail text names the grid for the tooltip ───────────────────────
+        function setFixEasting(easting) {
+            cave.fixStations.setData(cave.fixStations.index(0), easting,
+                                     FixStationModel.EastingRole)
+        }
 
-        function test_detailTextAppendsCsForTooltip() {
+        //! Push the anchoring fix 40 km east. The frame stays where it was
+        //! derived, so the cave now stands off its central meridian and carries
+        //! a real convergence (~0.3°) instead of the anchor's exact zero.
+        function moveTheFixOffTheMeridian() {
+            setFixEasting(518000.0)
+        }
+
+        // ── Precision: 3 decimals compact, 6 in the tooltip ──────────────────
+
+        //! The local projection keeps convergence small by design, so the
+        //! compact readout has to resolve well under a degree or every cave
+        //! near the anchor reads as a flat zero and the correction looks
+        //! switched off.
+        function test_compactIsThreeDecimalsAndDetailIsSix() {
             addUtm13NFix("a1", 478000.0, 4430000.0, 1655.0)
+            moveTheFixOffTheMeridian()
 
             const compact = cave.gridConvergence.text
             const detail = cave.gridConvergence.detailText
-            verify(detail.indexOf(compact) === 0,
-                   "detail starts with the compact text: " + detail)
-            verify(detail.length > compact.length,
-                   "detail says more than the compact text")
+
+            const compactMatch = compact.match(/^(-?\d+\.\d{3})° at /)
+            verify(compactMatch !== null,
+                   "compact readout carries exactly three decimals: " + compact)
+
+            const detailMatch = detail.match(/^(-?\d+\.\d{6})° at /)
+            verify(detailMatch !== null,
+                   "tooltip carries exactly six decimals: " + detail)
+
+            compare(parseFloat(compactMatch[1]),
+                    Math.round(parseFloat(detailMatch[1]) * 1000) / 1000,
+                    "the compact value is the tooltip's, rounded")
+        }
+
+        // ── Detail text names the grid for the tooltip ───────────────────────
+
+        function test_detailTextNamesTheGridItIsMeasuredIn() {
+            addUtm13NFix("a1", 478000.0, 4430000.0, 1655.0)
+            moveTheFixOffTheMeridian()
+
+            const detail = cave.gridConvergence.detailText
+            verify(detail.indexOf("a1") >= 0,
+                   "detail names the fix it converged at: " + detail)
             verify(detail.indexOf("local projection") >= 0,
                    "detail names the grid the angle is measured in: " + detail)
+        }
+
+        //! A cave just west of the meridian converges negatively by an amount
+        //! the compact readout rounds away — which would print a signed zero,
+        //! "-0.000°", and read as a broken minus sign. The tooltip is where the
+        //! sign still means something, so it keeps it.
+        function test_compactDropsTheSignOnAValueItRoundsToZero() {
+            addUtm13NFix("a1", 478000.0, 4430000.0, 1655.0)
+
+            // 50 m west of the anchor: ~0.0004°, under the compact format's
+            // last digit and well over the tooltip's.
+            const idx = cave.fixStations.index(0)
+            cave.fixStations.setData(idx, 477950.0, FixStationModel.EastingRole)
+
+            const compact = cave.gridConvergence.text
+            const detail = cave.gridConvergence.detailText
+
+            compare(compact.indexOf("0.000°"), 0,
+                    "compact rounds to an unsigned zero: " + compact)
+            verify(detail.indexOf("-0.000") === 0,
+                   "the tooltip keeps the sign it still has digits for: " + detail)
+            verify(detail.indexOf("central meridian") < 0,
+                   "a cave off the meridian is not told it is on it: " + detail)
+        }
+
+        //! The cave that owns the anchor sits on the central meridian, so it
+        //! reads zero at every precision — the one case where more decimals
+        //! say nothing and a sentence has to.
+        function test_detailTextExplainsTheAnchorsZero() {
+            addUtm13NFix("a1", 478000.0, 4430000.0, 1655.0)
+
+            const detail = cave.gridConvergence.detailText
+            verify(detail.indexOf("0.000000°") === 0,
+                   "the anchor reads as zero at full precision: " + detail)
+            verify(detail.indexOf("central meridian") >= 0,
+                   "detail says why the anchor reads zero: " + detail)
         }
 
         // ── Page-level scrollbar activates when the help expands ─────────────
@@ -200,11 +272,7 @@ MainWindowTest {
             addUtm13NFix("a1", 478000.0, 4430000.0, 1655.0)
             const first = cave.gridConvergence.text
 
-            // Move the fix 40 km east — close enough that the frame stays where
-            // it is, so the cave now stands off its central meridian and picks
-            // up a real convergence (~0.3°).
-            const idx = cave.fixStations.index(0)
-            cave.fixStations.setData(idx, 518000.0, FixStationModel.EastingRole)
+            moveTheFixOffTheMeridian()
 
             tryVerify(() => cave.gridConvergence.text !== first, 500,
                       "label must recompute when fix coords change")

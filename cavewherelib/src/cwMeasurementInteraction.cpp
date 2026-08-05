@@ -11,6 +11,7 @@
 #include "cwGeoPoint.h"
 #include "cwGeoReference.h"
 #include "cwMeasurementMath.h"
+#include "cwUnits.h"
 
 //Qt includes
 #include <QClipboard>
@@ -325,7 +326,7 @@ void cwMeasurementInteraction::copyToClipboard() const
     // pastes "n/a (reason)" rather than a silently-wrong grid value. Grid always
     // resolves, so m_referenceAzimuth is the grid azimuth in that case.
     const QString azimuthValue = m_referenceAvailable
-            ? QStringLiteral("%1°").arg(m_referenceAzimuth, 0, 'f', kAngleDecimals)
+            ? cwUnits::formatAngle(m_referenceAzimuth, kAngleDecimals)
             : QStringLiteral("n/a (%1)").arg(m_referenceReason);
     const QString azimuthLine =
             QStringLiteral("Azimuth (%1): %2")
@@ -347,12 +348,12 @@ void cwMeasurementInteraction::copyToClipboard() const
                    m_lengthUnit->format(m_horizontal))
             + azimuthLine
             + QStringLiteral("\n"
-                             "  Inclination: %1°\n"
+                             "  Inclination: %1\n"
                              "By Axis\n"
                              "  Easting (X): %2\n"
                              "  Northing (Y): %3\n"
                              "  Vertical (Z): %4")
-              .arg(QString::number(m_inclination, 'f', kAngleDecimals),
+              .arg(cwUnits::formatAngle(m_inclination, kAngleDecimals),
                    m_lengthUnit->format(m_deltaEast, true),
                    m_lengthUnit->format(m_deltaNorth, true),
                    m_lengthUnit->format(m_vertical, true));

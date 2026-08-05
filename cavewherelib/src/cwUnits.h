@@ -87,6 +87,13 @@ public:
     static QString formatLength(double meters, cwUnits::LengthUnit unit,
                                 bool signedValue = false, int decimals = 2);
 
+    //! An angle in \a degrees rendered at \a decimals places with the degree
+    //! sign (e.g. "0.4°"). A value that rounds to zero carries no sign: a
+    //! reading a hair below its reference direction renders "0.0°" rather than
+    //! "-0.0°", where the minus is noise the digits can't back up. Shared by
+    //! every angle readout so they agree on that.
+    Q_INVOKABLE static QString formatAngle(double degrees, int decimals = 1);
+
     //! The unit new survey shots default to for \a system (metres / feet).
     static constexpr cwUnits::LengthUnit surveyUnit(cwUnits::UnitSystem system);
     //! The unit cave depth is displayed in for \a system (metres / feet).

@@ -8,6 +8,7 @@
 #include "cwFixStation.h"
 #include "cwGeoPoint.h"
 #include "cwDeclination.h"
+#include "cwUnits.h"
 
 #include "Monad/Result.h"
 
@@ -319,11 +320,11 @@ void cwTripCalibration::updateWarnings(const Monad::Result<double>& autoResult)
         const double diff = std::abs(manual - computed);
         if (diff >= 0.5) {
             newWarning = QStringLiteral(
-                "Manual declination %1° differs from computed %2° by %3°. "
+                "Manual declination %1 differs from computed %2 by %3. "
                 "Verify it's still correct.")
-                .arg(manual, 0, 'f', 1)
-                .arg(computed, 0, 'f', 1)
-                .arg(diff, 0, 'f', 1);
+                .arg(cwUnits::formatAngle(manual),
+                     cwUnits::formatAngle(computed),
+                     cwUnits::formatAngle(diff));
         }
     }
 
