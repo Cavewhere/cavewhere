@@ -17,6 +17,7 @@
 #include "cwFixStationModel.h"
 #include "cwGeoReference.h"
 #include "cwLocalProjectionManager.h"
+#include "FixStationFixtureHelper.h"
 
 //Qt includes
 #include <QUuid>
@@ -44,25 +45,6 @@ constexpr double kNearbyNorthing = 4194100.0;
 const QString kElsewhereCS = QStringLiteral(
     "+proj=tmerc +lat_0=-33.9 +lon_0=18.4 +k=1 +x_0=0 +y_0=0 "
     "+datum=WGS84 +units=m +no_defs +type=crs");
-
-cwFixStation makeFix(const QString& name, const QString& cs,
-                     double easting, double northing, double elevation)
-{
-    cwFixStation fix;
-    fix.setStationName(name);
-    fix.setInputCS(cs);
-    fix.setCoordinate(easting, northing, elevation);
-    return fix;
-}
-
-cwCave* addCaveWithFixes(cwCavingRegion* region, const QList<cwFixStation>& fixes)
-{
-    region->addCave();
-    cwCave* cave = region->cave(region->caveCount() - 1);
-    REQUIRE(cave != nullptr);
-    cave->fixStations()->setFixStations(fixes);
-    return cave;
-}
 
 //! That \a localCS is a frame centered on the given point — asserted by using
 //! the stored string rather than by reading it. The frame puts its origin at

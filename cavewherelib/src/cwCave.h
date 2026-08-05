@@ -91,10 +91,11 @@ public:
     cwFixStationDiagnosticsModel* fixStationDiagnostics() const { return m_fixStationDiagnostics; }
 
     /// Per-cave grid-convergence readout (angle + state + display text).
-    /// Recomputed from the fix stations via recomputeGridConvergence() — under
-    /// the first fix's own inputCS(), never the region's; cwScrap reads
-    /// gridConvergence()->angle() to remove grid rotation from the note
-    /// transform.
+    /// Recomputed via recomputeGridConvergence() in the region's local
+    /// projection — the grid cavern plots the stations in — at the location the
+    /// cave's first usable fix station gives. cwScrap reads
+    /// gridConvergence()->angle() to remove that grid's rotation from the note
+    /// transform, so it has to be the same grid the stations came back in.
     cwGridConvergence* gridConvergence() const { return m_gridConvergence; }
 
     int tripCount() const;
@@ -153,9 +154,10 @@ signals:
     void externalCenterlineChanged();
 
 public slots:
-    /// Feed the cave's current fix stations into the gridConvergence() readout,
-    /// which caches the PROJ result and only re-emits when it actually changes.
-    /// Wired to fix-station edits.
+    /// Feed the cave's current fix stations and the region's frame into the
+    /// gridConvergence() readout, which caches the PROJ result and only re-emits
+    /// when it actually changes. Wired to fix-station edits here, and to frame
+    /// moves by the region.
     void recomputeGridConvergence();
 
 private:

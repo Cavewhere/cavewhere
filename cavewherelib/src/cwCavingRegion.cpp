@@ -27,12 +27,24 @@ cwCavingRegion::cwCavingRegion(QObject *parent) :
     m_fixStationValidator(new cwFixStationValidator(this)),
     m_localProjectionManager(new cwLocalProjectionManager(this))
 {
-    // geoReference owns the frame; the region only mirrors each change into the
-    // LAZ layer model (it owns lazLayers). Consumers that react to the frame
-    // connect to geoReference directly.
-    connect(m_geoReference, &cwGeoReference::localProjectionChanged, this, [this] {
+    // geoReference owns the frame; the region pushes each change into the things
+    // it owns — the LAZ layer model, and every cave's grid convergence, which is
+    // an angle in the frame and so moves with it. A cave can't watch the frame
+    // itself: it learns which region it belongs to only when it is parented, so
+    // joining is the other half — a cave converges to nothing until it has a
+    // region to read the frame off. Consumers the region doesn't own connect to
+    // geoReference directly.
+    const auto recomputeConvergence = [this] {
+        for (cwCave* cave : std::as_const(m_caves)) {
+            cave->recomputeGridConvergence();
+        }
+    };
+
+    connect(m_geoReference, &cwGeoReference::localProjectionChanged, this, [this, recomputeConvergence] {
         m_lazLayers->setRegionFrameCS(m_geoReference->localCoordinateSystem());
+        recomputeConvergence();
     });
+    connect(this, &cwCavingRegion::caveCountChanged, this, recomputeConvergence);
 }
 
 void cwCavingRegion::setUnitSystem(cwUnits::UnitSystem system)
@@ -388,13 +400,6 @@ void cwCavingRegion::InsertRemoveCave::insertCaves() {
         regionPtr->m_caves.insert(index, Caves.at(i));
         regionPtr->m_caveNames.insert(Caves.at(i)->name());
         Caves.at(i)->setParent(regionPtr);
-
-        // Nothing here follows the region's globalCS any more: a fix station is
-        // judged, converged and exported under its own inputCS, so changing the
-        // project's projection leaves every cave's readouts where they were, and
-        // joining a region can no longer change what a cave converges to. The
-        // cave keeps that current itself, from its own constructor and its fix
-        // stations' signals.
     }
 
     OwnsCaves = false;

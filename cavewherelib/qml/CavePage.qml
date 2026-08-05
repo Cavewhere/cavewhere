@@ -226,9 +226,10 @@ StandardPage {
             text: "<p><b>Grid convergence</b> is the angle between <i>true north</i> " +
                   "(the direction to the geographic pole) and <i>grid north</i> " +
                   "(the y-axis of the projected coordinate system).</p>" +
-                  "<p>It depends on both the projection and the location — inside one " +
-                  "UTM zone, convergence can vary by a degree or more between the " +
-                  "central meridian and the zone edge.</p>" +
+                  "<p>The projection here is the one CaveWhere derived for the " +
+                  "project, centered on the first thing you georeferenced — so " +
+                  "convergence is zero right there and grows as a cave sits farther " +
+                  "east or west of it.</p>" +
                   "<p>When CaveWhere computes 3D positions via survex/cavern, the " +
                   "bearing correction applied to each compass reading is " +
                   "<b>(magnetic declination − grid convergence)</b>, so corrected " +

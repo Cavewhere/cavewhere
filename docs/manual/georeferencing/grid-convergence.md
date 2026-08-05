@@ -2,7 +2,7 @@
 title: Understand Grid Convergence
 summary: The per-cave readout that appears once a cave is georeferenced — what its values and "n/a" states mean, and why it changes your bearing correction.
 problem: Read the grid convergence value on the cave page, understand why it's "n/a", and know why correcting for it is what lets multiple fixed stations close and a cave align with aerial LiDAR.
-keywords: [grid convergence, grid north, true north, bearing correction, declination, utm, projection, meridian, georeference, fixed station, loop closure, aerial lidar, point cloud, alignment, grid bearing]
+keywords: [grid convergence, grid north, true north, bearing correction, declination, utm, projection, low-distortion projection, ldp, scale factor, transverse mercator, meridian, georeference, fixed station, loop closure, aerial lidar, point cloud, alignment, grid bearing]
 related: [georeference-a-cave.md, ../concepts/coordinate-systems.md, ../survey-data/declination.md]
 ---
 
@@ -51,8 +51,8 @@ vary by a degree or more between the zone's central meridian and its edge.
 
 Unlike [declination](../survey-data/declination.md), grid convergence has
 nothing to do with the Earth's magnetic field, so it doesn't drift with time —
-it depends only on location and projection. CaveWhere computes it at the cave's
-first fixed station.
+it depends only on location and projection. CaveWhere reads it at the cave's
+first fixed station, in the projection it derived for your project.
 
 ![A map graticule with two families of north lines: orange true-north meridians that fan out and converge toward the pole, and a blue square UTM grid. Points A and B sit on the same orange meridian (both at longitude 108°E), so a sight from A to B is due true north — but the meridian leans relative to the grid, so B falls to the left of the vertical grid line through A and gets a smaller UTM easting. The angle between grid north and true north at a point is the grid convergence.](../images/illustrations/utm-grid-convergence.svg)
 *Two points at the same longitude lie on one true-north meridian, yet they get
@@ -60,24 +60,52 @@ different UTM eastings — because grid north leans away from true north. That l
 is the grid convergence, and it grows the farther you sit from the projection's
 central meridian. Based on a diagram by **Mike Futrell**.*
 
+## The grid is a low-distortion projection
+
+Which projection you land on decides how big the convergence gets, and CaveWhere
+doesn't put you in a UTM zone. The first thing you georeference — a fixed station
+or a point cloud — becomes the center of a **low-distortion projection** (LDP): a
+transverse Mercator built for your project alone, running through your own cave.
+Three things follow, and they're the reason the LDP exists:
+
+- **Distances on the grid are the distances you surveyed.** A UTM zone shrinks
+  everything by 400 ppm at its central meridian — 40 cm of every kilometer — and
+  stretches it by about as much out at the zone edge, so a 1 km survey leg is
+  never quite 1 km on the grid. CaveWhere's LDP sits at true scale where you are:
+  even 50 km out from its center — about as far as a project ever reaches — the
+  error is around 3 cm per kilometer, under the noise of the tape that measured
+  it.
+- **Grid north is essentially true north.** Convergence is exactly zero at the
+  center and reaches only a few tenths of a degree at the far edge of a project,
+  where a UTM zone can pass a full degree. The bearing correction stays close to
+  the [declination](../survey-data/declination.md) alone.
+- **There are no zone seams.** A cave that straddles a UTM zone boundary would
+  otherwise be split between two grids with different norths; the LDP has one
+  center and no edges.
+
+The trade is that the LDP belongs to this project — it isn't a published system
+another program will recognize by name. That only matters on the way out, which
+is why [exporting a survey](../import-export/export-surveys.md) writes a standard
+coordinate system rather than the project's own frame.
+
 ## Reading the value
 
 The **Grid convergence** cell sits next to the **Fix stations** link on the cave
 page. When the cave is georeferenced it reads as an angle at a station —
-for example `0.74° at a1` — and hovering it shows the coordinate system in use.
+for example `0.26° at a1` — and hovering it names the grid the angle is measured
+in.
 
 Before that, it explains *why* it has nothing to report:
 
 | Reading | Meaning |
 |---------|---------|
-| `0.74° at a1` | The convergence CaveWhere is applying, measured at that fixed station. |
-| `n/a (no fix station)` | The cave has a coordinate system but no [fixed station](georeference-a-cave.md#fix-a-station) to compute at. |
-| `n/a (no coordinate system)` | The cave has a fix, but the fix row names no [coordinate system](georeference-a-cave.md#fix-a-station) of its own to converge against. |
-| `n/a (geographic CS)` | The coordinate system is geographic (latitude/longitude), which has no grid, so convergence is zero and there's nothing to correct. |
+| `0.26° at a1` | The convergence CaveWhere is applying, measured at that fixed station. |
+| `n/a (no fix station)` | Nothing places this cave: it has no [fixed station](georeference-a-cave.md#fix-a-station), or the ones it has name no [coordinate system](georeference-a-cave.md#fix-a-station) to read their numbers under. |
+| `n/a (no coordinate system)` | Nothing in the project is georeferenced yet, so there is no projection to converge to and the model is drawn to true north. |
 
-The first two "n/a" readings are a checklist: convergence needs a fixed station
-*and* a coordinate system on that station's row, and the readout tells you which
-one is still missing.
+Both "n/a" readings are a checklist: convergence needs a projection for the
+project *and* a fixed station that says where this cave sits in it, and the
+readout tells you which one is still missing.
 
 ![The cave page showing the Fix stations count and the Grid convergence readout, with the help panel open explaining the value.](../images/georef-grid-convergence.png)
 *The grid convergence readout on the cave page. The help panel (the **?**) spells

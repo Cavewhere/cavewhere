@@ -285,9 +285,14 @@ cwUnits::UnitSystem cwCave::unitSystem() const
 void cwCave::recomputeGridConvergence()
 {
     // The readout owns the PROJ work and change detection; we just feed it the
-    // current fix stations. It reads the first one's own input CS — a fix that
-    // declares none has no grid to converge to, not the project's.
-    m_gridConvergence->update(FixStations->fixStations());
+    // current fix stations and the grid they are plotted in. That grid is the
+    // project's local projection — cavern solves under it — so a cave with no
+    // region has none, and converges to nothing.
+    const cwCavingRegion* region = parentRegion();
+    const QString frameCS = region == nullptr
+        ? QString()
+        : region->geoReference()->localCoordinateSystem();
+    m_gridConvergence->update(FixStations->fixStations(), frameCS);
 }
 
 /**
