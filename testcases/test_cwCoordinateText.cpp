@@ -36,10 +36,15 @@ cwCoordinateText::Coordinate parsed(const QString& text,
     return result.value();
 }
 
-//! The reason \a text wouldn't parse, or a Catch failure if it parsed.
-QString rejection(const QString& text, cwUnits::UnitSystem units = cwUnits::Metric)
+//! The reason \a text wouldn't parse, or a Catch failure if it parsed. Degrees,
+//! minutes and seconds are refused on a row that isn't geographic, so which
+//! order refused a coordinate is part of the answer — hence the same parameters
+//! parsed() takes.
+QString rejection(const QString& text,
+                  cwUnits::UnitSystem units = cwUnits::Metric,
+                  cwCoordinateText::AxisOrder order = cwCoordinateText::EastingNorthing)
 {
-    const auto result = cwCoordinateText::parse(text, units, cwCoordinateText::EastingNorthing);
+    const auto result = cwCoordinateText::parse(text, units, order);
     INFO("expected \"" << text.toStdString() << "\" to be rejected");
     REQUIRE(result.hasError());
     //An empty reason would leave both entry surfaces showing a blank error.
@@ -47,7 +52,26 @@ QString rejection(const QString& text, cwUnits::UnitSystem units = cwUnits::Metr
     return result.errorMessage();
 }
 
+//! The angle \a degrees° \a minutes' \a seconds" written out as a decimal, in
+//! the order parse() accumulates it so the two agree to the last bit.
+double angle(double degrees, double minutes = 0.0, double seconds = 0.0)
+{
+    return degrees + minutes / 60.0 + seconds / 3600.0;
+}
+
 constexpr double kFeetToMeters = 0.3048;
+constexpr auto kLatLong = cwCoordinateText::LatitudeLongitude;
+
+//! The coordinate \a text spells out under the geographic order, checked against
+//! \a northing and \a easting. Returned, so a section that also cares about the
+//! elevation can go on and check it.
+cwCoordinateText::Coordinate readsAs(const QString& text, double northing, double easting)
+{
+    const auto coordinate = parsed(text, cwUnits::Metric, kLatLong);
+    CHECK(coordinate.northing == tight(northing));
+    CHECK(coordinate.easting == tight(easting));
+    return coordinate;
+}
 
 }
 
@@ -250,6 +274,231 @@ TEST_CASE("cwCoordinateText reads each number as its own component",
     }
 }
 
+TEST_CASE("cwCoordinateText reads degrees, minutes and seconds the way they were written",
+          "[FixStation][cwCoordinateText]") {
+    //#654. Every one of these is a way the same Idaho entrance actually gets
+    //copied out of a GPS, a map or a survey file, and they all mean 46°07'16" N,
+    //115°35'56" W give or take the precision each notation carries.
+
+    SECTION("symbols, with the hemisphere after each angle") {
+        const auto coordinate = readsAs("46°07'16.1\" N, 115°35'56.5\" W, 304m",
+                                        angle(46, 7, 16.1), -angle(115, 35, 56.5));
+        CHECK(coordinate.elevation == tight(304.0));
+        CHECK(coordinate.hasElevation);
+    }
+
+    SECTION("the hemisphere in front instead, glued to the degrees") {
+        const auto coordinate = readsAs("N46 07 16.1, W115 35 56.5",
+                                        angle(46, 7, 16.1), -angle(115, 35, 56.5));
+        CHECK_FALSE(coordinate.hasElevation);
+    }
+
+    SECTION("colons, which is how survex and Walls write it") {
+        //So it is also what a #FIX line copied out of a project file looks like.
+        readsAs("46:07:16.1, -115:35:56.5", angle(46, 7, 16.1), -angle(115, 35, 56.5));
+    }
+
+    SECTION("degrees and decimal minutes, which is the form #654 asks for first") {
+        //Nothing between the two numbers says they belong together — the
+        //evidence is the letter, and it arrives after both of them.
+        readsAs("46 07.268 N, 115 35.941 W", angle(46, 7.268), -angle(115, 35.941));
+    }
+
+    SECTION("one marker is enough to make the numbers after it an angle") {
+        readsAs("46° 7.268, -115° 35.941", angle(46, 7.268), -angle(115, 35.941));
+    }
+
+    SECTION("the survex and PROJ spelling of the degree sign") {
+        readsAs("46deg 7.268, -115 deg 35.941", angle(46, 7.268), -angle(115, 35.941));
+    }
+
+    SECTION("the marks a keyboard can't reach, spelled the way it can") {
+        //The masculine ordinal for the degree sign and two apostrophes for the
+        //double prime — both are what someone types when the real character
+        //isn't on the key.
+        readsAs("46º07'16.1'', 115º35'56.5''", angle(46, 7, 16.1), angle(115, 35, 56.5));
+    }
+
+    SECTION("the primes, which is what a typographic paste carries") {
+        readsAs("46°07′16.1″, 115°35′56.5″", angle(46, 7, 16.1), angle(115, 35, 56.5));
+    }
+
+    SECTION("degrees alone") {
+        const auto coordinate = readsAs("46°, 115°", 46.0, 115.0);
+        CHECK_FALSE(coordinate.hasElevation);
+    }
+
+    SECTION("decimal degrees with a hemisphere and no marker at all") {
+        const auto coordinate = parsed("46.12113 N, 115.59902 W", cwUnits::Metric, kLatLong);
+        //Bit-for-bit rather than through tight(): the letter negates the number,
+        //it doesn't recompute it.
+        CHECK(coordinate.northing == 46.12113);
+        CHECK(coordinate.easting == -115.59902);
+    }
+
+    SECTION("a lowercase hemisphere") {
+        readsAs("46 07.268 n, 115 35.941 w", angle(46, 7.268), -angle(115, 35.941));
+    }
+
+    SECTION("two angles with nothing but a space between them") {
+        //A marker that can't be a minutes mark where it lands is the evidence
+        //that a second angle started.
+        const auto coordinate = readsAs("46°07'16\" 115°35'56\"",
+                                        angle(46, 7, 16), angle(115, 35, 56));
+        CHECK_FALSE(coordinate.hasElevation);
+    }
+}
+
+TEST_CASE("cwCoordinateText lets a hemisphere letter say which axis it is",
+          "[FixStation][cwCoordinateText]") {
+    //Authoritative wherever it sits, which is what makes it an explicit
+    //statement rather than an inference from the numbers: the order is still
+    //never guessed, it is just the user who said it this time.
+
+    SECTION("longitude written first, against the row's own order") {
+        readsAs("115°35'W, 46°07'N", angle(46, 7), -angle(115, 35));
+    }
+
+    SECTION("one letter is enough — the other component takes what's left") {
+        readsAs("115°35'W, 46°07'", angle(46, 7), -angle(115, 35));
+    }
+
+    SECTION("the southern and western halves are the negative ones") {
+        readsAs("46°07'S, 115°35'E", -angle(46, 7), angle(115, 35));
+    }
+}
+
+TEST_CASE("cwCoordinateText reads an angle only where the text says it wrote one",
+          "[FixStation][cwCoordinateText]") {
+    //The property the whole feature rests on. Text with no marker and no
+    //hemisphere letter groups exactly as it did before #654, so every
+    //coordinate anyone has already typed still means what it meant.
+
+    SECTION("bare numbers are components, however many of them there are") {
+        const auto coordinate = readsAs("46 07 16", 46.0, 7.0);
+        CHECK(coordinate.elevation == tight(16.0));
+    }
+
+    SECTION("six of them are six components, not two angles") {
+        //#654's own example of what has to stay refused: without a mark on them,
+        //these are six numbers and a coordinate takes three.
+        rejection(QStringLiteral("46 07 16.1, -115 35 56.5"), cwUnits::Metric, kLatLong);
+    }
+
+    SECTION("commas don't group either, or an all-spaces paste would break") {
+        //"46.12113 -115.59902 304m" is accepted today with no commas at all, so
+        //commas can't be what says where one component ends.
+        const auto coordinate = readsAs("46.12113 -115.59902 304m", 46.12113, -115.59902);
+        CHECK(coordinate.elevation == tight(304.0));
+    }
+}
+
+TEST_CASE("cwCoordinateText refuses an angle on a row that isn't geographic",
+          "[FixStation][cwCoordinateText]") {
+    //An angle is a latitude and a longitude, so a projected row has nowhere to
+    //put one — and the likeliest cause by far is the wrong coordinate system
+    //rather than a wish for degrees in an easting.
+    const QString dms = QStringLiteral("46°07'16\", -115°35'56\"");
+
+    SECTION("and says which of the two things to change") {
+        const QString reason = rejection(dms, cwUnits::Metric,
+                                         cwCoordinateText::EastingNorthing);
+        CHECK(reason.contains(QStringLiteral("coordinate system")));
+        CHECK(reason.contains(QStringLiteral("geographic")));
+    }
+
+    SECTION("the same text reads under the geographic order") {
+        //Which is the whole of the invariant this feature changes: readability
+        //now depends on the axis order, where before only meaning did.
+        CHECK_FALSE(cwCoordinateText::parse(dms, cwUnits::Metric, kLatLong).hasError());
+    }
+
+    SECTION("a hemisphere letter alone is refused there too") {
+        rejection(QStringLiteral("46.12113 N, 115.59902 W"), cwUnits::Metric,
+                  cwCoordinateText::EastingNorthing);
+    }
+
+    SECTION("but a letter on a projected row keeps the reading it always had") {
+        //"500000 E, 4649776 N" is ordinary UTM notation, and under an
+        //easting-first order those letters label the axes rather than naming a
+        //hemisphere — a hemisphere is a geographic idea. Reading them that way
+        //is its own feature; until then the letter stays the unit it was, and a
+        //horizontal component may not carry one.
+        CHECK(rejection(QStringLiteral("500000 E, 4649776 N"))
+                  .contains(QStringLiteral("Only the elevation")));
+    }
+}
+
+TEST_CASE("cwCoordinateText refuses an angle it can't make sense of",
+          "[FixStation][cwCoordinateText]") {
+    //Each of these is a message rather than a silent reinterpretation: an angle
+    //read a second way is still a coordinate, just not the one that was typed.
+    const auto reason = [](const QString& text) {
+        return rejection(text, cwUnits::Metric, kLatLong);
+    };
+
+    SECTION("minutes or seconds at 60 or above") {
+        CHECK(reason(QStringLiteral("46°75', 115°35'")).contains(QStringLiteral("60")));
+        CHECK(reason(QStringLiteral("46°07'60\", 115°35'56\"")).contains(QStringLiteral("60")));
+    }
+
+    SECTION("a fraction on a number that isn't the last") {
+        //"46°07.5'16\"" is two readings at once — 7.5 minutes and 16 seconds
+        //overlap — so it is a typo rather than a coordinate.
+        CHECK(reason(QStringLiteral("46°07.5'16\", 115°35'56\""))
+                  .contains(QStringLiteral("fraction")));
+    }
+
+    SECTION("a sign on anything but the degrees") {
+        //The sign negates the whole angle, so there is one place it can go.
+        CHECK(reason(QStringLiteral("46° -07', 115°35'")).contains(QStringLiteral("sign")));
+    }
+
+    SECTION("a sign and a hemisphere both") {
+        //They can contradict each other, and a typo is far likelier than
+        //someone meaning the western hemisphere twice.
+        CHECK(reason(QStringLiteral("-115°35'56\" W, 46°07'N"))
+                  .contains(QStringLiteral("hemisphere")));
+    }
+
+    SECTION("minutes before any degrees") {
+        CHECK(reason(QStringLiteral("46' 30\", 115°35'")).contains(QStringLiteral("degrees")));
+    }
+
+    SECTION("' and \" as feet and inches, which they never are here") {
+        //An elevation still needs its ft: the marker is read as minutes, and
+        //minutes want degrees in front of them. Position contains the collision
+        //rather than guesswork — the markers are legal on the horizontals only.
+        CHECK(reason(QStringLiteral("46.12113, -115.59902, 1000'"))
+                  .contains(QStringLiteral("degrees")));
+    }
+
+    SECTION("two components claiming the same axis") {
+        CHECK(reason(QStringLiteral("46°07'N, 115°35'N")).contains(QStringLiteral("latitude")));
+        CHECK(reason(QStringLiteral("46°07'E, 115°35'E")).contains(QStringLiteral("longitude")));
+    }
+
+    SECTION("an angle where the elevation goes") {
+        CHECK(reason(QStringLiteral("46.12113, -115.59902, 304°"))
+                  .contains(QStringLiteral("elevation")));
+        CHECK(reason(QStringLiteral("46.12113, -115.59902, 304 N"))
+                  .contains(QStringLiteral("elevation")));
+    }
+
+    SECTION("a hemisphere letter with no number to belong to") {
+        CHECK(reason(QStringLiteral("46°07'N, 115°35'W E"))
+                  .contains(QStringLiteral("Couldn't read")));
+    }
+
+    SECTION("a colon with nothing after it") {
+        //A fourth number is one too many for an angle, and reading it as the
+        //start of a second one would turn "46:07:16:22" into 46°07' and 16°22' —
+        //a coordinate, and not the one anybody typed.
+        CHECK(reason(QStringLiteral("46:07:16:22")).contains(QStringLiteral("colon")));
+        CHECK(reason(QStringLiteral("46:07:16:, 115:35:56")).contains(QStringLiteral("colon")));
+    }
+}
+
 TEST_CASE("cwCoordinateText leaves the elevation at zero when none is given",
           "[FixStation][cwCoordinateText]") {
     const auto coordinate = parsed("46.12113, -115.59902");
@@ -443,12 +692,28 @@ TEST_CASE("cwCoordinateTextValidator never blocks a keystroke",
         return static_cast<QValidator::State>(validator.validate(text));
     };
 
-    CHECK(state(QStringLiteral("")) == QValidator::Intermediate);
-    CHECK(state(QStringLiteral("4")) == QValidator::Intermediate);
-    CHECK(state(QStringLiteral("46.12113,")) == QValidator::Intermediate);
-    CHECK(state(QStringLiteral("46.12113, -115.59902, 304 b")) == QValidator::Intermediate);
-    CHECK(state(QStringLiteral("46.12113, -115.59902")) == QValidator::Acceptable);
-    CHECK(state(QStringLiteral("46.12113, -115.59902, 304m")) == QValidator::Acceptable);
+    SECTION("a decimal coordinate on its way to being whole") {
+        CHECK(state(QStringLiteral("")) == QValidator::Intermediate);
+        CHECK(state(QStringLiteral("4")) == QValidator::Intermediate);
+        CHECK(state(QStringLiteral("46.12113,")) == QValidator::Intermediate);
+        CHECK(state(QStringLiteral("46.12113, -115.59902, 304 b")) == QValidator::Intermediate);
+        CHECK(state(QStringLiteral("46.12113, -115.59902")) == QValidator::Acceptable);
+        CHECK(state(QStringLiteral("46.12113, -115.59902, 304m")) == QValidator::Acceptable);
+    }
+
+    SECTION("an angle, which stays half-typed for longer") {
+        //Every one of these is on the way to a coordinate the field accepts, and
+        //an angle passes through more of them than a decimal degree does.
+        validator.setAxisOrder(kLatLong);
+
+        CHECK(state(QStringLiteral("46°")) == QValidator::Intermediate);
+        CHECK(state(QStringLiteral("46°07")) == QValidator::Intermediate);
+        CHECK(state(QStringLiteral("46°07'16")) == QValidator::Intermediate);
+        CHECK(state(QStringLiteral("46°07'16\", ")) == QValidator::Intermediate);
+        CHECK(state(QStringLiteral("N")) == QValidator::Intermediate);
+        CHECK(state(QStringLiteral("N 46")) == QValidator::Intermediate);
+        CHECK(state(QStringLiteral("46°07'16\", -115°35'56\"")) == QValidator::Acceptable);
+    }
 }
 
 TEST_CASE("cwCoordinateTextValidator explains the rejection it just made",
@@ -485,12 +750,12 @@ TEST_CASE("cwCoordinateTextValidator explains itself in its row's axis order",
     CHECK_FALSE(validator.errorText().contains(QStringLiteral("easting")));
 }
 
-TEST_CASE("cwCoordinateTextValidator judges readability, not meaning",
+TEST_CASE("cwCoordinateTextValidator judges readability in the unit system it was handed",
           "[FixStation][cwCoordinateText]") {
-    //The verdict is independent of both the unit system and the axis order —
-    //they decide what the numbers mean, never whether they can be read — which
-    //is what lets the validator stand in Metric for a project it doesn't know.
-    //(The *message* is order-dependent; that is the case above.)
+    //The verdict is independent of the unit system — that decides only what a
+    //bare elevation means, and every unit system resolves it to something
+    //readable — which is what lets the validator stand in Metric for a project
+    //it doesn't know.
     cwCoordinateTextValidator validator;
 
     for (const auto units : {cwUnits::Metric, cwUnits::Imperial}) {
@@ -506,6 +771,26 @@ TEST_CASE("cwCoordinateTextValidator judges readability, not meaning",
           == QValidator::Acceptable);
     CHECK(static_cast<QValidator::State>(validator.validate(QStringLiteral("1")))
           == QValidator::Intermediate);
+
+    SECTION("the axis order it does not stand in for") {
+        //Which it used to: before #654 the order decided what the numbers meant
+        //and never whether they could be read. Degrees, minutes and seconds are
+        //a latitude and a longitude, so now it decides both — and the field that
+        //hands over the wrong one would refuse a coordinate its row can hold.
+        const QString dms = QStringLiteral("46°07'16\", -115°35'56\"");
+        for (const auto units : {cwUnits::Metric, cwUnits::Imperial}) {
+            CHECK_FALSE(cwCoordinateText::parse(dms, units,
+                                                cwCoordinateText::LatitudeLongitude).hasError());
+            CHECK(cwCoordinateText::parse(dms, units,
+                                          cwCoordinateText::EastingNorthing).hasError());
+        }
+
+        CHECK(static_cast<QValidator::State>(validator.validate(dms))
+              == QValidator::Intermediate);
+        validator.setAxisOrder(cwCoordinateText::LatitudeLongitude);
+        CHECK(static_cast<QValidator::State>(validator.validate(dms))
+              == QValidator::Acceptable);
+    }
 }
 
 TEST_CASE("cwCoordinateText swaps the first two numbers and nothing else",
@@ -570,11 +855,38 @@ TEST_CASE("cwCoordinateText swaps the first two numbers and nothing else",
         CHECK(cwCoordinateText::swapHorizontal(QString()).isEmpty());
 
         //Counting numbers is the wrong test, and this is the string that shows
-        //it: six of them, no coordinate. Exchanging the first two would rewrite
-        //a degrees-minutes-seconds reading into a different one that is just as
-        //unreadable, and offer it to the user as a correction.
+        //it: two of them, no coordinate.
+        CHECK(cwCoordinateText::swapHorizontal(QStringLiteral("46.12-115.6")).isEmpty());
+    }
+
+    SECTION("an angle moves whole, markers and all") {
+        //The span a component occupies takes in its own markers, so what lands
+        //where the other angle was is still an angle rather than the digits out
+        //of one.
+        CHECK(cwCoordinateText::swapHorizontal(QStringLiteral("46°07'16\", -115°35'56\""))
+              == QStringLiteral("-115°35'56\", 46°07'16\""));
+        CHECK(cwCoordinateText::swapHorizontal(QStringLiteral("46:07:16, -115:35:56"))
+              == QStringLiteral("-115:35:56, 46:07:16"));
+
+        //Two notations in one coordinate is where leaving a marker behind would
+        //show: the trailing " has to travel with the numbers it belongs to.
+        CHECK(cwCoordinateText::swapHorizontal(QStringLiteral("46°07'16\", -115.59902"))
+              == QStringLiteral("-115.59902, 46°07'16\""));
+    }
+
+    SECTION("text that already says which axis is which has nothing to ask") {
+        //A hemisphere letter states the order outright, so the question this
+        //function exists to ask is already answered and there is nothing to
+        //offer. "N 46 07 16 W 115 35 56" reads perfectly well — it is two
+        //angles — and it is precisely because it reads that the answer is empty.
         CHECK(cwCoordinateText::swapHorizontal(
                   QStringLiteral("N 46 07 16 W 115 35 56")).isEmpty());
+        CHECK(cwCoordinateText::swapHorizontal(
+                  QStringLiteral("46 07.268 N, 115 35.941 W")).isEmpty());
+        //One letter is enough: it settles its own component, and the other
+        //component is whatever is left.
+        CHECK(cwCoordinateText::swapHorizontal(QStringLiteral("46.12113 N, -115.59902"))
+                  .isEmpty());
     }
 
     SECTION("what comes out is still readable as a coordinate") {
@@ -589,3 +901,4 @@ TEST_CASE("cwCoordinateText swaps the first two numbers and nothing else",
         CHECK(coordinate.easting == tight(46.12113));
     }
 }
+

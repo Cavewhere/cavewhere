@@ -179,6 +179,63 @@ TEST_CASE("cwFixStation reads its numbers out of the coordinate it was given",
     }
 }
 
+TEST_CASE("cwFixStation keeps a coordinate written in degrees, minutes and seconds",
+          "[FixStation][cwFixStation]") {
+    //#654. The string is the only thing stored, so the notation survives by
+    //itself — there is no second representation for it to be lost in. What the
+    //row reports is decimal, because that is what everything downstream of here
+    //carries.
+    const QString dms = QStringLiteral("46°07'16.1\" N, 115°35'56.5\" W, 304m");
+    //What those angles come to, accumulated the way parse() accumulates them so
+    //the two agree to the last bit.
+    const double latitude = 46.0 + 7.0 / 60.0 + 16.1 / 3600.0;
+    const double longitude = -(115.0 + 35.0 / 60.0 + 56.5 / 3600.0);
+
+    cwFixStation fix;
+    fix.setInputCS(kWgs84);
+    fix.setCoordinate(dms);
+
+    CHECK(fix.state() == cwFixStation::Valid);
+    CHECK(fix.coordinate() == dms);
+    CHECK(fix.northing() == latitude);
+    CHECK(fix.easting() == longitude);
+    CHECK(fix.elevation() == 304.0);
+
+    SECTION("and reading it again reads the same thing") {
+        //Writing a component would spell the coordinate back out in decimal, so
+        //this is the property that says nothing did.
+        CHECK(reread(fix).coordinate() == dms);
+        CHECK(reread(fix).northing() == fix.northing());
+    }
+
+    SECTION("a projected system leaves it Unreadable rather than reinterpreting it") {
+        //An angle is a latitude and a longitude. Reading 46°07'16" as an easting
+        //would put the station 46 m from the origin of a grid in meters, which is
+        //a worse answer than saying the row can't be read.
+        fix.setInputCS(kUtmZ11N);
+        CHECK(fix.state() == cwFixStation::Unreadable);
+        CHECK(fix.coordinate() == dms);
+        CHECK(fix.easting() == 0.0);
+        CHECK(fix.northing() == 0.0);
+
+        //And naming a geographic one again reads it straight back: the text was
+        //kept, so nothing was lost in between.
+        fix.setInputCS(kWgs84);
+        CHECK(fix.state() == cwFixStation::Valid);
+        CHECK(fix.northing() == latitude);
+    }
+
+    SECTION("with no system at all it is NoSystem, like any other text") {
+        //There is no axis order to read it under, and the parser is never
+        //consulted — so this row wants "choose a coordinate system" whatever its
+        //notation is.
+        cwFixStation noSystem;
+        noSystem.setCoordinate(dms);
+        CHECK(noSystem.state() == cwFixStation::NoSystem);
+        CHECK(noSystem.coordinate() == dms);
+    }
+}
+
 TEST_CASE("cwFixStation re-reads its coordinate when the coordinate system changes",
           "[FixStation][cwFixStation]") {
     //The whole point of deriving: a coordinate means what its own text says

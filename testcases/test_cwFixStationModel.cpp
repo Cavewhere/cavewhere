@@ -805,6 +805,58 @@ TEST_CASE("cwFixStationModel setCoordinateText writes the whole coordinate at on
         CHECK(dataChangedSpy.count() == 0);
     }
 
+    SECTION("a coordinate in degrees, minutes and seconds is kept as it was typed") {
+        //#654. The cell renders the parsed numbers in decimal while the editor
+        //opens on the stored string, so the two disagree on purpose — and the
+        //thing that would make that a bug is the editor committing what the cell
+        //rendered. It opens on the coordinate text, so this is a no-op.
+        model.setData(model.index(0), QStringLiteral("EPSG:4326"),
+                      cwFixStationModel::InputCSRole);
+        const QString dms = QStringLiteral("46°07'16.1\" N, 115°35'56.5\" W, 304m");
+        REQUIRE(model.setCoordinateText(0, dms, cwUnits::Metric) == QString());
+
+        //Accumulated the way parse() accumulates it, so the two agree to the last
+        //bit.
+        const double latitude = 46.0 + 7.0 / 60.0 + 16.1 / 3600.0;
+        const double longitude = -(115.0 + 35.0 / 60.0 + 56.5 / 3600.0);
+
+        const cwFixStation fix = model.fixStationAt(0);
+        CHECK(fix.coordinate() == dms);
+        CHECK(fix.northing() == latitude);
+        CHECK(fix.easting() == longitude);
+        CHECK(fix.elevation() == 304.0);
+
+        dataChangedSpy.clear();
+        CHECK(model.setCoordinateText(0, dms, cwUnits::Metric) == QString());
+        CHECK(dataChangedSpy.count() == 0);
+        CHECK(model.fixStationAt(0).coordinate() == dms);
+    }
+
+    SECTION("an angle on a projected row is refused before it can be stored") {
+        //The row here is EPSG:32611. A wrong coordinate system is a far likelier
+        //cause than a wish for degrees in an easting, so the message says which
+        //two things could be changed and the row keeps what it had.
+        const QString error = model.setCoordinateText(0, QStringLiteral("46°07', -115°35'"),
+                                                      cwUnits::Metric);
+        CHECK(error.contains(QStringLiteral("coordinate system")));
+        CHECK(model.fixStationAt(0).state() == cwFixStation::Empty);
+        CHECK(dataChangedSpy.count() == 0);
+
+        SECTION("and a row with no system at all gets the same message") {
+            //There is no telling the two apart from here — a row with no CS has
+            //no axis order, and the fallback is the projected one — so one
+            //wording covers both. Plain numbers still reach the row and still
+            //land as NoSystem; only an angle is turned away.
+            model.setData(model.index(0), QString(), cwFixStationModel::InputCSRole);
+
+            CHECK(model.setCoordinateText(0, QStringLiteral("46°07', -115°35'"), cwUnits::Metric)
+                      .contains(QStringLiteral("coordinate system")));
+            CHECK(model.setCoordinateText(0, QStringLiteral("1, 2, 3m"), cwUnits::Metric)
+                  == QString());
+            CHECK(model.fixStationAt(0).state() == cwFixStation::NoSystem);
+        }
+    }
+
     SECTION("the axis order comes from the row's own CS") {
         //Without this the model could read every row easting-first and every
         //test above would still pass, while a lat/long row put its latitude in

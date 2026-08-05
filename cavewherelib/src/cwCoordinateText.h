@@ -28,7 +28,30 @@
  *                 46.12113, -115.59902, 304          (the project's units)
  *                 46.12113, -115.59902               (no elevation)
  *
+ *     degrees     46°07'16.1" N, 115°35'56.5" W, 304m
+ *                 N46 07 16.1, W115 35 56.5
+ *                 46:07:16.1, -115:35:56.5
+ *                 46 07.268 N, 115 35.941 W
+ *                 46° 7.268, -115° 35.941
+ *                 46°, 115°
+ *
  *     UTM         610016.792, 5615117.075, 2545.340 feet
+ *
+ * Degrees, minutes and seconds (#654) are read only where the text says it wrote
+ * them: a run of numbers is one angle only when it carries a marker — <tt>° º d
+ * deg</tt>, <tt>' ′</tt>, <tt>" ″ ''</tt>, or an infix colon — or a hemisphere
+ * letter. Without one, every number is a component of its own, so "46 07 16" is
+ * a latitude, a longitude and an elevation of 16 m, exactly as it was before
+ * #654. A hemisphere letter also says which axis its own component is, whichever
+ * side of the coordinate it was written on, and only a geographic CS can hold an
+ * angle at all — an angle on a projected row is a wrong coordinate system far
+ * more often than it is a wish for degrees in an easting, and it is refused with
+ * its own message.
+ *
+ * Reading only, in both senses: format() writes decimal degrees whatever
+ * notation was typed, and the notation is kept only by keeping the user's own
+ * string. So the FixStationPage cell shows a DMS coordinate in decimal while
+ * every surface that edits it re-offers the text as it was written.
  *
  * The first two components are not always the same axis. A geographic CS
  * is written the way people write it and the way #621 asks for it —
@@ -133,18 +156,25 @@ public:
                                       cwUnits::UnitSystem units,
                                       AxisOrder order);
 
-    //! \a text with its first two numbers exchanged and everything else left
+    //! \a text with its first two components exchanged and everything else left
     //! exactly as written — the separators, the elevation, its unit, and the
-    //! absence of an elevation. Empty when \a text doesn't read as a
-    //! coordinate, which is not the same as holding fewer than two numbers:
-    //! "N 46 07 16 W 115 35 56" holds six and is not a coordinate.
+    //! absence of an elevation. A whole angle moves as one, markers and all.
     //!
-    //! Textual on purpose, so it takes neither an axis order nor a unit system:
-    //! which axis a number <i>is</i> has no bearing on moving it, applying this
-    //! twice returns the original string, and a coordinate whose text is all it
-    //! has keeps that text's own shape. It exists for the one case nothing else
-    //! can recover — a coordinate stored under no coordinate system, whose axis
-    //! order was never written down (cwFixStation::NoSystem). Naming a
+    //! Empty when there is no swap to offer, which covers two cases. \a text may
+    //! not read as a coordinate, which is not the same as holding fewer than two
+    //! numbers: "46.12-115.6" holds two and is not a coordinate. Or it may say
+    //! which axis is which already — a hemisphere letter states that outright, so
+    //! "115°35'W, 46°07'N" has nothing left to ask about.
+    //!
+    //! Textual on purpose: applying it twice returns the original string, and a
+    //! coordinate whose text is all it has keeps that text's own shape. It takes
+    //! no unit system because the verdict doesn't depend on one, and no axis order
+    //! because only one of them could serve — an angle is a latitude and a
+    //! longitude, so the geographic order is the only one that reads everything a
+    //! swap could be offered for, and it is the order the question arises in. It
+    //! exists for the one case
+    //! nothing else can recover — a coordinate stored under no coordinate system,
+    //! whose axis order was never written down (cwFixStation::NoSystem). Naming a
     //! geographic system on such a row reads it latitude-first whatever it was
     //! written as, and only the user knows which was meant.
     Q_INVOKABLE static QString swapHorizontal(const QString& text);
@@ -200,11 +230,18 @@ public:
     cwCoordinateText::AxisOrder axisOrder() const { return m_axisOrder; }
     void setAxisOrder(cwCoordinateText::AxisOrder order);
 
-    //! The verdict is genuinely order-independent — which axis comes first
-    //! decides what the numbers *mean*, never whether they can be read — but
-    //! the <i>message</i> is not: it names the axes and picks the worked
-    //! example. A row whose CS is geographic must be told about a latitude and
-    //! a longitude, so each field sets axisOrder from its own row's CS.
+    //! The verdict is genuinely independent of the unit system — that decides
+    //! only what a bare elevation means, and every unit system resolves it to
+    //! something readable — which is what lets this stand in Metric for a
+    //! project it doesn't know.
+    //!
+    //! The axis order it depends on twice over. The <i>message</i> names the
+    //! axes and picks the worked example, so a row whose CS is geographic must
+    //! be told about a latitude and a longitude. And since #654 the verdict
+    //! itself depends on it: degrees, minutes and seconds are a latitude and a
+    //! longitude, so text that reads under LatitudeLongitude can be refused
+    //! under EastingNorthing. Each field therefore sets axisOrder from its own
+    //! row's CS.
     State validate(QString& input, int& position) const override;
     Q_INVOKABLE int validate(QString input) const override;
 

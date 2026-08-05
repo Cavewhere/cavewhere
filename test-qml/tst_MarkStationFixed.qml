@@ -410,7 +410,10 @@ MainWindowTest {
             const errorRow = findChild(popup, "fixStationPopupError")
             verify(coordinate !== null && errorRow !== null)
 
-            coordinate.text = "46.12113 N, 115.59902 W"
+            // Spelled out rather than lettered: a single N or W is a hemisphere
+            // and reads fine (#654), so the near-miss that gets refused here is
+            // the word.
+            coordinate.text = "46.12113 north, 115.59902 west"
             coordinate.editingFinished()
             tryVerify(() => errorRow.visible, 2000, "the paste is refused")
 
@@ -425,7 +428,7 @@ MainWindowTest {
                     "a new row starts on WGS84")
             picker.committed("EPSG:32611")
 
-            compare(coordinate.text, "46.12113 N, 115.59902 W",
+            compare(coordinate.text, "46.12113 north, 115.59902 west",
                     "the refused text survives the CS change")
             tryVerify(() => errorRow.visible, 2000,
                       "and so does the reason it was refused")
