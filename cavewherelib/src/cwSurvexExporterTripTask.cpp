@@ -31,6 +31,14 @@ void cwSurvexExporterTripTask::setData(const cwTripData &trip) {
     }
 }
 
+void cwSurvexExporterTripTask::setCaveFixStations(const QList<cwFixStation> &fixStations) {
+    if(!isRunning()) {
+        CaveFixStations = fixStations;
+    } else {
+        qDebug() << QStringLiteral("Can't set the cave's fix stations while the trip exporter is running");
+    }
+}
+
 /**
   \brief Saves the trip to a survex file
 
@@ -38,11 +46,17 @@ void cwSurvexExporterTripTask::setData(const cwTripData &trip) {
   */
 void cwSurvexExporterTripTask::runTask() {
     auto tripPtr = std::make_unique<cwTrip>();
+    tripPtr->setData(Trip);
 
     setNumberOfSteps(tripPtr->numberOfStations());
 
     openOutputFile();
-    writeTrip(*OutputStream.data(), tripPtr.get());
+    QTextStream& stream = *OutputStream.data();
+
+    const bool autoDeclinationInScope = cwSurvexExporterUtils::writeStandaloneTripHeader(
+        stream, CaveFixStations, Trip.calibrations.autoDeclination());
+
+    writeTrip(stream, tripPtr.get(), autoDeclinationInScope);
     closeOutputFile();
 
     done();
@@ -53,7 +67,7 @@ void cwSurvexExporterTripTask::runTask() {
   */
 void cwSurvexExporterTripTask::writeTrip(QTextStream& stream,
                                          cwTrip* trip,
-                                         const std::optional<cwSurvexExporterUtils::DeclinationContext>& declinationContext) {
+                                         bool autoDeclinationInScope) {
     //Write header. The `*begin` block is anonymous (the trip name follows as a comment
     //for human readers) and a `*title` directive preserves the name across a round-trip
     //even when it contains characters Survex doesn't allow in block names (e.g. spaces).
@@ -66,7 +80,7 @@ void cwSurvexExporterTripTask::writeTrip(QTextStream& stream,
 
     writeDate(stream, trip->date().date());
     writeTeamData(stream, trip->team());
-    writeCalibrations(stream, trip->calibrations(), declinationContext); stream << Qt::endl;
+    writeCalibrations(stream, trip->calibrations(), autoDeclinationInScope); stream << Qt::endl;
     writeShotData(stream, trip); stream << Qt::endl;
     writeLRUDData(stream, trip);
 
@@ -80,7 +94,9 @@ void cwSurvexExporterTripTask::writeTrip(QTextStream& stream,
   */
 void cwSurvexExporterTripTask::writeCalibrations(QTextStream& stream,
                                                  cwTripCalibration* calibrations,
-                                                 const std::optional<cwSurvexExporterUtils::DeclinationContext>& declinationContext) {
+                                                 bool autoDeclinationInScope) {
+    using namespace cwSurvexExporterUtils;
+
     writeLengthUnits(stream, calibrations->distanceUnit());
 
     writeCalibration(stream, QStringLiteral("TAPE"), calibrations->tapeCalibration());
@@ -97,27 +113,8 @@ void cwSurvexExporterTripTask::writeCalibrations(QTextStream& stream,
     double backClinoScale = calibrations->hasCorrectedClinoBacksight() ? -1.0 : 1.0;
     writeCalibration(stream, QStringLiteral("BACKCLINO"), calibrations->backClinoCalibration(), backClinoScale);
 
-    if (calibrations->autoDeclination() && declinationContext) {
-        cwSurvexExporterUtils::writeDeclinationAuto(stream, *declinationContext);
-    } else {
-        writeCalibration(stream, QStringLiteral("DECLINATION"), calibrations->declination());
-    }
-}
-
-void cwSurvexExporterTripTask::writeCalibration(QTextStream& stream, QString type, double value, double scale) {
-    if(value == 0.0 && scale == 1.0) { return; }
-    value = -value; //Flip the value be survex is counter intuitive
-
-    QString calibrationString = QStringLiteral("*calibrate %1 %2")
-            .arg(type)
-            .arg(value, 0, 'f', 2);
-
-    if(scale != 1.0) {
-        QString scaleString = QStringLiteral(" %3").arg(scale, 0, 'f', 2);
-        calibrationString += scaleString;
-    }
-
-    stream << calibrationString << Qt::endl;
+    writeDeclinationCalibration(stream, calibrations->autoDeclination(),
+                                calibrations->declination(), autoDeclinationInScope);
 }
 
 /**
@@ -191,7 +188,7 @@ void cwSurvexExporterTripTask::writeShotData(QTextStream& stream, const cwTrip* 
 
     QList<cwSurveyChunk*> chunks = trip->chunks();
     for(int i = 0; i < chunks.size(); i++) {
-        cwSurveyChunk* chunk = chunks[i];
+        cwSurveyChunk* chunk = chunks.at(i);
 
         //Write the chunk data
         writeChunk(stream, hasFrontSights, hasBackSights, chunk);

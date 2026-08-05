@@ -11,6 +11,7 @@
 //Our includes
 #include "cwCaveExporterTask.h"
 #include "cwSurvexExporterRegion.h"
+#include "cwSurvexExporterUtils.h"
 class cwSurvexExporterTripTask;
 class cwCave;
 
@@ -31,11 +32,15 @@ public:
     // loop; cleared by passing a default-constructed value.
     void setExportOptions(const cwSurvexExporterRegion::Options& options);
 
+protected:
+    QString writeStandaloneHeader(QTextStream& stream) override;
+
 private:
     cwSurvexExporterTripTask* TripExporter;
     cwSurvexExporterRegion::Options ExportOptions;
 
-    void writeFixStations(QTextStream& stream, const cwCaveData& cave, const QString& globalCS);
+    void writeFixStations(QTextStream& stream, const cwCaveData& cave, const QString& globalCS,
+                          cwSurvexExporterUtils::CsScope& scope);
 
     // Emits *include "<abs>" for the cave/trip's externalCenterline by
     // joining the owner's attachment dir with the project-relative

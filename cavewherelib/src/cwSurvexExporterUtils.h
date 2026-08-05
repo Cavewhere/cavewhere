@@ -26,6 +26,44 @@ namespace cwSurvexExporterUtils {
 //! scientific notation.
 void writeCoordTriplet(QTextStream& stream, double e, double n, double z);
 
+//! `*calibrate <type> <value>`, negated because survex's sign convention is the
+//! opposite of ours. A zero value at unit scale is left implicit.
+void writeCalibration(QTextStream& stream, const QString& type, double value, double scale = 1.0);
+
+/**
+ * The trip's `*calibrate DECLINATION`.
+ *
+ * Written even at zero when \a autoDeclinationInScope, which is the one case
+ * where a zero has to be spelled out: silence would inherit the enclosing
+ * block's `*declination auto` instead of overriding it with the zero that was
+ * asked for. Cavern honors the explicit zero — cmd_calibrate stores 0 rather
+ * than HUGE_REAL, and get_declination tests that slot before the auto path.
+ */
+void writeDeclinationCalibration(QTextStream& stream,
+                                 bool autoDeclination,
+                                 double declination,
+                                 bool autoDeclinationInScope);
+
+/**
+ * The *cs in scope in the block being written.
+ *
+ * Cavern scopes *cs to its *begin block (cmd_begin copies proj_str into the
+ * child settings), so every writer inside one block is naming the same system
+ * until somebody changes it. Sharing one CsScope across those writers lets each
+ * ask for the system it needs and get a *cs line only when that actually
+ * changes something.
+ */
+class CsScope
+{
+public:
+    //! A CS-less request leaves the scope alone, matching cavern: a fix with no
+    //! system of its own doesn't un-declare the enclosing one.
+    void ensure(QTextStream& stream, const QString& cs);
+
+private:
+    QString m_current;
+};
+
 //! Representative location for a `*declination auto X Y Z` directive, derived
 //! from the first fix station that actually gives one — it needs both a CS to
 //! read the coordinate under and a coordinate to read. Survex IGRF only needs
@@ -43,10 +81,35 @@ struct DeclinationContext {
 //! none can.
 std::optional<DeclinationContext> makeDeclinationContext(const QList<cwFixStation>& fixes);
 
-//! Emit `*cs <inputCS>` + `*declination auto X Y Z` inside the current trip
-//! block. Survex re-evaluates IGRF for the trip's `*date`, so the literal
-//! `*calibrate DECLINATION` line is suppressed by the caller.
-void writeDeclinationAuto(QTextStream& stream, const DeclinationContext& ctx);
+/**
+ * Emit the cave block's `*declination auto X Y Z`, preceded by a `*cs` when
+ * \a scope doesn't already name the system the coordinate is in. Returns
+ * whether one is now in scope for the trips inside the block.
+ *
+ * Written once per cave, not once per trip. Cavern converts the location to
+ * WGS84 at parse time and stores it on the settings stack, so every enclosed
+ * *begin block inherits it, and re-evaluates IGRF from that block's own *date.
+ * \a anyTripUsesAuto keeps caves that never ask for auto byte-identical to what
+ * they exported before.
+ */
+bool writeBlockDeclinationAuto(QTextStream& stream,
+                               const QList<cwFixStation>& fixes,
+                               bool anyTripUsesAuto,
+                               CsScope& scope);
+
+/**
+ * The `*cs out` + `*declination auto` preamble for a trip exported on its own,
+ * which is the whole file: nothing above it has named a coordinate frame or a
+ * location. Both or neither — `*declination auto` without `*cs out` is a cavern
+ * error, since the grid convergence it subtracts is a property of the output
+ * system. Returns whether the location was written.
+ *
+ * No `*fix`: fixes belong to the cave, and a lone trip means "solve this from
+ * the origin". \a fixes are read only for the location.
+ */
+bool writeStandaloneTripHeader(QTextStream& stream,
+                               const QList<cwFixStation>& fixes,
+                               bool tripUsesAuto);
 
 /**
  * Which coordinate system *cs out should name. There is no default, and the two
@@ -81,6 +144,19 @@ inline QString shareableCSForFix(const cwFixStation& fix)
     // outright, whatever it is spelled like.
     return cwCoordinateTransform::deriveProjectedOutputCS(
         fix.inputCS(), cwGeoPoint(fix.easting(), fix.northing(), fix.elevation()));
+}
+
+//! The first fix in \a fixes that yields a shareable CS, or empty when none
+//! does. What a cave or trip exported on its own names in *cs out.
+inline QString shareableCSForFixes(const QList<cwFixStation>& fixes)
+{
+    for (const cwFixStation& fix : fixes) {
+        const QString cs = shareableCSForFix(fix);
+        if (!cs.isEmpty()) {
+            return cs;
+        }
+    }
+    return QString();
 }
 
 /**
@@ -118,11 +194,9 @@ QString resolveOutputCS(const Region& region, const QString& frameCS, OutputCSPo
     }
 
     for (const auto& cave : region.caves) {
-        for (const cwFixStation& fix : cave.fixStations) {
-            const QString cs = shareableCSForFix(fix);
-            if (!cs.isEmpty()) {
-                return cs;
-            }
+        const QString cs = shareableCSForFixes(cave.fixStations);
+        if (!cs.isEmpty()) {
+            return cs;
         }
     }
     return QString();
@@ -175,11 +249,16 @@ QList<cwFixStation> validateFixStations(const QList<cwFixStation>& fixes,
  *   When globalCS is set, prefix it with `*cs <globalCS>` so the legacy
  *   fallback survives the *cs out scope. With no globalCS, no *cs is
  *   emitted (un-fixed projects keep their pre-CS behavior).
+ *
+ * \a scope carries which system is in scope out to the caller, so what the
+ * block writes after the fixes — `*declination auto` — can skip a *cs that
+ * would name the system already in force.
  */
 void writeFixStations(QTextStream& stream,
                       const QList<cwFixStation>& fixes,
                       const QString& fallbackFirstStation,
-                      const QString& globalCS = QString());
+                      const QString& globalCS,
+                      CsScope& scope);
 
 //! True when a shot only carries passage dimensions: a valid zero-length
 //! distance with no compass or clino (front or back). Compass records LRUD on

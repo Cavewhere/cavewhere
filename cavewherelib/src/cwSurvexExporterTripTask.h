@@ -15,7 +15,7 @@
 #include "cwDistanceReading.h"
 #include "cwClinoReading.h"
 #include "cwCompassReading.h"
-#include "cwSurvexExporterUtils.h"
+#include "cwFixStation.h"
 #include "CaveWhereLibExport.h"
 class cwTrip;
 class cwSurveyChunk;
@@ -35,9 +35,18 @@ public:
 
     void setData(const cwTripData& trip);
 
+    //! The fix stations of the cave this trip belongs to. A trip exported on
+    //! its own writes no *fix — fixes belong to the cave — but it still reads
+    //! them for the one location `*declination auto` needs and for the *cs out
+    //! that location requires.
+    void setCaveFixStations(const QList<cwFixStation>& fixStations);
+
+    //! \a autoDeclinationInScope says an enclosing block already carries
+    //! `*declination auto`, so a trip with auto on writes no declination line
+    //! and inherits it.
     void writeTrip(QTextStream& stream,
                    cwTrip* trip,
-                   const std::optional<cwSurvexExporterUtils::DeclinationContext>& declinationContext = std::nullopt);
+                   bool autoDeclinationInScope = false);
 
 
 signals:
@@ -49,13 +58,13 @@ public slots:
 
 private:
     cwTripData Trip;
+    QList<cwFixStation> CaveFixStations;
     inline static const int TextPadding = -11;
 
     void writeChunk(QTextStream& stream, bool hasFrontSight, bool hasBackSight, cwSurveyChunk* chunk);
     void writeCalibrations(QTextStream& stream,
                            cwTripCalibration* calibrations,
-                           const std::optional<cwSurvexExporterUtils::DeclinationContext>& declinationContext);
-    void writeCalibration(QTextStream& stream, QString type, double value, double scale = 1.0);
+                           bool autoDeclinationInScope);
     void writeLengthUnits(QTextStream& stream, cwUnits::LengthUnit unit);
     void writeShotData(QTextStream& stream, const cwTrip* trip);
     void writeLRUDData(QTextStream& stream, const cwTrip *trip);

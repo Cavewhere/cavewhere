@@ -16,6 +16,7 @@
 #include "cwDebug.h"
 #include "cwCavingRegion.h"
 #include "cwCave.h"
+#include "cwFixStationModel.h"
 #include "cwTrip.h"
 #include "cwExternalCenterline.h"
 #include "cwGlobals.h"
@@ -124,6 +125,9 @@ void cwSurveyExportManager::exportSurvexTrip(QString filename) {
         cwSurvexExporterTripTask* exportTask = new cwSurvexExporterTripTask();
         exportTask->setOutputFile(filename);
         exportTask->setData(trip->data());
+        if(cwCave* cave = trip->parentCave()) {
+            exportTask->setCaveFixStations(cave->fixStations()->fixStations());
+        }
         connect(exportTask, SIGNAL(finished()), SLOT(exporterFinished()));
         connect(exportTask, SIGNAL(stopped()), SLOT(exporterFinished()));
         exportTask->start();

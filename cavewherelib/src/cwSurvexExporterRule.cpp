@@ -8,6 +8,9 @@
 //Qt includes
 #include <QTextStream>
 
+//Std includes
+#include <algorithm>
+
 //Monad include
 #include "Monad/Result.h"
 
@@ -64,14 +67,14 @@ void cwSurvexExporterRule::setSurvexFileName(cwFileNameArtifact* survexFilename)
 
 ResultBase cwSurvexExporterRule::writeTrip(QTextStream &stream,
                                            const cwSurveyDataArtifact::Trip& trip,
-                                           const std::optional<cwSurvexExporterUtils::DeclinationContext>& declinationContext)
+                                           bool autoDeclinationInScope)
 {
     //Write header
     stream << "*begin ; " << trip.name << Qt::endl;
 
     writeDate(stream, trip.date);
     writeTeamData(stream, trip.teamMembers);
-    writeCalibrations(stream, trip.calibration, declinationContext);
+    writeCalibrations(stream, trip.calibration, autoDeclinationInScope);
     stream << Qt::endl;
     writeShotData(stream, trip);
     stream << Qt::endl;
@@ -91,13 +94,21 @@ ResultBase cwSurvexExporterRule::writeCave(QTextStream& stream,
 
     stream << "*begin " << caveName << " ;" << cave.name << Qt::endl << Qt::endl;
 
-    writeFixStations(stream, cave, globalCS);
+    cwSurvexExporterUtils::CsScope csScope;
+    writeFixStations(stream, cave, globalCS, csScope);
 
-    const auto declinationContext = cwSurvexExporterUtils::makeDeclinationContext(cave.fixStations);
+    const bool anyTripUsesAuto = !cave.fixStations.isEmpty()
+                                 && std::any_of(cave.trips.begin(), cave.trips.end(),
+                                                [](const cwSurveyDataArtifact::Trip& trip) {
+                                                    return trip.calibration.autoDeclination();
+                                                });
+    const bool autoDeclinationInScope =
+        cwSurvexExporterUtils::writeBlockDeclinationAuto(stream, cave.fixStations,
+                                                        anyTripUsesAuto, csScope);
 
     for(int i = 0; i < cave.trips.size(); i++) {
         const cwSurveyDataArtifact::Trip& trip = cave.trips.at(i);
-        writeTrip(stream, trip, declinationContext);
+        writeTrip(stream, trip, autoDeclinationInScope);
         stream << Qt::endl;
     }
 
@@ -169,44 +180,27 @@ void cwSurvexExporterRule::updatePipeline()
   */
 void cwSurvexExporterRule::writeCalibrations(QTextStream& stream,
                                              const cwTripCalibrationData& calibrations,
-                                             const std::optional<cwSurvexExporterUtils::DeclinationContext>& declinationContext) {
+                                             bool autoDeclinationInScope) {
+    using namespace cwSurvexExporterUtils;
+
     writeLengthUnits(stream, calibrations.distanceUnit());
 
-    writeCalibration(stream, "TAPE", calibrations.tapeCalibration());
+    writeCalibration(stream, QStringLiteral("TAPE"), calibrations.tapeCalibration());
 
     double correctFrontsightCompass = calibrations.hasCorrectedCompassFrontsight() ? -180.0 : 0.0;
-    writeCalibration(stream, "COMPASS", calibrations.frontCompassCalibration() + correctFrontsightCompass);
+    writeCalibration(stream, QStringLiteral("COMPASS"), calibrations.frontCompassCalibration() + correctFrontsightCompass);
 
     double correctBacksightCompass = calibrations.hasCorrectedCompassBacksight() ? -180.0 : 0.0;
-    writeCalibration(stream, "BACKCOMPASS", calibrations.backCompassCalibration() + correctBacksightCompass);
+    writeCalibration(stream, QStringLiteral("BACKCOMPASS"), calibrations.backCompassCalibration() + correctBacksightCompass);
 
     double frontClinoScale = calibrations.hasCorrectedClinoFrontsight() ? -1.0 : 1.0;
-    writeCalibration(stream, "CLINO", calibrations.frontClinoCalibration(), frontClinoScale);
+    writeCalibration(stream, QStringLiteral("CLINO"), calibrations.frontClinoCalibration(), frontClinoScale);
 
     double backClinoScale = calibrations.hasCorrectedClinoBacksight() ? -1.0 : 1.0;
-    writeCalibration(stream, "BACKCLINO", calibrations.backClinoCalibration(), backClinoScale);
+    writeCalibration(stream, QStringLiteral("BACKCLINO"), calibrations.backClinoCalibration(), backClinoScale);
 
-    if (calibrations.autoDeclination() && declinationContext) {
-        cwSurvexExporterUtils::writeDeclinationAuto(stream, *declinationContext);
-    } else {
-        writeCalibration(stream, "DECLINATION", calibrations.declinationManual());
-    }
-}
-
-void cwSurvexExporterRule::writeCalibration(QTextStream& stream, QString type, double value, double scale) {
-    if(value == 0.0 && scale == 1.0) { return; }
-    value = -value; //Flip the value be survex is counter intuitive
-
-    QString calibrationString = QString("*calibrate %1 %2")
-                                    .arg(type)
-                                    .arg(value, 0, 'f', 2);
-
-    if(scale != 1.0) {
-        QString scaleString = QString(" %3").arg(scale, 0, 'f', 2);
-        calibrationString += scaleString;
-    }
-
-    stream << calibrationString << Qt::endl;
+    writeDeclinationCalibration(stream, calibrations.autoDeclination(),
+                                calibrations.declinationManual(), autoDeclinationInScope);
 }
 
 /**
@@ -555,7 +549,8 @@ ResultBase cwSurvexExporterRule::writeChunk(QTextStream& stream,
  */
 void cwSurvexExporterRule::writeFixStations(QTextStream &stream,
                                             const cwSurveyDataArtifact::Cave &cave,
-                                            const QString& globalCS)
+                                            const QString& globalCS,
+                                            cwSurvexExporterUtils::CsScope& scope)
 {
     QString fallback;
     if (cave.fixStations.isEmpty() && !cave.trips.isEmpty()) {
@@ -571,5 +566,5 @@ void cwSurvexExporterRule::writeFixStations(QTextStream &stream,
         }
     }
 
-    cwSurvexExporterUtils::writeFixStations(stream, cave.fixStations, fallback, globalCS);
+    cwSurvexExporterUtils::writeFixStations(stream, cave.fixStations, fallback, globalCS, scope);
 }

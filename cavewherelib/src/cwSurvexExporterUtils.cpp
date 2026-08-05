@@ -27,6 +27,23 @@ constexpr int kSurvexDecimalPlaces = 2;
 //A clino this far from ±90 isn't a plumb.
 constexpr double kPlumbToleranceDegrees = 0.001;
 
+void writeCalibrationLine(QTextStream& stream, const QString& type, double value, double scale,
+                          bool skipZero)
+{
+    if(skipZero && value == 0.0 && scale == 1.0) { return; }
+    value = -value; //Flip the value be survex is counter intuitive
+
+    QString calibrationString = QStringLiteral("*calibrate %1 %2")
+                                    .arg(type)
+                                    .arg(value, 0, 'f', kSurvexDecimalPlaces);
+
+    if(scale != 1.0) {
+        calibrationString += QStringLiteral(" %3").arg(scale, 0, 'f', kSurvexDecimalPlaces);
+    }
+
+    stream << calibrationString << Qt::endl;
+}
+
 } // namespace
 
 namespace cwSurvexExporterUtils {
@@ -36,6 +53,16 @@ void writeCoordTriplet(QTextStream& stream, double e, double n, double z)
     stream << QString::number(e, 'f', 6) << ' '
            << QString::number(n, 'f', 6) << ' '
            << QString::number(z, 'f', 6);
+}
+
+void CsScope::ensure(QTextStream& stream, const QString& cs)
+{
+    const QString trimmed = cs.trimmed();
+    if (trimmed.isEmpty() || trimmed == m_current) {
+        return;
+    }
+    cwSurvexCS::writeCsLine(stream, trimmed);
+    m_current = trimmed;
 }
 
 std::optional<DeclinationContext> makeDeclinationContext(const QList<cwFixStation>& fixes)
@@ -59,12 +86,80 @@ std::optional<DeclinationContext> makeDeclinationContext(const QList<cwFixStatio
     return std::nullopt;
 }
 
-void writeDeclinationAuto(QTextStream& stream, const DeclinationContext& ctx)
+namespace {
+
+void writeDeclinationAuto(QTextStream& stream, const DeclinationContext& ctx, CsScope& scope)
 {
-    cwSurvexCS::writeCsLine(stream, ctx.inputCS);
+    // The fixes above may have left a different system in scope: this context
+    // comes from the first Valid fix, while the *cs standing after them is the
+    // last one's. When they agree — the usual case — this writes nothing.
+    scope.ensure(stream, ctx.inputCS);
     stream << "*declination auto ";
     writeCoordTriplet(stream, ctx.easting, ctx.northing, ctx.elevation);
     stream << Qt::endl;
+}
+
+} // namespace
+
+bool writeBlockDeclinationAuto(QTextStream& stream,
+                               const QList<cwFixStation>& fixes,
+                               bool anyTripUsesAuto,
+                               CsScope& scope)
+{
+    if (!anyTripUsesAuto) {
+        return false;
+    }
+
+    const auto ctx = makeDeclinationContext(fixes);
+    if (!ctx) {
+        return false;
+    }
+
+    writeDeclinationAuto(stream, *ctx, scope);
+    return true;
+}
+
+bool writeStandaloneTripHeader(QTextStream& stream,
+                               const QList<cwFixStation>& fixes,
+                               bool tripUsesAuto)
+{
+    if (!tripUsesAuto) {
+        return false;
+    }
+
+    const auto ctx = makeDeclinationContext(fixes);
+    if (!ctx) {
+        return false;
+    }
+
+    const QString outputCS = shareableCSForFixes(fixes);
+    if (outputCS.isEmpty()) {
+        return false;
+    }
+
+    CsScope scope;
+    cwSurvexCS::writeCsLine(stream, outputCS, true);
+    writeDeclinationAuto(stream, *ctx, scope);
+    stream << Qt::endl;
+    return true;
+}
+
+void writeCalibration(QTextStream& stream, const QString& type, double value, double scale)
+{
+    writeCalibrationLine(stream, type, value, scale, /*skipZero*/ true);
+}
+
+void writeDeclinationCalibration(QTextStream& stream,
+                                 bool autoDeclination,
+                                 double declination,
+                                 bool autoDeclinationInScope)
+{
+    if (autoDeclination && autoDeclinationInScope) {
+        return; //inherits the cave block's *declination auto
+    }
+
+    writeCalibrationLine(stream, QStringLiteral("DECLINATION"), declination, 1.0,
+                         /*skipZero*/ !autoDeclinationInScope);
 }
 
 bool isValidSurvexRole(const QString& role)
@@ -174,31 +269,19 @@ QList<cwFixStation> validateFixStations(const QList<cwFixStation>& fixes,
 void writeFixStations(QTextStream& stream,
                       const QList<cwFixStation>& fixes,
                       const QString& fallbackFirstStation,
-                      const QString& globalCS)
+                      const QString& globalCS,
+                      CsScope& scope)
 {
-    const QString globalCSTrimmed = globalCS.trimmed();
-
     if (fixes.isEmpty()) {
         if (!fallbackFirstStation.isEmpty()) {
-            if (!globalCSTrimmed.isEmpty()) {
-                cwSurvexCS::writeCsLine(stream, globalCSTrimmed);
-            }
+            scope.ensure(stream, globalCS);
             stream << "*fix " << fallbackFirstStation << " 0 0 0" << Qt::endl;
         }
         return;
     }
 
-    QString currentCS;
-    bool csEmitted = false;
     for (const cwFixStation& fix : fixes) {
-        const QString cs = fix.inputCS().trimmed();
-        if (!csEmitted || cs != currentCS) {
-            if (!cs.isEmpty()) {
-                cwSurvexCS::writeCsLine(stream, cs);
-            }
-            currentCS = cs;
-            csEmitted = true;
-        }
+        scope.ensure(stream, fix.inputCS());
         stream << "*fix " << fix.stationName() << ' ';
         writeCoordTriplet(stream, fix.easting(), fix.northing(), fix.elevation());
         stream << Qt::endl;
