@@ -269,6 +269,12 @@ bool isLrudOnlyShot(const cwShot& shot);
 
 bool stationHasLrudData(const cwStation& station);
 
+//! Opens a `*data passage` block. Both survex exporters write it, so they share
+//! one spelling of the wire format.
+inline QString passageDataHeader() {
+    return QStringLiteral("*data passage station left right up down ignoreall");
+}
+
 } // namespace cwSurvexExporterUtils
 
 #endif // CWSURVEXEXPORTERUTILS_H

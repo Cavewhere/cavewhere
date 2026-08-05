@@ -286,10 +286,10 @@ void cwSurvexExporterRule::writeShotData(QTextStream& stream, const cwSurveyData
   */
 void cwSurvexExporterRule::writeLRUDData(QTextStream& stream, const cwSurveyDataArtifact::Trip trip, int textPadding) {
 
-    QString dataLineTemplate("%1 %2 %3 %4 %5");
+    const QString dataLineTemplate(QStringLiteral("%1 %2 %3 %4 %5"));
 
     for(const cwSurveyDataArtifact::SurveyChunk& chunk : trip.chunks) {
-        stream << "*data passage station left right up down ignoreall" << Qt::endl;
+        QStringList dataLines;
 
         for(const cwStation& station : chunk.stations) {
             if(!station.isValid()) { continue; }
@@ -299,16 +299,19 @@ void cwSurvexExporterRule::writeLRUDData(QTextStream& stream, const cwSurveyData
             // any exported shot (e.g. orphans from dropped empty rows).
             if(!cwSurvexExporterUtils::stationHasLrudData(station)) { continue; }
 
-            QString dataLine = dataLineTemplate
-                                   .arg(station.name(), textPadding)
-                                   .arg(toSupportedLength(trip, station.left()), textPadding)
-                                   .arg(toSupportedLength(trip, station.right()), textPadding)
-                                   .arg(toSupportedLength(trip, station.up()), textPadding)
-                                   .arg(toSupportedLength(trip, station.down()), textPadding);
-
-            stream << dataLine << Qt::endl;
+            dataLines.append(dataLineTemplate
+                                 .arg(station.name(), textPadding)
+                                 .arg(toSupportedLength(trip, station.left()), textPadding)
+                                 .arg(toSupportedLength(trip, station.right()), textPadding)
+                                 .arg(toSupportedLength(trip, station.up()), textPadding)
+                                 .arg(toSupportedLength(trip, station.down()), textPadding));
         }
 
+        //A header with no cross sections under it is noise for the reader
+        if(dataLines.isEmpty()) { continue; }
+
+        stream << cwSurvexExporterUtils::passageDataHeader() << Qt::endl;
+        stream << dataLines.join(QLatin1Char('\n')) << Qt::endl;
         stream << Qt::endl;
     }
 }
