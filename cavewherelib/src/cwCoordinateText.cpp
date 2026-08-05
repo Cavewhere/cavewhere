@@ -304,10 +304,30 @@ Monad::Result<QList<Number>> scanNumbers(const QString& text,
 {
     using ScanResult = Monad::Result<QList<Number>>;
 
+    //The marks a typographic paste carries, mapped to the keys they stand in
+    //for: macOS smart quotes turn ' and " into ’ and ”, and some formatters
+    //write the minus as −. Each swap is one code unit for one, so every offset
+    //into this string is an offset into \a text — which is what lets
+    //swapHorizontal() keep rewriting the user's own characters by span.
+    QString normalized = text;
+    for (QChar& character : normalized) {
+        switch (character.unicode()) {
+        case u'’':
+            character = u'\'';
+            break;
+        case u'”':
+            character = u'"';
+            break;
+        case u'−':
+            character = u'-';
+            break;
+        }
+    }
+
     QList<Number> numbers;
     qsizetype cursor = 0;
 
-    QRegularExpressionMatchIterator iterator = numberExpression().globalMatch(text);
+    QRegularExpressionMatchIterator iterator = numberExpression().globalMatch(normalized);
     while (iterator.hasNext()) {
         const QRegularExpressionMatch match = iterator.next();
         const QStringView gap = QStringView(text).mid(cursor, match.capturedStart() - cursor);
@@ -418,10 +438,15 @@ Monad::Result<QList<NumberGroup>> splitGroups(const QList<Number>& numbers,
                 current.letter = pending;
                 pending = QChar();
             }
-        } else if (!part.lead.isNull() && part.word.isEmpty()) {
+        } else if (!part.lead.isNull()) {
             //A letter that isn't a hemisphere is a unit from either side of its
             //number, so both sides get the one rule that refuses it. A word
-            //already written here is the more specific answer and keeps its place.
+            //already written here has claimed that slot, and a number wearing a
+            //letter on each side ("N304m") is refused whole rather than read with
+            //one of them dropped.
+            if (!part.word.isEmpty()) {
+                return SplitResult(unreadableText(QStringView(&part.lead, 1)));
+            }
             part.word = part.lead;
         }
 

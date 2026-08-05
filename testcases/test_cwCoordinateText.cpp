@@ -323,6 +323,14 @@ TEST_CASE("cwCoordinateText reads degrees, minutes and seconds the way they were
         readsAs("46°07′16.1″, 115°35′56.5″", angle(46, 7, 16.1), angle(115, 35, 56.5));
     }
 
+    SECTION("smart quotes, which is what macOS turns the keyboard marks into") {
+        readsAs("46°07’16.1” N, 115°35’56.5” W", angle(46, 7, 16.1), -angle(115, 35, 56.5));
+    }
+
+    SECTION("the Unicode minus some formatters write") {
+        readsAs("46°07'16.1\", −115°35'56.5\"", angle(46, 7, 16.1), -angle(115, 35, 56.5));
+    }
+
     SECTION("degrees alone") {
         const auto coordinate = readsAs("46°, 115°", 46.0, 115.0);
         CHECK_FALSE(coordinate.hasElevation);
@@ -346,6 +354,47 @@ TEST_CASE("cwCoordinateText reads degrees, minutes and seconds the way they were
         const auto coordinate = readsAs("46°07'16\" 115°35'56\"",
                                         angle(46, 7, 16), angle(115, 35, 56));
         CHECK_FALSE(coordinate.hasElevation);
+    }
+}
+
+TEST_CASE("cwCoordinateText reads every spelling of each angle mark",
+          "[FixStation][cwCoordinateText]") {
+    //The spellings live in two places that must agree: the expression's marker
+    //class and markerFor()'s switch. A spelling added to the expression alone
+    //would match, map to no marker, and read as a plain number — a wrong
+    //coordinate rather than an error — so each one is pinned to the part it
+    //names here.
+
+    SECTION("degrees") {
+        for (const QString& mark : {QStringLiteral("°"), QStringLiteral("º"),
+                                    QStringLiteral("d"), QStringLiteral("D"),
+                                    QStringLiteral("deg"), QStringLiteral("DEG")}) {
+            INFO("degree mark \"" << mark.toStdString() << "\"");
+            readsAs(QStringLiteral("46%1 30, 115%1 30").arg(mark),
+                    angle(46, 30), angle(115, 30));
+        }
+    }
+
+    SECTION("minutes") {
+        for (const QString& mark : {QStringLiteral("'"), QStringLiteral("′")}) {
+            INFO("minute mark \"" << mark.toStdString() << "\"");
+            readsAs(QStringLiteral("46° 07%1, 115° 07%1").arg(mark),
+                    angle(46, 7), angle(115, 7));
+        }
+    }
+
+    SECTION("seconds") {
+        for (const QString& mark : {QStringLiteral("\""), QStringLiteral("″"),
+                                    QStringLiteral("''")}) {
+            INFO("second mark \"" << mark.toStdString() << "\"");
+            readsAs(QStringLiteral("46° 07' 16%1, 115° 07' 16%1").arg(mark),
+                    angle(46, 7, 16), angle(115, 7, 16));
+        }
+    }
+
+    SECTION("the colon, which names no part and only continues the angle") {
+        readsAs(QStringLiteral("46:07:16, 115:07:16"),
+                angle(46, 7, 16), angle(115, 7, 16));
     }
 }
 
@@ -462,6 +511,14 @@ TEST_CASE("cwCoordinateText refuses an angle on a row that isn't geographic",
         CHECK(leading.contains(QStringLiteral("Only the elevation")));
         CHECK(leading == rejection(QStringLiteral("46.12113 N, 115.59902 W")));
     }
+
+    SECTION("a letter on each side of one number is refused, never half-read") {
+        //"N304m" once parsed as 304 meters on a projected row: the unit slot was
+        //already taken, so the N fell through splitGroups() with no rule left to
+        //refuse it — a coordinate accepted with a letter of it silently dropped.
+        CHECK(rejection(QStringLiteral("500000, 4000000, N304m"))
+                  .contains(QStringLiteral("Couldn't read \"N\"")));
+    }
 }
 
 TEST_CASE("cwCoordinateText refuses an angle it can't make sense of",
@@ -492,7 +549,8 @@ TEST_CASE("cwCoordinateText refuses an angle it can't make sense of",
 
     SECTION("a sign on anything but the degrees") {
         //The sign negates the whole angle, so there is one place it can go.
-        CHECK(reason(QStringLiteral("46° -07', 115°35'")).contains(QStringLiteral("sign")));
+        CHECK(reason(QStringLiteral("46° -07', 115°35'"))
+                  .contains(QStringLiteral("Only the degrees")));
     }
 
     SECTION("a sign and a hemisphere both") {
@@ -503,7 +561,8 @@ TEST_CASE("cwCoordinateText refuses an angle it can't make sense of",
     }
 
     SECTION("minutes before any degrees") {
-        CHECK(reason(QStringLiteral("46' 30\", 115°35'")).contains(QStringLiteral("degrees")));
+        CHECK(reason(QStringLiteral("46' 30\", 115°35'"))
+                  .contains(QStringLiteral("need degrees")));
     }
 
     SECTION("' and \" as feet and inches, which they never are here") {
@@ -511,19 +570,21 @@ TEST_CASE("cwCoordinateText refuses an angle it can't make sense of",
         //minutes want degrees in front of them. Position contains the collision
         //rather than guesswork — the markers are legal on the horizontals only.
         CHECK(reason(QStringLiteral("46.12113, -115.59902, 1000'"))
-                  .contains(QStringLiteral("degrees")));
+                  .contains(QStringLiteral("need degrees")));
     }
 
     SECTION("two components claiming the same axis") {
-        CHECK(reason(QStringLiteral("46°07'N, 115°35'N")).contains(QStringLiteral("latitude")));
-        CHECK(reason(QStringLiteral("46°07'E, 115°35'E")).contains(QStringLiteral("longitude")));
+        CHECK(reason(QStringLiteral("46°07'N, 115°35'N"))
+                  .contains(QStringLiteral("say latitude")));
+        CHECK(reason(QStringLiteral("46°07'E, 115°35'E"))
+                  .contains(QStringLiteral("say longitude")));
     }
 
     SECTION("an angle where the elevation goes") {
         CHECK(reason(QStringLiteral("46.12113, -115.59902, 304°"))
-                  .contains(QStringLiteral("elevation")));
+                  .contains(QStringLiteral("is a height")));
         CHECK(reason(QStringLiteral("46.12113, -115.59902, 304 N"))
-                  .contains(QStringLiteral("elevation")));
+                  .contains(QStringLiteral("is a height")));
     }
 
     SECTION("a hemisphere letter with no number to belong to") {

@@ -550,6 +550,14 @@ container-overflow check during init.</p>
       it changes no behavior &mdash; the box is correct today &mdash; while adding public API and a QML
       edit that commit 3 has no other reason to touch. Worth doing the moment a third caller or a fourth
       empty-string reason arrives.</td></tr>
+  <tr><td>A reason code beside each error message (<code>ReadError { code, text }</code> on the
+      <code>Monad::Result</code> payload), so tests and QML branch on which refusal fired rather than on
+      its wording</td>
+      <td><b>Deferred.</b> Error identity is prose today: ~30 test sites assert by substring, so a
+      rewording &mdash; or localization &mdash; breaks tests that were checking <i>which</i> refusal fired,
+      not what it said. The pattern predates this feature; the diff only tripled the exposure in
+      <code>test_cwCoordinateText.cpp</code>. Worth doing when the project localizes, or when a UI surface
+      first needs to branch on the reason.</td></tr>
   <tr><td>Extracting the angle reader into a reusable <code>cwAngleText</code></td>
       <td><b>Not yet.</b> Nothing else wants DMS &mdash; the declination editor is decimal degrees. It stays
       in <code>cwCoordinateText.cpp</code>'s anonymous namespace until a second caller exists.</td></tr>
