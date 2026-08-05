@@ -225,6 +225,31 @@ TEST_CASE("cwCoordinateText accepts the separators a paste actually arrives with
     }
 }
 
+TEST_CASE("cwCoordinateText reads each number as its own component",
+          "[FixStation][cwCoordinateText]") {
+    //The property degrees, minutes and seconds (#654) get built on: nothing a
+    //coordinate can say today joins two numbers into one component, so three
+    //numbers are three components whatever separates them.
+    SECTION("three numbers are two horizontals and an elevation, not one angle") {
+        //"46 07 16" is a latitude of 46, a longitude of 7 and an elevation of
+        //16 m. It has to keep meaning that once 46°07'16" means something else.
+        const auto coordinate = parsed("46 07 16", cwUnits::Metric,
+                                       cwCoordinateText::LatitudeLongitude);
+        CHECK(coordinate.northing == tight(46.0));
+        CHECK(coordinate.easting == tight(7.0));
+        CHECK(coordinate.elevation == tight(16.0));
+        CHECK(coordinate.hasElevation);
+    }
+
+    SECTION("two numbers are two horizontals, not degrees and minutes") {
+        const auto coordinate = parsed("46 07.268", cwUnits::Metric,
+                                       cwCoordinateText::LatitudeLongitude);
+        CHECK(coordinate.northing == tight(46.0));
+        CHECK(coordinate.easting == tight(7.268));
+        CHECK_FALSE(coordinate.hasElevation);
+    }
+}
+
 TEST_CASE("cwCoordinateText leaves the elevation at zero when none is given",
           "[FixStation][cwCoordinateText]") {
     const auto coordinate = parsed("46.12113, -115.59902");

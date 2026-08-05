@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Degrees, Minutes and Seconds for Fix Stations — Implementation Plan</title>
+<style>
+  :root {
+    --bg: #ffffff; --panel: #f7f8fa; --panel2: #eef1f5; --ink: #1b1f24;
+    --muted: #5a6673; --accent: #1a6db3; --accent2: #1d7a45; --warn: #96650a;
+    --bad: #b32d26; --line: #dde2e8; --code-bg: #f2f4f7;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 48px 28px 120px; }
+  h1 { font-size: 30px; margin: 0 0 6px; letter-spacing: -0.3px; }
+  h2 { font-size: 22px; margin: 52px 0 14px; padding-bottom: 8px;
+    border-bottom: 1px solid var(--line); letter-spacing: -0.2px; }
+  h3 { font-size: 17px; margin: 28px 0 8px; color: var(--accent); }
+  .sub { color: var(--muted); margin: 0 0 8px; }
+  p { margin: 10px 0; }
+  code { font-family: var(--mono); font-size: 13.5px; background: var(--code-bg);
+    padding: 1.5px 6px; border-radius: 4px; color: #24303c; }
+  pre { background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px;
+    padding: 14px 16px; overflow-x: auto; font-family: var(--mono); font-size: 13px; line-height: 1.5; }
+  pre code { background: none; padding: 0; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 18px 20px; margin: 18px 0; }
+  .fig { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 18px; margin: 22px 0; text-align: center; }
+  .fig svg { max-width: 100%; height: auto; }
+  .figcap { color: var(--muted); font-size: 13.5px; margin-top: 12px; text-align: center; }
+  .figcap b { color: var(--ink); }
+  .pill { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 9px;
+    border-radius: 999px; vertical-align: middle; }
+  .pill.ok { background: rgba(29,122,69,.12); color: var(--accent2); }
+  .pill.new { background: rgba(26,109,179,.12); color: var(--accent); }
+  .pill.edit { background: rgba(150,101,10,.14); color: var(--warn); }
+  .pill.del { background: rgba(179,45,38,.12); color: var(--bad); }
+  table { border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 14px; }
+  th, td { border: 1px solid var(--line); padding: 9px 12px; text-align: left; vertical-align: top; }
+  th { background: var(--panel2); font-weight: 600; }
+  td code { font-size: 12.5px; }
+  ul, ol { margin: 10px 0; padding-left: 24px; }
+  li { margin: 5px 0; }
+  .callout { border-left: 3px solid var(--accent); background: var(--panel2);
+    padding: 12px 16px; margin: 16px 0; border-radius: 0 8px 8px 0; }
+  .callout.warn { border-color: var(--warn); }
+  .callout.bad { border-color: var(--bad); }
+  .callout.ok { border-color: var(--accent2); }
+  .toc { columns: 2; column-gap: 32px; font-size: 14px; }
+  .toc a { color: var(--accent); text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+  .commit { display:inline-block; font-family:var(--mono); font-size:12px; font-weight:700;
+    padding:3px 10px; border-radius:6px; background:rgba(26,109,179,.10); color:var(--accent);
+    border:1px solid rgba(26,109,179,.28); }
+  hr { border: none; border-top: 1px solid var(--line); margin: 36px 0; }
+  .mono-note { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .files code { display:block; margin:2px 0; }
+  .q { border-left: 3px solid var(--warn); background: var(--panel2); padding: 14px 18px;
+       margin: 18px 0; border-radius: 0 8px 8px 0; }
+  .q h4 { margin: 0 0 6px; font-size: 15px; color: var(--warn); }
+  .yes { color: var(--accent2); font-weight: 600; }
+  .no { color: var(--bad); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Degrees, Minutes and Seconds for Fix Stations</h1>
+<p class="sub">Issue <b>#654</b>. The free-form coordinate field learns to read
+<code>46&deg;07'16.1"&nbsp;N</code> and <code>46&nbsp;07.268&nbsp;N</code> alongside the decimal degrees
+it takes today. A parser change, essentially: the coordinate string is already the only thing stored
+(<span class="commit">ef346e2b</span>), so a coordinate typed in DMS survives save and load with no
+schema change at all.</p>
+
+<div class="callout">
+  <b>The whole feature lives behind one function.</b> <code>cwCoordinateText::parse()</code>
+  (<code>cavewherelib/src/cwCoordinateText.cpp:76</code>) is the only place any coordinate text is read.
+  Everything downstream &mdash; <code>cwFixStation</code>, the survex exporter, the diagnostics, the local
+  projection &mdash; consumes decimal doubles out of it and never sees the text. Three surfaces are dragged
+  in by consequence, not by design: <code>swapHorizontal()</code>, the validator's messages, and the
+  invariant that readability is independent of axis order.
+</div>
+
+<h2>1. Contents</h2>
+<div class="toc">
+  <a href="#decided">2. What was decided, and what it rules out</a><br>
+  <a href="#grammar">3. The grammar</a><br>
+  <a href="#property">3.1 The property that protects the legacy forms</a><br>
+  <a href="#table">4. Accepted, refused, unchanged</a><br>
+  <a href="#invariant">5. The invariant that changes</a><br>
+  <a href="#display">6. Display: why input-only doesn't drift</a><br>
+  <a href="#commits">7. Commit sequence</a><br>
+  <a href="#c1">7.1 Commit 1 &mdash; groups of numbers</a><br>
+  <a href="#c2">7.2 Commit 2 &mdash; degrees, minutes, seconds</a><br>
+  <a href="#c3">7.3 Commit 3 &mdash; swap and messages</a><br>
+  <a href="#tests">8. Test plan</a><br>
+  <a href="#deferred">9. Deferred and rejected</a><br>
+</div>
+
+<h2 id="decided">2. What was decided, and what it rules out</h2>
+
+<table>
+  <tr><th>Decision</th><th>Choice</th><th>What it buys</th></tr>
+  <tr>
+    <td><b>Disambiguation</b><br><span class="mono-note">the core question</span></td>
+    <td>Explicit markers required. A run of numbers is one angle only when it carries
+        <code>&deg;</code> <code>'</code> <code>"</code>, a colon, <code>d</code>/<code>deg</code>,
+        or a hemisphere letter.</td>
+    <td><code>46 07 16</code> keeps meaning <code>(46, 7, elev 16m)</code>, which is what it means today.
+        Zero regression risk on the legacy forms, and the refusal message has something concrete to
+        teach.</td>
+  </tr>
+  <tr>
+    <td><b>Hemisphere letters</b></td>
+    <td>Authoritative. <code>N</code>/<code>S</code> marks a latitude, <code>E</code>/<code>W</code> a
+        longitude, whatever position it sits in.</td>
+    <td><code>115&deg;35'W, 46&deg;07'N</code> reads correctly. It isn't inferring order from the
+        <i>numbers</i> &mdash; the letter is an explicit statement &mdash; so the "order is never guessed"
+        rule survives. Bonus: lettered text needs no axis-order prompt at all (&sect;7.3).</td>
+  </tr>
+  <tr>
+    <td><b>Non-geographic rows</b></td>
+    <td>Refused. An angle on a projected CS, or on a row with no CS at all, is an error with its own
+        message.</td>
+    <td>A wrong coordinate system is a far likelier cause than a user wanting degrees in an easting.
+        Costs one invariant &mdash; see &sect;5.</td>
+  </tr>
+  <tr>
+    <td><b>Display</b></td>
+    <td>Input only. <code>format()</code> keeps writing decimal degrees.</td>
+    <td>Smallest change, and provably drift-free (&sect;6). The FixStationPage cell shows decimal; the
+        editor and the popup re-offer the DMS text as typed.</td>
+  </tr>
+</table>
+
+<p>Two smaller rulings, both narrowing scope on purpose:</p>
+
+<div class="q">
+  <h4><code>500000 E, 4649776 N</code> stays refused</h4>
+  <p>That is ordinary UTM notation, and under <code>EastingNorthing</code> those letters mean easting and
+  northing rather than a hemisphere. Reading them that way is a separate feature with its own unanswered
+  questions &mdash; what would <code>W</code> or <code>S</code> mean on a projected grid? So on a projected
+  row a hemisphere letter keeps the rejection it gets today: <i>"Only the elevation can carry a unit."</i>
+  Worth its own issue.</p>
+</div>
+
+<div class="q">
+  <h4><code>'</code> and <code>"</code> never mean feet and inches</h4>
+  <p>Angle markers are legal only on the horizontal groups, so <code>1000'</code> as an elevation stays
+  refused and the elevation keeps needing <code>ft</code>. The collision is contained by position rather
+  than by guesswork.</p>
+</div>
+
+<h2 id="grammar">3. The grammar</h2>
+
+<p>Today's <code>parse()</code> is a flat scan: one regular expression over numbers, with a check that
+whatever sits between two matches is a comma or whitespace. It becomes three layers.</p>
+
+<pre><code>tokenize()        numbers, angle markers, hemisphere letters, unit words, gaps
+    &darr;
+group()           numbers assembled into 1-3 number groups
+    &darr;
+readComponents()  groups classified as latitude / longitude / elevation</code></pre>
+
+<h3>Markers</h3>
+<table>
+  <tr><th>Rank</th><th>Spellings</th><th>Note</th></tr>
+  <tr><td>degrees</td><td><code>&deg;</code> <code>&ordm;</code> <code>d</code> <code>deg</code></td>
+      <td><code>&ordm;</code> is the masculine ordinal &mdash; a common substitution, since <code>&deg;</code>
+      is awkward to type. <code>d</code> is the survex/PROJ spelling.</td></tr>
+  <tr><td>minutes</td><td><code>'</code> <code>&prime;</code></td><td>Apostrophe and the Unicode prime.</td></tr>
+  <tr><td>seconds</td><td><code>"</code> <code>&Prime;</code> <code>''</code></td>
+      <td>Two apostrophes is what a keyboard gives you when the double-prime isn't reachable.</td></tr>
+  <tr><td>infix</td><td><code>:</code></td>
+      <td>Position rather than rank: <code>46:07:16.1</code>. This is how Walls and survex write it, so
+      it is also what a <code>#FIX</code> line copied out of a project file looks like.</td></tr>
+</table>
+
+<p>Within a group, marker rank must <b>strictly increase</b>. A marker of rank less than or equal to the
+previous one means a new group started &mdash; which is what lets
+<code>46&deg;07'16.1" 115&deg;35'56.5"</code> split with no comma between the two angles.</p>
+
+<h3>Group boundaries</h3>
+<p>A new group begins at any of:</p>
+<ul>
+  <li>a comma in the gap;</li>
+  <li>a hemisphere letter <i>closing</i> the previous group (<code>46 07.268 N, 115 35.941 W</code>);</li>
+  <li>a hemisphere letter <i>opening</i> this one, glued or spaced (<code>N46 07 16</code>, <code>N 46 07 16</code>);</li>
+  <li>a marker rank that fails to increase;</li>
+  <li>three numbers already in hand.</li>
+</ul>
+
+<div class="callout warn">
+  <b>The trailing-letter case is the subtle one.</b> In <code>46 07.268 N</code> nothing between the two
+  numbers says they belong together &mdash; the evidence arrives afterwards, as the letter. So a trailing
+  hemisphere letter claims the run of numbers back to the last boundary, up to three of them. This is the
+  same mechanism that makes the issue's <i>degree min.decimal</i> case work without symbols.
+</div>
+
+<h3>Structural rejections</h3>
+<p>Each of these is a message, not a silent reinterpretation:</p>
+<ul>
+  <li>a sign on the minutes or seconds &mdash; only the degrees carry one, and it negates the whole angle;</li>
+  <li>a sign <i>and</i> a hemisphere letter on the same group (<code>-115&deg;35'56" W</code>) &mdash; a typo far
+      more often than an intent, and the two can contradict;</li>
+  <li>a fraction on any component followed by another (<code>46&deg;07.5'16"</code>);</li>
+  <li>minutes or seconds at 60 or above;</li>
+  <li>two groups claiming the same axis (<code>46&deg;07'N, 115&deg;35'N</code>);</li>
+  <li>a marker or a hemisphere letter on the elevation group.</li>
+</ul>
+
+<p>Magnitude is deliberately <i>not</i> checked here. A latitude past 90&deg; or a longitude past 180&deg;
+already has a reporter &mdash; the CS-domain diagnostic from <span class="commit">7d297150</span> &mdash; and
+two voices on the same complaint is worse than one.</p>
+
+<h3 id="property">3.1 The property that protects the legacy forms</h3>
+
+<div class="callout ok">
+  <b>A group grows past one number only when a marker or a hemisphere letter says so.</b>
+</div>
+
+<p>This is the load-bearing claim of the whole plan. For any text containing no marker character and no
+standalone <code>N/S/E/W</code>, grouping is exactly the flat list of numbers <code>parse()</code>
+produces today &mdash; so every current verdict, every current message, and every one of the 60-odd
+existing test sections is reproduced <i>by construction</i> rather than by hoping the rewrite got it
+right.</p>
+
+<p>Note what this rules out: commas are <b>not</b> group separators in the marker-free case. They stay
+what they are today, interchangeable with whitespace. Had grouping split on commas,
+<code>46.12113 -115.59902 304m</code> &mdash; all spaces, three components, accepted today &mdash; would
+have become a single group of three and broken.</p>
+
+<h2 id="table">4. Accepted, refused, unchanged</h2>
+
+<p>This table is the test suite for commit 2, written out.</p>
+
+<h3><span class="pill ok">accepted</span> new forms</h3>
+<pre><code>46&deg;07'16.1" N, 115&deg;35'56.5" W, 304m    symbols, trailing letters, elevation
+N46 07 16.1, W115 35 56.5              leading letters, glued
+46:07:16.1, -115:35:56.5               survex / Walls spelling
+46 07.268 N, 115 35.941 W              degree min.decimal &mdash; #654's first case
+46&deg; 7.268, -115&deg; 35.941                one marker is enough to make the group an angle
+46.12113 N, 115.59902 W                decimal degrees, letters authoritative
+115&deg;35'W, 46&deg;07'N                      letters override position
+46&deg;, 115&deg;                             degrees alone</code></pre>
+
+<h3><span class="pill del">refused</span>, each with its own reason</h3>
+<pre><code>46 07 16.1, -115 35 56.5     no marker &rarr; "mark them, or write decimal degrees"
+46&deg;07'16", -115&deg;35'56"       on a UTM row &rarr; the geographic-CS message
+46&deg;75'                       minutes at 60 or above
+46&deg;07.5'16"                   fraction on a component that is followed by another
+-115&deg;35'56" W                 a sign and a letter both
+46&deg;07'N, 115&deg;35'N             two latitudes
+46.12113, -115.59902, 304&deg;    an angle where the elevation goes</code></pre>
+
+<h3><span class="pill new">unchanged</span> &mdash; the legacy contract</h3>
+<pre><code>46 07 16                     still (46, 7, elevation 16m)
+46.12113 -115.59902 304
+46.12113, -115.59902, 304m
+610016.792, 5615117.075, 2545.34m
+.5, -.25, 0m                 leading decimal point
+1e6, 2.5e6, 0m               scientific notation, which format() emits for huge values
+500000 E, 4649776 N          still refused &mdash; see &sect;2</code></pre>
+
+<h2 id="invariant">5. The invariant that changes</h2>
+
+<p><code>cwCoordinateText</code> currently documents, and <code>test_cwCoordinateText.cpp:463</code>
+asserts by name, that <b>whether text parses is independent of the axis order</b> &mdash; the order decides
+what the numbers <i>mean</i>, never whether they can be <i>read</i>. Geographic-only DMS breaks that:
+<code>46&deg;07'16", -115&deg;35'56"</code> reads under <code>LatitudeLongitude</code> and is refused under
+<code>EastingNorthing</code>.</p>
+
+<p>Three places lean on the old invariant and have to move in the same commit as the rule that breaks
+it:</p>
+
+<table>
+  <tr><th>Place</th><th>Change</th></tr>
+  <tr><td><code>cwCoordinateText.h:203-207</code><br><span class="mono-note">validator doc comment</span></td>
+      <td>Keeps its claim about the unit system &mdash; which genuinely cannot change a verdict &mdash; and
+      drops the one about order.</td></tr>
+  <tr><td><code>cwCoordinateText.cpp:206-209</code><br><span class="mono-note">swapHorizontal's readability probe</span></td>
+      <td>Probes under <code>LatitudeLongitude</code> instead of <code>EastingNorthing</code>. After the
+      change that is the strictly permissive order, and it is also the <i>right</i> order for what swap
+      exists to do: answer a question about a row that was just named geographic.</td></tr>
+  <tr><td><code>test_cwCoordinateText.cpp:463</code><br><span class="mono-note">"judges readability, not meaning"</span></td>
+      <td>Loses its order loop, keeps its units loop, and gains the DMS case that shows why: readable
+      under one order, refused under the other.</td></tr>
+</table>
+
+<div class="callout warn">
+  <b>One message has to serve two situations.</b> <code>parse()</code> receives an
+  <code>AxisOrder</code>, never the CS string, so it cannot tell a UTM row from a row with no coordinate
+  system &mdash; <code>axisOrderFor("")</code> collapses both to <code>EastingNorthing</code>. Widening the
+  signature to take the CS would push coordinate-system knowledge into a text parser, so instead one
+  wording covers both:
+  <p style="margin:10px 0 0"><i>"Degrees, minutes and seconds are a latitude and longitude. Set this
+  station's coordinate system to a geographic one, or write the coordinate in the units its own system
+  uses."</i></p>
+</div>
+
+<p>On a CS-less row that message is the <i>only</i> thing the user sees, which is worth stating plainly:
+<code>cwFixStationModel::setCoordinateText()</code> refuses before the text reaches the model, so the
+row never enters the <code>NoSystem</code> state and its diagnostic never gets a turn. This is also a
+small behavior change beyond DMS &mdash; today a CS-less row accepts <code>1, 2, 3</code> and stores it as
+<code>NoSystem</code>; it will still do that, but <code>46&deg;07', 115&deg;35'</code> it will refuse.</p>
+
+<h2 id="display">6. Display: why input-only doesn't drift</h2>
+
+<p>The two entry surfaces already disagree about what they show, on purpose:</p>
+
+<table>
+  <tr><th>Surface</th><th>Shows</th><th>Why</th></tr>
+  <tr><td><code>FixStationPage.qml:404-411</code><br><span class="mono-note">table cell</span></td>
+      <td><code>format()</code> of the parsed numbers</td>
+      <td>So the elevation renders in the project's units. A stored <code>304m</code> shows as
+      <code>997.38ft</code> in an imperial project.</td></tr>
+  <tr><td><code>FixStationPage.qml:413</code><br><span class="mono-note">the cell's editor</span></td>
+      <td><code>coordinateText</code> &mdash; the stored string</td>
+      <td>An editor opens on the coordinate as it was written.</td></tr>
+  <tr><td><code>FixStationPopup.qml:173-181</code></td>
+      <td>the stored string</td>
+      <td>It is always an editor; there is no display half.</td></tr>
+</table>
+
+<p>So a DMS coordinate shows as decimal degrees in the table and as DMS everywhere it can be edited. The
+thing to verify rather than assume is that this <b>cannot drift the stored value</b>: the editor opens on
+<code>editValue: coordinateText</code>, not on the cell's rendering, so opening a cell and committing it
+untouched re-commits the original DMS string, <code>textToStore()</code> returns it unchanged, and
+<code>setCoordinateText()</code> compares equal and does nothing. A test pins this.</p>
+
+<h2 id="commits">7. Commit sequence</h2>
+
+<p>Three commits, reviewed one at a time. The split is chosen so that the risky part &mdash; restructuring
+a parser that 60 test sections depend on &mdash; happens in a commit that adds no features and is therefore
+judged purely on "did anything change?".</p>
+
+<h3 id="c1">7.1 <span class="commit">Commit 1</span> Read a coordinate as groups of numbers</h3>
+
+<p><b>Pure refactor. No newly accepted form, no changed message, no changed verdict.</b></p>
+
+<div class="panel files">
+  <b>Touches</b>
+  <code>cavewherelib/src/cwCoordinateText.cpp <span class="pill edit">edit</span></code>
+  <code>testcases/test_cwCoordinateText.cpp <span class="pill edit">+1 section</span></code>
+</div>
+
+<ul>
+  <li>Split <code>parse()</code> into <code>tokenize()</code> / <code>group()</code> /
+      <code>readComponents()</code> in the anonymous namespace.</li>
+  <li>Grouping in this commit cannot join two numbers &mdash; no marker exists yet to say so &mdash; so it is
+      the identity over today's flat list. That is the reviewable claim.</li>
+  <li><code>swapHorizontal()</code> moves onto the same scan, so there is one scanner rather than a parser
+      and a separate span-finder that must agree about what a number is. Because groups are 1:1 here it
+      ends up written against <i>groups</i> already, at identical behavior &mdash; which leaves commit 3's
+      swap change as nothing but the hemisphere-letter rule.</li>
+  <li>The scan stops trimming its input, so spans are offsets into the string the caller holds. Reading
+      untrimmed text finds the same numbers &mdash; whatever surrounds them has to be a separator, and
+      whitespace is one &mdash; and it is what lets <code>swapHorizontal()</code> put back
+      <code>" 5,6 "</code> with the user's own spacing intact.</li>
+  <li>Add one section stating &sect;3.1 behaviorally: <code>46 07 16</code> is still
+      <code>(46, 7, 16m)</code>.</li>
+</ul>
+
+<p><b>Gate:</b> the existing suite passes with no edits to it.</p>
+
+<h3 id="c2">7.2 <span class="commit">Commit 2</span> Read degrees, minutes and seconds</h3>
+
+<div class="panel files">
+  <b>Touches</b>
+  <code>cavewherelib/src/cwCoordinateText.cpp <span class="pill edit">edit</span></code>
+  <code>cavewherelib/src/cwCoordinateText.h <span class="pill edit">docs</span></code>
+  <code>testcases/test_cwCoordinateText.cpp <span class="pill new">new sections</span></code>
+  <code>testcases/test_cwFixStation.cpp <span class="pill new">new sections</span></code>
+</div>
+
+<ul>
+  <li>Marker and hemisphere tokens; the grouping rules of &sect;3; the angle&rarr;decimal conversion
+      (<code>d + m/60 + s/3600</code>, signed by the degrees or the letter); every structural rejection.</li>
+  <li>Letters authoritative for axis assignment, with the same-axis and letter-on-elevation refusals.</li>
+  <li>The geographic-only gate, and with it the whole of &sect;5 &mdash; including
+      <code>swapHorizontal()</code>'s probe order, which would otherwise start rejecting DMS the moment
+      the gate lands.</li>
+  <li>The accepted-formats block at <code>cwCoordinateText.h:22-65</code> is the class's documented
+      contract and gets the new forms.</li>
+</ul>
+
+<h3 id="c3">7.3 <span class="commit">Commit 3</span> Swap whole angles, and say how to write one</h3>
+
+<div class="panel files">
+  <b>Touches</b>
+  <code>cavewherelib/src/cwCoordinateText.cpp <span class="pill edit">edit</span></code>
+  <code>testcases/test_cwCoordinateText.cpp <span class="pill edit">edit</span></code>
+  <code>test-qml/tst_FixStations_RoundTrip.qml <span class="pill new">+1 case</span></code>
+</div>
+
+<ul>
+  <li><code>swapHorizontal()</code> already exchanges the first two <b>groups</b> as of commit 1, so
+      markers travel with their numbers for free. What is left is the letters rule below.</li>
+  <li>It returns empty when the text carries hemisphere letters: the letters already settle which axis is
+      which, so there is nothing to ask. <code>CoordinateOrderAskBox</code> needs no change &mdash; it gates
+      on <code>swapped !== ""</code> (<code>CoordinateOrderAskBox.qml:49,91</code>), so it goes quiet on
+      lettered text by itself.</li>
+  <li>The existing section asserting <code>"N 46 07 16 W 115 35 56"</code> has nothing to swap
+      (<code>test_cwCoordinateText.cpp:546</code>) keeps passing &mdash; for the opposite reason. Its comment
+      currently says the string is unreadable; it will be perfectly readable and simply unambiguous. The
+      comment gets rewritten, which is the point of doing this last.</li>
+  <li>Message rework, which is where most of this feature's usability actually sits: the
+      "at most three numbers" and "numbers with nothing between them" paths gain the DMS hint;
+      the geographic-CS refusal; the minutes/seconds range refusal. <code>exampleFor()</code> keeps
+      decimal degrees as the canonical worked example &mdash; the DMS form appears only in the messages
+      where it is the likely fix, so the common errors don't grow a paragraph.</li>
+</ul>
+
+<h2 id="tests">8. Test plan</h2>
+
+<table>
+  <tr><th>Where</th><th>What</th></tr>
+  <tr><td><code>test_cwCoordinateText.cpp</code></td>
+      <td>&sect;4's three lists, section by section. Plus half-typed text staying
+      <code>Intermediate</code> through the validator (<code>46&deg;</code>, <code>46&deg;07</code>,
+      <code>N</code>, <code>N 46</code>) &mdash; every coordinate is half-typed on its way to being whole,
+      and the validator must never block a keystroke.</td></tr>
+  <tr><td><code>test_cwFixStation.cpp</code></td>
+      <td>A DMS coordinate keeps its own text verbatim while reporting decimal components; re-committing
+      it unchanged is a no-op (&sect;6); naming a projected CS on a DMS row makes it
+      <code>Unreadable</code> rather than silently reinterpreting the numbers.</td></tr>
+  <tr><td><code>tst_FixStations_RoundTrip.qml</code></td>
+      <td>One DMS entry through the real field, saved and loaded, proving the string survives and the
+      validator accepts it live.</td></tr>
+</table>
+
+<p class="mono-note">ASAN_OPTIONS=detect_container_overflow=0 for cavewhere-test &mdash; PROJ trips the
+container-overflow check during init.</p>
+
+<h2 id="deferred">9. Deferred and rejected</h2>
+
+<table>
+  <tr><th>Idea</th><th>Verdict</th></tr>
+  <tr><td>Comma-grouping as a second disambiguation path, so bare
+      <code>46 07 16, -115 35 56</code> reads as DMS</td>
+      <td><b>Rejected.</b> Makes <code>46.1, -115.6 304</code> ambiguous and silently changes what
+      <code>46 07 16, 100m</code> means. Markers cover every paste that actually arrives from a GPS or a
+      map.</td></tr>
+  <tr><td><code>format()</code> re-rendering in the notation that was typed, so the table cell shows
+      DMS with the elevation still in project units</td>
+      <td><b>Deferred.</b> Wants a notation field on <code>Coordinate</code> and a new
+      <code>format()</code> argument. Worth revisiting if the cell/editor split reads as a bug in
+      practice.</td></tr>
+  <tr><td>A project-wide "show coordinates as DMS" preference</td>
+      <td><b>Deferred.</b> Settings plus every coordinate display including the picker popup, and it
+      overrides what the user typed.</td></tr>
+  <tr><td><code>500000 E, 4649776 N</code> as UTM easting/northing letters</td>
+      <td><b>Its own issue.</b> See &sect;2.</td></tr>
+  <tr><td>Preserving DMS notation on import, so a Walls <code>#FIX</code> keeps the form it had in the
+      source file</td>
+      <td><b>Deferred.</b> The importers set components rather than text
+      (<code>cwFixStation::setEasting</code> and friends re-render through <code>format()</code>), so this
+      is an importer change, not a parser one.</td></tr>
+  <tr><td>Extracting the angle reader into a reusable <code>cwAngleText</code></td>
+      <td><b>Not yet.</b> Nothing else wants DMS &mdash; the declination editor is decimal degrees. It stays
+      in <code>cwCoordinateText.cpp</code>'s anonymous namespace until a second caller exists.</td></tr>
+</table>
+
+</div>
+</body>
+</html>
