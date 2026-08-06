@@ -842,6 +842,85 @@ TEST_CASE("cwLazLayer .cwlaz: discardChanges re-surfaces .laz with original UUID
     REQUIRE_FALSE(project->modified());
 }
 
+TEST_CASE("cwLazLayer .cwlaz: discarding an uncommitted layer leaves the project clean",
+          "[cwLazLayer][cwLazLayerModel][cwSaveLoad]") {
+    // The mirror image of the test above. There the discard restores a .laz
+    // and the rescan adds a row; here it deletes one that was never
+    // committed and the rescan drops a row.
+    //
+    // Dropping a row runs cwSaveLoad's rowsAboutToBeRemoved handler, whose
+    // localMutationOccurred emit is the single thing that sets
+    // cwProject::modified(). That emit is guarded only by
+    // suppressLocalMutationTracking, so it fires for CaveWhere's own
+    // cleanUntracked as readily as for a user deleting the file in Finder —
+    // and the queued discardCompleted→rescan makes the discard reach it.
+    // The user discards their changes and is immediately offered a save for
+    // the work they just threw away.
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString externalLaz = writeMinimalLaz(tempLazPath(tempDir, QStringLiteral("discadd")));
+
+    auto root = std::make_unique<cwRootData>();
+    // git commitAll requires a valid account, or saveAs never creates a HEAD
+    // commit and discardChanges fails with "revspec 'HEAD' not found".
+    root->account()->setName(QStringLiteral("Discard Tester"));
+    root->account()->setEmail(QStringLiteral("discard.tester@example.com"));
+
+    auto* project = root->project();
+
+    // Commit the project before the layer exists, so HEAD holds no layer and
+    // the .laz added next is untracked — the state cleanUntracked deletes.
+    const QString projectPath = QDir(tempDir.path())
+                                    .filePath(QStringLiteral("laz-discadd-%1.cwproj")
+                                                  .arg(QCoreApplication::applicationPid()));
+    REQUIRE(project->saveAs(projectPath));
+    project->waitSaveToFinish();
+    root->futureManagerModel()->waitForFinished();
+    QCoreApplication::processEvents();
+    REQUIRE_FALSE(project->modified());
+
+    addLazAndWait(root.get(), {externalLaz});
+    auto* lazLayers = project->cavingRegion()->lazLayers();
+    REQUIRE(lazLayers->count() == 1);
+
+    const QDir gisDir = gisLayersDirForProject(project->filename());
+    const QString lazBase = QFileInfo(externalLaz).completeBaseName();
+    const QString lazInProject = gisDir.absoluteFilePath(lazBase + QStringLiteral(".laz"));
+    REQUIRE(QFile::exists(lazInProject));
+
+    // Drain the writes the add enqueued so their deferred completes before
+    // discardChanges replaces m_pendingJobsDeferred (same hazard as above).
+    project->waitSaveToFinish();
+    root->futureManagerModel()->waitForFinished();
+
+    REQUIRE(project->fileType() == cwProject::GitFileType);
+    QSignalSpy discardSpy(project, &cwProject::discardCompleted);
+    project->discardChanges();
+    project->waitForDiscardToFinish();
+    QCoreApplication::processEvents();
+    REQUIRE(discardSpy.count() >= 1);
+
+    // cleanUntracked removed the .laz; the queued rescan notices on the next
+    // event loop tick and drops the row. Bounding by wall-clock surfaces
+    // "rescan never fired" in CI logs rather than masking it downstream.
+    QElapsedTimer rescanTimer;
+    rescanTimer.start();
+    while (lazLayers->count() > 0
+           && rescanTimer.elapsed() < kDiscardRescanMaxWaitMs) {
+        QCoreApplication::processEvents();
+        QThread::msleep(kDiscardRescanPollSleepMs);
+    }
+    INFO("Waited " << rescanTimer.elapsed()
+         << "ms for discardCompleted→rescan to drop the row");
+
+    REQUIRE_FALSE(QFile::exists(lazInProject));
+    REQUIRE(lazLayers->count() == 0);
+
+    // The working tree is back at HEAD, so there is nothing left to save.
+    CHECK_FALSE(project->modified());
+}
+
 namespace {
 
 // Stand up a project with one .laz layer, save to a fresh .cwproj inside the

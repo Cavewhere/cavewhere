@@ -332,6 +332,16 @@ public:
     void enqueueExternalCenterlineRemoveFile(const QString& path);
     void enqueueExternalCenterlineRemoveTree(const QString& path);
 
+    // Reports that a file inside the project changed on disk without going
+    // through cwSaveLoad — a text editor rewriting an attached .svx, say.
+    // Marks the project modified (cwProject::modified()) so the edit is
+    // offered for save on quit, since nothing else on that path queues a
+    // job and so nothing else can reach the dirty bit.
+    //
+    // Ignored while cwSaveLoad is rewriting the project's own files; see
+    // cwSaveLoadPrivate::SelfWriteWindow.
+    void reportProjectFileChangedOnDisk();
+
     QString absolutePath(const cwNote* note, const QString& imageFilename) const;
     QString absolutePath(const cwNoteLiDAR* note, const QString& lidarFilename) const;
     cwImage absolutePathNoteImage(const cwNote* note) const;

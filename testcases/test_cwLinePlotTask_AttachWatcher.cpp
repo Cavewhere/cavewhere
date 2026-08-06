@@ -436,6 +436,13 @@ TEST_CASE("updateFromSource lands the copy, re-solves, clears the flag, and mark
     CHECK(manager.externalCenterlineManager()->isOwnerBusy(fixture->trip->id()));
     manager.externalCenterlineManager()->updateFromSource(fixture->trip->id());
 
+    // Read the count here, while both calls have returned and the event loop
+    // has yet to run: the enqueue emits synchronously, so this window holds
+    // the enqueues and only the enqueues. Reading it after the drain instead
+    // would fold in the project-side watcher, which reports the copy landing
+    // on its own schedule.
+    const int enqueuedMutations = mutationSpy.count();
+
     REQUIRE(tryWait(kWatcherWaitMs, [&] {
         QCoreApplication::processEvents(QEventLoop::AllEvents, kInnerPollEventsMs);
         return fixture->cave->stationPositionLookup().hasPosition(a4Key);
@@ -455,7 +462,7 @@ TEST_CASE("updateFromSource lands the copy, re-solves, clears the flag, and mark
     }));
     CHECK_FALSE(manager.externalCenterlineManager()->isOwnerBusy(fixture->trip->id()));
     CHECK(fixture->project->modified());
-    CHECK(mutationSpy.count() == 1);
+    CHECK(enqueuedMutations == 1);
 }
 
 TEST_CASE("Open-time probe seeds staleness for a source that drifted while closed",

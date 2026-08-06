@@ -3980,7 +3980,112 @@ Stations list   &larr; denser rows; consider abbreviated UsedStations view</code
   that plan is adopted.
 </p>
 
-<h3 id="bug-b8">B8 &mdash; An external edit to an attachment does not mark the project modified</h3>
+<h3 id="bug-b8">B8 &mdash; An external edit to an attachment does not mark the project modified <em>(FIXED 2026-08-04)</em></h3>
+
+<div class="note">
+  <strong>What shipped, and where it differs from the draft below.</strong>
+  The root cause is exactly as filed and the fix routes through
+  <code>cwSaveLoad::localMutationOccurred</code> as prescribed. Four things
+  the draft did not anticipate:
+
+  <ul>
+    <li>
+      <strong>The signal needed a discriminator, which is most of the work.</strong>
+      "Mark the project modified on a watcher event" is wrong on its own:
+      a discard's <code>git reset --hard</code>, a sync's pull, and a
+      checkout all rewrite the very files the watcher is armed on, and
+      arrive looking exactly like a user's edit. Unguarded, a discard
+      re-dirties the project it has just cleaned &mdash;
+      <code>cwProject</code> clears the bit on <code>discardCompleted</code>
+      (<code>cwProject.cpp:188-194</code>) and the watcher event lands after
+      that. So <code>cwSaveLoad</code> gained a public
+      <code>reportProjectFileChangedOnDisk()</code> plus a private
+      <em>self-write window</em> (<code>SelfWriteWindow::begin()</code> /
+      <code>end()</code>, nesting-counted) bracketing
+      <code>discardChanges()</code>, <code>sync()</code>, and
+      <code>gitOperationAndReconcile()</code>. The window stays open a
+      settle period (<code>kSettleMs</code>, 1500&nbsp;ms) past the
+      operation, because the event arrives after the write that caused it.
+      That settle is a heuristic and is documented as one: the cost of
+      over-covering is dropping an edit made within a second and a half of a
+      git operation, which is cheaper than re-dirtying every discard.
+      <code>suppressLocalMutationTracking</code> could not serve here &mdash;
+      it is a synchronous <code>qScopeGuard</code>
+      (<code>cwSaveLoad.cpp:1489-1493</code>) and the event is asynchronous.
+    </li>
+    <li>
+      <strong>Save As is two different operations, and only one of them
+      matters.</strong> An <em>already-saved</em> project's Save As
+      <em>copies</em> (<code>copyProjectTo</code>,
+      <code>cwProject.cpp:765-767</code>) &mdash; nothing moves, no events. A
+      <em>temporary</em> project's first Save As <em>moves</em> the whole
+      root, and the watcher then reports its files as changed naming where
+      they used to be. Those get filtered by location rather than by timing:
+      the manager only reports a change whose path is still inside
+      <code>dataRootDir()</code>, reusing B7's
+      <code>cwExternalCenterlineSync::isContainedIn</code>. A fact, not a
+      guess &mdash; and it needs no window, which matters because a window
+      around Save As would swallow real edits for a second and a half after
+      every save.
+      <p class="note">
+        Those move-events are <strong>intermittently</strong> delivered
+        &mdash; measured at roughly half of runs on macOS. The regression
+        test is therefore a sampling detector for this one case, not a pin,
+        and says so. Trying to raise the odds by watching four files instead
+        of one made no measurable difference.
+      </p>
+    </li>
+    <li>
+      <strong>Prerequisite found on the way: the manager never re-armed
+      after the data root moved.</strong> Nothing connected
+      <code>cwSaveLoad::dataRootChanged</code> to
+      <code>cwExternalCenterlineManager</code>, and every attachment
+      directory is derived from the data root &mdash; so after a temporary
+      project's first Save As the watch set named files that no longer
+      existed, and the attachment went unwatched for the rest of the
+      session. B8 cannot be correct on top of that, so
+      <code>setSaveLoad()</code> now wires the recompute (and disconnects
+      the previous <code>cwSaveLoad</code>, which it also never did).
+    </li>
+    <li>
+      <strong>Git is not the only self-write: CaveWhere's own attachment
+      writes echo too.</strong> An Update copies the source into the
+      attachment directory through <code>cwSaveLoad</code>, which marks the
+      project modified as it queues the copy &mdash; and the watcher is armed
+      on that destination, so the landing bytes report the same write a
+      second time. Arriving after the save that followed the Update, the echo
+      leaves the project asking to be saved with nothing to write. There is
+      no scope to bracket here (the job is queued now and lands later), so
+      the three <code>enqueueExternalCenterline*</code> writers hand their
+      job an <code>onDone</code> that calls
+      <code>SelfWriteWindow::noteWriteCompleted()</code> &mdash; the settle
+      tail alone, which is the only part a finished write's echo can fall
+      into. A job dropped by queue compression never wrote anything, so it
+      has no echo to skip and nothing leaks open.
+    </li>
+    <li>
+      <strong>The <code>.cwproj</code> consequence is milder than filed.</strong>
+      <code>cwProject.cpp:992-998</code> already sets
+      <code>modified=true</code> on open when the git working tree is dirty,
+      so an edit made while CaveWhere is closed is caught at the next
+      launch. The <code>.cwproj</code> gap is confined to the session. The
+      bundled <code>.cw</code> data-loss case stands exactly as written.
+    </li>
+  </ul>
+
+  <p>
+    <strong>Test gate as shipped</strong>
+    (<code>testcases/test_cwExternalCenterlineModified.cpp</code>, six cases):
+    the two positive cases the draft asked for (both formats), the
+    source-side negative, plus three the draft did not have &mdash; a discard
+    leaves the project clean, a temporary project's first save does too, and
+    an Update leaves nothing behind to save once it has been saved. All three
+    were needed: the draft's gate passes for a fix that dirties everything a
+    discard touches. Each guard was mutation-tested. The
+    sync/pull leg of the window is guarded by construction but untested,
+    since exercising it needs a remote.
+  </p>
+</div>
 
 <p>
   <em>(Filed 2026-08-04.)</em> Editing an in-project attachment outside CaveWhere

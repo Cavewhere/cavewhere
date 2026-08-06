@@ -45,6 +45,7 @@
   .callout { border-left: 3px solid var(--accent); background: var(--panel); padding: .7rem 1rem; border-radius: 0 8px 8px 0; margin: 1rem 0; }
   .callout.warn { border-left-color: var(--warn); }
   .callout.bad { border-left-color: var(--bad); }
+  .callout.good { border-left-color: var(--good); }
   .callout .title { font-weight: 700; margin-bottom: .2rem; }
   ul, ol { padding-left: 1.4rem; }
   li { margin: .3rem 0; }
@@ -207,13 +208,24 @@ return srcInfo.lastModified() &lt;= dstInfo.lastModified();</code></pre>
   project's own copy, which re-solves with no click at all.
 </div>
 
-<h2 id="prereq">3. Prerequisites &mdash; Phase 2 &sect;16 B7 and B8</h2>
+<h2 id="prereq">3. Prerequisites &mdash; Phase 2 &sect;16 B7 and B8 <em>(both met 2026-08-04)</em></h2>
+
+<div class="callout good">
+  <div class="title">Both prerequisites have shipped.</div>
+  B7 landed as <code>386cee62</code> and B8 alongside it, each with its own
+  regression suite. The gate below is satisfied &mdash; commit 1 is unblocked.
+  Read the two entries that follow for what the fixes actually do, since the
+  B8 one grew a discriminator the description here does not mention: a
+  discard, a sync's pull, and a checkout rewrite the same watched files, so
+  &ldquo;a watcher event means the user edited something&rdquo; is only true
+  once CaveWhere's own writes are filtered out.
+</div>
 
 <p>
-  Both are real defects today, independent of this plan. Both are on the path
+  Both were real defects, independent of this plan. Both are on the path
   this plan promotes from &ldquo;possible&rdquo; to &ldquo;sanctioned&rdquo;, so
-  shipping the retirement without them would be advertising a workflow whose
-  guard rails are missing.
+  shipping the retirement without them would have been advertising a workflow
+  whose guard rails were missing.
 </p>
 
 <p>
@@ -345,13 +357,14 @@ return srcInfo.lastModified() &lt;= dstInfo.lastModified();</code></pre>
   <tr><th>#</th><th>Commit</th><th>Test gate</th></tr>
   <tr>
     <td>0</td>
-    <td><em>(Phase 2 &sect;16 B7 and B8)</em> Shared containment helper, with the
-        project-side scan rejecting an escaping <code>*include</code>; and a
-        watcher-driven recompute marking the project modified.</td>
-    <td>Their own gates. Not part of this plan's commits &mdash; listed so the
-        dependency is visible. B8 in particular blocks commit 1: without it
-        &ldquo;edits to the copy are live&rdquo; is not a benefit worth trading
-        the <em>Update</em> button for.</td>
+    <td><em>(Phase 2 &sect;16 B7 and B8)</em> <span class="pill done">done</span>
+        Project-side scan rejecting an escaping <code>*include</code>; and a
+        watcher-driven recompute marking the project modified, filtered so
+        CaveWhere's own git writes do not.</td>
+    <td>Shipped 2026-08-04 with their own gates. Not part of this plan's
+        commits &mdash; listed so the dependency is visible. B8 in particular
+        blocked commit 1: without it &ldquo;edits to the copy are live&rdquo;
+        is not a benefit worth trading the <em>Update</em> button for.</td>
   </tr>
   <tr>
     <td>1</td>

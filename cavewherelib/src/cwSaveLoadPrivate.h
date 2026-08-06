@@ -26,6 +26,7 @@
 #include "Monad/Monad.h"
 
 //Qt includes
+#include <QDeadlineTimer>
 #include <QDir>
 #include <QFileInfo>
 #include <QHash>
@@ -350,6 +351,53 @@ struct cwSaveLoadPrivate {
     quint64 modelMutationEpoch = 0;
     quint64 localMutationEpoch = 0;
     bool suppressLocalMutationTracking = false;
+
+    // Open while cwSaveLoad is rewriting the project's own files in place —
+    // a discard's reset, a sync's pull, a checkout or restore. A filesystem
+    // watcher sees those writes exactly as it sees a user's edit in a text
+    // editor, so reportProjectFileChangedOnDisk() consults this to keep
+    // CaveWhere's own work from marking the project modified.
+    struct SelfWriteWindow {
+        // How long the window stays open past the write that opened it,
+        // covering the lag before the watcher event arrives (FSEvents on
+        // macOS coalesces, so this is not instant). A heuristic, and the
+        // trade-off runs both ways: too short re-dirties the project right
+        // after a discard, too long drops a real edit made in the same
+        // breath as one. Sized for the first, since the second takes a user
+        // typing into an editor within a second and a half of a git
+        // checkout. A deterministic discriminator — asking git whether the
+        // path differs from HEAD — would beat the clock, but QQuickGit
+        // reports no per-path status, so it needs a submodule API first.
+        static constexpr int kSettleMs = 1500;
+
+        void begin() { ++m_depth; }
+
+        // For a write that is already done by the time we hear about it, so
+        // there is no scope left to bracket — a queued file job landing on
+        // disk. Opens the settle tail alone, which is the only part the
+        // echo of a finished write can still fall into.
+        void noteWriteCompleted() { m_settle = QDeadlineTimer(kSettleMs); }
+
+        void end()
+        {
+            Q_ASSERT(m_depth > 0);
+            --m_depth;
+            if (m_depth == 0) {
+                m_settle = QDeadlineTimer(kSettleMs);
+            }
+        }
+
+        bool isOpen() const { return m_depth > 0 || !m_settle.hasExpired(); }
+
+    private:
+        // Counted rather than a flag, so two overlapping operations cannot
+        // close each other's window — a discard can start mid-sync, since
+        // cwProject::discardChanges() has no syncInProgress() guard.
+        int m_depth = 0;
+        QDeadlineTimer m_settle; //!< default-constructed is expired, i.e. closed
+    };
+
+    SelfWriteWindow selfWrite;
 
     struct RemoteApplyGuardState {
         bool active = false;

@@ -3256,6 +3256,13 @@ void cwSaveLoad::discardChanges()
 
     setSaveEnabled(false);
 
+    // `git reset --hard HEAD` + cleanUntracked rewrites project files the
+    // external-centerline watcher is armed on. Their events land after
+    // discardCompleted has already cleared cwProject::modified(), so
+    // without this window a discard would immediately re-dirty the project
+    // it just cleaned.
+    d->selfWrite.begin();
+
     // Capture the in-flight saves future before replacing the deferred so that
     // waitForFinished() (which calls completeSaveJobs()) will wait for the
     // discard operation itself, not just the now-drained save queue.
@@ -3278,6 +3285,7 @@ void cwSaveLoad::discardChanges()
     AsyncFuture::observe(resetFuture).context(this, [this, repo, resetFuture]() {
         const auto result = resetFuture.result();
         if (result.hasError()) {
+            d->selfWrite.end();
             qWarning() << "discardChanges: git reset --hard HEAD failed:"
                        << result.errorMessage();
             d->m_pendingJobsDeferred.complete();
@@ -3285,6 +3293,7 @@ void cwSaveLoad::discardChanges()
             return;
         }
         repo->cleanUntracked();
+        d->selfWrite.end();
         d->m_pendingJobsDeferred.complete();
         emit discardCompleted();
     });
@@ -3938,6 +3947,17 @@ void cwSaveLoad::enqueueExternalCenterlineCopyIfNewer(const QString& sourcePath,
         }
         return Monad::ResultBase();
     });
+    // The copy lands on a path the external-centerline watcher is armed on,
+    // and the watcher reads our own write exactly as it reads a user's edit
+    // in a text editor. The mutation above already covers this write, so the
+    // echo would be a second report of one change — and one that can arrive
+    // after the following save has cleared the dirty bit, leaving the project
+    // asking to be saved with nothing to write. Open the settle tail when the
+    // bytes land so reportProjectFileChangedOnDisk() skips the echo. A job
+    // dropped before it runs never wrote anything, so it has no echo to skip.
+    job.onDone = [this](const ResultBase&) {
+        d->selfWrite.noteWriteCompleted();
+    };
     // Set path for diagnostics + scheduling; ensureInsideRoot isn't enforced
     // for Action::Custom, so this is informational rather than a precondition.
     job.path = destinationPath;
@@ -3961,6 +3981,11 @@ void cwSaveLoad::enqueueExternalCenterlineRemoveFile(const QString& path)
     cwSaveLoadPrivate::Job job(nullptr,
                                cwSaveLoadPrivate::Job::Kind::File,
                                cwSaveLoadPrivate::Job::Action::Remove);
+    // Deleting a watched file notifies the watcher too; see
+    // enqueueExternalCenterlineCopyIfNewer for why the echo is skipped.
+    job.onDone = [this](const ResultBase&) {
+        d->selfWrite.noteWriteCompleted();
+    };
     job.oldPath = path;
     d->addExplicitFileSystemJob(std::move(job), this);
 }
@@ -3981,8 +4006,21 @@ void cwSaveLoad::enqueueExternalCenterlineRemoveTree(const QString& path)
     cwSaveLoadPrivate::Job job(nullptr,
                                cwSaveLoadPrivate::Job::Kind::Directory,
                                cwSaveLoadPrivate::Job::Action::Remove);
+    // Every watched file under the tree notifies on the way out; see
+    // enqueueExternalCenterlineCopyIfNewer for why the echo is skipped.
+    job.onDone = [this](const ResultBase&) {
+        d->selfWrite.noteWriteCompleted();
+    };
     job.oldPath = path;
     d->addExplicitFileSystemJob(std::move(job), this);
+}
+
+void cwSaveLoad::reportProjectFileChangedOnDisk()
+{
+    if (d->suppressLocalMutationTracking || d->selfWrite.isOpen()) {
+        return;
+    }
+    emit localMutationOccurred();
 }
 
 void cwSaveLoad::disconnectObjects()
@@ -4981,6 +5019,12 @@ QFuture<Monad::ResultBase> cwSaveLoad::sync()
     const QString repoPath = repo->directory().absolutePath();
     const quint64 syncGeneration = d->operationGeneration;
 
+    // A pull writes a teammate's edits straight into the working tree,
+    // where the watcher sees them. cwProject re-asserts the dirty bit from
+    // the sync report when the sync ends, so a watcher event arriving after
+    // that would contradict a decision made with the full picture.
+    d->selfWrite.begin();
+
     auto syncDeferred = std::make_shared<AsyncFuture::Deferred<ResultBase>>();
     auto scheduleAttempt = std::make_shared<std::function<void(int)>>();
     // Preserved across retries so each sync report's diff spans from the
@@ -5162,6 +5206,12 @@ QFuture<Monad::ResultBase> cwSaveLoad::sync()
         });
     };
 
+    // Retries re-enter scheduleAttempt, so the window closes on the
+    // deferred rather than on any one attempt.
+    AsyncFuture::observe(syncDeferred->future()).context(this, [this]() {
+        d->selfWrite.end();
+    });
+
     (*scheduleAttempt)(0);
 
     return syncDeferred->future();
@@ -5188,6 +5238,10 @@ QFuture<Monad::ResultBase> cwSaveLoad::gitOperationAndReconcile(const QString& o
     const QString repoPath = repo->directory().absolutePath();
     const quint64 syncGeneration = d->operationGeneration;
     auto attemptState = std::make_shared<ReconcileAttemptState>();
+
+    // Checkout, branch reset, and restore-to-commit all rewrite the working
+    // tree; see the window in sync().
+    d->selfWrite.begin();
 
     auto saveFlushFuture = d->enqueueOperation(this, cwSaveLoadPrivate::Operation::Type::SaveFlush, [this]() {
         return saveFlushImpl();
@@ -5298,6 +5352,7 @@ QFuture<Monad::ResultBase> cwSaveLoad::gitOperationAndReconcile(const QString& o
     AsyncFuture::observe(finalizeFuture)
             .context(this, [this, finalizeFuture, checkoutDeferred]() {
         d->remoteApplyGuard.end();
+        d->selfWrite.end();
         checkoutDeferred->complete(finalizeFuture.result());
     });
 

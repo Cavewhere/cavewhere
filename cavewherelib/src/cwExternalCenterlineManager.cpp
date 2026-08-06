@@ -226,7 +226,25 @@ void cwExternalCenterlineManager::setExternalSourceSettings(cwExternalSourceSett
 
 void cwExternalCenterlineManager::setSaveLoad(cwSaveLoad* saveLoad)
 {
+    if (m_saveLoad == saveLoad) {
+        return;
+    }
+    if (!m_saveLoad.isNull()) {
+        disconnect(m_saveLoad.data(), &cwSaveLoad::dataRootChanged,
+                   this, &cwExternalCenterlineManager::recomputeWatchSetAndProbeSources);
+    }
     m_saveLoad = saveLoad;
+    if (!m_saveLoad.isNull()) {
+        // Every attachment dir is derived from the data root, so moving it
+        // — a temporary project's first Save As does exactly that — leaves
+        // the whole watch set naming files that are no longer there. The
+        // recompute re-derives the dirs and re-arms on the new paths;
+        // without it an attachment stops being watched for the rest of the
+        // session, and the edits this class exists to notice go unseen.
+        connect(m_saveLoad.data(), &cwSaveLoad::dataRootChanged,
+                this, &cwExternalCenterlineManager::recomputeWatchSetAndProbeSources);
+    }
+    recomputeWatchSetAndProbeSources();
 }
 
 QStringList cwExternalCenterlineManager::watchedFiles() const
@@ -651,10 +669,25 @@ void cwExternalCenterlineManager::onWatchedFileChanged(const QString& path)
         return;
     }
 
-    // Project-side change: recompute the dep set in case the edit added
-    // or removed an *include that needs to enter/leave the watch set,
-    // with the re-solve chained behind the apply so it sees the fresh
-    // declination flags.
+    // Project-side change: the bytes that travel with the project just
+    // changed, so the project is modified. Nothing on this path queues a
+    // save job, which is the only other way the dirty bit gets set — so
+    // without this a bundled .cw drops the edit on quit-without-save,
+    // never having asked.
+    //
+    // The containment test is what handles a moved data root: the watcher
+    // stays armed on the old locations and does sometimes report them on the
+    // way out, and those paths are outside the project as a matter of fact
+    // rather than of timing. cwSaveLoad filters its own in-place rewrites.
+    if (!m_saveLoad.isNull()
+        && cwExternalCenterlineSync::isContainedIn(
+               path, m_saveLoad->dataRootDir().absolutePath())) {
+        m_saveLoad->reportProjectFileChangedOnDisk();
+    }
+
+    // Recompute the dep set in case the edit added or removed an *include
+    // that needs to enter/leave the watch set, with the re-solve chained
+    // behind the apply so it sees the fresh declination flags.
     m_solveOnScanApply = true;
     recomputeWatchSetAndProbeSources();
 }
