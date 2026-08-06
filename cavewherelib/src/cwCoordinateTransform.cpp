@@ -242,11 +242,11 @@ namespace {
     }
 
     // The capped per-thread memo shared by the QHash-backed PROJ query caches
-    // below. On overflow every entry is dropped — values come back by value, so
-    // nothing escapes the cache. Failures are cached too: a CS the user is
+    // below. On overflow every entry is dropped — this cache's values come back
+    // by value, so nothing escapes it. Failures are cached too: a CS the user is
     // still typing would otherwise rebuild and fail on every keystroke.
-    template <typename Value, typename Compute>
-    Value cachedValue(QHash<QString, Value>& cache, const QString& key, Compute compute)
+    template <typename Key, typename Value, typename Compute>
+    Value cachedValue(QHash<Key, Value>& cache, const Key& key, Compute compute)
     {
         const auto it = cache.constFind(key);
         if (it != cache.constEnd()) {
@@ -258,6 +258,33 @@ namespace {
         }
         cache.insert(key, value);
         return value;
+    }
+
+    /**
+     * The per-thread transform memo behind transformPoint() and domainCheck().
+     * The cost it skips is documented on transformPoint(); pairs that fail to
+     * build are cached too, for the same reason failures are cached above.
+     *
+     * std::map rather than QHash because cwCoordinateTransform is move-only with
+     * no default constructor; try_emplace builds it in place. Per-thread, which
+     * is also what the class's one-transform-one-thread contract wants.
+     *
+     * The returned reference lives only until the next call on this thread — an
+     * overflowing cache clears every entry.
+     */
+    const cwCoordinateTransform& cachedTransform(const QString& source, const QString& dest)
+    {
+        thread_local std::map<std::pair<QString, QString>, cwCoordinateTransform> cache;
+        const auto key = std::make_pair(source, dest);
+
+        auto it = cache.find(key);
+        if (it == cache.end()) {
+            if (cache.size() >= static_cast<size_t>(kCsCacheLimit)) {
+                cache.clear();
+            }
+            it = cache.try_emplace(key, source, dest).first;
+        }
+        return it->second;
     }
 }
 
@@ -297,29 +324,12 @@ std::optional<cwGeoPoint> cwCoordinateTransform::transformPoint(const QString& s
         return std::nullopt;
     }
 
-    // std::map rather than QHash because cwCoordinateTransform is move-only
-    // with no default constructor; try_emplace builds it in place. Per-thread,
-    // which is also what the class's one-transform-one-thread contract wants.
-    // Pairs that fail to build are cached too — otherwise a CS the user is
-    // still typing rebuilds and fails on every keystroke.
-    thread_local std::map<std::pair<QString, QString>, cwCoordinateTransform> cache;
-    const auto key = std::make_pair(source, dest);
-
-    auto it = cache.find(key);
-    if (it == cache.end()) {
-        if (cache.size() >= static_cast<size_t>(kCsCacheLimit)) {
-            // Nothing escapes the cache — points come back by value — so
-            // dropping every entry is safe.
-            cache.clear();
-        }
-        it = cache.try_emplace(key, source, dest).first;
-    }
-
-    if (!it->second.isValid()) {
+    const cwCoordinateTransform& transform = cachedTransform(source, dest);
+    if (!transform.isValid()) {
         return std::nullopt;
     }
 
-    const cwGeoPoint transformed = it->second.transform(point);
+    const cwGeoPoint transformed = transform.transform(point);
     if (!std::isfinite(transformed.x) || !std::isfinite(transformed.y)) {
         return std::nullopt;
     }
@@ -355,6 +365,25 @@ bool cwCoordinateTransform::isGeographic(const QString& cs)
     });
 }
 
+namespace {
+    //! domainCheck()'s cache key: the CS and the horizontal coordinate it was
+    //! asked about. A struct rather than the three spelled into one string, so
+    //! that a hit costs no allocation and no 17-digit double formatting — the
+    //! model asks for three domain roles per row on every dataChanged.
+    struct DomainKey {
+        QString cs;
+        double x;
+        double y;
+
+        bool operator==(const DomainKey& other) const = default;
+    };
+
+    size_t qHash(const DomainKey& key, size_t seed = 0) noexcept
+    {
+        return qHashMulti(seed, key.cs, key.x, key.y);
+    }
+}
+
 cwCoordinateTransform::DomainCheck
 cwCoordinateTransform::domainCheck(const QString& cs, const cwGeoPoint& point)
 {
@@ -366,14 +395,11 @@ cwCoordinateTransform::domainCheck(const QString& cs, const cwGeoPoint& point)
     // Per-thread cache keyed by the CS and the horizontal coordinate (z is not
     // part of the domain test). revalidate() re-runs this for every fix on each
     // fix-station edit, and the model recomputes the domain roles per row on each
-    // dataChanged; without the cache each call pays a fresh proj_create plus a
-    // proj_create_crs_to_crs. The two valid flags pack into one byte. Capped like
+    // dataChanged; without the cache each call pays a fresh proj_create and
+    // area-of-use lookup. The two valid flags pack into one byte. Capped like
     // isGeographic/nameFor so a long edit session can't grow it unboundedly.
-    thread_local QHash<QString, DomainCheck> cache;
-    const QString cacheKey = key
-        + QLatin1Char('|') + QString::number(point.x, 'g', 17)
-        + QLatin1Char('|') + QString::number(point.y, 'g', 17);
-    return cachedValue(cache, cacheKey, [&]() -> DomainCheck {
+    thread_local QHash<DomainKey, DomainCheck> cache;
+    return cachedValue(cache, DomainKey{key, point.x, point.y}, [&]() -> DomainCheck {
         PJ_CONTEXT* ctx = validatorContext();
         if (!ctx) {
             return {};
@@ -405,8 +431,10 @@ cwCoordinateTransform::domainCheck(const QString& cs, const cwGeoPoint& point)
 
         // Inverse-project the fix into geographic lon/lat to compare against the
         // area of use. normalize_for_visualization (applied by the constructor)
-        // makes the output x=lon, y=lat.
-        cwCoordinateTransform toGeographic(key, Wgs84);
+        // makes the output x=lon, y=lat. Memoized per CS: the cache key above
+        // includes the coordinate, so every keystroke misses it while the
+        // transform it needs is the same one every time.
+        const cwCoordinateTransform& toGeographic = cachedTransform(key, Wgs84);
         if (!toGeographic.isValid()) {
             return {};
         }
