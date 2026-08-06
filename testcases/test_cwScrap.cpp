@@ -23,7 +23,6 @@
 #include "cwRootData.h"
 #include "cwSurveyChunk.h"
 #include "cwTripCalibration.h"
-#include "cwTaskManagerModel.h"
 #include "cwFutureManagerModel.h"
 #include "cwProjectedProfileScrapViewMatrix.h"
 #include "cwJobSettings.h"
@@ -254,7 +253,7 @@ TEST_CASE("Check that auto calculate work outside of trip", "[cwScrap]") {
         root->scrapManager()->warpingSettings()->setUseShotInterpolationSpacing(false);
         root->scrapManager()->warpingSettings()->setUseMaxClosestStations(false);
         root->scrapManager()->warpingSettings()->setUseSmoothingRadius(false);
-        CHECK(root->scrapManager()->automaticUpdate());
+        CHECK(root->updateCoordinator()->automaticUpdate());
 
         fileToProject(root->project(), row.Filename);
         auto project = root->project();
@@ -265,7 +264,6 @@ TEST_CASE("Check that auto calculate work outside of trip", "[cwScrap]") {
 
         // CHECK(!project->cavingRegion()->cave(0)->stationPositionLookup().isEmpty());
 
-        // root->taskManagerModel()->waitForTasks();
         root->futureManagerModel()->waitForFinished();
 
         INFO("Finished after plotManager!");
@@ -294,7 +292,7 @@ TEST_CASE("Auto calculate if survey station change position", "[cwScrap]") {
         root->scrapManager()->warpingSettings()->setUseShotInterpolationSpacing(false);
         root->scrapManager()->warpingSettings()->setUseMaxClosestStations(false);
         root->scrapManager()->warpingSettings()->setUseSmoothingRadius(false);
-        CHECK(root->scrapManager()->automaticUpdate());
+        CHECK(root->updateCoordinator()->automaticUpdate());
 
         fileToProject(root->project(), row.Filename);
         auto project = root->project();
@@ -313,7 +311,6 @@ TEST_CASE("Auto calculate if survey station change position", "[cwScrap]") {
         auto plotManager = root->linePlotManager();
         plotManager->waitToFinish();
 
-        root->taskManagerModel()->waitForTasks();
         root->futureManagerModel()->waitForFinished();
 
         INFO("Finished after plotManager!");
@@ -344,7 +341,6 @@ TEST_CASE("Auto calculate should work on projected profile azimuth", "[cwScrap]"
         auto plotManager = root->linePlotManager();
         plotManager->waitToFinish();
 
-        root->taskManagerModel()->waitForTasks();
         root->futureManagerModel()->waitForFinished();
 
         //Force recalculation
@@ -372,7 +368,6 @@ TEST_CASE("Auto calculate if the scrap type has changed", "[cwScrap]") {
         auto plotManager = root->linePlotManager();
         plotManager->waitToFinish();
 
-        root->taskManagerModel()->waitForTasks();
         root->futureManagerModel()->waitForFinished();
 
         currentScrap->setCalculateNoteTransform(true);
@@ -469,11 +464,13 @@ TEST_CASE("Plan scrap removes grid convergence from the note transform", "[cwScr
     // Build a cave -> trip -> note -> scrap chain in memory, inside a region
     // whose local projection is anchored on a *different* cave, so this cave
     // sits off the frame's central meridian and its grid convergence is
-    // non-zero. Survex folds grid convergence into the plotted stations only
-    // when declination is auto-computed (it leaves manual declination
-    // verbatim, see survex datain.c get_declination). The note transform must
-    // mirror that: remove convergence in addition to declination, but only
-    // when the trip uses auto-declination.
+    // non-zero.
+    //
+    // The plotted stations are grid-aligned whichever way declination is
+    // resolved: cavern folds convergence into `*declination auto`, and the
+    // exporter subtracts it from a literal `*calibrate DECLINATION` because
+    // cavern won't (issue #628). So the note transform removes convergence in
+    // both cases, on top of the declination.
 
     cwCavingRegion region;
     addCaveFixedAt(&region, QStringLiteral("anchor"), kAnchorEasting);
@@ -527,16 +524,23 @@ TEST_CASE("Plan scrap removes grid convergence from the note transform", "[cwScr
               == Catch::Approx(expectedConvergence.value()).margin(1e-6));
     }
 
-    SECTION("Manual declination: convergence is left in (survex does not remove it)") {
+    SECTION("Manual declination: convergence is removed too (issue #628)") {
         calibration->setAutoDeclination(false);
         calibration->setDeclinationManual(12.5);
 
         const double declination = calibration->declination();
         const double adjusted = scrap->noteTransformAdjustedDeclination().north;
 
-        const double expected =
-            cwNoteTranformation::northAdjustedForDeclination(rawNorth, declination);
+        // Same as the auto case: manual declination is a pure magnetic
+        // declination, so grid convergence is applied on top of it.
+        const double expected = cwWrapDegrees360(
+            rawNorth - declination + expectedConvergence.value());
         CHECK(adjusted == Catch::Approx(expected).epsilon(1e-6));
+
+        const double declinationOnly =
+            cwNoteTranformation::northAdjustedForDeclination(rawNorth, declination);
+        CHECK(cwWrapDegrees360(adjusted - declinationOnly)
+              == Catch::Approx(expectedConvergence.value()).margin(1e-6));
     }
 
     SECTION("Non-plan scraps ignore both declination and convergence") {
@@ -642,7 +646,6 @@ TEST_CASE("Auto-calculate scrap transform handles declination correctly", "[cwSc
 
     auto settle = [&]() {
         root->linePlotManager()->waitToFinish();
-        root->taskManagerModel()->waitForTasks();
         root->futureManagerModel()->waitForFinished();
     };
 

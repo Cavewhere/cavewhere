@@ -38,11 +38,20 @@ void writeCalibration(QTextStream& stream, const QString& type, double value, do
  * block's `*declination auto` instead of overriding it with the zero that was
  * asked for. Cavern honors the explicit zero — cmd_calibrate stores 0 rather
  * than HUGE_REAL, and get_declination tests that slot before the auto path.
+ *
+ * \a gridConvergence is subtracted first, with a comment saying so. CaveWhere's
+ * declination is a pure magnetic declination (magnetic -> true), and cavern
+ * folds convergence (true -> grid) into `*declination auto` only, never into a
+ * literal `*calibrate DECLINATION` (survex datain.c get_declination) — so
+ * without this the literal path plots to true north while the auto path plots
+ * to grid north (issue #628). Zero for a block with no grid, which leaves the
+ * value untouched.
  */
 void writeDeclinationCalibration(QTextStream& stream,
                                  bool autoDeclination,
                                  double declination,
-                                 bool autoDeclinationInScope);
+                                 bool autoDeclinationInScope,
+                                 double gridConvergence = 0.0);
 
 /**
  * The *cs in scope in the block being written.
@@ -80,6 +89,19 @@ struct DeclinationContext {
 //! The first fix in `fixes` that can stand for the whole scope, or nothing when
 //! none can.
 std::optional<DeclinationContext> makeDeclinationContext(const QList<cwFixStation>& fixes);
+
+/**
+ * Grid convergence in degrees at \a ctx's location, read in \a outputCS — the
+ * system `*cs out` names, which is the only grid the solved stations are ever
+ * plotted in. A fix's own inputCS says where the cave is, not which grid the
+ * answer is about, so the location is transformed into \a outputCS first.
+ *
+ * Zero when the block has no representative location, when nothing named an
+ * output system (cavern then solves in no projection, so there is no grid to
+ * converge to), or when PROJ can't bridge the two systems.
+ */
+double gridConvergenceForBlock(const std::optional<DeclinationContext>& ctx,
+                               const QString& outputCS);
 
 /**
  * Emit the cave block's `*declination auto X Y Z`, preceded by a `*cs` when

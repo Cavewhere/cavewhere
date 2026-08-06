@@ -24,7 +24,6 @@ class cwCave;
 class cwCavingRegion;
 class cwTrip;
 class cwScrapManager;
-class cwTaskManagerModel;
 class cwRegionLoadTask;
 class cwErrorListModel;
 class cwFutureManagerModel;
@@ -50,6 +49,7 @@ class cwRemoteAuthProvider;
 #include <QFuture>
 #include <QQmlEngine>
 #include <functional>
+#include <memory>
 #include <optional>
 class QUndoStack;
 
@@ -226,7 +226,16 @@ public slots:
 
 private:
     QString rawRemoteUrlString() const;
-    bool beginSyncOperation(const QFuture<Monad::ResultBase>& operationFuture);
+
+    // Owns the single future that represents one sync click for its entire
+    // lifetime. Constructing it acquires the "Syncing" job and marks SyncFuture
+    // running. Each terminal gate stage calls finish() to release the job; the
+    // destructor is a safety net that finishes a cycle torn down (e.g. the auth
+    // provider died mid-gate) before reaching a terminal.
+    struct SyncCycle;
+    std::shared_ptr<SyncCycle> startSyncCycle();
+    void runSyncOperation(const std::shared_ptr<SyncCycle>& cycle,
+                          const QFuture<Monad::ResultBase>& operationFuture);
     void setModified(bool modified);
 
     //! Seed the region's unitSystem from the app-level default. Runs only at
@@ -256,8 +265,6 @@ private:
     bool ConvertedFromSqlite; //!< True when a SQLite .cw was auto-converted; distinguishes from a genuine bundled .cw zip
     QString BundledArchivePath;
 
-    //Task manager, for visualizing running tasks
-    QPointer<cwTaskManagerModel> TaskManager;
     cwFutureManagerToken FutureToken; //!<
     QPointer<cwRemoteAuthProvider> m_authProvider;
 
@@ -289,7 +296,7 @@ private:
     bool emitVersionGuardError(const QString& action);
     void setSqliteTemporaryProject(bool isTemp);
     void completeSyncOperation(const Monad::ResultBase& result);
-    bool continueSyncAfterGates();
+    void continueSyncAfterGates(const std::shared_ptr<SyncCycle>& cycle);
 
     // void addImageHelper(std::function<void (QList<cwImage>)> outputCallBackFunc,
     //                     std::function<void (cwAddImageTask*)> setImagesFunc);

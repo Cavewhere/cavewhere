@@ -14,6 +14,7 @@
 
 //Our includes
 #include "cwGlobals.h"
+#include "cwVisibilityProxy.h"
 class cwLeadView;
 class cwScrap;
 
@@ -26,27 +27,21 @@ class cwScrap;
  * cwLinePlotTripVisibility. It holds the cwScrap (not the LeadPoint list, which
  * is rebuilt as leads come and go) so it stays valid across those rebuilds.
  */
-class CAVEWHERE_LIB_EXPORT cwLeadVisibility : public QObject
+class CAVEWHERE_LIB_EXPORT cwLeadVisibility : public cwVisibilityProxy
 {
     Q_OBJECT
-    Q_PROPERTY(bool visible READ isVisible WRITE setVisible NOTIFY visibleChanged FINAL)
 
 public:
     cwLeadVisibility(cwLeadView* view, cwScrap* scrap, QObject* parent = nullptr);
 
-    bool isVisible() const { return m_visible; }
     cwScrap* scrap() const { return m_scrap; }
 
-public slots:
-    void setVisible(bool visible);
-
-signals:
-    void visibleChanged();
+protected:
+    void applyVisible(bool visible) override;
 
 private:
     QPointer<cwLeadView> m_view;
     QPointer<cwScrap> m_scrap;
-    bool m_visible = true;
 };
 
 #endif // CWLEADVISIBILITY_H

@@ -46,6 +46,41 @@ MainWindowTest {
             resetSpy.wait();
         }
 
+        // Long enough for one reset animation (cwBaseTurnTableInteraction's
+        // DefaultStateAnimationDurationMs is 1000 ms) plus slack, because a
+        // second click restarts the animation from wherever it got to: poll
+        // faster than this and the retry below would keep resetting the very
+        // animation it is waiting on, and never see one finish.
+        readonly property int framableAttemptMs: 2000
+        readonly property int framableAttempts: 5
+        readonly property int framablePollMs: 50
+
+        // Reset animates only over geometry the picker has accepted, and the
+        // line plot reaches the picker asynchronously after the solve: its
+        // pick-ready gate keeps the plot hidden until the sub-BVH lands, so
+        // until then the scene has nothing to frame and Reset takes the
+        // un-animated fallback, which emits no animationFinished.
+        //
+        // The solve finishing is not that moment. It used to be close enough to
+        // it, because the survey edits each ran their own solve and an early one
+        // opened the gate long before the last one published a cavern log; the
+        // update coordinator now batches them into a single pass, so the log and
+        // the plot's first registration land together. Click until one reset
+        // animates — after that the gate stays open and every reset animates.
+        function waitForFramableScene(resetViewButton) {
+            for (let attempt = 0; attempt < framableAttempts; attempt++) {
+                resetSpy.clear();
+                mouseClick(resetViewButton);
+                for (let waited = 0; waited < framableAttemptMs; waited += framablePollMs) {
+                    if (resetSpy.count > 0) {
+                        return;
+                    }
+                    wait(framablePollMs);
+                }
+            }
+            fail("the scene never became framable");
+        }
+
         // The scene geometry (line plot, scraps) registers into the intersecter
         // asynchronously after load, growing the scene bounding box and thus the
         // framed view. Reset until the framed zoom stops changing, so a captured
@@ -73,10 +108,11 @@ MainWindowTest {
 
             let resetViewButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->cameraOptions->resetViewButton")
 
-            //Wait for the line-plot solve to finish, then settle the framing so
-            //the scene bounding box (and thus the framed view) is stable before
-            //capturing a reference reset.
+            //Wait for the line-plot solve to finish and its geometry to reach the
+            //picker, then settle the framing so the scene bounding box (and thus
+            //the framed view) is stable before capturing a reference reset.
             tryVerify(() => RootData.linePlotManager.cavernLog.length > 0)
+            waitForFramableScene(resetViewButton);
 
             //Establish the canonical framed view (ortho). Reset frames the scene
             //bounding box, so the reference is the post-reset state, not the

@@ -67,14 +67,15 @@ void cwSurvexExporterRule::setSurvexFileName(cwFileNameArtifact* survexFilename)
 
 ResultBase cwSurvexExporterRule::writeTrip(QTextStream &stream,
                                            const cwSurveyDataArtifact::Trip& trip,
-                                           bool autoDeclinationInScope)
+                                           bool autoDeclinationInScope,
+                                           double gridConvergence)
 {
     //Write header
     stream << "*begin ; " << trip.name << Qt::endl;
 
     writeDate(stream, trip.date);
     writeTeamData(stream, trip.teamMembers);
-    writeCalibrations(stream, trip.calibration, autoDeclinationInScope);
+    writeCalibrations(stream, trip.calibration, autoDeclinationInScope, gridConvergence);
     stream << Qt::endl;
     writeShotData(stream, trip);
     stream << Qt::endl;
@@ -106,9 +107,14 @@ ResultBase cwSurvexExporterRule::writeCave(QTextStream& stream,
         cwSurvexExporterUtils::writeBlockDeclinationAuto(stream, cave.fixStations,
                                                         anyTripUsesAuto, csScope);
 
+    // One convergence for the whole cave: it is a property of the grid at the
+    // cave's location, and every trip inside is solved on the same grid.
+    const double gridConvergence = cwSurvexExporterUtils::gridConvergenceForBlock(
+        cwSurvexExporterUtils::makeDeclinationContext(cave.fixStations), globalCS);
+
     for(int i = 0; i < cave.trips.size(); i++) {
         const cwSurveyDataArtifact::Trip& trip = cave.trips.at(i);
-        writeTrip(stream, trip, autoDeclinationInScope);
+        writeTrip(stream, trip, autoDeclinationInScope, gridConvergence);
         stream << Qt::endl;
     }
 
@@ -180,7 +186,8 @@ void cwSurvexExporterRule::updatePipeline()
   */
 void cwSurvexExporterRule::writeCalibrations(QTextStream& stream,
                                              const cwTripCalibrationData& calibrations,
-                                             bool autoDeclinationInScope) {
+                                             bool autoDeclinationInScope,
+                                             double gridConvergence) {
     using namespace cwSurvexExporterUtils;
 
     writeLengthUnits(stream, calibrations.distanceUnit());
@@ -200,7 +207,8 @@ void cwSurvexExporterRule::writeCalibrations(QTextStream& stream,
     writeCalibration(stream, QStringLiteral("BACKCLINO"), calibrations.backClinoCalibration(), backClinoScale);
 
     writeDeclinationCalibration(stream, calibrations.autoDeclination(),
-                                calibrations.declinationManual(), autoDeclinationInScope);
+                                calibrations.declinationManual(), autoDeclinationInScope,
+                                gridConvergence);
 }
 
 /**

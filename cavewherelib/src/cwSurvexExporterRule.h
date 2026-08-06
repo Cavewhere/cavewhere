@@ -112,10 +112,12 @@ public:
                                        const QString& globalCS = QString());
     //! \a autoDeclinationInScope says an enclosing block already carries
     //! `*declination auto`, so a trip with auto on writes no declination line
-    //! and inherits it.
+    //! and inherits it. \a gridConvergence is subtracted from a literal
+    //! declination — see cwSurvexExporterUtils::writeDeclinationCalibration.
     static Monad::ResultBase writeTrip(QTextStream& stream,
                                        const cwSurveyDataArtifact::Trip& trip,
-                                       bool autoDeclinationInScope = false);
+                                       bool autoDeclinationInScope = false,
+                                       double gridConvergence = 0.0);
 
 signals:
     void surveyDataChanged();
@@ -135,7 +137,8 @@ private:
 
     static void writeCalibrations(QTextStream& stream,
                                   const cwTripCalibrationData& calibrations,
-                                  bool autoDeclinationInScope);
+                                  bool autoDeclinationInScope,
+                                  double gridConvergence);
 
     static void writeLengthUnits(QTextStream &stream, cwUnits::LengthUnit unit);
     static void writeShotData(QTextStream &stream, const cwSurveyDataArtifact::Trip trip, int textPadding = -11);

@@ -135,6 +135,17 @@ public:
     cwCave* parentCave() const;
     cwTripCalibration* tripCalibration() const;
 
+    //! The project's unit system, or Metric when the scrap isn't under a trip
+    //! yet. Delegates up to cwTrip::unitSystem() — the project default.
+    cwUnits::UnitSystem unitSystem() const;
+
+    //! The unit the trip's shots were surveyed in — the in-cave half of an
+    //! auto-calculated paper scale. Reads meters until the scrap is under a
+    //! trip, which cwScrapManager corrects on attach.
+    cwUnits::LengthUnit distanceUnit() const;
+
+    void updateNoteTransformUnits();
+
     cwAbstractScrapViewMatrix* viewMatrix() const;
     ScrapType type() const;
     void setType(ScrapType type);
@@ -175,6 +186,32 @@ public:
 
     cwNoteTranformation* noteTransformation() const;
     cwNoteTransformationData noteTransformAdjustedDeclination() const;
+
+    // A scrap is stored in the note's local frame - no declination, no grid
+    // convergence - while the plotted stations are grid aligned. Both
+    // resolutions that bridge the two, bundled so a consumer takes them
+    // together: the note transform (north; #628) and the view matrix (a manual
+    // projected-profile azimuth; #644). Where a resolution is a no-op - other
+    // scrap types, auto azimuths - the bundle carries the stored value.
+    struct ResolvedPlacement {
+        cwNoteTransformationData noteTransform;
+        std::unique_ptr<cwAbstractScrapViewMatrix::Data> viewMatrix;
+
+        /// Cave coordinates -> page (meters). Running profiles build their own
+        /// per-shot view rotation, so they place stations with this alone.
+        QMatrix4x4 caveToPageMatrix() const;
+
+        /// World -> page (meters) for plan and projected profiles: the resolved
+        /// view projection composed with caveToPageMatrix(), so a page-space
+        /// consumer can't apply one resolution without the other.
+        QMatrix4x4 worldToPageMatrix() const;
+    };
+
+    // Callers placing scrap geometry or stations into the grid-aligned 3D plot
+    // use this, not the raw noteTransformation()/viewMatrix() (issues #628, #644).
+    // Triangulation is the one consumer that unbundles it, because the worker
+    // recomposes the two halves itself deep inside cwTriangulateTask.
+    ResolvedPlacement resolvedPlacement() const;
 
     // Seed the note-transformation scale's display units from a project unit
     // system (metric cm/m, imperial in/ft) for a new scrap. The scale's value is
@@ -346,12 +383,26 @@ private:
     cwNoteTransformationData noteTransformAdjustedDeclination(cwNoteTransformationData transformation) const;
 
     /// Grid-convergence correction (degrees) that the plotted stations carry,
-    /// or 0.0 when it doesn't apply. Survex folds grid convergence into the
-    /// plot only when declination is auto-computed (manual declination is
-    /// verbatim, see survex datain.c get_declination), and only Plan scraps
-    /// store north in the grid-aligned magnetic frame. Storage subtracts this
-    /// and the read side adds it back, so the store/read round-trip cancels.
-    double autoDeclinationGridConvergence() const;
+    /// or 0.0 when it doesn't apply. Grid convergence is a property of the
+    /// projection at the fix station, independent of whether declination is
+    /// auto-computed or manual, so it applies in both cases (issue #628). Only
+    /// Plan scraps store north in the grid-aligned magnetic frame. Storage
+    /// subtracts this and the read side adds it back, so the store/read
+    /// round-trip cancels.
+    double planGridConvergence() const;
+
+    /// Grid-north adjustment (degrees) applied to a manual projected-profile
+    /// azimuth before it drives the plot. A typed or drawn azimuth is a compass
+    /// bearing (magnetic); the plotted stations are grid-aligned, so resolve
+    /// grid = magnetic + declination - convergence. Returns 0.0 for
+    /// non-projected scraps, for auto azimuths (already grid from the minimizer
+    /// fit), and when there's no trip calibration (issue #644).
+    double projectedProfileAzimuthAdjustment() const;
+
+    /// Clone of the view matrix Data with a manual projected-profile azimuth
+    /// resolved to grid; identical to the stored data for every other case.
+    /// Builds the view half of resolvedPlacement() (issue #644).
+    std::unique_ptr<cwAbstractScrapViewMatrix::Data> resolvedViewMatrixData() const;
 
 private slots:
 //    void updateStationsWithNewCave();

@@ -9,13 +9,13 @@
 #include "cwRootData.h"
 #include "TestHelper.h"
 #include "asyncfuture.h"
-#include "cwTaskManagerModel.h"
 #include "cwCave.h"
 #include "cwTrip.h"
 #include "cwSurveyChunk.h"
 #include "cwNote.h"
 #include "cwSurveyNoteModel.h"
 #include "cwLinePlotManager.h"
+#include "cwUpdateCoordinator.h"
 #include "cwJobSettings.h"
 // #include "cwScrapsEntity.h"
 #include "cwProjectedProfileScrapViewMatrix.h"
@@ -42,6 +42,17 @@
 
 //Async includes
 #include "asyncfuture.h"
+
+namespace {
+    //What the "Compute Scraps" menu item does. The manager has no single call for
+    //it on purpose: marking is what makes it every scrap rather than the dirty
+    //ones, and the drive that follows is the ordinary reading of the state.
+    void computeAllScraps(cwScrapManager* scrapManager)
+    {
+        scrapManager->markAllScrapsDirty();
+        scrapManager->runIfNeeded();
+    }
+}
 
 static void requireAutomaticUpdatesEnabled()
 {
@@ -71,7 +82,7 @@ TEST_CASE("cwScrapManager should make the file size grow when re-calculaing scra
         QElapsedTimer timer;
         for(int i = 0; i < numberOfRuns; i++) {
             timer.restart();
-            scrapManager->updateAllScraps();
+            computeAllScraps(scrapManager);
             scrapManager->waitForFinish();
             runTime.append(timer.nsecsElapsed());
         }
@@ -93,7 +104,7 @@ TEST_CASE("cwScrapManager should make the file size grow when re-calculaing scra
             timer.setInterval(waitTime * 1e-6);
             timer.start();
 
-            scrapManager->updateAllScraps();
+            computeAllScraps(scrapManager);
 
             QEventLoop eventLoop;
             QObject::connect(&timer, &QTimer::timeout, &eventLoop, &QEventLoop::quit);
@@ -121,23 +132,27 @@ TEST_CASE("cwScrapManager auto update should work propertly", "[cwScrapManager]"
     cwSignalSpy addRowSpy(rootData->futureManagerModel(), &cwFutureManagerModel::rowsInserted);
 
     auto scrapManager = rootData->scrapManager();
-    CHECK(scrapManager->automaticUpdate() == true);
+    auto coordinator = rootData->updateCoordinator();
+    CHECK(coordinator->automaticUpdate() == true);
 
-    scrapManager->setAutomaticUpdate(false);
-    CHECK(scrapManager->automaticUpdate() == false);
+    coordinator->setAutomaticUpdate(false);
+    CHECK(coordinator->automaticUpdate() == false);
 
-    //Change the station position
     auto cave = rootData->region()->cave(0);
     auto trip = cave->trip(0);
-    auto chunk = trip->chunk(0);
-    chunk->setData(cwSurveyChunk::ShotDistanceRole, 0, "10.0");
-
     auto notes = trip->notes()->notes();
     REQUIRE(notes.size() > 0);
     auto note = notes.first();
     REQUIRE(note->scraps().size() > 0);
     auto scraps = note->scraps();
     auto scrap = scraps.first();
+
+    //Dirty the scraps while auto update is off. The single coordinator gates
+    //the whole pipeline, so a warping change (which marks scraps dirty on its
+    //own) is used rather than a station move, whose line-plot solve would also
+    //be deferred.
+    auto warping = scrapManager->warpingSettings();
+    warping->setGridResolutionMeters(warping->gridResolutionMeters() + 1.0);
 
     rootData->futureManagerModel()->waitForFinished();
     CHECK(scrapManager->dirtyScraps().contains(scrap));
@@ -150,7 +165,7 @@ TEST_CASE("cwScrapManager auto update should work propertly", "[cwScrapManager]"
         auto pendingScraps = scrapManager->dirtyScraps();
         CHECK(pendingScraps.contains(scrap));
 
-        scrapManager->setAutomaticUpdate(true);
+        coordinator->setAutomaticUpdate(true);
 
         rootData->futureManagerModel()->waitForFinished();
         scrapManager->waitForFinish();
@@ -161,6 +176,121 @@ TEST_CASE("cwScrapManager auto update should work propertly", "[cwScrapManager]"
     });
 
     loop.exec();
+}
+
+TEST_CASE("A single Run resolves the line-plot to scraps cascade with automatic update off", "[cwScrapManager]") {
+    // Regression for the F1 "press Run twice" trap: with automatic update off, a
+    // survey edit defers the line-plot solve. One Run (updateNow) must solve the
+    // line plot AND carry the station-position change through to the scraps it
+    // dirties on completion, leaving nothing stale — the user never has to press
+    // Run a second time.
+    requireAutomaticUpdatesEnabled();
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+    fileToProject(project, testcasesDatasetPath("test_cwScrapManager/scrapGuessNeigborPlan.cw"));
+    rootData->futureManagerModel()->waitForFinished();
+
+    auto scrapManager = rootData->scrapManager();
+    auto linePlotManager = rootData->linePlotManager();
+    auto coordinator = rootData->updateCoordinator();
+    REQUIRE(scrapManager);
+    REQUIRE(linePlotManager);
+
+    coordinator->setAutomaticUpdate(false);
+    REQUIRE(coordinator->automaticUpdate() == false);
+
+    auto cave = rootData->region()->cave(0);
+    auto trip = cave->trip(0);
+    REQUIRE(trip->chunkCount() > 0);
+    auto chunk = trip->chunk(0);
+    auto note = trip->notes()->notes().first();
+    REQUIRE(note->scraps().size() > 0);
+    auto scrap = note->scraps().first();
+
+    // Everything is clean and settled to start.
+    rootData->futureManagerModel()->waitForFinished();
+    REQUIRE(coordinator->needsUpdate() == false);
+    REQUIRE(scrapManager->dirtyScraps().contains(scrap) == false);
+
+    // Edit a survey shot: this dirties the line plot only. With automatic update
+    // off nothing solves, so the scrap stays clean (it is dirtied later, by the
+    // line-plot solve moving station positions).
+    cwSignalSpy scrapsCascadeSpy(linePlotManager,
+                                 &cwLinePlotManager::stationPositionInScrapsChanged);
+    chunk->setData(cwSurveyChunk::ShotDistanceRole, 0, "25.0");
+    rootData->futureManagerModel()->waitForFinished();
+
+    CHECK(coordinator->needsUpdate() == true);          // line plot is dirty
+    CHECK(scrapManager->dirtyScraps().contains(scrap) == false); // scrap not yet
+    CHECK(scrapsCascadeSpy.count() == 0);               // nothing solved
+
+    // One Run.
+    coordinator->updateNow();
+
+    // Drain the whole cascade: the line-plot solve completes, dirties the
+    // scraps, and the still-open forced update runs them too.
+    for(int i = 0; i < 20 && (coordinator->needsUpdate()
+                              || rootData->futureManagerModel()->rowCount() > 0
+                              || linePlotManager->updateState() == cwUpdatable::State::Working
+                              || scrapManager->updateState() == cwUpdatable::State::Working); ++i) {
+        rootData->futureManagerModel()->waitForFinished();
+        linePlotManager->waitToFinish();
+        scrapManager->waitForFinish();
+        QCoreApplication::processEvents();
+    }
+
+    // The cascade actually fired for THIS scrap — assert the scrap itself
+    // appears in a stationPositionInScrapsChanged payload, not merely that some
+    // solve emitted (that signal fires per successful solve regardless of which
+    // scraps moved). Guards against dataset drift silently making the test pass.
+    const auto scrapCascaded = [&]() {
+        for(const auto& emission : scrapsCascadeSpy) {
+            if(emission.at(0).value<QList<cwScrap*>>().contains(scrap)) {
+                return true;
+            }
+        }
+        return false;
+    };
+    CHECK(scrapCascaded());
+    // ...and one Run resolved it: nothing stale, no second press needed.
+    CHECK(coordinator->needsUpdate() == false);
+    CHECK(scrapManager->dirtyScraps().contains(scrap) == false);
+}
+
+TEST_CASE("Scrap pipeline reports Working while a triangulation task is in flight",
+          "[cwScrapManager]")
+{
+    // updateState() must distinguish "dirty and idle" (Dirty) from "dirty and
+    // computing" (Working): the restarter queues its start, so the task is in
+    // flight — but not yet finished — the moment the forced update() returns.
+    requireAutomaticUpdatesEnabled();
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+    fileToProject(project, testcasesDatasetPath("test_cwScrapManager/scrapGuessNeigborPlan.cw"));
+    rootData->futureManagerModel()->waitForFinished();
+
+    auto scrapManager = rootData->scrapManager();
+    REQUIRE(scrapManager);
+
+    // Settle to Clean.
+    scrapManager->waitForFinish();
+    rootData->futureManagerModel()->waitForFinished();
+    QCoreApplication::processEvents();
+    REQUIRE(scrapManager->updateState() == cwUpdatable::State::Clean);
+
+    // Recompute every scrap. Marking makes the pipeline Dirty, so the drive
+    // dispatches a task; the restarter's start is queued, so the pipeline is
+    // Working (task dispatched, not yet finished) synchronously here.
+    computeAllScraps(scrapManager);
+    CHECK(scrapManager->updateState() == cwUpdatable::State::Working);
+
+    // Drain to completion — back to Clean, never stuck Working.
+    for(int i = 0; i < 20 && scrapManager->updateState() != cwUpdatable::State::Clean; ++i) {
+        rootData->futureManagerModel()->waitForFinished();
+        scrapManager->waitForFinish();
+        QCoreApplication::processEvents();
+    }
+    CHECK(scrapManager->updateState() == cwUpdatable::State::Clean);
 }
 
 
@@ -205,6 +335,63 @@ TEST_CASE("cwScrapManager shouldn't update scraps that are invalid", "[cwScrapMa
     scrap->removeStation(0);
     CHECK(rootData->futureManagerModel()->rowCount() == 1);
     rootData->futureManagerModel()->waitForFinished();
+}
+
+TEST_CASE("Deleting the last dirty scrap announces the pipeline is clean",
+          "[cwScrapManager]") {
+    // Removing a scrap drops it from the dirty set, which can take the pipeline
+    // from Dirty straight to Clean. That transition has to be announced like any
+    // other, or the coordinator's aggregate goes stale: the footer keeps offering
+    // Run for work that no longer exists.
+    requireAutomaticUpdatesEnabled();
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    fileToProject(project, testcasesDatasetPath("test_cwScrapManager/ProjectProfile-test-v3.cw"));
+    rootData->futureManagerModel()->waitForFinished();
+
+    auto scrapManager = rootData->scrapManager();
+    auto coordinator = rootData->updateCoordinator();
+    REQUIRE(scrapManager != nullptr);
+
+    auto notes = project->cavingRegion()->cave(0)->trip(0)->notes()->notes();
+    REQUIRE(notes.size() == 1);
+    auto note = notes.at(0);
+    REQUIRE(note->scraps().size() == 1);
+
+    coordinator->setAutomaticUpdate(false);
+
+    // Settle to Clean so the dirty set is exactly what this test puts in it.
+    scrapManager->waitForFinish();
+    rootData->futureManagerModel()->waitForFinished();
+    QCoreApplication::processEvents();
+    REQUIRE(scrapManager->updateState() == cwUpdatable::State::Clean);
+
+    // Dirty the one scrap without running it: with automatic update off, moving a
+    // station marks the scrap and leaves the run to the coordinator. This is the
+    // state the footer's Run offer is built on.
+    auto scrap = note->scraps().at(0);
+    const QPointF stationPos = scrap->stationData(cwScrap::StationPosition, 0).toPointF();
+    scrap->setStationData(cwScrap::StationPosition, 0, stationPos + QPointF(0.01, 0.0));
+
+    REQUIRE(scrapManager->dirtyScraps().contains(scrap));
+    REQUIRE(scrapManager->updateState() == cwUpdatable::State::Dirty);
+    REQUIRE(coordinator->needsUpdate());
+
+    cwSignalSpy pipelineSpy(scrapManager, &cwScrapManager::updateStateChanged);
+    cwSignalSpy aggregateSpy(coordinator, &cwUpdateCoordinator::needsUpdateChanged);
+
+    // Delete the only dirty scrap. Nothing is left to compute. removeScraps uses
+    // deleteLater, and plain processEvents() doesn't flush deferred deletes, so
+    // ask for them explicitly — the manager reacts to the scrap's destroyed().
+    note->removeScraps(0, 0);
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    QCoreApplication::processEvents();
+
+    CHECK(scrapManager->updateState() == cwUpdatable::State::Clean);
+    CHECK(pipelineSpy.count() > 0);
+    CHECK_FALSE(coordinator->needsUpdate());
+    CHECK(aggregateSpy.count() == 1);
 }
 
 TEST_CASE("cwScrapManager should update on viewMatrix change", "[cwScrapManager]") {

@@ -10,7 +10,7 @@
 #include "cwLabel3dView.h"
 
 cwLabel3dGroup::cwLabel3dGroup(cwLabel3dView *parent) :
-    QObject(parent),
+    cwVisibilityProxy(parent),
     m_parentView(nullptr)
 {
     setParentView(parent);
@@ -49,15 +49,8 @@ void cwLabel3dGroup::setLabels(QList<cwLabel3dItem> labels) {
     }
 }
 
-void cwLabel3dGroup::setVisible(bool visible) {
-    if(m_visible == visible) {
-        return;
-    }
-    m_visible = visible;
-
+void cwLabel3dGroup::applyVisible(bool) {
     if(m_parentView != nullptr) {
         m_parentView->updateGroup(this);
     }
-
-    emit visibleChanged();
 }

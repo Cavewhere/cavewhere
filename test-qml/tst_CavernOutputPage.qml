@@ -68,10 +68,6 @@ MainWindowTest {
             verify(status !== null, "statusLabel must exist")
             compare(status.text, qsTr("Last solve completed successfully."))
 
-            const errorLabel = findChild(page, "errorMessageLabel")
-            verify(errorLabel !== null, "errorMessageLabel must exist")
-            verify(!errorLabel.visible, "error message hidden when no solve error")
-
             const textArea = findChild(page, "cavernLogTextArea")
             verify(textArea !== null, "cavernLogTextArea must exist")
             compare(textArea.text, "")
@@ -112,10 +108,11 @@ MainWindowTest {
         }
 
         function test_rerunButtonInvokesManager() {
-            // The Re-run solve button calls linePlotManager.rerunSurvex();
-            // observe stationPositionInCavesChanged (fires per successful
-            // solve regardless of whether log content changed) as proof a
-            // new solve happened.
+            // The Solve button marks the line plot dirty and then drives it
+            // through updateCoordinator.updateNow(linePlotManager), so it solves
+            // even though nothing had changed. Observe stationPositionInCavesChanged
+            // (fires per successful solve regardless of whether log content
+            // changed) as proof a new solve happened.
             TestHelper.loadProjectFromFile(
                 RootData.project,
                 TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"))
@@ -136,7 +133,7 @@ MainWindowTest {
             RootData.futureManagerModel.waitForFinished()
 
             tryVerify(() => spy.count >= 1, 5000,
-                      "stationPositionInCavesChanged should fire after rerunSurvex()")
+                      "stationPositionInCavesChanged should fire after the solve")
 
             // After the rerun the cavern log is still populated (unchanged or
             // identical content — either way the manager state must hold).

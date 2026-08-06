@@ -4298,7 +4298,9 @@ void cwSaveLoad::connectScrap(cwScrap *scrap)
         saveNote();
     };
     connect(scrap->noteTransformation(), &cwNoteTranformation::northUpChanged, this, saveManualScrapTransform);
-    connect(scrap->noteTransformation(), &cwNoteTranformation::scaleChanged, this, saveManualScrapTransform);
+    //A manual scale's units are stored data, so persist on the data signal — the
+    //ratio-only scaleChanged would miss the user picking ft over m
+    connect(scrap->noteTransformation(), &cwNoteTranformation::scaleDataChanged, this, saveManualScrapTransform);
 
     auto connectProjectedViewMatrixSignals = [this, saveManualScrapTransform, scrap]() {
         if (auto projected = qobject_cast<cwProjectedProfileScrapViewMatrix*>(scrap->viewMatrix()))
@@ -4368,7 +4370,7 @@ void cwSaveLoad::connectNoteLiDAR(cwNoteLiDAR *lidarNote)
     connect(lidarNote->noteTransformation(), &cwNoteLiDARTransformation::upModeChanged, this, saveNote);
     connect(lidarNote->noteTransformation(), &cwNoteLiDARTransformation::upCustomChanged, this, saveNote);
     connect(lidarNote->noteTransformation(), &cwNoteLiDARTransformation::northUpChanged, this, saveNote);
-    connect(lidarNote->noteTransformation(), &cwNoteLiDARTransformation::scaleChanged, this, saveNote);
+    connect(lidarNote->noteTransformation(), &cwNoteLiDARTransformation::scaleDataChanged, this, saveNote);
 }
 
 void cwSaveLoad::connectSketch(cwSketch *sketch)
@@ -4398,7 +4400,7 @@ void cwSaveLoad::connectSketch(cwSketch *sketch)
     if (auto* scale = sketch->mapScale()) {
         if (d->trackConnected(scale)) {
             d->connectionChecker.add(scale);
-            connect(scale, &cwScale::scaleChanged, this, saveSketch);
+            connect(scale, &cwScale::dataChanged, this, saveSketch);
         }
     }
 }
@@ -4891,6 +4893,29 @@ void cwSaveLoad::setAuthProvider(cwRemoteAuthProvider* provider)
     updateCredentials();
 }
 
+namespace {
+
+// Surface a phased reconcile operation's live progress on `deferred` as each
+// phase runs: the network prepare (pull/checkout + LFS hydration) during
+// prepareFuture, then the push during finalizeFuture. Tracked in sequence —
+// tracking finalize eagerly would reset the bar to its not-yet-started empty
+// range mid-prepare — so finalize is tracked only once reconcile completes,
+// immediately before it runs. Shared by sync() and gitOperationAndReconcile()
+// so every prepare/reconcile/finalize path surfaces progress the same way.
+void trackPhasedProgress(QObject* context,
+                         const std::shared_ptr<AsyncFuture::Deferred<ResultBase>>& deferred,
+                         const QFuture<ResultBase>& prepareFuture,
+                         const QFuture<ResultBase>& reconcileFuture,
+                         const QFuture<ResultBase>& finalizeFuture)
+{
+    deferred->track(prepareFuture);
+    AsyncFuture::observe(reconcileFuture).context(context, [deferred, finalizeFuture]() {
+        deferred->track(finalizeFuture);
+    });
+}
+
+} // namespace
+
 QFuture<Monad::ResultBase> cwSaveLoad::sync()
 {
     d->lastSyncReport.reset();
@@ -5056,6 +5081,8 @@ QFuture<Monad::ResultBase> cwSaveLoad::sync()
                                                    repo,
                                                    attemptState,
                                                    FinalizeMode::SyncPush);
+
+        trackPhasedProgress(this, syncDeferred, syncPrepareFuture, reconcileFuture, finalizeFuture);
 
         AsyncFuture::observe(finalizeFuture)
                 .context(this, [this, finalizeFuture, retryCount, scheduleAttempt, syncDeferred]() {
@@ -5225,6 +5252,7 @@ QFuture<Monad::ResultBase> cwSaveLoad::gitOperationAndReconcile(const QString& o
                                                FinalizeMode::CheckoutLocal);
 
     auto checkoutDeferred = std::make_shared<AsyncFuture::Deferred<ResultBase>>();
+    trackPhasedProgress(this, checkoutDeferred, checkoutPrepareFuture, reconcileFuture, finalizeFuture);
     AsyncFuture::observe(finalizeFuture)
             .context(this, [this, finalizeFuture, checkoutDeferred]() {
         d->remoteApplyGuard.end();

@@ -25,6 +25,8 @@
 #include "cwSurveyDataArtifact.h"
 #include "cwTrip.h"
 #include "cwTripCalibration.h"
+#include "cwGridConvergence.h"
+#include "cwGeoPoint.h"
 
 //Qt includes
 #include <QBuffer>
@@ -92,6 +94,20 @@ BoulderFixture buildBoulderUtmFixture()
     fixture.cave->fixStations()->appendFixStation(
         makeFix(QStringLiteral("a1"), kUtmZ13N, 478000.0, 4430000.0, 1655.0));
     return fixture;
+}
+
+// The convergence the export is expected to subtract from a literal
+// declination: read in the system *cs out names, at the first fix's location
+// transformed into it. Derived here rather than hard-coded so the assertions
+// stay tied to what PROJ says rather than to a snapshot of it.
+double expectedConvergence(const cwCavingRegion& region)
+{
+    const cwSurveyDataArtifact::Region snapshot(&region);
+    const QString outputCS = cwSurvexExporterUtils::resolveOutputCS(
+        snapshot, QString(), cwSurvexExporterUtils::OutputCSPolicy::Shareable);
+    return cwSurvexExporterUtils::gridConvergenceForBlock(
+        cwSurvexExporterUtils::makeDeclinationContext(snapshot.caves.first().fixStations),
+        outputCS);
 }
 
 QString exportRegion(const cwCavingRegion* region)
@@ -211,9 +227,21 @@ TEST_CASE("cwSurvexExporterRule: autoDeclination off emits literal *calibrate DE
     // Nothing under this cave asked for auto, so no location is written at all.
     CHECK_FALSE(output.contains(QStringLiteral("*declination auto")));
     CHECK(output.contains(QStringLiteral("*calibrate DECLINATION")));
-    // survex literal sign convention is opposite of stored manual: stored
-    // 12.34 → emitted -12.34
-    CHECK(output.contains(QStringLiteral("-12.34")));
+
+    // Manual declination is a pure magnetic declination, so the exporter
+    // subtracts the fix station's grid convergence before writing the literal
+    // (issue #628) — cavern won't do it for *calibrate DECLINATION. writeCalibration
+    // then flips the sign, so the emitted value is -(12.34 - convergence).
+    const auto convergence = cwGridConvergence::computeAt(
+        cwGeoPoint(478000.0, 4430000.0, 1655.0), kUtmZ13N);
+    REQUIRE_FALSE(convergence.hasError());
+    REQUIRE(convergence.value() != 0.0);
+    const double emitted = -(12.34 - convergence.value());
+    CHECK(output.contains(QString::number(emitted, 'f', 2)));
+    // The plain magnetic value must NOT appear as the calibrate value.
+    CHECK_FALSE(output.contains(QStringLiteral("DECLINATION -12.34")));
+    // A comment explains the adjustment so the export isn't confusing.
+    CHECK(output.contains(QStringLiteral("grid convergence")));
 }
 
 TEST_CASE("cwSurvexExporterRule: a manual zero is spelled out when it has to override an inherited *declination auto",
@@ -231,15 +259,43 @@ TEST_CASE("cwSurvexExporterRule: a manual zero is spelled out when it has to ove
     const QString output = exportRegion(fixture.region.get());
     INFO(output.toStdString());
 
+    // The cave is georeferenced, so the zero is written as the grid convergence
+    // that lands a magnetic-zero survey on grid north — still an explicit
+    // override of the inherited auto, just not the digits 0.00.
+    const double convergence = expectedConvergence(*fixture.region);
+    REQUIRE(convergence != 0.0);
+    const QString expected = QStringLiteral("*calibrate DECLINATION %1")
+                                 .arg(-(0.0 - convergence), 0, 'f', 2);
+
     REQUIRE(output.count(QStringLiteral("*declination auto")) == 1);
-    CHECK(output.contains(QStringLiteral("*calibrate DECLINATION 0.00")));
-    CHECK(output.indexOf(QStringLiteral("*calibrate DECLINATION 0.00"))
-          > output.indexOf(QStringLiteral("*declination auto")));
+    CHECK(output.contains(expected));
+    CHECK(output.indexOf(expected) > output.indexOf(QStringLiteral("*declination auto")));
 }
 
-TEST_CASE("cwSurvexExporterRule: a manual zero stays implicit when no *declination auto is in scope",
+TEST_CASE("cwSurvexExporterRule: a manual zero stays implicit when there is no grid and nothing to override",
           "[cwSurvexExporter_Auto]")
 {
+    // Un-georeferenced, so there is no *cs out and no grid to converge to. Zero
+    // is survex's default, and writing it would be noise in every trip of every
+    // project that never touches declination.
+    auto fixture = buildUnfixedFixture(QStringLiteral("LocalCave"),
+                                       QStringLiteral("LocalTrip"));
+    fixture.calibration->setAutoDeclination(false);
+    fixture.calibration->setDeclinationManual(0.0);
+
+    const QString output = exportRegion(fixture.region.get());
+    INFO(output.toStdString());
+
+    CHECK_FALSE(output.contains(QStringLiteral("*declination auto")));
+    CHECK_FALSE(output.contains(QStringLiteral("*calibrate DECLINATION")));
+}
+
+TEST_CASE("cwSurvexExporterRule: a manual zero on a grid is written as the convergence",
+          "[cwSurvexExporter_Auto]")
+{
+    // A manual zero says "my compass reads true north", not "leave my bearings
+    // off the grid" — the plot still has to land in the system *cs out names, so
+    // the convergence is written even though the declination itself is nothing.
     auto fixture = buildBoulderUtmFixture();
     fixture.calibration->setAutoDeclination(false);
     fixture.calibration->setDeclinationManual(0.0);
@@ -247,10 +303,12 @@ TEST_CASE("cwSurvexExporterRule: a manual zero stays implicit when no *declinati
     const QString output = exportRegion(fixture.region.get());
     INFO(output.toStdString());
 
-    // With nothing to override, zero is survex's default and writing it would
-    // be noise in every trip of every project that never touches declination.
-    CHECK_FALSE(output.contains(QStringLiteral("*declination auto")));
-    CHECK_FALSE(output.contains(QStringLiteral("*calibrate DECLINATION")));
+    const double convergence = expectedConvergence(*fixture.region);
+    REQUIRE(convergence != 0.0);
+
+    CHECK(output.contains(QStringLiteral("*calibrate DECLINATION %1")
+                              .arg(-(0.0 - convergence), 0, 'f', 2)));
+    CHECK(output.contains(QStringLiteral("grid convergence")));
 }
 
 TEST_CASE("cwSurvexExporterRule: each cave gets its own *declination auto",

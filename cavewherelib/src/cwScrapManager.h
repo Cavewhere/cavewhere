@@ -38,7 +38,6 @@ class cwGLScraps;
 class cwStationPositionLookup;
 class cwRemoveImageTask;
 class cwLinePlotManager;
-class cwTaskManagerModel;
 class cwRegionTreeModel;
 class cwRenderScraps;
 class cwKeywordItemModel;
@@ -53,18 +52,18 @@ class cwSketchManager;
 #include "cwTriangulateWarping.h"
 #include "cwSketchScrapOutline.h"
 #include "cwKeywordItemRegistry.h"
+#include "cwUpdatable.h"
 #include <memory>
 
 /**
     The scrap manager listens to changes in the notes and creates all
     the geometry need to show a scrap in 3d
   */
-class CAVEWHERE_LIB_EXPORT cwScrapManager : public QObject
+class CAVEWHERE_LIB_EXPORT cwScrapManager : public QObject, public cwUpdatableBase
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(ScrapManager)
 
-    Q_PROPERTY(bool automaticUpdate READ automaticUpdate WRITE setAutomaticUpdate NOTIFY automaticUpdateChanged)
     Q_PROPERTY(cwTriangulateWarping* warpingSettings READ warpingSettings CONSTANT)
 
 public:
@@ -113,9 +112,6 @@ public:
 
     Q_INVOKABLE void setRenderScraps(cwRenderTexturedItems* glScraps);
 
-    bool automaticUpdate() const;
-    void setAutomaticUpdate(bool automaticUpdate);
-
     void waitForFinish();
 
     QList<cwScrap*> dirtyScraps() const;
@@ -131,7 +127,7 @@ public:
     Q_INVOKABLE int renderScrapCount() const { return m_scrapToRenderId.size(); }
 
 signals:
-    void automaticUpdateChanged();
+    void updateStateChanged();
 
     // Fires whenever stroke-level state changes for a tracked sketch; downstream
     // consumers (and tests) use this to observe the diff pipeline.
@@ -140,14 +136,39 @@ signals:
     void sketchDiagnosticsChanged(cwSketch* sketch);
 
 public slots:
-    void updateAllScraps();
+    //Marks every scrap in the region dirty without running anything. Public so a
+    //"Compute Scraps" button can pair it with cwUpdateCoordinator::updateNow(this),
+    //where the mark-then-drive split is explained.
+    void markAllScrapsDirty();
 
 private:
+    cwUpdatable::State doUpdateState() const override;
+    QFuture<void> doRun() override;
+
     QPointer<cwRegionTreeModel> RegionModel;
     cwLinePlotManager* LinePlotManager;
 
-    QSet<cwScrap*> DirtyScraps; //These are the scraps that need to be updated
+    // One scrap waiting to be triangulated, with the cave it hung from when it
+    // was marked. The cave is cached so isRunnable() reads only this entry: a
+    // trip destroys its own members before ~QObject deletes the notes holding
+    // its scraps, so walking scrap -> trip -> cave to answer a question about
+    // the scrap reads a dead trip (#637).
+    struct DirtyScrap {
+        cwScrap* scrap = nullptr;
+        QPointer<cwCave> cave;
+
+        bool isRunnable() const;
+        bool operator==(const DirtyScrap&) const = default;
+    };
+
+    QHash<cwScrap*, DirtyScrap> DirtyScraps; //These are the scraps that need to be updated
     QSet<cwScrap*> DeletedScraps; //All the deleted scraps
+
+    // The staleness half of updateState() (see cwUpdatable::State), mirroring the
+    // line plot: set when a scrap is (re)dirtied and cleared at dispatch, so a
+    // fresh edit mid-run reports Dirty rather than Working. The busy half is the
+    // run's future, held by cwUpdatableBase.
+    bool m_workPending = false;
     QHash<cwScrap*, uint32_t> m_scrapToRenderId; //The render id of the scrap
     cwKeywordItemRegistry<cwScrap*> m_keywordRegistry;
 
@@ -159,8 +180,6 @@ private:
 
     //The render scraps that need updating
     QPointer<cwRenderTexturedItems> m_renderScraps;
-
-    bool AutomaticUpdate; //!< 
 
     cwTriangulateWarping* m_warpingSettings = nullptr;
     std::unique_ptr<class cwTriangulateWarpingSettings> m_warpingSettingsStore;
@@ -208,8 +227,13 @@ private:
     void attachScrap(cwScrap* scrap);
     void detachScrap(cwScrap* scrap);
 
+    // The only way into DirtyScraps. Wiring the scrap's destroyed() is what lets
+    // it take itself back out, so inserting without it leaves a pointer the set
+    // outlives.
+    void markScrapDirty(cwScrap* scrap);
+
     void updateScrapGeometry(QList<cwScrap *> scraps = QList<cwScrap*>());
-    void updateScrapGeometryHelper(QList<cwScrap *> scraps);
+    QFuture<void> updateScrapGeometryHelper(QList<cwScrap *> scraps);
     cwTriangulateInData mapScrapToTriangulateInData(cwScrap *scrap) const;
     static QList<cwTriangulateStation> mapNoteStationsToTriangulateStation(QList<cwNoteStation> noteStations,
                                                                            const cwStationPositionLookup& positionLookup);
@@ -260,6 +284,11 @@ private slots:
     void taskFinished(const QList<cwScrap *> &scrapsToUpdate,
                       const QList<cwTriangulatedData>& scrapDataset);
 
+    // Leaves Working: finishes the run's future and emits updateStateChanged.
+    // Called on every task-completion path (taskFinished plus the task lambda's
+    // early returns), since that future is what whoever asked for the run waits on.
+    void finishScrapTask();
+
 };
 
 
@@ -272,17 +301,5 @@ inline uint32_t qHash(const QWeakPointer<cwScrap> &scrapPointer)
 {
     return qHash(scrapPointer.toStrongRef().data());
 }
-
-/**
-Gets automaticUpdate
-
- If true the scrap manager automatically update the 3d geometry of the scrap
-*/
-inline bool cwScrapManager::automaticUpdate() const {
-    return AutomaticUpdate;
-}
-
-
-
 
 #endif // CWSCRAPMANAGER_H

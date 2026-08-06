@@ -196,7 +196,7 @@ QMatrix4x4 cwCamera::qtViewportMatrix() const
   * Creates a ray from the front face to the back face
   * This is useful for intersection
   */
- QRay3D cwCamera::frustrumRay(QPoint point) const
+ QRay3D cwCamera::frustumRay(QPoint point) const
  {
      QVector3D frontPoint = unProject(point, 0.0);
      QVector3D backPoint = unProject(point, 1.0);
@@ -206,7 +206,7 @@ QMatrix4x4 cwCamera::qtViewportMatrix() const
 
  QRay3D cwCamera::rayFromQtViewport(QPointF qtViewportPoint) const
  {
-     return frustrumRay(mapToGLViewport(qtViewportPoint.toPoint()));
+     return frustumRay(mapToGLViewport(qtViewportPoint.toPoint()));
  }
 
  /**

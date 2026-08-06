@@ -109,6 +109,11 @@ bool cwSurvexExporterCaveTask::writeCave(QTextStream& stream, const cwCaveData& 
         cwSurvexExporterUtils::writeBlockDeclinationAuto(stream, cave.fixStations,
                                                         anyTripUsesAuto, csScope);
 
+    // One convergence for the whole cave: it is a property of the grid at the
+    // cave's location, and every trip inside is solved on the same grid.
+    const double gridConvergence = cwSurvexExporterUtils::gridConvergenceForBlock(
+        cwSurvexExporterUtils::makeDeclinationContext(cave.fixStations), globalCS);
+
     //Haven't done anything
     TotalProgress = 0;
 
@@ -137,7 +142,7 @@ bool cwSurvexExporterCaveTask::writeCave(QTextStream& stream, const cwCaveData& 
 
         auto trip = std::make_unique<cwTrip>();
         trip->setData(tripData);
-        TripExporter->writeTrip(stream, trip.get(), autoDeclinationInScope);
+        TripExporter->writeTrip(stream, trip.get(), autoDeclinationInScope, gridConvergence);
         TotalProgress += trip->numberOfStations();
         stream << Qt::endl;
     }

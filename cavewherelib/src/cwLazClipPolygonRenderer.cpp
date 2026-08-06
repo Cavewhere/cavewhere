@@ -50,7 +50,7 @@ cwLazClipPolygonRenderer::cwLazClipPolygonRenderer() = default;
 
 cwLazClipPolygonRenderer::~cwLazClipPolygonRenderer() = default;
 
-void cwLazClipPolygonRenderer::synchronize(QCanvasPainterItem* item)
+void cwLazClipPolygonRenderer::synchronizeData(QCanvasPainterItem* item)
 {
     auto* canvas = static_cast<cwLazClipPolygonCanvas*>(item);
 

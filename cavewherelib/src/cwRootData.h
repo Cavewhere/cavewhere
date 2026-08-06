@@ -23,6 +23,7 @@
 #include "cwCavingRegion.h"
 #include "cwLinePlotManager.h"
 #include "cwScrapManager.h"
+#include "cwUpdateCoordinator.h"
 #include "cwNoteLiDARManager.h"
 #include "cwSketchManager.h"
 #include "cwProject.h"
@@ -33,7 +34,6 @@
 #include "cwQMLReload.h"
 #include "cwLicenseAgreement.h"
 #include "cwRegionSceneManager.h"
-#include "cwTaskManagerModel.h"
 #include "cwFutureManagerModel.h"
 #include "cwPageSelectionModel.h"
 #include "cwSettings.h"
@@ -62,6 +62,7 @@ class CAVEWHERE_LIB_EXPORT cwRootData : public QObject
     Q_PROPERTY(cwCavingRegion* region READ region NOTIFY regionChanged)
     Q_PROPERTY(cwLinePlotManager* linePlotManager READ linePlotManager NOTIFY linePlotManagerChanged)
     Q_PROPERTY(cwScrapManager* scrapManager READ scrapManager NOTIFY scrapManagerChanged)
+    Q_PROPERTY(cwUpdateCoordinator* updateCoordinator READ updateCoordinator CONSTANT)
     Q_PROPERTY(cwNoteLiDARManager* noteLiDARManager READ noteLiDARManager NOTIFY noteLiDARManagerChanged FINAL)
     Q_PROPERTY(cwSketchManager* sketchManager READ sketchManager CONSTANT)
     Q_PROPERTY(cwProject* project READ project NOTIFY projectChanged)
@@ -74,7 +75,6 @@ class CAVEWHERE_LIB_EXPORT cwRootData : public QObject
     Q_PROPERTY(QString version READ version NOTIFY versionChanged)
     Q_PROPERTY(cwLicenseAgreement* license READ license NOTIFY licenseChanged)
     Q_PROPERTY(cwRegionSceneManager* regionSceneManager READ regionSceneManager NOTIFY regionSceneManagerChanged)
-    Q_PROPERTY(cwTaskManagerModel* taskManagerModel READ taskManagerModel CONSTANT)
     Q_PROPERTY(cwFutureManagerModel* futureManagerModel READ futureManagerModel CONSTANT)
     Q_PROPERTY(QQuickGit::Account* account READ account CONSTANT)
     Q_PROPERTY(cwRecentProjectModel* recentProjectModel READ recentProjectModel CONSTANT)
@@ -111,6 +111,7 @@ public:
     cwCavingRegion* region() const;
     cwLinePlotManager* linePlotManager() const;
     cwScrapManager* scrapManager() const;
+    cwUpdateCoordinator* updateCoordinator() const;
     cwProject* project() const;
     cwSurveyImportManager* surveyImportManager() const;
     QUndoStack* undoStack() const;
@@ -120,7 +121,6 @@ public:
     cwLicenseAgreement* license() const;
     cwRegionSceneManager* regionSceneManager() const;
     QScreen* primaryScreen() const;
-    cwTaskManagerModel* taskManagerModel() const;
     cwFutureManagerModel* futureManagerModel() const;
     cwPageSelectionModel* pageSelectionModel() const;
     cwRegionTreeModel* regionTreeModel() const;
@@ -214,6 +214,7 @@ private:
     cwCavingRegion* Region; //!< Where all the data is stored
     cwLinePlotManager* LinePlotManager; //!< For keeping the lineplot updated
     cwScrapManager* ScrapManager; //!< For keeping all the scraps updated (carpeting)
+    cwUpdateCoordinator* UpdateCoordinator; //!< Owns the auto-update policy + staleness aggregate
     cwNoteLiDARManager* NoteLiDARManager; //!< For carpeting lidar scans
     cwSketchManager* SketchManager = nullptr; //!< Rasterises sketch thumbnails into the disk cache
     cwKeywordItemModel* m_keywordItemModel;
@@ -224,7 +225,6 @@ private:
     cwQMLReload* QMLReloader; //!< For reloading the QML data on the fly
     cwLicenseAgreement* License; //!<
     cwRegionSceneManager* RegionSceneManager; //!<
-    cwTaskManagerModel* TaskManagerModel; //!<
     cwFutureManagerModel* FutureManagerModel; //!<
     cwPageSelectionModel* PageSelectionModel; //!<
     cwRegionTreeModel* RegionTreeModel; //!<
@@ -287,6 +287,10 @@ inline cwScrapManager* cwRootData::scrapManager() const {
     return ScrapManager;
 }
 
+inline cwUpdateCoordinator* cwRootData::updateCoordinator() const {
+    return UpdateCoordinator;
+}
+
 /**
   Gets project
   */
@@ -339,14 +343,6 @@ inline cwRegionSceneManager* cwRootData::regionSceneManager() const {
 */
 inline QScreen* cwRootData::primaryScreen() const {
     return QGuiApplication::primaryScreen();
-}
-
-/**
-* @brief cwRootData::taskManagerModel
-* @return The task manager model for visualizing running tasks
-*/
-inline cwTaskManagerModel* cwRootData::taskManagerModel() const {
-    return TaskManagerModel;
 }
 
 /**

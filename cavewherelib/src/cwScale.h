@@ -51,15 +51,26 @@ public:
     static Data defaultData(cwUnits::UnitSystem system);
 
 signals:
+     //! The ratio moved. Relabeling both sides into other units leaves the ratio
+     //! alone and stays quiet here, so geometry consumers don't rebuild for a
+     //! change they can't see — use dataChanged() to track the stored units too.
      void scaleChanged();
+
+     //! Either side's unit or value changed, ratio or not. What persistence
+     //! listens to: "1 in = 20 ft" and "1 in = 6.096 m" are the same scale but
+     //! not the same saved data.
+     void dataChanged();
 
 public slots:
 
 private:
      cwLength* ScaleNumerator; //!< This is the numerator of the scale, usually 1
      cwLength* ScaleDenominator; //!< The scale denominator
+     double m_scale; //!< Last emitted ratio, so scaleChanged() only fires on a real move
+     bool m_settingData = false; //!< Inside setData(), where the two sides move together
 
      void connectLengthObjects();
+     void updateScale();
 
 
 };

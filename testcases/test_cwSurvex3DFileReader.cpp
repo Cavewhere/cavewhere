@@ -12,7 +12,7 @@
 
 TEST_CASE("cwSurvex3DFileReader should return empty lookup for missing file", "[cwSurvex3DFileReader]") {
     cwSurvex3DFileReader reader;
-    auto lookup = reader.readStationPositions("/nonexistent/file.3d");
+    auto lookup = reader.readNetworkAndLookup("/nonexistent/file.3d").lookup;
     CHECK(lookup.isEmpty());
 }
 
@@ -29,12 +29,12 @@ TEST_CASE("cwSurvex3DFileReader should read station positions from .3d file", "[
 
     // Read station positions directly from the .3d file
     cwSurvex3DFileReader reader;
-    cwStationPositionLookup lookup = reader.readStationPositions(cavernResult.value().output3dPath);
+    cwStationPositionLookup lookup =
+        reader.readNetworkAndLookup(cavernResult.value().output3dPath).lookup;
 
     CHECK(!lookup.isEmpty());
 
     // The test dataset has 6 stations: 26, 26a-26e
-    // Expected positions match the existing cwSurvexportCSVTask test dataset
     auto positions = lookup.positions();
     CHECK(positions.size() == 6);
 

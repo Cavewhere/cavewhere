@@ -67,7 +67,8 @@ void cwSurvexExporterTripTask::runTask() {
   */
 void cwSurvexExporterTripTask::writeTrip(QTextStream& stream,
                                          cwTrip* trip,
-                                         bool autoDeclinationInScope) {
+                                         bool autoDeclinationInScope,
+                                         double gridConvergence) {
     //Write header. The `*begin` block is anonymous (the trip name follows as a comment
     //for human readers) and a `*title` directive preserves the name across a round-trip
     //even when it contains characters Survex doesn't allow in block names (e.g. spaces).
@@ -80,7 +81,7 @@ void cwSurvexExporterTripTask::writeTrip(QTextStream& stream,
 
     writeDate(stream, trip->date().date());
     writeTeamData(stream, trip->team());
-    writeCalibrations(stream, trip->calibrations(), autoDeclinationInScope); stream << Qt::endl;
+    writeCalibrations(stream, trip->calibrations(), autoDeclinationInScope, gridConvergence); stream << Qt::endl;
     writeShotData(stream, trip); stream << Qt::endl;
     writeLRUDData(stream, trip);
 
@@ -94,7 +95,8 @@ void cwSurvexExporterTripTask::writeTrip(QTextStream& stream,
   */
 void cwSurvexExporterTripTask::writeCalibrations(QTextStream& stream,
                                                  cwTripCalibration* calibrations,
-                                                 bool autoDeclinationInScope) {
+                                                 bool autoDeclinationInScope,
+                                                 double gridConvergence) {
     using namespace cwSurvexExporterUtils;
 
     writeLengthUnits(stream, calibrations->distanceUnit());
@@ -114,7 +116,8 @@ void cwSurvexExporterTripTask::writeCalibrations(QTextStream& stream,
     writeCalibration(stream, QStringLiteral("BACKCLINO"), calibrations->backClinoCalibration(), backClinoScale);
 
     writeDeclinationCalibration(stream, calibrations->autoDeclination(),
-                                calibrations->declination(), autoDeclinationInScope);
+                                calibrations->declination(), autoDeclinationInScope,
+                                gridConvergence);
 }
 
 /**

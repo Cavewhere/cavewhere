@@ -70,12 +70,22 @@ QVector<QVector3D> deterministicCloud(int count, float range, const QVector3D& t
 // origin) plus a slow ~500k cloud (id 2) in a single build, pumped just long
 // enough that the microsecond point sub-BVH finishes while the cloud is still
 // building. Leaves the build in flight, ready to be cancelled.
+//
+// The beat has to land inside a window with no main-thread signal at either
+// edge: a sub-BVH is banked only when the whole build's finished callback runs,
+// so "the point is done, the cloud is not" is worker-internal state. The window
+// is wide — the 500k build measures ~27ms in a release build, against a
+// single-primitive sub-BVH that costs microseconds — so a few milliseconds sits
+// comfortably in the middle, and a machine slow enough to miss the near edge
+// stretches the far edge by the same factor. Only the far edge can be checked,
+// and it is: an over-long beat used to leave both sub-BVHs banked and the
+// callers failing on a bewildering cache count instead of the broken premise.
 void seedPointAndSlowCloud(cwGeometryItersecter& intersector,
                            const QVector3D& cloudTarget, uint32_t cloudSeed)
 {
     constexpr int kSlowCloudCount = 500'000;
     constexpr float kSlowCloudRange = 500.0f;
-    constexpr int kPointCompletesMs = 100;
+    constexpr int kPointCompletesMs = 5;
 
     intersector.addObject(makePointObject(1, {QVector3D(0.0f, 0.0f, 0.0f)}));
     intersector.addObject(makePointObject(
@@ -85,6 +95,11 @@ void seedPointAndSlowCloud(cwGeometryItersecter& intersector,
 
     QCoreApplication::processEvents();
     QThread::msleep(kPointCompletesMs);
+
+    INFO("the " << kPointCompletesMs << "ms beat outran the whole "
+         << kSlowCloudCount << "-point build, so there is no build left to "
+         << "cancel — shorten the beat or grow the cloud");
+    REQUIRE(intersector.debugStatistics().cachedSubBvhCount == 0);
 }
 
 } // namespace

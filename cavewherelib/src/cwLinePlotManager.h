@@ -29,6 +29,7 @@ class cwLinePlotTripVisibility;
 #include "cwSurveyNetworkArtifact.h"
 #include "cwGlobals.h"
 #include "cwFutureManagerToken.h"
+#include "cwUpdatable.h"
 
 //Qt includes
 #include <QHash>
@@ -47,12 +48,11 @@ QT_FORWARD_DECLARE_CLASS(QFileSystemWatcher)
 //Std includes
 #include <optional>
 
-class CAVEWHERE_LIB_EXPORT cwLinePlotManager : public QObject
+class CAVEWHERE_LIB_EXPORT cwLinePlotManager : public QObject, public cwUpdatableBase
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(LinePlotManager)
 
-    Q_PROPERTY(bool automaticUpdate READ automaticUpdate WRITE setAutomaticUpdate NOTIFY automaticUpdateChanged)
     Q_PROPERTY(cwSurveyNetworkArtifact* surveyNetworkArtifact READ surveyNetworkArtifact CONSTANT)
     Q_PROPERTY(bool hasSolveError READ hasSolveError NOTIFY cavernOutputChanged FINAL)
     Q_PROPERTY(QString solveErrorMessage READ solveErrorMessage NOTIFY cavernOutputChanged FINAL)
@@ -100,7 +100,7 @@ public:
 
     // Optional cwSaveLoad used to enqueue reconcile copy/remove jobs when
     // a live-link source changes on disk. Without it the source-side
-    // watcher path still fires rerunSurvex but skips the reconcile; this
+    // watcher path still re-solves but skips the reconcile; this
     // is the test mode used by the simpler [Attach][Watcher] cases.
     void setSaveLoad(cwSaveLoad* saveLoad);
 
@@ -116,9 +116,6 @@ public:
     // plan. Empty when no live-link attachment is configured.
     QList<QUuid> missingSourceOwners() const { return m_missingSourceOwners; }
 
-    bool automaticUpdate() const;
-    void setAutomaticUpdate(bool automaticUpdate);
-
     // Region-wide survey network artifact, updated whenever the line-plot
     // pipeline completes. Shared across every consumer (sketches today; future
     // 2D views). Always non-null after construction; its future may be
@@ -131,7 +128,7 @@ signals:
     void stationPositionInCavesChanged(QList<cwCave*>);
     void stationPositionInTripsChanged(QList<cwTrip*>);
     void stationPositionInScrapsChanged(QList<cwScrap*>);
-    void automaticUpdateChanged();
+    void updateStateChanged();
     void cavernOutputChanged();
 
     // Emitted whenever the external-centerline watch set changes. Tests
@@ -144,9 +141,15 @@ signals:
     void missingSourceOwnersChanged();
 
 public slots:
-    void rerunSurvex();
+    //Marks the line plot dirty without running anything. Public so a "Solve"
+    //button can pair it with cwUpdateCoordinator::updateNow(this), where the
+    //mark-then-drive split is explained.
+    void markNeedsUpdate();
 
 private:
+    cwUpdatable::State doUpdateState() const override;
+    QFuture<void> doRun() override;
+
     QPointer<cwCavingRegion> Region; //The main
     QList<QPointer<cwErrorListModel>> UnconnectedChunks; //Current unconnected chunks
 
@@ -197,7 +200,13 @@ private:
     QPointer<cwKeywordItemModel> m_keywordItemModel;
     QHash<cwTrip*, QPointer<cwKeywordItem>> m_tripKeywordEntries;
 
-    bool AutomaticUpdate = true;
+    bool m_needsUpdate = false;
+
+    // Ends the run (Working -> Clean, or -> Dirty if re-edited mid-solve) and
+    // emits updateStateChanged so the coordinator re-evaluates its staleness
+    // aggregate. Finishing the run's future is what releases anyone waiting on
+    // the solve, so every completion path has to reach here.
+    void finishSolving();
 
     void connectCaves(cwCavingRegion* region);
     void connectFixStations(cwCave* cave);
@@ -249,8 +258,13 @@ private slots:
 //This needs to be here for moc to generate correctly and we can forward declare cwRenderLinePlot
 #include "cwRenderLinePlot.h"
 
-inline bool cwLinePlotManager::automaticUpdate() const {
-    return AutomaticUpdate;
+inline cwUpdatable::State cwLinePlotManager::doUpdateState() const {
+    // Dirty takes priority over Working: a survey edit that arrives mid-solve
+    // isn't covered by the solve in flight, so it reports Dirty and the driver
+    // runs it again. See cwUpdatable::State.
+    if(m_needsUpdate) { return cwUpdatable::State::Dirty; }
+    if(isRunning())   { return cwUpdatable::State::Working; }
+    return cwUpdatable::State::Clean;
 }
 
 #endif // CWLINEPLOTMANAGER_H

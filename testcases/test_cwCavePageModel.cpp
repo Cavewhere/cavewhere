@@ -8,7 +8,6 @@
 #include "cwCavePageModel.h"
 #include "cwRootData.h"
 #include "cwProject.h"
-#include "cwTaskManagerModel.h"
 #include "cwFutureManagerModel.h"
 #include "cwCavingRegion.h"
 #include "cwCave.h"
@@ -31,7 +30,6 @@ TEST_CASE("cwCavePageModel Test with Static Data", "[cwCavePageModel]")
     auto plotManager = root->linePlotManager();
     plotManager->waitToFinish();
 
-    root->taskManagerModel()->waitForTasks();
     root->futureManagerModel()->waitForFinished();
 
     // Access the cave
@@ -81,7 +79,6 @@ TEST_CASE("cwCavePageModel Test with Static Data", "[cwCavePageModel]")
 
     auto checkModel = [&]() {
         //Wait for the thread pool to settle
-        root->taskManagerModel()->waitForTasks();
         root->futureManagerModel()->waitForFinished();
         model.waitForFinished();
 

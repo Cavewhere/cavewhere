@@ -50,19 +50,6 @@ CoordKey toKey(const img_point& p) {
 
 } // namespace
 
-/**
- * @brief Reads station positions from a survex .3d file
- * @param threeDFilePath - path to the .3d file
- * @return cwStationPositionLookup containing station name -> position mapping
- *
- * This replaces the old pipeline of running survexport to produce a CSV file
- * and then parsing it. The img.h API reads .3d files directly.
- */
-cwStationPositionLookup cwSurvex3DFileReader::readStationPositions(const QString& threeDFilePath)
-{
-    return readNetworkAndLookup(threeDFilePath).lookup;
-}
-
 cwSurvex3DFileReader::NetworkAndLookup cwSurvex3DFileReader::readNetworkAndLookup(const QString& threeDFilePath)
 {
     NetworkAndLookup out;

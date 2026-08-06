@@ -1,136 +1,140 @@
 ---
 title: Scraps and Carpeting
-summary: What a scrap is, how carpeting morphs a flat sketch onto the 3D survey, and how the workflow fits together.
-problem: Turn the flat passage sketches you draw in the cave into a 3D model that stays correct as the survey changes.
+summary: How carpeting morphs a flat sketch onto the 3D survey, and how the chapter fits together.
+problem: Turn flat passage sketches into a 3D model that stays correct as the survey changes.
 keywords: [scrap, carpet, carpeting, morphing, warping, sketch, note, digitize, triangulation, compute scraps]
-related: [../concepts/why-cavewhere.md, ../concepts/glossary.md, ../view-3d/the-3d-view.md]
+related: [../getting-started/why-cavewhere.md, ../concepts/glossary.md, ../view-3d/the-3d-view.md]
 ---
 
 # Scraps and Carpeting
 
 ## Why / when you need this
 
-![A 3D view of a cave: hand-drawn passage sketches morphed and draped as textured carpets over the red survey line, its two levels and the vertical connection between them visible in three dimensions.](../images/scraps-carpet-orbit-poster.png)
-*The payoff. Flat passage sketches (scraps) morphed onto the 3D survey and draped
-like carpets, holding their place on the survey line. Everything else in this
-chapter builds toward this.*
+![A 3D view of a cave: hand-drawn passage sketches morphed and carpeted over the red survey line, their texture visible across two levels.](../images/scraps-carpet-orbit-poster.png)
+*The payoff. Flat sketches morphed onto the 3D survey and carpeted over the line.
+Everything in this chapter builds toward it.*
 
-<details>
-<summary>Play the orbit animation</summary>
+A surveyor's sketch is a flat drawing of a passage that twists, climbs, and
+drops in three dimensions. Traditionally it stays 2D forever, and somebody
+redraws the map by hand every time the survey changes. **Carpeting** is
+CaveWhere's answer.
 
-![The same cave orbiting so the carpets' 3D relief and its two levels read as the model turns.](../images/scraps-carpet-orbit.gif)
+You trace pieces of your sketch as [scraps](../concepts/glossary.md#scrap) and
+tie them to survey [stations](../concepts/glossary.md#station). CaveWhere bends
+each scrap onto the 3D survey line, so the drawing lies over the real passage
+like a carpet, as shown above, and rebuilds it whenever the survey moves. See
+also [Why CaveWhere](../getting-started/why-cavewhere.md#from-a-2d-sketch-to-a-3d-cave).
 
-</details>
-
-A surveyor's sketch is a flat drawing of a passage that actually twists, climbs,
-and drops in three dimensions. Traditionally that sketch stays 2D forever, and
-the finished map has to be redrawn by hand every time the survey data changes.
-**Carpeting** is CaveWhere's answer: you trace pieces of your sketch as
-[scraps](../concepts/glossary.md#scrap), tie them to survey
-[stations](../concepts/glossary.md#station), and CaveWhere deforms each scrap
-onto the 3D survey line so the drawing drapes over the real passage like a
-carpet. The result is a 3D cave model built from the drawings you already make —
-and it re-drapes itself automatically whenever the survey moves. (For the
-product-level version of this idea, see
-[Why CaveWhere](../concepts/why-cavewhere.md#from-a-2d-sketch-to-a-3d-cave).)
-
-> **A note on names.** The toolbar button that opens this workflow is labelled
-> **Carpet** (the pencil icon), and inside it you draw **scraps**. This manual
-> uses *Carpet mode* for the tool and *scrap* for one traced piece of the map.
+The toolbar button that opens this workflow is labeled **Carpet**; this manual
+calls it *Carpet mode*.
 
 ## What carpeting actually does
 
-Carpeting scales, rotates, grids, and warps a flat scrap so it matches the 3D
-survey line plot. It runs in three stages:
+Carpeting crops, scales, grids, and warps a flat scrap until it matches the 3D
+survey line plot. Four stages:
 
-1. **Scale and rotate.** Each scrap carries a scale (how many meters per inch of
-   drawing) and a north/up direction. These two values matter most: a wrong
-   scale makes the passage come out unnaturally thin or fat, and a rotation
-   error of more than about ten degrees visibly twists the sketch off the
-   survey. CaveWhere can auto-calculate both from the stations you place, but a
-   value you set by hand is usually more accurate.
-2. **Grid.** CaveWhere lays a regular grid of squares over the scrap and clips
-   it to the scrap's outline. The grid is the mesh that actually gets bent.
-3. **Morph.** CaveWhere bends the grid onto the survey — and this step is more
-   involved than "pin the stations and stretch." It anchors the sketch not only to
-   the stations you placed but to extra control points interpolated *along* each
-   survey shot, so the whole passage line steers the deformation, not just its
-   endpoints. Each grid point is then placed in 3D relative to the nearest handful
-   of those control points, and a final smoothing pass softens abrupt depth changes
-   between neighbours. The traced note image is textured onto the bent mesh — the
-   carpet.
+1. **Crop.** CaveWhere crops the note image to the outline's bounding box and
+   mipmaps it. That crop becomes the carpet's texture.
+2. **Scale and rotate.** Every scrap carries a scale and a north (plan) or up
+   (profile) direction. A wrong scale makes the passage come out thin or fat. A
+   wrong rotation twists the sketch off the survey. **Auto Calculate** derives
+   both from the stations you place, plus the plane's azimuth on a projected
+   profile. [Choose the scrap
+   type](scrap-types.md#auto-calculate-and-what-it-hides) covers switching it
+   off.
+3. **Grid.** CaveWhere lays a square grid over that bounding box, 0.5 m of cave
+   by default, and throws away every point outside your outline. Squares
+   straddling the outline get clipped against it, which is why a carpet ends on
+   your traced line, not on a staircase of grid squares.
+4. **Morph.** CaveWhere anchors the sketch to the stations you placed *and* to
+   control points interpolated every 0.5 m along the shots between them, so the
+   surveyed line inside the scrap steers the deformation. Each grid point
+   follows the 10 nearest control points, measured on the page, weighted by the
+   inverse square of their distance. Last, a Gaussian pass smooths the heights
+   over a 2.0 m radius.
 
-   How this stage behaves is governed by the
-   [warping (morphing) settings](warping-settings.md): the grid's density, how
-   finely each shot is interpolated into control points, how many nearby control
-   points steer each grid point, and the smoothing radius. The defaults suit most
-   caves — reach for these knobs only when a carpet comes out too coarse, too stiff,
-   or too noisy.
+Those 4 numbers are the [warping settings](warping-settings.md): grid
+resolution, shot interpolation spacing, max closest stations, and smoothing
+radius. The defaults suit most caves.
 
 The same engine morphs [LiDAR notes](../concepts/glossary.md#lidar-note) and
-photogrammetry models into the cave, not just hand-drawn scraps.
+photogrammetry models into the cave, but a LiDAR mesh carries no warping
+settings. It always morphs at the built-in 0.5 m spacing, uses *every*
+interpolated control point rather than the 10 nearest, and never gets smoothed.
+Changing the warping settings will not change how it lands.
+
+## Why does a carpet come out bumpy?
+
+Inverse-distance weighting is a blunt instrument, and plan scraps are where you
+see it. Each grid point's height is a weighted average of the control points
+around it, so a station sitting a couple of meters above its neighbors lifts the
+carpet near it. The morph knows only where the stations landed and how the
+straight line between them runs.
+
+The fix is to constrain the morph rather than trust it. Lower **Max closest
+stations** so each point is fitted to a shorter run of line, raise the smoothing
+radius, or split the sketch into smaller scraps.
+[Troubleshoot the carpet](troubleshoot-carpeting.md#choose-the-right-scrap-type)
+works through that.
+
+Three more rough edges:
+
+- **A running profile warps between exactly 2 stations**, the pair your point
+  falls between along the page. Give it fewer than 2 and every point collapses
+  onto the survey's origin, so the carpet vanishes rather than landing wrong.
+- **A degenerate scale can ask for a grid of hundreds of millions of cells.**
+  The classic cause is a note scale off by the 39.37 inches-per-meter factor.
+  CaveWhere clamps the grid at 2048 points per axis and logs `clamping
+  pathological point grid`. Without the clamp, one bad scrap pins every core!
+- **A carpet whose texture won't load comes back empty.** If the crop fails,
+  CaveWhere logs `Problem cropping image, does it not exist` and returns an
+  empty result. The scrap never appears in the 3D view, with no warning in the
+  UI.
 
 ## Carpeting is automatic
 
-You do not normally trigger carpeting. CaveWhere marks a scrap "dirty" whenever
-you edit its outline, move a station, or change its type, and re-morphs the
-affected scraps in the background. Because the survey re-solves on every edit,
-**closing a loop or fixing a blunder re-drapes every affected carpet on its own**
-— the map keeps up with the data instead of going stale. This is the core reason
-carpets are worth building: correct the survey once, and the drawings follow.
+You do not normally trigger carpeting. CaveWhere marks a scrap dirty and
+re-morphs it in the background when you edit the outline, add or move or rename
+a station, change its scale, north/up direction, or type, or move a lead. A
+scrap open for editing sits the round out; the recompute fires once you finish.
 
-This automatic recomputation is controlled by the **Automatic Update** checkbox in
-the **lower-left corner** of the window.
+The survey re-solves on every edit as well, so **closing a loop or fixing a
+blunder re-carpets everything affected on its own**. Correct the survey once,
+and the drawings follow.
 
-![The Automatic Update checkbox, highlighted, in the lower-left corner of the window.](../images/scraps-automatic-update.png)
-*The Automatic Update checkbox (lower-left), on by default. Turning it off
-suspends the survey solve and carpet re-morphing alike.*
-
-Leave it on (the default) and the map keeps up with your edits as described above.
-**Turn it off and CaveWhere stops recomputing automatically** — and this covers
-more than carpeting. The switch also suspends the **survey solve**, so **loop
-closure stops running** too: edit a shot with Automatic Update off and neither the
-line plot nor the carpets change. That is useful on a very large project where you
-don't want every keystroke to trigger a full recompute, but while it's off both
-your line plot and your carpets drift out of sync with the data. Turning it back on
-catches everything up at once — CaveWhere re-runs the survey solve and re-morphs
-every scrap that changed in the meantime.
+One checkbox governs the whole arrangement: **Automatic Update**, at the bottom
+of the sidebar, on by default. I recommend leaving it checked, and clearing it
+only on a very large project where a recompute is genuinely in your way. **Turn
+it off and CaveWhere stops recomputing** — and that covers a great deal more
+than carpeting. One switch feeds the line plot manager and the scrap manager, so
+the **survey solve stops too** and **loop closure stops running** with it. Turn it
+back on and CaveWhere catches up at once. The setting is per-machine and
+survives a restart, so a box you cleared last week is still clear today.
 
 ## The workflow at a glance
 
-Building a carpet is four short tasks, each covered on its own page:
+Building a carpet is 4 tasks, each on its own page:
 
-1. **[Digitize a scrap](digitize-a-scrap.md)** — enter Carpet mode, trace the
-   passage outline, and place the survey stations that fall inside it.
-2. **[Choose the scrap type](scrap-types.md)** — tell CaveWhere whether the
-   drawing is a plan, a running profile, or a projected profile so it projects
-   the sketch the right way.
-3. **[Troubleshoot the carpet](troubleshoot-carpeting.md)** — if a carpet comes
-   out distorted, work through the usual causes (scale, rotation, station
-   labels, scrap type).
-4. **[Tune the warping settings](warping-settings.md)** — adjust grid density
-   and smoothing when you need finer or coarser results.
+1. **[Digitize a scrap](digitize-a-scrap.md)**: trace the outline and place the
+   stations that fall inside it.
+2. **[Choose the scrap type](scrap-types.md)**: plan, running profile, or
+   projected profile.
+3. **[Troubleshoot the carpet](troubleshoot-carpeting.md)**: scale, rotation,
+   station labels, type.
+4. **[Tune the warping settings](warping-settings.md)**: grid density and
+   smoothing.
 
-The carpets appear in the [3D view](../view-3d/the-3d-view.md) draped over the
-survey line plot, and you can hide or show them with keyword layers like any
-other part of the scene.
+The carpets appear in the [3D view](../view-3d/the-3d-view.md) over the survey
+line plot, and keyword layers hide and show them.
 
 ## Advanced: recompute and visibility toggles
 
-Two developer-oriented controls live under **File ▸ Debug**:
+Two developer controls live under **File → Debug**:
 
-- **Compute Scraps** forces a full recompute of every scrap. You rarely need it
-  — carpeting is automatic — but it is a way to re-run everything if a carpet
-  looks stale after an unusual edit.
-- **Scraps Visible** toggles the carpets in the 3D scene as a whole. For normal
-  work, control scrap visibility through
+- **Compute Scraps** marks every scrap dirty and recomputes the lot. It exists
+  for testing, but it will refresh a carpet that looks stale.
+- **Scraps Visible** toggles the carpets in the 3D scene. The name undersells
+  it: carpets and morphed LiDAR meshes share one render list, so this hides your
+  LiDAR notes too. For normal work, use
   [keyword layers](../view-3d/the-3d-view.md#focus-on-part-of-the-cave-layers)
   instead.
-
-## Where to go next
-
-- Start building: [Digitize a scrap](digitize-a-scrap.md).
-- New to the terms (station, shot, scrap, line plot)? See the
-  [glossary](../concepts/glossary.md).
-- Want the reasoning behind the living 3D map? Read
-  [Why CaveWhere](../concepts/why-cavewhere.md).

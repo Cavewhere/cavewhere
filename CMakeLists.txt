@@ -213,6 +213,7 @@ if(BUILD_TESTING)
             testlib/LazFixtureHelper.cpp
             testlib/LazFixtureHelper.h
             testlib/CwRhiSceneTestAccess.h
+            testlib/GeoreferenceFixtureHelper.h
             testlib/BoulderFixtureHelper.cpp
             testlib/BoulderFixtureHelper.h
             testlib/FixStationFixtureHelper.cpp

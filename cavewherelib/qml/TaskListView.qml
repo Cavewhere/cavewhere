@@ -13,13 +13,8 @@ import cavewherelib
 QQ.ListView {
     id: taskListView
 
-    TaskFutureCombineModel {
-        id: taskModelCombinerId
-        models: [RootData.taskManagerModel, RootData.futureManagerModel]
-    }
-
-    model: taskModelCombinerId
-    verticalLayoutDirection: QQ.ListView.BottomToTop
+    // Every tracked job by default; a caller (or a test) can substitute its own.
+    model: ActiveTasks.model
 
     delegate: QQ.Rectangle {
         id: delegateId

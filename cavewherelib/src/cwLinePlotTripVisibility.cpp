@@ -11,7 +11,7 @@
 
 cwLinePlotTripVisibility::cwLinePlotTripVisibility(cwTrip* trip,
                                                    QObject* parent)
-    : QObject(parent),
+    : cwVisibilityProxy(parent),
       m_trip(trip)
 {
 }
@@ -23,16 +23,9 @@ void cwLinePlotTripVisibility::setTarget(cwRenderLinePlot* linePlot, int vertexS
     m_vertexCount = vertexCount;
 }
 
-void cwLinePlotTripVisibility::setVisible(bool visible)
+void cwLinePlotTripVisibility::applyVisible(bool visible)
 {
-    if(m_visible == visible) {
-        return;
-    }
-
-    m_visible = visible;
     if(m_linePlot) {
         m_linePlot->setRangeVisible(m_vertexStart, m_vertexCount, visible);
     }
-
-    emit visibleChanged();
 }

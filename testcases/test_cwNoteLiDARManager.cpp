@@ -23,6 +23,7 @@
 #include "cwRegionSceneManager.h"
 #include "cwRenderTexturedItems.h"
 #include "cwCavingRegion.h"
+#include "GeoreferenceFixtureHelper.h"
 #include "cwCave.h"
 #include "cwTrip.h"
 #include "cwStationPositionLookup.h"
@@ -30,6 +31,15 @@
 #include "cwFutureManagerModel.h"
 #include "cwLinePlotManager.h"
 #include "cwNoteLiDARStation.h"
+#include "cwTripCalibration.h"
+#include "cwFixStation.h"
+#include "cwFixStationModel.h"
+#include "cwGridConvergence.h"
+#include "cwCoordinateTransform.h"
+#include "cwGeoPoint.h"
+#include "cwMath.h"
+#include "cwUpdateCoordinator.h"
+#include "cwProject.h"
 
 TEST_CASE("cwNoteLiDARManager no crash when caves cleared during triangulation", "[cwNoteLiDARManager][Issue371]")
 {
@@ -143,6 +153,86 @@ TEST_CASE("cwNoteLiDARManager applies declination for manual north", "[cwNoteLiD
     note.setAutoCalculateNorth(false);
     const cwTriangulateLiDARInData manualData = cwNoteLiDARManager::mapNoteToInData(&note, nullptr);
     compareMatrix(manualData.modelMatrix(), adjustedTransform.matrix());
+}
+
+TEST_CASE("cwNoteLiDARManager folds grid convergence into the note north (issue #628)", "[cwNoteLiDARManager]")
+{
+    // Georeference the cave so grid convergence is non-zero, then verify
+    // mapNoteToInData removes it (in addition to declination) from the stored
+    // note north to recover the geometric north used for triangulation. This
+    // is the read-side mirror of cwNoteLiDAR::updateNoteTransformion (which
+    // subtracts the same convergence at store time) and matches the scrap-side test in
+    // test_cwScrap.cpp. Convergence is a property of the grid at the cave, so it
+    // applies to a manual declination just like an auto one.
+    //
+    // The grid is the project's frame, which is centered on whatever anchors it
+    // — so the anchor goes on a first cave and this one is offset east of it,
+    // where the angle is real.
+    cwCavingRegion region;
+    cwGeoreferenceFixture::fixAtAnchorPoint(cwGeoreferenceFixture::addAnchorCave(&region));
+
+    region.addCave();
+    cwCave* cave = region.cave(region.caveCount() - 1);
+    REQUIRE(cave != nullptr);
+
+    auto* trip = new cwTrip(cave);
+    cave->addTrip(trip);
+
+    const double convergence =
+            cwGeoreferenceFixture::fixEastOfAnchor(cave, QStringLiteral("a1"));
+    REQUIRE(convergence > 0.1);
+
+    cwNoteLiDAR note;
+    note.setParentTrip(trip);
+
+    auto* transform = note.noteTransformation();
+    REQUIRE(transform != nullptr);
+    transform->setNorthUp(10.0);
+
+    trip->calibrations()->setAutoDeclination(false);
+    trip->calibrations()->setDeclinationManual(5.0);
+    const double declination = trip->calibrations()->declination();
+
+    auto compareMatrix = [](const QMatrix4x4& actual, const QMatrix4x4& expected) {
+        const float* actualData = actual.constData();
+        const float* expectedData = expected.constData();
+        for(int i = 0; i < 16; ++i) {
+            CHECK(actualData[i] == Catch::Approx(expectedData[i]).epsilon(1e-6));
+        }
+    };
+
+    auto matrixForNorth = [&](double north) {
+        cwNoteLiDARTransformationData data = transform->data();
+        data.north = north;
+        cwNoteLiDARTransformation t;
+        t.setData(data);
+        return t.matrix();
+    };
+
+    // Read side recovers the geometric north: stored - declination + convergence.
+    const double declinationOnly =
+        cwNoteTranformation::northAdjustedForDeclination(transform->northUp(), declination);
+    const double expectedNorth =
+        cwNoteTranformation::northAdjustedForDeclination(declinationOnly, -convergence);
+
+    const cwTriangulateLiDARInData data = cwNoteLiDARManager::mapNoteToInData(&note, nullptr);
+    compareMatrix(data.modelMatrix(), matrixForNorth(expectedNorth));
+
+    // Regression guard: a declination-only adjustment (the pre-#628 behavior)
+    // differs from the emitted matrix by exactly the grid convergence.
+    CHECK(cwWrapDegrees360(expectedNorth - declinationOnly)
+          == Catch::Approx(convergence).margin(1e-6));
+    const QMatrix4x4 emittedMatrix = data.modelMatrix();
+    const QMatrix4x4 declOnlyMatrix = matrixForNorth(declinationOnly);
+    const float* emitted = emittedMatrix.constData();
+    const float* declOnly = declOnlyMatrix.constData();
+    bool differs = false;
+    for(int i = 0; i < 16; ++i) {
+        if(qAbs(emitted[i] - declOnly[i]) > 1e-4f) {
+            differs = true;
+        }
+    }
+    CHECK(differs);
 }
 
 TEST_CASE("cwNoteLiDARManager triangulates LiDAR notes and keeps geometry accessible", "[cwNoteLiDARManager]")
@@ -311,4 +401,176 @@ TEST_CASE("cwNoteLiDARManager triangulates LiDAR notes and keeps geometry access
         const float distance = (centroid - stationWorld).length();
         CHECK(distance < 0.03f); //Only 3cm off
     }
+}
+
+TEST_CASE("cwNoteLiDARManager reuses render ids when re-triangulating a note", "[cwNoteLiDARManager]")
+{
+    cwJobSettings::initialize();
+
+    auto root = std::make_unique<cwRootData>();
+    REQUIRE(root != nullptr);
+
+    TestHelper helper;
+    helper.loadProjectFromZip(root->project(), testcasesDatasetPath("lidarProjects/jaws of the beast.zip"));
+    root->project()->waitLoadToFinish();
+    root->futureManagerModel()->waitForFinished();
+    root->linePlotManager()->waitToFinish();
+
+    auto* cave = root->region()->cave(0);
+    REQUIRE(cave != nullptr);
+    auto* trip = cave->trip(0);
+    REQUIRE(trip != nullptr);
+    auto* lidarModel = trip->notesLiDAR();
+    REQUIRE(lidarModel != nullptr);
+    REQUIRE(cave->stationPositionLookup().positions().size() == 10);
+
+    const QString lidarFile = helper.copyToTempDir(testcasesDatasetPath("lidarProjects/9_15_2025 3.glb"));
+    REQUIRE_FALSE(lidarFile.isEmpty());
+
+    QSignalSpy rowsInsertedSpy(lidarModel, &QAbstractItemModel::rowsInserted);
+    lidarModel->addFromFiles({ QUrl::fromLocalFile(lidarFile) });
+    root->futureManagerModel()->waitForFinished();
+    if (rowsInsertedSpy.isEmpty()) {
+        rowsInsertedSpy.wait(1000);
+    }
+    REQUIRE(lidarModel->rowCount() == 1);
+
+    auto* note = qobject_cast<cwNoteLiDAR*>(
+        lidarModel->data(lidarModel->index(0, 0), cwSurveyNoteModelBase::NoteObjectRole).value<QObject*>());
+    REQUIRE(note != nullptr);
+
+    const struct { const char* name; QVector3D pos; } stations[] = {
+        {"6", QVector3D(0.19147f, -0.720703f, -2.15723f)},
+        {"7", QVector3D(3.51028f, -0.0917969f, 5.39945f)},
+        {"5", QVector3D(-3.48475f, -1.92188f, -3.38263f)}
+    };
+    for (const auto& s : stations) {
+        cwNoteLiDARStation station;
+        station.setName(QString::fromUtf8(s.name));
+        station.setPositionOnNote(s.pos);
+        note->addStation(station);
+    }
+
+    auto* manager = root->noteLiDARManager();
+    REQUIRE(manager != nullptr);
+
+    auto settle = [&]() {
+        root->linePlotManager()->waitToFinish();
+        manager->waitForFinish();
+        root->futureManagerModel()->waitForFinished();
+        QCoreApplication::processEvents();
+    };
+
+    settle();
+
+    const QVector<uint32_t> idsBefore = manager->renderItemIds(note);
+    REQUIRE_FALSE(idsBefore.isEmpty());
+
+    // A declination change re-runs the line plot and re-triangulates the note
+    // into the same number of items. The manager must update those items in
+    // place, reusing their render ids rather than removing and re-adding them
+    // (which would mint fresh monotonic ids and churn the picker/visibility
+    // bindings). Reusing ids is also what lets the render queue coalesce
+    // repeated edits and keeps memory bounded (issue #629).
+    QSignalSpy updatedSpy(manager, &cwNoteLiDARManager::liDARNotesUpdated);
+    trip->calibrations()->setDeclinationManual(5.0);
+    settle();
+
+    CHECK(updatedSpy.count() > 0); // the note actually re-triangulated
+
+    const QVector<uint32_t> idsAfter = manager->renderItemIds(note);
+    REQUIRE(idsAfter == idsBefore);
+
+    auto* renderItems = root->regionSceneManager()->items();
+    REQUIRE(renderItems != nullptr);
+    for (uint32_t id : idsAfter) {
+        CHECK(renderItems->hasItem(id));
+    }
+}
+
+TEST_CASE("Deleting the last dirty LiDAR note announces the pipeline is clean",
+          "[cwNoteLiDARManager]")
+{
+    // Mirrors cwScrapManager: removing a note drops it from the dirty set, which
+    // can take the pipeline Dirty -> Clean. The coordinator only re-reads its
+    // staleness aggregate when a transition is announced, so without that the
+    // footer keeps offering Run for a note that no longer exists.
+    cwJobSettings::initialize();
+
+    auto root = std::make_unique<cwRootData>();
+
+    TestHelper helper;
+    helper.loadProjectFromZip(root->project(),
+                              testcasesDatasetPath("lidarProjects/jaws of the beast.zip"));
+    root->project()->waitLoadToFinish();
+    root->futureManagerModel()->waitForFinished();
+    root->linePlotManager()->waitToFinish();
+
+    REQUIRE(root->region()->caveCount() == 1);
+    auto* cave = root->region()->cave(0);
+    REQUIRE(cave->tripCount() == 1);
+
+    auto* lidarModel = cave->trip(0)->notesLiDAR();
+    REQUIRE(lidarModel != nullptr);
+
+    const QString lidarFile = helper.copyToTempDir(testcasesDatasetPath("lidarProjects/9_15_2025 3.glb"));
+    REQUIRE_FALSE(lidarFile.isEmpty());
+
+    QSignalSpy rowsInsertedSpy(lidarModel, &QAbstractItemModel::rowsInserted);
+    lidarModel->addFromFiles({ QUrl::fromLocalFile(lidarFile) });
+    root->futureManagerModel()->waitForFinished();
+    if (rowsInsertedSpy.isEmpty()) {
+        rowsInsertedSpy.wait(1000);
+    }
+    REQUIRE(lidarModel->rowCount() == 1);
+
+    QObject* noteObject = lidarModel->data(lidarModel->index(0, 0),
+                                           cwSurveyNoteModelBase::NoteObjectRole).value<QObject*>();
+    auto* note = qobject_cast<cwNoteLiDAR*>(noteObject);
+    REQUIRE(note != nullptr);
+
+    // One station is all it takes for the note to be worth running.
+    cwNoteLiDARStation station;
+    station.setName(QStringLiteral("6"));
+    station.setPositionOnNote(QVector3D(0.19147f, -0.720703f, -2.15723f));
+    note->addStation(station);
+
+    auto* manager = root->noteLiDARManager();
+    auto* coordinator = root->updateCoordinator();
+    REQUIRE(manager != nullptr);
+
+    // Settle to Clean so the dirty set holds exactly what this test puts in it.
+    manager->waitForFinish();
+    root->futureManagerModel()->waitForFinished();
+    QCoreApplication::processEvents();
+    REQUIRE(manager->updateState() == cwUpdatable::State::Clean);
+
+    coordinator->setAutomaticUpdate(false);
+
+    // Dirty the note without running it: with automatic update off the coordinator
+    // owns the run decision, which is the state the footer's Run offer is built on.
+    cwNoteLiDARStation second;
+    second.setName(QStringLiteral("7"));
+    second.setPositionOnNote(QVector3D(3.51028f, -0.0917969f, 5.39945f));
+    note->addStation(second);
+
+    REQUIRE(manager->updateState() == cwUpdatable::State::Dirty);
+    REQUIRE(coordinator->needsUpdate());
+
+    QSignalSpy pipelineSpy(manager, &cwNoteLiDARManager::updateStateChanged);
+    QSignalSpy aggregateSpy(coordinator, &cwUpdateCoordinator::needsUpdateChanged);
+
+    // The announcement is synchronous, from liDARRowsAboutToBeRemoved: that
+    // handler drops the note from the dirty set and disconnects it, so the
+    // note's own destroyed() is never what reports this. removeNote uses
+    // deleteLater, and plain processEvents() doesn't flush deferred deletes, so
+    // ask for them explicitly to get the note actually destroyed inside the test.
+    lidarModel->removeNote(0);
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    QCoreApplication::processEvents();
+
+    CHECK(manager->updateState() == cwUpdatable::State::Clean);
+    CHECK(pipelineSpy.count() == 1);
+    CHECK_FALSE(coordinator->needsUpdate());
+    CHECK(aggregateSpy.count() == 1);
 }

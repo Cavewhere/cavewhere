@@ -43,10 +43,14 @@ public:
 
     //! \a autoDeclinationInScope says an enclosing block already carries
     //! `*declination auto`, so a trip with auto on writes no declination line
-    //! and inherits it.
+    //! and inherits it. \a gridConvergence is subtracted from a literal
+    //! declination — see cwSurvexExporterUtils::writeDeclinationCalibration.
+    //! It stays 0 for a trip exported on its own, which writes no `*cs out`
+    //! unless it uses auto, so there is no grid for the literal to converge to.
     void writeTrip(QTextStream& stream,
                    cwTrip* trip,
-                   bool autoDeclinationInScope = false);
+                   bool autoDeclinationInScope = false,
+                   double gridConvergence = 0.0);
 
 
 signals:
@@ -64,7 +68,8 @@ private:
     void writeChunk(QTextStream& stream, bool hasFrontSight, bool hasBackSight, cwSurveyChunk* chunk);
     void writeCalibrations(QTextStream& stream,
                            cwTripCalibration* calibrations,
-                           bool autoDeclinationInScope);
+                           bool autoDeclinationInScope,
+                           double gridConvergence);
     void writeLengthUnits(QTextStream& stream, cwUnits::LengthUnit unit);
     void writeShotData(QTextStream& stream, const cwTrip* trip);
     void writeLRUDData(QTextStream& stream, const cwTrip *trip);

@@ -25,7 +25,7 @@ cwMeasurementLineRenderer::cwMeasurementLineRenderer() = default;
 
 cwMeasurementLineRenderer::~cwMeasurementLineRenderer() = default;
 
-void cwMeasurementLineRenderer::synchronize(QCanvasPainterItem* item)
+void cwMeasurementLineRenderer::synchronizeData(QCanvasPainterItem* item)
 {
     auto* canvas = static_cast<cwMeasurementLineCanvas*>(item);
 

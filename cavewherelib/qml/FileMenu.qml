@@ -148,7 +148,11 @@ QC.Menu {
 
         QC.MenuItem {
             text: "Compute Scraps"
-            onTriggered: RootData.scrapManager.updateAllScraps()
+            onTriggered: {
+                // Mark, then drive — see cwUpdateCoordinator::updateNow().
+                RootData.scrapManager.markAllScrapsDirty()
+                RootData.updateCoordinator.updateNow(RootData.scrapManager)
+            }
         }
 
         QC.MenuItem {

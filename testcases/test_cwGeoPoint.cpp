@@ -17,6 +17,42 @@
 
 using Catch::Matchers::WithinAbs;
 
+TEST_CASE("cwGeoPoint::toVector3D narrows to float", "[cwGeoPoint]")
+{
+    SECTION("A small coordinate narrows exactly")
+    {
+        const cwGeoPoint p(1.5, 2.5, 3.5);
+
+        const QVector3D v = p.toVector3D();
+        CHECK(v.x() == 1.5f);
+        CHECK(v.y() == 2.5f);
+        CHECK(v.z() == 3.5f);
+    }
+
+    SECTION("local-projection magnitudes keep mm precision through the narrowing")
+    {
+        // The project's frame is centered on its anchor, so scene coordinates
+        // stay small — which is what leaves float room for millimeters. The
+        // same values as UTM eastings would not survive the narrowing.
+        const cwGeoPoint p(123.456789, 987.654321, 1234.5);
+
+        const QVector3D v = p.toVector3D();
+        CHECK_THAT(v.x(), WithinAbs(123.456789f, 1e-3f));
+        CHECK_THAT(v.y(), WithinAbs(987.654321f, 1e-3f));
+        CHECK_THAT(v.z(), WithinAbs(1234.5f, 1e-3f));
+    }
+}
+
+TEST_CASE("cwGeoPoint compares componentwise", "[cwGeoPoint]")
+{
+    const cwGeoPoint a(1.0, 2.0, 3.0);
+    const cwGeoPoint b(1.0, 2.0, 3.0);
+    const cwGeoPoint c(1.0, 2.0, 3.1);
+
+    CHECK(a == b);
+    CHECK(a != c);
+}
+
 TEST_CASE("cwGeoPoint::fromSceneLocal widens a scene point unchanged", "[cwGeoPoint]")
 {
     // The project's local projection is centered on its anchor, so a scene

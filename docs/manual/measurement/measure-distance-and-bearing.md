@@ -1,8 +1,8 @@
 ---
 title: Measure Distance and Bearing
-summary: Measure the straight-line distance, azimuth, and inclination between two points in the 3D view, with the azimuth reported in grid, true, or magnetic north.
-problem: Answer a spatial question about the cave — how far from here to there, which way does this passage point, how much does it climb or drop — right in the 3D view, without exporting anything.
-keywords: [measure, measurement, distance, azimuth, bearing, inclination, grid north, true north, magnetic north, declination, grid convergence, station, ruler, 3d view]
+summary: Measure distance, azimuth, and inclination between 2 points in the 3D view, against grid, true, or magnetic north.
+problem: You have a spatial question about the cave, and the measurement tool answers it from 2 clicks.
+keywords: [measure, distance, azimuth, bearing, inclination, grid north, true north, magnetic north, declination, grid convergence, station, snap, clipboard, 3d view]
 related: [../view-3d/the-3d-view.md, ../georeferencing/grid-convergence.md, ../concepts/coordinate-systems.md]
 ---
 
@@ -10,141 +10,155 @@ related: [../view-3d/the-3d-view.md, ../georeferencing/grid-convergence.md, ../c
 
 ## Why / when you need this
 
-Once a cave is in the [3D view](../view-3d/the-3d-view.md), you'll want to ask
-concrete questions of it: *How far is it from this station to that one? Which way
-does this dead-end lead actually point, so I know where to dig from the surface?
-How much does this passage climb between here and there?* The **measurement tool**
-answers all three at once. You pick two points in the view and CaveWhere reports
-the straight-line distance, the compass bearing, and the vertical angle between
-them — the same numbers you'd get from a shot, but taken off the finished model
-rather than measured underground.
+The cave sits in the [3D view](../view-3d/the-3d-view.md) and you want a number
+off it. Pick 2 points and the **measurement tool** reports the straight-line
+distance, the bearing, and the vertical angle between them.
 
-It's a scratch-pad measurement, not survey data: it lives only as long as you're
-looking at it, and picking a new pair replaces it. Nothing you do here changes the
-survey.
+A shot carries those same 3 numbers, but these come from the finished model, not a
+tape. The 3D view draws the *solved* survey, so a measurement inside a loop
+hands you the adjusted geometry, not what you wrote in the book. Treat it as a
+scratch pad: a new pair replaces the old one, `Esc` throws it away, and nothing
+reaches the project file.
 
 ## Open the measurement tool
 
-Measuring happens in the **3D view**. In the floating toolbar at the bottom-left
-of the view — the same one that holds the coordinate **Pick** and **Clip** tools —
-click **Measure** (the ruler icon, tooltipped *Measure distance and bearing*).
+The floating toolbar at the bottom-left of the 3D view holds **Pick**, **Clip**,
+and **Measure**. Click **Measure**, the ruler icon, tooltipped *Measure distance
+and bearing*. The 3 take turns, and clicking **Measure** again hands the view back
+to the turn-table. Leaving the tool discards the measurement, so `Esc` doubles as
+the delete key.
 
-![The 3D view with the Measure (ruler) tool highlighted in the bottom-left toolbar, and a finished measurement running between two points with the distance labelled on the line.](../images/measurement-tool.png)
-*The Measure tool (highlighted) sits in the 3D view's toolbar, beside the
-coordinate picker and the clip tool; clicking it again turns it back off. Here a
-completed measurement runs between two points, its distance labelled on the line.*
-
-You can still orbit, pan, and zoom while the tool is active — left-click is
-reserved for placing points, but the usual right-drag and scroll gestures keep
-working, so you can reframe the cave mid-measurement to line a shot up.
+The cursor becomes a crosshair. Orbit and zoom keep working, because right-drag
+and scroll pass through to the turn-table. Panning doesn't: the turn-table pans on
+left-drag and the tool has taken left-click, so nothing is left to forward. Press
+`Esc` and pan with the tool off.
 
 ## Place two points
 
-A measurement runs between **two points**. As you move the cursor over the model,
-a marker previews where the next point will land:
+Hover the model and a marker previews where the next point will land. The help box
+at the top of the view says what a click will do:
 
-1. **Click to place the first point.** A help box at the top of the view walks you
-   through it: *"Click to place the first point."*
-2. **Move the cursor** and a live preview stretches from the first point to the
-   cursor, with the running distance shown on the connecting line — so you can read
-   a distance just by hovering, before you commit the second point. The help box now
-   reads *"Click to place the second point."*
-3. **Click to place the second point.** The measurement freezes and the full
-   readout appears (see below). The help box switches to *"Click to start a new
-   measurement, or press `Esc` to exit."*
+1. **Click to place the first point.** The box reads *"Click to place the first
+   point."*
+2. **Move the cursor.** A rubber band stretches to the cursor with the running
+   distance on a chip at its midpoint, so you can read a distance before
+   committing. The box reads *"Click to place the second point."*
+3. **Click to place the second point.** The measurement freezes, the line
+   thickens, and the readout panel appears. The box switches to *"Click to start a
+   new measurement, or press **Esc** to exit."*
 
-Clicking again starts a fresh measurement, and **`Esc`** puts the tool away. Only
-one measurement exists at a time.
+Only 1 measurement exists at a time. The band draws thin and faded while you
+choose the second point. It switches to the danger color at full strength where a
+click would place nothing: the ray missed every piece of geometry, or **Station
+only** is on and you are not over a station.
 
 ### Snap to a survey station
 
-Where the tool places a point depends on what's under the cursor. By default
-(**Free** placement) a click lands wherever your line of sight meets the model — a
-passage wall, the point cloud, anywhere. When the cursor is near a **survey
-station** on the centerline, though, the marker changes to a ring and the point
-**snaps exactly to that station**, so a station-to-station measurement is precise
-rather than eyeballed.
+By default (**Free** placement) a click lands wherever your line of sight meets
+the model: a morphed scrap, a point cloud, anywhere. That answer is approximate by
+construction, because the surface came out of somebody's traced outline. Pass
+within **1.5 mm** of a **survey station** and the marker swaps its filled dot for
+a hollow ring. The point then **snaps exactly to that station**. That tolerance is
+physical millimeters on the glass, not pixels.
 
-To measure *only* between stations, turn on the **Station only** switch in the
-readout panel. Clicks then place a point only when they snap to a station and
-do nothing over open passage — which is what you want when the number has to be a
-true station-to-station distance, not "roughly wall to wall".
+Snapping only reaches the centerline, and a station hidden behind a wall never
+snaps, because the wall returns the nearer hit. Orbit until it comes into view.
+Where stations crowd into that 1.5 mm the snap may take a neighbor, so zoom in
+until they separate.
 
-A point behind a wall can't be snapped: the wall is hit first, so the tool never
-picks a station you can't actually see. Orbit until the station is in view.
+To measure *only* between stations, turn on the **Station only** switch at the
+bottom of the readout panel. Clicks then land only where they snap to a station,
+and do nothing over open passage. That panel exists only once a measurement is
+complete, so you can't arm Station only before your first one. Measure any 2
+points, flip the switch, then measure the pair you wanted. Flipping it
+mid-measurement gates only what happens next.
+
+The mode lasts the session and no longer, unlike the unit and the north reference,
+which persist to disk. Within a session the help box reads *"Click a survey
+station to start measuring."*
+
+**I recommend leaving Station only off** for most work, and turning it on for the
+measurement you plan to write down.
 
 ## Read the measurement
 
-With both points down, a **Measurement** panel appears in the top-right of the view.
-It groups the numbers the way a surveyor thinks about a shot:
+With both points down, a **Measurement** panel appears in the top-right.
 
-![The Measurement readout panel showing the distance, direction, and by-axis groups, with the azimuth north-reference selector.](../images/measurement-readout.png)
-*The measurement between two points. Distance, direction (azimuth and inclination),
-and the signed east/north/up components, each in the chosen unit.*
+![The Measurement readout panel: unit selector m, Straight-line (3D) 58.11 m, Horizontal (2D) 48.38 m, Azimuth Grid 90.9 degrees, Inclination -33.6 degrees, Easting (X) +48.38 m, Northing (Y) -0.75 m, Vertical (Z) -32.19 m, and Copy.](../images/measurement-readout.png)
+*The Measurement panel, the same vector shown 3 ways.*
 
-- **Distance**
-    - **Straight-line (3D)** — the direct distance between the two points, through
-      the air.
-    - **Horizontal (2D)** — the distance ignoring height, i.e. the length of the
-      shadow it would cast on a map. The gap between this and the 3D distance is how
-      steep the line is.
-- **Direction**
-    - **Azimuth** — the compass bearing from the first point to the second,
-      `0–360°`. Which "north" this is measured from is up to you — see
-      [the next section](#choose-which-north-the-azimuth-uses).
-    - **Inclination** — the vertical angle, `−90°` (straight down) to `+90°`
-      (straight up), `0°` being level.
-- **By Axis** — the same displacement broken into signed components:
-  **Easting (X)**, **Northing (Y)**, and **Vertical (Z)**. The sign carries the
-  direction — a negative vertical means the second point is *lower* than the first,
-  a negative easting means it's *west* — so this is the group to read for "which way
-  and how far down".
+Every group carries the same vector in different clothes, in selectable monospace
+text, lengths at 2 decimal places and angles at 1:
 
-A **unit selector** in the panel header switches every length between **metres,
-kilometres, feet, and miles** at once; it defaults to metres and remembers your
-choice. Every value is selectable text, and the **Copy** button drops the whole
-readout — distances, bearing, and axis components — onto the clipboard as text,
-ready to paste into notes. On a narrow view the panel collapses to just the
-distance; the **Expand** button in its header brings the full breakdown back.
+- **Distance** gives **Straight-line (3D)**, `58.11 m` here, the direct distance
+  through the air, and **Horizontal (2D)**, `48.38 m`, the shadow the line would
+  cast on a map.
+- **Direction** gives the **Azimuth**, `90.9°`, the bearing from the first point
+  to the second in the range `0-360°`, and the **Inclination**, `-33.6°`, from
+  `-90°` straight down to `+90°` straight up.
+- **By Axis** splits the displacement into signed **Easting (X)**, **Northing
+  (Y)**, and **Vertical (Z)**. A positive value carries an explicit sign,
+  `+48.38 m`, and a value that rounds to zero prints no sign at all.
+
+No panel appears during the live preview, so a bearing costs both points.
+
+### Units and copying
+
+The **unit selector** in the panel header switches every length at once between
+**m**, **km**, **ft**, and **mi**. It starts on whatever the project's unit system
+implies, meters for metric and feet for imperial, and follows that system until
+you pick a unit yourself. Then the choice saves, stops tracking
+the project, and waits for you next session.
+
+**Copy** drops the whole readout on the clipboard as plain text, laid out like the
+panel. Its azimuth line carries the reference in parentheses, `grid`, `true`, or
+`magnetic, today`, so nobody can misread a pasted bearing later.
 
 ## Choose which north the azimuth uses
 
-A bearing is only meaningful once you say *north of what* — and, as the
-[three norths](../concepts/coordinate-systems.md#three-norths) come apart the moment
-a cave is placed on a map, the tool lets you pick. The selector beside the
-**Azimuth** row offers three references; the **?** button beside it spells them out
-in the app. The mnemonic is **Grid = the map, True = the globe, Magnetic = your
-compass**:
+A bearing means nothing until you say north of what. The
+[three norths](../concepts/coordinate-systems.md#three-norths) come apart the
+moment a cave lands on a map. The selector sits in the **Azimuth** row. The
+mnemonic: **Grid = the map, True = the globe, Magnetic = your compass**.
 
-- **Grid** — north of the coordinate grid the model is drawn in (the UTM grid
-  lines, say). This is the default, and it's the north that matches the 3D view, the
-  survey's own coordinates, and a printed map, so a grid bearing is what you'd
-  transfer straight onto a plan.
-- **True** — geographic north, toward the pole. It differs from grid north by the
-  [grid convergence](../georeferencing/grid-convergence.md) at this spot — the lean
-  between the map's grid and the real meridians.
-- **Magnetic (today)** — where a compass points *now*. It differs from true north by
-  the magnetic [declination](../concepts/coordinate-systems.md#magnetic--true-declination),
-  which drifts year to year, so CaveWhere computes it for **today's date** at this
-  location. This is the bearing to give someone who'll walk the surface with a
-  compass in hand. Because it's tied to today, it's a live reading, not a stored one.
+- **Grid** means north of the coordinate grid the model gets drawn in, the UTM
+  grid lines, say. It is the default and needs no coordinate system, because
+  CaveWhere draws the scene with **+X east, +Y north, and +Z up**, so grid north
+  amounts to the +Y axis.
+- **True** means geographic north, reached by adding the
+  [grid convergence](../georeferencing/grid-convergence.md) at this spot.
+- **Magnetic (today)** means where a compass points now: true north less the
+  magnetic
+  [declination](../concepts/coordinate-systems.md#magnetic-to-true-declination).
 
-**True and Magnetic need the cave [georeferenced](../georeferencing/grid-convergence.md).**
-Converting a grid bearing to true or magnetic takes a real-world position and
-coordinate system, so on a local, un-georeferenced cave those two options are greyed
-out and only **Grid** is offered — there, "grid north" is simply straight up the
-model's own axes. Georeference the cave and all three switch on. Hover the azimuth
-value to see the exact convergence and declination being applied; if a coordinate
-system is set but can't be resolved, the value reads **n/a** and the tooltip says
-why.
+Counting both corrections east-positive:
+
+> **true = grid + convergence**
+> **magnetic = grid + convergence − declination**
+
+CaveWhere evaluates both at the **first** point you placed, not the midpoint, with
+no interpolation to the second. The declination comes from the IGRF-14 model that
+ships with Survex, for **today's date in UTC**. That is not the date on your
+[trip's declination](../survey-data/declination.md), so a cave surveyed in 2004
+and a bearing read off it today may not agree.
+
+**True and Magnetic need the cave
+[georeferenced](../georeferencing/grid-convergence.md).** On a local cave both
+rows stay in the list but come up grayed out, leaving **Grid** as the only one you
+can pick. Georeference the cave and all 3 switch on.
+
+Three more things before you trust a bearing. **Losing the coordinate system snaps
+the selection back to Grid**, rather than leaving the readout reporting a stale
+correction. **A set but unresolvable coordinate system reads `n/a`**, never a
+silently wrong grid number, with the reason in a tooltip. And a *geographic*
+coordinate system makes True equal Grid, because latitude and longitude have no
+grid to lean against, so the convergence comes out 0. The cave page reports that
+case as `n/a (geographic CS)`, which looks like a failure but is not.
 
 ## Next steps
 
-- [The 3D View](../view-3d/the-3d-view.md) — navigate and aim the view you're
-  measuring in.
-- [Understand Grid Convergence](../georeferencing/grid-convergence.md) — why a true
-  bearing and a grid bearing differ, and by how much.
-- [Directions and Coordinate Systems](../concepts/coordinate-systems.md) — the three
-  norths in full, and what georeferencing gives a cave.
-</content>
-</invoke>
+- [The 3D View](../view-3d/the-3d-view.md) to aim the view you measure in.
+- [Understand Grid Convergence](../georeferencing/grid-convergence.md) for why
+  true and grid bearings differ.
+- [Directions and Coordinate Systems](../concepts/coordinate-systems.md) for the
+  3 norths in full.

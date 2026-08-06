@@ -9,6 +9,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include "LoadProjectHelper.h"
 #include "BoulderFixtureHelper.h"
+#include "FixStationFixtureHelper.h"
 #include <catch2/catch_approx.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
@@ -16,6 +17,8 @@ using Catch::Matchers::WithinAbs;
 
 //Cavewhere includes
 #include "cwLinePlotManager.h"
+#include "cwUpdateCoordinator.h"
+#include "cwJobSettings.h"
 #include "cwCavingRegion.h"
 #include "cwGeoReference.h"
 #include "cwCave.h"
@@ -29,6 +32,10 @@ using Catch::Matchers::WithinAbs;
 #include "cwFixStationModel.h"
 #include "cwFixStation.h"
 #include "cwRenderLinePlot.h"
+#include "cwGridConvergence.h"
+#include "cwGeoPoint.h"
+#include "cwCoordinateTransform.h"
+#include "cwStationPositionLookup.h"
 #include "cwKeywordItemModel.h"
 #include "cwKeywordItem.h"
 #include "cwKeywordModel.h"
@@ -43,7 +50,11 @@ using Catch::Matchers::WithinAbs;
 #include <QElapsedTimer>
 #include <QThread>
 #include <QApplication>
+#include <QtMath>
 #include "cwSignalSpy.h"
+
+//Std includes
+#include <cmath>
 
 TEST_CASE("Survey network are returned", "[LinePlotManager]") {
     auto project = fileToProject(testcasesDatasetPath("network.cw"));
@@ -728,7 +739,7 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
     }
 }
 
-TEST_CASE("cwLinePlotManager automatic update should work", "[cwLinePlotManager]") {
+TEST_CASE("cwLinePlotManager defers solving to the update coordinator", "[cwLinePlotManager]") {
 
     cwCavingRegion region;
 
@@ -753,47 +764,51 @@ TEST_CASE("cwLinePlotManager automatic update should work", "[cwLinePlotManager]
     chunk->appendShot(s1, s2, shot1);
 
     auto plotManager = std::make_unique<cwLinePlotManager>();
-    cwSignalSpy autoUpdateSpy(plotManager.get(), &cwLinePlotManager::automaticUpdateChanged);
-    autoUpdateSpy.setObjectName("autoUpdateSpy");
+
+    // Once a coordinator drives the manager it is pure mechanism: with automatic
+    // update off, survey edits only mark it dirty; the coordinator's Run
+    // (updateNow) forces the solve. This is the footer "Update needed" path.
+    cwUpdateCoordinator coordinator;
+    coordinator.add(plotManager.get());
+
+    cwJobSettings::initialize();
+    cwJobSettings::instance()->setAutomaticUpdate(false);
 
     cwSignalSpy stationPositionSpy(cave, &cwCave::stationPositionPositionChanged);
     stationPositionSpy.setObjectName("stationPositionSpy");
 
     SpyChecker spyChecker {
-        {&autoUpdateSpy, 0},
         {&stationPositionSpy, 0}
     };
-
-    CHECK(plotManager->automaticUpdate() == true);
-
-    plotManager->setAutomaticUpdate(false);
-
-    spyChecker[&autoUpdateSpy]++;
-
-    CHECK(plotManager->automaticUpdate() == false);
-    spyChecker.checkSpies();
 
     plotManager->setRegion(&region);
     plotManager->waitToFinish();
 
-    spyChecker.checkSpies(); //StationPositionSpy should be zero
+    CHECK(plotManager->updateState() == cwUpdatable::State::Dirty);
+    CHECK(coordinator.needsUpdate() == true);
+    spyChecker.checkSpies(); //deferred: nothing solved while auto update is off
 
     chunk->setData(cwSurveyChunk::ShotDistanceRole, 0, "11.0");
     plotManager->waitToFinish();
 
-    spyChecker.checkSpies(); //StationPositionSpy should be zero
+    CHECK(plotManager->updateState() == cwUpdatable::State::Dirty);
+    spyChecker.checkSpies(); //still deferred
 
-    plotManager->setAutomaticUpdate(true);
+    // Run: recompute now regardless of the policy, clearing the dirty flag.
+    coordinator.updateNow();
     plotManager->waitToFinish();
-    spyChecker[&autoUpdateSpy]++;
     spyChecker[&stationPositionSpy]++;
     spyChecker.checkSpies();
-    CHECK(plotManager->automaticUpdate() == true);
+    CHECK(plotManager->updateState() == cwUpdatable::State::Clean);
+    CHECK(coordinator.needsUpdate() == false);
 
+    // Turning automatic update back on flushes a later edit immediately.
+    cwJobSettings::instance()->setAutomaticUpdate(true);
     chunk->setData(cwSurveyChunk::ShotDistanceRole, 0, "12.0");
     plotManager->waitToFinish();
     spyChecker[&stationPositionSpy]++;
     spyChecker.checkSpies();
+    CHECK(plotManager->updateState() == cwUpdatable::State::Clean);
 }
 
 TEST_CASE("cwLinePlotManager clears geometry when all caves are removed", "[LinePlotManager]")
@@ -1003,6 +1018,83 @@ TEST_CASE("cwLinePlotManager re-runs cavern when the frame or fix stations chang
             CHECK(position("a2") == QVector3D(0.0f, 10.0f, 0.0f));
         }
     }
+}
+
+TEST_CASE("cwLinePlotManager applies grid convergence to a manual declination (issue #628)",
+          "[LinePlotManager][fix]")
+{
+    // A manual declination is a pure magnetic declination. Cavern folds grid
+    // convergence into `*declination auto` only, so the exporter subtracts it
+    // from the literal `*calibrate DECLINATION` instead (see
+    // cwSurvexExporterUtils::writeDeclinationCalibration). This proves the
+    // end-to-end 3D plot lands in grid north: a magnetic-north shot with
+    // declination 0 must plot at grid bearing -convergence, not 0.
+    //
+    // The grid is the project's local projection, whose convergence is 0 at
+    // the anchor — so the anchor goes on a first cave and the cave under test
+    // is offset east of it, where the angle is real.
+    const QString cs = QStringLiteral("EPSG:32613"); // UTM 13N, central meridian -105
+    const double anchorEasting = 478000.0;
+    const double offsetEast = 34000.0;               // inside the frame's 50 km reach
+    const double fixNorthing = 4430000.0;            // latitude ~40°
+    const double fixElevation = 1600.0;
+
+    // A shot due magnetic north in each cave. Cavern rejects a *fix naming a
+    // station no survey mentions, so the anchor cave needs one of its own.
+    const auto addNorthShot = [](cwCave* cave, const QString& from, const QString& to) {
+        auto* trip = new cwTrip();
+        cave->addTrip(trip);
+        trip->calibrations()->setAutoDeclination(false);
+        trip->calibrations()->setDeclinationManual(0.0);
+
+        auto* chunk = new cwSurveyChunk();
+        trip->addChunk(chunk);
+        cwShot shot;
+        shot.setDistance(cwDistanceReading(QStringLiteral("100.0")));
+        shot.setCompass(cwCompassReading(QStringLiteral("0.0")));
+        shot.setClino(cwClinoReading(QStringLiteral("0.0")));
+        chunk->appendShot(cwStation(from), cwStation(to), shot);
+    };
+
+    cwCavingRegion region;
+    cwCave* anchorCave = addCaveWithFixes(
+        &region, {makeFix(QStringLiteral("b1"), cs, anchorEasting, fixNorthing, fixElevation)});
+    addNorthShot(anchorCave, QStringLiteral("b1"), QStringLiteral("b2"));
+
+    cwCave* cave = addCaveWithFixes(&region, {makeFix(QStringLiteral("a1"), cs,
+                                                      anchorEasting + offsetEast,
+                                                      fixNorthing, fixElevation)});
+    addNorthShot(cave, QStringLiteral("a1"), QStringLiteral("a2"));
+
+    auto plotManager = std::make_unique<cwLinePlotManager>();
+    plotManager->setRegion(&region);
+    plotManager->waitToFinish();
+
+    // The same angle the exporter subtracts: read in the frame, at the cave's
+    // location transformed into it.
+    const QString frameCS = region.geoReference()->localCoordinateSystem();
+    REQUIRE_FALSE(frameCS.isEmpty());
+    const auto framePoint = cwCoordinateTransform::transformPoint(
+        cs, frameCS, cwGeoPoint(anchorEasting + offsetEast, fixNorthing, fixElevation));
+    REQUIRE(framePoint.has_value());
+    const auto convergence = cwGridConvergence::computeAt(*framePoint, frameCS);
+    REQUIRE_FALSE(convergence.hasError());
+    REQUIRE(std::abs(convergence.value()) > 0.1); // meaningful convergence here
+
+    const QVector3D a1 = cave->stationPositionLookup().position(QStringLiteral("a1"));
+    const QVector3D a2 = cave->stationPositionLookup().position(QStringLiteral("a2"));
+    const QVector3D delta = a2 - a1;
+
+    // Grid north lies `convergence` east of true north, so a true-north shot
+    // plots at grid bearing -convergence (bearing measured clockwise from grid
+    // north, i.e. atan2(easting, northing)).
+    const double bearing = qRadiansToDegrees(std::atan2(delta.x(), delta.y()));
+    CHECK(bearing == Catch::Approx(-convergence.value()).margin(0.05));
+    CHECK(double(delta.length()) == Catch::Approx(100.0).margin(0.5));
+
+    // Regression guard: the old behavior left convergence out, plotting due
+    // grid north (bearing 0).
+    CHECK(std::abs(bearing) > 0.1);
 }
 
 TEST_CASE("cwLinePlotManager re-solves when a trip's date changes (bug #581)",
@@ -1636,6 +1728,12 @@ TEST_CASE("Line plot reports only the stations that actually moved", "[LinePlotM
     chunk->appendShot(cwStation("a1"), cwStation("a2"), shot);
 
     auto plotManager = std::make_unique<cwLinePlotManager>();
+
+    // A re-solve with nothing edited only happens on the "Solve" button's
+    // mark-then-drive path, so the test takes it the same way the button does.
+    cwUpdateCoordinator coordinator;
+    coordinator.add(plotManager.get());
+
     plotManager->setRegion(&region);
     plotManager->waitToFinish();
 
@@ -1652,7 +1750,8 @@ TEST_CASE("Line plot reports only the stations that actually moved", "[LinePlotM
                      });
 
     SECTION("A re-solve with no edits moves nothing") {
-        plotManager->rerunSurvex();
+        plotManager->markNeedsUpdate();
+        coordinator.updateNow();
         plotManager->waitToFinish();
 
         REQUIRE(emitCount == 1);    // the solve really did run

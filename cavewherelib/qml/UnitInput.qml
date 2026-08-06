@@ -23,6 +23,7 @@ UnitBaseItem {
 
     QC.Label {
         id: textArea
+        objectName: "unitLabel"
         color: unitInput.readOnly ? Theme.text : Theme.textLink
         text: unitInput.unitModel !== null && typeof(unitInput.unitModel) !== 'undefined' ? " " + unitInput.unitModel[menuId.selectedIndex] : "";
 

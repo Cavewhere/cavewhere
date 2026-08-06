@@ -65,11 +65,11 @@ public:
     QPointF project(QVector3D point, QMatrix4x4 modelMatrix) const;
     QPointF project(QVector3D point, QMatrix4x4 viewMatrix, QMatrix4x4 modelMatrix) const;
 
-    QRay3D frustrumRay(QPoint point) const;
+    QRay3D frustumRay(QPoint point) const;
 
     /// Convenience: takes a Qt viewport pixel (origin top-left, e.g. from a
     /// QML TapHandler eventPoint) and returns the corresponding world-space
-    /// frustum ray. Handles the Y-flip that frustrumRay() alone doesn't.
+    /// frustum ray. Handles the Y-flip that frustumRay() alone doesn't.
     QRay3D rayFromQtViewport(QPointF qtViewportPoint) const;
 
     static QVector3D mapNormalizeScreenToGLViewport(const QVector3D& point, const QRect& viewport);

@@ -1,6 +1,6 @@
 ---
 title: Set the Image Resolution
-summary: What a note's DPI is, how to measure it with the resolution tool, and how to copy it to every note in a trip.
+summary: What a note's DPI is, how to measure it off the page, and how to copy it to every note in a trip.
 problem: Fix the "Invalid scale (check DPI)" error and make a note's on-paper measurements mean real distances.
 keywords: [dpi, resolution, image resolution, ppi, pixels per inch, scale, invalid scale, check dpi, propagate, note]
 related: [add-a-note.md, ../scraps/scrap-types.md, ../scraps/troubleshoot-carpeting.md]
@@ -10,117 +10,125 @@ related: [add-a-note.md, ../scraps/scrap-types.md, ../scraps/troubleshoot-carpet
 
 ## Why you need this
 
-A scan is a grid of pixels, and pixels have no size. A note that is 3000 pixels
-wide might be a pocket notebook page or a flip-chart sheet, and nothing in the
-image says which. **Image Resolution** — the note's **DPI**, its dots per inch —
-is what supplies the missing fact: how much real paper each pixel covers.
+A scan is a grid of pixels, and pixels have no size. The demo project's note
+runs 3195 × 2564 pixels: at 350.03 dots per inch a 9.13 by 7.33 inch field
+notebook, at 96 DPI a 33.3 by 26.7 inch flip-chart sheet. **Image Resolution**,
+the note's **DPI**, supplies the missing fact: how much real paper one pixel
+covers.
 
-That matters because a scrap's scale is stated in *paper distance*: **On Paper
-1 in = In Cave 517 in**. The "1 in" is only an inch if CaveWhere knows how many
-pixels make an inch on your note. Get the DPI wrong and that whole equation is
-quoted in the wrong unit; make it zero or invalid and the scrap cannot warp at
-all. This is the setting behind the **"Invalid scale (check DPI)"** error you may
-have hit in the [Scrap Info panel](../scraps/scrap-types.md#set-the-scale).
+That matters because a scrap states its scale in *paper distance*. The demo
+scrap reads **On Paper 1 in = In Cave 516.99 in**, which CaveWhere reduces to
+**1:517**. That "1 in" only means an inch once CaveWhere knows how many pixels
+make an inch on the note. Set the number wrong and the scale comes out in the
+wrong unit. Set it to zero and the scrap cannot warp at all: the
+**"Invalid scale (check DPI)"** error in the
+[Scrap Info panel](../scraps/scrap-types.md#set-the-scale).
 
-Most of the time you never touch it. **CaveWhere reads the DPI out of the image
-file** when you import it, and scanners record it faithfully — a page scanned at
-300 DPI arrives saying 300 DPI. You need this page when the file *doesn't* carry
-that information, or carries the wrong information: photos taken with a phone,
-images that have been through a converter or an editor that dropped the metadata,
-and pages exported from other software.
+Most of the time you never touch it. On import CaveWhere reads the image's own
+horizontal density, stored as a whole number of dots per meter and converted at
+39.3700787 to the inch. The rounding shows: the demo JPEG's 3780 dots per meter
+comes back as 96.01 DPI, not a clean 96. Only the *horizontal* density gets
+read, and a file that declares none arrives with whatever fallback the image
+library hands over, with nothing on screen to say it was a guess.
 
-**This is a raster problem, so it mostly isn't a digital surveyor's problem.** A
-PDF or an SVG states its own page size, so CaveWhere works the resolution out from
-the document rather than trusting metadata that may not be there, and a note
-sketched digitally normally arrives with a sane one you can leave alone. A
-[LiDAR note](lidar-notes.md) has no DPI at all — a scan is already measured in
-real units, so there's no paper to size. If every note in your project came from a
-tablet or a scanner that does the right thing, you can skip this page until
-something looks wrong.
+From then on the number lives on the note, not on the file. CaveWhere saves it
+with the project and reads it back on load, so the panel need not agree with the
+image. The demo note stores 350.0311716281545, shown as 350.03, over a JPEG
+that still records 96.01.
+
+**Mostly this is a raster problem**. A PDF page always reads 72.01 DPI and an
+SVG 96.01, whatever rasterization resolution you set in
+[Add Notes to a Trip](add-a-note.md), and both already work. A
+[LiDAR note](lidar-notes.md) carries no DPI: a scan records numbers, not units.
 
 ## Find the Image Resolution
 
-The **Image Info** panel is only shown while you're editing the note, so click
-**Carpet** first. The panel sits at the top of the note next to Scrap Info.
+The **Image Info** panel, shown below, rides above Scrap Info at the top of the
+note and appears only in carpet mode, so click **Carpet** first.
 
 ![The Image Info panel on a note in Carpet mode, with the Image Resolution row highlighted: a measurement-tool button, the label Image Resolution, and the value 350.03 Dots per inch.](../images/notes-image-info.png)
-*The Image Info panel. This note reports 350.03 dots per inch, read from the scan
-itself. The button on the left starts the resolution tool; the menu on the right
-copies or resets the value.*
+*The Image Info panel, with the whole feature on one row: a tool button, the
+value, and a menu.*
 
-If you know the real number — because you scanned the page yourself — type it in.
-The field takes a unit, so you can enter the resolution in dots per centimetre or
-dots per metre instead of DPI if that's what you have.
+The value on the row shown above reads to at most 2 decimal places. A dropdown
+beside it (**Dots per inch**, **Dots per centimeter**, **Dots per meter**)
+converts the number as you switch, and you can type a known resolution straight
+in.
 
 ## Measure the resolution off the page
 
-When nobody knows what the resolution is, measure it. You need something on the
-note whose real paper size you can state: the printed grid on engineer's paper,
-a ruler laid on the page before scanning, or the width of the page itself.
+When nobody knows the resolution, measure it. You need something on the note
+whose paper size you can state: the grid on engineer's paper, a ruler scanned
+alongside the page, or the page width.
 
-![The Image Info panel with the measurement button at the left of the Image Resolution row highlighted — a small button showing a horizontal measuring bar.](../images/notes-measure-resolution.png)
-*The measurement button starts the resolution tool. It sits at the left of the
-Image Resolution row, and carries the same measuring-bar icon as the scrap's
-scale tool.*
-
-1. Click the **measurement button** at the left of the Image Resolution row.
-2. **Click two points** on the note, at each end of the thing you're measuring.
-3. Type the **length on the paper** between those two points — the distance you'd
-   get holding a ruler to the original page, not the distance in the cave. It
-   defaults to inches.
+1. Click the **measurement button** at the left of the row, the one wearing a
+   measuring-bar icon. CaveWhere prompts *Click the length's first point*.
+2. Click both ends of what you are measuring. The prompt becomes *Click the
+   length's second point*, and a panel opens under the second click.
+3. Type the **length on the paper** between those points, what a ruler on the
+   page would give, not the distance in the cave.
 4. Click **Done**.
 
-CaveWhere divides the pixels between your two clicks by the length you gave and
-sets the DPI from the result. **Done stays disabled until the length is greater
-than zero**, so the tool can't hand back a nonsense resolution.
+CaveWhere divides the pixels between your clicks by the length you typed,
+correcting for zoom so the answer stays honest on a rasterized PDF. The result
+lands in whatever unit the dropdown shows, and Escape abandons the measurement.
 
-Note the difference between this tool and the similar-looking one in Scrap Info:
-this one asks for a distance **on the paper**, the scrap's scale tool asks for a
-distance **in the cave**. Both start with two clicks on the note, so it's an easy
-pair to mix up.
+Two things the panel never mentions. **Done stays disabled until the length
+exceeds zero**, so the tool cannot hand back a resolution of nothing. And the
+length field defaults to **inches** even on a metric project, whatever the
+project unit system, so read the unit before typing.
+
+I recommend measuring across the **longest feature you can name**. The
+resolution is pixels divided by the length you typed, so a click off by a few
+pixels costs ten times as much over a 1 in baseline as over a 10 in one.
+
+The scrap's scale tool wears the same icon, so the two are easy to mix up. This
+tool's field is *Length on the paper*; the scale tool's is *In cave length*, a
+distance in the cave, and it defaults to meters.
 
 ## Apply the resolution to the whole trip
 
-Notes from one trip are almost always scanned in one batch on one scanner, so
-they share a resolution. The **menu** at the right of the row has two items:
+Notes from one trip usually come off one scanner in one batch, so they share a
+resolution. The menu at the right of the row holds 2 items.
 
-- **Propagate resolution for each note in *(trip)*** — copies this note's
-  resolution to every other note in the trip. Measure once, apply to all.
-- **Reset to original** — puts back the resolution the image file itself
-  declared, undoing your edits.
+- **Propagate resolution for each note in *(trip name)*** copies this note's
+  value *and its unit* onto every note in the trip. **Nothing asks you to
+  confirm, nothing puts the old values back, and there is no undo.** Propagate
+  from a note you trust.
+- **Reset to original** restores the density stored with the image file and
+  forces the unit back to **Dots per inch**. When the file declared no usable
+  density, reset hands back the same fallback that caused the trouble.
 
 ## What the DPI does and doesn't change
 
-This one is easy to get backwards, so it's worth being precise.
+This one is easy to get backwards. The resolution never touches the note's
+pixels, and on its own it does not resize your carpet. With **Auto Calculate**
+on, CaveWhere measures page distances *through* the resolution while deriving
+the scrap's scale from the shots, so the resolution divides back out. Changing
+it re-quotes the **1:*x*** ratio in Scrap Info and leaves the carpet the size
+the survey says.
 
-The DPI does **not** change the note's pixels, and it does **not**, on its own,
-resize your carpet. When **Auto Calculate** is on, CaveWhere derives the scrap's
-scale by comparing distances on the page against the real survey shots — and it
-measures those page distances *through the DPI*. The DPI ends up on both sides of
-that comparison and cancels out, so changing it re-quotes the **1:*x*** ratio in
-Scrap Info while the carpet stays exactly the size the survey says it is.
+Where it genuinely bites is **a scale you typed yourself**. With Auto Calculate
+off, CaveWhere derives nothing, so the DPI alone decides how much of the sketch
+"1 in" covers. Wrong by a factor of 2, carpet wrong by a factor of 2.
 
-Where the DPI genuinely bites is:
+One case earns its own warning. A resolution off by the 39.3700787 unit factor
+can wedge the machine! The morph grid defaults to 0.5 m spacing in cave
+coordinates (**Settings → Warping**). A page claiming to be 39 times too large
+may ask for hundreds of millions of grid points and pin every core for minutes.
+CaveWhere clamps the grid at 2048 points per axis and logs
+`clamping pathological point grid`, which turns a hang into a coarse warp.
 
-- **When you type the scale by hand.** Once you enter *On Paper 1 in = In Cave
-  40 ft* yourself, nothing is derived from the survey any more, and the DPI is
-  the only thing deciding how much of your sketch "1 in" actually covers. A DPI
-  that's off by a factor of two puts your carpet out by a factor of two.
-- **When it's zero, negative, or not a number.** Then the page has no size at
-  all, the scale works out to nothing usable, and the scrap can't warp. CaveWhere
-  refuses the value outright rather than let that happen.
-
-So: a suspiciously scaled carpet on an auto-calculated scrap is usually *not* a
-DPI problem — check the scrap type and the stations first (see
-[Troubleshoot the Carpet](../scraps/troubleshoot-carpeting.md)). A **"check DPI"**
-error, or a hand-entered scale that comes out wrong, usually *is*.
+A suspiciously scaled carpet on an auto-calculated scrap is usually *not* a
+resolution problem. Check the scrap type and the stations first, in
+[Troubleshoot the Carpet](../scraps/troubleshoot-carpeting.md).
 
 ## Errors you might see
 
-- **"Invalid DPI. Value must be finite and greater than 0."** — in the Image Info
-  panel, when the resolution is zero, negative, or not a number. Type a real
-  resolution or use **Reset to original**. CaveWhere won't accept a zero you type,
-  so this normally means the imported file declared nothing usable.
-- **"Invalid scale (check DPI)"** — in the Scrap Info panel. The scrap's scale
-  can't be worked out, and a bad note resolution is the usual reason. Fix the
-  resolution here and the scrap's scale resolves.
+- **"Invalid DPI. Value must be finite and greater than 0."** sits in the Image
+  Info panel whenever the resolution is zero, negative, or not a number. Type a
+  real resolution, or use **Reset to original**. CaveWhere rejects a zero you
+  type, so this normally points at the imported file.
+- **"Invalid scale (check DPI)"** sits in the Scrap Info panel: the scrap's
+  scale cannot be worked out, and a bad note resolution is the usual reason. Fix
+  the resolution here and the scale resolves.

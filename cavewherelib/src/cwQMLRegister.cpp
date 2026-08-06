@@ -114,7 +114,6 @@ cwQMLRegister::cwQMLRegister()
     // qmlRegisterType<QGraphicsScene>("Cavewhere", 1, 0, "GraphicsScene");
     // qmlRegisterType<cwCaptureItemManiputalor>("Cavewhere", 1, 0, "CaptureItemManiputalor");
     // qmlRegisterType<cwCaptureGroupModel>("Cavewhere", 1, 0, "CaptureGroupModel");
-    // qmlRegisterType<cwTaskManagerModel>("Cavewhere", 1, 0, "TaskManagerModel");
     // qmlRegisterType<cwPageSelectionModel>("Cavewhere", 1, 0, "PageSelectionModel");
     // qmlRegisterType<cwPageView>("Cavewhere", 1, 0, "PageView");
     // qmlRegisterType<cwPage>("Cavewhere", 1, 0, "Page");
@@ -140,7 +139,6 @@ cwQMLRegister::cwQMLRegister()
     // qmlRegisterType<cwColumnNameModel>("Cavewhere", 1, 0, "ColumnNameModel");
     // qmlRegisterType<cwCSVLineModel>("Cavewhere", 1, 0, "CSVLineModel");
     // qmlRegisterType<cwFutureManagerModel>("Cavewhere", 1, 0, "FutureManagerModel");
-    // qmlRegisterType<cwTaskFutureCombineModel>("Cavewhere", 1, 0, "TaskFutureCombineModel");
     // qmlRegisterUncreatableType<cwOpenGLSettings>("Cavewhere", 1, 0, "OpenGLSettings", "Should only be created in cwSettings also is static across the application");
     // qmlRegisterSingletonType( QUrl("qrc:/qml/UnitDefaults.qml"), "Cavewhere", 1, 0, "UnitDefaults");
     // qmlRegisterUncreatableType<cwSettings>("Cavewhere", 1, 0, "Settings", "Should only be created in cwRootData also is static across the application");

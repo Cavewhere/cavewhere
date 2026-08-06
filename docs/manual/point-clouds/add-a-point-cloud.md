@@ -11,124 +11,135 @@ related: [clip-a-point-cloud.md, ../georeferencing/georeference-a-cave.md, ../co
 ## Why / when you need this
 
 A cave survey is a wireframe: stations, shots, and the passage walls you sketched.
-It says nothing about the world *above* the cave — where the entrance sits on the
-hillside, which surface sink a lead is heading for, how a passage runs beneath a
-road or a building. A **point cloud** — a LiDAR scan of the surface, usually flown
-from the air — carries exactly that: millions of measured 3D points of the terrain.
+It says nothing about the world *above* the cave, where the entrance sits on the
+hillside, which surface sink a lead heads for, whether a passage runs under a road.
+A **point cloud** carries that: a LiDAR scan of the surface, usually flown from the
+air, holding millions of measured 3D points.
 
-Bring one into the project and CaveWhere draws it in the *same space* as the cave,
-so the two line up. That's what lets you check a lead against the surface above it,
-plan a dig from where a passage comes closest to daylight, or simply present the
-cave in the landscape it belongs to.
+Bring one in and CaveWhere draws it in the same space as the cave. Check a lead
+against the surface above it, or plan a dig where a passage comes closest to
+daylight.
 
-The one prerequisite is a shared frame: the cloud and the cave both have to be on
-the same real-world grid, so **the cave must be
-[georeferenced](../georeferencing/georeference-a-cave.md)** (or become so as you add
-the cloud — see below). A cloud dropped onto a floating, un-georeferenced cave has
-nothing to line up with.
+Both have to sit on one real-world grid, so
+**[georeference the cave](../georeferencing/georeference-a-cave.md)**, or let the
+cloud do it (see below).
 
 ## Where point clouds live
 
-Point-cloud layers are a project-wide thing, not a per-cave one. On the **Data**
-page, find the **Layers** link, which shows the current layer count (`0` on a
-project with none). Click it to open the **Geospatial Layers** page.
+Point-cloud layers belong to the project, not to a cave. Open the **Data** page and
+find the **Project** box, which holds two rows: **Units** and **Layers**. The count
+next to **Layers** is a link (`0` on a project with none); click it to open
+**Geospatial Layers**.
 
-![The empty Geospatial Layers page, with the "Add LAZ Files" bar at the top and a help box reading "No geospatial layers yet."](../images/point-clouds-empty.png)
-*The Geospatial Layers page before any cloud is added. The **Add LAZ Files** bar
-is the entry point; the help box names the first step.*
+Until a cloud loads, the page below shows a blue help box: "No geospatial
+layers yet. Click **Add LAZ Files** to add a LiDAR point cloud."
+
+![The empty Geospatial Layers page, with the Add LAZ Files bar ringed in orange along the top.](../images/point-clouds-empty.png)
+*The Geospatial Layers page before any cloud is added.*
 
 ## Add a LAZ or LAS file
 
-Click **Add LAZ Files**. The file picker filters to **LAZ point clouds
-(`*.laz` `*.las`)** — `.laz` is the compressed form, `.las` the uncompressed one,
-and CaveWhere reads either. You can select several at once.
+Click **Add LAZ Files**, the bar ringed above. The file picker filters to **LAZ
+point clouds (`*.laz` `*.las`)**. `.laz` is the compressed form, `.las` the
+uncompressed one, and CaveWhere reads both through LASlib. Select several at
+once.
 
-CaveWhere **copies** each file into the project (into a `GIS Layers` folder), so the
-cloud travels with the project rather than depending on where the original scan
-happened to live. A large scan is streamed and loaded in the background; a progress
-entry tracks it, and the layer appears in the table as soon as its header is read.
+CaveWhere **copies** each file into a `GIS Layers` folder inside the project, so the
+cloud travels with the project. Beside each copy it writes a `<name>.cwlaz` sidecar
+holding the layer's id and enabled bit. Decoding runs in the background on one
+worker per 262,144 points, capped at one per core, tracked by a progress entry
+labeled `Loading <name>.laz` even when the file was a `.las`.
 
 ## The layer table
 
-Each loaded cloud is one row, under three columns:
+Each loaded cloud is one row, under 3 columns.
 
-- **Name** — the file's name. This is just the layer's label; renaming the file
-  before you import it is the way to give it a friendly name.
-- **Coordinate System** — the real-world grid the layer's points are in, shown by
-  its human name (for example `NAD83 / UTM zone 13N`). Hover the cell to see the
-  full underlying definition. This is the layer's *own* system, read from the file —
-  it doesn't have to match the project's, because CaveWhere reprojects (see below).
-- **Points** — how many points the cloud holds. Aerial scans run to millions.
+- **Name** shows the file's base name. Nothing on this page renames a layer, so
+  choose the file name before you import.
+- **Coordinate System** names the grid the layer's own points sit on, as PROJ
+  resolves it, such as `NAD83 / UTM zone 13N`. Hover the cell for the raw
+  definition. It
+  need not match the project's, because CaveWhere reprojects.
+- **Points** counts the points, comma-grouped. Aerial tiles run to millions.
+
+A row you turn off dims and picks up a **Disabled** chip.
 
 ## Coordinate systems: how the cloud lines up
 
-A point cloud already knows where it is — a LiDAR file normally carries its own
-coordinate system baked in. CaveWhere uses that to **reproject** every point into
-the frame the project is drawn in, so the cloud and the survey end up on one grid
-and overlay correctly. You don't align anything by hand.
+A LiDAR file normally carries its own coordinate system. CaveWhere hands that and
+the project's frame to PROJ and **reprojects** every point, so the cloud and the
+survey land on one grid. You align nothing by hand.
 
-Two cases are worth knowing:
+**The project isn't placed yet.** Your first cloud is enough to place it: CaveWhere
+derives the project's frame from that cloud's own coordinate system and centers it
+on the scan. This is the quick path — drop in an aerial scan and the project has
+somewhere to be, ready for you to
+[fix a station](../georeferencing/georeference-a-cave.md#fix-a-station) into it.
+Whichever scan you add first decides where the frame sits.
 
-- **The project isn't placed yet.** Adding your first cloud is enough to place it:
-  CaveWhere derives the project's frame from that cloud's own coordinate system
-  and centers it on the scan. This is the quick path — drop in an aerial scan and
-  the project has somewhere to be, ready for you to
-  [fix a station](../georeferencing/georeference-a-cave.md#fix-a-station) into it.
-- **The cloud has no coordinate system of its own.** Some `.las` files don't embed
-  one. Then nothing says where those points are, so CaveWhere can't place them and
-  a help box says so. Re-export the scan from whatever produced it with its
-  coordinate system written into the file.
+**The cloud has no coordinate system of its own.** CaveWhere reads only the OGC WKT
+record that LAS 1.4 writes. Older files store their CRS as GeoTIFF GeoKeys instead,
+which CaveWhere does not decode, so a well-georeferenced old scan looks
+unreferenced. Either way nothing says where those points are, so CaveWhere can't
+place them and a help box says so. Re-export the scan from whatever produced it
+with its coordinate system written into the file as OGC WKT.
 
-Either way, the goal is the one from
-[georeferencing](../georeferencing/georeference-a-cave.md): the cave, the surface
-scan, and any surface map all reported in a single coordinate system, so they share
-one space.
+**PROJ cannot get from the cloud's grid to the project's.** Nothing warns you. The
+points go through untransformed and the cloud lands wherever its raw easting and
+northing put it, rarely near the cave. If a cloud you just added is
+nowhere in sight, check this first.
+
+A file the reader cannot open fails just as quietly: the row appears with `0` under
+**Points** and no explanation, because the layer's error message has nowhere to
+surface here. Only a corrupt `.cwlaz` sidecar speaks up, skipping the row and
+reporting `Cannot load LAZ layer <file>: <reason>` in the project's error list.
 
 ## Hide, archive, or remove a layer
 
-**To hide a cloud in the 3D view**, use the **Layers** tab — the same keyword filter
-that shows and hides caves and trips (see
+**To hide a cloud in the 3D view**, use the **Layers** tab, the keyword filter that
+also shows and hides caves and trips (see
 [Focus on part of the cave](../view-3d/the-3d-view.md#focus-on-part-of-the-cave-layers)).
-Every point cloud is tagged **Type: LAZ Layer**, so grouping the Layers tab by
-**Type** gives you a **LAZ Layer** group you can tick or untick to show or hide the
-clouds. That's the visibility control — there's no per-row checkbox on this page.
+Every point cloud carries the keyword **Type: LAZ Layer**, so grouping that tab by
+**Type** gives you a **LAZ Layer** group to tick or untick. This page has no per-row
+checkbox.
 
-For the two heavier actions, **right-click a row** on the Geospatial Layers page:
+For the heavier 2, **right-click a row**.
 
-- **Disable** / **Enable** — *unload* the cloud, not just hide it. A disabled layer
-  isn't drawn and isn't held in memory at all, so this is how you **archive** a scan
-  you're done with, and how you keep a large cloud from spending load time every time
-  the project opens. It stays in the table, dimmed and marked **Disabled**; **Enable**
-  loads it back. (The [clip tool](clip-a-point-cloud.md) disables the source clouds
-  for you after a clip, leaving just the result on screen.)
-- **Remove** — take the layer out of the project entirely. CaveWhere confirms first,
-  then deletes the copied file from the project's `GIS Layers` folder. The original
-  scan you imported from is untouched.
+- **Disable** / **Enable** *unloads* the cloud rather than hiding it. Disabling
+  cancels any load in flight, throws the geometry away, and holds no memory, so it
+  archives a scan you are done with and stops a big cloud costing load time on every
+  open. The row stays, dimmed and marked **Disabled**, and the `.cwlaz` persists the
+  bit through a reopen. The [clip tool](clip-a-point-cloud.md) disables the source
+  clouds for you after a crop or erase, leaving just the result drawn.
+- **Remove `<name>`** asks `Remove <name>?`, then **deletes** the copied file from
+  `GIS Layers` along with its `.cwlaz`. That copy was the project's only version of
+  the layer, and nothing in CaveWhere brings it back. The original scan you imported
+  from survives, so keep it.
 
 ## What you see in the 3D view
 
-Switch to the **3D view** and the cloud is drawn alongside the cave, in the same
-coordinates. Two things about how it looks are automatic and worth understanding:
+Switch to the **3D view** and CaveWhere draws the cloud beside the cave, in the same
+coordinates. Two things happen automatically.
 
-- **It reads as a lit surface, not a field of dots.** CaveWhere shades the cloud
-  with *Eye-Dome Lighting* — each point is darkened according to how far its
-  on-screen neighbors sit in front of or behind it, which brings out relief and
-  edges the way shading on a solid surface would. There's no on/off switch; it's
-  always on, because a raw scatter of equally-bright points is nearly impossible to
-  read as terrain.
-- **Points are sized to just touch.** CaveWhere sizes each point from the scan's own
-  average spacing so neighboring points meet with no gaps — that gap-free coverage
-  is what lets the shading read as a continuous surface instead of showing the
-  background through the holes. If a cloud looks too sparse or too clotted, tune the
-  point size right in the view: **hover the 3D view, hold `P`, and scroll** the mouse
-  wheel or trackpad. While `P` is held the wheel grows and shrinks the points instead
-  of zooming the camera.
+- **It reads as a lit surface, not a field of dots.** CaveWhere shades every cloud
+  with *Eye-Dome Lighting*: each point darkens according to how far its on-screen
+  neighbors sit in front of it, which brings out relief and edges. It runs at
+  strength 1500, max darken 3.0, and a 1.4 px sample radius, and no control in the
+  app changes that or turns it off.
+- **Every point draws as a 1.29 m-radius sphere.** CaveWhere uses that radius for every
+  cloud rather than measuring it from the scan, so a dense tile looks solid and a
+  sparse one shows background through the gaps. Tune it in the view: **hover the
+  3D view, hold `P`, and scroll** the mouse wheel or trackpad.
+  While `P` is held the wheel resizes points instead of zooming the camera, about
+  13% a tick (roughly 6 ticks to double), clamped to 0.01 m through 50 m, and it
+  moves every loaded cloud together. CaveWhere does measure the scan's mean spacing,
+  but that sizes the invisible pick spheres, not the drawn ones.
 
 ## Next steps
 
-- [Clip a Point Cloud](clip-a-point-cloud.md) — trim a big scan down to just the
-  part over your cave.
-- [Georeference a Cave](../georeferencing/georeference-a-cave.md) — fix the cave to
-  the same grid the cloud is on, so the two line up.
-- [Directions and Coordinate Systems](../concepts/coordinate-systems.md) — datums,
-  projections, and why a shared grid matters.
+- [Clip a Point Cloud](clip-a-point-cloud.md): trim a big scan to the part over your
+  cave.
+- [Georeference a Cave](../georeferencing/georeference-a-cave.md): fix the cave to
+  the grid the cloud is on.
+- [Directions and Coordinate Systems](../concepts/coordinate-systems.md): datums and
+  projections.

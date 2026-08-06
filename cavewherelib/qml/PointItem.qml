@@ -20,6 +20,8 @@ Positioner {
 
     focus: selected //A selected point takes keyboard focus so its Keys handlers fire
 
+    visible: inFrustum
+
     onSelectedChanged: {
         if(parentView.selectedItemIndex === pointIndex && !selected) {
             parentView.selectedItemIndex = -1

@@ -123,7 +123,7 @@ std::optional<QVector3D> cwBaseTurnTableInteraction::unProject(QPoint point,
     Q_ASSERT(scene()->geometryItersecter());
 
     //Create a ray from the back projection front and back plane
-    const QRay3D ray = Camera->frustrumRay(point);
+    const QRay3D ray = Camera->frustumRay(point);
     const cwGeometryItersecter* intersecter = scene()->geometryItersecter();
 
     const cwPickQuery pivotQuery =
@@ -279,7 +279,7 @@ QVector3D cwBaseTurnTableInteraction::rayPointAtCenterDepth(QPoint mappedPoint) 
     // Plane through the current center, facing the camera. The ray's direction
     // sign doesn't matter — it's only used as the plane normal and the ray
     // parameter, both of which yield the same world point on the plane.
-    const QRay3D ray = Camera->frustrumRay(mappedPoint);
+    const QRay3D ray = Camera->frustumRay(mappedPoint);
     const QPlane3D plane(m_center, ray.direction());
 
     const double t = plane.intersection(ray);
@@ -687,7 +687,7 @@ void cwBaseTurnTableInteraction::zoomPerspective()
     //target (m_perspectiveIntersection) is a point on this ray — the near
     //geometry's depth on a hit, the pivot's depth on a miss. Recomputed by the
     //binding whenever m_perspectiveMappedPos changed above.
-    const QRay3D cursorRay = Camera->frustrumRay(mappedPos);
+    const QRay3D cursorRay = Camera->frustumRay(mappedPos);
     const QVector3D target = m_perspectiveIntersection.value();
 
     //Signed distance from the near plane to the target along the ray: positive
@@ -1268,7 +1268,7 @@ cwRayHit cwBaseTurnTableInteraction::pick(QPointF qtViewPoint) const
     QPoint mappedPos = Camera->mapToGLViewport(qtViewPoint.toPoint());
 
     //Create a ray from the back projection front and back plane
-    const auto ray = Camera->frustrumRay(mappedPos);
+    const auto ray = Camera->frustumRay(mappedPos);
     return scene()->geometryItersecter()->intersectsDetailed(
                 ray, Camera->pickQuery(pixelsForMillimeters(PivotPickRadiusMillimeters)));
 }

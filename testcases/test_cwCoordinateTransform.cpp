@@ -13,46 +13,7 @@
 #include "cwCoordinateTransform.h"
 #include "cwGeoPoint.h"
 
-//Qt includes
-#include <QVector3D>
-
-#include <cmath>
-
 using Catch::Matchers::WithinAbs;
-
-TEST_CASE("cwGeoPoint converts to QVector3D", "[cwGeoPoint]")
-{
-    SECTION("toVector3D narrows to float")
-    {
-        cwGeoPoint p(1.5, 2.5, 3.5);
-        QVector3D v = p.toVector3D();
-        CHECK(v.x() == 1.5f);
-        CHECK(v.y() == 2.5f);
-        CHECK(v.z() == 3.5f);
-    }
-
-    SECTION("local-projection magnitudes keep mm precision through the narrowing")
-    {
-        // The project's frame is centered on its anchor, so scene coordinates
-        // stay small — which is what leaves float room for millimeters. The
-        // same values as UTM eastings would not survive the narrowing.
-        cwGeoPoint p(123.456789, 987.654321, 1234.5);
-
-        QVector3D v = p.toVector3D();
-        CHECK_THAT(v.x(), WithinAbs(123.456789f, 1e-3f));
-        CHECK_THAT(v.y(), WithinAbs(987.654321f, 1e-3f));
-        CHECK_THAT(v.z(), WithinAbs(1234.5f, 1e-3f));
-    }
-
-    SECTION("equality")
-    {
-        cwGeoPoint a(1.0, 2.0, 3.0);
-        cwGeoPoint b(1.0, 2.0, 3.0);
-        cwGeoPoint c(1.0, 2.0, 3.1);
-        CHECK(a == b);
-        CHECK(a != c);
-    }
-}
 
 TEST_CASE("cwCoordinateTransform short-circuits identical CS", "[cwCoordinateTransform][identity]")
 {

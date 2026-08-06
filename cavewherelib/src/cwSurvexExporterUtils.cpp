@@ -10,6 +10,7 @@
 #include "cwClinoReading.h"
 #include "cwCompassReading.h"
 #include "cwDistanceReading.h"
+#include "cwGridConvergence.h"
 #include "cwShot.h"
 #include "cwStation.h"
 #include "cwSurvexCS.h"
@@ -152,14 +153,45 @@ void writeCalibration(QTextStream& stream, const QString& type, double value, do
 void writeDeclinationCalibration(QTextStream& stream,
                                  bool autoDeclination,
                                  double declination,
-                                 bool autoDeclinationInScope)
+                                 bool autoDeclinationInScope,
+                                 double gridConvergence)
 {
     if (autoDeclination && autoDeclinationInScope) {
         return; //inherits the cave block's *declination auto
     }
 
-    writeCalibrationLine(stream, QStringLiteral("DECLINATION"), declination, 1.0,
+    if (gridConvergence != 0.0) {
+        //Say so in the file, or a reader comparing it against the declination
+        //they typed concludes CaveWhere got their declination wrong. The wording
+        //deliberately spells no survex directive: a reader grepping the export
+        //for one should find only the lines that are actually directives.
+        stream << QStringLiteral("; Declination %1 is magnetic; %2 of grid convergence "
+                                 "subtracted so the survey plots to grid north, as the "
+                                 "auto-declination path would have done.")
+                      .arg(declination, 0, 'f', kSurvexDecimalPlaces)
+                      .arg(gridConvergence, 0, 'f', kSurvexDecimalPlaces)
+               << Qt::endl;
+    }
+
+    writeCalibrationLine(stream, QStringLiteral("DECLINATION"), declination - gridConvergence, 1.0,
                          /*skipZero*/ !autoDeclinationInScope);
+}
+
+double gridConvergenceForBlock(const std::optional<DeclinationContext>& ctx,
+                               const QString& outputCS)
+{
+    if (!ctx || outputCS.trimmed().isEmpty()) {
+        return 0.0;
+    }
+
+    const auto inOutput = cwCoordinateTransform::transformPoint(
+        ctx->inputCS, outputCS, cwGeoPoint(ctx->easting, ctx->northing, ctx->elevation));
+    if (!inOutput.has_value()) {
+        return 0.0;
+    }
+
+    const auto convergence = cwGridConvergence::computeAt(*inOutput, outputCS);
+    return convergence.hasError() ? 0.0 : convergence.value();
 }
 
 bool isValidSurvexRole(const QString& role)

@@ -180,9 +180,8 @@ void cwScrapStationView::updateShotLines() {
         //The position of the selected station
         QVector3D selectedStationPos = stationPositionLookup.position(noteStation.name());
 
-        //Create the matrix to covert global position into note position
-        QMatrix4x4 noteTransformMatrix = cwNoteTranformation::matrix(scrap()->noteTransformAdjustedDeclination()); //Matrix from page coordinates to cave coordinates
-        noteTransformMatrix = noteTransformMatrix.inverted(); //From cave coordinates to page coordinates
+        const cwScrap::ResolvedPlacement placement = scrap()->resolvedPlacement();
+        const QMatrix4x4 caveToPage = placement.caveToPageMatrix();
 
         QMatrix4x4 notePageAspect = note->scaleMatrix().inverted(); //The note's aspect ratio
 
@@ -198,8 +197,8 @@ void cwScrapStationView::updateShotLines() {
         QMatrix4x4 toNormalizedNote = noteStationOffset *
                 dotPerMeter *
                 notePageAspect *
-                noteTransformMatrix *
-                scrap()->viewMatrix()->matrix() *
+                caveToPage *
+                placement.viewMatrix->matrix() *
                 offsetMatrix;
 
         //Only used if the scrap is in running profile
@@ -229,7 +228,7 @@ void cwScrapStationView::updateShotLines() {
                 toNormalizedNote = noteStationOffset *
                         dotPerMeter *
                         notePageAspect *
-                        noteTransformMatrix *
+                        caveToPage *
                         profileDirection *
                         toProfileRotation *
                         offsetMatrix;

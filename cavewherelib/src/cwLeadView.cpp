@@ -19,6 +19,7 @@
 #include "cwKeywordItemModel.h"
 #include "cwKeywordModel.h"
 #include "cwLeadVisibility.h"
+#include "cwPositionItem.h"
 #include "cwDebug.h"
 
 //Qt includes
@@ -28,7 +29,7 @@
 #include <QRay3D>
 
 namespace {
-// Pull the lead marker toward the eye along the line of sight (screen position
+// Pull the lead marker toward the viewer along the line of sight (screen position
 // and size unaffected) so local scrap/centerline geometry near the lead doesn't
 // draw over it. Same rationale and value as the station-label bias. The click
 // occlusion test (isOccluded) reuses this as its slack so a click is rejected
@@ -63,23 +64,63 @@ void cwLeadView::setRegionModel(cwRegionTreeModel* regionModel) {
         if(!RegionModel.isNull()) {
             disconnect(RegionModel.data(), &cwRegionTreeModel::rowsInserted, this, &cwLeadView::scrapsAdded);
             disconnect(RegionModel.data(), &cwRegionTreeModel::rowsAboutToBeRemoved, this, &cwLeadView::scrapsRemoved);
+            disconnect(RegionModel.data(), &QAbstractItemModel::modelAboutToBeReset, this, &cwLeadView::clearAllScraps);
+            disconnect(RegionModel.data(), &QAbstractItemModel::modelReset, this, &cwLeadView::addAllScraps);
         }
+
+        //Drop any scraps tracked from the previous model before switching.
+        clearAllScraps();
 
         RegionModel = regionModel;
 
         if(!RegionModel.isNull()) {
-            m_currentScrapId = 0; //Reset the scrap id, this is useful for the qml testcase to work correctly
-
             connect(RegionModel.data(), &cwRegionTreeModel::rowsInserted, this, &cwLeadView::scrapsAdded);
             connect(RegionModel.data(), &cwRegionTreeModel::rowsAboutToBeRemoved, this, &cwLeadView::scrapsRemoved);
+            connect(RegionModel.data(), &QAbstractItemModel::modelAboutToBeReset, this, &cwLeadView::clearAllScraps);
+            connect(RegionModel.data(), &QAbstractItemModel::modelReset, this, &cwLeadView::addAllScraps);
 
-            QList<cwScrap*> scraps = RegionModel->all<cwScrap*>(QModelIndex(), &cwRegionTreeModel::scrap);
-            for(auto scrap : std::as_const(scraps)) {
-                addScrap(scrap);
-            }
+            addAllScraps();
         }
 
         emit regionModelChanged();
+    }
+}
+
+/**
+ * @brief cwLeadView::clearAllScraps
+ *
+ * Removes every tracked scrap. Used when the region model resets or is replaced,
+ * where per-row remove signals never fire.
+ */
+void cwLeadView::clearAllScraps() {
+    //removeScrap mutates m_leadItems, so snapshot the keys before iterating.
+    QList<cwScrap*> scraps;
+    scraps.reserve(static_cast<int>(m_leadItems.size()));
+    for(const auto& [scrap, entry] : m_leadItems) {
+        scraps.append(scrap);
+    }
+
+    for(auto scrap : std::as_const(scraps)) {
+        removeScrap(scrap);
+    }
+}
+
+/**
+ * @brief cwLeadView::addAllScraps
+ *
+ * (Re)populates the view from the region model. Used on initial model set and
+ * after a model reset.
+ */
+void cwLeadView::addAllScraps() {
+    if(RegionModel.isNull()) {
+        return;
+    }
+
+    m_currentScrapId = 0; //Reset the scrap id, this is useful for the qml testcase to work correctly
+
+    const QList<cwScrap*> scraps = RegionModel->all<cwScrap*>(QModelIndex(), &cwRegionTreeModel::scrap);
+    for(auto scrap : std::as_const(scraps)) {
+        addScrap(scrap);
     }
 }
 
@@ -91,13 +132,11 @@ void cwLeadView::addScrap(cwScrap *scrap)
 {
     Q_ASSERT(scrap != nullptr);
 
-    // A region-model reset (project load/checkout) emits beginResetModel/
-    // endResetModel rather than per-row removals, so a scrap can still be tracked
-    // here when its slot is reused or the scrap is re-added. Rebuild cleanly
-    // instead of double-inserting (which previously hit an assert).
-    if(m_leadItems.contains(scrap)) {
-        removeScrap(scrap);
-    }
+    // A scrap must never already be tracked here. A region-model reset (project
+    // load/checkout) is handled by clearAllScraps()/addAllScraps() around the
+    // reset signals, so this stays a strict invariant (issue #576) rather than a
+    // defensive rebuild that would hide a regression of that class.
+    Q_ASSERT(!m_leadItems.contains(scrap));
 
     auto itemAt = [scrap](const auto& items, int i) {
         Q_ASSERT(dynamic_cast<QQuickItem*>(items[i]));
@@ -106,7 +145,10 @@ void cwLeadView::addScrap(cwScrap *scrap)
 
     auto updatePosition = [scrap](QQuickItem* item, int i) {
         auto position = scrap->leadData(cwScrap::LeadPosition, i).value<QVector3D>();
-        item->setProperty("position3D", position);
+        auto positionItem = qobject_cast<cwPositionItem*>(item);
+        if(positionItem != nullptr) {
+            positionItem->setPosition3D(position);
+        }
     };
 
     auto updatePositions = [scrap, this, updatePosition, itemAt](int begin, int end) {
@@ -490,12 +532,12 @@ void cwLeadView::updateItemPositions() {
     for(auto it = m_leadItems.begin(); it != m_leadItems.end(); ++it) {
         ScrapEntry& entry = it->second;
         for(int i = 0; i < entry.items.size(); i++) {
-            QQuickItem* item = entry.items.at(i);
+            cwPositionItem* item = qobject_cast<cwPositionItem*>(entry.items.at(i));
             if(item == nullptr) {
                 continue;
             }
 
-            const QVector3D world = item->property("position3D").value<QVector3D>();
+            const QVector3D world = item->position3D();
             const QVector3D screen = matrix.map(world);
             item->setPosition(QPointF(screen.x(), screen.y()));
 
@@ -561,10 +603,10 @@ bool cwLeadView::isOccluded(const QVector3D& worldPosition,
     if(qFuzzyIsNull(denom)) {
         return false;
     }
-    // ray.direction() is unit length (cwCamera::frustrumRay normalizes it), so
+    // ray.direction() is unit length (cwCamera::frustumRay normalizes it), so
     // this parameter is a world distance comparable to cwRayHit::tWorld(). The
-    // - kLeadDepthBias slack mirrors the eye-ward shift the billboard renders
-    // with (cwRenderBillboards::buildModelMatrix).
+    // - kLeadDepthBias slack mirrors the line-of-sight shift the billboard
+    // renders with (cwBillboardSightLine).
     const double quadDistance =
         QVector3D::dotProduct(worldPosition - ray.origin(), planeNormal) / denom;
     if(quadDistance <= 0.0) {

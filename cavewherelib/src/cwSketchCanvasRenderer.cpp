@@ -91,7 +91,7 @@ cwSketchCanvasRenderer::~cwSketchCanvasRenderer()
     delete m_linePlotSnapshot;
 }
 
-void cwSketchCanvasRenderer::synchronize(QCanvasPainterItem *item)
+void cwSketchCanvasRenderer::synchronizeData(QCanvasPainterItem *item)
 {
     auto *canvas = qobject_cast<cwSketchCanvas *>(item);
     if (canvas == nullptr) {

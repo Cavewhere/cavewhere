@@ -107,6 +107,21 @@ StandardPage {
         ? cavePageArea.currentCave.errorModel.errors.warningMessages.length > 0
         : false
 
+    // Renders a trip's length in the project's unit system (magnitude-based
+    // m/km, ft/mi), converting from the trip's own calibration unit so the
+    // wide table and narrow list never mix unit systems.
+    component TripLengthLabel : QC.Label {
+        required property real distance      // in distanceUnit
+        required property int distanceUnit   // a Units.LengthUnit
+
+        text: {
+            let meters = Units.convertLength(distance, distanceUnit, Units.Meters)
+            let displayUnit = Units.lengthDisplayUnit(meters, ProjectUnits.unitSystem)
+            return Utils.fixed(Units.convertLength(meters, Units.Meters, displayUnit), 2)
+                   + " " + Units.lengthUnitName(displayUnit)
+        }
+    }
+
     // --- Standalone items (defined once, proxied into wide/narrow layouts) ---
 
     DoubleClickTextInput {
@@ -663,22 +678,11 @@ StandardPage {
                                 implicitHeight: lengthId.implicitHeight
                                 clip: true
 
-                                QC.Label {
+                                TripLengthLabel {
                                     id: lengthId
                                     elide: QQ.Text.ElideRight
-                                    text: {
-                                        var unit = ""
-                                        switch(rowDelegateId.tripObjectRole.calibration.distanceUnit) {
-                                        case Units.Meters:
-                                            unit = "m"
-                                            break;
-                                        case Units.Feet:
-                                            unit = "ft"
-                                            break;
-                                        }
-
-                                        return Utils.fixed(rowDelegateId.tripDistanceRole, 2) + " " + unit;
-                                    }
+                                    distance: rowDelegateId.tripDistanceRole
+                                    distanceUnit: rowDelegateId.tripObjectRole.calibration.distanceUnit
                                 }
                             }
 
@@ -909,19 +913,9 @@ StandardPage {
                     QC.Label { text: Qt.formatDateTime(flowDelegateId.tripDateRole, "yyyy-MM-dd") }
                     QC.Label { text: "·"; color: Theme.textSubtle }
                     QC.Label { text: flowDelegateId.usedStationsRole; color: Theme.textSubtle }
-                    QC.Label {
-                        text: {
-                            var unit = ""
-                            switch(flowDelegateId.tripObjectRole.calibration.distanceUnit) {
-                            case Units.Meters:
-                                unit = "m"
-                                break;
-                            case Units.Feet:
-                                unit = "ft"
-                                break;
-                            }
-                            return Utils.fixed(flowDelegateId.tripDistanceRole, 2) + " " + unit
-                        }
+                    TripLengthLabel {
+                        distance: flowDelegateId.tripDistanceRole
+                        distanceUnit: flowDelegateId.tripObjectRole.calibration.distanceUnit
                         color: Theme.textSubtle
                     }
 

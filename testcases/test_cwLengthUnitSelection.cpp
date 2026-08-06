@@ -14,7 +14,6 @@
 #include <catch2/catch_approx.hpp>
 
 //Qt includes
-#include <QSettings>
 #include <QStringList>
 
 using namespace Catch;
@@ -101,104 +100,16 @@ TEST_CASE("cwLengthUnitSelection formats a length in the selected unit",
     }
 }
 
-TEST_CASE("cwLengthUnitSelection persists to its settings key",
+TEST_CASE("cwLengthUnitSelection holds no persisted or shared state",
           "[cwLengthUnitSelection]")
 {
-    // Each test process has a PID-scoped QSettings, cleared at startup; clear
-    // again so this case is independent of sibling cases.
-    QSettings().clear();
-    const QString key = QStringLiteral("test/lengthUnit");
+    // The selection is in-memory only: its owner re-seeds it from the project's
+    // unit system, so one instance's choice must never leak into another — as a
+    // persisted global unit once did, defeating the project default (#614).
+    cwLengthUnitSelection first;
+    first.setUnit(cwUnits::Feet);
+    CHECK(first.unit() == cwUnits::Feet);
 
-    SECTION("setting the key loads a previously stored unit") {
-        {
-            cwLengthUnitSelection writer;
-            writer.setSettingsKey(key);
-            writer.setUnit(cwUnits::Feet);
-        }
-
-        cwLengthUnitSelection reader;
-        reader.setSettingsKey(key);
-        CHECK(reader.unit() == cwUnits::Feet);
-    }
-
-    SECTION("without a key nothing is persisted") {
-        cwLengthUnitSelection noKey;
-        noKey.setUnit(cwUnits::Feet);
-
-        cwLengthUnitSelection keyed;
-        keyed.setSettingsKey(key);
-        CHECK(keyed.unit() == cwUnits::Meters);
-    }
-
-    SECTION("a corrupt stored value falls back to metres") {
-        QSettings().setValue(key, 999);
-        cwLengthUnitSelection selection;
-        selection.setSettingsKey(key);
-        CHECK(selection.unit() == cwUnits::Meters);
-    }
-
-    QSettings().clear();
-}
-
-TEST_CASE("cwLengthUnitSelection default unit follows the project until chosen",
-          "[cwLengthUnitSelection]")
-{
-    QSettings().clear();
-    const QString key = QStringLiteral("test/lengthUnit");
-
-    SECTION("the default seeds the unit when nothing is persisted") {
-        cwLengthUnitSelection selection;
-        selection.setDefaultUnit(cwUnits::Feet);
-        selection.setSettingsKey(key);
-        CHECK(selection.unit() == cwUnits::Feet);
-    }
-
-    SECTION("the default applies regardless of set order (key first)") {
-        cwLengthUnitSelection selection;
-        selection.setSettingsKey(key);
-        selection.setDefaultUnit(cwUnits::Feet);
-        CHECK(selection.unit() == cwUnits::Feet);
-    }
-
-    SECTION("a persisted choice wins over a later default") {
-        {
-            cwLengthUnitSelection writer;
-            writer.setSettingsKey(key);
-            writer.setUnit(cwUnits::Feet); // an explicit user choice
-        }
-
-        cwLengthUnitSelection selection;
-        selection.setSettingsKey(key);
-        selection.setDefaultUnit(cwUnits::Meters);
-        // The stored feet choice is the user's and must not be overridden.
-        CHECK(selection.unit() == cwUnits::Feet);
-    }
-
-    SECTION("an unlisted default coerces to metres") {
-        cwLengthUnitSelection selection;
-        selection.setDefaultUnit(cwUnits::Inches);
-        selection.setSettingsKey(key);
-        CHECK(selection.unit() == cwUnits::Meters);
-    }
-
-    SECTION("a seeded default does not persist, so it keeps re-following") {
-        // Regression: seeding must not write the key, otherwise a later project
-        // change (a new default) would be mistaken for a user choice and ignored.
-        cwLengthUnitSelection selection;
-        selection.setSettingsKey(key);
-        selection.setDefaultUnit(cwUnits::Feet); // e.g. an imperial project
-        CHECK(selection.unit() == cwUnits::Feet);
-        CHECK_FALSE(QSettings().contains(key));
-
-        selection.setDefaultUnit(cwUnits::Meters); // switched to a metric project
-        CHECK(selection.unit() == cwUnits::Meters);
-
-        // An explicit pick, however, persists and then wins over any later seed.
-        selection.setUnit(cwUnits::Feet);
-        CHECK(QSettings().contains(key));
-        selection.setDefaultUnit(cwUnits::Meters);
-        CHECK(selection.unit() == cwUnits::Feet);
-    }
-
-    QSettings().clear();
+    cwLengthUnitSelection second;
+    CHECK(second.unit() == cwUnits::Meters);
 }

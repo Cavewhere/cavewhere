@@ -553,3 +553,10 @@ phase is small: just the survex export branch plus a regression test.
 - Plan doc lives at `plans/AUTO_DECLINATION_PLAN.md` (copied from
   `/Users/cave/.claude/plans/i-want-you-to-majestic-gizmo.md` as the
   first action after this plan is approved).
+- **Follow-up (#628):** manual declination now also gets grid
+  convergence in the survex export, plan-scrap transform, and LiDAR
+  note paths (`manualDeclinationForGrid()`,
+  `cwScrap::planGridConvergence()`), so a manual value plots to grid
+  north like the auto path. A further follow-up — treating a manual
+  projected-profile azimuth as magnetic (resolved to grid like plan
+  north) — is GitHub #644 / `plans/PROJECTED_PROFILE_AZIMUTH_FRAME_PLAN.md`.

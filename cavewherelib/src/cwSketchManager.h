@@ -29,7 +29,7 @@
 #include "cwDiskCacher.h"
 #include "cwPenStroke.h"
 #include "cwTripLinePlotTask.h"
-#include "cwUniqueConnectionChecker.h"
+#include "cwConnectionRegistry.h"
 #include "asyncfuture.h"
 
 class cwProject;
@@ -163,6 +163,7 @@ private:
     void disconnectTrip(cwTrip* trip);
 
     void connectSketch(cwSketch* sketch);
+    void wireSketch(cwSketch* sketch);
     void disconnectSketch(cwSketch* sketch);
 
     void updateIconFromCache(cwSketch* sketch);
@@ -207,7 +208,7 @@ private:
     bool m_autoIconUpdates = true;
     int  m_idleIntervalMs  = 3000;
 
-    cwUniqueConnectionChecker m_connectionChecker;
+    cwConnectionRegistry m_connectionRegistry;
 
     std::unordered_map<cwTrip*, std::unique_ptr<TripPipeline>> m_tripPipelines;
 };

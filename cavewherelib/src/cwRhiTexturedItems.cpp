@@ -66,77 +66,73 @@ void cwRhiTexturedItems::synchronize(const SynchronizeData& data)
     Q_ASSERT(dynamic_cast<cwRenderTexturedItems*>(data.object) != nullptr);
     auto* renderItems = static_cast<cwRenderTexturedItems*>(data.object);
 
+    // The queue is keyed by id and already coalesced, so each entry is the one
+    // net change for that item this frame; iteration order doesn't matter since
+    // every entry touches only its own id's render Item.
     const auto pendingChanges = renderItems->m_pendingChanges;
-    for (const auto& command : pendingChanges) {
-        const auto id = command.id();
+    using PendingItemState = cwRenderTexturedItems::PendingItemState;
+    for (auto it = pendingChanges.constBegin(); it != pendingChanges.constEnd(); ++it) {
+        const uint32_t id = it.key();
+        const PendingItemState& state = it.value();
+        const auto& payload = state.payload;
 
-        switch (command.type()) {
-        case cwRenderTexturedItems::PendingCommand::Add: {
+        switch (state.lifecycle) {
+        case PendingItemState::Lifecycle::Add: {
             auto* item = new Item;
             item->owner = this;
-            item->material = command.payload().material;
-            item->geometry = command.payload().geometry;
+            item->material = payload.material;
+            item->geometry = payload.geometry;
             item->geometryNeedsUpdate = !item->geometry.indices().isEmpty();
-            item->image = command.payload().texture;
+            item->image = payload.texture;
             item->textureNeedsUpdate = !item->image.isNull();
-            item->uniformBlock = command.payload().uniformBlock;
+            item->uniformBlock = payload.uniformBlock;
             item->uniformNeedsUpdate = true;
             item->pipelineNeedsUpdate = true;
-            item->modelMatrix = command.payload().modelMatrix;
+            item->modelMatrix = payload.modelMatrix;
             item->modelMatrixNeedsUpdate = true;
 
+            // Ids are monotonic, so an Add never targets a live id.
+            Q_ASSERT(!m_items.contains(id));
             m_items.insert(id, item);
             break;
         }
-        case cwRenderTexturedItems::PendingCommand::Remove: {
-            auto it = m_items.find(id);
-            if (it != m_items.end()) {
-                delete it.value();
-                m_items.erase(it);
+        case PendingItemState::Lifecycle::Remove: {
+            auto found = m_items.find(id);
+            if (found != m_items.end()) {
+                delete found.value();
+                m_items.erase(found);
             }
             break;
         }
-        case cwRenderTexturedItems::PendingCommand::UpdateGeometry: {
-            if (auto* item = m_items.value(id, nullptr)) {
-                item->geometry = command.payload().geometry;
+        case PendingItemState::Lifecycle::Update: {
+            auto* item = m_items.value(id, nullptr);
+            if (!item) {
+                break;
+            }
+            if (state.geometryDirty) {
+                item->geometry = payload.geometry;
                 item->geometryNeedsUpdate = true;
             }
-            break;
-        }
-        case cwRenderTexturedItems::PendingCommand::UpdateTexture: {
-            if (auto* item = m_items.value(id, nullptr)) {
-                item->image = command.payload().texture;
+            if (state.textureDirty) {
+                item->image = payload.texture;
                 item->textureNeedsUpdate = true;
             }
-            break;
-        }
-        case cwRenderTexturedItems::PendingCommand::UpdateMaterial: {
-            if (auto* item = m_items.value(id, nullptr)) {
-                if (!(item->material == command.payload().material)) {
-                    item->material = command.payload().material;
-                    item->pipelineNeedsUpdate = true;
-                    item->uniformNeedsUpdate = true;
-                }
-            }
-            break;
-        }
-        case cwRenderTexturedItems::PendingCommand::UpdateUniformBlock: {
-            if (auto* item = m_items.value(id, nullptr)) {
-                item->uniformBlock = command.payload().uniformBlock;
+            if (state.materialDirty && !(item->material == payload.material)) {
+                item->material = payload.material;
+                item->pipelineNeedsUpdate = true;
                 item->uniformNeedsUpdate = true;
             }
-            break;
-        }
-        case cwRenderTexturedItems::PendingCommand::UpdateModelMatrix: {
-            if (auto* item = m_items.value(id, nullptr)) {
-                item->modelMatrix = command.payload().modelMatrix;
+            if (state.uniformBlockDirty) {
+                item->uniformBlock = payload.uniformBlock;
+                item->uniformNeedsUpdate = true;
+            }
+            if (state.modelMatrixDirty) {
+                item->modelMatrix = payload.modelMatrix;
                 item->modelMatrixNeedsUpdate = true;
                 item->uniformNeedsUpdate = true;
             }
             break;
         }
-        default:
-            break;
         }
     }
 

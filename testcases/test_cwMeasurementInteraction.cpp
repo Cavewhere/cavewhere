@@ -152,10 +152,9 @@ TEST_CASE("cwMeasurementInteraction measures between two stations", "[cwMeasurem
 
     SECTION("the clipboard reports lengths in the selected unit") {
         // #564: the interaction routes every clipboard length through its shared
-        // cwLengthUnitSelection. Clear/restore settings so this Feet choice can't
-        // leak into sibling sections (the unit persists via QSettings). The unit
-        // mapping/conversion itself is covered by [cwLengthUnitSelection].
-        QSettings().clear();
+        // cwLengthUnitSelection. The unit is per-instance in-memory state, so this
+        // Feet pick can't leak into sibling sections; the mapping/conversion
+        // itself is covered by [cwLengthUnitSelection].
         QClipboard* clipboard = QGuiApplication::clipboard();
         REQUIRE(clipboard != nullptr);
 
@@ -180,21 +179,27 @@ TEST_CASE("cwMeasurementInteraction measures between two stations", "[cwMeasurem
 
         // Angles are unit-independent and stay in degrees.
         CHECK(text.contains(QStringLiteral("Inclination: 0.0°")));
-
-        lengthUnit->setUnit(cwUnits::Meters);
     }
 
-    SECTION("the length unit persists across interaction instances") {
-        // The interaction wires its selection to a shared QSettings key, so the
-        // choice survives into a fresh interaction (and a new session).
-        QSettings().clear();
-        {
-            cwMeasurementInteraction first;
-            first.lengthUnitSelection()->setUnit(cwUnits::Feet);
-        }
-        cwMeasurementInteraction second;
-        CHECK(second.lengthUnitSelection()->unit() == cwUnits::Feet);
-        second.lengthUnitSelection()->setUnit(cwUnits::Meters);
+    SECTION("the readout unit follows the project unit system") {
+        // #614: the measuring tool takes its length unit from the project, not a
+        // persisted global choice — imperial reads in feet, metric in metres, and
+        // the switch is live.
+        cwLengthUnitSelection* lengthUnit = interaction.lengthUnitSelection();
+        REQUIRE(lengthUnit != nullptr);
+
+        interaction.setUnitSystem(cwUnits::Imperial);
+        CHECK(lengthUnit->unit() == cwUnits::Feet);
+
+        interaction.setUnitSystem(cwUnits::Metric);
+        CHECK(lengthUnit->unit() == cwUnits::Meters);
+
+        // A fresh interaction inherits no prior in-session pick: it defaults to
+        // metres and only its own project binding moves it.
+        interaction.setUnitSystem(cwUnits::Imperial);
+        lengthUnit->setUnit(cwUnits::Miles);
+        cwMeasurementInteraction fresh;
+        CHECK(fresh.lengthUnitSelection()->unit() == cwUnits::Meters);
     }
 
     SECTION("awaiting-second hover previews the live measurement") {
@@ -220,6 +225,39 @@ TEST_CASE("cwMeasurementInteraction measures between two stations", "[cwMeasurem
         // A click on a station still places.
         interaction.place(camera.project(a));
         CHECK(interaction.hasFirst());
+    }
+
+    SECTION("Station-only picks a station through occluding geometry") {
+        // #610: a scrap/wall triangle in front of a station must not block a
+        // Station-only pick. The ray ignores solid geometry and snaps to the
+        // station behind it; in Free mode that same triangle occludes it.
+        // Owner is null so the triangle hit reports no object (never a line
+        // plot), matching a non-centerline surface. z = -50 sits halfway
+        // between the eye and the station at z = -100, covering the ray to a.
+        QVector<QVector3D> occluder;
+        occluder << QVector3D(-25.0f, -15.0f, -50.0f)
+                 << QVector3D(-5.0f, -15.0f, -50.0f)
+                 << QVector3D(-15.0f, 15.0f, -50.0f);
+        scene.geometryItersecter()->addObject(
+                    cwGeometryItersecter::Object(nullptr, 1,
+                        cwTestGeometry::triangles(occluder, {0, 1, 2}, false)));
+        scene.geometryItersecter()->waitForFinish();
+
+        const QPointF stationPixel = camera.project(a);
+
+        // Free mode: the nearer triangle wins by depth, so the pick never
+        // reaches the station — placeable as a free point, but not snapped.
+        interaction.setMode(cwMeasurementInteraction::Mode::Free);
+        interaction.hover(stationPixel);
+        CHECK(interaction.hoverValid());
+        CHECK_FALSE(interaction.hoverSnapped());
+        CHECK(interaction.hoverPoint() != a);
+
+        // Station-only: the ray passes through the triangle and snaps to a.
+        interaction.setMode(cwMeasurementInteraction::Mode::StationOnly);
+        interaction.place(stationPixel);
+        CHECK(interaction.hasFirst());
+        CHECK(interaction.firstPoint() == a);
     }
 
     SECTION("a click after Complete restarts the measurement") {
