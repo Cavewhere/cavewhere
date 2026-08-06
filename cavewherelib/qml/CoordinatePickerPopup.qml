@@ -18,7 +18,6 @@ QC.Popup {
     required property CoordinatePicker picker
 
     readonly property int _gap: 12
-    readonly property int _elevationPrecision: 3
     // The 7th decimal of a degree is ~1 cm, the resolution a registered LiDAR
     // scan actually holds. Six would quantize a pick on one to ~11 cm.
     readonly property int _wgsPrecision: 7
@@ -43,7 +42,7 @@ QC.Popup {
     function _formatElevation(elevationInMeters) {
         const unit = Units.depthDisplayUnit(ProjectUnits.unitSystem)
         const elevation = Units.convertLength(elevationInMeters, Units.Meters, unit)
-        return elevation.toFixed(root._elevationPrecision) + Units.lengthUnitName(unit)
+        return elevation.toFixed(Units.lengthDecimals(unit)) + Units.lengthUnitName(unit)
     }
 
     // Latitude, longitude and elevation as one comma-separated triple, so a

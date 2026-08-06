@@ -80,12 +80,18 @@ public:
     static QString unitName(cwUnits::LengthUnit unit);
     static cwUnits::LengthUnit toLengthUnit(QString unitString);
 
-    //! A length in \a meters, converted to \a unit and rendered at \a decimals
-    //! places with the unit suffix (e.g. "196.85 ft"). With \a signedValue a
-    //! positive value gets an explicit '+'; a value that rounds to zero carries
-    //! no sign (a rounded -0 renders a clean "0.00 <unit>").
+    //! The decimals a measured length is shown at in \a unit — enough to read to
+    //! about a millimeter, whichever unit it is shown in. Drives the measurement
+    //! readout, its clipboard copy, and the coordinate picker's elevation; the
+    //! cave-length stats round to their own coarser precision.
+    Q_INVOKABLE static constexpr int lengthDecimals(cwUnits::LengthUnit unit);
+
+    //! A length in \a meters, converted to \a unit and rendered at that unit's
+    //! lengthDecimals() with the unit suffix (e.g. "196.85 ft"). With
+    //! \a signedValue a positive value gets an explicit '+'; a value that rounds
+    //! to zero carries no sign (a rounded -0 renders a clean "0.000 m").
     static QString formatLength(double meters, cwUnits::LengthUnit unit,
-                                bool signedValue = false, int decimals = 2);
+                                bool signedValue = false);
 
     //! An angle in \a degrees rendered at \a decimals places with the degree
     //! sign (e.g. "0.4°"). A value that rounds to zero carries no sign: a
@@ -201,6 +207,26 @@ inline constexpr double cwUnits::convert(double value,
         return value;
     }
     return convert(value, LengthUnitsToMeters[from], LengthUnitsToMeters[to]);
+}
+
+inline constexpr int cwUnits::lengthDecimals(cwUnits::LengthUnit unit)
+{
+    switch(unit) {
+    case Millimeters:
+        return 0;
+    case Centimeters:
+        return 1;
+    case Inches:
+    case Feet:
+    case Yards:
+    case LengthUnitless:
+        return 2;
+    case Meters:
+    case Kilometers:
+    case Miles:
+        return 3;
+    }
+    return 2;
 }
 
 inline constexpr cwUnits::LengthUnit cwUnits::smallLengthUnit(cwUnits::UnitSystem system)

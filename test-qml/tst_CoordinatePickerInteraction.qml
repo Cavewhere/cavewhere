@@ -111,9 +111,10 @@ MainWindowTest {
                     "41.5660230, -96.3132030, 2206.890m",
                     "Metric project reports the elevation in meters")
 
+            // The decimals follow the unit, from cwUnits::lengthDecimals.
             RootData.region.unitSystem = Units.Imperial
             compare(popup._formatLatLonElevation(41.566023, -96.313203, 1828.8),
-                    "41.5660230, -96.3132030, 6000.000ft",
+                    "41.5660230, -96.3132030, 6000.00ft",
                     "Imperial project reports the elevation in feet")
 
             // The 7th decimal is ~1 cm, which a registered LiDAR scan resolves —

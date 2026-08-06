@@ -109,7 +109,9 @@ In the **3D view**, click the crosshair **Pick** button in the bottom toolbar
 (tooltip "Pick coordinates"), then click the model. A **Picked coordinates**
 panel reports it as **WGS84 (lat, lon, elevation)** — one line, with a **Copy**
 button, so a paste carries the height along with the position. The elevation is
-in the project's units, `2206.890m` or `6000.000ft`. Escape puts the tool away.
+in the project's units, `2206.890m` or `6000.00ft` — the same millimeter
+resolution the [measurement tool](../measurement/measure-distance-and-bearing.md)
+reads to. Escape puts the tool away.
 It's a quick way to grab an entrance coordinate for a permit, a callout, or a
 landowner.
 

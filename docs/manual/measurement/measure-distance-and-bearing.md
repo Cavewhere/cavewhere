@@ -73,9 +73,9 @@ complete, so you can't arm Station only before your first one. Measure any 2
 points, flip the switch, then measure the pair you wanted. Flipping it
 mid-measurement gates only what happens next.
 
-The mode lasts the session and no longer, unlike the unit and the north reference,
-which persist to disk. Within a session the help box reads *"Click a survey
-station to start measuring."*
+The mode lasts the session and no longer, as does the unit. Of the three, only
+the north reference persists to disk. Within a session the help box reads
+*"Click a survey station to start measuring."*
 
 **I recommend leaving Station only off** for most work, and turning it on for the
 measurement you plan to write down.
@@ -84,21 +84,22 @@ measurement you plan to write down.
 
 With both points down, a **Measurement** panel appears in the top-right.
 
-![The Measurement readout panel: unit selector m, Straight-line (3D) 58.11 m, Horizontal (2D) 48.38 m, Azimuth Grid 90.9 degrees, Inclination -33.6 degrees, Easting (X) +48.38 m, Northing (Y) -0.75 m, Vertical (Z) -32.19 m, and Copy.](../images/measurement-readout.png)
+![The Measurement readout panel: unit selector m, Straight-line (3D) 58.051 m, Horizontal (2D) 48.396 m, Azimuth Grid 90.9 degrees, Inclination -33.5 degrees, Easting (X) +48.390 m, Northing (Y) -0.740 m, Vertical (Z) -32.060 m, and Copy.](../images/measurement-readout.png)
 *The Measurement panel, the same vector shown 3 ways.*
 
 Every group carries the same vector in different clothes, in selectable monospace
-text, lengths at 2 decimal places and angles at 1:
+text. Angles read to 1 decimal place, and lengths to the millimeter: 3 decimals
+in meters, 2 in feet, so either unit resolves the same distance.
 
-- **Distance** gives **Straight-line (3D)**, `58.11 m` here, the direct distance
-  through the air, and **Horizontal (2D)**, `48.38 m`, the shadow the line would
+- **Distance** gives **Straight-line (3D)**, `58.051 m` here, the direct distance
+  through the air, and **Horizontal (2D)**, `48.396 m`, the shadow the line would
   cast on a map.
 - **Direction** gives the **Azimuth**, `90.9°`, the bearing from the first point
-  to the second in the range `0-360°`, and the **Inclination**, `-33.6°`, from
+  to the second in the range `0-360°`, and the **Inclination**, `-33.5°`, from
   `-90°` straight down to `+90°` straight up.
 - **By Axis** splits the displacement into signed **Easting (X)**, **Northing
   (Y)**, and **Vertical (Z)**. A positive value carries an explicit sign,
-  `+48.38 m`, and a value that rounds to zero prints no sign at all.
+  `+48.390 m`, and a value that rounds to zero prints no sign at all.
 
 No panel appears during the live preview, so a bearing costs both points.
 
@@ -106,9 +107,11 @@ No panel appears during the live preview, so a bearing costs both points.
 
 The **unit selector** in the panel header switches every length at once between
 **m**, **km**, **ft**, and **mi**. It starts on whatever the project's unit system
-implies, meters for metric and feet for imperial, and follows that system until
-you pick a unit yourself. Then the choice saves, stops tracking
-the project, and waits for you next session.
+implies, meters for metric and feet for imperial. Pick a unit yourself and it
+holds for the session, for reading one measurement in feet without touching the
+project. Nothing is written to disk, so the selector goes back to following the
+project the moment its unit system changes — the project setting stays the one
+that decides.
 
 **Copy** drops the whole readout on the clipboard as plain text, laid out like the
 panel. Its azimuth line carries the reference in parentheses, `grid`, `true`, or

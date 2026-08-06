@@ -81,11 +81,12 @@ QStringList cwUnits::unitSystemNames()
 }
 
 QString cwUnits::formatLength(double meters, cwUnits::LengthUnit unit,
-                              bool signedValue, int decimals)
+                              bool signedValue)
 {
     // Round to display precision first so the sign decision and the -0 collapse
-    // both act on the value the user will actually see (a tiny 0.001 must not
-    // print "+0.00").
+    // both act on the value the user will actually see (a tiny 0.0001 m must not
+    // print "+0.000").
+    const int decimals = lengthDecimals(unit);
     const double scale = std::pow(10.0, decimals);
     double value = std::round(convert(meters, Meters, unit) * scale) / scale;
     value += 0.0; // IEEE: -0.0 + 0.0 == +0.0, so a rounds-to-zero value shows no sign

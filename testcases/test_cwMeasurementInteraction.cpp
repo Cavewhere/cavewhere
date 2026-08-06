@@ -116,9 +116,9 @@ TEST_CASE("cwMeasurementInteraction measures between two stations", "[cwMeasurem
 
     SECTION("the clipboard readout matches the on-screen popup labels and signs") {
         // Regression for #565: the copied text must read like the panel — grouped
-        // labels, signed by-axis components, and two-decimal lengths — not the old
-        // flat "Distance:/ΔEast:", unsigned, three-decimal form. Clear so the
-        // asserted metre suffixes don't depend on a sibling section's persisted unit.
+        // labels and signed by-axis components — not the old flat
+        // "Distance:/ΔEast:", unsigned form. Clear so a sibling section's stored
+        // azimuth reference can't reach the copied text.
         QSettings().clear();
         QClipboard* clipboard = QGuiApplication::clipboard();
         REQUIRE(clipboard != nullptr);
@@ -134,20 +134,20 @@ TEST_CASE("cwMeasurementInteraction measures between two stations", "[cwMeasurem
         CHECK(text.contains(QStringLiteral("Distance\n")));
         CHECK(text.contains(QStringLiteral("Direction\n")));
         CHECK(text.contains(QStringLiteral("By Axis\n")));
-        CHECK(text.contains(QStringLiteral("Straight-line (3D): 60.00 m")));
-        CHECK(text.contains(QStringLiteral("Horizontal (2D): 60.00 m")));
+        // Meters read to the millimeter, the resolution a disto measures at.
+        CHECK(text.contains(QStringLiteral("Straight-line (3D): 60.000 m")));
+        CHECK(text.contains(QStringLiteral("Horizontal (2D): 60.000 m")));
         CHECK(text.contains(QStringLiteral("Inclination: 0.0°")));
 
         // By-axis components carry their sign; a component that rounds to zero
-        // shows none (never "-0.00 m").
-        CHECK(text.contains(QStringLiteral("Easting (X): +60.00 m")));
-        CHECK(text.contains(QStringLiteral("Northing (Y): 0.00 m")));
-        CHECK(text.contains(QStringLiteral("Vertical (Z): 0.00 m")));
+        // shows none (never "-0.000 m").
+        CHECK(text.contains(QStringLiteral("Easting (X): +60.000 m")));
+        CHECK(text.contains(QStringLiteral("Northing (Y): 0.000 m")));
+        CHECK(text.contains(QStringLiteral("Vertical (Z): 0.000 m")));
 
-        // The retired flat labels and three-decimal lengths must be gone.
+        // The retired flat labels must be gone.
         CHECK_FALSE(text.contains(QStringLiteral("ΔEast")));
         CHECK_FALSE(text.contains(QStringLiteral("ΔNorth")));
-        CHECK_FALSE(text.contains(QStringLiteral("60.000 m")));
     }
 
     SECTION("the clipboard reports lengths in the selected unit") {
