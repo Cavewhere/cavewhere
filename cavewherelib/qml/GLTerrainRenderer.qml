@@ -35,7 +35,7 @@ Item {
             iconSource: "qrc:/twbs-icons/icons/crosshair.svg"
             text: qsTr("Pick")
             toolTip: qsTr("Pick coordinates")
-            group: qsTr("Measure & Pick")
+            group: qsTr("Pick & Measure")
             groupId: "measurePick"
         },
         ToolItem {
@@ -44,7 +44,7 @@ Item {
             iconSource: "qrc:/twbs-icons/icons/rulers.svg"
             text: qsTr("Measure")
             toolTip: qsTr("Measure distance and bearing")
-            group: qsTr("Measure & Pick")
+            group: qsTr("Pick & Measure")
             groupId: "measurePick"
         },
         ToolItem {
