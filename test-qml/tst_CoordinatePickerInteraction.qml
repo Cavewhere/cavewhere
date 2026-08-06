@@ -108,21 +108,21 @@ MainWindowTest {
 
             RootData.region.unitSystem = Units.Metric
             compare(popup._formatLatLonElevation(41.566023, -96.313203, 2206.89),
-                    "41.5660230, -96.3132030, 2206.890m",
+                    "41.56602300, -96.31320300, 2206.890m",
                     "Metric project reports the elevation in meters")
 
             // The decimals follow the unit, from cwUnits::lengthDecimals.
             RootData.region.unitSystem = Units.Imperial
             compare(popup._formatLatLonElevation(41.566023, -96.313203, 1828.8),
-                    "41.5660230, -96.3132030, 6000.00ft",
+                    "41.56602300, -96.31320300, 6000.00ft",
                     "Imperial project reports the elevation in feet")
 
-            // The 7th decimal is ~1 cm, which a registered LiDAR scan resolves —
-            // a pick that lands there must survive the formatting.
+            // The 8th decimal (~1 mm of latitude) has to survive formatting,
+            // where the 7th used to round it away to the centimeter.
             RootData.region.unitSystem = Units.Metric
-            compare(popup._formatLatLonElevation(41.5660234, -96.3132037, 2206.89),
-                    "41.5660234, -96.3132037, 2206.890m",
-                    "Centimeter-scale digits are kept")
+            compare(popup._formatLatLonElevation(41.56602341, -96.31320372, 2206.89),
+                    "41.56602341, -96.31320372, 2206.890m",
+                    "Millimeter-scale digits are kept")
         }
     }
 }

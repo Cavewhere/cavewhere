@@ -25,6 +25,14 @@ namespace {
 //source granularity of the values that carry one (Compass stores hundredths).
 constexpr int kSurvexDecimalPlaces = 2;
 
+//A coordinate under a geographic *cs is degrees, where the six decimals that
+//are micrometers in a projected system are ~11 cm of latitude — enough to pull
+//a cave visibly off its LiDAR scan. Nine covers both regimes by overshooting
+//rather than by branching on cwCoordinateTransform::isGeographic(), which
+//answers only for geographic 2D/3D CRS: a compound or engineering system would
+//take the coarse branch and land back on this same bug.
+constexpr int kCoordinateDecimalPlaces = 9;
+
 //A clino this far from ±90 isn't a plumb.
 constexpr double kPlumbToleranceDegrees = 0.001;
 
@@ -51,9 +59,9 @@ namespace cwSurvexExporterUtils {
 
 void writeCoordTriplet(QTextStream& stream, double e, double n, double z)
 {
-    stream << QString::number(e, 'f', 6) << ' '
-           << QString::number(n, 'f', 6) << ' '
-           << QString::number(z, 'f', 6);
+    stream << QString::number(e, 'f', kCoordinateDecimalPlaces) << ' '
+           << QString::number(n, 'f', kCoordinateDecimalPlaces) << ' '
+           << QString::number(z, 'f', kCoordinateDecimalPlaces);
 }
 
 void CsScope::ensure(QTextStream& stream, const QString& cs)

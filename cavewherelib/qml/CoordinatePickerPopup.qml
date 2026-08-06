@@ -18,9 +18,11 @@ QC.Popup {
     required property CoordinatePicker picker
 
     readonly property int _gap: 12
-    // The 7th decimal of a degree is ~1 cm, the resolution a registered LiDAR
-    // scan actually holds. Six would quantize a pick on one to ~11 cm.
-    readonly property int _wgsPrecision: 7
+    // 8 decimals of a degree is ~1 mm of latitude, matching the millimeter the
+    // elevation beside it already reads to (cwUnits::lengthDecimals). The 7th
+    // holds latitude to ~11 mm, coarser than the scan under the pick; the float
+    // the pick arrives as runs out around the 9th.
+    readonly property int _wgsPrecision: 8
     readonly property int _messageWidth: 240
 
     // True when the project has nothing to anchor its local projection to, so the

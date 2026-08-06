@@ -378,6 +378,24 @@ TEST_CASE("cwSurveyDataArtifact::Cave drops a fix whose coordinate can't be read
     exported.caves.append(snapshotCave);
     const QString output = writeRegionToString(exported);
     INFO(output.toStdString());
-    CHECK(output.contains(QStringLiteral("*fix a1 500000.000000 4000000.000000 100.000000")));
+    CHECK(output.contains(QStringLiteral("*fix a1 500000.000000000 4000000.000000000 100.000000000")));
     CHECK_FALSE(output.contains(QStringLiteral("a2")));
+}
+
+TEST_CASE("cwSurvexExporterRule writes a geographic fix to the last digit the user typed",
+          "[cwSurvexExporterRule_fix]") {
+    // Degrees, so the decimals that are micrometers in UTM are centimeters
+    // here. Cutting them at six put this cave's a1 ~5 cm off the LiDAR scan it
+    // was picked from; the 7th below has to reach the file.
+    cwSurveyDataArtifact::Region region;
+
+    cwSurveyDataArtifact::Cave cave;
+    cave.name = QStringLiteral("Iron Gorge");
+    cave.fixStations.append(makeFix("a1", QStringLiteral("EPSG:4326"),
+                                    -121.8305843, 51.1140816, 2198.010));
+    region.caves.append(cave);
+
+    const QString output = writeRegionToString(region);
+    INFO(output.toStdString());
+    CHECK(output.contains(QStringLiteral("*fix a1 -121.830584300 51.114081600 2198.010000000")));
 }

@@ -171,7 +171,7 @@ TEST_CASE("cwSurvexExporterRule: the cave block carries one *declination auto fo
     // re-evaluates IGRF from that block's own *date, so one line covers both
     // trips no matter how many there are.
     CHECK(output.count(QStringLiteral("*declination auto")) == 1);
-    CHECK(output.contains(QStringLiteral("*declination auto 478000.000000 4430000.000000 1655.000000")));
+    CHECK(output.contains(QStringLiteral("*declination auto 478000.000000000 4430000.000000000 1655.000000000")));
 
     // ...and it sits in the cave block, ahead of every trip.
     const int declinationAt = output.indexOf(QStringLiteral("*declination auto"));
@@ -212,7 +212,7 @@ TEST_CASE("cwSurvexExporterRule: *declination auto re-declares its *cs when a la
     CHECK(reDeclaredAt < declinationAt);
 
     // The coordinate is the first fix's, read under the system just re-declared.
-    CHECK(output.contains(QStringLiteral("*declination auto 478000.000000 4430000.000000 1655.000000")));
+    CHECK(output.contains(QStringLiteral("*declination auto 478000.000000000 4430000.000000000 1655.000000000")));
 }
 
 TEST_CASE("cwSurvexExporterRule: autoDeclination off emits literal *calibrate DECLINATION and no auto command",
@@ -328,8 +328,8 @@ TEST_CASE("cwSurvexExporterRule: each cave gets its own *declination auto",
 
     // Two caves are two locations: declination is a property of where you are.
     CHECK(output.count(QStringLiteral("*declination auto")) == 2);
-    CHECK(output.contains(QStringLiteral("*declination auto 478000.000000 4430000.000000 1655.000000")));
-    CHECK(output.contains(QStringLiteral("*declination auto 500000.000000 4200000.000000 900.000000")));
+    CHECK(output.contains(QStringLiteral("*declination auto 478000.000000000 4430000.000000000 1655.000000000")));
+    CHECK(output.contains(QStringLiteral("*declination auto 500000.000000000 4200000.000000000 900.000000000")));
 }
 
 TEST_CASE("cwSurvexExporterCaveTask: the cave block carries one *declination auto for every trip under it",
