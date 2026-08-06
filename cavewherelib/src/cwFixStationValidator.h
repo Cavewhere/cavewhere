@@ -33,10 +33,14 @@ enum class cwErrorTypeId : int;
  * silently blows up the 3D render by inflating the scene bounds until the cave
  * is a sub-pixel dot.
  *
- * "Outlier" is defined relative to the whole survey, so detection is
+ * "Outlier" is defined relative to the project's frame, so detection is
  * region-scoped: it gathers every cave's fix stations, reprojects them into the
- * project's local projection, and flags any point that sits far from the cluster
- * of all the others. Owned by cwCavingRegion (region.fixStationValidator).
+ * project's local projection, and flags any point that sits implausibly far
+ * from its origin. Because the LDP is centered on the project's anchor with
+ * x_0 = y_0 = 0, that distance is a single hypot of coordinates already in
+ * hand — so one fix can be judged as readily as fifty, which is what the
+ * cross-cave clustering this replaced could never do.
+ * Owned by cwCavingRegion (region.fixStationValidator).
  */
 class CAVEWHERE_LIB_EXPORT cwFixStationValidator : public QObject
 {
@@ -67,15 +71,19 @@ public:
         QUuid fixId;
         cwGeoPoint global;  //!< reprojected into the project's local projection
         //! Whether the fix's raw coordinate is plausible for its own input CS
-        //! (Part A). A domain-bad fix is a certain outlier with no cluster
-        //! needed, and is excluded from the cluster math.
+        //! (Part A). A domain-bad fix is a certain outlier on its own, and Part
+        //! B leaves it alone so one bad coordinate raises one warning.
         bool domainValid = true;
     };
 
-    //! Partition of the gathered candidates: the tight cluster (inliers), the
-    //! stragglers far from it (cluster outliers), and the fixes whose coordinate
-    //! is outside their own CS's valid domain (domain outliers — flagged on
-    //! their own, independent of any cluster).
+    //! Partition of the gathered candidates: the fixes near the project's frame
+    //! (inliers), those implausibly far from its origin (outliers), and those
+    //! whose coordinate is outside their own CS's valid domain (domain
+    //! outliers — flagged on their own, independent of the frame).
+    //!
+    //! Only the two outlier lists raise warnings. inliers completes the
+    //! partition so a test can assert which fixes were cleared by name rather
+    //! than by subtraction — say so before deleting it as unread.
     struct Classification {
         QList<FixCandidate> inliers;
         QList<FixCandidate> outliers;
@@ -85,12 +93,11 @@ public:
     explicit cwFixStationValidator(cwCavingRegion* region);
 
     //! Pure classification of already-gathered candidates: no region, no side
-    //! effects, so the threshold math is unit-testable with hand-built input. A
-    //! candidate is an outlier when its distance from the component-wise median
-    //! center exceeds both the float-precision floor and a multiple of the
-    //! cluster's median radius — so a legitimately spread-out survey (large
-    //! radius) flags nothing, and a point too close to matter (below the floor)
-    //! flags nothing.
+    //! effects, so the threshold is unit-testable with hand-built input.
+    //! Candidates are expected in the project's local projection, where a
+    //! candidate is an outlier once its distance from the origin passes the
+    //! threshold. Each fix is judged alone, so the count of candidates never
+    //! changes any one verdict.
     static Classification classifyCandidates(const QList<FixCandidate>& candidates);
 
     //! Gather every cave's fix stations, reproject into the project's frame, and
@@ -125,8 +132,8 @@ private:
     QHash<cwCave*, QString> referenceWarnings() const;
 
     //! Set (or, with an empty message, clear) the cave's Warning row for one of
-    //! our stable errorTypeIds. Each id owns its own row, so the cluster-outlier
-    //! and the domain warnings coexist and are suppressed independently.
+    //! our stable errorTypeIds. Each id owns its own row, so the distance and
+    //! the domain warnings coexist and are suppressed independently.
     void setCaveWarning(cwCave* cave, cwErrorTypeId errorTypeId, const QString& message);
 
     //! Keep m_cavesWithWarning in step with the cave's error rows after a

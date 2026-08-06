@@ -47,6 +47,33 @@ MainWindowTest {
             return findChild(viewPage(), "fixStationOutlierBox")
         }
 
+        // The label HelpBox puts the rich text in. It carries no objectName, so
+        // it is found by the one thing that distinguishes it: only a text item
+        // answers linkAt().
+        function overlayLabel() {
+            const kids = overlay().children
+            for (let i = 0; i < kids.length; i++) {
+                if (typeof kids[i].linkAt === "function") {
+                    return kids[i]
+                }
+            }
+            return null
+        }
+
+        // Where the "Fix Stations" anchor actually landed after layout, asked of
+        // the label itself rather than guessed from the wording.
+        function linkPoint(label) {
+            const kStep = 2
+            for (let y = 0; y < label.height; y += kStep) {
+                for (let x = 0; x < label.width; x += kStep) {
+                    if (label.linkAt(x, y) === "fixStations") {
+                        return Qt.point(x, y)
+                    }
+                }
+            }
+            return null
+        }
+
         function addUtm13NFix(name, e, n, z) {
             cave.fixStations.addFixStation()
             const idx = cave.fixStations.index(cave.fixStations.count - 1)
@@ -57,9 +84,9 @@ MainWindowTest {
             cave.fixStations.setData(idx, z, FixStationModel.ElevationRole)
         }
 
-        // A tight cluster of four good fixes near Boulder, UTM Z13N. Detection
-        // needs at least four fixes to have a cluster to judge an outlier from.
-        function addGoodCluster() {
+        // Four good fixes near Boulder, UTM Z13N. The first anchors the
+        // project's frame, so all four sit within meters of its origin.
+        function addGoodFixes() {
             addUtm13NFix("g1", 478000.0, 4430000.0, 1655.0)
             addUtm13NFix("g2", 478010.0, 4430010.0, 1656.0)
             addUtm13NFix("g3", 477990.0, 4429990.0, 1654.0)
@@ -73,16 +100,16 @@ MainWindowTest {
             verify(o !== null, "outlier overlay must exist in the render view")
             verify(!o.visible, "overlay is hidden with no fix stations")
 
-            addGoodCluster()
-            verify(!o.visible, "a clean cluster raises no overlay")
+            addGoodFixes()
+            verify(!o.visible, "clean fixes raise no overlay")
         }
 
         // ── Typo'd fix → overlay names the cave and routes to its fix stations ─
 
         function test_overlayAppearsForOutlier() {
-            addGoodCluster()
-            // ~1000 km east of the cluster: exceeds both the precision floor and
-            // the cluster-radius multiple, so it is flagged.
+            addGoodFixes()
+            // ~1000 km east of the others, and so of the frame origin they
+            // anchored: past the threshold, so it is flagged.
             addUtm13NFix("BAD", 1478000.0, 4430000.0, 1655.0)
 
             const o = overlay()
@@ -104,7 +131,7 @@ MainWindowTest {
             cave.name = "Bat & Ball"
             compare(cave.name, "Bat & Ball", "the ampersand must survive the name validator")
 
-            addGoodCluster()
+            addGoodFixes()
             addUtm13NFix("BAD", 1478000.0, 4430000.0, 1655.0)
 
             const o = overlay()
@@ -118,26 +145,63 @@ MainWindowTest {
         // ── Activating the link routes to the offending cave's fix stations ──
 
         function test_overlayLinkRoutesToFixStations() {
-            addGoodCluster()
+            addGoodFixes()
             addUtm13NFix("BAD", 1478000.0, 4430000.0, 1655.0)
 
             const o = overlay()
             tryVerify(() => o.visible, 1000, "overlay is up before the link is used")
 
-            // Emitting the HelpBox linkActivated signal drives the overlay's
-            // navigation handler, exactly as a click on the rich-text link would.
+            // Drive the navigation handler on its own, so a routing failure is
+            // told apart from a click that never lands — which is what
+            // test_overlayLinkAcceptsARealClick covers.
             o.linkActivated("fixStations")
 
-            tryVerify(() => RootData.pageSelectionModel.currentPageAddress.indexOf("Cave=OutlierCave") >= 0,
+            // The whole address, not just the cave part: the banner offers to
+            // open the Fix Stations page, and landing on the cave page instead
+            // leaves the user to find it (#627).
+            tryVerify(() => RootData.pageSelectionModel.currentPageAddress
+                              === "Source/Data/Cave=OutlierCave/Fix Stations",
                       1000,
-                      "the link routes to the offending cave: "
+                      "the link routes to the offending cave's fix stations: "
+                      + RootData.pageSelectionModel.currentPageAddress)
+            tryVerify(() => RootData.pageView.currentPageItem !== null
+                            && RootData.pageView.currentPageItem.objectName === "fixStationPage",
+                      1000, "and the Fix Stations page is what is shown")
+        }
+
+        // ── The link is reachable by an actual click ────────────────────────
+
+        // Emitting linkActivated proves the handler routes; it says nothing
+        // about whether a press ever reaches the label. The banner sits inside
+        // the render view underneath LeadView and LinePlotLabelView, which fill
+        // the same area and carry tap-away handlers, so the click is the only
+        // thing that tests the z-order the banner depends on.
+        function test_overlayLinkAcceptsARealClick() {
+            addGoodFixes()
+            addUtm13NFix("BAD", 1478000.0, 4430000.0, 1655.0)
+
+            const o = overlay()
+            tryVerify(() => o.visible, 1000, "overlay is up before the link is clicked")
+
+            const label = overlayLabel()
+            verify(label !== null, "the overlay's text label must be findable")
+
+            const p = linkPoint(label)
+            verify(p !== null, "the \"Fix Stations\" link must occupy a hit-testable point")
+
+            mouseClick(label, p.x, p.y)
+
+            tryVerify(() => RootData.pageSelectionModel.currentPageAddress
+                              === "Source/Data/Cave=OutlierCave/Fix Stations",
+                      1000,
+                      "clicking the link routes to the fix stations: "
                       + RootData.pageSelectionModel.currentPageAddress)
         }
 
         // ── Correcting the coordinate hides the overlay ─────────────────────
 
         function test_overlayClearsWhenCoordinateCorrected() {
-            addGoodCluster()
+            addGoodFixes()
             addUtm13NFix("BAD", 1478000.0, 4430000.0, 1655.0)
 
             const o = overlay()

@@ -62,9 +62,9 @@ QString warningText(cwCave* cave)
     return cave->errorModel()->toStringList().join(QChar(' '));
 }
 
-// Append four fixes in a tight EPSG:32612 cluster — enough to establish a
-// cluster so a fifth straggler can be judged an outlier.
-void appendGoodCluster(cwCave* cave)
+// Append four good fixes close together in EPSG:32612. The first anchors the
+// project's frame, so all four sit within a few hundred meters of its origin.
+void appendGoodFixes(cwCave* cave)
 {
     cave->fixStations()->appendFixStation(
         makeFix(QStringLiteral("A1"), QStringLiteral("EPSG:32612"), 500000.0, 4194000.0, 2700.0));
@@ -81,7 +81,7 @@ void appendGoodCluster(cwCave* cave)
 TEST_CASE("classifyCandidates flags an isolated outlier",
           "[cwFixStationValidator]")
 {
-    // A tight cluster of five plus one point ~500 km away.
+    // Five fixes on the project's frame origin plus one ~500 km away.
     const QList<FixCandidate> candidates = {
         candidateAt(0.0, 0.0),
         candidateAt(10.0, -5.0),
@@ -98,7 +98,7 @@ TEST_CASE("classifyCandidates flags an isolated outlier",
     CHECK(result.outliers.first().global.x == 500000.0);
 }
 
-TEST_CASE("classifyCandidates keeps a tight cluster clean",
+TEST_CASE("classifyCandidates keeps fixes near the frame origin clean",
           "[cwFixStationValidator]")
 {
     const QList<FixCandidate> candidates = {
@@ -118,9 +118,9 @@ TEST_CASE("classifyCandidates keeps a tight cluster clean",
 TEST_CASE("classifyCandidates ignores a legitimately spread-out survey",
           "[cwFixStationValidator]")
 {
-    // Two real clusters ~200 km apart: every point is far from the median
-    // center, so the cluster-radius term lifts the threshold above the floor
-    // and nothing is flagged.
+    // Two real groups of caves ~200 km apart. A karst region this wide is
+    // ordinary, and every fix is still inside the threshold, so the project
+    // must stay quiet — the false-alarm case the threshold is bounded by.
     const QList<FixCandidate> candidates = {
         candidateAt(0.0, 0.0),
         candidateAt(1000.0, 500.0),
@@ -136,48 +136,61 @@ TEST_CASE("classifyCandidates ignores a legitimately spread-out survey",
     CHECK(result.inliers.size() == 6);
 }
 
-TEST_CASE("classifyCandidates does not flag below the minimum fix count",
+TEST_CASE("classifyCandidates flags a distant fix in a two-fix project",
           "[cwFixStationValidator]")
 {
-    // Two points, one obviously distant — but too few to establish a cluster,
-    // so detection is off and everything is an inlier.
+    // Two caves, one fix each, the second ~500 km out — the commonest shape a
+    // project takes, and the one no cross-cave cluster rule can judge: with two
+    // points there is no majority to say which of them is wrong. Measuring each
+    // against the frame origin needs no majority, so this is caught.
     const QList<FixCandidate> candidates = {
         candidateAt(0.0, 0.0),
-        candidateAt(500000.0, 0.0),
-    };
-
-    const auto result = cwFixStationValidator::classifyCandidates(candidates);
-
-    CHECK(result.outliers.isEmpty());
-    CHECK(result.inliers.size() == 2);
-}
-
-TEST_CASE("classifyCandidates flags a straggler once a two-point majority exists",
-          "[cwFixStationValidator]")
-{
-    // Three points: two clustered, one ~500 km away. With the relaxed minimum
-    // (3), the component-wise median lands on the majority pair, so the odd one
-    // out is judged an outlier — the realistic "cluster + one straggler cave"
-    // shape the old four-fix floor would have missed.
-    const QList<FixCandidate> candidates = {
-        candidateAt(0.0, 0.0),
-        candidateAt(10.0, 5.0),
         candidateAt(500000.0, 0.0),
     };
 
     const auto result = cwFixStationValidator::classifyCandidates(candidates);
 
     REQUIRE(result.outliers.size() == 1);
-    CHECK(result.inliers.size() == 2);
     CHECK(result.outliers.first().global.x == 500000.0);
+    CHECK(result.inliers.size() == 1);
 }
 
-TEST_CASE("classifyCandidates separates a domain-bad fix without a cluster",
+TEST_CASE("classifyCandidates flags a lone distant fix with nothing to compare against",
           "[cwFixStationValidator]")
 {
-    // Two points only — below the cluster minimum — but one is marked
-    // domain-invalid (Part A). It must land in domainOutliers, leaving the good
-    // one as the sole inlier, even though no cluster could be formed.
+    // One fix, and it is nowhere near the project's frame — which happens when
+    // the frame is Frozen (its anchor deleted) and the survivor carries the
+    // typo. A single fix is judged on the same terms as any other.
+    const QList<FixCandidate> candidates = {
+        candidateAt(500000.0, 0.0),
+    };
+
+    const auto result = cwFixStationValidator::classifyCandidates(candidates);
+
+    REQUIRE(result.outliers.size() == 1);
+    CHECK(result.inliers.isEmpty());
+}
+
+TEST_CASE("classifyCandidates judges each fix independently of how many there are",
+          "[cwFixStationValidator]")
+{
+    // The same distant point, alone and among neighbors, must get the same
+    // verdict — there is no count at which detection switches on or off.
+    const FixCandidate far = candidateAt(500000.0, 0.0);
+
+    CHECK(cwFixStationValidator::classifyCandidates({far}).outliers.size() == 1);
+    CHECK(cwFixStationValidator::classifyCandidates(
+              {candidateAt(0.0, 0.0), far}).outliers.size() == 1);
+    CHECK(cwFixStationValidator::classifyCandidates(
+              {candidateAt(0.0, 0.0), candidateAt(10.0, 5.0), far}).outliers.size() == 1);
+}
+
+TEST_CASE("classifyCandidates reports a domain-bad fix as domain-bad, not distant",
+          "[cwFixStationValidator]")
+{
+    // A fix marked domain-invalid (Part A) sits right next to the frame origin,
+    // so only Part A has anything to say about it. It must land in
+    // domainOutliers, leaving the good one as the sole inlier.
     QList<FixCandidate> candidates = {
         candidateAt(0.0, 0.0),
         candidateAt(10.0, 5.0),
@@ -193,19 +206,20 @@ TEST_CASE("classifyCandidates separates a domain-bad fix without a cluster",
     CHECK(result.inliers.first().global.x == 0.0);
 }
 
-TEST_CASE("classifyCandidates drops a domain-bad fix before the cluster median",
+TEST_CASE("classifyCandidates raises one warning per bad fix, not two",
           "[cwFixStationValidator]")
 {
-    // A wild domain-bad point sits far off; if it were left in, the median
-    // center would be dragged toward it and could mask a second, subtler
-    // straggler. Pulling it out first keeps the cluster judged on real data.
+    // A domain-bad point that is ALSO far from the frame — the usual shape,
+    // since a coordinate outside its own CS's range is rarely nearby. It must
+    // be reported once, by Part A, which says what is wrong with it; Part B
+    // must leave it alone rather than add a second warning about the same fix.
     QList<FixCandidate> candidates = {
         candidateAt(0.0, 0.0),
         candidateAt(10.0, 5.0),
         candidateAt(-8.0, 12.0),
         candidateAt(3.0, 3.0),
-        candidateAt(500000.0, 0.0),    // in-domain straggler → cluster outlier
-        candidateAt(9000000.0, 0.0),   // domain-bad → pulled out first
+        candidateAt(500000.0, 0.0),    // in-domain but distant → Part B
+        candidateAt(9000000.0, 0.0),   // domain-bad → Part A, and only Part A
     };
     candidates[5].domainValid = false;
 
@@ -218,11 +232,11 @@ TEST_CASE("classifyCandidates drops a domain-bad fix before the cluster median",
     CHECK(result.inliers.size() == 4);
 }
 
-TEST_CASE("classifyCandidates leaves a near point below the precision floor alone",
+TEST_CASE("classifyCandidates leaves a point inside the threshold alone",
           "[cwFixStationValidator]")
 {
-    // 50 km from a tight cluster: beyond the cluster radius, but under the
-    // ~84 km float-precision floor, so it does not yet break rendering and is
+    // 50 km out: far enough from its neighbors that a cluster rule would have
+    // called it a straggler, but an ordinary distance for one project, so it is
     // not flagged.
     const QList<FixCandidate> candidates = {
         candidateAt(0.0, 0.0),
@@ -244,7 +258,7 @@ TEST_CASE("currentClassification flags a typo'd fix across caves with provenance
 {
     cwCavingRegion region;
 
-    // Four good fixes spread across two caves, clustered near one spot.
+    // Four good fixes spread across two caves, all near one spot.
     region.addCave();
     auto* caveA = region.cave(0);
     REQUIRE(caveA != nullptr);
@@ -289,7 +303,7 @@ TEST_CASE("currentClassification reprojects a fix entered in a different CS",
 {
     // The global CS is UTM 12N; four good fixes are entered directly in it, plus
     // one good fix for the SAME real-world spot entered in WGS84 lon/lat. Raw, the
-    // WGS84 degrees sit ~4000 km from the UTM cluster and would be flagged — so
+    // WGS84 degrees sit ~4000 km from the UTM fixes and would be flagged — so
     // classifying it as an inlier proves gatherCandidates() actually ran the
     // cwCoordinateTransform. Exercises the reproject branch the same-CS tests skip.
     cwCavingRegion region;
@@ -349,7 +363,7 @@ TEST_CASE("currentClassification drops fixes with no usable CS of their own",
     CHECK(result.outliers.isEmpty());
     CHECK(result.inliers.size() == 4);
 
-    // By identity, not by count: E1 sits inside the cluster, so a count alone
+    // By identity, not by count: E1 sits near the frame origin, so a count alone
     // would not say which four survived.
     const auto kept = [&](int row) {
         const QUuid id = cave->fixStations()->fixStationAt(row).id();
@@ -366,7 +380,7 @@ TEST_CASE("currentClassification drops a fix that has a CS but no coordinate yet
 {
     // "Mark Station as Fixed" makes exactly this row: a coordinate system, and
     // no coordinate until the user types one. Its components are 0 — every
-    // state but Valid reads 0 — so admitting it would enter the cluster at
+    // state but Valid reads 0 — so admitting it would judge it at
     // WGS84's origin, thousands of km from the project, and flag the row the
     // user just created as an outlier.
     cwCavingRegion region;
@@ -415,9 +429,9 @@ TEST_CASE("revalidate attributes an outlier warning to its cave",
     region.addCave();
     auto* cave = region.cave(0);
     REQUIRE(cave != nullptr);
-    appendGoodCluster(cave);
+    appendGoodFixes(cave);
 
-    // No outlier yet — the four-fix cluster is clean.
+    // No outlier yet — all four fixes are clean.
     CHECK(cave->errorModel()->warningCount() == 0);
 
     // Editing the model fires the validator's own connections, so appending the
@@ -437,12 +451,12 @@ TEST_CASE("revalidate clears the warning when the outlier is corrected",
     region.addCave();
     auto* cave = region.cave(0);
     REQUIRE(cave != nullptr);
-    appendGoodCluster(cave);
+    appendGoodFixes(cave);
     cave->fixStations()->appendFixStation(
         makeFix(QStringLiteral("Bad"), QStringLiteral("EPSG:32612"), 500150.0, 5194000.0, 2708.0));
     REQUIRE(cave->errorModel()->warningCount() == 1);
 
-    // Correct the typo in place — the northing back into the cluster.
+    // Correct the typo in place — the northing back beside the other fixes.
     const int badRow = cave->fixStations()->count() - 1;
     cave->fixStations()->setData(cave->fixStations()->index(badRow),
                                  4194050.0,
@@ -459,7 +473,7 @@ TEST_CASE("revalidate updates an existing warning in place without re-adding",
     region.addCave();
     auto* cave = region.cave(0);
     REQUIRE(cave != nullptr);
-    appendGoodCluster(cave);
+    appendGoodFixes(cave);
     cave->fixStations()->appendFixStation(
         makeFix(QStringLiteral("Bad"), QStringLiteral("EPSG:32612"), 500150.0, 5194000.0, 2708.0));
     REQUIRE(cave->errorModel()->warningCount() == 1);
@@ -487,7 +501,7 @@ TEST_CASE("revalidate preserves a suppressed outlier warning across edits",
     region.addCave();
     auto* cave = region.cave(0);
     REQUIRE(cave != nullptr);
-    appendGoodCluster(cave);
+    appendGoodFixes(cave);
     cave->fixStations()->appendFixStation(
         makeFix(QStringLiteral("Bad"), QStringLiteral("EPSG:32612"), 500150.0, 5194000.0, 2708.0));
 
@@ -529,12 +543,12 @@ TEST_CASE("revalidate clears the warning when its cave leaves the region",
     region.addCave();
     auto* keepCave = region.cave(0);
     REQUIRE(keepCave != nullptr);
-    appendGoodCluster(keepCave);
+    appendGoodFixes(keepCave);
 
     region.addCave();
     auto* doomedCave = region.cave(1);
     REQUIRE(doomedCave != nullptr);
-    appendGoodCluster(doomedCave);
+    appendGoodFixes(doomedCave);
     doomedCave->fixStations()->appendFixStation(
         makeFix(QStringLiteral("Bad"), QStringLiteral("EPSG:32612"), 500150.0, 5194000.0, 2708.0));
     REQUIRE(doomedCave->errorModel()->warningCount() == 1);
@@ -560,7 +574,7 @@ TEST_CASE("revalidate raises no warning across caves entered in different CSs",
     region.addCave();
     auto* utmCave = region.cave(0);
     REQUIRE(utmCave != nullptr);
-    appendGoodCluster(utmCave);
+    appendGoodFixes(utmCave);
 
     region.addCave();
     auto* wgsCave = region.cave(1);
@@ -576,9 +590,10 @@ TEST_CASE("revalidate raises no warning across caves entered in different CSs",
 TEST_CASE("classifyCandidates flags an elevation-only outlier",
           "[cwFixStationValidator]")
 {
-    // A tight cluster in x/y at ground level plus one point displaced only in z —
-    // a transposed elevation. Only distance()'s dz term can catch it, so a
-    // regression dropping dz would leave this uncaught.
+    // Fixes at ground level plus one displaced only in z — a transposed
+    // elevation. The frame has no z origin, so this rides entirely on
+    // distanceFromFrameOrigin() keeping its z term; dropping it to a horizontal
+    // hypot would leave this uncaught.
     const QList<FixCandidate> candidates = {
         candidateAt(0.0, 0.0, 0.0),
         candidateAt(10.0, -5.0, 0.0),
@@ -603,12 +618,12 @@ TEST_CASE("revalidate summarizes outliers for the render-view overlay",
     auto* cave = region.cave(0);
     REQUIRE(cave != nullptr);
     cave->setName(QStringLiteral("Deep Hole"));
-    appendGoodCluster(cave);
+    appendGoodFixes(cave);
 
     auto* validator = region.fixStationValidator();
     REQUIRE(validator != nullptr);
 
-    // A clean cluster leaves the summary empty so the overlay stays hidden.
+    // Clean fixes leave the summary empty so the overlay stays hidden.
     CHECK(validator->property("warningMessage").toString().isEmpty());
     CHECK(validator->property("outlierCount").toInt() == 0);
     CHECK(validator->property("firstOutlierCave").value<cwCave*>() == nullptr);
@@ -653,7 +668,7 @@ TEST_CASE("revalidate refreshes the summary when the offending cave is renamed",
     auto* cave = region.cave(0);
     REQUIRE(cave != nullptr);
     cave->setName(QStringLiteral("Deep Hole"));
-    appendGoodCluster(cave);
+    appendGoodFixes(cave);
     cave->fixStations()->appendFixStation(
         makeFix(QStringLiteral("Bad"), QStringLiteral("EPSG:32612"), 500150.0, 5194000.0, 2708.0));
 
@@ -670,13 +685,13 @@ TEST_CASE("revalidate refreshes the summary when the offending cave is renamed",
     CHECK_FALSE(message.contains(QStringLiteral("Deep Hole")));
 }
 
-TEST_CASE("revalidate flags a fix outside its CS's valid domain with no cluster",
+TEST_CASE("revalidate flags a fix outside its CS's valid domain",
           "[cwFixStationValidator]")
 {
     // The realistic 2-cave typo: one good cave, one whose single fix has a
     // transposed leading digit (1478000 easting in UTM 13N — ~1000 km east of
-    // the zone). Only one fix is domain-valid, so the cluster rule cannot fire;
-    // the per-fix domain check (Part A) is what catches it.
+    // the zone). Part A names what is actually wrong with it, which is more
+    // than the distance alone would say.
     cwCavingRegion region;
 
     region.addCave();
@@ -701,13 +716,13 @@ TEST_CASE("revalidate flags a fix outside its CS's valid domain with no cluster"
     CHECK(goodCave->errorModel()->warningCount() == 0);
 }
 
-TEST_CASE("revalidate flags a distant in-domain cave once a two-cave majority exists",
+TEST_CASE("revalidate flags a distant in-domain cave",
           "[cwFixStationValidator]")
 {
     // Three caves, one fix each, all valid UTM 13N coordinates — but one sits
     // ~1000 km north of the other two. The domain check passes (it is a real
-    // in-zone location), so this is caught only by the relaxed cluster rule
-    // (Part B): with an odd count the median center lands on the majority pair.
+    // in-zone location), so Part B's distance from the frame is the only thing
+    // that catches it.
     cwCavingRegion region;
 
     region.addCave();
@@ -731,20 +746,20 @@ TEST_CASE("revalidate flags a distant in-domain cave once a two-cave majority ex
     REQUIRE(caveC->errorModel()->warningCount() == 1);
     // One outlier, so the singular verb. The distance is computed, so the
     // assertions straddle it rather than pinning a number.
-    const QString clusterMessage = warningText(caveC);
-    CHECK(clusterMessage.contains(QStringLiteral("Fix station \"C\" (~")));
-    CHECK(clusterMessage.contains(QStringLiteral(") is far from the rest of the survey")));
+    const QString distanceMessage = warningText(caveC);
+    CHECK(distanceMessage.contains(QStringLiteral("Fix station \"C\" (~")));
+    CHECK(distanceMessage.contains(QStringLiteral(") is far from the rest of the survey")));
     CHECK(caveA->errorModel()->warningCount() == 0);
     CHECK(caveB->errorModel()->warningCount() == 0);
 }
 
-TEST_CASE("revalidate flags a domain-bad cave in a balanced split the cluster rule cannot",
+TEST_CASE("revalidate attributes a whole bad cave to Part A, not Part B",
           "[cwFixStationValidator]")
 {
     // Two caves, two fixes each. One cave's fixes both carry a transposed-digit
-    // easting (out of the zone's domain). A balanced 2-vs-2 split defeats the
-    // cluster rule — the median center sits midway, so neither pair strays — yet
-    // Part A still flags the bad cave.
+    // easting (out of the zone's domain), so the bad cave is flagged for what is
+    // actually wrong with it — the coordinates, not their distance — even though
+    // both fixes are also far from the frame.
     cwCavingRegion region;
 
     region.addCave();
@@ -771,21 +786,55 @@ TEST_CASE("revalidate flags a domain-bad cave in a balanced split the cluster ru
                        "their coordinate system")));
     CHECK(goodCave->errorModel()->warningCount() == 0);
 
-    // Prove the cluster rule alone could not: the same four points, all treated
-    // as in-domain, produce no cluster outlier (median center sits midway).
-    const QList<FixCandidate> balanced = {
-        candidateAt(478000.0, 4430000.0), candidateAt(478100.0, 4430100.0),
-        candidateAt(1478000.0, 4430000.0), candidateAt(1478100.0, 4430100.0),
-    };
-    CHECK(cwFixStationValidator::classifyCandidates(balanced).outliers.isEmpty());
+    // And exactly one warning, not two: the same fixes are far from the frame as
+    // well, so a Part B that did not defer would flag this cave a second time.
+    const auto classification = region.fixStationValidator()->currentClassification();
+    CHECK(classification.domainOutliers.size() == 2);
+    CHECK(classification.outliers.isEmpty());
+}
+
+TEST_CASE("revalidate flags a two-cave project whose second fix is a continent away",
+          "[cwFixStationValidator]")
+{
+    // The reported shape (#627): two caves, one WGS84 fix each, the second
+    // ~2000 km from the first — a real coordinate for somewhere the project is
+    // not. Both are legal lat/lon, so Part A passes them; with only two fixes
+    // there is no majority for a cluster rule to find, which is exactly why
+    // this went unreported until Part B started measuring from the frame.
+    cwCavingRegion region;
+
+    region.addCave();
+    auto* bcCave = region.cave(0);
+    REQUIRE(bcCave != nullptr);
+    bcCave->setName(QStringLiteral("Cave 1"));
+    bcCave->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("a1"), QStringLiteral("EPSG:4326"), -121.83058365, 51.11408015, 2198.03));
+
+    region.addCave();
+    auto* strayCave = region.cave(1);
+    REQUIRE(strayCave != nullptr);
+    strayCave->setName(QStringLiteral("Cave 2"));
+    strayCave->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("b2"), QStringLiteral("EPSG:4326"), -98.370455, 41.936678, 0.0));
+
+    REQUIRE(bcCave->errorModel()->warningCount() == 0);
+    REQUIRE(strayCave->errorModel()->warningCount() == 1);
+    CHECK(warningText(strayCave).contains(QStringLiteral("Fix station \"b2\" (~")));
+    CHECK(warningText(strayCave).contains(QStringLiteral(") is far from the rest of the survey")));
+
+    // And the render-view banner names the offending cave, so an empty-looking
+    // 3D view has a cause the user can act on.
+    auto* validator = region.fixStationValidator();
+    CHECK(validator->property("outlierCount").toInt() == 1);
+    CHECK(validator->property("firstOutlierCave").value<cwCave*>() == strayCave);
 }
 
 TEST_CASE("revalidate does not flag two legitimately distant caves",
           "[cwFixStationValidator]")
 {
-    // Two caves ~300 km apart, every fix a valid in-zone UTM 13N coordinate.
-    // Neither the domain check nor the balanced cluster split should fire — a
-    // legitimately spread-out survey must not cry wolf.
+    // Two caves ~300 km apart, every fix a valid in-zone UTM 13N coordinate — a
+    // karst region, not a typo. This is the lower bound on the distance
+    // threshold: a legitimately spread-out survey must not cry wolf.
     cwCavingRegion region;
 
     region.addCave();
@@ -820,8 +869,8 @@ TEST_CASE("fixStationErrorTypeIds lists the three fix-station warning kinds",
 TEST_CASE("revalidate flags a fix whose station name is not in the survey",
           "[cwFixStationValidator][reference]")
 {
-    // No global CS, so the cluster/domain math sits out — this isolates the
-    // reference check, which is independent of any output CS.
+    // No project frame, so the distance/domain math sits out — this isolates
+    // the reference check, which is independent of any frame.
     cwCavingRegion region;
     region.addCave();
     auto* cave = region.cave(0);

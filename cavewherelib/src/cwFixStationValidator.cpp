@@ -22,32 +22,37 @@
 #include <QStringList>
 
 //Std includes
-#include <algorithm>
 #include <cmath>
 #include <optional>
 
 namespace {
 
-// A float's 23-bit mantissa gives a relative precision of 2^-23; the absolute
-// error at coordinate magnitude d is d * this. Holding render jitter under a
-// 1 cm budget caps the usable distance of any vertex from the world origin —
-// beyond it, a coordinate is both a rendering problem and almost certainly a
-// typo.
-constexpr double kFloatPrecisionBudgetMeters = 0.01;
-constexpr double kFloatMantissaRelPrecision = 1.0 / double(1 << 23);
-constexpr double kOutlierFloorMeters = kFloatPrecisionBudgetMeters / kFloatMantissaRelPrecision;
-
-// A fix must also be this many cluster-radii from the center to be flagged, so
-// a legitimately spread-out survey (large radius) never trips on the floor.
-constexpr double kMadMultiplier = 6.0;
-
-// Below this many domain-valid fixes there is no cluster to judge an outlier
-// against. Kept small (3, not 4) so the common "one cluster + one straggler
-// cave" shape is caught: with an odd count the component-wise median lands on
-// the majority. The pathological even balanced split (2 vs 2, no majority) is
-// covered by the per-fix domain check instead. The cluster rule is best-effort
-// for small N; the domain check (Part A) is the reliable path.
-constexpr int kMinFixesForDetection = 3;
+// How far a fix may sit from the project's frame before it reads as a typo
+// rather than a survey.
+//
+// The LDP is a transverse Mercator centered on the project's anchor with
+// x_0 = y_0 = 0, so a fix's coordinates in that frame already are its offset
+// from the origin: the test is one hypot per fix, with no cluster to establish
+// and no minimum number of fixes to establish it from. That is what lets a
+// two-fix project — the most common shape there is — be judged at all.
+//
+// The distance itself is a judgment call, bounded from both sides. Below it: a
+// region-wide project — a whole karst area, caves a few hundred km apart — is
+// ordinary and must stay quiet. Above it: a coordinate typed under the
+// neighboring UTM zone lands one zone width away, and a zone is 6° wide — ~470
+// km at 45°N, narrowing toward the poles — so reaching much higher would stop
+// catching the wrong-zone typo at mid latitudes. Above ~55° a zone is narrower
+// than this threshold and the domain check is what catches those. Transposed
+// digits and swapped lat/lon land far beyond either bound.
+//
+// Two independent limits also degrade around here, which is why there is no
+// reason to reach higher: float32's 23-bit mantissa puts render jitter at ~5 cm
+// at this range, and the frame's own transverse Mercator scale error reaches
+// ~0.2% (2 m per km), so a survey this far out is being distorted by the
+// projection carrying it. That second figure is this distance read off the same
+// curve cwLocalProjection.h quotes near the origin, so it holds only for the
+// LDP recipe described there — change the recipe and this needs rereading.
+constexpr double kMaxDistanceFromFrameMeters = 400000.0;
 
 // A cave's warning nests two levels of joining, and they are not interchangeable:
 // station names are listed inside one sentence, while a cave with more than one
@@ -58,67 +63,17 @@ constexpr QLatin1String kSentenceSeparator(" ");
 // Our two Warning kinds are identified by stable ids from the cwErrorTypeId
 // registry, so a user's suppression survives the message text changing across
 // versions (see cwError::errorTypeId) and each kind is suppressed independently.
-// FixStationOutlier is the cross-cave cluster straggler; FixStationDomain is a
-// coordinate outside its own CS's valid range (a transposed digit or wrong
-// zone), which needs no cluster to prove.
+// FixStationOutlier is the fix too far from the project's frame; FixStationDomain
+// is a coordinate outside its own CS's valid range (a transposed digit or wrong
+// zone), which needs no frame to prove.
 
-double distance(const cwGeoPoint& a, const cwGeoPoint& b)
+//! How far \a p sits from the project's frame origin. The frame has no z origin,
+//! so z is the elevation itself — which is what makes a transposed elevation
+//! visible here at all, and costs nothing, since no real elevation comes near
+//! the threshold.
+double distanceFromFrameOrigin(const cwGeoPoint& p)
 {
-    const double dx = a.x - b.x;
-    const double dy = a.y - b.y;
-    const double dz = a.z - b.z;
-    return std::sqrt(dx * dx + dy * dy + dz * dz);
-}
-
-// Median of a copy (leaves the caller's order intact). Averages the two middle
-// values for an even count.
-double median(QList<double> values)
-{
-    if (values.isEmpty()) {
-        return 0.0;
-    }
-    std::sort(values.begin(), values.end());
-    const qsizetype n = values.size();
-    if (n % 2 == 1) {
-        return values.at(n / 2);
-    }
-    return 0.5 * (values.at(n / 2 - 1) + values.at(n / 2));
-}
-
-// Component-wise median center: robust to one bad axis, which is the common
-// typo shape (a single corrupted coordinate). Cheaper than the geometric
-// median and sufficient for separating a straggler from the cluster.
-cwGeoPoint medianCenter(const QList<cwFixStationValidator::FixCandidate>& candidates)
-{
-    QList<double> xs;
-    QList<double> ys;
-    QList<double> zs;
-    xs.reserve(candidates.size());
-    ys.reserve(candidates.size());
-    zs.reserve(candidates.size());
-    for (const auto& c : candidates) {
-        xs.append(c.global.x);
-        ys.append(c.global.y);
-        zs.append(c.global.z);
-    }
-    return cwGeoPoint{median(xs), median(ys), median(zs)};
-}
-
-// Component-wise mean of the candidates' reprojected points. Returns the origin
-// for an empty list; callers that must distinguish "no candidates" guard first.
-cwGeoPoint centroid(const QList<cwFixStationValidator::FixCandidate>& candidates)
-{
-    cwGeoPoint sum;
-    if (candidates.isEmpty()) {
-        return sum;
-    }
-    for (const auto& c : candidates) {
-        sum.x += c.global.x;
-        sum.y += c.global.y;
-        sum.z += c.global.z;
-    }
-    const double n = double(candidates.size());
-    return cwGeoPoint{sum.x / n, sum.y / n, sum.z / n};
+    return std::hypot(p.x, p.y, p.z);
 }
 
 } // namespace
@@ -132,8 +87,8 @@ cwFixStationValidator::cwFixStationValidator(cwCavingRegion* region) :
     }
 
     // A cave joining or leaving the region rewires the per-cave fix-station
-    // connections and re-attributes. The CS changing reprojects every fix, so
-    // an outlier under the old CS may cease to be one under the new.
+    // connections and re-attributes. The frame moving reprojects every fix, so
+    // an outlier under the old frame may cease to be one under the new.
     connect(m_region, &cwCavingRegion::caveCountChanged,
             this, [this] { syncCaveConnections(); revalidate(); });
     connect(m_region->geoReference(), &cwGeoReference::localProjectionChanged,
@@ -157,42 +112,20 @@ cwFixStationValidator::classifyCandidates(const QList<FixCandidate>& candidates)
 {
     Classification result;
 
-    // Part A (primary): a fix whose coordinate is implausible for its own CS is
-    // a certain outlier on its own — no cluster needed. Pull these out first so
-    // a wild typo can't drag the median center off the real data and mask a
-    // second, subtler straggler.
-    QList<FixCandidate> clusterCandidates;
-    clusterCandidates.reserve(candidates.size());
     for (const auto& c : candidates) {
-        if (c.domainValid) {
-            clusterCandidates.append(c);
-        } else {
+        if (!c.domainValid) {
+            // Part A: the coordinate is implausible for the CS the fix itself
+            // declares, which is certain on its own and says more than a
+            // distance does. One bad coordinate earns one warning, so a fix
+            // Part A has already claimed is never measured again by Part B.
             result.domainOutliers.append(c);
-        }
-    }
-
-    // Part B (secondary): the cross-cave cluster rule. Below the minimum there
-    // is no majority to place the median center against, so nothing is judged.
-    if (clusterCandidates.size() < kMinFixesForDetection) {
-        result.inliers = clusterCandidates;
-        return result;
-    }
-
-    const cwGeoPoint center = medianCenter(clusterCandidates);
-
-    QList<double> distances;
-    distances.reserve(clusterCandidates.size());
-    for (const auto& c : clusterCandidates) {
-        distances.append(distance(c.global, center));
-    }
-
-    const double threshold = (std::max)(kOutlierFloorMeters, kMadMultiplier * median(distances));
-
-    for (qsizetype i = 0; i < clusterCandidates.size(); ++i) {
-        if (distances.at(i) > threshold) {
-            result.outliers.append(clusterCandidates.at(i));
+        } else if (distanceFromFrameOrigin(c.global) > kMaxDistanceFromFrameMeters) {
+            // Part B: in-domain for its own CS, but nowhere near the project.
+            // The wrong-zone and wrong-hemisphere typos live here — both give a
+            // perfectly legal coordinate for somewhere the project is not.
+            result.outliers.append(c);
         } else {
-            result.inliers.append(clusterCandidates.at(i));
+            result.inliers.append(c);
         }
     }
     return result;
@@ -201,9 +134,9 @@ cwFixStationValidator::classifyCandidates(const QList<FixCandidate>& candidates)
 cwFixStationValidator::Classification
 cwFixStationValidator::currentClassification() const
 {
-    // Without a project frame there is nothing to reproject into, so fixes
-    // entered in different input CSs would be compared as raw coordinates and a
-    // legitimate station could be flagged. Skip classification entirely until
+    // Without a project frame there is no origin to measure a distance from,
+    // and fixes entered in different input CSs would be compared as raw
+    // coordinates — degrees against meters. Skip classification entirely until
     // the project is georeferenced.
     if (m_region == nullptr || !m_region->geoReference()->hasCoordinateSystem()) {
         return {};
@@ -230,9 +163,9 @@ cwFixStationValidator::gatherCandidates() const
             // because cwFixStation::refresh() zeroes them before it branches.
             // A row that carries a coordinate system but no coordinate yet is
             // what "Mark Station as Fixed" makes, so without this the ordinary
-            // half-finished row enters the cluster at its CS's origin, drags the
-            // robust world origin toward it, and can push real fixes outside the
-            // outlier radius. Valid also implies a non-empty inputCS.
+            // half-finished row would be judged at its CS's origin — off the
+            // African coast for a geographic CS — and flagged the moment the
+            // user created it. Valid also implies a non-empty inputCS.
             if (fix.state() != cwFixStation::Valid) {
                 continue;
             }
@@ -244,8 +177,8 @@ cwFixStationValidator::gatherCandidates() const
             const cwGeoPoint p(fix.easting(), fix.northing(), fix.elevation());
 
             // Part A: does the raw coordinate even belong to its own CS? This is
-            // independent of the global CS and of any cluster, so it catches the
-            // single-cave, single-fix typo the cluster rule structurally can't.
+            // independent of the project's frame, so it still judges the fix the
+            // frame was derived from — the one Part B always measures at zero.
             const bool domainValid = cwFixStationDiagnostics::isDomainValid(fix);
 
             // currentClassification() guarantees frameCS is non-empty. The
@@ -297,26 +230,23 @@ void cwFixStationValidator::revalidate()
 {
     const Classification classification = currentClassification();
 
-    // The reference the cluster outliers are "off" from: the inlier centroid —
-    // the same robust origin the render centers on, so the reported distance is
-    // the gap the user would see between the bad station and the rest.
-    const cwGeoPoint center = centroid(classification.inliers);
-
-    // Cluster-outlier messages (Part B): one "«station» (~N km)" fragment list
-    // per offending cave.
-    QHash<cwCave*, QStringList> clusterParts;
+    // Distance messages (Part B): one "«station» (~N km)" fragment list per
+    // offending cave. The distance is measured from the frame origin, which the
+    // rest of the survey sits on — so it is also the gap the user would see
+    // between the bad station and everything else.
+    QHash<cwCave*, QStringList> distantParts;
     for (const auto& c : classification.outliers) {
         if (c.cave == nullptr) {
             continue;
         }
         const QString name = stationNameFor(c.cave, c.fixId);
-        const double km = distance(c.global, center) / 1000.0;
-        clusterParts[c.cave].append(QStringLiteral("\"%1\" (~%2 km)").arg(name).arg(km, 0, 'f', 0));
+        const double km = distanceFromFrameOrigin(c.global) / 1000.0;
+        distantParts[c.cave].append(QStringLiteral("\"%1\" (~%2 km)").arg(name).arg(km, 0, 'f', 0));
     }
 
-    QHash<cwCave*, QString> clusterMessages;
-    for (auto it = clusterParts.constBegin(); it != clusterParts.constEnd(); ++it) {
-        clusterMessages.insert(it.key(),
+    QHash<cwCave*, QString> distantMessages;
+    for (auto it = distantParts.constBegin(); it != distantParts.constEnd(); ++it) {
+        distantMessages.insert(it.key(),
             namedCaveWarning(it.value(),
                 QStringLiteral("Fix station %1 is far from the rest of the survey — "
                                "check the coordinate system, UTM zone, and value."),
@@ -345,9 +275,9 @@ void cwFixStationValidator::revalidate()
 
     // Reference messages: fixes whose station name matches no survey station in
     // the owning cave, plus fixes with no name at all (both are anchors survex
-    // silently drops). Independent of the global CS and the cluster/domain math,
-    // so it runs even before an output CS is set. A cave whose network hasn't
-    // been computed yet is skipped by the classifier for its *named* fixes.
+    // silently drops). Independent of the project frame and the distance/domain
+    // math, so it runs even before the project is georeferenced. A cave whose
+    // network hasn't been computed yet is skipped for its *named* fixes.
     const QHash<cwCave*, QString> referenceMessages = referenceWarnings();
 
     // Reconcile every warning kind against every cave that has or had one, so a
@@ -355,14 +285,14 @@ void cwFixStationValidator::revalidate()
     QSet<cwCave*> caves(m_connectedCaves);
     caves.unite(m_cavesWithWarning);
     for (cwCave* cave : caves) {
-        setCaveWarning(cave, cwErrorTypeId::FixStationOutlier, clusterMessages.value(cave));
+        setCaveWarning(cave, cwErrorTypeId::FixStationOutlier, distantMessages.value(cave));
         setCaveWarning(cave, cwErrorTypeId::FixStationDomain, domainMessages.value(cave));
         setCaveWarning(cave, cwErrorTypeId::FixStationReference, referenceMessages.value(cave));
     }
 
     // Region-wide summary for the render-view overlay. A domain-bad fix is the
     // most certain error, so it names the culprit first; otherwise the first
-    // cluster outlier in region order (both lists follow caves() order). The
+    // distance outlier in region order (both lists follow caves() order). The
     // message stays generic so it covers either kind.
     cwCave* firstOffender = nullptr;
     for (const auto& c : classification.domainOutliers) {

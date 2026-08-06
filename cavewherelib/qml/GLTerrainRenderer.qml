@@ -244,6 +244,10 @@ Item {
         anchors.top: parent.top
         anchors.topMargin: 20
         anchors.bottom: undefined
+        // The banner carries a link, so it needs the chrome layer, not just a
+        // spot above the scene: LeadView's tap-away handler fills this item at
+        // zLabels and takes the press first, leaving the link unclickable.
+        z: rootId.zOverlay
         visible: RootData.region.fixStationValidator.warningMessage !== ""
         // Markup here is real — the link is what makes the banner actionable —
         // so the message it is glued to has to be escaped: the summary quotes
@@ -255,7 +259,7 @@ Item {
         onLinkActivated: {
             let cave = RootData.region.fixStationValidator.firstOutlierCave
             if (cave !== null) {
-                RootData.pageSelectionModel.currentPageAddress = outlierLinkGeneratorId.caveLink(cave)
+                RootData.pageSelectionModel.currentPageAddress = outlierLinkGeneratorId.fixStationsLink(cave)
             }
         }
     }
