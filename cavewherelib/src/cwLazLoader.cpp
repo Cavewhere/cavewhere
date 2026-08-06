@@ -448,9 +448,6 @@ cwLazLoader::ProbeResult cwLazLoader::probeHeader(const QString& path)
     result.sourceCS = extractEmbeddedCS(header);
     result.bboxMin = cwGeoPoint(header.min_x, header.min_y, header.min_z);
     result.bboxMax = cwGeoPoint(header.max_x, header.max_y, header.max_z);
-    result.bboxCenter = cwGeoPoint(0.5 * (header.min_x + header.max_x),
-                                   0.5 * (header.min_y + header.max_y),
-                                   0.5 * (header.min_z + header.max_z));
     result.valid = true;
 
     reader->close();

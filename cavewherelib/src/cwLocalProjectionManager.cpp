@@ -39,22 +39,94 @@ cwLocalProjectionManager::cwLocalProjectionManager(cwCavingRegion* region) :
         evaluate();
     });
 
-    // The row signals rather than countChanged: a rescan that swaps one file for
-    // another leaves the count alone, and clear() deletes its layers before it
-    // announces anything, so the connections have to be reconciled off the model's
-    // own structural signals or they outlive what they point at.
+    // Everything evaluate() reads off a layer arrives through the model, so
+    // these three connections are the whole layer dependency. The row signals
+    // rather than countChanged: a rescan that swaps one file for another leaves
+    // the count alone, and clear() deletes its layers before it announces
+    // anything.
     cwLazLayerModel* layers = m_region->lazLayers();
-    const auto layersChanged = [this] {
-        syncLayerConnections();
-        evaluate();
-    };
-    connect(layers, &QAbstractItemModel::rowsInserted, this, layersChanged);
-    connect(layers, &QAbstractItemModel::rowsRemoved, this, layersChanged);
-    connect(layers, &QAbstractItemModel::modelReset, this, layersChanged);
+    connect(layers, &QAbstractItemModel::rowsInserted,
+            this, &cwLocalProjectionManager::evaluate);
+    connect(layers, &QAbstractItemModel::rowsRemoved,
+            this, &cwLocalProjectionManager::evaluate);
+    connect(layers, &QAbstractItemModel::modelReset,
+            this, &cwLocalProjectionManager::evaluate);
+
+    // The edges of "any header still being read", which are the two moments the
+    // epoch turns on: the first probe of a batch opens it, and the last one to
+    // land closes it and lets the anchor be chosen from the whole set. The
+    // falling edge is also how a header's arrival is heard — the layer publishes
+    // the header before it reports the probe finished.
+    connect(layers, &cwLazLayerModel::headerProbeInFlightChanged,
+            this, &cwLocalProjectionManager::evaluate);
+
+    // The one input change with no probe behind it: setSourceCSOverride applies
+    // its precedence in memory, so nothing above would fire for it.
+    connect(layers, &QAbstractItemModel::dataChanged, this,
+            [this](const QModelIndex&, const QModelIndex&, const QList<int>& roles) {
+        if (roles.isEmpty() || roles.contains(cwLazLayerModel::SourceCSRole)) {
+            evaluate();
+        }
+    });
 
     syncCaveConnections();
-    syncLayerConnections();
     evaluate();
+}
+
+cwLocalProjectionManager::~cwLocalProjectionManager()
+{
+    cancelEpoch();
+}
+
+QFuture<QString> cwLocalProjectionManager::frameFuture()
+{
+    if (!epochOpen()) {
+        return AsyncFuture::completed(m_region->geoReference()->localCoordinateSystem());
+    }
+
+    if (!m_epoch.has_value()) {
+        m_epoch = AsyncFuture::deferred<QString>();
+    }
+
+    // Every caller gets its own view of the one epoch. AsyncFuture pushes a
+    // cancel back up the chain it came from, so without the shield a single
+    // layer giving up its wait would cancel the epoch itself — and every other
+    // layer waiting on it would drop its points for a frame that then never
+    // settles.
+    return AsyncFuture::shield(m_epoch->future());
+}
+
+bool cwLocalProjectionManager::epochOpen() const
+{
+    return m_region->geoReference()->state() == cwGeoReference::Ungeoreferenced
+            && m_region->lazLayers()->anyHeaderProbeInFlight();
+}
+
+void cwLocalProjectionManager::settleEpoch()
+{
+    if (!m_epoch.has_value() || epochOpen()) {
+        return;
+    }
+
+    // The frame as it now stands: derived from the batch that just closed,
+    // taken from a fix station that arrived while the batch was still reading,
+    // or empty because nothing in the project could place it. Empty is a real
+    // answer — the clouds load untransformed, in their own units — and it is an
+    // answer only a completed future can deliver, because the frame never
+    // changed and so nothing signalled.
+    auto epoch = *m_epoch;
+    m_epoch.reset();
+    epoch.complete(m_region->geoReference()->localCoordinateSystem());
+}
+
+void cwLocalProjectionManager::cancelEpoch()
+{
+    if (!m_epoch.has_value()) {
+        return;
+    }
+    auto epoch = *m_epoch;
+    m_epoch.reset();
+    epoch.cancel();
 }
 
 void cwLocalProjectionManager::setLoading(bool loading)
@@ -63,12 +135,25 @@ void cwLocalProjectionManager::setLoading(bool loading)
         return;
     }
     m_loading = loading;
-    if (!m_loading) {
+    if (m_loading) {
+        // The frame the load is about to restore is the one the project keeps,
+        // so an epoch derived from what is here now has nothing left to settle
+        // on. Cancelling rather than completing it means nothing chained on it
+        // loads into a frame that is being replaced wholesale.
+        cancelEpoch();
+    } else {
         evaluate();
     }
 }
 
 QList<cwLocalProjectionManager::Input> cwLocalProjectionManager::gatherInputs() const
+{
+    QList<Input> inputs = gatherFixInputs();
+    inputs.append(gatherLayerInputs());
+    return inputs;
+}
+
+QList<cwLocalProjectionManager::Input> cwLocalProjectionManager::gatherFixInputs() const
 {
     QList<Input> inputs;
 
@@ -95,6 +180,13 @@ QList<cwLocalProjectionManager::Input> cwLocalProjectionManager::gatherInputs() 
             });
         }
     }
+
+    return inputs;
+}
+
+QList<cwLocalProjectionManager::Input> cwLocalProjectionManager::gatherLayerInputs() const
+{
+    QList<Input> inputs;
 
     cwLazLayerModel* layers = m_region->lazLayers();
     for (int row = 0; row < layers->count(); ++row) {
@@ -193,6 +285,12 @@ void cwLocalProjectionManager::evaluate()
         return;
     }
 
+    evaluateFrame();
+    settleEpoch();
+}
+
+void cwLocalProjectionManager::evaluateFrame()
+{
     cwGeoReference* geoReference = m_region->geoReference();
 
     if (geoReference->anchor() != m_lastAnchor) {
@@ -201,6 +299,17 @@ void cwLocalProjectionManager::evaluate()
         // inputs proves nothing about this one.
         m_lastAnchor = geoReference->anchor();
         m_anchorSeen = false;
+    }
+
+    if (epochOpen()) {
+        // Headers are still arriving, so the layers that hold one right now are
+        // whichever ones the disk got to first — a frame derived from them is a
+        // frame that depends on disk timing. A fix station is the user's own
+        // input and the model orders it, so it may anchor immediately: it leads
+        // the list gatherInputs() builds, so anchoring on one now picks the same
+        // input the closed batch would have.
+        anchorToFirstUsable(gatherFixInputs());
+        return;
     }
 
     const QList<Input> inputs = gatherInputs();
@@ -275,12 +384,11 @@ void cwLocalProjectionManager::evaluate()
 
 void cwLocalProjectionManager::syncCaveConnections()
 {
-    // Connect-only, for the same reason as syncLayerConnections: a destroyed
-    // cave drops its own connections, and UniqueConnection makes re-running
-    // harmless. Remembering the caves instead would mean holding raw pointers to
-    // caves the region has already handed to an undo command that deleteLater()s
-    // them, and the row signals rather than countChanged so one setFixStations
-    // doesn't evaluate twice.
+    // Connect-only: a destroyed cave drops its own connections, and
+    // UniqueConnection makes re-running harmless. Remembering the caves instead
+    // would mean holding raw pointers to caves the region has already handed to
+    // an undo command that deleteLater()s them, and the row signals rather than
+    // countChanged so one setFixStations doesn't evaluate twice.
     for (cwCave* cave : m_region->caves()) {
         if (cave == nullptr) {
             continue;
@@ -293,32 +401,6 @@ void cwLocalProjectionManager::syncCaveConnections()
         connect(model, &QAbstractItemModel::dataChanged,
                 this, &cwLocalProjectionManager::evaluate, Qt::UniqueConnection);
         connect(model, &QAbstractItemModel::modelReset,
-                this, &cwLocalProjectionManager::evaluate, Qt::UniqueConnection);
-    }
-}
-
-void cwLocalProjectionManager::syncLayerConnections()
-{
-    // Nothing is torn down here, and no layer is remembered between calls.
-    // cwLazLayerModel::clear() deletes its layers outright before it announces
-    // the reset, so a remembered list of them would already be dangling by the
-    // time it could be walked. A destroyed layer drops its own connections, and
-    // UniqueConnection makes re-running this harmless.
-    cwLazLayerModel* layers = m_region->lazLayers();
-
-    for (int row = 0; row < layers->count(); ++row) {
-        cwLazLayer* layer = layers->layerAt(row);
-        if (layer == nullptr) {
-            continue;
-        }
-        connect(layer, &cwLazLayer::sourcePathChanged,
-                this, &cwLocalProjectionManager::evaluate, Qt::UniqueConnection);
-        connect(layer, &cwLazLayer::sourceCSChanged,
-                this, &cwLocalProjectionManager::evaluate, Qt::UniqueConnection);
-        // A layer becomes an input when its load lands, and stops being one
-        // when it's disabled or reloaded. sourceCSChanged alone would miss a
-        // reload that resolved to the same CS it had before.
-        connect(layer, &cwLazLayer::loadStatusChanged,
                 this, &cwLocalProjectionManager::evaluate, Qt::UniqueConnection);
     }
 }

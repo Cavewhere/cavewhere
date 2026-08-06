@@ -76,6 +76,52 @@ TEST_CASE("cwGeoReference::anchorTo writes the frame and its anchor together",
     }
 }
 
+TEST_CASE("cwGeoReference reports a moved frame apart from a moved anchor",
+          "[cwGeoReference]")
+{
+    // Re-decoding a directory of point clouds hangs off the narrower signal, so
+    // the two have to come apart: everything a cloud was transformed into is
+    // still true when only the anchor changes.
+    cwGeoReference reference;
+    QSignalSpy projectionSpy(&reference, &cwGeoReference::localProjectionChanged);
+    QSignalSpy frameSpy(&reference, &cwGeoReference::localCoordinateSystemChanged);
+
+    const auto anchor = fixAnchor();
+    reference.anchorTo(anchor, kLocalCS);
+    CHECK(projectionSpy.count() == 1);
+    CHECK(frameSpy.count() == 1);
+
+    SECTION("the same frame under a different anchor is not a move")
+    {
+        reference.anchorTo(fixAnchor(), kLocalCS);
+        CHECK(projectionSpy.count() == 2);
+        CHECK(frameSpy.count() == 1);
+    }
+
+    SECTION("freezing keeps every coordinate where it was")
+    {
+        reference.freeze();
+        CHECK(reference.state() == cwGeoReference::Frozen);
+        CHECK(projectionSpy.count() == 2);
+        CHECK(frameSpy.count() == 1);
+    }
+
+    SECTION("a re-derived frame is a move")
+    {
+        reference.anchorTo(anchor, kOtherLocalCS);
+        CHECK(projectionSpy.count() == 2);
+        CHECK(frameSpy.count() == 2);
+    }
+
+    SECTION("losing the frame is a move")
+    {
+        reference.clear();
+        CHECK(reference.localCoordinateSystem().isEmpty());
+        CHECK(projectionSpy.count() == 2);
+        CHECK(frameSpy.count() == 2);
+    }
+}
+
 TEST_CASE("cwGeoReference::anchorTo refuses half an anchoring", "[cwGeoReference]")
 {
     // Either half alone would leave a state naming an input the frame didn't

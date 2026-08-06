@@ -146,6 +146,16 @@ signals:
     //! The LDP, the state, or the anchor changed — they move together, so they
     //! report together.
     void localProjectionChanged();
+
+    //! The frame itself moved: localCoordinateSystem() now returns a different
+    //! string. Narrower than localProjectionChanged, which also reports a
+    //! freeze or a change of anchor — both of which leave every coordinate in
+    //! the project exactly where it was. Whoever has to redo work in the frame
+    //! (the point clouds re-decode) listens here; whoever describes the frame
+    //! listens to localProjectionChanged. Emitted first, so the frame's
+    //! dependents are up to date before its describers run.
+    void localCoordinateSystemChanged();
+
     void verticalDatumChanged();
 
 private:

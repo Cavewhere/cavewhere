@@ -24,23 +24,9 @@
 
 namespace {
 
-// Minimal valid OGC WKT for UTM Zone 10N (WGS 84). PROJ accepts this, which is
-// all the derivation needs — it reads the header's CS and the bbox center and
-// builds a transverse Mercator centered there.
-const QString kUtmZone10N = QStringLiteral(
-    "PROJCS[\"WGS 84 / UTM zone 10N\","
-        "GEOGCS[\"WGS 84\","
-            "DATUM[\"WGS_1984\","
-                "SPHEROID[\"WGS 84\",6378137,298.257223563]],"
-            "PRIMEM[\"Greenwich\",0],"
-            "UNIT[\"degree\",0.0174532925199433]],"
-        "PROJECTION[\"Transverse_Mercator\"],"
-        "PARAMETER[\"latitude_of_origin\",0],"
-        "PARAMETER[\"central_meridian\",-123],"
-        "PARAMETER[\"scale_factor\",0.9996],"
-        "PARAMETER[\"false_easting\",500000],"
-        "PARAMETER[\"false_northing\",0],"
-        "UNIT[\"metre\",1]]");
+// The derivation reads the header's CS and the bbox center and builds a
+// transverse Mercator centered there.
+const QString kUtmZone10N = utmZoneWkt(10, -123);
 
 // bbox of minimalLazPoints() is (0,0,0)-(4,4,4), so the derivation anchors on
 // its center.

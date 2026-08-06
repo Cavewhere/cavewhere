@@ -20,8 +20,6 @@
 #include "cwCavingRegion.h"
 #include "cwError.h"
 #include "cwErrorListModel.h"
-#include "cwLazLoader.h"
-#include "cwLocalProjection.h"
 #include "cwProject.h"
 #include "cwSaveLoad.h"
 
@@ -285,14 +283,31 @@ void cwLazLayerModel::setFutureManagerToken(const cwFutureManagerToken& token)
     }
 }
 
-void cwLazLayerModel::setRegionFrameCS(const QString& cs)
+void cwLazLayerModel::setLocalProjectionToken(const cwLocalProjectionToken& token)
 {
-    if (m_regionFrameCS == cs) {
-        return;
-    }
-    m_regionFrameCS = cs;
+    m_localProjectionToken = token;
     for (cwLazLayer* layer : std::as_const(m_layers)) {
-        layer->setRegionFrameCS(cs);
+        layer->setLocalProjectionToken(token);
+    }
+}
+
+void cwLazLayerModel::reloadAll()
+{
+    for (cwLazLayer* layer : std::as_const(m_layers)) {
+        layer->reload();
+    }
+}
+
+void cwLazLayerModel::updateHeaderProbeInFlight(cwLazLayer* layer, bool inFlight)
+{
+    const bool wasProbing = anyHeaderProbeInFlight();
+    if (inFlight) {
+        m_probingLayers.insert(layer);
+    } else {
+        m_probingLayers.remove(layer);
+    }
+    if (wasProbing != anyHeaderProbeInFlight()) {
+        emit headerProbeInFlightChanged();
     }
 }
 
@@ -305,9 +320,9 @@ void cwLazLayerModel::setGisLayersDir(const QDir& dir)
     // Defer the rescan to the event loop. During project load, this setter is
     // called from cwSaveLoad::setFileName, which runs *before* cwCavingRegion
     // ::setData restores the stored frame. Running rescan synchronously here
-    // would derive a frame from the first layer's header only for the restore
-    // to replace it — and reload every layer twice on the way. Queuing lets
-    // setData run first, after which deriveFrameFromLaz is a no-op.
+    // would derive a frame from the layers' own headers only for the restore to
+    // replace it — and reload every layer twice on the way. Queuing lets setData
+    // run first, after which the layers load straight into the restored frame.
     QMetaObject::invokeMethod(this, &cwLazLayerModel::rescan, Qt::QueuedConnection);
 }
 
@@ -442,12 +457,6 @@ void cwLazLayerModel::rescan()
         // alongside, making the on-disk pair the source of truth from
         // then on.
 
-        // The load below has to have somewhere to load into, and on a project
-        // with no fix stations this layer is the only thing that can say where
-        // that is.
-        deriveFrameFromLaz(path, layer);
-        layer->setRegionFrameCS(m_regionFrameCS);
-
         // setSourcePath — which starts the load — before announcing the row:
         // it triggers updateNameKeyword/updateFileNameKeyword on the layer's
         // keyword model. Running it after beginInsertRows lets the scene node
@@ -478,8 +487,13 @@ void cwLazLayerModel::clear()
     }
     qCDebug(lcLazModel) << "clear: destroying" << m_layers.size() << "layers";
     beginResetModel();
-    qDeleteAll(m_layers);
+    // Empty the list before deleting, not after: a layer's destruction reaches
+    // observers — the local projection is told the header it was waiting for is
+    // never coming — and any of them may read the model back while the rest of
+    // the list is still being deleted.
+    const QList<cwLazLayer*> doomed = m_layers;
     m_layers.clear();
+    qDeleteAll(doomed);
     endResetModel();
     emit countChanged();
 }
@@ -503,6 +517,18 @@ void cwLazLayerModel::connectLayer(cwLazLayer* layer)
     connect(layer, &cwLazLayer::loadStatusChanged, this, [emitForRole]() { emitForRole(LoadStatusRole); });
     connect(layer, &cwLazLayer::pointCountChanged, this, [emitForRole]() { emitForRole(PointCountRole); });
     connect(layer, &cwLazLayer::enabledChanged, this, [emitForRole]() { emitForRole(EnabledRole); });
+
+    // Connected at creation, before the layer becomes a row, because the header
+    // read starts there too: setSourcePath asks for it and then asks whether
+    // the frame has settled, both before the insert is announced.
+    connect(layer, &cwLazLayer::headerProbeInFlightChanged, this, [this, layer]() {
+        updateHeaderProbeInFlight(layer, layer->headerProbeInFlight());
+    });
+    // A layer destroyed mid-read never delivers one, so it drops out here
+    // instead. The pointer is only ever a key — nothing dereferences it.
+    connect(layer, &QObject::destroyed, this, [this, layer]() {
+        updateHeaderProbeInFlight(layer, false);
+    });
 }
 
 cwLazLayer* cwLazLayerModel::createLayer()
@@ -510,6 +536,7 @@ cwLazLayer* cwLazLayerModel::createLayer()
     auto* layer = new cwLazLayer(this);
     connectLayer(layer);
     layer->setFutureManagerToken(m_futureManagerToken);
+    layer->setLocalProjectionToken(m_localProjectionToken);
     return layer;
 }
 
@@ -521,38 +548,6 @@ int cwLazLayerModel::indexOf(cwLazLayer* layer) const
         }
     }
     return -1;
-}
-
-void cwLazLayerModel::deriveFrameFromLaz(const QString& sourcePath, cwLazLayer* layer)
-{
-    auto* region = qobject_cast<cwCavingRegion*>(parent());
-    if (region == nullptr || layer == nullptr) {
-        return;
-    }
-
-    cwGeoReference* geoReference = region->geoReference();
-    if (geoReference->hasCoordinateSystem()) {
-        // The project already knows where it is — from its own fix stations,
-        // from an earlier layer, or from the file it was loaded out of. Nothing
-        // here may move that.
-        return;
-    }
-
-    // The header alone, because the load this unblocks hasn't run yet: the
-    // layer has no sourceCS or bounding box to read until it has.
-    const auto probe = cwLazLoader::probeHeader(sourcePath);
-    if (!probe.valid || probe.sourceCS.isEmpty()) {
-        // A cloud with no CRS of its own places nothing. It still loads —
-        // untransformed, in whatever units the file is in — exactly as it did
-        // before there was a frame to load into.
-        return;
-    }
-
-    const QString localCS = cwLocalProjection::deriveFrom(probe.sourceCS, probe.bboxCenter);
-    if (localCS.isEmpty()) {
-        return;
-    }
-    geoReference->anchorTo({cwGeoReference::Anchor::LazLayer, layer->id()}, localCS);
 }
 
 cwProject* cwLazLayerModel::project() const

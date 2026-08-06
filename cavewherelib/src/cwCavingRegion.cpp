@@ -12,6 +12,7 @@
 #include "cwFixStationValidator.h"
 #include "cwLazLayerModel.h"
 #include "cwLocalProjectionManager.h"
+#include "cwLocalProjectionToken.h"
 #include "cwProject.h"
 #include "cwData.h"
 #include "cwNameUtils.h"
@@ -27,23 +28,30 @@ cwCavingRegion::cwCavingRegion(QObject *parent) :
     m_fixStationValidator(new cwFixStationValidator(this)),
     m_localProjectionManager(new cwLocalProjectionManager(this))
 {
-    // geoReference owns the frame; the region pushes each change into the things
-    // it owns — the LAZ layer model, and every cave's grid convergence, which is
-    // an angle in the frame and so moves with it. A cave can't watch the frame
-    // itself: it learns which region it belongs to only when it is parented, so
-    // joining is the other half — a cave converges to nothing until it has a
-    // region to read the frame off. Consumers the region doesn't own connect to
-    // geoReference directly.
+    // Every GIS layer loads into the frame, and the frame is derived from what
+    // those layers say about themselves — so each one is handed the manager it
+    // reads the frame off, and waits on, before it decodes.
+    m_lazLayers->setLocalProjectionToken(cwLocalProjectionToken(m_localProjectionManager));
+
+    // geoReference owns the frame; the region tells the things it owns when it
+    // moves — the LAZ layers, whose points are in the frame they were decoded
+    // into, and every cave's grid convergence, which is an angle in the frame
+    // and so moves with it. A cave can't watch the frame itself: it learns which
+    // region it belongs to only when it is parented, so joining is the other
+    // half — a cave converges to nothing until it has a region to read the frame
+    // off. Consumers the region doesn't own connect to geoReference directly.
     const auto recomputeConvergence = [this] {
         for (cwCave* cave : std::as_const(m_caves)) {
             cave->recomputeGridConvergence();
         }
     };
 
-    connect(m_geoReference, &cwGeoReference::localProjectionChanged, this, [this, recomputeConvergence] {
-        m_lazLayers->setRegionFrameCS(m_geoReference->localCoordinateSystem());
-        recomputeConvergence();
-    });
+    // Re-decoding a directory of point clouds is the most expensive thing the
+    // frame can cause, so it hangs off the narrower signal: a freeze or a change
+    // of anchor leaves every coordinate where it was.
+    connect(m_geoReference, &cwGeoReference::localCoordinateSystemChanged,
+            m_lazLayers, &cwLazLayerModel::reloadAll);
+    connect(m_geoReference, &cwGeoReference::localProjectionChanged, this, recomputeConvergence);
     connect(this, &cwCavingRegion::caveCountChanged, this, recomputeConvergence);
 }
 

@@ -1406,7 +1406,9 @@ departure from house style — and answering that turned up a bigger finding: <b
 F2 deletes is currently the only thing that orders the frame ahead of the decode, and the only
 thing that makes the anchor deterministic.</b> F2 was written as a tidy-up ("one class owns the
 frame"). It is really a scheduling change, and it needs a replacement mechanism, not just a
-deletion.</p>
+deletion. The replacement, settled on review: an epoch future —
+<code>cwLocalProjectionManager::frameFuture()</code> — plus a gate on the manager's own anchor
+path.</p>
 
 <h3>What the synchronous probe is actually doing</h3>
 
@@ -1444,6 +1446,14 @@ suspicion that today's code decodes once into an empty frame and again into the 
   function of disk timing — and it is <i>persisted</i>, into a Git-backed <code>.cwproj</code>.
   Two people importing the same directory get different frames, different scene coordinates, and a
   diff that looks like real work.</p>
+  <p><b>And the gate must live inside <code>evaluate()</code>.</b> An earlier draft had the model
+  "drive one <code>evaluate()</code> per batch" — not enough. <code>evaluate()</code> has other
+  callers that fire mid-batch: the model's <code>rowsInserted</code>/<code>rowsRemoved</code>/<code>modelReset</code>
+  (<code>cwLocalProjectionManager.cpp:51-53</code>), fix-station <code>dataChanged</code>
+  (<code>:293</code>), <code>caveCountChanged</code> (<code>:37</code>), and each layer's
+  <code>loadStatusChanged</code> (<code>:321</code>). Any of them would anchor from the landed
+  subset. So the Ungeoreferenced path defers <code>anchorToFirstUsable</code> while the epoch is
+  open, and every existing connection stays.</p>
   <p><b>Invariant to add to §4:</b> the anchor may depend on the <i>set</i> of inputs and on their
   order in the model, never on the order in which their I/O completes. This is the sibling of §4's
   "only witnessed deletions count" and of the stored-not-computed rule in §3 — same motivation,
@@ -1459,7 +1469,10 @@ suspicion that today's code decodes once into an empty frame and again into the 
       <td><b>Remove (F2).</b> One file on a normal import, but <i>N</i> when the tiles carry no
       CRS: <code>probe.sourceCS.isEmpty()</code> returns without anchoring, so the
       <code>hasCoordinateSystem()</code> guard never trips and every file blocks in turn. This is
-      the last synchronous file read on the rescan path.</td></tr>
+      the last synchronous <i>LAZ</i> read on the rescan path — rescan still reads each new layer's
+      tiny <code>.cwlaz</code> synchronously (<code>cwSaveLoad::loadLazLayer</code>,
+      <code>cwLazLayerModel.cpp:420</code>) and stats the directory; those are small and
+      stay.</td></tr>
   <tr><td>2</td><td><code>cwLazLayer::startHeaderProbe</code> → <code>probeHeader</code> — async,
       per layer</td>
       <td><b>Keep.</b> F1 added it; it becomes the single source of a layer's header facts.</td></tr>
@@ -1518,67 +1531,177 @@ cloud is, one open that decodes it. Until F2 lands, F1 leaves the first layer's 
   <path class="edgeGood" d="M714 78 V94" marker-end="url(#arrCG)"/>
 
   <rect class="boxAccent" x="504" y="98" width="420" height="44"/>
-  <text class="lbl" x="518" y="118">combine(probes) — barrier</text>
-  <text class="sub" x="518" y="134">AsyncFuture::combine()</text>
+  <text class="lbl" x="518" y="118">epoch open — probes in flight</text>
+  <text class="sub" x="518" y="134">frameFuture() pending · anchoring deferred</text>
   <path class="edgeGood" d="M714 142 V158" marker-end="url(#arrCG)"/>
 
   <rect class="boxGood" x="504" y="162" width="420" height="44"/>
-  <text class="lbl" x="518" y="182">evaluate() once → anchorToFirstUsable</text>
-  <text class="sub" x="518" y="198">deterministic: model row order</text>
+  <text class="lbl" x="518" y="182">last probe lands → evaluate() once</text>
+  <text class="sub" x="518" y="198">anchorToFirstUsable — model row order</text>
   <path class="edgeGood" d="M714 206 V222" marker-end="url(#arrCG)"/>
 
   <rect class="boxGood" x="504" y="226" width="420" height="44"/>
-  <text class="lbl" x="518" y="246">frame settled</text>
-  <text class="sub" x="518" y="262">Anchored | Frozen | all probes in, still Ungeoreferenced</text>
+  <text class="lbl" x="518" y="246">frameFuture() completes</text>
+  <text class="sub" x="518" y="262">value: the frameCS, possibly empty</text>
   <path class="edgeGood" d="M714 270 V286" marker-end="url(#arrCG)"/>
 
   <rect class="box" x="504" y="290" width="420" height="44"/>
-  <text class="lbl" x="518" y="310">decode ×N</text>
+  <text class="lbl" x="518" y="310">decode ×N — chained on frameFuture()</text>
   <text class="sub" x="518" y="326">async, cwConcurrent, into the settled frame</text>
 </svg>
 <figcaption>The blocking call on the left is doing two jobs at once — keeping the decode behind the
-frame, and keeping the anchor choice deterministic. The barrier on the right is what replaces both.
-A per-layer chain (each layer's decode continuing its own probe) would order the decode correctly
-and still lose the determinism, which is why the barrier is not optional.</figcaption>
+frame, and keeping the anchor choice deterministic. The epoch future on the right replaces both:
+completion is the ordering edge, and the single <code>evaluate()</code> behind it is the
+determinism. A per-layer chain (each layer's decode continuing its own probe) would order the
+decode correctly and still lose the determinism, which is why the barrier is not optional. For an
+already-anchored project the future is already finished, so a dropped-in tile decodes with no wait
+at all.</figcaption>
 </figure>
 
-<h3>"Settled frame" — the gate's definition</h3>
+<h3><code>frameFuture()</code> — the epoch future</h3>
 
-<p><code>cwLazLayer::reload()</code> gains one precondition: the frame must be <b>settled</b>.
-Three cases, and the third is the whole reason this is a barrier rather than a boolean:</p>
+<p><code>cwLocalProjectionManager</code> gains one accessor:</p>
+
+<pre><code>QFuture&lt;QString&gt; frameFuture();   // the current epoch's future; value = the settled frameCS</code></pre>
+
+<p>The <b>epoch</b> is open exactly while the frame is Ungeoreferenced <i>and</i> at least one
+layer probe is in flight. <code>frameFuture()</code> returns the open epoch's pending future, or an
+already-finished one otherwise — so "settled" has a one-line definition, <b>settled ⇔ the future is
+finished</b>, and the three cases an earlier draft enumerated collapse into it:</p>
 
 <ul>
-  <li><b>Anchored or Frozen</b> → settled. Dropping one tile into an already-georeferenced project
-      waits for nothing; its decode starts as soon as its own probe lands.</li>
-  <li><b>Ungeoreferenced, and every in-flight probe has landed</b> → settled. Nothing in the project
-      can name a position, so the clouds load untransformed in their own units — exactly what
-      <code>deriveFrameFromLaz</code>'s early return promises today ("A cloud with no CRS of its own
-      places nothing. It still loads — untransformed…").</li>
-  <li><b>Ungeoreferenced with probes still in flight</b> → <b>not</b> settled; the decode waits.</li>
+  <li><b>Anchored or Frozen</b> → finished, carrying the current frameCS. A tile dropped into a
+      georeferenced project chains on a finished future and decodes immediately — it does <i>not</i>
+      wait for its own probe; the load reads the header itself (read #3 above, kept for exactly
+      this reason).</li>
+  <li><b>Ungeoreferenced, no probes in flight</b> → finished, carrying an empty string. Empty is a
+      legitimate settled value: the clouds load untransformed, in their own units — exactly what
+      <code>deriveFrameFromLaz</code>'s early return promises today.</li>
+  <li><b>Ungeoreferenced, probes in flight</b> → pending. Decodes chained on it wait.</li>
 </ul>
 
 <p>Getting the second and third cases confused is the failure mode: treat "no frame" as settled and
 a CRS-bearing project decodes every tile untransformed before its own headers arrive; treat it as
-unsettled forever and a CRS-less directory never loads at all.</p>
+unsettled forever and a CRS-less directory never loads at all. The future makes the distinction
+mechanical, and its completion <i>is</i> the notification — the case a changed-value signal can
+never deliver, because the settled value may be the same empty string the layer started with.</p>
+
+<p>The future also <b>carries</b> the frame, and that is the only way a layer gets one. An earlier
+draft pushed the value down separately (<code>setRegionFrameCS</code>) and used the future purely
+as a "now it's final" bell, which left one fact traveling two channels and an ordering contract
+between them written only in a comment. Taking the value off the future deletes the second channel,
+the duplicate <code>m_regionFrameCS</code> member in both the layer and the model, and the
+contract.</p>
+
+<p><b>The frame is computed at most once per epoch</b>, because the gate defers all layer-driven
+anchoring while the epoch is open. An epoch ends one of two ways, and each completes the
+<code>AsyncFuture::Deferred&lt;QString&gt;</code> behind the future exactly once:</p>
+
+<ul>
+  <li><b>The last probe lands</b> → one <code>evaluate()</code> →
+      <code>anchorToFirstUsable</code> over the full set → complete with the result (or the empty
+      string).</li>
+  <li><b>A fix station anchors mid-epoch</b> → complete early with the fix's frame. Safe because it
+      is order-identical to waiting: <code>gatherInputs()</code> lists fix stations ahead of
+      layers, so the batch-close path would have picked the same fix. A user edit is allowed to
+      decide the anchor; I/O timing is not. So the gate is not "anchor nothing while the epoch is
+      open" but "anchor nothing <i>a header could have decided</i>": the Ungeoreferenced path
+      filters the inputs down to the fix stations and anchors on those, then settles because the
+      frame is no longer Ungeoreferenced.</li>
+</ul>
+
+<p>Epochs <b>extend or complete — they never supersede</b>. A probe starting while the epoch is
+open joins it (the future just completes later); a probe starting after settle opens a fresh epoch
+with a fresh Deferred, and the old future is already finished. That is why this is a Deferred and
+not an <code>AsyncFuture::Restarter</code>: Restarter's machinery is "cancel the superseded run,
+deliver only the latest," and no epoch is ever superseded. The Restarter already sits where
+superseding actually happens — each layer's <code>m_loadRestarter</code>, which handles a frame
+that moves <i>after</i> settle. The split: the Deferred guards when a decode may first start; the
+load Restarter guards replacing one already running.</p>
+
+<p>A frame that moves after settle reaches the layers as
+<code>cwGeoReference::localCoordinateSystemChanged</code> → <code>cwLazLayerModel::reloadAll()</code>
+→ each layer reads the new frame back off its token. The signal is deliberately narrower than
+<code>localProjectionChanged</code>: a freeze or a change of anchor leaves every coordinate in the
+project exactly where it was, and re-decoding a directory of point clouds is the most expensive
+thing the frame can cause. That narrowing is what the deleted <code>setRegionFrameCS</code>
+early-return used to provide, moved to where the change actually happens.</p>
+
+<p>The one abort: project close / <code>clear()</code> mid-epoch <b>cancels</b> the Deferred rather
+than completing it, so waiting continuations never fire and nothing decodes into a dying
+region.</p>
+
+<p>Subscription is three lines, and identical for any future GIS layer type (GeoTIFF, DEM,
+shapefile):</p>
+
+<pre><code>AsyncFuture::observe(m_frameFuture)
+    .context(this, [this](const QString&amp; frameCS) { startDecode(frameCS); });</code></pre>
+
+<p>A layer <b>asks</b> for the future at the moment it needs it, through a
+<code>cwLocalProjectionToken</code> — the same shape as <code>cwFutureManagerToken</code>, a
+<code>QPointer</code> to the manager behind one method. Pushing the future instead reads simpler
+and is wrong in exactly the case that matters: <code>rescan()</code> starts a new layer's probe and
+its <code>reload()</code> <i>before</i> the row is announced (deliberately —
+<code>cwLazLayerModel.cpp:451-457</code>), so any push driven by the epoch opening would arrive
+after the layer had already asked. Asking has no ordering to get right at all. The
+<i>contribute</i> side — telling the manager a probe is in flight — stays cwLazLayer-specific until
+a second GIS type exists; one consumer is too early for an abstraction.</p>
+
+<p>Accounting note: the model keys the probing layers by <b>identity</b>, in a
+<code>QSet&lt;cwLazLayer*&gt;</code> wired up in <code>connectLayer()</code> — which is called at
+<i>creation</i>, so a layer counts from before it is a row, which is when its probe starts. A set
+rather than a counter because the probe Restarter delivers only the latest run: counting starts
+would leak a decrement every time a restart superseded a probe mid-flight, and a layer destroyed
+mid-read would leak one permanently. It drops out on <code>QObject::destroyed</code> instead, where
+the pointer is only ever a key.</p>
+
+<div class="callout bad">
+  <div class="title">Cancel propagates upstream — keep the wait out of the load Restarter</div>
+  <p>The obvious shape for "decode after the frame" is to put the chain <i>inside</i>
+  <code>m_loadRestarter.restart()</code>, so a newer reload supersedes the older wait for free. It
+  is a trap. <code>asyncfuture</code>'s <code>Private::execute</code> watches the derived future and
+  propagates a cancel <i>up</i> to its parent (<code>futurePtr-&gt;cancel()</code>), so the
+  Restarter cancelling one layer's run would cancel the <b>shared epoch future</b> — and every
+  other layer waiting on it would stop dead.</p>
+  <p>So the wait sits outside the Restarter and a monotonic <code>m_frameWaitGeneration</code>
+  drops the superseded continuation. Layer <i>destruction</i> is safe either way: the context
+  object's <code>destroyed</code> handler deletes the watcher before the cancel it triggers can be
+  delivered.</p>
+</div>
+
+<p>Thread-safety: probes and decodes run on the pool, but their results are delivered on the GUI
+thread, and <code>evaluate()</code>, the gate, and the Deferred's completion are all
+GUI-thread-only. The races this section closes are logical ordering races — which input anchors
+first — never data races.</p>
 
 <h3>Revised scope</h3>
 
-<p><b>F1</b> (landed 2026-08-05, uncommitted) stands as written. It carries two debts until the work
-below lands, both deliberate: the duplicate header read on the first layer, and the
-<code>QtConcurrent::run</code> call on the global pool.</p>
+<p><b>F1</b> — committed as <code>bae40559</code> (2026-08-05). It carries two debts until F2
+lands, both deliberate and named in its commit message: the duplicate header read on the first
+layer, and the <code>QtConcurrent::run</code> call on the global pool.</p>
 
-<p><b>F2</b> becomes one commit with four parts, in this order:</p>
+<p><b>F2</b> becomes one commit with five parts, in this order:</p>
 <ol>
-  <li><code>cwLazLayer::reload()</code> gates on a settled frame (definition above).</li>
-  <li><code>cwLazLayerModel</code> combines its layers' probe futures and drives one
-      <code>evaluate()</code> when the batch has landed, instead of the manager re-evaluating on
-      each layer's <code>sourceCSChanged</code>. Besides the determinism fix this drops an
-      O(<i>n</i>²) walk — <code>evaluate()</code> re-walks every cave and fix station once per
-      probe today.</li>
+  <li><code>cwLocalProjectionManager</code> gains the epoch: the open/settled state, the Deferred,
+      <code>frameFuture()</code>, the gate on <code>evaluate()</code>'s Ungeoreferenced anchor
+      path, and cancel-on-clear. Every existing signal connection stays. (Optional, same commit or
+      later: coalesce <code>evaluate()</code> through a queued single-shot — mid-epoch calls are
+      gated but each still walks every cave and fix station.)</li>
+  <li><code>cwLazLayer</code> reports its probe in-flight flag; <code>cwLazLayerModel</code> keys
+      the probing layers and raises the two edges the manager watches. This is the contribute side
+      of the epoch.</li>
+  <li><code>cwLazLayer::reload()</code> chains the decode on <code>frameFuture()</code>, asked for
+      through the token, instead of starting it directly, and decodes into the frame that future
+      carries. <code>setRegionFrameCS</code> and both <code>m_regionFrameCS</code> members come out;
+      a frame that moves after settle arrives as <code>reloadAll()</code>. Ordering note:
+      <code>startHeaderProbe()</code> raises the in-flight flag synchronously ahead of
+      <code>reload()</code> in both of its callers, so the epoch is already open by the time
+      <code>reload()</code> asks.</li>
   <li>Delete <code>deriveFrameFromLaz</code>. One class owns the frame, which was F2's original
       point, and now the guarantee it was silently providing has somewhere to live.</li>
-  <li>Revert <code>startHeaderProbe</code> to <code>cwConcurrent::run</code>. With the gate in
-      place nothing waits on the probe, so it needs neither priority nor a pool of its own.</li>
+  <li>Revert <code>startHeaderProbe</code> to <code>cwConcurrent::run</code>. With decodes chained
+      on <code>frameFuture()</code>, nothing user-visible waits on a probe, so it needs neither
+      priority nor a pool of its own.</li>
 </ol>
 
 <div class="callout good">
@@ -1604,13 +1727,48 @@ below lands, both deliberate: the duplicate header read on the first layer, and 
         <i>both</i> pools to the user's thread count and <code>threadCount()</code> asserts they are
         equal — that setting is the app's CPU budget, and riding the global pool quietly spends
         twice it.</li>
-    <li><b>All of it is moot once the decode can't start early</b>, which is why part 4 above is a
+    <li><b>All of it is moot once the decode can't start early</b>, which is why part 5 above is a
         revert rather than a redesign.</li>
   </ul>
 </div>
 
+<h3>What the layer stopped storing (settled 2026-08-06)</h3>
+
+<p>With the frame arriving on the future, <code>cwLazLayer</code> was reviewed for the rest of its
+shadow state. Two more facts turned out to be stored copies of things it could derive, and both
+were costing branches:</p>
+
+<ul>
+  <li><b>The header is one value, not four fields plus a bool.</b> The probe already produces a
+      coherent <code>cwLazLoader::ProbeResult</code>; the layer used to shred it into
+      <code>m_sourceCS</code>, <code>m_sourceBboxMin</code>, <code>m_sourceBboxMax</code> and an
+      <code>m_hasReadHeader</code> flag that only restated "those three mean something". It now
+      holds <code>std::optional&lt;ProbeResult&gt;</code>: <code>hasReadHeader()</code> is
+      <code>has_value()</code>, and the override precedence (override &gt; embedded &gt; empty)
+      moved into <code>sourceCS()</code>. That last move is why
+      <code>setSourceCSOverride</code> no longer re-reads the file — the header did not change,
+      only which CRS it is read as, and precedence is now applied on the way out.</li>
+  <li><b><code>Probed</code> is a name, not a state.</b> Two independent things happen to a layer —
+      the header read and the point decode — and they were interleaved into one stored enum plus
+      two bools. The layer now stores only <code>PointState</code> (Idle / Loading / Loaded /
+      Error) and <code>loadStatus()</code> folds in the header: <code>Probed</code> is what "header
+      in, points out" is called. That deletes <code>applyProbe</code>'s "only ever an upgrade from
+      Idle" guard and both copies of the <code>m_hasReadHeader ? Probed : Idle</code> fallback —
+      all three existed only to hand-maintain a derivable value.</li>
+</ul>
+
+<p><code>m_headerProbeInFlight</code> stays an explicit member: it is the epoch's input, and it is
+genuinely dynamic rather than derived from anything else the layer holds.</p>
+
 <h3>Verification</h3>
 <ul>
+  <li><b>A frame that moves takes its clouds with it:</b> correcting the anchor fix station by
+      100 km re-derives the frame and every loaded tile decodes again into it — the case the
+      value-on-the-future change has to keep working, since nothing pushes a CS any more.</li>
+  <li><b>A frame that only changes hands leaves its clouds alone:</b> deleting the anchor while a
+      tile sits near the origin freezes the frame, and no layer emits
+      <code>loadStatusChanged</code>. This is what pins <code>reloadAll()</code> to
+      <code>localCoordinateSystemChanged</code> rather than <code>localProjectionChanged</code>.</li>
   <li><b>Determinism:</b> a project with several CRS-bearing layers anchors to the first in model
       row order, and repeated imports of the same directory produce a byte-identical stored
       projection. Worth forcing probe completion out of order rather than trusting that a fast
@@ -1620,23 +1778,53 @@ below lands, both deliberate: the duplicate header read on the first layer, and 
       scaffolding via <code>QT_LOGGING_RULES="cw.laz.layer.debug=true"</code>, which is how the
       current ordering was confirmed.</li>
   <li><b>CRS-less directory still loads:</b> N tiles with no embedded CRS all reach
-      <code>Loaded</code>, untransformed, and rescan performs no synchronous header read.</li>
-  <li><b>No barrier for an anchored project:</b> adding one tile to an Anchored project starts its
-      decode off its own probe without waiting on anything else.</li>
+      <code>Loaded</code>, untransformed; <code>frameFuture()</code> completes with the empty
+      string; rescan performs no synchronous LAZ read.</li>
+  <li><b>No wait for an anchored project:</b> adding one tile to an Anchored project chains on an
+      already-finished future and decodes immediately — before its own probe lands.</li>
+  <li><b>Mid-epoch fix station:</b> adding a valid fix while probes are in flight settles the epoch
+      early to the fix, and the stored frame equals what batch-close would have produced.</li>
+  <li><b>Clear mid-epoch:</b> clearing the project while probes are in flight cancels the epoch;
+      no decode continuation fires afterward.</li>
   <li>F1's three existing tests keep passing unchanged — they pin the probe's own behavior, which
       this does not alter.</li>
 </ul>
 
-<div class="callout warn">
-  <div class="title">Open for review: what exactly is the barrier over?</div>
-  <p>"All in-flight probes" is written above as though the set is obvious, and it isn't. A single
-  file added to an <i>Ungeoreferenced</i> project is its own one-element batch, so it settles as
-  soon as its probe lands — fine. But two rescans overlapping, or a file added while a directory
-  import is still probing, need a rule. <b>Lean:</b> the barrier is per-rescan-batch, and a batch
-  arriving while another is open joins it rather than starting a second. Cheaper to reason about
-  than a global "no probes anywhere in flight", and it keeps the anchor tied to a batch's row
-  order. Wants a decision before part 2 is written.</p>
+<div class="callout good">
+  <div class="title">Barrier scope — settled 2026-08-05</div>
+  <p>The earlier open question — per-rescan-batch vs. a global "no probes anywhere in flight" —
+  dissolves: with the join rule (a batch arriving while the epoch is open extends it), batch
+  identity stops mattering, and the two formulations are the same predicate. <b>The epoch is open
+  while the frame is Ungeoreferenced and any layer probe is in flight, whatever started the
+  probe.</b> The global predicate also covers any probe a rescan did not start — whatever restarts
+  one on an Ungeoreferenced project opens an epoch, so the anchor waits for it rather than racing
+  it.</p>
+  <p>One case that used to need this no longer reaches it: <code>setSourceCSOverride</code> stopped
+  re-reading the file (see "What the layer stopped storing"), so it updates <code>sourceCS()</code>
+  synchronously and <code>evaluate()</code> then runs against a complete input set. No I/O means no
+  order to race.</p>
 </div>
+
+<h3>The manager watches only the model (settled 2026-08-06)</h3>
+<p><code>syncLayerConnections()</code> is gone, and with it the three per-layer connections.
+Everything <code>evaluate()</code> reads off a layer arrives through
+<code>cwLazLayerModel</code>, so the manager's whole layer dependency is three model-level
+facts: <b>membership</b> (the row signals), <b>headers</b> (the
+<code>headerProbeInFlightChanged</code> edges — the falling edge is ordered after the header is
+published, so hearing "probing ended" always means the header is readable;
+<code>cwLazLayer::finishProbe()</code> owns both writes so the ordering is a choke point rather
+than two adjacent statements in its caller), and <b>the override</b> (<code>dataChanged</code> filtered on
+<code>SourceCSRole</code> — <code>setSourceCSOverride</code> applies its precedence in memory
+with no probe behind it, so neither of the other two would fire for it).</p>
+<p>The deleted <code>loadStatusChanged</code> connection had gone dead already: since
+<code>gatherInputs()</code> gates on <code>hasReadHeader()</code>, a decode landing changes no
+input, and the connection's comment ("a layer becomes an input when its load lands") described
+the pre-F2 design. <code>sourcePathChanged</code> was likewise indirect — a path change matters
+only through the re-probe it kicks off, which reports through the probe edges.
+<code>m_probingLayers</code> stays a <code>QSet</code>: it counts layers that are not rows yet,
+because <code>rescan()</code> starts the probe (and the <code>reload()</code> that pulls
+<code>frameFuture()</code>) before <code>beginInsertRows</code>, and a linear scan of
+<code>m_layers</code> at that instant would miss the very probe that must open the epoch.</p>
 
 <h2 id="open">15. Open questions</h2>
 <ul>

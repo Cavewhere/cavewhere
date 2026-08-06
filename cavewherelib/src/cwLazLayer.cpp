@@ -12,9 +12,9 @@
 #include <QDebug>
 #include <QFileInfo>
 #include <QLoggingCategory>
-#include <QtConcurrent>
 
 //Our includes
+#include "cwConcurrent.h"
 #include "cwCoordinateTransform.h"
 #include "cwFuture.h"
 #include "cwKeyword.h"
@@ -24,6 +24,11 @@ Q_LOGGING_CATEGORY(lcLazLayer, "cw.laz.layer")
 
 namespace {
 constexpr const char* kLazLayerType = "LAZ Layer";
+
+cwGeoPoint midpoint(const cwGeoPoint& a, const cwGeoPoint& b)
+{
+    return cwGeoPoint((a.x + b.x) * 0.5, (a.y + b.y) * 0.5, (a.z + b.z) * 0.5);
+}
 }
 
 cwLazLayer::cwLazLayer(QObject* parent) :
@@ -66,7 +71,7 @@ cwLazLayer::cwLazLayer(QObject* parent) :
     // microseconds, and a directory of tiles would flash a progress row per
     // file for work no one waits on.
     m_probeRestarter.onResult(this, [this](cwLazLoader::ProbeResult probe) {
-        applyProbe(probe);
+        finishProbe(probe);
     });
 }
 
@@ -187,10 +192,10 @@ void cwLazLayer::setEnabled(bool enabled)
         m_bboxMax = QVector3D{};
         m_meanSpacingXY = 0.0f;
         setErrorMessage(QString());
-        // Back to what the header alone established, not to nothing: the file's
-        // CRS and bounding box are still known, and a disabled layer that stops
-        // being a georeferenced input would read as one that was deleted.
-        setLoadStatus(m_hasReadHeader ? LoadStatus::Probed : LoadStatus::Idle);
+        // Only the points go: the file's CRS and bounding box are still known,
+        // and a disabled layer that stopped being a georeferenced input would
+        // read as one that was deleted.
+        setPointState(PointState::Idle);
         if (hadGeometry) {
             emit pointCountChanged();
             emit bboxChanged();
@@ -201,13 +206,21 @@ void cwLazLayer::setEnabled(bool enabled)
     }
 }
 
+QString cwLazLayer::sourceCS() const
+{
+    if (!m_sourceCSOverride.isEmpty()) {
+        return m_sourceCSOverride;
+    }
+    return m_header.has_value() ? m_header->sourceCS : QString();
+}
+
 QString cwLazLayer::sourceCSDisplayName() const
 {
     // PROJ resolves WKT, PROJ-strings, and authority codes uniformly, so the
     // same nameFor() call handles every flavor of sourceCS the loader can
     // produce. nameFor() has a thread_local cache keyed on the input string,
     // so binding re-evaluation in QML doesn't replay proj_create per row.
-    return cwCoordinateTransform::nameFor(m_sourceCS);
+    return cwCoordinateTransform::nameFor(sourceCS());
 }
 
 void cwLazLayer::setSourceCSOverride(const QString& cs)
@@ -215,18 +228,30 @@ void cwLazLayer::setSourceCSOverride(const QString& cs)
     if (m_sourceCSOverride == cs) {
         return;
     }
+
+    // Which CRS the file is read as changes; what its header says does not, so
+    // there is nothing to re-read. The precedence is applied in sourceCS().
+    const QString previousCS = sourceCS();
     m_sourceCSOverride = cs;
-    // The header hasn't changed, but which CRS the file is read as has, and the
-    // probe is where that precedence is applied.
-    startHeaderProbe();
+    if (sourceCS() != previousCS) {
+        emit sourceCSChanged();
+    }
     reload();
+}
+
+cwGeoPoint cwLazLayer::sourceBboxMin() const
+{
+    return m_header.has_value() ? m_header->bboxMin : cwGeoPoint{};
+}
+
+cwGeoPoint cwLazLayer::sourceBboxMax() const
+{
+    return m_header.has_value() ? m_header->bboxMax : cwGeoPoint{};
 }
 
 cwGeoPoint cwLazLayer::sourceBboxCenter() const
 {
-    return cwGeoPoint((m_sourceBboxMin.x + m_sourceBboxMax.x) * 0.5,
-                      (m_sourceBboxMin.y + m_sourceBboxMax.y) * 0.5,
-                      (m_sourceBboxMin.z + m_sourceBboxMax.z) * 0.5);
+    return midpoint(sourceBboxMin(), sourceBboxMax());
 }
 
 void cwLazLayer::setFutureManagerToken(const cwFutureManagerToken& token)
@@ -234,15 +259,9 @@ void cwLazLayer::setFutureManagerToken(const cwFutureManagerToken& token)
     m_futureManagerToken = token;
 }
 
-void cwLazLayer::setRegionFrameCS(const QString& cs)
+void cwLazLayer::setLocalProjectionToken(const cwLocalProjectionToken& token)
 {
-    if (m_regionFrameCS == cs) {
-        return;
-    }
-    m_regionFrameCS = cs;
-    if (!m_sourcePath.isEmpty()) {
-        reload();
-    }
+    m_localProjectionToken = token;
 }
 
 void cwLazLayer::reload()
@@ -258,17 +277,60 @@ void cwLazLayer::reload()
         return;
     }
 
-    qCDebug(lcLazLayer) << QFileInfo(m_sourcePath).fileName()
-                        << "reload() frameCSSet=" << !m_regionFrameCS.isEmpty();
-
     setErrorMessage(QString());
-    setLoadStatus(LoadStatus::Loading);
+    setPointState(PointState::Loading);
 
-    m_loadRestarter.restart([this]() {
+    // Points are only in the right place if the frame they were transformed
+    // into is the one the project keeps, so the frame comes from the one place
+    // that knows when it is final. On a project that already has a frame the
+    // future is finished and the decode starts here; on one still deriving its
+    // frame from headers that are still arriving, waiting is what keeps every
+    // cloud in the same frame — and keeps that frame from depending on which
+    // header the disk returned first.
+    ++m_frameWaitGeneration;
+    const QFuture<QString> frame = m_localProjectionToken.frameFuture();
+    if (frame.isFinished()) {
+        startDecode(frame.result());
+        return;
+    }
+
+    qCDebug(lcLazLayer) << QFileInfo(m_sourcePath).fileName()
+                        << "reload() waiting on the frame";
+
+    const quint64 generation = m_frameWaitGeneration;
+    AsyncFuture::observe(frame).context(this,
+        [this, generation](const QString& frameCS) {
+            if (generation != m_frameWaitGeneration) {
+                // A later reload() replaced this wait, and decoded against the
+                // frame it was given.
+                return;
+            }
+            if (!m_enabled || m_sourcePath.isEmpty()) {
+                return;
+            }
+            startDecode(frameCS);
+        },
+        [this, generation]() {
+            // The frame was abandoned with the project it belonged to. Give the
+            // points up rather than report a load that will never run; the
+            // header still stands, so the layer stays a georeferenced input.
+            if (generation != m_frameWaitGeneration) {
+                return;
+            }
+            setPointState(PointState::Idle);
+        });
+}
+
+void cwLazLayer::startDecode(const QString& frameCS)
+{
+    qCDebug(lcLazLayer) << QFileInfo(m_sourcePath).fileName()
+                        << "reload() frameCSSet=" << !frameCS.isEmpty();
+
+    m_loadRestarter.restart([this, frameCS]() {
         return cwLazLoader::load({
             .path = m_sourcePath,
             .sourceCSOverride = m_sourceCSOverride,
-            .frameCS = m_regionFrameCS
+            .frameCS = frameCS
         });
     });
 }
@@ -279,56 +341,77 @@ void cwLazLayer::startHeaderProbe()
         return;
     }
 
+    // Announced before the read is queued: the local projection waits for every
+    // header it is going to be offered, and the wait has to be in place before
+    // the reload() that follows this call asks whether the frame has settled.
+    setHeaderProbeInFlight(true);
+
     // Runs whether or not the layer is enabled. Where the file sits is a fact
     // about the file, and the project's local projection is derived from it —
     // a layer that will never decode a point still has to be able to place one.
     const QString path = m_sourcePath;
     m_probeRestarter.restart([path]() {
-        // The global pool rather than cwTask's: that one is where the point
-        // decodes run, and a header open queued behind a 100-million-point tile
-        // would hold up the frame every one of those decodes is waiting on.
-        return QtConcurrent::run([path]() { return cwLazLoader::probeHeader(path); });
+        return cwConcurrent::run([path]() { return cwLazLoader::probeHeader(path); });
     });
 }
 
-void cwLazLayer::applyProbe(const cwLazLoader::ProbeResult& probe)
+void cwLazLayer::setHeaderProbeInFlight(bool inFlight)
 {
-    if (!probe.valid) {
-        // The file wouldn't open. Whatever a previous probe established stands:
-        // rescan is what notices a file that has gone away, and reload() is
-        // about to report the same failure as an Error.
+    if (m_headerProbeInFlight == inFlight) {
         return;
     }
+    m_headerProbeInFlight = inFlight;
+    emit headerProbeInFlightChanged();
+}
 
-    m_hasReadHeader = true;
-    m_sourceBboxMin = probe.bboxMin;
-    m_sourceBboxMax = probe.bboxMax;
+void cwLazLayer::finishProbe(const cwLazLoader::ProbeResult& probe)
+{
+    // An invalid probe means the file wouldn't open, and whatever a previous
+    // probe established stands: rescan is what notices a file that has gone
+    // away, and reload() is about to report the same failure as an Error.
+    if (probe.valid) {
+        const QString previousCS = sourceCS();
+        const LoadStatus previousStatus = loadStatus();
 
-    const QString sourceCS = m_sourceCSOverride.isEmpty() ? probe.sourceCS
-                                                          : m_sourceCSOverride;
-    if (m_sourceCS != sourceCS) {
-        m_sourceCS = sourceCS;
-        emit sourceCSChanged();
+        m_header = probe;
+
+        if (sourceCS() != previousCS) {
+            emit sourceCSChanged();
+        }
+        // Idle becomes Probed here; every other status already outranks it.
+        if (loadStatus() != previousStatus) {
+            emit loadStatusChanged();
+        }
     }
 
-    // Only ever an upgrade from Idle. A load already running or finished has
-    // read the same header and says more than the probe does.
-    if (m_loadStatus == LoadStatus::Idle) {
-        setLoadStatus(LoadStatus::Probed);
-    }
+    // Last on every path, so the header is published before the local
+    // projection is told this layer has stopped being one it is waiting for.
+    setHeaderProbeInFlight(false);
 }
 
 void cwLazLayer::applyResult(cwLazLoadResult&& result)
 {
+    const QString previousCS = sourceCS();
+
     m_geometry = std::move(result.geometry);
     m_bboxMin = result.bboxMin;
     m_bboxMax = result.bboxMax;
-    m_sourceBboxMin = result.sourceBboxMin;
-    m_sourceBboxMax = result.sourceBboxMax;
     m_meanSpacingXY = result.meanSpacingXY;
 
-    if (m_sourceCS != result.sourceCS) {
-        m_sourceCS = result.sourceCS;
+    if (!m_header.has_value()) {
+        // A decode that got this far read the header on its way, so a layer
+        // whose probe hasn't landed yet still knows where it is. The probe
+        // overwrites this when it arrives: it reports what the file declares,
+        // while a load reports the CRS it actually read as.
+        m_header = cwLazLoader::ProbeResult{
+            .valid = true,
+            .sourceCS = result.sourceCS,
+            .bboxMin = result.sourceBboxMin,
+            .bboxMax = result.sourceBboxMax
+        };
+    }
+
+    if (sourceCS() != previousCS) {
         emit sourceCSChanged();
     }
 
@@ -338,23 +421,35 @@ void cwLazLayer::applyResult(cwLazLoadResult&& result)
 
     if (m_geometry.vertexCount() == 0) {
         setErrorMessage(QStringLiteral("Could not read points from %1").arg(m_sourcePath));
-        setLoadStatus(LoadStatus::Error);
+        setPointState(PointState::Error);
         return;
     }
 
     setErrorMessage(QString());
-    // A decode that produced points read the header on its way there, so this
-    // holds even in the rare case where the load beats its own probe home.
-    m_hasReadHeader = true;
-    setLoadStatus(LoadStatus::Loaded);
+    setPointState(PointState::Loaded);
 }
 
-void cwLazLayer::setLoadStatus(LoadStatus status)
+cwLazLayer::LoadStatus cwLazLayer::loadStatus() const
 {
-    if (m_loadStatus == status) {
+    switch (m_pointState) {
+    case PointState::Idle:
+        return m_header.has_value() ? LoadStatus::Probed : LoadStatus::Idle;
+    case PointState::Loading:
+        return LoadStatus::Loading;
+    case PointState::Loaded:
+        return LoadStatus::Loaded;
+    case PointState::Error:
+        return LoadStatus::Error;
+    }
+    return LoadStatus::Idle;
+}
+
+void cwLazLayer::setPointState(PointState state)
+{
+    if (m_pointState == state) {
         return;
     }
-    m_loadStatus = status;
+    m_pointState = state;
     emit loadStatusChanged();
 }
 

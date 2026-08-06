@@ -74,6 +74,12 @@ void cwGeoReference::setLocalProjection(const LocalProjectionState& state)
     if (m_localProjection == state) {
         return;
     }
+
+    const bool frameMoved =
+            (m_localProjection.coordinateSystem != state.coordinateSystem);
     m_localProjection = state;
+    if (frameMoved) {
+        emit localCoordinateSystemChanged();
+    }
     emit localProjectionChanged();
 }

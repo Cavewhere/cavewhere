@@ -9,11 +9,15 @@
 #define CWLOCALPROJECTIONMANAGER_H
 
 //Qt includes
+#include <QFuture>
 #include <QObject>
 #include <QString>
 
 //Std includes
 #include <optional>
+
+//AsyncFuture
+#include <asyncfuture.h>
 
 //Our includes
 #include "cwGeoPoint.h"
@@ -42,6 +46,12 @@ class cwLazLayer;
  * caves are loaded — so an anchor that is merely absent has not necessarily
  * been deleted, and treating it as deleted would move a frame that was stored
  * precisely so it would never have to be re-derived.
+ *
+ * The anchor may depend on which inputs a project has and on their order in
+ * the model, never on the order in which their I/O completes. A frame derived
+ * from whichever header a disk happened to return first would differ between
+ * two people importing the same directory, and it is written into the project
+ * file. That is what the epoch — frameFuture() — is for.
  */
 class CAVEWHERE_LIB_EXPORT cwLocalProjectionManager : public QObject
 {
@@ -49,6 +59,22 @@ class CAVEWHERE_LIB_EXPORT cwLocalProjectionManager : public QObject
 
 public:
     explicit cwLocalProjectionManager(cwCavingRegion* region);
+    ~cwLocalProjectionManager() override;
+
+    //! The project's frame, as a future that finishes once the frame has
+    //! stopped moving — settled is exactly "this future is finished", and its
+    //! value is the frame it settled on, which may be the empty string.
+    //!
+    //! A GIS layer chains its decode on this, because points are only in the
+    //! right place if the frame they were transformed into is the one the
+    //! project keeps. On a project that is already anchored or frozen the
+    //! future is already finished and the decode starts with no wait at all;
+    //! it is pending only while the frame is still being derived from headers
+    //! that are still arriving.
+    //!
+    //! Each call hands back an independent view of the same epoch, so a caller
+    //! that cancels its own wait stops only itself.
+    QFuture<QString> frameFuture();
 
     //! Suspend evaluation while a project load replaces the region's data.
     //! Caves arriving mid-load would otherwise derive a frame that
@@ -85,6 +111,11 @@ private:
     //! Whether a project load is replacing the region's data — see setLoading().
     bool m_loading = false;
 
+    //! The epoch currently being settled, if the frame is still being derived.
+    //! Held only while frameFuture() has been asked for during an open epoch,
+    //! so a project that never has to derive anything never mints one.
+    std::optional<AsyncFuture::Deferred<QString>> m_epoch;
+
     //! The georeferenced inputs in a fixed order — each cave's fix stations in
     //! region order, then the LAZ layers in model order. Nothing records which
     //! input truly came first, so "first" means first in this order: it only
@@ -95,8 +126,33 @@ private:
     //! hash lookup, because isValidCS memoizes the PROJ query per thread.
     QList<Input> gatherInputs() const;
 
-    //! Run the state machine against the current inputs.
+    //! The two halves of gatherInputs(), in the order it concatenates them.
+    //! The fix half stands on its own while headers are still arriving: it is
+    //! the part of the list that no disk is being waited on for.
+    QList<Input> gatherFixInputs() const;
+    QList<Input> gatherLayerInputs() const;
+
+    //! Run the state machine against the current inputs, then settle the epoch
+    //! if the last thing it was waiting on has landed.
     void evaluate();
+
+    //! The state machine itself. Split from evaluate() so that every path out
+    //! of it — including the early returns — goes through the settle.
+    void evaluateFrame();
+
+    //! Whether the frame is still being derived: it is Ungeoreferenced and at
+    //! least one layer is still reading its header. Which layers hold a header
+    //! at any instant during that is decided by disk timing, and the frame is
+    //! stored, so the anchor waits for the whole set rather than racing it.
+    bool epochOpen() const;
+
+    //! Finish the epoch on the frame as it now stands, exactly once. Anything
+    //! chained on frameFuture() runs from here.
+    void settleEpoch();
+
+    //! End the epoch without settling it, so that nothing waiting on it loads
+    //! into a frame that is being replaced wholesale.
+    void cancelEpoch();
 
     //! Horizontal distance from the current LDP's origin to \a input, or an
     //! empty result when the two systems can't be related — an unanswerable
@@ -117,7 +173,6 @@ private:
     void anchorToFirstUsable(const QList<Input>& inputs);
 
     void syncCaveConnections();
-    void syncLayerConnections();
 };
 
 #endif // CWLOCALPROJECTIONMANAGER_H

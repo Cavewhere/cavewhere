@@ -89,7 +89,6 @@ public:
         QString sourceCS;          //!< empty for older GeoTIFF-only LAZs
         cwGeoPoint bboxMin;        //!< raw LAZ source-CS coordinates
         cwGeoPoint bboxMax;        //!< raw LAZ source-CS coordinates
-        cwGeoPoint bboxCenter;     //!< midpoint of bbox in source CS
     };
 
     static ProbeResult probeHeader(const QString& path);

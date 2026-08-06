@@ -2,6 +2,7 @@
 
 #include <QByteArray>
 #include <QCoreApplication>
+#include <QElapsedTimer>
 #include <QSignalSpy>
 #include <QThread>
 #include <QUrl>
@@ -20,6 +21,11 @@
 #include <cmath>
 
 namespace {
+
+//! How long a wait blocks before it looks at the world again.
+constexpr int kSignalWaitMs = 100;
+constexpr int kSpinSliceMs = 50;
+constexpr int kSleepSliceMs = 5;
 
 /**
  * Center the header's offsets on @a points.
@@ -237,6 +243,22 @@ QString tempLazPath(QTemporaryDir& dir, const QString& tag)
                             .arg(QCoreApplication::applicationPid()));
 }
 
+QString utmZoneWkt(int zone, int centralMeridian)
+{
+    return QStringLiteral(
+        "PROJCS[\"WGS 84 / UTM zone %1N\",GEOGCS[\"WGS 84\","
+        "DATUM[\"WGS_1984\",SPHEROID[\"WGS 84\",6378137,298.257223563]],"
+        "PRIMEM[\"Greenwich\",0],UNIT[\"degree\",0.0174532925199433]],"
+        "PROJECTION[\"Transverse_Mercator\"],"
+        "PARAMETER[\"latitude_of_origin\",0],"
+        "PARAMETER[\"central_meridian\",%2],"
+        "PARAMETER[\"scale_factor\",0.9996],"
+        "PARAMETER[\"false_easting\",500000],"
+        "PARAMETER[\"false_northing\",0],UNIT[\"metre\",1]]")
+        .arg(zone)
+        .arg(centralMeridian);
+}
+
 QString writeMinimalLaz(const QString& path, const QString& wktCS)
 {
     const QVector<QVector3D> points = {
@@ -269,16 +291,41 @@ bool waitForLazLayerLoaded(cwLazLayer* layer, int timeoutMs)
 
 bool waitForLazLayerHeader(cwLazLayer* layer, int timeoutMs)
 {
-    // The probe publishes no signal of its own — an enabled layer is already
-    // Loading when it lands, and its CS may be the one the layer had — so the
-    // wait polls the flag rather than watching for a change.
-    int waited = 0;
-    while (waited < timeoutMs && !layer->hasReadHeader()) {
-        QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
-        QThread::msleep(5);
-        waited += 50;
+    // The layer publishes the header before it reports the probe finished, so
+    // the falling edge of this signal is the moment the header is readable.
+    QSignalSpy spy(layer, &cwLazLayer::headerProbeInFlightChanged);
+    QElapsedTimer elapsed;
+    elapsed.start();
+    while (!layer->hasReadHeader() && elapsed.elapsed() < timeoutMs) {
+        spy.wait(kSignalWaitMs);
     }
     return layer->hasReadHeader();
+}
+
+void spinEventLoopSlice()
+{
+    QCoreApplication::processEvents(QEventLoop::AllEvents, kSpinSliceMs);
+    QThread::msleep(kSleepSliceMs);
+}
+
+bool waitForLazLayerModelSettled(cwLazLayerModel* layers, int timeoutMs)
+{
+    const auto settling = [layers]() {
+        if (layers->anyHeaderProbeInFlight()) {
+            return true;
+        }
+        const QList<cwLazLayer*>& all = layers->layers();
+        return std::any_of(all.begin(), all.end(), [](const cwLazLayer* layer) {
+            return layer->loadStatus() == cwLazLayer::LoadStatus::Loading;
+        });
+    };
+
+    QElapsedTimer elapsed;
+    elapsed.start();
+    while (elapsed.elapsed() < timeoutMs && settling()) {
+        spinEventLoopSlice();
+    }
+    return !settling();
 }
 
 void addLazAndWait(cwRootData* root, const QStringList& externalPaths)
@@ -292,5 +339,12 @@ void addLazAndWait(cwRootData* root, const QStringList& externalPaths)
     }
     region->lazLayers()->addFromFiles(urls);
     project->waitSaveToFinish();
+    root->futureManagerModel()->waitForFinished();
+
+    // The frame is derived from the layers' headers, and the point decodes wait
+    // on the frame, so neither has necessarily happened yet: returning here
+    // would hand the test a model whose rows are all still Loading.
+    waitForLazLayerModelSettled(region->lazLayers());
+
     root->futureManagerModel()->waitForFinished();
 }
