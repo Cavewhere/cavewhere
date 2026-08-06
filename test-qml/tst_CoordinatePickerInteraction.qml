@@ -11,15 +11,9 @@ MainWindowTest {
         name: "CoordinatePickerInteraction"
         when: windowShown
 
-        // Verifies the interaction lifecycle: the sidebar tool-rail button activates
-        // the picker via InteractionManager, which disables the turn-table; toggling
-        // off restores the turn-table and clears the current pick.
-        //
-        // The ray-cast itself (cwCamera::frustumRay → cwGeometryItersecter →
-        // cwGeoPoint → cwCoordinateTransform) is covered by the C++ unit tests
-        // for those classes plus the manual smoke test in the plan file.
-        function test_lifecycle() {
-            TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
+        // Every test here works through the 3D renderer on the View page: show
+        // the page, then hand back the renderer once the page has built it.
+        function gotoRenderer() {
             RootData.pageSelectionModel.currentPageAddress = "View"
             tryVerify(() => RootData.pageView.currentPageItem !== null
                             && RootData.pageView.currentPageItem.objectName === "viewPage",
@@ -31,6 +25,25 @@ MainWindowTest {
                     "rootId->viewPage->SplitView->renderer")
                 return renderer !== null
             }, 5000, "Renderer found")
+            return renderer
+        }
+
+        function gotoPopup() {
+            let popup = findChild(gotoRenderer(), "coordinatePickerPopup")
+            verify(popup !== null, "Coordinate picker popup found")
+            return popup
+        }
+
+        // Verifies the interaction lifecycle: the sidebar tool-rail button activates
+        // the picker via InteractionManager, which disables the turn-table; toggling
+        // off restores the turn-table and clears the current pick.
+        //
+        // The ray-cast itself (cwCamera::frustumRay → cwGeometryItersecter →
+        // cwGeoPoint → cwCoordinateTransform) is covered by the C++ unit tests
+        // for those classes plus the manual smoke test in the plan file.
+        function test_lifecycle() {
+            TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
+            let renderer = gotoRenderer()
 
             let turnTable = renderer.turnTableInteraction
             let picker = renderer.coordinatePickerInteraction
@@ -70,20 +83,7 @@ MainWindowTest {
         function test_needsCoordinateSystemGuidance() {
             RootData.newProject()
 
-            RootData.pageSelectionModel.currentPageAddress = "View"
-            tryVerify(() => RootData.pageView.currentPageItem !== null
-                            && RootData.pageView.currentPageItem.objectName === "viewPage",
-                      5000, "View page should be active")
-
-            let renderer = null
-            tryVerify(() => {
-                renderer = ObjectFinder.findObjectByChain(rootId.mainWindow,
-                    "rootId->viewPage->SplitView->renderer")
-                return renderer !== null
-            }, 5000, "Renderer found")
-
-            let popup = findChild(renderer, "coordinatePickerPopup")
-            verify(popup !== null, "Coordinate picker popup found")
+            let popup = gotoPopup()
 
             verify(!RootData.region.geoReference.hasCoordinateSystem,
                    "geoReference reports no coordinate system")
@@ -96,6 +96,32 @@ MainWindowTest {
             tryVerify(() => RootData.pageView.currentPageItem !== null
                             && RootData.pageView.currentPageItem.objectName === "dataMainPage",
                       5000, "Link should navigate to the Data page")
+        }
+
+        // The pick reads as one pasteable "lat, lon, elevation" triple. Only the
+        // elevation carries a unit, and it follows the project's unit system —
+        // a metric project reads meters, an imperial one feet.
+        function test_latLonElevationFormat() {
+            RootData.newProject()
+
+            let popup = gotoPopup()
+
+            RootData.region.unitSystem = Units.Metric
+            compare(popup._formatLatLonElevation(41.566023, -96.313203, 2206.89),
+                    "41.5660230, -96.3132030, 2206.890m",
+                    "Metric project reports the elevation in meters")
+
+            RootData.region.unitSystem = Units.Imperial
+            compare(popup._formatLatLonElevation(41.566023, -96.313203, 1828.8),
+                    "41.5660230, -96.3132030, 6000.000ft",
+                    "Imperial project reports the elevation in feet")
+
+            // The 7th decimal is ~1 cm, which a registered LiDAR scan resolves —
+            // a pick that lands there must survive the formatting.
+            RootData.region.unitSystem = Units.Metric
+            compare(popup._formatLatLonElevation(41.5660234, -96.3132037, 2206.89),
+                    "41.5660234, -96.3132037, 2206.890m",
+                    "Centimeter-scale digits are kept")
         }
     }
 }

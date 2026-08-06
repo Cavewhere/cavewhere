@@ -107,14 +107,16 @@ system your reader can paste elsewhere.
 
 In the **3D view**, click the crosshair **Pick** button in the bottom toolbar
 (tooltip "Pick coordinates"), then click the model. A **Picked coordinates**
-panel reports it two ways, each with a **Copy** button: **WGS84 (lat, lon)** and
-the **Elevation**. Escape puts the tool away. It's a quick way to grab an
-entrance coordinate for a permit, a callout, or a landowner.
+panel reports it as **WGS84 (lat, lon, elevation)** — one line, with a **Copy**
+button, so a paste carries the height along with the position. The elevation is
+in the project's units, `2206.890m` or `6000.000ft`. Escape puts the tool away.
+It's a quick way to grab an entrance coordinate for a permit, a callout, or a
+landowner.
 
 **I recommend checking every new fix this way.** Pick the station you fixed and
 confirm the latitude and longitude land on the entrance, as shown below.
 
-![The 3D view with the Pick tool active: a marker on the cave and a "Picked coordinates" panel reading the point as WGS84 lat, lon and its elevation, each with a Copy button.](../images/georef-coordinate-picker.png)
+![The 3D view with the Pick tool active: a marker on the cave and a "Picked coordinates" panel reading the point as WGS84 lat, lon and elevation on one line, with a Copy button.](../images/georef-coordinate-picker.png)
 *The coordinate picker reads one point back out as WGS84 lat/lon and elevation.*
 
 Until something places the project, the panel has nothing to read the pick
