@@ -40,7 +40,7 @@ TEST_CASE("cwLazLayer save/load round-trip preserves layer files",
     REQUIRE(region != nullptr);
     REQUIRE(region->lazLayers() != nullptr);
 
-    addLazAndWait(root.get(), {lazA, lazB});
+    REQUIRE(addLazAndWait(root.get(), {lazA, lazB}));
     REQUIRE(region->lazLayers()->count() == 2);
 
     // Originals are copies, not moves — sources should still exist on disk.
@@ -110,7 +110,7 @@ TEST_CASE("cwLazLayer save/load: pointSize runtime override resets to default",
     auto root = std::make_unique<cwRootData>();
     auto* project = root->project();
     auto* region = project->cavingRegion();
-    addLazAndWait(root.get(), {laz});
+    REQUIRE(addLazAndWait(root.get(), {laz}));
     auto* layer = region->lazLayers()->layerAt(0);
     REQUIRE(layer != nullptr);
 
@@ -150,7 +150,7 @@ TEST_CASE("cwLazLayer save/load: disabled state survives reopen",
     auto* region = project->cavingRegion();
     REQUIRE(region != nullptr);
 
-    addLazAndWait(root.get(), {lazA, lazB});
+    REQUIRE(addLazAndWait(root.get(), {lazA, lazB}));
     REQUIRE(region->lazLayers()->count() == 2);
 
     auto* layerA = region->lazLayers()->layerAt(0);
@@ -199,7 +199,7 @@ TEST_CASE("cwLazLayer save/load: .cwproj has no reserved-7 (lazLayerStates) fiel
     auto root = std::make_unique<cwRootData>();
     auto* project = root->project();
     auto* region = project->cavingRegion();
-    addLazAndWait(root.get(), {laz});
+    REQUIRE(addLazAndWait(root.get(), {laz}));
     REQUIRE(region->lazLayers()->count() == 1);
     auto* layer = region->lazLayers()->layerAt(0);
     REQUIRE(waitForLazLayerLoaded(layer));
@@ -246,7 +246,7 @@ TEST_CASE("cwLazLayer save/load: user-removed layer does not silently disable it
     auto* project = root->project();
     auto* region = project->cavingRegion();
 
-    addLazAndWait(root.get(), {laz});
+    REQUIRE(addLazAndWait(root.get(), {laz}));
     REQUIRE(region->lazLayers()->count() == 1);
     auto* layer = region->lazLayers()->layerAt(0);
     REQUIRE(waitForLazLayerLoaded(layer));
@@ -272,7 +272,7 @@ TEST_CASE("cwLazLayer save/load: user-removed layer does not silently disable it
     // a new dataset that happens to reuse the name.
     const QString reAddedLaz = QDir(tempDir.path()).filePath(basename);
     REQUIRE(writeSyntheticLazFile(reAddedLaz, {{1.0f, 2.0f, 3.0f}, {4.0f, 5.0f, 6.0f}}));
-    addLazAndWait(root.get(), {reAddedLaz});
+    REQUIRE(addLazAndWait(root.get(), {reAddedLaz}));
     REQUIRE(region->lazLayers()->count() == 1);
     auto* fresh = region->lazLayers()->layerAt(0);
     REQUIRE(fresh != nullptr);
@@ -306,7 +306,7 @@ TEST_CASE("cwLazLayer save/load: all-enabled round-trip leaves all enabled",
     auto* project = root->project();
     auto* region = project->cavingRegion();
 
-    addLazAndWait(root.get(), {lazA, lazB});
+    REQUIRE(addLazAndWait(root.get(), {lazA, lazB}));
     REQUIRE(region->lazLayers()->count() == 2);
     REQUIRE(waitForLazLayerLoaded(region->lazLayers()->layerAt(0)));
     REQUIRE(waitForLazLayerLoaded(region->lazLayers()->layerAt(1)));
@@ -342,7 +342,7 @@ TEST_CASE("cwLazLayer save/load: all-defaults project round-trips with every lay
     auto* project = root->project();
     auto* region = project->cavingRegion();
 
-    addLazAndWait(root.get(), {lazA});
+    REQUIRE(addLazAndWait(root.get(), {lazA}));
     REQUIRE(region->lazLayers()->count() == 1);
     REQUIRE(waitForLazLayerLoaded(region->lazLayers()->layerAt(0)));
 
@@ -374,7 +374,7 @@ TEST_CASE("cwLazLayer save/load: missing source file → loadStatus == Error",
 
     auto root = std::make_unique<cwRootData>();
     auto* project = root->project();
-    addLazAndWait(root.get(), {laz});
+    REQUIRE(addLazAndWait(root.get(), {laz}));
     auto* layer = project->cavingRegion()->lazLayers()->layerAt(0);
     REQUIRE(layer != nullptr);
     REQUIRE(waitForLazLayerLoaded(layer));
@@ -461,7 +461,7 @@ TEST_CASE("cwLazLayer .cwlaz: pre-placed sibling sets UUID + enabled on rescan",
     const QString externalLaz = writeMinimalLaz(tempLazPath(tempDir, QStringLiteral("prepl")));
     auto root = std::make_unique<cwRootData>();
     auto* project = root->project();
-    addLazAndWait(root.get(), {externalLaz});
+    REQUIRE(addLazAndWait(root.get(), {externalLaz}));
     REQUIRE(project->cavingRegion()->lazLayers()->count() == 1);
 
     const QString projectPath = QDir(tempDir.path())
@@ -509,7 +509,7 @@ TEST_CASE("cwLazLayer .cwlaz: fresh layer with no sibling is eagerly persisted",
 
     auto root = std::make_unique<cwRootData>();
     auto* project = root->project();
-    addLazAndWait(root.get(), {externalLaz});
+    REQUIRE(addLazAndWait(root.get(), {externalLaz}));
     REQUIRE(project->cavingRegion()->lazLayers()->count() == 1);
 
     // Save the project to settle GIS Layers/ on disk.
@@ -548,7 +548,7 @@ TEST_CASE("cwLazLayer .cwlaz: removeAt drops both .laz and .cwlaz",
 
     auto root = std::make_unique<cwRootData>();
     auto* project = root->project();
-    addLazAndWait(root.get(), {externalLaz});
+    REQUIRE(addLazAndWait(root.get(), {externalLaz}));
     REQUIRE(project->cavingRegion()->lazLayers()->count() == 1);
 
     const QString projectPath = QDir(tempDir.path())
@@ -586,7 +586,7 @@ TEST_CASE("cwLazLayer .cwlaz: orphaned sibling without matching .laz is left unt
     const QString externalLaz = writeMinimalLaz(tempLazPath(tempDir, QStringLiteral("orphan")));
     auto root = std::make_unique<cwRootData>();
     auto* project = root->project();
-    addLazAndWait(root.get(), {externalLaz});
+    REQUIRE(addLazAndWait(root.get(), {externalLaz}));
     REQUIRE(project->cavingRegion()->lazLayers()->count() == 1);
 
     const QString projectPath = QDir(tempDir.path())
@@ -632,7 +632,7 @@ TEST_CASE("cwLazLayer .cwlaz: UUID survives close/reopen",
 
     auto root = std::make_unique<cwRootData>();
     auto* project = root->project();
-    addLazAndWait(root.get(), {lazA, lazB});
+    REQUIRE(addLazAndWait(root.get(), {lazA, lazB}));
     REQUIRE(project->cavingRegion()->lazLayers()->count() == 2);
 
     const QString projectPath = QDir(tempDir.path())
@@ -675,7 +675,7 @@ TEST_CASE("cwLazLayer .cwlaz: malformed sibling skips layer + reports to errorMo
     const QString externalLaz = writeMinimalLaz(tempLazPath(tempDir, QStringLiteral("bad")));
     auto root = std::make_unique<cwRootData>();
     auto* project = root->project();
-    addLazAndWait(root.get(), {externalLaz});
+    REQUIRE(addLazAndWait(root.get(), {externalLaz}));
     REQUIRE(project->cavingRegion()->lazLayers()->count() == 1);
 
     const QString projectPath = QDir(tempDir.path())
@@ -725,7 +725,7 @@ TEST_CASE("cwLazLayer .cwlaz: external .laz delete dirties the project",
 
     auto root = std::make_unique<cwRootData>();
     auto* project = root->project();
-    addLazAndWait(root.get(), {externalLaz});
+    REQUIRE(addLazAndWait(root.get(), {externalLaz}));
     REQUIRE(project->cavingRegion()->lazLayers()->count() == 1);
 
     const QString projectPath = QDir(tempDir.path())
@@ -770,7 +770,7 @@ TEST_CASE("cwLazLayer .cwlaz: discardChanges re-surfaces .laz with original UUID
     root->account()->setEmail(QStringLiteral("discard.tester@example.com"));
 
     auto* project = root->project();
-    addLazAndWait(root.get(), {externalLaz});
+    REQUIRE(addLazAndWait(root.get(), {externalLaz}));
     REQUIRE(project->cavingRegion()->lazLayers()->count() == 1);
 
     const QString projectPath = QDir(tempDir.path())
@@ -868,7 +868,7 @@ LazProjectFixture makeRenameFixture(QTemporaryDir& tempDir,
     fx.root->account()->setEmail(QStringLiteral("rename.tester@example.com"));
 
     auto* project = fx.root->project();
-    addLazAndWait(fx.root.get(), {externalLaz});
+    REQUIRE(addLazAndWait(fx.root.get(), {externalLaz}));
     REQUIRE(project->cavingRegion()->lazLayers()->count() == 1);
     project->cavingRegion()->lazLayers()->layerAt(0)->setEnabled(enabled);
 
@@ -1023,7 +1023,7 @@ TEST_CASE("cwLazLayer rename: collides with another loaded layer",
     root->account()->setName(QStringLiteral("Rename Tester"));
     root->account()->setEmail(QStringLiteral("rename.tester@example.com"));
     auto* project = root->project();
-    addLazAndWait(root.get(), {lazA, lazB});
+    REQUIRE(addLazAndWait(root.get(), {lazA, lazB}));
 
     const QString projectPath = QDir(tempDir.path())
                                     .filePath(QStringLiteral("laz-collide-%1.cwproj")

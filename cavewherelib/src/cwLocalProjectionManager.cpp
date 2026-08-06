@@ -113,7 +113,7 @@ void cwLocalProjectionManager::settleEpoch()
     // or empty because nothing in the project could place it. Empty is a real
     // answer — the clouds load untransformed, in their own units — and it is an
     // answer only a completed future can deliver, because the frame never
-    // changed and so nothing signalled.
+    // changed and so nothing signaled.
     auto epoch = *m_epoch;
     m_epoch.reset();
     epoch.complete(m_region->geoReference()->localCoordinateSystem());

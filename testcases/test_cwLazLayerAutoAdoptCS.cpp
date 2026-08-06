@@ -51,7 +51,7 @@ TEST_CASE("Derive frame: empty project + LAZ with embedded CS anchors on the lay
         kUtmZone10N);
     REQUIRE(!path.isEmpty());
 
-    addLazAndWait(root.get(), QStringList{path});
+    REQUIRE(addLazAndWait(root.get(), QStringList{path}));
 
     REQUIRE(geoReference->state() == cwGeoReference::Anchored);
     CHECK(geoReference->anchor().kind == cwGeoReference::Anchor::LazLayer);
@@ -76,7 +76,7 @@ TEST_CASE("Derive frame: a LAZ without an embedded CS leaves the project local",
         tempLazPath(tempDir, QStringLiteral("no-cs")));
     REQUIRE(!path.isEmpty());
 
-    addLazAndWait(root.get(), QStringList{path});
+    REQUIRE(addLazAndWait(root.get(), QStringList{path}));
 
     CHECK(region->geoReference()->state() == cwGeoReference::Ungeoreferenced);
     CHECK(region->geoReference()->localCoordinateSystem().isEmpty());
@@ -102,7 +102,7 @@ TEST_CASE("Derive frame: a project that already has a frame is left untouched",
         kUtmZone10N);
     REQUIRE(!path.isEmpty());
 
-    addLazAndWait(root.get(), QStringList{path});
+    REQUIRE(addLazAndWait(root.get(), QStringList{path}));
 
     CHECK(geoReference->localCoordinateSystem() == existingFrame);
 }
@@ -117,26 +117,17 @@ TEST_CASE("Derive frame: a second add leaves the frame on the first layer",
 
     const QString first = writeMinimalLaz(
         tempLazPath(tempDir, QStringLiteral("first")), kUtmZone10N);
-    addLazAndWait(root.get(), QStringList{first});
+    REQUIRE(addLazAndWait(root.get(), QStringList{first}));
 
     const QString frameAfterFirst = region->geoReference()->localCoordinateSystem();
     REQUIRE_FALSE(frameAfterFirst.isEmpty());
     const QUuid anchorAfterFirst = region->geoReference()->anchor().id;
 
-    const QString utm11n = QStringLiteral(
-        "PROJCS[\"WGS 84 / UTM zone 11N\",GEOGCS[\"WGS 84\","
-        "DATUM[\"WGS_1984\",SPHEROID[\"WGS 84\",6378137,298.257223563]],"
-        "PRIMEM[\"Greenwich\",0],UNIT[\"degree\",0.0174532925199433]],"
-        "PROJECTION[\"Transverse_Mercator\"],"
-        "PARAMETER[\"latitude_of_origin\",0],"
-        "PARAMETER[\"central_meridian\",-117],"
-        "PARAMETER[\"scale_factor\",0.9996],"
-        "PARAMETER[\"false_easting\",500000],"
-        "PARAMETER[\"false_northing\",0],UNIT[\"metre\",1]]");
+    const QString utm11n = utmZoneWkt(11, -117);
 
     const QString second = writeMinimalLaz(
         tempLazPath(tempDir, QStringLiteral("second")), utm11n);
-    addLazAndWait(root.get(), QStringList{second});
+    REQUIRE(addLazAndWait(root.get(), QStringList{second}));
 
     CHECK(region->geoReference()->localCoordinateSystem() == frameAfterFirst);
     CHECK(region->geoReference()->anchor().id == anchorAfterFirst);

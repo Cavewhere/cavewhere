@@ -267,6 +267,8 @@ QFuture<cwLazLoadResult> cwLazLoader::load(const Request& request)
             }
 
             const QString embeddedCS = extractEmbeddedCS(headerReader->header);
+            result.embeddedCS = embeddedCS;
+            result.headerRead = true;
             result.sourceCS = !sourceCSOverride.isEmpty() ? sourceCSOverride : embeddedCS;
             result.sourceBboxMin = cwGeoPoint(headerReader->header.min_x,
                                               headerReader->header.min_y,

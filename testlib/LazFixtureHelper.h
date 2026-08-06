@@ -122,7 +122,11 @@ bool waitForLazLayerModelSettled(cwLazLayerModel* layers, int timeoutMs = 10000)
  * spin both the project save-flush and the future manager to completion. Each
  * input is copied into the project's GIS Layers folder, then surfaced by
  * rescan; on return the model has one row per resulting file.
+ *
+ * Returns whether the model settled within the wait's timeout, so a slow
+ * machine fails at the wait rather than on a later, unrelated-looking
+ * assertion — REQUIRE the result.
  */
-void addLazAndWait(cwRootData* root, const QStringList& externalPaths);
+[[nodiscard]] bool addLazAndWait(cwRootData* root, const QStringList& externalPaths);
 
 #endif // LAZFIXTUREHELPER_H

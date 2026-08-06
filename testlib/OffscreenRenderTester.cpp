@@ -156,8 +156,7 @@ bool OffscreenRenderTester::addSyntheticPointCloud(QObject* rootData)
     // addLazAndWait copies the file into the project, so the temp can vanish after.
     const QString lazPath = tempLazPath(dir, QStringLiteral("offscreen_diag"));
     writeMinimalLaz(lazPath);
-    addLazAndWait(root, QStringList{lazPath});
-    return true;
+    return addLazAndWait(root, QStringList{lazPath});
 }
 
 int OffscreenRenderTester::visiblePointCloudCount(QObject* sceneManager) const

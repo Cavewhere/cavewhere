@@ -285,10 +285,10 @@ void cwLazLayerModel::setFutureManagerToken(const cwFutureManagerToken& token)
 
 void cwLazLayerModel::setLocalProjectionToken(const cwLocalProjectionToken& token)
 {
+    // Installed once at region construction, before any layer exists;
+    // createLayer() hands the token to each layer it makes.
+    Q_ASSERT(m_layers.isEmpty());
     m_localProjectionToken = token;
-    for (cwLazLayer* layer : std::as_const(m_layers)) {
-        layer->setLocalProjectionToken(token);
-    }
 }
 
 void cwLazLayerModel::reloadAll()

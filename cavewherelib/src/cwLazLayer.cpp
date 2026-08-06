@@ -235,8 +235,11 @@ void cwLazLayer::setSourceCSOverride(const QString& cs)
     m_sourceCSOverride = cs;
     if (sourceCS() != previousCS) {
         emit sourceCSChanged();
+        // Only an effective-CS move puts the decoded points in the wrong
+        // place; an override edit that resolves to the same CS changes
+        // nothing the decode reads.
+        reload();
     }
-    reload();
 }
 
 cwGeoPoint cwLazLayer::sourceBboxMin() const
@@ -398,14 +401,14 @@ void cwLazLayer::applyResult(cwLazLoadResult&& result)
     m_bboxMax = result.bboxMax;
     m_meanSpacingXY = result.meanSpacingXY;
 
-    if (!m_header.has_value()) {
-        // A decode that got this far read the header on its way, so a layer
-        // whose probe hasn't landed yet still knows where it is. The probe
-        // overwrites this when it arrives: it reports what the file declares,
-        // while a load reports the CRS it actually read as.
+    if (!m_header.has_value() && result.headerRead) {
+        // A decode that read the header on its way lets a layer whose probe
+        // hasn't landed yet still know where it is. Recorded as what the file
+        // declares — not the override-resolved CS the decode used — matching
+        // what the probe publishes when it arrives.
         m_header = cwLazLoader::ProbeResult{
             .valid = true,
-            .sourceCS = result.sourceCS,
+            .sourceCS = result.embeddedCS,
             .bboxMin = result.sourceBboxMin,
             .bboxMax = result.sourceBboxMax
         };

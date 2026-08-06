@@ -104,7 +104,7 @@ TEST_CASE("A layer that never loads is still an anchor the frame can be lost wit
     const QString path = tempLazPath(tempDir, QStringLiteral("disabled-anchor"));
     REQUIRE(writeSyntheticLazFile(path, pointsInZone10N(), kUtmZone10N));
 
-    addLazAndWait(root.get(), QStringList{path});
+    REQUIRE(addLazAndWait(root.get(), QStringList{path}));
     REQUIRE(region->lazLayers()->count() == 1);
     auto* layer = region->lazLayers()->layerAt(0);
     REQUIRE(waitForLazLayerLoaded(layer));
@@ -136,7 +136,7 @@ TEST_CASE("Reloading the anchor layer leaves the frame where it is",
     const QString path = tempLazPath(tempDir, QStringLiteral("reload-anchor"));
     REQUIRE(writeSyntheticLazFile(path, pointsInZone10N(), kUtmZone10N));
 
-    addLazAndWait(root.get(), QStringList{path});
+    REQUIRE(addLazAndWait(root.get(), QStringList{path}));
     REQUIRE(region->lazLayers()->count() == 1);
     auto* layer = region->lazLayers()->layerAt(0);
     REQUIRE(waitForLazLayerLoaded(layer));
@@ -171,7 +171,7 @@ TEST_CASE("A LAZ layer alone anchors the local projection",
     const QString path = tempLazPath(tempDir, QStringLiteral("anchor-layer"));
     REQUIRE(writeSyntheticLazFile(path, pointsInZone10N(), kUtmZone10N));
 
-    addLazAndWait(root.get(), QStringList{path});
+    REQUIRE(addLazAndWait(root.get(), QStringList{path}));
     REQUIRE(region->lazLayers()->count() == 1);
 
     // The frame follows the load now, not the insert: a layer only becomes an

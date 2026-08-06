@@ -328,7 +328,7 @@ bool waitForLazLayerModelSettled(cwLazLayerModel* layers, int timeoutMs)
     return !settling();
 }
 
-void addLazAndWait(cwRootData* root, const QStringList& externalPaths)
+bool addLazAndWait(cwRootData* root, const QStringList& externalPaths)
 {
     auto* project = root->project();
     auto* region = project->cavingRegion();
@@ -344,7 +344,8 @@ void addLazAndWait(cwRootData* root, const QStringList& externalPaths)
     // The frame is derived from the layers' headers, and the point decodes wait
     // on the frame, so neither has necessarily happened yet: returning here
     // would hand the test a model whose rows are all still Loading.
-    waitForLazLayerModelSettled(region->lazLayers());
+    const bool settled = waitForLazLayerModelSettled(region->lazLayers());
 
     root->futureManagerModel()->waitForFinished();
+    return settled;
 }

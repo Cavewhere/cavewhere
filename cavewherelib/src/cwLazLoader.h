@@ -31,6 +31,13 @@ struct CAVEWHERE_LIB_EXPORT cwLazLoadResult
     QVector3D bboxMax;
     QString sourceCS; // CS actually used during load (override > LAZ-embedded > "")
 
+    // The CS the file itself declares, before any override — what a header
+    // synthesized from this result must record as the file's own.
+    QString embeddedCS;
+    // True once the header pass opened the file; an open failure delivers an
+    // empty result with this still false.
+    bool headerRead = false;
+
     // The header's bounding box in the file's own CRS, before the transform
     // into frameCS that bboxMin/bboxMax carry.
     // A cloud's position in its own CRS exists nowhere else in the result, and
