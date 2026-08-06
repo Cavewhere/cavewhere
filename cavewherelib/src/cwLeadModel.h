@@ -32,6 +32,7 @@ class CAVEWHERE_LIB_EXPORT cwLeadModel : public QAbstractListModel
     Q_OBJECT
     QML_NAMED_ELEMENT(LeadModel)
 
+    Q_PROPERTY(int count READ rowCount NOTIFY countChanged)
     Q_PROPERTY(cwRegionTreeModel* regionModel READ regionModel WRITE setRegionTreeModel NOTIFY regionModelChanged)
     Q_PROPERTY(cwCave* cave READ cave WRITE setCave NOTIFY caveChanged)
     Q_PROPERTY(QString referanceStation READ referanceStation WRITE setReferanceStation NOTIFY referanceStationChanged)
@@ -73,6 +74,7 @@ public:
     QHash<int, QByteArray> roleNames() const;
 
 signals:
+    void countChanged();
     void regionModelChanged();
     void caveChanged();
     void referanceStationChanged();

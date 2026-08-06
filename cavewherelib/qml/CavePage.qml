@@ -177,7 +177,7 @@ StandardPage {
 
         LinkText {
             objectName: "leadsLink"
-            text: leadModelId.rowCount()
+            text: leadModelId.count
             onClicked: {
                 RootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page, "Leads");
             }
@@ -773,7 +773,7 @@ StandardPage {
                         QC.Label { text: "Leads:" }
 
                         LinkText {
-                            text: leadModelId.rowCount()
+                            text: leadModelId.count
                             onClicked: {
                                 RootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page, "Leads");
                             }

@@ -21,7 +21,11 @@
 
 cwLeadModel::cwLeadModel(QObject *parent) : QAbstractListModel(parent)
 {
-
+    //Derived from the model's own change signals, so every lead added, lead
+    //removed and cave switch announces the count from one place.
+    connect(this, &QAbstractItemModel::rowsInserted, this, &cwLeadModel::countChanged);
+    connect(this, &QAbstractItemModel::rowsRemoved, this, &cwLeadModel::countChanged);
+    connect(this, &QAbstractItemModel::modelReset, this, &cwLeadModel::countChanged);
 }
 
 cwLeadModel::~cwLeadModel()

@@ -262,6 +262,13 @@ public:
                                            const QString& refSpec,
                                            bool force = true) const;
     Q_INVOKABLE int noteScrapCount(cwNote* note) const;
+    /**
+     * A note named \a noteName added to \a trip with one empty scrap, so a test
+     * can hang leads or stations off it without the note-import UI. The image is
+     * path-mode, as the project serializer requires, and points at a file that
+     * was never written.
+     */
+    Q_INVOKABLE cwNote* addNoteWithScrap(cwTrip* trip, const QString& noteName) const;
     Q_INVOKABLE QVariantMap scrapOutlineState(cwNote* note, int scrapIndex) const;
     Q_INVOKABLE bool addScrapStation(cwNote* note,
                                      int scrapIndex,
@@ -272,6 +279,9 @@ public:
                                   const QPointF& positionOnNote,
                                   const QSizeF& size,
                                   const QString& description) const;
+    Q_INVOKABLE bool removeScrapLead(cwNote* note,
+                                     int scrapIndex,
+                                     int leadIndex) const;
     Q_INVOKABLE bool addLiDARStation(cwNoteLiDAR* note,
                                      const QString& name,
                                      const QVector3D& positionOnNote) const;
