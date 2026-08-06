@@ -155,24 +155,41 @@ StandardPage {
                 QQ.Item { Layout.fillWidth: true }
             }
 
-            RowLayout {
+            ColumnLayout {
                 Layout.fillWidth: true
-                spacing: Theme.delegatePadding
+                spacing: Theme.tightSpacing
 
-                QC.Label {
-                    text: qsTr("Layers:")
-                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.delegatePadding
 
-                LinkText {
-                    objectName: "geospatialLayersLink"
-                    text: RootData.region.lazLayers.count
-                    onClicked: {
-                        RootData.pageSelectionModel.gotoPageByName(pageId.PageView.page,
-                                                                   "Geospatial Layers");
+                    LabelWithHelp {
+                        objectName: "gisSourcesLabel"
+                        text: qsTr("GIS Sources:")
+                        helpArea: gisSourcesHelpArea
                     }
+
+                    LinkText {
+                        objectName: "geospatialLayersLink"
+                        text: RootData.region.lazLayers.count
+                        onClicked: {
+                            RootData.pageSelectionModel.gotoPageByName(pageId.PageView.page,
+                                                                       "Geospatial Layers");
+                        }
+                    }
+
+                    QQ.Item { Layout.fillWidth: true }
                 }
 
-                QQ.Item { Layout.fillWidth: true }
+                HelpArea {
+                    id: gisSourcesHelpArea
+                    objectName: "gisSourcesHelp"
+                    Layout.fillWidth: true
+                    text: "<p>A <b>GIS source</b> is a georeferenced file CaveWhere can draw " +
+                          "with your survey. Currently, only LiDAR point clouds are " +
+                          "supported, <b>.laz</b> or <b>.las</b>.</p>" +
+                          "<p>Click the number to add or remove files.</p>"
+                }
             }
         }
     }
