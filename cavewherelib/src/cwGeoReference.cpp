@@ -26,11 +26,24 @@ void cwGeoReference::anchorTo(const Anchor& anchor, const QString& localCS)
 
 void cwGeoReference::freeze()
 {
-    if (m_localProjection.coordinateSystem.isEmpty()) {
+    freezeTo(m_localProjection.coordinateSystem);
+}
+
+void cwGeoReference::recenter(const QString& localCS)
+{
+    freezeTo(localCS);
+}
+
+void cwGeoReference::freezeTo(const QString& localCS)
+{
+    if (localCS.isEmpty()) {
+        // The same refusal as anchorTo: a frame that couldn't be derived leaves
+        // the one we have in place, which is at least a frame the project has
+        // already been read in.
         return;
     }
 
-    setLocalProjection({Frozen, m_localProjection.coordinateSystem, Anchor{}});
+    setLocalProjection({Frozen, localCS, Anchor{}});
 }
 
 void cwGeoReference::clear()

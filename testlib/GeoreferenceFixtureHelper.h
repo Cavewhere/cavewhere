@@ -21,6 +21,7 @@
 #include "cwFixStation.h"
 #include "cwFixStationModel.h"
 #include "cwGeoPoint.h"
+#include "cwGeoReference.h"
 #include "cwGridConvergence.h"
 
 // Header-only on purpose: Catch2's REQUIRE cannot be used from inside the
@@ -114,6 +115,19 @@ namespace cwGeoreferenceFixture {
                   cwGeoPoint(anchor.x + kOffsetEastDegrees, anchor.y, anchor.z));
 
         return cave->gridConvergence()->angle();
+    }
+
+    //! Take \a region back through the load path with \a frameCS as the frame
+    //! the file carries. Restoring is the only honest way to reach a frame the
+    //! state machine would never derive from the region's own inputs, and it is
+    //! exactly the shape of the old project the recenter exists to heal.
+    inline void restoreFrozenFrame(cwCavingRegion* region, const QString& frameCS)
+    {
+        cwCavingRegionData data = region->data();
+        data.geoReference.state = cwGeoReference::Frozen;
+        data.geoReference.localCoordinateSystem = frameCS;
+        data.geoReference.anchor = cwGeoReference::Anchor{};
+        region->setData(data);
     }
 }
 

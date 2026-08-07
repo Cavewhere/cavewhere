@@ -15,10 +15,12 @@
 #include "cwLazLayer.h"
 #include "cwLazLayerModel.h"
 #include "cwLocalProjection.h"
+#include "cwMath.h"
 
 //Std includes
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 namespace {
     //! How far an input may sit from the origin before the origin counts as
@@ -26,6 +28,14 @@ namespace {
     //! while the mistakes this is meant to catch (a wrong UTM zone, a hemisphere
     //! flip, a transposed digit) miss by far more.
     constexpr double kAnchorThresholdMeters = 50000.0;
+
+    //! How far \a point sits from the frame's origin. The LDP fixes x_0 = y_0 = 0,
+    //! so a point already in the frame is its own offset from the origin, and the
+    //! frame is judged on where it is horizontally.
+    double horizontalMagnitude(const cwGeoPoint& point)
+    {
+        return std::hypot(point.x, point.y);
+    }
 }
 
 cwLocalProjectionManager::cwLocalProjectionManager(cwCavingRegion* region) :
@@ -218,22 +228,95 @@ QList<cwLocalProjectionManager::Input> cwLocalProjectionManager::gatherLayerInpu
     return inputs;
 }
 
-std::optional<double> cwLocalProjectionManager::distanceFromOrigin(const Input& input) const
+std::optional<cwGeoPoint> cwLocalProjectionManager::localPointOf(const Input& input) const
 {
     const QString localCS = m_region->geoReference()->localCoordinateSystem();
     if (localCS.isEmpty()) {
         return std::nullopt;
     }
 
-    const auto local = cwCoordinateTransform::transformPoint(
+    return cwCoordinateTransform::transformPoint(
         input.coordinateSystem, localCS, input.point);
+}
+
+std::optional<double> cwLocalProjectionManager::distanceFromOrigin(const Input& input) const
+{
+    const auto local = localPointOf(input);
     if (!local.has_value()) {
         return std::nullopt;
     }
 
-    // x_0 = y_0 = 0, so a point's distance from the frame's origin is just its
-    // magnitude once it is in the frame.
-    return std::hypot(local->x, local->y);
+    return horizontalMagnitude(*local);
+}
+
+void cwLocalProjectionManager::maybeRecenter(const QList<Input>& inputs)
+{
+    cwGeoReference* geoReference = m_region->geoReference();
+    const QString localCS = geoReference->localCoordinateSystem();
+
+    QList<double> xs;
+    QList<double> ys;
+    for (const Input& input : inputs) {
+        const auto local = localPointOf(input);
+        if (!local.has_value()) {
+            // A system that can't be related to the frame is neither near nor
+            // far: it can't veto the move and it can't vote on where to go.
+            continue;
+        }
+
+        if (horizontalMagnitude(*local) <= kAnchorThresholdMeters) {
+            // Something is where the frame says the project is, so the frame is
+            // still describing the project. This is the veto that keeps a tile
+            // from the wrong county from dragging the origin to itself, and it
+            // is the common case: a frozen project sitting on its own data pays
+            // one transform for it.
+            return;
+        }
+
+        xs.append(local->x);
+        ys.append(local->y);
+    }
+
+    if (xs.isEmpty()) {
+        // Nothing that could be placed at all, so the frame isn't provably
+        // wrong. Moving a stored frame on no evidence is the one thing storing
+        // it was meant to prevent.
+        return;
+    }
+
+    // Component-wise median rather than mean, so a single tile 300 km out pulls
+    // the center by meters instead of halfway to it. Horizontal only — the
+    // derivation ignores z.
+    const cwGeoPoint center(cwMedian(std::move(xs)), cwMedian(std::move(ys)), 0.0);
+
+    if (horizontalMagnitude(center) <= kAnchorThresholdMeters) {
+        // The origin is already in the middle of the data, however far the data
+        // spreads either side of it: every input can be past the threshold while
+        // the middle of them is a couple of kilometers away, which is not an
+        // origin that is wrong.
+        //
+        // This is also what makes the rule terminate. Moving the frame onto the
+        // median leaves the next median a few millimeters off the new origin,
+        // and a proj string carries lat_0 to ten decimal places, so a check for
+        // a frame that merely changed would keep finding one — re-decoding every
+        // cloud in the project each time. The origin moves when it is
+        // meaningfully wrong, on the same terms as everywhere else here.
+        return;
+    }
+
+    // The median is in the frame's coordinates and the frame carries the datum
+    // pinned when the project was first placed, so deriving from it keeps that
+    // datum: inputs on mixed datums vote on position, never on datum.
+    const QString candidate = cwLocalProjection::deriveFrom(localCS, center);
+    if (candidate.isEmpty()) {
+        // Nothing we could vouch for. Leave the frame alone rather than
+        // half-move it, the way anchorTo() does.
+        return;
+    }
+
+    geoReference->recenter(candidate);
+    m_lastAnchor = geoReference->anchor();
+    m_anchorSeen = false;
 }
 
 bool cwLocalProjectionManager::anchorTo(const Input& input)
@@ -378,8 +461,13 @@ void cwLocalProjectionManager::evaluateFrame()
 
     if (geoReference->state() == cwGeoReference::Ungeoreferenced) {
         anchorToFirstUsable(inputs);
+        return;
     }
-    // Frozen: a frame with nothing left to follow. Only the user moves it.
+
+    // Frozen: a frame with nothing left to follow, so no single input can be
+    // answerable for it being wrong. It takes the whole project having left the
+    // frame behind to move it.
+    maybeRecenter(inputs);
 }
 
 void cwLocalProjectionManager::syncCaveConnections()

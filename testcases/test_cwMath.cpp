@@ -43,3 +43,35 @@ TEST_CASE("cwWrapDegrees360 keeps angles within [0, 360)", "[cwMath]")
         CHECK(cwWrapDegrees360(std::numeric_limits<double>::quiet_NaN()) == 0.0);
     }
 }
+
+TEST_CASE("cwMedian finds the middle of a list", "[cwMath]")
+{
+    SECTION("An odd count takes the middle value")
+    {
+        CHECK(cwMedian({3.0, 1.0, 2.0}) == Approx(2.0));
+        CHECK(cwMedian({5.0}) == Approx(5.0));
+    }
+
+    SECTION("An even count averages the two middle values")
+    {
+        CHECK(cwMedian({1.0, 2.0, 3.0, 4.0}) == Approx(2.5));
+        CHECK(cwMedian({-10.0, 10.0}) == Approx(0.0));
+    }
+
+    SECTION("One value far from the rest moves the middle by one place, not by its distance")
+    {
+        CHECK(cwMedian({1.0, 2.0, 3.0, 1000000.0}) == Approx(2.5));
+    }
+
+    SECTION("An empty list is zero")
+    {
+        CHECK(cwMedian({}) == 0.0);
+    }
+
+    SECTION("The caller's order is left alone")
+    {
+        const QList<double> values{3.0, 1.0, 2.0};
+        CHECK(cwMedian(values) == Approx(2.0));
+        CHECK(values == QList<double>{3.0, 1.0, 2.0});
+    }
+}

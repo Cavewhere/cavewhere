@@ -32,6 +32,11 @@ const QString kUtmZone10N = utmZoneWkt(10, -123);
 // its center.
 const cwGeoPoint kBboxCenter{2.0, 2.0, 2.0};
 
+//! How far east and north of kBboxCenter the existing-frame test centers its
+//! stored frame: ~14 km diagonal, inside the layer's 50 km reach, so the layer
+//! says nothing is wrong with the frame it finds.
+constexpr double kExistingFrameOffsetMeters = 10000.0;
+
 } // namespace
 
 TEST_CASE("Derive frame: empty project + LAZ with embedded CS anchors on the layer",
@@ -91,9 +96,14 @@ TEST_CASE("Derive frame: a project that already has a frame is left untouched",
     auto* region = root->project()->cavingRegion();
     auto* geoReference = region->geoReference();
 
-    const QString existingFrame =
-        cwLocalProjection::deriveFrom(QStringLiteral("EPSG:32611"),
-                                      cwGeoPoint{500000.0, 4000000.0, 100.0});
+    // A frame the project already keeps, offset from where the layer sits: near
+    // enough that the layer says nothing is wrong with it, and not a string any
+    // derivation from the layer could produce.
+    const QString existingFrame = cwLocalProjection::deriveFrom(
+        kUtmZone10N,
+        cwGeoPoint{kBboxCenter.x + kExistingFrameOffsetMeters,
+                   kBboxCenter.y + kExistingFrameOffsetMeters,
+                   0.0});
     REQUIRE_FALSE(existingFrame.isEmpty());
     geoReference->restore(cwGeoReference::Frozen, existingFrame, {}, QString());
 

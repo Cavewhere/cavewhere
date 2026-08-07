@@ -121,6 +121,13 @@ public:
     //! would be churn. A no-op with no LDP to freeze.
     void freeze();
 
+    //! Move a frozen frame to \a localCS, keeping it anchorless: every input the
+    //! project has ended up far from the origin, so the frame is wrong and there
+    //! is nothing left that could be answerable for correcting it. State and
+    //! string are written together, and an empty \a localCS is refused the way
+    //! anchorTo() refuses one.
+    void recenter(const QString& localCS);
+
     //! Back to Ungeoreferenced — every georeferenced input is gone, so the
     //! frame it implied is too.
     void clear();
@@ -174,6 +181,11 @@ private:
     QString m_verticalDatum;
 
     void setLocalProjection(const LocalProjectionState& state);
+
+    //! Become Frozen at \a localCS. What freeze() and recenter() both are, and
+    //! the one place that says what a frozen frame is made of: a string, no
+    //! anchor, and an empty string refused rather than half-applied.
+    void freezeTo(const QString& localCS);
 };
 
 #endif // CWGEOREFERENCE_H

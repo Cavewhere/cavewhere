@@ -690,7 +690,8 @@ lands green on both suites before the next.</p>
             <a href="#lazchain">§14</a>. Prerequisite for step&nbsp;4.</li>
         <li><b>Automatic recentering</b> (D20) — the "nothing within R → re-derive at the
             median" rule in <code>evaluate()</code>; replaces the manual Recenter action
-            and D7's migration path. Requires F1's complete input set.</li>
+            and D7's migration path. Requires F1's complete input set. Implementation
+            details: <a href="#d20impl">§15</a>.</li>
         <li><b>Read-only datum/frame display</b> in project info
             (<code>DataMainPage.qml</code>, where the CS combo box used to live) —
             <code>localCoordinateSystem</code>/<code>state</code>/<code>verticalDatum</code>
@@ -1826,7 +1827,173 @@ because <code>rescan()</code> starts the probe (and the <code>reload()</code> th
 <code>frameFuture()</code>) before <code>beginInsertRows</code>, and a linear scan of
 <code>m_layers</code> at that instant would miss the very probe that must open the epoch.</p>
 
-<h2 id="open">15. Open questions</h2>
+<h2 id="d20impl">15. D20 implementation — automatic recentering (planned 2026-08-06)</h2>
+
+<p>The sequencing gate is satisfied: F1's universal async probe (<code>2d7148b6</code>) and
+F2's epoch (<code>fad72b67</code>) are in, so whenever the state machine runs against a closed
+epoch, every layer with a path holds a header and <code>gatherInputs()</code> is the complete
+set. The V1-shaped hazard D20 was sequenced behind — a still-loading layer making "nothing
+within R" spuriously true at project open — is retired.</p>
+
+<h3>Where the rule lives — the Frozen branch, and only there</h3>
+
+<p><code>evaluateFrame()</code> ends today with the comment "Frozen: a frame with nothing left
+to follow. Only the user moves it." — and D20 deletes the manual action that sentence assumed.
+The recenter check replaces that comment: after the Ungeoreferenced anchor attempt, a Frozen
+state with non-empty inputs calls <code>maybeRecenter(inputs)</code>. A case walk shows the
+"none within R" condition can never fire anywhere else, so a single call site is the whole
+rule:</p>
+
+<ul>
+  <li><b>Anchored, anchor among the inputs:</b> anchor within R → an input is within R, so the
+      rule is vetoed. Anchor beyond R → the existing edited-anchor rule re-derives at the
+      anchor first, which puts the anchor at the origin. Either way "none within R" is false
+      by the time the rule could run. The anchor stays authoritative: a user who corrects the
+      anchor by 100&nbsp;km must land the frame on the corrected anchor, not on a median that
+      stale tiles drag back toward the mistake.</li>
+  <li><b>Anchored, anchor witnessed-deleted:</b> something nearby → freeze, and an input is
+      within R. Nothing nearby → <code>anchorToFirstUsable</code> hands the role on, and the
+      new origin sits on that input. <b>Kept as-is, a decision this section records:</b> §4's
+      green edge ("re-derive from the first remaining") predates D20 and stays — median-freezing
+      here instead would trade a live anchor for a dead frame on the one path where the user is
+      demonstrably editing inputs.</li>
+  <li><b>Ungeoreferenced:</b> no origin to be far from.</li>
+  <li><b>Open epoch:</b> <code>evaluateFrame()</code> returns before the branch is reached, so
+      a recenter can never run against a partial header set — the same barrier that protects
+      the first anchor protects every recenter.</li>
+</ul>
+
+<h3>New surface</h3>
+
+<p><code>cwGeoReference::recenter(const QString&amp; localCS)</code> — the fourth mutator:
+writes {Frozen, <code>localCS</code>, null Anchor} together, and refuses an empty string the
+way <code>anchorTo</code> does. It rides <code>setLocalProjection</code>'s existing change
+detection and signal order (<code>localCoordinateSystemChanged</code> before
+<code>localProjectionChanged</code>), so the clouds re-decode before convergence recomputes,
+exactly as on an anchor move. Nothing new persists: Frozen + CS + no anchor is already a
+storable combination, so the proto and save/load are untouched.</p>
+
+<p>On the manager: a private <code>maybeRecenter(const QList&lt;Input&gt;&amp;)</code>, plus a
+<code>localPointOf(const Input&amp;)</code> helper returning
+<code>std::optional&lt;cwGeoPoint&gt;</code> that <code>distanceFromOrigin()</code> refactors
+onto — same transform, but the recenter needs the point itself, not just its magnitude. The
+component-wise median is a file-local function in the .cpp.</p>
+
+<h3>The algorithm</h3>
+
+<ol>
+  <li><b>One pass, veto first.</b> Transform each input into the current frame (memoized
+      <code>transformPoint</code>), collecting the points that transform. The first point
+      within R returns immediately — the veto is the common case and the cheap one, and fixes
+      lead the input order, so a Frozen project sitting on its data usually pays one transform
+      and one <code>hypot</code> per <code>evaluate()</code>.</li>
+  <li><b>Unanswerable is neither near nor far.</b> An input whose CS can't be related to the
+      frame contributes nothing: it can't veto and it can't vote. Zero relatable points →
+      return; the frame is not provably wrong, and moving it on no evidence is exactly what
+      the stored-frame rule forbids.</li>
+  <li><b>Component-wise median</b> of the relatable local points: sort the x's and the y's
+      independently, average the middle two on an even count; z&nbsp;=&nbsp;0 (derivation is
+      horizontal-only, D5). Median rather than mean so a single wrong-county tile at
+      300&nbsp;km pulls the center by meters, not halfway to the wrong county. With one
+      relatable input the median <i>is</i> that input and the frame lands on it — the "re-derive
+      at the data" degenerate case, still Frozen.</li>
+  <li><b>Derive on the frame's own datum:</b>
+      <code>candidate = cwLocalProjection::deriveFrom(currentLocalCS, medianPoint)</code>.
+      Handing the current frame as the anchor CS is what pins the datum: the median is in frame
+      coordinates, and the frame carries the datum pinned at first anchor — inputs on mixed
+      datums vote on position, never on datum. (<code>deriveFrom</code>'s x-first contract is
+      met for free; <code>transformPoint</code> output is already normalized x-first.)</li>
+  <li><b>Guards:</b> median within R of the origin → return; empty candidate → return (leave the
+      frame alone rather than half-move it, matching <code>anchorTo</code>).
+      <b>Amended during implementation (2026-08-06):</b> this section had planned the second
+      guard as a string comparison — candidate equal to the current frame → return — and called
+      that the termination proof, rejecting a distance test. Implementing it showed the string
+      comparison does not terminate cheaply. A recenter lands the origin on the median, and
+      recomputing the median in the <i>new</i> frame leaves it a few millimeters off (the frames
+      are not related by a translation), while PROJ writes <code>lat_0</code> to ten decimal
+      places — about 0.01&nbsp;mm. So the string keeps differing: the frame walks in on a
+      geometric sequence, 25&nbsp;m → 6&nbsp;mm → µm, and every step of it re-decodes every
+      cloud in the project, one step per evaluate tick. Comparing against R instead terminates
+      in one move and needs no new constant: the origin moves when it is meaningfully wrong,
+      which is the same test the rest of this class makes. The degenerate case the string guard
+      was for — inputs spread either side of the origin, all beyond R, median on the origin —
+      is covered by the same comparison.</li>
+  <li><b>Commit:</b> <code>geoReference-&gt;recenter(candidate)</code>, then the bookkeeping
+      every frame move records: <code>m_lastAnchor = geoReference-&gt;anchor()</code> (now the
+      null anchor), <code>m_anchorSeen = false</code>.</li>
+</ol>
+
+<h3>Downstream, all synchronous</h3>
+
+<p><code>recenter</code> → <code>localCoordinateSystemChanged</code> →
+<code>reloadAll</code> → each <code>reload()</code> pulls <code>frameFuture()</code>; the
+state is Frozen, so the epoch is closed and the future arrives already finished with the new
+string — decodes start immediately, no epoch involvement and no re-entrant
+<code>evaluate()</code> (a reload re-reads points, never the header, so no probe edge fires).
+Then <code>localProjectionChanged</code> → convergence recompute. The full re-decode sweep is
+the cost that keeps R at 50&nbsp;km rather than a softer "off-center" trigger (the churn
+rationale in the D20 row).</p>
+
+<p><b>Self-heal (D7's replacement):</b> an old dev project restores a frame far from its data;
+<code>setLoading(false)</code> runs one <code>evaluate()</code>. A Frozen frame recenters right
+there if the headers are already in, or on the probe falling edge otherwise; an Anchored frame
+heals through the edited-anchor rule once its anchor is witnessed. Either way, exactly one
+reload sweep.</p>
+
+<h3>Tests (<code>test_cwLocalProjectionManager.cpp</code>, one integration case in
+<code>test_cwLocalProjectionFrame.cpp</code>)</h3>
+
+<ul>
+  <li>Fabricating "Frozen and far" uses <code>restore()</code> — the load path is the only
+      honest way to reach a frame the state machine wouldn't produce from the current inputs,
+      and it is exactly the old-dev-project shape D20 exists to heal.</li>
+  <li><b>Recenters at the median:</b> three inputs, frame restored 200&nbsp;km away → Frozen,
+      anchor invalid, the median input reads ~0 in the new frame.</li>
+  <li><b>Fires once:</b> a SignalSpy on <code>localCoordinateSystemChanged</code> counts the
+      load's move and the recenter, and stays there across further <code>evaluate()</code>
+      ticks.</li>
+  <li><b>Data spread around the frame stays put:</b> inputs 55&nbsp;km south and 60&nbsp;km
+      north of the origin → every input past R, median 2.5&nbsp;km out, no signal. The offsets
+      are uneven on purpose: <b>a test written with the inputs balanced north–south cannot
+      fail.</b> The fixtures are UTM zone 12 eastings of 500000, which is the zone's own central
+      meridian, so the frame derived there shares it — and two transverse Mercators on one
+      ellipsoid sharing a central meridian are related by an exact affine map. The median of the
+      projected coordinates then lands on the origin to 3e-9&nbsp;m whatever the guard does.
+      Measured, not assumed: a temporary probe printed both medians.</li>
+  <li><b>One input within R vetoes:</b> the §4 wrong-county-tile invariant — a good fix near
+      the origin plus a tile at 300&nbsp;km → frame stays, tile keeps its outlier flag.</li>
+  <li><b>Unanswerable is neither near nor far:</b> an unrelatable-CS input alone neither vetoes
+      nor moves anything; paired with one far readable input, the frame lands on the readable
+      one.</li>
+  <li><b>Clouds follow the frame</b> (integration): Frozen-far project with a synthetic LAZ;
+      after the recenter the tile's decoded points sit near the origin. Reuse
+      <code>utmZoneWkt</code>/<code>waitForLazLayerModelSettled</code> and
+      <code>FixStationFixtureHelper</code>; real-world fixture coordinates depend on
+      <code>centerHeaderOffsets</code>.</li>
+  <li>Falsification pass, run: disabling the veto fails the wrong-county case (and §4's
+      "a frozen frame stays put when new data arrives"); disabling the R comparison on the
+      median fails the spread case; taking the first input instead of the median fails both the
+      spread case and "moves to the middle of it".</li>
+  <li>One older test had to change: "Loading a project keeps the frame the file carries" stored
+      a frame in Cape Town for a project in Utah, which is now exactly what the recenter heals.
+      Its point — a load restores rather than re-derives — is kept by storing a frame 10&nbsp;km
+      from the data instead: still nothing the project's own inputs could derive, and still
+      describing where the project is.</li>
+</ul>
+
+<h3>Costs and non-changes</h3>
+
+<ul>
+  <li>Frozen projects gain per-evaluate work that used to be zero: transforms until the first
+      within-R input. Memoized transforms and keystroke-rate calls keep it negligible.</li>
+  <li>Untouched: the Anchored edited-anchor rule, the deleted-anchor handoff, the epoch
+      machinery, the persistence schema, and all UI — D20 is invisible except through the
+      frame moving. It also softens P4.2's "the first cave always reads 0.000°": once other
+      inputs pull the median away, a recentered frame gives the original cave a non-zero
+      convergence.</li>
+</ul>
+
+<h2 id="open">16. Open questions</h2>
 <ul>
   <li><s><b>R's exact value</b> — 50 km proposed. Cheap to change; pick during P2.</s>
       Settled in P2: 50 km, as <code>cwLocalProjectionManager::kAnchorThresholdMeters</code>.</li>

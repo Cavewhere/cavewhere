@@ -154,12 +154,24 @@ private:
     //! into a frame that is being replaced wholesale.
     void cancelEpoch();
 
-    //! Horizontal distance from the current LDP's origin to \a input, or an
-    //! empty result when the two systems can't be related — an unanswerable
-    //! question must not read as "close enough".
+    //! Where \a input sits in the current LDP, or an empty result when the two
+    //! systems can't be related — an unanswerable question must not read as
+    //! "close enough".
+    std::optional<cwGeoPoint> localPointOf(const Input& input) const;
+
+    //! Horizontal distance from the current LDP's origin to \a input, on the
+    //! same terms as localPointOf().
     std::optional<double> distanceFromOrigin(const Input& input) const;
 
-    //! The three ways the frame moves. Each records what it did, so that
+    //! Move a frozen frame to the middle of \a inputs when every one of them has
+    //! ended up further than the threshold from the origin — the frame outlived
+    //! whatever placed it and is now describing somewhere the project isn't. A
+    //! single input within the threshold vetoes the move: the frame is where the
+    //! project is, and the outliers are the ones that are wrong.
+    void maybeRecenter(const QList<Input>& inputs);
+
+    //! Three of the four ways the frame moves — maybeRecenter() is the fourth
+    //! and records the same things. Each records what it did, so that
     //! evaluate()'s "an anchor I didn't write came from a load" test can't be
     //! fooled by this class's own writes.
     bool anchorTo(const Input& input);

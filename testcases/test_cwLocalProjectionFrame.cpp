@@ -20,6 +20,7 @@
 #include "cwLocalProjection.h"
 
 #include "FixStationFixtureHelper.h"
+#include "GeoreferenceFixtureHelper.h"
 #include "LazFixtureHelper.h"
 
 //Qt includes
@@ -388,6 +389,43 @@ TEST_CASE("A frame that only changes hands leaves its clouds alone",
     REQUIRE(waitForFrame(&region));
     CHECK(loadSpy.count() == 0);
     CHECK(layer->loadStatus() == cwLazLayer::LoadStatus::Loaded);
+}
+
+TEST_CASE("A frozen frame its clouds are nowhere near moves onto them",
+          "[cwLocalProjectionFrame]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    const QDir gisLayers = makeGisLayersDir(tempDir);
+
+    cwCavingRegion region;
+    bindEmptyFolder(&region, gisLayers);
+
+    // What an old project carries: a frame that was stored before anything kept
+    // the origin near the data, 200 km from everything the project has. There is
+    // nothing to anchor on and nothing that could ever move it back.
+    const QString farFrame = cwLocalProjection::deriveFrom(
+        kUtm10N, cwGeoPoint(500000.0, 4394000.0, 110.0));
+    REQUIRE_FALSE(farFrame.isEmpty());
+
+    cwGeoreferenceFixture::restoreFrozenFrame(&region, farFrame);
+    REQUIRE(region.geoReference()->localCoordinateSystem() == farFrame);
+
+    // The tile decodes into the frame the project has — 200 km out — and the
+    // recenter the header triggers has to bring it back.
+    writeTile(gisLayers, QStringLiteral("a-tile"), cloudAt(500000.0, 4194000.0), kUtm10N);
+    readFolder(&region);
+    REQUIRE(waitForFrame(&region));
+
+    auto* geoReference = region.geoReference();
+    CHECK(geoReference->state() == cwGeoReference::Frozen);
+    CHECK_FALSE(geoReference->anchor().isValid());
+    CHECK(geoReference->localCoordinateSystem() != farFrame);
+
+    auto* layer = region.lazLayers()->layerAt(0);
+    CHECK(layer->loadStatus() == cwLazLayer::LoadStatus::Loaded);
+    CHECK(layer->pointCount() == 3);
+    CHECK(distanceFromOrigin(layer) < kNearOriginMeters);
 }
 
 TEST_CASE("Clearing the layers while the headers are still arriving leaves nothing behind",
