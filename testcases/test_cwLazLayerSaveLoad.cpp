@@ -6,6 +6,7 @@
 #include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
+#include <QPointer>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QThread>
@@ -1492,4 +1493,131 @@ TEST_CASE("cwLazLayer rename: phantom-rename guard — no rename, no on-disk chu
     const QList<DirSnapshot> after = snapshotDir(gisDir);
     INFO("before:" << before.size() << " after:" << after.size());
     REQUIRE(after == before);
+}
+
+TEST_CASE("cwLazLayer retarget: Save As keeps layer objects and their point data",
+          "[cwLazLayer][cwLazLayerModel][cwSaveLoad][SaveAs]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString lazA = writeMinimalLaz(tempLazPath(tempDir, QStringLiteral("rtgA")));
+    const QString lazB = writeMinimalLaz(tempLazPath(tempDir, QStringLiteral("rtgB")));
+
+    auto root = std::make_unique<cwRootData>();
+    auto* project = root->project();
+    auto* lazLayers = project->cavingRegion()->lazLayers();
+    addLazAndWait(root.get(), {lazA, lazB});
+    REQUIRE(lazLayers->count() == 2);
+    REQUIRE(waitForLazLayerLoaded(lazLayers->layerAt(0)));
+    REQUIRE(waitForLazLayerLoaded(lazLayers->layerAt(1)));
+
+    QPointer<cwLazLayer> layer0 = lazLayers->layerAt(0);
+    QPointer<cwLazLayer> layer1 = lazLayers->layerAt(1);
+    const int pointCount0 = layer0->pointCount();
+    REQUIRE(pointCount0 > 0);
+
+    // The transfer must retarget the rows, never remove + re-create them:
+    // a removal destroys the layer objects (discarding their streamed point
+    // data) and fires localMutationOccurred, dirtying a just-saved project.
+    QSignalSpy removeSpy(lazLayers, &QAbstractItemModel::rowsAboutToBeRemoved);
+    QSignalSpy mutationSpy(project, &cwProject::localMutationOccurred);
+
+    const auto saveAsAndCheckSurvival = [&](const QString& baseName) {
+        const QString projectPath = QDir(tempDir.path())
+                                        .filePath(QStringLiteral("%1-%2.cwproj")
+                                                      .arg(baseName)
+                                                      .arg(QCoreApplication::applicationPid()));
+        INFO("saveAs " << projectPath.toStdString());
+        REQUIRE(project->saveAs(projectPath));
+        project->waitSaveToFinish();
+        root->futureManagerModel()->waitForFinished();
+        QCoreApplication::processEvents();
+
+        REQUIRE(removeSpy.count() == 0);
+        REQUIRE(mutationSpy.count() == 0);
+        REQUIRE_FALSE(project->modified());
+        REQUIRE(lazLayers->count() == 2);
+        REQUIRE(lazLayers->layerAt(0) == layer0.data());
+        REQUIRE(lazLayers->layerAt(1) == layer1.data());
+        REQUIRE(layer0->pointCount() == pointCount0);
+
+        const QDir gisDir = gisLayersDirForProject(project->filename());
+        REQUIRE(QFileInfo(layer0->sourcePath()).absolutePath() == gisDir.absolutePath());
+        REQUIRE(QFileInfo(layer1->sourcePath()).absolutePath() == gisDir.absolutePath());
+        REQUIRE(QFile::exists(layer0->sourcePath()));
+        REQUIRE(QFile::exists(layer1->sourcePath()));
+        return gisDir;
+    };
+
+    // First saveAs of a temporary project = Move mode; the second, of an
+    // already-saved project = Copy mode.
+    saveAsAndCheckSurvival(QStringLiteral("laz-rtg-move"));
+    const QDir copiedGisDir = saveAsAndCheckSurvival(QStringLiteral("laz-rtg-copy"));
+
+    // A toggle after the transfer must write the .cwlaz under the NEW root
+    // (resetObjectStates cleared the layer states; transferProjectTo
+    // re-seeds them).
+    const QString cwlaz0 = copiedGisDir.absoluteFilePath(
+        QFileInfo(layer0->sourcePath()).completeBaseName() + QStringLiteral(".cwlaz"));
+    REQUIRE(QFile::exists(cwlaz0));
+    layer0->setEnabled(false);
+    project->waitSaveToFinish();
+    root->futureManagerModel()->waitForFinished();
+    QCoreApplication::processEvents();
+    const auto reread = cwSaveLoad::loadLazLayer(cwlaz0);
+    REQUIRE_FALSE(reread.hasError());
+    REQUIRE_FALSE(reread.value().enabled);
+}
+
+TEST_CASE("cwLazLayer retarget: file missing at the new root drops only that row",
+          "[cwLazLayer][cwLazLayerModel][cwSaveLoad][SaveAs]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString lazA = writeMinimalLaz(tempLazPath(tempDir, QStringLiteral("partA")));
+    const QString lazB = writeMinimalLaz(tempLazPath(tempDir, QStringLiteral("partB")));
+
+    auto root = std::make_unique<cwRootData>();
+    auto* project = root->project();
+    auto* lazLayers = project->cavingRegion()->lazLayers();
+    addLazAndWait(root.get(), {lazA, lazB});
+    REQUIRE(lazLayers->count() == 2);
+
+    const QString projectPath = QDir(tempDir.path())
+                                    .filePath(QStringLiteral("laz-part-%1.cwproj")
+                                                  .arg(QCoreApplication::applicationPid()));
+    REQUIRE(project->saveAs(projectPath));
+    project->waitSaveToFinish();
+    root->futureManagerModel()->waitForFinished();
+    QCoreApplication::processEvents();
+    REQUIRE_FALSE(project->modified());
+
+    QPointer<cwLazLayer> layerA = lazLayers->layerAt(0);
+    const QDir gisDir = gisLayersDirForProject(project->filename());
+
+    // Build a partial destination: only layer A's files made it across.
+    const QDir partialDir(QDir(tempDir.path())
+                              .filePath(QStringLiteral("partial-%1")
+                                            .arg(QCoreApplication::applicationPid())));
+    REQUIRE(QDir().mkpath(partialDir.absolutePath()));
+    const QString baseA = QFileInfo(layerA->sourcePath()).fileName();
+    const QString cwlazA = QFileInfo(layerA->sourcePath()).completeBaseName()
+                           + QStringLiteral(".cwlaz");
+    REQUIRE(QFile::copy(gisDir.absoluteFilePath(baseA), partialDir.absoluteFilePath(baseA)));
+    REQUIRE(QFile::copy(gisDir.absoluteFilePath(cwlazA), partialDir.absoluteFilePath(cwlazA)));
+
+    QSignalSpy removeSpy(lazLayers, &QAbstractItemModel::rowsAboutToBeRemoved);
+    lazLayers->retargetGisLayersDir(partialDir);
+
+    // The reconciling rescan is queued; pump it through.
+    QCoreApplication::processEvents();
+
+    // Layer A survives with its object identity and a retargeted path;
+    // layer B's file never arrived, so its row goes — and that genuine
+    // divergence marks the project modified.
+    REQUIRE(lazLayers->count() == 1);
+    REQUIRE(lazLayers->layerAt(0) == layerA.data());
+    REQUIRE(QFileInfo(layerA->sourcePath()).absolutePath() == partialDir.absolutePath());
+    REQUIRE(removeSpy.count() == 1);
+    REQUIRE(project->modified());
 }

@@ -329,6 +329,31 @@ void cwLazLayerModel::setGisLayersDir(const QDir& dir)
     QMetaObject::invokeMethod(this, &cwLazLayerModel::rescan, Qt::QueuedConnection);
 }
 
+void cwLazLayerModel::retargetGisLayersDir(const QDir& newDir)
+{
+    const QString oldRoot = m_gisLayersDir.absolutePath();
+    if (oldRoot == newDir.absolutePath()) {
+        return;
+    }
+
+    qCDebug(lcLazModel) << "retarget:" << oldRoot << "->" << newDir.absolutePath()
+                        << "layers=" << m_layers.size();
+
+    // renameSourcePath refreshes the cached fingerprint from the new path,
+    // absorbing any mtime drift the copy introduced.
+    for (cwLazLayer* layer : std::as_const(m_layers)) {
+        const QFileInfo info(layer->sourcePath());
+        if (info.absolutePath() == oldRoot) {
+            layer->renameSourcePath(newDir.absoluteFilePath(info.fileName()));
+        }
+    }
+
+    // Every path and fingerprint now matches, so setGisLayersDir's queued rescan
+    // is a no-op — except for a layer whose file the transfer dropped, whose row
+    // it removes. That removal legitimately dirties the project.
+    setGisLayersDir(newDir);
+}
+
 void cwLazLayerModel::rescan()
 {
     qCDebug(lcLazModel) << "rescan: BEGIN dir=" << m_gisLayersDir.absolutePath()

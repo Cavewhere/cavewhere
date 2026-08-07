@@ -1183,6 +1183,17 @@ ResultBase cwSaveLoad::transferProjectTo(const QString& destinationFileUrl, Proj
         }
     }
 
+    auto* lazLayers = region != nullptr ? region->lazLayers() : nullptr;
+
+    // Retarget before setFileName's setGisLayersDir runs, so the layer objects
+    // and their loaded point data survive the root change. Left to that setter,
+    // the rescan would re-create every row: a full point re-stream that also
+    // spuriously dirties the just-saved project via localMutationOccurred.
+    if (!sameRoot && lazLayers != nullptr) {
+        lazLayers->retargetGisLayersDir(
+                    QDir(targetRootDir.absoluteFilePath(cwLazLayerModel::folderName())));
+    }
+
     setFileName(desiredFilePath);
     initializeRepositoryForCurrentFile();
     setTemporary(false);
@@ -1191,6 +1202,15 @@ ResultBase cwSaveLoad::transferProjectTo(const QString& destinationFileUrl, Proj
     // (cwProject::saveAs) is responsible for setting the region name to the raw
     // user-chosen basename once the transfer completes.
     d->resetObjectStates(this);
+
+    // resetObjectStates covers caves/trips/notes only, so re-register each
+    // layer's .cwlaz path here. The rowsInserted hookup that used to do it
+    // fires only for re-created rows, and the retarget above keeps the rows.
+    if (lazLayers != nullptr) {
+        for (cwLazLayer* layer : lazLayers->layers()) {
+            d->seedStatePathFromLoaded(layer, absolutePathPrivate(layer));
+        }
+    }
     saveProject(targetRootDir, region);
 
     setSaveEnabled(true);

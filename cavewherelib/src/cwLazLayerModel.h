@@ -82,6 +82,15 @@ public:
     void setGisLayersDir(const QDir& dir);
     QDir gisLayersDir() const { return m_gisLayersDir; }
 
+    /// Repoint the model at `newDir` when the project root moved wholesale and
+    /// the files under newDir are the same bytes the layers already streamed,
+    /// at a new path (Save As copy or move). Layers are renamed in place, so
+    /// their objects, loaded point data, and UUIDs survive; a queued rescan()
+    /// then reconciles anything the transfer dropped. Use setGisLayersDir when
+    /// the destination may hold different content, such as a project load —
+    /// its rescan diffs by absolute path, so it reloads every layer.
+    void retargetGisLayersDir(const QDir& newDir);
+
     void clear();
 
     static QString folderName();
