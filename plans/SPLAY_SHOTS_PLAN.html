@@ -368,14 +368,27 @@ the <code>.3d</code> is what gives rendering its endpoints.</p>
 
 <h3>Export (cwSurvexExporterTripTask)</h3>
 <ul>
-  <li><span class="tag new">new</span>After a chunk's centerline legs, emit each station's
-      splays as one block:
+  <li><span class="tag new">new</span>After the trip's centerline legs, emit every station's
+      splays as one block — the same shape <code>writeLRUDData</code> already uses for the trip's
+      other station-attached data, so a multi-chunk trip gets one block rather than one per chunk:
 <pre><code>*flags splay
 a4 .. 5.88 124.1 4.6
 a4 .. 5.42 118.8 2.9
 *flags not splay</code></pre>
       Writing <code>..</code> directly needs no <code>*alias</code>; <code>*flags splay</code> is
       redundant with the anonymous endpoint but makes the file self-describing.</li>
+  <li><span class="tag fix">fix</span><b>A backsighted trip needs the block to name its own
+      <code>*data</code>.</b> The plan's block assumes the trip declared
+      <code>from to tape compass clino</code>. A trip with backsights declares seven columns and a
+      backsight-only trip declares the readings in the <i>backsight</i> slots — writing a front-sight
+      splay into either would be wrong. So a trip with backsight columns writes
+      <code>*data normal from to tape compass clino</code> before the block and hands the trip's
+      line back after <code>*flags not splay</code>. A front-sight-only trip (the common case, and
+      what TopoDroid exports) is byte-identical to the block above.</li>
+  <li><span class="tag fix">fix</span>A splay with no tape, or with no compass on a leg that isn't
+      vertical, is dropped with an export error naming its station — cavern rejects both, and
+      nothing else warns about a splay (the chunk's <code>errorModel</code> only covers the
+      centerline).</li>
   <li><span class="tag fix">fix</span>The excluded-distance wrapper at
       <code>cwSurvexExporterTripTask.cpp:450</code> keeps writing
       <code>*flags duplicate</code> for excluded shots — but splays no longer arrive as
@@ -389,7 +402,11 @@ a4 .. 5.42 118.8 2.9
       leg's resolvable end (the coord-index lookup at <code>:115</code>) is its station; the
       other end is the splay tip. Return them as a new output:
       <code>QHash&lt;QString stationName, QList&lt;QVector3D&gt; tipPositions&gt;</code>
-      alongside the existing network + position lookup.</li>
+      alongside the existing network + position lookup, keyed by
+      <code>cwStation::canonicalKey</code> so it shares the lookup's key space.</li>
+  <li><span class="tag fix">fix</span>A splay-flagged leg whose <i>both</i> ends resolve to named
+      stations stays a leg of the network (an external <code>.svx</code> can flag one that way).
+      Only a leg with exactly one named end yields a tip.</li>
   <li>Keep skipping <code>img_SFLAG_ANON</code> labels in pass 1 (they still aren't stations),
       and keep dropping non-splay legs with unresolvable endpoints.</li>
   <li><span class="tag warn"></span>Positions flow through the same worldOrigin narrowing as
@@ -402,7 +419,24 @@ a4 .. 5.42 118.8 2.9
   <li>Carry the per-station splay tips through <code>cwLinePlotTask</code>'s results into the
       per-cave data that <code>cwLinePlotGeometry</code> already consumes (alongside
       <code>caveStationPositions</code>). Station→cave attribution reuses the same name
-      resolution the network already does.</li>
+      resolution the network already does — the <code>cave_&lt;uuid&gt;.</code> prefix split, now
+      a shared <code>parseCavernStationName</code> helper used by both the position and splay-tip
+      splits.</li>
+  <li><span class="tag new">new</span>One carrier: <code>LinePlotCaveData::splayTips()</code> puts
+      the tips on the result the same way station positions ride out.
+      <code>cwSplayTipsByStation</code> (in <code>cwStationPositionLookup.h</code>, beside the
+      lookup it shares a key space with) names the type both halves pass around.</li>
+  <li><span class="tag fix">fix</span>Phase 4 has to decide how the geometry pass gets the tips.
+      A <code>cwCaveData::splayTips</code> field is the wrong shape — every other producer of
+      <code>cwCaveData</code> (save/load, Compass import, sync/merge, <code>cwCave::data()</code>)
+      would carry a member it can never fill, because <code>cwCave</code> owns no splay tips.
+      Pass them to <code>cwLinePlotGeometry::generate</code> as a second argument instead; the
+      worker already holds them split per cave.</li>
+  <li><span class="tag warn"></span>Also for Phase 4: a tip is keyed per cave-level station name,
+      but Phase 1 stores splays per station <i>occurrence</i>. Two trips sharing a tie-in station
+      merge their splays into one bucket, so a per-trip splay vertex range needs an attribution
+      rule — simplest honest one is "a station's tips belong to the first trip whose chunk holds
+      that occurrence." Decide it before writing the geometry, not after.</li>
 </ul>
 
 <h3>Tests</h3>
@@ -413,6 +447,22 @@ a4 .. 5.42 118.8 2.9
       <code>SURVEXLIB</code>/<code>PROJ_DATA</code> is on record) and assert splay tips come
       back within the <code>.3d</code> centimeter floor (~5&nbsp;mm quantization).</li>
 </ul>
+
+<div class="callout"><b>Phase 3 status: done</b> (new file
+  <code>testcases/test_cwSplayShotPipeline.cpp</code>, 9 cases). Covered: the golden splay block;
+  a trip with no splays writing none; a multi-chunk trip landing all its splays in one block;
+  the backsighted-trip <code>*data</code> switch and restore;
+  the dropped-splay error paths; a vertical splay writing <code>- UP</code>; the reader's tips
+  through a real cavern run; a named-to-named splay leg staying a leg; and an end-to-end
+  export → cavern → read-back → per-cave result through <code>cwLinePlotTask::run</code>.
+  Regression sweep green (339 cases across <code>[SurvexImport]</code>,
+  <code>[SurvexExport]</code>, <code>[cwSurvexExporterTripTask]</code>,
+  <code>[cwSurvex3DFileReader]</code>, <code>[cwSurvex3DFileReaderPrecision]</code>,
+  <code>[LinePlot]</code>, <code>[cwLinePlotManager]</code>, <code>[TripLinePlotTask]</code>,
+  <code>[cwSurvexExportRule]</code>, plus <code>[cwProject]</code>/<code>[cwSaveLoad]</code>).
+  <b>Deferred:</b> the <code>a0-a34.svx</code> import → export → re-import round trip, which needs
+  Phase 2's importer. Add it when Phase 2 lands — the exporter half is already pinned by the
+  golden-string cases.</div>
 
 <!-- ==================================================================== -->
 <h2><span class="phase">Phase 4</span> — Rendering</h2>

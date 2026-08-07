@@ -15,6 +15,7 @@
 #include "cwDistanceReading.h"
 #include "cwClinoReading.h"
 #include "cwCompassReading.h"
+#include "cwShotMeasurement.h"
 #include "cwFixStation.h"
 #include "CaveWhereLibExport.h"
 class cwTrip;
@@ -66,6 +67,10 @@ private:
     inline static const int TextPadding = -11;
 
     void writeChunk(QTextStream& stream, bool hasFrontSight, bool hasBackSight, cwSurveyChunk* chunk);
+    void writeSplayData(QTextStream& stream,
+                        const cwTrip* trip,
+                        const QString& normalDataLine,
+                        bool tripHasBackSights);
     void writeCalibrations(QTextStream& stream,
                            cwTripCalibration* calibrations,
                            bool autoDeclinationInScope,
@@ -75,6 +80,10 @@ private:
     void writeLRUDData(QTextStream& stream, const cwTrip *trip);
     void writeTeamData(QTextStream& stream, const cwTeam *trip);
     void writeDate(QTextStream& stream, QDate date);
+
+    QString splayLine(const cwTripCalibration* calibration,
+                      const QString& stationName,
+                      const cwShotMeasurement& splay);
 
     QString toSupportedLength(const cwTripCalibration* calibration, const cwDistanceReading& reading) const;
     QString compassToString(const cwCompassReading &reading) const;

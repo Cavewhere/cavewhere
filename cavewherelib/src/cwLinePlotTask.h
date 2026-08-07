@@ -90,12 +90,14 @@ public:
         void setDepth(double depth);
         void setLength(double length);
         void setStationPositions(cwStationPositionLookup positionLookup);
+        void setSplayTips(cwSplayTipsByStation splayTips);
         void setUnconnectedChunkError(QList<cwFindUnconnectedSurveyChunks::Result> results);
         void setNetwork(cwSurveyNetwork network);
 
         double depth() const;
         double length() const;
         cwStationPositionLookup stationPositions() const;
+        cwSplayTipsByStation splayTips() const;
         QList<cwFindUnconnectedSurveyChunks::Result> unconnectedChunkError() const;
         cwSurveyNetwork network() const;
 
@@ -112,6 +114,7 @@ public:
         bool StationPostionsChanged;
         bool NetworkChanged;
         cwStationPositionLookup Lookup;
+        cwSplayTipsByStation SplayTips;
         cwSurveyNetwork Network;
     };
 
@@ -340,6 +343,16 @@ inline double cwLinePlotTask::LinePlotCaveData::length() const
 inline cwStationPositionLookup cwLinePlotTask::LinePlotCaveData::stationPositions() const
 {
     return Lookup;
+}
+
+inline void cwLinePlotTask::LinePlotCaveData::setSplayTips(cwSplayTipsByStation splayTips)
+{
+    SplayTips = std::move(splayTips);
+}
+
+inline cwSplayTipsByStation cwLinePlotTask::LinePlotCaveData::splayTips() const
+{
+    return SplayTips;
 }
 
 inline QList<cwFindUnconnectedSurveyChunks::Result> cwLinePlotTask::LinePlotCaveData::unconnectedChunkError() const
