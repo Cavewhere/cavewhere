@@ -252,7 +252,8 @@ struct cwSaveLoadPrivate {
             SyncProject,
             ReconcileExternal,
             RepairSave,
-            ImportFiles
+            ImportFiles,
+            DiscardChanges
         };
 
         Type type = Type::SaveFlush;

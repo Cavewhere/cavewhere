@@ -11,6 +11,7 @@
 #include "cwLinePlotErrorCodes.h"
 #include "cwStationPositionLookup.h"
 #include "cwSurvex3DFileReader.h"
+#include "cwSurvexExporterUtils.h"
 
 //Qt includes
 #include <QDir>
@@ -90,15 +91,7 @@ Monad::Result<QStringList> cwExternalStationHarvest::harvest(const QString& entr
                             LinePlotErrorCode::ValidationFailed);
     }
 
-    //Survex *include has no escape for an embedded double quote, and treats
-    //'\n', '\r' and '\032' alike as end of line (datain.c's SPECIAL_EOL table),
-    //so such a path would break the driver or smuggle in a second *include
-    //token. The same refusal cwSurvexExporterCaveTask::writeExternalInclude
-    //makes.
-    if(absoluteEntry.contains(QLatin1Char('"'))
-       || absoluteEntry.contains(QLatin1Char('\n'))
-       || absoluteEntry.contains(QLatin1Char('\r'))
-       || absoluteEntry.contains(QLatin1Char('\032'))) {
+    if(!cwSurvexExporterUtils::isQuotableIncludePath(absoluteEntry)) {
         return harvestError(QStringLiteral("External centerline path contains characters that "
                                            "Survex *include cannot quote (\", newline, carriage "
                                            "return or Ctrl-Z): %1")

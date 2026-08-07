@@ -131,10 +131,6 @@ void cwTieSuggestionModel::setTrip(cwTrip* trip)
 
 void cwTieSuggestionModel::setTripConnected(cwTrip* trip, bool connected)
 {
-    if (trip == nullptr) {
-        return;
-    }
-
     //Every pulse that can move a suggestion, named in one place so connect and
     //disconnect cannot drift apart. This model reads every trip in the cave, so
     //it needs cave-wide coverage of the two sources that move: the solve lands
@@ -146,12 +142,25 @@ void cwTieSuggestionModel::setTripConnected(cwTrip* trip, bool connected)
     //cave's aggregate already delivers. scopeLabelsChanged is the region's
     //aggregate rename: a renamed trip is a row's label, and an added or removed
     //one is a whole candidate list.
-    cwCave* cave = trip->parentCave();
-    cwCavingRegion* region = cave != nullptr ? cave->parentRegion() : nullptr;
+    //
+    //The cave and region senders are remembered at connect time: by disconnect
+    //time the trip may be destroyed (the QPointer already null) or removed from
+    //its cave, and re-deriving the senders from it would leave their
+    //connections behind to rebuild once per bind for the model's lifetime.
+    if (connected) {
+        m_connectedCave = trip != nullptr ? trip->parentCave() : nullptr;
+        m_connectedRegion = m_connectedCave != nullptr
+                ? m_connectedCave->parentRegion() : nullptr;
+    }
+
+    cwCave* cave = m_connectedCave.data();
+    cwCavingRegion* region = m_connectedRegion.data();
 
     const auto forEachSignal = [trip, cave, region](auto apply) {
-        apply(trip, &cwTrip::solvedStationsChanged);
-        apply(trip, &cwTrip::scopeChanged);
+        if (trip != nullptr) {
+            apply(trip, &cwTrip::solvedStationsChanged);
+            apply(trip, &cwTrip::scopeChanged);
+        }
         if (cave != nullptr) {
             apply(cave, &cwCave::tripExternalStationsChanged);
         }
@@ -168,6 +177,8 @@ void cwTieSuggestionModel::setTripConnected(cwTrip* trip, bool connected)
         forEachSignal([this](auto* sender, auto signal) {
             QObject::disconnect(sender, signal, this, &cwTieSuggestionModel::rebuildRows);
         });
+        m_connectedCave = nullptr;
+        m_connectedRegion = nullptr;
     }
 }
 

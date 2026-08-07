@@ -2,6 +2,7 @@
 
 #include <QCoreApplication>
 #include <QDir>
+#include <QDirIterator>
 #include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
@@ -10,6 +11,7 @@
 #include <QThread>
 #include <QUrl>
 
+#include "cwCave.h"
 #include "cwCavingRegion.h"
 #include "cwErrorListModel.h"
 #include "cwFutureManagerModel.h"
@@ -19,6 +21,7 @@
 #include "cwProject.h"
 #include "cwRootData.h"
 #include "cwSaveLoad.h"
+#include "GitRepository.h"
 
 #include "cavewhere.pb.h"
 #include "cwRegionIOTask.h"
@@ -918,6 +921,191 @@ TEST_CASE("cwLazLayer .cwlaz: discarding an uncommitted layer leaves the project
     REQUIRE(lazLayers->count() == 0);
 
     // The working tree is back at HEAD, so there is nothing left to save.
+    CHECK_FALSE(project->modified());
+}
+
+TEST_CASE("cwLazLayer .cwlaz: a failed discard rescans layers and leaves the project savable",
+          "[cwLazLayer][cwLazLayerModel][cwSaveLoad]") {
+    // git reset --hard can fail partway — a locked file, a permission error —
+    // after it has already rewritten some of "GIS Layers/". The failure branch
+    // owes the model the same resync the success branch runs, and it owes the
+    // user their save pipeline back: the discard didn't take, so edits made
+    // after it must keep flowing to disk, or quitting loses them silently.
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString externalLaz = writeMinimalLaz(tempLazPath(tempDir, QStringLiteral("discfail")));
+
+    auto root = std::make_unique<cwRootData>();
+    // git commitAll requires a valid account, or saveAs never creates a HEAD
+    // commit and discardChanges fails before the path under test.
+    root->account()->setName(QStringLiteral("Discard Tester"));
+    root->account()->setEmail(QStringLiteral("discard.tester@example.com"));
+
+    auto* project = root->project();
+    addLazAndWait(root.get(), {externalLaz});
+    REQUIRE(project->cavingRegion()->lazLayers()->count() == 1);
+
+    const QString projectPath = QDir(tempDir.path())
+                                    .filePath(QStringLiteral("laz-discfail-%1.cwproj")
+                                                  .arg(QCoreApplication::applicationPid()));
+    REQUIRE(project->saveAs(projectPath));
+    project->waitSaveToFinish();
+    root->futureManagerModel()->waitForFinished();
+    QCoreApplication::processEvents();
+    REQUIRE_FALSE(project->modified());
+
+    auto* lazLayers = project->cavingRegion()->lazLayers();
+    const QDir gisDir = gisLayersDirForProject(project->filename());
+    const QString lazBase = QFileInfo(externalLaz).completeBaseName();
+    const QString lazInProject = gisDir.absoluteFilePath(lazBase + QStringLiteral(".laz"));
+    REQUIRE(QFile::exists(lazInProject));
+
+    // The .laz disappears on disk with no rescan — the divergence a half-done
+    // reset leaves behind. The model still shows the row.
+    REQUIRE(QFile::remove(lazInProject));
+    REQUIRE(lazLayers->count() == 1);
+
+    // Point HEAD at a branch that does not exist so the reset fails cleanly,
+    // keeping the original bytes to repair it afterward.
+    const QString repoPath = QFileInfo(project->filename()).absoluteDir().absolutePath();
+    const QString headPath = QDir(repoPath).absoluteFilePath(QStringLiteral(".git/HEAD"));
+    QByteArray headBytes;
+    {
+        QFile headFile(headPath);
+        REQUIRE(headFile.open(QFile::ReadOnly));
+        headBytes = headFile.readAll();
+    }
+    {
+        QFile headFile(headPath);
+        REQUIRE(headFile.open(QFile::WriteOnly | QFile::Truncate));
+        headFile.write(QByteArrayLiteral("ref: refs/heads/cw-does-not-exist\n"));
+    }
+
+    QSignalSpy completedSpy(project, &cwProject::discardCompleted);
+    QSignalSpy failedSpy(project->saveLoad(), &cwSaveLoad::discardFailed);
+    project->discardChanges();
+    project->waitForDiscardToFinish();
+    QCoreApplication::processEvents();
+    REQUIRE(failedSpy.count() == 1);
+    CHECK(completedSpy.count() == 0);
+
+    // The failure-path rescan drops the row whose file is gone. Bounding by
+    // wall-clock surfaces "rescan never fired" in CI logs rather than masking
+    // it downstream.
+    QElapsedTimer rescanTimer;
+    rescanTimer.start();
+    while (lazLayers->count() > 0
+           && rescanTimer.elapsed() < kDiscardRescanMaxWaitMs) {
+        QCoreApplication::processEvents();
+        QThread::msleep(kDiscardRescanPollSleepMs);
+    }
+    INFO("Waited " << rescanTimer.elapsed() << "ms for the failure-path rescan");
+    CHECK(lazLayers->count() == 0);
+
+    // Repair HEAD so the save below exercises only the state under test.
+    {
+        QFile headFile(headPath);
+        REQUIRE(headFile.open(QFile::WriteOnly | QFile::Truncate));
+        headFile.write(headBytes);
+    }
+
+    // An edit made after the failed discard must still reach disk.
+    project->cavingRegion()->addCave();
+    const int caveIndex = project->cavingRegion()->caveCount() - 1;
+    project->cavingRegion()->cave(caveIndex)->setName(
+        QStringLiteral("Cave After Failed Discard"));
+    project->waitSaveToFinish();
+    root->futureManagerModel()->waitForFinished();
+
+    const auto repoContains = [&repoPath](const QByteArray& needle) {
+        QDirIterator it(repoPath, QDir::Files, QDirIterator::Subdirectories);
+        while (it.hasNext()) {
+            QFile file(it.next());
+            if (file.open(QFile::ReadOnly) && file.readAll().contains(needle)) {
+                return true;
+            }
+        }
+        return false;
+    };
+    CHECK(repoContains(QByteArrayLiteral("Cave After Failed Discard")));
+}
+
+TEST_CASE("cwLazLayer .cwlaz: a reconcile that drops the .laz drops the row and stays clean",
+          "[cwLazLayer][cwLazLayerModel][cwSaveLoad][RestoreToCommit]") {
+    // Every reconcile lets git rewrite "GIS Layers/" behind the model's back —
+    // a pull carrying a teammate's delete, a branch checkout, a restore — and
+    // no merge handler speaks for LAZ layers, so the model has to be told to
+    // look again or it keeps a row whose .laz is gone.
+    //
+    // A restore is the cheapest way in: same reconcile, no remote. The rescan
+    // it triggers must also stay quiet, because the working tree now matches
+    // the commit it was moved to and there is nothing left to save.
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString externalLaz = writeMinimalLaz(tempLazPath(tempDir, QStringLiteral("restore")));
+
+    auto root = std::make_unique<cwRootData>();
+    root->account()->setName(QStringLiteral("Restore Tester"));
+    root->account()->setEmail(QStringLiteral("restore.tester@example.com"));
+
+    auto* project = root->project();
+
+    // Commit the project before the layer exists, so restoring here is what
+    // takes the .laz back out of the working tree.
+    const QString projectPath = QDir(tempDir.path())
+                                    .filePath(QStringLiteral("laz-restore-%1.cwproj")
+                                                  .arg(QCoreApplication::applicationPid()));
+    REQUIRE(project->saveAs(projectPath));
+    project->waitSaveToFinish();
+    root->futureManagerModel()->waitForFinished();
+    QCoreApplication::processEvents();
+
+    auto* repo = project->repository();
+    REQUIRE(repo != nullptr);
+    const QString repoPath = repo->directory().absolutePath();
+    const auto beforeLayerOid = QQuickGit::GitRepository::headCommitOid(repoPath);
+    REQUIRE_FALSE(beforeLayerOid.hasError());
+
+    addLazAndWait(root.get(), {externalLaz});
+    auto* lazLayers = project->cavingRegion()->lazLayers();
+    REQUIRE(lazLayers->count() == 1);
+
+    REQUIRE(project->save());
+    project->waitSaveToFinish();
+    root->futureManagerModel()->waitForFinished();
+
+    const QDir gisDir = gisLayersDirForProject(project->filename());
+    const QString lazBase = QFileInfo(externalLaz).completeBaseName();
+    const QString lazInProject = gisDir.absoluteFilePath(lazBase + QStringLiteral(".laz"));
+    const QString cwlazInProject = gisDir.absoluteFilePath(lazBase + QStringLiteral(".cwlaz"));
+    REQUIRE(QFile::exists(lazInProject));
+    REQUIRE(QFile::exists(cwlazInProject));
+
+    const auto withLayerOid = QQuickGit::GitRepository::headCommitOid(repoPath);
+    REQUIRE_FALSE(withLayerOid.hasError());
+    REQUIRE(withLayerOid.value() != beforeLayerOid.value());
+
+    // cwProject re-asserts the dirty bit from the sync report once the
+    // reconcile ends, so a spurious mutation during it is invisible by the
+    // time modified() is readable. Watch the signal itself to see it.
+    QSignalSpy mutationSpy(project, &cwProject::localMutationOccurred);
+
+    REQUIRE(project->restoreToCommit(beforeLayerOid.value()));
+    project->waitSaveToFinish();
+    root->futureManagerModel()->waitForFinished();
+    QCoreApplication::processEvents();
+
+    REQUIRE_FALSE(QFile::exists(lazInProject));
+    CHECK(lazLayers->count() == 0);
+
+    // Reconnecting the tree model re-wires the row while its files are gone
+    // and the rescan hasn't run yet, so the .cwlaz must stay deleted rather
+    // than being written back as an orphan.
+    CHECK_FALSE(QFile::exists(cwlazInProject));
+
+    CHECK(mutationSpy.count() == 0);
     CHECK_FALSE(project->modified());
 }
 

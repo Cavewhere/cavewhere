@@ -254,6 +254,9 @@ QString readGitExclude(const QDir& dir)
     return QString::fromUtf8(file.readAll());
 }
 
+constexpr int kDiscardSettleMaxWaitMs = 15000;
+constexpr int kDiscardSettlePollSleepMs = 10;
+
 QString firstCwprojInDirectory(const QString& rootPath)
 {
     QDirIterator it(rootPath,
@@ -768,6 +771,72 @@ TEST_CASE("discardChanges resets modified git directory project to HEAD", "[cwPr
     // modified in-memory model).
     const QStringList modifiedPaths = rawStatusPaths(repoPath);
     INFO("Modified paths after discard: " << modifiedPaths.join(QStringLiteral(", ")).toStdString());
+    CHECK(modifiedPaths.isEmpty());
+}
+
+TEST_CASE("discardChanges settles while save jobs are in flight", "[cwProject][discardChanges]") {
+    // A model edit synchronously activates a SaveFlush operation and
+    // dispatches its WriteFile job, leaving m_pendingJobsDeferred running.
+    // discardChanges must settle — reset the tree and emit discardCompleted
+    // or discardFailed — even when it lands in that window. Replacing the
+    // running deferred cancels its future, and AsyncFuture propagates that
+    // cancellation through both the discard chain and the active flush
+    // operation's future: the reset never runs, no signal fires, the
+    // self-write window stays open, and the operation queue jams for the
+    // rest of the session.
+    QQuickGit::Account account;
+    account.setName(QStringLiteral("Discard Tester"));
+    account.setEmail(QStringLiteral("discard.tester@example.com"));
+
+    auto project = std::make_unique<cwProject>();
+    addTokenManager(project.get());
+    project->setGitAccount(&account);
+
+    project->cavingRegion()->addCave();
+    project->cavingRegion()->cave(0)->setName(QStringLiteral("Cave Before Discard"));
+
+    QTemporaryDir saveDir;
+    REQUIRE(saveDir.isValid());
+    const QString savePath = saveDir.filePath(QStringLiteral("discard-in-flight.cwproj"));
+    REQUIRE(project->saveAs(savePath));
+    project->waitSaveToFinish();
+    REQUIRE(project->save());
+    project->waitSaveToFinish();
+
+    REQUIRE(project->fileType() == cwProject::GitFileType);
+    REQUIRE(isProjectModified(project.get()) == false);
+
+    const QString repoPath = QFileInfo(project->filename()).absoluteDir().absolutePath();
+
+    QSignalSpy completedSpy(project.get(), &cwProject::discardCompleted);
+    QSignalSpy failedSpy(project->saveLoad(), &cwSaveLoad::discardFailed);
+
+    // The rename enqueues its metadata write before returning, so discarding
+    // in the same event-loop turn always hits the in-flight window.
+    project->cavingRegion()->cave(0)->setName(QStringLiteral("Cave After Discard"));
+    project->discardChanges();
+
+    // Pump events bounded by wall clock instead of waitForDiscardToFinish():
+    // when the discard chain is cancelled the operation queue never idles and
+    // that wait blocks forever, turning the failure into a suite hang.
+    QElapsedTimer settleTimer;
+    settleTimer.start();
+    while (completedSpy.count() + failedSpy.count() == 0
+           && settleTimer.elapsed() < kDiscardSettleMaxWaitMs) {
+        QCoreApplication::processEvents();
+        QThread::msleep(kDiscardSettlePollSleepMs);
+    }
+    INFO("Waited " << settleTimer.elapsed() << "ms for the discard to settle");
+    REQUIRE(completedSpy.count() + failedSpy.count() == 1);
+    CHECK(failedSpy.count() == 0);
+    CHECK(completedSpy.count() == 1);
+
+    // Safe now that the discard settled; proves the operation queue drains.
+    project->waitForDiscardToFinish();
+
+    const QStringList modifiedPaths = rawStatusPaths(repoPath);
+    INFO("Modified paths after discard: "
+         << modifiedPaths.join(QStringLiteral(", ")).toStdString());
     CHECK(modifiedPaths.isEmpty());
 }
 

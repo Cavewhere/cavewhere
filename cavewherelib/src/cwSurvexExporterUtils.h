@@ -257,6 +257,20 @@ inline void writeFixStations(QTextStream& stream,
     }
 }
 
+//True when the path can appear inside a quoted survex *include. The syntax
+//has no escape for an embedded double quote, and cavern treats '\n', '\r'
+//and '\032' alike as end of line (datain.c's SPECIAL_EOL table), so a path
+//carrying any of them would either produce a syntactically broken driver or
+//smuggle in a second *include token. Callers refuse such paths before
+//emitting.
+inline bool isQuotableIncludePath(const QString& path)
+{
+    return !path.contains(QLatin1Char('"'))
+        && !path.contains(QLatin1Char('\n'))
+        && !path.contains(QLatin1Char('\r'))
+        && !path.contains(QLatin1Char('\032'));
+}
+
 //True when a shot only carries passage dimensions: a valid zero-length
 //distance with no compass or clino (front or back). Compass records LRUD on
 //dead-end stations this way, e.g. "ALT13LRUD ALT13 0 - - - -". Survex rejects

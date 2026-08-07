@@ -76,6 +76,7 @@
 #include <QBuffer>
 #include <QUuid>
 #include <QtCore/qscopeguard.h>
+#include <QScopedValueRollback>
 #include <QFileInfo>
 #include <QThread>
 #ifdef Q_OS_WIN
@@ -3263,44 +3264,67 @@ void cwSaveLoad::discardChanges()
     // it just cleaned.
     d->selfWrite.begin();
 
-    // Capture the in-flight saves future before replacing the deferred so that
-    // waitForFinished() (which calls completeSaveJobs()) will wait for the
-    // discard operation itself, not just the now-drained save queue.
-    auto saveFlushed = completeSaveJobs();
+    // Run the discard as a queued operation, the same shape sync() uses.
+    // Operations are FIFO, so any in-flight or scheduled save flush drains
+    // before the reset rewrites the tree, and waitForFinished() covers the
+    // discard through the queue's idle future. Replacing m_pendingJobsDeferred
+    // here instead would cancel a mid-flight drain future, and AsyncFuture
+    // propagates that cancellation through this chain and the active flush
+    // operation — silently dropping the reset and jamming the queue.
+    d->ensureSaveFlushScheduled(this);
 
-    // Replace the pending-jobs deferred so the discard pipeline is what
-    // waitForFinished() waits on from this point forward.
-    d->m_pendingJobsDeferred = {};
+    auto discardFuture = d->enqueueOperation(
+                this,
+                cwSaveLoadPrivate::Operation::Type::DiscardChanges,
+                [this, repo]() -> QFuture<ResultBase> {
+        auto resetFuture = repo->reset(QStringLiteral("HEAD"),
+                                       QQuickGit::GitRepository::ResetMode::Hard);
+        return AsyncFuture::observe(resetFuture)
+                .context(this, [repo, resetFuture]() {
+                    const auto result = resetFuture.result();
+                    if (!result.hasError()) {
+                        repo->cleanUntracked();
+                    }
+                    return result;
+                })
+                .future();
+    });
 
-    auto resetFuture = AsyncFuture::observe(saveFlushed)
-            .context(this, [repo]() -> QFuture<Monad::ResultBase> {
-                         return repo->reset(QStringLiteral("HEAD"),
-                         QQuickGit::GitRepository::ResetMode::Hard);
-                     })
-            .future();
-
-    d->futureToken.addJob(cwFuture(QFuture<void>(resetFuture),
+    d->futureToken.addJob(cwFuture(QFuture<void>(discardFuture),
                                    QStringLiteral("Discarding changes")));
 
-    AsyncFuture::observe(resetFuture).context(this, [this, repo, resetFuture]() {
-        const auto result = resetFuture.result();
+    // The operation deferred settles with an error Result on every
+    // cancellation path, so this observer always runs and the self-write
+    // window always closes.
+    AsyncFuture::observe(discardFuture).context(this, [this, discardFuture]() {
+        d->selfWrite.end();
+        const auto result = discardFuture.result();
         if (result.hasError()) {
-            d->selfWrite.end();
             qWarning() << "discardChanges: git reset --hard HEAD failed:"
                        << result.errorMessage();
-            d->m_pendingJobsDeferred.complete();
+            // The discard didn't take, so the project stays live: saves must
+            // keep flowing to disk (the success path re-enables via the
+            // reload discardCompleted triggers, which never happens here),
+            // and the LAZ model resyncs with whatever a partial reset left
+            // on disk — libgit2 checks files out one at a time, so an abort
+            // can land after some of "GIS Layers/" was already rewritten.
+            setSaveEnabled(true);
             emit discardFailed(result.errorMessage());
+            rescanLazLayersAfterGitWrite();
             return;
         }
-        repo->cleanUntracked();
-        d->selfWrite.end();
-        d->m_pendingJobsDeferred.complete();
         emit discardCompleted();
     });
 }
 
 void cwSaveLoad::disconnectTreeModel()
 {
+    // Runs this→this, so the region disconnect below leaves it. Torn down here
+    // rather than inside the region guard because it outlives the region, and
+    // each reconnect cycle would otherwise add another.
+    disconnect(this, &cwSaveLoad::discardCompleted,
+               this, &cwSaveLoad::rescanLazLayersAfterGitWrite);
+
     // Disconnect from the region directly. cwCavingRegion is NOT included in the
     // cwRegionTreeModel::all<QObject*> iteration (the root item uses an invalid index
     // which returns QVariant() for ObjectRole), so disconnectObjects() below will not
@@ -3310,13 +3334,8 @@ void cwSaveLoad::disconnectTreeModel()
         // lazLayers is a child of region and its connections survive
         // disconnectObjects(); each reconnect cycle would otherwise
         // accumulate duplicate rowsAboutToBeRemoved / rowsRemoved handlers.
-        // Tear down both directions: lazLayers→this for the model-change
-        // observers, and this→lazLayers for the discardCompleted→rescan
-        // hookup added in connectTreeModel.
         if (auto* lazLayers = region->lazLayers()) {
             disconnect(lazLayers, nullptr, this, nullptr);
-            disconnect(this, &cwSaveLoad::discardCompleted,
-                       lazLayers, &cwLazLayerModel::rescan);
         }
         // geoReference and the equate model are children of region too, so their
         // this-bound saveMetadata connections (wired in connectTreeModel) survive
@@ -3700,7 +3719,13 @@ void cwSaveLoad::connectTreeModel()
                 const QString metadataPath = absolutePathPrivate(layer);
                 if (!metadataPath.isEmpty()) {
                     d->seedStatePathFromLoaded(layer, metadataPath);
-                    if (!QFileInfo::exists(metadataPath)) {
+                    // Write the .cwlaz only while the .laz it describes is
+                    // still there. A reconcile re-wires rows in the window
+                    // between git deleting a layer's files and the rescan
+                    // dropping its row, and writing then resurrects the .cwlaz
+                    // as an orphan the next commit picks up.
+                    if (!QFileInfo::exists(metadataPath)
+                            && QFileInfo::exists(layer->sourcePath())) {
                         save(layer);
                     }
                 }
@@ -3720,17 +3745,40 @@ void cwSaveLoad::connectTreeModel()
             }
 
             // Re-rescan after a Git-driven on-disk mutation. discardChanges
-            // restores deleted .laz files via `git reset --hard HEAD`; the
-            // model needs a kick to re-discover them and re-pair with any
+            // restores deleted .laz files via `git reset --hard HEAD` and
+            // deletes uncommitted ones via cleanUntracked; the model needs a
+            // kick to re-discover the restored ones and re-pair with any
             // orphan .cwlaz sibling so the original UUID + enabled bit are
             // adopted. Queued so the rescan runs after discardCompleted's
             // observers have settled (the project's modified bit clears
             // first, then we repopulate).
             connect(this, &cwSaveLoad::discardCompleted,
-                    lazLayers, &cwLazLayerModel::rescan,
+                    this, &cwSaveLoad::rescanLazLayersAfterGitWrite,
                     Qt::QueuedConnection);
         }
     }
+}
+
+void cwSaveLoad::rescanLazLayersAfterGitWrite()
+{
+    const auto* region = cavingRegion();
+    if (region == nullptr) {
+        return;
+    }
+
+    auto* lazLayers = region->lazLayers();
+    if (lazLayers == nullptr) {
+        return;
+    }
+
+    // Dropping a row still has to run — the rowsAboutToBeRemoved handler is
+    // what releases the layer's m_objectStates entry before the pointer
+    // dangles. Only its localMutationOccurred emit is unwanted, and rescan()
+    // emits its row signals synchronously, so the rollback covers exactly the
+    // rows this scan touches.
+    QScopedValueRollback<bool> suppressTracking(d->suppressLocalMutationTracking, true);
+
+    lazLayers->rescan();
 }
 
 void cwSaveLoad::enqueueProjectRenameJobs(const QString& oldDescriptorPath,
@@ -3902,11 +3950,15 @@ void cwSaveLoad::enqueueExternalCenterlineCopyIfNewer(const QString& sourcePath,
         emit localMutationOccurred();
     }
 
+    // Whether the job body mutated the destination, set on the worker and
+    // read by onDone on the main thread — the job future's completion orders
+    // the two.
+    auto wroteDestination = std::make_shared<bool>(false);
     cwSaveLoadPrivate::Job job(
                 nullptr,
                 cwSaveLoadPrivate::Job::Kind::File,
                 cwSaveLoadPrivate::Job::Action::Custom,
-                [sourcePath, destinationPath]() -> Monad::ResultBase {
+                [sourcePath, destinationPath, wroteDestination]() -> Monad::ResultBase {
         if (sourcePath == destinationPath) {
             // Identical paths is almost certainly a caller bug, but removing
             // and re-copying the same file would silently delete it. Treat
@@ -3933,6 +3985,9 @@ void cwSaveLoad::enqueueExternalCenterlineCopyIfNewer(const QString& sourcePath,
                             QStringLiteral("copyIfNewer: failed to remove stale destination: %1")
                             .arg(destinationPath));
             }
+            // The delete is itself a write the watcher sees, even if the
+            // copy below then fails.
+            *wroteDestination = true;
         }
 
         const auto ensureResult = cwSaveLoadPrivate::ensurePathForFile(destinationPath);
@@ -3945,6 +4000,7 @@ void cwSaveLoad::enqueueExternalCenterlineCopyIfNewer(const QString& sourcePath,
                         QStringLiteral("copyIfNewer: failed to copy %1 -> %2")
                         .arg(sourcePath, destinationPath));
         }
+        *wroteDestination = true;
         return Monad::ResultBase();
     });
     // The copy lands on a path the external-centerline watcher is armed on,
@@ -3954,9 +4010,14 @@ void cwSaveLoad::enqueueExternalCenterlineCopyIfNewer(const QString& sourcePath,
     // after the following save has cleared the dirty bit, leaving the project
     // asking to be saved with nothing to write. Open the settle tail when the
     // bytes land so reportProjectFileChangedOnDisk() skips the echo. A job
-    // dropped before it runs never wrote anything, so it has no echo to skip.
-    job.onDone = [this](const ResultBase&) {
-        d->selfWrite.noteWriteCompleted();
+    // that skipped the copy (destination already newer, same path, dropped
+    // before running) wrote nothing, so it has no echo to skip — and the
+    // window is global, so opening it anyway would swallow a genuine editor
+    // save to any attachment inside the tail.
+    job.onDone = [this, wroteDestination](const ResultBase&) {
+        if (*wroteDestination) {
+            d->selfWrite.noteWriteCompleted();
+        }
     };
     // Set path for diagnostics + scheduling; ensureInsideRoot isn't enforced
     // for Action::Custom, so this is informational rather than a precondition.
@@ -5484,6 +5545,13 @@ QFuture<Monad::Result<cwSaveLoad::ReconcileExternalResult>> cwSaveLoad::reconcil
         auto reconnectGuard = qScopeGuard([this, previousSaveEnabled]() {
             setSaveEnabled(previousSaveEnabled);
             connectTreeModel();
+            // loadAll never enumerates "GIS Layers/", so loadData carries
+            // nothing about LAZ layers for a merge handler to diff — the model
+            // would keep a row whose file is gone, and its stale point cloud,
+            // until something else happened to rescan. Runs after
+            // connectTreeModel so the row handlers are live to release each
+            // removed layer's m_objectStates entry.
+            rescanLazLayersAfterGitWrite();
         });
 
         const auto& loadData = loadResult.value();

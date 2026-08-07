@@ -500,6 +500,12 @@ private:
     void disconnectTreeModel();
     void connectTreeModel();
 
+    // Re-scan "GIS Layers/" after a git operation CaveWhere ran rewrote the
+    // working tree — a discard's reset and cleanUntracked, or a pull, checkout,
+    // or restore. The rows this drops or adds are that write coming back around
+    // rather than an edit to save, so it leaves cwProject::modified() alone.
+    void rescanLazLayersAfterGitWrite();
+
     void disconnectObjects();
     void connectObjects();
 

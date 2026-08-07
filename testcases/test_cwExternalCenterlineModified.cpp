@@ -37,6 +37,7 @@
 #include <QEventLoop>
 #include <QFile>
 #include <QFileInfo>
+#include <QSignalSpy>
 #include <QString>
 #include <QTemporaryDir>
 #include <QTest>
@@ -413,4 +414,40 @@ TEST_CASE("The first save of a temporary project does not re-dirty it through th
     constexpr int kNothingHappenedSettleMs = 1000;
     QTest::qWait(kNothingHappenedSettleMs);
     CHECK_FALSE(fixture.project->modified());
+}
+
+TEST_CASE("A copy that writes nothing leaves the watcher's next report alive",
+          "[ExternalCenterline][Modified]")
+{
+    // enqueueExternalCenterlineCopyIfNewer's job can complete without writing
+    // a byte: the destination is already newer, or source and destination are
+    // the same path. The settle window exists to skip the watcher's echo of
+    // CaveWhere's own write — opened for a write that never happened, it
+    // swallows a genuine editor save landing in the next 1.5 s, and on a
+    // bundled .cw a quit-without-save then drops that edit.
+    cwLinePlotManager manager;
+    auto fixture = makeFixture(manager, QStringLiteral("cwproj"));
+
+    // A stale twin of the entry file — same size, older mtime — is exactly
+    // the "destination already newer" skip.
+    const QString stalePath =
+        QDir(fixture->tempDir.path()).filePath(QStringLiteral("stale-entry.svx"));
+    REQUIRE(QFile::copy(fixture->entryPath, stalePath));
+    {
+        QFile staleFile(stalePath);
+        REQUIRE(staleFile.open(QFile::ReadWrite));
+        REQUIRE(staleFile.setFileTime(
+            QFileInfo(fixture->entryPath).lastModified().addSecs(-10),
+            QFileDevice::FileModificationTime));
+    }
+
+    fixture->saveLoad()->enqueueExternalCenterlineCopyIfNewer(stalePath,
+                                                              fixture->entryPath);
+    drainSave(*fixture);
+
+    // The watcher's report of a real editor save inside the settle tail —
+    // reportProjectFileChangedOnDisk is the exact call it makes.
+    QSignalSpy mutationSpy(fixture->saveLoad(), &cwSaveLoad::localMutationOccurred);
+    fixture->saveLoad()->reportProjectFileChangedOnDisk();
+    CHECK(mutationSpy.count() == 1);
 }

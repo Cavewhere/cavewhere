@@ -12,6 +12,7 @@
 #include "cwGlobals.h"
 #include "cwStationHandle.h"
 class cwCave;
+class cwCavingRegion;
 class cwTrip;
 
 //Qt includes
@@ -104,6 +105,10 @@ private:
     };
 
     QPointer<cwTrip> m_trip;
+    //The cave and region the model connected to, remembered so disconnecting
+    //still finds them after the trip is destroyed or leaves its cave.
+    QPointer<cwCave> m_connectedCave;
+    QPointer<cwCavingRegion> m_connectedRegion;
     QList<Row> m_rows;
     bool m_truncated = false;
 

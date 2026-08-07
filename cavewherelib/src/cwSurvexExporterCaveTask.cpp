@@ -344,16 +344,9 @@ bool cwSurvexExporterCaveTask::writeExternalInclude(QTextStream& stream,
 
     const QString absolutePath = driverIncludePathFor(it.value(), entryFile);
 
-    // Survex *include syntax has no escape for an embedded double-quote,
-    // and treats '\n', '\r' and '\032' alike as end of line (datain.c's
-    // SPECIAL_EOL table), so a hostile entry file / attachment dir name
-    // would either produce a syntactically broken driver or sneak in a
-    // second *include token. Refuse before we emit; the user surfaces this
-    // as an export error, not a confusing cavern parse failure.
-    if (absolutePath.contains(QLatin1Char('"'))
-        || absolutePath.contains(QLatin1Char('\n'))
-        || absolutePath.contains(QLatin1Char('\r'))
-        || absolutePath.contains(QLatin1Char('\032'))) {
+    // Refuse before we emit; the user surfaces this as an export error,
+    // not a confusing cavern parse failure.
+    if (!cwSurvexExporterUtils::isQuotableIncludePath(absolutePath)) {
         Errors.append(QStringLiteral(
             "External centerline path for '%1' contains characters that "
             "Survex *include cannot quote (\", newline, carriage return or Ctrl-Z): %2")

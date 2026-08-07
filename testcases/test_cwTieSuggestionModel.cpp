@@ -31,6 +31,7 @@
 #include "ExternalCenterlineTestHelpers.h"
 
 // Qt
+#include <QCoreApplication>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 
@@ -397,4 +398,36 @@ TEST_CASE("A renamed trip is renamed in the row that offers it",
     // row showing the name from before a rename points at the wrong one.
     second->setName(QStringLiteral("Renamed"));
     CHECK(candidateTripAt(model, 0) == QStringLiteral("Renamed"));
+}
+
+TEST_CASE("Rebinding after the bound trip is destroyed keeps one rebuild per pulse",
+          "[TieSuggestionModel]")
+{
+    cwCavingRegion region;
+    cwCave* cave = addEmptyCave(region, QStringLiteral("Alpha"));
+    cwTrip* doomed = addAttachedTrip(cave, QStringLiteral("Doomed"),
+                                     QStringLiteral("survex_hanging.svx"));
+    cwTrip* rebound = addAttachedTrip(cave, QStringLiteral("Rebound"),
+                                      QStringLiteral("survex_hanging.svx"));
+    cwTrip* candidate = addAttachedTrip(cave, QStringLiteral("Candidate"),
+                                        QStringLiteral("survex_simple.svx"));
+
+    cwTieSuggestionModel model;
+    model.setTrip(doomed);
+
+    // Deleting a trip out from under the panel is ordinary: the panel binds
+    // whichever trip floats, and the user removes trips. removeTrip's command
+    // deleteLater()s the trip, so flushing deferred deletes clears the model's
+    // QPointer the way it would between event-loop turns in the application.
+    cave->removeTrip(cave->indexOf(doomed));
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+
+    model.setTrip(rebound);
+
+    // One harvest pulse fires cwCave::tripExternalStationsChanged once, so the
+    // model resets once. Rebinding must not stack a second cave or region
+    // connection just because the previous trip could no longer name them.
+    QSignalSpy resetSpy(&model, &QAbstractItemModel::modelReset);
+    candidate->setExternalStations({QStringLiteral("hanging.h2")});
+    CHECK(resetSpy.count() == 1);
 }
