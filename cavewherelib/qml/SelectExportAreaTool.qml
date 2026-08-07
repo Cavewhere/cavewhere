@@ -10,6 +10,10 @@ QQ.Item {
     required property CaptureManager manager;
 
     anchors.fill: parent
+    // The tool is reparented onto the renderer, so it has to claim the chrome
+    // layer: LeadView and LinePlotLabelView fill that item at zLabels and take
+    // every press first, leaving the Select Area button drawn but dead.
+    z: view.zOverlay
     visible: parent !== null
 
     // onVisibleChanged: {
