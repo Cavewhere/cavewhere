@@ -104,6 +104,9 @@ public:
     Q_INVOKABLE cwStation station(int index) const;
     Q_INVOKABLE QList<int> indicesOfStation(QString stationName) const;
 
+    QList<cwShotMeasurement> stationSplays(int index) const;
+    void setStationSplays(int index, const QList<cwShotMeasurement>& splays);
+
     Q_INVOKABLE cwShot shot(int index) const;
 
     Q_INVOKABLE cwErrorModel* errorsAt(int index, DataRole role) const;
@@ -129,6 +132,8 @@ signals:
     void shotsRemoved(int beginIndex, int endIndex);
 
     void dataChanged(cwSurveyChunk::DataRole mainRole, int index);
+
+    void stationSplaysChanged(int index);
 
     // void connectedChanged();
 

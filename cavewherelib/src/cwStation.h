@@ -50,6 +50,14 @@ public:
     cwDistanceReading down() const;
     void setDown(const cwDistanceReading& down) { Data->m_down = down; }
 
+    // Splays are wall shots taken from this station with no named destination.
+    // Front sights only — a splay is never backsighted.
+    QList<cwShotMeasurement> splays() const;
+    void setSplays(const QList<cwShotMeasurement>& splays) { Data->m_splays = splays; }
+    void addSplay(const cwShotMeasurement& splay) { Data->m_splays.append(splay); }
+    const cwShotMeasurement& splayAt(int index) const { return Data->m_splays.at(index); }
+    int splayCount() const { return Data->m_splays.size(); }
+
     void setData(QVariant data, DataRoles role);
     QVariant data(DataRoles role) const;
 
@@ -95,10 +103,12 @@ inline cwDistanceReading cwStation::left() const { return Data->m_left; }
 inline cwDistanceReading cwStation::right() const { return Data->m_right; }
 inline cwDistanceReading cwStation::up() const { return Data->m_up; }
 inline cwDistanceReading cwStation::down() const { return Data->m_down; }
+inline QList<cwShotMeasurement> cwStation::splays() const { return Data->m_splays; }
 
 inline bool cwStation::operator ==(const cwStation &station) const
 {
-    return station.name().compare(station.name()) == 0;
+    //Matches qHash(), which hashes the canonical key, so QSet/QHash stay consistent
+    return canonicalKey(Data->Name) == canonicalKey(station.name());
 }
 
 inline bool cwStation::operator !=(const cwStation &station) const

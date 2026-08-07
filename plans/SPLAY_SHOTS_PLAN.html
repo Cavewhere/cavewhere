@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Splay Shots Plan — issue #483</title>
+<style>
+  :root {
+    --bg: #f5f5f4;
+    --paper: #ffffff;
+    --ink: #1c1c1a;
+    --muted: #7a7a74;
+    --line: #d8d8d2;
+    --accent: #2e6fb0;
+    --accent-soft: #e3eefb;
+    --splay: #8a6d3b;
+    --splay-soft: #f7f1e3;
+    --warn: #a04020;
+    --warn-soft: #fbe9e2;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #191917;
+      --paper: #232320;
+      --ink: #e8e8e2;
+      --muted: #9a9a90;
+      --line: #3a3a34;
+      --accent: #6aa5dd;
+      --accent-soft: #1e304a;
+      --splay: #c9a35e;
+      --splay-soft: #322a1a;
+      --warn: #e08060;
+      --warn-soft: #3a231a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.55 -apple-system, "Segoe UI", sans-serif;
+  }
+  .page { max-width: 900px; margin: 0 auto; padding: 30px 28px 80px; }
+  h1 { font-size: 26px; margin: 0 0 6px; }
+  h1 + p.sub { color: var(--muted); margin: 0 0 24px; }
+  h2 {
+    font-size: 20px; margin: 40px 0 10px; padding-top: 14px;
+    border-top: 2px solid var(--line);
+  }
+  h2 .phase { color: var(--accent); }
+  h3 { font-size: 16px; margin: 20px 0 6px; }
+  p, li { max-width: 82ch; }
+  code, pre {
+    font: 13px ui-monospace, "SF Mono", Menlo, monospace;
+    background: var(--paper); border: 1px solid var(--line); border-radius: 4px;
+  }
+  code { padding: 1px 5px; white-space: nowrap; }
+  pre { padding: 12px 14px; overflow-x: auto; line-height: 1.5; }
+  pre code { border: none; background: none; padding: 0; white-space: pre; }
+  table { border-collapse: collapse; margin: 12px 0; }
+  th, td { border: 1px solid var(--line); padding: 6px 12px; text-align: left; font-size: 14px; }
+  th { background: var(--paper); }
+  .callout {
+    background: var(--paper); border: 1px solid var(--line); border-left: 4px solid var(--accent);
+    border-radius: 6px; padding: 12px 16px; margin: 14px 0;
+  }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout.splay { border-left-color: var(--splay); }
+  .callout b:first-child { color: var(--accent); }
+  .callout.warn b:first-child { color: var(--warn); }
+  .callout.splay b:first-child { color: var(--splay); }
+  .decided {
+    background: var(--paper); border: 1px solid var(--line); border-radius: 8px;
+    padding: 14px 18px; margin: 16px 0;
+  }
+  .decided ul { margin: 6px 0 0; }
+  ul.files li { margin-bottom: 4px; }
+  .tag {
+    display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .05em;
+    text-transform: uppercase; border-radius: 4px; padding: 1px 7px; margin-right: 6px;
+  }
+  .tag.test { background: var(--accent-soft); color: var(--accent); }
+  .tag.fix { background: var(--warn-soft); color: var(--warn); }
+  .tag.new { background: var(--splay-soft); color: var(--splay); }
+</style>
+</head>
+<body>
+<div class="page">
+
+<h1>Splay Shots — Implementation Plan</h1>
+<p class="sub">Issue #483 · branch <code>dev_4</code> · plan written 2026-08-06</p>
+
+<p>Add first-class splay shots to CaveWhere: import them from Survex <code>.svx</code>
+(TopoDroid exports in particular), store them on stations, solve their positions through the
+existing cavern pipeline, render them in the 3D line plot, and show them read-only in the
+SurveyEditor behind an expandable chip in a dedicated Splays column.</p>
+
+<div class="decided">
+  <b>Decisions already made</b>
+  <ul>
+    <li><b>Station-anchored.</b> A splay is a <code>cwShotMeasurement</code> (distance, compass,
+        clino) stored on a station occurrence — the same shape as LRUD, which is also
+        per-occurrence. The chunk's alternating station/shot chain stays untouched.</li>
+    <li><b>Front-sight only.</b> No backsighted splays in v1.</li>
+    <li><b>Read-only in the editor.</b> Display behind the Splays-column chip
+        (per <code>plans/SPLAY_EDITOR_PROTOTYPES.html</code>). Renaming/promoting a splay to a
+        named station is a later feature, as is adding/editing splays by hand.</li>
+    <li><b>Positions come from cavern, not local math.</b> Splays ride the existing
+        export → cavern → <code>.3d</code> pipeline so declination/convergence are applied
+        identically to centerline (measure, don't reason about frames).</li>
+    <li><b>Compass export deferred to the end</b> (Phase 6).</li>
+  </ul>
+</div>
+
+<div class="callout splay">
+  <b>Ground truth: the TopoDroid file.</b> <code>~/Desktop/svx/a0-a34.svx</code> shows what
+  real input looks like — and it is <i>not</i> <code>*flags splay</code>:
+<pre><code>*begin                      ; anonymous begin (no survey name)
+  *alias station - ..       ; "-" is an alias for the anonymous station ".."
+  *flags not splay
+  *data normal from to tape compass clino
+  a3 - 1.14 275.1 83.3      ; splay: leg to an anonymous station
+    a0 a4   24.07 95.9 -50.0  ; centerline leg
+  ...
+*end</code></pre>
+  Splay-ness here comes entirely from the <b>anonymous endpoint</b>. That matches Survex
+  semantics: cavern implicitly marks any leg to an anonymous station as a splay. The importer
+  must therefore recognize two independent signals — anonymous endpoints
+  (<code>-</code> via alias, <code>.</code>, <code>..</code>, <code>...</code>) and the
+  <code>*flags splay</code> flag — and today it handles neither correctly. Also note the LRUD
+  <code>-</code> ("no reading") in <code>*data passage</code> blocks, which must keep working.
+</div>
+
+<h2>Current state (recon summary)</h2>
+<table>
+  <tr><th>Area</th><th>Where</th><th>Today</th></tr>
+  <tr><td>svx parse</td><td><code>cwSurvexImporter.cpp:1045</code>, <code>:554</code></td>
+      <td><code>*flags splay</code> conflated with <code>duplicate</code> (one shared bool —
+          <code>*flags not splay</code> cancels an active duplicate); <code>-</code> legs skipped
+          with a warning; <code>.</code>/<code>..</code> slip past validation and produce
+          empty-named stations that break chunk chaining; <code>*alias</code> unsupported</td></tr>
+  <tr><td>data model</td><td><code>cwStation.h:83</code></td>
+      <td>dead <code>QList&lt;cwShotMeasurement&gt; m_splays</code> — no accessors, no consumers</td></tr>
+  <tr><td>proto</td><td><code>cavewhere.proto:310</code> (<code>StationShot</code>)</td>
+      <td>no splay fields; station block uses tags 100–104, shot block 1000–1005</td></tr>
+  <tr><td>svx export</td><td><code>cwSurvexExporterTripTask.cpp:450</code></td>
+      <td>writes <code>*flags duplicate</code> for any excluded-distance shot — imported splays
+          round-trip out as duplicates</td></tr>
+  <tr><td>.3d read</td><td><code>cwSurvex3DFileReader.cpp:77, 115-119</code></td>
+      <td>skips <code>img_SFLAG_ANON</code> labels; never checks <code>img_FLAG_SPLAY</code>;
+          splay legs dropped incidentally (unresolvable endpoint)</td></tr>
+  <tr><td>geometry</td><td><code>cwLinePlotGeometry.cpp:96-118</code></td>
+      <td>per-shot de-shared 2-vertex layout, already designed to accommodate splays</td></tr>
+  <tr><td>render</td><td><code>cwRenderLinePlot.h:36-51</code></td>
+      <td>per-vertex visibility byte buffer, reusable for a splay toggle</td></tr>
+  <tr><td>editor</td><td><code>cwSurveyEditorRowIndex.h:21-26</code></td>
+      <td><code>TitleRow | StationRow | ShotRow</code>; strict alternation; no splay anything</td></tr>
+</table>
+
+<div class="callout">
+  <b>Phase discipline.</b> Each phase is one reviewable commit (or a small series) and ends with
+  both test suites green. Stop at every phase boundary for review before starting the next.
+</div>
+
+<!-- ==================================================================== -->
+<h2><span class="phase">Phase 1</span> — Data model, proto, save/load</h2>
+
+<p>Give splays a real home and make them survive a save/load cycle, before any importer can
+produce them.</p>
+
+<h3>cwStation</h3>
+<ul>
+  <li><span class="tag new">new</span>Revive <code>m_splays</code> with accessors on
+      <code>cwStation</code>: <code>splays()</code>, <code>setSplays()</code>,
+      <code>addSplay()</code>, <code>splayAt()</code>, <code>splayCount()</code>. Value-type
+      semantics like LRUD — the shared <code>PrivateData</code> already copy-on-writes.</li>
+  <li><span class="tag new">new</span><code>cwShotMeasurement</code> gains
+      <code>operator==</code>/<code>!=</code> comparing all three readings plus direction, so
+      splay lists compare as values.</li>
+  <li><span class="tag fix">fix</span><b>Splays stay out of
+      <code>cwStation::operator==</code>.</b> The original plan had them participate, but the
+      operator turned out to be <code>station.name().compare(station.name())</code> — comparing
+      the argument to itself, so it was unconditionally true. Its real consumers are
+      <code>QSet&lt;cwStation&gt;</code> in <code>cwSurveyChunk</code>/<code>cwTrip</code>'s
+      <code>neighboringStations</code>, where <code>qHash</code> hashes
+      <code>canonicalKey(name)</code> alone. Equality is therefore fixed to case-insensitive
+      name comparison, matching <code>qHash</code>'s contract; folding LRUD or splays in would
+      have changed neighbor-set dedup semantics for no benefit.</li>
+  <li>Only <code>cwShotMeasurement::Direction::Front</code> is produced anywhere in v1; the
+      field exists but stays constant.</li>
+</ul>
+
+<h3>cwSurveyChunk</h3>
+<ul>
+  <li><span class="tag new">new</span>A mutation + notification path so the editor model and
+      save system observe splay changes: <code>stationSplays(int)</code> /
+      <code>setStationSplays(int, const QList&lt;cwShotMeasurement&gt;&amp;)</code> plus a
+      dedicated <code>stationSplaysChanged(int index)</code> signal.
+      <code>setStation()</code> emits it too, since it replaces the whole station.</li>
+  <li><span class="tag fix">fix</span><b>A dedicated signal, not a new
+      <code>DataRole</code>.</b> The plan called for
+      <code>DataRole::StationSplays</code> + <code>dataChanged</code>, but the roles are
+      cell-oriented and QString-centric: <code>setData</code> gates on
+      <code>data.canConvert&lt;QString&gt;()</code>, and the error-checking switches over
+      <code>DataRole</code> are exhaustive, so a list-valued role would have to be stubbed into
+      several of them for no gain. A typed accessor pair keeps the grid machinery clean.</li>
+  <li><code>cwSaveLoad</code> connects the new signal next to <code>dataChanged</code>
+      (<code>cwSaveLoad.cpp:4107</code>) so a splay edit marks the trip dirty.</li>
+  <li>No change to the alternating station/shot chain or <code>canAddShot</code>.</li>
+</ul>
+
+<h3>Proto (cavewhere.proto)</h3>
+<pre><code>message SplayShot {
+    optional string distance = 1;
+    optional string compass = 2;
+    optional string clino = 3;
+}
+
+message StationShot {
+    ...
+    repeated SplayShot splays = 105;   // station block (100s)
+}</code></pre>
+<ul>
+  <li>Readings are plain <code>string</code>, matching how <code>StationShot</code> already
+      stores LRUD and shot readings. The <code>DistanceReading</code>/<code>CompassReading</code>/
+      <code>ClinoReading</code> messages the plan first named are marked legacy in the proto and
+      are only read by the pre-v9 path.</li>
+  <li>Wire up in <code>cwProtoUtils</code>: <code>saveStationShot</code> and
+      <code>fromProtoStation</code>, reusing the file's existing <code>saveReading</code>
+      helper so an empty reading writes no field at all.</li>
+  <li><span class="tag fix">fix</span><b>Resolved: no <code>protoVersion()</code> bump.</b>
+      The field is purely additive, and <code>cwSaveLoad</code> parses JSON with
+      <code>ignore_unknown_fields = true</code> (<code>cwSaveLoad.cpp:973</code>), so an older
+      build loads a splay-bearing file cleanly. Bumping to 10 would instead make every older
+      build show the "Upgrade CaveWhere… you will lose data if you save" error
+      (<code>cwRegionLoadTask.cpp:219</code>) for <i>all</i> new files, splays or not. Existing
+      practice agrees — <code>GeoReference</code> and <code>auto_declination</code> were added
+      under version 9 without a bump.</li>
+</ul>
+
+<h3>Tests</h3>
+<ul>
+  <li><span class="tag test">test</span>New file <code>testcases/test_cwSplayShot.cpp</code>
+      (own file per test-organization convention): measurement equality, station accessors and
+      copy-on-write independence, station equality staying name-only and agreeing with
+      <code>qHash</code>, chunk notification (including the silent no-op and out-of-range
+      cases), proto round trip with empty readings, and a full project save/load round trip
+      that also asserts <code>"splays"</code> is legible in the on-disk
+      <code>.cwtrip</code> JSON.</li>
+</ul>
+
+<div class="callout"><b>Phase 1 status: done.</b> 7 test cases / 67 assertions pass. Regression
+  sweep also green: <code>[SurvexImport]</code>, <code>[SurvexExport]</code>,
+  <code>[cwSurveyChunk]</code>, <code>[cwSurveyEditorModel]</code>, <code>[cwTrip]</code>,
+  <code>[cwScrap]</code>, <code>[cwScrapManager]</code>, <code>[cwNoteTransformation]</code>,
+  <code>[cwSaveLoad]</code>, <code>[cwSketchSaveLoad]</code>, <code>[cwProject]</code> —
+  the suites that exercise the fixed <code>operator==</code> and the changed serialization.</div>
+
+<!-- ==================================================================== -->
+<h2><span class="phase">Phase 2</span> — Survex .svx import</h2>
+
+<p>Make <code>cwSurvexImporter</code> produce splays from both real-world encodings, and fix
+the pre-existing flag and anonymous-station bugs. Acceptance bar: <code>a0-a34.svx</code>
+imports with every splay attached to its station and zero spurious warnings.</p>
+
+<h3>Flags (parseFlags, cwSurvexImporter.cpp:1032)</h3>
+<ul>
+  <li><span class="tag fix">fix</span>Untangle <code>splay</code> from <code>duplicate</code>:
+      give <code>cwTreeImportDataNode</code> a separate splay flag alongside
+      <code>includeDistance</code> (positive names, AND-combined through block nesting like the
+      existing flag). <code>*flags not splay</code> stops canceling an active
+      <code>duplicate</code>.</li>
+</ul>
+
+<h3>Anonymous stations and *alias (parseNormalData, cwSurvexImporter.cpp:554)</h3>
+<ul>
+  <li><span class="tag new">new</span>Parse <code>*alias station - ..</code> /
+      <code>*alias station -</code> (the only alias form Survex defines). Alias state is
+      per-block, inherited by child <code>*begin</code> blocks, restored on <code>*end</code> —
+      same scoping as flags.</li>
+  <li><span class="tag new">new</span>Recognize anonymous to-stations: <code>.</code>,
+      <code>..</code>, <code>...</code>, and <code>-</code> when the alias is active (also keep
+      accepting bare <code>-</code> for legacy files, since that's what the importer skipped
+      before). A leg with a named from and an anonymous to becomes
+      <code>cwShotMeasurement{distance, compass, clino, Front}</code> attached to the from
+      station. Handle the reversed orientation (anonymous from, named to) by attaching to the
+      named end as-is — do <i>not</i> invert the reading; Survex's own semantics anchor the
+      splay at the named end and record the instrument reading unchanged.</li>
+  <li>Both ends anonymous → warning, skip (matches cavern's "no fixed point" reality).</li>
+  <li><span class="tag fix">fix</span>Legs whose station fails <code>cwStationValidator</code>
+      (e.g. an unhandled dotted name) become an import <b>warning + skipped leg</b> instead of
+      today's silent empty-named station corruption.</li>
+  <li><code>*flags splay</code> on a leg between two <b>named</b> stations: keep importing it as
+      a regular shot with <code>distanceIncluded = false</code> (today's behavior, now under the
+      correct flag) plus a warning that the station names were kept. Converting those to
+      anchored splays would throw away the to-station name; revisit when splay
+      promotion/naming lands.</li>
+  <li>Remove the "Skipping splay data" warning path.</li>
+</ul>
+
+<h3>Attaching splays to chunk stations</h3>
+<p>The importer accumulates legs into chunks as it parses; a station's splays can appear before
+or after the centerline leg that introduces the station (in <code>a0-a34.svx</code>, the
+<code>a3</code> splays precede the <code>a0 a4</code> leg). So: buffer splays per block keyed by
+resolved station name during parsing, and after the block's chunks are assembled, attach each
+buffered list to the station's first occurrence in that block's chunks. A buffered splay whose
+station never appears in a leg gets an import warning (an orphan splay has no anchor).</p>
+
+<h3>Tests</h3>
+<ul>
+  <li><span class="tag test">test</span>Add a trimmed copy of <code>a0-a34.svx</code> to
+      <code>testcases/</code> data. Cases: alias + <code>-</code> splays land on the right
+      stations with right values; <code>..</code> direct; reversed anonymous-from leg;
+      <code>*flags splay</code>/<code>duplicate</code> independence; dotted-name warning path;
+      passage-data <code>-</code> LRUD unaffected; orphan splay warning.</li>
+</ul>
+
+<!-- ==================================================================== -->
+<h2><span class="phase">Phase 3</span> — Survex export + cavern + .3d read-back</h2>
+
+<p>Two consumers share this code: the user-facing Survex export, and
+<code>cwLinePlotTask</code>'s internal export that feeds cavern. Getting splays into the
+generated <code>.svx</code> is what makes cavern solve their positions; reading them back out of
+the <code>.3d</code> is what gives rendering its endpoints.</p>
+
+<h3>Export (cwSurvexExporterTripTask)</h3>
+<ul>
+  <li><span class="tag new">new</span>After a chunk's centerline legs, emit each station's
+      splays as one block:
+<pre><code>*flags splay
+a4 .. 5.88 124.1 4.6
+a4 .. 5.42 118.8 2.9
+*flags not splay</code></pre>
+      Writing <code>..</code> directly needs no <code>*alias</code>; <code>*flags splay</code> is
+      redundant with the anonymous endpoint but makes the file self-describing.</li>
+  <li><span class="tag fix">fix</span>The excluded-distance wrapper at
+      <code>cwSurvexExporterTripTask.cpp:450</code> keeps writing
+      <code>*flags duplicate</code> for excluded shots — but splays no longer arrive as
+      excluded shots, so the mislabeling case disappears.</li>
+</ul>
+
+<h3>.3d reading (cwSurvex3DFileReader)</h3>
+<ul>
+  <li><span class="tag new">new</span>Stop relying on the incidental drop: check
+      <code>pimg-&gt;flags &amp; img_FLAG_SPLAY</code> on <code>img_LINE</code> items. A splay
+      leg's resolvable end (the coord-index lookup at <code>:115</code>) is its station; the
+      other end is the splay tip. Return them as a new output:
+      <code>QHash&lt;QString stationName, QList&lt;QVector3D&gt; tipPositions&gt;</code>
+      alongside the existing network + position lookup.</li>
+  <li>Keep skipping <code>img_SFLAG_ANON</code> labels in pass 1 (they still aren't stations),
+      and keep dropping non-splay legs with unresolvable endpoints.</li>
+  <li><span class="tag warn"></span>Positions flow through the same worldOrigin narrowing as
+      stations — subtract in double before building <code>QVector3D</code>s (the established
+      rule from the worldOrigin work).</li>
+</ul>
+
+<h3>Plumbing (cwLinePlotTask → caves)</h3>
+<ul>
+  <li>Carry the per-station splay tips through <code>cwLinePlotTask</code>'s results into the
+      per-cave data that <code>cwLinePlotGeometry</code> already consumes (alongside
+      <code>caveStationPositions</code>). Station→cave attribution reuses the same name
+      resolution the network already does.</li>
+</ul>
+
+<h3>Tests</h3>
+<ul>
+  <li><span class="tag test">test</span>Exporter: golden-string test that a trip with splays
+      emits the block above. Round trip: import <code>a0-a34.svx</code> → export → re-import →
+      same splays. Reader: run cavern on a small fixture (the standalone-cavern recipe with
+      <code>SURVEXLIB</code>/<code>PROJ_DATA</code> is on record) and assert splay tips come
+      back within the <code>.3d</code> centimeter floor (~5&nbsp;mm quantization).</li>
+</ul>
+
+<!-- ==================================================================== -->
+<h2><span class="phase">Phase 4</span> — Rendering</h2>
+
+<h3>Geometry (cwLinePlotGeometry)</h3>
+<ul>
+  <li><span class="tag new">new</span>After each trip's centerline segments, append splay
+      segments: station position → tip, two de-shared vertices each — exactly the layout the
+      per-shot visibility plan anticipated. Record each trip's splay vertex range next to its
+      centerline range so the existing trip-UUID → range visibility mapping in
+      <code>cwLinePlotManager::reconcileTripKeywordItems</code> extends naturally.</li>
+  <li>Splays never contribute to cave length/depth (they already can't — those accumulate from
+      chunk shots, not geometry).</li>
+</ul>
+
+<h3>Render (cwRenderLinePlot / cwRHILinePlot) — instanced screen-space quads</h3>
+
+<p>This phase also upgrades the line rendering itself. The current pipeline draws a native
+<code>Lines</code> topology, which Metal (and D3D/Vulkan core) clamps to 1&nbsp;px. Replace it
+with <b>instanced screen-space quad expansion</b> — the standard Metal-era thick-line approach
+(geometry shaders are unavailable on Metal):</p>
+
+<ul>
+  <li><span class="tag new">new</span>One instance per shot segment. The per-instance buffer
+      carries <code>{vec3 from, vec3 to, uint flags}</code> (flags = visibility bit + type bit:
+      centerline vs splay). The pipeline draws a fixed 4-vertex <code>TriangleStrip</code>,
+      corner selected by <code>gl_VertexIndex</code> — no corner vertex buffer. The current
+      pair-per-shot vertex layout is already one instance per two points, so the geometry
+      upload shape barely changes.</li>
+  <li><span class="tag new">new</span>Vertex shader: project both endpoints to clip space,
+      divide by <code>w</code> manually, compute the screen-space perpendicular from the two
+      NDC points, extrude by <code>halfWidthPx * 2.0 / viewportSize * devicePixelRatio</code>,
+      then multiply back by <code>w</code> so clipping and depth interpolation stay correct.
+      <code>devicePixelRatio</code> is already in <code>GlobalBlock</code>; viewport size joins
+      the line plot's own uniform block (per the global-uniform-scope rule, not GlobalBlock).</li>
+  <li>Widths and colors branch on the type bit to shader constants: centerline 2&nbsp;px,
+      existing red <code>vec4(1,0,0,1)</code>; splays 1&nbsp;px, opaque light red
+      <code>vec4(1.0, 0.6, 0.6, 1.0)</code>. No alpha blending — hard-edged quads plus the MSAA
+      sample count already in the pipeline key give clean edges. One pipeline, one draw.</li>
+  <li>Caps/joins: extend each quad by <code>halfWidth</code> along its own direction (square
+      caps) to fill pinhole gaps at shared stations; at 1–2&nbsp;px no miter/round joins are
+      needed.</li>
+  <li>Depth: keep the existing <code>z -= 1e-4</code> bias; give splays a slightly larger bias
+      so the centerline wins z-fights at stations.</li>
+  <li><span class="tag new">new</span>Visibility becomes <b>per-segment</b> (one flag per
+      instance) instead of the duplicated per-vertex mask — the
+      <code>cwSceneVisibility</code> ranges now address segments, which simplifies the mask
+      upload in <code>updateVisibilityBuffer</code>.</li>
+  <li><span class="tag new">new</span>A <code>showSplays</code> toggle (default on) implemented
+      through that per-segment visibility — masking each trip's splay range — exposed as a
+      checkbox in the View page's line-plot settings. Visibility must go through
+      <code>cwSceneVisibility</code> so picking agrees with rendering.</li>
+</ul>
+
+<h3>Tests / verification</h3>
+<ul>
+  <li><span class="tag test">test</span>Geometry unit test: vertex counts and ranges for a
+      known two-trip fixture with splays; toggling <code>showSplays</code> flips exactly the
+      splay ranges' bytes.</li>
+  <li>Render an offscreen PNG of the fixture (headless-output convention) so the result can be
+      eyeballed without launching the app.</li>
+</ul>
+
+<!-- ==================================================================== -->
+<h2><span class="phase">Phase 5</span> — SurveyEditor display</h2>
+
+<p>Per the approved prototype: a dedicated <b>Splays</b> column at the end of the row; station
+rows with splays show a chip (count + disclosure triangle); clicking expands read-only splay
+rows (distance, compass, clino) under the station.</p>
+
+<ul>
+  <li><span class="tag new">new</span><code>cwSurveyEditorRowIndex</code>: add
+      <code>SplayRow</code> with a second index (station index, splay index) — the row identity
+      survives expansion/collapse of other stations.</li>
+  <li><span class="tag new">new</span><code>cwSurveyEditorModel</code>: per-station expansion
+      state lives in the model (QML delegates are recycled and can't own it). New roles:
+      <code>SplayDistanceRole</code>, <code>SplayCompassRole</code>, <code>SplayClinoRole</code>,
+      <code>StationSplayCountRole</code>, <code>StationSplaysExpandedRole</code>; a
+      <code>toggleSplaysExpanded(rowIndex)</code> invokable inserts/removes the splay rows with
+      proper <code>beginInsertRows</code>/<code>beginRemoveRows</code>. Chunk
+      <code>dataChanged(StationSplays)</code> reconciles open clusters.</li>
+  <li><span class="tag new">new</span>QML: <code>SurveyEditorColumnTitles.qml</code> gains the
+      Splays column header; the station loader in <code>DrySurveyComponent.qml</code> gains the
+      chip (a <code>TapHandler</code>, Theme tokens, <code>QC.Label</code>); a third
+      <code>Loader</code> for <code>rowType === SplayRow</code> renders the read-only row
+      (muted styling per the prototype). Chip and splay rows are display-only — no editing,
+      no context-menu changes in this phase.</li>
+  <li>Watch the ObjectFinder chains: adding <code>objectName</code>s to new items is fine, but
+      leave existing intermediate items unnamed.</li>
+</ul>
+
+<h3>Tests</h3>
+<ul>
+  <li><span class="tag test">test</span>C++ model tests (row insertion/removal, role data,
+      expansion survives chunk edits) in the model's test file; a QML test
+      (<code>test-qml/tst_SplayRows.qml</code>, offscreen) that clicks the chip and
+      <code>tryVerify</code>s the rows appear.</li>
+</ul>
+
+<!-- ==================================================================== -->
+<h2><span class="phase">Phase 6</span> — Compass export (deferred tail)</h2>
+<ul>
+  <li>Write splays using Compass's splay convention (flag the shot and synthesize the
+      anonymous-style to-name Compass expects, uppercase per the existing Compass rule);
+      decide at implementation time between the <code>#|L#</code> exclude flag and dedicated
+      splay support depending on what current Compass versions accept.</li>
+  <li>Walls import stays explicitly unsupported (existing warning) — out of scope.</li>
+</ul>
+
+<h2>Explicitly out of scope (later features)</h2>
+<ul>
+  <li>Renaming / promoting splays to named stations (the rename-run prototype is parked in
+      <code>plans/SPLAY_EDITOR_PROTOTYPES.html</code> git history).</li>
+  <li>Adding, editing, or deleting splays in the editor.</li>
+  <li>Backsighted splays.</li>
+  <li>Compass/Walls <i>import</i> of splays.</li>
+  <li>Using splays for scrap morphing or LRUD estimation.</li>
+</ul>
+
+<h2>Open items to confirm during implementation</h2>
+<ul>
+  <li>Final tuning of the splay light-red <code>vec4(1.0, 0.6, 0.6, 1.0)</code> against the
+      2&nbsp;px centerline (Phase 4 — will show a PNG).</li>
+  <li>Where the <code>showSplays</code> toggle persists (per-project vs app settings), decided
+      when wiring the View page checkbox.</li>
+  <li><strong>Phase 2 constraint from the Phase 1 review:</strong> <code>SplayShot</code> has no
+      backsight field, but the in-memory <code>cwShotMeasurement</code> still carries
+      <code>direction</code>. A splay built with <code>Direction::Back</code> would work in memory
+      and silently reset to <code>Front</code> on reload. <code>saveStationShot</code> now
+      <code>Q_ASSERT</code>s the invariant; the importer's reversed-orientation path (anonymous
+      from-station, named to-station) must flip the bearing into a front sight rather than set
+      <code>Back</code>.</li>
+</ul>
+
+</div>
+</body>
+</html>

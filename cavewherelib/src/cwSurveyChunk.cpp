@@ -591,6 +591,11 @@ QString cwSurveyChunk::guessNextStation(QString stationName) const {
  */
 void cwSurveyChunk::setStation(cwStation station, int index){
     if(index < 0 || index >= d.stations.size()) { return; }
+
+    //Each emission below re-serializes the whole trip for the save queue, so only
+    //announce splays when they actually changed
+    const bool splaysChanged = d.stations.at(index).splays() != station.splays();
+
     d.stations[index] = station;
     emit dataChanged(StationNameRole, index);
     emit dataChanged(StationLeftRole, index);
@@ -598,7 +603,38 @@ void cwSurveyChunk::setStation(cwStation station, int index){
     emit dataChanged(StationUpRole, index);
     emit dataChanged(StationDownRole, index);
 
+    if(splaysChanged) {
+        emit stationSplaysChanged(index);
+    }
+
     checkForStationError(index);
+}
+
+/**
+ * @brief cwSurveyChunk::stationSplays
+ * @param index - The index of the station
+ * @return The station's splays, or an empty list if the index is out of range
+ */
+QList<cwShotMeasurement> cwSurveyChunk::stationSplays(int index) const
+{
+    if(!stationIndexCheck(index)) { return QList<cwShotMeasurement>(); }
+    return d.stations.at(index).splays();
+}
+
+/**
+ * @brief cwSurveyChunk::setStationSplays
+ * @param index - The index of the station
+ * @param splays - The station's new splays
+ *
+ * If the index is out of range, this function will do nothing
+ */
+void cwSurveyChunk::setStationSplays(int index, const QList<cwShotMeasurement> &splays)
+{
+    if(!stationIndexCheck(index)) { return; }
+    if(d.stations.at(index).splays() == splays) { return; }
+
+    d.stations[index].setSplays(splays);
+    emit stationSplaysChanged(index);
 }
 
 /**

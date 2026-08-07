@@ -27,6 +27,8 @@ struct cwShotMeasurement {
         , direction(direction)
     {}
 
+    bool operator==(const cwShotMeasurement& other) const = default;
+
     // Public member data
     cwDistanceReading distance;
     cwCompassReading  compass;
