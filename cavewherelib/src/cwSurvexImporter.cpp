@@ -37,6 +37,17 @@ namespace {
 QString stripSurvexSentinel(const QString& value) {
     return value.trimmed() == QLatin1String("-") ? QString() : value;
 }
+
+// Survex's anonymous stations. Cavern resolves a leg to one of these as a wall
+// point instead of a named station, which is what makes the leg a splay. "-" is
+// the spelling `*alias station - ..` declares; CaveWhere reads it as anonymous
+// whether or not the alias was declared, because older files rely on that.
+bool isAnonymousStation(const QString& name) {
+    return name == QLatin1String(".")
+           || name == QLatin1String("..")
+           || name == QLatin1String("...")
+           || name == QLatin1String("-");
+}
 }
 
 cwSurvexImporter::cwSurvexImporter(QObject* parent) :
@@ -101,6 +112,10 @@ void cwSurvexImporter::importSurvex(QString filename) {
     CurrentBlock = RootBlock;
 
     loadFile(filename);
+
+    //A file that never opens a *begin keeps its data on the root block, and the
+    //root block never sees an *end
+    finishBlock();
 
     //Add the rootBlocks to GlobalData
     GlobalData->setNodes(RootBlock->childNodes());
@@ -313,8 +328,8 @@ void cwSurvexImporter::parseLine(QString line) {
 
         if(compare(command, "end")) {
 
-            //Update the LRUD before getting out of this block
-            updateLRUDForCurrentBlock();
+            //Drain the block's scratch onto its chunks before getting out of it
+            finishBlock();
 
             cwTreeImportDataNode* parentBlock = CurrentBlock->parentNode();
             if(parentBlock != nullptr) {
@@ -348,6 +363,8 @@ void cwSurvexImporter::parseLine(QString line) {
             parseEquate(arg);
         } else if(compare(command, "flags")) {
             parseFlags(arg);
+        } else if(compare(command, "alias")) {
+            parseAlias(arg);
         } else if(compare(command, "cs")) {
             parseCS(arg);
         } else if(compare(command, "fix")) {
@@ -543,6 +560,9 @@ QStringList cwSurvexImporter::parseData(QString line) {
 
 /**
   \brief Imports a line of survey data
+
+  A leg with one anonymous end is a splay: it gets buffered on the named end
+  rather than becoming a shot, since it has no destination station to chain to.
   */
 void cwSurvexImporter::parseNormalData(QString line) {
     QStringList data = parseData(line);
@@ -551,15 +571,53 @@ void cwSurvexImporter::parseNormalData(QString line) {
     QString fromStationName = extractData(data, From);
     QString toStationName= extractData(data, To);
 
-    if(fromStationName == QString("-") || toStationName == QString("-")) {
-        addWarning(QString("Skipping splay data at ") + fromStationName + " " + toStationName);
-        return;
-    }
-
     //Make sure the to and from stations exist
     if(fromStationName.isEmpty() || toStationName.isEmpty()) {
         addError("Can't extract shot data. No toStation or from station");
         return;
+    }
+
+    const bool fromIsAnonymous = isAnonymousStation(fromStationName);
+    const bool toIsAnonymous = isAnonymousStation(toStationName);
+
+    if(fromIsAnonymous && toIsAnonymous) {
+        addWarning(QString("Skipping the leg between %1 and %2 because both ends are anonymous, "
+                           "so it has nothing to hang on")
+                       .arg(fromStationName, toStationName));
+        return;
+    }
+
+    const auto isUsableEnd = [](const QString& name) {
+        return isAnonymousStation(name) || cwStation::nameIsValid(name);
+    };
+
+    if(!isUsableEnd(fromStationName) || !isUsableEnd(toStationName)) {
+        addWarning(QString("Skipping the leg between \"%1\" and \"%2\" because those aren't "
+                           "station names CaveWhere can use")
+                       .arg(fromStationName, toStationName));
+        return;
+    }
+
+    const QString distance = stripSurvexSentinel(extractData(data, Distance));
+    const QString compass = stripSurvexSentinel(extractData(data, Compass));
+    const QString clino = stripSurvexSentinel(extractData(data, Clino));
+
+    if(fromIsAnonymous || toIsAnonymous) {
+        //Survex anchors the splay at the named end and records the instrument
+        //reading as written, whichever column the anonymous station lands in
+        nodeData(CurrentBlock)->addSplay(fromIsAnonymous ? toStationName : fromStationName,
+                                         cwShotMeasurement(cwDistanceReading(distance),
+                                                           cwCompassReading(compass),
+                                                           cwClinoReading(clino)));
+        return;
+    }
+
+    if(CurrentBlock->isSplay()) {
+        //Both ends are named, so keep the leg and its names. Anchoring it as a
+        //splay would throw the to-station's name away
+        addWarning(QString("Keeping the splay between %1 and %2 as a shot, since both ends are "
+                           "named. Its length is excluded from the cave")
+                       .arg(fromStationName, toStationName));
     }
 
     //Create the from and to stations
@@ -567,12 +625,15 @@ void cwSurvexImporter::parseNormalData(QString line) {
     cwStation toStation(toStationName);
 
     cwShot shot;
-    shot.setDistance(stripSurvexSentinel(extractData(data, Distance)));
-    shot.setCompass(stripSurvexSentinel(extractData(data, Compass)));
+    shot.setDistance(distance);
+    shot.setCompass(compass);
     shot.setBackCompass(stripSurvexSentinel(extractData(data, BackCompass)));
-    shot.setClino(stripSurvexSentinel(extractData(data, Clino)));
+    shot.setClino(clino);
     shot.setBackClino(stripSurvexSentinel(extractData(data, BackClino)));
-    shot.setDistanceIncluded(CurrentBlock->isDistanceInclude());
+
+    //A splay is a wall shot, so it never adds to the cave's length whatever the
+    //duplicate and surface flags say
+    shot.setDistanceIncluded(CurrentBlock->isDistanceInclude() && !CurrentBlock->isSplay());
 
     addShotToCurrentChunk(fromStation, toStation, shot);
 }
@@ -963,20 +1024,22 @@ void cwSurvexImporter::parseUnits(QString line) {
             }
 
             calibration->setDistanceUnit(unit);
-        } else if(type == "compass") {
-           addWarning("cavewhere cannot handle 'compass' units");
-        } else if(type == "bearing") {
-           addWarning("cavewhere cannot handle 'bearing' units");
-        } else if(type == "clino") {
-           addWarning("cavewhere cannot handle 'clino' units");
-        } else if(type == "gradient") {
-            addWarning("cavewhere cannot handle 'gradient' units");
+        } else if(type == "compass" || type == "bearing"
+                  || type == "clino" || type == "gradient"
+                  || type == "declination") {
+            //CaveWhere reads every angle in degrees, so a *units line saying so
+            //restates the default — TopoDroid writes one for every export
+            const bool inDegrees = compare(unitString, "degrees")
+                                   || compare(unitString, "degs")
+                                   || compare(unitString, "deg");
+            if(!inDegrees) {
+                addWarning(QString("cavewhere reads '%1' in degrees, ignoring %2")
+                               .arg(type, unitString));
+            }
         } else if(type == "counter") {
             addWarning("cavewhere cannot handle 'counter' units");
         } else if(type == "depth") {
             addWarning("cavewhere cannot handle 'depth' units");
-        } else if(type == "declination") {
-            addWarning("cavewhere cannot handle 'declination' units");
         } else if(type == "x") {
             addWarning("cavewhere cannot handle 'x' units");
         } else if(type == "y") {
@@ -1027,37 +1090,60 @@ void cwSurvexImporter::parseExport(QString line)
  *
  * This parses the flags
  *
+ * `not` applies to the flag that follows it and to nothing else, so each flag
+ * is tracked on its own and `*flags not splay` leaves an active `duplicate`
+ * alone.
+ *
  * Currently, surface isn't support.
  */
 void cwSurvexImporter::parseFlags(QString line)
 {
-    QStringList flags = line.split(QRegularExpression("\\s+"));
+    const QStringList flags = line.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
 
-    bool flagOperator = true;
-    bool excludeLength = false;
-    foreach(QString flag, flags) {
-        if(flag.compare("duplicate", Qt::CaseInsensitive) == 0) {
-            excludeLength = flagOperator;
-            flagOperator = true;
-
-            //Flip, becuause we're including
-            CurrentBlock->setIncludeDistance(!excludeLength);
-        } else if(flag.compare("splay", Qt::CaseInsensitive) == 0) {
-            excludeLength = flagOperator;
-            flagOperator = true;
-
-            //Flip, becuause we're including
-            CurrentBlock->setIncludeDistance(!excludeLength);
-        } else if(flag.compare("surface", Qt::CaseInsensitive) == 0) {
-            Errors.append(QString("Warning: *flags surface isn't support at this time, excluding shot lengths"));
-            excludeLength = flagOperator;
-            flagOperator = true;
-
-            //Flip, becuause we're including
-            CurrentBlock->setIncludeDistance(!excludeLength);
-        } else if(flag.compare("not", Qt::CaseInsensitive) == 0) {
-            flagOperator = false;
+    bool flagIsOn = true;
+    for(const QString& flag : flags) {
+        if(compare(flag, "not")) {
+            flagIsOn = false;
+            continue;
         }
+
+        if(compare(flag, "splay")) {
+            CurrentBlock->setSplay(flagIsOn);
+        } else if(compare(flag, "duplicate")) {
+            CurrentBlock->setIncludeDistance(!flagIsOn);
+        } else if(compare(flag, "surface")) {
+            if(flagIsOn) {
+                addWarning("*flags surface isn't support at this time, excluding shot lengths");
+            }
+            CurrentBlock->setIncludeDistance(!flagIsOn);
+        }
+
+        flagIsOn = true;
+    }
+}
+
+/**
+ * @brief cwSurvexImporter::parseAlias
+ * @param line
+ *
+ * Survex defines exactly one alias, `*alias station - ..`, which makes `-`
+ * another spelling of the anonymous station `..`; `*alias station -` drops it
+ * again. CaveWhere reads `-` as anonymous either way, so this only has to take
+ * the directive quietly and say something about spellings it doesn't know.
+ */
+void cwSurvexImporter::parseAlias(QString line)
+{
+    const QStringList parts = line.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
+    const QStringList arguments = parts.mid(1);
+
+    const bool stationAlias = !parts.isEmpty()
+                              && compare(parts.at(0), "station")
+                              && (arguments == QStringList{QStringLiteral("-")}
+                                  || arguments == QStringList{QStringLiteral("-"), QStringLiteral("..")});
+
+    if(!stationAlias) {
+        addWarning(QString("Ignoring \"*alias %1\", the only alias survex defines is "
+                           "\"*alias station - ..\"").arg(line));
     }
 }
 
@@ -1215,6 +1301,58 @@ void cwSurvexImporter::updateLRUDForCurrentBlock() {
 }
 
 /**
+ * @brief cwSurvexImporter::finishBlock
+ *
+ * Drains everything the block buffered while it parsed onto its chunks. Both
+ * *end and the end of the file go through here, so a file that never opens a
+ * *begin gets the same treatment on the root block.
+ */
+void cwSurvexImporter::finishBlock()
+{
+    updateLRUDForCurrentBlock();
+    updateSplaysForCurrentBlock();
+}
+
+/**
+ * @brief cwSurvexImporter::updateSplaysForCurrentBlock
+ *
+ * Hangs the splays buffered while the block parsed on the stations they were
+ * shot from.
+ *
+ * This waits until the block's chunks are complete because a station's splays
+ * can show up before the leg that introduces it — TopoDroid writes all of a3's
+ * wall shots ahead of the `a0 a4` centerline leg. A station that occurs more
+ * than once gets its splays on the first occurrence, which is the one the
+ * editor shows.
+ */
+void cwSurvexImporter::updateSplaysForCurrentBlock()
+{
+    cwSurvexNodeData* blockData = nodeData(CurrentBlock);
+
+    for(const cwStation& station : std::as_const(blockData->Splays)) {
+        const auto hangOnFirstOccurrence = [&]() {
+            for(cwSurveyChunk* chunk : std::as_const(CurrentBlock->Chunks)) {
+                const QList<int> indices = chunk->indicesOfStation(station.name());
+                if(!indices.isEmpty()) {
+                    chunk->setStationSplays(indices.first(), station.splays());
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        if(!hangOnFirstOccurrence()) {
+            addWarning(QString("Skipping %1 splay(s) at %2 because no shot in this block reaches "
+                               "that station")
+                           .arg(station.splayCount())
+                           .arg(station.name()));
+        }
+    }
+
+    blockData->Splays.clear();
+}
+
+/**
  * @brief cwSurvexImporter::updateStationLRUD
  * @param before - The station before station that occures in *data passage
  * @param station - The station with LRUDs
@@ -1227,8 +1365,18 @@ void cwSurvexImporter::updateStationLRUD(cwStation before, cwStation station, cw
 {
     Q_UNUSED(before);
 
+    //Copies just the four readings onto the chunk's own station, so everything
+    //else it already carries — its splays — survives the *data passage pass
+    auto withLRUD = [](cwStation existing, const cwStation& source) {
+        existing.setLeft(source.left());
+        existing.setRight(source.right());
+        existing.setUp(source.up());
+        existing.setDown(source.down());
+        return existing;
+    };
+
     //Update's the chunk's LRUD from station and after
-    auto setLRUD = [](
+    auto setLRUD = [withLRUD](
             const cwStation& station,
             const cwStation& after,
             cwSurveyChunk* chunk,
@@ -1240,8 +1388,8 @@ void cwSurvexImporter::updateStationLRUD(cwStation before, cwStation station, cw
         if(cwStation::canonicalKey(station.name()) == currentStationName
                 && cwStation::canonicalKey(after.name()) == afterStationName)
         {
-            chunk->setStation(station, stationIndex);
-            chunk->setStation(after, stationIndex + 1);
+            chunk->setStation(withLRUD(chunk->station(stationIndex), station), stationIndex);
+            chunk->setStation(withLRUD(chunk->station(stationIndex + 1), after), stationIndex + 1);
             return true;
         }
         return false;

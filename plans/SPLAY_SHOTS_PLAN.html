@@ -312,6 +312,52 @@ station never appears in a leg gets an import warning (an orphan splay has no an
       passage-data <code>-</code> LRUD unaffected; orphan splay warning.</li>
 </ul>
 
+<div class="callout"><b>Phase 2 status: done.</b> <code>a0-a34.svx</code> imports 171 splays onto
+  14 stations — all 174 splay legs in the file, less <code>a3</code>'s 3 (see below) — with one
+  warning. New file <code>testcases/test_cwSurvexImporterSplays.cpp</code>: 8 test cases,
+  backed by two datasets, <code>survex/splays.svx</code> (a trimmed copy of the TopoDroid
+  export) and <code>survex/splaysEdgeCases.svx</code> (one <code>*begin</code> block per odd
+  form). <code>[SplayShot]</code> 15 cases / 146 assertions; regression sweep green across
+  <code>[SurvexImport]</code>, <code>[SurvexExport]</code>, <code>[importSurvexToTrip]</code>,
+  <code>[fix]</code>, <code>[SurvexTitle]</code>, <code>[cwSurvexCS]</code>,
+  <code>[cwSurvex3DFileReader]</code>, <code>[cwWallsImporter]</code>, <code>[Compass]</code>,
+  <code>[cwSurveyChunk]</code>, <code>[cwTrip]</code>, <code>[cwSurveyEditorModel]</code>.</div>
+
+<h3>What came out different from the plan</h3>
+<ul>
+  <li><span class="tag fix">fix</span><b><code>*alias</code> keeps no state.</b> The plan gave it
+      per-block scoping like flags, but the state would never be read: <code>-</code> is
+      anonymous whether or not the alias was declared, because that's what legacy files rely on
+      and <code>*alias station - ..</code> is the only alias survex defines. So
+      <code>parseAlias</code> just accepts that one spelling quietly and warns about any other —
+      enough to stop the "Unknown survex keyword:alias" the file used to produce.</li>
+  <li><span class="tag fix">fix</span><b>The LRUD pass now merges instead of replacing.</b>
+      <code>updateStationLRUD</code> used to write whole <code>cwStation</code> values built in
+      <code>parsePassageData</code>, which would have dropped any splays already on those
+      stations. Rather than leave that as an ordering rule for every later phase to remember,
+      <code>setLRUD</code> copies only the four readings onto the chunk's own station, so the
+      station keeps everything else it carries. A test checks <code>a4</code> ends up with both
+      <code>left = 1.2</code> and its 3 splays. Both drains run from one
+      <code>finishBlock()</code>, called at <code>*end</code> and again at the end of
+      <code>importSurvex</code> for files that never open a <code>*begin</code>.</li>
+  <li><span class="tag fix">fix</span><b>The one warning on <code>a0-a34.svx</code> is real, not
+      spurious.</b> <code>a3</code> is an orphan in the ground-truth file: the leg that names it
+      lives in the previous survey file, so its 3 splays have nothing in this block to hang on.
+      The trimmed dataset keeps that shape rather than inventing a leg for it.</li>
+  <li><span class="tag fix">fix</span><b>Drive-by: <code>*units compass degrees</code> stopped
+      warning.</b> Getting to "zero spurious warnings" on the real file needed it — TopoDroid
+      writes <code>*units compass degrees</code> and <code>*units clino degrees</code> on every
+      export, and CaveWhere reads every angle in degrees already, so the line restates the
+      default. All five angle types (<code>compass</code>, <code>bearing</code>,
+      <code>clino</code>, <code>gradient</code>, <code>declination</code>) now stay quiet on
+      degrees and name the unit they're ignoring otherwise.</li>
+  <li>The splay buffer lives in <code>cwSurvexNodeData</code> next to <code>LRUDChunks</code>,
+      as a <code>QMap&lt;QString, cwStation&gt;</code> keyed by
+      <code>cwStation::canonicalKey</code> so <code>A4</code> and <code>a4</code> collect
+      together. Buffering into a <code>cwStation</code> reuses the name and splay accessors
+      Phase 1 already added, and keeps the as-written spelling for the warning text.</li>
+</ul>
+
 <!-- ==================================================================== -->
 <h2><span class="phase">Phase 3</span> — Survex export + cavern + .3d read-back</h2>
 

@@ -1,4 +1,5 @@
 #include "cwSurvexNodeData.h"
+#include "cwStation.h"
 
 cwSurvexNodeData::cwSurvexNodeData(QObject *parent) : QObject(parent)
 {
@@ -12,6 +13,22 @@ cwSurvexNodeData::cwSurvexNodeData(QObject *parent) : QObject(parent)
 void cwSurvexNodeData::addLRUDChunk()
 {
     LRUDChunks.append(cwSurvexLRUDChunk());
+}
+
+/**
+ * @brief cwSurvexNodeData::addSplay
+ * @param stationName - The named station the splay was shot from
+ * @param splay - The wall shot
+ *
+ * Buffers the splay until the block's chunks are complete
+ */
+void cwSurvexNodeData::addSplay(const QString &stationName, const cwShotMeasurement &splay)
+{
+    cwStation& station = Splays[cwStation::canonicalKey(stationName)];
+    if(!station.isValid()) {
+        station.setName(stationName);
+    }
+    station.addSplay(splay);
 }
 
 /**

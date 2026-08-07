@@ -21,35 +21,12 @@
 #include "cavewhere.pb.h"
 
 //Test includes
+#include "SplayFixtureHelper.h"
 #include "TestHelper.h"
 #include "cwSignalSpy.h"
 
 //Qt includes
 #include <QTemporaryDir>
-
-namespace {
-
-cwShotMeasurement makeSplay(const QString& distance,
-                            const QString& compass,
-                            const QString& clino)
-{
-    return cwShotMeasurement(cwDistanceReading(distance),
-                             cwCompassReading(compass),
-                             cwClinoReading(clino));
-}
-
-//The first three splays off a4 in the TopoDroid export used as ground truth
-//(~/Desktop/svx/a0-a34.svx)
-QList<cwShotMeasurement> a4Splays()
-{
-    return {
-        makeSplay("5.88", "124.1", "4.6"),
-        makeSplay("5.42", "118.8", "2.9"),
-        makeSplay("8.96", "150.9", "17.5")
-    };
-}
-
-}
 
 TEST_CASE("cwShotMeasurement compares all its readings", "[SplayShot]") {
     const cwShotMeasurement splay = makeSplay("5.88", "124.1", "4.6");
