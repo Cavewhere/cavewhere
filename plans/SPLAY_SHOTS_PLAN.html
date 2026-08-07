@@ -496,8 +496,10 @@ with <b>instanced screen-space quad expansion</b> — the standard Metal-era thi
       divide by <code>w</code> manually, compute the screen-space perpendicular from the two
       NDC points, extrude by <code>halfWidthPx * 2.0 / viewportSize * devicePixelRatio</code>,
       then multiply back by <code>w</code> so clipping and depth interpolation stay correct.
-      <code>devicePixelRatio</code> is already in <code>GlobalBlock</code>; viewport size joins
-      the line plot's own uniform block (per the global-uniform-scope rule, not GlobalBlock).</li>
+      <code>devicePixelRatio</code> and <code>viewportSize</code> are both already in
+      <code>GlobalBlock</code> (stamped per camera slot every frame; <code>PointCloud.vert</code>
+      reads them the same way), so the shader declares the fuller GlobalBlock layout and needs no
+      uniform block of its own.</li>
   <li>Widths and colors branch on the type bit to shader constants: centerline 2&nbsp;px,
       existing red <code>vec4(1,0,0,1)</code>; splays 1&nbsp;px, opaque light red
       <code>vec4(1.0, 0.6, 0.6, 1.0)</code>. No alpha blending — hard-edged quads plus the MSAA
@@ -505,26 +507,52 @@ with <b>instanced screen-space quad expansion</b> — the standard Metal-era thi
   <li>Caps/joins: extend each quad by <code>halfWidth</code> along its own direction (square
       caps) to fill pinhole gaps at shared stations; at 1–2&nbsp;px no miter/round joins are
       needed.</li>
-  <li>Depth: keep the existing <code>z -= 1e-4</code> bias; give splays a slightly larger bias
-      so the centerline wins z-fights at stations.</li>
-  <li><span class="tag new">new</span>Visibility becomes <b>per-segment</b> (one flag per
-      instance) instead of the duplicated per-vertex mask — the
-      <code>cwSceneVisibility</code> ranges now address segments, which simplifies the mask
-      upload in <code>updateVisibilityBuffer</code>.</li>
-  <li><span class="tag new">new</span>A <code>showSplays</code> toggle (default on) implemented
-      through that per-segment visibility — masking each trip's splay range — exposed as a
-      checkbox in the View page's line-plot settings. Visibility must go through
-      <code>cwSceneVisibility</code> so picking agrees with rendering.</li>
+  <li>Depth: keep the existing <code>z -= 1e-4</code> bias for the centerline; give splays a
+      slightly <b>smaller</b> bias (<code>0.5e-4</code>) so the centerline wins z-fights at
+      stations. (An earlier draft said "larger", which would have pulled splays in front —
+      the implemented direction matches the stated intent.)</li>
+  <li><span class="tag fix">fix</span><b>Deviation:</b> the <code>cwSceneVisibility</code> store
+      mask stays <b>per-vertex</b> — it is the intersecter's generic pick contract
+      (<code>vertexIsVisible(mask, index)</code>), and re-addressing it per segment would
+      special-case shared infrastructure. Instead <code>updateVisibilityBuffer</code> compresses
+      the per-vertex mask to one uint per instance (byte <code>2i</code>) at GPU upload, which
+      only runs on a toggle or a new solve.</li>
+  <li><span class="tag new">new</span>Splay visibility toggles through the <b>keyword system</b>,
+      not a <code>showSplays</code> property: each trip with splay geometry gets a second
+      <code>cwKeywordItem</code> whose model carries <code>Type="Splays"</code>
+      (<code>cwTrip::splaysKeywordModel()</code>, mirroring <code>linePlotKeywordModel()</code>)
+      and extends the trip's keywords. Its proxy targets the trip's splay tail while the
+      centerline item targets only the centerline prefix — <b>disjoint ranges</b>, so the two
+      toggles compose with no AND logic, and trip-level filters hide both. Both proxies push
+      through <code>cwSceneVisibility</code> so picking agrees with rendering.</li>
 </ul>
 
 <h3>Tests / verification</h3>
 <ul>
   <li><span class="tag test">test</span>Geometry unit test: vertex counts and ranges for a
-      known two-trip fixture with splays; toggling <code>showSplays</code> flips exactly the
-      splay ranges' bytes.</li>
+      known two-trip fixture with splays; toggling the <code>Type="Splays"</code> item's proxy
+      flips exactly the splay ranges' bytes.</li>
   <li>Render an offscreen PNG of the fixture (headless-output convention) so the result can be
       eyeballed without launching the app.</li>
 </ul>
+
+<div class="callout"><b>Phase 4 status: done.</b> Geometry emits each trip's splays at the tail
+  of its contiguous span (<code>Result::tripSplayVertexRanges</code>;
+  <code>tripVertexRanges</code> = full span), attributed to the first trip holding an occurrence
+  of the station <i>with</i> splays (fallback: first trip holding the station).
+  <code>cwRHILinePlot</code> rewritten to instanced quads: three per-instance buffers (endpoints
+  byte-for-byte from the point pairs, uint type, uint visibility), with viewport size read from
+  the shared <code>GlobalBlock</code>; <code>cwSurveyChunk::stationSplaysChanged</code> now
+  re-solves the plot. Keyword items per trip: centerline + Splays over disjoint ranges (the
+  Splays item exists only while the trip has splay geometry). Tests: <code>[LinePlotManager]</code>
+  Splays-keyword case (item lifecycle, tail-exact masking, re-solve persistence) — 1449
+  assertions / 54 cases green across the line-plot tags — plus
+  <code>test-qml/tst_OffscreenRenderSplays.qml</code>, a GPU-backed offscreen PNG check that both
+  the 2&nbsp;px red centerline and 1&nbsp;px light-red splays reach the output
+  (<code>OffscreenRenderTester::addSplaysToFirstStation</code> /
+  <code>colorFraction</code>). <b>Gotcha:</b> a 1&nbsp;px axis-aligned splay at
+  <code>devicePixelRatio</code> 1 can land exactly on pixel boundaries and rasterize nothing —
+  the QML fixture uses 45° splays for this reason; real caves at Retina dpr are unaffected.</div>
 
 <!-- ==================================================================== -->
 <h2><span class="phase">Phase 5</span> — SurveyEditor display</h2>
@@ -585,9 +613,11 @@ rows (distance, compass, clino) under the station.</p>
 <h2>Open items to confirm during implementation</h2>
 <ul>
   <li>Final tuning of the splay light-red <code>vec4(1.0, 0.6, 0.6, 1.0)</code> against the
-      2&nbsp;px centerline (Phase 4 — will show a PNG).</li>
-  <li>Where the <code>showSplays</code> toggle persists (per-project vs app settings), decided
-      when wiring the View page checkbox.</li>
+      2&nbsp;px centerline — the Phase 4 offscreen PNG shows the pair reads clearly; revisit
+      only if real-cave feedback asks for it.</li>
+  <li><s>Where the <code>showSplays</code> toggle persists</s> — superseded: visibility is a
+      per-trip <code>Type="Splays"</code> keyword item, so it follows keyword-filter state
+      rather than a settings toggle.</li>
   <li><strong>Phase 2 constraint from the Phase 1 review:</strong> <code>SplayShot</code> has no
       backsight field, but the in-memory <code>cwShotMeasurement</code> still carries
       <code>direction</code>. A splay built with <code>Direction::Back</code> would work in memory

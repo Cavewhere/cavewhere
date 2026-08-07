@@ -203,12 +203,15 @@ struct cwLinePlotTask::LinePlotWorker {
             return result;
         }
         updateStationPositionForCaves(parsed.lookup, result);
-        updateSplayTipsForCaves(parsed.splayTips, result);
+        const QHash<QUuid, cwSplayTipsByStation> caveSplayTips =
+            splitSplayTipsByCave(parsed.splayTips);
+        updateSplayTipsForCaves(caveSplayTips, result);
         result.setRegionNetwork(std::move(parsed.network));
 
-        cwLinePlotGeometry::Result geometry = generateGeometry();
+        cwLinePlotGeometry::Result geometry = generateGeometry(caveSplayTips);
         result.setPositions(geometry.points);
         result.setTripVertexRanges(geometry.tripVertexRanges);
+        result.setTripSplayVertexRanges(geometry.tripSplayVertexRanges);
         result.setTripUuids(geometry.tripUuids);
 
         updateDepthLength(geometry.cavesLengthAndDepths, result);
@@ -329,10 +332,11 @@ private:
         return true;
     }
 
-    cwLinePlotGeometry::Result generateGeometry()
+    cwLinePlotGeometry::Result generateGeometry(
+        const QHash<QUuid, cwSplayTipsByStation>& caveSplayTips)
     {
         const Monad::Result<cwLinePlotGeometry::Result> result =
-            cwLinePlotGeometry::generate(Region.data());
+            cwLinePlotGeometry::generate(Region.data(), caveSplayTips);
         if (result.hasError()) {
             return cwLinePlotGeometry::Result();
         }
@@ -502,10 +506,9 @@ private:
     // Splays move exactly when the station they hang off does, so they ride out
     // on the caves the solve already had something to say about. A cave with no
     // tips keeps the empty hash it was built with.
-    void updateSplayTipsForCaves(const cwSplayTipsByStation& splayTips,
+    void updateSplayTipsForCaves(const QHash<QUuid, cwSplayTipsByStation>& caveSplayTips,
                                  cwLinePlotTask::LinePlotResultData& result)
     {
-        const QHash<QUuid, cwSplayTipsByStation> caveSplayTips = splitSplayTipsByCave(splayTips);
         for (auto iter = caveSplayTips.constBegin(); iter != caveSplayTips.constEnd(); ++iter) {
             const auto it = result.Caves.find(iter.key());
             if (it != result.Caves.end()) {

@@ -11,6 +11,7 @@
 #include <QHash>
 #include <QLineF>
 #include <QMap>
+#include <QSet>
 #include <QString>
 
 #include <limits>
@@ -30,10 +31,52 @@ QHash<QString, QVector3D> caveStationPositions(const cwCaveData& cave)
     return out;
 }
 
+// Which running trip id owns each splay-tipped station's segments. Tips are
+// keyed per cave-level station name while splays are stored per station
+// occurrence, so a tie-in name shared between trips has one merged bucket;
+// it goes to the first trip holding an occurrence with splays, falling back
+// to the first trip holding the station at all (tips from an external .svx
+// include match no stored splays).
+QHash<QString, int> splayOwnerByStation(const cwCaveData& cave,
+                                        const cwSplayTipsByStation& tips,
+                                        int firstRunningTripId)
+{
+    QHash<QString, int> owner;
+    if (tips.isEmpty()) {
+        // The common case — a cave with no splays skips the station walk.
+        return owner;
+    }
+
+    QSet<QString> ownerHasSplays;
+    int runningTripId = firstRunningTripId;
+    for (const cwTripData& trip : cave.trips) {
+        for (const cwSurveyChunkData& chunk : trip.chunks) {
+            for (const cwStation& station : chunk.stations) {
+                const QString key = cwStation::canonicalKey(station.name());
+                if (!tips.contains(key)) {
+                    continue;
+                }
+                if (!owner.contains(key)) {
+                    owner.insert(key, runningTripId);
+                }
+                if (station.splayCount() > 0 && !ownerHasSplays.contains(key)) {
+                    // The first splays-bearing occurrence wins over the plain
+                    // first occurrence.
+                    owner.insert(key, runningTripId);
+                    ownerHasSplays.insert(key);
+                }
+            }
+        }
+        runningTripId++;
+    }
+    return owner;
+}
+
 } // namespace
 
 Monad::Result<cwLinePlotGeometry::Result>
-cwLinePlotGeometry::generate(const cwCavingRegionData& region)
+cwLinePlotGeometry::generate(const cwCavingRegionData& region,
+                             const QHash<QUuid, cwSplayTipsByStation>& splayTipsByCave)
 {
     Result result;
 
@@ -44,6 +87,11 @@ cwLinePlotGeometry::generate(const cwCavingRegionData& region)
         const cwCaveData& cave = region.caves.at(caveIndex);
         const QHash<QString, QVector3D> stationPositions = caveStationPositions(cave);
 
+        const cwSplayTipsByStation caveSplayTips = splayTipsByCave.value(cave.id);
+        const QHash<QString, int> splayOwners =
+            splayOwnerByStation(cave, caveSplayTips, result.tripUuids.size());
+        QSet<QString> splaysEmitted;
+
         double minDepth = std::numeric_limits<double>::max();
         double maxDepth = -std::numeric_limits<double>::max();
         double length = 0.0;
@@ -53,8 +101,10 @@ cwLinePlotGeometry::generate(const cwCavingRegionData& region)
             const cwTripData& trip = cave.trips.at(tripIndex);
 
             // Every trip gets a running id (== index into tripUuids /
-            // tripVertexRanges) in iteration order, even ones that emit no
-            // geometry, so both tables stay a dense total-trip-count list.
+            // tripVertexRanges / tripSplayVertexRanges) in iteration order,
+            // even ones that emit no geometry, so all three tables stay a
+            // dense total-trip-count list.
+            const int runningTripId = result.tripUuids.size();
             result.tripUuids.append(trip.id);
             const int vertexStart = result.points.size();
 
@@ -121,6 +171,36 @@ cwLinePlotGeometry::generate(const cwCavingRegionData& region)
                 }
             }
 
+            // Splay segments ride at the tail of the trip's span, so the full
+            // trip range covers them and the splay sub-range can be masked on
+            // its own. Walk the trip's stations in survey order so the tips
+            // land deterministically; splays never touch length/depth.
+            const int splayStart = result.points.size();
+            if (!splayOwners.isEmpty()) {
+                for (const cwSurveyChunkData& chunk : trip.chunks) {
+                    for (const cwStation& station : chunk.stations) {
+                        const QString key = cwStation::canonicalKey(station.name());
+                        if (splayOwners.value(key, -1) != runningTripId
+                            || splaysEmitted.contains(key)) {
+                            continue;
+                        }
+                        splaysEmitted.insert(key);
+
+                        QVector3D stationPoint;
+                        if (!resolve(station.name(), &stationPoint)) {
+                            continue;
+                        }
+                        const QList<QVector3D>& tips = caveSplayTips.value(key);
+                        for (const QVector3D& tip : tips) {
+                            result.points.append(stationPoint);
+                            result.points.append(tip);
+                        }
+                    }
+                }
+            }
+            result.tripSplayVertexRanges.append(
+                VertexRange{splayStart, int(result.points.size()) - splayStart});
+
             const int vertexCount = result.points.size() - vertexStart;
             result.tripVertexRanges.append(VertexRange{vertexStart, vertexCount});
         }
@@ -134,6 +214,7 @@ cwLinePlotGeometry::generate(const cwCavingRegionData& region)
 
     result.points.squeeze();
     result.tripVertexRanges.squeeze();
+    result.tripSplayVertexRanges.squeeze();
     result.tripUuids.squeeze();
 
     return Monad::Result<Result>(std::move(result));

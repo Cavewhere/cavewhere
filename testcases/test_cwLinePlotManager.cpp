@@ -10,6 +10,7 @@
 #include "LoadProjectHelper.h"
 #include "BoulderFixtureHelper.h"
 #include "FixStationFixtureHelper.h"
+#include "SplayFixtureHelper.h"
 #include <catch2/catch_approx.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
@@ -41,6 +42,7 @@ using Catch::Matchers::WithinAbs;
 #include "cwKeywordModel.h"
 #include "cwKeyword.h"
 #include "cwLinePlotTripVisibility.h"
+#include "cwShotMeasurement.h"
 
 //Our includes
 #include "TestHelper.h"
@@ -1408,6 +1410,136 @@ TEST_CASE("cwLinePlotManager registers per-trip centerline keyword visibility",
         CHECK(keywordModel.rowCount() == 1);
         // Only trip1 remains: one shot (a1->a2) = 2 vertices.
         CHECK(linePlot.visibility().size() == 2);
+    }
+}
+
+TEST_CASE("cwLinePlotManager registers a Splays keyword item per trip with splays",
+          "[LinePlotManager][keyword][SplayShot]")
+{
+    // Two trips sharing the tie-in station a2: trip1 a1->a2 (with two splays
+    // at a2), trip2 a2->a3 (no splays). The splays belong to trip1 — the first
+    // trip holding an a2 occurrence with splays.
+    cwCavingRegion region;
+
+    cwCave* cave = new cwCave();
+    cave->setName(QStringLiteral("Cave 1"));
+    region.addCave(cave);
+
+    auto makeShot = [](const QString& dist, const QString& compass, const QString& clino) {
+        cwShot s;
+        s.setDistance(cwDistanceReading(dist));
+        s.setCompass(cwCompassReading(compass));
+        s.setClino(cwClinoReading(clino));
+        return s;
+    };
+    cwTrip* trip1 = new cwTrip();
+    trip1->setName(QStringLiteral("Trip A"));
+    trip1->calibrations()->setAutoDeclination(false);
+    cwSurveyChunk* chunk1 = new cwSurveyChunk();
+    trip1->addChunk(chunk1);
+    chunk1->appendShot(cwStation("a1"), cwStation("a2"), makeShot("10.0", "0.0", "0.0"));
+    chunk1->setStationSplays(1, {makeSplay("5.0", "90.0", "0.0"),
+                                 makeSplay("3.0", "270.0", "0.0")});
+    cave->addTrip(trip1);
+
+    cwTrip* trip2 = new cwTrip();
+    trip2->setName(QStringLiteral("Trip B"));
+    trip2->calibrations()->setAutoDeclination(false);
+    cwSurveyChunk* chunk2 = new cwSurveyChunk();
+    trip2->addChunk(chunk2);
+    chunk2->appendShot(cwStation("a2"), cwStation("a3"), makeShot("10.0", "90.0", "0.0"));
+    cave->addTrip(trip2);
+
+    cwKeywordItemModel keywordModel;
+    cwRenderLinePlot linePlot;
+
+    auto plotManager = std::make_unique<cwLinePlotManager>();
+    plotManager->setKeywordItemModel(&keywordModel);
+    plotManager->setRenderLinePlot(&linePlot);
+    plotManager->setRegion(&region);
+    plotManager->waitToFinish();
+
+    auto hiddenIndexes = [&]() {
+        QList<int> indexes;
+        const QVector<quint8> visibility = linePlot.visibility();
+        for (int i = 0; i < visibility.size(); ++i) {
+            if (visibility.at(i) == 0) { indexes.append(i); }
+        }
+        return indexes;
+    };
+
+    const cwKeyword splaysType(cwKeywordModel::TypeKey, QStringLiteral("Splays"));
+    const cwKeyword linePlotType(cwKeywordModel::TypeKey, QStringLiteral("Line Plot"));
+
+    auto proxyForTrip = [&](cwTrip* trip, const cwKeyword& type) -> cwLinePlotTripVisibility* {
+        for (int i = 0; i < keywordModel.rowCount(); ++i) {
+            auto* item = keywordModel.item(i);
+            auto* proxy = qobject_cast<cwLinePlotTripVisibility*>(item->object());
+            if (proxy && proxy->trip() == trip
+                && item->keywordModel()->keywords().contains(type)) {
+                return proxy;
+            }
+        }
+        return nullptr;
+    };
+
+    // trip1: a1->a2 = 2 centerline vertices + 2 splays * 2 = 4 splay vertices,
+    // then trip2: a2->a3 = 2 centerline vertices.
+    REQUIRE(linePlot.points().size() == 8);
+
+    SECTION("only the trip with splays gets a Splays item") {
+        CHECK(keywordModel.rowCount() == 3);
+        CHECK(proxyForTrip(trip1, linePlotType) != nullptr);
+        CHECK(proxyForTrip(trip2, linePlotType) != nullptr);
+        CHECK(proxyForTrip(trip1, splaysType) != nullptr);
+        CHECK(proxyForTrip(trip2, splaysType) == nullptr);
+    }
+
+    SECTION("the Splays item inherits the trip's keywords") {
+        // Extension of the trip's keyword model, so trip-level filters (Trip /
+        // Year / Date / Cave / Caver) cover the splays too.
+        for (int i = 0; i < keywordModel.rowCount(); ++i) {
+            auto* item = keywordModel.item(i);
+            auto* proxy = qobject_cast<cwLinePlotTripVisibility*>(item->object());
+            if (proxy && proxy->trip() == trip1
+                && item->keywordModel()->keywords().contains(splaysType)) {
+                CHECK(item->keywordModel()->keywords().contains(
+                    cwKeyword(cwKeywordModel::TripNameKey, QStringLiteral("Trip A"))));
+            }
+        }
+    }
+
+    SECTION("hiding the Splays item masks exactly the splay tail") {
+        auto* splaysProxy = proxyForTrip(trip1, splaysType);
+        REQUIRE(splaysProxy != nullptr);
+
+        splaysProxy->setVisible(false);
+        CHECK(hiddenIndexes() == QList<int>({2, 3, 4, 5}));
+
+        SECTION("the hidden splays survive a re-solve") {
+            cave->setName(QStringLiteral("Renamed Cave"));
+            plotManager->waitToFinish();
+
+            CHECK(linePlot.visibility().size() == 8);
+            CHECK(hiddenIndexes() == QList<int>({2, 3, 4, 5}));
+        }
+    }
+
+    SECTION("hiding the centerline item leaves the splays visible") {
+        auto* centerlineProxy = proxyForTrip(trip1, linePlotType);
+        REQUIRE(centerlineProxy != nullptr);
+
+        centerlineProxy->setVisible(false);
+        CHECK(hiddenIndexes() == QList<int>({0, 1}));
+    }
+
+    SECTION("clearing the splays re-solves and drops the Splays item") {
+        chunk1->setStationSplays(1, {});
+        plotManager->waitToFinish();
+
+        CHECK(linePlot.points().size() == 4);
+        CHECK(keywordModel.rowCount() == 2);
+        CHECK(proxyForTrip(trip1, splaysType) == nullptr);
     }
 }
 

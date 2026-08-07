@@ -15,6 +15,7 @@
 // Our includes
 #include "cwRenderObject.h"
 #include "cwTracked.h"
+#include "cwLinePlotGeometry.h"
 
 // Qt includes
 #include <QVector3D>
@@ -31,10 +32,14 @@ class cwRenderLinePlot : public cwRenderObject
 public:
     explicit cwRenderLinePlot(QObject *parent = nullptr);
 
-    // Points are a non-indexed line list: a drawn shot owns vertices [2i, 2i+1].
-    // New geometry resets visibility to all-visible, one byte per vertex; the
-    // owner re-applies any hidden ranges (cwLinePlotManager::reconcileTripKeywordItems).
-    void setGeometry(QVector<QVector3D> pointData);
+    // Points are a non-indexed line list: a drawn segment owns vertices
+    // [2i, 2i+1]. splayRanges marks the vertex spans holding splay segments
+    // (the tail of each trip's span, see cwLinePlotGeometry); segments outside
+    // them are centerline. New geometry resets visibility to all-visible, one
+    // byte per vertex; the owner re-applies any hidden ranges
+    // (cwLinePlotManager::reconcileTripKeywordItems).
+    void setGeometry(QVector<QVector3D> pointData,
+                     QVector<cwLinePlotGeometry::VertexRange> splayRanges = {});
 
     // Per-vertex visibility, one byte per vertex (255 = visible, 0 = hidden;
     // both vertices of a shot share the value). setRangeVisible flips a
@@ -80,6 +85,11 @@ private:
 
         QVector<QVector3D> points;
 
+        // One entry per segment (points.size() / 2): kCenterlineSegment or
+        // kSplaySegment. Uploaded as the per-instance type attribute that
+        // selects line width, color, and depth bias in the shader.
+        QVector<quint32> segmentTypes;
+
         // This is needed for cwTracked to work, all ways changes
         bool operator!=(const Data& other) const { return true; }
     };
@@ -102,6 +112,11 @@ public:
     // the intersecter and the visibility store. Shared with cwRHILinePlot's
     // snapshot reads.
     static constexpr uint64_t kSubId = 0;
+
+    // Per-segment type values for Data::segmentTypes; the shader branches on
+    // zero vs non-zero.
+    static constexpr quint32 kCenterlineSegment = 0;
+    static constexpr quint32 kSplaySegment = 1;
 };
 
 inline float cwRenderLinePlot::maxZValue() const

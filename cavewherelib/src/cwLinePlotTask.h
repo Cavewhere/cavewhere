@@ -137,16 +137,19 @@ public:
 
         void setPositions(QVector<QVector3D> positions);
         void setTripVertexRanges(QVector<cwLinePlotGeometry::VertexRange> tripVertexRanges);
+        void setTripSplayVertexRanges(QVector<cwLinePlotGeometry::VertexRange> ranges);
         void setTripUuids(QVector<QUuid> tripUuids);
 
         QVector<QVector3D> stationPositions() const;
 
-        // Per-trip vertex span in stationPositions and the running-id -> stable
-        // cwTrip::id mapping (both running-id indexed). Only value-type data
-        // crosses the worker boundary; the manager resolves each UUID to a live
-        // cwTrip* and binds its visibility proxy to the matching vertex range.
-        // See cwLinePlotGeometry for how the ranges are assigned.
+        // Per-trip vertex span in stationPositions (with the splay sub-span at
+        // its tail) and the running-id -> stable cwTrip::id mapping (all
+        // running-id indexed). Only value-type data crosses the worker
+        // boundary; the manager resolves each UUID to a live cwTrip* and binds
+        // its visibility proxy to the matching vertex range. See
+        // cwLinePlotGeometry for how the ranges are assigned.
         QVector<cwLinePlotGeometry::VertexRange> tripVertexRanges() const;
+        QVector<cwLinePlotGeometry::VertexRange> tripSplayVertexRanges() const;
         QVector<QUuid> tripUuids() const;
 
     public:
@@ -159,6 +162,7 @@ public:
         QSet<QUuid> Scraps;
         QVector<QVector3D> StationPositions;
         QVector<cwLinePlotGeometry::VertexRange> TripVertexRanges;
+        QVector<cwLinePlotGeometry::VertexRange> TripSplayVertexRanges;
         QVector<QUuid> TripUuids;
         cwSurveyNetwork RegionNetwork;
         bool RegionNetworkChanged = false;
@@ -278,6 +282,11 @@ inline void cwLinePlotTask::LinePlotResultData::setTripVertexRanges(
     TripVertexRanges = std::move(tripVertexRanges);
 }
 
+inline void cwLinePlotTask::LinePlotResultData::setTripSplayVertexRanges(
+    QVector<cwLinePlotGeometry::VertexRange> ranges) {
+    TripSplayVertexRanges = std::move(ranges);
+}
+
 inline void cwLinePlotTask::LinePlotResultData::setTripUuids(QVector<QUuid> tripUuids) {
     TripUuids = std::move(tripUuids);
 }
@@ -285,6 +294,11 @@ inline void cwLinePlotTask::LinePlotResultData::setTripUuids(QVector<QUuid> trip
 inline QVector<cwLinePlotGeometry::VertexRange>
 cwLinePlotTask::LinePlotResultData::tripVertexRanges() const {
     return TripVertexRanges;
+}
+
+inline QVector<cwLinePlotGeometry::VertexRange>
+cwLinePlotTask::LinePlotResultData::tripSplayVertexRanges() const {
+    return TripSplayVertexRanges;
 }
 
 inline QVector<QUuid> cwLinePlotTask::LinePlotResultData::tripUuids() const {

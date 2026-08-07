@@ -37,6 +37,17 @@ public:
     // the type into this header). Returns true on success.
     Q_INVOKABLE bool addSyntheticPointCloud(QObject* rootData);
 
+    // Add a handful of splay shots to the first station of the region's first
+    // trip and block until the line plot re-solves, so the splay segments are
+    // in the render geometry. rootData is the cwRootData singleton. Returns
+    // true on success.
+    Q_INVOKABLE bool addSplaysToFirstStation(QObject* rootData);
+
+    // Fraction of the image's pixels within @a tolerance (per channel) of
+    // @a color, for asserting that a specific draw color reached the output.
+    Q_INVOKABLE double colorFraction(const QString& path, const QColor& color,
+                                     int tolerance) const;
+
     // Number of visible point clouds owned by @a sceneManager's LAZ scene node
     // (cwRegionSceneManager as QObject*). Lets a test assert the "exactly one cloud"
     // precondition the framed-render helpers rely on, rather than trusting an
