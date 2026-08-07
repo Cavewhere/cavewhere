@@ -590,6 +590,80 @@ rows (distance, compass, clino) under the station.</p>
       <code>tryVerify</code>s the rows appear.</li>
 </ul>
 
+<div class="callout"><b>Phase 5 status: done.</b> New file
+  <code>testcases/test_cwSurveyEditorModelSplays.cpp</code> (8 cases) plus
+  <code>test-qml/tst_SplayRows.qml</code> (3 cases, offscreen). <code>[SplayShot]</code> 23 cases
+  / 251 assertions; <code>[cwSurveyEditorModel]</code>, <code>[cwSurveyChunk]</code> and
+  <code>[cwTrip]</code> green, as are <code>tst_SurveyDataEntry</code>,
+  <code>tst_MarkStationFixed</code> and <code>tst_TripSync</code>.</div>
+
+<h3>What came out different from the plan</h3>
+<ul>
+  <li>The model tests live in their own file rather than in
+      <code>test_cwSurveyEditorModel.cpp</code>, which is already long.</li>
+  <li>Each test reads its row count through a fixture helper that also checks the ranges the
+      model announced through <code>beginInsertRows</code>/<code>beginRemoveRows</code> add up to
+      the rows it really gained or lost. <code>QAbstractItemModelTester</code> would have done
+      that, but it reads <code>Qt::DisplayRole</code>, which this model numbers as
+      <code>RowIndexRole</code> — renumbering <code>Role</code> to start at
+      <code>Qt::UserRole</code> is a worthwhile separate change.</li>
+  <li>The expansion state remembers how many rows each open cluster is showing, not just that it
+      is open. The chunk reports only which station's splays changed, so the remembered count is
+      what turns a splay appearing or disappearing into an insert or a remove.</li>
+  <li>A shot row is normally zero-height and draws its boxes straddling the row boundary. Under
+      an open cluster that would cover the last splay, so the shot row takes half a row of height
+      and drops its boxes below the cluster instead.</li>
+  <li><code>StationSplaysExpandedRole</code> answers for shot rows too — a shot hangs under
+      station <i>i</i>, so it reports that station's cluster. That is what drives the offset
+      above without the delegate having to look at its neighbors.</li>
+  <li>A QML test can't build a splay (<code>cwShotMeasurement</code> isn't a QML type), so
+      <code>TestHelper</code> gained <code>addStationSplay</code> rather than production code
+      gaining an invokable.</li>
+</ul>
+
+<h3>Cleanup pass</h3>
+<ul>
+  <li>The survey table's entry path — fresh project, cave/trip/chunk, trip page, the
+      <code>rootId-&gt;tripPage-&gt;surveyEditor-&gt;view</code> chain, station naming — moved to
+      <code>test-qml/SurveyTableTestHelper.qml</code>, which <code>tst_SplayRows</code> and
+      <code>tst_MarkStationFixed</code> now share. An <code>objectName</code> added to an
+      intermediate item breaks one chain instead of two.</li>
+  <li><code>cwSurveyChunk</code> gained <code>stationSplayCount</code> and
+      <code>stationSplayAt</code>. <code>stationSplays</code> returns the list by value, and
+      <code>data()</code> was calling it once per splay role just to index it.</li>
+  <li><code>expandedSplays</code> answers from one branch while nothing is expanded anywhere,
+      which is the usual state and is on <code>data()</code>'s path for every row of every
+      chunk.</li>
+  <li>The chip lives in a <code>Loader</code> keyed on the splay count, so the stations without
+      splays — nearly all of them — stop laying out chip text they will never show.</li>
+  <li>One <code>shotBoxShift</code> property drives both the shot row's height and its boxes'
+      <code>y</code>. They were two ternaries 290 lines apart that had to keep summing to
+      zero.</li>
+  <li>The chip keeps a <code>▶</code> glyph rather than the <code>chevron-right.svg</code>
+      the rest of the app uses. <code>Icon</code> colorizes through a <code>MultiEffect</code>
+      layer, which costs an offscreen texture in every recycled row and renders as nothing in
+      offscreen tests — the glyph tracks <code>Theme.splayText</code> in both modes for free.</li>
+  <li>The QML test reads the a4 readings from <code>SplayFixtureHelper.h</code> through
+      <code>TestHelper::a4SplayReadings</code>, so the numbers have one home.</li>
+</ul>
+
+<h3>Left for later</h3>
+<ul>
+  <li><code>toModelRow</code> and <code>toRowIndex</code> are independent inverses, and each new
+      row type means editing both. A single owner of a chunk's row order would make the next
+      interposed row (editable splays, leads, per-station comments) one edit rather than
+      several. <code>firstVirtualRow</code> folded away the one formula that was spelled out
+      twice.</li>
+  <li><code>StationSplaysExpandedRole</code> is a feature-named role that a shot row answers on
+      behalf of the station above it. A role named for the geometry — how far the boxes may
+      reach into the row above — would survive a second kind of interposed row without another
+      boolean per feature.</li>
+  <li>The expansion map is keyed by station index, which is what forces
+      <code>shiftExpandedSplays</code> and the force-collapse in <code>aboutToRemove</code>.
+      <code>cwStation</code> carries a stable <code>QUuid</code>; keying by it would delete both,
+      at the cost of a scan in <code>splayRowsBefore</code>.</li>
+</ul>
+
 <!-- ==================================================================== -->
 <h2><span class="phase">Phase 6</span> — Compass export (deferred tail)</h2>
 <ul>

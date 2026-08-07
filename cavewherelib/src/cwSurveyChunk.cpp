@@ -622,6 +622,29 @@ QList<cwShotMeasurement> cwSurveyChunk::stationSplays(int index) const
 }
 
 /**
+ * @brief cwSurveyChunk::stationSplayCount
+ * @param index - The index of the station
+ * @return How many splays the station carries, or zero if the index is out of range
+ */
+int cwSurveyChunk::stationSplayCount(int index) const
+{
+    if(!stationIndexCheck(index)) { return 0; }
+    return d.stations.at(index).splayCount();
+}
+
+/**
+ * @brief cwSurveyChunk::stationSplayAt
+ * @param index - The index of the station
+ * @param splayIndex - The index of the splay, which must be in range
+ * @return The splay, by reference
+ */
+const cwShotMeasurement& cwSurveyChunk::stationSplayAt(int index, int splayIndex) const
+{
+    Q_ASSERT(stationIndexCheck(index));
+    return d.stations.at(index).splayAt(splayIndex);
+}
+
+/**
  * @brief cwSurveyChunk::setStationSplays
  * @param index - The index of the station
  * @param splays - The station's new splays

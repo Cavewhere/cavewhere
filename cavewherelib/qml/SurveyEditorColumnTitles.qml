@@ -29,6 +29,9 @@ Item {
     property real dataRowHalfHeight: dataRowHeight * 0.5
     property real shotRowY: -dataRowHeight * 0.5
 
+    //Splay rows are read-only, so they sit tighter than the boxes above them
+    property real splayRowHeight: 24
+
     //For displaying chunk error message correctly
     property alias chunk: chunkErrorId.chunk
     required property int listViewIndex
@@ -102,6 +105,12 @@ Item {
         TitleLabel {
             id: dLabelId
             text: "D"
+            Layout.fillWidth: true
+        }
+
+        TitleLabel {
+            id: splaysLabelId
+            text: "Splays"
             Layout.fillWidth: true
         }
     }

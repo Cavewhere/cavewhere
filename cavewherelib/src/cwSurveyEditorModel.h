@@ -10,6 +10,8 @@
 
 //Qt includes
 #include <QAbstractListModel>
+#include <QHash>
+#include <QMap>
 #include <QPointer>
 #include <QPersistentModelIndex>
 #include <QQmlEngine>
@@ -73,6 +75,20 @@ public:
         ShotClinoRole,
         ShotBackClinoRole,
         ShotCalibrationRole,
+
+        //Splay Data Roles
+
+        //On a station row, how many splays it carries and whether its cluster is
+        //open. On a shot row, StationSplaysExpandedRole answers for the station
+        //above it, which is what tells the shot's boxes to step out of the
+        //cluster's way
+        StationSplayCountRole,
+        StationSplaysExpandedRole,
+
+        //Read-only readings of one splay, as they were written
+        SplayDistanceRole,
+        SplayCompassRole,
+        SplayClinoRole,
     };
     Q_ENUM(Role)
 
@@ -123,6 +139,8 @@ public:
 
     Q_INVOKABLE int toModelRow(const cwSurveyEditorRowIndex& rowIndex) const;
 
+    Q_INVOKABLE void toggleSplaysExpanded(const cwSurveyEditorRowIndex& rowIndex);
+
     Q_INVOKABLE cwSurveyEditorRowIndex rowIndex(cwSurveyChunk *chunk, int chunkIndex, cwSurveyEditorRowIndex::RowType type) const
     {
         return cwSurveyEditorRowIndex(chunk, chunkIndex, type);
@@ -133,6 +151,14 @@ private:
         cwSurveyChunk* chunk = nullptr;
         int firstIndex = -1;
     };
+
+    //!< The splay clusters the user has opened, and how many rows each one is
+    //!< currently showing. A station is expanded exactly when it has a key here.
+    //!< The row count is remembered rather than re-read from the chunk so that a
+    //!< splay appearing or disappearing can be turned into an insert or a remove.
+    using ExpandedSplays = QMap<int, int>;
+
+    QHash<const cwSurveyChunk*, ExpandedSplays> m_expandedSplays;
 
     QPointer<cwTrip> m_trip; //!<
     QPointer<cwFixStationModel> m_fixStations; //!< The trip's cave's fixes, for StationFixedRole
@@ -163,6 +189,14 @@ private:
     int stationCount(const cwSurveyChunk* chunk) const;
     int shotCount(const cwSurveyChunk* chunk) const;
     int chunkRowCount(const cwSurveyChunk* chunk) const;
+    const ExpandedSplays* expandedSplays(const cwSurveyChunk* chunk) const;
+    int splayRowCount(const cwSurveyChunk* chunk, int stationIndex) const;
+    int splayRowsBefore(const cwSurveyChunk* chunk, int stationIndex) const;
+    int splayRowsInChunk(const cwSurveyChunk* chunk) const;
+    int firstVirtualRow(cwSurveyChunk* chunk) const;
+    void collapseSplays(cwSurveyChunk* chunk, int stationIndex);
+    void reconcileSplayRows(cwSurveyChunk* chunk, int stationIndex);
+    void shiftExpandedSplays(cwSurveyChunk* chunk, int firstStationIndex, int offset);
     bool hasVirtualTrailingStationShot(const cwSurveyChunk* chunk) const;
     bool hasVisibleVirtualRows(const cwSurveyChunk* chunk) const;
     // void removeVisibleVirtualRows(cwSurveyChunk* chunk);

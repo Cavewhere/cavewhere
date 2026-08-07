@@ -13,7 +13,9 @@ Item {
         case SurveyEditorRowIndex.StationRow:
             return 49
         case SurveyEditorRowIndex.ShotRow:
-            return 0
+            return itemId.shotBoxShift
+        case SurveyEditorRowIndex.SplayRow:
+            return itemId.columnTemplate.splayRowHeight
         }
     }
 
@@ -27,6 +29,7 @@ Item {
     required property var removePreview
     required property FixStationPopup fixStationPopup
     required property int rowType
+    required property cwSurveyEditorRowIndex rowIndex
 
     //Data that comes from the model
     required property cwSurveyEditorBoxData stationName;
@@ -41,6 +44,11 @@ Item {
     required property cwSurveyEditorBoxData shotBackCompass;
     required property cwSurveyEditorBoxData shotClino;
     required property cwSurveyEditorBoxData shotBackClino;
+    required property int stationSplayCount;
+    required property bool stationSplaysExpanded;
+    required property string splayDistance;
+    required property string splayCompass;
+    required property string splayClino;
 
     //Visualize properties
     required property SurveyEditorColumnTitles columnTemplate
@@ -54,6 +62,12 @@ Item {
 
     //For sizing
     readonly property int titleOffset: index === 0 ? 5 : 25
+
+    //A shot row is normally zero-height, with its boxes reaching up over the
+    //boundary from columnTemplate.shotRowY. An open splay cluster stands between
+    //the station and its shot, so the row takes on the height the boxes reach up
+    //by and drops them below the cluster instead of covering the last splay
+    readonly property real shotBoxShift: stationSplaysExpanded ? -columnTemplate.shotRowY : 0
 
     Loader {
         id: titleLoaderId
@@ -169,8 +183,118 @@ Item {
                 view: itemId.ListView.view
                 dataValidator: distanceValidator
             }
+
+            //Most stations carry no splays, so the chip stays uninstantiated
+            //rather than laying out text it will never show
+            Loader {
+                active: itemId.stationSplayCount > 0
+                anchors.verticalCenter: downBox.verticalCenter
+                anchors.left: downBox.right
+                anchors.leftMargin: Theme.delegatePadding
+
+                sourceComponent: Rectangle {
+                    objectName: "splayChip"
+
+                    width: chipRowId.implicitWidth + Theme.delegatePadding * 2
+                    height: chipRowId.implicitHeight + Theme.delegatePadding
+
+                    radius: height * 0.5
+                    color: Theme.splaySurface
+                    border.color: Theme.splayBorder
+                    border.width: 1
+
+                    Row {
+                        id: chipRowId
+                        anchors.centerIn: parent
+                        spacing: Theme.flowSpacing
+
+                        //A glyph rather than the chevron SVG the rest of the app
+                        //uses: Icon colorizes through a MultiEffect layer, which
+                        //costs an offscreen texture in every recycled row and
+                        //renders as nothing in offscreen tests
+                        QC.Label {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: "▶"
+                            color: Theme.splayText
+                            font.pixelSize: Theme.fontSizeCaption
+                            rotation: itemId.stationSplaysExpanded ? 90 : 0
+
+                            Behavior on rotation {
+                                NumberAnimation { duration: 120 }
+                            }
+                        }
+
+                        QC.Label {
+                            objectName: "splayChipCount"
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: itemId.stationSplayCount
+                            color: Theme.splayText
+                            font.pixelSize: Theme.fontSizeSmall
+                        }
+                    }
+
+                    TapHandler {
+                        onSingleTapped: itemId.model.toggleSplaysExpanded(itemId.rowIndex)
+                    }
+                }
+            }
         }
 
+    }
+
+    //Splay data loader. Splays are read-only here — editing them is a later
+    //feature, so the row shows the readings as they were written
+    Loader {
+        id: splayLoaderId
+        active: itemId.rowType === SurveyEditorRowIndex.SplayRow
+
+        sourceComponent: Rectangle {
+            width: itemId.columnTemplate.width
+            height: itemId.columnTemplate.splayRowHeight
+            color: Theme.splaySurface
+
+            QC.Label {
+                objectName: "splayRowLabel"
+
+                readonly property real splayNameIndent: 20
+
+                x: itemId.columnTemplate.stationX + splayNameIndent
+                anchors.verticalCenter: parent.verticalCenter
+                text: "splay"
+                color: Theme.splayText
+                font.pixelSize: Theme.fontSizeCaption
+            }
+
+            QC.Label {
+                objectName: "splayDistanceLabel"
+                x: itemId.columnTemplate.distanceX
+                width: itemId.columnTemplate.distanceWidth
+                anchors.verticalCenter: parent.verticalCenter
+                horizontalAlignment: Text.AlignHCenter
+                text: itemId.splayDistance
+                font.pixelSize: Theme.fontSizeSmall
+            }
+
+            QC.Label {
+                objectName: "splayCompassLabel"
+                x: itemId.columnTemplate.compassX
+                width: itemId.columnTemplate.compassWidth
+                anchors.verticalCenter: parent.verticalCenter
+                horizontalAlignment: Text.AlignHCenter
+                text: itemId.splayCompass
+                font.pixelSize: Theme.fontSizeSmall
+            }
+
+            QC.Label {
+                objectName: "splayClinoLabel"
+                x: itemId.columnTemplate.clinoX
+                width: itemId.columnTemplate.clinoWidth
+                anchors.verticalCenter: parent.verticalCenter
+                horizontalAlignment: Text.AlignHCenter
+                text: itemId.splayClino
+                font.pixelSize: Theme.fontSizeSmall
+            }
+        }
     }
 
     Loader {
@@ -184,7 +308,7 @@ Item {
                 width: itemId.columnTemplate.distanceWidth
                 height: itemId.columnTemplate.dataRowHeight
                 x: itemId.columnTemplate.distanceX
-                y: itemId.columnTemplate.shotRowY
+                y: itemId.columnTemplate.shotRowY + itemId.shotBoxShift
                 anchors.topMargin: 0
 
                 dataValue: shotDistance

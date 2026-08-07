@@ -105,6 +105,8 @@ public:
     Q_INVOKABLE QList<int> indicesOfStation(QString stationName) const;
 
     QList<cwShotMeasurement> stationSplays(int index) const;
+    int stationSplayCount(int index) const;
+    const cwShotMeasurement& stationSplayAt(int index, int splayIndex) const;
     void setStationSplays(int index, const QList<cwShotMeasurement>& splays);
 
     Q_INVOKABLE cwShot shot(int index) const;

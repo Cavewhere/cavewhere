@@ -8,8 +8,12 @@
 #include "cwSurveyEditorBoxData.h"
 #include "cwDebug.h"
 #include "cwReading.h"
+#include "cwShotMeasurement.h"
 
 #include <QDebug>
+
+//Std includes
+#include <limits>
 
 cwSurveyEditorModel::cwSurveyEditorModel()
 {
@@ -64,8 +68,13 @@ void cwSurveyEditorModel::connectChunkSignals(cwSurveyChunk* chunk)
     connect(chunk, &cwSurveyChunk::dataChanged, this, chunkDataChange);
     connect(chunk, &cwSurveyChunk::errorsChanged, this, chunkDataChange);
 
+    connect(chunk, &cwSurveyChunk::stationSplaysChanged, this, [this, chunk](int stationIndex) {
+        reconcileSplayRows(chunk, stationIndex);
+    });
+
     connect(chunk, &cwSurveyChunk::added, this,
             [this, chunk, emitDataChangedForChunk](int stationBegin, int stationEnd, int shotBegin, int shotEnd) {
+                shiftExpandedSplays(chunk, stationBegin, stationEnd - stationBegin + 1);
                 int first = std::min(toModelRow({chunk, stationBegin, cwSurveyEditorRowIndex::StationRow}),
                                      toModelRow({chunk, shotBegin, cwSurveyEditorRowIndex::ShotRow}));
                 int last = std::max(toModelRow({chunk, stationEnd, cwSurveyEditorRowIndex::StationRow}),
@@ -80,6 +89,12 @@ void cwSurveyEditorModel::connectChunkSignals(cwSurveyChunk* chunk)
 
     connect(chunk, &cwSurveyChunk::aboutToRemove, this,
             [this, chunk](int stationBegin, int stationEnd, int shotBegin, int shotEnd) {
+                //A cluster on a station that's leaving has to close on its own,
+                //so its rows go away as a removal the view can follow
+                for(int stationIndex = stationEnd; stationIndex >= stationBegin; --stationIndex) {
+                    collapseSplays(chunk, stationIndex);
+                }
+
                 int first = std::min(toModelRow({chunk, stationBegin, cwSurveyEditorRowIndex::StationRow}),
                                      toModelRow({chunk, shotBegin, cwSurveyEditorRowIndex::ShotRow}));
                 int last = std::max(toModelRow({chunk, stationEnd, cwSurveyEditorRowIndex::StationRow}),
@@ -90,7 +105,8 @@ void cwSurveyEditorModel::connectChunkSignals(cwSurveyChunk* chunk)
             });
 
     connect(chunk, &cwSurveyChunk::removed, this,
-            [this, chunk](int, int, int, int) {
+            [this, chunk](int stationBegin, int stationEnd, int, int) {
+                shiftExpandedSplays(chunk, stationBegin, stationBegin - stationEnd - 1);
                 endRemoveRows();
                 Q_ASSERT(m_removeToken.chunk != nullptr);
                 syncVirtualRows(chunk);
@@ -152,6 +168,7 @@ void cwSurveyEditorModel::setTrip(cwTrip* trip) {
         m_virtualRowsVisibleChunk = nullptr;
         m_focusedRowIndex = QPersistentModelIndex();
         m_focusedDataRole = static_cast<cwSurveyChunk::DataRole>(-1);
+        m_expandedSplays.clear();
 
         if(m_trip) {
             const auto chunks = m_trip->chunks();
@@ -216,6 +233,7 @@ void cwSurveyEditorModel::setTrip(cwTrip* trip) {
                             if(chunk == m_focusedChunk) {
                                 m_virtualRowsVisibleChunk = nullptr;
                             }
+                            m_expandedSplays.remove(chunk);
                             disconnectChunkSignals(allChunks.at(i));
                         }
                     });
@@ -271,8 +289,7 @@ void cwSurveyEditorModel::setFocusedChunk(cwSurveyChunk* chunk)
     }
 
     if(m_virtualRowsVisibleChunk) {
-        const int baseRow = toModelRow({m_virtualRowsVisibleChunk, -1, cwSurveyEditorRowIndex::TitleRow});
-        const int first = baseRow + m_virtualRowsVisibleChunk->stationCount() + m_virtualRowsVisibleChunk->shotCount() + m_titleRowOffset;
+        const int first = firstVirtualRow(m_virtualRowsVisibleChunk);
         const int last = first + 1;
         beginRemoveRows(QModelIndex(), first, last);
         m_virtualRowsVisibleChunk = nullptr;
@@ -366,6 +383,10 @@ QVariant cwSurveyEditorModel::data(const QModelIndex& index, int role) const
             case StationFixedRole:
                 //The trailing virtual row has no name, so nothing can anchor it
                 return false;
+            case StationSplaysExpandedRole:
+                return false;
+            case StationSplayCountRole:
+                return 0;
             case StationNameRole:
                 return data(cwSurveyChunk::StationNameRole, [&]() { return cwReading(QString()); });
             case StationLeftRole:
@@ -384,6 +405,10 @@ QVariant cwSurveyEditorModel::data(const QModelIndex& index, int role) const
         case StationFixedRole:
             return m_fixStations != nullptr
                     && m_fixStations->isFixed(chunk->station(stationIndex).name());
+        case StationSplayCountRole:
+            return chunk->stationSplayCount(stationIndex);
+        case StationSplaysExpandedRole:
+            return splayRowCount(chunk, stationIndex) > 0;
         case StationNameRole:
             return data(cwSurveyChunk::StationNameRole, [&]() { return cwReading(chunk->station(stationIndex).name()); });
         case StationLeftRole:
@@ -399,9 +424,15 @@ QVariant cwSurveyEditorModel::data(const QModelIndex& index, int role) const
         }
     };
 
-    auto shotData = [index, role, data](const cwSurveyEditorRowIndex& chunkIndex)->QVariant {
+    auto shotData = [this, index, role, data](const cwSurveyEditorRowIndex& chunkIndex)->QVariant {
         const auto chunk = chunkIndex.chunk();
         const int shotIndex = chunkIndex.indexInChunk();
+
+        if(role == StationSplaysExpandedRole) {
+            //Shot i hangs under station i, so it answers for that station's cluster
+            return splayRowCount(chunk, shotIndex) > 0;
+        }
+
         if(shotIndex == chunk->shotCount()) {
             if(role == ShotCalibrationRole) {
                 return QVariant::fromValue(static_cast<cwTripCalibration*>(nullptr));
@@ -443,6 +474,27 @@ QVariant cwSurveyEditorModel::data(const QModelIndex& index, int role) const
         }
     };
 
+    auto splayData = [role](const cwSurveyEditorRowIndex& chunkIndex)->QVariant {
+        const auto chunk = chunkIndex.chunk();
+        const int stationIndex = chunkIndex.indexInChunk();
+        const int splayIndex = chunkIndex.splayIndex();
+        if(splayIndex < 0 || splayIndex >= chunk->stationSplayCount(stationIndex)) {
+            return QVariant();
+        }
+
+        const cwShotMeasurement& splay = chunk->stationSplayAt(stationIndex, splayIndex);
+        switch(role) {
+        case SplayDistanceRole:
+            return splay.distance.value();
+        case SplayCompassRole:
+            return splay.compass.value();
+        case SplayClinoRole:
+            return splay.clino.value();
+        default:
+            return QVariant();
+        }
+    };
+
     switch(rowIndex.rowType()) {
     case cwSurveyEditorRowIndex::TitleRow:
         return titleData(rowIndex);
@@ -450,6 +502,8 @@ QVariant cwSurveyEditorModel::data(const QModelIndex& index, int role) const
         return stationData(rowIndex);
     case cwSurveyEditorRowIndex::ShotRow:
         return shotData(rowIndex);
+    case cwSurveyEditorRowIndex::SplayRow:
+        return splayData(rowIndex);
     }
     return QVariant();
 }
@@ -903,6 +957,11 @@ QHash<int, QByteArray> cwSurveyEditorModel::roleNames() const
     roles.insert(ShotClinoRole, "shotClino");
     roles.insert(ShotBackClinoRole, "shotBackClino");
     roles.insert(ShotCalibrationRole, "shotCalibration");
+    roles.insert(StationSplayCountRole, "stationSplayCount");
+    roles.insert(StationSplaysExpandedRole, "stationSplaysExpanded");
+    roles.insert(SplayDistanceRole, "splayDistance");
+    roles.insert(SplayCompassRole, "splayCompass");
+    roles.insert(SplayClinoRole, "splayClino");
     // roles.insert(ChunkRole, "chunk");
     // roles.insert(RowTypeRole, "rowType");
     // roles.insert(StationVisibleRole, "stationVisible");
@@ -1471,6 +1530,16 @@ int cwSurveyEditorModel::toModelRow(const cwSurveyEditorRowIndex &rowIndex) cons
             return -1;
         }
         break;
+    case cwSurveyEditorRowIndex::SplayRow:
+        if (rowIndex.indexInChunk() < 0 || rowIndex.indexInChunk() >= stationCount(rowChunk)) {
+            return -1;
+        }
+        if (rowIndex.splayIndex() < 0
+            || rowIndex.splayIndex() >= splayRowCount(rowChunk, rowIndex.indexInChunk()))
+        {
+            return -1;
+        }
+        break;
     default:
         return -1;
     }
@@ -1482,16 +1551,27 @@ int cwSurveyEditorModel::toModelRow(const cwSurveyEditorRowIndex &rowIndex) cons
         baseRow += chunkRowCount(current);
     }
 
+    //Stations and shots still alternate; an open splay cluster pushes everything
+    //below its station down by the rows it added
+    const int indexInChunk = rowIndex.indexInChunk();
     int modelRow = -1;
     switch(rowIndex.rowType()) {
     case cwSurveyEditorRowIndex::TitleRow:
         modelRow = baseRow;
         break;
     case cwSurveyEditorRowIndex::StationRow:
-        modelRow = baseRow + rowIndex.indexInChunk() * 2 + m_titleRowOffset; // Alternate between station and shot
+        modelRow = baseRow + indexInChunk * 2 + m_titleRowOffset
+                   + splayRowsBefore(rowChunk, indexInChunk);
         break;
     case cwSurveyEditorRowIndex::ShotRow:
-        modelRow = baseRow + rowIndex.indexInChunk() * 2 + 1 + m_titleRowOffset;
+        //Shot i sits below station i, so it clears that station's own cluster too
+        modelRow = baseRow + indexInChunk * 2 + 1 + m_titleRowOffset
+                   + splayRowsBefore(rowChunk, indexInChunk + 1);
+        break;
+    case cwSurveyEditorRowIndex::SplayRow:
+        modelRow = baseRow + indexInChunk * 2 + m_titleRowOffset
+                   + splayRowsBefore(rowChunk, indexInChunk)
+                   + 1 + rowIndex.splayIndex();
         break;
     default:
         modelRow = -1;
@@ -1502,6 +1582,138 @@ int cwSurveyEditorModel::toModelRow(const cwSurveyEditorRowIndex &rowIndex) cons
         return -1;
     }
     return modelRow;
+}
+
+/**
+ * @brief cwSurveyEditorModel::toggleSplaysExpanded
+ * @param rowIndex - The station row whose splay cluster opens or closes
+ *
+ * The expansion state lives here rather than in the delegate because the view
+ * recycles delegates as it scrolls, which would throw the state away.
+ */
+void cwSurveyEditorModel::toggleSplaysExpanded(const cwSurveyEditorRowIndex& rowIndex)
+{
+    cwSurveyChunk* chunk = rowIndex.chunk();
+    const int stationIndex = rowIndex.indexInChunk();
+
+    if(chunk == nullptr
+        || m_trip.isNull()
+        || !m_trip->chunks().contains(chunk)
+        || rowIndex.rowType() != cwSurveyEditorRowIndex::StationRow
+        || stationIndex < 0
+        || stationIndex >= chunk->stationCount())
+    {
+        return;
+    }
+
+    if(splayRowCount(chunk, stationIndex) > 0) {
+        collapseSplays(chunk, stationIndex);
+        return;
+    }
+
+    const int splayCount = chunk->stationSplayCount(stationIndex);
+    if(splayCount == 0) {
+        return;
+    }
+
+    const int stationRow = toModelRow({chunk, stationIndex, cwSurveyEditorRowIndex::StationRow});
+    if(stationRow < 0) {
+        return;
+    }
+
+    beginInsertRows(QModelIndex(), stationRow + 1, stationRow + splayCount);
+    m_expandedSplays[chunk].insert(stationIndex, splayCount);
+    endInsertRows();
+
+    emit dataChanged(index(stationRow), index(stationRow), {StationSplaysExpandedRole});
+}
+
+void cwSurveyEditorModel::collapseSplays(cwSurveyChunk* chunk, int stationIndex)
+{
+    const int shownRows = splayRowCount(chunk, stationIndex);
+    if(shownRows == 0) {
+        return;
+    }
+
+    const int stationRow = toModelRow({chunk, stationIndex, cwSurveyEditorRowIndex::StationRow});
+    Q_ASSERT(stationRow >= 0);
+
+    beginRemoveRows(QModelIndex(), stationRow + 1, stationRow + shownRows);
+    auto chunkIter = m_expandedSplays.find(chunk);
+    chunkIter->remove(stationIndex);
+    if(chunkIter->isEmpty()) {
+        m_expandedSplays.erase(chunkIter);
+    }
+    endRemoveRows();
+
+    emit dataChanged(index(stationRow), index(stationRow), {StationSplaysExpandedRole});
+}
+
+/**
+ * @brief cwSurveyEditorModel::reconcileSplayRows
+ *
+ * The station's splays changed underneath an open cluster, so the rows it shows
+ * are grown or shrunk to match. The count is compared against the one remembered
+ * in m_expandedSplays because the chunk only reports the station that changed.
+ */
+void cwSurveyEditorModel::reconcileSplayRows(cwSurveyChunk* chunk, int stationIndex)
+{
+    const int stationRow = toModelRow({chunk, stationIndex, cwSurveyEditorRowIndex::StationRow});
+    if(stationRow < 0) {
+        return;
+    }
+
+    const int shownRows = splayRowCount(chunk, stationIndex);
+    const int splayCount = chunk->stationSplayCount(stationIndex);
+
+    //A closed cluster only moves the chip's count; an open one grows or shrinks
+    //to match, and the station row itself stays put either way
+    if(shownRows > 0) {
+        if(splayCount == 0) {
+            collapseSplays(chunk, stationIndex);
+        } else if(splayCount > shownRows) {
+            beginInsertRows(QModelIndex(),
+                            stationRow + 1 + shownRows,
+                            stationRow + splayCount);
+            m_expandedSplays[chunk].insert(stationIndex, splayCount);
+            endInsertRows();
+        } else if(splayCount < shownRows) {
+            beginRemoveRows(QModelIndex(),
+                            stationRow + 1 + splayCount,
+                            stationRow + shownRows);
+            m_expandedSplays[chunk].insert(stationIndex, splayCount);
+            endRemoveRows();
+        }
+    }
+
+    emit dataChanged(index(stationRow), index(stationRow), {StationSplayCountRole});
+
+    if(splayRowCount(chunk, stationIndex) > 0) {
+        emit dataChanged(index(stationRow + 1), index(stationRow + splayCount),
+                         {SplayDistanceRole, SplayCompassRole, SplayClinoRole});
+    }
+}
+
+/**
+ * @brief cwSurveyEditorModel::shiftExpandedSplays
+ *
+ * Stations were added to or removed from \a chunk, so the open clusters at and
+ * below \a firstStationIndex now belong to different stations. Their keys move
+ * by \a offset to follow the stations they were opened on.
+ */
+void cwSurveyEditorModel::shiftExpandedSplays(cwSurveyChunk* chunk, int firstStationIndex, int offset)
+{
+    auto chunkIter = m_expandedSplays.find(chunk);
+    if(offset == 0 || chunkIter == m_expandedSplays.end()) {
+        return;
+    }
+
+    ExpandedSplays shifted;
+    for(auto iter = chunkIter->constBegin(); iter != chunkIter->constEnd(); ++iter) {
+        const int stationIndex = iter.key() < firstStationIndex ? iter.key() : iter.key() + offset;
+        shifted.insert(stationIndex, iter.value());
+    }
+    *chunkIter = shifted;
 }
 
 cwSurveyEditorRowIndex::RowType cwSurveyEditorModel::toRowType(cwSurveyChunk::DataRole chunkDataRole) const
@@ -1636,6 +1848,25 @@ cwSurveyEditorRowIndex cwSurveyEditorModel::toRowIndex(int index) const
                 return {chunk, -1, cwSurveyEditorRowIndex::TitleRow};
             }
 
+            //Walk the open clusters above index to find how far they pushed it
+            //down, or to land inside one of them
+            int splayOffset = 0;
+            if(const auto* expanded = expandedSplays(chunk)) {
+                for(auto iter = expanded->constBegin(); iter != expanded->constEnd(); ++iter) {
+                    const int stationRow = iter.key() * 2 + splayOffset;
+                    if(index <= stationRow) {
+                        break;
+                    }
+                    if(index <= stationRow + iter.value()) {
+                        return {chunk, iter.key(), index - stationRow - 1,
+                                cwSurveyEditorRowIndex::SplayRow};
+                    }
+                    splayOffset += iter.value();
+                }
+            }
+
+            index -= splayOffset;
+
             if(index % 2 == 0) {
                 //Is a station
                 int stationIndex = index / 2;
@@ -1675,7 +1906,63 @@ int cwSurveyEditorModel::shotCount(const cwSurveyChunk* chunk) const
 
 int cwSurveyEditorModel::chunkRowCount(const cwSurveyChunk* chunk) const
 {
-    return stationCount(chunk) + shotCount(chunk) + m_titleRowOffset;
+    return stationCount(chunk) + shotCount(chunk) + m_titleRowOffset + splayRowsInChunk(chunk);
+}
+
+const cwSurveyEditorModel::ExpandedSplays* cwSurveyEditorModel::expandedSplays(const cwSurveyChunk* chunk) const
+{
+    //Every row of every chunk asks this, and almost always the answer is that
+    //nothing is open anywhere, so that case costs one branch instead of a hash probe
+    if(m_expandedSplays.isEmpty()) {
+        return nullptr;
+    }
+
+    const auto iter = m_expandedSplays.constFind(chunk);
+    return iter == m_expandedSplays.constEnd() ? nullptr : &iter.value();
+}
+
+/**
+ * The number of splay rows station \a stationIndex is currently showing, which
+ * is zero unless its cluster is open.
+ */
+int cwSurveyEditorModel::splayRowCount(const cwSurveyChunk* chunk, int stationIndex) const
+{
+    const auto* expanded = expandedSplays(chunk);
+    return expanded == nullptr ? 0 : expanded->value(stationIndex, 0);
+}
+
+int cwSurveyEditorModel::splayRowsBefore(const cwSurveyChunk* chunk, int stationIndex) const
+{
+    const auto* expanded = expandedSplays(chunk);
+    if(expanded == nullptr) {
+        return 0;
+    }
+
+    int count = 0;
+    for(auto iter = expanded->constBegin();
+         iter != expanded->constEnd() && iter.key() < stationIndex;
+         ++iter)
+    {
+        count += iter.value();
+    }
+    return count;
+}
+
+int cwSurveyEditorModel::splayRowsInChunk(const cwSurveyChunk* chunk) const
+{
+    //Every station is before the end, so this sums the whole chunk
+    return splayRowsBefore(chunk, std::numeric_limits<int>::max());
+}
+
+/**
+ * The row the chunk's virtual trailing station would sit on, which is just past
+ * the rows its real stations, shots and open splay clusters take up.
+ */
+int cwSurveyEditorModel::firstVirtualRow(cwSurveyChunk* chunk) const
+{
+    const int baseRow = toModelRow({chunk, -1, cwSurveyEditorRowIndex::TitleRow});
+    return baseRow + chunk->stationCount() + chunk->shotCount() + m_titleRowOffset
+           + splayRowsInChunk(chunk);
 }
 
 bool cwSurveyEditorModel::hasVirtualTrailingStationShot(const cwSurveyChunk* chunk) const
@@ -1733,8 +2020,7 @@ void cwSurveyEditorModel::syncVirtualRows(cwSurveyChunk* chunk)
         return;
     }
 
-    const int baseRow = toModelRow({chunk, -1, cwSurveyEditorRowIndex::TitleRow});
-    const int first = baseRow + chunk->stationCount() + chunk->shotCount() + m_titleRowOffset;
+    const int first = firstVirtualRow(chunk);
     const int last = first + 1;
 
     if(shouldHaveVirtualRows) {

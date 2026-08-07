@@ -15,13 +15,20 @@ class CAVEWHERE_LIB_EXPORT cwSurveyEditorRowIndex {
     QML_VALUE_TYPE(cwSurveyEditorRowIndex)
     Q_PROPERTY(cwSurveyChunk* chunk READ chunk WRITE setChunk)
     Q_PROPERTY(int indexInChunk READ indexInChunk WRITE setIndexInChunk)
+    Q_PROPERTY(int splayIndex READ splayIndex WRITE setSplayIndex)
     Q_PROPERTY(RowType rowType READ rowType WRITE setRowType)
 
 public:
     enum RowType {
         TitleRow,
         StationRow,
-        ShotRow
+        ShotRow,
+
+        //A read-only splay hanging under a station row. indexInChunk is the
+        //station it was shot from and splayIndex picks it out of that station's
+        //splays, so the row keeps its identity while other stations expand and
+        //collapse around it
+        SplayRow
     };
     Q_ENUM(RowType)
 
@@ -32,6 +39,17 @@ public:
                            RowType rowType)
         : m_chunk(chunk),
         m_indexInChunk(indexInChunk),
+        m_rowType(rowType)
+    {
+    }
+
+    cwSurveyEditorRowIndex(cwSurveyChunk* chunk,
+                           int stationIndexInChunk,
+                           int splayIndex,
+                           RowType rowType)
+        : m_chunk(chunk),
+        m_indexInChunk(stationIndexInChunk),
+        m_splayIndex(splayIndex),
         m_rowType(rowType)
     {
     }
@@ -60,10 +78,19 @@ public:
         m_indexInChunk = indexInChunk;
     }
 
+    // Accessor and mutator for splayIndex
+    int splayIndex() const {
+        return m_splayIndex;
+    }
+    void setSplayIndex(int splayIndex) {
+        m_splayIndex = splayIndex;
+    }
+
     // Equality operator for QML
     bool operator==(const cwSurveyEditorRowIndex &rhs) const {
         return m_chunk == rhs.m_chunk &&
                m_indexInChunk == rhs.m_indexInChunk &&
+               m_splayIndex == rhs.m_splayIndex &&
                m_rowType == rhs.m_rowType;
     }
 
@@ -74,6 +101,7 @@ public:
 private:
     QPointer<cwSurveyChunk> m_chunk;
     int m_indexInChunk = -1;
+    int m_splayIndex = -1;
     RowType m_rowType = TitleRow;
 };
 
