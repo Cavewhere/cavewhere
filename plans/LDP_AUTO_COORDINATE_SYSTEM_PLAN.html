@@ -693,9 +693,15 @@ lands green on both suites before the next.</p>
             and D7's migration path. Requires F1's complete input set. Implementation
             details: <a href="#d20impl">§15</a>.</li>
         <li><b>Read-only datum/frame display</b> in project info
-            (<code>DataMainPage.qml</code>, where the CS combo box used to live) —
-            <code>localCoordinateSystem</code>/<code>state</code>/<code>verticalDatum</code>
-            via <code>cwCoordinateTransform::nameFor</code>.</li>
+            (<code>DataMainPage.qml</code>, where the CS combo box used to live).
+            <b>Done 2026-08-06</b>; see <a href="#datumdisplay">§16</a> for what shipped.
+            <b>Two revisions to what this row originally said:</b>
+            (a) <code>cwCoordinateTransform::nameFor</code> is the wrong tool — it returns
+            <code>proj_get_name</code>, which for a derived proj-string answers
+            <i>unknown</i>, so the display reads the datum out of the frame instead;
+            (b) <code>state</code> is not shown — <i>Anchored</i> and <i>Frozen</i> are
+            lifecycle internals with no user-facing meaning, and the only distinction a
+            user needs (has a frame or does not) already reads off the location row.</li>
       </ol>
       <b>Deferred (decision 2026-08-04):</b> the per-layer CS override UI — the C++
       mechanism (<code>setSourceCSOverride</code>, override&nbsp;&gt;&nbsp;embedded in loader
@@ -1993,7 +1999,72 @@ reload sweep.</p>
       convergence.</li>
 </ul>
 
-<h2 id="open">16. Open questions</h2>
+<h2 id="datumdisplay">16. P4 step 5 — the read-only frame display (shipped 2026-08-06)</h2>
+
+<p>The last step of P4: the project info box on <code>DataMainPage.qml</code> now says where the
+project's frame is centered, what datum it is on, and what its elevations are measured from.
+Read-only, and never an editor — D4's reasoning is that a datum picked by hand can only
+disagree with the data it describes, since every input already declares its own.</p>
+
+<h3>What it shows</h3>
+<table>
+  <tr><th>Row</th><th>Value</th><th>When</th></tr>
+  <tr><td>Location</td><td>The frame's origin as <code>latitude, longitude</code> to six
+      decimals (~0.1 m — a projection parameter, not a placed point, so coarser than the
+      picker's eight)</td><td>Always; reads "Not georeferenced" with no frame</td></tr>
+  <tr><td>Datum</td><td>The datum's readable name, e.g. <i>North American Datum 1983</i></td>
+      <td>Only with a frame</td></tr>
+  <tr><td>Elevations</td><td>The recorded vertical datum, e.g. <i>NAVD88</i></td>
+      <td>Only when something declared one</td></tr>
+</table>
+
+<p>The help text says CaveWhere derives its own projection per project, that the datum is
+inherited rather than chosen, and — for §5 — that elevations are passed through exactly as
+given and never converted between height systems.</p>
+
+<h3>How the frame describes itself</h3>
+<p>Two new statics on <code>cwLocalProjection</code>, both answering from the stored string
+alone, so nothing has to be re-derived to describe it:</p>
+<ul>
+  <li><code>datumName(cs)</code> — the horizontal half's geodetic base, then
+      <code>proj_crs_get_datum_forced</code>. <b>Forced</b> matters: WGS84 is a datum
+      <i>ensemble</i> in modern PROJ and plain <code>proj_crs_get_datum</code> answers
+      nothing at all for one. It also answers for an input CS, not just a frame.</li>
+  <li><code>origin(localCS)</code> — asks the frame where its own <code>(0, 0)</code> lands,
+      which is the origin <i>only</i> because the LDP has no false easting or northing.
+      Handing it a UTM zone answers for a point 500 km west of that zone's center. Returns
+      x-first (longitude, latitude) on the frame's <b>own</b> datum, so no datum shift creeps
+      into a readout of a number that was planted, not measured. Shares
+      <code>toGeographicTransform()</code> with <code>deriveFrom</code>, which builds the same
+      transform in the other direction.</li>
+</ul>
+
+<p><code>cwGeoReference</code> exposes <code>datumName</code>, <code>hasOrigin</code>,
+<code>originLatitude</code> and <code>originLongitude</code>, all notified by
+<code>localProjectionChanged</code>. They are read out of the frame once inside
+<code>setLocalProjection</code> — the only writer the frame has, so the only writer they
+need — rather than on every binding that describes it. Latitude and longitude cross to QML
+as two named doubles rather than one point, so the axis-order trap that
+<code>deriveFrom</code> documents has nowhere to hide at the boundary.</p>
+
+<h3>Tests</h3>
+<ul>
+  <li><code>[cwLocalProjection]</code> — <code>datumName</code> over a NAD83 frame, a WGS84
+      frame, a bare input CS and a compound CS, plus the four unreadable cases;
+      <code>origin</code> round-tripping both <code>derive</code> and <code>deriveFrom</code>,
+      on WGS84 and on NAD83 (the latter pins that the readout stays on the frame's own datum).</li>
+  <li><code>[cwGeoReference]</code> — the description arrives with the frame, follows a
+      recenter, leaves with a <code>clear()</code>, and is present on a
+      <code>restore()</code>d frame, which the load path writes without replaying the
+      transitions that produced it.</li>
+  <li><code>tst_DataMainPage_Georeference.qml</code> — the empty project, a fix station giving
+      the project a location and a datum, the rows staying labels in edit mode, and the
+      vertical-datum row appearing only once something declares one. The location assertion
+      bounds latitude and longitude separately, so a transposed pair fails on a latitude of
+      −84. Both claims mutation-verified.</li>
+</ul>
+
+<h2 id="open">17. Open questions</h2>
 <ul>
   <li><s><b>R's exact value</b> — 50 km proposed. Cheap to change; pick during P2.</s>
       Settled in P2: 50 km, as <code>cwLocalProjectionManager::kAnchorThresholdMeters</code>.</li>

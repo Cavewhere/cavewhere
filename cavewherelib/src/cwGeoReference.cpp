@@ -6,6 +6,7 @@
 **************************************************************************/
 
 #include "cwGeoReference.h"
+#include "cwLocalProjection.h"
 
 cwGeoReference::cwGeoReference(QObject* parent) :
     QObject(parent)
@@ -92,6 +93,8 @@ void cwGeoReference::setLocalProjection(const LocalProjectionState& state)
             (m_localProjection.coordinateSystem != state.coordinateSystem);
     m_localProjection = state;
     if (frameMoved) {
+        m_datumName = cwLocalProjection::datumName(state.coordinateSystem);
+        m_origin = cwLocalProjection::origin(state.coordinateSystem);
         emit localCoordinateSystemChanged();
     }
     emit localProjectionChanged();

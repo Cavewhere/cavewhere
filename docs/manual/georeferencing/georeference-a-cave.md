@@ -103,6 +103,29 @@ anchor later moves the station, not the frame; only a correction big enough to
 mean the project is somewhere else re-derives it. Exports still name a standard
 system your reader can paste elsewhere.
 
+## Where the project landed
+
+The **Data** page's **Project** box reports the frame CaveWhere derived, in three
+read-only rows. None of them is a picker: a datum chosen by hand could only
+disagree with the coordinates you typed, which already say which datum they are
+on.
+
+- **Location** is where the frame is centered, as latitude and longitude. It sits
+  on the first thing that placed the project, which makes it the fastest check
+  that an anchor went in right — a fix typed into the wrong UTM zone shows up
+  here as a location in the wrong part of the world, the one warning the app
+  cannot give you on the fix row itself. Before anything places the project it
+  reads `Not georeferenced`.
+- **Datum** names the model of the Earth's shape your coordinates measure
+  against, inherited from that same first input: `North American Datum 1983` for
+  most US data. Different parts of the world work on different datums, and
+  CaveWhere adopts whichever one your data declares.
+- **Elevations** names the surface heights are measured from, as your point cloud
+  declared it, `NAVD88` on most recent US scans. The row appears only when
+  something declared one. CaveWhere passes elevations through exactly as they
+  arrive and never converts between height systems, so this row records what you
+  handed it rather than a correction it applied.
+
 ## Read coordinates back out
 
 In the **3D view**, click the crosshair **Pick** button in the bottom toolbar

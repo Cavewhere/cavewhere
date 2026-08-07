@@ -11,6 +11,9 @@
 //Qt includes
 #include <QString>
 
+//Std includes
+#include <optional>
+
 //Our includes
 #include "cwGeoPoint.h"
 #include "cwGlobals.h"
@@ -77,6 +80,34 @@ public:
      * frame is then stored for good.
      */
     static QString deriveFrom(const QString& anchorCS, const cwGeoPoint& anchorPoint);
+
+    /**
+     * The name of the datum \a cs is on, as PROJ spells it for a reader —
+     * "North American Datum 1983", not "+datum=NAD83". A compound CRS answers
+     * for its horizontal half, and a datum ensemble answers with the datum it
+     * stands for rather than the ensemble's own name.
+     *
+     * Empty when \a cs is empty or PROJ can't read it. This is the datum the
+     * project inherited from its anchor and is displayed under, never one that
+     * is chosen: see the class doc.
+     */
+    static QString datumName(const QString& cs);
+
+    /**
+     * Where \a localCS is centered, as longitude (x) and latitude (y) in
+     * degrees on \a localCS's own datum — the point derive() was handed, read
+     * back out of the string it produced.
+     *
+     * This asks the frame where its own (0, 0) lands, which is the origin only
+     * because the LDP has no false easting or northing. Handing it a CRS that
+     * does have one (any UTM zone) answers for a point 500 km west of where
+     * that zone is centered.
+     *
+     * The result is x-first, the convention every cwGeoPoint in the codebase is
+     * in, rather than the latitude-first order a geographic CRS declares.
+     * nullopt when \a localCS is empty or PROJ can't read it.
+     */
+    static std::optional<cwGeoPoint> origin(const QString& localCS);
 };
 
 #endif // CWLOCALPROJECTION_H

@@ -6,6 +6,7 @@
 **************************************************************************/
 
 //Catch includes
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 //Our includes
@@ -272,4 +273,57 @@ TEST_CASE("cwGeoReference records a vertical datum without applying it",
     reference.anchorTo(fixAnchor(), kLocalCS);
     CHECK(reference.verticalDatum() == QStringLiteral("NAVD88"));
     CHECK(spy.count() == 1);
+}
+
+TEST_CASE("cwGeoReference describes the frame it is holding", "[cwGeoReference]")
+{
+    cwGeoReference reference;
+
+    SECTION("nothing to describe without a frame")
+    {
+        CHECK(reference.datumName().isEmpty());
+        CHECK_FALSE(reference.hasOrigin());
+    }
+
+    SECTION("a frame answers with its datum and where it is centered")
+    {
+        reference.anchorTo(fixAnchor(), kLocalCS);
+
+        CHECK(reference.datumName().contains(QStringLiteral("World Geodetic System 1984")));
+        REQUIRE(reference.hasOrigin());
+        CHECK(reference.originLatitude() == Catch::Approx(37.1832));
+        CHECK(reference.originLongitude() == Catch::Approx(-84.0947));
+    }
+
+    SECTION("the description follows the frame when it moves")
+    {
+        reference.anchorTo(fixAnchor(), kLocalCS);
+        reference.recenter(kOtherLocalCS);
+
+        CHECK(reference.originLatitude() == Catch::Approx(38.0));
+        CHECK(reference.originLongitude() == Catch::Approx(-85.0));
+    }
+
+    SECTION("and goes away with it")
+    {
+        reference.anchorTo(fixAnchor(), kLocalCS);
+        reference.clear();
+
+        CHECK(reference.datumName().isEmpty());
+        CHECK_FALSE(reference.hasOrigin());
+        CHECK(reference.originLatitude() == 0.0);
+        CHECK(reference.originLongitude() == 0.0);
+    }
+
+    SECTION("a restored frame describes itself the same way a derived one does")
+    {
+        // The load path writes the frame without replaying the transitions that
+        // produced it, so it has to arrive described all the same.
+        reference.restore(cwGeoReference::Frozen, kLocalCS, cwGeoReference::Anchor{},
+                          QStringLiteral("NAVD88"));
+
+        CHECK(reference.datumName().contains(QStringLiteral("World Geodetic System 1984")));
+        REQUIRE(reference.hasOrigin());
+        CHECK(reference.originLatitude() == Catch::Approx(37.1832));
+    }
 }

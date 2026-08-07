@@ -15,6 +15,8 @@
 //Std includes
 #include <cmath>
 #include <memory>
+#include <optional>
+#include <utility>
 
 namespace {
 
@@ -109,17 +111,69 @@ namespace {
         PjPtr twoDimensional(proj_crs_demote_to_2D(context, nullptr, base.get()));
         return twoDimensional ? std::move(twoDimensional) : std::move(base);
     }
+
+    /**
+     * A transform from \a horizontal to the geographic CRS \a base it is built
+     * on, normalized so it reads x-first and answers longitude-first whatever
+     * axis order either CRS declares — the same convention
+     * cwCoordinateTransform hands its callers.
+     *
+     * Without the normalization the transform would take a geographic point
+     * latitude-first, so a caller in the codebase's x-first convention would
+     * silently transpose it. That makes a failure to normalize fatal rather
+     * than something to fall back from, which is how cwCoordinateTransform
+     * treats it too.
+     */
+    PjPtr toGeographicTransform(PJ_CONTEXT* context, PJ* horizontal, PJ* base)
+    {
+        PjPtr transform(proj_create_crs_to_crs_from_pj(context, horizontal, base,
+                                                       nullptr, nullptr));
+        if (!transform) {
+            return {};
+        }
+
+        return PjPtr(proj_normalize_for_visualization(context, transform.get()));
+    }
+
+    /**
+     * A coordinate system resolved down to the pieces every entry point here
+     * needs: the context they were created in, the horizontal half of \a cs, and
+     * the geographic CRS that half is built on.
+     *
+     * The context is declared first so it outlives the two PJs it owns.
+     */
+    struct GeodeticFrame {
+        ContextPtr context;
+        PjPtr horizontal;
+        PjPtr base;
+    };
+
+    //! \a cs resolved, or nullopt when PROJ can't read it as something with a datum.
+    std::optional<GeodeticFrame> resolveGeodeticFrame(const QString& cs)
+    {
+        ContextPtr context(cwCoordinateTransformPrivate::createContext());
+        if (!context) {
+            return std::nullopt;
+        }
+
+        PjPtr horizontal = horizontalCrs(context.get(), cs);
+        if (!horizontal) {
+            return std::nullopt;
+        }
+
+        PjPtr base = geodeticBase(context.get(), horizontal.get());
+        if (!base) {
+            return std::nullopt;
+        }
+
+        return GeodeticFrame{std::move(context), std::move(horizontal), std::move(base)};
+    }
 }
 
 QString cwLocalProjection::derive(double latitude, double longitude, const QString& datumSourceCS)
 {
     if (!std::isfinite(latitude) || !std::isfinite(longitude)
         || std::abs(latitude) > kMaxLatitude || std::abs(longitude) > kMaxLongitude) {
-        return {};
-    }
-
-    ContextPtr context(cwCoordinateTransformPrivate::createContext());
-    if (!context) {
         return {};
     }
 
@@ -131,15 +185,13 @@ QString cwLocalProjection::derive(double latitude, double longitude, const QStri
     const QString datumCS = datumSourceCS.trimmed().isEmpty() ? cwCoordinateTransform::Wgs84
                                                               : datumSourceCS;
 
-    PjPtr horizontal = horizontalCrs(context.get(), datumCS);
-    if (!horizontal) {
+    std::optional<GeodeticFrame> frame = resolveGeodeticFrame(datumCS);
+    if (!frame) {
         return {};
     }
 
-    PjPtr base = geodeticBase(context.get(), horizontal.get());
-    if (!base) {
-        return {};
-    }
+    const ContextPtr& context = frame->context;
+    const PjPtr& base = frame->base;
 
     PjPtr conversion(proj_create_conversion_transverse_mercator(
                          context.get(), latitude, longitude, kScaleFactor,
@@ -186,42 +238,63 @@ QString cwLocalProjection::deriveFrom(const QString& anchorCS, const cwGeoPoint&
     const QString cs = anchorCS.trimmed().isEmpty() ? cwCoordinateTransform::Wgs84
                                                     : anchorCS.trimmed();
 
-    ContextPtr context(cwCoordinateTransformPrivate::createContext());
-    if (!context) {
+    std::optional<GeodeticFrame> frame = resolveGeodeticFrame(cs);
+    if (!frame) {
         return {};
     }
 
-    PjPtr horizontal = horizontalCrs(context.get(), cs);
-    if (!horizontal) {
-        return {};
-    }
-
-    PjPtr base = geodeticBase(context.get(), horizontal.get());
-    if (!base) {
-        return {};
-    }
-
-    PjPtr toGeographic(proj_create_crs_to_crs_from_pj(context.get(), horizontal.get(),
-                                                      base.get(), nullptr, nullptr));
+    PjPtr toGeographic = toGeographicTransform(frame->context.get(), frame->horizontal.get(),
+                                               frame->base.get());
     if (!toGeographic) {
         return {};
     }
-
-    // Normalized, so the transform reads x-first and answers longitude-first
-    // whatever the CRS's own axis order is — the same convention
-    // cwCoordinateTransform hands its callers. Without it the transform would
-    // take a geographic anchor latitude-first and silently center the frame on
-    // the transposed point, so a failure here is fatal rather than something to
-    // fall back from (cwCoordinateTransform treats it the same way).
-    PjPtr normalized(proj_normalize_for_visualization(context.get(), toGeographic.get()));
-    if (!normalized) {
-        return {};
-    }
-    toGeographic = std::move(normalized);
 
     const PJ_COORD source = proj_coord(anchorPoint.x, anchorPoint.y, 0.0, 0.0);
     const PJ_COORD geographic = proj_trans(toGeographic.get(), PJ_FWD, source);
 
     // proj_trans reports failure as HUGE_VAL, which derive() rejects.
     return derive(geographic.xy.y, geographic.xy.x, cs);
+}
+
+QString cwLocalProjection::datumName(const QString& cs)
+{
+    std::optional<GeodeticFrame> frame = resolveGeodeticFrame(cs);
+    if (!frame) {
+        return {};
+    }
+
+    // Forced, because WGS84 is a datum ensemble in modern PROJ and
+    // proj_crs_get_datum answers nothing at all for one. The forced form names
+    // the datum the ensemble stands for, which is what a reader recognizes.
+    PjPtr datum(proj_crs_get_datum_forced(frame->context.get(), frame->base.get()));
+    if (!datum) {
+        return {};
+    }
+
+    const char* name = proj_get_name(datum.get());
+    return name != nullptr ? QString::fromUtf8(name) : QString();
+}
+
+std::optional<cwGeoPoint> cwLocalProjection::origin(const QString& localCS)
+{
+    std::optional<GeodeticFrame> frame = resolveGeodeticFrame(localCS);
+    if (!frame) {
+        return std::nullopt;
+    }
+
+    PjPtr toGeographic = toGeographicTransform(frame->context.get(), frame->horizontal.get(),
+                                               frame->base.get());
+    if (!toGeographic) {
+        return std::nullopt;
+    }
+
+    const PJ_COORD center = proj_coord(kFalseOrigin, kFalseOrigin, 0.0, 0.0);
+    const PJ_COORD geographic = proj_trans(toGeographic.get(), PJ_FWD, center);
+
+    // proj_trans reports failure as HUGE_VAL.
+    if (!std::isfinite(geographic.xy.x) || !std::isfinite(geographic.xy.y)) {
+        return std::nullopt;
+    }
+
+    return cwGeoPoint(geographic.xy.x, geographic.xy.y, 0.0);
 }

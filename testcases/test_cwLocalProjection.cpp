@@ -254,3 +254,102 @@ TEST_CASE("cwLocalProjection::deriveFrom refuses an anchor with no numbers",
                                         cwGeoPoint(kAnchorLongitude, kAnchorLatitude, 0.0))
               .isEmpty());
 }
+
+TEST_CASE("cwLocalProjection::datumName names the datum a frame is on",
+          "[cwLocalProjection]")
+{
+    SECTION("a NAD83 frame, spelled for a reader rather than for PROJ")
+    {
+        const QString ldp = cwLocalProjection::derive(kAnchorLatitude, kAnchorLongitude,
+                                                      QString::fromLatin1(kNad83Utm16N));
+        REQUIRE_FALSE(ldp.isEmpty());
+        CHECK_THAT(cwLocalProjection::datumName(ldp).toStdString(),
+                   ContainsSubstring("North American Datum 1983"));
+    }
+
+    SECTION("a WGS84 frame")
+    {
+        const QString ldp = cwLocalProjection::derive(kAnchorLatitude, kAnchorLongitude,
+                                                      cwCoordinateTransform::Wgs84);
+        REQUIRE_FALSE(ldp.isEmpty());
+        CHECK_THAT(cwLocalProjection::datumName(ldp).toStdString(),
+                   ContainsSubstring("World Geodetic System 1984"));
+    }
+
+    SECTION("an input system answers too, so a datum can be read before a frame exists")
+    {
+        CHECK_THAT(cwLocalProjection::datumName(QString::fromLatin1(kNad83Utm16N)).toStdString(),
+                   ContainsSubstring("North American Datum 1983"));
+    }
+
+    SECTION("a compound system answers for its horizontal half")
+    {
+        CHECK_THAT(cwLocalProjection::datumName(QStringLiteral("EPSG:26916+EPSG:5703")).toStdString(),
+                   ContainsSubstring("North American Datum 1983"));
+    }
+
+    SECTION("nothing readable names no datum")
+    {
+        CHECK(cwLocalProjection::datumName(QString()).isEmpty());
+        CHECK(cwLocalProjection::datumName(QStringLiteral("   ")).isEmpty());
+        CHECK(cwLocalProjection::datumName(QStringLiteral("not a coordinate system")).isEmpty());
+
+        // Parses, but as a transformation rather than a CRS, so it carries no
+        // datum — the same case derive() refuses.
+        CHECK(cwLocalProjection::datumName(QStringLiteral("+proj=utm +zone=16")).isEmpty());
+    }
+}
+
+TEST_CASE("cwLocalProjection::origin reads back the point a frame was derived on",
+          "[cwLocalProjection]")
+{
+    SECTION("the anchor comes back out, longitude first")
+    {
+        const QString ldp = cwLocalProjection::derive(kAnchorLatitude, kAnchorLongitude,
+                                                      cwCoordinateTransform::Wgs84);
+        REQUIRE_FALSE(ldp.isEmpty());
+
+        const std::optional<cwGeoPoint> origin = cwLocalProjection::origin(ldp);
+        REQUIRE(origin.has_value());
+        CHECK_THAT(origin->x, WithinAbs(kAnchorLongitude, 1e-9));
+        CHECK_THAT(origin->y, WithinAbs(kAnchorLatitude, 1e-9));
+    }
+
+    SECTION("on the frame's own datum, so no datum shift creeps into the readout")
+    {
+        // derive() plants its latitude and longitude on the datum it was given,
+        // so reading them back on that same datum returns them unchanged. Going
+        // through WGS84 instead would move the readout by the NAD83 shift.
+        const QString ldp = cwLocalProjection::derive(kAnchorLatitude, kAnchorLongitude,
+                                                      QString::fromLatin1(kNad83Utm16N));
+        REQUIRE_FALSE(ldp.isEmpty());
+
+        const std::optional<cwGeoPoint> origin = cwLocalProjection::origin(ldp);
+        REQUIRE(origin.has_value());
+        CHECK_THAT(origin->x, WithinAbs(kAnchorLongitude, 1e-9));
+        CHECK_THAT(origin->y, WithinAbs(kAnchorLatitude, 1e-9));
+    }
+
+    SECTION("a frame with no data behind it still says where it is")
+    {
+        // deriveFrom's path: the frame remembers the anchor it was centered on
+        // whatever coordinate system that anchor was typed in.
+        const QString ldp = cwLocalProjection::deriveFrom(
+            cwCoordinateTransform::Wgs84,
+            cwGeoPoint(kAnchorLongitude, kAnchorLatitude, 0.0));
+        REQUIRE_FALSE(ldp.isEmpty());
+
+        const std::optional<cwGeoPoint> origin = cwLocalProjection::origin(ldp);
+        REQUIRE(origin.has_value());
+        CHECK_THAT(origin->x, WithinAbs(kAnchorLongitude, 1e-9));
+        CHECK_THAT(origin->y, WithinAbs(kAnchorLatitude, 1e-9));
+    }
+
+    SECTION("nothing readable has no origin")
+    {
+        CHECK_FALSE(cwLocalProjection::origin(QString()).has_value());
+        CHECK_FALSE(cwLocalProjection::origin(QStringLiteral("   ")).has_value());
+        CHECK_FALSE(cwLocalProjection::origin(QStringLiteral("not a coordinate system")).has_value());
+        CHECK_FALSE(cwLocalProjection::origin(QStringLiteral("+proj=utm +zone=16")).has_value());
+    }
+}

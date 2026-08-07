@@ -14,7 +14,11 @@
 #include <QString>
 #include <QUuid>
 
+//Std includes
+#include <optional>
+
 //Our includes
+#include "cwGeoPoint.h"
 #include "cwGlobals.h"
 
 /**
@@ -44,6 +48,10 @@ class CAVEWHERE_LIB_EXPORT cwGeoReference : public QObject
     Q_PROPERTY(QString localCoordinateSystem READ localCoordinateSystem NOTIFY localProjectionChanged)
     Q_PROPERTY(State state READ state NOTIFY localProjectionChanged)
     Q_PROPERTY(QString verticalDatum READ verticalDatum WRITE setVerticalDatum NOTIFY verticalDatumChanged)
+    Q_PROPERTY(QString datumName READ datumName NOTIFY localProjectionChanged)
+    Q_PROPERTY(bool hasOrigin READ hasOrigin NOTIFY localProjectionChanged)
+    Q_PROPERTY(double originLatitude READ originLatitude NOTIFY localProjectionChanged)
+    Q_PROPERTY(double originLongitude READ originLongitude NOTIFY localProjectionChanged)
 
 public:
     /**
@@ -149,6 +157,20 @@ public:
     QString verticalDatum() const { return m_verticalDatum; }
     void setVerticalDatum(const QString& datum);
 
+    //! The name of the datum the frame is on, as a reader recognizes it ("North
+    //! American Datum 1983"). Inherited from whatever anchored the project, so
+    //! it describes the frame rather than offering a choice — see D4 in
+    //! plans/LDP_AUTO_COORDINATE_SYSTEM_PLAN.html. Empty without a frame.
+    QString datumName() const { return m_datumName; }
+
+    //! Whether the frame reports where it is centered. False without a frame.
+    bool hasOrigin() const { return m_origin.has_value(); }
+
+    //! Where the frame is centered, in degrees on its own datum. Both read 0
+    //! when hasOrigin() is false.
+    double originLatitude() const { return m_origin.has_value() ? m_origin->y : 0.0; }
+    double originLongitude() const { return m_origin.has_value() ? m_origin->x : 0.0; }
+
 signals:
     //! The LDP, the state, or the anchor changed — they move together, so they
     //! report together.
@@ -179,6 +201,12 @@ private:
     LocalProjectionState m_localProjection;
 
     QString m_verticalDatum;
+
+    // What the frame says about itself, read out of it once when it changes
+    // rather than on every binding that describes it. setLocalProjection is the
+    // only writer of the frame, so it is the only writer of these.
+    QString m_datumName;
+    std::optional<cwGeoPoint> m_origin;
 
     void setLocalProjection(const LocalProjectionState& state);
 

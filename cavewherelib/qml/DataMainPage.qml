@@ -97,11 +97,27 @@ StandardPage {
     QQ.Rectangle {
         id: regionInfoBox
         objectName: "regionInfoBox"
+
+        property bool editMode: settingsEditButton.editMode
+
+        // 6 decimals of a degree is ~0.1 m, far finer than an origin that only
+        // has to say which valley the project sits in. The picker reads to 8
+        // because it reports a point the user placed; this reports a projection
+        // parameter.
+        readonly property int originPrecision: 6
+
         Layout.fillWidth: true
         implicitHeight: infoColumnId.implicitHeight + Theme.statsPadding * 2
         color: Theme.borderSubtle
 
-        property bool editMode: settingsEditButton.editMode
+        // Latitude and longitude as one comma-separated pair, in the order the
+        // rest of the app displays them. Degrees are degrees, so neither
+        // carries a unit.
+        function formatOrigin(latitude, longitude) {
+            return "%1, %2"
+                .arg(latitude.toFixed(regionInfoBox.originPrecision))
+                .arg(longitude.toFixed(regionInfoBox.originPrecision))
+        }
 
         ColumnLayout {
             id: infoColumnId
@@ -189,6 +205,88 @@ StandardPage {
                           "with your survey. Currently, only LiDAR point clouds are " +
                           "supported, <b>.laz</b> or <b>.las</b>.</p>" +
                           "<p>Click the number to add or remove files.</p>"
+                }
+            }
+
+            // Where the project sits and what it is measured against. Read-only
+            // on purpose: CaveWhere derives its own projection from the first
+            // thing you georeference and inherits that input's datum, so there
+            // is nothing here to pick — a datum chosen by hand could only
+            // disagree with the data it describes.
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: Theme.tightSpacing
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.delegatePadding
+
+                    LabelWithHelp {
+                        objectName: "projectionLabel"
+                        text: qsTr("Location:")
+                        helpArea: projectionHelpArea
+                    }
+
+                    QC.Label {
+                        objectName: "projectionOriginValue"
+                        text: RootData.region.geoReference.hasOrigin
+                              ? regionInfoBox.formatOrigin(RootData.region.geoReference.originLatitude,
+                                                           RootData.region.geoReference.originLongitude)
+                              : qsTr("Not georeferenced")
+                    }
+
+                    QQ.Item { Layout.fillWidth: true }
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.delegatePadding
+                    visible: RootData.region.geoReference.datumName !== ""
+
+                    QC.Label {
+                        text: qsTr("Datum:")
+                    }
+
+                    QC.Label {
+                        objectName: "projectionDatumValue"
+                        text: RootData.region.geoReference.datumName
+                    }
+
+                    QQ.Item { Layout.fillWidth: true }
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.delegatePadding
+                    visible: RootData.region.geoReference.verticalDatum !== ""
+
+                    QC.Label {
+                        text: qsTr("Elevations:")
+                    }
+
+                    QC.Label {
+                        objectName: "projectionVerticalDatumValue"
+                        text: RootData.region.geoReference.verticalDatum
+                    }
+
+                    QQ.Item { Layout.fillWidth: true }
+                }
+
+                HelpArea {
+                    id: projectionHelpArea
+                    objectName: "projectionHelp"
+                    Layout.fillWidth: true
+                    text: "<p>CaveWhere builds its own map projection for each project — a " +
+                          "<i>low-distortion projection</i> centered on the first thing you " +
+                          "georeference, whether that is a fix station or a GIS source. " +
+                          "<b>Location</b> is where that center landed.</p>" +
+                          "<p>The <b>datum</b> is the model of the Earth's shape your " +
+                          "coordinates are measured against, and it comes from that same " +
+                          "first input — it is shown here rather than chosen, because every " +
+                          "coordinate you enter already says which datum it is on.</p>" +
+                          "<p><b>Elevations</b> names the surface heights are measured from, " +
+                          "as your LiDAR declared it. CaveWhere passes elevations through " +
+                          "exactly as given and never converts between height systems.</p>"
                 }
             }
         }
