@@ -3568,15 +3568,21 @@ void cwSaveLoad::connectTreeModel()
             }
 
             // Queue a background job to rename the dataRoot directory.
-            d->addExplicitFileSystemJob(
-                        cwSaveLoadPrivate::Job(nullptr, cwSaveLoadPrivate::Job::Kind::Directory, cwSaveLoadPrivate::Job::Action::Custom,
+            cwSaveLoadPrivate::Job moveJob(nullptr, cwSaveLoadPrivate::Job::Kind::Directory, cwSaveLoadPrivate::Job::Action::Custom,
                                   [oldDataRootPath, newDataRootPath]() -> Monad::ResultBase {
                 if (!QFileInfo::exists(oldDataRootPath) || QFileInfo::exists(newDataRootPath)) {
                     return Monad::ResultBase();
                 }
                 return cwSaveLoadPrivate::moveDirectoryRobust(oldDataRootPath, newDataRootPath);
-            }),
-                        this);
+            });
+            // The emit above fired before the tree moved, so listeners that
+            // re-derive paths from disk (the external-centerline watcher, the
+            // image provider binder) saw the new root empty. Announce again
+            // once the move has landed; onDone runs on the main thread.
+            moveJob.onDone = [this](const Monad::ResultBase&) {
+                emit dataRootChanged();
+            };
+            d->addExplicitFileSystemJob(std::move(moveJob), this);
 
             // Queue a background job to rename the .cwproj descriptor file.
             if (currentFile != newDescriptorPath) {
