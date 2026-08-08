@@ -105,8 +105,11 @@ row; the Location row still gives its coordinates.</div>
     <code>cwGeoReference</code> changes are needed.</td>
     <td><code>cwGeoReference.cpp:28-48</code></td></tr>
 <tr><td><code>cwLocalProjectionManager</code> is owned by <code>cwCavingRegion</code>
-    (<code>m_localProjectionManager</code>), never exposed to QML. Its API is almost
-    entirely private; the QML surface for recentering must route through the region.</td>
+    (<code>m_localProjectionManager</code>), and was not exposed to QML. Its API is
+    almost entirely private. Phase 2 exposes the manager itself as
+    <code>region.localProjection</code>, alongside the region's existing
+    <code>geoReference</code>/<code>lazLayers</code>/<code>fixStationValidator</code>
+    properties.</td>
     <td><code>cwCavingRegion.h:143</code>, <code>cwLocalProjectionManager.h</code></td></tr>
 <tr><td><code>anchorTo(const Input&amp;)</code> already does the full bookkeeping:
     derives via <code>cwLocalProjection::deriveFrom</code>, calls
@@ -197,12 +200,12 @@ Recenter… button appears only in edit mode on a georeferenced project.</figcap
     <text x="85" y="122" text-anchor="middle" font-size="10" fill="#555">station / center of data</text>
 
     <rect x="230" y="20" width="200" height="52" rx="6" fill="#fff" stroke="#888"/>
-    <text x="330" y="41" text-anchor="middle">region.recenterOnStation(id)</text>
-    <text x="330" y="58" text-anchor="middle" font-size="10" fill="#555">manager: anchorTo(Input) → Anchored</text>
+    <text x="330" y="38" text-anchor="middle" font-size="11">region.localProjection<tspan x="330" dy="13">.recenterOnStation(id)</tspan></text>
+    <text x="330" y="66" text-anchor="middle" font-size="10" fill="#555">manager: anchorTo(Input) → Anchored</text>
 
     <rect x="230" y="150" width="200" height="52" rx="6" fill="#fff" stroke="#888"/>
-    <text x="330" y="171" text-anchor="middle">region.recenterOnDataCenter()</text>
-    <text x="330" y="188" text-anchor="middle" font-size="10" fill="#555">manager: median → recenter() → Frozen</text>
+    <text x="330" y="168" text-anchor="middle" font-size="11">region.localProjection<tspan x="330" dy="13">.recenterOnDataCenter()</tspan></text>
+    <text x="330" y="196" text-anchor="middle" font-size="10" fill="#555">manager: median → recenter() → Frozen</text>
 
     <rect x="480" y="80" width="150" height="70" rx="6" fill="#f0fff2" stroke="#2a6"/>
     <text x="555" y="103" text-anchor="middle">cwGeoReference</text>
@@ -358,64 +361,60 @@ counter.</p>
 
 <h3>5.1 Manager: public recenter API</h3>
 
-<p>Add a public section to <code>cwLocalProjectionManager</code>:</p>
+<p>The manager keeps only what needs its private lifecycle state and its view of the
+whole project. Building the picker's rows is the model's job (5.2); what the manager
+publishes are the two actions and the three facts the model needs to do it:</p>
 
-<pre>//! One row of the manual-recenter picker: a usable fix station, where it is
-//! relative to the middle of the project's data, and whether centering on it
-//! keeps the data inside the frame's envelope.
-struct RecenterCandidate {
-    QUuid stationId;
-    QString stationName;
-    QString caveName;
-    bool eligible = false;
-};
+<pre>//! The frame's reach, which is the same rule that decides a station is worth
+//! centering on and that an origin has ended up somewhere the project isn't.
+//! kAnchorThresholdMeters stays private in the .cpp.
+static bool isWithinReach(const cwGeoPoint&amp; center, const cwGeoPoint&amp; point);
 
-//! The stations the user may recenter on, in gatherFixInputs() order. Empty
-//! when the project has no frame — recentering re-derives an existing frame
-//! and never creates the first one.
-QList&lt;RecenterCandidate&gt; recenterCandidates() const;
+//! Built on first access; a project that never opens the picker never pays for it.
+cwRecenterCandidateModel* recenterCandidates();
+
+//! The component-wise median of every input the frame can place, in the frame's
+//! own coordinates. Empty with no frame, or nothing the frame can place.
+std::optional&lt;cwGeoPoint&gt; dataCenter() const;
+
+//! Where \a fix sits in the project's frame. Empty when the fix has no
+//! coordinate the frame can read — folding "not a usable fix" and "can't be
+//! transformed" together, because neither is a station you can center on.
+std::optional&lt;cwGeoPoint&gt; localPointOfFix(const cwFixStation&amp; fix) const;
 
 //! Re-anchor the frame on the station \a stationId, making it the input the
 //! lifecycle follows from now on. Refuses (returns false) an unknown id, an
 //! unusable station, and an ineligible one — the picker grays those out, and
-//! the model may have changed between showing the list and the click.
-bool recenterOnStation(const QUuid&amp; stationId);
+//! the project may have changed between showing the list and the click.
+Q_INVOKABLE bool recenterOnStation(const QUuid&amp; stationId);
 
-//! Freeze the frame at the component-wise median of every placeable input —
-//! the same point maybeRecenter() steers to, applied because the user asked
-//! rather than because the data drifted. Returns false with no frame or no
-//! placeable input.
-bool recenterOnDataCenter();
+//! Freeze the frame at dataCenter() — the same point maybeRecenter() steers to,
+//! applied because the user asked rather than because the data drifted.
+Q_INVOKABLE bool recenterOnDataCenter();
 </pre>
 
-<p><b><code>recenterCandidates()</code> implementation.</b> All in the current frame's
-local coordinates:</p>
+<p><b><code>dataCenter()</code> implementation.</b> For every input from
+<code>gatherInputs()</code> (stations <i>and</i> layers), <code>localPointOf(input)</code>;
+skip inputs that don't transform; median x and median y via <code>cwMedian</code>
+(<code>cwMath.h</code>). Empty when nothing transforms — which also covers "no frame",
+since <code>localPointOf</code> answers nothing without one. <code>maybeRecenter()</code>
+loses its own copy of the median and calls this, after its veto scan.</p>
 
-<ol>
-    <li>If <code>geoReference-&gt;localCoordinateSystem()</code> is empty, return
-        <code>{}</code>.</li>
-    <li>Compute the data median once: for every input from <code>gatherInputs()</code>
-        (stations <i>and</i> layers), <code>localPointOf(input)</code>; skip inputs
-        that don't transform; median x and median y via <code>cwMedian</code>
-        (<code>cwMath.h</code>). If nothing transforms, return <code>{}</code>.</li>
-    <li>Walk caves/stations exactly the way <code>gatherFixInputs()</code> does
-        (same Valid + <code>isValidCS</code> filter — extract a shared file-local
-        helper <code>usableFixStation(const cwFixStation&amp;)</code> so the two loops
-        can't drift), but also capture <code>fix.stationName()</code> and
-        <code>cave-&gt;name()</code>.</li>
-    <li>Eligibility: <code>std::hypot(median.x − station.x, median.y − station.y)
-        &lt;= kAnchorThresholdMeters</code>, both points in the <i>current</i> frame.
-        This stands in for "median distance from the origin of the would-be new frame":
-        recentering moves the origin to the station, and tmerc distortion over these
-        distances (≤ ~11 ppm at 30 km) is noise against a 50 km threshold — so one
-        median and one subtraction per station replaces deriving a candidate frame and
-        re-transforming every input per station.</li>
-</ol>
+<p><b><code>localPointOfFix()</code></b> is <code>usableFixStation(fix)</code> (the
+file-local Valid + <code>isValidCS</code> filter, shared with
+<code>gatherFixInputs()</code> so the two can't drift) then
+<code>localPointOf(inputOf(fix))</code>. Extracting <code>inputOf()</code> as the one
+place a fix becomes an <code>Input</code> is what keeps the picker and the lifecycle
+reading a station the same way.</p>
 
-<p><b><code>recenterOnStation()</code>:</b> find the station's <code>Input</code>
-(reuse the gather loop), re-check eligibility with a fresh median, then call the
-existing private <code>anchorTo(input)</code> — it already derives, writes, and
-maintains <code>m_lastAnchor</code>/<code>m_anchorSeen</code>. Return its result.</p>
+<p><b><code>recenterOnStation()</code>:</b> take a fresh <code>dataCenter()</code>, find
+the station, refuse unless <code>isWithinReach(center, local)</code>
+— the same predicate the model draws its rows with, so the check and the display can't
+disagree — then call the existing private <code>anchorTo(inputOf(fix))</code>, which
+already derives, writes, and maintains
+<code>m_lastAnchor</code>/<code>m_anchorSeen</code>. It deliberately does <b>not</b>
+refresh the model: an action that mutates what the picker is displaying is a surprise,
+and re-deriving the one station's eligibility is cheaper than rebuilding every row.</p>
 
 <p><b><code>recenterOnDataCenter()</code>:</b> compute the median as above, then follow
 the tail of <code>maybeRecenter()</code> exactly
@@ -443,24 +442,63 @@ calls.</div>
 <code>localCoordinateSystemChanged</code> → <code>reloadAll</code>). That is intended
 and already asynchronous; add no progress plumbing and no extra reload call.</div>
 
-<h3>5.2 Region: QML surface</h3>
+<h3>5.2 The candidate model, and the QML surface</h3>
 
-<p>The manager stays QML-invisible. On <code>cwCavingRegion</code>:</p>
+<p>The region owns the manager; it does not wrap it. It gains one property, exactly
+like the four subsystem properties it already exposes:</p>
 
-<pre>Q_INVOKABLE QVariantList recenterCandidates() const;   // list of QVariantMap rows
-Q_INVOKABLE bool recenterOnStation(const QUuid&amp; stationId);
-Q_INVOKABLE bool recenterOnDataCenter();
+<pre>Q_PROPERTY(cwLocalProjectionManager* localProjection READ localProjection CONSTANT)
 </pre>
 
-<p>The two actions just delegate to <code>m_localProjectionManager</code>.
-<code>recenterCandidates()</code> converts each <code>RecenterCandidate</code> to a
-<code>QVariantMap</code> with keys <code>stationId</code>, <code>stationName</code>,
-<code>caveName</code>, <code>eligible</code>. A transient list the popup fetches once
-per open is enough — the popup is modal and short-lived, so live model updates buy
-nothing; a QAbstractListModel here would be scaffolding. (This is the one sanctioned
-use of untyped data in this plan: it crosses to QML as a JS array consumed immediately
-by a <code>Repeater</code>/<code>ListView</code> model, and is never stored in a
-<code>property var</code>.)</p>
+<p>and the manager becomes the QML-facing object — <code>QML_NAMED_ELEMENT</code> +
+<code>QML_UNCREATABLE</code>, the way <code>cwFixStationValidator</code> is:</p>
+
+<pre>Q_PROPERTY(cwRecenterCandidateModel* recenterCandidates READ recenterCandidates CONSTANT FINAL)
+</pre>
+
+<p><code>cwRecenterCandidateModel</code> is a new
+<code>QAbstractListModel</code> (<code>cwRecenterCandidateModel.h/.cpp</code>, picked up
+by the source glob) with roles <code>stationId</code>, <code>stationName</code>,
+<code>caveName</code>, <code>eligible</code> — the same shape every other list in this
+codebase crosses to QML in. It owns the question the picker is asking, not just the rows
+that answer it:</p>
+
+<pre>struct cwRecenterCandidate { QUuid stationId; QString stationName;
+                             QString caveName; bool eligible = false; };
+
+cwRecenterCandidateModel(cwLocalProjectionManager* manager, cwCavingRegion* region);
+
+//! Rebuild against the project as it stands. It reprojects the project's inputs.
+Q_INVOKABLE void refresh();
+</pre>
+
+<p><code>refresh()</code> takes <code>manager-&gt;dataCenter()</code>, walks the region's
+caves, and keeps every station <code>manager-&gt;localPointOfFix()</code> can place,
+marking it with <code>manager::isWithinReach()</code>. It runs in the constructor, so the model is
+correct the moment the property is first read, and the popup calls it again in its
+<code>onOpened</code>.</p>
+
+<div class="decision">Eligibility is <code>isWithinReach(center, station)</code> — a
+horizontal distance against the 50 km threshold, both points in the <i>current</i> frame. It stands in for
+"how far the data would sit from the origin of the would-be new frame": recentering moves
+the origin onto the station, and tmerc distortion over these distances (≤ ~11 ppm at
+30 km) is noise against a 50 km threshold — so one median and one subtraction per station
+replaces deriving a candidate frame and re-transforming every input per station.</div>
+
+<div class="trap">The rows are deliberately <b>not</b> kept current between opens — no
+connections to the fix-station models. Eligibility reprojects every station in the
+project, and nothing is displaying the list between opens, so recomputing it per
+keystroke would be real work for nobody. <code>refresh()</code> on open is the contract;
+a test that appends a station and expects the count to follow is asserting the wrong
+thing.</div>
+
+<div class="trap">No <code>QVariantList</code>/<code>QVariantMap</code>, and no
+pass-through invokables on <code>cwCavingRegion</code>. Untyped rows violate the QML
+rules in CLAUDE.md, and a region that forwards calls to a subsystem it owns is a facade
+the region's existing design deliberately avoids — consumers read
+<code>region.geoReference</code>, <code>region.lazLayers</code>,
+<code>region.fixStationValidator</code>, and now
+<code>region.localProjection</code>.</div>
 
 <h3>5.3 Phase 2 tests (C++, tag them so they run as a subset)</h3>
 
@@ -493,9 +531,15 @@ fix stations in known CRSs). Cases:</p>
         byte-identical. The clustered stations are eligible.</li>
     <li><b>Refusals:</b> unknown id → false; ungeoreferenced project →
         <code>recenterCandidates()</code> empty and both actions false.</li>
-    <li><b>Datum follows the pick:</b> A typed on WGS84 (empty CS), B declared on
-        EPSG:26916 → after <code>recenterOnStation(B.id)</code>,
-        <code>geoReference-&gt;datumName() == "North American Datum 1983"</code>.</li>
+    <li><b>Datum follows the pick:</b> A declared on EPSG:32616, B on EPSG:26916, a
+        couple of km apart so only the declared datum differs → after
+        <code>recenterOnStation(B.id)</code>, <code>datumName()</code> contains "North
+        American Datum 1983". Its mirror: after <code>recenterOnDataCenter()</code> on a
+        mixed-datum project, the datum is unchanged.</li>
+    <li><b>The rows are a snapshot:</b> read <code>recenterCandidates()</code>, append a
+        station, the count holds; <code>refresh()</code> and it follows. This is what
+        pins the deliberate staleness — without it, someone "fixes" the model by wiring
+        it to the fix-station models.</li>
 </ol>
 
 <div class="trap">Axis order. Everywhere in these tests, <code>cwGeoPoint</code> is
@@ -524,9 +568,11 @@ established popup pattern — match it rather than inventing one). Content:</p>
         cave's coordinates change, the cave itself does not move, and point clouds
         reload once.</li>
     <li>First row: <b>Center of data</b> — always enabled when the popup is open;
-        calls <code>RootData.region.recenterOnDataCenter()</code>, then closes.</li>
-    <li>Then the stations from <code>RootData.region.recenterCandidates()</code>
-        (fetched in the popup's <code>onOpened</code>), a <code>ListView</code> with
+        calls <code>RootData.region.localProjection
+            .recenterOnDataCenter()</code>, then closes.</li>
+    <li>Then the stations from
+        <code>RootData.region.localProjection.recenterCandidates</code> (refreshed in the
+        popup's <code>onOpened</code>), a <code>ListView</code> with
         <code>section.property</code> on <code>caveName</code> so stations group under
         their cave. Each row shows the station name; the row for the current anchor is
         marked (compare against the attribution, or pass the anchor id in — mark it

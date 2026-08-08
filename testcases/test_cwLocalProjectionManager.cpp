@@ -8,6 +8,7 @@
 //Catch includes
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
 
 //Our includes
 #include "cwCave.h"
@@ -18,6 +19,7 @@
 #include "cwGeoReference.h"
 #include "cwLocalProjection.h"
 #include "cwLocalProjectionManager.h"
+#include "cwRecenterCandidateModel.h"
 #include "FixStationFixtureHelper.h"
 #include "GeoreferenceFixtureHelper.h"
 
@@ -25,6 +27,7 @@
 #include <QSignalSpy>
 #include <QUuid>
 
+using Catch::Matchers::ContainsSubstring;
 using Catch::Matchers::WithinAbs;
 
 namespace {
@@ -75,6 +78,13 @@ QString frameNorthOfData(double metersNorth)
         kUtm12N, cwGeoPoint(kAnchorEasting, kAnchorNorthing + metersNorth, 0.0));
     REQUIRE_FALSE(frame.isEmpty());
     return frame;
+}
+
+//! \a role of \a row, read the way a delegate reads it.
+QVariant candidateRole(const cwRecenterCandidateModel* model, int row,
+                       cwRecenterCandidateModel::Roles role)
+{
+    return model->data(model->index(row, 0), role);
 }
 
 using cwGeoreferenceFixture::restoreFrozenFrame;
@@ -478,4 +488,240 @@ TEST_CASE("An input the frame can't be related to neither keeps it nor moves it"
     }
 
     CHECK(region.geoReference()->state() == cwGeoReference::Frozen);
+}
+
+TEST_CASE("Recentering on a station makes it the project's anchor",
+          "[cwLocalProjectionManager][cwRecenter]")
+{
+    // The user picking a station is the same move the state machine makes when
+    // it anchors, so it lands in the same state — nothing about the frame
+    // records that a person chose it rather than the rule.
+    cwCavingRegion region;
+    const cwFixStation entrance = makeFix(QStringLiteral("A1"), kUtm12N,
+                                          kAnchorEasting, kAnchorNorthing, kElevation);
+    const cwFixStation surveyed = makeFix(QStringLiteral("B1"), kUtm12N,
+                                          kAnchorEasting + 3000.0, kAnchorNorthing + 4000.0,
+                                          kElevation);
+    addCaveWithFixes(&region, {entrance, surveyed});
+
+    auto* geoReference = region.geoReference();
+    REQUIRE(geoReference->anchor().id == entrance.id());
+
+    QSignalSpy frameSpy(geoReference, &cwGeoReference::localCoordinateSystemChanged);
+    CHECK(region.localProjection()->recenterOnStation(surveyed.id()));
+
+    CHECK(geoReference->state() == cwGeoReference::Anchored);
+    CHECK(geoReference->anchor().id == surveyed.id());
+    checkCenteredOn(geoReference->localCoordinateSystem(), kUtm12N,
+                    kAnchorEasting + 3000.0, kAnchorNorthing + 4000.0);
+
+    // One move of the frame, so the project's clouds re-decode once.
+    CHECK(frameSpy.count() == 1);
+}
+
+TEST_CASE("The lifecycle follows a station the user picked",
+          "[cwLocalProjectionManager][cwRecenter]")
+{
+    // What proves the pick joined the normal lifecycle rather than pinning the
+    // frame: the new anchor answers for the origin exactly as a derived one
+    // would, and the old anchor has stopped answering for anything.
+    cwCavingRegion region;
+    const cwFixStation entrance = makeFix(QStringLiteral("A1"), kUtm12N,
+                                          kAnchorEasting, kAnchorNorthing, kElevation);
+    const cwFixStation surveyed = makeFix(QStringLiteral("B1"), kUtm12N,
+                                          kAnchorEasting + 3000.0, kAnchorNorthing + 4000.0,
+                                          kElevation);
+    cwCave* cave = addCaveWithFixes(&region, {entrance, surveyed});
+    REQUIRE(region.localProjection()->recenterOnStation(surveyed.id()));
+
+    auto* geoReference = region.geoReference();
+    const QString picked = geoReference->localCoordinateSystem();
+
+    cwFixStation refined = entrance;
+    refined.setCoordinate(kAnchorEasting + 3.0, kAnchorNorthing + 2.0, kElevation);
+    cave->fixStations()->setFixStations({refined, surveyed});
+    CHECK(geoReference->localCoordinateSystem() == picked);
+
+    cave->fixStations()->removeAt(1);
+
+    // The hand-off every deleted anchor gets: the frame is still a good frame,
+    // so it keeps it and gives up the anchor.
+    CHECK(geoReference->state() == cwGeoReference::Frozen);
+    CHECK(geoReference->localCoordinateSystem() == picked);
+    CHECK_FALSE(geoReference->anchor().isValid());
+}
+
+TEST_CASE("Recentering on the data's middle freezes the frame there",
+          "[cwLocalProjectionManager][cwRecenter]")
+{
+    // Deliberately asymmetric: a mean of these would land 2.3 km east and 4.7 km
+    // north of the median, so the assertion can tell the two apart. Symmetric
+    // inputs put both statistics in the same place and could not fail.
+    cwCavingRegion region;
+    addCaveWithFixes(&region, {
+        makeFix(QStringLiteral("A1"), kUtm12N,
+                kAnchorEasting, kAnchorNorthing, kElevation),
+        makeFix(QStringLiteral("A2"), kUtm12N,
+                kAnchorEasting + 1000.0, kAnchorNorthing + 2000.0, kElevation),
+        makeFix(QStringLiteral("A3"), kUtm12N,
+                kAnchorEasting + 9000.0, kAnchorNorthing + 18000.0, kElevation)});
+
+    auto* geoReference = region.geoReference();
+    REQUIRE(geoReference->state() == cwGeoReference::Anchored);
+
+    CHECK(region.localProjection()->recenterOnDataCenter());
+
+    CHECK(geoReference->state() == cwGeoReference::Frozen);
+    CHECK_FALSE(geoReference->anchor().isValid());
+    checkCenteredOn(geoReference->localCoordinateSystem(), kUtm12N,
+                    kAnchorEasting + 1000.0, kAnchorNorthing + 2000.0);
+}
+
+TEST_CASE("A station the project's data would sit far from can't be recentered on",
+          "[cwLocalProjectionManager][cwRecenter]")
+{
+    // Centering on the wrong county's entrance would put the whole survey 200 km
+    // out in its own frame — every coordinate large, every distortion real. The
+    // picker grays the row out; the action refuses it too, because the model can
+    // change between the list being drawn and the click.
+    cwCavingRegion region;
+    const cwFixStation first = makeFix(QStringLiteral("A1"), kUtm12N,
+                                       kAnchorEasting, kAnchorNorthing, kElevation);
+    const cwFixStation second = makeFix(QStringLiteral("A2"), kUtm12N,
+                                        kAnchorEasting + 100.0, kAnchorNorthing + 100.0,
+                                        kElevation);
+    const cwFixStation third = makeFix(QStringLiteral("A3"), kUtm12N,
+                                       kAnchorEasting + 200.0, kAnchorNorthing + 200.0,
+                                       kElevation);
+    const cwFixStation elsewhere = makeFix(QStringLiteral("Z1"), kUtm12N,
+                                           kAnchorEasting, kDistantNorthing, kElevation);
+    cwCave* cave = addCaveWithFixes(&region, {first, second, third, elsewhere});
+    cave->setName(QStringLiteral("Roppel Cave"));
+
+    const cwRecenterCandidateModel* candidates =
+        region.localProjection()->recenterCandidates();
+    REQUIRE(candidates->count() == 4);
+
+    CHECK(candidateRole(candidates, 3, cwRecenterCandidateModel::StationIdRole).toUuid()
+          == elsewhere.id());
+    CHECK(candidateRole(candidates, 3, cwRecenterCandidateModel::StationNameRole).toString()
+          == QStringLiteral("Z1"));
+    CHECK(candidateRole(candidates, 3, cwRecenterCandidateModel::CaveNameRole).toString()
+          == QStringLiteral("Roppel Cave"));
+    CHECK_FALSE(candidateRole(candidates, 3, cwRecenterCandidateModel::EligibleRole).toBool());
+
+    for (int row = 0; row < 3; ++row) {
+        CHECK(candidateRole(candidates, row, cwRecenterCandidateModel::EligibleRole).toBool());
+    }
+
+    auto* geoReference = region.geoReference();
+    const QString before = geoReference->localCoordinateSystem();
+    CHECK_FALSE(region.localProjection()->recenterOnStation(elsewhere.id()));
+    CHECK(geoReference->localCoordinateSystem() == before);
+    CHECK(geoReference->anchor().id == first.id());
+}
+
+TEST_CASE("The candidate rows are the project as of the last refresh",
+          "[cwLocalProjectionManager][cwRecenter]")
+{
+    // Eligibility reprojects every station in the project, so the rows are built
+    // when the picker asks for them rather than kept current against edits
+    // nothing is displaying.
+    cwCavingRegion region;
+    cwCave* cave = addCaveWithFixes(&region, {makeFix(QStringLiteral("A1"), kUtm12N,
+                                                      kAnchorEasting, kAnchorNorthing,
+                                                      kElevation)});
+
+    cwRecenterCandidateModel* candidates = region.localProjection()->recenterCandidates();
+    REQUIRE(candidates->count() == 1);
+
+    cave->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("B1"), kUtm12N, kNearbyEasting, kNearbyNorthing, kElevation));
+    CHECK(candidates->count() == 1);
+
+    candidates->refresh();
+    CHECK(candidates->count() == 2);
+    CHECK(candidateRole(candidates, 1, cwRecenterCandidateModel::StationNameRole).toString()
+          == QStringLiteral("B1"));
+}
+
+TEST_CASE("A project with no frame has nothing to recenter",
+          "[cwLocalProjectionManager][cwRecenter]")
+{
+    // Recentering re-derives a frame the project already has. It is not how the
+    // first one gets made, so it has nothing to offer a project that has none.
+    cwCavingRegion region;
+    addCaveWithFixes(&region, {makeFix(QStringLiteral("A1"), QString(),
+                                       kAnchorEasting, kAnchorNorthing, kElevation)});
+    REQUIRE(region.geoReference()->state() == cwGeoReference::Ungeoreferenced);
+
+    CHECK(region.localProjection()->recenterCandidates()->count() == 0);
+    CHECK_FALSE(region.localProjection()->recenterOnDataCenter());
+    CHECK_FALSE(region.localProjection()->recenterOnStation(QUuid::createUuid()));
+    CHECK(region.geoReference()->state() == cwGeoReference::Ungeoreferenced);
+}
+
+TEST_CASE("Recentering on a station that isn't there leaves the frame alone",
+          "[cwLocalProjectionManager][cwRecenter]")
+{
+    cwCavingRegion region;
+    const cwFixStation fix = makeFix(QStringLiteral("A1"), kUtm12N,
+                                     kAnchorEasting, kAnchorNorthing, kElevation);
+    addCaveWithFixes(&region, {fix});
+    const QString before = region.geoReference()->localCoordinateSystem();
+
+    CHECK_FALSE(region.localProjection()->recenterOnStation(QUuid::createUuid()));
+    CHECK(region.geoReference()->localCoordinateSystem() == before);
+    CHECK(region.geoReference()->anchor().id == fix.id());
+}
+
+TEST_CASE("The frame takes the datum of the station it is recentered on",
+          "[cwLocalProjectionManager][cwRecenter]")
+{
+    // A pick re-derives on the station's own system, so it adopts that station's
+    // datum — the same rule that applies when the state machine anchors. Both
+    // stations are within a few kilometers of each other; only the datum they
+    // are declared on differs.
+    cwCavingRegion region;
+    const cwFixStation onWgs84 = makeFix(QStringLiteral("A1"),
+                                         QStringLiteral("EPSG:32616"),
+                                         kAnchorEasting, kAnchorNorthing, kElevation);
+    const cwFixStation onNad83 = makeFix(QStringLiteral("B1"),
+                                         QStringLiteral("EPSG:26916"),
+                                         kAnchorEasting + 2000.0, kAnchorNorthing,
+                                         kElevation);
+    addCaveWithFixes(&region, {onWgs84, onNad83});
+
+    auto* geoReference = region.geoReference();
+    REQUIRE(geoReference->anchor().id == onWgs84.id());
+    REQUIRE_THAT(geoReference->datumName().toStdString(),
+                 ContainsSubstring("World Geodetic System 1984"));
+
+    REQUIRE(region.localProjection()->recenterOnStation(onNad83.id()));
+
+    CHECK_THAT(geoReference->datumName().toStdString(),
+               ContainsSubstring("North American Datum 1983"));
+}
+
+TEST_CASE("Recentering on the data's middle keeps the frame's datum",
+          "[cwLocalProjectionManager][cwRecenter]")
+{
+    // The middle of the data is a point in the frame's own coordinates, so it
+    // says where to put the origin and nothing about what to measure it on.
+    // Inputs on mixed datums vote on position, never on datum.
+    cwCavingRegion region;
+    addCaveWithFixes(&region, {
+        makeFix(QStringLiteral("A1"), QStringLiteral("EPSG:26916"),
+                kAnchorEasting, kAnchorNorthing, kElevation),
+        makeFix(QStringLiteral("B1"), QStringLiteral("EPSG:32616"),
+                kAnchorEasting + 2000.0, kAnchorNorthing, kElevation)});
+
+    auto* geoReference = region.geoReference();
+    REQUIRE_THAT(geoReference->datumName().toStdString(),
+                 ContainsSubstring("North American Datum 1983"));
+
+    REQUIRE(region.localProjection()->recenterOnDataCenter());
+
+    CHECK_THAT(geoReference->datumName().toStdString(),
+               ContainsSubstring("North American Datum 1983"));
 }

@@ -29,12 +29,28 @@ namespace {
     //! flip, a transposed digit) miss by far more.
     constexpr double kAnchorThresholdMeters = 50000.0;
 
+    //! How far \a from and \a to sit apart horizontally, both being points in
+    //! the frame. The frame is judged on horizontal position, so z takes no part.
+    double horizontalDistance(const cwGeoPoint& from, const cwGeoPoint& to)
+    {
+        return std::hypot(to.x - from.x, to.y - from.y);
+    }
+
     //! How far \a point sits from the frame's origin. The LDP fixes x_0 = y_0 = 0,
-    //! so a point already in the frame is its own offset from the origin, and the
-    //! frame is judged on where it is horizontally.
+    //! so a point already in the frame is its own offset from the origin.
     double horizontalMagnitude(const cwGeoPoint& point)
     {
-        return std::hypot(point.x, point.y);
+        return horizontalDistance(cwGeoPoint(0.0, 0.0, 0.0), point);
+    }
+
+    //! Whether \a fix can place anything. Only a Valid fix has components at
+    //! all — every other state reads zeros, and a frame centered on a coordinate
+    //! system's own origin is exactly the "cave in the Gulf of Guinea" failure
+    //! the LDP exists to make impossible.
+    bool usableFixStation(const cwFixStation& fix)
+    {
+        return fix.state() == cwFixStation::Valid
+                && cwCoordinateTransform::isValidCS(fix.inputCS().trimmed());
     }
 }
 
@@ -172,26 +188,23 @@ QList<cwLocalProjectionManager::Input> cwLocalProjectionManager::gatherFixInputs
             continue;
         }
         for (const cwFixStation& fix : cave->fixStations()->fixStations()) {
-            // Only a Valid fix has components at all — every other state reads
-            // zeros, and a frame centered on a coordinate system's own origin is
-            // exactly the "cave in the Gulf of Guinea" failure the LDP exists to
-            // make impossible.
-            if (fix.state() != cwFixStation::Valid) {
+            if (!usableFixStation(fix)) {
                 continue;
             }
-            const QString inputCS = fix.inputCS().trimmed();
-            if (!cwCoordinateTransform::isValidCS(inputCS)) {
-                continue;
-            }
-            inputs.append(Input{
-                cwGeoReference::Anchor{cwGeoReference::Anchor::FixStation, fix.id()},
-                inputCS,
-                cwGeoPoint(fix.easting(), fix.northing(), fix.elevation())
-            });
+            inputs.append(inputOf(fix));
         }
     }
 
     return inputs;
+}
+
+cwLocalProjectionManager::Input cwLocalProjectionManager::inputOf(const cwFixStation& fix)
+{
+    return Input{
+        cwGeoReference::Anchor{cwGeoReference::Anchor::FixStation, fix.id()},
+        fix.inputCS().trimmed(),
+        cwGeoPoint(fix.easting(), fix.northing(), fix.elevation())
+    };
 }
 
 QList<cwLocalProjectionManager::Input> cwLocalProjectionManager::gatherLayerInputs() const
@@ -249,13 +262,130 @@ std::optional<double> cwLocalProjectionManager::distanceFromOrigin(const Input& 
     return horizontalMagnitude(*local);
 }
 
-void cwLocalProjectionManager::maybeRecenter(const QList<Input>& inputs)
+bool cwLocalProjectionManager::isWithinReach(const cwGeoPoint& center,
+                                             const cwGeoPoint& point)
 {
-    cwGeoReference* geoReference = m_region->geoReference();
-    const QString localCS = geoReference->localCoordinateSystem();
+    return horizontalDistance(center, point) <= kAnchorThresholdMeters;
+}
 
+std::optional<cwGeoPoint> cwLocalProjectionManager::dataCenter() const
+{
+    return centerOf(gatherInputs());
+}
+
+std::optional<cwGeoPoint> cwLocalProjectionManager::centerOf(const QList<Input>& inputs) const
+{
     QList<double> xs;
     QList<double> ys;
+    for (const Input& input : inputs) {
+        const auto local = localPointOf(input);
+        if (!local.has_value()) {
+            // A system that can't be related to the frame can't vote on where
+            // the middle of the project is.
+            continue;
+        }
+        xs.append(local->x);
+        ys.append(local->y);
+    }
+
+    if (xs.isEmpty()) {
+        return std::nullopt;
+    }
+
+    // Component-wise median rather than mean, so a single tile 300 km out pulls
+    // the center by meters instead of halfway to it. Horizontal only — the
+    // derivation ignores z.
+    return cwGeoPoint(cwMedian(std::move(xs)), cwMedian(std::move(ys)), 0.0);
+}
+
+std::optional<cwGeoPoint> cwLocalProjectionManager::localPointOfFix(const cwFixStation& fix) const
+{
+    if (!usableFixStation(fix)) {
+        return std::nullopt;
+    }
+    return localPointOf(inputOf(fix));
+}
+
+cwRecenterCandidateModel* cwLocalProjectionManager::recenterCandidates()
+{
+    if (m_recenterCandidates == nullptr) {
+        m_recenterCandidates = new cwRecenterCandidateModel(this, m_region);
+    }
+    return m_recenterCandidates;
+}
+
+std::optional<cwFixStation> cwLocalProjectionManager::fixStationWithId(const QUuid& stationId) const
+{
+    for (cwCave* cave : m_region->caves()) {
+        if (cave == nullptr) {
+            continue;
+        }
+        for (const cwFixStation& fix : cave->fixStations()->fixStations()) {
+            if (fix.id() == stationId) {
+                return fix;
+            }
+        }
+    }
+    return std::nullopt;
+}
+
+bool cwLocalProjectionManager::recenterOnStation(const QUuid& stationId)
+{
+    const auto fix = fixStationWithId(stationId);
+    if (!fix.has_value()) {
+        return false;
+    }
+
+    const auto local = localPointOfFix(*fix);
+    const auto center = dataCenter();
+    if (!local.has_value() || !center.has_value()
+            || !isWithinReach(*center, *local)) {
+        // The picker draws these as unusable or disabled, so reaching here means
+        // the project changed between the list being drawn and the click. Refuse
+        // rather than derive a frame the project's own data sits outside.
+        return false;
+    }
+
+    return anchorTo(inputOf(*fix));
+}
+
+bool cwLocalProjectionManager::recenterOnDataCenter()
+{
+    const auto center = dataCenter();
+    if (!center.has_value()) {
+        return false;
+    }
+
+    // Deliberately without maybeRecenter()'s two guards. Those exist so the
+    // automatic path only moves a frame that is provably wrong; here the user is
+    // asking, and an origin already sitting on its data is precisely the case
+    // this is for.
+    return freezeAt(*center);
+}
+
+bool cwLocalProjectionManager::freezeAt(const cwGeoPoint& center)
+{
+    cwGeoReference* geoReference = m_region->geoReference();
+
+    // The center is in the frame's coordinates and the frame carries the datum
+    // pinned when the project was first placed, so deriving from it keeps that
+    // datum: inputs on mixed datums vote on position, never on datum.
+    const QString candidate =
+        cwLocalProjection::deriveFrom(geoReference->localCoordinateSystem(), center);
+    if (candidate.isEmpty()) {
+        // Nothing we could vouch for. Leave the frame alone rather than
+        // half-move it, the way anchorTo() does.
+        return false;
+    }
+
+    geoReference->recenter(candidate);
+    m_lastAnchor = geoReference->anchor();
+    m_anchorSeen = false;
+    return true;
+}
+
+void cwLocalProjectionManager::maybeRecenter(const QList<Input>& inputs)
+{
     for (const Input& input : inputs) {
         const auto local = localPointOf(input);
         if (!local.has_value()) {
@@ -269,27 +399,26 @@ void cwLocalProjectionManager::maybeRecenter(const QList<Input>& inputs)
             // still describing the project. This is the veto that keeps a tile
             // from the wrong county from dragging the origin to itself, and it
             // is the common case: a frozen project sitting on its own data pays
-            // one transform for it.
+            // one transform for it and stops here.
             return;
         }
-
-        xs.append(local->x);
-        ys.append(local->y);
     }
 
-    if (xs.isEmpty()) {
+    // The same inputs the veto just read: nothing can have changed under them,
+    // so re-walking the region to gather them again would be answering a
+    // question this function was already handed. centerOf() does reproject each
+    // one a second time, which the memoized pipeline makes a per-point
+    // multiply — and this branch only runs when the frame is about to move and
+    // every cloud re-decodes anyway.
+    const auto center = centerOf(inputs);
+    if (!center.has_value()) {
         // Nothing that could be placed at all, so the frame isn't provably
         // wrong. Moving a stored frame on no evidence is the one thing storing
         // it was meant to prevent.
         return;
     }
 
-    // Component-wise median rather than mean, so a single tile 300 km out pulls
-    // the center by meters instead of halfway to it. Horizontal only — the
-    // derivation ignores z.
-    const cwGeoPoint center(cwMedian(std::move(xs)), cwMedian(std::move(ys)), 0.0);
-
-    if (horizontalMagnitude(center) <= kAnchorThresholdMeters) {
+    if (horizontalMagnitude(*center) <= kAnchorThresholdMeters) {
         // The origin is already in the middle of the data, however far the data
         // spreads either side of it: every input can be past the threshold while
         // the middle of them is a couple of kilometers away, which is not an
@@ -304,19 +433,7 @@ void cwLocalProjectionManager::maybeRecenter(const QList<Input>& inputs)
         return;
     }
 
-    // The median is in the frame's coordinates and the frame carries the datum
-    // pinned when the project was first placed, so deriving from it keeps that
-    // datum: inputs on mixed datums vote on position, never on datum.
-    const QString candidate = cwLocalProjection::deriveFrom(localCS, center);
-    if (candidate.isEmpty()) {
-        // Nothing we could vouch for. Leave the frame alone rather than
-        // half-move it, the way anchorTo() does.
-        return;
-    }
-
-    geoReference->recenter(candidate);
-    m_lastAnchor = geoReference->anchor();
-    m_anchorSeen = false;
+    freezeAt(*center);
 }
 
 bool cwLocalProjectionManager::anchorTo(const Input& input)

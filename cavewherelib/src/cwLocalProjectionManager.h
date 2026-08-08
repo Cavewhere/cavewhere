@@ -12,6 +12,7 @@
 #include <QFuture>
 #include <QObject>
 #include <QString>
+#include <QUuid>
 
 //Std includes
 #include <optional>
@@ -23,9 +24,11 @@
 #include "cwGeoPoint.h"
 #include "cwGeoReference.h"
 #include "cwGlobals.h"
+#include "cwRecenterCandidateModel.h"
 
 class cwCave;
 class cwCavingRegion;
+class cwFixStation;
 class cwLazLayer;
 
 /**
@@ -56,6 +59,10 @@ class cwLazLayer;
 class CAVEWHERE_LIB_EXPORT cwLocalProjectionManager : public QObject
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(LocalProjectionManager)
+    QML_UNCREATABLE("Owned by CavingRegion; access via region.localProjection")
+
+    Q_PROPERTY(cwRecenterCandidateModel* recenterCandidates READ recenterCandidates CONSTANT FINAL)
 
 public:
     explicit cwLocalProjectionManager(cwCavingRegion* region);
@@ -76,6 +83,40 @@ public:
     //! that cancels its own wait stops only itself.
     QFuture<QString> frameFuture();
 
+    //! Whether \a point is close enough to \a center to be part of the same
+    //! project, both being points in the frame. This is the frame's reach, so it
+    //! is the same rule that decides a station is worth centering on and that an
+    //! origin has ended up somewhere the project isn't.
+    static bool isWithinReach(const cwGeoPoint& center, const cwGeoPoint& point);
+
+    //! The stations the user may recenter on, in region order. Built on first
+    //! access — a project that never opens the picker never pays for it — and
+    //! refreshed from there by the picker itself.
+    cwRecenterCandidateModel* recenterCandidates();
+
+    //! The middle of the project — the component-wise median of every input the
+    //! frame can place, in the frame's own coordinates — or an empty result when
+    //! there is no frame or nothing it can place.
+    std::optional<cwGeoPoint> dataCenter() const;
+
+    //! Where \a fix sits in the project's frame, or an empty result when the fix
+    //! has no coordinate the frame can read. A station the frame can't place is
+    //! not one the project can be centered on, so the two refusals are the same
+    //! answer here.
+    std::optional<cwGeoPoint> localPointOfFix(const cwFixStation& fix) const;
+
+    //! Re-anchor the frame on the station \a stationId, making it the input the
+    //! lifecycle follows from now on. Refuses an unknown id, an unusable
+    //! station, and an ineligible one — the picker grays those out, and the
+    //! project may have changed between the list being drawn and the click.
+    Q_INVOKABLE bool recenterOnStation(const QUuid& stationId);
+
+    //! Freeze the frame at the middle of every placeable input — the same point
+    //! maybeRecenter() steers to, applied because the user asked rather than
+    //! because the data drifted. Refuses a project with no frame, and one with
+    //! nothing the frame can place.
+    Q_INVOKABLE bool recenterOnDataCenter();
+
     //! Suspend evaluation while a project load replaces the region's data.
     //! Caves arriving mid-load would otherwise derive a frame that
     //! cwGeoReference::restore() overwrites moments later — a PROJ pipeline
@@ -93,6 +134,10 @@ private:
     };
 
     cwCavingRegion* m_region = nullptr;
+
+    //! The rows the picker shows, as of the last
+    //! cwRecenterCandidateModel::refresh().
+    cwRecenterCandidateModel* m_recenterCandidates = nullptr;
 
     //! Whether the current anchor has been seen among the inputs since it was
     //! set. Until it has, its absence means "not loaded yet" rather than
@@ -125,6 +170,18 @@ private:
     //! Gathering is cheap enough to run on every keystroke: per input it is a
     //! hash lookup, because isValidCS memoizes the PROJ query per thread.
     QList<Input> gatherInputs() const;
+
+    //! \a fix as an anchor candidate. The one place a fix station becomes an
+    //! Input, so the gather and the picker can only ever read it the same way.
+    static Input inputOf(const cwFixStation& fix);
+
+    //! dataCenter() over a list already gathered, so a caller holding the inputs
+    //! doesn't transform every one of them a second time.
+    std::optional<cwGeoPoint> centerOf(const QList<Input>& inputs) const;
+
+    //! The region's fix station carrying \a stationId, or an empty result when
+    //! the project no longer has it.
+    std::optional<cwFixStation> fixStationWithId(const QUuid& stationId) const;
 
     //! The two halves of gatherInputs(), in the order it concatenates them.
     //! The fix half stands on its own while headers are still arriving: it is
@@ -170,13 +227,14 @@ private:
     //! project is, and the outliers are the ones that are wrong.
     void maybeRecenter(const QList<Input>& inputs);
 
-    //! Three of the four ways the frame moves — maybeRecenter() is the fourth
-    //! and records the same things. Each records what it did, so that
+    //! The ways the frame moves. Every one of them records what it did, so that
     //! evaluate()'s "an anchor I didn't write came from a load" test can't be
-    //! fooled by this class's own writes.
+    //! fooled by this class's own writes — which is why re-centering goes
+    //! through freezeAt() rather than writing cwGeoReference directly.
     bool anchorTo(const Input& input);
     void freezeFrame();
     void clearFrame();
+    bool freezeAt(const cwGeoPoint& center);
 
     //! Anchor on the first of \a inputs a frame can actually be derived from.
     //! A coordinate PROJ can't place — a UTM easting typed into a row that says

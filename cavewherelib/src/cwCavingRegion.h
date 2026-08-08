@@ -21,11 +21,11 @@
 
 //Our includes
 class cwCave;
-class cwLocalProjectionManager;
 class cwProject;
 #include "cwCavingRegionData.h"
 #include "cwFixStationValidator.h"
 #include "cwGeoReference.h"
+#include "cwLocalProjectionManager.h"
 #include "cwLazLayerModel.h"
 #include "cwSanitizedNameSet.h"
 #include "cwUndoer.h"
@@ -44,6 +44,7 @@ class CAVEWHERE_LIB_EXPORT cwCavingRegion : public QAbstractListModel, public cw
     Q_PROPERTY(cwGeoReference* geoReference READ geoReference CONSTANT)
     Q_PROPERTY(cwFixStationValidator* fixStationValidator READ fixStationValidator CONSTANT)
     Q_PROPERTY(cwLazLayerModel* lazLayers READ lazLayers CONSTANT)
+    Q_PROPERTY(cwLocalProjectionManager* localProjection READ localProjection CONSTANT)
     Q_PROPERTY(cwUnits::UnitSystem unitSystem READ unitSystem WRITE setUnitSystem NOTIFY unitSystemChanged)
 
 public:
@@ -74,6 +75,12 @@ public:
     cwFixStationValidator* fixStationValidator() const { return m_fixStationValidator; }
 
     cwLazLayerModel* lazLayers() const { return m_lazLayers; }
+
+    //! Drives the local projection through its lifecycle, and is where the user
+    //! recenters it from. Owned here because the policy needs the region's caves
+    //! and layers; read through region.localProjection, not through the region.
+    cwLocalProjectionManager* localProjection() const { return m_localProjectionManager; }
+
     void setFutureManagerToken(const cwFutureManagerToken& token);
 
     //! The project-wide default unit system, persisted with the project. It

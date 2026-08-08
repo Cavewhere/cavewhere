@@ -129,11 +129,14 @@ public:
     //! would be churn. A no-op with no LDP to freeze.
     void freeze();
 
-    //! Move a frozen frame to \a localCS, keeping it anchorless: every input the
-    //! project has ended up far from the origin, so the frame is wrong and there
-    //! is nothing left that could be answerable for correcting it. State and
-    //! string are written together, and an empty \a localCS is refused the way
-    //! anchorTo() refuses one.
+    //! Move the frame to \a localCS, leaving it Frozen and anchorless. Two
+    //! callers, one meaning: the frame's position stops being answerable to any
+    //! single input — either every input drifted far from the origin and the
+    //! automatic path is correcting a frame that outlived what placed it, or
+    //! the user asked for the middle of the data, which no one input can claim.
+    //! Legal from Anchored as well as Frozen. State and string are written
+    //! together, and an empty \a localCS is refused the way anchorTo() refuses
+    //! one.
     void recenter(const QString& localCS);
 
     //! Back to Ungeoreferenced — every georeferenced input is gone, so the
