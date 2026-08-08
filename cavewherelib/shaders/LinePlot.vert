@@ -37,6 +37,11 @@ const float kSplayHalfWidthPx = 0.5;      // logical px -> 1 px wide line
 // z-fights at shared stations.
 const float kCenterlineDepthBias = 1e-4;
 const float kSplayDepthBias = 0.5e-4;
+// Smallest clip w kept after eye-plane clipping. An endpoint behind the eye
+// (w <= 0) mirrors under the manual perspective divide and flips the sign of
+// the width offset (which scales by w), so segments straddling the eye plane
+// are clipped here first; the hardware near plane trims the rest.
+const float kMinClipW = 1e-4;
 
 void main(void)
 {
@@ -48,6 +53,22 @@ void main(void)
 
     vec4 clipFrom = viewProjectionMatrix * vec4(iFrom, 1.0);
     vec4 clipTo   = viewProjectionMatrix * vec4(iTo, 1.0);
+
+    // Both endpoints behind the eye: the whole segment is invisible.
+    if (clipFrom.w < kMinClipW && clipTo.w < kMinClipW) {
+        gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+        vType = 0u;
+        return;
+    }
+    // One endpoint behind the eye: truncate the segment at the eye plane so
+    // every value below is computed from points with positive w.
+    if (clipFrom.w < kMinClipW) {
+        clipFrom = mix(clipFrom, clipTo,
+                       (kMinClipW - clipFrom.w) / (clipTo.w - clipFrom.w));
+    } else if (clipTo.w < kMinClipW) {
+        clipTo = mix(clipTo, clipFrom,
+                     (kMinClipW - clipTo.w) / (clipFrom.w - clipTo.w));
+    }
 
     // Screen-space direction of the segment; the perpendicular carries the
     // width. A segment projecting to a point (looking straight down it) has
