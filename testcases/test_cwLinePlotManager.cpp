@@ -1509,6 +1509,17 @@ TEST_CASE("cwLinePlotManager registers a Splays keyword item per trip with splay
         }
     }
 
+    SECTION("splay tips extend depth, never length") {
+        CHECK(cave->length()->value() == Catch::Approx(20.0));
+        CHECK(cave->depth()->value() == Catch::Approx(0.0));
+
+        chunk1->setStationSplays(1, {makeSplay("4.0", "0.0", "-90.0")});
+        plotManager->waitToFinish();
+
+        CHECK(cave->length()->value() == Catch::Approx(20.0));
+        CHECK(cave->depth()->value() == Catch::Approx(4.0));
+    }
+
     SECTION("hiding the Splays item masks exactly the splay tail") {
         auto* splaysProxy = proxyForTrip(trip1, splaysType);
         REQUIRE(splaysProxy != nullptr);

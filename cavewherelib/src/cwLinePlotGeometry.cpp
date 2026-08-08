@@ -174,7 +174,9 @@ cwLinePlotGeometry::generate(const cwCavingRegionData& region,
             // Splay segments ride at the tail of the trip's span, so the full
             // trip range covers them and the splay sub-range can be masked on
             // its own. Walk the trip's stations in survey order so the tips
-            // land deterministically; splays never touch length/depth.
+            // land deterministically. Splays never touch length, but their
+            // tips extend depth: floor and ceiling splays reach the cave's
+            // true vertical extremes, which stations only approximate.
             const int splayStart = result.points.size();
             if (!splayOwners.isEmpty()) {
                 for (const cwSurveyChunkData& chunk : trip.chunks) {
@@ -194,6 +196,9 @@ cwLinePlotGeometry::generate(const cwCavingRegionData& region,
                         for (const QVector3D& tip : tips) {
                             result.points.append(stationPoint);
                             result.points.append(tip);
+                            minDepth = qMin(minDepth, (double)tip.z());
+                            maxDepth = qMax(maxDepth, (double)tip.z());
+                            hasDepth = true;
                         }
                     }
                 }
