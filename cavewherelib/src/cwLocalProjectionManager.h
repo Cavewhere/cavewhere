@@ -193,6 +193,18 @@ private:
     //! if the last thing it was waiting on has landed.
     void evaluate();
 
+    //! Re-resolve who the frame is centered on and publish it on the
+    //! cwGeoReference. Separate from evaluate() because a rename changes the
+    //! answer without changing a single thing the state machine reads — running
+    //! the machine for one would be work at best and a re-derive at worst.
+    void updateAnchorDescription();
+
+    //! The anchor's id spelled back out as a name, by finding whatever currently
+    //! carries it. Empty when nothing does, which covers both "no anchor" and
+    //! "the input holding it has just gone" — the evaluate that settles the
+    //! second case runs this again.
+    QString resolveAnchorDescription() const;
+
     //! The state machine itself. Split from evaluate() so that every path out
     //! of it — including the early returns — goes through the settle.
     void evaluateFrame();
@@ -235,6 +247,15 @@ private:
     void freezeFrame();
     void clearFrame();
     bool freezeAt(const cwGeoPoint& center);
+
+    //! What a move of the frame has to record: the anchor this class just wrote,
+    //! and who the frame is now centered on. \a anchorSeen is whether the move
+    //! anchored on an input that was in front of us, which only anchorTo() has.
+    //!
+    //! The recentering the user asks for moves the frame without running the
+    //! state machine, so a move that left the description to evaluate() would
+    //! keep naming the anchor the project had before the click.
+    void recordFrameMove(bool anchorSeen);
 
     //! Anchor on the first of \a inputs a frame can actually be derived from.
     //! A coordinate PROJ can't place — a UTM easting typed into a row that says

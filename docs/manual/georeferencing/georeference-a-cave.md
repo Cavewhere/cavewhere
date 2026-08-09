@@ -105,26 +105,34 @@ system your reader can paste elsewhere.
 
 ## Where the project landed
 
-The **Data** page's **Project** box reports the frame CaveWhere derived, in three
-read-only rows. None of them is a picker: a datum chosen by hand could only
-disagree with the coordinates you typed, which already say which datum they are
-on.
+The **Data** page's **Project** box has a **Coordinate System** group. **Units** is
+the one row there you set; the rest report the frame CaveWhere derived and are
+read-only. None of those is a picker: a datum chosen by hand could only disagree
+with the coordinates you typed, which already say which datum they are on.
 
+- **Units** is the project-wide unit system — the one row here you can change,
+  through the **Edit** button on the group's heading.
 - **Location** is where the frame is centered, as latitude and longitude. It sits
   on the first thing that placed the project, which makes it the fastest check
   that an anchor went in right — a fix typed into the wrong UTM zone shows up
   here as a location in the wrong part of the world, the one warning the app
   cannot give you on the fix row itself. Before anything places the project it
   reads `Not georeferenced`.
+- **Centered on** names that first thing: `entrance — Roppel Cave` for a fix
+  station, or the file name for a point cloud. It follows renames, so it always
+  names the station as you have it now.
 - **Datum** names the model of the Earth's shape your coordinates measure
   against, inherited from that same first input: `North American Datum 1983` for
   most US data. Different parts of the world work on different datums, and
   CaveWhere adopts whichever one your data declares.
 - **Elevations** names the surface heights are measured from, as your point cloud
-  declared it, `NAVD88` on most recent US scans. The row appears only when
-  something declared one. CaveWhere passes elevations through exactly as they
-  arrive and never converts between height systems, so this row records what you
-  handed it rather than a correction it applied.
+  declared it, `NAVD88` on most recent US scans. When nothing declared one it
+  says `Not declared by your data` rather than going quiet, so you can tell the
+  two apart. CaveWhere passes elevations through exactly as they arrive and never
+  converts between height systems, so this row records what you handed it rather
+  than a correction it applied.
+
+Once the project has a frame, every row stays on screen.
 
 ## Read coordinates back out
 

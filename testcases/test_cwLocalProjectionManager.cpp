@@ -725,3 +725,98 @@ TEST_CASE("Recentering on the data's middle keeps the frame's datum",
     CHECK_THAT(geoReference->datumName().toStdString(),
                ContainsSubstring("North American Datum 1983"));
 }
+
+TEST_CASE("The manager names what the frame is centered on",
+          "[cwLocalProjectionManager][cwAnchorDescription]")
+{
+    cwCavingRegion region;
+    CHECK(region.geoReference()->anchorDescription().isEmpty());
+
+    const cwFixStation fix = makeFix(QStringLiteral("A42"), kUtm12N,
+                                     kAnchorEasting, kAnchorNorthing, kElevation);
+    cwCave* cave = addCaveWithFixes(&region, {fix});
+    cave->setName(QStringLiteral("Roppel Cave"));
+
+    REQUIRE(region.geoReference()->state() == cwGeoReference::Anchored);
+    CHECK(region.geoReference()->anchorDescription() == QStringLiteral("A42 — Roppel Cave"));
+
+    SECTION("renaming the cave moves the description") {
+        QSignalSpy spy(region.geoReference(), &cwGeoReference::anchorDescriptionChanged);
+
+        cave->setName(QStringLiteral("Hidden River Cave"));
+
+        CHECK(spy.count() == 1);
+        CHECK(region.geoReference()->anchorDescription() == QStringLiteral("A42 — Hidden River Cave"));
+    }
+
+    SECTION("renaming the station moves the description") {
+        QSignalSpy spy(region.geoReference(), &cwGeoReference::anchorDescriptionChanged);
+
+        cwFixStation renamed = fix;
+        renamed.setStationName(QStringLiteral("A43"));
+        cave->fixStations()->setFixStations({renamed});
+
+        CHECK(spy.count() == 1);
+        CHECK(region.geoReference()->anchorDescription() == QStringLiteral("A43 — Roppel Cave"));
+    }
+
+    SECTION("a frame with no anchor left names nothing") {
+        QSignalSpy spy(region.geoReference(), &cwGeoReference::anchorDescriptionChanged);
+
+        // The anchor was the only georeferenced input, so deleting it takes the
+        // frame with it — and there is nothing left the description could name.
+        cave->fixStations()->setFixStations({});
+
+        REQUIRE(region.geoReference()->state() == cwGeoReference::Ungeoreferenced);
+        CHECK(spy.count() >= 1);
+        CHECK(region.geoReference()->anchorDescription().isEmpty());
+    }
+}
+
+TEST_CASE("Recentering renames what the frame is centered on",
+          "[cwLocalProjectionManager][cwRecenter][cwAnchorDescription]")
+{
+    // The recentering the user asks for moves the frame without running the
+    // state machine. A description left to evaluate() would go on naming the
+    // station the project was anchored on before the click — and on a project
+    // with no GIS layers nothing would ever come along to correct it.
+    cwCavingRegion region;
+    const cwFixStation entrance = makeFix(QStringLiteral("A1"), kUtm12N,
+                                          kAnchorEasting, kAnchorNorthing, kElevation);
+    const cwFixStation surveyed = makeFix(QStringLiteral("B1"), kUtm12N,
+                                          kAnchorEasting + 3000.0, kAnchorNorthing + 4000.0,
+                                          kElevation);
+    cwCave* cave = addCaveWithFixes(&region, {entrance, surveyed});
+    cave->setName(QStringLiteral("Roppel Cave"));
+
+    auto* geoReference = region.geoReference();
+    REQUIRE(geoReference->anchorDescription() == QStringLiteral("A1 — Roppel Cave"));
+
+    SECTION("a picked station is the one named") {
+        QSignalSpy spy(geoReference, &cwGeoReference::anchorDescriptionChanged);
+
+        REQUIRE(region.localProjection()->recenterOnStation(surveyed.id()));
+
+        CHECK(spy.count() == 1);
+        CHECK(geoReference->anchorDescription() == QStringLiteral("B1 — Roppel Cave"));
+    }
+
+    SECTION("the data's middle is no station, so it names nothing") {
+        QSignalSpy spy(geoReference, &cwGeoReference::anchorDescriptionChanged);
+
+        REQUIRE(region.localProjection()->recenterOnDataCenter());
+
+        REQUIRE(geoReference->state() == cwGeoReference::Frozen);
+        CHECK(spy.count() == 1);
+        CHECK(geoReference->anchorDescription().isEmpty());
+    }
+
+    SECTION("a refused recentering leaves the description alone") {
+        QSignalSpy spy(geoReference, &cwGeoReference::anchorDescriptionChanged);
+
+        CHECK_FALSE(region.localProjection()->recenterOnStation(QUuid::createUuid()));
+
+        CHECK(spy.count() == 0);
+        CHECK(geoReference->anchorDescription() == QStringLiteral("A1 — Roppel Cave"));
+    }
+}

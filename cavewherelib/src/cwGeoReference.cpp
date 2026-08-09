@@ -83,6 +83,15 @@ void cwGeoReference::setVerticalDatum(const QString& datum)
     emit verticalDatumChanged();
 }
 
+void cwGeoReference::setAnchorDescription(const QString& description)
+{
+    if (m_anchorDescription == description) {
+        return;
+    }
+    m_anchorDescription = description;
+    emit anchorDescriptionChanged();
+}
+
 void cwGeoReference::setLocalProjection(const LocalProjectionState& state)
 {
     if (m_localProjection == state) {

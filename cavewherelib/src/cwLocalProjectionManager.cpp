@@ -87,11 +87,16 @@ cwLocalProjectionManager::cwLocalProjectionManager(cwCavingRegion* region) :
             this, &cwLocalProjectionManager::evaluate);
 
     // The one input change with no probe behind it: setSourceCSOverride applies
-    // its precedence in memory, so nothing above would fire for it.
+    // its precedence in memory, so nothing above would fire for it. A rename is
+    // the opposite case — it moves what the anchor is called without moving a
+    // thing the state machine reads.
     connect(layers, &QAbstractItemModel::dataChanged, this,
             [this](const QModelIndex&, const QModelIndex&, const QList<int>& roles) {
         if (roles.isEmpty() || roles.contains(cwLazLayerModel::SourceCSRole)) {
             evaluate();
+        }
+        if (roles.isEmpty() || roles.contains(cwLazLayerModel::NameRole)) {
+            updateAnchorDescription();
         }
     });
 
@@ -379,8 +384,7 @@ bool cwLocalProjectionManager::freezeAt(const cwGeoPoint& center)
     }
 
     geoReference->recenter(candidate);
-    m_lastAnchor = geoReference->anchor();
-    m_anchorSeen = false;
+    recordFrameMove(false);
     return true;
 }
 
@@ -445,8 +449,7 @@ bool cwLocalProjectionManager::anchorTo(const Input& input)
         return false;
     }
     m_region->geoReference()->anchorTo(input.anchor, localCS);
-    m_lastAnchor = m_region->geoReference()->anchor();
-    m_anchorSeen = true;
+    recordFrameMove(true);
     return true;
 }
 
@@ -464,19 +467,22 @@ void cwLocalProjectionManager::anchorToFirstUsable(const QList<Input>& inputs)
 // mutation that forgot to update m_lastAnchor would misread its own write as one.
 void cwLocalProjectionManager::freezeFrame()
 {
-    cwGeoReference* geoReference = m_region->geoReference();
-    geoReference->freeze();
-    m_lastAnchor = geoReference->anchor();
-    m_anchorSeen = false;
+    m_region->geoReference()->freeze();
+    recordFrameMove(false);
 }
 
 void cwLocalProjectionManager::clearFrame()
 {
-    cwGeoReference* geoReference = m_region->geoReference();
-    geoReference->clear();
-    m_lastAnchor = geoReference->anchor();
-    m_anchorSeen = false;
+    m_region->geoReference()->clear();
+    recordFrameMove(false);
     m_sawAnyInput = false;
+}
+
+void cwLocalProjectionManager::recordFrameMove(bool anchorSeen)
+{
+    m_lastAnchor = m_region->geoReference()->anchor();
+    m_anchorSeen = anchorSeen;
+    updateAnchorDescription();
 }
 
 void cwLocalProjectionManager::evaluate()
@@ -486,7 +492,45 @@ void cwLocalProjectionManager::evaluate()
     }
 
     evaluateFrame();
+    updateAnchorDescription();
     settleEpoch();
+}
+
+void cwLocalProjectionManager::updateAnchorDescription()
+{
+    m_region->geoReference()->setAnchorDescription(resolveAnchorDescription());
+}
+
+QString cwLocalProjectionManager::resolveAnchorDescription() const
+{
+    const cwGeoReference::Anchor anchor = m_region->geoReference()->anchor();
+
+    switch (anchor.kind) {
+    case cwGeoReference::Anchor::None:
+        break;
+    case cwGeoReference::Anchor::FixStation:
+        for (cwCave* cave : m_region->caves()) {
+            if (cave == nullptr) {
+                continue;
+            }
+            const QList<cwFixStation>& fixes = cave->fixStations()->fixStations();
+            for (const cwFixStation& fix : fixes) {
+                if (fix.id() == anchor.id) {
+                    return QStringLiteral("%1 — %2").arg(fix.stationName(), cave->name());
+                }
+            }
+        }
+        break;
+    case cwGeoReference::Anchor::LazLayer:
+        for (cwLazLayer* layer : m_region->lazLayers()->layers()) {
+            if (layer != nullptr && layer->id() == anchor.id) {
+                return layer->name();
+            }
+        }
+        break;
+    }
+
+    return QString();
 }
 
 void cwLocalProjectionManager::evaluateFrame()
@@ -607,5 +651,11 @@ void cwLocalProjectionManager::syncCaveConnections()
                 this, &cwLocalProjectionManager::evaluate, Qt::UniqueConnection);
         connect(model, &QAbstractItemModel::modelReset,
                 this, &cwLocalProjectionManager::evaluate, Qt::UniqueConnection);
+
+        // A cave's name is half of what an anchored fix station is called, and
+        // it is the one part of that no input signal reports.
+        connect(cave, &cwCave::nameChanged, this,
+                &cwLocalProjectionManager::updateAnchorDescription,
+                Qt::UniqueConnection);
     }
 }

@@ -61,9 +61,13 @@ MainWindowTest {
             compare(label("projectionOriginValue").text, "Not georeferenced")
 
             // Nothing placed the project, so there is no datum it could have
-            // inherited and nothing to show a row for.
+            // inherited, no elevations to describe, and nothing centering it.
             verify(!label("projectionDatumValue").visible,
                    "the datum row stays hidden until a frame exists")
+            verify(!label("projectionVerticalDatumValue").visible,
+                   "the elevations row stays hidden until a frame exists")
+            verify(!label("projectionAnchorValue").visible,
+                   "nothing anchors an ungeoreferenced project")
         }
 
         function test_aFixStationGivesTheProjectALocationAndADatum() {
@@ -99,8 +103,8 @@ MainWindowTest {
             tryVerify(() => label("projectionDatumValue").visible, 5000)
 
             // The datum is inherited from the input that anchored the project,
-            // never chosen — nothing here may become an editor when the Project
-            // box is put into edit mode.
+            // never chosen — the projection rows stay labels when the Project
+            // box is put into edit mode, however editable Units becomes.
             const editButton = findChild(dataPage(), "regionSettingsEditButton")
             verify(editButton !== null, "edit toggle must exist")
             editButton.editMode = true
@@ -113,19 +117,111 @@ MainWindowTest {
             editButton.editMode = false
         }
 
-        function test_verticalDatumShowsOnlyWhenSomethingDeclaredOne() {
+        function test_theElevationsRowSaysSoWhenNothingDeclaredAVerticalDatum() {
             addUtm16NFix()
             tryVerify(() => label("projectionDatumValue").visible, 5000)
 
-            verify(!label("projectionVerticalDatumValue").visible,
-                   "a typed fix station declares no vertical datum")
+            // The row stays put and says what it knows. Vanishing would leave
+            // the reader unable to tell "your data never said" from "CaveWhere
+            // forgot to show it".
+            const vertical = label("projectionVerticalDatumValue")
+            verify(vertical.visible,
+                   "the elevations row shows once there is a frame")
+            compare(vertical.text, "Not declared by your data")
 
             RootData.region.geoReference.verticalDatum = "NAVD88"
 
-            const vertical = label("projectionVerticalDatumValue")
-            tryVerify(() => vertical.visible, 3000,
-                      "a declared vertical datum earns a row")
-            compare(vertical.text, "NAVD88")
+            tryCompare(vertical, "text", "NAVD88", 3000)
+        }
+
+        function test_theProjectSaysWhichStationItIsCenteredOn() {
+            addUtm16NFix()
+
+            const anchor = label("projectionAnchorValue")
+            tryVerify(() => anchor.visible, 5000,
+                      "an anchored frame names the input it came from")
+            compare(anchor.text, "entrance — " + RootData.region.cave(0).name)
+        }
+
+        function test_theProjectionFactsShareOneGroup() {
+            // Every projection fact reads as one block. GIS Sources is a link to
+            // another page, not a setting, so it stays outside.
+            const group = label("coordinateSystemGroup")
+            const inGroup = name => {
+                verify(findChild(group, name) !== null,
+                       name + " must sit inside the Coordinate System group")
+            }
+            inGroup("unitSystemValue")
+            inGroup("projectionOriginValue")
+            inGroup("projectionAnchorValue")
+            inGroup("projectionDatumValue")
+            inGroup("projectionVerticalDatumValue")
+
+            // Edit unlocks Units and nothing else, so it belongs to the group
+            // rather than to the Project box around it.
+            inGroup("regionSettingsEditButton")
+
+            verify(findChild(group, "geospatialLayersLink") === null,
+                   "GIS Sources is a link to another page, not a projection fact")
+        }
+
+        // A custom label replaces the one the style positions and measures, so
+        // both jobs are done by hand and both can go wrong: the title starts at
+        // the control's edge instead of the frame's, and the group reserves too
+        // little room for it and prints it over the first row.
+        function test_theGroupTitleLinesUpWithItsRows() {
+            const group = label("coordinateSystemGroup")
+            const title = label("coordinateSystemTitle")
+            const edit = label("regionSettingsEditButton")
+
+            compare(group.mapFromItem(title, 0, 0).x, group.contentItem.x,
+                    "the title starts where the rows inside the frame do")
+
+            const clears = item => {
+                const bottom = group.mapFromItem(item, 0, item.height).y
+                verify(bottom <= group.contentItem.y,
+                       "the title line clears the rows: " + item.objectName
+                       + " ends at " + bottom
+                       + ", the rows start at " + group.contentItem.y)
+            }
+            clears(title)
+            clears(edit)
+        }
+
+        // Deleting the anchor of a project that has a second georeferenced
+        // station hands the frame off to Frozen: it keeps the projection but has
+        // no input answerable for where it sits, so there is no one station the
+        // attribution could name.
+        function test_aFrozenFrameNamesNothing() {
+            addUtm16NFix()
+            const cave = RootData.region.cave(0)
+            cave.fixStations.addFixStation()
+            const second = cave.fixStations.index(1)
+            cave.fixStations.setData(second, "back door", FixStationModel.StationNameRole)
+            cave.fixStations.setData(second, utm16N, FixStationModel.InputCSRole)
+            cave.fixStations.setData(second, easting + 1000.0, FixStationModel.EastingRole)
+            cave.fixStations.setData(second, northing + 1000.0, FixStationModel.NorthingRole)
+            cave.fixStations.setData(second, 320.0, FixStationModel.ElevationRole)
+
+            tryVerify(() => label("projectionAnchorValue").visible, 5000)
+
+            cave.fixStations.removeFixStation("entrance")
+
+            tryCompare(RootData.region.geoReference, "state", GeoReference.Frozen, 5000)
+            verify(!label("projectionAnchorValue").visible,
+                   "a frozen frame has no anchor to name")
+            verify(label("projectionDatumValue").visible,
+                   "the frame is still there, so the datum row stays")
+        }
+
+        function test_theCenteredOnRowFollowsACaveRename() {
+            addUtm16NFix()
+            tryVerify(() => label("projectionAnchorValue").visible, 5000)
+
+            RootData.region.cave(0).name = "Roppel Cave"
+
+            tryCompare(label("projectionAnchorValue"), "text",
+                       "entrance — Roppel Cave", 3000)
         }
     }
 }

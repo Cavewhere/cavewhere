@@ -142,3 +142,45 @@ TEST_CASE("Derive frame: a second add leaves the frame on the first layer",
     CHECK(region->geoReference()->localCoordinateSystem() == frameAfterFirst);
     CHECK(region->geoReference()->anchor().id == anchorAfterFirst);
 }
+
+TEST_CASE("The region names the GIS layer the frame is centered on",
+          "[cwLazAutoAdoptCS][cwAnchorDescription]") {
+    // The anchor is persisted as an id, so the name has to be resolved against
+    // the layer currently carrying it — which means it has to follow a rename
+    // and let go when the layer does.
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    auto root = std::make_unique<cwRootData>();
+    auto* region = root->project()->cavingRegion();
+
+    const QString path = writeMinimalLaz(
+        tempLazPath(tempDir, QStringLiteral("anchor-name")),
+        kUtmZone10N);
+    REQUIRE(!path.isEmpty());
+    REQUIRE(addLazAndWait(root.get(), QStringList{path}));
+
+    REQUIRE(region->geoReference()->anchor().kind == cwGeoReference::Anchor::LazLayer);
+    REQUIRE(region->lazLayers()->count() == 1);
+    cwLazLayer* layer = region->lazLayers()->layerAt(0);
+    REQUIRE(layer != nullptr);
+
+    // The layer's own name, with no cave to qualify it.
+    CHECK(region->geoReference()->anchorDescription() == layer->name());
+
+    SECTION("the description follows a layer rename") {
+        QSignalSpy spy(region->geoReference(), &cwGeoReference::anchorDescriptionChanged);
+
+        REQUIRE(region->lazLayers()->rename(0, QStringLiteral("blue-spring-entrance")));
+
+        CHECK(spy.size() == 1);
+        CHECK(region->geoReference()->anchorDescription() == QStringLiteral("blue-spring-entrance"));
+        CHECK(region->geoReference()->anchorDescription() == layer->name());
+    }
+
+    SECTION("removing the layer leaves nothing to name") {
+        region->lazLayers()->removeAt(0);
+
+        CHECK(region->geoReference()->anchorDescription().isEmpty());
+    }
+}

@@ -52,6 +52,7 @@ class CAVEWHERE_LIB_EXPORT cwGeoReference : public QObject
     Q_PROPERTY(bool hasOrigin READ hasOrigin NOTIFY localProjectionChanged)
     Q_PROPERTY(double originLatitude READ originLatitude NOTIFY localProjectionChanged)
     Q_PROPERTY(double originLongitude READ originLongitude NOTIFY localProjectionChanged)
+    Q_PROPERTY(QString anchorDescription READ anchorDescription NOTIFY anchorDescriptionChanged)
 
 public:
     /**
@@ -166,6 +167,18 @@ public:
     //! plans/LDP_AUTO_COORDINATE_SYSTEM_PLAN.html. Empty without a frame.
     QString datumName() const { return m_datumName; }
 
+    //! What the frame is centered on, for a reader: "A42 — Roppel Cave" when the
+    //! anchor is a fix station, the layer's name when it is a GIS layer, and ""
+    //! when no anchor is answerable for the frame (Ungeoreferenced or Frozen).
+    //!
+    //! Unlike datumName(), this can't be derived from the frame string — the
+    //! anchor is an id, and only the caves and layers know what carries it. So
+    //! cwLocalProjectionManager resolves it and writes it here, next to the rest
+    //! of what describes the frame. It follows renames rather than being stored,
+    //! which is why it is written on every evaluate rather than only on a move.
+    QString anchorDescription() const { return m_anchorDescription; }
+    void setAnchorDescription(const QString& description);
+
     //! Whether the frame reports where it is centered. False without a frame.
     bool hasOrigin() const { return m_origin.has_value(); }
 
@@ -190,6 +203,8 @@ signals:
 
     void verticalDatumChanged();
 
+    void anchorDescriptionChanged();
+
 private:
     // The three parts of the local projection, bundled: a state, the string it
     // stands for, and the input it came from are only meaningful together, and
@@ -209,6 +224,7 @@ private:
     // rather than on every binding that describes it. setLocalProjection is the
     // only writer of the frame, so it is the only writer of these.
     QString m_datumName;
+    QString m_anchorDescription;
     std::optional<cwGeoPoint> m_origin;
 
     void setLocalProjection(const LocalProjectionState& state);
