@@ -298,7 +298,8 @@ return srcInfo.lastModified() &lt;= dstInfo.lastModified();</code></pre>
         <code>updateMissingSourcePath</code> polling
         (<code>ExternalCenterlineTripPanel.qml:67-101</code>, which exists only
         because <code>sourcePathFor</code> has no property backing). Replaced by
-        a <em>Replace&hellip;</em> action.</td>
+        a <em>Replace&hellip;</em> action. The <em>Detach&hellip;</em> action and
+        its <code>RemoveAskBox</code> also go &mdash; see &sect;4.1.</td>
   </tr>
   <tr>
     <td><code>cwRootData.h/.cpp</code></td>
@@ -320,6 +321,44 @@ return srcInfo.lastModified() &lt;= dstInfo.lastModified();</code></pre>
         re-solve are kept and become the load-bearing ones.</td>
   </tr>
 </table>
+
+<h3 id="detach">4.1 Detach</h3>
+
+<p>
+  The panel's <em>Detach&hellip;</em> action comes out too. Once the copy is the
+  only file, detaching leaves a trip that has nothing in it &mdash; the survey
+  data lived in the attachment, and CaveWhere never lets the user edit an
+  external trip's shots by hand. Removing the trip on the Cave page reaches the
+  same end in one step users already know, so the panel keeps the two verbs that
+  are actually about the file: <em>Reload now</em> and <em>Replace&hellip;</em>.
+</p>
+
+<p>
+  Removing the trip also cleans up: the attachment dir is rooted under the
+  trip's own directory (<code>externalCenterlineDir(trip)</code> resolves
+  through <code>dirPrivate(trip)</code>), and trip removal already enqueues
+  <code>removeDirectory(trip)</code> (<code>cwSaveLoad.cpp:3490</code>), so the
+  copied closure goes with it rather than lingering as an orphan.
+</p>
+
+<p>
+  What the two verbs do differ in is worth stating plainly rather than
+  discovering later: detach kept the trip and its name, date, team, and
+  calibration; removing the trip discards all of it. That difference only
+  matters to a user who wants to keep a trip's metadata and swap what fills
+  it &mdash; which is <em>Replace</em>, not detach-then-attach. No workflow this
+  plan knows of needs an emptied-but-surviving external trip.
+</p>
+
+<p>
+  <code>cwExternalCenterlineManager::detachCenterline</code> and
+  <code>cwRootData::detachTripCenterline</code> stay. The panel's
+  <code>RemoveAskBox</code> is their only caller today, but detach is still the
+  correct teardown for an owner (it clears the settings entry and the
+  attachment-dir map synchronously so a queued operation cannot resurrect
+  files), and the manager tests cover it directly. This is a UI removal, not an
+  API one.
+</p>
 
 <h2 id="add">5. What goes in</h2>
 
@@ -395,6 +434,19 @@ return srcInfo.lastModified() &lt;= dstInfo.lastModified();</code></pre>
         for the removed banner deleted rather than skipped.</td>
   </tr>
   <tr>
+    <td>3b</td>
+    <td><strong>Remove the Detach&hellip; action</strong> (&sect;4.1). The panel
+        button and its <code>RemoveAskBox</code> only;
+        <code>detachCenterline</code> / <code>detachTripCenterline</code> stay
+        as the owner-teardown API.</td>
+    <td>An attached trip's panel offers <em>Reload now</em> and
+        <em>Replace&hellip;</em> and nothing else. Removing the trip on the Cave
+        page leaves no attachment dir behind &mdash; assert the directory is
+        gone after the save drains, for both <code>.cw</code> and
+        <code>.cwproj</code>. Manager-level detach tests stay green untouched,
+        which is what proves the API survived the UI removal.</td>
+  </tr>
+  <tr>
     <td>4</td>
     <td><strong>Demote <code>cwExternalSourceSettings</code>.</strong> Rename the
         accessors to breadcrumb language; update the class doc and
@@ -415,6 +467,14 @@ return srcInfo.lastModified() &lt;= dstInfo.lastModified();</code></pre>
   the API. Splitting them keeps the diff that changes behavior small enough to
   review against the tests, and leaves a revert point if a consumer turns up that
   the file sweep missed.
+</p>
+
+<p class="dim">
+  3b is numbered rather than slotted in as 4 so the later commits keep the
+  numbers already referenced from the code and from commit 1's notes. It follows
+  3 because 3 is already rewriting the panel's action row; doing both in one
+  commit would mix &ldquo;delete the retired live-link surface&rdquo; with a
+  separate UX judgement about detach.
 </p>
 
 <h2 id="open">7. Open questions</h2>
