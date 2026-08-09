@@ -379,13 +379,7 @@ MainWindowTest {
             let selected = []
             for(let i = 0; i < boxes.length; ++i) {
                 let box = boxes[i]
-                let editorFocused = false
-                if(box.shouldHaveFocus !== undefined) {
-                    editorFocused = box.shouldHaveFocus()
-                } else if(box.hasEditorFocus !== undefined) {
-                    editorFocused = box.hasEditorFocus === true
-                }
-                if(editorFocused) {
+                if(box.shouldHaveFocus()) {
                     selected.push(box.objectName)
                 }
             }

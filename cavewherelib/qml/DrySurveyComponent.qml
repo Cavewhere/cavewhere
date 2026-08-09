@@ -199,6 +199,7 @@ Item {
                 splayCount: itemId.stationSplayCount
                 splaysExpanded: itemId.stationSplaysExpanded
                 calibration: itemId.calibration
+                view: itemId.ListView.view
             }
         }
 

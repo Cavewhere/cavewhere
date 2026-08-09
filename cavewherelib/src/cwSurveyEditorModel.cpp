@@ -68,7 +68,7 @@ void cwSurveyEditorModel::connectChunkSignals(cwSurveyChunk* chunk)
         }
     };
 
-    auto chunkDataChange = [this, chunk](cwSurveyChunk::DataRole role, int chunkIndex) {
+    auto chunkCellChange = [this, chunk](cwSurveyChunk::DataRole role, int chunkIndex) {
         auto rowType = toRowType(role);
         auto modelIndex = toModelIndex({chunk, chunkIndex, rowType});
         if(!modelIndex.isValid()) {
@@ -76,23 +76,30 @@ void cwSurveyEditorModel::connectChunkSignals(cwSurveyChunk* chunk)
             return;
         }
         emit dataChanged(modelIndex, modelIndex, changedRolesFor(role));
-
-        //An open cluster labels each of its rows with the station's name, so a
-        //rename has to reach the rows hanging below the station row too
-        if(role == cwSurveyChunk::StationNameRole) {
-            const int splayRows = splayRowCount(chunk, chunkIndex);
-            if(splayRows > 0) {
-                emit dataChanged(index(modelIndex.row() + 1),
-                                 index(modelIndex.row() + splayRows),
-                                 {SplayStationNameRole});
-            }
-        }
-
         syncVirtualRows(chunk);
     };
 
-    connect(chunk, &cwSurveyChunk::dataChanged, this, chunkDataChange);
-    connect(chunk, &cwSurveyChunk::errorsChanged, this, chunkDataChange);
+    //An open cluster labels each of its rows with the station's name, so a
+    //rename has to reach the rows hanging below the station row too. Only a
+    //rename does — an error appearing on the station name leaves the labels
+    //reading exactly what they read before
+    auto renameSplayLabels = [this, chunk](cwSurveyChunk::DataRole role, int chunkIndex) {
+        if(role != cwSurveyChunk::StationNameRole) {
+            return;
+        }
+
+        const int stationRow = toModelRow({chunk, chunkIndex, cwSurveyEditorRowIndex::StationRow});
+        const int splayRows = splayRowCount(chunk, chunkIndex);
+        if(stationRow >= 0 && splayRows > 0) {
+            emit dataChanged(index(stationRow + 1),
+                             index(stationRow + splayRows),
+                             {SplayStationNameRole});
+        }
+    };
+
+    connect(chunk, &cwSurveyChunk::dataChanged, this, chunkCellChange);
+    connect(chunk, &cwSurveyChunk::dataChanged, this, renameSplayLabels);
+    connect(chunk, &cwSurveyChunk::errorsChanged, this, chunkCellChange);
 
     connect(chunk, &cwSurveyChunk::stationSplaysChanged, this, [this, chunk](int stationIndex) {
         reconcileSplayRows(chunk, stationIndex);

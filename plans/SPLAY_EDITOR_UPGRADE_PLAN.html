@@ -52,7 +52,7 @@
 <body>
 
 <h1>Splay editor upgrade — commit plan</h1>
-<p class="lead">Six commits taking the survey table's splay display (phase 5 of
+<p class="lead">Eight commits taking the survey table's splay display (phase 5 of
 <code>plans/SPLAY_SHOTS_PLAN.html</code>) to a full editor: a real Splays column, delete, move,
 in-place editing, and manual entry. Groundwork for digital survey on mobile, where splays arrive
 over Bluetooth from a DistoX/BRIC and the common failures are splays on the wrong station, bad
@@ -103,7 +103,64 @@ the new cell (chip found inside <code>SplaysBox</code>, keyboard toggle).
 <b>By hand:</b> import a Survex file with splays, tab across a station row into the Splays cell,
 expand with Enter, check the variant-C look in light and dark.</div>
 
-<h2><span class="commit">Commit 2</span> Chunk mutation API (no UI)</h2>
+<div class="callout"><b>Landed</b> as <code>dd3b288e</code>. Review of the commit surfaced two
+refactors that must precede editable splay cells, inserted below as commits 2 and 3: SplaysBox
+copies DataBox's focus protocol and chrome wholesale (and misses DataBox's re-sync on
+<code>view.onCurrentIndexChanged</code>), and <code>StationSplaysRole</code> living in
+<code>cwSurveyChunk::DataRole</code> is a seam — the editor's cell vocabulary borrowing the
+chunk's data vocabulary, which the splay reading cells cannot fit at all.</div>
+
+<h2><span class="commit">Commit 2</span> Shared <code>SurveyEditorCell</code> base (QML refactor)</h2>
+<p>Extract the focus protocol and cell chrome that <code>SplaysBox</code> duplicated from
+<code>DataBox</code> into one base, before commit 7 would create a third copy. Pure refactor —
+no behavior change beyond the one fix it absorbs.</p>
+<ul>
+  <li><b>New <code>SurveyEditorCell.qml</code></b>: <code>model</code>, <code>view</code>,
+      <code>listViewIndex</code>, <code>dataRole</code>, <code>indexInChunk</code>,
+      <code>calibration</code> (→ <code>frontSights</code>/<code>backSights</code>), the focus
+      protocol (<code>shouldHaveFocus</code>/<code>syncFocusState</code>/<code>takeFocus</code>/
+      <code>moveFocus</code>, tab handling, model <code>Connections</code>, sync hooks), and the
+      chrome layers (station gradient, 1&nbsp;px border, focus highlight). Input via
+      <code>TapHandler</code>, with a <code>tapped</code> seam for subtypes.</li>
+  <li><b><code>DataBox</code></b> layers on the editor (<code>GlobalShadowTextInput</code> dance,
+      error loader, remove preview, right-click); <b><code>SplaysBox</code></b> layers on the chip
+      and Enter/Space toggle.</li>
+  <li><b>Absorbed fix</b>: <code>SplaysBox</code> gains DataBox's re-sync on
+      <code>view.onCurrentIndexChanged</code> (the ListView steals focus onto the row delegate;
+      without the re-sync a focused Splays cell goes keyboard-dead when the current index moves).</li>
+  <li><b>Also here</b>: split the station-rename branch out of the model's shared
+      <code>chunkDataChange</code> lambda so <code>errorsChanged</code> on a station name stops
+      redundantly re-emitting <code>SplayStationNameRole</code> for the rows under it.</li>
+</ul>
+<div class="test"><b>Tests.</b> Existing suites are the gate — <code>tst_SplayRows</code>,
+<code>tst_SurveyDataEntry</code>, <code>tst_MarkStationFixed</code> — plus an offscreen
+screenshot compare against the commit-1 render (pixel-identical expected). <b>By hand:</b>
+focus a Splays cell, scroll the table, confirm the keyboard toggle still works.</div>
+
+<h2><span class="commit">Commit 3</span> Editor-level <code>CellRole</code> (C++ refactor)</h2>
+<p>Give the editor its own cell vocabulary instead of borrowing the chunk's data vocabulary.
+The forcing function is commit 7: a splay reading cell can never be a
+<code>cwSurveyChunk::DataRole</code> because <code>chunk-&gt;data(role, index)</code> has no
+splay index.</p>
+<ul>
+  <li><b><code>cwSurveyEditorCellIndex</code></b> gains <code>enum CellRole</code>
+      (<code>Q_ENUM</code>, QML-exposed): reading enumerators mirroring the chunk roles at
+      identical numeric values — so the ~100 existing <code>cellIndex(...)</code> call sites and
+      QML int coercions keep working — plus editor-only cells, starting with
+      <code>StationSplaysCell</code>.</li>
+  <li><b>Write boundary</b>: <code>toChunkRole(CellRole)</code> returning an optional, used in
+      <code>setDataAt</code> — editor-only cells answer empty, replacing the
+      <code>isReadingCell</code> guard.</li>
+  <li><b>Retire <code>StationSplaysRole</code></b> from <code>cwSurveyChunk::DataRole</code>
+      (with its <code>checkForError</code> case), and delete the wrong-if-ever-reached
+      <code>toModelRole(StationSplaysRole) → StationSplayCountRole</code> mapping.</li>
+</ul>
+<div class="test"><b>Tests.</b> Existing <code>[cwSurveyEditorModel]</code> and
+<code>[SplayShot]</code> suites, with the splay-cell cases retargeted at
+<code>CellRole</code>. <b>By hand:</b> tab across a station row into the Splays cell and back —
+unchanged behavior is the proof.</div>
+
+<h2><span class="commit">Commit 4</span> Chunk mutation API (no UI)</h2>
 <p>All splay mutations in one C++-only commit, so every UI commit after this is thin wiring.</p>
 <ul>
   <li><b><code>cwSurveyChunk</code></b>:
@@ -126,7 +183,7 @@ empty results) and <code>[cwSurveyEditorModel]</code> reconciliation cases: remo
 clear-while-expanded (cluster collapses), move between stations with both clusters open, move
 across chunks. <b>By hand:</b> nothing visible yet — this commit is proven by its tests.</div>
 
-<h2><span class="commit">Commit 3</span> Delete UI</h2>
+<h2><span class="commit">Commit 5</span> Delete UI</h2>
 <ul>
   <li><b>Splay row menu</b>: a ⋯ button at the end of each splay row plus right-click via
       <code>ContextMenuArea</code>, with "Remove splay" acting immediately through a new model
@@ -147,7 +204,7 @@ all (challenge appears, Cancel leaves data intact, Remove clears and collapses).
 <b>By hand:</b> import splays, prune a bad shot, delete a whole cluster, watch the 3D plot drop
 the splays live.</div>
 
-<h2><span class="commit">Commit 4</span> Move UI — pick-a-target</h2>
+<h2><span class="commit">Commit 6</span> Move UI — pick-a-target</h2>
 <ul>
   <li><b>Menu items</b>: "Move to…" (row menu) and "Move all to…" (cluster menu) arm a pending
       move.</li>
@@ -169,24 +226,25 @@ tryVerify rows appear under the target; Esc cancels. <b>By hand:</b> the headlin
 a cluster downloaded to the wrong station moved to its neighbor in three taps
 (⋯ → Move all to… → tap station).</div>
 
-<h2><span class="commit">Commit 5</span> Editable splay cells</h2>
+<h2><span class="commit">Commit 7</span> Editable splay cells</h2>
 <p>The biggest commit: splay readings join the editing model, which is what makes correcting a
 mistyped DistoX value or finishing a partial manual entry possible.</p>
 <ul>
-  <li><b><code>cwSurveyChunk::DataRole</code></b> gains <code>SplayDistanceRole</code>,
-      <code>SplayCompassRole</code>, <code>SplayClinoRole</code>. The model serves
+  <li><b><code>cwSurveyEditorCellIndex::CellRole</code></b> (from commit 3) gains
+      <code>SplayDistanceCell</code>, <code>SplayCompassCell</code>,
+      <code>SplayClinoCell</code> — editor-only cells; the chunk enum stays untouched. The model
+      serves
       <code>cwSurveyEditorBoxData</code> for splay cells (reading populated from
       <code>cwShotMeasurement</code>; empty error model for now), so the QML can reuse the
       DataBox machinery: <code>GlobalShadowTextInput</code> editing, validators, focus sync,
       typing-starts-editing.</li>
-  <li><b><code>setDataAt</code></b> routes splay roles to
-      <code>setStationSplayData</code> from commit 2. The cell index stays
-      <code>(modelRow, DataRole)</code> — the model row already pins chunk, station, and splay
+  <li><b><code>setDataAt</code></b> routes splay cells to
+      <code>setStationSplayData</code> from commit 4. The cell index stays
+      <code>(modelRow, CellRole)</code> — the model row already pins chunk, station, and splay
       index through <code>cwSurveyEditorRowIndex</code>.</li>
-  <li><b>New <code>SplayDataBox.qml</code></b> shares <code>DataBox</code>'s core (probably by
-      instantiating <code>DataBox</code> with the splay-surface background branch added, the
-      same way station/shot backgrounds branch today) with remove-preview and error UI inert.
-      Validators: the existing distance/compass/clino validators.</li>
+  <li><b>New <code>SplayDataBox.qml</code></b> layers on the <code>SurveyEditorCell</code> base
+      from commit 2 — the editing machinery plus a splay-surface background, with no
+      remove-preview or error UI. Validators: the existing distance/compass/clino validators.</li>
   <li><b><code>nextCellIndex</code></b>: Tab flows distance → compass → clino → next splay row;
       arrows move within the cluster and out of it vertically. Splays are single-reading, so
       front/back-sight branching stays off this path.</li>
@@ -197,7 +255,7 @@ cluster, validator rejection leaves the reading untouched. QML: click a reading,
 value, Tab, tryCompare the committed text; arrow navigation across rows.
 <b>By hand:</b> correct a reading and watch the splay swing in the 3D plot.</div>
 
-<h2><span class="commit">Commit 6</span> Add splays — blank entry row and empty-cell entry</h2>
+<h2><span class="commit">Commit 8</span> Add splays — blank entry row and empty-cell entry</h2>
 <ul>
   <li><b>Blank entry row</b>: every expanded cluster shows one trailing virtual splay row
       (dashed styling, <code>IsVirtualRole</code> true, <code>splayIndex == count</code> — the
@@ -227,7 +285,7 @@ next station's box. <b>By hand:</b> enter a full station of splays without touch
       model, never in delegates.</li>
   <li><b>Splay construction in QML tests</b> goes through <code>TestHelper.addStationSplay</code>
       (<code>cwShotMeasurement</code> is a value struct outside QML).</li>
-  <li><b>Shot-box shift</b>: commit 6's always-present blank row changes an open cluster's
+  <li><b>Shot-box shift</b>: commit 8's always-present blank row changes an open cluster's
       height; <code>shotBoxShift</code> and <code>clusterHeight</code> math stay driven by the
       model's row count, never by a parallel formula in QML.</li>
   <li><b>Chip loader</b>: keep the count-gated <code>Loader</code> economy from phase 5 — most

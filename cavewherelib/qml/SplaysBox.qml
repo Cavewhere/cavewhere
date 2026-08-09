@@ -9,150 +9,43 @@ import QtQuick as QQ
 import QtQuick.Controls as QC
 import cavewherelib
 
-// The Splays column's cell. It holds no reading, so it's a DataBox in look and
-// focus behavior only — no editor, no error model, no remove preview. Focusing
-// it and pressing Enter or Space opens the station's splay cluster, which is
-// also the way a station with no splays at all gets its first one.
-QQ.Item {
+// The Splays column's cell. It holds no reading, so it takes the grid cell's
+// look and focus behavior from SurveyEditorCell and adds nothing but a count —
+// no editor, no error model, no remove preview. Focusing it and pressing Enter
+// or Space opens the station's splay cluster, which is also the way a station
+// with no splays at all gets its first one.
+SurveyEditorCell {
     id: splaysBox
     objectName: "splaysBox." + splaysBox.listViewIndex
 
-    required property SurveyEditorModel model
     required property cwSurveyEditorRowIndex rowIndex
-
-    //Index in the ListView
-    required property int listViewIndex
 
     required property int splayCount
     required property bool splaysExpanded
 
-    property TripCalibration calibration: null
-    readonly property bool frontSights: calibration !== null && calibration.frontSights
-    readonly property bool backSights: calibration !== null && calibration.backSights
-
-    readonly property int dataRole: SurveyChunk.StationSplaysRole
-
-    function shouldHaveFocus(): bool {
-        if(listViewIndex < 0) {
-            return false
-        }
-        return model.focusedRow === listViewIndex && model.focusedRole === splaysBox.dataRole
-    }
-
-    function syncFocusState() {
-        const selected = shouldHaveFocus()
-        if(focus === selected) {
-            return
-        }
-        if(selected) {
-            forceActiveFocus()
-        }
-        focus = selected
-    }
-
-    function takeFocus() {
-        model.setFocusedCell(model.cellIndex(splaysBox.listViewIndex, splaysBox.dataRole))
-    }
-
-    function moveFocus(navKey: int) {
-        const currentCell = model.cellIndex(splaysBox.listViewIndex, splaysBox.dataRole)
-        model.setFocusedCell(model.nextCell(currentCell,
-                                            navKey,
-                                            splaysBox.frontSights,
-                                            splaysBox.backSights))
-    }
+    dataRole: SurveyChunk.StationSplaysRole
+    indexInChunk: splaysBox.rowIndex.indexInChunk
+    stationCell: true
 
     function toggleExpanded() {
-        model.toggleSplaysExpanded(splaysBox.rowIndex)
-    }
-
-    QQ.Component.onCompleted: syncFocusState()
-
-    onListViewIndexChanged: syncFocusState()
-
-    onFocusChanged: {
-        if(focus) {
-            takeFocus()
-        }
+        splaysBox.model.toggleSplaysExpanded(splaysBox.rowIndex)
     }
 
     QQ.Keys.onPressed: (event) => {
+                           if(splaysBox.handleNavigationKey(event)) {
+                               return
+                           }
                            switch(event.key) {
-                           case Qt.Key_Tab:
-                               splaysBox.moveFocus(SurveyEditorModel.Tab)
-                               break
-                           case 1 + Qt.Key_Tab:
-                               //Shift tab -- 1 + Qt.Key_Tab is a hack but it works
-                               splaysBox.moveFocus(SurveyEditorModel.BackTab)
-                               break
-                           case Qt.Key_Left:
-                               splaysBox.moveFocus(SurveyEditorModel.Left)
-                               break
-                           case Qt.Key_Right:
-                               splaysBox.moveFocus(SurveyEditorModel.Right)
-                               break
-                           case Qt.Key_Up:
-                               splaysBox.moveFocus(SurveyEditorModel.Up)
-                               break
-                           case Qt.Key_Down:
-                               splaysBox.moveFocus(SurveyEditorModel.Down)
-                               break
                            case Qt.Key_Enter:
                            case Qt.Key_Return:
                            case Qt.Key_Space:
                                splaysBox.toggleExpanded()
+                               event.accepted = true
                                break
-                           default:
-                               return
                            }
-                           event.accepted = true
                        }
 
-    QQ.Connections {
-        target: splaysBox.model
-
-        function onFocusedRowChanged() {
-            splaysBox.syncFocusState()
-        }
-
-        function onFocusedRoleChanged() {
-            splaysBox.syncFocusState()
-        }
-    }
-
-    QQ.Rectangle {
-        id: backgroundId
-        anchors.fill: parent
-
-        gradient: QQ.Gradient {
-            QQ.GradientStop {
-                position: splaysBox.rowIndex.indexInChunk % 2 === 0 ? 1.0 : 0.0
-                color: Theme.surfaceRaised
-            }
-            QQ.GradientStop {
-                position: splaysBox.rowIndex.indexInChunk % 2 === 0 ? 0.4 : 0.6
-                color: Theme.surface
-            }
-        }
-    }
-
-    QQ.Rectangle {
-        id: borderId
-        anchors.fill: parent
-        border.color: Theme.borderSubtle
-        border.width: 1
-        color: Theme.transparent
-    }
-
-    QQ.Rectangle {
-        id: highlightId
-        anchors.fill: parent
-        anchors.margins: 1
-        border.color: Theme.border
-        border.width: 1
-        color: Theme.highlight
-        visible: splaysBox.shouldHaveFocus()
-    }
+    onTapped: splaysBox.toggleExpanded()
 
     //Most stations carry no splays, so the chip stays uninstantiated rather than
     //laying out text it will never show
@@ -200,13 +93,6 @@ QQ.Item {
                     font.pixelSize: Theme.fontSizeSmall
                 }
             }
-        }
-    }
-
-    QQ.TapHandler {
-        onSingleTapped: {
-            splaysBox.takeFocus()
-            splaysBox.toggleExpanded()
         }
     }
 }
