@@ -160,31 +160,6 @@ QQ.Item {
                     contentItem: ColumnLayout {
                         spacing: Theme.tightSpacing
 
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: Theme.tightSpacing
-
-                            QC.Button {
-                                id: attachButtonId
-                                objectName: "attachButton"
-                                text: qsTr("Attach")
-                                enabled: root.trip !== null && pickerId.valid
-                                         && !root.busy
-                                onClicked: {
-                                    sessionId.start(root.trip)
-                                    RootData.attachTripCenterline(root.trip,
-                                                                  pickerId.sourcePath)
-                                }
-                            }
-
-                            QC.Label {
-                                objectName: "recommendedLabel"
-                                text: qsTr("Recommended")
-                                font.bold: true
-                                color: Theme.accent
-                            }
-                        }
-
                         BodyText {
                             objectName: "attachExplainerText"
                             Layout.fillWidth: true
@@ -199,6 +174,34 @@ QQ.Item {
                         }
 
                         QQ.Item { Layout.fillHeight: true }
+
+                        // The filler above holds the choice button at the
+                        // bottom right, where dialog choice buttons live;
+                        // stacked, it collapses and the margin makes the gap.
+                        RowLayout {
+                            Layout.alignment: Qt.AlignRight
+                            Layout.topMargin: Theme.sectionSpacing
+                            spacing: Theme.flowSpacing
+
+                            QC.Label {
+                                objectName: "recommendedLabel"
+                                text: qsTr("Recommended")
+                                font.bold: true
+                                color: Theme.accent
+                            }
+
+                            QC.Button {
+                                objectName: "attachButton"
+                                text: qsTr("Attach")
+                                enabled: root.trip !== null && pickerId.valid
+                                         && !root.busy
+                                onClicked: {
+                                    sessionId.start(root.trip)
+                                    RootData.attachTripCenterline(root.trip,
+                                                                  pickerId.sourcePath)
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -210,21 +213,6 @@ QQ.Item {
 
                     contentItem: ColumnLayout {
                         spacing: Theme.tightSpacing
-
-                        QC.Button {
-                            id: importButtonId
-                            objectName: "importButton"
-                            text: qsTr("Import a copy")
-                            enabled: root.trip !== null && pickerId.valid
-                                     && !root.busy && pickerId.importSupported
-                            onClicked: {
-                                sessionId.errorMessage = ""
-                                root.importingTrip = root.trip
-                                root.importing = true
-                                RootData.surveyImportManager.importSurvexToTrip(
-                                    pickerId.sourcePath, root.importingTrip)
-                            }
-                        }
 
                         BodyText {
                             objectName: "importExplainerText"
@@ -245,6 +233,22 @@ QQ.Item {
                         }
 
                         QQ.Item { Layout.fillHeight: true }
+
+                        QC.Button {
+                            objectName: "importButton"
+                            Layout.alignment: Qt.AlignRight
+                            Layout.topMargin: Theme.sectionSpacing
+                            text: qsTr("Import a copy")
+                            enabled: root.trip !== null && pickerId.valid
+                                     && !root.busy && pickerId.importSupported
+                            onClicked: {
+                                sessionId.errorMessage = ""
+                                root.importingTrip = root.trip
+                                root.importing = true
+                                RootData.surveyImportManager.importSurvexToTrip(
+                                    pickerId.sourcePath, root.importingTrip)
+                            }
+                        }
                     }
                 }
             }
