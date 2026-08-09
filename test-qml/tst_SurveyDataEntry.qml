@@ -2898,7 +2898,16 @@ MainWindowTest {
 
             keyClick(16777217, 0) //Tab
 
-            verify(lastItem.focus === true);
+            //D hands off to the Splays cell, the last cell in a station row
+            let splaysName = "rootId->tripPage->surveyEditor->view->splaysBox." + surveyView.currentIndex;
+            let splaysItem = ObjectFinder.findObjectByChain(mainWindow, splaysName)
+            verify(splaysItem !== null)
+            tryVerify(() => { return splaysItem.focus === true; })
+
+            //There's nothing past it, so tabbing off the end stays put
+            keyClick(16777217, 0) //Tab
+
+            verify(splaysItem.focus === true);
         }
 
         function test_tabGuessSurveyName() {

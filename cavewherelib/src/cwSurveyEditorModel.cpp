@@ -15,6 +15,20 @@
 //Std includes
 #include <limits>
 
+namespace {
+
+/**
+ * Most cells in the editor stand for a reading the chunk stores, and those are
+ * the only ones a write can reach. The Splays cell is a handle on the station's
+ * cluster instead, so it names no reading to write to.
+ */
+bool isReadingCell(cwSurveyChunk::DataRole role)
+{
+    return role != cwSurveyChunk::StationSplaysRole;
+}
+
+}
+
 cwSurveyEditorModel::cwSurveyEditorModel()
 {
     connect(this, &QAbstractItemModel::rowsInserted, this, [this]() {
@@ -62,6 +76,18 @@ void cwSurveyEditorModel::connectChunkSignals(cwSurveyChunk* chunk)
             return;
         }
         emit dataChanged(modelIndex, modelIndex, changedRolesFor(role));
+
+        //An open cluster labels each of its rows with the station's name, so a
+        //rename has to reach the rows hanging below the station row too
+        if(role == cwSurveyChunk::StationNameRole) {
+            const int splayRows = splayRowCount(chunk, chunkIndex);
+            if(splayRows > 0) {
+                emit dataChanged(index(modelIndex.row() + 1),
+                                 index(modelIndex.row() + splayRows),
+                                 {SplayStationNameRole});
+            }
+        }
+
         syncVirtualRows(chunk);
     };
 
@@ -478,6 +504,11 @@ QVariant cwSurveyEditorModel::data(const QModelIndex& index, int role) const
         const auto chunk = chunkIndex.chunk();
         const int stationIndex = chunkIndex.indexInChunk();
         const int splayIndex = chunkIndex.splayIndex();
+
+        if(role == SplayStationNameRole) {
+            return chunk->station(stationIndex).name();
+        }
+
         if(splayIndex < 0 || splayIndex >= chunk->stationSplayCount(stationIndex)) {
             return QVariant();
         }
@@ -532,6 +563,10 @@ int cwSurveyEditorModel::rowCount(const QModelIndex& parent) const
 bool cwSurveyEditorModel::setDataAt(const cwSurveyEditorCellIndex& cell, const QVariant& data)
 {
     if(m_trip.isNull()) {
+        return false;
+    }
+
+    if(!isReadingCell(cell.dataRole())) {
         return false;
     }
 
@@ -962,6 +997,7 @@ QHash<int, QByteArray> cwSurveyEditorModel::roleNames() const
     roles.insert(SplayDistanceRole, "splayDistance");
     roles.insert(SplayCompassRole, "splayCompass");
     roles.insert(SplayClinoRole, "splayClino");
+    roles.insert(SplayStationNameRole, "splayStationName");
     // roles.insert(ChunkRole, "chunk");
     // roles.insert(RowTypeRole, "rowType");
     // roles.insert(StationVisibleRole, "stationVisible");
@@ -1270,7 +1306,7 @@ cwSurveyEditorCellIndex cwSurveyEditorModel::nextCellIndex(const cwSurveyEditorC
             if(indexInChunk == 1) {
                 return offsetCurrentRowRole(cwSurveyChunk::StationNameRole, -1);
             }
-            return offsetCurrentRowRole(cwSurveyChunk::StationDownRole, -1);
+            return offsetCurrentRowRole(cwSurveyChunk::StationSplaysRole, -1);
         case Right: {
             const int shotOffset = indexInChunk == 0 ? 0 : -1;
             return shotCell(indexInChunk + shotOffset, cwSurveyChunk::ShotDistanceRole, 0);
@@ -1289,7 +1325,7 @@ cwSurveyEditorCellIndex cwSurveyEditorModel::nextCellIndex(const cwSurveyEditorC
         case BackTab:
         case Left:
             if(indexInChunk == 1) {
-                return offsetCurrentRowRole(cwSurveyChunk::StationDownRole, -1);
+                return offsetCurrentRowRole(cwSurveyChunk::StationSplaysRole, -1);
             } else {
                 const int shotOffset = indexInChunk == 0 ? 0 : -1;
                 if(backSights) {
@@ -1336,19 +1372,35 @@ cwSurveyEditorCellIndex cwSurveyEditorModel::nextCellIndex(const cwSurveyEditorC
     case cwSurveyChunk::StationDownRole:
         switch(key) {
         case Tab:
+        case Right:
+            return offsetCurrentRowRole(cwSurveyChunk::StationSplaysRole, 0);
+        case BackTab:
+        case Left:
+            return offsetCurrentRowRole(cwSurveyChunk::StationUpRole, 0);
+        case Down:
+            return offsetCurrentRowRole(cwSurveyChunk::StationDownRole, 1);
+        case Up:
+            return offsetCurrentRowRole(cwSurveyChunk::StationDownRole, -1);
+        }
+        break;
+    case cwSurveyChunk::StationSplaysRole:
+        //The last cell in a station row, so it inherits the way D used to leave
+        //the row
+        switch(key) {
+        case Tab:
             if(indexInChunk == 0) {
                 return offsetCurrentRowRole(cwSurveyChunk::StationLeftRole, 1);
             }
             return offsetCurrentRowRole(cwSurveyChunk::StationNameRole, 1);
         case BackTab:
         case Left:
-            return offsetCurrentRowRole(cwSurveyChunk::StationUpRole, 0);
+            return offsetCurrentRowRole(cwSurveyChunk::StationDownRole, 0);
         case Right:
             return cwSurveyEditorCellIndex();
         case Down:
-            return offsetCurrentRowRole(cwSurveyChunk::StationDownRole, 1);
+            return offsetCurrentRowRole(cwSurveyChunk::StationSplaysRole, 1);
         case Up:
-            return offsetCurrentRowRole(cwSurveyChunk::StationDownRole, -1);
+            return offsetCurrentRowRole(cwSurveyChunk::StationSplaysRole, -1);
         }
         break;
     case cwSurveyChunk::ShotDistanceRole:
@@ -1625,7 +1677,29 @@ void cwSurveyEditorModel::toggleSplaysExpanded(const cwSurveyEditorRowIndex& row
     m_expandedSplays[chunk].insert(stationIndex, splayCount);
     endInsertRows();
 
-    emit dataChanged(index(stationRow), index(stationRow), {StationSplaysExpandedRole});
+    emitSplayExpansionChanged(chunk, stationIndex);
+}
+
+/**
+ * @brief cwSurveyEditorModel::emitSplayExpansionChanged
+ *
+ * Two rows answer StationSplaysExpandedRole for \a stationIndex, so both hear
+ * about it together: the station row, which draws the chip, and the shot row
+ * below the cluster. That shot's boxes normally reach up over the boundary into
+ * the station row above them, which is where an open cluster goes, so the shot
+ * row needs the same news to drop them below the cluster instead.
+ */
+void cwSurveyEditorModel::emitSplayExpansionChanged(cwSurveyChunk* chunk, int stationIndex)
+{
+    const int stationRow = toModelRow({chunk, stationIndex, cwSurveyEditorRowIndex::StationRow});
+    if(stationRow >= 0) {
+        emit dataChanged(index(stationRow), index(stationRow), {StationSplaysExpandedRole});
+    }
+
+    const int shotRow = toModelRow({chunk, stationIndex, cwSurveyEditorRowIndex::ShotRow});
+    if(shotRow >= 0) {
+        emit dataChanged(index(shotRow), index(shotRow), {StationSplaysExpandedRole});
+    }
 }
 
 void cwSurveyEditorModel::collapseSplays(cwSurveyChunk* chunk, int stationIndex)
@@ -1646,7 +1720,7 @@ void cwSurveyEditorModel::collapseSplays(cwSurveyChunk* chunk, int stationIndex)
     }
     endRemoveRows();
 
-    emit dataChanged(index(stationRow), index(stationRow), {StationSplaysExpandedRole});
+    emitSplayExpansionChanged(chunk, stationIndex);
 }
 
 /**
@@ -1724,6 +1798,7 @@ cwSurveyEditorRowIndex::RowType cwSurveyEditorModel::toRowType(cwSurveyChunk::Da
     case cwSurveyChunk::StationRightRole:
     case cwSurveyChunk::StationUpRole:
     case cwSurveyChunk::StationDownRole:
+    case cwSurveyChunk::StationSplaysRole:
         return cwSurveyEditorRowIndex::StationRow;
     case cwSurveyChunk::ShotDistanceRole:
     case cwSurveyChunk::ShotDistanceIncludedRole:
@@ -1783,6 +1858,8 @@ cwSurveyEditorModel::Role cwSurveyEditorModel::toModelRole(cwSurveyChunk::DataRo
         return StationUpRole;
     case cwSurveyChunk::StationDownRole:
         return StationDownRole;
+    case cwSurveyChunk::StationSplaysRole:
+        return StationSplayCountRole;
     case cwSurveyChunk::ShotDistanceIncludedRole:
         return ShotDistanceIncludedRole;
     case cwSurveyChunk::ShotDistanceRole:

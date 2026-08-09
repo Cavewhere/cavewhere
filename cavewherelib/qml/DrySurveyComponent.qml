@@ -49,6 +49,7 @@ Item {
     required property string splayDistance;
     required property string splayCompass;
     required property string splayClino;
+    required property string splayStationName;
 
     //Visualize properties
     required property SurveyEditorColumnTitles columnTemplate
@@ -184,115 +185,85 @@ Item {
                 dataValidator: distanceValidator
             }
 
-            //Most stations carry no splays, so the chip stays uninstantiated
-            //rather than laying out text it will never show
-            Loader {
-                active: itemId.stationSplayCount > 0
-                anchors.verticalCenter: downBox.verticalCenter
+            SplaysBox {
+                id: splaysBox
+                width: itemId.columnTemplate.splaysWidth
+                height: itemId.columnTemplate.dataRowHeight
+                anchors.top: stationBox.top
                 anchors.left: downBox.right
-                anchors.leftMargin: Theme.delegatePadding
+                anchors.leftMargin: -1
 
-                sourceComponent: Rectangle {
-                    objectName: "splayChip"
-
-                    width: chipRowId.implicitWidth + Theme.delegatePadding * 2
-                    height: chipRowId.implicitHeight + Theme.delegatePadding
-
-                    radius: height * 0.5
-                    color: Theme.splaySurface
-                    border.color: Theme.splayBorder
-                    border.width: 1
-
-                    Row {
-                        id: chipRowId
-                        anchors.centerIn: parent
-                        spacing: Theme.flowSpacing
-
-                        //A glyph rather than the chevron SVG the rest of the app
-                        //uses: Icon colorizes through a MultiEffect layer, which
-                        //costs an offscreen texture in every recycled row and
-                        //renders as nothing in offscreen tests
-                        QC.Label {
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: "▶"
-                            color: Theme.splayText
-                            font.pixelSize: Theme.fontSizeCaption
-                            rotation: itemId.stationSplaysExpanded ? 90 : 0
-
-                            Behavior on rotation {
-                                NumberAnimation { duration: 120 }
-                            }
-                        }
-
-                        QC.Label {
-                            objectName: "splayChipCount"
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: itemId.stationSplayCount
-                            color: Theme.splayText
-                            font.pixelSize: Theme.fontSizeSmall
-                        }
-                    }
-
-                    TapHandler {
-                        onSingleTapped: itemId.model.toggleSplaysExpanded(itemId.rowIndex)
-                    }
-                }
+                model: itemId.model
+                rowIndex: itemId.rowIndex
+                listViewIndex: itemId.index
+                splayCount: itemId.stationSplayCount
+                splaysExpanded: itemId.stationSplaysExpanded
+                calibration: itemId.calibration
             }
         }
 
     }
 
     //Splay data loader. Splays are read-only here — editing them is a later
-    //feature, so the row shows the readings as they were written
+    //feature, so the row shows the readings as they were written. The rail down
+    //the station column ties the cluster back to the station it hangs from,
+    //which a long cluster can push off-screen
     Loader {
         id: splayLoaderId
         active: itemId.rowType === SurveyEditorRowIndex.SplayRow
 
-        sourceComponent: Rectangle {
+        sourceComponent: Item {
+            id: splayRowId
+
             width: itemId.columnTemplate.width
             height: itemId.columnTemplate.splayRowHeight
-            color: Theme.splaySurface
+
+            Rectangle {
+                objectName: "splayRail"
+                x: itemId.columnTemplate.stationX + itemId.columnTemplate.splayRailX
+                width: itemId.columnTemplate.splayRailWidth
+                //Bridges into the row below so a cluster draws one unbroken rail
+                height: splayRowId.height + itemId.columnTemplate.columnOffset
+                color: Theme.splayBorder
+            }
 
             QC.Label {
                 objectName: "splayRowLabel"
 
-                readonly property real splayNameIndent: 20
-
-                x: itemId.columnTemplate.stationX + splayNameIndent
+                x: itemId.columnTemplate.stationX + itemId.columnTemplate.splayTagIndent
+                width: itemId.columnTemplate.stationWidth
+                       - itemId.columnTemplate.splayTagIndent
+                       - itemId.columnTemplate.splayTagRightMargin
                 anchors.verticalCenter: parent.verticalCenter
-                text: "splay"
+                horizontalAlignment: Text.AlignRight
+                elide: Text.ElideLeft
+                text: itemId.splayStationName + " · s" + (itemId.rowIndex.splayIndex + 1)
                 color: Theme.splayText
                 font.pixelSize: Theme.fontSizeCaption
             }
 
-            QC.Label {
+            SplayReadingCell {
                 objectName: "splayDistanceLabel"
                 x: itemId.columnTemplate.distanceX
                 width: itemId.columnTemplate.distanceWidth
-                anchors.verticalCenter: parent.verticalCenter
-                horizontalAlignment: Text.AlignHCenter
+                height: itemId.columnTemplate.splayCellHeight
                 text: itemId.splayDistance
-                font.pixelSize: Theme.fontSizeSmall
             }
 
-            QC.Label {
+            SplayReadingCell {
                 objectName: "splayCompassLabel"
                 x: itemId.columnTemplate.compassX
                 width: itemId.columnTemplate.compassWidth
-                anchors.verticalCenter: parent.verticalCenter
-                horizontalAlignment: Text.AlignHCenter
+                height: itemId.columnTemplate.splayCellHeight
                 text: itemId.splayCompass
-                font.pixelSize: Theme.fontSizeSmall
             }
 
-            QC.Label {
+            SplayReadingCell {
                 objectName: "splayClinoLabel"
                 x: itemId.columnTemplate.clinoX
                 width: itemId.columnTemplate.clinoWidth
-                anchors.verticalCenter: parent.verticalCenter
-                horizontalAlignment: Text.AlignHCenter
+                height: itemId.columnTemplate.splayCellHeight
                 text: itemId.splayClino
-                font.pixelSize: Theme.fontSizeSmall
             }
         }
     }

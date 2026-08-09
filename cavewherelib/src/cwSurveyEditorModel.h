@@ -89,6 +89,10 @@ public:
         SplayDistanceRole,
         SplayCompassRole,
         SplayClinoRole,
+
+        //The name of the station a splay row hangs under, so a splay deep in a
+        //long cluster can still say whose it is
+        SplayStationNameRole,
     };
     Q_ENUM(Role)
 
@@ -195,6 +199,7 @@ private:
     int splayRowsInChunk(const cwSurveyChunk* chunk) const;
     int firstVirtualRow(cwSurveyChunk* chunk) const;
     void collapseSplays(cwSurveyChunk* chunk, int stationIndex);
+    void emitSplayExpansionChanged(cwSurveyChunk* chunk, int stationIndex);
     void reconcileSplayRows(cwSurveyChunk* chunk, int stationIndex);
     void shiftExpandedSplays(cwSurveyChunk* chunk, int firstStationIndex, int offset);
     bool hasVirtualTrailingStationShot(const cwSurveyChunk* chunk) const;

@@ -8,6 +8,9 @@
 //Catch includes
 #include <catch2/catch_test_macros.hpp>
 
+//Qt includes
+#include <QSignalSpy>
+
 //Our includes
 #include "cwShot.h"
 #include "cwStation.h"
@@ -157,6 +160,47 @@ TEST_CASE("Expanding a station shows its splays under it", "[cwSurveyEditorModel
     }
 }
 
+TEST_CASE("Opening a cluster tells the shot below it", "[cwSurveyEditorModel][SplayShot]") {
+    SplayFixture fixture;
+
+    //The shot's boxes reach up over the boundary into the station row above
+    //them, which is where an open cluster goes. The shot row only drops them
+    //below the cluster if it hears that the cluster opened, so a rowsInserted
+    //on its own leaves the shot drawn over the last splay
+    QSignalSpy changes(&fixture.model, &QAbstractItemModel::dataChanged);
+
+    const auto shotRowsTold = [&changes](int row) {
+        int count = 0;
+        for(const auto& change : changes) {
+            const int first = change.at(0).value<QModelIndex>().row();
+            const int last = change.at(1).value<QModelIndex>().row();
+            const auto roles = change.at(2).value<QList<int>>();
+            if(first <= row && row <= last
+                && roles.contains(cwSurveyEditorModel::StationSplaysExpandedRole))
+            {
+                ++count;
+            }
+        }
+        return count;
+    };
+
+    fixture.model.toggleSplaysExpanded(fixture.stationRow(1));
+
+    //a2's shot, now sitting under the three splay rows
+    CHECK(fixture.rowIndexOf(7).rowType() == cwSurveyEditorRowIndex::ShotRow);
+    CHECK(shotRowsTold(7) == 1);
+
+    //a1's shot is above the cluster and keeps reaching up as it always has
+    CHECK(shotRowsTold(2) == 0);
+
+    changes.clear();
+    fixture.model.toggleSplaysExpanded(fixture.stationRow(1));
+
+    CHECK(fixture.rowIndexOf(4).rowType() == cwSurveyEditorRowIndex::ShotRow);
+    CHECK(shotRowsTold(4) == 1);
+    CHECK_FALSE(fixture.rowData(4, cwSurveyEditorModel::StationSplaysExpandedRole).toBool());
+}
+
 TEST_CASE("A station with no splays has nothing to expand", "[cwSurveyEditorModel][SplayShot]") {
     SplayFixture fixture;
 
@@ -263,6 +307,77 @@ TEST_CASE("Two open clusters stack up in station order", "[cwSurveyEditorModel][
     CHECK(fixture.model.toModelRow(fixture.stationRow(2)) == 8);
     CHECK(fixture.rowIndexOf(9).rowType() == cwSurveyEditorRowIndex::SplayRow);
     CHECK(fixture.rowData(9, cwSurveyEditorModel::SplayDistanceRole).toString() == QStringLiteral("7.56"));
+}
+
+TEST_CASE("The Splays cell is the last cell in a station row", "[cwSurveyEditorModel][SplayShot]") {
+    SplayFixture fixture;
+
+    //title, a1, shot, a2, shot, a3
+    const int a1Row = 1;
+    const int a2Row = 3;
+    const int a3Row = 5;
+
+    auto cell = [&fixture](int row, cwSurveyChunk::DataRole role) {
+        return fixture.model.cellIndex(row, role);
+    };
+
+    auto next = [&fixture](const cwSurveyEditorCellIndex& from, cwSurveyEditorModel::NavigationKey key) {
+        return fixture.model.nextCell(from, key, true, false);
+    };
+
+    SECTION("the cell is reachable on every station row, splays or not") {
+        for(int row : {a1Row, a2Row, a3Row}) {
+            CHECK(fixture.model.isCellValid(cell(row, cwSurveyChunk::StationSplaysRole)));
+        }
+    }
+
+    SECTION("D tabs into it, and it tabs on the way D used to") {
+        const auto splays = next(cell(a1Row, cwSurveyChunk::StationDownRole),
+                                 cwSurveyEditorModel::Tab);
+        CHECK(splays == cell(a1Row, cwSurveyChunk::StationSplaysRole));
+
+        //The first station's row leads into the second station's LRUD
+        CHECK(next(splays, cwSurveyEditorModel::Tab) == cell(a2Row, cwSurveyChunk::StationLeftRole));
+        CHECK(next(cell(a2Row, cwSurveyChunk::StationSplaysRole), cwSurveyEditorModel::Tab)
+              == cell(a3Row, cwSurveyChunk::StationNameRole));
+    }
+
+    SECTION("shift-tab walks back through it into D") {
+        CHECK(next(cell(a1Row, cwSurveyChunk::StationSplaysRole), cwSurveyEditorModel::BackTab)
+              == cell(a1Row, cwSurveyChunk::StationDownRole));
+        CHECK(next(cell(a3Row, cwSurveyChunk::StationNameRole), cwSurveyEditorModel::BackTab)
+              == cell(a2Row, cwSurveyChunk::StationSplaysRole));
+    }
+
+    SECTION("right stops at it, and left goes back to D") {
+        const auto splays = cell(a2Row, cwSurveyChunk::StationSplaysRole);
+        CHECK(next(cell(a2Row, cwSurveyChunk::StationDownRole), cwSurveyEditorModel::Right) == splays);
+        CHECK_FALSE(fixture.model.isCellValid(next(splays, cwSurveyEditorModel::Right)));
+        CHECK(next(splays, cwSurveyEditorModel::Left) == cell(a2Row, cwSurveyChunk::StationDownRole));
+    }
+
+    SECTION("up and down stay in the column") {
+        CHECK(next(cell(a2Row, cwSurveyChunk::StationSplaysRole), cwSurveyEditorModel::Down)
+              == cell(a3Row, cwSurveyChunk::StationSplaysRole));
+        CHECK(next(cell(a2Row, cwSurveyChunk::StationSplaysRole), cwSurveyEditorModel::Up)
+              == cell(a1Row, cwSurveyChunk::StationSplaysRole));
+    }
+
+    SECTION("an open cluster moves the rows but not the chain") {
+        fixture.model.toggleSplaysExpanded(fixture.stationRow(1));
+        fixture.checkRowCount(9);
+
+        const int shiftedA3Row = a3Row + 3;
+        CHECK(next(cell(a2Row, cwSurveyChunk::StationSplaysRole), cwSurveyEditorModel::Tab)
+              == cell(shiftedA3Row, cwSurveyChunk::StationNameRole));
+        CHECK(next(cell(shiftedA3Row, cwSurveyChunk::StationSplaysRole), cwSurveyEditorModel::Up)
+              == cell(a2Row, cwSurveyChunk::StationSplaysRole));
+    }
+
+    SECTION("the cell holds no reading to write") {
+        CHECK_FALSE(fixture.model.setDataAt(cell(a2Row, cwSurveyChunk::StationSplaysRole),
+                                            QStringLiteral("99")));
+    }
 }
 
 TEST_CASE("Retiring a trip forgets which clusters were open", "[cwSurveyEditorModel][SplayShot]") {
