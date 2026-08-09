@@ -1509,7 +1509,9 @@ TEST_CASE("cwLinePlotManager registers a Splays keyword item per trip with splay
         }
     }
 
-    SECTION("splay tips extend depth, never length") {
+    SECTION("splay tips leave length and depth alone") {
+        // A splay is a wall shot, not surveyed passage, so it must never pad
+        // the cave's stats — a straight-down 4 m splay keeps depth at 0.
         CHECK(cave->length()->value() == Catch::Approx(20.0));
         CHECK(cave->depth()->value() == Catch::Approx(0.0));
 
@@ -1517,7 +1519,7 @@ TEST_CASE("cwLinePlotManager registers a Splays keyword item per trip with splay
         plotManager->waitToFinish();
 
         CHECK(cave->length()->value() == Catch::Approx(20.0));
-        CHECK(cave->depth()->value() == Catch::Approx(4.0));
+        CHECK(cave->depth()->value() == Catch::Approx(0.0));
     }
 
     SECTION("hiding the Splays item masks exactly the splay tail") {
