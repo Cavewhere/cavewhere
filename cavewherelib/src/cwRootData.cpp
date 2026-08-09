@@ -413,6 +413,12 @@ cwRootData::attachTripCenterline(cwTrip* trip, const QString& sourcePath)
     return externalCenterlineManager()->attachCenterline(trip, sourcePath);
 }
 
+QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
+cwRootData::replaceTripCenterline(cwTrip* trip, const QString& sourcePath)
+{
+    return externalCenterlineManager()->replaceCenterline(trip, sourcePath);
+}
+
 QFuture<Monad::ResultBase> cwRootData::detachTripCenterline(cwTrip* trip)
 {
     return externalCenterlineManager()->detachCenterline(trip);

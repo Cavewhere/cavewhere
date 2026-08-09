@@ -745,18 +745,15 @@ cwExternalCenterlineManager::attachCenterline(cwTrip* trip, const QString& sourc
     using ReportResult = Monad::Result<cwExternalCenterlineAttach::AttachReport>;
 
     if (trip == nullptr) {
-        const QString error = QStringLiteral("attach: trip is null");
-        emitReportDeferred(&cwExternalCenterlineManager::attachCompleted,
-                           cwExternalCenterlineReport::failed(QUuid(), error));
-        return AsyncFuture::completed(ReportResult(error));
+        return refuseOperation<ReportResult>(
+            &cwExternalCenterlineManager::attachCompleted, QUuid(),
+            QStringLiteral("attach: trip is null"));
     }
     const QUuid ownerId = trip->id();
     if (isOwnerBusy(ownerId)) {
-        const QString error = QStringLiteral(
-            "attach: another operation for this trip is still in progress");
-        emitReportDeferred(&cwExternalCenterlineManager::attachCompleted,
-                           cwExternalCenterlineReport::failed(ownerId, error));
-        return AsyncFuture::completed(ReportResult(error));
+        return refuseOperation<ReportResult>(
+            &cwExternalCenterlineManager::attachCompleted, ownerId,
+            QStringLiteral("attach: another operation for this trip is still in progress"));
     }
 
     auto cancelFlag = std::make_shared<std::atomic_bool>(false);
@@ -790,6 +787,25 @@ cwExternalCenterlineManager::attachCenterline(cwTrip* trip, const QString& sourc
     return future;
 }
 
+QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
+cwExternalCenterlineManager::replaceCenterline(cwTrip* trip, const QString& sourcePath)
+{
+    using ReportResult = Monad::Result<cwExternalCenterlineAttach::AttachReport>;
+
+    if (trip != nullptr && trip->externalCenterline().isEmpty()) {
+        return refuseOperation<ReportResult>(
+            &cwExternalCenterlineManager::attachCompleted, trip->id(),
+            QStringLiteral("replace: this trip has no attached centerline to replace"));
+    }
+
+    // Attach already is replace: its reconcile copies the new closure
+    // into the owner's existing attachment dir and GCs whatever the new
+    // entry file stops referencing. It also owns the null-trip and
+    // busy-owner refusals, so the nothing-attached guard above is the
+    // only one replace adds.
+    return attachCenterline(trip, sourcePath);
+}
+
 void cwExternalCenterlineManager::cancelAttach(const QUuid& ownerId)
 {
     const auto it = m_activeOperations.constFind(ownerId);
@@ -806,18 +822,15 @@ QFuture<Monad::ResultBase> cwExternalCenterlineManager::detachCenterline(cwTrip*
     using Monad::ResultBase;
 
     if (trip == nullptr) {
-        const QString error = QStringLiteral("detach: trip is null");
-        emitReportDeferred(&cwExternalCenterlineManager::detachCompleted,
-                           cwExternalCenterlineReport::failed(QUuid(), error));
-        return AsyncFuture::completed(ResultBase(error));
+        return refuseOperation<ResultBase>(
+            &cwExternalCenterlineManager::detachCompleted, QUuid(),
+            QStringLiteral("detach: trip is null"));
     }
     const QUuid ownerId = trip->id();
     if (isOwnerBusy(ownerId)) {
-        const QString error = QStringLiteral(
-            "detach: another operation for this trip is still in progress");
-        emitReportDeferred(&cwExternalCenterlineManager::detachCompleted,
-                           cwExternalCenterlineReport::failed(ownerId, error));
-        return AsyncFuture::completed(ResultBase(error));
+        return refuseOperation<ResultBase>(
+            &cwExternalCenterlineManager::detachCompleted, ownerId,
+            QStringLiteral("detach: another operation for this trip is still in progress"));
     }
 
     auto guard = std::make_shared<OperationGuard>(

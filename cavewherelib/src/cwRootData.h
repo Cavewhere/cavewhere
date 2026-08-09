@@ -165,6 +165,8 @@ public:
     // enforces the per-owner operation token (isOwnerBusy).
     Q_INVOKABLE QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
     attachTripCenterline(cwTrip* trip, const QString& sourcePath);
+    Q_INVOKABLE QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
+    replaceTripCenterline(cwTrip* trip, const QString& sourcePath);
     Q_INVOKABLE QFuture<Monad::ResultBase> detachTripCenterline(cwTrip* trip);
 
     //Helper functions for creating things

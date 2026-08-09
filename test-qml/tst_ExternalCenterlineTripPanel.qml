@@ -222,6 +222,57 @@ MainWindowTest {
             verify(!panelId.isAttached, "panel leaves Attached mode")
         }
 
+        function test_replaceSwapsTheAttachedFileThroughTheDialog() {
+            attachAndBind("trip-panel-replace")
+            RootData.futureManagerModel.waitForFinished()
+
+            const replaceButton = findChild(panelId, "replaceButton")
+            verify(replaceButton !== null, "replaceButton must exist")
+            verify(replaceButton.visible && replaceButton.enabled,
+                   "Replace is clickable on an idle attached trip")
+
+            // The dialog is built by the click that opens it.
+            verify(findChild(panelId, "replaceCenterlineDialog") === null,
+                   "the panel defers the dialog until Replace is clicked")
+            mouseClick(replaceButton)
+            const dialog = findChild(panelId, "replaceCenterlineDialog")
+            verify(dialog !== null, "replaceCenterlineDialog must exist")
+
+            const pathField = findChild(dialog, "sourcePathField")
+            verify(pathField !== null, "sourcePathField must exist")
+            const confirmButton = findChild(dialog, "replaceConfirmButton")
+            verify(confirmButton !== null, "replaceConfirmButton must exist")
+            verify(!confirmButton.enabled, "Replace stays disabled until a file scans")
+
+            // A three-file closure replacing the one-file fixture, so the
+            // swap is visible in the entry file the panel shows.
+            pathField.text = TestHelper.testcasesDatasetPath(
+                "external-centerlines/survex_nested.svx")
+            tryVerify(() => confirmButton.enabled, 10000,
+                      "the scan preview enables Replace")
+
+            attachCompletedSpyId.clear()
+            mouseClick(confirmButton)
+
+            // Replace holds the same per-owner token as attach, so the
+            // panel's affordances disable while it drains.
+            compare(panelId.ownerBusy, true, "owner is busy right after confirming")
+            verify(!replaceButton.enabled, "Replace disables while the owner is busy")
+
+            tryVerify(() => attachCompletedSpyId.count === 1, 10000,
+                      "replace reports once through the attach bridge")
+            const report = attachCompletedSpyId.signalArguments[0][0]
+            verify(report.success, "the replace reports success; got: " + report.errorMessage)
+
+            tryVerify(() => rootId.trip.externalCenterline.entryFile === "survex_nested.svx",
+                      10000, "the trip now carries the replacement entry file")
+
+            const header = findChild(panelId, "attachedHeader")
+            const fileLabel = findChild(header, "attachedFileLabel")
+            tryCompare(fileLabel, "text", "survex_nested.svx")
+            tryVerify(() => !panelId.ownerBusy, 10000, "the busy token releases")
+        }
+
         function test_missingSourceForgetClearsRememberedPath() {
             const fixture = attachAndBind("trip-panel-forget")
 

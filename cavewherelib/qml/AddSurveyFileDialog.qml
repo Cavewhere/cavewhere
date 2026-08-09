@@ -7,7 +7,6 @@
 
 import QtQuick as QQ
 import QtQuick.Controls as QC
-import QtQuick.Dialogs as QD
 import QtQuick.Layouts
 import cavewherelib
 
@@ -28,36 +27,20 @@ QQ.Item {
 
     property Trip trip: null
 
-    // True from the Attach click until the bridge reports for this
-    // trip. The manager's busy token covers the same window, but the
-    // local flag keeps a busy *sibling* operation from being mistaken
-    // for this dialog's attach.
-    property bool attaching: false
-    property string attachError: ""
-
-    // Owner snapshot taken at the Attach click. Report attribution
-    // matches on the id string - not the live trip binding - so a host
-    // rebinding (or nulling) trip mid-attach can neither wedge
-    // `attaching` forever nor let a sibling surface's report for the
-    // new trip close this dialog. The Trip itself is kept only for
-    // cancelAttach, which needs the QUuid; losing it (trip destroyed
-    // mid-attach) only costs the ability to cancel - the manager's
-    // owner-was-deleted failure report still matches the id string
-    // and unwedges the dialog.
-    property Trip attachingTrip: null
-    property string attachingTripId: ""
-
-    // Same snapshot idea for Import: importFinished carries the trip
-    // pointer, so identity-compare against the snapshot (a trip
+    // Import keeps its own owner snapshot, the way the attach session
+    // keeps one: importFinished carries the trip pointer, so
+    // identity-compare against the snapshot (a trip
     // destroyed mid-import nulls both sides, which still matches and
     // unwedges the dialog). The source path needs no snapshot - the
-    // path field is locked while busy, so previewId.sourcePath is
-    // stable until the import reports.
+    // picker is locked while busy, so its sourcePath is stable until
+    // the import reports.
     property bool importing: false
     property Trip importingTrip: null
 
     property alias title: dialogId.title
 
+    // True from the Attach click until the session's report lands.
+    readonly property bool attaching: sessionId.busy
     readonly property bool busy: attaching || importing
 
     // Outcome signals for hosts. Exactly one fires per open()d session
@@ -74,11 +57,8 @@ QQ.Item {
     signal dismissed()
 
     function open() {
-        pathFieldId.text = ""
-        root.attachError = ""
-        root.attaching = false
-        root.attachingTrip = null
-        root.attachingTripId = ""
+        pickerId.clear()
+        sessionId.reset()
         root.importing = false
         root.importingTrip = null
         dialogId.open()
@@ -88,35 +68,17 @@ QQ.Item {
         dialogId.close()
     }
 
-    ExternalCenterlineScanPreview {
-        id: previewId
-        sourcePath: pathFieldId.text
-    }
+    ExternalCenterlineAttachSession {
+        id: sessionId
 
-    QQ.Connections {
-        target: RootData.externalCenterlineManager
+        onSucceeded: {
+            dialogId.close()
+            root.attached()
+        }
 
-        function onAttachCompleted(report) {
-            if (!root.attaching || root.attachingTripId.length === 0) {
-                return
-            }
-            // QUuid wrappers never compare equal directly in JS -
-            // compare the string forms (same idiom as the panel tests).
-            if (String(report.ownerId) !== root.attachingTripId) {
-                return
-            }
-            root.attaching = false
-            root.attachingTrip = null
-            root.attachingTripId = ""
-            if (report.success) {
-                dialogId.close()
-                root.attached()
-            } else if (report.canceled) {
-                dialogId.close()
-                root.dismissed()
-            } else {
-                root.attachError = report.errorMessage
-            }
+        onCanceled: {
+            dialogId.close()
+            root.dismissed()
         }
     }
 
@@ -133,7 +95,7 @@ QQ.Item {
             // still lands whatever parsed); the dialog's session is
             // over either way.
             dialogId.close()
-            root.imported(previewId.sourcePath)
+            root.imported(pickerId.sourcePath)
         }
     }
 
@@ -163,81 +125,14 @@ QQ.Item {
         contentItem: ColumnLayout {
             spacing: Theme.tightSpacing
 
-            QC.Label {
-                text: qsTr("Pick the entry file:")
-            }
-
-            RowLayout {
+            ExternalCenterlineFilePicker {
+                id: pickerId
                 Layout.fillWidth: true
-                spacing: Theme.tightSpacing
-
-                QC.TextField {
-                    id: pathFieldId
-                    objectName: "sourcePathField"
-                    Layout.fillWidth: true
-                    enabled: !root.busy
-                    placeholderText: qsTr("/path/to/centerline.svx")
-                    // A stale failure from the previous attempt must not
-                    // outrank the fresh path's scan result.
-                    onTextChanged: root.attachError = ""
-                }
-
-                QC.Button {
-                    objectName: "browseButton"
-                    enabled: !root.busy
-                    text: qsTr("Browse…")
-                    onClicked: fileDialogId.open()
-                }
-            }
-
-            QC.Label {
-                objectName: "supportedFormatsLabel"
-                Layout.fillWidth: true
-                visible: previewId.formatName.length === 0
-                wrapMode: QC.Label.WordWrap
-                color: Theme.textSubtle
-                font.pixelSize: Theme.fontSizeSmall
-                text: qsTr("You can open Survex (.svx), Compass (.dat, .mak), "
-                         + "or Walls (.wpj, .srv) files.")
-            }
-
-            QC.Label {
-                objectName: "formatLabel"
-                visible: previewId.formatName.length > 0
-                color: Theme.textSecondary
-                text: qsTr("Format: %1 (auto-detected)").arg(previewId.formatName)
-            }
-
-            QC.Label {
-                objectName: "scanningLabel"
-                visible: previewId.scanning
-                color: Theme.textSecondary
-                text: qsTr("Scanning…")
-            }
-
-            QC.Label {
-                objectName: "scanSummaryLabel"
-                visible: previewId.valid
-                text: qsTr("✓ Found %n file(s)", "", previewId.fileCount)
-            }
-
-            QC.Label {
-                objectName: "scanWarningLabel"
-                Layout.fillWidth: true
-                visible: previewId.warnings.length > 0
-                wrapMode: QC.Label.WordWrap
-                color: Theme.warning
-                text: previewId.warnings.join("\n")
-            }
-
-            QC.Label {
-                objectName: "scanErrorLabel"
-                Layout.fillWidth: true
-                visible: text.length > 0
-                wrapMode: QC.Label.WordWrap
-                color: Theme.danger
-                text: root.attachError.length > 0 ? root.attachError
-                                                  : previewId.errorMessage
+                promptText: qsTr("Pick the entry file:")
+                fileDialogTitle: dialogId.title
+                locked: root.busy
+                operationError: sessionId.errorMessage
+                onPathEdited: sessionId.errorMessage = ""
             }
 
             QC.Label {
@@ -273,15 +168,12 @@ QQ.Item {
                                 id: attachButtonId
                                 objectName: "attachButton"
                                 text: qsTr("Attach")
-                                enabled: root.trip !== null && previewId.valid
+                                enabled: root.trip !== null && pickerId.valid
                                          && !root.busy
                                 onClicked: {
-                                    root.attachError = ""
-                                    root.attachingTrip = root.trip
-                                    root.attachingTripId = String(root.trip.id)
-                                    root.attaching = true
-                                    RootData.attachTripCenterline(root.attachingTrip,
-                                                                  previewId.sourcePath)
+                                    sessionId.start(root.trip)
+                                    RootData.attachTripCenterline(root.trip,
+                                                                  pickerId.sourcePath)
                                 }
                             }
 
@@ -323,14 +215,14 @@ QQ.Item {
                             id: importButtonId
                             objectName: "importButton"
                             text: qsTr("Import a copy")
-                            enabled: root.trip !== null && previewId.valid
-                                     && !root.busy && previewId.importSupported
+                            enabled: root.trip !== null && pickerId.valid
+                                     && !root.busy && pickerId.importSupported
                             onClicked: {
-                                root.attachError = ""
+                                sessionId.errorMessage = ""
                                 root.importingTrip = root.trip
                                 root.importing = true
                                 RootData.surveyImportManager.importSurvexToTrip(
-                                    previewId.sourcePath, root.importingTrip)
+                                    pickerId.sourcePath, root.importingTrip)
                             }
                         }
 
@@ -346,7 +238,7 @@ QQ.Item {
                         QC.Label {
                             objectName: "importFormatNote"
                             Layout.fillWidth: true
-                            visible: previewId.valid && !previewId.importSupported
+                            visible: pickerId.valid && !pickerId.importSupported
                             wrapMode: QC.Label.WordWrap
                             color: Theme.textSubtle
                             text: qsTr("Import supports Survex files only.")
@@ -389,10 +281,7 @@ QQ.Item {
                     enabled: !root.importing
                     onClicked: {
                         if (root.attaching) {
-                            if (root.attachingTrip !== null) {
-                                RootData.externalCenterlineManager.cancelAttach(
-                                    root.attachingTrip.id)
-                            }
+                            sessionId.cancel()
                         } else {
                             dialogId.close()
                             root.dismissed()
@@ -403,19 +292,4 @@ QQ.Item {
         }
     }
 
-    QD.FileDialog {
-        id: fileDialogId
-        objectName: "entryFileDialog"
-        title: dialogId.title
-        nameFilters: [
-            qsTr("Survey files (*.svx *.dat *.mak *.srv *.wpj)"),
-            qsTr("All files (*)")
-        ]
-        currentFolder: RootData.lastDirectory
-        fileMode: QD.FileDialog.OpenFile
-        onAccepted: {
-            RootData.lastDirectory = selectedFile
-            pathFieldId.text = RootData.urlToLocal(selectedFile)
-        }
-    }
 }

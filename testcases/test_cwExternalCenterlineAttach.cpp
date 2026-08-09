@@ -65,7 +65,9 @@ struct SavedProjectFixture {
     cwExternalSourceSettings* settings() const { return rootData->externalSourceSettings(); }
 };
 
-std::unique_ptr<SavedProjectFixture> makeSavedProject(const QString& projectFileBase)
+std::unique_ptr<SavedProjectFixture> makeSavedProject(
+    const QString& projectFileBase,
+    const QString& extension = QStringLiteral(".cwproj"))
 {
     auto fixture = std::make_unique<SavedProjectFixture>();
     REQUIRE(fixture->tempDir.isValid());
@@ -82,7 +84,7 @@ std::unique_ptr<SavedProjectFixture> makeSavedProject(const QString& projectFile
     fixture->trip->setName(QStringLiteral("AttachTrip"));
 
     const QString projectPath =
-        QDir(fixture->tempDir.path()).filePath(projectFileBase + QStringLiteral(".cwproj"));
+        QDir(fixture->tempDir.path()).filePath(projectFileBase + extension);
     REQUIRE(fixture->project->saveAs(projectPath));
     fixture->project->waitSaveToFinish();
     // Drain the queued fileSaved delivery so modified() is settled false
@@ -559,6 +561,16 @@ void drainPipelines(SavedProjectFixture* fixture)
     QCoreApplication::processEvents();
 }
 
+// The "give me an attached trip" prologue for tests about something
+// else. Tests about attach itself drive the future directly so they can
+// observe it mid-flight.
+void attachThroughManager(SavedProjectFixture* fixture, const QString& sourcePath)
+{
+    auto future = managerOf(fixture)->attachCenterline(fixture->trip, sourcePath);
+    REQUIRE(AsyncFuture::waitForFinished(future, kAttachWaitMs));
+    REQUIRE_FALSE(future.result().hasError());
+}
+
 } // namespace
 
 TEST_CASE("manager attach holds the owner token, refuses re-entry, and derives the dir map",
@@ -603,9 +615,7 @@ TEST_CASE("manager detach drops the settings entry and dir map synchronously",
     const QString source = datasetExternalCenterlinePath(QStringLiteral("survex_simple.svx"));
     const QUuid ownerId = fixture->trip->id();
 
-    auto attachFuture = manager->attachCenterline(fixture->trip, source);
-    REQUIRE(AsyncFuture::waitForFinished(attachFuture, kAttachWaitMs));
-    REQUIRE_FALSE(attachFuture.result().hasError());
+    attachThroughManager(fixture.get(), source);
     drainPipelines(fixture.get());
     REQUIRE(manager->solveInputs().tripAttachmentDirs.contains(ownerId));
 
@@ -783,9 +793,7 @@ TEST_CASE("cancelAttach is a no-op for idle owners and non-attach operations",
     // Idle owner: nothing to cancel, nothing reported.
     manager->cancelAttach(ownerId);
 
-    auto attachFuture = manager->attachCenterline(fixture->trip, source);
-    REQUIRE(AsyncFuture::waitForFinished(attachFuture, kAttachWaitMs));
-    REQUIRE_FALSE(attachFuture.result().hasError());
+    attachThroughManager(fixture.get(), source);
 
     // cancelAttach never touches a detach in flight.
     auto detachFuture = manager->detachCenterline(fixture->trip);
@@ -840,4 +848,133 @@ TEST_CASE("attachment dirs derive from the save/load pipeline at load time",
     freshRoot->linePlotManager()->waitToFinish();
     freshRoot->futureManagerModel()->waitForFinished();
     QCoreApplication::processEvents();
+}
+
+// ---------------------------------------------------------------------
+// Replace verb (plans/EXTERNAL_FILE_LIVE_LINK_RETIREMENT.html commit 1):
+// point an attached trip at a freshly picked file in one operation.
+// ---------------------------------------------------------------------
+
+TEST_CASE("replace swaps the closure, GCs the dropped deps, and re-solves",
+          "[Attach][Replace]")
+{
+    // Both project formats: the bundled .cw keeps its tree extracted in a
+    // temporary directory, so the attachment dir the replace reconciles
+    // into is a different place than the .cwproj's on-disk tree.
+    QString extension;
+    SECTION("git-backed .cwproj") { extension = QStringLiteral(".cwproj"); }
+    SECTION("bundled .cw") { extension = QStringLiteral(".cw"); }
+
+    auto fixture = makeSavedProject(QStringLiteral("replace-swap"), extension);
+    auto manager = managerOf(fixture.get());
+    const QUuid ownerId = fixture->trip->id();
+
+    // Three files deep: survex_nested.svx -> entrance.svx -> passage.svx.
+    const QString nested = datasetExternalCenterlinePath(QStringLiteral("survex_nested.svx"));
+    attachThroughManager(fixture.get(), nested);
+    drainPipelines(fixture.get());
+
+    const QDir attachmentDir = fixture->saveLoad()->externalCenterlineDir(fixture->trip);
+    REQUIRE(QFileInfo::exists(attachmentDir.absoluteFilePath(QStringLiteral("entrance.svx"))));
+    REQUIRE(QFileInfo::exists(attachmentDir.absoluteFilePath(QStringLiteral("passage.svx"))));
+
+    cwSignalSpy solveSpy(manager, &cwExternalCenterlineManager::solveNeeded);
+    cwSignalSpy attachSpy(manager, &cwExternalCenterlineManager::attachCompleted);
+
+    // The new pick references neither include, so both are the GC's job.
+    const QString simple = datasetExternalCenterlinePath(QStringLiteral("survex_simple.svx"));
+    auto replaceFuture = manager->replaceCenterline(fixture->trip, simple);
+    REQUIRE(AsyncFuture::waitForFinished(replaceFuture, kAttachWaitMs));
+    REQUIRE_FALSE(replaceFuture.result().hasError());
+    drainPipelines(fixture.get());
+
+    CHECK(fixture->trip->externalCenterline().entryFile()
+          == QStringLiteral("survex_simple.svx"));
+    CHECK(QFileInfo::exists(attachmentDir.absoluteFilePath(QStringLiteral("survex_simple.svx"))));
+    CHECK_FALSE(QFileInfo::exists(
+        attachmentDir.absoluteFilePath(QStringLiteral("survex_nested.svx"))));
+    CHECK_FALSE(QFileInfo::exists(
+        attachmentDir.absoluteFilePath(QStringLiteral("entrance.svx"))));
+    CHECK_FALSE(QFileInfo::exists(
+        attachmentDir.absoluteFilePath(QStringLiteral("passage.svx"))));
+
+    // The pick is remembered like any other, and the plot is re-solved
+    // off the new bytes rather than waiting for the next edit.
+    CHECK(fixture->settings()->sourcePathFor(ownerId) == simple);
+    CHECK(solveSpy.count() > 0);
+
+    // One report, through the attach bridge - a replace is an attach over
+    // an occupied owner as far as a dialog is concerned.
+    REQUIRE(attachSpy.count() == 1);
+    const auto report = attachSpy.at(0).at(0).value<cwExternalCenterlineReport>();
+    CHECK(report.success());
+    CHECK(report.entryFile() == QStringLiteral("survex_simple.svx"));
+    CHECK(report.ownerId() == ownerId);
+}
+
+TEST_CASE("replace refuses a trip with nothing attached", "[Attach][Replace]")
+{
+    auto fixture = makeSavedProject(QStringLiteral("replace-unattached"));
+    auto manager = managerOf(fixture.get());
+    const QString source = datasetExternalCenterlinePath(QStringLiteral("survex_simple.svx"));
+
+    cwSignalSpy attachSpy(manager, &cwExternalCenterlineManager::attachCompleted);
+
+    auto future = manager->replaceCenterline(fixture->trip, source);
+    REQUIRE(future.isFinished());
+    CHECK(future.result().hasError());
+    CHECK(future.result().errorMessage().contains(QStringLiteral("no attached centerline")));
+
+    // Nothing was attached on the way out: replace is a swap, not a
+    // back-door attach.
+    CHECK(fixture->trip->externalCenterline().isEmpty());
+    CHECK_FALSE(manager->isOwnerBusy(fixture->trip->id()));
+
+    // The refusal reports through the bridge, deferred like every other
+    // synchronous refusal.
+    CHECK(attachSpy.count() == 0);
+    REQUIRE(attachSpy.wait(kAttachWaitMs));
+    REQUIRE(attachSpy.count() == 1);
+    const auto report = attachSpy.at(0).at(0).value<cwExternalCenterlineReport>();
+    CHECK_FALSE(report.success());
+    CHECK(report.errorMessage().contains(QStringLiteral("no attached centerline")));
+
+    drainPipelines(fixture.get());
+}
+
+TEST_CASE("replace refuses a busy owner without disturbing the attachment",
+          "[Attach][Replace]")
+{
+    auto fixture = makeSavedProject(QStringLiteral("replace-busy"));
+    auto manager = managerOf(fixture.get());
+    const QUuid ownerId = fixture->trip->id();
+    const QString simple = datasetExternalCenterlinePath(QStringLiteral("survex_simple.svx"));
+
+    attachThroughManager(fixture.get(), simple);
+    drainPipelines(fixture.get());
+
+    cwSignalSpy busySpy(manager, &cwExternalCenterlineManager::ownerBusyChanged);
+
+    const QString nested = datasetExternalCenterlinePath(QStringLiteral("survex_nested.svx"));
+    auto replaceFuture = manager->replaceCenterline(fixture->trip, nested);
+    REQUIRE(manager->isOwnerBusy(ownerId));
+
+    const QString noMetadata =
+        datasetExternalCenterlinePath(QStringLiteral("survex_no_metadata.svx"));
+    auto refused = manager->replaceCenterline(fixture->trip, noMetadata);
+    REQUIRE(refused.isFinished());
+    CHECK(refused.result().hasError());
+    CHECK(refused.result().errorMessage().contains(QStringLiteral("in progress")));
+
+    REQUIRE(AsyncFuture::waitForFinished(replaceFuture, kAttachWaitMs));
+    REQUIRE_FALSE(replaceFuture.result().hasError());
+    drainPipelines(fixture.get());
+
+    // The refused call never took the token, so the owner's busy window
+    // is the first replace's alone, and the file that landed is the one
+    // that replace ran with.
+    CHECK(busySpy.count() == 2);
+    CHECK_FALSE(manager->isOwnerBusy(ownerId));
+    CHECK(fixture->trip->externalCenterline().entryFile()
+          == QStringLiteral("survex_nested.svx"));
 }

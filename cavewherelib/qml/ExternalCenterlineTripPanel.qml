@@ -198,6 +198,18 @@ QQ.Item {
             }
 
             QC.Button {
+                id: replaceButtonId
+                objectName: "replaceButton"
+                text: qsTr("Replace…")
+                visible: root.isAttached
+                enabled: !root.ownerBusy
+                onClicked: {
+                    replaceDialogLoaderId.active = true
+                    replaceDialogLoaderId.item.open()
+                }
+            }
+
+            QC.Button {
                 id: detachButtonId
                 objectName: "detachButton"
                 text: qsTr("Detach…")
@@ -221,6 +233,19 @@ QQ.Item {
             Layout.fillWidth: true
             trip: root.trip
             fileOwnsDeclination: root.fileOwnsDeclination
+        }
+    }
+
+    // Built on the first Replace click: every external trip page keeps a
+    // panel alive, and the dialog carries a file dialog and a scan
+    // preview that most of them never open.
+    QQ.Loader {
+        id: replaceDialogLoaderId
+        active: false
+        sourceComponent: QQ.Component {
+            ReplaceCenterlineDialog {
+                trip: root.trip
+            }
         }
     }
 

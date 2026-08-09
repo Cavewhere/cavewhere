@@ -1,0 +1,140 @@
+/**************************************************************************
+**
+**    Copyright (C) 2026 by Philip Schuchardt
+**    www.cavewhere.com
+**
+**************************************************************************/
+
+import QtQuick as QQ
+import QtQuick.Controls as QC
+import QtQuick.Layouts
+import cavewherelib
+
+// Replace dialog for an already-attached trip
+// (plans/EXTERNAL_FILE_LIVE_LINK_RETIREMENT.html commit 1). Pick a new
+// entry file, preview the scan, and swap the whole closure in one
+// operation: the manager reconciles the new file's dependencies into
+// the trip's existing attachment dir and garbage-collects whatever the
+// new file stops referencing.
+//
+// The dialog itself is the confirmation the plan calls for (§7): a
+// plain statement of what Replace does, rather than a warning about
+// local changes we have no baseline to detect.
+QQ.Item {
+    id: root
+    objectName: "replaceCenterlineDialog"
+
+    property Trip trip: null
+
+    function open() {
+        // Commit 4 pre-fills this from the remembered-source breadcrumb.
+        pickerId.clear()
+        sessionId.reset()
+        dialogId.open()
+    }
+
+    ExternalCenterlineAttachSession {
+        id: sessionId
+        onSucceeded: dialogId.close()
+        onCanceled: dialogId.close()
+    }
+
+    QC.Dialog {
+        id: dialogId
+        objectName: "replaceDialog"
+
+        readonly property QQ.Item overlayItem: QC.Overlay.overlay
+        readonly property int preferredWidth: 520
+
+        anchors.centerIn: QC.Overlay.overlay
+        modal: true
+        implicitWidth: overlayItem !== null
+                       ? Math.min(preferredWidth,
+                                  overlayItem.width - 2 * Theme.actionBarSpacing)
+                       : preferredWidth
+        title: qsTr("Replace centerline file")
+        closePolicy: QC.Popup.NoAutoClose
+
+        contentItem: ColumnLayout {
+            spacing: Theme.tightSpacing
+
+            QC.Label {
+                objectName: "currentEntryLabel"
+                Layout.fillWidth: true
+                elide: QC.Label.ElideMiddle
+                text: qsTr("Currently attached: %1").arg(
+                          root.trip !== null ? root.trip.externalCenterline.entryFile : "")
+            }
+
+            ExternalCenterlineFilePicker {
+                id: pickerId
+                Layout.fillWidth: true
+                promptText: qsTr("Pick the replacement file:")
+                fileDialogTitle: dialogId.title
+                showsSupportedFormats: false
+                locked: sessionId.busy
+                operationError: sessionId.errorMessage
+                onPathEdited: sessionId.errorMessage = ""
+            }
+
+            BodyText {
+                objectName: "replaceExplainerText"
+                Layout.fillWidth: true
+                Layout.topMargin: Theme.sectionSpacing
+                wrapMode: QC.Label.WordWrap
+                text: qsTr("This replaces the attached files for this trip. The "
+                         + "project's current copy, and any file it includes that "
+                         + "the new one does not, are removed.")
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: Theme.tightSpacing
+                visible: sessionId.busy
+
+                QC.BusyIndicator {
+                    implicitWidth: Theme.fontSizeLarge
+                    implicitHeight: Theme.fontSizeLarge
+                    running: sessionId.busy
+                }
+
+                QC.Label {
+                    objectName: "replaceBusyLabel"
+                    text: qsTr("Replacing…")
+                }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.topMargin: Theme.sectionSpacing
+                spacing: Theme.flowSpacing
+
+                QQ.Item {
+                    Layout.fillWidth: true
+                }
+
+                QC.Button {
+                    objectName: "replaceCancelButton"
+                    text: qsTr("Cancel")
+                    onClicked: {
+                        if (sessionId.busy) {
+                            sessionId.cancel()
+                        } else {
+                            dialogId.close()
+                        }
+                    }
+                }
+
+                QC.Button {
+                    objectName: "replaceConfirmButton"
+                    text: qsTr("Replace")
+                    enabled: root.trip !== null && pickerId.valid && !sessionId.busy
+                    onClicked: {
+                        sessionId.start(root.trip)
+                        RootData.replaceTripCenterline(root.trip, pickerId.sourcePath)
+                    }
+                }
+            }
+        }
+    }
+}

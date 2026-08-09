@@ -155,6 +155,18 @@ public:
     attachCenterline(cwTrip* trip, const QString& sourcePath);
     QFuture<Monad::ResultBase> detachCenterline(cwTrip* trip);
 
+    // Points an already-attached trip at a freshly picked file: the same
+    // scan → reconcile → GC → re-solve pass as attach, run against the
+    // owner's existing attachment dir, so the closure is swapped in one
+    // operation (plans/EXTERNAL_FILE_LIVE_LINK_RETIREMENT.html §5.1).
+    // Deliberately not detach-then-attach: detach clears the settings
+    // entry and the attachment-dir map synchronously, leaving a window
+    // where an interleaved scan sees the owner as unattached. Reports
+    // through attachCompleted, since to the bridge a replace is an
+    // attach over an occupied owner.
+    QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
+    replaceCenterline(cwTrip* trip, const QString& sourcePath);
+
     // Requests cancellation of ownerId's in-flight attachCenterline.
     // Honored only until the attach's internal scan lands - the flag
     // is consulted exactly once, at that point, so a later call is a
@@ -482,6 +494,19 @@ private:
         QMetaObject::invokeMethod(this, [this, signal, report = std::move(report)]() {
             emit (this->*signal)(report);
         }, Qt::QueuedConnection);
+    }
+
+    // The whole synchronous refusal: queue the failure report on the
+    // operation's completion signal and hand the caller an already
+    // failed future carrying the same message. Every verb refuses this
+    // way, so the shape lives here rather than in each of them.
+    template<typename ResultT, typename Signal>
+    QFuture<ResultT> refuseOperation(Signal signal,
+                                     const QUuid& ownerId,
+                                     const QString& error)
+    {
+        emitReportDeferred(signal, cwExternalCenterlineReport::failed(ownerId, error));
+        return AsyncFuture::completed(ResultT(error));
     }
 
     // Rebuilds both attachment-dir maps wholesale from the region walk
