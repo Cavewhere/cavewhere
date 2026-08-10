@@ -14,7 +14,6 @@
 #include "cwCavingRegion.h"
 #include "cwExternalCenterline.h"
 #include "cwExternalCenterlineManager.h"
-#include "cwExternalSourceSettings.h"
 #include "cwLinePlotManager.h"
 #include "cwTrip.h"
 
@@ -24,34 +23,12 @@
 #include "cwSignalSpy.h"
 
 // Qt
-#include <QByteArray>
-#include <QCoreApplication>
-#include <QDateTime>
-#include <QDir>
-#include <QElapsedTimer>
-#include <QEventLoop>
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
 #include <QString>
 #include <QTemporaryDir>
-#include <QThread>
 #include <QUuid>
-
-// Std
-#include <functional>
-#include <memory>
-
-namespace {
-
-// How long the union-gate test blocks (without processing events) after
-// editing the source, so the watcher thread's queued fileChanged
-// delivery is in the event queue before processing resumes. kqueue
-// latency is typically single-digit milliseconds; 500 leaves valgrind
-// headroom.
-constexpr int kWatcherPostWindowMs = 500;
-
-} // namespace
 
 TEST_CASE("Attach populates the watch set only after the async scan applies",
           "[LinePlotManager][AsyncScan]")
@@ -278,84 +255,4 @@ TEST_CASE("Teardown while a scan is in flight is safe",
         manager.reset();
         CHECK(true); // sentinel: reached teardown without crashing
     }
-}
-
-TEST_CASE("Source edit during an in-flight scan survives the apply-time union",
-          "[LinePlotManager][AsyncScan]")
-{
-    QTemporaryDir tempRoot;
-    REQUIRE(tempRoot.isValid());
-
-    // Live-link layout without a project: source outside, in-project copy
-    // inside the attachment dir, both starting in sync.
-    const QString sourcePath = QDir(tempRoot.path()).filePath(QStringLiteral("source.svx"));
-    REQUIRE(QFile::copy(fixturePath(QStringLiteral("survex_simple.svx")), sourcePath));
-    const QString attachDir = tempSubdir(tempRoot, QStringLiteral("union-attach"));
-    const QString destPath = QDir(attachDir).filePath(QStringLiteral("source.svx"));
-    REQUIRE(QFile::copy(sourcePath, destPath));
-
-    cwCavingRegion region;
-    cwCave* cave = addEmptyCave(region, QStringLiteral("Union"));
-    cwTrip* trip = new cwTrip();
-    trip->setName(QStringLiteral("Linked"));
-    cave->addTrip(trip);
-    trip->setExternalCenterline(cwExternalCenterline(QStringLiteral("source.svx")));
-
-    cwExternalSourceSettings settings;
-    settings.setSourcePath(trip->id(), sourcePath);
-
-    cwLinePlotManager manager;
-    QHash<QUuid, QString> tripDirs;
-    tripDirs.insert(trip->id(), attachDir);
-    manager.externalCenterlineManager()->setTripAttachmentDirs(tripDirs);
-    manager.externalCenterlineManager()->setExternalSourceSettings(&settings);
-    manager.setRegion(&region);
-    manager.waitToFinish();
-    REQUIRE(manager.externalCenterlineManager()->staleSourceOwners().isEmpty());
-    REQUIRE(manager.externalCenterlineManager()->watchedFiles().contains(QFileInfo(sourcePath).canonicalFilePath()));
-
-    // Kick off a scan FIRST — its queued snapshot runs before the watcher
-    // event below can be delivered, so the flag the event raises lands in
-    // the since-snapshot set while the worker probes the disk.
-    manager.externalCenterlineManager()->setTripAttachmentDirs(tripDirs);
-
-    // Same-size edit with a backdated mtime: computePlan's size+mtime
-    // heuristic reads this as "in sync", so the probe alone can never
-    // flag the owner — only the apply-time union with the watcher flag
-    // keeps it stale (the commit-8 merge-policy gate).
-    const QByteArray original = fileContents(sourcePath);
-    QByteArray flipped = original;
-    flipped.replace("8.5", "8.6");
-    REQUIRE(flipped != original);
-    REQUIRE(flipped.size() == original.size());
-    overwriteFile(sourcePath, flipped);
-    {
-        const QDateTime destTime = QFileInfo(destPath).lastModified();
-        QFile sourceFile(sourcePath);
-        REQUIRE(sourceFile.open(QFile::ReadWrite));
-        REQUIRE(sourceFile.setFileTime(destTime.addSecs(-60),
-                                       QFileDevice::FileModificationTime));
-        sourceFile.close();
-    }
-
-    // Block WITHOUT processing events: the watcher thread posts its
-    // fileChanged delivery into the main-thread queue during this sleep,
-    // landing behind the already-queued scan start and ahead of the
-    // worker's apply (which can only be posted after the scan start
-    // executes). Processing then runs snapshot-clear → watcher flag →
-    // apply — the exact ordering the union must survive. Without the
-    // sleep the sub-millisecond worker usually applies before the OS
-    // event arrives and the final check would pass on the fast path
-    // alone, never exercising the union.
-    QThread::msleep(kWatcherPostWindowMs);
-
-    REQUIRE(tryWait(kWatcherWaitMs, [&] {
-        return manager.externalCenterlineManager()->staleSourceOwners().contains(trip->id());
-    }));
-
-    // Drain the scan and the chained solve: the apply must have unioned
-    // the watcher-raised flag back in rather than trusting the probe.
-    manager.waitToFinish();
-    CHECK(manager.externalCenterlineManager()->staleSourceOwners().contains(trip->id()));
-    CHECK(manager.externalCenterlineManager()->missingSourceOwners().isEmpty());
 }

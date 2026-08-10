@@ -63,6 +63,24 @@ inline constexpr int kPollEventsBudgetMs = 50;
 // because it only drains what is already queued.
 inline constexpr int kInnerPollEventsMs = 10;
 
+// Bounded wait used to prove nothing happens: long enough for a watcher
+// event to have been delivered and any queued reconcile, scan, or solve
+// continuation to have run. Shared so tuning it for a slow CI box is one
+// edit rather than one per suite.
+inline constexpr int kNothingHappensSettleMs = 500;
+
+// Spins the event loop for `ms` wall-clock milliseconds, giving a
+// (wrongly) queued continuation every chance to run before the test
+// asserts it did not.
+inline void settleEventLoop(int ms)
+{
+    QElapsedTimer timer;
+    timer.start();
+    while (timer.elapsed() < ms) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, kInnerPollEventsMs);
+    }
+}
+
 inline bool tryWait(int timeoutMs, std::function<bool()> predicate)
 {
     QElapsedTimer timer;

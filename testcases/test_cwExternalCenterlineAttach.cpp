@@ -36,7 +36,6 @@
 #include <QDate>
 #include <QDateTime>
 #include <QDir>
-#include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
 #include <QTemporaryDir>
@@ -50,9 +49,6 @@ namespace {
 // Plenty of headroom for the scan worker + save-job queue under
 // valgrind / busy CI; the actual attach finishes in milliseconds.
 constexpr int kAttachWaitMs = 10000;
-// Bounded wait used to prove nothing happens after a cancel - long
-// enough for the discarded scan continuation to have landed.
-constexpr int kCancelSettleMs = 500;
 
 struct SavedProjectFixture {
     QTemporaryDir tempDir;
@@ -100,18 +96,6 @@ QString datasetExternalCenterlinePath(const QString& fileName)
     // files; the attach copies into the project without touching it.
     return testcasesDatasetSourcePath(
         QStringLiteral("external-centerlines/%1").arg(fileName));
-}
-
-// Spins the event loop for `ms` wall-clock milliseconds. Used to give
-// a discarded continuation every chance to run before asserting that
-// it did NOT mutate anything.
-void settleEventLoop(int ms)
-{
-    QElapsedTimer timer;
-    timer.start();
-    while (timer.elapsed() < ms) {
-        QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
-    }
 }
 
 Monad::Result<cwExternalCenterlineAttach::AttachReport> runAttach(
@@ -445,7 +429,7 @@ TEST_CASE("cancelling the attach before the scan lands leaves everything untouch
     // delivers the discarded continuation (otherwise a slow-CI cold
     // pool start would make the assertions pass vacuously).
     REQUIRE(QThreadPool::globalInstance()->waitForDone(kAttachWaitMs));
-    settleEventLoop(kCancelSettleMs);
+    settleEventLoop(kNothingHappensSettleMs);
 
     CHECK(future.isCanceled());
     CHECK(fixture->trip->externalCenterline().isEmpty());
@@ -722,7 +706,7 @@ TEST_CASE("cancelAttach cancels an in-flight attach before the scan lands",
     REQUIRE(AsyncFuture::waitForFinished(future, kAttachWaitMs));
     CHECK(future.isCanceled());
 
-    settleEventLoop(kCancelSettleMs);
+    settleEventLoop(kNothingHappensSettleMs);
     REQUIRE(attachSpy.count() == 1);
     const auto report = attachSpy.takeFirst().at(0).value<cwExternalCenterlineReport>();
     CHECK(report.canceled());
@@ -768,7 +752,7 @@ TEST_CASE("cancelAttach after the scan lands is a structural no-op",
     CHECK_FALSE(future.isCanceled());
     REQUIRE_FALSE(future.result().hasError());
 
-    settleEventLoop(kCancelSettleMs);
+    settleEventLoop(kNothingHappensSettleMs);
     REQUIRE(attachSpy.count() == 1);
     const auto report = attachSpy.takeFirst().at(0).value<cwExternalCenterlineReport>();
     CHECK(report.success());
@@ -802,7 +786,7 @@ TEST_CASE("cancelAttach is a no-op for idle owners and non-attach operations",
     CHECK_FALSE(detachFuture.isCanceled());
     REQUIRE_FALSE(detachFuture.result().hasError());
 
-    settleEventLoop(kCancelSettleMs);
+    settleEventLoop(kNothingHappensSettleMs);
     CHECK(attachSpy.count() == 1); // only the successful attach reported
     REQUIRE(detachSpy.count() == 1);
     const auto detachReport =

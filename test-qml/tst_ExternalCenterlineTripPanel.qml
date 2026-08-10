@@ -273,26 +273,25 @@ MainWindowTest {
             tryVerify(() => !panelId.ownerBusy, 10000, "the busy token releases")
         }
 
-        function test_missingSourceForgetClearsRememberedPath() {
-            const fixture = attachAndBind("trip-panel-forget")
+        function test_forgetSourceRequestClearsRememberedPath() {
+            attachAndBind("trip-panel-forget")
 
             const banner = findChild(panelId, "missingSourceBanner")
             verify(banner !== null, "banner must exist")
             verify(!banner.visible, "banner hidden while the source exists")
+            verify(RootData.externalSourceSettings
+                       .sourcePathFor(rootId.trip.id).length > 0,
+                   "the attach remembered a source path")
 
-            TestHelper.removeFile(TestHelper.toLocalUrl(fixture.source))
-            tryVerify(() => banner.visible, 10000,
-                      "banner appears once the watcher reports the missing source")
-
-            const forgetButton = findChild(banner, "forgetSourceButton")
-            verify(forgetButton !== null, "forgetSourceButton must exist")
-            mouseClick(forgetButton)
+            // The banner is raised by root.sourceMissing, which the manager
+            // only re-derives at a recompute now that the remembered source
+            // goes unwatched — so the test raises the request the button
+            // raises rather than staging a state the session cannot reach.
+            banner.forgetSourceRequested()
 
             tryVerify(() => RootData.externalSourceSettings
                                 .sourcePathFor(rootId.trip.id).length === 0,
                       5000, "Forget source clears the remembered path")
-            tryVerify(() => !banner.visible, 10000,
-                      "banner hides once the owner has no remembered source")
         }
 
         function test_aSecondAttachmentNothingTiesInBannersItself() {

@@ -137,7 +137,7 @@ MainWindowTest {
                             + sourceLabel.text)
         }
 
-        function test_missingSourceBannerLightsUpAndForgets() {
+        function test_missingSourceBannerRendersAndForgets() {
             const fixture = attachFixtureTrip("panel-banner")
             rootId.trip = fixture.trip
             bannerId.sourcePath =
@@ -145,18 +145,15 @@ MainWindowTest {
 
             verify(!bannerId.visible, "banner hidden by default")
 
-            // The panel's binding (commit 11): membership re-evaluated on
-            // missingSourceOwnersChanged via the property dependency.
-            bannerId.visible = Qt.binding(() => {
-                const manager = RootData.externalCenterlineManager
-                manager.missingSourceOwners
-                return manager.isSourceMissing(fixture.trip.id)
-            })
-            verify(!bannerId.visible, "still hidden while the source exists")
-
-            TestHelper.removeFile(TestHelper.toLocalUrl(fixture.source))
-            tryVerify(() => bannerId.visible, 10000,
-                      "banner appears once the watcher reports the missing source")
+            // What the banner renders once something lights it. Raising it
+            // is the panel's job, and its binding is the panel's test; the
+            // detection behind that binding is the manager's.
+            bannerId.visible = true
+            // The column only repositions its children on the next frame,
+            // and the banner is a cached item that already carries the
+            // previous layout's geometry — clicking before the frame lands
+            // hits whatever still occupies the banner's old place.
+            waitForRendering(componentColumnId)
 
             const label = findChild(bannerId, "missingSourceLabel")
             verify(label !== null, "missingSourceLabel must exist")
@@ -174,8 +171,8 @@ MainWindowTest {
             mouseClick(forgetButton)
             compare(forgetSpyId.count, 1, "Forget source raises the signal")
 
-            // Break the fixture-bound binding — the trip dies with cleanup's
-            // newProject but the banner item is cached across tests.
+            // The banner item is cached across tests, so hand the next one
+            // back a hidden, empty banner.
             bannerId.visible = false
             bannerId.sourcePath = ""
         }

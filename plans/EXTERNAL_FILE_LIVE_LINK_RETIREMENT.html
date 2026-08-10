@@ -265,14 +265,14 @@ return srcInfo.lastModified() &lt;= dstInfo.lastModified();</code></pre>
   <tr><th>File</th><th>Removed</th></tr>
   <tr>
     <td><code>cwExternalCenterlineManager.h/.cpp</code></td>
-    <td><code>staleSourceOwners</code> + signal + <code>m_staleRaisedSinceSnapshot</code>;
-        <code>missingSourceOwners</code> + signal + <code>isSourceMissing</code>;
-        <code>updateFromSource</code>; <code>m_sourceOwnerForPath</code>; the
-        source branch of the freshness probe
-        (<code>:361-401</code>); the source branch of
-        <code>onWatchedFileChanged</code> (<code>:548-574</code>);
-        <code>ExternalScanResult</code>'s stale/missing/sourceOwner fields and
-        their apply-time union (<code>:429-466</code>).</td>
+    <td><em>Commit 2 took:</em> <code>m_staleRaisedSinceSnapshot</code>,
+        <code>m_sourceOwnerForPath</code>, the source branch of the freshness
+        probe, the source branch of <code>onWatchedFileChanged</code>, and
+        <code>ExternalScanResult</code>'s stale/sourceOwner fields with their
+        apply-time union. <em>Commit 3 takes the rest:</em>
+        <code>staleSourceOwners</code> + signal (an empty stub since commit 2);
+        <code>missingSourceOwners</code> + signal + <code>isSourceMissing</code>
+        and its scan-side existence check; <code>updateFromSource</code>.</td>
   </tr>
   <tr>
     <td><code>cwExternalSourceSettings.h/.cpp</code></td>
@@ -417,10 +417,16 @@ return srcInfo.lastModified() &lt;= dstInfo.lastModified();</code></pre>
     <td>2</td>
     <td><strong>Stop watching sources.</strong> Drop the source branch from the
         probe and from <code>onWatchedFileChanged</code>; drop
-        <code>m_sourceOwnerForPath</code>. <code>staleSourceOwners</code> stays
-        in the API but is now permanently empty.</td>
-    <td>Editing a remembered source file changes nothing observable: no
-        <code>staleSourceOwnersChanged</code>, no watch-set change, no re-solve.
+        <code>m_sourceOwnerForPath</code> and
+        <code>m_staleRaisedSinceSnapshot</code>. <code>staleSourceOwners</code>
+        stays in the API but is now permanently empty.
+        <code>missingSourceOwners</code> survives as a bare existence check so
+        commit 3 stays the commit that removes it &mdash; but with the source
+        unwatched it is recompute-time only, so a file deleted mid-session
+        surfaces at the next recompute instead of immediately.</td>
+    <td>Editing a remembered source file changes nothing observable: the source
+        is absent from the watch set, and the edit brings no watch-set change,
+        no reconcile, and no re-solve.
         Editing the project copy still re-solves &mdash; the existing test,
         which now carries the weight.</td>
   </tr>
@@ -428,7 +434,9 @@ return srcInfo.lastModified() &lt;= dstInfo.lastModified();</code></pre>
     <td>3</td>
     <td><strong>Delete the stale/missing surface.</strong> Both properties, both
         signals, <code>updateFromSource</code>, <code>isSourceMissing</code>, the
-        missing-source banner, the Update action, the panel's polling.</td>
+        missing-source banner, the panel's polling. (No Update <em>action</em>
+        to remove: <code>updateFromSource</code> is <code>Q_INVOKABLE</code>-only
+        and no control ever called it &mdash; see commit 1.)</td>
     <td>Panel renders for an attached owner with no source recorded and one with
         a source whose file is gone &mdash; identical UI in both cases. QML tests
         for the removed banner deleted rather than skipped.</td>

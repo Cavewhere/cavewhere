@@ -64,6 +64,12 @@ const QByteArray kEditedEntry =
     "E2 E3 12.0 90 0\n"
     "*end Entry\n";
 
+// Stations the harvest reports for each of the two entry files. The
+// difference between them is the observable that says a watcher event was
+// delivered and its rescan applied.
+constexpr int kOriginalStationCount = 2;
+constexpr int kEditedStationCount = 3;
+
 struct ModifiedFixture {
     QTemporaryDir tempDir;
     std::unique_ptr<cwRootData> rootData;
@@ -181,7 +187,7 @@ TEST_CASE("Editing the source outside the project leaves the project unmodified"
 {
     // The asymmetry the fix has to keep: the source is the user's own file
     // outside the project, and nothing that travels with the project changed
-    // when it did. It raises the stale flag and waits for an Update.
+    // when it did. The edit is simply not the project's business.
     cwLinePlotManager manager;
     auto fixture = makeFixture(manager, QStringLiteral("cwproj"));
 
@@ -195,13 +201,22 @@ TEST_CASE("Editing the source outside the project leaves the project unmodified"
     external->setExternalSourceSettings(settings);
     manager.waitToFinish();
 
+    // A source edit can only reach the project through a watch on the
+    // source, so pin that channel shut first — deterministically, before
+    // any waiting.
+    CHECK_FALSE(external->watchedFiles()
+                    .contains(QFileInfo(sourcePath).canonicalFilePath()));
+
     overwriteFile(sourcePath, kEditedEntry);
 
-    REQUIRE(tryWait(kWatcherWaitMs, [&] {
-        QCoreApplication::processEvents(QEventLoop::AllEvents, kInnerPollEventsMs);
-        return external->staleSourceOwners().contains(fixture->trip->id());
-    }));
+    // The edit produces no signal to wait on, so wait out the window in
+    // which one would have arrived. The edited entry adds a station, so
+    // the harvest count is what a wrongly-processed edit would move.
+    settleEventLoop(kNothingHappensSettleMs);
+
     CHECK_FALSE(fixture->project->modified());
+    CHECK(fixture->trip->externalStations().size() == kOriginalStationCount);
+    CHECK(fileContents(fixture->entryPath) == kOriginalEntry);
 
     settings->setSourcePath(fixture->trip->id(), QString());
 }
@@ -216,11 +231,6 @@ TEST_CASE("Discarding changes does not re-dirty the project through the watcher"
     auto fixture = makeFixture(manager, QStringLiteral("cwproj"));
     REQUIRE(fixture->project->fileType() == cwProject::GitFileType);
 
-    // Station counts the harvest reports for each of the two entry files.
-    // The difference is the observable that says the watcher event was
-    // delivered and the rescan applied, rather than asserting into a race.
-    constexpr int kOriginalStationCount = 2;
-    constexpr int kEditedStationCount = 3;
     const auto waitForStationCount = [&](int count) {
         return tryWait(kWatcherWaitMs, [&] {
             QCoreApplication::processEvents(QEventLoop::AllEvents, kInnerPollEventsMs);
@@ -288,8 +298,7 @@ TEST_CASE("An Update leaves nothing behind to save once it has been saved",
     external->updateFromSource(fixture->trip->id());
 
     // The extra leg arrives with the copied bytes, so the harvest reporting
-    // three stations is the reconcile having reached disk.
-    constexpr int kEditedStationCount = 3;
+    // the edited count is the reconcile having reached disk.
     REQUIRE(tryWait(kWatcherWaitMs, [&] {
         QCoreApplication::processEvents(QEventLoop::AllEvents, kInnerPollEventsMs);
         return fixture->trip->externalStations().size() == kEditedStationCount;

@@ -104,10 +104,9 @@ cwExternalCenterlineManager::cwExternalCenterlineManager(QObject* parent) :
 {
     m_attachedCenterlinesModel = new cwAttachedCenterlinesModel(this);
 
-    // Single watcher for both in-project attachment-dir dependencies and
-    // live-link source-side dependencies. fileChanged hands the event off
-    // to onWatchedFileChanged which decides between a plain re-solve and
-    // the stale-flag flow.
+    // Watches the in-project dependencies of every attachment. fileChanged
+    // hands the event off to onWatchedFileChanged, which dirties the
+    // project and re-solves.
     m_watcher = new QFileSystemWatcher(this);
     connect(m_watcher, &QFileSystemWatcher::fileChanged,
             this, &cwExternalCenterlineManager::onWatchedFileChanged);
@@ -120,7 +119,7 @@ cwExternalCenterlineManager::cwExternalCenterlineManager(QObject* parent) :
 
     // Any attach/detach — the wrappers here, undo/redo, or protobuf load
     // populating a trip after insertion — re-derives the watch set, dir
-    // maps, rows, and missing/stale probes. Trip-list churn matters too:
+    // maps, rows, and missing-source probe. Trip-list churn matters too:
     // a cave inserted at load (or a trip restored by undo) can carry an
     // already-set externalCenterline that never fires the change signal
     // post-connect.
@@ -266,15 +265,12 @@ void cwExternalCenterlineManager::recomputeWatchSetAndProbeSources()
 {
     m_scanRestarter.restart([this]() {
         // Stage 1 (main thread, no I/O): snapshot the per-owner value
-        // inputs. Clearing the since-snapshot set here — not at restart
-        // time — matters: the restarter defers this lambda through the
-        // event loop, and "since the snapshot" means since this instant.
-        m_staleRaisedSinceSnapshot.clear();
+        // inputs.
         refreshAttachmentDirsFromSaveLoad();
         const QVector<OwnerScanInput> owners = collectOwnerSnapshots();
 
-        // Stage 2 (worker thread): every scan and freshness probe. The
-        // scanner and planner are stateless; `owners` crosses by value.
+        // Stage 2 (worker thread): the per-owner scans. The scanner is
+        // stateless; `owners` crosses by value.
         auto future = cwConcurrent::run([owners]() {
             return scanOwners(owners);
         });
@@ -326,6 +322,18 @@ QVector<cwExternalCenterlineManager::OwnerScanInput> cwExternalCenterlineManager
     const QString dataRootDir =
         m_saveLoad.isNull() ? QString() : m_saveLoad->dataRootDir().absolutePath();
 
+    // One QSettings read for the whole batch. Per-owner sourcePathFor()
+    // calls would each construct a QSettings, and this runs on the main
+    // thread on every recompute.
+    QHash<QUuid, QString> sourcePaths;
+    if (!m_externalSourceSettings.isNull()) {
+        const auto sources = m_externalSourceSettings->externalCenterlineSources();
+        sourcePaths.reserve(sources.size());
+        for (const auto& source : sources) {
+            sourcePaths.insert(source.ownerId, source.sourcePath);
+        }
+    }
+
     const auto appendOwner = [&](const QUuid& ownerId,
                                  const QString& attachmentDir,
                                  const QString& entryFile,
@@ -337,7 +345,7 @@ QVector<cwExternalCenterlineManager::OwnerScanInput> cwExternalCenterlineManager
         }
         owners.append(OwnerScanInput { ownerId, caveName, ownerName, ownerKind,
                                        entryFile, attachmentDir,
-                                       sourcePathForOwner(ownerId),
+                                       sourcePaths.value(ownerId),
                                        dataRootDir });
     };
 
@@ -380,16 +388,13 @@ cwExternalCenterlineManager::ExternalScanResult cwExternalCenterlineManager::sca
 {
     ExternalScanResult result;
 
-    // Per-owner scan: project-side (in-project copy) and source-side
-    // (live-link). Both feed the same watch set; the source-side
-    // mapping survives separately so onWatchedFileChanged can route
-    // to the stale flag. Each owner also contributes one row to the
-    // attached-centerlines model, counted from the project-side scan
-    // when it resolves (the solve *includes the in-project bytes) and
-    // the source-side scan otherwise.
+    // Per-owner scan of the in-project copy — the only file the project
+    // reads, and so the only one worth scanning or watching. A remembered
+    // source is checked for existence and otherwise left alone. Each owner
+    // contributes one row to the attached-centerlines model, counted from
+    // the scan when it resolves.
     for (const OwnerScanInput& owner : owners) {
         cwAttachedCenterlinesModel::Row row = rowFromOwner(owner);
-        bool rowCounted = false;
 
         if (!owner.attachmentDir.isEmpty()) {
             const QString projectEntry = QDir(owner.attachmentDir).filePath(owner.entryFile);
@@ -412,8 +417,7 @@ cwExternalCenterlineManager::ExternalScanResult cwExternalCenterlineManager::sca
                     // Station names, from cavern reading this one attachment on its
                     // own — the region solve can't supply them for exactly the
                     // attachments that need tying in, since it drops a survey
-                    // nothing fixes. The in-project copy, not the live-link source:
-                    // it is the bytes the solve *includes.
+                    // nothing fixes.
                     const auto harvest = cwExternalStationHarvest::harvest(projectEntry);
                     if (harvest.hasError()) {
                         result.tripHarvestErrors.insert(owner.ownerId, harvest.errorMessage());
@@ -439,51 +443,13 @@ cwExternalCenterlineManager::ExternalScanResult cwExternalCenterlineManager::sca
                         owner.ownerId, scan.value().seededMetadata.fileOwnsDeclination());
                     row.depCount = scan.value().dependencies.size();
                     row.warningCount = scan.value().warnings.size();
-                    rowCounted = true;
                 }
             }
         }
-        if (!owner.sourcePath.isEmpty()) {
-            if (!QFileInfo::exists(owner.sourcePath)) {
-                result.missingSourceOwners.append(owner.ownerId);
-            } else {
-                const auto scan = cwExternalCenterlineScanner::scan(owner.sourcePath);
-                if (!scan.hasError()) {
-                    for (const QString& dep : scan.value().dependencies) {
-                        result.watchedFiles.append(dep);
-                        // First owner wins; collisions between two
-                        // live-link owners pointing at the same source
-                        // tree are not a v1 use case.
-                        if (!result.sourceOwnerForPath.contains(dep)) {
-                            result.sourceOwnerForPath.insert(dep, owner.ownerId);
-                        }
-                    }
-                    // The project-side flag wins when both scans resolve:
-                    // the solve *includes the in-project copy, so its scan
-                    // describes the bytes actually exported. The source
-                    // scan only fills in when no project entry exists yet;
-                    // once reconcile copies the source over, the next
-                    // recompute converges the flag to the new bytes.
-                    if (!result.fileOwnsDeclination.contains(owner.ownerId)) {
-                        result.fileOwnsDeclination.insert(
-                            owner.ownerId, scan.value().seededMetadata.fileOwnsDeclination());
-                    }
-                    if (!rowCounted) {
-                        row.depCount = scan.value().dependencies.size();
-                        row.warningCount = scan.value().warnings.size();
-                    }
-                    // Open-time / recompute freshness probe: a pending
-                    // copy in the reconcile plan means the source has
-                    // drifted from the in-project bytes. computePlan
-                    // only reads the filesystem, so the probe is free
-                    // of side effects (Phase 2 direction change).
-                    if (!owner.attachmentDir.isEmpty()
-                        && !cwExternalCenterlineSync::computePlan(
-                                scan.value(), owner.attachmentDir).copies.isEmpty()) {
-                        result.staleSourceOwners.append(owner.ownerId);
-                    }
-                }
-            }
+
+        // Existence only — the in-project copy is the file the project reads.
+        if (!owner.sourcePath.isEmpty() && !QFileInfo::exists(owner.sourcePath)) {
+            result.missingSourceOwners.append(owner.ownerId);
         }
         result.rows.append(row);
     }
@@ -500,7 +466,6 @@ cwExternalCenterlineManager::ExternalScanResult cwExternalCenterlineManager::sca
         }
     }
     std::sort(result.missingSourceOwners.begin(), result.missingSourceOwners.end());
-    std::sort(result.staleSourceOwners.begin(), result.staleSourceOwners.end());
     sortAttachedRows(result.rows);
 
     return result;
@@ -508,16 +473,6 @@ cwExternalCenterlineManager::ExternalScanResult cwExternalCenterlineManager::sca
 
 void cwExternalCenterlineManager::applyScanResult(ExternalScanResult result)
 {
-    // Commit-8 merge policy: a watcher event that fired after the
-    // snapshot raised a flag the probe was computed without — union it
-    // back in rather than letting the wholesale rebuild wipe it.
-    for (const QUuid& ownerId : std::as_const(m_staleRaisedSinceSnapshot)) {
-        if (!result.staleSourceOwners.contains(ownerId)) {
-            result.staleSourceOwners.append(ownerId);
-        }
-    }
-    std::sort(result.staleSourceOwners.begin(), result.staleSourceOwners.end());
-
     if (result.watchedFiles != m_watchedFiles) {
         // Wholesale-replace the watcher's table from our intent set. Files
         // that don't exist on disk are kept in m_watchedFiles (so a later
@@ -533,21 +488,12 @@ void cwExternalCenterlineManager::applyScanResult(ExternalScanResult result)
             m_watcher->addPaths(result.existingWatchedFiles);
         }
         m_watchedFiles = std::move(result.watchedFiles);
-        m_sourceOwnerForPath = std::move(result.sourceOwnerForPath);
         emit watchedFilesChanged();
-    } else {
-        // Union unchanged but per-owner source mapping may have shifted.
-        m_sourceOwnerForPath = std::move(result.sourceOwnerForPath);
     }
 
     if (result.missingSourceOwners != m_missingSourceOwners) {
         m_missingSourceOwners = std::move(result.missingSourceOwners);
         emit missingSourceOwnersChanged();
-    }
-
-    if (result.staleSourceOwners != m_staleSourceOwners) {
-        m_staleSourceOwners = std::move(result.staleSourceOwners);
-        emit staleSourceOwnersChanged();
     }
 
     // Request the solve behind the flag swap so the consumer's buildInput
@@ -641,39 +587,11 @@ void cwExternalCenterlineManager::onWatchedFileChanged(const QString& path)
 {
     rearmWatcher(path);
 
-    const auto sourceIt = m_sourceOwnerForPath.constFind(path);
-    if (sourceIt != m_sourceOwnerForPath.constEnd()) {
-        if (!QFileInfo::exists(path)) {
-            // The source-side file vanished (deleted or renamed away) —
-            // "stale" would offer an Update for a file that is gone.
-            // Reclassify through the full probe so the owner lands in
-            // missingSourceOwners instead. (An editor's atomic-save
-            // replace has already re-created the path by the time the
-            // event is delivered, so it takes the stale branch below.)
-            recomputeWatchSetAndProbeSources();
-            return;
-        }
-        // Direction change (see the header comment on
-        // setExternalSourceSettings): a source-side edit only flags the
-        // owner stale. It never touches the filesystem or re-solves —
-        // the user triggers the reconcile via updateFromSource. Also
-        // record it for the apply-time union: a scan in flight probed
-        // the disk before this edit and must not clear the flag.
-        const QUuid ownerId = sourceIt.value();
-        m_staleRaisedSinceSnapshot.insert(ownerId);
-        if (!m_staleSourceOwners.contains(ownerId)) {
-            m_staleSourceOwners.append(ownerId);
-            std::sort(m_staleSourceOwners.begin(), m_staleSourceOwners.end());
-            emit staleSourceOwnersChanged();
-        }
-        return;
-    }
-
-    // Project-side change: the bytes that travel with the project just
-    // changed, so the project is modified. Nothing on this path queues a
-    // save job, which is the only other way the dirty bit gets set — so
-    // without this a bundled .cw drops the edit on quit-without-save,
-    // never having asked.
+    // Every watched file travels with the project, so every event here
+    // is an edit the project owns and the project is modified. Nothing
+    // on this path queues a save job, which is the only other way the
+    // dirty bit gets set — so without this a bundled .cw drops the edit
+    // on quit-without-save, never having asked.
     //
     // The containment test is what handles a moved data root: the watcher
     // stays armed on the old locations and does sometimes report them on the
@@ -712,8 +630,7 @@ void cwExternalCenterlineManager::updateFromSource(const QUuid& ownerId)
     }
     const auto scan = cwExternalCenterlineScanner::scan(sourcePath);
     if (scan.hasError()) {
-        // Unreadable source: nothing sensible to reconcile. The stale
-        // flag is probe-owned — the next recompute re-derives it.
+        // Unreadable source: nothing sensible to reconcile.
         return;
     }
     auto guard = std::make_shared<OperationGuard>(
@@ -723,11 +640,10 @@ void cwExternalCenterlineManager::updateFromSource(const QUuid& ownerId)
     // Reconcile drains through the cwSaveLoad job queue; the returned
     // future completes after every copy/remove has hit disk, which is
     // the moment a solve can see the fresh bytes in the in-project
-    // copy. The recompute re-probes freshness (clearing the stale flag)
-    // and installs any newly-added *include target in the watch set
-    // before requesting the solve. The canceled path (project retired
-    // mid-drain) must still release the per-owner token or the Update
-    // affordance stays stuck for the rest of the session.
+    // copy. The recompute installs any newly-added *include target in the
+    // watch set before requesting the solve. The canceled path (project
+    // retired mid-drain) must still release the per-owner token or the
+    // owner stays busy for the rest of the session.
     AsyncFuture::observe(future).context(this,
             [this, guard, ownerId](Monad::ResultBase) {
         guard->release();
