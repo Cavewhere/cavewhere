@@ -354,7 +354,16 @@ Item {
                            + itemId.columnTemplate.splayMenuIndent
                         anchors.verticalCenter: parent.verticalCenter
 
-                        onTapped: splayRowMenuId.menu.popup()
+                        //The button takes the grab from the row's own handler,
+                        //so it calls an armed move off the way the rest of the
+                        //row does instead of popping a menu over it
+                        onTapped: {
+                            if(itemId.model.splayMoveActive) {
+                                itemId.model.cancelSplayMove()
+                                return
+                            }
+                            splayRowMenuId.menu.popup()
+                        }
                     }
                 }
             }

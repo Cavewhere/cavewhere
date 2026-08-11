@@ -1182,6 +1182,17 @@ bool cwSurveyEditorModel::isSplayCell(cwSurveyEditorCellIndex::CellRole role) co
     return toRowType(role) == cwSurveyEditorRowIndex::SplayRow;
 }
 
+/**
+ * True when \a role names a reading the chunk itself stores, which is what
+ * makes the cell part of the shot flow space carries into the next chunk. The
+ * editor's own cells — a station's splay cluster and a splay's readings — stand
+ * outside it
+ */
+bool cwSurveyEditorModel::isChunkCell(cwSurveyEditorCellIndex::CellRole role) const
+{
+    return cwSurveyEditorCellIndex::toChunkRole(role).has_value();
+}
+
 bool cwSurveyEditorModel::isCellSelected(const cwSurveyEditorCellIndex& selectedCell,
                                          const cwSurveyEditorCellIndex& candidateCell) const
 {

@@ -137,6 +137,7 @@ public:
     Q_INVOKABLE bool isStationCell(cwSurveyEditorCellIndex::CellRole role) const;
     Q_INVOKABLE bool isShotCell(cwSurveyEditorCellIndex::CellRole role) const;
     Q_INVOKABLE bool isSplayCell(cwSurveyEditorCellIndex::CellRole role) const;
+    Q_INVOKABLE bool isChunkCell(cwSurveyEditorCellIndex::CellRole role) const;
     Q_INVOKABLE bool isCellSelected(const cwSurveyEditorCellIndex& selectedCell,
                                     const cwSurveyEditorCellIndex& candidateCell) const;
     Q_INVOKABLE bool isFocusedCell(const cwSurveyEditorCellIndex& cell) const;

@@ -759,6 +759,38 @@ TEST_CASE("Two open clusters stack up in station order", "[cwSurveyEditorModel][
     CHECK(fixture.splayReading(10, cwSurveyEditorModel::SplayDistanceRole) == QStringLiteral("7.56"));
 }
 
+TEST_CASE("The model says which cells the chunk stores a reading for",
+          "[cwSurveyEditorModel][SplayShot]") {
+    SplayFixture fixture;
+
+    SECTION("a station or shot cell belongs to the chunk") {
+        for(auto role : {cwSurveyEditorCellIndex::StationNameCell,
+                          cwSurveyEditorCellIndex::StationLeftCell,
+                          cwSurveyEditorCellIndex::StationRightCell,
+                          cwSurveyEditorCellIndex::StationUpCell,
+                          cwSurveyEditorCellIndex::StationDownCell,
+                          cwSurveyEditorCellIndex::ShotDistanceCell,
+                          cwSurveyEditorCellIndex::ShotDistanceIncludedCell,
+                          cwSurveyEditorCellIndex::ShotCompassCell,
+                          cwSurveyEditorCellIndex::ShotBackCompassCell,
+                          cwSurveyEditorCellIndex::ShotClinoCell,
+                          cwSurveyEditorCellIndex::ShotBackClinoCell})
+        {
+            CHECK(fixture.model.isChunkCell(role));
+        }
+    }
+
+    SECTION("the editor's own cells stand outside the chunk") {
+        for(auto role : {cwSurveyEditorCellIndex::StationSplaysCell,
+                          cwSurveyEditorCellIndex::SplayDistanceCell,
+                          cwSurveyEditorCellIndex::SplayCompassCell,
+                          cwSurveyEditorCellIndex::SplayClinoCell})
+        {
+            CHECK_FALSE(fixture.model.isChunkCell(role));
+        }
+    }
+}
+
 TEST_CASE("The Splays cell is the last cell in a station row", "[cwSurveyEditorModel][SplayShot]") {
     SplayFixture fixture;
 

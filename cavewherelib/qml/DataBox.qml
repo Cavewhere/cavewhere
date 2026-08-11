@@ -20,9 +20,11 @@ SurveyEditorCell {
 
     property alias aboutToDelete: removeBoxId.visible
 
-    //Space starts the next chunk from the cells that make up a shot. A cell
-    //that stands outside that flow, such as a splay's reading, turns it off
-    property bool addsChunkOnSpace: true
+    //Space starts the next chunk from the cells that make up a shot, which is
+    //the cells the chunk stores a reading for — a splay's reading stands
+    //outside that flow, so the model answers it from the cell
+    readonly property bool startsChunkOnSpace: dataBox.model !== null
+                                               && dataBox.model.isChunkCell(dataBox.cellRole)
     readonly property ErrorModel errorModel: dataValue.errorModel
     required property QC.ButtonGroup errorButtonGroup
 
@@ -100,11 +102,8 @@ SurveyEditorCell {
         return ""
     }
 
+    //! Starts the trip's next chunk, or focuses the empty one it already has
     function addNewChunk() {
-        if(!dataBox.addsChunkOnSpace) {
-            return;
-        }
-
         var trip = dataValue.chunk.parentTrip;
         if(trip.chunkCount > 0) {
             var lastChunkIndex = trip.chunkCount - 1
@@ -164,7 +163,9 @@ SurveyEditorCell {
                        }
 
     QQ.Keys.onSpacePressed: {
-        addNewChunk();
+        if(dataBox.startsChunkOnSpace) {
+            dataBox.addNewChunk();
+        }
     }
 
 
@@ -195,8 +196,7 @@ SurveyEditorCell {
         //The editor's own handler takes the click before the cell's does, so a
         //splay move waiting for a station to land on is finished from here
         onClicked: {
-            if(dataBox.model !== null && dataBox.model.splayMoveActive) {
-                dataBox.handleSplayMoveTap()
+            if(!dataBox.shouldTakeTap()) {
                 return
             }
 
@@ -311,7 +311,7 @@ SurveyEditorCell {
                         if(!commited) { return; }
                     }
 
-                    if(pressKeyEvent.key === Qt.Key_Space) {
+                    if(pressKeyEvent.key === Qt.Key_Space && dataBox.startsChunkOnSpace) {
                         dataBox.addNewChunk();
                     }
 

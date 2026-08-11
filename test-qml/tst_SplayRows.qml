@@ -73,9 +73,10 @@ MainWindowTest {
             return cell
         }
 
-        // One of the three reading cells of a splay row, by the cell it stands
-        // for — SurveyEditorCellIndex.SplayDistanceCell and friends.
-        function splayBox(context, row, cellRole) {
+        // A reading cell of any row, by the cell it stands for — a splay row's
+        // SurveyEditorCellIndex.SplayDistanceCell and friends, or a shot row's
+        // ShotDistanceCell.
+        function cellBox(context, row, cellRole) {
             const item = surveyTableId.rowItem(this, context, row)
 
             let box = null
@@ -87,7 +88,7 @@ MainWindowTest {
         }
 
         function splayReading(context, row, cellRole) {
-            return splayBox(context, row, cellRole).dataValue.reading.value
+            return cellBox(context, row, cellRole).dataValue.reading.value
         }
 
         function splayChip(context, indexInChunk) {
@@ -525,6 +526,28 @@ MainWindowTest {
                     "a called-off move should leave the cluster alone")
         }
 
+        // The splay row's own ⋯ answers to an armed move the same way the
+        // cluster's does, rather than popping its menu over the move.
+        function test_theRowMenuButtonCallsAnArmedMoveOff() {
+            const context = gotoSurveyTable()
+            const firstSplayRow = openCluster(context, 0)
+
+            const row = surveyTableId.rowItem(this, context, firstSplayRow)
+            const rowMenu = findChild(row, "splayRowMenu")
+            verify(rowMenu !== null, "a splay row should carry a menu")
+            menuItem(rowMenu, "moveSplayMenuItem").triggered()
+
+            tryVerify(() => context.editorModel.splayMoveActive, 5000,
+                      "one splay should be armed to move")
+
+            mouseClick(findChild(row, "splayRowMenuButton"))
+
+            tryVerify(() => !context.editorModel.splayMoveActive, 5000,
+                      "clicking the row's ⋯ during a move should call the move off")
+            compare(splayCount(context, 0), a4Splays.length,
+                    "a called-off move should leave the cluster alone")
+        }
+
         // Removing a station takes its splays with it, so the preview strikes
         // through the Splays cell and the cluster's rows, not just the readings.
         function test_removingTheStationPreviewsOverTheSplays() {
@@ -564,7 +587,7 @@ MainWindowTest {
             const context = gotoSurveyTable()
             const firstSplayRow = openCluster(context, 0)
 
-            mouseClick(splayBox(context, firstSplayRow, SurveyEditorCellIndex.SplayCompassCell))
+            mouseClick(cellBox(context, firstSplayRow, SurveyEditorCellIndex.SplayCompassCell))
             tryCompare(context.editorModel, "focusedRow", firstSplayRow, 5000,
                        "clicking a splay reading should focus it")
             tryCompare(context.editorModel, "focusedRole", SurveyEditorCellIndex.SplayCompassCell)
@@ -596,7 +619,7 @@ MainWindowTest {
             const context = gotoSurveyTable()
             const firstSplayRow = openCluster(context, 0)
 
-            mouseClick(splayBox(context, firstSplayRow, SurveyEditorCellIndex.SplayDistanceCell))
+            mouseClick(cellBox(context, firstSplayRow, SurveyEditorCellIndex.SplayDistanceCell))
             tryCompare(context.editorModel, "focusedRole", SurveyEditorCellIndex.SplayDistanceCell, 5000)
 
             keyClick(Qt.Key_X)
@@ -604,6 +627,81 @@ MainWindowTest {
 
             compare(splayReading(context, firstSplayRow, SurveyEditorCellIndex.SplayDistanceCell),
                     a4Splays[0].distance)
+        }
+
+        // The chunk's first shot row, for the space cases below.
+        function shotRow(context, indexInChunk) {
+            const row = context.editorModel.toModelRow(
+                          context.editorModel.rowIndex(context.chunk, indexInChunk,
+                                                       SurveyEditorRowIndex.ShotRow))
+            verify(row >= 0, "shot " + indexInChunk + " should have a model row")
+            return row
+        }
+
+        // The half of the guard that has to keep working: space on a shot cell
+        // still starts the trip's next chunk.
+        function test_spaceOnAShotReadingStartsTheNextChunk() {
+            const context = gotoSurveyTable()
+
+            mouseClick(cellBox(context, shotRow(context, 0),
+                               SurveyEditorCellIndex.ShotDistanceCell))
+            tryCompare(context.editorModel, "focusedRole",
+                       SurveyEditorCellIndex.ShotDistanceCell, 5000,
+                       "clicking a shot reading should focus it")
+
+            keyClick(Qt.Key_Space)
+            tryCompare(context.trip, "chunkCount", 2, 5000,
+                       "space on a shot cell should start the trip's next chunk")
+        }
+
+        // The same through a shot cell's open editor: space commits what was
+        // typed and carries on into the next chunk.
+        function test_spaceOutOfAShotEditorStartsTheNextChunk() {
+            const context = gotoSurveyTable()
+            const row = shotRow(context, 0)
+
+            mouseClick(cellBox(context, row, SurveyEditorCellIndex.ShotDistanceCell))
+            tryCompare(context.editorModel, "focusedRole",
+                       SurveyEditorCellIndex.ShotDistanceCell, 5000,
+                       "clicking a shot reading should focus it")
+
+            keyClick(Qt.Key_7)
+            keyClick(Qt.Key_Space)
+
+            tryVerify(() => cellBox(context, row, SurveyEditorCellIndex.ShotDistanceCell)
+                              .dataValue.reading.value === "7",
+                      5000, "space should commit the reading the editor holds")
+            tryCompare(context.trip, "chunkCount", 2, 5000,
+                       "space out of a shot's editor should start the trip's next chunk")
+        }
+
+        // Space on a shot cell starts the trip's next chunk. A splay's readings
+        // stand outside that flow, so space there leaves the trip alone —
+        // whether the cell is sitting there or has its editor open.
+        function test_spaceOnASplayReadingStartsNoChunk() {
+            const context = gotoSurveyTable()
+            const firstSplayRow = openCluster(context, 0)
+
+            mouseClick(cellBox(context, firstSplayRow, SurveyEditorCellIndex.SplayDistanceCell))
+            tryCompare(context.editorModel, "focusedRole",
+                       SurveyEditorCellIndex.SplayDistanceCell, 5000,
+                       "clicking a splay reading should focus it")
+
+            keyClick(Qt.Key_Space)
+            wait(settleMilliseconds)
+            compare(context.trip.chunkCount, 1,
+                    "space on a splay cell should start no chunk")
+
+            // The same key through the open editor: it commits what was typed
+            // and stops there
+            keyClick(Qt.Key_7)
+            keyClick(Qt.Key_Space)
+            tryVerify(() => splayReading(context, firstSplayRow,
+                                         SurveyEditorCellIndex.SplayDistanceCell) === "7",
+                      5000, "space should commit the reading the editor holds")
+            wait(settleMilliseconds)
+            compare(context.trip.chunkCount, 1,
+                    "space out of a splay's editor should start no chunk")
         }
 
         // The manual-entry scenario: the Bluetooth link is dead, so a station
@@ -691,7 +789,7 @@ MainWindowTest {
             // The model's focus lands a frame before the cell holding it takes
             // the keyboard, and the first reading's first key is what would go
             // missing in between
-            const distanceBox = splayBox(context, entryRow,
+            const distanceBox = cellBox(context, entryRow,
                                          SurveyEditorCellIndex.SplayDistanceCell)
             tryVerify(() => distanceBox.activeFocus, 5000,
                       "the blank row's distance cell should have the keyboard")
@@ -728,7 +826,7 @@ MainWindowTest {
             const firstSplayRow = openCluster(context, 0)
             const blankRowIndex = firstSplayRow + a4Splays.length
 
-            mouseClick(splayBox(context, blankRowIndex, SurveyEditorCellIndex.SplayDistanceCell))
+            mouseClick(cellBox(context, blankRowIndex, SurveyEditorCellIndex.SplayDistanceCell))
             tryCompare(context.editorModel, "focusedRow", blankRowIndex, 5000,
                        "clicking the blank row should focus it")
 
@@ -758,7 +856,7 @@ MainWindowTest {
             const context = gotoSurveyTable()
             const firstSplayRow = openCluster(context, 0)
 
-            mouseClick(splayBox(context, firstSplayRow, SurveyEditorCellIndex.SplayDistanceCell))
+            mouseClick(cellBox(context, firstSplayRow, SurveyEditorCellIndex.SplayDistanceCell))
             tryCompare(context.editorModel, "focusedRole", SurveyEditorCellIndex.SplayDistanceCell, 5000)
 
             keyClick(Qt.Key_Right)

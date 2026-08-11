@@ -95,7 +95,7 @@ SurveyEditorCell {
     //then the button that says splays can be typed here
     QQ.Loader {
         anchors.centerIn: parent
-        active: splaysBox.splayCount === 0
+        active: !splaysBox.clusterHasControls
                 && !splaysBox.isVirtual
                 && splaysBox.hovered
 
@@ -120,7 +120,7 @@ SurveyEditorCell {
     //uninstantiated rather than laying out what it will never show
     QQ.Loader {
         anchors.centerIn: parent
-        active: splaysBox.splayCount > 0
+        active: splaysBox.clusterHasControls
 
         sourceComponent: QQ.Row {
             spacing: Theme.flowSpacing

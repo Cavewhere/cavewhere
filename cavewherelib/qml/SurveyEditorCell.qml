@@ -197,15 +197,26 @@ QQ.Item {
 
     //! The arbitration every left tap inside the cell shares, whether it landed
     //! on the cell itself or on a control a subtype put there: an armed splay
-    //! move takes the tap, and anything else takes the focus. Answers whether
-    //! the caller should carry on with what the tap was for
-    function handleCellTap(): bool {
+    //! move takes the tap. Answers whether the tap is the caller's to act on.
+    //! Callers that focus the cell some other way than the model's focus, such
+    //! as an editor taking the keyboard, ask this and then focus themselves
+    function shouldTakeTap(): bool {
         if(cell.model === null) {
             return false
         }
 
         if(cell.model.splayMoveActive) {
             cell.handleSplayMoveTap()
+            return false
+        }
+
+        return true
+    }
+
+    //! shouldTakeTap with the focus step the plain cells share. Answers whether
+    //! the caller should carry on with what the tap was for
+    function handleCellTap(): bool {
+        if(!cell.shouldTakeTap()) {
             return false
         }
 
