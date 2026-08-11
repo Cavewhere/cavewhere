@@ -160,7 +160,7 @@ public:
     Q_INVOKABLE void cancelAttach(const QUuid& ownerId);
 
     // True while an attach / replace / detach for ownerId has not yet
-    // drained. QML binds this one query for the Replace/Detach/re-attach
+    // drained. QML binds this one query for the Reload/Replace
     // affordances; ownerBusyChanged notifies.
     Q_INVOKABLE bool isOwnerBusy(const QUuid& ownerId) const
     {

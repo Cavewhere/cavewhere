@@ -16,8 +16,7 @@ ShadowRectangle {
     property string removeName;
     property int indexToRemove
 
-    // Override for prompts that aren't a plain "Remove <name>?", e.g.
-    // the external-centerline detach confirmation.
+    // Override for prompts that aren't a plain "Remove <name>?".
     property string message: removeName.length !== 0 ? "Remove <b>" + removeName + "</b>?" : ""
     property string confirmText: "Remove"
 

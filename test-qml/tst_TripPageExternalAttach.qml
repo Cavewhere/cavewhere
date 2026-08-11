@@ -364,14 +364,11 @@ MainWindowTest {
                    "no SurveyEditor while attached")
             RootData.futureManagerModel.waitForFinished()
 
-            const detachButton = findChild(tripPage, "detachButton")
-            verify(detachButton !== null, "detach button must exist")
-            tryVerify(() => detachButton.enabled, 10000, "owner idles before detach")
-            mouseClick(detachButton)
-
-            const askBox = findChild(tripPage, "detachAskBox")
-            tryVerify(() => askBox.visible, 5000, "confirm box opens")
-            mouseClick(findChild(askBox, "removeButton"))
+            // Driven through the owner-teardown API the panel no longer
+            // exposes (plans/EXTERNAL_FILE_LIVE_LINK_RETIREMENT.html §4.1):
+            // what this test is about is the pane swapping back once the trip
+            // is Native again, whatever made it Native.
+            RootData.detachTripCenterline(fixture.trip)
 
             tryVerify(() => fixture.trip.externalCenterline.entryFile.length === 0,
                       10000, "the trip is Native again")

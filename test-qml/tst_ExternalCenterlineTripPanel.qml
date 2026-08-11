@@ -6,7 +6,7 @@ import QmlTestRecorder
 
 // Commit-11 assembly tests for ExternalCenterlineTripPanel: the five
 // commit-10 sub-components wired to the real managers, plus the
-// attach/detach completion-signal bridge.
+// attach completion-signal bridge.
 MainWindowTest {
     id: rootId
 
@@ -40,12 +40,6 @@ MainWindowTest {
         }
 
         SignalSpy {
-            id: detachCompletedSpyId
-            target: RootData.externalCenterlineManager
-            signalName: "detachCompleted"
-        }
-
-        SignalSpy {
             id: stationClickSpyId
             target: panelId
             signalName: "stationClicked"
@@ -59,7 +53,6 @@ MainWindowTest {
             rootId.trip = null
             solvedSpyId.clear()
             attachCompletedSpyId.clear()
-            detachCompletedSpyId.clear()
             stationClickSpyId.clear()
         }
 
@@ -179,44 +172,41 @@ MainWindowTest {
             tryCompare(RootData.pageSelectionModel, "currentPageAddress", "Cavern")
         }
 
-        function test_detachThroughRemoveAskBox() {
-            attachAndBind("trip-panel-detach")
+        // The commit-3b gate (plans/EXTERNAL_FILE_LIVE_LINK_RETIREMENT.html
+        // §4.1): the panel keeps the two verbs that are about the file.
+        // Detaching is now "remove the trip" on the Cave page, so the panel
+        // must offer nothing else — enumerated rather than spot-checked, so
+        // a re-added action fails here instead of shipping unnoticed.
+        function test_attachedPanelOffersReloadAndReplaceOnly() {
+            attachAndBind("trip-panel-actions")
             RootData.futureManagerModel.waitForFinished()
 
-            const detachButton = findChild(panelId, "detachButton")
-            verify(detachButton !== null, "detachButton must exist")
-            verify(detachButton.visible && detachButton.enabled,
-                   "Detach is clickable on an idle attached trip")
+            const actionsRow = findChild(panelId, "externalCenterlineActions")
+            verify(actionsRow !== null, "externalCenterlineActions must exist")
 
-            const askBox = findChild(panelId, "detachAskBox")
-            verify(askBox !== null, "detachAskBox must exist")
-            verify(!askBox.visible, "confirm box hidden until Detach is clicked")
+            const actionNames = []
+            for (let i = 0; i < actionsRow.children.length; ++i) {
+                const child = actionsRow.children[i]
+                if (child.objectName.length > 0) {
+                    actionNames.push(child.objectName)
+                }
+            }
+            compare(actionNames.join(","), "reloadButton,replaceButton",
+                    "an attached panel offers Reload now and Replace… and nothing else")
+            // The two buttons plus the fill spacer — pins the row's size so
+            // an action added without an objectName fails here too.
+            compare(actionsRow.children.length, 3,
+                    "the actions row holds exactly Reload, Replace… and the spacer")
 
-            mouseClick(detachButton)
-            tryVerify(() => askBox.visible, 5000, "Detach opens the confirm box")
-            verify(askBox.message.indexOf("Detach this trip's centerline?") === 0,
-                   "confirm box carries the detach message; got: " + askBox.message)
-
-            const confirmButton = findChild(askBox, "removeButton")
-            verify(confirmButton !== null, "confirm button must exist")
-            mouseClick(confirmButton)
-
-            // The busy token flips synchronously when the detach starts,
-            // so the affordances disable before the future drains.
-            compare(panelId.ownerBusy, true, "owner is busy right after confirming")
             const reloadButton = findChild(panelId, "reloadButton")
-            verify(!reloadButton.enabled, "Reload disables while the owner is busy")
-            verify(!detachButton.enabled, "Detach disables while the owner is busy")
+            const replaceButton = findChild(panelId, "replaceButton")
+            verify(reloadButton.visible && reloadButton.enabled,
+                   "Reload is clickable on an idle attached trip")
+            verify(replaceButton.visible && replaceButton.enabled,
+                   "Replace is clickable on an idle attached trip")
 
-            tryVerify(() => rootId.trip.externalCenterline.entryFile.length === 0,
-                      10000, "the trip is Native again after the detach drains")
-            tryVerify(() => !panelId.ownerBusy, 10000, "the busy token releases")
-
-            tryVerify(() => detachCompletedSpyId.count === 1, 5000,
-                      "detach emits exactly one completion")
-            const report = detachCompletedSpyId.signalArguments[0][0]
-            verify(report.success, "the detach reports success")
-            verify(!panelId.isAttached, "panel leaves Attached mode")
+            verify(findChild(panelId, "detachAskBox") === null,
+                   "the detach confirm box is gone with the action that opened it")
         }
 
         function test_replaceSwapsTheAttachedFileThroughTheDialog() {

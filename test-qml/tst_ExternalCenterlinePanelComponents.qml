@@ -317,7 +317,7 @@ MainWindowTest {
             compare(message.text, complaint)
 
             // A file cavern hates produces a complaint per problem, and the
-            // panel's way out of that state — Reload, Detach — sits below this
+            // panel's way out of that state — Reload, Replace — sits below this
             // banner. So the log scrolls past a point instead of growing.
             const shortHeight = fileErrorBannerId.height
             let manyComplaints = []

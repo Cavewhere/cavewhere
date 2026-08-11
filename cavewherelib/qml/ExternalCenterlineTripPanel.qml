@@ -143,6 +143,7 @@ QQ.Item {
 
         RowLayout {
             id: actionsRowId
+            objectName: "externalCenterlineActions"
             Layout.fillWidth: true
             spacing: Theme.flowSpacing
 
@@ -164,20 +165,6 @@ QQ.Item {
                 onClicked: {
                     replaceDialogLoaderId.active = true
                     replaceDialogLoaderId.item.open()
-                }
-            }
-
-            QC.Button {
-                id: detachButtonId
-                objectName: "detachButton"
-                text: qsTr("Detach…")
-                visible: root.isAttached
-                enabled: !root.ownerBusy
-                onClicked: {
-                    const pos = detachButtonId.mapToItem(root, 0, detachButtonId.height)
-                    detachAskBoxId.x = pos.x
-                    detachAskBoxId.y = pos.y
-                    detachAskBoxId.show()
                 }
             }
 
@@ -205,14 +192,6 @@ QQ.Item {
                 trip: root.trip
             }
         }
-    }
-
-    RemoveAskBox {
-        id: detachAskBoxId
-        objectName: "detachAskBox"
-        message: qsTr("Detach this trip's centerline? The in-project copy will be removed.")
-        confirmText: qsTr("Detach")
-        onRemove: RootData.detachTripCenterline(root.trip)
     }
 
     QQ.Component {

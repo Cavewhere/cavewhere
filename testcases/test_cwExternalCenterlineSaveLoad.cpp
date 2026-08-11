@@ -62,7 +62,9 @@ struct SavedProjectFixture {
 // Builds a saved-to-disk project with one cave + one trip already on disk.
 // All paths under tempDir.path(); safe to run in parallel processes because
 // QTemporaryDir generates a unique suffix per process.
-std::unique_ptr<SavedProjectFixture> makeSavedProject(const QString& projectFileBase)
+std::unique_ptr<SavedProjectFixture> makeSavedProject(
+    const QString& projectFileBase,
+    const QString& extension = QStringLiteral(".cwproj"))
 {
     auto fixture = std::make_unique<SavedProjectFixture>();
     REQUIRE(fixture->tempDir.isValid());
@@ -79,7 +81,7 @@ std::unique_ptr<SavedProjectFixture> makeSavedProject(const QString& projectFile
     fixture->trip->setName(QString::fromLatin1(kOriginalTripName));
 
     const QString projectPath =
-        QDir(fixture->tempDir.path()).filePath(projectFileBase + QStringLiteral(".cwproj"));
+        QDir(fixture->tempDir.path()).filePath(projectFileBase + extension);
     REQUIRE(fixture->project->saveAs(projectPath));
     fixture->project->waitSaveToFinish();
     // Drain the queued fileSaved delivery so modified() is settled false
@@ -412,19 +414,32 @@ TEST_CASE("cave delete removes external-centerline/ subdir",
     CHECK_FALSE(originalCaveDir.exists());
 }
 
+// Removing the trip is the only way out of an attachment now that the panel's
+// Detach action is gone (plans/EXTERNAL_FILE_LIVE_LINK_RETIREMENT.html §4.1),
+// so it has to take the copied closure with it in both project formats — a
+// bundled .cw keeps its tree extracted in a temporary directory, which is a
+// different place than the .cwproj's on-disk tree.
 TEST_CASE("trip delete removes external-centerline/ subdir",
           "[SaveLoad][External]")
 {
-    auto fixture = makeSavedProject(QStringLiteral("trip-delete-cascade"));
+    QString extension;
+    SECTION("git-backed .cwproj") { extension = QStringLiteral(".cwproj"); }
+    SECTION("bundled .cw") { extension = QStringLiteral(".cw"); }
+
+    auto fixture = makeSavedProject(QStringLiteral("trip-delete-cascade"), extension);
 
     const QDir originalTripDir = ProjectFilenameTestHelper::dir(fixture->trip);
+    const QDir attachmentDir =
+        fixture->project->saveLoad()->externalCenterlineDir(fixture->trip);
     const QString plantedPath = plantExternalCenterlineFile(originalTripDir);
     REQUIRE(QFileInfo::exists(plantedPath));
+    REQUIRE(attachmentDir.exists());
 
     fixture->cave->removeTrip(0);
     fixture->project->waitSaveToFinish();
 
     CHECK_FALSE(QFileInfo::exists(plantedPath));
+    CHECK_FALSE(attachmentDir.exists());
     CHECK_FALSE(originalTripDir.exists());
 }
 
