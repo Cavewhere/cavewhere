@@ -424,6 +424,183 @@ TEST_CASE("Moved splays leave one cluster and land in another", "[cwSurveyEditor
     }
 }
 
+TEST_CASE("A move waits for the station the user picks", "[cwSurveyEditorModel][SplayShot]") {
+    SplayFixture fixture;
+    fixture.model.toggleSplaysExpanded(fixture.stationRow(1));
+    fixture.checkRowCount(9);
+
+    const auto splayRow = [&fixture](int splayIndex) {
+        return cwSurveyEditorRowIndex(fixture.chunk, 1, splayIndex, cwSurveyEditorRowIndex::SplayRow);
+    };
+
+    QSignalSpy moveChanged(&fixture.model, &cwSurveyEditorModel::splayMoveChanged);
+    REQUIRE(moveChanged.isValid());
+
+    SECTION("the whole cluster moves onto the station the user clicks") {
+        fixture.model.startSplayMove(fixture.stationRow(1), true);
+
+        CHECK(fixture.model.splayMoveActive());
+        CHECK(fixture.model.splayMoveCount() == 3);
+        CHECK(fixture.model.splayMoveStationName() == QStringLiteral("a2"));
+        CHECK(moveChanged.count() == 1);
+
+        //a3 takes them, a1 and the station they came off don't
+        CHECK(fixture.model.isSplayMoveTarget(fixture.stationRow(2)));
+        CHECK(fixture.model.isSplayMoveTarget(fixture.stationRow(0)));
+        CHECK_FALSE(fixture.model.isSplayMoveTarget(fixture.stationRow(1)));
+        CHECK(fixture.model.isSplayMoveSource(fixture.stationRow(1)));
+        CHECK(fixture.model.isSplayMoveSource(splayRow(0)));
+        CHECK_FALSE(fixture.model.isSplayMoveTarget(
+            cwSurveyEditorRowIndex(fixture.chunk, 1, cwSurveyEditorRowIndex::ShotRow)));
+
+        fixture.model.commitSplayMove(fixture.stationRow(2));
+
+        CHECK_FALSE(fixture.model.splayMoveActive());
+        CHECK(fixture.model.splayMoveCount() == 0);
+        CHECK(fixture.chunk->stationSplayCount(1) == 0);
+        CHECK(fixture.chunk->stationSplayCount(2) == 3);
+
+        //a2's cluster empties and closes, and a3 opens on what it just took
+        //title, a1, shot, a2, shot, a3, 3 splays
+        fixture.checkRowCount(9);
+        const int a3Row = fixture.model.toModelRow(fixture.stationRow(2));
+        REQUIRE(a3Row == 5);
+        CHECK(fixture.rowData(a3Row, cwSurveyEditorModel::StationSplaysExpandedRole).toBool());
+        CHECK(fixture.rowData(a3Row + 1, cwSurveyEditorModel::SplayDistanceRole).toString()
+              == QStringLiteral("5.88"));
+    }
+
+    SECTION("one splay moves on its own") {
+        fixture.model.startSplayMove(splayRow(1), false);
+
+        CHECK(fixture.model.splayMoveCount() == 1);
+
+        fixture.model.commitSplayMove(fixture.stationRow(0));
+
+        CHECK(fixture.chunk->stationSplayCount(0) == 1);
+        CHECK(fixture.chunk->stationSplayCount(1) == 2);
+
+        //a1 opens on the splay it took, a2 keeps the two it has left
+        //title, a1, 1 splay, shot, a2, 2 splays, shot, a3
+        fixture.checkRowCount(9);
+        CHECK(fixture.rowData(2, cwSurveyEditorModel::SplayDistanceRole).toString()
+              == QStringLiteral("5.42"));
+        CHECK(fixture.rowData(5, cwSurveyEditorModel::SplayDistanceRole).toString()
+              == QStringLiteral("5.88"));
+    }
+
+    SECTION("splays move into a station in another chunk") {
+        auto secondChunk = new cwSurveyChunk();
+        secondChunk->appendShot(cwStation("b1"), cwStation("b2"), cwShot("5.0", "10.0", "190.0", "1.0", "-1.0"));
+        fixture.trip.addChunk(secondChunk);
+        fixture.checkRowCount(13);
+
+        const cwSurveyEditorRowIndex b2Row(secondChunk, 1, cwSurveyEditorRowIndex::StationRow);
+
+        fixture.model.startSplayMove(fixture.stationRow(1), true);
+        CHECK(fixture.model.isSplayMoveTarget(b2Row));
+
+        fixture.model.commitSplayMove(b2Row);
+
+        CHECK(fixture.chunk->stationSplayCount(1) == 0);
+        CHECK(secondChunk->stationSplayCount(1) == 3);
+
+        //a2 gives up its three rows and b2 opens on them
+        fixture.checkRowCount(13);
+        const int b2ModelRow = fixture.model.toModelRow(b2Row);
+        REQUIRE(b2ModelRow > 0);
+        CHECK(fixture.rowData(b2ModelRow, cwSurveyEditorModel::StationSplaysExpandedRole).toBool());
+        CHECK(fixture.rowIndexOf(b2ModelRow + 1).rowType() == cwSurveyEditorRowIndex::SplayRow);
+    }
+
+    SECTION("canceling leaves nothing pending and nothing moved") {
+        fixture.model.startSplayMove(fixture.stationRow(1), true);
+        fixture.model.cancelSplayMove();
+
+        CHECK_FALSE(fixture.model.splayMoveActive());
+        CHECK(fixture.model.splayMoveStationName().isEmpty());
+        CHECK(moveChanged.count() == 2);
+        CHECK_FALSE(fixture.model.isSplayMoveTarget(fixture.stationRow(2)));
+
+        //A second cancel has nothing left to say
+        fixture.model.cancelSplayMove();
+        CHECK(moveChanged.count() == 2);
+
+        //And a commit with nothing armed leaves the splays where they are
+        fixture.model.commitSplayMove(fixture.stationRow(2));
+        CHECK(fixture.chunk->stationSplayCount(1) == 3);
+        CHECK(fixture.chunk->stationSplayCount(2) == 0);
+        fixture.checkRowCount(9);
+    }
+
+    SECTION("rows that name no splays arm nothing") {
+        fixture.model.startSplayMove(fixture.stationRow(0), true);
+        CHECK_FALSE(fixture.model.splayMoveActive());
+
+        fixture.model.startSplayMove(splayRow(3), false);
+        CHECK_FALSE(fixture.model.splayMoveActive());
+
+        fixture.model.startSplayMove(fixture.stationRow(1), false);
+        CHECK_FALSE(fixture.model.splayMoveActive());
+
+        fixture.model.startSplayMove(
+            cwSurveyEditorRowIndex(nullptr, 1, 0, cwSurveyEditorRowIndex::SplayRow), true);
+        CHECK_FALSE(fixture.model.splayMoveActive());
+
+        CHECK(moveChanged.count() == 0);
+    }
+
+    SECTION("arming a move calls off the one before it") {
+        fixture.model.startSplayMove(fixture.stationRow(1), true);
+        fixture.model.startSplayMove(splayRow(0), false);
+
+        CHECK(fixture.model.splayMoveCount() == 1);
+        //The second arming cancels the first before it announces itself
+        CHECK(moveChanged.count() == 3);
+    }
+
+    SECTION("a station leaving takes the move it armed with it") {
+        fixture.model.startSplayMove(fixture.stationRow(1), true);
+        fixture.chunk->removeStation(1, cwSurveyChunk::Above);
+
+        CHECK_FALSE(fixture.model.splayMoveActive());
+    }
+
+    SECTION("a station arriving takes the move with it") {
+        fixture.model.startSplayMove(fixture.stationRow(1), true);
+        fixture.chunk->insertStation(0, cwSurveyChunk::Above);
+
+        //a2 is at index 2 now, so an armed index 1 would name somebody else
+        CHECK_FALSE(fixture.model.splayMoveActive());
+    }
+
+    SECTION("editing the splays the move armed calls it off") {
+        fixture.model.startSplayMove(splayRow(2), false);
+        fixture.chunk->removeStationSplay(1, 0);
+
+        //The armed index 2 named the last splay, which is index 1 now
+        CHECK_FALSE(fixture.model.splayMoveActive());
+        CHECK(fixture.chunk->stationSplayCount(1) == 2);
+    }
+
+    SECTION("splays changing on another station leave the move armed") {
+        fixture.model.startSplayMove(fixture.stationRow(1), true);
+        fixture.chunk->setStationSplays(0, a4Splays());
+
+        CHECK(fixture.model.splayMoveActive());
+        CHECK(fixture.model.splayMoveCount() == 3);
+    }
+
+    SECTION("leaving the trip calls the move off") {
+        fixture.model.startSplayMove(fixture.stationRow(1), true);
+
+        cwTrip otherTrip;
+        fixture.model.setTrip(&otherTrip);
+
+        CHECK_FALSE(fixture.model.splayMoveActive());
+    }
+}
+
 TEST_CASE("Splays moving onto a closed station stay out of sight", "[cwSurveyEditorModel][SplayShot]") {
     SplayFixture fixture;
     fixture.model.toggleSplaysExpanded(fixture.stationRow(1));

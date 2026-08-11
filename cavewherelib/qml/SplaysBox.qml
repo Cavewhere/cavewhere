@@ -17,8 +17,6 @@ SurveyEditorCell {
     id: splaysBox
     objectName: "splaysBox." + splaysBox.listViewIndex
 
-    required property cwSurveyEditorRowIndex rowIndex
-
     //The station's name cell, which is what the station menu acts through
     required property cwSurveyEditorBoxData stationData
 
@@ -27,7 +25,7 @@ SurveyEditorCell {
 
     //The table's one challenge for deleting a whole cluster, owned by
     //SurveyEditor so it outlives the recycled row that asks for it
-    required property RemoveAskBox splayRemoveChallenge
+    required property SplayRemoveAskBox splayRemoveChallenge
 
     cellRole: SurveyEditorCellIndex.StationSplaysCell
     indexInChunk: splaysBox.rowIndex.indexInChunk

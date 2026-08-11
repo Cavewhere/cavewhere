@@ -37,6 +37,16 @@ QQ.Item {
     //rows, and a cell with nothing behind it draws no background
     property SurveyChunk chunk: null
 
+    //The model row the cell sits on, for the actions that name a row rather
+    //than a reading — expanding a splay cluster, landing a splay move. A cell
+    //that offers none of them leaves it at the empty row it starts with
+    property cwSurveyEditorRowIndex rowIndex
+
+    //A cell a splay move can land on. While one is armed, a tap here moves the
+    //splays onto this cell's station instead of taking focus; every other
+    //cell's tap calls the move off
+    property bool acceptsSplayMove: false
+
     //How the cell's background reads: a station cell gets the gradient that
     //ties a station to the shots around it, a shot cell a flat fill. Which of
     //the two a cell is follows from its column, so the model answers it
@@ -167,6 +177,16 @@ QQ.Item {
         return cell.handleTab(eventKey) || cell.handleArrowKey(eventKey)
     }
 
+    //! Finishes an armed splay move: this cell's station takes the splays, or
+    //! anywhere else calls the move off
+    function handleSplayMoveTap() {
+        if(cell.acceptsSplayMove && cell.model.isSplayMoveTarget(cell.rowIndex)) {
+            cell.model.commitSplayMove(cell.rowIndex)
+        } else {
+            cell.model.cancelSplayMove()
+        }
+    }
+
     onFocusChanged: {
         if(cell.focus) {
             cell.takeFocus()
@@ -266,6 +286,13 @@ QQ.Item {
         acceptedButtons: Qt.LeftButton | Qt.RightButton
 
         onSingleTapped: (eventPoint, button) => {
+                            if(button !== Qt.RightButton
+                                    && cell.model !== null
+                                    && cell.model.splayMoveActive) {
+                                cell.handleSplayMoveTap()
+                                return
+                            }
+
                             cell.takeFocus()
                             if(button === Qt.RightButton) {
                                 cell.rightTapped()

@@ -16,10 +16,6 @@ ShadowRectangle {
     property string removeName;
     property int indexToRemove
 
-    //What the survey table removes instead of a plain row: a station's whole
-    //splay cluster is named by the row it hangs from, which an int can't carry
-    property cwSurveyEditorRowIndex rowIndexToRemove
-
     function show() {
         state = "visible"
     }

@@ -28,7 +28,7 @@ Item {
     required property QC.ButtonGroup errorButtonGroup
     required property var removePreview
     required property FixStationPopup fixStationPopup
-    required property RemoveAskBox splayRemoveChallenge
+    required property SplayRemoveAskBox splayRemoveChallenge
     required property int rowType
     required property cwSurveyEditorRowIndex rowIndex
 
@@ -107,6 +107,7 @@ Item {
                 dataValidator: stationValidator
                 fixStationPopup: itemId.fixStationPopup
                 stationIsFixed: itemId.stationFixed
+                rowIndex: itemId.rowIndex
             }
 
 
@@ -302,12 +303,17 @@ Item {
                    + itemId.columnTemplate.splayMenuIndent
                 anchors.verticalCenter: parent.verticalCenter
 
-                onTapped: (position) => {
-                              const menuPoint = splayRowMenuButtonId.mapToItem(splayRowMenuId,
-                                                                               position.x,
-                                                                               position.y)
-                              splayRowMenuId.showMenu(menuPoint.x, menuPoint.y)
-                          }
+                onTapped: splayRowMenuId.menu.popup()
+            }
+
+            //A splay row is a big target to miss a station by, so a click on
+            //one while a move is armed calls the move off rather than doing
+            //nothing at all
+            TapHandler {
+                enabled: itemId.model.splayMoveActive
+                gesturePolicy: TapHandler.ReleaseWithinBounds
+
+                onSingleTapped: itemId.model.cancelSplayMove()
             }
 
             Rectangle {

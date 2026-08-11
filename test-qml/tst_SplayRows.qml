@@ -274,7 +274,7 @@ MainWindowTest {
                     "backing out should leave the cluster alone")
             compare(context.view.count, openRows)
 
-            clusterMenuButton.tapped(Qt.point(0, 0))
+            clusterMenuButton.tapped()
             menuItem(cell, "stationMenuDeleteSplays").triggered()
             tryVerify(() => challenge.visible, 5000)
 
@@ -285,6 +285,87 @@ MainWindowTest {
             compare(splayCount(context, 0), 0)
             tryVerify(() => findChild(splaysCell(context, 0), "splayChip") === null, 5000,
                       "the chip should go with the splays it counted")
+        }
+
+        function stationNameBox(context, indexInChunk) {
+            const row = surveyTableId.stationRow(context, indexInChunk)
+            const item = surveyTableId.rowItem(this, context, row)
+
+            let box = null
+            tryVerify(() => {
+                box = findChild(item, "dataBox." + row + "." + SurveyChunk.StationNameRole)
+                return box !== null
+            }, 5000, "station " + indexInChunk + " should have a name box")
+            return box
+        }
+
+        // The headline scenario: a cluster downloaded onto the wrong station
+        // moves to its neighbor in three taps — ⋯, Move all to…, tap station.
+        function test_movingAClusterToTheStationTheUserPicks() {
+            const context = gotoSurveyTable()
+            openCluster(context, 0)
+
+            const cell = splaysCell(context, 0)
+            mouseClick(findChild(cell, "splayClusterMenuButton"))
+
+            const moveItem = menuItem(cell, "stationMenuMoveSplays")
+            compare(moveItem.text, "Move all 3 splays to…")
+            moveItem.triggered()
+
+            tryVerify(() => context.editorModel.splayMoveActive, 5000,
+                      "the move should wait for a station to land on")
+            compare(context.editorModel.splayMoveCount, a4Splays.length)
+
+            const banner = findChild(surveyTableId.surveyEditor(), "splayMoveBanner")
+            verify(banner !== null, "the table should say what the move is waiting for")
+            tryVerify(() => banner.visible, 5000)
+            compare(findChild(banner, "splayMoveBannerLabel").text,
+                    "Click a station to move 3 splays from A1 — Esc cancels")
+
+            // A2 can take them, A1 can't take back what it already has
+            const targetBox = stationNameBox(context, 1)
+            tryVerify(() => findChild(targetBox, "splayMoveTargetOutline").visible, 5000,
+                      "the station the splays can land on should show it")
+            verify(!findChild(stationNameBox(context, 0), "splayMoveTargetOutline").visible,
+                   "the station the splays are leaving is no target")
+
+            mouseClick(targetBox)
+
+            tryVerify(() => !context.editorModel.splayMoveActive, 5000,
+                      "landing the splays should end the move")
+            compare(splayCount(context, 0), 0)
+            compare(splayCount(context, 1), a4Splays.length)
+
+            // The target opens on what it just took, so the landing is visible
+            const firstSplayRow = surveyTableId.stationRow(context, 1) + 1
+            for (let i = 0; i < a4Splays.length; i++) {
+                const item = surveyTableId.rowItem(this, context, firstSplayRow + i)
+                tryVerify(() => findChild(item, "splayRowLabel") !== null, 5000,
+                          "the target should show splay row " + i)
+                compare(findChild(item, "splayRowLabel").text, "A2 · s" + (i + 1))
+                compare(findChild(item, "splayDistanceLabel").text, a4Splays[i].distance)
+            }
+        }
+
+        // A move armed by mistake costs one key to be rid of.
+        function test_escCallsTheMoveOff() {
+            const context = gotoSurveyTable()
+            const firstSplayRow = openCluster(context, 0)
+
+            const row = surveyTableId.rowItem(this, context, firstSplayRow)
+            const menu = findChild(row, "splayRowMenu")
+            verify(menu !== null, "a splay row should carry a menu")
+            menuItem(menu, "moveSplayMenuItem").triggered()
+
+            tryVerify(() => context.editorModel.splayMoveActive, 5000,
+                      "one splay should be armed to move")
+            compare(context.editorModel.splayMoveCount, 1)
+
+            keyClick(Qt.Key_Escape)
+
+            tryVerify(() => !context.editorModel.splayMoveActive, 5000,
+                      "Esc should call the move off")
+            compare(splayCount(context, 0), a4Splays.length)
         }
 
         // Removing a station takes its splays with it, so the preview strikes

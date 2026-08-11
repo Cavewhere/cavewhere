@@ -18,9 +18,8 @@ QQ.Rectangle {
     readonly property real buttonSize: 16
     readonly property bool hovered: hoverHandlerId.hovered
 
-    //Where the tap landed, in this button's coordinates, so a menu can open
-    //where the user pressed
-    signal tapped(point position)
+    //The menu opens at the cursor, so the button only has to say it was pressed
+    signal tapped()
 
     implicitWidth: menuButton.buttonSize
     implicitHeight: menuButton.buttonSize
@@ -50,6 +49,6 @@ QQ.Rectangle {
     QQ.TapHandler {
         gesturePolicy: QQ.TapHandler.ReleaseWithinBounds
 
-        onSingleTapped: (eventPoint) => menuButton.tapped(eventPoint.position)
+        onSingleTapped: menuButton.tapped()
     }
 }

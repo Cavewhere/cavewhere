@@ -88,11 +88,23 @@ void cwSurveyEditorModel::connectChunkSignals(cwSurveyChunk* chunk)
     connect(chunk, &cwSurveyChunk::errorsChanged, this, chunkCellChange);
 
     connect(chunk, &cwSurveyChunk::stationSplaysChanged, this, [this, chunk](int stationIndex) {
+        //An armed move names its splays by index, so a splay leaving or joining
+        //the station they're coming off renumbers them out from under it
+        if(m_pendingSplayMove.chunk == chunk && m_pendingSplayMove.stationIndex == stationIndex) {
+            cancelSplayMove();
+        }
+
         reconcileSplayRows(chunk, stationIndex);
     });
 
     connect(chunk, &cwSurveyChunk::added, this,
             [this, chunk, emitDataChangedForChunk](int stationBegin, int stationEnd, int shotBegin, int shotEnd) {
+                //The stations at and below the insert renumber, so an armed
+                //move would follow its old index onto somebody else's splays
+                if(m_pendingSplayMove.chunk == chunk) {
+                    cancelSplayMove();
+                }
+
                 shiftExpandedSplays(chunk, stationBegin, stationEnd - stationBegin + 1);
                 int first = std::min(toModelRow({chunk, stationBegin, cwSurveyEditorRowIndex::StationRow}),
                                      toModelRow({chunk, shotBegin, cwSurveyEditorRowIndex::ShotRow}));
@@ -108,6 +120,12 @@ void cwSurveyEditorModel::connectChunkSignals(cwSurveyChunk* chunk)
 
     connect(chunk, &cwSurveyChunk::aboutToRemove, this,
             [this, chunk](int stationBegin, int stationEnd, int shotBegin, int shotEnd) {
+                //The stations left over renumber, so an armed move would follow
+                //its old index onto somebody else's splays
+                if(m_pendingSplayMove.chunk == chunk) {
+                    cancelSplayMove();
+                }
+
                 //A cluster on a station that's leaving has to close on its own,
                 //so its rows go away as a removal the view can follow
                 for(int stationIndex = stationEnd; stationIndex >= stationBegin; --stationIndex) {
@@ -182,6 +200,9 @@ void cwSurveyEditorModel::invalidateStationFixed()
 
 void cwSurveyEditorModel::setTrip(cwTrip* trip) {
     if(m_trip != trip) {
+        //A move armed in the trip the table is leaving has nowhere to land
+        cancelSplayMove();
+
         beginResetModel();
         m_focusedChunk = nullptr;
         m_virtualRowsVisibleChunk = nullptr;
@@ -253,6 +274,9 @@ void cwSurveyEditorModel::setTrip(cwTrip* trip) {
                                 m_virtualRowsVisibleChunk = nullptr;
                             }
                             m_expandedSplays.remove(chunk);
+                            if(m_pendingSplayMove.chunk == chunk) {
+                                cancelSplayMove();
+                            }
                             disconnectChunkSignals(allChunks.at(i));
                         }
                     });
@@ -1662,6 +1686,20 @@ void cwSurveyEditorModel::toggleSplaysExpanded(const cwSurveyEditorRowIndex& row
 
     if(splayRowCount(chunk, stationIndex) > 0) {
         collapseSplays(chunk, stationIndex);
+    } else {
+        expandSplays(chunk, stationIndex);
+    }
+}
+
+/**
+ * @brief cwSurveyEditorModel::expandSplays
+ *
+ * Opens \a stationIndex's cluster. A station with no splays, or one whose
+ * cluster is already open, keeps the rows it has.
+ */
+void cwSurveyEditorModel::expandSplays(cwSurveyChunk* chunk, int stationIndex)
+{
+    if(splayRowCount(chunk, stationIndex) > 0) {
         return;
     }
 
@@ -1754,6 +1792,162 @@ void cwSurveyEditorModel::clearSplaysAt(const cwSurveyEditorRowIndex& rowIndex)
     }
 
     chunk->clearStationSplays(rowIndex.indexInChunk());
+}
+
+/**
+ * @brief cwSurveyEditorModel::startSplayMove
+ * @param rowIndex - The splay row to move, or the cluster's station row
+ * @param allSplays - True moves every splay the station carries, false the one
+ * splay \a rowIndex names
+ *
+ * Arms a move and waits for the user to pick the station it lands on. Arming a
+ * move calls off the one before it, so the table only ever has one in flight.
+ */
+void cwSurveyEditorModel::startSplayMove(const cwSurveyEditorRowIndex& rowIndex, bool allSplays)
+{
+    cancelSplayMove();
+
+    cwSurveyChunk* chunk = splayClusterChunk(rowIndex);
+    if(chunk == nullptr) {
+        return;
+    }
+
+    const int stationIndex = rowIndex.indexInChunk();
+    const int splayCount = chunk->stationSplayCount(stationIndex);
+
+    QList<int> splayIndices;
+    if(allSplays) {
+        if(rowIndex.rowType() != cwSurveyEditorRowIndex::StationRow
+            && rowIndex.rowType() != cwSurveyEditorRowIndex::SplayRow)
+        {
+            return;
+        }
+
+        splayIndices.reserve(splayCount);
+        for(int splayIndex = 0; splayIndex < splayCount; ++splayIndex) {
+            splayIndices.append(splayIndex);
+        }
+    } else {
+        if(rowIndex.rowType() != cwSurveyEditorRowIndex::SplayRow) {
+            return;
+        }
+        if(rowIndex.splayIndex() < 0 || rowIndex.splayIndex() >= splayCount) {
+            return;
+        }
+
+        splayIndices.append(rowIndex.splayIndex());
+    }
+
+    if(splayIndices.isEmpty()) {
+        return;
+    }
+
+    m_pendingSplayMove = {chunk, stationIndex, splayIndices};
+    emit splayMoveChanged();
+}
+
+/**
+ * @brief cwSurveyEditorModel::cancelSplayMove
+ *
+ * Leaves the splays where they are. Every tap that isn't on a station the move
+ * can land on comes through here.
+ */
+void cwSurveyEditorModel::cancelSplayMove()
+{
+    if(!splayMoveActive()) {
+        return;
+    }
+
+    m_pendingSplayMove = PendingSplayMove();
+    emit splayMoveChanged();
+}
+
+/**
+ * @brief cwSurveyEditorModel::commitSplayMove
+ * @param targetRowIndex - The station row the user picked
+ *
+ * Moves the armed splays onto \a targetRowIndex's station and opens that
+ * station's cluster, so the splays are visible where they landed. A row the
+ * move can't land on leaves it armed for the next pick.
+ */
+void cwSurveyEditorModel::commitSplayMove(const cwSurveyEditorRowIndex& targetRowIndex)
+{
+    if(!isSplayMoveTarget(targetRowIndex)) {
+        return;
+    }
+
+    cwSurveyChunk* target = splayClusterChunk(targetRowIndex);
+    cwSurveyChunk* source = m_pendingSplayMove.chunk;
+    const int sourceStation = m_pendingSplayMove.stationIndex;
+    const int targetStation = targetRowIndex.indexInChunk();
+    const QList<int> splayIndices = m_pendingSplayMove.splayIndices;
+
+    //The move is over before the chunks announce it, so the rows arriving
+    //through stationSplaysChanged are read by a table with nothing in flight
+    m_pendingSplayMove = PendingSplayMove();
+    emit splayMoveChanged();
+
+    cwSurveyChunk::moveStationSplays(source, sourceStation, target, targetStation, splayIndices);
+
+    expandSplays(target, targetStation);
+}
+
+/**
+ * @brief cwSurveyEditorModel::isSplayMoveTarget
+ * @return True when an armed move can land on \a rowIndex's station
+ *
+ * Any station in the trip takes the splays, in this chunk or another. The one
+ * they came off is the only station excluded — it already has them.
+ */
+bool cwSurveyEditorModel::isSplayMoveTarget(const cwSurveyEditorRowIndex& rowIndex) const
+{
+    if(!splayMoveActive() || rowIndex.rowType() != cwSurveyEditorRowIndex::StationRow) {
+        return false;
+    }
+
+    cwSurveyChunk* chunk = splayClusterChunk(rowIndex);
+    if(chunk == nullptr) {
+        return false;
+    }
+
+    return chunk != m_pendingSplayMove.chunk
+           || rowIndex.indexInChunk() != m_pendingSplayMove.stationIndex;
+}
+
+/**
+ * @brief cwSurveyEditorModel::isSplayMoveSource
+ * @return True when \a rowIndex names the station an armed move's splays are
+ * leaving
+ */
+bool cwSurveyEditorModel::isSplayMoveSource(const cwSurveyEditorRowIndex& rowIndex) const
+{
+    if(!splayMoveActive()) {
+        return false;
+    }
+
+    return rowIndex.chunk() == m_pendingSplayMove.chunk
+           && rowIndex.indexInChunk() == m_pendingSplayMove.stationIndex;
+}
+
+bool cwSurveyEditorModel::splayMoveActive() const
+{
+    return !m_pendingSplayMove.chunk.isNull() && !m_pendingSplayMove.splayIndices.isEmpty();
+}
+
+int cwSurveyEditorModel::splayMoveCount() const
+{
+    return splayMoveActive() ? m_pendingSplayMove.splayIndices.size() : 0;
+}
+
+//! The name of the station an armed move's splays are leaving, for the banner
+QString cwSurveyEditorModel::splayMoveStationName() const
+{
+    if(!splayMoveActive()) {
+        return QString();
+    }
+
+    return m_pendingSplayMove.chunk->data(cwSurveyChunk::StationNameRole,
+                                          m_pendingSplayMove.stationIndex).toString();
 }
 
 /**

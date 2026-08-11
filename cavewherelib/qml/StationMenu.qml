@@ -22,7 +22,7 @@ QQ.Loader {
     //shows no splay items at all
     property cwSurveyEditorRowIndex splayClusterRow
     property int splayCount: 0
-    property RemoveAskBox splayRemoveChallenge: null
+    property SplayRemoveAskBox splayRemoveChallenge: null
 
     active: false
 
@@ -32,9 +32,13 @@ QQ.Loader {
             objectName: "stationMenuRoot"
 
             //The cluster items only belong to the cell that stands for the
-            //cluster, and only while there is something in it to lose
-            readonly property bool offersSplayActions:
-                stationMenuLoader.splayCount > 0
+            //cluster, and only while there is something in it to act on
+            readonly property bool offersSplayActions: stationMenuLoader.splayCount > 0
+
+            //Losing the cluster is the one action that asks first, so it needs
+            //something to ask with
+            readonly property bool offersSplayDelete:
+                menuId.offersSplayActions
                 && stationMenuLoader.splayRemoveChallenge !== null
 
             function stationLabel(index) {
@@ -106,9 +110,17 @@ QQ.Loader {
             }
 
             QC.MenuItem {
+                objectName: "stationMenuMoveSplays"
+                text: "Move " + menuId.splayCountLabel() + " to…"
+                visible: menuId.offersSplayActions
+                height: visible ? implicitHeight : 0
+                onTriggered: stationMenuLoader.model.startSplayMove(stationMenuLoader.splayClusterRow, true)
+            }
+
+            QC.MenuItem {
                 objectName: "stationMenuDeleteSplays"
                 text: "Delete " + menuId.splayCountLabel()
-                visible: menuId.offersSplayActions
+                visible: menuId.offersSplayDelete
                 height: visible ? implicitHeight : 0
                 onTriggered: askToDeleteSplays()
             }

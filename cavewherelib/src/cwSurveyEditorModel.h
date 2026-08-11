@@ -34,6 +34,12 @@ class CAVEWHERE_LIB_EXPORT cwSurveyEditorModel : public QAbstractListModel
     Q_PROPERTY(int focusedRow READ focusedRow NOTIFY focusedRowChanged)
     Q_PROPERTY(int focusedRole READ focusedRole NOTIFY focusedRoleChanged)
 
+    //A move waiting for the user to pick the station it lands on. All three
+    //answer for the same pending move, so they change together
+    Q_PROPERTY(bool splayMoveActive READ splayMoveActive NOTIFY splayMoveChanged)
+    Q_PROPERTY(int splayMoveCount READ splayMoveCount NOTIFY splayMoveChanged)
+    Q_PROPERTY(QString splayMoveStationName READ splayMoveStationName NOTIFY splayMoveChanged)
+
 public:
     cwSurveyEditorModel();
 
@@ -147,6 +153,15 @@ public:
     Q_INVOKABLE void removeSplayAt(const cwSurveyEditorRowIndex& rowIndex);
     Q_INVOKABLE void clearSplaysAt(const cwSurveyEditorRowIndex& rowIndex);
 
+    Q_INVOKABLE void startSplayMove(const cwSurveyEditorRowIndex& rowIndex, bool allSplays);
+    Q_INVOKABLE void cancelSplayMove();
+    Q_INVOKABLE void commitSplayMove(const cwSurveyEditorRowIndex& targetRowIndex);
+    Q_INVOKABLE bool isSplayMoveTarget(const cwSurveyEditorRowIndex& rowIndex) const;
+    Q_INVOKABLE bool isSplayMoveSource(const cwSurveyEditorRowIndex& rowIndex) const;
+    bool splayMoveActive() const;
+    int splayMoveCount() const;
+    QString splayMoveStationName() const;
+
     Q_INVOKABLE cwSurveyEditorRowIndex rowIndex(cwSurveyChunk *chunk, int chunkIndex, cwSurveyEditorRowIndex::RowType type) const
     {
         return cwSurveyEditorRowIndex(chunk, chunkIndex, type);
@@ -164,7 +179,18 @@ private:
     //!< splay appearing or disappearing can be turned into an insert or a remove.
     using ExpandedSplays = QMap<int, int>;
 
+    //!< Splays armed for a move, and the station they came off. The station
+    //!< they land on is picked by clicking rows away from the menu that armed
+    //!< the move, and the view recycles every delegate in between, so the
+    //!< pending move waits here rather than in any of them.
+    struct PendingSplayMove {
+        QPointer<cwSurveyChunk> chunk;
+        int stationIndex = -1;
+        QList<int> splayIndices;
+    };
+
     QHash<const cwSurveyChunk*, ExpandedSplays> m_expandedSplays;
+    PendingSplayMove m_pendingSplayMove;
 
     QPointer<cwTrip> m_trip; //!<
     QPointer<cwFixStationModel> m_fixStations; //!< The trip's cave's fixes, for StationFixedRole
@@ -201,6 +227,7 @@ private:
     int splayRowsBefore(const cwSurveyChunk* chunk, int stationIndex) const;
     int splayRowsInChunk(const cwSurveyChunk* chunk) const;
     int firstVirtualRow(cwSurveyChunk* chunk) const;
+    void expandSplays(cwSurveyChunk* chunk, int stationIndex);
     void collapseSplays(cwSurveyChunk* chunk, int stationIndex);
     void emitSplayExpansionChanged(cwSurveyChunk* chunk, int stationIndex);
     void reconcileSplayRows(cwSurveyChunk* chunk, int stationIndex);
@@ -227,6 +254,7 @@ signals:
     void tripChanged();
     void focusedRowChanged();
     void focusedRoleChanged();
+    void splayMoveChanged();
 
     //Called when a chunk has been added to the end of the model
     void lastChunkAdded();

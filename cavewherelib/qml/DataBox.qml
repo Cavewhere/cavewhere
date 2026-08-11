@@ -182,7 +182,14 @@ SurveyEditorCell {
             dataBox.state = 'MiddleTyping';
         }
 
+        //The editor's own handler takes the click before the cell's does, so a
+        //splay move waiting for a station to land on is finished from here
         onClicked: {
+            if(dataBox.model !== null && dataBox.model.splayMoveActive) {
+                dataBox.handleSplayMoveTap()
+                return
+            }
+
             dataBox.forceActiveFocus();
         }
 
