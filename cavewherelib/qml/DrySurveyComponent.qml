@@ -28,6 +28,7 @@ Item {
     required property QC.ButtonGroup errorButtonGroup
     required property var removePreview
     required property FixStationPopup fixStationPopup
+    required property RemoveAskBox splayRemoveChallenge
     required property int rowType
     required property cwSurveyEditorRowIndex rowIndex
 
@@ -199,6 +200,7 @@ Item {
                 listViewIndex: itemId.index
                 splayCount: itemId.stationSplayCount
                 splaysExpanded: itemId.stationSplaysExpanded
+                splayRemoveChallenge: itemId.splayRemoveChallenge
                 removePreview: itemId.removePreview
                 calibration: itemId.calibration
                 view: itemId.ListView.view
@@ -207,10 +209,11 @@ Item {
 
     }
 
-    //Splay data loader. Splays are read-only here — editing them is a later
-    //feature, so the row shows the readings as they were written. The rail down
-    //the station column ties the cluster back to the station it hangs from,
-    //which a long cluster can push off-screen
+    //Splay data loader. The readings are read-only here — editing them is a
+    //later feature, so the row shows them as they were written, and offers the
+    //one action it has through its menu. The rail down the station column ties
+    //the cluster back to the station it hangs from, which a long cluster can
+    //push off-screen
     Loader {
         id: splayLoaderId
         active: itemId.rowType === SurveyEditorRowIndex.SplayRow
@@ -280,6 +283,31 @@ Item {
                 width: itemId.columnTemplate.clinoWidth
                 height: itemId.columnTemplate.splayCellHeight
                 text: itemId.splayClino
+            }
+
+            SplayRowMenu {
+                id: splayRowMenuId
+                anchors.fill: parent
+
+                model: itemId.model
+                rowIndex: itemId.rowIndex
+            }
+
+            SplayMenuButton {
+                id: splayRowMenuButtonId
+                objectName: "splayRowMenuButton"
+
+                x: itemId.columnTemplate.clinoX
+                   + itemId.columnTemplate.clinoWidth
+                   + itemId.columnTemplate.splayMenuIndent
+                anchors.verticalCenter: parent.verticalCenter
+
+                onTapped: (position) => {
+                              const menuPoint = splayRowMenuButtonId.mapToItem(splayRowMenuId,
+                                                                               position.x,
+                                                                               position.y)
+                              splayRowMenuId.showMenu(menuPoint.x, menuPoint.y)
+                          }
             }
 
             Rectangle {

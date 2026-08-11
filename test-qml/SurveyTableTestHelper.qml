@@ -68,6 +68,13 @@ QQ.QtObject {
         }
     }
 
+    // The editor the table sits in, for the things it owns rather than the rows
+    // — popups, and the challenge that guards deleting a whole splay cluster.
+    function surveyEditor() {
+        return ObjectFinder.findObjectByChain(
+                    helperId.mainWindow, "rootId->tripPage->surveyEditor")
+    }
+
     function stationRow(context, indexInChunk) {
         return context.editorModel.toModelRow(
                     context.editorModel.rowIndex(context.chunk,

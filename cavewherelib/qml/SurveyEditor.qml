@@ -43,6 +43,18 @@ QQ.Item {
         id: removePreviewId
     }
 
+    // Deleting a whole splay cluster is the one splay action that can't be
+    // shrugged off, so it asks first. One box serves the whole table, since the
+    // row that asks for it is recycled out from under the answer.
+    RemoveAskBox {
+        id: removeSplaysChallengeId
+        objectName: "removeSplaysChallenge"
+
+        onRemove: {
+            editorModel.clearSplaysAt(removeSplaysChallengeId.rowIndexToRemove)
+        }
+    }
+
     // One editor for the whole table, shared by every station cell's caret — see
     // FixStationPopup on why it can't live in the cell that opens it.
     FixStationPopup {
@@ -388,6 +400,7 @@ QQ.Item {
                 model: editorModel
                 removePreview: removePreviewId
                 fixStationPopup: fixStationPopupId
+                splayRemoveChallenge: removeSplaysChallengeId
                 stationValidator: stationValidatorId
                 distanceValidator: distanceValidatorId
                 compassValidator: compassValidatorId

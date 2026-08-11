@@ -17,12 +17,25 @@ QQ.Loader {
     required property int listViewIndex
     required property RemovePreview removePreview
 
+    //The station's splay cluster, set by the cell that stands for it. A menu
+    //popped from a cell that carries no cluster leaves the count at zero and
+    //shows no splay items at all
+    property cwSurveyEditorRowIndex splayClusterRow
+    property int splayCount: 0
+    property RemoveAskBox splayRemoveChallenge: null
+
     active: false
 
     sourceComponent: QQ.Component {
         QC.Menu {
             id: menuId
             objectName: "stationMenuRoot"
+
+            //The cluster items only belong to the cell that stands for the
+            //cluster, and only while there is something in it to lose
+            readonly property bool offersSplayActions:
+                stationMenuLoader.splayCount > 0
+                && stationMenuLoader.splayRemoveChallenge !== null
 
             function stationLabel(index) {
                 if(dataValue.chunk === null || stationMenuLoader.model === null) {
@@ -58,8 +71,52 @@ QQ.Loader {
                 }
             }
 
+            function splayCountLabel() {
+                if(stationMenuLoader.splayCount === 1) {
+                    return "the splay"
+                }
+                return "all " + stationMenuLoader.splayCount + " splays"
+            }
+
+            //Drops the challenge under the cell the menu was popped from, kept
+            //inside the table so the Splays column, which sits against the
+            //table's right edge, doesn't push it off the side
+            function askToDeleteSplays() {
+                let challenge = stationMenuLoader.splayRemoveChallenge
+                let cell = stationMenuLoader.parent
+                let pos = cell.mapToItem(challenge.parent, 0, cell.height)
+
+                challenge.rowIndexToRemove = stationMenuLoader.splayClusterRow
+                challenge.removeName = splayCountLabel()
+                        + " from " + stationLabel(dataValue.indexInChunk)
+
+                //The box is as wide as the name it just took, and that width
+                //only settles on the next polish, so the clamp is a binding
+                //rather than a number measured against the width the box
+                //happened to have while it was hidden
+                challenge.x = Qt.binding(function() {
+                    return Math.max(0, Math.min(pos.x, challenge.parent.width - challenge.width))
+                })
+                challenge.y = pos.y
+                challenge.show()
+            }
+
             onClosed: {
                 clearRemovePreview()
+            }
+
+            QC.MenuItem {
+                objectName: "stationMenuDeleteSplays"
+                text: "Delete " + menuId.splayCountLabel()
+                visible: menuId.offersSplayActions
+                height: visible ? implicitHeight : 0
+                onTriggered: askToDeleteSplays()
+            }
+
+            QC.MenuSeparator {
+                objectName: "stationMenuSplaySeparator"
+                visible: menuId.offersSplayActions
+                height: visible ? implicitHeight : 0
             }
 
             QC.Menu {

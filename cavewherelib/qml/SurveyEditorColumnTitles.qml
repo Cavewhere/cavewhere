@@ -42,6 +42,9 @@ Item {
     property real splayTagIndent: 20
     property real splayTagRightMargin: 8
 
+    //The gap between the last reading of a splay row and the ⋯ that acts on it
+    property real splayMenuIndent: 6
+
     //For displaying chunk error message correctly
     property alias chunk: chunkErrorId.chunk
     required property int listViewIndex

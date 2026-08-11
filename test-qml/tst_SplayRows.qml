@@ -184,6 +184,109 @@ MainWindowTest {
             }, 5000, "right clicking the Splays cell should pop the station menu")
         }
 
+        // Opens the cluster on the given station and answers the model row its
+        // first splay landed on.
+        function openCluster(context, indexInChunk) {
+            const rowsWhileClosed = context.view.count
+
+            mouseClick(splaysCell(context, indexInChunk))
+            tryCompare(context.view, "count", rowsWhileClosed + a4Splays.length + virtualRows, 5000,
+                       "the cluster should open")
+
+            return surveyTableId.stationRow(context, indexInChunk) + 1
+        }
+
+        function splayCount(context, indexInChunk) {
+            const row = surveyTableId.stationRow(context, indexInChunk)
+            return context.editorModel.data(context.editorModel.index(row, 0),
+                                            SurveyEditorModel.StationSplayCountRole)
+        }
+
+        // Triggering a menu item runs what a click on it runs — popup() under
+        // offscreen rendering is what's unreliable, not the handler.
+        function menuItem(parentItem, itemName) {
+            let item = null
+            tryVerify(() => {
+                item = findChild(parentItem, itemName)
+                return item !== null
+            }, 5000, "the menu should offer " + itemName)
+            return item
+        }
+
+        // The one bad shot out of a download goes at once, from the row's own
+        // menu — there's nothing to confirm while the cluster it left is in view.
+        function test_removingOneSplayTakesItsRow() {
+            const context = gotoSurveyTable()
+            const firstSplayRow = openCluster(context, 0)
+            const openRows = context.view.count
+
+            const row = surveyTableId.rowItem(this, context, firstSplayRow)
+            verify(findChild(row, "splayRowMenuButton") !== null,
+                   "a splay row should offer a ⋯ that opens its menu")
+
+            const menu = findChild(row, "splayRowMenu")
+            verify(menu !== null, "a splay row should carry a menu")
+            menuItem(menu, "removeSplayMenuItem").triggered()
+
+            tryCompare(context.view, "count", openRows - 1, 5000,
+                       "the removed splay should take its row with it")
+            compare(splayCount(context, 0), a4Splays.length - 1)
+
+            // The rows that are left renumber, so the tags stay a count of the
+            // cluster rather than of what it once held
+            for (let i = 0; i < a4Splays.length - 1; i++) {
+                const item = surveyTableId.rowItem(this, context, firstSplayRow + i)
+                compare(findChild(item, "splayRowLabel").text, "A1 · s" + (i + 1))
+                compare(findChild(item, "splayDistanceLabel").text, a4Splays[i + 1].distance)
+            }
+        }
+
+        // Losing a whole cluster is the destructive one, so it asks first.
+        function test_deletingTheWholeClusterAsksFirst() {
+            const context = gotoSurveyTable()
+            openCluster(context, 0)
+            const openRows = context.view.count
+
+            const cell = splaysCell(context, 0)
+            const clusterMenuButton = findChild(cell, "splayClusterMenuButton")
+            verify(clusterMenuButton !== null,
+                   "the Splays cell should offer a ⋯ beside its chip")
+
+            // A real click, so the cell behind the ⋯ stays out of it — the
+            // menu describes the cluster the user is looking at
+            mouseClick(clusterMenuButton)
+            compare(context.view.count, openRows,
+                    "clicking the ⋯ should leave the cluster as it was")
+
+            const deleteItem = menuItem(cell, "stationMenuDeleteSplays")
+            compare(deleteItem.text, "Delete all 3 splays")
+            deleteItem.triggered()
+
+            const challenge = findChild(surveyTableId.surveyEditor(), "removeSplaysChallenge")
+            verify(challenge !== null, "the table should own a remove challenge")
+            tryVerify(() => challenge.visible, 5000,
+                      "deleting a cluster should ask before it takes anything")
+            compare(challenge.removeName, "all 3 splays from A1")
+
+            mouseClick(findChild(challenge, "cancelButton"))
+            tryVerify(() => !challenge.visible, 5000)
+            compare(splayCount(context, 0), a4Splays.length,
+                    "backing out should leave the cluster alone")
+            compare(context.view.count, openRows)
+
+            clusterMenuButton.tapped(Qt.point(0, 0))
+            menuItem(cell, "stationMenuDeleteSplays").triggered()
+            tryVerify(() => challenge.visible, 5000)
+
+            mouseClick(findChild(challenge, "removeButton"))
+
+            tryCompare(context.view, "count", openRows - a4Splays.length, 5000,
+                       "an emptied cluster should collapse")
+            compare(splayCount(context, 0), 0)
+            tryVerify(() => findChild(splaysCell(context, 0), "splayChip") === null, 5000,
+                      "the chip should go with the splays it counted")
+        }
+
         // Removing a station takes its splays with it, so the preview strikes
         // through the Splays cell and the cluster's rows, not just the readings.
         function test_removingTheStationPreviewsOverTheSplays() {

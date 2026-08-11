@@ -299,6 +299,66 @@ TEST_CASE("An open cluster follows a splay edit", "[cwSurveyEditorModel][SplaySh
     }
 }
 
+TEST_CASE("The editor deletes splays through the rows it shows", "[cwSurveyEditorModel][SplayShot]") {
+    SplayFixture fixture;
+    fixture.model.toggleSplaysExpanded(fixture.stationRow(1));
+    fixture.checkRowCount(9);
+
+    const auto splayRow = [&fixture](int splayIndex) {
+        return cwSurveyEditorRowIndex(fixture.chunk, 1, splayIndex, cwSurveyEditorRowIndex::SplayRow);
+    };
+
+    SECTION("removing one splay takes its row and renumbers the rest") {
+        fixture.model.removeSplayAt(splayRow(0));
+
+        fixture.checkRowCount(8);
+        CHECK(fixture.chunk->stationSplayCount(1) == 2);
+        CHECK(fixture.rowIndexOf(4).splayIndex() == 0);
+        CHECK(fixture.rowData(4, cwSurveyEditorModel::SplayDistanceRole).toString() == QStringLiteral("5.42"));
+    }
+
+    SECTION("removing the last splay closes the cluster") {
+        for(int splayIndex = 2; splayIndex >= 0; --splayIndex) {
+            fixture.model.removeSplayAt(splayRow(splayIndex));
+        }
+
+        fixture.checkRowCount(6);
+        CHECK(fixture.chunk->stationSplayCount(1) == 0);
+        CHECK_FALSE(fixture.rowData(3, cwSurveyEditorModel::StationSplaysExpandedRole).toBool());
+    }
+
+    SECTION("clearing from the station row empties the cluster") {
+        fixture.model.clearSplaysAt(fixture.stationRow(1));
+
+        fixture.checkRowCount(6);
+        CHECK(fixture.chunk->stationSplayCount(1) == 0);
+        CHECK(fixture.rowData(3, cwSurveyEditorModel::StationSplayCountRole).toInt() == 0);
+        CHECK(fixture.rowIndexOf(4).rowType() == cwSurveyEditorRowIndex::ShotRow);
+    }
+
+    SECTION("a splay row names the same cluster to clear") {
+        fixture.model.clearSplaysAt(splayRow(2));
+
+        fixture.checkRowCount(6);
+        CHECK(fixture.chunk->stationSplayCount(1) == 0);
+    }
+
+    SECTION("rows that name no cluster leave the splays alone") {
+        fixture.model.removeSplayAt(fixture.stationRow(1));
+        fixture.model.removeSplayAt(splayRow(3));
+        fixture.model.removeSplayAt(cwSurveyEditorRowIndex(nullptr, 1, 0, cwSurveyEditorRowIndex::SplayRow));
+        fixture.model.clearSplaysAt(cwSurveyEditorRowIndex(fixture.chunk, 1, cwSurveyEditorRowIndex::ShotRow));
+        fixture.model.clearSplaysAt(cwSurveyEditorRowIndex(fixture.chunk, 7, cwSurveyEditorRowIndex::StationRow));
+
+        cwSurveyChunk otherChunk;
+        otherChunk.appendShot(cwStation("b1"), cwStation("b2"), cwShot("5.0", "10.0", "190.0", "1.0", "-1.0"));
+        fixture.model.clearSplaysAt(cwSurveyEditorRowIndex(&otherChunk, 1, cwSurveyEditorRowIndex::StationRow));
+
+        fixture.checkRowCount(9);
+        CHECK(fixture.chunk->stationSplayCount(1) == 3);
+    }
+}
+
 TEST_CASE("Moved splays leave one cluster and land in another", "[cwSurveyEditorModel][SplayShot]") {
     SplayFixture fixture;
     fixture.chunk->setStationSplays(2, {makeSplay("7.56", "307.7", "18.6")});

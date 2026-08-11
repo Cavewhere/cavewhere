@@ -25,6 +25,10 @@ SurveyEditorCell {
     required property int splayCount
     required property bool splaysExpanded
 
+    //The table's one challenge for deleting a whole cluster, owned by
+    //SurveyEditor so it outlives the recycled row that asks for it
+    required property RemoveAskBox splayRemoveChallenge
+
     cellRole: SurveyEditorCellIndex.StationSplaysCell
     indexInChunk: splaysBox.rowIndex.indexInChunk
     chunk: splaysBox.rowIndex.chunk
@@ -59,52 +63,72 @@ SurveyEditorCell {
         dataValue: splaysBox.stationData
         listViewIndex: splaysBox.listViewIndex
         removePreview: splaysBox.removePreview
+        splayClusterRow: splaysBox.rowIndex
+        splayCount: splaysBox.splayCount
+        splayRemoveChallenge: splaysBox.splayRemoveChallenge
     }
 
-    //Most stations carry no splays, so the chip stays uninstantiated rather than
-    //laying out text it will never show
+    //The chip and the ⋯ that acts on the cluster it counts. Most stations carry
+    //no splays, and they keep a bare cell — the whole row of them stays
+    //uninstantiated rather than laying out what it will never show
     QQ.Loader {
-        active: splaysBox.splayCount > 0
         anchors.centerIn: parent
+        active: splaysBox.splayCount > 0
 
-        sourceComponent: QQ.Rectangle {
-            objectName: "splayChip"
+        sourceComponent: QQ.Row {
+            spacing: Theme.flowSpacing
 
-            width: chipRowId.implicitWidth + Theme.delegatePadding * 2
-            height: chipRowId.implicitHeight + Theme.delegatePadding
+            QQ.Rectangle {
+                objectName: "splayChip"
+                anchors.verticalCenter: parent.verticalCenter
 
-            radius: height * 0.5
-            color: Theme.splaySurface
-            border.color: Theme.splayBorder
-            border.width: 1
+                width: chipRowId.implicitWidth + Theme.delegatePadding * 2
+                height: chipRowId.implicitHeight + Theme.delegatePadding
 
-            QQ.Row {
-                id: chipRowId
-                anchors.centerIn: parent
-                spacing: Theme.flowSpacing
+                radius: height * 0.5
+                color: Theme.splaySurface
+                border.color: Theme.splayBorder
+                border.width: 1
 
-                //A glyph rather than the chevron SVG the rest of the app uses:
-                //Icon colorizes through a MultiEffect layer, which costs an
-                //offscreen texture in every recycled row and renders as nothing
-                //in offscreen tests
-                QC.Label {
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "▶"
-                    color: Theme.splayText
-                    font.pixelSize: Theme.fontSizeCaption
-                    rotation: splaysBox.splaysExpanded ? 90 : 0
+                QQ.Row {
+                    id: chipRowId
+                    anchors.centerIn: parent
+                    spacing: Theme.flowSpacing
 
-                    QQ.Behavior on rotation {
-                        QQ.NumberAnimation { duration: 120 }
+                    //A glyph rather than the chevron SVG the rest of the app uses:
+                    //Icon colorizes through a MultiEffect layer, which costs an
+                    //offscreen texture in every recycled row and renders as nothing
+                    //in offscreen tests
+                    QC.Label {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: "▶"
+                        color: Theme.splayText
+                        font.pixelSize: Theme.fontSizeCaption
+                        rotation: splaysBox.splaysExpanded ? 90 : 0
+
+                        QQ.Behavior on rotation {
+                            QQ.NumberAnimation { duration: 120 }
+                        }
+                    }
+
+                    QC.Label {
+                        objectName: "splayChipCount"
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: splaysBox.splayCount
+                        color: Theme.splayText
+                        font.pixelSize: Theme.fontSizeSmall
                     }
                 }
+            }
 
-                QC.Label {
-                    objectName: "splayChipCount"
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: splaysBox.splayCount
-                    color: Theme.splayText
-                    font.pixelSize: Theme.fontSizeSmall
+            SplayMenuButton {
+                objectName: "splayClusterMenuButton"
+                anchors.verticalCenter: parent.verticalCenter
+
+                onTapped: {
+                    splaysBox.takeFocus()
+                    stationMenuId.active = true
+                    stationMenuId.item.popup()
                 }
             }
         }

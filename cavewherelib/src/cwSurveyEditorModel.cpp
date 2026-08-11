@@ -1649,18 +1649,16 @@ int cwSurveyEditorModel::toModelRow(const cwSurveyEditorRowIndex &rowIndex) cons
  */
 void cwSurveyEditorModel::toggleSplaysExpanded(const cwSurveyEditorRowIndex& rowIndex)
 {
-    cwSurveyChunk* chunk = rowIndex.chunk();
-    const int stationIndex = rowIndex.indexInChunk();
-
-    if(chunk == nullptr
-        || m_trip.isNull()
-        || !m_trip->chunks().contains(chunk)
-        || rowIndex.rowType() != cwSurveyEditorRowIndex::StationRow
-        || stationIndex < 0
-        || stationIndex >= chunk->stationCount())
-    {
+    if(rowIndex.rowType() != cwSurveyEditorRowIndex::StationRow) {
         return;
     }
+
+    cwSurveyChunk* chunk = splayClusterChunk(rowIndex);
+    if(chunk == nullptr) {
+        return;
+    }
+
+    const int stationIndex = rowIndex.indexInChunk();
 
     if(splayRowCount(chunk, stationIndex) > 0) {
         collapseSplays(chunk, stationIndex);
@@ -1682,6 +1680,80 @@ void cwSurveyEditorModel::toggleSplaysExpanded(const cwSurveyEditorRowIndex& row
     endInsertRows();
 
     emitSplayExpansionChanged(chunk, stationIndex);
+}
+
+/**
+ * @brief cwSurveyEditorModel::splayClusterChunk
+ * @param rowIndex - A row that hangs off a station's splay cluster
+ * @return The chunk the cluster lives in, or nullptr when \a rowIndex names a
+ * station this model isn't showing
+ *
+ * Both splay mutations and the expansion toggle reach a cluster through a row
+ * the view handed back, which can name a chunk the trip has since dropped or a
+ * station the chunk has since lost.
+ */
+cwSurveyChunk* cwSurveyEditorModel::splayClusterChunk(const cwSurveyEditorRowIndex& rowIndex) const
+{
+    cwSurveyChunk* chunk = rowIndex.chunk();
+    const int stationIndex = rowIndex.indexInChunk();
+
+    if(chunk == nullptr
+        || m_trip.isNull()
+        || !m_trip->chunks().contains(chunk)
+        || stationIndex < 0
+        || stationIndex >= chunk->stationCount())
+    {
+        return nullptr;
+    }
+
+    return chunk;
+}
+
+/**
+ * @brief cwSurveyEditorModel::removeSplayAt
+ * @param rowIndex - The splay row the user asked to be rid of
+ *
+ * Removing one splay is immediate: the cluster it came out of is on screen, so
+ * a wrong one is cheap to see and to shoot again.
+ */
+void cwSurveyEditorModel::removeSplayAt(const cwSurveyEditorRowIndex& rowIndex)
+{
+    if(rowIndex.rowType() != cwSurveyEditorRowIndex::SplayRow) {
+        return;
+    }
+
+    cwSurveyChunk* chunk = splayClusterChunk(rowIndex);
+    if(chunk == nullptr) {
+        return;
+    }
+
+    chunk->removeStationSplay(rowIndex.indexInChunk(), rowIndex.splayIndex());
+}
+
+/**
+ * @brief cwSurveyEditorModel::clearSplaysAt
+ * @param rowIndex - A station row, or any splay row hanging off it
+ *
+ * Takes every splay off the station. This is the destructive one, so the UI
+ * asks first; the model just does as it's told.
+ */
+void cwSurveyEditorModel::clearSplaysAt(const cwSurveyEditorRowIndex& rowIndex)
+{
+    switch(rowIndex.rowType()) {
+    case cwSurveyEditorRowIndex::StationRow:
+    case cwSurveyEditorRowIndex::SplayRow:
+        break;
+    case cwSurveyEditorRowIndex::TitleRow:
+    case cwSurveyEditorRowIndex::ShotRow:
+        return;
+    }
+
+    cwSurveyChunk* chunk = splayClusterChunk(rowIndex);
+    if(chunk == nullptr) {
+        return;
+    }
+
+    chunk->clearStationSplays(rowIndex.indexInChunk());
 }
 
 /**

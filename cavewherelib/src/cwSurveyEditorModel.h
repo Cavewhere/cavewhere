@@ -144,6 +144,8 @@ public:
     Q_INVOKABLE int toModelRow(const cwSurveyEditorRowIndex& rowIndex) const;
 
     Q_INVOKABLE void toggleSplaysExpanded(const cwSurveyEditorRowIndex& rowIndex);
+    Q_INVOKABLE void removeSplayAt(const cwSurveyEditorRowIndex& rowIndex);
+    Q_INVOKABLE void clearSplaysAt(const cwSurveyEditorRowIndex& rowIndex);
 
     Q_INVOKABLE cwSurveyEditorRowIndex rowIndex(cwSurveyChunk *chunk, int chunkIndex, cwSurveyEditorRowIndex::RowType type) const
     {
@@ -194,6 +196,7 @@ private:
     int shotCount(const cwSurveyChunk* chunk) const;
     int chunkRowCount(const cwSurveyChunk* chunk) const;
     const ExpandedSplays* expandedSplays(const cwSurveyChunk* chunk) const;
+    cwSurveyChunk* splayClusterChunk(const cwSurveyEditorRowIndex& rowIndex) const;
     int splayRowCount(const cwSurveyChunk* chunk, int stationIndex) const;
     int splayRowsBefore(const cwSurveyChunk* chunk, int stationIndex) const;
     int splayRowsInChunk(const cwSurveyChunk* chunk) const;
