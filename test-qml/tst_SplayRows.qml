@@ -145,11 +145,11 @@ MainWindowTest {
                     "clicking the blank station's Splays cell should open no cluster")
         }
 
-        function test_clickingTheCellOpensTheSplayRows() {
+        function test_clickingTheChipOpensTheSplayRows() {
             const context = gotoSurveyTable()
             const rowsWhileClosed = context.view.count
 
-            mouseClick(splaysCell(context, 0))
+            mouseClick(splayChip(context, 0))
 
             tryCompare(context.view, "count", rowsWhileClosed + 3 + blankRow + virtualRows, 5000,
                        "the three splays should each become a row")
@@ -170,14 +170,14 @@ MainWindowTest {
             }
         }
 
-        function test_clickingTheCellAgainClosesTheSplayRows() {
+        function test_clickingTheChipAgainClosesTheSplayRows() {
             const context = gotoSurveyTable()
             const rowsWhileClosed = context.view.count
 
-            mouseClick(splaysCell(context, 0))
+            mouseClick(splayChip(context, 0))
             tryCompare(context.view, "count", rowsWhileClosed + 3 + blankRow + virtualRows)
 
-            mouseClick(splaysCell(context, 0))
+            mouseClick(splayChip(context, 0))
             tryCompare(context.view, "count", rowsWhileClosed + virtualRows, 5000,
                        "closing the cluster should take the splay rows back out")
         }
@@ -216,7 +216,7 @@ MainWindowTest {
             const context = gotoSurveyTable()
             const rowsWhileClosed = context.view.count
 
-            mouseClick(splaysCell(context, 0))
+            mouseClick(splayChip(context, 0))
             tryCompare(context.view, "count", rowsWhileClosed + 3 + blankRow + virtualRows, 5000)
 
             const firstSplayRow = surveyTableId.stationRow(context, 0) + 1
@@ -256,7 +256,7 @@ MainWindowTest {
         function openCluster(context, indexInChunk) {
             const rowsWhileClosed = context.view.count
 
-            mouseClick(splaysCell(context, indexInChunk))
+            mouseClick(splayChip(context, indexInChunk))
             tryCompare(context.view, "count", rowsWhileClosed + a4Splays.length + blankRow + virtualRows, 5000,
                        "the cluster should open")
 
@@ -311,7 +311,7 @@ MainWindowTest {
         }
 
         // Losing a whole cluster is the destructive one, so it asks first.
-        function test_deletingTheWholeClusterAsksFirst() {
+        function test_removingTheWholeClusterAsksFirst() {
             const context = gotoSurveyTable()
             openCluster(context, 0)
             const openRows = context.view.count
@@ -327,14 +327,14 @@ MainWindowTest {
             compare(context.view.count, openRows,
                     "clicking the ⋯ should leave the cluster as it was")
 
-            const deleteItem = menuItem(cell, "stationMenuDeleteSplays")
-            compare(deleteItem.text, "Delete all 3 splays")
-            deleteItem.triggered()
+            const removeItem = menuItem(cell, "stationMenuRemoveSplays")
+            compare(removeItem.text, "Remove all 3 splays")
+            removeItem.triggered()
 
             const challenge = findChild(surveyTableId.surveyEditor(), "removeSplaysChallenge")
             verify(challenge !== null, "the table should own a remove challenge")
             tryVerify(() => challenge.visible, 5000,
-                      "deleting a cluster should ask before it takes anything")
+                      "removing a cluster should ask before it takes anything")
             compare(challenge.removeName, "all 3 splays from A1")
 
             mouseClick(findChild(challenge, "cancelButton"))
@@ -344,7 +344,7 @@ MainWindowTest {
             compare(context.view.count, openRows)
 
             clusterMenuButton.tapped()
-            menuItem(cell, "stationMenuDeleteSplays").triggered()
+            menuItem(cell, "stationMenuRemoveSplays").triggered()
             tryVerify(() => challenge.visible, 5000)
 
             mouseClick(findChild(challenge, "removeButton"))
@@ -395,10 +395,25 @@ MainWindowTest {
             // The outline is built only while a move can land on the station,
             // so its absence is what says the station is no target
             const targetBox = stationNameBox(context, 1)
-            tryVerify(() => findChild(targetBox, "splayMoveTargetOutline") !== null, 5000,
-                      "the station the splays can land on should show it")
+            let outline = null
+            tryVerify(() => {
+                outline = findChild(targetBox, "splayMoveTargetOutline")
+                return outline !== null
+            }, 5000, "the station the splays can land on should show it")
             compare(findChild(stationNameBox(context, 0), "splayMoveTargetOutline"), null,
                     "the station the splays are leaving is no target")
+
+            // Every stroke stays inside the station cell, so the cell next door
+            // has nothing of ours to clip
+            const outlineTopLeft = outline.mapToItem(targetBox, 0, 0)
+            verify(outlineTopLeft.x >= targetBox.splayMoveOutlineInset
+                   && outlineTopLeft.y >= targetBox.splayMoveOutlineInset,
+                   "the outline should start inside the cell")
+            verify(outlineTopLeft.x + outline.width <= targetBox.width - targetBox.splayMoveOutlineInset
+                   && outlineTopLeft.y + outline.height <= targetBox.height - targetBox.splayMoveOutlineInset,
+                   "the outline should end inside the cell")
+
+            const rowsBeforeTheMove = context.view.count
 
             mouseClick(targetBox)
 
@@ -407,7 +422,24 @@ MainWindowTest {
             compare(splayCount(context, 0), 0)
             compare(splayCount(context, 1), a4Splays.length)
 
-            // The target opens on what it just took, so the landing is visible
+            // A2 takes them without opening — the chip counting them is the
+            // confirmation, and A1's emptied cluster is all the table loses
+            tryCompare(context.view, "count",
+                       rowsBeforeTheMove - a4Splays.length - blankRow, 5000,
+                       "the target should take the splays without opening")
+            tryVerify(() => findChild(splaysCell(context, 0), "splayChip") === null, 5000,
+                      "the chip should go with the splays it counted")
+            tryCompare(findChild(splayChip(context, 1), "splayChipCount"), "text",
+                       String(a4Splays.length), 5000,
+                       "the target's chip should count what it took")
+
+            // And the splays are there for the asking
+            const rowsWhileClosed = context.view.count
+            mouseClick(splayChip(context, 1))
+            tryCompare(context.view, "count",
+                       rowsWhileClosed + a4Splays.length + blankRow, 5000,
+                       "the target's chip should open on what it took")
+
             const firstSplayRow = surveyTableId.stationRow(context, 1) + 1
             for (let i = 0; i < a4Splays.length; i++) {
                 const item = surveyTableId.rowItem(this, context, firstSplayRow + i)
@@ -418,6 +450,31 @@ MainWindowTest {
                                      SurveyEditorCellIndex.SplayDistanceCell),
                         a4Splays[i].distance)
             }
+        }
+
+        // The chip is the handle for the cluster: the rest of the Splays cell
+        // takes the focus like any other cell and leaves the rows alone.
+        function test_clickingBesideTheChipLeavesTheClusterAlone() {
+            const context = gotoSurveyTable()
+            const cell = splaysCell(context, 0)
+            const chip = splayChip(context, 0)
+            const rowsWhileClosed = context.view.count
+
+            // The near edge of the cell, clear of the chip and its ⋯
+            const besideTheChip = chip.mapToItem(cell, 0, 0).x * 0.5
+            verify(besideTheChip >= 1, "the chip should leave room to click beside it")
+
+            mouseClick(cell, besideTheChip, cell.height * 0.5)
+
+            // The focus is what brings the chunk's trailing virtual rows in, so
+            // wait for it before the row count means anything
+            tryCompare(context.editorModel, "focusedRole",
+                       SurveyEditorCellIndex.StationSplaysCell, 5000,
+                       "the cell should still take the focus")
+            wait(settleMilliseconds)
+
+            compare(context.view.count, rowsWhileClosed + virtualRows,
+                    "clicking beside the chip should open no cluster")
         }
 
         // A move armed by mistake costs one key to be rid of.
@@ -448,7 +505,7 @@ MainWindowTest {
             const rowsWhileClosed = context.view.count
             const cell = splaysCell(context, 0)
 
-            mouseClick(cell)
+            mouseClick(splayChip(context, 0))
             tryCompare(context.view, "count", rowsWhileClosed + 3 + blankRow + virtualRows, 5000,
                        "the cluster should be open before the preview runs")
 

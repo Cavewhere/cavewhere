@@ -295,5 +295,131 @@ next station's box. <b>By hand:</b> enter a full station of splays without touch
       <code>tst_SurveyDataEntry</code>, <code>tst_MarkStationFixed</code> before each push.</li>
 </ul>
 
+<h2>Follow-up series — manual review + open refactors</h2>
+<p>Scope agreed 2026-08-11: all seven manual-review follow-ups
+(<code>plans/SPLAY_EDITOR_REVIEW_NOTES.md</code>, "Manual review follow-ups") plus open ranked
+refactors 1, 3, 4, 5, 6, 7, and 8 from
+<code>plans/SPLAY_EDITOR_REVIEW_DIGEST.html</code>. Refactor 2 (Escape arbitration) stays
+deferred. Refactor 3 (Up skips the cluster) is absorbed into the keyboard-navigation commit;
+refactors 6–8 are perf items gated on a QML profile before any fix lands.</p>
+
+<h2><span class="commit">Commit 9</span> Move/remove UI polish<span style="color:#2e7d32; font-size:0.8em;"> — done</span></h2>
+<p>Follow-ups 1, 2, 5, 7 — small QML/model changes in the same interaction area.</p>
+<ul>
+  <li><b>"Remove", not "Delete"</b> (f1): the cluster menu item and its challenge read
+      "Remove all N splays", matching <code>RemoveAskBox</code>'s own verb.</li>
+  <li><b>Move lands collapsed</b> (f2): <code>commitSplayMove</code> stops expanding the target
+      cluster; the chip's count updating is the confirmation.</li>
+  <li><b>Chip-only expand</b> (f5): clicking the Splays cell outside the chip leaves the cluster
+      as it is; only the chip itself toggles expansion.</li>
+  <li><b>Inset move-target outline</b> (f7): every <code>Theme.splayBorder</code> stroke stays
+      within the station cell's own bounds so the neighboring distance cell has nothing to clip —
+      today the outline reaches the cell edge and the clip leaves rendering artifacts.</li>
+</ul>
+<div class="test"><b>Tests.</b> QML: menu/challenge text says "Remove all N splays"; commit a
+move and tryVerify the target stays collapsed while its chip count grows; click the Splays cell
+beside the chip and verify no expansion. <b>By hand:</b> arm a move and check the target outline
+against the distance cell edge — no clipped strokes.</div>
+
+<h2><span class="commit">Commit 10</span> Keyboard navigation through the cluster</h2>
+<p>Follow-ups 3 + 4, absorbing open refactor 3 (Up from a shot cell skips the cluster — the
+missing inverse of the Down path).</p>
+<ul>
+  <li><b>Column-preserving Up/Down</b> (f3): from a splay's distance, compass, or clino cell the
+      arrows land on the same reading column of the row above/below — splay to splay, blank
+      entry row, and out onto the shot rows in both directions. This closes refactor 3's
+      asymmetry: Up from a shot cell below an open cluster enters the cluster's last row instead
+      of skipping to the previous shot.</li>
+  <li><b>Tab / shift-tab walk the cluster</b> (f4): Tab on an expanded station's Splays cell
+      enters the first splay's distance cell; shift-tab on the next station's name cell lands on
+      the last splay's clino cell.</li>
+</ul>
+<div class="test"><b>Tests.</b> The acceptance property: every Tab has a shift-tab that returns
+exactly to its starting cell, and every Down an Up — drive the full traversal over an expanded
+cluster in both directions and compare cell-for-cell. Cover both-sight-groups-off shot rows
+(the commit-7 fallback path). <b>By hand:</b> arrow and tab through a real imported cluster
+without touching the mouse.</div>
+
+<h2><span class="commit">Commit 11</span> Round "+" entry button</h2>
+<p>Follow-up 6.</p>
+<ul>
+  <li>The "+" entry hint becomes a much bigger round button, ideally with an SVG icon. Commit 5
+      chose text glyphs over SVG for offscreen-test rendering reasons — first verify whether
+      that constraint is real here (render the button in <code>cavewhere-qml-test
+      --platform offscreen</code>); fall back to a drawn glyph in a round button if SVG
+      genuinely fails offscreen.</li>
+  <li>Sizing and colors through <code>Theme.qml</code> tokens; keep the count-gated
+      <code>Loader</code> economy — zero-splay stations still instantiate only the hint.</li>
+</ul>
+<div class="test"><b>Tests.</b> Existing entry-hint gating tests keep passing (hidden on
+virtual trailing station, shown on real zero-splay station); click the button and enter a splay.
+<b>By hand:</b> eyeball size/alignment in light and dark mode.</div>
+
+<h2><span class="commit">Commit 12</span> <code>addsChunkOnSpace</code> shape</h2>
+<p>Open refactor 4.</p>
+<ul>
+  <li>Replace the <code>addsChunkOnSpace</code> property checked inside
+      <code>DataBox.addNewChunk()</code> with honest shapes: either the model answers "does this
+      cell belong to the chunk?" from the cell role, or <code>SplayDataBox</code> overrides
+      <code>addNewChunk()</code> and the property disappears. Either way the guard moves out of
+      the action-named function so a caller is refused loudly or not at all.</li>
+</ul>
+<div class="test"><b>Tests.</b> Space on a shot cell still starts a new chunk; Space on a splay
+cell still does nothing — existing tags plus one case per moved guard.</div>
+
+<h2><span class="commit">Commit 13</span> Splay box data carries its cell role</h2>
+<p>Open refactor 5.</p>
+<ul>
+  <li>A splay's <code>cwSurveyEditorBoxData</code> stops pairing a <code>SplayRow</code> with a
+      shot <code>chunkDataRole</code>: carry the cell role in the box data (or leave the splay's
+      <code>chunkDataRole</code> unset) so a future component reused across shot and splay rows
+      can't build a shot cell index for a splay row and hit a silent
+      <code>setDataAt</code> no-op. Audit the <code>ShotMenu.qml</code> /
+      <code>StationMenu.qml</code> <code>cellIndex(listViewIndex, dataValue.chunkDataRole)</code>
+      idiom (17 sites) against the new shape.</li>
+</ul>
+<div class="test"><b>Tests.</b> <code>[cwSurveyEditorModel]</code> case: box data for a splay
+cell exposes the splay cell role and no shot role; existing menu tests keep passing.</div>
+
+<h2><span class="commit">Commit 14</span> Profiled performance pass</h2>
+<p>Open refactors 6, 7, 8 — <b>profile first, fix only what the profile confirms.</b></p>
+<ul>
+  <li><b>Profile</b>: run <code>qmlprofiler</code> (or QML profiler via Qt Creator) on a
+      splay-heavy trip — scroll the table with several expanded clusters, hover across rows,
+      recycle delegates. Record the findings in the review notes before touching code.</li>
+  <li><b>Candidate fixes</b>, applied per confirmation:
+      (6) <code>data()</code> copies a <code>cwShotMeasurement</code> per splay cell read — a
+      file-scope <code>const cwShotMeasurement kBlankSplay;</code> lets the ternary bind a
+      <code>const&amp;</code>;
+      (7) <code>SplaysBox</code>'s <code>HoverHandler</code> runs on every Splays cell —
+      <code>enabled: splaysBox.splayCount === 0</code> keeps the hint and drops the cost;
+      (8) every real splay row builds a live <code>QC.Menu</code> inside
+      <code>ContextMenuArea</code> — defer behind a right-tap-flipped
+      <code>Loader { active: false }</code> like <code>StationMenu.qml</code>.</li>
+</ul>
+<div class="test"><b>Tests.</b> Behavior-neutral commit: full <code>tst_SplayRows</code> plus
+the targeted C++ splay tags. The profile before/after numbers go in the commit body and the
+review notes.</div>
+
+<h2><span class="commit">Commit 15</span> Splay error model</h2>
+<p>Open refactor 1 — the largest behavioral gap left: a splay with a garbage reading gets no
+red box and no error list, while the identical reading on a shot row does. Design work, last in
+the series.</p>
+<ul>
+  <li>Validation errors hang off the splay reading itself (<code>cwShotMeasurement</code> has no
+      error list today — decide where splay errors live: on the measurement, the chunk, or
+      computed by the model), reusing the shot rows' validation rules for distance, compass, and
+      clino.</li>
+  <li><code>cwSurveyEditorModel::data()</code> builds splay cells' box data with the error-model
+      constructor instead of the three-argument no-error one
+      (<code>cwSurveyEditorModel.cpp:558</code>).</li>
+  <li><code>SplayDataBox</code> grows back the error UI <code>DataBox</code> already has: red
+      box, error text, and inclusion in the trip's error list/navigation.</li>
+</ul>
+<div class="test"><b>Tests.</b> C++: invalid splay reading produces the same error object a
+shot reading does; blank entry row stays error-free. QML: type garbage into a splay distance,
+tryVerify the red box; fix it, tryVerify it clears. <b>By hand:</b> error navigation visits
+splay errors.</div>
+
 </body>
 </html>

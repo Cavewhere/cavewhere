@@ -44,7 +44,8 @@ SurveyEditorCell {
     rightClickMenuLoader: stationMenuId
 
     function toggleExpanded() {
-        if(splaysBox.isVirtual) {
+        //A recycled delegate re-evaluates this with its model already gone
+        if(splaysBox.model === null || splaysBox.isVirtual) {
             return
         }
 
@@ -73,7 +74,14 @@ SurveyEditorCell {
                            }
                        }
 
-    onTapped: splaysBox.toggleExpanded()
+    //The chip is the handle for a cluster that exists — a tap anywhere else in
+    //the cell leaves it as it is. A station with no splays has no chip, so the
+    //cell itself is the way into manual entry
+    onTapped: {
+        if(splaysBox.splayCount === 0) {
+            splaysBox.toggleExpanded()
+        }
+    }
 
     QQ.HoverHandler {
         id: hoverHandlerId
@@ -127,6 +135,22 @@ SurveyEditorCell {
                 color: Theme.splaySurface
                 border.color: Theme.splayBorder
                 border.width: 1
+
+                //Takes the exclusive grab, so the cell's own handler stays out
+                //of a tap meant for the chip
+                QQ.TapHandler {
+                    gesturePolicy: QQ.TapHandler.ReleaseWithinBounds
+
+                    onSingleTapped: {
+                        if(splaysBox.model !== null && splaysBox.model.splayMoveActive) {
+                            splaysBox.handleSplayMoveTap()
+                            return
+                        }
+
+                        splaysBox.takeFocus()
+                        splaysBox.toggleExpanded()
+                    }
+                }
 
                 QQ.Row {
                     id: chipRowId

@@ -531,14 +531,14 @@ TEST_CASE("A move waits for the station the user picks", "[cwSurveyEditorModel][
         CHECK(fixture.chunk->stationSplayCount(1) == 0);
         CHECK(fixture.chunk->stationSplayCount(2) == 3);
 
-        //a2's cluster empties and closes, and a3 opens on what it just took
-        //title, a1, shot, a2, shot, a3, 3 splays, blank
-        fixture.checkRowCount(10);
+        //a2's cluster empties and closes, and a3 stays closed on what it just
+        //took — its count is what says the splays landed
+        //title, a1, shot, a2, shot, a3
+        fixture.checkRowCount(6);
         const int a3Row = fixture.model.toModelRow(fixture.stationRow(2));
         REQUIRE(a3Row == 5);
-        CHECK(fixture.rowData(a3Row, cwSurveyEditorModel::StationSplaysExpandedRole).toBool());
-        CHECK(fixture.splayReading(a3Row + 1, cwSurveyEditorModel::SplayDistanceRole)
-              == QStringLiteral("5.88"));
+        CHECK_FALSE(fixture.rowData(a3Row, cwSurveyEditorModel::StationSplaysExpandedRole).toBool());
+        CHECK(fixture.rowData(a3Row, cwSurveyEditorModel::StationSplayCountRole).toInt() == 3);
     }
 
     SECTION("one splay moves on its own") {
@@ -551,13 +551,15 @@ TEST_CASE("A move waits for the station the user picks", "[cwSurveyEditorModel][
         CHECK(fixture.chunk->stationSplayCount(0) == 1);
         CHECK(fixture.chunk->stationSplayCount(1) == 2);
 
-        //a1 opens on the splay it took, a2 keeps the two it has left
-        //title, a1, 1 splay, blank, shot, a2, 2 splays, blank, shot, a3
-        fixture.checkRowCount(11);
-        CHECK(fixture.splayReading(2, cwSurveyEditorModel::SplayDistanceRole)
-              == QStringLiteral("5.42"));
-        CHECK(fixture.splayReading(6, cwSurveyEditorModel::SplayDistanceRole)
+        //a1 stays closed on the splay it took, a2 keeps the two it has left
+        //title, a1, shot, a2, 2 splays, blank, shot, a3
+        fixture.checkRowCount(9);
+        CHECK_FALSE(fixture.rowData(1, cwSurveyEditorModel::StationSplaysExpandedRole).toBool());
+        CHECK(fixture.rowData(1, cwSurveyEditorModel::StationSplayCountRole).toInt() == 1);
+        CHECK(fixture.splayReading(4, cwSurveyEditorModel::SplayDistanceRole)
               == QStringLiteral("5.88"));
+        CHECK(fixture.splayReading(5, cwSurveyEditorModel::SplayDistanceRole)
+              == QStringLiteral("8.96"));
     }
 
     SECTION("splays move into a station in another chunk") {
@@ -576,12 +578,13 @@ TEST_CASE("A move waits for the station the user picks", "[cwSurveyEditorModel][
         CHECK(fixture.chunk->stationSplayCount(1) == 0);
         CHECK(secondChunk->stationSplayCount(1) == 3);
 
-        //a2 gives up its rows and b2 opens on them
-        fixture.checkRowCount(14);
+        //a2 gives up its rows and b2 takes the splays without opening
+        //title, a1, shot, a2, shot, a3, title, b1, shot, b2
+        fixture.checkRowCount(10);
         const int b2ModelRow = fixture.model.toModelRow(b2Row);
         REQUIRE(b2ModelRow > 0);
-        CHECK(fixture.rowData(b2ModelRow, cwSurveyEditorModel::StationSplaysExpandedRole).toBool());
-        CHECK(fixture.rowIndexOf(b2ModelRow + 1).rowType() == cwSurveyEditorRowIndex::SplayRow);
+        CHECK_FALSE(fixture.rowData(b2ModelRow, cwSurveyEditorModel::StationSplaysExpandedRole).toBool());
+        CHECK(fixture.rowData(b2ModelRow, cwSurveyEditorModel::StationSplayCountRole).toInt() == 3);
     }
 
     SECTION("canceling leaves nothing pending and nothing moved") {

@@ -2117,9 +2117,10 @@ void cwSurveyEditorModel::cancelSplayMove()
  * @brief cwSurveyEditorModel::commitSplayMove
  * @param targetRowIndex - The station row the user picked
  *
- * Moves the armed splays onto \a targetRowIndex's station and opens that
- * station's cluster, so the splays are visible where they landed. A row the
- * move can't land on leaves it armed for the next pick.
+ * Moves the armed splays onto \a targetRowIndex's station, leaving that
+ * station's cluster as closed as it was — its chip counting the splays it took
+ * is the confirmation. A row the move can't land on leaves it armed for the
+ * next pick.
  */
 void cwSurveyEditorModel::commitSplayMove(const cwSurveyEditorRowIndex& targetRowIndex)
 {
@@ -2139,8 +2140,6 @@ void cwSurveyEditorModel::commitSplayMove(const cwSurveyEditorRowIndex& targetRo
     emit splayMoveChanged();
 
     cwSurveyChunk::moveStationSplays(source, sourceStation, target, targetStation, splayIndices);
-
-    expandSplays(target, targetStation);
 }
 
 /**

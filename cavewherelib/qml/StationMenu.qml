@@ -37,7 +37,7 @@ QQ.Loader {
 
             //Losing the cluster is the one action that asks first, so it needs
             //something to ask with
-            readonly property bool offersSplayDelete:
+            readonly property bool offersSplayRemove:
                 menuId.offersSplayActions
                 && stationMenuLoader.splayRemoveChallenge !== null
 
@@ -85,7 +85,7 @@ QQ.Loader {
             //Drops the challenge under the cell the menu was popped from, kept
             //inside the table so the Splays column, which sits against the
             //table's right edge, doesn't push it off the side
-            function askToDeleteSplays() {
+            function askToRemoveSplays() {
                 let challenge = stationMenuLoader.splayRemoveChallenge
                 let cell = stationMenuLoader.parent
                 let pos = cell.mapToItem(challenge.parent, 0, cell.height)
@@ -118,11 +118,11 @@ QQ.Loader {
             }
 
             QC.MenuItem {
-                objectName: "stationMenuDeleteSplays"
-                text: "Delete " + menuId.splayCountLabel()
-                visible: menuId.offersSplayDelete
+                objectName: "stationMenuRemoveSplays"
+                text: "Remove " + menuId.splayCountLabel()
+                visible: menuId.offersSplayRemove
                 height: visible ? implicitHeight : 0
-                onTriggered: askToDeleteSplays()
+                onTriggered: askToRemoveSplays()
             }
 
             QC.MenuSeparator {

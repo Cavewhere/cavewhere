@@ -41,6 +41,10 @@ DataBox {
     readonly property real splayMoveSourceOpacity: 0.4
     readonly property int splayMoveOutlineWidth: 2
 
+    // The outline draws inside the cell's own border, so the neighboring
+    // distance cell has no stroke of ours to clip
+    readonly property int splayMoveOutlineInset: 1
+
     // A blank name has nothing to anchor — that's the trailing virtual station
     // row, which shouldn't offer to fix itself.
     readonly property bool canFix: stationBox.fixStationPopup !== null
@@ -102,6 +106,7 @@ DataBox {
     // while a move is armed, which is almost never
     QQ.Loader {
         anchors.fill: parent
+        anchors.margins: stationBox.splayMoveOutlineInset
         active: stationBox.splayMoveTarget
         z: 1
 
