@@ -121,8 +121,8 @@ cwRootData::cwRootData(QObject *parent) :
     LinePlotManager->setRegion(Region);
     LinePlotManager->setKeywordItemModel(m_keywordItemModel);
     LinePlotManager->externalCenterlineManager()->setExternalSourceSettings(m_externalSourceSettings);
-    // The attach/detach/updateFromSource operations reconcile through the
-    // project's save/load pipeline; newProject() replaces it, so track it.
+    // The attach/replace/detach operations reconcile through the project's
+    // save/load pipeline; newProject() replaces it, so track it.
     LinePlotManager->externalCenterlineManager()->setSaveLoad(Project->saveLoad());
     connect(Project, &cwProject::saveLoadChanged, this, [this]() {
         LinePlotManager->externalCenterlineManager()->setSaveLoad(Project->saveLoad());

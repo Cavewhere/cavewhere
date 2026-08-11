@@ -12,9 +12,9 @@ import cavewherelib
 
 // Replaces SurveyEditor on TripPage for an externally-backed trip
 // (master plan §8.5.1 + Phase-2 §9 deltas). Assembles the commit-10
-// sub-components: missing-source banner, attached header, solve
-// status, scoped station list, and trip metadata. The Scope mode is
-// Phase 3 — the header Loader is hard-coded to the attached header.
+// sub-components: attached header, solve status, scoped station list,
+// and trip metadata. The Scope mode is Phase 3 — the header Loader is
+// hard-coded to the attached header.
 QQ.Item {
     id: root
     objectName: "externalCenterlineTripPanel"
@@ -26,14 +26,6 @@ QQ.Item {
 
     readonly property bool isAttached: trip !== null
                                        && trip.externalCenterline.entryFile.length > 0
-    readonly property bool sourceMissing: {
-        if (!isAttached) {
-            return false
-        }
-        // Dependency for re-evaluation; membership needs the invokable.
-        externalCenterlineManager.missingSourceOwners
-        return externalCenterlineManager.isSourceMissing(trip.id)
-    }
 
     // isOwnerBusy has no property NOTIFY — ownerBusyChanged drives the
     // imperative refresh below.
@@ -44,15 +36,6 @@ QQ.Item {
     // whenever the declination flags change.
     property bool fileOwnsDeclination: true
 
-    // sourcePathFor has no property backing (§15 observable
-    // remembered-source follow-up), so a declarative binding would go
-    // stale when the settings store changes under a live panel — e.g.
-    // the attach writes the source path right after entryFile flips
-    // the panel in. Same imperative idiom as
-    // ExternalCenterlineAttachedHeader.
-    property string missingSourcePath: ""
-
-    signal relinkRequested()
     signal stationClicked(cwStationHandle stationHandle)
 
     function updateOwnerBusy() {
@@ -64,22 +47,14 @@ QQ.Item {
                 || externalCenterlineManager.fileOwnsDeclination(trip.id)
     }
 
-    function updateMissingSourcePath() {
-        missingSourcePath = trip !== null
-                ? externalSourceSettings.sourcePathFor(trip.id)
-                : ""
-    }
-
     onTripChanged: {
         updateOwnerBusy()
         updateFileOwnsDeclination()
-        updateMissingSourcePath()
     }
 
     QQ.Component.onCompleted: {
         updateOwnerBusy()
         updateFileOwnsDeclination()
-        updateMissingSourcePath()
     }
 
     QQ.Connections {
@@ -91,14 +66,6 @@ QQ.Item {
 
         function onSolveNeeded() {
             root.updateFileOwnsDeclination()
-        }
-    }
-
-    QQ.Connections {
-        target: root.externalSourceSettings
-
-        function onExternalCenterlineSourcesChanged() {
-            root.updateMissingSourcePath()
         }
     }
 
@@ -133,15 +100,6 @@ QQ.Item {
         anchors.fill: parent
         anchors.margins: Theme.sectionSpacing
         spacing: Theme.sectionSpacing
-
-        ExternalCenterlineMissingSourceBanner {
-            id: missingSourceBannerId
-            Layout.fillWidth: true
-            visible: root.sourceMissing
-            sourcePath: root.missingSourcePath
-            onRelinkRequested: root.relinkRequested()
-            onForgetSourceRequested: root.externalSourceSettings.clearSourcePath(root.trip.id)
-        }
 
         ExternalCenterlineFileErrorBanner {
             id: fileErrorBannerId

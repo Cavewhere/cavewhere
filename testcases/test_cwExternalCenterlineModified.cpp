@@ -31,6 +31,9 @@
 // Tests
 #include "ExternalCenterlineTestHelpers.h"
 
+// AsyncFuture
+#include <asyncfuture.h>
+
 // Qt
 #include <QCoreApplication>
 #include <QDir>
@@ -261,16 +264,16 @@ TEST_CASE("Discarding changes does not re-dirty the project through the watcher"
     CHECK_FALSE(fixture->project->modified());
 }
 
-TEST_CASE("An Update leaves nothing behind to save once it has been saved",
+TEST_CASE("A Replace leaves nothing behind to save once it has been saved",
           "[ExternalCenterline][Modified]")
 {
-    // updateFromSource writes into the project through cwSaveLoad, which marks
-    // the project modified as it queues the copy — so by the time the copy
-    // lands the dirty bit has already done its job. The watcher is armed on
-    // that same destination and reads CaveWhere's own write exactly as it
-    // reads a user's edit, so unless the copy opens the self-write window on
-    // its way out, its event dirties the project a second time. Arriving after
-    // the save that followed the Update, that leaves the project asking to be
+    // Replace writes into the project through cwSaveLoad, which marks the
+    // project modified as it queues the copy — so by the time the copy lands
+    // the dirty bit has already done its job. The watcher is armed on that
+    // same destination and reads CaveWhere's own write exactly as it reads a
+    // user's edit, so unless the copy opens the self-write window on its way
+    // out, its event dirties the project a second time. Arriving after the
+    // save that followed the Replace, that leaves the project asking to be
     // saved again with nothing left to write.
     //
     // Whether the event lands before or after that save is the OS's business,
@@ -281,7 +284,7 @@ TEST_CASE("An Update leaves nothing behind to save once it has been saved",
     cwLinePlotManager manager;
     auto fixture = makeFixture(manager, QStringLiteral("cwproj"));
 
-    // The source carries the entry file's name so the copy lands on the
+    // The picked file carries the entry file's name so the copy lands on the
     // watched destination rather than beside it.
     const QString sourceDir =
         QDir(fixture->tempDir.path()).filePath(QStringLiteral("source"));
@@ -289,13 +292,13 @@ TEST_CASE("An Update leaves nothing behind to save once it has been saved",
     const QString sourcePath = QDir(sourceDir).filePath(QStringLiteral("entry.svx"));
     overwriteFile(sourcePath, kEditedEntry);
 
-    auto* settings = fixture->rootData->externalSourceSettings();
-    settings->setSourcePath(fixture->trip->id(), sourcePath);
     auto* external = manager.externalCenterlineManager();
-    external->setExternalSourceSettings(settings);
+    external->setExternalSourceSettings(fixture->rootData->externalSourceSettings());
     manager.waitToFinish();
 
-    external->updateFromSource(fixture->trip->id());
+    auto replaced = external->replaceCenterline(fixture->trip, sourcePath);
+    REQUIRE(AsyncFuture::waitForFinished(replaced, kWatcherWaitMs));
+    REQUIRE_FALSE(replaced.result().hasError());
 
     // The extra leg arrives with the copied bytes, so the harvest reporting
     // the edited count is the reconcile having reached disk.
@@ -315,7 +318,9 @@ TEST_CASE("An Update leaves nothing behind to save once it has been saved",
     QTest::qWait(kEchoSettleMs);
     CHECK_FALSE(fixture->project->modified());
 
-    settings->setSourcePath(fixture->trip->id(), QString());
+    // cwExternalSourceSettings writes through QSettings, which outlives the
+    // fixture — the replace recorded a breadcrumb the next test would read.
+    fixture->rootData->externalSourceSettings()->clearSourcePath(fixture->trip->id());
 }
 
 TEST_CASE("Renaming the region keeps the attachment watched once the data root moves",

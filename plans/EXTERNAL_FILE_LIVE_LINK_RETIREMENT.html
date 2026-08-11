@@ -269,10 +269,18 @@ return srcInfo.lastModified() &lt;= dstInfo.lastModified();</code></pre>
         <code>m_sourceOwnerForPath</code>, the source branch of the freshness
         probe, the source branch of <code>onWatchedFileChanged</code>, and
         <code>ExternalScanResult</code>'s stale/sourceOwner fields with their
-        apply-time union. <em>Commit 3 takes the rest:</em>
+        apply-time union. <em>Commit 3 took the rest:</em>
         <code>staleSourceOwners</code> + signal (an empty stub since commit 2);
         <code>missingSourceOwners</code> + signal + <code>isSourceMissing</code>
-        and its scan-side existence check; <code>updateFromSource</code>.</td>
+        and its scan-side existence check; <code>updateFromSource</code>. With
+        the last of them went <code>sourcePathForOwner</code>,
+        <code>OwnerScanInput::sourcePath</code>, and the store's
+        <code>externalCenterlineSourcesChanged</code> connection &mdash; nothing
+        in the scan pipeline reads the breadcrumb now, so a recompute per
+        settings write was pure cost. <code>OperationKind::Update</code> went
+        with its one caller, and the slot lost the half of its name that no
+        longer happens: <code>recomputeWatchSetAndProbeSources</code> &rarr;
+        <code>recomputeWatchSet</code>.</td>
   </tr>
   <tr>
     <td><code>cwExternalSourceSettings.h/.cpp</code></td>
@@ -289,17 +297,21 @@ return srcInfo.lastModified() &lt;= dstInfo.lastModified();</code></pre>
   </tr>
   <tr>
     <td><code>ExternalCenterlineMissingSourceBanner.qml</code></td>
-    <td>Deleted.</td>
+    <td>Deleted in commit 3, along with the second copy of the same banner
+        inlined in <code>CavernOutputPage.qml</code>.</td>
   </tr>
   <tr>
     <td><code>ExternalCenterlineAttachedHeader.qml</code>,
         <code>ExternalCenterlineTripPanel.qml</code></td>
-    <td>The stale/missing state, the <em>Update</em> action, the
-        <code>updateMissingSourcePath</code> polling
-        (<code>ExternalCenterlineTripPanel.qml:67-101</code>, which exists only
-        because <code>sourcePathFor</code> has no property backing). Replaced by
-        a <em>Replace&hellip;</em> action. The <em>Detach&hellip;</em> action and
-        its <code>RemoveAskBox</code> also go &mdash; see &sect;4.1.</td>
+    <td><em>Commit 3 took</em> the panel's stale/missing state
+        (<code>sourceMissing</code>, <code>missingSourcePath</code>, the
+        <code>updateMissingSourcePath</code> polling and the store
+        <code>Connections</code> that drove it, and the now-unheard
+        <code>relinkRequested</code> signal). The header keeps its
+        <code>rememberedSourcePath</code> line: that is the breadcrumb, and it
+        is the one place a remembered source is still shown. Replaced by a
+        <em>Replace&hellip;</em> action. The <em>Detach&hellip;</em> action and
+        its <code>RemoveAskBox</code> still go &mdash; see &sect;4.1.</td>
   </tr>
   <tr>
     <td><code>cwRootData.h/.cpp</code></td>
@@ -437,9 +449,16 @@ return srcInfo.lastModified() &lt;= dstInfo.lastModified();</code></pre>
         missing-source banner, the panel's polling. (No Update <em>action</em>
         to remove: <code>updateFromSource</code> is <code>Q_INVOKABLE</code>-only
         and no control ever called it &mdash; see commit 1.)</td>
-    <td>Panel renders for an attached owner with no source recorded and one with
-        a source whose file is gone &mdash; identical UI in both cases. QML tests
-        for the removed banner deleted rather than skipped.</td>
+    <td>Nothing the manager publishes depends on the breadcrumb: a source
+        that is gone, one sitting right there, and none at all give the same
+        watch set, rows, and declination flags. The UI half of that gate is
+        QML-side &mdash; forgetting a source leaves every panel component in
+        the same place, which is as far as QML can stage it, since
+        <code>setSourcePath</code> is not <code>Q_INVOKABLE</code> and the
+        alternative (deleting the shared dataset fixture) would corrupt
+        sibling tests. QML tests for the removed banner deleted rather than
+        skipped; the <em>Update</em> echo test re-vehicled onto
+        <em>Replace</em>, which reconciles through the same copy path.</td>
   </tr>
   <tr>
     <td>3b</td>

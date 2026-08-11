@@ -33,10 +33,6 @@ MainWindowTest {
         function test_nativeProjectHidesExternalSections() {
             const page = gotoCavernOutput()
 
-            const banner = findChild(page, "missingSourceBanner")
-            verify(banner !== null, "missingSourceBanner must exist")
-            verify(!banner.visible, "banner hidden with no attachments")
-
             const section = findChild(page, "attachedCenterlinesSection")
             verify(section !== null, "attachedCenterlinesSection must exist")
             verify(!section.visible, "attached section hidden with no attachments")
@@ -112,18 +108,6 @@ MainWindowTest {
             const statsPattern = /^Last solve completed successfully in \d+(\.\d+)? s — \d+ stations, \d+ warnings\.$/
             tryVerify(() => statsPattern.test(status.text), 5000,
                       "status shows live stats; got: " + status.text)
-        }
-
-        function test_missingSourceBannerIsPresentAndQuiet() {
-            attachFixtureTrip("cavern-missing-source")
-            const page = gotoCavernOutput()
-
-            // What the page owes is the banner itself, wired and silent
-            // while the source is there; raising it is the manager's, and
-            // the C++ startup-probe test owns that.
-            const banner = findChild(page, "missingSourceBanner")
-            verify(banner !== null, "missingSourceBanner must exist")
-            verify(!banner.visible, "banner hidden while the source exists")
         }
 
         function test_inheritedStructureStillPresent() {

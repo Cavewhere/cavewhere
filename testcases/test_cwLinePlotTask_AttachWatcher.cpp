@@ -9,6 +9,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 // Cavewhere
+#include "cwAttachedCenterlinesModel.h"
 #include "cwCave.h"
 #include "cwCavingRegion.h"
 #include "cwExternalCenterline.h"
@@ -44,6 +45,7 @@
 
 // Std
 #include <memory>
+#include <tuple>
 
 namespace {
 
@@ -93,8 +95,6 @@ TEST_CASE("Watcher set contains the in-project copy paths after attach",
     INFO("expected watch path: " << expected.toStdString());
     REQUIRE_FALSE(expected.isEmpty());
     CHECK(manager.externalCenterlineManager()->watchedFiles().contains(expected));
-    // No remembered source, so nothing can be reported missing.
-    CHECK(manager.externalCenterlineManager()->missingSourceOwners().isEmpty());
 }
 
 TEST_CASE("Editing the in-project copy triggers a re-run that picks up the new station",
@@ -186,49 +186,75 @@ TEST_CASE("Detach mid-solve does not crash and empties the watch set",
     CHECK(cave != nullptr); // sentinel: just make sure we got here
 }
 
-TEST_CASE("Startup probe detects a missing remembered source path",
+TEST_CASE("What the manager reports is the same for every remembered-source state",
           "[Attach][Watcher]")
 {
+    // The commit-3 gate (plans/EXTERNAL_FILE_LIVE_LINK_RETIREMENT.html §6),
+    // from the manager's side: an owner whose remembered source has since
+    // vanished, one whose source is sitting right there, and one that never
+    // recorded a source are all indistinguishable. The scan reads the
+    // in-project copies alone, so the breadcrumb reaches none of the state
+    // the manager publishes — a source back in the watch set, or any state
+    // derived from statting it, breaks this.
     QTemporaryDir tempRoot;
     REQUIRE(tempRoot.isValid());
 
-    const QString attachDir = tempSubdir(tempRoot, QStringLiteral("probe-attach"));
-    seedAttachment(attachDir, fixturePath(QStringLiteral("survex_simple.svx")));
-
-    // Plant a sourcePath in cwExternalSourceSettings that *does not* exist on disk -
-    // simulates the user moving the original outside CaveWhere while the
-    // project was closed. Per §8.8 question 16 the missing-source state
-    // must surface at startup, not just on a watcher event.
     const QString missingSource =
         QDir(tempRoot.path()).absoluteFilePath(QStringLiteral("not-there.svx"));
     REQUIRE_FALSE(QFile::exists(missingSource));
 
-    cwCavingRegion region;
-    cwCave* cave = addEmptyCave(region, QStringLiteral("Probe"));
-    cwTrip* attached = addEmptyTrip(cave, QStringLiteral("Attached"));
-    attached->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_simple.svx")));
+    const QString presentSource = fixturePath(QStringLiteral("survex_simple.svx"));
+    REQUIRE(QFile::exists(presentSource));
 
-    cwExternalSourceSettings settings;
-    settings.setSourcePath(attached->id(), missingSource);
+    // Every arm is built the same way; only the breadcrumb differs. The arm
+    // name doubles as the trip name so each arm lands in its own subdir.
+    const auto reportedState = [&](const QString& name, const QString& sourcePath) {
+        cwCavingRegion region;
+        cwCave* cave = addEmptyCave(region, QStringLiteral("Probe"));
+        cwTrip* attached = addAttachedTrip(cave, name);
 
-    cwLinePlotManager manager;
-    QHash<QUuid, QString> tripDirs;
-    tripDirs.insert(attached->id(), attachDir);
-    manager.externalCenterlineManager()->setTripAttachmentDirs(tripDirs);
-    manager.externalCenterlineManager()->setExternalSourceSettings(&settings);
+        QHash<QUuid, QString> tripDirs;
+        attachFixture(tempRoot, attached, QStringLiteral("survex_simple.svx"), tripDirs);
+        const QString attachDir = tripDirs.value(attached->id());
 
-    cwSignalSpy missingSpy(manager.externalCenterlineManager(), &cwExternalCenterlineManager::missingSourceOwnersChanged);
+        cwExternalSourceSettings settings;
+        if (!sourcePath.isEmpty()) {
+            settings.setSourcePath(attached->id(), sourcePath);
+        }
 
-    // Now bind the region. setRegion's recompute walks the region against
-    // the already-configured local settings and surfaces the missing
-    // source without needing a QFileSystemWatcher event.
-    manager.setRegion(&region);
-    manager.waitToFinish();
+        cwLinePlotManager manager;
+        manager.externalCenterlineManager()->setExternalSourceSettings(&settings);
+        solveRegion(manager, region, tripDirs);
 
-    const QList<QUuid> missing = manager.externalCenterlineManager()->missingSourceOwners();
-    CHECK(missing.size() == 1);
-    CHECK(missing.contains(attached->id()));
-    CHECK(missingSpy.count() >= 1);
+        auto* external = manager.externalCenterlineManager();
+        // Relative to the owner's own attachment dir, so the arms are
+        // comparable despite living in different temp subdirectories. The
+        // watch set is canonical, and on macOS the temp root reaches it
+        // through a /var -> /private/var symlink, so the base has to be
+        // canonical too or every path relativizes back through the root.
+        const QDir attachRoot(QFileInfo(attachDir).canonicalFilePath());
+        QStringList watched;
+        for (const QString& path : external->watchedFiles()) {
+            watched.append(attachRoot.relativeFilePath(path));
+        }
+        return std::make_tuple(watched,
+                               external->attachedCenterlinesModel()->rowCount(),
+                               external->fileOwnsDeclination(attached->id()));
+    };
+
+    const auto withNoSource = reportedState(QStringLiteral("probe-none"), QString());
+    const auto withMissingSource = reportedState(QStringLiteral("probe-missing"), missingSource);
+    const auto withPresentSource = reportedState(QStringLiteral("probe-present"), presentSource);
+
+    // The in-project copy, and only it — an arm that also watched its source
+    // would carry a second entry.
+    REQUIRE(std::get<0>(withNoSource) == QStringList { QStringLiteral("survex_simple.svx") });
+    CHECK(std::get<0>(withMissingSource) == std::get<0>(withNoSource));
+    CHECK(std::get<0>(withPresentSource) == std::get<0>(withNoSource));
+    CHECK(std::get<1>(withMissingSource) == std::get<1>(withNoSource));
+    CHECK(std::get<1>(withPresentSource) == std::get<1>(withNoSource));
+    CHECK(std::get<2>(withMissingSource) == std::get<2>(withNoSource));
+    CHECK(std::get<2>(withPresentSource) == std::get<2>(withNoSource));
 }
 
 namespace {

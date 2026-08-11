@@ -608,24 +608,20 @@ TEST_CASE("manager detach drops the settings entry and dir map synchronously",
 
     auto detachFuture = manager->detachCenterline(fixture->trip);
 
-    // The queued-invoke hole (commit-7 review): everything a late
-    // updateFromSource would consult is already gone, synchronously -
-    // before the remove-tree drains.
+    // The queued-invoke hole (commit-7 review): everything a caller queued
+    // behind the detach would consult is already gone, synchronously -
+    // before the remove-tree drains. The busy token covers the rest of the
+    // drain, so there is no instant at which the owner looks attachable
+    // while its files are still being removed.
     CHECK(fixture->settings()->sourcePathFor(ownerId).isEmpty());
     CHECK_FALSE(manager->solveInputs().tripAttachmentDirs.contains(ownerId));
     CHECK(fixture->trip->externalCenterline().isEmpty());
     CHECK(manager->isOwnerBusy(ownerId));
 
-    // A late updateFromSource during the drain is refused by the busy
-    // token; after the drain it hits the empty sourcePath/attachmentDir
-    // guard. Either way nothing is resurrected.
-    manager->updateFromSource(ownerId);
-
     REQUIRE(AsyncFuture::waitForFinished(detachFuture, kAttachWaitMs));
     REQUIRE_FALSE(detachFuture.result().hasError());
     CHECK_FALSE(manager->isOwnerBusy(ownerId));
 
-    manager->updateFromSource(ownerId);
     drainPipelines(fixture.get());
     CHECK_FALSE(QDir(attachmentDir).exists());
 }

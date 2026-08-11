@@ -33,11 +33,6 @@ MainWindowTest {
             width: parent.width
         }
 
-        ExternalCenterlineMissingSourceBanner {
-            id: bannerId
-            width: parent.width
-        }
-
         ExternalCenterlineStationsList {
             id: stationsListId
             width: parent.width
@@ -74,12 +69,6 @@ MainWindowTest {
         when: windowShown
 
         SignalSpy {
-            id: forgetSpyId
-            target: bannerId
-            signalName: "forgetSourceRequested"
-        }
-
-        SignalSpy {
             id: viewOutputSpyId
             target: solveStatusId
             signalName: "viewCavernOutputRequested"
@@ -101,7 +90,6 @@ MainWindowTest {
             RootData.newProject()
             RootData.futureManagerModel.waitForFinished()
             rootId.trip = null
-            forgetSpyId.clear()
             viewOutputSpyId.clear()
             stationClickSpyId.clear()
             dateSpyId.clear()
@@ -135,46 +123,6 @@ MainWindowTest {
             tryVerify(() => sourceLabel.text === "Source forgotten (this machine)",
                       5000, "forgotten-source line renders after clearing; got: "
                             + sourceLabel.text)
-        }
-
-        function test_missingSourceBannerRendersAndForgets() {
-            const fixture = attachFixtureTrip("panel-banner")
-            rootId.trip = fixture.trip
-            bannerId.sourcePath =
-                RootData.externalSourceSettings.sourcePathFor(fixture.trip.id)
-
-            verify(!bannerId.visible, "banner hidden by default")
-
-            // What the banner renders once something lights it. Raising it
-            // is the panel's job, and its binding is the panel's test; the
-            // detection behind that binding is the manager's.
-            bannerId.visible = true
-            // The column only repositions its children on the next frame,
-            // and the banner is a cached item that already carries the
-            // previous layout's geometry — clicking before the frame lands
-            // hits whatever still occupies the banner's old place.
-            waitForRendering(componentColumnId)
-
-            const label = findChild(bannerId, "missingSourceLabel")
-            verify(label !== null, "missingSourceLabel must exist")
-            verify(label.text.indexOf("survex_simple.svx") >= 0,
-                   "banner names the missing path; got: " + label.text)
-
-            const relinkButton = findChild(bannerId, "relinkButton")
-            verify(relinkButton !== null, "relinkButton must exist")
-            verify(!relinkButton.enabled, "Re-link is stubbed disabled")
-            verify(bannerId.relinkDisabledReason.indexOf("future release") >= 0,
-                   "tooltip explains the stub; got: " + bannerId.relinkDisabledReason)
-
-            const forgetButton = findChild(bannerId, "forgetSourceButton")
-            verify(forgetButton !== null, "forgetSourceButton must exist")
-            mouseClick(forgetButton)
-            compare(forgetSpyId.count, 1, "Forget source raises the signal")
-
-            // The banner item is cached across tests, so hand the next one
-            // back a hidden, empty banner.
-            bannerId.visible = false
-            bannerId.sourcePath = ""
         }
 
         function test_solveStatusDotColorsAndLink() {

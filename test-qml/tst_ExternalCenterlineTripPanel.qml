@@ -93,13 +93,10 @@ MainWindowTest {
                    "ownerId stringifies to a uuid; got: " + String(report.ownerId))
             compare(String(report.ownerId), String(rootId.trip.id))
 
-            const banner = findChild(panelId, "missingSourceBanner")
             const header = findChild(panelId, "attachedHeader")
             const solveStatus = findChild(panelId, "solveStatus")
             const stationsList = findChild(panelId, "stationsList")
             const metadata = findChild(panelId, "tripMetadata")
-            verify(banner !== null, "banner must exist")
-            verify(!banner.visible, "banner hidden while the source exists")
             verify(header !== null && header.visible, "attached header renders")
             verify(solveStatus !== null && solveStatus.visible, "solve status renders")
             verify(stationsList !== null && stationsList.visible, "stations list renders")
@@ -273,25 +270,53 @@ MainWindowTest {
             tryVerify(() => !panelId.ownerBusy, 10000, "the busy token releases")
         }
 
-        function test_forgetSourceRequestClearsRememberedPath() {
+        // The commit-3 gate (plans/EXTERNAL_FILE_LIVE_LINK_RETIREMENT.html
+        // §6): whether a source is remembered is no longer something the
+        // panel reacts to. Forgetting one is the state change QML can stage
+        // — the manager's own test covers a remembered source whose file has
+        // since vanished, which needs a setter QML cannot reach.
+        function test_forgettingTheSourceLeavesThePanelUnchanged() {
             attachAndBind("trip-panel-forget")
 
-            const banner = findChild(panelId, "missingSourceBanner")
-            verify(banner !== null, "banner must exist")
-            verify(!banner.visible, "banner hidden while the source exists")
+            // Let the relayout the trip binding causes settle before taking
+            // the baseline — a snapshot mid-polish would make the exact-y
+            // compares below fail for reasons unrelated to forgetting.
+            const componentNames = ["attachedHeader", "solveStatus",
+                                    "stationsList", "tripMetadata"]
+            componentNames.forEach(name => {
+                tryVerify(() => {
+                    const item = findChild(panelId, name)
+                    return item !== null && item.visible
+                }, 5000, name + " must exist and be laid out")
+            })
+            waitForRendering(panelId)
+            const before = componentNames.map(name => {
+                const item = findChild(panelId, name)
+                return { visible: item.visible, y: item.mapToItem(panelId, 0, 0).y }
+            })
             verify(RootData.externalSourceSettings
                        .sourcePathFor(rootId.trip.id).length > 0,
                    "the attach remembered a source path")
 
-            // The banner is raised by root.sourceMissing, which the manager
-            // only re-derives at a recompute now that the remembered source
-            // goes unwatched — so the test raises the request the button
-            // raises rather than staging a state the session cannot reach.
-            banner.forgetSourceRequested()
-
+            RootData.externalSourceSettings.clearSourcePath(rootId.trip.id)
             tryVerify(() => RootData.externalSourceSettings
                                 .sourcePathFor(rootId.trip.id).length === 0,
-                      5000, "Forget source clears the remembered path")
+                      5000, "clearing drops the remembered path")
+
+            // The breadcrumb line is the one thing that may move, and it is
+            // inside the header — so wait for it to settle before comparing
+            // the layout, or the comparison races the relayout it causes.
+            const sourceLabel = findChild(panelId, "sourceModeLabel")
+            verify(sourceLabel !== null, "sourceModeLabel must exist")
+            tryCompare(sourceLabel, "text", "Source forgotten (this machine)")
+
+            componentNames.forEach((name, i) => {
+                const item = findChild(panelId, name)
+                compare(item.visible, before[i].visible,
+                        name + " keeps its visibility")
+                compare(item.mapToItem(panelId, 0, 0).y, before[i].y,
+                        name + " keeps its place")
+            })
         }
 
         function test_aSecondAttachmentNothingTiesInBannersItself() {

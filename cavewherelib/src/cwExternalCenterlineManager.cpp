@@ -119,14 +119,14 @@ cwExternalCenterlineManager::cwExternalCenterlineManager(QObject* parent) :
 
     // Any attach/detach — the wrappers here, undo/redo, or protobuf load
     // populating a trip after insertion — re-derives the watch set, dir
-    // maps, rows, and missing-source probe. Trip-list churn matters too:
+    // maps, and rows. Trip-list churn matters too:
     // a cave inserted at load (or a trip restored by undo) can carry an
     // already-set externalCenterline that never fires the change signal
     // post-connect.
-    m_signaler->addConnectionToCaves(SIGNAL(externalCenterlineChanged()), this, SLOT(recomputeWatchSetAndProbeSources()));
-    m_signaler->addConnectionToCaves(SIGNAL(insertedTrips(int,int)), this, SLOT(recomputeWatchSetAndProbeSources()));
-    m_signaler->addConnectionToCaves(SIGNAL(removedTrips(int,int)), this, SLOT(recomputeWatchSetAndProbeSources()));
-    m_signaler->addConnectionToTrips(SIGNAL(externalCenterlineChanged()), this, SLOT(recomputeWatchSetAndProbeSources()));
+    m_signaler->addConnectionToCaves(SIGNAL(externalCenterlineChanged()), this, SLOT(recomputeWatchSet()));
+    m_signaler->addConnectionToCaves(SIGNAL(insertedTrips(int,int)), this, SLOT(recomputeWatchSet()));
+    m_signaler->addConnectionToCaves(SIGNAL(removedTrips(int,int)), this, SLOT(recomputeWatchSet()));
+    m_signaler->addConnectionToTrips(SIGNAL(externalCenterlineChanged()), this, SLOT(recomputeWatchSet()));
 
     // Registering the scan with the future manager lets tests drain it
     // via futureManagerModel()->waitForFinished().
@@ -154,9 +154,9 @@ void cwExternalCenterlineManager::setRegion(cwCavingRegion* region)
 {
     if (!m_region.isNull()) {
         disconnect(m_region.data(), &cwCavingRegion::insertedCaves,
-                   this, &cwExternalCenterlineManager::recomputeWatchSetAndProbeSources);
+                   this, &cwExternalCenterlineManager::recomputeWatchSet);
         disconnect(m_region.data(), &cwCavingRegion::removedCaves,
-                   this, &cwExternalCenterlineManager::recomputeWatchSetAndProbeSources);
+                   this, &cwExternalCenterlineManager::recomputeWatchSet);
     }
     m_region = region;
     m_signaler->setRegion(region);
@@ -166,9 +166,9 @@ void cwExternalCenterlineManager::setRegion(cwCavingRegion* region)
         // — the per-object change signal never fires, so the list-level
         // signal drives the recompute.
         connect(m_region.data(), &cwCavingRegion::insertedCaves,
-                this, &cwExternalCenterlineManager::recomputeWatchSetAndProbeSources);
+                this, &cwExternalCenterlineManager::recomputeWatchSet);
         connect(m_region.data(), &cwCavingRegion::removedCaves,
-                this, &cwExternalCenterlineManager::recomputeWatchSetAndProbeSources);
+                this, &cwExternalCenterlineManager::recomputeWatchSet);
     }
 
     if (m_region.isNull()) {
@@ -176,7 +176,7 @@ void cwExternalCenterlineManager::setRegion(cwCavingRegion* region)
         // its apply would otherwise reinstall that region's watch set and
         // model rows. The null-region snapshot produces an empty result,
         // clearing both.
-        recomputeWatchSetAndProbeSources();
+        recomputeWatchSet();
         return;
     }
 
@@ -186,7 +186,7 @@ void cwExternalCenterlineManager::setRegion(cwCavingRegion* region)
     if (m_region->hasCaves()) {
         m_solveOnScanApply = true;
     }
-    recomputeWatchSetAndProbeSources();
+    recomputeWatchSet();
 }
 
 void cwExternalCenterlineManager::setFutureManagerToken(cwFutureManagerToken token)
@@ -197,30 +197,21 @@ void cwExternalCenterlineManager::setFutureManagerToken(cwFutureManagerToken tok
 void cwExternalCenterlineManager::setCaveAttachmentDirs(QHash<QUuid, QString> dirs)
 {
     m_caveAttachmentDirs = std::move(dirs);
-    recomputeWatchSetAndProbeSources();
+    recomputeWatchSet();
 }
 
 void cwExternalCenterlineManager::setTripAttachmentDirs(QHash<QUuid, QString> dirs)
 {
     m_tripAttachmentDirs = std::move(dirs);
-    recomputeWatchSetAndProbeSources();
+    recomputeWatchSet();
 }
 
 void cwExternalCenterlineManager::setExternalSourceSettings(cwExternalSourceSettings* settings)
 {
-    if (m_externalSourceSettings == settings) {
-        return;
-    }
-    if (!m_externalSourceSettings.isNull()) {
-        disconnect(m_externalSourceSettings.data(), &cwExternalSourceSettings::externalCenterlineSourcesChanged,
-                   this, &cwExternalCenterlineManager::recomputeWatchSetAndProbeSources);
-    }
+    // No recompute, and nothing observed on the store: the scan reads the
+    // in-project copies alone, so a breadcrumb changing under it cannot
+    // change what any of them says.
     m_externalSourceSettings = settings;
-    if (!m_externalSourceSettings.isNull()) {
-        connect(m_externalSourceSettings.data(), &cwExternalSourceSettings::externalCenterlineSourcesChanged,
-                this, &cwExternalCenterlineManager::recomputeWatchSetAndProbeSources);
-    }
-    recomputeWatchSetAndProbeSources();
 }
 
 void cwExternalCenterlineManager::setSaveLoad(cwSaveLoad* saveLoad)
@@ -230,7 +221,7 @@ void cwExternalCenterlineManager::setSaveLoad(cwSaveLoad* saveLoad)
     }
     if (!m_saveLoad.isNull()) {
         disconnect(m_saveLoad.data(), &cwSaveLoad::dataRootChanged,
-                   this, &cwExternalCenterlineManager::recomputeWatchSetAndProbeSources);
+                   this, &cwExternalCenterlineManager::recomputeWatchSet);
     }
     m_saveLoad = saveLoad;
     if (!m_saveLoad.isNull()) {
@@ -241,9 +232,9 @@ void cwExternalCenterlineManager::setSaveLoad(cwSaveLoad* saveLoad)
         // without it an attachment stops being watched for the rest of the
         // session, and the edits this class exists to notice go unseen.
         connect(m_saveLoad.data(), &cwSaveLoad::dataRootChanged,
-                this, &cwExternalCenterlineManager::recomputeWatchSetAndProbeSources);
+                this, &cwExternalCenterlineManager::recomputeWatchSet);
     }
-    recomputeWatchSetAndProbeSources();
+    recomputeWatchSet();
 }
 
 QStringList cwExternalCenterlineManager::watchedFiles() const
@@ -261,7 +252,7 @@ void cwExternalCenterlineManager::waitToFinish()
     AsyncFuture::waitForFinished(m_scanRestarter.future());
 }
 
-void cwExternalCenterlineManager::recomputeWatchSetAndProbeSources()
+void cwExternalCenterlineManager::recomputeWatchSet()
 {
     m_scanRestarter.restart([this]() {
         // Stage 1 (main thread, no I/O): snapshot the per-owner value
@@ -322,18 +313,6 @@ QVector<cwExternalCenterlineManager::OwnerScanInput> cwExternalCenterlineManager
     const QString dataRootDir =
         m_saveLoad.isNull() ? QString() : m_saveLoad->dataRootDir().absolutePath();
 
-    // One QSettings read for the whole batch. Per-owner sourcePathFor()
-    // calls would each construct a QSettings, and this runs on the main
-    // thread on every recompute.
-    QHash<QUuid, QString> sourcePaths;
-    if (!m_externalSourceSettings.isNull()) {
-        const auto sources = m_externalSourceSettings->externalCenterlineSources();
-        sourcePaths.reserve(sources.size());
-        for (const auto& source : sources) {
-            sourcePaths.insert(source.ownerId, source.sourcePath);
-        }
-    }
-
     const auto appendOwner = [&](const QUuid& ownerId,
                                  const QString& attachmentDir,
                                  const QString& entryFile,
@@ -344,9 +323,7 @@ QVector<cwExternalCenterlineManager::OwnerScanInput> cwExternalCenterlineManager
             return;
         }
         owners.append(OwnerScanInput { ownerId, caveName, ownerName, ownerKind,
-                                       entryFile, attachmentDir,
-                                       sourcePaths.value(ownerId),
-                                       dataRootDir });
+                                       entryFile, attachmentDir, dataRootDir });
     };
 
     for (cwCave* cave : m_region->caves()) {
@@ -389,8 +366,7 @@ cwExternalCenterlineManager::ExternalScanResult cwExternalCenterlineManager::sca
     ExternalScanResult result;
 
     // Per-owner scan of the in-project copy — the only file the project
-    // reads, and so the only one worth scanning or watching. A remembered
-    // source is checked for existence and otherwise left alone. Each owner
+    // reads, and so the only one worth scanning or watching. Each owner
     // contributes one row to the attached-centerlines model, counted from
     // the scan when it resolves.
     for (const OwnerScanInput& owner : owners) {
@@ -447,10 +423,6 @@ cwExternalCenterlineManager::ExternalScanResult cwExternalCenterlineManager::sca
             }
         }
 
-        // Existence only — the in-project copy is the file the project reads.
-        if (!owner.sourcePath.isEmpty() && !QFileInfo::exists(owner.sourcePath)) {
-            result.missingSourceOwners.append(owner.ownerId);
-        }
         result.rows.append(row);
     }
 
@@ -465,7 +437,6 @@ cwExternalCenterlineManager::ExternalScanResult cwExternalCenterlineManager::sca
             result.existingWatchedFiles.append(path);
         }
     }
-    std::sort(result.missingSourceOwners.begin(), result.missingSourceOwners.end());
     sortAttachedRows(result.rows);
 
     return result;
@@ -489,11 +460,6 @@ void cwExternalCenterlineManager::applyScanResult(ExternalScanResult result)
         }
         m_watchedFiles = std::move(result.watchedFiles);
         emit watchedFilesChanged();
-    }
-
-    if (result.missingSourceOwners != m_missingSourceOwners) {
-        m_missingSourceOwners = std::move(result.missingSourceOwners);
-        emit missingSourceOwnersChanged();
     }
 
     // Request the solve behind the flag swap so the consumer's buildInput
@@ -567,11 +533,6 @@ void cwExternalCenterlineManager::rebuildAttachedRowsFromNames()
     m_attachedCenterlinesModel->setRows(std::move(rows));
 }
 
-QString cwExternalCenterlineManager::sourcePathForOwner(const QUuid& ownerId) const
-{
-    return m_externalSourceSettings.isNull() ? QString() : m_externalSourceSettings->sourcePathFor(ownerId);
-}
-
 void cwExternalCenterlineManager::rearmWatcher(const QString& path)
 {
     // macOS atomic-replace (write-to-temp, rename-over) drops the path from
@@ -607,52 +568,7 @@ void cwExternalCenterlineManager::onWatchedFileChanged(const QString& path)
     // that needs to enter/leave the watch set, with the re-solve chained
     // behind the apply so it sees the fresh declination flags.
     m_solveOnScanApply = true;
-    recomputeWatchSetAndProbeSources();
-}
-
-void cwExternalCenterlineManager::updateFromSource(const QUuid& ownerId)
-{
-    if (isOwnerBusy(ownerId) || m_saveLoad.isNull()) {
-        return;
-    }
-    const QString sourcePath = sourcePathForOwner(ownerId);
-    QString attachmentDir = m_caveAttachmentDirs.value(ownerId);
-    if (attachmentDir.isEmpty()) {
-        attachmentDir = m_tripAttachmentDirs.value(ownerId);
-    }
-    if (sourcePath.isEmpty()
-        || !QFileInfo::exists(sourcePath)
-        || attachmentDir.isEmpty()) {
-        // Source went missing or we don't know where to reconcile to.
-        // Recompute so missingSourceOwners reflects the current disk state.
-        recomputeWatchSetAndProbeSources();
-        return;
-    }
-    const auto scan = cwExternalCenterlineScanner::scan(sourcePath);
-    if (scan.hasError()) {
-        // Unreadable source: nothing sensible to reconcile.
-        return;
-    }
-    auto guard = std::make_shared<OperationGuard>(
-        this, ownerId, OperationKind::Update, nullptr, nullptr);
-    auto future = cwExternalCenterlineSync::reconcile(
-        m_saveLoad.data(), scan.value(), attachmentDir);
-    // Reconcile drains through the cwSaveLoad job queue; the returned
-    // future completes after every copy/remove has hit disk, which is
-    // the moment a solve can see the fresh bytes in the in-project
-    // copy. The recompute installs any newly-added *include target in the
-    // watch set before requesting the solve. The canceled path (project
-    // retired mid-drain) must still release the per-owner token or the
-    // owner stays busy for the rest of the session.
-    AsyncFuture::observe(future).context(this,
-            [this, guard, ownerId](Monad::ResultBase) {
-        guard->release();
-        m_solveOnScanApply = true;
-        recomputeWatchSetAndProbeSources();
-    },
-            [guard]() {
-        guard->release();
-    });
+    recomputeWatchSet();
 }
 
 QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
@@ -684,11 +600,11 @@ cwExternalCenterlineManager::attachCenterline(cwTrip* trip, const QString& sourc
     AsyncFuture::observe(future).context(this,
             [this, guard, ownerId](const ReportResult& result) {
         if (!result.hasError()) {
-            // The settings write already queued a recompute; make sure
-            // its apply also requests the solve that picks up the new
-            // owner's *include.
+            // This is the only recompute after an attach lands — the
+            // settings write triggers nothing — and its apply must also
+            // request the solve that picks up the new owner's *include.
             m_solveOnScanApply = true;
-            recomputeWatchSetAndProbeSources();
+            recomputeWatchSet();
             const auto& attachReport = result.value();
             guard->finish(cwExternalCenterlineReport::succeeded(
                 ownerId, attachReport.persisted.entryFile(), attachReport.warnings));
@@ -753,22 +669,21 @@ QFuture<Monad::ResultBase> cwExternalCenterlineManager::detachCenterline(cwTrip*
         this, ownerId, OperationKind::Detach, nullptr,
         &cwExternalCenterlineManager::detachCompleted);
 
-    // Queued-invoke hole (commit-7 review): an updateFromSource invoke
-    // already queued behind this call would otherwise still see the
-    // owner's attachment dir and resurrect files into it. Drop the map
-    // entry in the same synchronous block as detach()'s settings and
-    // model clears so the late invoke hits the empty-guard and no-ops.
+    // Queued-invoke hole (commit-7 review): anything already queued behind
+    // this call would otherwise still see the owner's attachment dir and
+    // could write into it. Drop the map entry in the same synchronous block
+    // as detach()'s settings and model clears, so a late caller finds the
+    // owner unattached rather than half-detached.
     m_tripAttachmentDirs.remove(ownerId);
 
     auto future = cwExternalCenterlineAttach::detach(
         trip, m_saveLoad.data(), m_externalSourceSettings.data());
     AsyncFuture::observe(future).context(this,
             [this, guard, ownerId](const ResultBase& result) {
-        // Re-probe after the remove-tree drains (the settings clear
-        // already queued one recompute; this one sees the dir gone) and
-        // request the solve that drops the owner's *include.
+        // Recompute once the remove-tree has drained, so the scan sees the
+        // dir gone, and request the solve that drops the owner's *include.
         m_solveOnScanApply = true;
-        recomputeWatchSetAndProbeSources();
+        recomputeWatchSet();
         if (!result.hasError()) {
             guard->finish(cwExternalCenterlineReport::succeeded(ownerId));
         } else {

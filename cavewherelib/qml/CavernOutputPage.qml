@@ -69,25 +69,6 @@ StandardPage {
             text: root.solveErrorMessage
         }
 
-        QQ.Rectangle {
-            objectName: "missingSourceBanner"
-            Layout.fillWidth: true
-            implicitHeight: missingSourceLabel.implicitHeight + Theme.sectionSpacing * 2
-            visible: root.externalManager !== null
-                     && root.externalManager.missingSourceOwners.length > 0
-            color: Theme.warning
-            radius: 5
-
-            QC.Label {
-                id: missingSourceLabel
-                anchors.fill: parent
-                anchors.margins: Theme.sectionSpacing
-                wrapMode: QC.Label.WordWrap
-                text: qsTr("Some external centerline source files can no longer be found on disk. "
-                           + "The copies inside the project are still used for solving.")
-            }
-        }
-
         ColumnLayout {
             objectName: "attachedCenterlinesSection"
             Layout.fillWidth: true

@@ -42,10 +42,15 @@ QT_FORWARD_DECLARE_CLASS(QFileSystemWatcher)
 /**
  * Self-contained external-centerline subsystem: owns the attachment-dir
  * maps and the attached-centerlines model, watches the in-project copies,
- * runs the async scan pipeline, and surfaces owners whose remembered
- * source has gone missing. cwLinePlotManager consumes it — it reads the
- * dirs and declination flags for each solve's buildInput and runs a solve
- * whenever solveNeeded() fires.
+ * and runs the async scan pipeline. cwLinePlotManager consumes it — it
+ * reads the dirs and declination flags for each solve's buildInput and
+ * runs a solve whenever solveNeeded() fires.
+ *
+ * The in-project copy is the only file the subsystem ever reads. The file
+ * an attachment was picked from is a breadcrumb held elsewhere
+ * (cwExternalSourceSettings) and is never watched, scanned, or copied from
+ * on the manager's own initiative — see
+ * plans/EXTERNAL_FILE_LIVE_LINK_RETIREMENT.html.
  */
 class CAVEWHERE_LIB_EXPORT cwExternalCenterlineManager : public QObject
 {
@@ -54,8 +59,6 @@ class CAVEWHERE_LIB_EXPORT cwExternalCenterlineManager : public QObject
     QML_UNCREATABLE("ExternalCenterlineManager is created by cwLinePlotManager")
 
     Q_PROPERTY(cwAttachedCenterlinesModel* attachedCenterlinesModel READ attachedCenterlinesModel CONSTANT FINAL)
-    Q_PROPERTY(QList<QUuid> missingSourceOwners READ missingSourceOwners NOTIFY missingSourceOwnersChanged FINAL)
-    Q_PROPERTY(QList<QUuid> staleSourceOwners READ staleSourceOwners NOTIFY staleSourceOwnersChanged FINAL)
 
 public:
     explicit cwExternalCenterlineManager(QObject* parent = nullptr);
@@ -92,22 +95,16 @@ public:
                  QSet<QUuid>(m_containmentErrors.keyBegin(), m_containmentErrors.keyEnd()) };
     }
 
-    // Per-machine record of the file each attachment was last picked
-    // from, owned by cwRootData. The manager reads it for one purpose:
-    // reporting an owner whose remembered path has since vanished
-    // (missingSourceOwners). The source file itself is never watched,
-    // scanned, or copied from on the manager's own initiative — the
-    // in-project copy is the only file the project reads (see
-    // plans/EXTERNAL_FILE_LIVE_LINK_RETIREMENT.html). The manager
-    // observes the store's change signal so a newly remembered path is
-    // probed. Null by default, which leaves every attachment with no
-    // remembered source.
+    // Per-machine record of the file each attachment was last picked from,
+    // owned by cwRootData. The manager holds it only to hand to attach and
+    // replace, which write the breadcrumb as they land; nothing in the scan
+    // pipeline reads it. Null by default, which leaves attach with nowhere
+    // to record the pick.
     void setExternalSourceSettings(cwExternalSourceSettings* settings);
     cwExternalSourceSettings* externalSourceSettings() const { return m_externalSourceSettings; }
 
-    // Optional cwSaveLoad used by updateFromSource to enqueue reconcile
-    // copy/remove jobs, and the source of the attachment dirs every
-    // recompute derives. Without it updateFromSource is a no-op.
+    // Optional cwSaveLoad: the source of the attachment dirs every recompute
+    // derives, and the job queue attach and replace reconcile through.
     void setSaveLoad(cwSaveLoad* saveLoad);
 
     // The current set of paths the QFileSystemWatcher is intended to watch
@@ -117,40 +114,15 @@ public:
     // alone.
     QStringList watchedFiles() const;
 
-    // Owners (cave or trip id) whose remembered source path did not exist
-    // on disk at the most recent recompute. Surfaces the "Source not
-    // found" startup probe per §8.8 question 16 of the master plan. Since
-    // the source is unwatched, this is recompute-time only: a file deleted
-    // mid-session surfaces at the next recompute rather than immediately.
-    // Empty when no source is remembered.
-    QList<QUuid> missingSourceOwners() const { return m_missingSourceOwners; }
-
-    // Permanently empty, and the signal never fires. Staleness meant "the
-    // remembered source has drifted from the in-project copy", which the
-    // manager stopped tracking when the in-project copy became the only
-    // file the project reads. No consumer remains; the accessor, its
-    // property, and its signal are retired together with the rest of the
-    // stale/missing surface in commit 3
-    // (plans/EXTERNAL_FILE_LIVE_LINK_RETIREMENT.html §6).
-    QList<QUuid> staleSourceOwners() const { return {}; }
-
-    // User-triggered "Update": rescans the remembered source and
-    // reconciles the closure into the owner's attachment dir through
-    // cwSaveLoad, then recomputes and requests a re-solve. No-op while any
-    // operation for the same owner is already in flight, or when no
-    // saveLoad is wired. Reachable from no UI — retired with the rest of
-    // the source surface in commit 3.
-    Q_INVOKABLE void updateFromSource(const QUuid& ownerId);
-
     // Trip-level attach/detach through the cwExternalCenterlineAttach
     // orchestrator, using the wired saveLoad and settings store. Both
     // refuse a busy owner (completed error future) so two filesystem
     // operations for one owner can never interleave — the same
     // protection the UI gets from isOwnerBusy, enforced for every
     // caller. Detach drops the owner's settings entry and attachment-dir
-    // map entry synchronously, so an updateFromSource invoke already
-    // queued behind it hits the empty-guard and no-ops instead of
-    // resurrecting files into the detached owner's dir.
+    // map entry synchronously, so anything queued behind it finds the
+    // owner already unattached rather than resurrecting files into the
+    // detached owner's dir.
     QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
     attachCenterline(cwTrip* trip, const QString& sourcePath);
     QFuture<Monad::ResultBase> detachCenterline(cwTrip* trip);
@@ -173,7 +145,7 @@ public:
     // structural no-op and the attach runs to completion (the §5 q14
     // rule). The busy token is held until either outcome reports, so
     // cancel can never free the owner while reconcile is writing.
-    // Never touches a detach or updateFromSource in flight; a
+    // Never touches a detach in flight; a
     // cancelled attach ends in one attachCompleted report with
     // canceled == true.
     //
@@ -187,21 +159,12 @@ public:
     // returned future.
     Q_INVOKABLE void cancelAttach(const QUuid& ownerId);
 
-    // True while an attach / detach / updateFromSource for ownerId has
-    // not yet drained. QML binds this one query for the
-    // Update/Detach/re-attach affordances; ownerBusyChanged notifies.
+    // True while an attach / replace / detach for ownerId has not yet
+    // drained. QML binds this one query for the Replace/Detach/re-attach
+    // affordances; ownerBusyChanged notifies.
     Q_INVOKABLE bool isOwnerBusy(const QUuid& ownerId) const
     {
         return m_activeOperations.contains(ownerId);
-    }
-
-    // Per-owner missing-source query for QML. JS can't test QUuid
-    // membership in missingSourceOwners (strict equality never matches
-    // the wrapped values); bind this instead, re-evaluated on
-    // missingSourceOwnersChanged.
-    Q_INVOKABLE bool isSourceMissing(const QUuid& ownerId) const
-    {
-        return m_missingSourceOwners.contains(ownerId);
     }
 
     // True when the owner's external file carries its own declination
@@ -239,13 +202,6 @@ signals:
     // before asserting watchedFiles() contents.
     void watchedFilesChanged();
 
-    // Emitted whenever the set of owners with a missing remembered source
-    // changes. The set itself is read via missingSourceOwners().
-    void missingSourceOwnersChanged();
-
-    // Never emitted; see staleSourceOwners().
-    void staleSourceOwnersChanged();
-
     // Emitted after a scan apply has fully installed its result (member
     // swap included) when the apply carried a solve request or the
     // declination flags changed. The consumer runs its solve here — the
@@ -253,7 +209,7 @@ signals:
     void solveNeeded();
 
     // Emitted whenever isOwnerBusy(ownerId) flips for ownerId — an
-    // attach/detach/updateFromSource started or drained.
+    // attach/replace/detach started or drained.
     void ownerBusyChanged(const QUuid& ownerId);
 
     // Completion bridge for QML (commit-11 decision): while the manager
@@ -280,7 +236,6 @@ private:
         QString ownerKind;
         QString entryFile;
         QString attachmentDir;
-        QString sourcePath;
         // Containment boundary for this owner's in-project dependencies
         // (cwSaveLoad::dataRootDir). Empty when no saveLoad is wired, which
         // disables the check — scan-only tests have no project on disk to
@@ -297,7 +252,6 @@ private:
         // the apply feeds these to addPaths (QFileSystemWatcher warns on
         // missing files) without re-statting on the main thread.
         QStringList existingWatchedFiles;
-        QList<QUuid> missingSourceOwners;
         QHash<QUuid, bool> fileOwnsDeclination;
         // Station names harvested from each trip owner's in-project entry
         // file, and cavern's complaint when that harvest failed. An owner
@@ -343,8 +297,6 @@ private:
     // next time recompute runs and they appear.
     QStringList m_watchedFiles;
 
-    QList<QUuid> m_missingSourceOwners;
-
     // Sticky "request a solve when the next scan applies" flag, set by
     // paths that used to do recompute-then-solve synchronously. The
     // apply consumes it after the member swap and emits solveNeeded().
@@ -354,17 +306,17 @@ private:
     // their dep/warning counts so it never touches the disk.
     QVector<cwAttachedCenterlinesModel::Row> m_lastScanRows;
 
-    // Per-owner operation registry: one entry while an
-    // attach/detach/updateFromSource drains, guarding against
-    // interleaved per-owner filesystem operations (commit-5 review's
-    // in-flight-token item, generalized at commit 9, made a registry
-    // for cancelAttach at commit 12). The kind keeps cancelAttach off
-    // detach/update operations; the cancelFlag is the attach
-    // orchestrator's cancel seam.
-    enum class OperationKind { Attach, Detach, Update };
+    // Per-owner operation registry: one entry while an attach/replace/detach
+    // drains, guarding against interleaved per-owner filesystem operations
+    // (commit-5 review's in-flight-token item, generalized at commit 9, made
+    // a registry for cancelAttach at commit 12). The kind keeps cancelAttach
+    // off detach operations; the cancelFlag is the attach orchestrator's
+    // cancel seam. A replace registers as an Attach — to everything
+    // downstream it is an attach over an occupied owner.
+    enum class OperationKind { Attach, Detach };
 
     struct ActiveOperation {
-        OperationKind kind = OperationKind::Update;
+        OperationKind kind;
         std::shared_ptr<std::atomic_bool> cancelFlag; // Attach only
     };
 
@@ -437,8 +389,8 @@ private:
             }
         }
 
-        // Token release without a report - for operations with no
-        // report signal (updateFromSource) and the destructor backstop.
+        // Token release without a report - for the destructor backstop and
+        // any operation constructed with no report signal.
         void release()
         {
             if (m_released) {
@@ -500,8 +452,8 @@ private:
     QVector<OwnerScanInput> collectOwnerSnapshots() const;
 
     // Stage 2, runs on the worker thread: scans each owner's in-project
-    // entry file and stats its remembered source. Static and pure —
-    // touches no member state, only the filesystem.
+    // entry file. Static and pure — touches no member state, only the
+    // filesystem.
     static ExternalScanResult scanOwners(const QVector<OwnerScanInput>& owners);
 
     // Identity fields of a model row from an owner snapshot (counts and
@@ -524,10 +476,6 @@ private:
     // implicitly drops a path after an atomic-write replace.
     void rearmWatcher(const QString& path);
 
-    // The path ownerId's attachment was last picked from, or empty when
-    // no store is set or nothing was remembered.
-    QString sourcePathForOwner(const QUuid& ownerId) const;
-
 private slots:
     // Async three-stage recompute: snapshot per-owner value inputs on
     // the main thread (no I/O), run the per-owner scans on a
@@ -539,7 +487,7 @@ private slots:
     // consumer's solve chains behind the member swap. A slot so the
     // signaler's externalCenterlineChanged / trip-list connections can
     // route here.
-    void recomputeWatchSetAndProbeSources();
+    void recomputeWatchSet();
 
     void onWatchedFileChanged(const QString& path);
 
