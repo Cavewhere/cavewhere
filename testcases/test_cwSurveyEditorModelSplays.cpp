@@ -122,7 +122,8 @@ TEST_CASE("Expanding a station shows its splays under it", "[cwSurveyEditorModel
 
     fixture.model.toggleSplaysExpanded(fixture.stationRow(1));
 
-    fixture.checkRowCount(9);
+    //The three splays, plus the blank row the next one is typed into
+    fixture.checkRowCount(10);
     CHECK(fixture.rowData(3, cwSurveyEditorModel::StationSplaysExpandedRole).toBool());
 
     SECTION("the splay rows sit between the station and its shot") {
@@ -134,10 +135,12 @@ TEST_CASE("Expanding a station shows its splays under it", "[cwSurveyEditorModel
             CHECK(rowIndex.indexInChunk() == 1);
             CHECK(rowIndex.splayIndex() == splayIndex);
         }
-        CHECK(fixture.rowIndexOf(7).rowType() == cwSurveyEditorRowIndex::ShotRow);
-        CHECK(fixture.rowIndexOf(7).indexInChunk() == 1);
-        CHECK(fixture.rowIndexOf(8).rowType() == cwSurveyEditorRowIndex::StationRow);
-        CHECK(fixture.rowIndexOf(8).indexInChunk() == 2);
+        CHECK(fixture.rowIndexOf(7).rowType() == cwSurveyEditorRowIndex::SplayRow);
+        CHECK(fixture.rowIndexOf(7).splayIndex() == 3);
+        CHECK(fixture.rowIndexOf(8).rowType() == cwSurveyEditorRowIndex::ShotRow);
+        CHECK(fixture.rowIndexOf(8).indexInChunk() == 1);
+        CHECK(fixture.rowIndexOf(9).rowType() == cwSurveyEditorRowIndex::StationRow);
+        CHECK(fixture.rowIndexOf(9).indexInChunk() == 2);
     }
 
     SECTION("each row shows its reading as it was written") {
@@ -148,7 +151,7 @@ TEST_CASE("Expanding a station shows its splays under it", "[cwSurveyEditorModel
     }
 
     SECTION("the shot below the cluster knows to step out of its way") {
-        CHECK(fixture.rowData(7, cwSurveyEditorModel::StationSplaysExpandedRole).toBool());
+        CHECK(fixture.rowData(8, cwSurveyEditorModel::StationSplaysExpandedRole).toBool());
         CHECK_FALSE(fixture.rowData(2, cwSurveyEditorModel::StationSplaysExpandedRole).toBool());
     }
 
@@ -156,9 +159,30 @@ TEST_CASE("Expanding a station shows its splays under it", "[cwSurveyEditorModel
         const cwSurveyEditorRowIndex splayRow(fixture.chunk, 1, 2, cwSurveyEditorRowIndex::SplayRow);
         CHECK(fixture.model.toModelRow(splayRow) == 6);
 
-        //A splay past the end of the cluster has no row
-        const cwSurveyEditorRowIndex pastEnd(fixture.chunk, 1, 3, cwSurveyEditorRowIndex::SplayRow);
+        //The blank row sits one past the last splay
+        const cwSurveyEditorRowIndex blankRow(fixture.chunk, 1, 3, cwSurveyEditorRowIndex::SplayRow);
+        CHECK(fixture.model.toModelRow(blankRow) == 7);
+
+        //And past the blank row the cluster is over
+        const cwSurveyEditorRowIndex pastEnd(fixture.chunk, 1, 4, cwSurveyEditorRowIndex::SplayRow);
         CHECK(fixture.model.toModelRow(pastEnd) == -1);
+    }
+
+    SECTION("the blank row reads empty and says it holds no splay yet") {
+        const int blankRow = 7;
+        CHECK(fixture.rowData(blankRow, cwSurveyEditorModel::IsVirtualRole).toBool());
+        CHECK(fixture.splayReading(blankRow, cwSurveyEditorModel::SplayDistanceRole).isEmpty());
+        CHECK(fixture.splayReading(blankRow, cwSurveyEditorModel::SplayCompassRole).isEmpty());
+        CHECK(fixture.splayReading(blankRow, cwSurveyEditorModel::SplayClinoRole).isEmpty());
+
+        //The rows above it hold splays, so none of them is the blank one
+        for(int row = 4; row < blankRow; ++row) {
+            CHECK_FALSE(fixture.rowData(row, cwSurveyEditorModel::IsVirtualRole).toBool());
+        }
+
+        //It hangs off the same station as the rest of the cluster
+        CHECK(fixture.rowData(blankRow, cwSurveyEditorModel::SplayStationNameRole).toString()
+              == QStringLiteral("a2"));
     }
 
     SECTION("collapsing takes the rows back out") {
@@ -196,9 +220,9 @@ TEST_CASE("Opening a cluster tells the shot below it", "[cwSurveyEditorModel][Sp
 
     fixture.model.toggleSplaysExpanded(fixture.stationRow(1));
 
-    //a2's shot, now sitting under the three splay rows
-    CHECK(fixture.rowIndexOf(7).rowType() == cwSurveyEditorRowIndex::ShotRow);
-    CHECK(shotRowsTold(7) == 1);
+    //a2's shot, now sitting under the three splay rows and the blank one
+    CHECK(fixture.rowIndexOf(8).rowType() == cwSurveyEditorRowIndex::ShotRow);
+    CHECK(shotRowsTold(8) == 1);
 
     //a1's shot is above the cluster and keeps reaching up as it always has
     CHECK(shotRowsTold(2) == 0);
@@ -211,13 +235,47 @@ TEST_CASE("Opening a cluster tells the shot below it", "[cwSurveyEditorModel][Sp
     CHECK_FALSE(fixture.rowData(4, cwSurveyEditorModel::StationSplaysExpandedRole).toBool());
 }
 
-TEST_CASE("A station with no splays has nothing to expand", "[cwSurveyEditorModel][SplayShot]") {
+TEST_CASE("A station with no splays opens on the blank row", "[cwSurveyEditorModel][SplayShot]") {
     SplayFixture fixture;
 
     fixture.model.toggleSplaysExpanded(fixture.stationRow(0));
 
-    fixture.checkRowCount(6);
-    CHECK_FALSE(fixture.rowData(1, cwSurveyEditorModel::StationSplaysExpandedRole).toBool());
+    //Manual entry when the download dies: the cluster opens on the one row
+    //there is to type in
+    fixture.checkRowCount(7);
+    CHECK(fixture.rowData(1, cwSurveyEditorModel::StationSplaysExpandedRole).toBool());
+    CHECK(fixture.rowData(1, cwSurveyEditorModel::StationSplayCountRole).toInt() == 0);
+    CHECK(fixture.rowIndexOf(2).rowType() == cwSurveyEditorRowIndex::SplayRow);
+    CHECK(fixture.rowIndexOf(2).splayIndex() == 0);
+    CHECK(fixture.rowData(2, cwSurveyEditorModel::IsVirtualRole).toBool());
+    CHECK(fixture.rowIndexOf(3).rowType() == cwSurveyEditorRowIndex::ShotRow);
+
+    SECTION("the entry cell is the blank row's distance") {
+        const auto entry = fixture.model.splayEntryCell(fixture.stationRow(0));
+        CHECK(entry == fixture.model.cellIndex(2, cwSurveyEditorCellIndex::SplayDistanceCell));
+        CHECK(fixture.model.isCellValid(entry));
+    }
+
+    SECTION("typing a reading into it makes the station's first splay") {
+        CHECK(fixture.model.setDataAt(fixture.model.cellIndex(2, cwSurveyEditorCellIndex::SplayDistanceCell),
+                                      QStringLiteral("4.21")));
+
+        //The blank row became a splay, and a fresh blank row took its place
+        fixture.checkRowCount(8);
+        CHECK(fixture.chunk->stationSplayCount(0) == 1);
+        CHECK(fixture.chunk->stationSplayAt(0, 0).distance.value() == QStringLiteral("4.21"));
+        CHECK_FALSE(fixture.rowData(2, cwSurveyEditorModel::IsVirtualRole).toBool());
+        CHECK(fixture.rowData(3, cwSurveyEditorModel::IsVirtualRole).toBool());
+        CHECK(fixture.rowData(1, cwSurveyEditorModel::StationSplayCountRole).toInt() == 1);
+    }
+
+    SECTION("closing it again takes the blank row back out") {
+        fixture.model.toggleSplaysExpanded(fixture.stationRow(0));
+
+        fixture.checkRowCount(6);
+        CHECK_FALSE(fixture.rowData(1, cwSurveyEditorModel::StationSplaysExpandedRole).toBool());
+        CHECK_FALSE(fixture.model.isCellValid(fixture.model.splayEntryCell(fixture.stationRow(0))));
+    }
 }
 
 TEST_CASE("A splay row holds none of the station's or shot's cells", "[cwSurveyEditorModel][SplayShot]") {
@@ -242,18 +300,20 @@ TEST_CASE("An open cluster follows the station's splays", "[cwSurveyEditorModel]
         splays.append(makeSplay("9.48", "163.6", "21.9"));
         fixture.chunk->setStationSplays(1, splays);
 
-        fixture.checkRowCount(10);
+        fixture.checkRowCount(11);
         CHECK(fixture.splayReading(7, cwSurveyEditorModel::SplayDistanceRole) == QStringLiteral("9.48"));
-        CHECK(fixture.rowIndexOf(8).rowType() == cwSurveyEditorRowIndex::ShotRow);
+        CHECK(fixture.rowData(8, cwSurveyEditorModel::IsVirtualRole).toBool());
+        CHECK(fixture.rowIndexOf(9).rowType() == cwSurveyEditorRowIndex::ShotRow);
         CHECK(fixture.rowData(3, cwSurveyEditorModel::StationSplayCountRole).toInt() == 4);
     }
 
     SECTION("a splay going away takes its row with it") {
         fixture.chunk->setStationSplays(1, {makeSplay("5.88", "124.1", "4.6")});
 
-        fixture.checkRowCount(7);
+        fixture.checkRowCount(8);
         CHECK(fixture.rowIndexOf(4).rowType() == cwSurveyEditorRowIndex::SplayRow);
-        CHECK(fixture.rowIndexOf(5).rowType() == cwSurveyEditorRowIndex::ShotRow);
+        CHECK(fixture.rowData(5, cwSurveyEditorModel::IsVirtualRole).toBool());
+        CHECK(fixture.rowIndexOf(6).rowType() == cwSurveyEditorRowIndex::ShotRow);
     }
 
     SECTION("the last splay leaving closes the cluster") {
@@ -268,25 +328,27 @@ TEST_CASE("An open cluster follows the station's splays", "[cwSurveyEditorModel]
 TEST_CASE("An open cluster follows a splay edit", "[cwSurveyEditorModel][SplayShot]") {
     SplayFixture fixture;
     fixture.model.toggleSplaysExpanded(fixture.stationRow(1));
-    fixture.checkRowCount(9);
+    fixture.checkRowCount(10);
 
-    SECTION("appending a splay adds a row at the bottom of the cluster") {
+    SECTION("appending a splay adds a row above the blank one") {
         fixture.chunk->appendStationSplay(1, makeSplay("9.48", "163.6", "21.9"));
 
-        fixture.checkRowCount(10);
+        fixture.checkRowCount(11);
         CHECK(fixture.splayReading(7, cwSurveyEditorModel::SplayDistanceRole) == QStringLiteral("9.48"));
-        CHECK(fixture.rowIndexOf(8).rowType() == cwSurveyEditorRowIndex::ShotRow);
+        CHECK(fixture.rowData(8, cwSurveyEditorModel::IsVirtualRole).toBool());
+        CHECK(fixture.rowIndexOf(9).rowType() == cwSurveyEditorRowIndex::ShotRow);
     }
 
     SECTION("removing a splay takes one row, and the rest renumber") {
         fixture.chunk->removeStationSplay(1, 0);
 
-        fixture.checkRowCount(8);
+        fixture.checkRowCount(9);
         CHECK(fixture.rowData(3, cwSurveyEditorModel::StationSplayCountRole).toInt() == 2);
         CHECK(fixture.rowIndexOf(4).splayIndex() == 0);
         CHECK(fixture.splayReading(4, cwSurveyEditorModel::SplayDistanceRole) == QStringLiteral("5.42"));
         CHECK(fixture.splayReading(5, cwSurveyEditorModel::SplayDistanceRole) == QStringLiteral("8.96"));
-        CHECK(fixture.rowIndexOf(6).rowType() == cwSurveyEditorRowIndex::ShotRow);
+        CHECK(fixture.rowData(6, cwSurveyEditorModel::IsVirtualRole).toBool());
+        CHECK(fixture.rowIndexOf(7).rowType() == cwSurveyEditorRowIndex::ShotRow);
     }
 
     SECTION("clearing the splays collapses the cluster") {
@@ -301,7 +363,7 @@ TEST_CASE("An open cluster follows a splay edit", "[cwSurveyEditorModel][SplaySh
     SECTION("a written reading shows up in its row") {
         fixture.chunk->setStationSplayData(cwSurveyChunk::ShotCompassRole, 1, 1, QStringLiteral("119.4"));
 
-        fixture.checkRowCount(9);
+        fixture.checkRowCount(10);
         CHECK(fixture.splayReading(5, cwSurveyEditorModel::SplayCompassRole) == QStringLiteral("119.4"));
     }
 }
@@ -309,7 +371,7 @@ TEST_CASE("An open cluster follows a splay edit", "[cwSurveyEditorModel][SplaySh
 TEST_CASE("The editor deletes splays through the rows it shows", "[cwSurveyEditorModel][SplayShot]") {
     SplayFixture fixture;
     fixture.model.toggleSplaysExpanded(fixture.stationRow(1));
-    fixture.checkRowCount(9);
+    fixture.checkRowCount(10);
 
     const auto splayRow = [&fixture](int splayIndex) {
         return cwSurveyEditorRowIndex(fixture.chunk, 1, splayIndex, cwSurveyEditorRowIndex::SplayRow);
@@ -318,7 +380,7 @@ TEST_CASE("The editor deletes splays through the rows it shows", "[cwSurveyEdito
     SECTION("removing one splay takes its row and renumbers the rest") {
         fixture.model.removeSplayAt(splayRow(0));
 
-        fixture.checkRowCount(8);
+        fixture.checkRowCount(9);
         CHECK(fixture.chunk->stationSplayCount(1) == 2);
         CHECK(fixture.rowIndexOf(4).splayIndex() == 0);
         CHECK(fixture.splayReading(4, cwSurveyEditorModel::SplayDistanceRole) == QStringLiteral("5.42"));
@@ -352,6 +414,8 @@ TEST_CASE("The editor deletes splays through the rows it shows", "[cwSurveyEdito
 
     SECTION("rows that name no cluster leave the splays alone") {
         fixture.model.removeSplayAt(fixture.stationRow(1));
+
+        //The blank row holds no splay to remove
         fixture.model.removeSplayAt(splayRow(3));
         fixture.model.removeSplayAt(cwSurveyEditorRowIndex(nullptr, 1, 0, cwSurveyEditorRowIndex::SplayRow));
         fixture.model.clearSplaysAt(cwSurveyEditorRowIndex(fixture.chunk, 1, cwSurveyEditorRowIndex::ShotRow));
@@ -361,7 +425,7 @@ TEST_CASE("The editor deletes splays through the rows it shows", "[cwSurveyEdito
         otherChunk.appendShot(cwStation("b1"), cwStation("b2"), cwShot("5.0", "10.0", "190.0", "1.0", "-1.0"));
         fixture.model.clearSplaysAt(cwSurveyEditorRowIndex(&otherChunk, 1, cwSurveyEditorRowIndex::StationRow));
 
-        fixture.checkRowCount(9);
+        fixture.checkRowCount(10);
         CHECK(fixture.chunk->stationSplayCount(1) == 3);
     }
 }
@@ -373,18 +437,18 @@ TEST_CASE("Moved splays leave one cluster and land in another", "[cwSurveyEditor
     fixture.model.toggleSplaysExpanded(fixture.stationRow(1));
     fixture.model.toggleSplaysExpanded(fixture.stationRow(2));
 
-    //title, a1, shot, a2, 3 splays, shot, a3, 1 splay
-    fixture.checkRowCount(10);
+    //title, a1, shot, a2, 3 splays, blank, shot, a3, 1 splay, blank
+    fixture.checkRowCount(12);
 
     SECTION("one splay moves down to the station below") {
         cwSurveyChunk::moveStationSplays(fixture.chunk, 1, fixture.chunk, 2, {0});
 
-        fixture.checkRowCount(10);
+        fixture.checkRowCount(12);
         CHECK(fixture.rowData(3, cwSurveyEditorModel::StationSplayCountRole).toInt() == 2);
         CHECK(fixture.splayReading(4, cwSurveyEditorModel::SplayDistanceRole) == QStringLiteral("5.42"));
 
         const int a3Row = fixture.model.toModelRow(fixture.stationRow(2));
-        REQUIRE(a3Row == 7);
+        REQUIRE(a3Row == 8);
         CHECK(fixture.rowData(a3Row, cwSurveyEditorModel::StationSplayCountRole).toInt() == 2);
         CHECK(fixture.splayReading(a3Row + 2, cwSurveyEditorModel::SplayDistanceRole) == QStringLiteral("5.88"));
     }
@@ -392,8 +456,8 @@ TEST_CASE("Moved splays leave one cluster and land in another", "[cwSurveyEditor
     SECTION("a whole cluster moving away closes the cluster it left") {
         cwSurveyChunk::moveStationSplays(fixture.chunk, 1, fixture.chunk, 2, {0, 1, 2});
 
-        //title, a1, shot, a2, shot, a3, 4 splays
-        fixture.checkRowCount(10);
+        //title, a1, shot, a2, shot, a3, 4 splays, blank
+        fixture.checkRowCount(11);
         CHECK_FALSE(fixture.rowData(3, cwSurveyEditorModel::StationSplaysExpandedRole).toBool());
         CHECK(fixture.rowIndexOf(4).rowType() == cwSurveyEditorRowIndex::ShotRow);
         CHECK(fixture.rowData(5, cwSurveyEditorModel::StationSplayCountRole).toInt() == 4);
@@ -407,16 +471,16 @@ TEST_CASE("Moved splays leave one cluster and land in another", "[cwSurveyEditor
         fixture.trip.addChunk(secondChunk);
 
         //The second chunk brings a title, two stations, and a shot
-        fixture.checkRowCount(14);
+        fixture.checkRowCount(16);
 
         const cwSurveyEditorRowIndex b2Row(secondChunk, 1, cwSurveyEditorRowIndex::StationRow);
         fixture.model.toggleSplaysExpanded(b2Row);
-        fixture.checkRowCount(15);
+        fixture.checkRowCount(18);
 
         cwSurveyChunk::moveStationSplays(fixture.chunk, 1, secondChunk, 1, {1, 2});
 
         //a2 gives up two rows and b2 gains them, so the table stays the same height
-        fixture.checkRowCount(15);
+        fixture.checkRowCount(18);
         CHECK(fixture.rowData(3, cwSurveyEditorModel::StationSplayCountRole).toInt() == 1);
         CHECK(fixture.splayReading(4, cwSurveyEditorModel::SplayDistanceRole) == QStringLiteral("5.88"));
 
@@ -434,7 +498,7 @@ TEST_CASE("Moved splays leave one cluster and land in another", "[cwSurveyEditor
 TEST_CASE("A move waits for the station the user picks", "[cwSurveyEditorModel][SplayShot]") {
     SplayFixture fixture;
     fixture.model.toggleSplaysExpanded(fixture.stationRow(1));
-    fixture.checkRowCount(9);
+    fixture.checkRowCount(10);
 
     const auto splayRow = [&fixture](int splayIndex) {
         return cwSurveyEditorRowIndex(fixture.chunk, 1, splayIndex, cwSurveyEditorRowIndex::SplayRow);
@@ -468,8 +532,8 @@ TEST_CASE("A move waits for the station the user picks", "[cwSurveyEditorModel][
         CHECK(fixture.chunk->stationSplayCount(2) == 3);
 
         //a2's cluster empties and closes, and a3 opens on what it just took
-        //title, a1, shot, a2, shot, a3, 3 splays
-        fixture.checkRowCount(9);
+        //title, a1, shot, a2, shot, a3, 3 splays, blank
+        fixture.checkRowCount(10);
         const int a3Row = fixture.model.toModelRow(fixture.stationRow(2));
         REQUIRE(a3Row == 5);
         CHECK(fixture.rowData(a3Row, cwSurveyEditorModel::StationSplaysExpandedRole).toBool());
@@ -488,11 +552,11 @@ TEST_CASE("A move waits for the station the user picks", "[cwSurveyEditorModel][
         CHECK(fixture.chunk->stationSplayCount(1) == 2);
 
         //a1 opens on the splay it took, a2 keeps the two it has left
-        //title, a1, 1 splay, shot, a2, 2 splays, shot, a3
-        fixture.checkRowCount(9);
+        //title, a1, 1 splay, blank, shot, a2, 2 splays, blank, shot, a3
+        fixture.checkRowCount(11);
         CHECK(fixture.splayReading(2, cwSurveyEditorModel::SplayDistanceRole)
               == QStringLiteral("5.42"));
-        CHECK(fixture.splayReading(5, cwSurveyEditorModel::SplayDistanceRole)
+        CHECK(fixture.splayReading(6, cwSurveyEditorModel::SplayDistanceRole)
               == QStringLiteral("5.88"));
     }
 
@@ -500,7 +564,7 @@ TEST_CASE("A move waits for the station the user picks", "[cwSurveyEditorModel][
         auto secondChunk = new cwSurveyChunk();
         secondChunk->appendShot(cwStation("b1"), cwStation("b2"), cwShot("5.0", "10.0", "190.0", "1.0", "-1.0"));
         fixture.trip.addChunk(secondChunk);
-        fixture.checkRowCount(13);
+        fixture.checkRowCount(14);
 
         const cwSurveyEditorRowIndex b2Row(secondChunk, 1, cwSurveyEditorRowIndex::StationRow);
 
@@ -512,8 +576,8 @@ TEST_CASE("A move waits for the station the user picks", "[cwSurveyEditorModel][
         CHECK(fixture.chunk->stationSplayCount(1) == 0);
         CHECK(secondChunk->stationSplayCount(1) == 3);
 
-        //a2 gives up its three rows and b2 opens on them
-        fixture.checkRowCount(13);
+        //a2 gives up its rows and b2 opens on them
+        fixture.checkRowCount(14);
         const int b2ModelRow = fixture.model.toModelRow(b2Row);
         REQUIRE(b2ModelRow > 0);
         CHECK(fixture.rowData(b2ModelRow, cwSurveyEditorModel::StationSplaysExpandedRole).toBool());
@@ -537,7 +601,7 @@ TEST_CASE("A move waits for the station the user picks", "[cwSurveyEditorModel][
         fixture.model.commitSplayMove(fixture.stationRow(2));
         CHECK(fixture.chunk->stationSplayCount(1) == 3);
         CHECK(fixture.chunk->stationSplayCount(2) == 0);
-        fixture.checkRowCount(9);
+        fixture.checkRowCount(10);
     }
 
     SECTION("rows that name no splays arm nothing") {
@@ -612,8 +676,8 @@ TEST_CASE("Splays moving onto a closed station stay out of sight", "[cwSurveyEdi
     SplayFixture fixture;
     fixture.model.toggleSplaysExpanded(fixture.stationRow(1));
 
-    //title, a1, shot, a2, 3 splays, shot, a3
-    fixture.checkRowCount(9);
+    //title, a1, shot, a2, 3 splays, blank, shot, a3
+    fixture.checkRowCount(10);
 
     QSignalSpy dataChanged(&fixture.model, &QAbstractItemModel::dataChanged);
     REQUIRE(dataChanged.isValid());
@@ -621,10 +685,10 @@ TEST_CASE("Splays moving onto a closed station stay out of sight", "[cwSurveyEdi
     cwSurveyChunk::moveStationSplays(fixture.chunk, 1, fixture.chunk, 2, {0});
 
     //a2 gives up a row and the closed a3 shows the splay only on its chip
-    fixture.checkRowCount(8);
+    fixture.checkRowCount(9);
 
     const int a3Row = fixture.model.toModelRow(fixture.stationRow(2));
-    REQUIRE(a3Row == 7);
+    REQUIRE(a3Row == 8);
     CHECK(fixture.rowData(a3Row, cwSurveyEditorModel::StationSplayCountRole).toInt() == 1);
     CHECK_FALSE(fixture.rowData(a3Row, cwSurveyEditorModel::StationSplaysExpandedRole).toBool());
     CHECK(fixture.rowData(3, cwSurveyEditorModel::StationSplayCountRole).toInt() == 2);
@@ -645,7 +709,7 @@ TEST_CASE("An open cluster stays on its station when the chunk changes", "[cwSur
     SECTION("a station inserted above pushes the cluster down with a2") {
         fixture.chunk->insertStation(0, cwSurveyChunk::Below);
 
-        fixture.checkRowCount(11);
+        fixture.checkRowCount(12);
 
         //a2 moved from index 1 to index 2, and its splays came along
         const int stationRow = fixture.model.toModelRow(fixture.stationRow(2));
@@ -669,8 +733,8 @@ TEST_CASE("An open cluster stays on its station when the chunk changes", "[cwSur
     SECTION("removing a station above keeps the cluster on a2") {
         fixture.chunk->removeStation(0, cwSurveyChunk::Below);
 
-        //title, a2, 3 splays, shot, a3
-        fixture.checkRowCount(7);
+        //title, a2, 3 splays, blank, shot, a3
+        fixture.checkRowCount(8);
         CHECK(fixture.rowData(1, cwSurveyEditorModel::StationSplaysExpandedRole).toBool());
         CHECK(fixture.rowIndexOf(2).rowType() == cwSurveyEditorRowIndex::SplayRow);
         CHECK(fixture.rowIndexOf(2).indexInChunk() == 0);
@@ -684,12 +748,12 @@ TEST_CASE("Two open clusters stack up in station order", "[cwSurveyEditorModel][
     fixture.model.toggleSplaysExpanded(fixture.stationRow(2));
     fixture.model.toggleSplaysExpanded(fixture.stationRow(1));
 
-    //title, a1, shot, a2, 3 splays, shot, a3, 1 splay
-    fixture.checkRowCount(10);
+    //title, a1, shot, a2, 3 splays, blank, shot, a3, 1 splay, blank
+    fixture.checkRowCount(12);
     CHECK(fixture.model.toModelRow(fixture.stationRow(1)) == 3);
-    CHECK(fixture.model.toModelRow(fixture.stationRow(2)) == 8);
-    CHECK(fixture.rowIndexOf(9).rowType() == cwSurveyEditorRowIndex::SplayRow);
-    CHECK(fixture.splayReading(9, cwSurveyEditorModel::SplayDistanceRole) == QStringLiteral("7.56"));
+    CHECK(fixture.model.toModelRow(fixture.stationRow(2)) == 9);
+    CHECK(fixture.rowIndexOf(10).rowType() == cwSurveyEditorRowIndex::SplayRow);
+    CHECK(fixture.splayReading(10, cwSurveyEditorModel::SplayDistanceRole) == QStringLiteral("7.56"));
 }
 
 TEST_CASE("The Splays cell is the last cell in a station row", "[cwSurveyEditorModel][SplayShot]") {
@@ -739,7 +803,7 @@ TEST_CASE("The Splays cell is the last cell in a station row", "[cwSurveyEditorM
         CHECK(next(splays, cwSurveyEditorModel::Left) == cell(a2Row, cwSurveyEditorCellIndex::StationDownCell));
     }
 
-    SECTION("up and down stay in the column") {
+    SECTION("up and down stay in the column while the cluster is closed") {
         CHECK(next(cell(a2Row, cwSurveyEditorCellIndex::StationSplaysCell), cwSurveyEditorModel::Down)
               == cell(a3Row, cwSurveyEditorCellIndex::StationSplaysCell));
         CHECK(next(cell(a2Row, cwSurveyEditorCellIndex::StationSplaysCell), cwSurveyEditorModel::Up)
@@ -748,13 +812,29 @@ TEST_CASE("The Splays cell is the last cell in a station row", "[cwSurveyEditorM
 
     SECTION("an open cluster moves the rows but not the chain") {
         fixture.model.toggleSplaysExpanded(fixture.stationRow(1));
-        fixture.checkRowCount(9);
+        fixture.checkRowCount(10);
 
-        const int shiftedA3Row = a3Row + 3;
+        const int shiftedA3Row = a3Row + 4;
         CHECK(next(cell(a2Row, cwSurveyEditorCellIndex::StationSplaysCell), cwSurveyEditorModel::Tab)
               == cell(shiftedA3Row, cwSurveyEditorCellIndex::StationNameCell));
         CHECK(next(cell(shiftedA3Row, cwSurveyEditorCellIndex::StationSplaysCell), cwSurveyEditorModel::Up)
               == cell(a2Row, cwSurveyEditorCellIndex::StationSplaysCell));
+    }
+
+    SECTION("down walks into the cluster the cell opened") {
+        fixture.model.toggleSplaysExpanded(fixture.stationRow(1));
+        fixture.checkRowCount(10);
+
+        //The readings the cluster holds are what's below the cell now, and the
+        //first of them is where the keyboard lands
+        CHECK(next(cell(a2Row, cwSurveyEditorCellIndex::StationSplaysCell), cwSurveyEditorModel::Down)
+              == cell(a2Row + 1, cwSurveyEditorCellIndex::SplayDistanceCell));
+
+        //A station opened on nothing but its blank row lands there instead, so
+        //typing a first splay costs no more than opening the cluster
+        fixture.model.toggleSplaysExpanded(fixture.stationRow(0));
+        CHECK(next(cell(a1Row, cwSurveyEditorCellIndex::StationSplaysCell), cwSurveyEditorModel::Down)
+              == cell(a1Row + 1, cwSurveyEditorCellIndex::SplayDistanceCell));
     }
 
     SECTION("the cell holds no reading to write") {
@@ -766,10 +846,12 @@ TEST_CASE("The Splays cell is the last cell in a station row", "[cwSurveyEditorM
 TEST_CASE("A splay's readings are cells the table writes", "[cwSurveyEditorModel][SplayShot]") {
     SplayFixture fixture;
     fixture.model.toggleSplaysExpanded(fixture.stationRow(1));
-    fixture.checkRowCount(9);
+    fixture.checkRowCount(10);
 
-    //title, a1, shot, a2, s1, s2, s3, shot, a3
+    //title, a1, shot, a2, s1, s2, s3, blank, shot, a3
     const int firstSplayRow = 4;
+    const int blankRow = 7;
+    const int a2ShotRow = 8;
 
     auto cell = [&fixture](int row, cwSurveyEditorCellIndex::CellRole role) {
         return fixture.model.cellIndex(row, role);
@@ -797,7 +879,7 @@ TEST_CASE("A splay's readings are cells the table writes", "[cwSurveyEditorModel
         CHECK(fixture.model.setDataAt(cell(firstSplayRow + 2, cwSurveyEditorCellIndex::SplayClinoCell),
                                       QStringLiteral("-8.25")));
 
-        fixture.checkRowCount(9);
+        fixture.checkRowCount(10);
         CHECK(fixture.chunk->stationSplayAt(1, 0).distance.value() == QStringLiteral("6.02"));
         CHECK(fixture.chunk->stationSplayAt(1, 1).compass.value() == QStringLiteral("119.4"));
         CHECK(fixture.chunk->stationSplayAt(1, 2).clino.value() == QStringLiteral("-8.25"));
@@ -828,20 +910,58 @@ TEST_CASE("A splay's readings are cells the table writes", "[cwSurveyEditorModel
     }
 
     SECTION("a cell on a row that shows no splay writes nothing") {
-        //The station row above the cluster, a splay row of a station that has
-        //none, and a row past the end of the model
+        //The station row above the cluster, the shot row below it, and a row
+        //past the end of the model
         CHECK_FALSE(fixture.model.setDataAt(cell(3, cwSurveyEditorCellIndex::SplayDistanceCell),
                                             QStringLiteral("99")));
-        CHECK_FALSE(fixture.model.setDataAt(cell(7, cwSurveyEditorCellIndex::SplayCompassCell),
+        CHECK_FALSE(fixture.model.setDataAt(cell(a2ShotRow, cwSurveyEditorCellIndex::SplayCompassCell),
                                             QStringLiteral("99")));
         CHECK_FALSE(fixture.model.setDataAt(cell(fixture.model.rowCount(),
                                                  cwSurveyEditorCellIndex::SplayClinoCell),
                                             QStringLiteral("99")));
 
-        fixture.checkRowCount(9);
+        fixture.checkRowCount(10);
         CHECK(fixture.splayReading(firstSplayRow, cwSurveyEditorModel::SplayDistanceRole)
               == QStringLiteral("5.88"));
         CHECK(fixture.chunk->shot(1).compass().value() != QStringLiteral("99"));
+    }
+
+    SECTION("the blank row turns into a splay when a reading is written into it") {
+        CHECK(fixture.rowData(blankRow, cwSurveyEditorModel::IsVirtualRole).toBool());
+
+        CHECK(fixture.model.setDataAt(cell(blankRow, cwSurveyEditorCellIndex::SplayDistanceCell),
+                                      QStringLiteral("7.10")));
+
+        //The row the reading landed on holds a splay now, and a fresh blank row
+        //waits under it, so the next one is typed without reaching for anything
+        fixture.checkRowCount(11);
+        CHECK(fixture.chunk->stationSplayCount(1) == 4);
+        CHECK(fixture.chunk->stationSplayAt(1, 3).distance.value() == QStringLiteral("7.10"));
+        CHECK(fixture.splayReading(blankRow, cwSurveyEditorModel::SplayDistanceRole)
+              == QStringLiteral("7.10"));
+        CHECK_FALSE(fixture.rowData(blankRow, cwSurveyEditorModel::IsVirtualRole).toBool());
+        CHECK(fixture.rowData(blankRow + 1, cwSurveyEditorModel::IsVirtualRole).toBool());
+
+        //The rest of the splay is written into the row it made, rather than
+        //making another one
+        CHECK(fixture.model.setDataAt(cell(blankRow, cwSurveyEditorCellIndex::SplayCompassCell),
+                                      QStringLiteral("199.4")));
+        fixture.checkRowCount(11);
+        CHECK(fixture.chunk->stationSplayCount(1) == 4);
+        CHECK(fixture.chunk->stationSplayAt(1, 3).compass.value() == QStringLiteral("199.4"));
+    }
+
+    SECTION("tabbing across the blank row without typing leaves it blank") {
+        for(auto role : {cwSurveyEditorCellIndex::SplayDistanceCell,
+                          cwSurveyEditorCellIndex::SplayCompassCell,
+                          cwSurveyEditorCellIndex::SplayClinoCell})
+        {
+            CHECK(fixture.model.setDataAt(cell(blankRow, role), QString()));
+        }
+
+        fixture.checkRowCount(10);
+        CHECK(fixture.chunk->stationSplayCount(1) == 3);
+        CHECK(fixture.rowData(blankRow, cwSurveyEditorModel::IsVirtualRole).toBool());
     }
 
     SECTION("writing the reading a splay already has tells the view nothing") {
@@ -858,14 +978,15 @@ TEST_CASE("A splay's readings are cells the table writes", "[cwSurveyEditorModel
 TEST_CASE("The keyboard walks a cluster's readings", "[cwSurveyEditorModel][SplayShot]") {
     SplayFixture fixture;
     fixture.model.toggleSplaysExpanded(fixture.stationRow(1));
-    fixture.checkRowCount(9);
+    fixture.checkRowCount(10);
 
-    //title, a1, shot, a2, s1, s2, s3, shot, a3
+    //title, a1, shot, a2, s1, s2, s3, blank, shot, a3
     const int a2Row = 3;
     const int firstSplayRow = 4;
     const int lastSplayRow = 6;
-    const int a2ShotRow = 7;
-    const int a3Row = 8;
+    const int blankRow = 7;
+    const int a2ShotRow = 8;
+    const int a3Row = 9;
 
     auto cell = [&fixture](int row, cwSurveyEditorCellIndex::CellRole role) {
         return fixture.model.cellIndex(row, role);
@@ -890,9 +1011,23 @@ TEST_CASE("The keyboard walks a cluster's readings", "[cwSurveyEditorModel][Spla
               == cell(firstSplayRow + 1, cwSurveyEditorCellIndex::SplayDistanceCell));
     }
 
-    SECTION("tab out of the last splay leaves the row the way the cluster's cell does") {
+    SECTION("tab out of the last splay carries on into the blank row") {
         CHECK(next(cell(lastSplayRow, cwSurveyEditorCellIndex::SplayClinoCell),
                    cwSurveyEditorModel::Tab)
+              == cell(blankRow, cwSurveyEditorCellIndex::SplayDistanceCell));
+    }
+
+    SECTION("tab through the blank row leaves the row the way the cluster's cell does") {
+        //Nothing was typed, so the cluster is a pass-through and the chain
+        //carries on to the next station's name, the way the table tabs today
+        const auto compass = next(cell(blankRow, cwSurveyEditorCellIndex::SplayDistanceCell),
+                                  cwSurveyEditorModel::Tab);
+        CHECK(compass == cell(blankRow, cwSurveyEditorCellIndex::SplayCompassCell));
+
+        const auto clino = next(compass, cwSurveyEditorModel::Tab);
+        CHECK(clino == cell(blankRow, cwSurveyEditorCellIndex::SplayClinoCell));
+
+        CHECK(next(clino, cwSurveyEditorModel::Tab)
               == cell(a3Row, cwSurveyEditorCellIndex::StationNameCell));
     }
 
@@ -931,32 +1066,36 @@ TEST_CASE("The keyboard walks a cluster's readings", "[cwSurveyEditorModel][Spla
                    cwSurveyEditorModel::Up)
               == cell(firstSplayRow, cwSurveyEditorCellIndex::SplayCompassCell));
 
-        //Above the cluster is the cell it hangs from; below it is the shot
+        //Above the cluster is the cell it hangs from; below the last splay is
+        //the blank row, and below that the shot
         CHECK(next(cell(firstSplayRow, cwSurveyEditorCellIndex::SplayDistanceCell),
                    cwSurveyEditorModel::Up)
               == cell(a2Row, cwSurveyEditorCellIndex::StationSplaysCell));
         CHECK(next(cell(lastSplayRow, cwSurveyEditorCellIndex::SplayDistanceCell),
                    cwSurveyEditorModel::Down)
+              == cell(blankRow, cwSurveyEditorCellIndex::SplayDistanceCell));
+        CHECK(next(cell(blankRow, cwSurveyEditorCellIndex::SplayDistanceCell),
+                   cwSurveyEditorModel::Down)
               == cell(a2ShotRow, cwSurveyEditorCellIndex::ShotDistanceCell));
-        CHECK(next(cell(lastSplayRow, cwSurveyEditorCellIndex::SplayClinoCell),
+        CHECK(next(cell(blankRow, cwSurveyEditorCellIndex::SplayClinoCell),
                    cwSurveyEditorModel::Down)
               == cell(a2ShotRow, cwSurveyEditorCellIndex::ShotClinoCell));
     }
 
     SECTION("a trip on back sights leaves the cluster on the back sight boxes") {
-        CHECK(next(cell(lastSplayRow, cwSurveyEditorCellIndex::SplayCompassCell),
+        CHECK(next(cell(blankRow, cwSurveyEditorCellIndex::SplayCompassCell),
                    cwSurveyEditorModel::Down, false, true)
               == cell(a2ShotRow, cwSurveyEditorCellIndex::ShotBackCompassCell));
-        CHECK(next(cell(lastSplayRow, cwSurveyEditorCellIndex::SplayClinoCell),
+        CHECK(next(cell(blankRow, cwSurveyEditorCellIndex::SplayClinoCell),
                    cwSurveyEditorModel::Down, false, true)
               == cell(a2ShotRow, cwSurveyEditorCellIndex::ShotBackClinoCell));
     }
 
     SECTION("a trip that records neither sight drops the whole cluster onto the distance box") {
-        CHECK(next(cell(lastSplayRow, cwSurveyEditorCellIndex::SplayCompassCell),
+        CHECK(next(cell(blankRow, cwSurveyEditorCellIndex::SplayCompassCell),
                    cwSurveyEditorModel::Down, false, false)
               == cell(a2ShotRow, cwSurveyEditorCellIndex::ShotDistanceCell));
-        CHECK(next(cell(lastSplayRow, cwSurveyEditorCellIndex::SplayClinoCell),
+        CHECK(next(cell(blankRow, cwSurveyEditorCellIndex::SplayClinoCell),
                    cwSurveyEditorModel::Down, false, false)
               == cell(a2ShotRow, cwSurveyEditorCellIndex::ShotDistanceCell));
     }
@@ -964,12 +1103,16 @@ TEST_CASE("The keyboard walks a cluster's readings", "[cwSurveyEditorModel][Spla
     SECTION("the last station's cluster has no shot below it to step onto") {
         fixture.chunk->setStationSplays(2, {makeSplay("7.56", "201.3", "-12.4")});
         fixture.model.toggleSplaysExpanded(fixture.stationRow(2));
-        fixture.checkRowCount(10);
+        fixture.checkRowCount(12);
 
         const int a3SplayRow = a3Row + 1;
+        const int a3BlankRow = a3SplayRow + 1;
         CHECK(fixture.rowIndexOf(a3SplayRow).rowType() == cwSurveyEditorRowIndex::SplayRow);
+        CHECK(next(cell(a3SplayRow, cwSurveyEditorCellIndex::SplayDistanceCell),
+                   cwSurveyEditorModel::Down)
+              == cell(a3BlankRow, cwSurveyEditorCellIndex::SplayDistanceCell));
         CHECK_FALSE(fixture.model.isCellValid(
-            next(cell(a3SplayRow, cwSurveyEditorCellIndex::SplayDistanceCell),
+            next(cell(a3BlankRow, cwSurveyEditorCellIndex::SplayDistanceCell),
                  cwSurveyEditorModel::Down)));
     }
 }
@@ -977,7 +1120,7 @@ TEST_CASE("The keyboard walks a cluster's readings", "[cwSurveyEditorModel][Spla
 TEST_CASE("Retiring a trip forgets which clusters were open", "[cwSurveyEditorModel][SplayShot]") {
     SplayFixture fixture;
     fixture.model.toggleSplaysExpanded(fixture.stationRow(1));
-    fixture.checkRowCount(9);
+    fixture.checkRowCount(10);
 
     cwTrip otherTrip;
     fixture.model.setTrip(&otherTrip);

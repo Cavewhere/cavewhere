@@ -153,6 +153,7 @@ public:
     Q_INVOKABLE int toModelRow(const cwSurveyEditorRowIndex& rowIndex) const;
 
     Q_INVOKABLE void toggleSplaysExpanded(const cwSurveyEditorRowIndex& rowIndex);
+    Q_INVOKABLE cwSurveyEditorCellIndex splayEntryCell(const cwSurveyEditorRowIndex& stationRowIndex) const;
     Q_INVOKABLE void removeSplayAt(const cwSurveyEditorRowIndex& rowIndex);
     Q_INVOKABLE void clearSplaysAt(const cwSurveyEditorRowIndex& rowIndex);
 
@@ -177,9 +178,10 @@ private:
     };
 
     //!< The splay clusters the user has opened, and how many rows each one is
-    //!< currently showing. A station is expanded exactly when it has a key here.
-    //!< The row count is remembered rather than re-read from the chunk so that a
-    //!< splay appearing or disappearing can be turned into an insert or a remove.
+    //!< currently showing — its splays plus the blank row they're typed into. A
+    //!< station is expanded exactly when it has a key here. The row count is
+    //!< remembered rather than re-read from the chunk so that a splay appearing
+    //!< or disappearing can be turned into an insert or a remove.
     using ExpandedSplays = QMap<int, int>;
 
     //!< Splays armed for a move, and the station they came off. The station

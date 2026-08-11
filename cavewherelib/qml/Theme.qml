@@ -52,6 +52,11 @@ QtObject {
     readonly property color splayBorder: dark ? "#c9a35e" : "#8a6d3b"
     readonly property color splayText: dark ? "#c9a35e" : "#8a6d3b"
 
+    // How far back the blank row at the bottom of an open splay cluster sits
+    // while it waits for a reading. Qt Quick draws no dashed border without
+    // Shapes, which the survey table stays clear of, so it fades instead.
+    readonly property real splayWaitingOpacity: 0.55
+
     // Lines and outlines
     readonly property color border: dark ? "#4a4f58" : "#d3d3d3"
     readonly property color borderSubtle: dark ? "#353a42" : "#e4e4e4"

@@ -23,6 +23,14 @@ SurveyEditorCell {
     required property int splayCount
     required property bool splaysExpanded
 
+    //The chunk's trailing blank station stands for a station that hasn't been
+    //surveyed yet, so it can carry no splays until it's named
+    required property bool isVirtual
+
+    //True while the pointer is over the cell, which is when it offers to take
+    //a station's first splay
+    readonly property bool hovered: hoverHandlerId.hovered
+
     //The table's one challenge for deleting a whole cluster, owned by
     //SurveyEditor so it outlives the recycled row that asks for it
     required property SplayRemoveAskBox splayRemoveChallenge
@@ -36,7 +44,19 @@ SurveyEditorCell {
     rightClickMenuLoader: stationMenuId
 
     function toggleExpanded() {
+        if(splaysBox.isVirtual) {
+            return
+        }
+
+        const wasExpanded = splaysBox.splaysExpanded
         splaysBox.model.toggleSplaysExpanded(splaysBox.rowIndex)
+
+        //A station with no splays opens on its blank row alone, and the caret
+        //goes straight into it — manual entry when the download dies is tab to
+        //Splays, Enter, type
+        if(!wasExpanded && splaysBox.splayCount === 0) {
+            splaysBox.model.setFocusedCell(splaysBox.model.splayEntryCell(splaysBox.rowIndex))
+        }
     }
 
     QQ.Keys.onPressed: (event) => {
@@ -54,6 +74,26 @@ SurveyEditorCell {
                        }
 
     onTapped: splaysBox.toggleExpanded()
+
+    QQ.HoverHandler {
+        id: hoverHandlerId
+    }
+
+    //A station with no splays shows nothing until the pointer is over it, and
+    //then the one mark that says splays can be typed here
+    QQ.Loader {
+        anchors.centerIn: parent
+        active: splaysBox.splayCount === 0
+                && !splaysBox.isVirtual
+                && splaysBox.hovered
+
+        sourceComponent: QC.Label {
+            objectName: "splayAddHint"
+            text: "+"
+            color: Theme.splayText
+            font.pixelSize: Theme.fontSizeSmall
+        }
+    }
 
     StationMenu {
         id: stationMenuId

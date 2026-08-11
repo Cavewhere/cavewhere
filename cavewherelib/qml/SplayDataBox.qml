@@ -19,6 +19,11 @@ import cavewherelib
 DataBox {
     id: splayDataBox
 
+    //DataBox reads its cell off the reading it shows, which a splay's reading
+    //can't name. Required here so a call site that forgets it fails at load
+    //rather than quietly writing to a shot cell
+    required cellRole
+
     //A splay row stands outside the shot flow that space carries into the next
     //chunk
     addsChunkOnSpace: false

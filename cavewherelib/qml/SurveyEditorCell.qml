@@ -110,12 +110,15 @@ QQ.Item {
 
     function syncFocusState() {
         const selected = cell.shouldHaveFocus()
-        if(cell.focus === selected) {
-            return
-        }
-        if(selected) {
+
+        //A cell built while the view still has it off-scene can't take the
+        //focus, and asking again costs nothing once it can — which is what
+        //carries the caret into a splay cluster opening under it. An open
+        //editor already holds the focus for the cell, so it keeps it
+        if(selected && !cell.activeFocus && !cell.editing) {
             cell.forceActiveFocus()
         }
+
         cell.focus = selected
     }
 
@@ -207,6 +210,10 @@ QQ.Item {
     onCellRoleChanged: cell.syncFocusState()
 
     onListViewIndexChanged: cell.syncFocusState()
+
+    //The view builds a delegate before it parents it into the scene, so a cell
+    //that arrives already focused asks for the focus again once it has landed
+    onParentChanged: cell.syncFocusState()
 
     QQ.Component.onCompleted: cell.syncFocusState()
 

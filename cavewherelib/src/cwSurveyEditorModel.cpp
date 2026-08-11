@@ -17,6 +17,12 @@
 #include <array>
 #include <limits>
 
+namespace {
+    //! The blank row an open cluster carries under its splays, which is where
+    //! the station's next splay is typed
+    constexpr int kBlankSplayRowCount = 1;
+}
+
 cwSurveyEditorModel::cwSurveyEditorModel()
 {
     connect(this, &QAbstractItemModel::rowsInserted, this, [this]() {
@@ -391,6 +397,13 @@ QVariant cwSurveyEditorModel::data(const QModelIndex& index, int role) const
             return false;
         }
 
+        //The blank row at the bottom of an open cluster stands for the splay
+        //the station hasn't been given yet, so it sits past the last real one
+        if(rowIndex.rowType() == cwSurveyEditorRowIndex::SplayRow) {
+            return rowIndex.splayIndex()
+                   == rowIndex.chunk()->stationSplayCount(rowIndex.indexInChunk());
+        }
+
         const bool hasVirtualRows = hasVirtualTrailingStationShot(rowIndex.chunk());
         if(!hasVirtualRows) {
             return false;
@@ -534,7 +547,8 @@ QVariant cwSurveyEditorModel::data(const QModelIndex& index, int role) const
             return chunk->stationSplayCount(stationIndex);
         }
 
-        if(splayIndex < 0 || splayIndex >= chunk->stationSplayCount(stationIndex)) {
+        const int splayCount = chunk->stationSplayCount(stationIndex);
+        if(splayIndex < 0 || splayIndex > splayCount) {
             return QVariant();
         }
 
@@ -546,7 +560,12 @@ QVariant cwSurveyEditorModel::data(const QModelIndex& index, int role) const
             return QVariant::fromValue(cwSurveyEditorBoxData(reading, chunkIndex, readingRole));
         };
 
-        const cwShotMeasurement& splay = chunk->stationSplayAt(stationIndex, splayIndex);
+        //The blank row reads empty in all three columns until the first reading
+        //typed into it makes it a splay
+        const bool isBlankRow = splayIndex == splayCount;
+        const cwShotMeasurement splay = isBlankRow
+                                            ? cwShotMeasurement()
+                                            : chunk->stationSplayAt(stationIndex, splayIndex);
         switch(role) {
         case SplayDistanceRole:
             return splayReading(splay.distance, cwSurveyChunk::ShotDistanceRole);
@@ -688,7 +707,10 @@ bool cwSurveyEditorModel::setDataAt(const cwSurveyEditorCellIndex& cell, const Q
  * @return True when the reading was handed to the chunk
  *
  * The row pins the chunk, the station and the splay, so the cell only has to
- * say which of the splay's three readings it holds.
+ * say which of the splay's three readings it holds. The blank row at the bottom
+ * of the cluster is where a splay is made: the first reading written into it
+ * appends one, and reconciliation turns the row into data and hands the cluster
+ * a fresh blank underneath.
  */
 bool cwSurveyEditorModel::setSplayDataAt(const cwSurveyEditorCellIndex& cell,
                                          cwSurveyChunk::DataRole readingRole,
@@ -706,8 +728,19 @@ bool cwSurveyEditorModel::setSplayDataAt(const cwSurveyEditorCellIndex& cell,
 
     const int stationIndex = rowIndex.indexInChunk();
     const int splayIndex = rowIndex.splayIndex();
-    if(splayIndex < 0 || splayIndex >= chunk->stationSplayCount(stationIndex)) {
+    const int splayCount = chunk->stationSplayCount(stationIndex);
+    if(splayIndex < 0 || splayIndex > splayCount) {
         return false;
+    }
+
+    if(splayIndex == splayCount) {
+        //Tabbing across the blank row without typing leaves it blank, so the
+        //station keeps exactly one of them
+        if(data.toString().trimmed().isEmpty()) {
+            return true;
+        }
+
+        chunk->appendStationSplay(stationIndex, cwShotMeasurement());
     }
 
     chunk->setStationSplayData(readingRole, stationIndex, splayIndex, data);
@@ -1598,8 +1631,15 @@ cwSurveyEditorCellIndex cwSurveyEditorModel::nextCellIndex(const cwSurveyEditorC
             return offsetCurrentRowRole(cwSurveyEditorCellIndex::StationDownCell, 0);
         case Right:
             return cwSurveyEditorCellIndex();
-        case Down:
+        case Down: {
+            //An open cluster is the next thing down the column, and its blank
+            //row is how a station takes its first splay from the keyboard
+            const auto firstSplay = splayCell(0, cwSurveyEditorCellIndex::SplayDistanceCell);
+            if(isCellValid(firstSplay)) {
+                return firstSplay;
+            }
             return offsetCurrentRowRole(cwSurveyEditorCellIndex::StationSplaysCell, 1);
+        }
         case Up:
             return offsetCurrentRowRole(cwSurveyEditorCellIndex::StationSplaysCell, -1);
         }
@@ -1873,17 +1913,14 @@ void cwSurveyEditorModel::toggleSplaysExpanded(const cwSurveyEditorRowIndex& row
 /**
  * @brief cwSurveyEditorModel::expandSplays
  *
- * Opens \a stationIndex's cluster. A station with no splays, or one whose
- * cluster is already open, keeps the rows it has.
+ * Opens \a stationIndex's cluster: a row for each splay it carries, plus the
+ * blank row its next splay is typed into. A station with no splays opens on the
+ * blank row alone, which is how manual entry starts. A cluster that is already
+ * open keeps the rows it has.
  */
 void cwSurveyEditorModel::expandSplays(cwSurveyChunk* chunk, int stationIndex)
 {
-    if(splayRowCount(chunk, stationIndex) > 0) {
-        return;
-    }
-
-    const int splayCount = chunk->stationSplayCount(stationIndex);
-    if(splayCount == 0) {
+    if(chunk == nullptr || splayRowCount(chunk, stationIndex) > 0) {
         return;
     }
 
@@ -1892,11 +1929,46 @@ void cwSurveyEditorModel::expandSplays(cwSurveyChunk* chunk, int stationIndex)
         return;
     }
 
-    beginInsertRows(QModelIndex(), stationRow + 1, stationRow + splayCount);
-    m_expandedSplays[chunk].insert(stationIndex, splayCount);
+    const int rowsShown = chunk->stationSplayCount(stationIndex) + kBlankSplayRowCount;
+
+    beginInsertRows(QModelIndex(), stationRow + 1, stationRow + rowsShown);
+    m_expandedSplays[chunk].insert(stationIndex, rowsShown);
     endInsertRows();
 
     emitSplayExpansionChanged(chunk, stationIndex);
+}
+
+/**
+ * @brief cwSurveyEditorModel::splayEntryCell
+ * @param stationRowIndex - The station row whose cluster the entry lands in
+ * @return The distance cell of the cluster's blank row, or an invalid cell when
+ * the station's cluster is closed
+ *
+ * Where typing a station's next splay starts. The Splays cell uses it to put the
+ * caret in the blank row it just opened, so manual entry on a station with no
+ * splays is tab, Enter, type.
+ */
+cwSurveyEditorCellIndex cwSurveyEditorModel::splayEntryCell(const cwSurveyEditorRowIndex& stationRowIndex) const
+{
+    if(stationRowIndex.rowType() != cwSurveyEditorRowIndex::StationRow) {
+        return cwSurveyEditorCellIndex();
+    }
+
+    cwSurveyChunk* chunk = splayClusterChunk(stationRowIndex);
+    if(chunk == nullptr) {
+        return cwSurveyEditorCellIndex();
+    }
+
+    const int stationIndex = stationRowIndex.indexInChunk();
+    const int blankRow = toModelRow(cwSurveyEditorRowIndex(chunk,
+                                                           stationIndex,
+                                                           chunk->stationSplayCount(stationIndex),
+                                                           cwSurveyEditorRowIndex::SplayRow));
+    if(blankRow < 0) {
+        return cwSurveyEditorCellIndex();
+    }
+
+    return cellIndex(blankRow, cwSurveyEditorCellIndex::SplayDistanceCell);
 }
 
 /**
@@ -2200,33 +2272,39 @@ void cwSurveyEditorModel::reconcileSplayRows(cwSurveyChunk* chunk, int stationIn
 
     const int shownRows = splayRowCount(chunk, stationIndex);
     const int splayCount = chunk->stationSplayCount(stationIndex);
+    const int rowsWanted = splayCount + kBlankSplayRowCount;
 
     //A closed cluster only moves the chip's count; an open one grows or shrinks
-    //to match, and the station row itself stays put either way
+    //to match, and the station row itself stays put either way. A cluster the
+    //last splay leaves closes, blank row and all — there's nothing left to look
+    //at, and the Splays cell opens it again for the next entry
     if(shownRows > 0) {
         if(splayCount == 0) {
             collapseSplays(chunk, stationIndex);
-        } else if(splayCount > shownRows) {
+        } else if(rowsWanted > shownRows) {
             beginInsertRows(QModelIndex(),
                             stationRow + 1 + shownRows,
-                            stationRow + splayCount);
-            m_expandedSplays[chunk].insert(stationIndex, splayCount);
+                            stationRow + rowsWanted);
+            m_expandedSplays[chunk].insert(stationIndex, rowsWanted);
             endInsertRows();
-        } else if(splayCount < shownRows) {
+        } else if(rowsWanted < shownRows) {
             beginRemoveRows(QModelIndex(),
-                            stationRow + 1 + splayCount,
+                            stationRow + 1 + rowsWanted,
                             stationRow + shownRows);
-            m_expandedSplays[chunk].insert(stationIndex, splayCount);
+            m_expandedSplays[chunk].insert(stationIndex, rowsWanted);
             endRemoveRows();
         }
     }
 
     emit dataChanged(index(stationRow), index(stationRow), {StationSplayCountRole});
 
-    if(splayRowCount(chunk, stationIndex) > 0) {
-        emit dataChanged(index(stationRow + 1), index(stationRow + splayCount),
+    const int rowsLeft = splayRowCount(chunk, stationIndex);
+    if(rowsLeft > 0) {
+        //IsVirtualRole rides along because the row that was blank holds a splay
+        //once one is typed into it, and the fresh blank row takes its place
+        emit dataChanged(index(stationRow + 1), index(stationRow + rowsLeft),
                          {SplayDistanceRole, SplayCompassRole, SplayClinoRole,
-                          StationSplayCountRole});
+                          StationSplayCountRole, IsVirtualRole});
     }
 }
 
@@ -2464,8 +2542,9 @@ const cwSurveyEditorModel::ExpandedSplays* cwSurveyEditorModel::expandedSplays(c
 }
 
 /**
- * The number of splay rows station \a stationIndex is currently showing, which
- * is zero unless its cluster is open.
+ * The number of splay rows station \a stationIndex is currently showing — its
+ * splays and the blank row under them — which is zero unless its cluster is
+ * open.
  */
 int cwSurveyEditorModel::splayRowCount(const cwSurveyChunk* chunk, int stationIndex) const
 {

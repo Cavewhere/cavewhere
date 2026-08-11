@@ -53,6 +53,14 @@ MainWindowTest {
         // cluster it opens.
         readonly property int virtualRows: 2
 
+        // Every open cluster carries the blank row its next splay is typed
+        // into, so opening one costs a row more than the splays it holds.
+        readonly property int blankRow: 1
+
+        // Long enough for a hover or a click to have taken effect, for the
+        // checks that something stayed away
+        readonly property int settleMilliseconds: 100
+
         function splaysCell(context, indexInChunk) {
             const item = surveyTableId.rowItem(
                            this, context, surveyTableId.stationRow(context, indexInChunk))
@@ -102,13 +110,48 @@ MainWindowTest {
             compare(findChild(splaysCell(context, 1), "splayChip"), null)
         }
 
+        // The chunk's trailing blank station stands for a station that hasn't
+        // been surveyed yet, so it can hold no splays. Its Splays cell offers
+        // the "+" to no one, while a real station with an empty cluster does.
+        function test_theBlankStationOffersNoSplayHint() {
+            const context = gotoSurveyTable()
+
+            // Focusing a cell in the chunk is what brings the trailing blank
+            // station and shot rows in
+            context.editorModel.setFocusedCell(
+                        context.editorModel.cellIndex(surveyTableId.stationRow(context, 0),
+                                                      SurveyChunk.StationNameRole))
+            tryCompare(context.editorModel, "focusedRow", surveyTableId.stationRow(context, 0))
+
+            const realCell = splaysCell(context, 1)
+            mouseMove(realCell, realCell.width * 0.5, realCell.height * 0.5)
+            tryVerify(() => realCell.hovered, 5000, "A2's Splays cell should take the hover")
+            tryVerify(() => findChild(realCell, "splayAddHint") !== null, 5000,
+                      "hovering A2's empty Splays cell should offer the +")
+
+            const blankStation = context.chunk.stationCount
+            const blankCell = splaysCell(context, blankStation)
+            const rowsWhileClosed = context.view.count
+
+            mouseMove(blankCell, blankCell.width * 0.5, blankCell.height * 0.5)
+            tryVerify(() => blankCell.hovered, 5000,
+                      "the blank station's Splays cell should take the hover")
+            verify(findChild(blankCell, "splayAddHint") === null,
+                   "the blank station's Splays cell should offer nothing")
+
+            mouseClick(blankCell)
+            wait(settleMilliseconds)
+            compare(context.view.count, rowsWhileClosed,
+                    "clicking the blank station's Splays cell should open no cluster")
+        }
+
         function test_clickingTheCellOpensTheSplayRows() {
             const context = gotoSurveyTable()
             const rowsWhileClosed = context.view.count
 
             mouseClick(splaysCell(context, 0))
 
-            tryCompare(context.view, "count", rowsWhileClosed + 3 + virtualRows, 5000,
+            tryCompare(context.view, "count", rowsWhileClosed + 3 + blankRow + virtualRows, 5000,
                        "the three splays should each become a row")
 
             const firstSplayRow = surveyTableId.stationRow(context, 0) + 1
@@ -132,7 +175,7 @@ MainWindowTest {
             const rowsWhileClosed = context.view.count
 
             mouseClick(splaysCell(context, 0))
-            tryCompare(context.view, "count", rowsWhileClosed + 3 + virtualRows)
+            tryCompare(context.view, "count", rowsWhileClosed + 3 + blankRow + virtualRows)
 
             mouseClick(splaysCell(context, 0))
             tryCompare(context.view, "count", rowsWhileClosed + virtualRows, 5000,
@@ -161,35 +204,36 @@ MainWindowTest {
             tryCompare(context.editorModel, "focusedRow", stationRow)
 
             keyClick(Qt.Key_Return)
-            tryCompare(context.view, "count", rowsWhileClosed + 3 + virtualRows, 5000,
+            tryCompare(context.view, "count", rowsWhileClosed + 3 + blankRow + virtualRows, 5000,
                        "Enter on the Splays cell should open the cluster")
         }
 
         // Each rail bridges into the row below so the cluster draws one
-        // unbroken line, except the last — below it is the shot row's bare
-        // background, where the bridge would show as a loose sliver.
-        function test_theRailStopsAtTheLastSplay() {
+        // unbroken line, except the blank row at the bottom — below it is the
+        // shot row's bare background, where the bridge would show as a loose
+        // sliver.
+        function test_theRailStopsAtTheBlankRow() {
             const context = gotoSurveyTable()
             const rowsWhileClosed = context.view.count
 
             mouseClick(splaysCell(context, 0))
-            tryCompare(context.view, "count", rowsWhileClosed + 3 + virtualRows, 5000)
+            tryCompare(context.view, "count", rowsWhileClosed + 3 + blankRow + virtualRows, 5000)
 
             const firstSplayRow = surveyTableId.stationRow(context, 0) + 1
             for (let i = 0; i < a4Splays.length; i++) {
                 const item = surveyTableId.rowItem(this, context, firstSplayRow + i)
                 const rail = findChild(item, "splayRail")
                 verify(rail !== null, "splay row " + i + " should have a rail")
-
-                const lastSplay = i + 1 === a4Splays.length
-                if(lastSplay) {
-                    compare(rail.height, item.height,
-                            "the last splay's rail should stop at its own row")
-                } else {
-                    verify(rail.height > item.height,
-                           "splay row " + i + "'s rail should bridge into the row below")
-                }
+                verify(rail.height > item.height,
+                       "splay row " + i + "'s rail should bridge into the row below")
             }
+
+            const blankItem = surveyTableId.rowItem(this, context,
+                                                    firstSplayRow + a4Splays.length)
+            const blankRail = findChild(blankItem, "splayRail")
+            verify(blankRail !== null, "the blank row should have a rail")
+            compare(blankRail.height, blankItem.height,
+                    "the blank row's rail should stop at its own row")
         }
 
         // The Splays cell offers the station's actions like the rest of the
@@ -213,7 +257,7 @@ MainWindowTest {
             const rowsWhileClosed = context.view.count
 
             mouseClick(splaysCell(context, indexInChunk))
-            tryCompare(context.view, "count", rowsWhileClosed + a4Splays.length + virtualRows, 5000,
+            tryCompare(context.view, "count", rowsWhileClosed + a4Splays.length + blankRow + virtualRows, 5000,
                        "the cluster should open")
 
             return surveyTableId.stationRow(context, indexInChunk) + 1
@@ -305,7 +349,7 @@ MainWindowTest {
 
             mouseClick(findChild(challenge, "removeButton"))
 
-            tryCompare(context.view, "count", openRows - a4Splays.length, 5000,
+            tryCompare(context.view, "count", openRows - a4Splays.length - blankRow, 5000,
                        "an emptied cluster should collapse")
             compare(splayCount(context, 0), 0)
             tryVerify(() => findChild(splaysCell(context, 0), "splayChip") === null, 5000,
@@ -405,7 +449,7 @@ MainWindowTest {
             const cell = splaysCell(context, 0)
 
             mouseClick(cell)
-            tryCompare(context.view, "count", rowsWhileClosed + 3 + virtualRows, 5000,
+            tryCompare(context.view, "count", rowsWhileClosed + 3 + blankRow + virtualRows, 5000,
                        "the cluster should be open before the preview runs")
 
             verify(!cell.removePreviewActive,
@@ -476,6 +520,86 @@ MainWindowTest {
 
             compare(splayReading(context, firstSplayRow, SurveyEditorCellIndex.SplayDistanceCell),
                     a4Splays[0].distance)
+        }
+
+        // The manual-entry scenario: the Bluetooth link is dead, so a station
+        // with no splays takes them from the keyboard — Enter on its Splays
+        // cell, then the three readings with Tab between them.
+        function test_typingASplayIntoTheBlankRow() {
+            const context = gotoSurveyTable()
+            const rowsWhileClosed = context.view.count
+            const stationRow = surveyTableId.stationRow(context, 1)
+
+            // A2 carries no splays, so its cell opens on the blank row alone
+            mouseClick(splaysCell(context, 1))
+            tryCompare(context.view, "count", rowsWhileClosed + blankRow + virtualRows, 5000,
+                       "a station with no splays should open on its blank row")
+
+            const entryRow = stationRow + 1
+            tryCompare(context.editorModel, "focusedRow", entryRow, 5000,
+                       "opening an empty cluster should put the caret in the blank row")
+            tryCompare(context.editorModel, "focusedRole",
+                       SurveyEditorCellIndex.SplayDistanceCell)
+            compare(findChild(surveyTableId.rowItem(this, context, entryRow),
+                              "splayRowLabel").text, "A2 · +")
+
+            const typeReading = function(keys) {
+                for (let i = 0; i < keys.length; i++) {
+                    keyClick(keys[i])
+                }
+                keyClick(Qt.Key_Tab)
+            }
+
+            typeReading([Qt.Key_4, Qt.Key_Period, Qt.Key_2])
+            typeReading([Qt.Key_1, Qt.Key_2, Qt.Key_0])
+            typeReading([Qt.Key_5])
+
+            tryVerify(() => splayCount(context, 1) === 1, 5000,
+                      "the readings typed into the blank row should make a splay")
+            tryCompare(context.view, "count",
+                       rowsWhileClosed + 1 + blankRow + virtualRows, 5000,
+                       "a fresh blank row should wait under the splay that was typed")
+
+            compare(splayReading(context, entryRow, SurveyEditorCellIndex.SplayDistanceCell), "4.2")
+            compare(splayReading(context, entryRow, SurveyEditorCellIndex.SplayCompassCell), "120")
+            compare(splayReading(context, entryRow, SurveyEditorCellIndex.SplayClinoCell), "5")
+
+            // The row that was blank holds a splay now, and the one below it is
+            // where the next one goes
+            compare(findChild(surveyTableId.rowItem(this, context, entryRow),
+                              "splayRowLabel").text, "A2 · s1")
+            compare(findChild(surveyTableId.rowItem(this, context, entryRow + 1),
+                              "splayRowLabel").text, "A2 · +")
+        }
+
+        // Tabbing across a blank row that was never typed into leaves it blank
+        // and carries on to the next station, the way the table tabs today.
+        function test_tabbingThroughTheBlankRowReachesTheNextStation() {
+            const context = gotoSurveyTable()
+            const firstSplayRow = openCluster(context, 0)
+            const blankRowIndex = firstSplayRow + a4Splays.length
+
+            mouseClick(splayBox(context, blankRowIndex, SurveyEditorCellIndex.SplayDistanceCell))
+            tryCompare(context.editorModel, "focusedRow", blankRowIndex, 5000,
+                       "clicking the blank row should focus it")
+
+            keyClick(Qt.Key_Tab)
+            keyClick(Qt.Key_Tab)
+            tryCompare(context.editorModel, "focusedRole",
+                       SurveyEditorCellIndex.SplayClinoCell, 5000)
+
+            keyClick(Qt.Key_Tab)
+
+            // The cluster is a pass-through: tab leaves it the way the Splays
+            // cell does, and the first station's row runs into the second
+            // station's LRUD rather than its name
+            tryCompare(context.editorModel, "focusedRow",
+                       surveyTableId.stationRow(context, 1), 5000,
+                       "tab out of an untouched blank row should reach the next station")
+            tryCompare(context.editorModel, "focusedRole",
+                       SurveyEditorCellIndex.StationLeftCell)
+            compare(splayCount(context, 0), a4Splays.length,
+                    "tabbing through the blank row should make no splay")
         }
 
         // The arrows run the cluster the way they run the rest of the grid:

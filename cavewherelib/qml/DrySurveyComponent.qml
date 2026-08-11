@@ -32,6 +32,10 @@ Item {
     required property int rowType
     required property cwSurveyEditorRowIndex rowIndex
 
+    //True on the rows the data hasn't reached yet: a chunk's trailing blank
+    //station and shot, and the blank row at the bottom of a splay cluster
+    required property bool isVirtual
+
     //Data that comes from the model
     required property cwSurveyEditorBoxData stationName;
     required property cwSurveyEditorBoxData stationLeft;
@@ -201,6 +205,7 @@ Item {
                 listViewIndex: itemId.index
                 splayCount: itemId.stationSplayCount
                 splaysExpanded: itemId.stationSplaysExpanded
+                isVirtual: itemId.isVirtual
                 splayRemoveChallenge: itemId.splayRemoveChallenge
                 removePreview: itemId.removePreview
                 calibration: itemId.calibration
@@ -224,8 +229,19 @@ Item {
             width: itemId.columnTemplate.width
             height: itemId.columnTemplate.splayRowHeight
 
-            readonly property bool lastInCluster:
-                itemId.rowIndex.splayIndex + 1 === itemId.stationSplayCount
+            //The row at the bottom of every open cluster that holds no splay
+            //yet. Typing a reading into it is what makes one, so it stays out
+            //of the way — no tag of its own and no menu to act on — until the
+            //caret is in it
+            readonly property bool blankRow: itemId.isVirtual
+            readonly property bool blankRowFocused: itemId.model.focusedRow === itemId.index
+
+            readonly property real readingOpacity:
+                splayRowId.blankRow && !splayRowId.blankRowFocused
+                ? Theme.splayWaitingOpacity : 1.0
+
+            //The blank row is the bottom of the cluster, so the rail stops there
+            readonly property bool lastInCluster: splayRowId.blankRow
 
             //Removing the station takes its splays with it
             readonly property bool removePreviewActive:
@@ -256,7 +272,10 @@ Item {
                 anchors.verticalCenter: parent.verticalCenter
                 horizontalAlignment: Text.AlignRight
                 elide: Text.ElideLeft
-                text: itemId.splayStationName + " · s" + (itemId.rowIndex.splayIndex + 1)
+                opacity: splayRowId.readingOpacity
+                text: splayRowId.blankRow
+                      ? itemId.splayStationName + " · +"
+                      : itemId.splayStationName + " · s" + (itemId.rowIndex.splayIndex + 1)
                 color: Theme.splayText
                 font.pixelSize: Theme.fontSizeCaption
             }
@@ -265,6 +284,8 @@ Item {
                 x: itemId.columnTemplate.distanceX
                 width: itemId.columnTemplate.distanceWidth
                 height: itemId.columnTemplate.splayCellHeight
+
+                opacity: splayRowId.readingOpacity
 
                 cellRole: SurveyEditorCellIndex.SplayDistanceCell
                 dataValue: itemId.splayDistance
@@ -281,6 +302,8 @@ Item {
                 width: itemId.columnTemplate.compassWidth
                 height: itemId.columnTemplate.splayCellHeight
 
+                opacity: splayRowId.readingOpacity
+
                 cellRole: SurveyEditorCellIndex.SplayCompassCell
                 dataValue: itemId.splayCompass
                 listViewIndex: itemId.index
@@ -296,6 +319,8 @@ Item {
                 width: itemId.columnTemplate.clinoWidth
                 height: itemId.columnTemplate.splayCellHeight
 
+                opacity: splayRowId.readingOpacity
+
                 cellRole: SurveyEditorCellIndex.SplayClinoCell
                 dataValue: itemId.splayClino
                 listViewIndex: itemId.index
@@ -306,24 +331,32 @@ Item {
                 dataValidator: clinoValidator
             }
 
-            SplayRowMenu {
-                id: splayRowMenuId
+            //The blank row holds no splay to remove or move, so it offers
+            //neither the menu nor the ⋯ that opens it
+            Loader {
                 anchors.fill: parent
+                active: !splayRowId.blankRow
 
-                model: itemId.model
-                rowIndex: itemId.rowIndex
-            }
+                sourceComponent: Item {
+                    SplayRowMenu {
+                        id: splayRowMenuId
+                        anchors.fill: parent
 
-            SplayMenuButton {
-                id: splayRowMenuButtonId
-                objectName: "splayRowMenuButton"
+                        model: itemId.model
+                        rowIndex: itemId.rowIndex
+                    }
 
-                x: itemId.columnTemplate.clinoX
-                   + itemId.columnTemplate.clinoWidth
-                   + itemId.columnTemplate.splayMenuIndent
-                anchors.verticalCenter: parent.verticalCenter
+                    SplayMenuButton {
+                        objectName: "splayRowMenuButton"
 
-                onTapped: splayRowMenuId.menu.popup()
+                        x: itemId.columnTemplate.clinoX
+                           + itemId.columnTemplate.clinoWidth
+                           + itemId.columnTemplate.splayMenuIndent
+                        anchors.verticalCenter: parent.verticalCenter
+
+                        onTapped: splayRowMenuId.menu.popup()
+                    }
+                }
             }
 
             //A splay row is a big target to miss a station by, so a click on
