@@ -123,7 +123,8 @@ QQ.Item {
     }
 
     function takeFocus() {
-        if(cell.listViewIndex < 0) {
+        //A recycled delegate can be tapped with its model already gone
+        if(cell.listViewIndex < 0 || cell.model === null) {
             return
         }
         cell.model.setFocusedCell(cell.model.cellIndex(cell.listViewIndex, cell.cellRole))
@@ -192,6 +193,24 @@ QQ.Item {
         } else {
             cell.model.cancelSplayMove()
         }
+    }
+
+    //! The arbitration every left tap inside the cell shares, whether it landed
+    //! on the cell itself or on a control a subtype put there: an armed splay
+    //! move takes the tap, and anything else takes the focus. Answers whether
+    //! the caller should carry on with what the tap was for
+    function handleCellTap(): bool {
+        if(cell.model === null) {
+            return false
+        }
+
+        if(cell.model.splayMoveActive) {
+            cell.handleSplayMoveTap()
+            return false
+        }
+
+        cell.takeFocus()
+        return true
     }
 
     onFocusChanged: {
@@ -303,17 +322,15 @@ QQ.Item {
         acceptedButtons: Qt.LeftButton | Qt.RightButton
 
         onSingleTapped: (eventPoint, button) => {
-                            if(button !== Qt.RightButton
-                                    && cell.model !== null
-                                    && cell.model.splayMoveActive) {
-                                cell.handleSplayMoveTap()
+                            //A right click asks for the menu whatever else is
+                            //going on, so it skips the move arbitration
+                            if(button === Qt.RightButton) {
+                                cell.takeFocus()
+                                cell.rightTapped()
                                 return
                             }
 
-                            cell.takeFocus()
-                            if(button === Qt.RightButton) {
-                                cell.rightTapped()
-                            } else {
+                            if(cell.handleCellTap()) {
                                 cell.tapped()
                             }
                         }

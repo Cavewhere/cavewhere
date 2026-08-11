@@ -31,6 +31,13 @@ SurveyEditorCell {
     //a station's first splay
     readonly property bool hovered: hoverHandlerId.hovered
 
+    //The chip and its ⋯ take the taps that land on them, so a tap the cell
+    //itself receives on a station that has them is a tap that missed both — and
+    //it leaves the cluster as the user found it. A station with no splays
+    //carries neither control, so nothing there can take a tap and the whole
+    //cell is the target its "+" button marks
+    readonly property bool clusterHasControls: splaysBox.splayCount > 0
+
     //The table's one challenge for deleting a whole cluster, owned by
     //SurveyEditor so it outlives the recycled row that asks for it
     required property SplayRemoveAskBox splayRemoveChallenge
@@ -74,11 +81,8 @@ SurveyEditorCell {
                            }
                        }
 
-    //The chip is the handle for a cluster that exists — a tap anywhere else in
-    //the cell leaves it as it is. A station with no splays has no chip, so the
-    //cell itself is the way into manual entry
     onTapped: {
-        if(splaysBox.splayCount === 0) {
+        if(!splaysBox.clusterHasControls) {
             splaysBox.toggleExpanded()
         }
     }
@@ -88,18 +92,15 @@ SurveyEditorCell {
     }
 
     //A station with no splays shows nothing until the pointer is over it, and
-    //then the one mark that says splays can be typed here
+    //then the button that says splays can be typed here
     QQ.Loader {
         anchors.centerIn: parent
         active: splaysBox.splayCount === 0
                 && !splaysBox.isVirtual
                 && splaysBox.hovered
 
-        sourceComponent: QC.Label {
-            objectName: "splayAddHint"
-            text: "+"
-            color: Theme.splayText
-            font.pixelSize: Theme.fontSizeSmall
+        sourceComponent: SplayEntryButton {
+            objectName: "splayEntryButton"
         }
     }
 
@@ -142,13 +143,9 @@ SurveyEditorCell {
                     gesturePolicy: QQ.TapHandler.ReleaseWithinBounds
 
                     onSingleTapped: {
-                        if(splaysBox.model !== null && splaysBox.model.splayMoveActive) {
-                            splaysBox.handleSplayMoveTap()
-                            return
+                        if(splaysBox.handleCellTap()) {
+                            splaysBox.toggleExpanded()
                         }
-
-                        splaysBox.takeFocus()
-                        splaysBox.toggleExpanded()
                     }
                 }
 
@@ -188,9 +185,10 @@ SurveyEditorCell {
                 anchors.verticalCenter: parent.verticalCenter
 
                 onTapped: {
-                    splaysBox.takeFocus()
-                    stationMenuId.active = true
-                    stationMenuId.item.popup()
+                    if(splaysBox.handleCellTap()) {
+                        stationMenuId.active = true
+                        stationMenuId.item.popup()
+                    }
                 }
             }
         }

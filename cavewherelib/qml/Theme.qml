@@ -57,6 +57,15 @@ QtObject {
     // Shapes, which the survey table stays clear of, so it fades instead.
     readonly property real splayWaitingOpacity: 0.55
 
+    // The round "+" a station with no splays offers while the pointer is over
+    // its Splays cell. It reads as a button in a 50pt station row, where the
+    // small-sized glyph it replaced read as a stray character. The bars that
+    // draw the "+" span a little under half the button, leaving a ring of the
+    // button's own fill around them.
+    readonly property int splayEntryButtonSize: 28
+    readonly property int splayEntryGlyphThickness: 2
+    readonly property real splayEntryGlyphSpan: 0.45
+
     // Lines and outlines
     readonly property color border: dark ? "#4a4f58" : "#d3d3d3"
     readonly property color borderSubtle: dark ? "#353a42" : "#e4e4e4"

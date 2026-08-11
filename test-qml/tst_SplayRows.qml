@@ -126,7 +126,7 @@ MainWindowTest {
             const realCell = splaysCell(context, 1)
             mouseMove(realCell, realCell.width * 0.5, realCell.height * 0.5)
             tryVerify(() => realCell.hovered, 5000, "A2's Splays cell should take the hover")
-            tryVerify(() => findChild(realCell, "splayAddHint") !== null, 5000,
+            tryVerify(() => findChild(realCell, "splayEntryButton") !== null, 5000,
                       "hovering A2's empty Splays cell should offer the +")
 
             const blankStation = context.chunk.stationCount
@@ -136,7 +136,7 @@ MainWindowTest {
             mouseMove(blankCell, blankCell.width * 0.5, blankCell.height * 0.5)
             tryVerify(() => blankCell.hovered, 5000,
                       "the blank station's Splays cell should take the hover")
-            verify(findChild(blankCell, "splayAddHint") === null,
+            verify(findChild(blankCell, "splayEntryButton") === null,
                    "the blank station's Splays cell should offer nothing")
 
             mouseClick(blankCell)
@@ -498,6 +498,33 @@ MainWindowTest {
             compare(splayCount(context, 0), a4Splays.length)
         }
 
+        // Every control in the cell answers to an armed move first, the ⋯
+        // included: while a move waits for a station, clicking it calls the
+        // move off rather than popping the station menu over it.
+        function test_theClusterMenuButtonCallsAnArmedMoveOff() {
+            const context = gotoSurveyTable()
+            const firstSplayRow = openCluster(context, 0)
+
+            const row = surveyTableId.rowItem(this, context, firstSplayRow)
+            const rowMenu = findChild(row, "splayRowMenu")
+            verify(rowMenu !== null, "a splay row should carry a menu")
+            menuItem(rowMenu, "moveSplayMenuItem").triggered()
+
+            tryVerify(() => context.editorModel.splayMoveActive, 5000,
+                      "one splay should be armed to move")
+
+            const cell = splaysCell(context, 0)
+            mouseClick(findChild(cell, "splayClusterMenuButton"))
+
+            tryVerify(() => !context.editorModel.splayMoveActive, 5000,
+                      "clicking the ⋯ during a move should call the move off")
+            wait(settleMilliseconds)
+            compare(findChild(cell, "stationMenuRoot"), null,
+                    "the station menu should stay shut while a move is armed")
+            compare(splayCount(context, 0), a4Splays.length,
+                    "a called-off move should leave the cluster alone")
+        }
+
         // Removing a station takes its splays with it, so the preview strikes
         // through the Splays cell and the cluster's rows, not just the readings.
         function test_removingTheStationPreviewsOverTheSplays() {
@@ -627,6 +654,71 @@ MainWindowTest {
                               "splayRowLabel").text, "A2 · s1")
             compare(findChild(surveyTableId.rowItem(this, context, entryRow + 1),
                               "splayRowLabel").text, "A2 · +")
+        }
+
+        // The "+" is a button, not a hint: it's round, it's a target rather
+        // than a character, and clicking it opens the row a splay is typed
+        // into. Same manual-entry path as the keyboard's, reached by mouse.
+        function test_clickingTheEntryButtonTakesASplay() {
+            const context = gotoSurveyTable()
+            const rowsWhileClosed = context.view.count
+            const cell = splaysCell(context, 1)
+
+            mouseMove(cell, cell.width * 0.5, cell.height * 0.5)
+            tryVerify(() => cell.hovered, 5000, "A2's Splays cell should take the hover")
+
+            let button = null
+            tryVerify(() => {
+                button = findChild(cell, "splayEntryButton")
+                return button !== null
+            }, 5000, "hovering an empty Splays cell should offer the + button")
+
+            compare(button.width, Theme.splayEntryButtonSize)
+            compare(button.height, Theme.splayEntryButtonSize)
+            compare(button.radius, Theme.splayEntryButtonSize * 0.5,
+                    "the entry button should be round")
+
+            mouseClick(button)
+
+            const entryRow = surveyTableId.stationRow(context, 1) + 1
+            tryCompare(context.view, "count", rowsWhileClosed + blankRow + virtualRows, 5000,
+                       "clicking the + should open the row a splay is typed into")
+            tryCompare(context.editorModel, "focusedRow", entryRow, 5000,
+                       "clicking the + should put the caret in the blank row")
+            tryCompare(context.editorModel, "focusedRole",
+                       SurveyEditorCellIndex.SplayDistanceCell)
+
+            // The model's focus lands a frame before the cell holding it takes
+            // the keyboard, and the first reading's first key is what would go
+            // missing in between
+            const distanceBox = splayBox(context, entryRow,
+                                         SurveyEditorCellIndex.SplayDistanceCell)
+            tryVerify(() => distanceBox.activeFocus, 5000,
+                      "the blank row's distance cell should have the keyboard")
+
+            const typeReading = function(keys) {
+                for (let i = 0; i < keys.length; i++) {
+                    keyClick(keys[i])
+                }
+                keyClick(Qt.Key_Tab)
+            }
+
+            typeReading([Qt.Key_3, Qt.Key_Period, Qt.Key_1])
+            typeReading([Qt.Key_9, Qt.Key_0])
+            typeReading([Qt.Key_Minus, Qt.Key_7])
+
+            tryVerify(() => splayCount(context, 1) === 1, 5000,
+                      "the readings typed after the + should make a splay")
+            compare(splayReading(context, entryRow, SurveyEditorCellIndex.SplayDistanceCell), "3.1")
+            compare(splayReading(context, entryRow, SurveyEditorCellIndex.SplayCompassCell), "90")
+            compare(splayReading(context, entryRow, SurveyEditorCellIndex.SplayClinoCell), "-7")
+
+            // The station carries splays now, so the cell trades the button for
+            // the chip that counts them
+            tryVerify(() => findChild(splaysCell(context, 1), "splayChip") !== null, 5000,
+                      "the chip should take the button's place")
+            compare(findChild(splaysCell(context, 1), "splayEntryButton"), null,
+                    "a station with splays offers no + button")
         }
 
         // Tabbing across a blank row that was never typed into leaves it blank
