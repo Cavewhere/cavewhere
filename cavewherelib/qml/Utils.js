@@ -24,6 +24,21 @@ function escapeHtml(text) {
 }
 
 /**
+  Formats a WGS84 pair as one comma-separated string, latitude first, in the
+  order the rest of the app displays them. Degrees are degrees, so neither
+  carries a unit. Callers pass their own precision: a projection parameter and a
+  point the user placed are read to different resolutions.
+
+  @param latitude - degrees north
+  @param longitude - degrees east
+  @param precision - decimal places, the same for both
+  @return string - "36.123456, -84.089012"
+  */
+function formatLatLon(latitude, longitude, precision) {
+    return "%1, %2".arg(latitude.toFixed(precision)).arg(longitude.toFixed(precision))
+}
+
+/**
   This will map MouseArea mouseX and mouseY to global coordinates
 
   @param mouseArea - The mouse area, that the mouse event came from

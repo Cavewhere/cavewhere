@@ -14,6 +14,8 @@ import QtQml
 import QtQuick as QQ
 import QtQuick.Layouts
 import QtQuick.Controls as QC
+import "Utils.js" as Utils
+
 StandardPage {
     id: pageId
 
@@ -110,13 +112,8 @@ StandardPage {
         implicitHeight: infoColumnId.implicitHeight + Theme.statsPadding * 2
         color: Theme.borderSubtle
 
-        // Latitude and longitude as one comma-separated pair, in the order the
-        // rest of the app displays them. Degrees are degrees, so neither
-        // carries a unit.
         function formatOrigin(latitude, longitude) {
-            return "%1, %2"
-                .arg(latitude.toFixed(regionInfoBox.originPrecision))
-                .arg(longitude.toFixed(regionInfoBox.originPrecision))
+            return Utils.formatLatLon(latitude, longitude, regionInfoBox.originPrecision)
         }
 
         ColumnLayout {
@@ -273,6 +270,17 @@ StandardPage {
                                   : qsTr("Not georeferenced")
                         }
 
+                        // Recentering re-derives a frame that already exists, so
+                        // it has nothing to offer a project nothing has placed
+                        // yet.
+                        QC.Button {
+                            objectName: "recenterButton"
+                            visible: regionInfoBox.editMode
+                                     && RootData.region.geoReference.hasCoordinateSystem
+                            text: qsTr("Recenter…")
+                            onClicked: projectionCenterDialogId.open()
+                        }
+
                         QQ.Item { Layout.fillWidth: true }
                     }
 
@@ -360,6 +368,11 @@ StandardPage {
                               "georeference, whether that is a fix station or a GIS source. " +
                               "<b>Location</b> is where that center landed, and <b>Centered on</b> " +
                               "names the fix station or GIS source it landed on.</p>" +
+                              "<p>Click <b>Edit</b> and then <b>Recenter…</b> to move that center " +
+                              "onto a fix station of your choosing, or onto the middle of your " +
+                              "data. True north lines up best near the center, so the station in " +
+                              "the middle of the part of the cave you care about is a good one to " +
+                              "pick. The datum still comes from your data either way.</p>" +
                               "<p>The <b>datum</b> is the model of the Earth's shape your " +
                               "coordinates are measured against, and it comes from that same " +
                               "first input — it is shown here rather than chosen, because every " +
@@ -570,6 +583,10 @@ StandardPage {
             LayoutItemProxy { target: actionBar }
             LayoutItemProxy { target: caveListId }
         }
+    }
+
+    ProjectionCenterDialog {
+        id: projectionCenterDialogId
     }
 
     RemoveAskBox {

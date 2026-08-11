@@ -23,11 +23,11 @@
 #include <utility>
 
 namespace {
-    //! How far an input may sit from the origin before the origin counts as
-    //! meaningfully wrong. Scale error out here is ~30 ppm — still negligible —
-    //! while the mistakes this is meant to catch (a wrong UTM zone, a hemisphere
-    //! flip, a transposed digit) miss by far more.
-    constexpr double kAnchorThresholdMeters = 50000.0;
+    //! How near the origin a point has to sit to count as being on it. The frame
+    //! travels as a PROJ string, so an origin written out and read back lands a
+    //! fraction of a meter from where it started; a gap past this one is the
+    //! project's data having moved rather than the round trip.
+    constexpr double kFrameOriginToleranceMeters = 1.0;
 
     //! How far \a from and \a to sit apart horizontally, both being points in
     //! the frame. The frame is judged on horizontal position, so z takes no part.
@@ -352,6 +352,20 @@ bool cwLocalProjectionManager::recenterOnStation(const QUuid& stationId)
     }
 
     return anchorTo(inputOf(*fix));
+}
+
+bool cwLocalProjectionManager::isCenteredOnDataCenter() const
+{
+    // An anchored frame is never "already there", even with its anchor sitting
+    // on the middle of the data: centering would still cut the frame loose from
+    // the input it follows, which is a change worth offering.
+    if (m_region->geoReference()->state() != cwGeoReference::Frozen) {
+        return false;
+    }
+
+    const auto center = dataCenter();
+    return center.has_value()
+            && horizontalMagnitude(*center) <= kFrameOriginToleranceMeters;
 }
 
 bool cwLocalProjectionManager::recenterOnDataCenter()

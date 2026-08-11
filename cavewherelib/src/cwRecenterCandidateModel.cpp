@@ -9,8 +9,10 @@
 #include "cwRecenterCandidateModel.h"
 #include "cwCave.h"
 #include "cwCavingRegion.h"
+#include "cwCoordinateTransform.h"
 #include "cwFixStation.h"
 #include "cwFixStationModel.h"
+#include "cwGeoReference.h"
 #include "cwLocalProjectionManager.h"
 
 cwRecenterCandidateModel::cwRecenterCandidateModel(cwLocalProjectionManager* manager,
@@ -21,8 +23,6 @@ cwRecenterCandidateModel::cwRecenterCandidateModel(cwLocalProjectionManager* man
 {
     Q_ASSERT(m_manager != nullptr);
     Q_ASSERT(m_region != nullptr);
-
-    refresh();
 }
 
 int cwRecenterCandidateModel::rowCount(const QModelIndex& parent) const
@@ -47,8 +47,16 @@ QVariant cwRecenterCandidateModel::data(const QModelIndex& index, int role) cons
         return candidate.stationName;
     case CaveNameRole:
         return candidate.caveName;
+    case LatitudeRole:
+        return candidate.position.has_value() ? candidate.position->y : 0.0;
+    case LongitudeRole:
+        return candidate.position.has_value() ? candidate.position->x : 0.0;
+    case HasCoordinateRole:
+        return candidate.position.has_value();
     case EligibleRole:
         return candidate.eligible;
+    case CurrentRole:
+        return candidate.current;
     default:
         return QVariant();
     }
@@ -57,10 +65,14 @@ QVariant cwRecenterCandidateModel::data(const QModelIndex& index, int role) cons
 QHash<int, QByteArray> cwRecenterCandidateModel::roleNames() const
 {
     return {
-        {StationIdRole,   "stationId"},
-        {StationNameRole, "stationName"},
-        {CaveNameRole,    "caveName"},
-        {EligibleRole,    "eligible"}
+        {StationIdRole,     "stationId"},
+        {StationNameRole,   "stationName"},
+        {CaveNameRole,      "caveName"},
+        {LatitudeRole,      "latitude"},
+        {LongitudeRole,     "longitude"},
+        {HasCoordinateRole, "hasCoordinate"},
+        {EligibleRole,      "eligible"},
+        {CurrentRole,       "isCurrent"}
     };
 }
 
@@ -72,8 +84,15 @@ void cwRecenterCandidateModel::refresh()
         // re-derives a frame that exists and is never how the first one gets
         // made, so there is nothing to offer.
         setCandidates({});
+        setDataCenter(std::nullopt, false);
         return;
     }
+
+    const cwGeoReference* geoReference = m_region->geoReference();
+    setDataCenter(toWgs84(geoReference->localCoordinateSystem(), *center),
+                  m_manager->isCenteredOnDataCenter());
+
+    const cwGeoReference::Anchor anchor = geoReference->anchor();
 
     QList<cwRecenterCandidate> candidates;
     for (cwCave* cave : m_region->caves()) {
@@ -95,7 +114,10 @@ void cwRecenterCandidateModel::refresh()
                 fix.id(),
                 fix.stationName(),
                 cave->name(),
-                cwLocalProjectionManager::isWithinReach(*center, *local)
+                toWgs84(fix.inputCS(),
+                        cwGeoPoint(fix.easting(), fix.northing(), fix.elevation())),
+                cwLocalProjectionManager::isWithinReach(*center, *local),
+                anchor.kind == cwGeoReference::Anchor::FixStation && anchor.id == fix.id()
             });
         }
     }
@@ -114,4 +136,23 @@ void cwRecenterCandidateModel::setCandidates(const QList<cwRecenterCandidate>& c
     if (previousCount != count()) {
         emit countChanged();
     }
+}
+
+void cwRecenterCandidateModel::setDataCenter(const std::optional<cwGeoPoint>& center,
+                                             bool isCurrent)
+{
+    if (m_dataCenter == center && m_dataCenterIsCurrent == isCurrent) {
+        return;
+    }
+    m_dataCenter = center;
+    m_dataCenterIsCurrent = isCurrent;
+    emit dataCenterChanged();
+}
+
+std::optional<cwGeoPoint> cwRecenterCandidateModel::toWgs84(const QString& coordinateSystem,
+                                                            const cwGeoPoint& point)
+{
+    return cwCoordinateTransform::transformPoint(coordinateSystem,
+                                                 cwCoordinateTransform::Wgs84,
+                                                 point);
 }

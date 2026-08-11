@@ -118,7 +118,7 @@ with the coordinates you typed, which already say which datum they are on.
   here as a location in the wrong part of the world, the one warning the app
   cannot give you on the fix row itself. Before anything places the project it
   reads `Not georeferenced`.
-- **Centered on** names that first thing: `entrance — Roppel Cave` for a fix
+- **Centered on** names that first thing: `entrance — Phake Cave` for a fix
   station, or the file name for a point cloud. It follows renames, so it always
   names the station as you have it now.
 - **Datum** names the model of the Earth's shape your coordinates measure
@@ -133,6 +133,33 @@ with the coordinates you typed, which already say which datum they are on.
   than a correction it applied.
 
 Once the project has a frame, every row stays on screen.
+
+## Move the center
+
+The frame lands on whatever placed the project first, which rarely sits in the
+middle. Click **Edit** on the **Coordinate System** heading and **Recenter…**
+appears beside **Location**.
+
+Why bother: the frame holds true scale and true north at its center and leans
+away the further out you go, about 0.008° of
+[convergence](grid-convergence.md) per kilometer east or west at 40°N. Center it
+on the part of the cave you care about. The case I hit most: a project that grew
+two miles west over ten years, off the one entrance anybody fixed, on its
+eastern edge.
+
+The picker opens with **Middle of your data**, then your fix stations, each as
+its cave and the station in it (`Phake Cave at entrance`). Every row carries
+its latitude and longitude, which tells two `entrance` stations apart and
+catches a wrong-zone fix. Click a row, then **Center**: a click alone only
+selects. I pick Middle of your data unless one station matters more. The row the
+frame already sits on stays listed, marked `Projection's center`. A station over
+50 km from the middle of your data goes gray with the reason under it: centering
+that far off gives you a worse frame than the one you have.
+
+Centering re-projects your coordinates onto the new center, and point clouds
+reload once. Nothing moves on the ground: the cave keeps its coordinates in
+every real-world system, and only the grid CaveWhere draws it on changes. Your
+data still decides the datum.
 
 ## Read coordinates back out
 

@@ -64,9 +64,22 @@ class CAVEWHERE_LIB_EXPORT cwLocalProjectionManager : public QObject
 
     Q_PROPERTY(cwRecenterCandidateModel* recenterCandidates READ recenterCandidates CONSTANT FINAL)
 
+    //! The frame's reach, in meters, for the picker to print beside the rows it
+    //! grays out. Exposed rather than restated in QML so the number the user
+    //! reads is the number isWithinReach() applies.
+    Q_PROPERTY(double anchorThresholdMeters READ anchorThresholdMeters CONSTANT FINAL)
+
 public:
+    //! How far an input may sit from the origin before the origin counts as
+    //! meaningfully wrong. Scale error out here is ~30 ppm — still negligible —
+    //! while the mistakes this is meant to catch (a wrong UTM zone, a hemisphere
+    //! flip, a transposed digit) miss by far more.
+    static constexpr double kAnchorThresholdMeters = 50000.0;
+
     explicit cwLocalProjectionManager(cwCavingRegion* region);
     ~cwLocalProjectionManager() override;
+
+    double anchorThresholdMeters() const { return kAnchorThresholdMeters; }
 
     //! The project's frame, as a future that finishes once the frame has
     //! stopped moving — settled is exactly "this future is finished", and its
@@ -89,15 +102,21 @@ public:
     //! origin has ended up somewhere the project isn't.
     static bool isWithinReach(const cwGeoPoint& center, const cwGeoPoint& point);
 
-    //! The stations the user may recenter on, in region order. Built on first
-    //! access — a project that never opens the picker never pays for it — and
-    //! refreshed from there by the picker itself.
+    //! The stations the user may recenter on, in region order. Created empty on
+    //! first access and filled by the picker's own refresh(), so a project that
+    //! never opens the picker never pays for it.
     cwRecenterCandidateModel* recenterCandidates();
 
     //! The middle of the project — the component-wise median of every input the
     //! frame can place, in the frame's own coordinates — or an empty result when
     //! there is no frame or nothing it can place.
     std::optional<cwGeoPoint> dataCenter() const;
+
+    //! Whether the frame is already frozen on the middle of the project, so
+    //! centering there again would re-derive the frame it already has. Answered
+    //! by position, unlike cwGeoReference::anchor(): freezing leaves no anchor
+    //! behind for an identity check to compare against.
+    bool isCenteredOnDataCenter() const;
 
     //! Where \a fix sits in the project's frame, or an empty result when the fix
     //! has no coordinate the frame can read. A station the frame can't place is

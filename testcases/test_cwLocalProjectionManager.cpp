@@ -87,6 +87,16 @@ QVariant candidateRole(const cwRecenterCandidateModel* model, int row,
     return model->data(model->index(row, 0), role);
 }
 
+//! \a region's picker rows, gathered the way opening the picker gathers them.
+//! The model exists from first access and holds nothing until refresh() fills
+//! it, so every reader here starts by opening the picker.
+cwRecenterCandidateModel* openedCandidates(cwCavingRegion* region)
+{
+    cwRecenterCandidateModel* candidates = region->localProjection()->recenterCandidates();
+    candidates->refresh();
+    return candidates;
+}
+
 using cwGeoreferenceFixture::restoreFrozenFrame;
 
 } // namespace
@@ -577,6 +587,41 @@ TEST_CASE("Recentering on the data's middle freezes the frame there",
                     kAnchorEasting + 1000.0, kAnchorNorthing + 2000.0);
 }
 
+TEST_CASE("A frame already frozen on the data's middle says so",
+          "[cwLocalProjectionManager][cwRecenter]")
+{
+    // The picker grays out the row the frame already sits on. A station row
+    // answers that by identity against the anchor; freezing leaves no anchor
+    // behind, so the middle-of-the-data row has to answer it by position.
+    cwCavingRegion region;
+    cwCave* cave = addCaveWithFixes(&region, {
+        makeFix(QStringLiteral("A1"), kUtm12N,
+                kAnchorEasting, kAnchorNorthing, kElevation),
+        makeFix(QStringLiteral("A2"), kUtm12N,
+                kNearbyEasting, kNearbyNorthing, kElevation)});
+
+    // Anchored on a station, even one sitting on the middle of the data:
+    // centering would still cut the frame loose from the input it follows.
+    REQUIRE(region.geoReference()->state() == cwGeoReference::Anchored);
+    CHECK_FALSE(region.localProjection()->isCenteredOnDataCenter());
+    CHECK_FALSE(openedCandidates(&region)->dataCenterIsCurrent());
+
+    REQUIRE(region.localProjection()->recenterOnDataCenter());
+    REQUIRE(region.geoReference()->state() == cwGeoReference::Frozen);
+
+    CHECK(region.localProjection()->isCenteredOnDataCenter());
+    CHECK(openedCandidates(&region)->dataCenterIsCurrent());
+
+    // Data added on one side moves the middle off the origin, so the row is a
+    // real move again.
+    cave->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("A3"), kUtm12N,
+                kAnchorEasting + 4000.0, kAnchorNorthing + 4000.0, kElevation));
+
+    CHECK_FALSE(region.localProjection()->isCenteredOnDataCenter());
+    CHECK_FALSE(openedCandidates(&region)->dataCenterIsCurrent());
+}
+
 TEST_CASE("A station the project's data would sit far from can't be recentered on",
           "[cwLocalProjectionManager][cwRecenter]")
 {
@@ -598,8 +643,7 @@ TEST_CASE("A station the project's data would sit far from can't be recentered o
     cwCave* cave = addCaveWithFixes(&region, {first, second, third, elsewhere});
     cave->setName(QStringLiteral("Roppel Cave"));
 
-    const cwRecenterCandidateModel* candidates =
-        region.localProjection()->recenterCandidates();
+    const cwRecenterCandidateModel* candidates = openedCandidates(&region);
     REQUIRE(candidates->count() == 4);
 
     CHECK(candidateRole(candidates, 3, cwRecenterCandidateModel::StationIdRole).toUuid()
@@ -621,6 +665,46 @@ TEST_CASE("A station the project's data would sit far from can't be recentered o
     CHECK(geoReference->anchor().id == first.id());
 }
 
+TEST_CASE("Every candidate says where on Earth it is",
+          "[cwLocalProjectionManager][cwRecenter]")
+{
+    // The picker prints the coordinate under each row, which is what tells two
+    // caves' "entrance" stations apart and what catches a fix typed into the
+    // wrong zone before the whole project is centered on it. Zone 12N's central
+    // meridian is 111 W, and 4194000 m north of the equator is close to 37.9 N.
+    cwCavingRegion region;
+    addCaveWithFixes(&region, {makeFix(QStringLiteral("A1"), kUtm12N,
+                                       kAnchorEasting, kAnchorNorthing, kElevation),
+                               makeFix(QStringLiteral("B1"), QString(),
+                                       kAnchorEasting, kAnchorNorthing, kElevation)});
+
+    const cwRecenterCandidateModel* candidates = openedCandidates(&region);
+    REQUIRE(candidates->count() == 1);
+
+    CHECK(candidateRole(candidates, 0, cwRecenterCandidateModel::HasCoordinateRole).toBool());
+    CHECK_THAT(candidateRole(candidates, 0, cwRecenterCandidateModel::LatitudeRole).toDouble(),
+               WithinAbs(37.888, 0.01));
+    CHECK_THAT(candidateRole(candidates, 0, cwRecenterCandidateModel::LongitudeRole).toDouble(),
+               WithinAbs(-111.0, 0.01));
+
+    // The middle of the data is the other thing the picker offers, so it says
+    // where it is on the same terms. One station makes it that station.
+    CHECK(candidates->hasDataCenter());
+    CHECK_THAT(candidates->dataCenterLatitude(), WithinAbs(37.888, 0.01));
+    CHECK_THAT(candidates->dataCenterLongitude(), WithinAbs(-111.0, 0.01));
+}
+
+TEST_CASE("A project with nothing to center on has no middle either",
+          "[cwLocalProjectionManager][cwRecenter]")
+{
+    cwCavingRegion region;
+    addCaveWithFixes(&region, {makeFix(QStringLiteral("A1"), QString(),
+                                       kAnchorEasting, kAnchorNorthing, kElevation)});
+    REQUIRE(region.geoReference()->state() == cwGeoReference::Ungeoreferenced);
+
+    CHECK_FALSE(openedCandidates(&region)->hasDataCenter());
+}
+
 TEST_CASE("The candidate rows are the project as of the last refresh",
           "[cwLocalProjectionManager][cwRecenter]")
 {
@@ -632,7 +716,7 @@ TEST_CASE("The candidate rows are the project as of the last refresh",
                                                       kAnchorEasting, kAnchorNorthing,
                                                       kElevation)});
 
-    cwRecenterCandidateModel* candidates = region.localProjection()->recenterCandidates();
+    cwRecenterCandidateModel* candidates = openedCandidates(&region);
     REQUIRE(candidates->count() == 1);
 
     cave->fixStations()->appendFixStation(
@@ -655,7 +739,7 @@ TEST_CASE("A project with no frame has nothing to recenter",
                                        kAnchorEasting, kAnchorNorthing, kElevation)});
     REQUIRE(region.geoReference()->state() == cwGeoReference::Ungeoreferenced);
 
-    CHECK(region.localProjection()->recenterCandidates()->count() == 0);
+    CHECK(openedCandidates(&region)->count() == 0);
     CHECK_FALSE(region.localProjection()->recenterOnDataCenter());
     CHECK_FALSE(region.localProjection()->recenterOnStation(QUuid::createUuid()));
     CHECK(region.geoReference()->state() == cwGeoReference::Ungeoreferenced);
