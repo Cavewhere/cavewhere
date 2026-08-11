@@ -3967,9 +3967,9 @@ void cwSaveLoad::enqueueExternalCenterlineCopyIfNewer(const QString& sourcePath,
     }
 
     // An external-centerline copy mutates the project's on-disk shape
-    // (a live-link refresh landing mid-session), so flip
+    // (an attach or a Replace landing mid-session), so flip
     // cwProject::modified() via localMutationOccurred — otherwise the
-    // refresh is silently lost in a bundled .cw on quit-without-save.
+    // copy is silently lost in a bundled .cw on quit-without-save.
     // reconcile()'s planner skips up-to-date destinations, so a no-op
     // reconcile never reaches this and the bit stays untouched.
     if (!d->suppressLocalMutationTracking) {

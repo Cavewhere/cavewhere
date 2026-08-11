@@ -27,6 +27,11 @@ ColumnLayout {
     property bool locked: false
     property string operationError: ""
 
+    // Folder the Browse dialog opens in. Empty - which is what a host
+    // with no breadcrumb to offer passes - falls back to the last
+    // directory the user picked anything in.
+    property url initialFolder
+
     // The add dialog opens on an empty field and names what it accepts.
     // A replace picks the same kinds of file for a trip that already has
     // one, so it stays quiet.
@@ -133,7 +138,9 @@ ColumnLayout {
             qsTr("Survey files (*.svx *.dat *.mak *.srv *.wpj)"),
             qsTr("All files (*)")
         ]
-        currentFolder: RootData.lastDirectory
+        currentFolder: root.initialFolder.toString().length > 0
+                       ? root.initialFolder
+                       : RootData.lastDirectory
         fileMode: QD.FileDialog.OpenFile
         onAccepted: {
             RootData.lastDirectory = selectedFile

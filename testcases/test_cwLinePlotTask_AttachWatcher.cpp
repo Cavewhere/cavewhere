@@ -219,7 +219,7 @@ TEST_CASE("What the manager reports is the same for every remembered-source stat
 
         cwExternalSourceSettings settings;
         if (!sourcePath.isEmpty()) {
-            settings.setSourcePath(attached->id(), sourcePath);
+            settings.setBreadcrumbPath(attached->id(), sourcePath);
         }
 
         cwLinePlotManager manager;
@@ -327,7 +327,7 @@ TEST_CASE("Editing a remembered source file changes nothing observable",
     auto fixture = makeRememberedSourceFixture();
 
     cwExternalSourceSettings settings;
-    settings.setSourcePath(fixture->trip->id(), fixture->sourcePath);
+    settings.setBreadcrumbPath(fixture->trip->id(), fixture->sourcePath);
 
     cwLinePlotManager manager;
     manager.externalCenterlineManager()->setSaveLoad(fixture->project->saveLoad());

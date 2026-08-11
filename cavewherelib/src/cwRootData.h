@@ -228,7 +228,7 @@ public slots:
 
 private:
     cwCavingRegion* Region; //!< Where all the data is stored
-    cwExternalSourceSettings* m_externalSourceSettings; //!< Per-machine live-link source paths
+    cwExternalSourceSettings* m_externalSourceSettings; //!< Per-machine breadcrumbs for the Replace file dialog
     cwLinePlotManager* LinePlotManager; //!< For keeping the lineplot updated
     cwScrapManager* ScrapManager; //!< For keeping all the scraps updated (carpeting)
     cwNoteLiDARManager* NoteLiDARManager; //!< For carpeting lidar scans

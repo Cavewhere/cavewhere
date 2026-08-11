@@ -828,7 +828,7 @@ TEST_CASE("Project-side scan flag wins over a diverged live-link source",
     attached->calibrations()->setDeclinationManual(90.0);
 
     cwExternalSourceSettings settings;
-    settings.setSourcePath(attached->id(), sourcePath);
+    settings.setBreadcrumbPath(attached->id(), sourcePath);
 
     cwLinePlotManager manager;
     manager.externalCenterlineManager()->setExternalSourceSettings(&settings);
@@ -850,7 +850,7 @@ TEST_CASE("Project-side scan flag wins over a diverged live-link source",
     CHECK(b2.x() == Catch::Approx(10.0).margin(0.01));
     CHECK(b2.y() == Catch::Approx(0.0).margin(0.01));
 
-    settings.clearSourcePath(attached->id());
+    settings.clearBreadcrumb(attached->id());
 }
 
 TEST_CASE("File-owned declination wins over the trip's CaveWhere setting",

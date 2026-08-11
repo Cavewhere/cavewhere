@@ -147,7 +147,7 @@ TEST_CASE("attach copies the closure, sets the trip centerline, and remembers th
     CHECK(QFileInfo::exists(attachmentDir.absoluteFilePath(QStringLiteral("survex_simple.svx"))));
 
     // Source memory is always written (direction change: no live-link toggle).
-    CHECK(fixture->settings()->sourcePathFor(fixture->trip->id()) == source);
+    CHECK(fixture->settings()->breadcrumbPath(fixture->trip->id()) == source);
 
     // Attaching is a project mutation.
     CHECK(fixture->project->modified());
@@ -187,7 +187,7 @@ TEST_CASE("attach writes the source entry through the shared per-machine store",
     REQUIRE_FALSE(result.hasError());
 
     const cwExternalSourceSettings fresh;
-    CHECK(fresh.sourcePathFor(fixture->trip->id()) == source);
+    CHECK(fresh.breadcrumbPath(fixture->trip->id()) == source);
 }
 
 TEST_CASE("attach seeds date, team, and file-owned declination onto a fresh trip",
@@ -282,7 +282,7 @@ TEST_CASE("re-attach over an attached trip replaces the entry and GCs the old cl
     CHECK_FALSE(QFileInfo::exists(
         attachmentDir.absoluteFilePath(QStringLiteral("survex_simple.svx"))));
     // Source memory upserted to the new pick.
-    CHECK(fixture->settings()->sourcePathFor(fixture->trip->id()) == second);
+    CHECK(fixture->settings()->breadcrumbPath(fixture->trip->id()) == second);
 }
 
 TEST_CASE("failed re-attach leaves the prior attachment model untouched",
@@ -321,7 +321,7 @@ TEST_CASE("failed re-attach leaves the prior attachment model untouched",
     CHECK(fixture->trip->externalCenterline().entryFile()
           == QStringLiteral("survex_simple.svx"));
     // The prior source memory is preserved for a retry.
-    CHECK(fixture->settings()->sourcePathFor(fixture->trip->id()) == first);
+    CHECK(fixture->settings()->breadcrumbPath(fixture->trip->id()) == first);
 }
 
 TEST_CASE("attach fails cleanly when the source file does not exist",
@@ -339,7 +339,7 @@ TEST_CASE("attach fails cleanly when the source file does not exist",
     CHECK(future.result().hasError());
     CHECK(fixture->trip->externalCenterline().isEmpty());
     CHECK_FALSE(fixture->saveLoad()->externalCenterlineDir(fixture->trip).exists());
-    CHECK(fixture->settings()->sourcePathFor(fixture->trip->id()).isEmpty());
+    CHECK(fixture->settings()->breadcrumbPath(fixture->trip->id()).isEmpty());
     CHECK_FALSE(fixture->project->modified());
 }
 
@@ -371,7 +371,7 @@ TEST_CASE("attach refuses a source whose *include cannot be mirrored under the a
 
     // The model is untouched, so the trip is exactly as it was.
     CHECK(fixture->trip->externalCenterline().isEmpty());
-    CHECK(fixture->settings()->sourcePathFor(fixture->trip->id()).isEmpty());
+    CHECK(fixture->settings()->breadcrumbPath(fixture->trip->id()).isEmpty());
 }
 
 TEST_CASE("attach never sets the trip centerline when reconcile cannot write",
@@ -405,7 +405,7 @@ TEST_CASE("attach never sets the trip centerline when reconcile cannot write",
     // Never set: the model flips only after the reconcile verify
     // passes, so the trip stays Native and no source entry is written.
     CHECK(fixture->trip->externalCenterline().isEmpty());
-    CHECK(fixture->settings()->sourcePathFor(fixture->trip->id()).isEmpty());
+    CHECK(fixture->settings()->breadcrumbPath(fixture->trip->id()).isEmpty());
     // Pinned by the phase 2 plan: a failed attach leaves modified()
     // true - the copy jobs flipped the bit at enqueue and partial
     // files may have hit disk.
@@ -434,7 +434,7 @@ TEST_CASE("cancelling the attach before the scan lands leaves everything untouch
     CHECK(future.isCanceled());
     CHECK(fixture->trip->externalCenterline().isEmpty());
     CHECK_FALSE(fixture->saveLoad()->externalCenterlineDir(fixture->trip).exists());
-    CHECK(fixture->settings()->sourcePathFor(fixture->trip->id()).isEmpty());
+    CHECK(fixture->settings()->breadcrumbPath(fixture->trip->id()).isEmpty());
     CHECK_FALSE(fixture->project->modified());
 }
 
@@ -459,8 +459,8 @@ TEST_CASE("detach clears the centerline, removes the attachment dir, and forgets
     REQUIRE_FALSE(future.result().hasError());
     CHECK(fixture->trip->externalCenterline().isEmpty());
     CHECK_FALSE(QDir(attachmentDir).exists());
-    CHECK(fixture->settings()->sourcePathFor(fixture->trip->id()).isEmpty());
-    CHECK_FALSE(fixture->settings()->hasSource(fixture->trip->id()));
+    CHECK(fixture->settings()->breadcrumbPath(fixture->trip->id()).isEmpty());
+    CHECK_FALSE(fixture->settings()->hasBreadcrumb(fixture->trip->id()));
 
     // Second detach on the now-Native trip: idempotent, still Ok.
     auto again = cwExternalCenterlineAttach::detach(
@@ -477,8 +477,8 @@ TEST_CASE("detach on a Native trip is a no-op that completes Ok",
 
     // Plant a stray source entry: detach on a Native trip must still
     // clear it (the documented contract), even with nothing attached.
-    fixture->settings()->setSourcePath(fixture->trip->id(),
-                                       QStringLiteral("/stale/orphan.svx"));
+    fixture->settings()->setBreadcrumbPath(fixture->trip->id(),
+                                           QStringLiteral("/stale/orphan.svx"));
 
     auto future = cwExternalCenterlineAttach::detach(
         fixture->trip, fixture->saveLoad(), fixture->settings());
@@ -486,7 +486,7 @@ TEST_CASE("detach on a Native trip is a no-op that completes Ok",
 
     REQUIRE_FALSE(future.result().hasError());
     CHECK(fixture->trip->externalCenterline().isEmpty());
-    CHECK_FALSE(fixture->settings()->hasSource(fixture->trip->id()));
+    CHECK_FALSE(fixture->settings()->hasBreadcrumb(fixture->trip->id()));
     CHECK_FALSE(fixture->project->modified());
 }
 
@@ -613,7 +613,7 @@ TEST_CASE("manager detach drops the settings entry and dir map synchronously",
     // before the remove-tree drains. The busy token covers the rest of the
     // drain, so there is no instant at which the owner looks attachable
     // while its files are still being removed.
-    CHECK(fixture->settings()->sourcePathFor(ownerId).isEmpty());
+    CHECK(fixture->settings()->breadcrumbPath(ownerId).isEmpty());
     CHECK_FALSE(manager->solveInputs().tripAttachmentDirs.contains(ownerId));
     CHECK(fixture->trip->externalCenterline().isEmpty());
     CHECK(manager->isOwnerBusy(ownerId));
@@ -712,7 +712,7 @@ TEST_CASE("cancelAttach cancels an in-flight attach before the scan lands",
 
     CHECK_FALSE(manager->isOwnerBusy(ownerId));
     CHECK(fixture->trip->externalCenterline().isEmpty());
-    CHECK(fixture->settings()->sourcePathFor(ownerId).isEmpty());
+    CHECK(fixture->settings()->breadcrumbPath(ownerId).isEmpty());
 
     // The owner is immediately reusable - a fresh attach succeeds.
     auto retry = manager->attachCenterline(fixture->trip, source);
@@ -880,7 +880,7 @@ TEST_CASE("replace swaps the closure, GCs the dropped deps, and re-solves",
 
     // The pick is remembered like any other, and the plot is re-solved
     // off the new bytes rather than waiting for the next edit.
-    CHECK(fixture->settings()->sourcePathFor(ownerId) == simple);
+    CHECK(fixture->settings()->breadcrumbPath(ownerId) == simple);
     CHECK(solveSpy.count() > 0);
 
     // One report, through the attach bridge - a replace is an attach over

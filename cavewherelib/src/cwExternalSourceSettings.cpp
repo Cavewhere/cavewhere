@@ -8,6 +8,8 @@
 #include "cwExternalSourceSettings.h"
 
 //Qt includes
+#include <QDir>
+#include <QFileInfo>
 #include <QSettings>
 
 cwExternalSourceSettings::cwExternalSourceSettings(QObject* parent)
@@ -15,83 +17,93 @@ cwExternalSourceSettings::cwExternalSourceSettings(QObject* parent)
 {
 }
 
-// QUuid keys are stored "WithoutBraces" (lowercase with hyphens) to
-// match the Cave/Trip id serialization in cwSaveLoad. QUuid::fromString
-// accepts both with-hyphens and no-hyphens, so lookups never trip over
-// formatting drift.
-QString cwExternalSourceSettings::sourceKey(const QUuid& ownerId)
+// The "externalCenterlineSources" group name predates the demotion to
+// breadcrumbs and stays as it is, so settings files written by older
+// versions keep resolving. QUuid keys are stored "WithoutBraces"
+// (lowercase with hyphens) to match the Cave/Trip id serialization in
+// cwSaveLoad. QUuid::fromString accepts both with-hyphens and
+// no-hyphens, so lookups never trip over formatting drift.
+QString cwExternalSourceSettings::breadcrumbKey(const QUuid& ownerId)
 {
     return QStringLiteral("externalCenterlineSources/")
         + ownerId.toString(QUuid::WithoutBraces);
 }
 
-QString cwExternalSourceSettings::sourcePathFor(const QUuid& ownerId) const
+QString cwExternalSourceSettings::breadcrumbPath(const QUuid& ownerId) const
 {
     if (ownerId.isNull()) {
         return QString();
     }
     QSettings settings;
-    return settings.value(sourceKey(ownerId)).toString();
+    return settings.value(breadcrumbKey(ownerId)).toString();
 }
 
-bool cwExternalSourceSettings::hasSource(const QUuid& ownerId) const
+bool cwExternalSourceSettings::hasBreadcrumb(const QUuid& ownerId) const
 {
     if (ownerId.isNull()) {
         return false;
     }
     QSettings settings;
-    return settings.contains(sourceKey(ownerId));
+    return settings.contains(breadcrumbKey(ownerId));
 }
 
-bool cwExternalSourceSettings::isLiveLink(const QUuid& ownerId) const
+QUrl cwExternalSourceSettings::breadcrumbFolder(const QUuid& ownerId) const
 {
-    return !sourcePathFor(ownerId).isEmpty();
+    const QString path = breadcrumbPath(ownerId);
+    if (path.isEmpty()) {
+        return QUrl();
+    }
+    const QDir folder = QFileInfo(path).absoluteDir();
+    if (!folder.exists()) {
+        return QUrl();
+    }
+    return QUrl::fromLocalFile(folder.absolutePath());
 }
 
-QList<cwExternalSourceSettings::ExternalCenterlineSource> cwExternalSourceSettings::externalCenterlineSources() const
+QList<cwExternalSourceSettings::Breadcrumb> cwExternalSourceSettings::breadcrumbs() const
 {
     QSettings settings;
     settings.beginGroup(QStringLiteral("externalCenterlineSources"));
     const QStringList keys = settings.childKeys();
 
-    QList<ExternalCenterlineSource> sources;
-    sources.reserve(keys.size());
+    QList<Breadcrumb> breadcrumbs;
+    breadcrumbs.reserve(keys.size());
     for (const QString& key : keys) {
         // Skip keys that aren't owner UUIDs - they're junk that would
-        // also confuse the sourcePathFor lookup.
+        // also confuse the breadcrumbPath lookup.
         const QUuid ownerId = QUuid::fromString(key);
         if (ownerId.isNull()) {
             continue;
         }
-        sources.append({ownerId, settings.value(key).toString()});
+        breadcrumbs.append({ownerId, settings.value(key).toString()});
     }
-    return sources;
+    return breadcrumbs;
 }
 
-void cwExternalSourceSettings::setSourcePath(const QUuid& ownerId, const QString& sourcePath)
+void cwExternalSourceSettings::setBreadcrumbPath(const QUuid& ownerId, const QString& path)
 {
     if (ownerId.isNull()) {
         return;
     }
     QSettings settings;
-    const QString key = sourceKey(ownerId);
-    if (settings.contains(key) && settings.value(key).toString() == sourcePath) {
+    const QString key = breadcrumbKey(ownerId);
+    if (settings.contains(key) && settings.value(key).toString() == path) {
         return;
     }
-    settings.setValue(key, sourcePath);
-    emit externalCenterlineSourcesChanged();
+    settings.setValue(key, path);
+    emit breadcrumbsChanged();
 }
 
-void cwExternalSourceSettings::clearSourcePath(const QUuid& ownerId)
+void cwExternalSourceSettings::clearBreadcrumb(const QUuid& ownerId)
 {
     if (ownerId.isNull()) {
         return;
     }
     QSettings settings;
-    const QString key = sourceKey(ownerId);
+    const QString key = breadcrumbKey(ownerId);
     if (!settings.contains(key)) {
         return;
     }
     settings.remove(key);
-    emit externalCenterlineSourcesChanged();
+    emit breadcrumbsChanged();
 }

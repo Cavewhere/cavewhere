@@ -251,8 +251,8 @@ QFuture<Monad::Result<AttachReport>> attach(cwTrip* trip,
             report.warnings = scan.warnings;
             report.metadata = seedTripMetadata(trip, scan.seededMetadata);
 
-            settingsPtr->setSourcePath(trip->id(),
-                                       QFileInfo(sourceFile).absoluteFilePath());
+            settingsPtr->setBreadcrumbPath(trip->id(),
+                                           QFileInfo(sourceFile).absoluteFilePath());
 
             deferred.complete(ReportResult(report));
         });
@@ -278,7 +278,7 @@ QFuture<Monad::ResultBase> detach(cwTrip* trip,
             ResultBase(QStringLiteral("detach: externalSourceSettings is null")));
     }
 
-    externalSourceSettings->clearSourcePath(trip->id());
+    externalSourceSettings->clearBreadcrumb(trip->id());
 
     if (trip->externalCenterline().isEmpty()) {
         // Native trip: nothing to remove and no mutation to report, so

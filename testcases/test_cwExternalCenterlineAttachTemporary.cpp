@@ -324,7 +324,7 @@ TEST_CASE("attach works on a project that has never been saved", "[Attach][Tempo
 
     // Source memory is written for a temporary project too, so the
     // Update button works before the first save.
-    CHECK(fixture->settings()->sourcePathFor(fixture->trip->id()) == source);
+    CHECK(fixture->settings()->breadcrumbPath(fixture->trip->id()) == source);
 }
 
 TEST_CASE("attaching to an unsaved project marks it modified", "[Attach][Temporary]")

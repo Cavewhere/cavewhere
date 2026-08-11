@@ -110,7 +110,7 @@ cwRootData::cwRootData(QObject *parent) :
     RegionTreeModel = new cwRegionTreeModel(Project);
     RegionTreeModel->setCavingRegion(Region);
 
-    //Per-machine live-link source paths (QSettings-backed)
+    //Per-machine breadcrumbs for the Replace file dialog (QSettings-backed)
     m_externalSourceSettings = new cwExternalSourceSettings(this);
 
     //Setup the loop closer

@@ -129,7 +129,7 @@ MainWindowTest {
             compare(report.warnings.length, 0, "no warnings for a clean fixture")
 
             // Source always remembered (direction change - no mode toggle).
-            compare(RootData.externalSourceSettings.sourcePathFor(rootId.trip.id),
+            compare(RootData.externalSourceSettings.breadcrumbPath(rootId.trip.id),
                     source)
 
             tryVerify(() => !pathField.visible, 5000, "dialog closes on success")
@@ -268,7 +268,7 @@ MainWindowTest {
 
             compare(rootId.trip.externalCenterline.entryFile, "",
                     "no data-model change")
-            compare(RootData.externalSourceSettings.sourcePathFor(rootId.trip.id),
+            compare(RootData.externalSourceSettings.breadcrumbPath(rootId.trip.id),
                     "", "no source remembered")
             tryVerify(() => !RootData.externalCenterlineManager.isOwnerBusy(rootId.trip.id),
                       5000, "the busy token releases")

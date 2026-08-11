@@ -16,34 +16,42 @@
 #include <QObject>
 #include <QQmlEngine>
 #include <QString>
+#include <QUrl>
 #include <QUuid>
 
 /**
- * Per-user, per-machine external-centerline source paths for
- * live-link attachments, keyed by owner UUID (cwCave::id() /
- * cwTrip::id()). One store serves every project on the machine -
- * owner UUIDs are globally unique, so there is no per-project
- * namespace and entries survive bundled .cw open/close cycles (the
- * extraction dir is a fresh temp path every session). Copies of a
- * project (Git clone, Save As, restored backup) preserve owner UUIDs
- * and therefore share live-link entries on this machine - intended v1
- * behavior, see master plan section 5.3. Entries whose owner no longer
- * exists in any project are harmless (a lookup that never matches) and
- * are not GC'd.
+ * Per-user, per-machine breadcrumbs recording the file an external
+ * centerline was last attached or replaced from, keyed by owner UUID
+ * (cwCave::id() / cwTrip::id()). A breadcrumb is a convenience for the
+ * Replace file dialog - it decides which folder that dialog opens in,
+ * and nothing else. The in-project copy is the attachment
+ * (plans/EXTERNAL_FILE_LIVE_LINK_RETIREMENT.html section 5.2), so a
+ * breadcrumb naming a file that has moved or been deleted is an
+ * ordinary state: the dialog opens at the default location instead.
+ *
+ * One store serves every project on the machine - owner UUIDs are
+ * globally unique, so there is no per-project namespace and entries
+ * survive bundled .cw open/close cycles (the extraction dir is a fresh
+ * temp path every session). Copies of a project (Git clone, Save As,
+ * restored backup) preserve owner UUIDs and therefore share
+ * breadcrumbs on this machine. Entries whose owner no longer exists in
+ * any project are harmless (a lookup that never matches) and are not
+ * GC'd.
  *
  * Backed by QSettings - the same store as the rest of CaveWhere's
  * per-machine state - with one key per owner under the
- * "externalCenterlineSources" group. QSettings serializes concurrent
- * writers with a lock file and merges per-key on sync, so two
- * CaveWhere instances upserting different owners both persist; a
- * hand-rolled settings file would be whole-file last-writer-wins.
- * Every read and write goes straight to QSettings (no in-memory
- * copy), so all instances in a process agree. The change signal fires
- * only on the instance that performed the mutation.
+ * "externalCenterlineSources" group. That group name is the on-disk
+ * format and stays as it is, so settings files written by older
+ * versions keep resolving. QSettings serializes concurrent writers
+ * with a lock file and merges per-key on sync, so two CaveWhere
+ * instances upserting different owners both persist; a hand-rolled
+ * settings file would be whole-file last-writer-wins. Every read and
+ * write goes straight to QSettings (no in-memory copy), so all
+ * instances in a process agree. The change signal fires only on the
+ * instance that performed the mutation.
  *
- * Owned by cwRootData; consumers (cwLinePlotManager, the attach
- * orchestrator) receive the pointer and observe
- * externalCenterlineSourcesChanged.
+ * Owned by cwRootData; the attach orchestrator writes breadcrumbs and
+ * the Replace dialog reads them.
  */
 class CAVEWHERE_LIB_EXPORT cwExternalSourceSettings : public QObject
 {
@@ -53,52 +61,47 @@ class CAVEWHERE_LIB_EXPORT cwExternalSourceSettings : public QObject
 
 public:
     /**
-     * Per-machine source path for a single Attached / Scope
-     * external-centerline. ownerId is the cwCave or cwTrip QUuid
-     * (matches cwCave::id() / cwTrip::id()). Empty sourcePath means
-     * "import mode" - the user attached without live-link.
+     * One owner's breadcrumb. ownerId is the cwCave or cwTrip QUuid
+     * (matches cwCave::id() / cwTrip::id()). An empty path is an entry
+     * that names no file, which the Replace dialog treats the same way
+     * as no entry at all.
      */
-    struct ExternalCenterlineSource {
+    struct Breadcrumb {
         QUuid ownerId;
-        QString sourcePath;
+        QString path;
     };
 
     explicit cwExternalSourceSettings(QObject* parent = nullptr);
 
     /**
-     * Returns the source path stored for ownerId, or an empty string
-     * when no entry exists (import mode). The path is returned as-is
-     * even when it no longer exists on disk; surfacing the missing-
-     * source banner is the consumer's responsibility.
+     * Returns the path recorded for ownerId, or an empty string when
+     * no entry exists. The path is returned as-is even when it no
+     * longer names a file on disk.
      */
-    Q_INVOKABLE QString sourcePathFor(const QUuid& ownerId) const;
+    Q_INVOKABLE QString breadcrumbPath(const QUuid& ownerId) const;
 
-    /** True if any entry (with or without sourcePath) is recorded for ownerId. */
-    Q_INVOKABLE bool hasSource(const QUuid& ownerId) const;
+    /** True if any entry (with or without a path) is recorded for ownerId. */
+    Q_INVOKABLE bool hasBreadcrumb(const QUuid& ownerId) const;
 
     /**
-     * True iff a non-empty sourcePath is recorded for ownerId - the
-     * attachment is in live-link mode on this machine. An entry with
-     * an empty path (import mode) or no entry at all returns false.
+     * The folder a file dialog should open in for ownerId: the
+     * directory holding the breadcrumb's file. Empty when there is no
+     * breadcrumb, when it records no path, or when the directory it
+     * names is gone - the caller falls back to its own default folder.
      */
-    Q_INVOKABLE bool isLiveLink(const QUuid& ownerId) const;
+    Q_INVOKABLE QUrl breadcrumbFolder(const QUuid& ownerId) const;
 
-    /** All ExternalCenterlineSource entries (live-link + import-mode). */
-    QList<ExternalCenterlineSource> externalCenterlineSources() const;
-
-    /**
-     * Upserts the ExternalCenterlineSource for ownerId. Setting an
-     * empty sourcePath records "import mode" - the entry still exists
-     * but has no path. To remove the entry entirely use
-     * clearSourcePath.
-     */
-    void setSourcePath(const QUuid& ownerId, const QString& sourcePath);
+    /** Every recorded breadcrumb. */
+    QList<Breadcrumb> breadcrumbs() const;
 
     /**
-     * Removes any ExternalCenterlineSource entry for ownerId.
-     * Q_INVOKABLE for the panel's "Forget source" action.
+     * Upserts the breadcrumb for ownerId. To remove the entry entirely
+     * use clearBreadcrumb.
      */
-    Q_INVOKABLE void clearSourcePath(const QUuid& ownerId);
+    void setBreadcrumbPath(const QUuid& ownerId, const QString& path);
+
+    /** Removes any breadcrumb recorded for ownerId. */
+    Q_INVOKABLE void clearBreadcrumb(const QUuid& ownerId);
 
 signals:
     /**
@@ -107,10 +110,10 @@ signals:
      * emit. Mutations from other instances or processes don't emit
      * here - re-read on your own triggers if that matters.
      */
-    void externalCenterlineSourcesChanged();
+    void breadcrumbsChanged();
 
 private:
-    static QString sourceKey(const QUuid& ownerId);
+    static QString breadcrumbKey(const QUuid& ownerId);
 };
 
 #endif // CWEXTERNALSOURCESETTINGS_H

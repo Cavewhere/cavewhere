@@ -199,7 +199,7 @@ TEST_CASE("Editing the source outside the project leaves the project unmodified"
     overwriteFile(sourcePath, kOriginalEntry);
 
     auto* settings = fixture->rootData->externalSourceSettings();
-    settings->setSourcePath(fixture->trip->id(), sourcePath);
+    settings->setBreadcrumbPath(fixture->trip->id(), sourcePath);
     auto* external = manager.externalCenterlineManager();
     external->setExternalSourceSettings(settings);
     manager.waitToFinish();
@@ -221,7 +221,7 @@ TEST_CASE("Editing the source outside the project leaves the project unmodified"
     CHECK(fixture->trip->externalStations().size() == kOriginalStationCount);
     CHECK(fileContents(fixture->entryPath) == kOriginalEntry);
 
-    settings->setSourcePath(fixture->trip->id(), QString());
+    settings->setBreadcrumbPath(fixture->trip->id(), QString());
 }
 
 TEST_CASE("Discarding changes does not re-dirty the project through the watcher",
@@ -320,7 +320,7 @@ TEST_CASE("A Replace leaves nothing behind to save once it has been saved",
 
     // cwExternalSourceSettings writes through QSettings, which outlives the
     // fixture — the replace recorded a breadcrumb the next test would read.
-    fixture->rootData->externalSourceSettings()->clearSourcePath(fixture->trip->id());
+    fixture->rootData->externalSourceSettings()->clearBreadcrumb(fixture->trip->id());
 }
 
 TEST_CASE("Renaming the region keeps the attachment watched once the data root moves",

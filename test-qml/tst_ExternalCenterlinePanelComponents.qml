@@ -64,6 +64,11 @@ MainWindowTest {
         }
     }
 
+    ReplaceCenterlineDialog {
+        id: replaceDialogId
+        trip: rootId.trip
+    }
+
     ExternalCenterlineTestCase {
         name: "ExternalCenterlinePanelComponents"
         when: windowShown
@@ -96,6 +101,12 @@ MainWindowTest {
         }
 
         function cleanup() {
+            // A failure inside the Replace test can leave its modal dialog
+            // up, and a modal overlay swallows every later test's clicks.
+            const replaceCancel = findChild(replaceDialogId, "replaceCancelButton")
+            if (replaceCancel !== null) {
+                replaceCancel.clicked()
+            }
             RootData.newProject()
         }
 
@@ -119,10 +130,61 @@ MainWindowTest {
             verify(sourceLabel.text.indexOf("survex_simple.svx") >= 0,
                    "source line carries the path; got: " + sourceLabel.text)
 
-            RootData.externalSourceSettings.clearSourcePath(fixture.trip.id)
+            RootData.externalSourceSettings.clearBreadcrumb(fixture.trip.id)
             tryVerify(() => sourceLabel.text === "Source forgotten (this machine)",
                       5000, "forgotten-source line renders after clearing; got: "
                             + sourceLabel.text)
+        }
+
+        // The commit-4 gate (plans/EXTERNAL_FILE_LIVE_LINK_RETIREMENT.html
+        // §6): the breadcrumb is the Replace dialog's starting folder and
+        // nothing else. Forgetting it drops the dialog back on the default
+        // folder, with no error and no other visible change.
+        function test_replaceDialogBrowsesFromTheBreadcrumbFolder() {
+            const fixture = attachFixtureTrip("panel-replace-breadcrumb")
+            rootId.trip = fixture.trip
+
+            const breadcrumb = RootData.externalSourceSettings
+                                   .breadcrumbPath(fixture.trip.id)
+            verify(breadcrumb.length > 0, "the attach remembered a source path")
+            const breadcrumbFolder = breadcrumb.substring(0, breadcrumb.lastIndexOf("/"))
+            // Both folders below have to be distinct for either compare to
+            // mean anything.
+            verify(RootData.urlToLocal(RootData.lastDirectory) !== breadcrumbFolder,
+                   "the default folder differs from the breadcrumb's")
+
+            replaceDialogId.open()
+            const fileDialog = findChild(replaceDialogId, "entryFileDialog")
+            verify(fileDialog !== null, "entryFileDialog must exist")
+            compare(RootData.urlToLocal(fileDialog.currentFolder), breadcrumbFolder,
+                    "Browse starts in the folder the trip was attached from")
+
+            const pathField = findChild(replaceDialogId, "sourcePathField")
+            verify(pathField !== null, "sourcePathField must exist")
+            compare(pathField.text, "",
+                    "the breadcrumb chooses a folder, never a replacement file")
+
+            const cancelButton = findChild(replaceDialogId, "replaceCancelButton")
+            verify(cancelButton !== null, "replaceCancelButton must exist")
+            cancelButton.clicked()
+            tryVerify(() => !pathField.visible, 5000, "the dialog closes on cancel")
+
+            RootData.externalSourceSettings.clearBreadcrumb(fixture.trip.id)
+            compare(RootData.externalSourceSettings.breadcrumbPath(fixture.trip.id), "",
+                    "clearing drops the breadcrumb")
+
+            replaceDialogId.open()
+            tryVerify(() => pathField.visible, 5000, "the dialog reopens")
+            compare(String(fileDialog.currentFolder), String(RootData.lastDirectory),
+                    "a forgotten breadcrumb falls back to the default folder")
+
+            const errorLabel = findChild(replaceDialogId, "scanErrorLabel")
+            verify(errorLabel !== null, "scanErrorLabel must exist")
+            verify(!errorLabel.visible,
+                   "a forgotten breadcrumb is not an error; got: " + errorLabel.text)
+
+            cancelButton.clicked()
+            tryVerify(() => !pathField.visible, 5000, "the dialog closes on cancel")
         }
 
         function test_solveStatusDotColorsAndLink() {

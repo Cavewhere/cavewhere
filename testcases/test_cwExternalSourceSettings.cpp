@@ -25,6 +25,7 @@
 #include <QSignalSpy>
 #include <QString>
 #include <QTemporaryDir>
+#include <QUrl>
 #include <QUuid>
 
 // Std
@@ -55,15 +56,15 @@ TEST_CASE("cwExternalSourceSettings entries persist to a fresh instance via the 
     const QUuid projectBOwner = QUuid::createUuid();
     {
         cwExternalSourceSettings written;
-        written.setSourcePath(projectAOwner, QStringLiteral("/projects/a/entry.svx"));
-        written.setSourcePath(projectBOwner, QStringLiteral("/projects/b/entry.dat"));
+        written.setBreadcrumbPath(projectAOwner, QStringLiteral("/projects/a/entry.svx"));
+        written.setBreadcrumbPath(projectBOwner, QStringLiteral("/projects/b/entry.dat"));
     }
 
     const cwExternalSourceSettings fresh;
-    CHECK(fresh.sourcePathFor(projectAOwner) == QStringLiteral("/projects/a/entry.svx"));
-    CHECK(fresh.sourcePathFor(projectBOwner) == QStringLiteral("/projects/b/entry.dat"));
-    CHECK(fresh.isLiveLink(projectAOwner));
-    CHECK(fresh.isLiveLink(projectBOwner));
+    CHECK(fresh.breadcrumbPath(projectAOwner) == QStringLiteral("/projects/a/entry.svx"));
+    CHECK(fresh.breadcrumbPath(projectBOwner) == QStringLiteral("/projects/b/entry.dat"));
+    CHECK(fresh.hasBreadcrumb(projectAOwner));
+    CHECK(fresh.hasBreadcrumb(projectBOwner));
 }
 
 TEST_CASE("cwExternalSourceSettings returns no entry for an unrecorded owner",
@@ -72,36 +73,17 @@ TEST_CASE("cwExternalSourceSettings returns no entry for an unrecorded owner",
     cwExternalSourceSettings settings;
     const QUuid recordedOwner = QUuid::createUuid();
     const QString sourcePath = QStringLiteral("/path/recorded.svx");
-    settings.setSourcePath(recordedOwner, sourcePath);
+    settings.setBreadcrumbPath(recordedOwner, sourcePath);
 
     const QUuid unrelatedOwner = QUuid::createUuid();
-    CHECK(settings.sourcePathFor(unrelatedOwner).isEmpty());
-    CHECK_FALSE(settings.hasSource(unrelatedOwner));
+    CHECK(settings.breadcrumbPath(unrelatedOwner).isEmpty());
+    CHECK_FALSE(settings.hasBreadcrumb(unrelatedOwner));
 
-    CHECK(settings.sourcePathFor(recordedOwner) == sourcePath);
-    CHECK(settings.hasSource(recordedOwner));
+    CHECK(settings.breadcrumbPath(recordedOwner) == sourcePath);
+    CHECK(settings.hasBreadcrumb(recordedOwner));
 }
 
-TEST_CASE("cwExternalSourceSettings::isLiveLink is true iff a non-empty sourcePath is recorded",
-          "[ExternalSourceSettings]")
-{
-    cwExternalSourceSettings settings;
-    const QUuid liveLinkOwner = QUuid::createUuid();
-    const QUuid importOwner = QUuid::createUuid();
-
-    settings.setSourcePath(liveLinkOwner, QStringLiteral("/path/live.svx"));
-    settings.setSourcePath(importOwner, QString());
-
-    CHECK(settings.isLiveLink(liveLinkOwner));
-    // Import-mode entry: recorded, but no path.
-    CHECK_FALSE(settings.isLiveLink(importOwner));
-    CHECK(settings.hasSource(importOwner));
-    // No entry at all, and the null owner.
-    CHECK_FALSE(settings.isLiveLink(QUuid::createUuid()));
-    CHECK_FALSE(settings.isLiveLink(QUuid()));
-}
-
-TEST_CASE("cwExternalSourceSettings keeps an entry whose sourcePath no longer exists on disk",
+TEST_CASE("cwExternalSourceSettings keeps a breadcrumb whose file no longer exists on disk",
           "[ExternalSourceSettings]")
 {
     QTemporaryDir tempDir;
@@ -112,16 +94,105 @@ TEST_CASE("cwExternalSourceSettings keeps an entry whose sourcePath no longer ex
     const QString missingSourcePath =
         QDir(tempDir.path()).filePath(QStringLiteral("definitely-not-here.svx"));
     REQUIRE_FALSE(QFileInfo::exists(missingSourcePath));
-    settings.setSourcePath(ownerId, missingSourcePath);
+    settings.setBreadcrumbPath(ownerId, missingSourcePath);
 
-    // The store returns the entry as-is - surfacing the missing-source
-    // banner is the consumer's responsibility, not the store's.
+    // The store returns the breadcrumb as-is - it is a picker default,
+    // and where the dialog lands is the picker's call.
     const cwExternalSourceSettings fresh;
-    CHECK(fresh.sourcePathFor(ownerId) == missingSourcePath);
-    CHECK(fresh.hasSource(ownerId));
+    CHECK(fresh.breadcrumbPath(ownerId) == missingSourcePath);
+    CHECK(fresh.hasBreadcrumb(ownerId));
 }
 
-TEST_CASE("cwExternalSourceSettings::setSourcePath upserts existing owner without duplicating",
+// The commit-4 gate (plans/EXTERNAL_FILE_LIVE_LINK_RETIREMENT.html
+// section 6): the breadcrumb pre-fills the Replace dialog's folder, and
+// every way of having no usable breadcrumb falls back silently.
+TEST_CASE("cwExternalSourceSettings::breadcrumbFolder names the folder holding the picked file",
+          "[ExternalSourceSettings]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    const QDir sourceDir(tempDir.path());
+    const QString sourcePath = sourceDir.filePath(QStringLiteral("entry.svx"));
+
+    cwExternalSourceSettings settings;
+    const QUuid ownerId = QUuid::createUuid();
+    settings.setBreadcrumbPath(ownerId, sourcePath);
+
+    CHECK(settings.breadcrumbFolder(ownerId)
+          == QUrl::fromLocalFile(sourceDir.absolutePath()));
+}
+
+TEST_CASE("cwExternalSourceSettings::breadcrumbFolder is empty when there is nothing to open at",
+          "[ExternalSourceSettings]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    cwExternalSourceSettings settings;
+
+    SECTION("no breadcrumb at all") {
+        CHECK(settings.breadcrumbFolder(QUuid::createUuid()).isEmpty());
+        CHECK(settings.breadcrumbFolder(QUuid()).isEmpty());
+    }
+
+    SECTION("a breadcrumb recording no path") {
+        const QUuid ownerId = QUuid::createUuid();
+        settings.setBreadcrumbPath(ownerId, QString());
+        REQUIRE(settings.hasBreadcrumb(ownerId));
+        CHECK(settings.breadcrumbFolder(ownerId).isEmpty());
+    }
+
+    SECTION("a breadcrumb whose folder is gone") {
+        const QUuid ownerId = QUuid::createUuid();
+        const QString removedDir =
+            QDir(tempDir.path()).filePath(QStringLiteral("gone"));
+        REQUIRE(QDir().mkpath(removedDir));
+        settings.setBreadcrumbPath(
+            ownerId, QDir(removedDir).filePath(QStringLiteral("entry.svx")));
+        REQUIRE(QDir(removedDir).removeRecursively());
+
+        CHECK(settings.breadcrumbFolder(ownerId).isEmpty());
+    }
+
+    SECTION("a breadcrumb whose file is gone but whose folder remains") {
+        // The folder is still the most useful place to start, so it is
+        // the one missing-file case that keeps its answer.
+        const QUuid ownerId = QUuid::createUuid();
+        const QDir sourceDir(tempDir.path());
+        const QString missingFile = sourceDir.filePath(QStringLiteral("gone.svx"));
+        REQUIRE_FALSE(QFileInfo::exists(missingFile));
+        settings.setBreadcrumbPath(ownerId, missingFile);
+
+        CHECK(settings.breadcrumbFolder(ownerId)
+              == QUrl::fromLocalFile(sourceDir.absolutePath()));
+    }
+}
+
+// The key format is the on-disk format: a settings file written before
+// the accessors were renamed still resolves through the new API.
+TEST_CASE("cwExternalSourceSettings reads a key written by an older version",
+          "[ExternalSourceSettings]")
+{
+    clearExternalCenterlineSettings();
+
+    const QUuid ownerId = QUuid::createUuid();
+    const QString sourcePath = QStringLiteral("/projects/legacy/entry.svx");
+    {
+        QSettings raw;
+        raw.setValue(QStringLiteral("externalCenterlineSources/")
+                         + ownerId.toString(QUuid::WithoutBraces),
+                     sourcePath);
+    }
+
+    const cwExternalSourceSettings settings;
+    CHECK(settings.breadcrumbPath(ownerId) == sourcePath);
+    CHECK(settings.hasBreadcrumb(ownerId));
+    REQUIRE(settings.breadcrumbs().size() == 1);
+    CHECK(settings.breadcrumbs().first().ownerId == ownerId);
+    CHECK(settings.breadcrumbs().first().path == sourcePath);
+}
+
+TEST_CASE("cwExternalSourceSettings::setBreadcrumbPath upserts existing owner without duplicating",
           "[ExternalSourceSettings]")
 {
     clearExternalCenterlineSettings();
@@ -129,14 +200,14 @@ TEST_CASE("cwExternalSourceSettings::setSourcePath upserts existing owner withou
     cwExternalSourceSettings settings;
     const QUuid ownerId = QUuid::createUuid();
 
-    settings.setSourcePath(ownerId, QStringLiteral("/path/one.svx"));
-    settings.setSourcePath(ownerId, QStringLiteral("/path/two.svx"));
+    settings.setBreadcrumbPath(ownerId, QStringLiteral("/path/one.svx"));
+    settings.setBreadcrumbPath(ownerId, QStringLiteral("/path/two.svx"));
 
-    CHECK(settings.externalCenterlineSources().size() == 1);
-    CHECK(settings.sourcePathFor(ownerId) == QStringLiteral("/path/two.svx"));
+    CHECK(settings.breadcrumbs().size() == 1);
+    CHECK(settings.breadcrumbPath(ownerId) == QStringLiteral("/path/two.svx"));
 }
 
-TEST_CASE("cwExternalSourceSettings::clearSourcePath removes only the matching entry",
+TEST_CASE("cwExternalSourceSettings::clearBreadcrumb removes only the matching entry",
           "[ExternalSourceSettings]")
 {
     clearExternalCenterlineSettings();
@@ -145,42 +216,42 @@ TEST_CASE("cwExternalSourceSettings::clearSourcePath removes only the matching e
     const QUuid first = QUuid::createUuid();
     const QUuid second = QUuid::createUuid();
 
-    settings.setSourcePath(first, QStringLiteral("/path/first.svx"));
-    settings.setSourcePath(second, QStringLiteral("/path/second.svx"));
-    REQUIRE(settings.externalCenterlineSources().size() == 2);
+    settings.setBreadcrumbPath(first, QStringLiteral("/path/first.svx"));
+    settings.setBreadcrumbPath(second, QStringLiteral("/path/second.svx"));
+    REQUIRE(settings.breadcrumbs().size() == 2);
 
-    settings.clearSourcePath(first);
-    CHECK(settings.externalCenterlineSources().size() == 1);
-    CHECK_FALSE(settings.hasSource(first));
-    CHECK(settings.sourcePathFor(second) == QStringLiteral("/path/second.svx"));
+    settings.clearBreadcrumb(first);
+    CHECK(settings.breadcrumbs().size() == 1);
+    CHECK_FALSE(settings.hasBreadcrumb(first));
+    CHECK(settings.breadcrumbPath(second) == QStringLiteral("/path/second.svx"));
 }
 
-TEST_CASE("cwExternalSourceSettings emits externalCenterlineSourcesChanged only on real mutations",
+TEST_CASE("cwExternalSourceSettings emits breadcrumbsChanged only on real mutations",
           "[ExternalSourceSettings]")
 {
     cwExternalSourceSettings settings;
-    QSignalSpy changedSpy(&settings, &cwExternalSourceSettings::externalCenterlineSourcesChanged);
+    QSignalSpy changedSpy(&settings, &cwExternalSourceSettings::breadcrumbsChanged);
     const QUuid ownerId = QUuid::createUuid();
 
-    settings.setSourcePath(ownerId, QStringLiteral("/path/one.svx"));
+    settings.setBreadcrumbPath(ownerId, QStringLiteral("/path/one.svx"));
     CHECK(changedSpy.count() == 1);
 
     // No-op upsert: same value again.
-    settings.setSourcePath(ownerId, QStringLiteral("/path/one.svx"));
+    settings.setBreadcrumbPath(ownerId, QStringLiteral("/path/one.svx"));
     CHECK(changedSpy.count() == 1);
 
-    settings.setSourcePath(ownerId, QStringLiteral("/path/two.svx"));
+    settings.setBreadcrumbPath(ownerId, QStringLiteral("/path/two.svx"));
     CHECK(changedSpy.count() == 2);
 
     // No-op clear: entry doesn't exist.
-    settings.clearSourcePath(QUuid::createUuid());
+    settings.clearBreadcrumb(QUuid::createUuid());
     CHECK(changedSpy.count() == 2);
 
-    settings.clearSourcePath(ownerId);
+    settings.clearBreadcrumb(ownerId);
     CHECK(changedSpy.count() == 3);
 
     // Null owner is ignored entirely.
-    settings.setSourcePath(QUuid(), QStringLiteral("/path/ignored.svx"));
+    settings.setBreadcrumbPath(QUuid(), QStringLiteral("/path/ignored.svx"));
     CHECK(changedSpy.count() == 3);
 }
 
@@ -192,7 +263,7 @@ TEST_CASE("cwExternalSourceSettings listing skips junk keys in the settings grou
     cwExternalSourceSettings settings;
     const QUuid validOwner = QUuid::createUuid();
     const QString validSource = QStringLiteral("/path/valid.svx");
-    settings.setSourcePath(validOwner, validSource);
+    settings.setBreadcrumbPath(validOwner, validSource);
 
     // Plant a key that isn't an owner UUID - a hand-edited or corrupted
     // store must not break the listing.
@@ -202,8 +273,8 @@ TEST_CASE("cwExternalSourceSettings listing skips junk keys in the settings grou
                      QStringLiteral("/path/junk.svx"));
     }
 
-    CHECK(settings.externalCenterlineSources().size() == 1);
-    CHECK(settings.sourcePathFor(validOwner) == validSource);
+    CHECK(settings.breadcrumbs().size() == 1);
+    CHECK(settings.breadcrumbPath(validOwner) == validSource);
 }
 
 TEST_CASE("cwExternalSourceSettings entries survive a bundled .cw close and reopen by owner UUID",
@@ -238,10 +309,10 @@ TEST_CASE("cwExternalSourceSettings entries survive a bundled .cw close and reop
         tripId = trip->id();
         REQUIRE_FALSE(tripId.isNull());
 
-        // Record the live-link entry through the rootData-owned store -
-        // it lands in the machine-global QSettings, never in the bundle's
+        // Record the breadcrumb through the rootData-owned store - it
+        // lands in the machine-global QSettings, never in the bundle's
         // extraction tree (which is abandoned on close).
-        rootData->externalSourceSettings()->setSourcePath(tripId, sourcePath);
+        rootData->externalSourceSettings()->setBreadcrumbPath(tripId, sourcePath);
 
         firstExtractionDir = project->dataRootDir().absolutePath();
     }
@@ -257,6 +328,6 @@ TEST_CASE("cwExternalSourceSettings entries survive a bundled .cw close and reop
     // A fresh extraction path and a fresh store instance, but the owner
     // UUID still resolves through the machine-global QSettings.
     const cwExternalSourceSettings settings;
-    CHECK(settings.sourcePathFor(reloadedTrip->id()) == sourcePath);
-    CHECK(settings.isLiveLink(reloadedTrip->id()));
+    CHECK(settings.breadcrumbPath(reloadedTrip->id()) == sourcePath);
+    CHECK(settings.hasBreadcrumb(reloadedTrip->id()));
 }

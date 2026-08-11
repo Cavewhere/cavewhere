@@ -20,8 +20,8 @@ ColumnLayout {
     property Trip trip: null
     property ExternalSourceSettings externalSourceSettings: null
 
-    // Refreshed imperatively: externalCenterlineSourcesChanged is a plain
-    // signal, so a declarative binding can't observe it.
+    // Refreshed imperatively: breadcrumbsChanged is a plain signal, so
+    // a declarative binding can't observe it.
     property string rememberedSourcePath: ""
 
     readonly property string entryFile: trip !== null ? trip.externalCenterline.entryFile : ""
@@ -35,7 +35,7 @@ ColumnLayout {
             rememberedSourcePath = ""
             return
         }
-        rememberedSourcePath = externalSourceSettings.sourcePathFor(trip.id)
+        rememberedSourcePath = externalSourceSettings.breadcrumbPath(trip.id)
     }
 
     onTripChanged: updateRememberedSource()
@@ -44,7 +44,7 @@ ColumnLayout {
 
     QQ.Connections {
         target: root.externalSourceSettings
-        function onExternalCenterlineSourcesChanged() {
+        function onBreadcrumbsChanged() {
             root.updateRememberedSource()
         }
     }

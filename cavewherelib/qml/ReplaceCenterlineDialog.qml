@@ -27,7 +27,12 @@ QQ.Item {
     property Trip trip: null
 
     function open() {
-        // Commit 4 pre-fills this from the remembered-source breadcrumb.
+        // The breadcrumb only chooses where Browse starts. The field
+        // stays empty: the replacement is a different file than the one
+        // the trip was attached from.
+        pickerId.initialFolder = trip !== null
+                ? RootData.externalSourceSettings.breadcrumbFolder(trip.id)
+                : ""
         pickerId.clear()
         sessionId.reset()
         dialogId.open()

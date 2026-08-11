@@ -30,7 +30,7 @@ class cwExternalSourceSettings;
 /**
  * Attach orchestrator: composes the Phase 1 primitives (scanner,
  * reconcile, data-model mutation) plus the cwExternalSourceSettings
- * source-memory write into one cancellable, testable entry point.
+ * breadcrumb write into one cancellable, testable entry point.
  * Free functions, no QObject, no member state - see
  * plans/EXTERNAL_FILE_PHASE2.html section 6.
  *
@@ -97,8 +97,8 @@ CAVEWHERE_LIB_EXPORT QFuture<Monad::Result<AttachReport>> attach(
 /**
  * Trip-level detach: clear the trip's externalCenterline, remove the
  * attachment dir through the cwSaveLoad job queue, and drop the
- * cwExternalSourceSettings entry. Idempotent - detaching a Native
- * trip only clears any stray settings entry and completes Ok without
+ * cwExternalSourceSettings breadcrumb. Idempotent - detaching a Native
+ * trip only clears any stray breadcrumb and completes Ok without
  * touching the filesystem or the modified bit. If the attachment dir
  * cannot be removed the future completes with an error naming the
  * stranded directory; the model and settings are cleared regardless.

@@ -285,12 +285,12 @@ MainWindowTest {
                 return { visible: item.visible, y: item.mapToItem(panelId, 0, 0).y }
             })
             verify(RootData.externalSourceSettings
-                       .sourcePathFor(rootId.trip.id).length > 0,
+                       .breadcrumbPath(rootId.trip.id).length > 0,
                    "the attach remembered a source path")
 
-            RootData.externalSourceSettings.clearSourcePath(rootId.trip.id)
+            RootData.externalSourceSettings.clearBreadcrumb(rootId.trip.id)
             tryVerify(() => RootData.externalSourceSettings
-                                .sourcePathFor(rootId.trip.id).length === 0,
+                                .breadcrumbPath(rootId.trip.id).length === 0,
                       5000, "clearing drops the remembered path")
 
             // The breadcrumb line is the one thing that may move, and it is
