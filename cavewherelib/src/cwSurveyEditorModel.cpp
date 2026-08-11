@@ -1441,34 +1441,93 @@ cwSurveyEditorCellIndex cwSurveyEditorModel::nextCellIndex(const cwSurveyEditorC
         return static_cast<int>(std::distance(kSplayColumns.begin(), column));
     };
 
-    //The column the cluster sits in, on the shot row below it. Shot i hangs
-    //under station i, which is the station the cluster hangs from. A shot's
-    //compass and clino are drawn only for the sights the trip records, so with
-    //both sight groups off the whole column lands on the distance cell
-    auto shotCellBelowCluster = [&](int column) {
-        const auto distanceCell = [&]() {
-            return shotCell(indexInChunk, cwSurveyEditorCellIndex::ShotDistanceCell, 0);
-        };
+    //How a station row carries on forward, past the cluster it owns. The
+    //cluster's last row leaves the way the cell that owns it does, so both read
+    //it from here
+    auto tabOutOfStationRow = [&]() {
+        if(indexInChunk == 0) {
+            return stationCell(indexInChunk, cwSurveyEditorCellIndex::StationLeftCell, 1);
+        }
+        return stationCell(indexInChunk, cwSurveyEditorCellIndex::StationNameCell, 1);
+    };
 
-        if(!frontSights && !backSights) {
-            return distanceCell();
+    //Shift-tab back into a station row lands on the cluster the row has open
+    //rather than the cell that owns it: the cluster's rows come after that cell
+    //in the chain, so the last of them is what tab last left. \a splaysCell is
+    //returned as it is for a station whose cluster is closed
+    auto backTabIntoStationRow = [&](const cwSurveyEditorCellIndex& splaysCell) {
+        if(!isCellValid(splaysCell)) {
+            return splaysCell;
         }
 
-        const bool backSightsOnly = backSights && !frontSights;
+        const auto stationRowIndex = toRowIndex(splaysCell.modelRow());
+        const int stationIndex = stationRowIndex.indexInChunk();
+        const int lastSplayRow = splayRowCount(stationRowIndex.chunk(), stationIndex) - 1;
+        const int row = toModelRow(cwSurveyEditorRowIndex(stationRowIndex.chunk(),
+                                                          stationIndex,
+                                                          lastSplayRow,
+                                                          cwSurveyEditorRowIndex::SplayRow));
+        if(row < 0) {
+            return splaysCell;
+        }
+        return cellIndex(row, kSplayColumns.back());
+    };
+
+    //The row above or below \a fromRow that the distance, compass and clino
+    //columns run through. Only splay rows and shot rows carry them — a station
+    //row's cells sit in columns of their own — so a column steps over it
+    auto readingRowNear = [&](int fromRow, int direction) {
+        const int rows = rowCount();
+        for(int row = fromRow + direction; row >= 0 && row < rows; row += direction) {
+            switch(toRowIndex(row).rowType()) {
+            case cwSurveyEditorRowIndex::SplayRow:
+            case cwSurveyEditorRowIndex::ShotRow:
+                return row;
+            case cwSurveyEditorRowIndex::TitleRow:
+            case cwSurveyEditorRowIndex::StationRow:
+                break;
+            }
+        }
+        return -1;
+    };
+
+    //Where a column of splay readings lands on a shot row. A shot's compass and
+    //clino are drawn only for the sights the trip records, so a row entered from
+    //above lands on the sight it shows first and one entered from below on the
+    //sight it shows last; with neither sight group recorded the whole column
+    //lands on the distance cell
+    auto shotCellForSplayColumn = [&](int shotRow, int column, bool fromAbove) {
+        if(!frontSights && !backSights) {
+            return cellIndex(shotRow, cwSurveyEditorCellIndex::ShotDistanceCell);
+        }
+
+        const bool backSight = fromAbove ? (backSights && !frontSights) : backSights;
         switch(kSplayColumns.at(column)) {
         case cwSurveyEditorCellIndex::SplayCompassCell:
-            if(backSightsOnly) {
-                return shotCell(indexInChunk, cwSurveyEditorCellIndex::ShotBackCompassCell, 0);
-            }
-            return shotCell(indexInChunk, cwSurveyEditorCellIndex::ShotCompassCell, 0);
+            return cellIndex(shotRow,
+                             backSight ? cwSurveyEditorCellIndex::ShotBackCompassCell
+                                       : cwSurveyEditorCellIndex::ShotCompassCell);
         case cwSurveyEditorCellIndex::SplayClinoCell:
-            if(backSightsOnly) {
-                return shotCell(indexInChunk, cwSurveyEditorCellIndex::ShotBackClinoCell, 0);
-            }
-            return shotCell(indexInChunk, cwSurveyEditorCellIndex::ShotClinoCell, 0);
+            return cellIndex(shotRow,
+                             backSight ? cwSurveyEditorCellIndex::ShotBackClinoCell
+                                       : cwSurveyEditorCellIndex::ShotClinoCell);
         default:
-            return distanceCell();
+            return cellIndex(shotRow, cwSurveyEditorCellIndex::ShotDistanceCell);
         }
+    };
+
+    //One step up or down a splay's column: the cluster's next row, the cluster
+    //the neighboring station has open, or the shot row the column runs onto.
+    //\a atEnd answers for a column that runs off the end of the table
+    auto splayColumnStep = [&](int column, int direction, const cwSurveyEditorCellIndex& atEnd) {
+        const int row = readingRowNear(currentCell.modelRow(), direction);
+        if(row < 0) {
+            return atEnd;
+        }
+        if(toRowIndex(row).rowType() == cwSurveyEditorRowIndex::SplayRow) {
+            return cellIndex(row, kSplayColumns.at(column));
+        }
+        return shotCellForSplayColumn(row, column, direction > 0);
     };
 
     auto nextSplayCell = [&](cwSurveyEditorCellIndex::CellRole splayRole) {
@@ -1487,14 +1546,14 @@ cwSurveyEditorCellIndex cwSurveyEditorModel::nextCellIndex(const cwSurveyEditorC
             }
             //Out the bottom of the cluster, the row carries on the way the cell
             //that owns the cluster leaves it
-            return nextCellIndex(clusterCell(), Tab, frontSights, backSights);
+            return tabOutOfStationRow();
         }
         case BackTab:
             if(column > 0) {
                 return splayCell(splayIndex, kSplayColumns.at(column - 1));
             }
             if(splayIndex > 0) {
-                return splayCell(splayIndex - 1, cwSurveyEditorCellIndex::SplayClinoCell);
+                return splayCell(splayIndex - 1, kSplayColumns.back());
             }
             return clusterCell();
         case Left:
@@ -1508,20 +1567,42 @@ cwSurveyEditorCellIndex cwSurveyEditorModel::nextCellIndex(const cwSurveyEditorC
             }
             return cwSurveyEditorCellIndex();
         case Up:
-            if(splayIndex > 0) {
-                return splayCell(splayIndex - 1, kSplayColumns.at(column));
-            }
-            return clusterCell();
-        case Down: {
-            const auto belowInCluster = splayCell(splayIndex + 1, kSplayColumns.at(column));
-            if(isCellValid(belowInCluster)) {
-                return belowInCluster;
-            }
-            return shotCellBelowCluster(column);
-        }
+            //A cluster at the head of the table has no reading above it, so the
+            //caret falls back on the cell the cluster hangs from
+            return splayColumnStep(column, -1, clusterCell());
+        case Down:
+            return splayColumnStep(column, 1, cwSurveyEditorCellIndex());
         }
 
         return cwSurveyEditorCellIndex();
+    };
+
+    //The splay column a shot's reading shares. A splay's three readings sit in
+    //the shot's distance, compass and clino columns, so a cluster standing
+    //between two shot rows is walked in the column the caret is already in
+    auto splayColumnOfShotCell = [](cwSurveyEditorCellIndex::CellRole shotRole) {
+        switch(shotRole) {
+        case cwSurveyEditorCellIndex::ShotCompassCell:
+        case cwSurveyEditorCellIndex::ShotBackCompassCell:
+            return cwSurveyEditorCellIndex::SplayCompassCell;
+        case cwSurveyEditorCellIndex::ShotClinoCell:
+        case cwSurveyEditorCellIndex::ShotBackClinoCell:
+            return cwSurveyEditorCellIndex::SplayClinoCell;
+        default:
+            return cwSurveyEditorCellIndex::SplayDistanceCell;
+        }
+    };
+
+    //A shot row's Up and Down step into an open cluster standing next to it
+    //before carrying on to the shot row past it. Going down that cluster is
+    //entered at its first row and going up at its last, which is the row the
+    //walk reaches first either way
+    auto shotRowStep = [&](cwSurveyEditorCellIndex::CellRole leavingRole, int direction) {
+        const int row = readingRowNear(currentCell.modelRow(), direction);
+        if(row >= 0 && toRowIndex(row).rowType() == cwSurveyEditorRowIndex::SplayRow) {
+            return cellIndex(row, splayColumnOfShotCell(currentCell.cellRole()));
+        }
+        return offsetCurrentRowRole(leavingRole, direction);
     };
 
     switch(currentCell.cellRole()) {
@@ -1540,7 +1621,8 @@ cwSurveyEditorCellIndex cwSurveyEditorModel::nextCellIndex(const cwSurveyEditorC
             if(indexInChunk == 1) {
                 return offsetCurrentRowRole(cwSurveyEditorCellIndex::StationNameCell, -1);
             }
-            return offsetCurrentRowRole(cwSurveyEditorCellIndex::StationSplaysCell, -1);
+            return backTabIntoStationRow(
+                offsetCurrentRowRole(cwSurveyEditorCellIndex::StationSplaysCell, -1));
         case Right: {
             const int shotOffset = indexInChunk == 0 ? 0 : -1;
             return shotCell(indexInChunk + shotOffset, cwSurveyEditorCellIndex::ShotDistanceCell, 0);
@@ -1559,7 +1641,10 @@ cwSurveyEditorCellIndex cwSurveyEditorModel::nextCellIndex(const cwSurveyEditorC
         case BackTab:
         case Left:
             if(indexInChunk == 1) {
-                return offsetCurrentRowRole(cwSurveyEditorCellIndex::StationSplaysCell, -1);
+                const auto splaysCell =
+                    offsetCurrentRowRole(cwSurveyEditorCellIndex::StationSplaysCell, -1);
+                //Only the tab chain walks the cluster; Left stays in its row
+                return key == BackTab ? backTabIntoStationRow(splaysCell) : splaysCell;
             } else {
                 const int shotOffset = indexInChunk == 0 ? 0 : -1;
                 if(backSights) {
@@ -1621,25 +1706,26 @@ cwSurveyEditorCellIndex cwSurveyEditorModel::nextCellIndex(const cwSurveyEditorC
         //The last cell in a station row, so it inherits the way D used to leave
         //the row
         switch(key) {
-        case Tab:
-            if(indexInChunk == 0) {
-                return offsetCurrentRowRole(cwSurveyEditorCellIndex::StationLeftCell, 1);
+        case Tab: {
+            //The cluster the cell has open is the next thing in the chain, and
+            //its first reading is where tab lands
+            const auto firstSplay = splayCell(0, cwSurveyEditorCellIndex::SplayDistanceCell);
+            if(isCellValid(firstSplay)) {
+                return firstSplay;
             }
-            return offsetCurrentRowRole(cwSurveyEditorCellIndex::StationNameCell, 1);
+            return tabOutOfStationRow();
+        }
         case BackTab:
         case Left:
             return offsetCurrentRowRole(cwSurveyEditorCellIndex::StationDownCell, 0);
         case Right:
             return cwSurveyEditorCellIndex();
-        case Down: {
-            //An open cluster is the next thing down the column, and its blank
-            //row is how a station takes its first splay from the keyboard
-            const auto firstSplay = splayCell(0, cwSurveyEditorCellIndex::SplayDistanceCell);
-            if(isCellValid(firstSplay)) {
-                return firstSplay;
-            }
+        case Down:
+            //A cluster's readings stand in the distance, compass and clino
+            //columns rather than this one, so the arrows run past them and tab
+            //is the way in. Diving into the cluster here would give two cells
+            //the same Down and leave the first splay's Up with no way back
             return offsetCurrentRowRole(cwSurveyEditorCellIndex::StationSplaysCell, 1);
-        }
         case Up:
             return offsetCurrentRowRole(cwSurveyEditorCellIndex::StationSplaysCell, -1);
         }
@@ -1664,9 +1750,9 @@ cwSurveyEditorCellIndex cwSurveyEditorModel::nextCellIndex(const cwSurveyEditorC
         case Left:
             return stationCell(indexInChunk + 1, cwSurveyEditorCellIndex::StationNameCell, 0);
         case Down:
-            return offsetCurrentRowRole(cwSurveyEditorCellIndex::ShotDistanceCell, 1);
+            return shotRowStep(cwSurveyEditorCellIndex::ShotDistanceCell, 1);
         case Up:
-            return offsetCurrentRowRole(cwSurveyEditorCellIndex::ShotDistanceCell, -1);
+            return shotRowStep(cwSurveyEditorCellIndex::ShotDistanceCell, -1);
         }
         break;
     case cwSurveyEditorCellIndex::ShotCompassCell:
@@ -1687,12 +1773,12 @@ cwSurveyEditorCellIndex cwSurveyEditorModel::nextCellIndex(const cwSurveyEditorC
             if(backSights) {
                 return offsetCurrentRowRole(cwSurveyEditorCellIndex::ShotBackCompassCell, 0);
             }
-            return offsetCurrentRowRole(cwSurveyEditorCellIndex::ShotCompassCell, 1);
+            return shotRowStep(cwSurveyEditorCellIndex::ShotCompassCell, 1);
         case Up:
             if(backSights) {
-                return offsetCurrentRowRole(cwSurveyEditorCellIndex::ShotBackCompassCell, -1);
+                return shotRowStep(cwSurveyEditorCellIndex::ShotBackCompassCell, -1);
             }
-            return offsetCurrentRowRole(cwSurveyEditorCellIndex::ShotCompassCell, -1);
+            return shotRowStep(cwSurveyEditorCellIndex::ShotCompassCell, -1);
         }
         break;
     case cwSurveyEditorCellIndex::ShotBackCompassCell:
@@ -1715,14 +1801,14 @@ cwSurveyEditorCellIndex cwSurveyEditorModel::nextCellIndex(const cwSurveyEditorC
             return offsetCurrentRowRole(cwSurveyEditorCellIndex::ShotDistanceCell, 0);
         case Down:
             if(frontSights) {
-                return offsetCurrentRowRole(cwSurveyEditorCellIndex::ShotCompassCell, 1);
+                return shotRowStep(cwSurveyEditorCellIndex::ShotCompassCell, 1);
             }
-            return offsetCurrentRowRole(cwSurveyEditorCellIndex::ShotBackCompassCell, 1);
+            return shotRowStep(cwSurveyEditorCellIndex::ShotBackCompassCell, 1);
         case Up:
             if(frontSights) {
                 return offsetCurrentRowRole(cwSurveyEditorCellIndex::ShotCompassCell, 0);
             }
-            return offsetCurrentRowRole(cwSurveyEditorCellIndex::ShotBackCompassCell, -1);
+            return shotRowStep(cwSurveyEditorCellIndex::ShotBackCompassCell, -1);
         }
         break;
     case cwSurveyEditorCellIndex::ShotClinoCell:
@@ -1747,12 +1833,12 @@ cwSurveyEditorCellIndex cwSurveyEditorModel::nextCellIndex(const cwSurveyEditorC
             if(backSights) {
                 return offsetCurrentRowRole(cwSurveyEditorCellIndex::ShotBackClinoCell, 0);
             }
-            return offsetCurrentRowRole(cwSurveyEditorCellIndex::ShotClinoCell, 1);
+            return shotRowStep(cwSurveyEditorCellIndex::ShotClinoCell, 1);
         case Up:
             if(backSights) {
-                return offsetCurrentRowRole(cwSurveyEditorCellIndex::ShotBackClinoCell, -1);
+                return shotRowStep(cwSurveyEditorCellIndex::ShotBackClinoCell, -1);
             }
-            return offsetCurrentRowRole(cwSurveyEditorCellIndex::ShotClinoCell, -1);
+            return shotRowStep(cwSurveyEditorCellIndex::ShotClinoCell, -1);
         }
         break;
     case cwSurveyEditorCellIndex::ShotBackClinoCell:
@@ -1772,14 +1858,14 @@ cwSurveyEditorCellIndex cwSurveyEditorModel::nextCellIndex(const cwSurveyEditorC
             return offsetCurrentRowRole(cwSurveyEditorCellIndex::ShotBackCompassCell, 0);
         case Down:
             if(frontSights) {
-                return offsetCurrentRowRole(cwSurveyEditorCellIndex::ShotClinoCell, 1);
+                return shotRowStep(cwSurveyEditorCellIndex::ShotClinoCell, 1);
             }
-            return offsetCurrentRowRole(cwSurveyEditorCellIndex::ShotBackClinoCell, 1);
+            return shotRowStep(cwSurveyEditorCellIndex::ShotBackClinoCell, 1);
         case Up:
             if(frontSights) {
                 return offsetCurrentRowRole(cwSurveyEditorCellIndex::ShotClinoCell, 0);
             }
-            return offsetCurrentRowRole(cwSurveyEditorCellIndex::ShotBackClinoCell, -1);
+            return shotRowStep(cwSurveyEditorCellIndex::ShotBackClinoCell, -1);
         }
         break;
     case cwSurveyEditorCellIndex::SplayDistanceCell:

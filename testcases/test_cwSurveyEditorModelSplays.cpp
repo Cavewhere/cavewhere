@@ -813,31 +813,41 @@ TEST_CASE("The Splays cell is the last cell in a station row", "[cwSurveyEditorM
               == cell(a1Row, cwSurveyEditorCellIndex::StationSplaysCell));
     }
 
-    SECTION("an open cluster moves the rows but not the chain") {
+    SECTION("an open cluster moves the rows, and tab walks through it") {
         fixture.model.toggleSplaysExpanded(fixture.stationRow(1));
         fixture.checkRowCount(10);
 
+        //title, a1, shot, a2, s1, s2, s3, blank, shot, a3
         const int shiftedA3Row = a3Row + 4;
+
+        //Tab leaves the cell into the cluster it has open, and comes back out
+        //of the cluster's last row onto the station the closed cell tabs to
         CHECK(next(cell(a2Row, cwSurveyEditorCellIndex::StationSplaysCell), cwSurveyEditorModel::Tab)
+              == cell(a2Row + 1, cwSurveyEditorCellIndex::SplayDistanceCell));
+        CHECK(next(cell(shiftedA3Row - 2, cwSurveyEditorCellIndex::SplayClinoCell),
+                   cwSurveyEditorModel::Tab)
               == cell(shiftedA3Row, cwSurveyEditorCellIndex::StationNameCell));
+
+        //The column the cell sits in runs past the cluster, since no splay
+        //reading stands in it
         CHECK(next(cell(shiftedA3Row, cwSurveyEditorCellIndex::StationSplaysCell), cwSurveyEditorModel::Up)
               == cell(a2Row, cwSurveyEditorCellIndex::StationSplaysCell));
     }
 
-    SECTION("down walks into the cluster the cell opened") {
+    SECTION("down runs past an open cluster, and up comes back the same way") {
         fixture.model.toggleSplaysExpanded(fixture.stationRow(1));
         fixture.checkRowCount(10);
 
-        //The readings the cluster holds are what's below the cell now, and the
-        //first of them is where the keyboard lands
-        CHECK(next(cell(a2Row, cwSurveyEditorCellIndex::StationSplaysCell), cwSurveyEditorModel::Down)
-              == cell(a2Row + 1, cwSurveyEditorCellIndex::SplayDistanceCell));
+        //A cluster's readings stand in the reading columns, not this one, so
+        //the arrows walk station to station and tab is the way into the cluster
+        const int shiftedA3Row = a3Row + 4;
+        const auto splays = cell(a2Row, cwSurveyEditorCellIndex::StationSplaysCell);
+        const auto below = next(splays, cwSurveyEditorModel::Down);
+        CHECK(below == cell(shiftedA3Row, cwSurveyEditorCellIndex::StationSplaysCell));
+        CHECK(next(below, cwSurveyEditorModel::Up) == splays);
 
-        //A station opened on nothing but its blank row lands there instead, so
-        //typing a first splay costs no more than opening the cluster
-        fixture.model.toggleSplaysExpanded(fixture.stationRow(0));
-        CHECK(next(cell(a1Row, cwSurveyEditorCellIndex::StationSplaysCell), cwSurveyEditorModel::Down)
-              == cell(a1Row + 1, cwSurveyEditorCellIndex::SplayDistanceCell));
+        CHECK(next(splays, cwSurveyEditorModel::Tab)
+              == cell(a2Row + 1, cwSurveyEditorCellIndex::SplayDistanceCell));
     }
 
     SECTION("the cell holds no reading to write") {
@@ -984,6 +994,7 @@ TEST_CASE("The keyboard walks a cluster's readings", "[cwSurveyEditorModel][Spla
     fixture.checkRowCount(10);
 
     //title, a1, shot, a2, s1, s2, s3, blank, shot, a3
+    const int a1ShotRow = 2;
     const int a2Row = 3;
     const int firstSplayRow = 4;
     const int lastSplayRow = 6;
@@ -1069,11 +1080,11 @@ TEST_CASE("The keyboard walks a cluster's readings", "[cwSurveyEditorModel][Spla
                    cwSurveyEditorModel::Up)
               == cell(firstSplayRow, cwSurveyEditorCellIndex::SplayCompassCell));
 
-        //Above the cluster is the cell it hangs from; below the last splay is
-        //the blank row, and below that the shot
+        //Above the cluster is the shot row the column runs onto; below the last
+        //splay is the blank row, and below that the shot
         CHECK(next(cell(firstSplayRow, cwSurveyEditorCellIndex::SplayDistanceCell),
                    cwSurveyEditorModel::Up)
-              == cell(a2Row, cwSurveyEditorCellIndex::StationSplaysCell));
+              == cell(a1ShotRow, cwSurveyEditorCellIndex::ShotDistanceCell));
         CHECK(next(cell(lastSplayRow, cwSurveyEditorCellIndex::SplayDistanceCell),
                    cwSurveyEditorModel::Down)
               == cell(blankRow, cwSurveyEditorCellIndex::SplayDistanceCell));
@@ -1117,6 +1128,195 @@ TEST_CASE("The keyboard walks a cluster's readings", "[cwSurveyEditorModel][Spla
         CHECK_FALSE(fixture.model.isCellValid(
             next(cell(a3BlankRow, cwSurveyEditorCellIndex::SplayDistanceCell),
                  cwSurveyEditorModel::Down)));
+    }
+}
+
+TEST_CASE("The keyboard leaves a cluster the way it came in", "[cwSurveyEditorModel][SplayShot]") {
+    SplayFixture fixture;
+    fixture.model.toggleSplaysExpanded(fixture.stationRow(1));
+    fixture.checkRowCount(10);
+
+    //title, a1, shot, a2, s1, s2, s3, blank, shot, a3
+    const int a1ShotRow = 2;
+    const int a2Row = 3;
+    const int firstSplayRow = 4;
+    const int blankRow = 7;
+    const int a2ShotRow = 8;
+    const int a3Row = 9;
+
+    auto cell = [&fixture](int row, cwSurveyEditorCellIndex::CellRole role) {
+        return fixture.model.cellIndex(row, role);
+    };
+
+    //Every step of a traversal, and the same traversal read back the other way.
+    //A cluster is walked in by one key and out by its opposite, so the two lists
+    //have to be each other reversed, cell for cell
+    auto walk = [&fixture](const cwSurveyEditorCellIndex& start,
+                           cwSurveyEditorModel::NavigationKey key,
+                           int steps,
+                           bool frontSights = true,
+                           bool backSights = false) {
+        QList<cwSurveyEditorCellIndex> cells{start};
+        for(int step = 0; step < steps; ++step) {
+            const auto nextCell = fixture.model.nextCell(cells.last(), key, frontSights, backSights);
+            REQUIRE(fixture.model.isCellValid(nextCell));
+            cells.append(nextCell);
+        }
+        return cells;
+    };
+
+    auto reversed = [](QList<cwSurveyEditorCellIndex> cells) {
+        std::reverse(cells.begin(), cells.end());
+        return cells;
+    };
+
+    SECTION("tab and shift-tab walk the same cells through the cluster") {
+        //D, the Splays cell, the three readings of each splay and of the blank
+        //row, then the next station's name
+        const auto forward = walk(cell(a2Row, cwSurveyEditorCellIndex::StationDownCell),
+                                  cwSurveyEditorModel::Tab, 14);
+
+        CHECK(forward.at(1) == cell(a2Row, cwSurveyEditorCellIndex::StationSplaysCell));
+        CHECK(forward.at(2) == cell(firstSplayRow, cwSurveyEditorCellIndex::SplayDistanceCell));
+        CHECK(forward.at(11) == cell(blankRow, cwSurveyEditorCellIndex::SplayDistanceCell));
+        CHECK(forward.last() == cell(a3Row, cwSurveyEditorCellIndex::StationNameCell));
+
+        CHECK(walk(forward.last(), cwSurveyEditorModel::BackTab, forward.size() - 1)
+              == reversed(forward));
+    }
+
+    SECTION("up and down walk the same cells through every reading column") {
+        struct Column {
+            cwSurveyEditorCellIndex::CellRole splayRole;
+            cwSurveyEditorCellIndex::CellRole shotRole;
+        };
+
+        //A trip on front sights alone draws each shot reading in one box, so
+        //the splay column runs straight onto it
+        for(const auto& column : {Column{cwSurveyEditorCellIndex::SplayDistanceCell,
+                                          cwSurveyEditorCellIndex::ShotDistanceCell},
+                                   Column{cwSurveyEditorCellIndex::SplayCompassCell,
+                                          cwSurveyEditorCellIndex::ShotCompassCell},
+                                   Column{cwSurveyEditorCellIndex::SplayClinoCell,
+                                          cwSurveyEditorCellIndex::ShotClinoCell}})
+        {
+            //The shot above, the three splays, the blank row, and the shot below
+            const auto down = walk(cell(a1ShotRow, column.shotRole),
+                                   cwSurveyEditorModel::Down, 5);
+
+            CHECK(down.at(1) == cell(firstSplayRow, column.splayRole));
+            CHECK(down.at(4) == cell(blankRow, column.splayRole));
+            CHECK(down.last() == cell(a2ShotRow, column.shotRole));
+
+            CHECK(walk(down.last(), cwSurveyEditorModel::Up, down.size() - 1) == reversed(down));
+        }
+    }
+
+    SECTION("a trip on both sights enters the shot row on the sight it shows first") {
+        //Front and back stack in one column, so the cluster runs onto the front
+        //box going down and off the back box going up
+        const auto down = walk(cell(a1ShotRow, cwSurveyEditorCellIndex::ShotBackCompassCell),
+                               cwSurveyEditorModel::Down, 5, true, true);
+
+        CHECK(down.at(1) == cell(firstSplayRow, cwSurveyEditorCellIndex::SplayCompassCell));
+        CHECK(down.last() == cell(a2ShotRow, cwSurveyEditorCellIndex::ShotCompassCell));
+
+        CHECK(walk(down.last(), cwSurveyEditorModel::Up, down.size() - 1, true, true)
+              == reversed(down));
+    }
+
+    SECTION("a trip on back sights alone runs the column onto the back sight boxes") {
+        const auto down = walk(cell(a1ShotRow, cwSurveyEditorCellIndex::ShotBackClinoCell),
+                               cwSurveyEditorModel::Down, 5, false, true);
+
+        CHECK(down.at(1) == cell(firstSplayRow, cwSurveyEditorCellIndex::SplayClinoCell));
+        CHECK(down.last() == cell(a2ShotRow, cwSurveyEditorCellIndex::ShotBackClinoCell));
+
+        CHECK(walk(down.last(), cwSurveyEditorModel::Up, down.size() - 1, false, true)
+              == reversed(down));
+    }
+
+    SECTION("a trip that records neither sight walks the cluster on the distance boxes") {
+        //The compass and clino boxes of a shot row are drawn for the sights the
+        //trip records, so with neither recorded the distance column is the only
+        //way in or out of the cluster
+        const auto down = walk(cell(a1ShotRow, cwSurveyEditorCellIndex::ShotDistanceCell),
+                               cwSurveyEditorModel::Down, 5, false, false);
+
+        CHECK(down.at(1) == cell(firstSplayRow, cwSurveyEditorCellIndex::SplayDistanceCell));
+        CHECK(down.last() == cell(a2ShotRow, cwSurveyEditorCellIndex::ShotDistanceCell));
+
+        CHECK(walk(down.last(), cwSurveyEditorModel::Up, down.size() - 1, false, false)
+              == reversed(down));
+
+        //The other two columns have no box of their own to land on, so they
+        //leave the cluster on the distance box too
+        CHECK(fixture.model.nextCell(cell(firstSplayRow, cwSurveyEditorCellIndex::SplayCompassCell),
+                                     cwSurveyEditorModel::Up, false, false)
+              == cell(a1ShotRow, cwSurveyEditorCellIndex::ShotDistanceCell));
+        CHECK(fixture.model.nextCell(cell(blankRow, cwSurveyEditorCellIndex::SplayClinoCell),
+                                     cwSurveyEditorModel::Down, false, false)
+              == cell(a2ShotRow, cwSurveyEditorCellIndex::ShotDistanceCell));
+    }
+
+    SECTION("a closed cluster leaves the column running shot to shot") {
+        fixture.model.toggleSplaysExpanded(fixture.stationRow(1));
+        fixture.checkRowCount(6);
+
+        const int closedA2ShotRow = 4;
+        CHECK(fixture.model.nextCell(cell(a1ShotRow, cwSurveyEditorCellIndex::ShotDistanceCell),
+                                     cwSurveyEditorModel::Down, true, false)
+              == cell(closedA2ShotRow, cwSurveyEditorCellIndex::ShotDistanceCell));
+        CHECK(fixture.model.nextCell(cell(closedA2ShotRow, cwSurveyEditorCellIndex::ShotDistanceCell),
+                                     cwSurveyEditorModel::Up, true, false)
+              == cell(a1ShotRow, cwSurveyEditorCellIndex::ShotDistanceCell));
+    }
+
+    SECTION("a cluster at the head of the table falls back on the cell it hangs from") {
+        //Nothing stands above a1's cluster in the reading columns, so up out of
+        //it lands on the cell that owns it rather than nowhere at all
+        fixture.model.toggleSplaysExpanded(fixture.stationRow(0));
+        fixture.checkRowCount(11);
+
+        const int a1Row = 1;
+        CHECK(fixture.model.nextCell(cell(a1Row + 1, cwSurveyEditorCellIndex::SplayDistanceCell),
+                                     cwSurveyEditorModel::Up, true, false)
+              == cell(a1Row, cwSurveyEditorCellIndex::StationSplaysCell));
+    }
+
+    SECTION("a cluster on a chunk's last station leaves into the chunk below it") {
+        //A cluster hanging off the last station of a chunk has the next chunk's
+        //rows below it, so both the tab chain and the reading columns carry on
+        //into that chunk rather than stopping at the boundary
+        auto secondChunk = new cwSurveyChunk();
+        secondChunk->appendShot(cwStation("b1"), cwStation("b2"), cwShot("5.0", "10.0", "190.0", "1.0", "-1.0"));
+        fixture.trip.addChunk(secondChunk);
+
+        //The second chunk brings a title, two stations, and a shot
+        fixture.checkRowCount(14);
+
+        fixture.chunk->setStationSplays(2, {makeSplay("7.56", "201.3", "-12.4")});
+        fixture.model.toggleSplaysExpanded(fixture.stationRow(2));
+        fixture.checkRowCount(16);
+
+        //title, a1, shot, a2, s1, s2, s3, blank, shot, a3, s1, blank,
+        //title, b1, shot, b2
+        const int a3BlankRow = 11;
+        const int b1ShotRow = 14;
+        const cwSurveyEditorRowIndex b1Row(secondChunk, 0, cwSurveyEditorRowIndex::StationRow);
+        const int b1ModelRow = fixture.model.toModelRow(b1Row);
+        REQUIRE(b1ModelRow == 13);
+        REQUIRE(fixture.rowIndexOf(a3BlankRow).rowType() == cwSurveyEditorRowIndex::SplayRow);
+
+        const auto down = walk(cell(a3BlankRow, cwSurveyEditorCellIndex::SplayCompassCell),
+                               cwSurveyEditorModel::Down, 1);
+        CHECK(down.last() == cell(b1ShotRow, cwSurveyEditorCellIndex::ShotCompassCell));
+        CHECK(walk(down.last(), cwSurveyEditorModel::Up, 1) == reversed(down));
+
+        const auto tabbed = walk(cell(a3BlankRow, cwSurveyEditorCellIndex::SplayClinoCell),
+                                 cwSurveyEditorModel::Tab, 1);
+        CHECK(tabbed.last() == cell(b1ModelRow, cwSurveyEditorCellIndex::StationNameCell));
+        CHECK(walk(tabbed.last(), cwSurveyEditorModel::BackTab, 1) == reversed(tabbed));
     }
 }
 

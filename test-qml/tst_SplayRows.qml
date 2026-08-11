@@ -685,5 +685,46 @@ MainWindowTest {
                        "up out of the cluster should land on the cell it hangs from")
             tryCompare(context.editorModel, "focusedRole", SurveyEditorCellIndex.StationSplaysCell)
         }
+
+        // The cluster is part of the tab chain: tab off the Splays cell walks
+        // into it, and shift-tab walks the same cells back the other way.
+        function test_tabWalksIntoTheClusterAndBackOut() {
+            const context = gotoSurveyTable()
+            const firstSplayRow = openCluster(context, 0)
+            const blankRowIndex = firstSplayRow + a4Splays.length
+            const stationRow = surveyTableId.stationRow(context, 0)
+
+            context.editorModel.setFocusedCell(
+                        context.editorModel.cellIndex(stationRow,
+                                                      SurveyEditorCellIndex.StationSplaysCell))
+            tryCompare(context.editorModel, "focusedRow", stationRow, 5000)
+            tryCompare(context.editorModel, "focusedRole",
+                       SurveyEditorCellIndex.StationSplaysCell)
+
+            keyClick(Qt.Key_Tab)
+            tryCompare(context.editorModel, "focusedRow", firstSplayRow, 5000,
+                       "tab off the Splays cell should enter the cluster it has open")
+            tryCompare(context.editorModel, "focusedRole",
+                       SurveyEditorCellIndex.SplayDistanceCell)
+
+            keyClick(Qt.Key_Backtab, Qt.ShiftModifier)
+            tryCompare(context.editorModel, "focusedRow", stationRow, 5000,
+                       "shift-tab should hand the caret back to the cell it came from")
+            tryCompare(context.editorModel, "focusedRole",
+                       SurveyEditorCellIndex.StationSplaysCell)
+
+            // The next station's LRUD comes after the cluster in the chain, so
+            // shift-tab off it reaches the blank row at the cluster's bottom
+            context.editorModel.setFocusedCell(
+                        context.editorModel.cellIndex(surveyTableId.stationRow(context, 1),
+                                                      SurveyChunk.StationLeftRole))
+            tryCompare(context.editorModel, "focusedRole", SurveyChunk.StationLeftRole, 5000)
+
+            keyClick(Qt.Key_Backtab, Qt.ShiftModifier)
+            tryCompare(context.editorModel, "focusedRow", blankRowIndex, 5000,
+                       "shift-tab into a station row should land in the cluster above it")
+            tryCompare(context.editorModel, "focusedRole",
+                       SurveyEditorCellIndex.SplayClinoCell)
+        }
     }
 }
