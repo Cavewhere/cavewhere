@@ -1892,6 +1892,20 @@ public:
 <h3>Commit 7 &mdash; cwLinePlotManager attached-centerlines model + driver source <em>(landed; includes the direction-change stale/updateFromSource work)</em></h3>
 <p><strong>New tags:</strong> <code>[LinePlotManager][AttachedCenterlinesModel]</code>,
 <code>[Attach][Stale]</code></p>
+
+<div class="note">
+  <strong>Superseded 2026-08-11 &mdash; the stale/<code>updateFromSource</code>
+  half of this commit has been removed.</strong> The history below stands
+  as written; what it shipped no longer exists. Staleness, the freshness
+  probe, <code>updateFromSource</code>, <code>isSourceMissing</code> and
+  the missing-source banner were all deleted, and the
+  <code>[Attach][Stale]</code> cases went with them. The in-project copy
+  is now the only file and <em>Replace&hellip;</em> is the only way an
+  outside file enters the project after attach &mdash; see
+  <a href="EXTERNAL_FILE_LIVE_LINK_RETIREMENT.html">the live-link
+  retirement plan</a>. The attached-centerlines model and driver-source
+  work in this commit are unaffected.
+</div>
 <ul>
   <li>Native region &rarr; <code>attachedCenterlinesModel</code> has
     zero rows; <code>driverSource</code> is the existing native
@@ -4091,7 +4105,7 @@ Stations list   &larr; denser rows; consider abbreviated UsedStations view</code
   <em>(Filed 2026-08-04.)</em> Editing an in-project attachment outside CaveWhere
   &mdash; the <code>external-centerline/</code> copy, in either project format
   &mdash; fires the watcher, recomputes the dependency set and re-solves
-  (<code>cwExternalCenterlineManager.cpp:576-581</code>), so the plot visibly
+  (<code>cwExternalCenterlineManager::onWatchedFileChanged</code>), so the plot visibly
   updates. <strong><code>cwProject::modified()</code> stays false throughout.</strong>
 </p>
 

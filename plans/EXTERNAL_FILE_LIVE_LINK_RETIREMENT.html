@@ -42,6 +42,7 @@
   .pill { display: inline-block; border-radius: 999px; padding: .05rem .6rem; font-size: .75rem; font-weight: 600; letter-spacing: .3px; vertical-align: middle; }
   .pill.draft { background: #3d3524; color: var(--warn); border: 1px solid var(--warn); }
   .pill.done { background: #2b3a2b; color: var(--good); border: 1px solid var(--good); }
+  .pill.active { background: #23303d; color: var(--accent); border: 1px solid var(--accent); }
   .callout { border-left: 3px solid var(--accent); background: var(--panel); padding: .7rem 1rem; border-radius: 0 8px 8px 0; margin: 1rem 0; }
   .callout.warn { border-left-color: var(--warn); }
   .callout.bad { border-left-color: var(--bad); }
@@ -57,12 +58,16 @@
 <body>
 <main>
 
-<h1>Live-Link Retirement <span class="pill draft">DRAFT</span></h1>
+<h1>Live-Link Retirement <span class="pill active">IN PROGRESS</span></h1>
 <p class="meta">
-  The in-project copy becomes the <em>only</em> file. CaveWhere stops watching,
+  The in-project copy is the <em>only</em> file. CaveWhere stops watching,
   probing and offering to re-copy from a remembered external source; the user
   replaces the attachment explicitly, and edits to the project's own copy are
   what the watcher reacts to. Filed 2026-08-04.
+  <br>
+  <strong>Status 2026-08-11:</strong> commits 1, 2, 3, 3b and 4 have shipped
+  (&sect;6 carries the hashes) &mdash; the retirement is complete in the code.
+  Commit 5, this doc reconciliation, is the last row.
   <br>
   Related: <a href="EXTERNAL_FILE_INTEGRATION_PLAN.html">master plan</a>
   (&sect;5 copy workflow, &sect;8.8 q16),
@@ -80,16 +85,19 @@
   copy the source of truth and dropped auto-reconcile: a source-side edit now
   only raises a flag, and the user triggers the copy. That was the right
   direction and it did not go far enough. The watcher, the freshness probe, the
-  <em>Update</em> button and two banners all remain, and every one of them is
+  <em>Update</em> button and two banners all remained (all since deleted,
+  &sect;6), and every one of them was
   built on the opposite premise &mdash; that the external file still holds
   authority and the project copy is a cache of it.
 </p>
 
 <p>
-  The two premises meet in one predicate. Staleness is defined as "the reconcile
-  plan has pending copies" (<code>cwExternalCenterlineManager.cpp:390-399</code>),
-  and a copy is planned whenever <code>destinationMatchesSource</code> is false
-  (<code>cwExternalCenterlineSync.cpp:42-56</code>):
+  The two premises met in one predicate. Staleness was defined as "the reconcile
+  plan has pending copies" &mdash; in the freshness probe
+  <code>cwExternalCenterlineManager</code> ran per owner, deleted in commit 2
+  &mdash; and a copy is planned whenever <code>destinationMatchesSource</code> is
+  false (<code>cwExternalCenterlineSync.cpp</code>, which survives because
+  attach and replace still need it):
 </p>
 
 <pre><code>if (!dstInfo.exists())                    return false;
@@ -130,7 +138,7 @@ return srcInfo.lastModified() &lt;= dstInfo.lastModified();</code></pre>
     <td>User B edits the copy, commits, pushes. User A pulls; the copy carries B's
         bytes and a checkout mtime. Sizes differ, so A is flagged stale on open;
         clicking <em>Update</em> writes A's untouched source over B's work, and
-        reconcile's GC (<code>cwExternalCenterlineSync.cpp:121-128</code>) deletes
+        reconcile's GC (<code>cwExternalCenterlineSync::computePlan</code>) deletes
         any file B added to the closure.</td>
   </tr>
   <tr>
@@ -188,8 +196,8 @@ return srcInfo.lastModified() &lt;= dstInfo.lastModified();</code></pre>
       what the error banner names, and what git versions.</li>
   <li><strong>Edits to it are live.</strong> Already implemented: a project-side
       watcher event recomputes the dependency set and re-solves
-      (<code>cwExternalCenterlineManager.cpp:576-581</code>). This half of the
-      proposal is existing behavior, not new work.</li>
+      (<code>cwExternalCenterlineManager::onWatchedFileChanged</code>). This half
+      of the proposal is existing behavior, not new work.</li>
   <li><strong>Replace is explicit.</strong> A new verb re-runs the attach path
       against a freshly picked file, swapping the closure in one operation. It is
       the only way an outside file enters the project after the initial attach.</li>
@@ -291,8 +299,8 @@ return srcInfo.lastModified() &lt;= dstInfo.lastModified();</code></pre>
   <tr>
     <td><code>cwExternalCenterlineSync.cpp</code></td>
     <td><code>destinationMatchesSource</code> keeps its job inside
-        attach/replace, but stops being the definition of staleness. The GC
-        (<code>:121-128</code>) now only ever runs against a closure the user
+        attach/replace, but stops being the definition of staleness. The GC in
+        <code>computePlan</code> now only ever runs against a closure the user
         just picked, which is the context it was safe in all along.</td>
   </tr>
   <tr>
@@ -316,9 +324,9 @@ return srcInfo.lastModified() &lt;= dstInfo.lastModified();</code></pre>
   <tr>
     <td><code>cwRootData.h/.cpp</code></td>
     <td>Nothing removed; the <code>externalSourceSettings</code> property
-        survives as the breadcrumb store. Its member comment
-        (<code>cwRootData.h:229</code>, &ldquo;Per-machine live-link source
-        paths&rdquo;) is now wrong.</td>
+        survives as the breadcrumb store. <em>Commit 4</em> rewrote its member
+        comment, which used to read &ldquo;Per-machine live-link source
+        paths&rdquo; and now names the breadcrumbs for what they are.</td>
   </tr>
   <tr>
     <td>Tests (8 files)</td>
@@ -387,8 +395,8 @@ return srcInfo.lastModified() &lt;= dstInfo.lastModified();</code></pre>
 <p>
   The open detail is whether it routes through detach-then-attach or reuses the
   existing reconcile-with-GC. Reconcile-with-GC is preferable: detach drops the
-  settings entry and attachment-dir map entry synchronously (per the header
-  comment at <code>cwExternalCenterlineManager.h:142-150</code>), so a
+  settings entry and attachment-dir map entry synchronously (per the
+  <code>detachCenterline</code> header comment), so a
   detach/attach pair briefly leaves the owner in a state where an interleaved
   scan sees no attachment at all.
 </p>
@@ -419,15 +427,18 @@ return srcInfo.lastModified() &lt;= dstInfo.lastModified();</code></pre>
   </tr>
   <tr>
     <td>1</td>
-    <td><strong>Replace verb.</strong> Manager entry point + panel action. Live
-        alongside the existing Update button, which still works.</td>
+    <td><strong>Replace verb.</strong> <span class="pill done">done</span>
+        <code>9776e6ed</code>. Manager entry point + panel action. Was to live
+        alongside the existing Update button &mdash; which turned out to have no
+        control in the UI at all, so there was nothing to sit beside.</td>
     <td>Replace swaps the closure, GCs a dependency the new file does not
         reference, and re-solves. Busy-owner refusal. Bundled
         <code>.cw</code> and <code>.cwproj</code> both covered.</td>
   </tr>
   <tr>
     <td>2</td>
-    <td><strong>Stop watching sources.</strong> Drop the source branch from the
+    <td><strong>Stop watching sources.</strong> <span class="pill done">done</span>
+        <code>9e6e623e</code>. Drop the source branch from the
         probe and from <code>onWatchedFileChanged</code>; drop
         <code>m_sourceOwnerForPath</code> and
         <code>m_staleRaisedSinceSnapshot</code>. <code>staleSourceOwners</code>
@@ -444,7 +455,8 @@ return srcInfo.lastModified() &lt;= dstInfo.lastModified();</code></pre>
   </tr>
   <tr>
     <td>3</td>
-    <td><strong>Delete the stale/missing surface.</strong> Both properties, both
+    <td><strong>Delete the stale/missing surface.</strong>
+        <span class="pill done">done</span> <code>a0ffc6c4</code>. Both properties, both
         signals, <code>updateFromSource</code>, <code>isSourceMissing</code>, the
         missing-source banner, the panel's polling. (No Update <em>action</em>
         to remove: <code>updateFromSource</code> is <code>Q_INVOKABLE</code>-only
@@ -462,7 +474,8 @@ return srcInfo.lastModified() &lt;= dstInfo.lastModified();</code></pre>
   </tr>
   <tr>
     <td>3b</td>
-    <td><strong>Remove the Detach&hellip; action</strong> (&sect;4.1). The panel
+    <td><strong>Remove the Detach&hellip; action</strong> (&sect;4.1).
+        <span class="pill done">done</span> <code>75c63a9c</code>. The panel
         button and its <code>RemoveAskBox</code> only;
         <code>detachCenterline</code> / <code>detachTripCenterline</code> stay
         as the owner-teardown API.</td>
@@ -475,16 +488,17 @@ return srcInfo.lastModified() &lt;= dstInfo.lastModified();</code></pre>
   </tr>
   <tr>
     <td>4</td>
-    <td><strong>Demote <code>cwExternalSourceSettings</code>.</strong> Rename the
-        accessors to breadcrumb language; update the class doc and
-        <code>cwRootData.h:229</code>; wire it as the Replace dialog's default
-        folder only.</td>
+    <td><strong>Demote <code>cwExternalSourceSettings</code>.</strong>
+        <span class="pill done">done</span> <code>d038e700</code>. Rename the
+        accessors to breadcrumb language; update the class doc and the
+        <code>cwRootData</code> member comment; wire it as the Replace dialog's
+        default folder only.</td>
     <td>Replace pre-fills from the breadcrumb; a missing breadcrumb falls back
         without error; detach clears it. Old settings files still load.</td>
   </tr>
   <tr>
     <td>5</td>
-    <td><strong>Plan and doc reconciliation</strong> (&sect;8).</td>
+    <td><strong>Plan and doc reconciliation</strong> (&sect;9).</td>
     <td>None &mdash; documentation only.</td>
   </tr>
 </table>
@@ -509,8 +523,9 @@ return srcInfo.lastModified() &lt;= dstInfo.lastModified();</code></pre>
 <ol>
   <li>
     <strong>What happens when the in-project copy itself goes missing?</strong>
-    <code>missingSourceOwners</code> covers a missing <em>source</em>; nothing
-    covers a missing <em>copy</em>. Once the copy is the only file, that becomes
+    <code>missingSourceOwners</code> covered a missing <em>source</em> and is now
+    deleted; nothing covers a missing <em>copy</em>. With the copy the only file,
+    that becomes
     the state worth surfacing, and it is the one case where a
     &ldquo;re-attach&rdquo; prompt is genuinely the right answer. Probably one
     small addition rather than a repurposing of the banner being deleted.
@@ -556,28 +571,35 @@ return srcInfo.lastModified() &lt;= dstInfo.lastModified();</code></pre>
 
 <h2 id="staleness">9. Documentation this invalidates</h2>
 
+<p class="dim">All four reconciled in commit 5.</p>
+
 <ul>
   <li>
-    <strong>Master plan &sect;8.8 q16</strong> defines the missing-source banner
-    as &ldquo;Yellow banner; Re-link / Switch-to-import buttons&rdquo;
-    (<code>EXTERNAL_FILE_INTEGRATION_PLAN.html:2098</code>). The question
-    dissolves rather than being answered &mdash; mark it retired, do not answer
-    it.
+    <strong>Master plan &sect;8.8 q16</strong> defined the missing-source banner
+    as &ldquo;Yellow banner; Re-link / Switch-to-import buttons.&rdquo;
+    <span class="pill done">done</span> The question is marked RETIRED with a
+    pointer here and its old answer kept as labeled history &mdash; it dissolved
+    rather than being answered. The &sect;8.5.1 component table row that named
+    the banner is marked deleted alongside it.
   </li>
   <li>
-    <strong>Master plan &sect;5</strong> (copy workflow) describes the live link
-    as an ongoing relationship. Needs a note that the copy is terminal.
+    <strong>Master plan &sect;5</strong> (copy workflow) described the live link
+    as an ongoing relationship. <span class="pill done">done</span> The section
+    opens with a note that the copy is terminal: copying happens at attach and at
+    an explicit <em>Replace&hellip;</em>, and the rest of the section's
+    watch/probe/update language reads as history.
   </li>
   <li>
     <strong>Phase 2 commit 7</strong> is titled
-    &ldquo;<em>includes the direction-change stale/updateFromSource work</em>&rdquo;
-    (<code>EXTERNAL_FILE_PHASE2.html:1872</code>). Leave the history, add a
-    forward pointer here.
+    &ldquo;<em>includes the direction-change stale/updateFromSource work</em>.&rdquo;
+    <span class="pill done">done</span> The history stands as written, with a
+    forward pointer here noting the stale half has since been deleted.
   </li>
   <li>
-    <strong><code>cwExternalCenterlineManager.h:121-132</code></strong>, the
-    staleness doc, is the clearest statement of the retired model and goes with
-    the code.
+    <strong>The staleness doc in <code>cwExternalCenterlineManager.h</code></strong>
+    was the clearest statement of the retired model. <span class="pill done">done</span>
+    It went with the code in commit 3; commit 5 confirmed the header keeps no
+    remnant of it.
   </li>
 </ul>
 

@@ -667,6 +667,22 @@ AsyncFuture::observe(future)
 
 <h2 id="copy">5. In-project copy workflow</h2>
 
+<div class="note">
+  <strong>The copy is terminal (2026-08-11).</strong> Wherever this
+  section reads as an ongoing relationship between an outside file and
+  its in-project copy &mdash; watching, probing, staleness, an
+  <em>Update</em> that pulls the source forward &mdash; read it as
+  history. Copying happens once, at attach, and again only when the
+  user explicitly picks a new file through <em>Replace&hellip;</em>.
+  After that the in-project copy is the only file: it is what the solve
+  includes, what the harvest reads, what the watcher reacts to, and
+  what git versions. The path the user originally picked is kept solely
+  to pre-fill the Replace picker. See
+  <a class="anchor" href="EXTERNAL_FILE_LIVE_LINK_RETIREMENT.html">the
+  live-link retirement plan</a> for why a two-file model could not tell
+  &ldquo;the source moved&rdquo; from &ldquo;the copy moved.&rdquo;
+</div>
+
 <h3>5.1 Layout</h3>
 
 <p>
@@ -2095,8 +2111,12 @@ QQ.Item {
   </tr>
   <tr>
     <td><code>ExternalCenterlineMissingSourceBanner.qml</code></td>
-    <td>Yellow banner; Re-link / Switch-to-import buttons (&sect;8.8 question 16).</td>
-    <td>2 (banner lights up trivially in Phase 2 even before Phase 5b lands the rebind dialog &mdash; the buttons can be present but only "Forget source" wired in Phase 2; Re-link wires to its dialog in Phase 5b)</td>
+    <td><strong>Deleted 2026-08-11</strong> &mdash; was: yellow banner;
+      Re-link / Switch-to-import buttons (&sect;8.8 question 16, now
+      retired). No missing-source state survives; see
+      <a class="anchor" href="EXTERNAL_FILE_LIVE_LINK_RETIREMENT.html">the
+      live-link retirement plan</a>.</td>
+    <td>was: 2 (banner lights up trivially in Phase 2 even before Phase 5b lands the rebind dialog &mdash; the buttons can be present but only "Forget source" wired in Phase 2; Re-link wires to its dialog in Phase 5b)</td>
   </tr>
   <tr>
     <td><code>ExternalCenterlineTripMetadata.qml</code></td>
@@ -2427,7 +2447,19 @@ QQ.Item {
   </li>
   <li>
     <strong>Re-link discoverability across app restarts.</strong>
-    Resolved &mdash; the missing-source check is part of the
+    <strong>RETIRED 2026-08-11</strong> &mdash; the question dissolved
+    rather than being answered. CaveWhere no longer keeps a live link
+    to the file the user originally picked: the in-project copy is the
+    only file, the remembered path is a breadcrumb that pre-fills the
+    <em>Replace&hellip;</em> picker, and a breadcrumb pointing at
+    something that has moved is an ordinary state with no banner and no
+    re-link flow to discover. See
+    <a class="anchor" href="EXTERNAL_FILE_LIVE_LINK_RETIREMENT.html">the
+    live-link retirement plan</a>. The answer below is kept as history
+    and describes a surface that has been deleted.
+    <div class="note">
+      <em>Historical answer (superseded).</em>
+      The missing-source check is part of the
     attachment's startup probe, not just the
     <code>QFileSystemWatcher</code> path. When
     <code>cwLinePlotManager</code> loads the project, any attachment
@@ -2441,6 +2473,7 @@ QQ.Item {
     banner state, so the two routes converge on one UI surface.
     Without this, the watcher-only design quietly drops the
     moved-while-app-closed case &mdash; which is the common one.
+    </div>
   </li>
   <li>
     <strong>Scope trip auto-naming.</strong> Resolved &mdash; use the
