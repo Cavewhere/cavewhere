@@ -13,6 +13,8 @@
 #include <QDebug>
 
 //Std includes
+#include <algorithm>
+#include <array>
 #include <limits>
 
 cwSurveyEditorModel::cwSurveyEditorModel()
@@ -536,14 +538,22 @@ QVariant cwSurveyEditorModel::data(const QModelIndex& index, int role) const
             return QVariant();
         }
 
+        //A splay reading is edited through the same boxes the rest of the table
+        //uses, so it arrives in the same shape they read. Nothing checks a splay
+        //yet, so it carries no error model
+        auto splayReading = [&chunkIndex](const cwReading& reading,
+                                          cwSurveyChunk::DataRole readingRole) {
+            return QVariant::fromValue(cwSurveyEditorBoxData(reading, chunkIndex, readingRole));
+        };
+
         const cwShotMeasurement& splay = chunk->stationSplayAt(stationIndex, splayIndex);
         switch(role) {
         case SplayDistanceRole:
-            return splay.distance.value();
+            return splayReading(splay.distance, cwSurveyChunk::ShotDistanceRole);
         case SplayCompassRole:
-            return splay.compass.value();
+            return splayReading(splay.compass, cwSurveyChunk::ShotCompassRole);
         case SplayClinoRole:
-            return splay.clino.value();
+            return splayReading(splay.clino, cwSurveyChunk::ShotClinoRole);
         default:
             return QVariant();
         }
@@ -587,6 +597,13 @@ bool cwSurveyEditorModel::setDataAt(const cwSurveyEditorCellIndex& cell, const Q
 {
     if(m_trip.isNull()) {
         return false;
+    }
+
+    //A splay's readings hang off a station instead of sitting in a row of the
+    //chunk, so they're written through the cluster rather than chunk->setData
+    const auto splayReadingRole = cwSurveyEditorCellIndex::toSplayReadingRole(cell.cellRole());
+    if(splayReadingRole.has_value()) {
+        return setSplayDataAt(cell, *splayReadingRole, data);
     }
 
     //A cell the editor owns rather than one the chunk stores has no reading to
@@ -661,6 +678,39 @@ bool cwSurveyEditorModel::setDataAt(const cwSurveyEditorCellIndex& cell, const Q
         trim(chunk, FullTrim);
     }
     syncVirtualRows(chunk);
+    return true;
+}
+
+/**
+ * @brief cwSurveyEditorModel::setSplayDataAt
+ * @param cell - One of the three reading cells of a splay row
+ * @param readingRole - The reading \a cell shows, from toSplayReadingRole
+ * @return True when the reading was handed to the chunk
+ *
+ * The row pins the chunk, the station and the splay, so the cell only has to
+ * say which of the splay's three readings it holds.
+ */
+bool cwSurveyEditorModel::setSplayDataAt(const cwSurveyEditorCellIndex& cell,
+                                         cwSurveyChunk::DataRole readingRole,
+                                         const QVariant& data)
+{
+    if(!isCellValid(cell)) {
+        return false;
+    }
+
+    const auto rowIndex = toRowIndex(cell.modelRow());
+    cwSurveyChunk* chunk = splayClusterChunk(rowIndex);
+    if(chunk == nullptr) {
+        return false;
+    }
+
+    const int stationIndex = rowIndex.indexInChunk();
+    const int splayIndex = rowIndex.splayIndex();
+    if(splayIndex < 0 || splayIndex >= chunk->stationSplayCount(stationIndex)) {
+        return false;
+    }
+
+    chunk->setStationSplayData(readingRole, stationIndex, splayIndex, data);
     return true;
 }
 
@@ -1094,6 +1144,11 @@ bool cwSurveyEditorModel::isShotCell(cwSurveyEditorCellIndex::CellRole role) con
     return toRowType(role) == cwSurveyEditorRowIndex::ShotRow;
 }
 
+bool cwSurveyEditorModel::isSplayCell(cwSurveyEditorCellIndex::CellRole role) const
+{
+    return toRowType(role) == cwSurveyEditorRowIndex::SplayRow;
+}
+
 bool cwSurveyEditorModel::isCellSelected(const cwSurveyEditorCellIndex& selectedCell,
                                          const cwSurveyEditorCellIndex& candidateCell) const
 {
@@ -1314,6 +1369,126 @@ cwSurveyEditorCellIndex cwSurveyEditorModel::nextCellIndex(const cwSurveyEditorC
     auto nextLeftFromClino = [&]() {
         const int stationIndex = indexInChunk == 0 ? indexInChunk : indexInChunk + 1;
         return stationCell(stationIndex, cwSurveyEditorCellIndex::StationLeftCell, 0);
+    };
+
+    //A splay is one front sight, so its readings chain straight across and the
+    //front/back sight branching the shot rows do stays off this path
+    constexpr std::array<cwSurveyEditorCellIndex::CellRole, 3> kSplayColumns = {
+        cwSurveyEditorCellIndex::SplayDistanceCell,
+        cwSurveyEditorCellIndex::SplayCompassCell,
+        cwSurveyEditorCellIndex::SplayClinoCell
+    };
+
+    auto splayCell = [&](int splayIndex, cwSurveyEditorCellIndex::CellRole splayRole) {
+        if(chunk == nullptr || m_trip.isNull()) {
+            return cwSurveyEditorCellIndex();
+        }
+        const int row = toModelRow(cwSurveyEditorRowIndex(chunk,
+                                                          indexInChunk,
+                                                          splayIndex,
+                                                          cwSurveyEditorRowIndex::SplayRow));
+        if(row < 0) {
+            return cwSurveyEditorCellIndex();
+        }
+        return cellIndex(row, splayRole);
+    };
+
+    //The cell that owns the cluster, which is the row directly above it
+    auto clusterCell = [&]() {
+        return makeCell(chunk,
+                        indexInChunk,
+                        cwSurveyEditorRowIndex::StationRow,
+                        cwSurveyEditorCellIndex::StationSplaysCell);
+    };
+
+    //Where a splay column sits in kSplayColumns, so the column ordering lives
+    //in the array alone
+    auto splayColumn = [&](cwSurveyEditorCellIndex::CellRole splayRole) {
+        const auto column = std::find(kSplayColumns.begin(), kSplayColumns.end(), splayRole);
+        return static_cast<int>(std::distance(kSplayColumns.begin(), column));
+    };
+
+    //The column the cluster sits in, on the shot row below it. Shot i hangs
+    //under station i, which is the station the cluster hangs from. A shot's
+    //compass and clino are drawn only for the sights the trip records, so with
+    //both sight groups off the whole column lands on the distance cell
+    auto shotCellBelowCluster = [&](int column) {
+        const auto distanceCell = [&]() {
+            return shotCell(indexInChunk, cwSurveyEditorCellIndex::ShotDistanceCell, 0);
+        };
+
+        if(!frontSights && !backSights) {
+            return distanceCell();
+        }
+
+        const bool backSightsOnly = backSights && !frontSights;
+        switch(kSplayColumns.at(column)) {
+        case cwSurveyEditorCellIndex::SplayCompassCell:
+            if(backSightsOnly) {
+                return shotCell(indexInChunk, cwSurveyEditorCellIndex::ShotBackCompassCell, 0);
+            }
+            return shotCell(indexInChunk, cwSurveyEditorCellIndex::ShotCompassCell, 0);
+        case cwSurveyEditorCellIndex::SplayClinoCell:
+            if(backSightsOnly) {
+                return shotCell(indexInChunk, cwSurveyEditorCellIndex::ShotBackClinoCell, 0);
+            }
+            return shotCell(indexInChunk, cwSurveyEditorCellIndex::ShotClinoCell, 0);
+        default:
+            return distanceCell();
+        }
+    };
+
+    auto nextSplayCell = [&](cwSurveyEditorCellIndex::CellRole splayRole) {
+        const int column = splayColumn(splayRole);
+        const int splayIndex = currentRowIndex.splayIndex();
+        const int lastColumn = static_cast<int>(kSplayColumns.size()) - 1;
+
+        switch(key) {
+        case Tab: {
+            if(column < lastColumn) {
+                return splayCell(splayIndex, kSplayColumns.at(column + 1));
+            }
+            const auto nextSplay = splayCell(splayIndex + 1, cwSurveyEditorCellIndex::SplayDistanceCell);
+            if(isCellValid(nextSplay)) {
+                return nextSplay;
+            }
+            //Out the bottom of the cluster, the row carries on the way the cell
+            //that owns the cluster leaves it
+            return nextCellIndex(clusterCell(), Tab, frontSights, backSights);
+        }
+        case BackTab:
+            if(column > 0) {
+                return splayCell(splayIndex, kSplayColumns.at(column - 1));
+            }
+            if(splayIndex > 0) {
+                return splayCell(splayIndex - 1, cwSurveyEditorCellIndex::SplayClinoCell);
+            }
+            return clusterCell();
+        case Left:
+            if(column > 0) {
+                return splayCell(splayIndex, kSplayColumns.at(column - 1));
+            }
+            return cwSurveyEditorCellIndex();
+        case Right:
+            if(column < lastColumn) {
+                return splayCell(splayIndex, kSplayColumns.at(column + 1));
+            }
+            return cwSurveyEditorCellIndex();
+        case Up:
+            if(splayIndex > 0) {
+                return splayCell(splayIndex - 1, kSplayColumns.at(column));
+            }
+            return clusterCell();
+        case Down: {
+            const auto belowInCluster = splayCell(splayIndex + 1, kSplayColumns.at(column));
+            if(isCellValid(belowInCluster)) {
+                return belowInCluster;
+            }
+            return shotCellBelowCluster(column);
+        }
+        }
+
+        return cwSurveyEditorCellIndex();
     };
 
     switch(currentCell.cellRole()) {
@@ -1567,6 +1742,10 @@ cwSurveyEditorCellIndex cwSurveyEditorModel::nextCellIndex(const cwSurveyEditorC
             return offsetCurrentRowRole(cwSurveyEditorCellIndex::ShotBackClinoCell, -1);
         }
         break;
+    case cwSurveyEditorCellIndex::SplayDistanceCell:
+    case cwSurveyEditorCellIndex::SplayCompassCell:
+    case cwSurveyEditorCellIndex::SplayClinoCell:
+        return nextSplayCell(currentCell.cellRole());
     //The included checkbox rides along with the distance cell, so the keyboard
     //never lands on it
     case cwSurveyEditorCellIndex::ShotDistanceIncludedCell:
@@ -1918,6 +2097,9 @@ bool cwSurveyEditorModel::isSplayMoveTarget(const cwSurveyEditorRowIndex& rowInd
  * @brief cwSurveyEditorModel::isSplayMoveSource
  * @return True when \a rowIndex names the station an armed move's splays are
  * leaving
+ *
+ * Only the rows that hang off a cluster answer: a shot row carries the same
+ * index as the station above it, and it is no part of the move.
  */
 bool cwSurveyEditorModel::isSplayMoveSource(const cwSurveyEditorRowIndex& rowIndex) const
 {
@@ -1925,7 +2107,16 @@ bool cwSurveyEditorModel::isSplayMoveSource(const cwSurveyEditorRowIndex& rowInd
         return false;
     }
 
-    return rowIndex.chunk() == m_pendingSplayMove.chunk
+    switch(rowIndex.rowType()) {
+    case cwSurveyEditorRowIndex::StationRow:
+    case cwSurveyEditorRowIndex::SplayRow:
+        break;
+    case cwSurveyEditorRowIndex::TitleRow:
+    case cwSurveyEditorRowIndex::ShotRow:
+        return false;
+    }
+
+    return splayClusterChunk(rowIndex) == m_pendingSplayMove.chunk
            && rowIndex.indexInChunk() == m_pendingSplayMove.stationIndex;
 }
 
@@ -2078,6 +2269,10 @@ cwSurveyEditorRowIndex::RowType cwSurveyEditorModel::toRowType(cwSurveyEditorCel
     case cwSurveyEditorCellIndex::ShotClinoCell:
     case cwSurveyEditorCellIndex::ShotBackClinoCell:
         return cwSurveyEditorRowIndex::ShotRow;
+    case cwSurveyEditorCellIndex::SplayDistanceCell:
+    case cwSurveyEditorCellIndex::SplayCompassCell:
+    case cwSurveyEditorCellIndex::SplayClinoCell:
+        return cwSurveyEditorRowIndex::SplayRow;
     }
 
     //Only a default constructed cell reaches here

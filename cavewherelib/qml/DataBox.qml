@@ -13,12 +13,16 @@ import QtQuick.Controls as QC
 SurveyEditorCell {
     id: dataBox
     objectName: listViewIndex >= 0 ?
-                    ("dataBox." + listViewIndex + "." + dataValue.chunkDataRole) :
-                    ("templateCell." + listViewIndex + "." + dataValue.chunkDataRole)
+                    ("dataBox." + listViewIndex + "." + cellRole) :
+                    ("templateCell." + listViewIndex + "." + cellRole)
 
     property alias dataValidator: editor.validator
 
     property alias aboutToDelete: removeBoxId.visible
+
+    //Space starts the next chunk from the cells that make up a shot. A cell
+    //that stands outside that flow, such as a splay's reading, turns it off
+    property bool addsChunkOnSpace: true
     readonly property ErrorModel errorModel: dataValue.errorModel
     required property QC.ButtonGroup errorButtonGroup
 
@@ -97,6 +101,10 @@ SurveyEditorCell {
     }
 
     function addNewChunk() {
+        if(!dataBox.addsChunkOnSpace) {
+            return;
+        }
+
         var trip = dataValue.chunk.parentTrip;
         if(trip.chunkCount > 0) {
             var lastChunkIndex = trip.chunkCount - 1
@@ -177,8 +185,10 @@ SurveyEditorCell {
                             }
 
         onStartedEditting: {
+            //The cell the edit commits to, not the reading behind it: a splay's
+            //cells are the editor's own and name no chunk role
             dataBox.editTargetRow = dataBox.listViewIndex
-            dataBox.editTargetRole = dataBox.dataValue.chunkDataRole
+            dataBox.editTargetRole = dataBox.cellRole
             dataBox.state = 'MiddleTyping';
         }
 

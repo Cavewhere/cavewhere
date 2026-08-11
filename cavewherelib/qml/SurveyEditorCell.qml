@@ -48,14 +48,18 @@ QQ.Item {
     property bool acceptsSplayMove: false
 
     //How the cell's background reads: a station cell gets the gradient that
-    //ties a station to the shots around it, a shot cell a flat fill. Which of
-    //the two a cell is follows from its column, so the model answers it
+    //ties a station to the shots around it, a shot cell a flat fill, and a
+    //splay cell the accent that keeps a cluster reading as a group. Which of
+    //the three a cell is follows from its column, so the model answers it
     readonly property bool stationCell: cell.chunk !== null
                                         && cell.model !== null
                                         && cell.model.isStationCell(cell.cellRole)
     readonly property bool shotCell: cell.chunk !== null
                                      && cell.model !== null
                                      && cell.model.isShotCell(cell.cellRole)
+    readonly property bool splayCell: cell.chunk !== null
+                                      && cell.model !== null
+                                      && cell.model.isSplayCell(cell.cellRole)
 
     //Hovering a remove action strikes through every cell the removal takes
     //with it, whether or not the cell holds a reading
@@ -242,13 +246,19 @@ QQ.Item {
         }
     }
 
-    //A station's gradient and a shot's flat fill are the same rectangle, since
-    //a cell is never both, and a gradient overrides the color
+    //A station's gradient, a shot's flat fill and a splay's accent are the same
+    //rectangle, since a cell is only ever one of the three, and a gradient
+    //overrides the color
     QQ.Rectangle {
         id: backgroundId
         anchors.fill: parent
-        visible: cell.stationCell || cell.shotCell
-        color: cell.evenRow ? Theme.surfaceRaised : Theme.surface
+        visible: cell.stationCell || cell.shotCell || cell.splayCell
+        color: {
+            if(cell.splayCell) {
+                return Theme.splaySurface
+            }
+            return cell.evenRow ? Theme.surfaceRaised : Theme.surface
+        }
         gradient: cell.stationCell ? stationGradientId : null
     }
 

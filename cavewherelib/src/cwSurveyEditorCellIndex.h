@@ -42,7 +42,15 @@ public:
 
         //A station's splay cluster, as a cell the editor can focus and toggle.
         //It stands for the whole cluster rather than any one reading in it
-        StationSplaysCell = kFirstEditorCell
+        StationSplaysCell = kFirstEditorCell,
+
+        //The three readings of one splay. A splay lives under a station at an
+        //index of its own, which no chunk role can name, so these are the
+        //editor's own cells and the reading each one writes comes back from
+        //toSplayReadingRole
+        SplayDistanceCell,
+        SplayCompassCell,
+        SplayClinoCell
     };
     Q_ENUM(CellRole)
 
@@ -88,6 +96,41 @@ public:
         case ShotClinoCell:
         case ShotBackClinoCell:
             return static_cast<cwSurveyChunk::DataRole>(cellRole);
+        case StationSplaysCell:
+        case SplayDistanceCell:
+        case SplayCompassCell:
+        case SplayClinoCell:
+            break;
+        }
+        return {};
+    }
+
+    /**
+     * The reading of a splay \a cellRole shows, or nothing when the cell shows
+     * something other than a splay. A splay is a front sight with no
+     * destination, so it answers to the shot's three front-sight roles, and the
+     * station and splay it belongs to come from the row rather than the cell.
+     */
+    static std::optional<cwSurveyChunk::DataRole> toSplayReadingRole(CellRole cellRole)
+    {
+        switch(cellRole) {
+        case SplayDistanceCell:
+            return cwSurveyChunk::ShotDistanceRole;
+        case SplayCompassCell:
+            return cwSurveyChunk::ShotCompassRole;
+        case SplayClinoCell:
+            return cwSurveyChunk::ShotClinoRole;
+        case StationNameCell:
+        case StationLeftCell:
+        case StationRightCell:
+        case StationUpCell:
+        case StationDownCell:
+        case ShotDistanceCell:
+        case ShotDistanceIncludedCell:
+        case ShotCompassCell:
+        case ShotBackCompassCell:
+        case ShotClinoCell:
+        case ShotBackClinoCell:
         case StationSplaysCell:
             break;
         }

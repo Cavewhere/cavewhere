@@ -24,7 +24,7 @@ public:
         StationRow,
         ShotRow,
 
-        //A read-only splay hanging under a station row. indexInChunk is the
+        //One splay hanging under a station row. indexInChunk is the
         //station it was shot from and splayIndex picks it out of that station's
         //splays, so the row keeps its identity while other stations expand and
         //collapse around it

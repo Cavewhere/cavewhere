@@ -47,9 +47,9 @@ Item {
     required property cwSurveyEditorBoxData shotBackClino;
     required property int stationSplayCount;
     required property bool stationSplaysExpanded;
-    required property string splayDistance;
-    required property string splayCompass;
-    required property string splayClino;
+    required property cwSurveyEditorBoxData splayDistance;
+    required property cwSurveyEditorBoxData splayCompass;
+    required property cwSurveyEditorBoxData splayClino;
     required property string splayStationName;
 
     //Visualize properties
@@ -210,11 +210,10 @@ Item {
 
     }
 
-    //Splay data loader. The readings are read-only here — editing them is a
-    //later feature, so the row shows them as they were written, and offers the
-    //one action it has through its menu. The rail down the station column ties
-    //the cluster back to the station it hangs from, which a long cluster can
-    //push off-screen
+    //Splay data loader. The three readings are cells of the grid like any
+    //other, so a mistyped download is corrected where it's read. The rail down
+    //the station column ties the cluster back to the station it hangs from,
+    //which a long cluster can push off-screen
     Loader {
         id: splayLoaderId
         active: itemId.rowType === SurveyEditorRowIndex.SplayRow
@@ -262,28 +261,49 @@ Item {
                 font.pixelSize: Theme.fontSizeCaption
             }
 
-            SplayReadingCell {
-                objectName: "splayDistanceLabel"
+            SplayDataBox {
                 x: itemId.columnTemplate.distanceX
                 width: itemId.columnTemplate.distanceWidth
                 height: itemId.columnTemplate.splayCellHeight
-                text: itemId.splayDistance
+
+                cellRole: SurveyEditorCellIndex.SplayDistanceCell
+                dataValue: itemId.splayDistance
+                listViewIndex: itemId.index
+                errorButtonGroup: itemId.errorButtonGroup
+                model: itemId.model
+                calibration: itemId.calibration
+                view: itemId.ListView.view
+                dataValidator: distanceValidator
             }
 
-            SplayReadingCell {
-                objectName: "splayCompassLabel"
+            SplayDataBox {
                 x: itemId.columnTemplate.compassX
                 width: itemId.columnTemplate.compassWidth
                 height: itemId.columnTemplate.splayCellHeight
-                text: itemId.splayCompass
+
+                cellRole: SurveyEditorCellIndex.SplayCompassCell
+                dataValue: itemId.splayCompass
+                listViewIndex: itemId.index
+                errorButtonGroup: itemId.errorButtonGroup
+                model: itemId.model
+                calibration: itemId.calibration
+                view: itemId.ListView.view
+                dataValidator: compassValidator
             }
 
-            SplayReadingCell {
-                objectName: "splayClinoLabel"
+            SplayDataBox {
                 x: itemId.columnTemplate.clinoX
                 width: itemId.columnTemplate.clinoWidth
                 height: itemId.columnTemplate.splayCellHeight
-                text: itemId.splayClino
+
+                cellRole: SurveyEditorCellIndex.SplayClinoCell
+                dataValue: itemId.splayClino
+                listViewIndex: itemId.index
+                errorButtonGroup: itemId.errorButtonGroup
+                model: itemId.model
+                calibration: itemId.calibration
+                view: itemId.ListView.view
+                dataValidator: clinoValidator
             }
 
             SplayRowMenu {

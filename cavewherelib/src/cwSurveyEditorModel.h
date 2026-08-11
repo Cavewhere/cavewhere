@@ -91,7 +91,9 @@ public:
         StationSplayCountRole,
         StationSplaysExpandedRole,
 
-        //Read-only readings of one splay, as they were written
+        //The three readings of one splay, in the shape the editor's boxes read.
+        //Which splay is pinned by the row rather than the role, so they're
+        //written back through the cells in cwSurveyEditorCellIndex
         SplayDistanceRole,
         SplayCompassRole,
         SplayClinoRole,
@@ -134,6 +136,7 @@ public:
     Q_INVOKABLE int modelRowForCellRole(cwSurveyChunk* chunk, int indexInChunk, cwSurveyEditorCellIndex::CellRole role) const;
     Q_INVOKABLE bool isStationCell(cwSurveyEditorCellIndex::CellRole role) const;
     Q_INVOKABLE bool isShotCell(cwSurveyEditorCellIndex::CellRole role) const;
+    Q_INVOKABLE bool isSplayCell(cwSurveyEditorCellIndex::CellRole role) const;
     Q_INVOKABLE bool isCellSelected(const cwSurveyEditorCellIndex& selectedCell,
                                     const cwSurveyEditorCellIndex& candidateCell) const;
     Q_INVOKABLE bool isFocusedCell(const cwSurveyEditorCellIndex& cell) const;
@@ -210,6 +213,10 @@ private:
         FullTrim,
         PreserveLastEmptyOne
     };
+
+    bool setSplayDataAt(const cwSurveyEditorCellIndex& cell,
+                        cwSurveyChunk::DataRole readingRole,
+                        const QVariant& data);
 
     cwSurveyEditorRowIndex toRowIndex(const QModelIndex& index) const;
     cwSurveyEditorRowIndex toRowIndex(int index) const;

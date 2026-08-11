@@ -65,6 +65,23 @@ MainWindowTest {
             return cell
         }
 
+        // One of the three reading cells of a splay row, by the cell it stands
+        // for — SurveyEditorCellIndex.SplayDistanceCell and friends.
+        function splayBox(context, row, cellRole) {
+            const item = surveyTableId.rowItem(this, context, row)
+
+            let box = null
+            tryVerify(() => {
+                box = findChild(item, "dataBox." + row + "." + cellRole)
+                return box !== null
+            }, 5000, "row " + row + " should have a box for cell " + cellRole)
+            return box
+        }
+
+        function splayReading(context, row, cellRole) {
+            return splayBox(context, row, cellRole).dataValue.reading.value
+        }
+
         function splayChip(context, indexInChunk) {
             const cell = splaysCell(context, indexInChunk)
 
@@ -98,9 +115,15 @@ MainWindowTest {
             for (let i = 0; i < a4Splays.length; i++) {
                 const item = surveyTableId.rowItem(this, context, firstSplayRow + i)
                 compare(findChild(item, "splayRowLabel").text, "A1 · s" + (i + 1))
-                compare(findChild(item, "splayDistanceLabel").text, a4Splays[i].distance)
-                compare(findChild(item, "splayCompassLabel").text, a4Splays[i].compass)
-                compare(findChild(item, "splayClinoLabel").text, a4Splays[i].clino)
+                compare(splayReading(context, firstSplayRow + i,
+                                     SurveyEditorCellIndex.SplayDistanceCell),
+                        a4Splays[i].distance)
+                compare(splayReading(context, firstSplayRow + i,
+                                     SurveyEditorCellIndex.SplayCompassCell),
+                        a4Splays[i].compass)
+                compare(splayReading(context, firstSplayRow + i,
+                                     SurveyEditorCellIndex.SplayClinoCell),
+                        a4Splays[i].clino)
             }
         }
 
@@ -237,7 +260,9 @@ MainWindowTest {
             for (let i = 0; i < a4Splays.length - 1; i++) {
                 const item = surveyTableId.rowItem(this, context, firstSplayRow + i)
                 compare(findChild(item, "splayRowLabel").text, "A1 · s" + (i + 1))
-                compare(findChild(item, "splayDistanceLabel").text, a4Splays[i + 1].distance)
+                compare(splayReading(context, firstSplayRow + i,
+                                     SurveyEditorCellIndex.SplayDistanceCell),
+                        a4Splays[i + 1].distance)
             }
         }
 
@@ -323,11 +348,13 @@ MainWindowTest {
                     "Click a station to move 3 splays from A1 — Esc cancels")
 
             // A2 can take them, A1 can't take back what it already has
+            // The outline is built only while a move can land on the station,
+            // so its absence is what says the station is no target
             const targetBox = stationNameBox(context, 1)
-            tryVerify(() => findChild(targetBox, "splayMoveTargetOutline").visible, 5000,
+            tryVerify(() => findChild(targetBox, "splayMoveTargetOutline") !== null, 5000,
                       "the station the splays can land on should show it")
-            verify(!findChild(stationNameBox(context, 0), "splayMoveTargetOutline").visible,
-                   "the station the splays are leaving is no target")
+            compare(findChild(stationNameBox(context, 0), "splayMoveTargetOutline"), null,
+                    "the station the splays are leaving is no target")
 
             mouseClick(targetBox)
 
@@ -343,7 +370,9 @@ MainWindowTest {
                 tryVerify(() => findChild(item, "splayRowLabel") !== null, 5000,
                           "the target should show splay row " + i)
                 compare(findChild(item, "splayRowLabel").text, "A2 · s" + (i + 1))
-                compare(findChild(item, "splayDistanceLabel").text, a4Splays[i].distance)
+                compare(splayReading(context, firstSplayRow + i,
+                                     SurveyEditorCellIndex.SplayDistanceCell),
+                        a4Splays[i].distance)
             }
         }
 
@@ -399,6 +428,81 @@ MainWindowTest {
             cell.removePreview.clear()
             tryVerify(() => !cell.removePreviewActive, 5000,
                       "clearing the preview should take the strike-through back off")
+        }
+
+        // A reading mistyped on the way out of a DistoX is corrected where it's
+        // read: click it, type over it, Tab.
+        function test_typingOverAReadingCommitsIt() {
+            const context = gotoSurveyTable()
+            const firstSplayRow = openCluster(context, 0)
+
+            mouseClick(splayBox(context, firstSplayRow, SurveyEditorCellIndex.SplayCompassCell))
+            tryCompare(context.editorModel, "focusedRow", firstSplayRow, 5000,
+                       "clicking a splay reading should focus it")
+            tryCompare(context.editorModel, "focusedRole", SurveyEditorCellIndex.SplayCompassCell)
+
+            // The first key opens the editor over the cell, the rest go into it
+            keyClick(Qt.Key_1)
+            keyClick(Qt.Key_1)
+            keyClick(Qt.Key_9)
+            keyClick(Qt.Key_Period)
+            keyClick(Qt.Key_4)
+            keyClick(Qt.Key_Tab)
+
+            tryVerify(() => splayReading(context, firstSplayRow,
+                                         SurveyEditorCellIndex.SplayCompassCell) === "119.4",
+                      5000, "tabbing out of the cell should commit what was typed")
+            tryCompare(context.editorModel, "focusedRole", SurveyEditorCellIndex.SplayClinoCell, 5000,
+                       "tab should carry on to the next reading of the same splay")
+
+            // The splays around it keep the readings they were downloaded with
+            compare(splayReading(context, firstSplayRow, SurveyEditorCellIndex.SplayDistanceCell),
+                    a4Splays[0].distance)
+            compare(splayReading(context, firstSplayRow + 1, SurveyEditorCellIndex.SplayCompassCell),
+                    a4Splays[1].compass)
+        }
+
+        // A key the reading can't hold never opens the editor, so the splay
+        // keeps what it had.
+        function test_aRejectedKeyLeavesTheReadingAlone() {
+            const context = gotoSurveyTable()
+            const firstSplayRow = openCluster(context, 0)
+
+            mouseClick(splayBox(context, firstSplayRow, SurveyEditorCellIndex.SplayDistanceCell))
+            tryCompare(context.editorModel, "focusedRole", SurveyEditorCellIndex.SplayDistanceCell, 5000)
+
+            keyClick(Qt.Key_X)
+            keyClick(Qt.Key_Tab)
+
+            compare(splayReading(context, firstSplayRow, SurveyEditorCellIndex.SplayDistanceCell),
+                    a4Splays[0].distance)
+        }
+
+        // The arrows run the cluster the way they run the rest of the grid:
+        // across the three readings, down the rows, and out the top onto the
+        // cell the cluster hangs from.
+        function test_arrowsWalkTheClusterReadings() {
+            const context = gotoSurveyTable()
+            const firstSplayRow = openCluster(context, 0)
+
+            mouseClick(splayBox(context, firstSplayRow, SurveyEditorCellIndex.SplayDistanceCell))
+            tryCompare(context.editorModel, "focusedRole", SurveyEditorCellIndex.SplayDistanceCell, 5000)
+
+            keyClick(Qt.Key_Right)
+            tryCompare(context.editorModel, "focusedRole", SurveyEditorCellIndex.SplayCompassCell, 5000)
+            tryCompare(context.editorModel, "focusedRow", firstSplayRow)
+
+            keyClick(Qt.Key_Down)
+            tryCompare(context.editorModel, "focusedRow", firstSplayRow + 1, 5000,
+                       "down should stay in the column and move a splay along")
+            tryCompare(context.editorModel, "focusedRole", SurveyEditorCellIndex.SplayCompassCell)
+
+            keyClick(Qt.Key_Up)
+            keyClick(Qt.Key_Up)
+            tryCompare(context.editorModel, "focusedRow",
+                       surveyTableId.stationRow(context, 0), 5000,
+                       "up out of the cluster should land on the cell it hangs from")
+            tryCompare(context.editorModel, "focusedRole", SurveyEditorCellIndex.StationSplaysCell)
         }
     }
 }

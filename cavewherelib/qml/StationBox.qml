@@ -61,12 +61,12 @@ DataBox {
     rightClickMenuLoader: removeMenuId
 
     function guessedStationName() {
-        return model.guessStationNameAt(model.cellIndex(listViewIndex, dataValue.chunkDataRole))
+        return model.guessStationNameAt(model.cellIndex(listViewIndex, stationBox.cellRole))
     }
 
     function commitAutoStation() {
         var stationName = guessedStationName();
-        model.setDataAt(model.cellIndex(listViewIndex, dataValue.chunkDataRole), stationName)
+        model.setDataAt(model.cellIndex(listViewIndex, stationBox.cellRole), stationName)
     }
 
     onFocusChanged: {
@@ -98,14 +98,19 @@ DataBox {
         }
     }
 
-    QQ.Rectangle {
-        objectName: "splayMoveTargetOutline"
+    // Every station row would otherwise carry an outline that is only ever seen
+    // while a move is armed, which is almost never
+    QQ.Loader {
         anchors.fill: parent
-        visible: stationBox.splayMoveTarget
-        color: Theme.transparent
-        border.color: Theme.splayBorder
-        border.width: stationBox.splayMoveOutlineWidth
+        active: stationBox.splayMoveTarget
         z: 1
+
+        sourceComponent: QQ.Rectangle {
+            objectName: "splayMoveTargetOutline"
+            color: Theme.transparent
+            border.color: Theme.splayBorder
+            border.width: stationBox.splayMoveOutlineWidth
+        }
     }
 
     QQ.Rectangle {
