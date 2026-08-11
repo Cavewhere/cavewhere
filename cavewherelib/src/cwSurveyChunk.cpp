@@ -1055,10 +1055,6 @@ void cwSurveyChunk::checkForError(cwSurveyChunk::DataRole role, int index, bool 
     case ShotBackClinoRole:
         errors = checkDataError(role, index);
         break;
-    case StationSplaysRole:
-        //Names a cell in the editor rather than a reading, so there's nothing
-        //here to validate
-        break;
     }
 
     CellIndex cellIndex = CellIndex(index, role);

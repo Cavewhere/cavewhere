@@ -21,40 +21,13 @@ SurveyEditorCell {
     property alias aboutToDelete: removeBoxId.visible
     readonly property ErrorModel errorModel: dataValue.errorModel
     required property QC.ButtonGroup errorButtonGroup
-    property RemovePreview removePreview: null
-    property QQ.Loader rightClickMenuLoader: null
-    readonly property bool removePreviewActive: {
-        if(removePreview === null || removePreview.chunk === null) {
-            return false
-        }
-        if(dataValue.chunk !== removePreview.chunk) {
-            return false
-        }
-        if(removePreview.previewChunkRemoval) {
-            if(model.isStationRole(dataValue.chunkDataRole)) {
-                return dataValue.chunk.isStationRole(dataValue.chunkDataRole)
-            } else if(model.isShotRole(dataValue.chunkDataRole)) {
-                return dataValue.chunk.isShotRole(dataValue.chunkDataRole)
-            }
-            return false
-        }
-        if(model.isStationRole(dataValue.chunkDataRole)) {
-            return dataValue.chunk.isStationRole(dataValue.chunkDataRole) && removePreview.stationIndex === dataValue.indexInChunk
-        } else if(model.isShotRole(dataValue.chunkDataRole)) {
-            return dataValue.chunk.isShotRole(dataValue.chunkDataRole) && removePreview.shotIndex === dataValue.indexInChunk
-        }
-        return false
-    }
 
     //The index informantion from cwSurveyEditorModel
     required property cwSurveyEditorBoxData dataValue
 
-    dataRole: dataBox.dataValue.chunkDataRole
+    cellRole: dataBox.dataValue.chunkDataRole
     indexInChunk: dataBox.dataValue.indexInChunk
-    stationCell: dataBox.dataValue.chunk !== null
-                 && dataBox.dataValue.chunk.isStationRole(dataBox.dataValue.chunkDataRole)
-    shotCell: dataBox.dataValue.chunk !== null
-              && dataBox.dataValue.chunk.isShotRole(dataBox.dataValue.chunkDataRole)
+    chunk: dataBox.dataValue.chunk
     editing: editor.isEditting
 
     property int editTargetRow: -1
@@ -129,8 +102,8 @@ SurveyEditorCell {
             var lastChunkIndex = trip.chunkCount - 1
             var lastChunk = trip.chunk(lastChunkIndex);
             if(lastChunk.isStationAndShotsEmpty()) {
-                let row = model.modelRowForChunkRole(lastChunk, 0, SurveyChunk.StationNameRole)
-                model.setFocusedCell(model.cellIndex(row, SurveyChunk.StationNameRole))
+                let row = model.modelRowForCellRole(lastChunk, 0, SurveyEditorCellIndex.StationNameCell)
+                model.setFocusedCell(model.cellIndex(row, SurveyEditorCellIndex.StationNameCell))
                 return;
             }
         }
@@ -146,29 +119,12 @@ SurveyEditorCell {
         deletePressedHandler()
     }
 
-    onRightTapped: {
-        rightClickMenuLoader.active = true;
-        rightClickMenuLoader.item.popup();
-    }
-
     RemoveDataRectangle {
         id: removeBoxId
         visible: false
         anchors.fill: parent
         anchors.rightMargin: -1
         z: 1
-    }
-
-    QQ.Rectangle {
-        id: removePreviewLine
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.verticalCenter: parent.verticalCenter
-        height: 2
-        color: Theme.text
-        // opacity: 0.9
-        visible: removePreviewActive
-        z: 2
     }
 
     QQ.Keys.onPressed: (event) => {

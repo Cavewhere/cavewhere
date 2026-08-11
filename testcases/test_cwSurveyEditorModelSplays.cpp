@@ -214,7 +214,7 @@ TEST_CASE("Splay rows are read-only and can't be navigated into", "[cwSurveyEdit
     SplayFixture fixture;
     fixture.model.toggleSplaysExpanded(fixture.stationRow(1));
 
-    for(auto role : {cwSurveyChunk::StationNameRole, cwSurveyChunk::ShotDistanceRole}) {
+    for(auto role : {cwSurveyEditorCellIndex::StationNameCell, cwSurveyEditorCellIndex::ShotDistanceCell}) {
         const auto cell = fixture.model.cellIndex(4, role);
         CHECK_FALSE(fixture.model.isCellValid(cell));
         CHECK_FALSE(fixture.model.setDataAt(cell, QStringLiteral("99")));
@@ -317,7 +317,7 @@ TEST_CASE("The Splays cell is the last cell in a station row", "[cwSurveyEditorM
     const int a2Row = 3;
     const int a3Row = 5;
 
-    auto cell = [&fixture](int row, cwSurveyChunk::DataRole role) {
+    auto cell = [&fixture](int row, cwSurveyEditorCellIndex::CellRole role) {
         return fixture.model.cellIndex(row, role);
     };
 
@@ -327,40 +327,40 @@ TEST_CASE("The Splays cell is the last cell in a station row", "[cwSurveyEditorM
 
     SECTION("the cell is reachable on every station row, splays or not") {
         for(int row : {a1Row, a2Row, a3Row}) {
-            CHECK(fixture.model.isCellValid(cell(row, cwSurveyChunk::StationSplaysRole)));
+            CHECK(fixture.model.isCellValid(cell(row, cwSurveyEditorCellIndex::StationSplaysCell)));
         }
     }
 
     SECTION("D tabs into it, and it tabs on the way D used to") {
-        const auto splays = next(cell(a1Row, cwSurveyChunk::StationDownRole),
+        const auto splays = next(cell(a1Row, cwSurveyEditorCellIndex::StationDownCell),
                                  cwSurveyEditorModel::Tab);
-        CHECK(splays == cell(a1Row, cwSurveyChunk::StationSplaysRole));
+        CHECK(splays == cell(a1Row, cwSurveyEditorCellIndex::StationSplaysCell));
 
         //The first station's row leads into the second station's LRUD
-        CHECK(next(splays, cwSurveyEditorModel::Tab) == cell(a2Row, cwSurveyChunk::StationLeftRole));
-        CHECK(next(cell(a2Row, cwSurveyChunk::StationSplaysRole), cwSurveyEditorModel::Tab)
-              == cell(a3Row, cwSurveyChunk::StationNameRole));
+        CHECK(next(splays, cwSurveyEditorModel::Tab) == cell(a2Row, cwSurveyEditorCellIndex::StationLeftCell));
+        CHECK(next(cell(a2Row, cwSurveyEditorCellIndex::StationSplaysCell), cwSurveyEditorModel::Tab)
+              == cell(a3Row, cwSurveyEditorCellIndex::StationNameCell));
     }
 
     SECTION("shift-tab walks back through it into D") {
-        CHECK(next(cell(a1Row, cwSurveyChunk::StationSplaysRole), cwSurveyEditorModel::BackTab)
-              == cell(a1Row, cwSurveyChunk::StationDownRole));
-        CHECK(next(cell(a3Row, cwSurveyChunk::StationNameRole), cwSurveyEditorModel::BackTab)
-              == cell(a2Row, cwSurveyChunk::StationSplaysRole));
+        CHECK(next(cell(a1Row, cwSurveyEditorCellIndex::StationSplaysCell), cwSurveyEditorModel::BackTab)
+              == cell(a1Row, cwSurveyEditorCellIndex::StationDownCell));
+        CHECK(next(cell(a3Row, cwSurveyEditorCellIndex::StationNameCell), cwSurveyEditorModel::BackTab)
+              == cell(a2Row, cwSurveyEditorCellIndex::StationSplaysCell));
     }
 
     SECTION("right stops at it, and left goes back to D") {
-        const auto splays = cell(a2Row, cwSurveyChunk::StationSplaysRole);
-        CHECK(next(cell(a2Row, cwSurveyChunk::StationDownRole), cwSurveyEditorModel::Right) == splays);
+        const auto splays = cell(a2Row, cwSurveyEditorCellIndex::StationSplaysCell);
+        CHECK(next(cell(a2Row, cwSurveyEditorCellIndex::StationDownCell), cwSurveyEditorModel::Right) == splays);
         CHECK_FALSE(fixture.model.isCellValid(next(splays, cwSurveyEditorModel::Right)));
-        CHECK(next(splays, cwSurveyEditorModel::Left) == cell(a2Row, cwSurveyChunk::StationDownRole));
+        CHECK(next(splays, cwSurveyEditorModel::Left) == cell(a2Row, cwSurveyEditorCellIndex::StationDownCell));
     }
 
     SECTION("up and down stay in the column") {
-        CHECK(next(cell(a2Row, cwSurveyChunk::StationSplaysRole), cwSurveyEditorModel::Down)
-              == cell(a3Row, cwSurveyChunk::StationSplaysRole));
-        CHECK(next(cell(a2Row, cwSurveyChunk::StationSplaysRole), cwSurveyEditorModel::Up)
-              == cell(a1Row, cwSurveyChunk::StationSplaysRole));
+        CHECK(next(cell(a2Row, cwSurveyEditorCellIndex::StationSplaysCell), cwSurveyEditorModel::Down)
+              == cell(a3Row, cwSurveyEditorCellIndex::StationSplaysCell));
+        CHECK(next(cell(a2Row, cwSurveyEditorCellIndex::StationSplaysCell), cwSurveyEditorModel::Up)
+              == cell(a1Row, cwSurveyEditorCellIndex::StationSplaysCell));
     }
 
     SECTION("an open cluster moves the rows but not the chain") {
@@ -368,14 +368,14 @@ TEST_CASE("The Splays cell is the last cell in a station row", "[cwSurveyEditorM
         fixture.checkRowCount(9);
 
         const int shiftedA3Row = a3Row + 3;
-        CHECK(next(cell(a2Row, cwSurveyChunk::StationSplaysRole), cwSurveyEditorModel::Tab)
-              == cell(shiftedA3Row, cwSurveyChunk::StationNameRole));
-        CHECK(next(cell(shiftedA3Row, cwSurveyChunk::StationSplaysRole), cwSurveyEditorModel::Up)
-              == cell(a2Row, cwSurveyChunk::StationSplaysRole));
+        CHECK(next(cell(a2Row, cwSurveyEditorCellIndex::StationSplaysCell), cwSurveyEditorModel::Tab)
+              == cell(shiftedA3Row, cwSurveyEditorCellIndex::StationNameCell));
+        CHECK(next(cell(shiftedA3Row, cwSurveyEditorCellIndex::StationSplaysCell), cwSurveyEditorModel::Up)
+              == cell(a2Row, cwSurveyEditorCellIndex::StationSplaysCell));
     }
 
     SECTION("the cell holds no reading to write") {
-        CHECK_FALSE(fixture.model.setDataAt(cell(a2Row, cwSurveyChunk::StationSplaysRole),
+        CHECK_FALSE(fixture.model.setDataAt(cell(a2Row, cwSurveyEditorCellIndex::StationSplaysCell),
                                             QStringLiteral("99")));
     }
 }

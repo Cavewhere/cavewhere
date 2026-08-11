@@ -28,10 +28,10 @@ QQ.Loader {
                 if(dataValue.chunk === null || stationMenuLoader.model === null) {
                     return "empty station"
                 }
-                let row = stationMenuLoader.model.modelRowForChunkRole(
+                let row = stationMenuLoader.model.modelRowForCellRole(
                             dataValue.chunk,
                             index,
-                            SurveyChunk.StationNameRole)
+                            SurveyEditorCellIndex.StationNameCell)
                 if(row < 0) {
                     return "empty station"
                 }

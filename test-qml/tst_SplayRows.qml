@@ -133,13 +133,88 @@ MainWindowTest {
             verify(downBox !== null, "station 0 should have a D box")
             keyClick(Qt.Key_Tab)
 
-            tryCompare(context.editorModel, "focusedRole", SurveyChunk.StationSplaysRole, 5000,
+            tryCompare(context.editorModel, "focusedRole", SurveyEditorCellIndex.StationSplaysCell, 5000,
                        "tabbing out of D should land on the Splays cell")
             tryCompare(context.editorModel, "focusedRow", stationRow)
 
             keyClick(Qt.Key_Return)
             tryCompare(context.view, "count", rowsWhileClosed + 3 + virtualRows, 5000,
                        "Enter on the Splays cell should open the cluster")
+        }
+
+        // Each rail bridges into the row below so the cluster draws one
+        // unbroken line, except the last — below it is the shot row's bare
+        // background, where the bridge would show as a loose sliver.
+        function test_theRailStopsAtTheLastSplay() {
+            const context = gotoSurveyTable()
+            const rowsWhileClosed = context.view.count
+
+            mouseClick(splaysCell(context, 0))
+            tryCompare(context.view, "count", rowsWhileClosed + 3 + virtualRows, 5000)
+
+            const firstSplayRow = surveyTableId.stationRow(context, 0) + 1
+            for (let i = 0; i < a4Splays.length; i++) {
+                const item = surveyTableId.rowItem(this, context, firstSplayRow + i)
+                const rail = findChild(item, "splayRail")
+                verify(rail !== null, "splay row " + i + " should have a rail")
+
+                const lastSplay = i + 1 === a4Splays.length
+                if(lastSplay) {
+                    compare(rail.height, item.height,
+                            "the last splay's rail should stop at its own row")
+                } else {
+                    verify(rail.height > item.height,
+                           "splay row " + i + "'s rail should bridge into the row below")
+                }
+            }
+        }
+
+        // The Splays cell offers the station's actions like the rest of the
+        // row, rather than swallowing the click that asks for them.
+        function test_rightClickingTheCellPopsTheStationMenu() {
+            const context = gotoSurveyTable()
+            const cell = splaysCell(context, 0)
+
+            mouseClick(cell, cell.width / 2, cell.height / 2, Qt.RightButton)
+
+            let menu = null
+            tryVerify(() => {
+                menu = findChild(cell, "stationMenuRoot")
+                return menu !== null
+            }, 5000, "right clicking the Splays cell should pop the station menu")
+        }
+
+        // Removing a station takes its splays with it, so the preview strikes
+        // through the Splays cell and the cluster's rows, not just the readings.
+        function test_removingTheStationPreviewsOverTheSplays() {
+            const context = gotoSurveyTable()
+            const rowsWhileClosed = context.view.count
+            const cell = splaysCell(context, 0)
+
+            mouseClick(cell)
+            tryCompare(context.view, "count", rowsWhileClosed + 3 + virtualRows, 5000,
+                       "the cluster should be open before the preview runs")
+
+            verify(!cell.removePreviewActive,
+                   "nothing is being removed yet")
+
+            cell.removePreview.previewStation(context.chunk, 0, SurveyChunk.Below)
+
+            tryVerify(() => cell.removePreviewActive, 5000,
+                      "the Splays cell should show the station's remove preview")
+
+            const firstSplayRow = surveyTableId.stationRow(context, 0) + 1
+            for (let i = 0; i < a4Splays.length; i++) {
+                const item = surveyTableId.rowItem(this, context, firstSplayRow + i)
+                const line = findChild(item, "splayRemovePreviewLine")
+                verify(line !== null, "splay row " + i + " should have a preview line")
+                tryVerify(() => line.visible, 5000,
+                          "splay row " + i + " should show the remove preview")
+            }
+
+            cell.removePreview.clear()
+            tryVerify(() => !cell.removePreviewActive, 5000,
+                      "clearing the preview should take the strike-through back off")
         }
     }
 }

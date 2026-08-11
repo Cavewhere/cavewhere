@@ -52,12 +52,7 @@ public:
         ShotCompassRole,
         ShotBackCompassRole,
         ShotClinoRole,
-        ShotBackClinoRole,
-
-        //The station's splay cluster, as a cell the editor can focus and toggle.
-        //It reads and writes no chunk data — it exists so the Splays column
-        //takes part in the table's focus and tab chain like any other cell
-        StationSplaysRole
+        ShotBackClinoRole
     };
 
     //If the chunk is connected to the rest of the cave, Connected

@@ -138,7 +138,7 @@ QQ.Item {
 
                 editorModel.setFocusedChunk(editorModel.chunkForRow(row))
 
-                if(editorModel.isShotRole(role)) {
+                if(editorModel.isShotCell(role)) {
                     //Since the shot row has a height of zero, this -1 and +1 forces shot to be visible in the list view
                     viewId.positionViewAtIndex(row - 1, QQ.ListView.Contain)
                     viewId.positionViewAtIndex(row + 1, QQ.ListView.Contain)

@@ -11,21 +11,27 @@ import cavewherelib
 
 // The Splays column's cell. It holds no reading, so it takes the grid cell's
 // look and focus behavior from SurveyEditorCell and adds nothing but a count —
-// no editor, no error model, no remove preview. Focusing it and pressing Enter
-// or Space opens the station's splay cluster, which is also the way a station
-// with no splays at all gets its first one.
+// no editor, no error model. Focusing it and pressing Enter or Space opens the
+// station's splay cluster.
 SurveyEditorCell {
     id: splaysBox
     objectName: "splaysBox." + splaysBox.listViewIndex
 
     required property cwSurveyEditorRowIndex rowIndex
 
+    //The station's name cell, which is what the station menu acts through
+    required property cwSurveyEditorBoxData stationData
+
     required property int splayCount
     required property bool splaysExpanded
 
-    dataRole: SurveyChunk.StationSplaysRole
+    cellRole: SurveyEditorCellIndex.StationSplaysCell
     indexInChunk: splaysBox.rowIndex.indexInChunk
-    stationCell: true
+    chunk: splaysBox.rowIndex.chunk
+
+    //The same menu the rest of the station's row pops, so the column the
+    //cluster hangs from offers the station's actions like every other
+    rightClickMenuLoader: stationMenuId
 
     function toggleExpanded() {
         splaysBox.model.toggleSplaysExpanded(splaysBox.rowIndex)
@@ -46,6 +52,14 @@ SurveyEditorCell {
                        }
 
     onTapped: splaysBox.toggleExpanded()
+
+    StationMenu {
+        id: stationMenuId
+        model: splaysBox.model
+        dataValue: splaysBox.stationData
+        listViewIndex: splaysBox.listViewIndex
+        removePreview: splaysBox.removePreview
+    }
 
     //Most stations carry no splays, so the chip stays uninstantiated rather than
     //laying out text it will never show

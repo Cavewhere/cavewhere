@@ -2207,7 +2207,7 @@ MainWindowTest {
                     if(!model.isCellValid(nextCell)) {
                         break;
                     }
-                    currentItem = downArrow(currentItem, nextCell.modelRow, nextCell.dataRole);
+                    currentItem = downArrow(currentItem, nextCell.modelRow, nextCell.cellRole);
                 }
 
                 //Scroll to the top
@@ -2246,7 +2246,7 @@ MainWindowTest {
                     if(!model.isCellValid(previousCell)) {
                         break;
                     }
-                    currentItem = upArrow(currentItem, previousCell.modelRow, previousCell.dataRole);
+                    currentItem = upArrow(currentItem, previousCell.modelRow, previousCell.cellRole);
                 }
             }
 

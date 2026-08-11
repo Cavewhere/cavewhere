@@ -195,9 +195,11 @@ Item {
 
                 model: itemId.model
                 rowIndex: itemId.rowIndex
+                stationData: itemId.stationName
                 listViewIndex: itemId.index
                 splayCount: itemId.stationSplayCount
                 splaysExpanded: itemId.stationSplaysExpanded
+                removePreview: itemId.removePreview
                 calibration: itemId.calibration
                 view: itemId.ListView.view
             }
@@ -219,12 +221,25 @@ Item {
             width: itemId.columnTemplate.width
             height: itemId.columnTemplate.splayRowHeight
 
+            readonly property bool lastInCluster:
+                itemId.rowIndex.splayIndex + 1 === itemId.stationSplayCount
+
+            //Removing the station takes its splays with it
+            readonly property bool removePreviewActive:
+                itemId.removePreview !== null
+                && itemId.removePreview.chunk === itemId.rowIndex.chunk
+                && (itemId.removePreview.previewChunkRemoval
+                    || itemId.removePreview.stationIndex === itemId.rowIndex.indexInChunk)
+
             Rectangle {
                 objectName: "splayRail"
                 x: itemId.columnTemplate.stationX + itemId.columnTemplate.splayRailX
                 width: itemId.columnTemplate.splayRailWidth
-                //Bridges into the row below so a cluster draws one unbroken rail
-                height: splayRowId.height + itemId.columnTemplate.columnOffset
+                //Every row but the last bridges into the row below so the
+                //cluster draws one unbroken rail. The last stops at its own
+                //edge, since the shot row beneath it has nothing to bridge to
+                height: splayRowId.height
+                        + (splayRowId.lastInCluster ? 0 : itemId.columnTemplate.columnOffset)
                 color: Theme.splayBorder
             }
 
@@ -265,6 +280,19 @@ Item {
                 width: itemId.columnTemplate.clinoWidth
                 height: itemId.columnTemplate.splayCellHeight
                 text: itemId.splayClino
+            }
+
+            Rectangle {
+                objectName: "splayRemovePreviewLine"
+                x: itemId.columnTemplate.stationX + itemId.columnTemplate.splayTagIndent
+                width: itemId.columnTemplate.clinoX
+                       + itemId.columnTemplate.clinoWidth
+                       - x
+                anchors.verticalCenter: parent.verticalCenter
+                height: 2
+                color: Theme.text
+                visible: splayRowId.removePreviewActive
+                z: 2
             }
         }
     }

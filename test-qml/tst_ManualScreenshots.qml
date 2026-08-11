@@ -2756,8 +2756,8 @@ MainWindowTest {
             let chunk = model.chunkForRow(0);
             verify(chunk, "found the trip's first data block");
 
-            let row = model.modelRowForChunkRole(chunk, 0,
-                                                 SurveyChunk.ShotDistanceRole);
+            let row = model.modelRowForCellRole(chunk, 0,
+                                                SurveyEditorCellIndex.ShotDistanceCell);
             verify(row >= 0, "found the model row of the first shot's Distance");
 
             // Focus the cell rather than clicking it: the caret button's Loader is
@@ -2834,8 +2834,8 @@ MainWindowTest {
 
             let chunk = model.chunkForRow(0);
             verify(chunk, "found the trip's first data block");
-            let row = model.modelRowForChunkRole(chunk, 0,
-                                                 SurveyChunk.ShotDistanceRole);
+            let row = model.modelRowForCellRole(chunk, 0,
+                                                SurveyEditorCellIndex.ShotDistanceCell);
             verify(row >= 0, "found the model row of the first shot's Distance");
 
             chunk.setData(SurveyChunk.ShotDistanceRole, 0, "");

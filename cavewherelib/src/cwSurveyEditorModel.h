@@ -102,9 +102,9 @@ public:
 
     QVariant data(const QModelIndex &index, int role) const;
     int rowCount(const QModelIndex &parent = QModelIndex()) const;
-    Q_INVOKABLE cwSurveyEditorCellIndex cellIndex(int modelRow, cwSurveyChunk::DataRole dataRole) const
+    Q_INVOKABLE cwSurveyEditorCellIndex cellIndex(int modelRow, cwSurveyEditorCellIndex::CellRole cellRole) const
     {
-        return cwSurveyEditorCellIndex(modelRow, dataRole);
+        return cwSurveyEditorCellIndex(modelRow, cellRole);
     }
     Q_INVOKABLE bool setDataAt(const cwSurveyEditorCellIndex& cell, const QVariant& data);
     Q_INVOKABLE QString guessStationNameAt(const cwSurveyEditorCellIndex& cell) const;
@@ -125,9 +125,9 @@ public:
 
     Q_INVOKABLE cwSurveyChunk* chunkForRow(int modelRow) const;
     Q_INVOKABLE bool isCellValid(const cwSurveyEditorCellIndex& cell) const;
-    Q_INVOKABLE int modelRowForChunkRole(cwSurveyChunk* chunk, int indexInChunk, cwSurveyChunk::DataRole role) const;
-    Q_INVOKABLE bool isStationRole(cwSurveyChunk::DataRole role) const;
-    Q_INVOKABLE bool isShotRole(cwSurveyChunk::DataRole role) const;
+    Q_INVOKABLE int modelRowForCellRole(cwSurveyChunk* chunk, int indexInChunk, cwSurveyEditorCellIndex::CellRole role) const;
+    Q_INVOKABLE bool isStationCell(cwSurveyEditorCellIndex::CellRole role) const;
+    Q_INVOKABLE bool isShotCell(cwSurveyEditorCellIndex::CellRole role) const;
     Q_INVOKABLE bool isCellSelected(const cwSurveyEditorCellIndex& selectedCell,
                                     const cwSurveyEditorCellIndex& candidateCell) const;
     Q_INVOKABLE bool isFocusedCell(const cwSurveyEditorCellIndex& cell) const;
@@ -169,7 +169,7 @@ private:
     QPointer<cwSurveyChunk> m_focusedChunk;
     QPointer<cwSurveyChunk> m_virtualRowsVisibleChunk;
     QPersistentModelIndex m_focusedRowIndex;
-    cwSurveyChunk::DataRole m_focusedDataRole = static_cast<cwSurveyChunk::DataRole>(-1);
+    cwSurveyEditorCellIndex::CellRole m_focusedCellRole = static_cast<cwSurveyEditorCellIndex::CellRole>(-1);
     int m_lastNotifiedFocusedRow = -1;
     int m_lastNotifiedFocusedRole = -1;
 
@@ -189,7 +189,7 @@ private:
 
     Role toModelRole(cwSurveyChunk::DataRole chunkRole) const;
     QList<int> changedRolesFor(cwSurveyChunk::DataRole chunkRole) const;
-    cwSurveyEditorRowIndex::RowType toRowType(cwSurveyChunk::DataRole chunkRole) const;
+    cwSurveyEditorRowIndex::RowType toRowType(cwSurveyEditorCellIndex::CellRole cellRole) const;
     int stationCount(const cwSurveyChunk* chunk) const;
     int shotCount(const cwSurveyChunk* chunk) const;
     int chunkRowCount(const cwSurveyChunk* chunk) const;
