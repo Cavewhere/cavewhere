@@ -109,6 +109,15 @@ public:
     const cwShotMeasurement& stationSplayAt(int index, int splayIndex) const;
     void setStationSplays(int index, const QList<cwShotMeasurement>& splays);
 
+    void appendStationSplay(int index, const cwShotMeasurement& splay);
+    void removeStationSplay(int index, int splayIndex);
+    void clearStationSplays(int index);
+    void setStationSplayData(cwSurveyChunk::DataRole role, int index, int splayIndex, const QVariant& data);
+
+    static void moveStationSplays(cwSurveyChunk* from, int fromStation,
+                                  cwSurveyChunk* to, int toStation,
+                                  const QList<int>& splayIndices);
+
     Q_INVOKABLE cwShot shot(int index) const;
 
     Q_INVOKABLE cwErrorModel* errorsAt(int index, DataRole role) const;
@@ -196,6 +205,11 @@ private:
 
     bool shotIndexCheck(int index) const { return index >= 0 && index < d.shots.count();  }
     bool stationIndexCheck(int index) const { return index >= 0 && index < d.stations.count(); }
+    bool splayIndexCheck(int index, int splayIndex) const {
+        return stationIndexCheck(index)
+               && splayIndex >= 0
+               && splayIndex < d.stations.at(index).splayCount();
+    }
 
     void remove(int stationIndex, int shotIndex);
     int index(int index, Direction direction);

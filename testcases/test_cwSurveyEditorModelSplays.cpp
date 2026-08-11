@@ -21,6 +21,9 @@
 //Test includes
 #include "SplayFixtureHelper.h"
 
+//Std includes
+#include <algorithm>
+
 namespace {
 
 /**
@@ -253,6 +256,142 @@ TEST_CASE("An open cluster follows the station's splays", "[cwSurveyEditorModel]
         CHECK_FALSE(fixture.rowData(3, cwSurveyEditorModel::StationSplaysExpandedRole).toBool());
         CHECK(fixture.rowData(3, cwSurveyEditorModel::StationSplayCountRole).toInt() == 0);
     }
+}
+
+TEST_CASE("An open cluster follows a splay edit", "[cwSurveyEditorModel][SplayShot]") {
+    SplayFixture fixture;
+    fixture.model.toggleSplaysExpanded(fixture.stationRow(1));
+    fixture.checkRowCount(9);
+
+    SECTION("appending a splay adds a row at the bottom of the cluster") {
+        fixture.chunk->appendStationSplay(1, makeSplay("9.48", "163.6", "21.9"));
+
+        fixture.checkRowCount(10);
+        CHECK(fixture.rowData(7, cwSurveyEditorModel::SplayDistanceRole).toString() == QStringLiteral("9.48"));
+        CHECK(fixture.rowIndexOf(8).rowType() == cwSurveyEditorRowIndex::ShotRow);
+    }
+
+    SECTION("removing a splay takes one row, and the rest renumber") {
+        fixture.chunk->removeStationSplay(1, 0);
+
+        fixture.checkRowCount(8);
+        CHECK(fixture.rowData(3, cwSurveyEditorModel::StationSplayCountRole).toInt() == 2);
+        CHECK(fixture.rowIndexOf(4).splayIndex() == 0);
+        CHECK(fixture.rowData(4, cwSurveyEditorModel::SplayDistanceRole).toString() == QStringLiteral("5.42"));
+        CHECK(fixture.rowData(5, cwSurveyEditorModel::SplayDistanceRole).toString() == QStringLiteral("8.96"));
+        CHECK(fixture.rowIndexOf(6).rowType() == cwSurveyEditorRowIndex::ShotRow);
+    }
+
+    SECTION("clearing the splays collapses the cluster") {
+        fixture.chunk->clearStationSplays(1);
+
+        fixture.checkRowCount(6);
+        CHECK_FALSE(fixture.rowData(3, cwSurveyEditorModel::StationSplaysExpandedRole).toBool());
+        CHECK(fixture.rowData(3, cwSurveyEditorModel::StationSplayCountRole).toInt() == 0);
+        CHECK(fixture.rowIndexOf(4).rowType() == cwSurveyEditorRowIndex::ShotRow);
+    }
+
+    SECTION("a written reading shows up in its row") {
+        fixture.chunk->setStationSplayData(cwSurveyChunk::ShotCompassRole, 1, 1, QStringLiteral("119.4"));
+
+        fixture.checkRowCount(9);
+        CHECK(fixture.rowData(5, cwSurveyEditorModel::SplayCompassRole).toString() == QStringLiteral("119.4"));
+    }
+}
+
+TEST_CASE("Moved splays leave one cluster and land in another", "[cwSurveyEditorModel][SplayShot]") {
+    SplayFixture fixture;
+    fixture.chunk->setStationSplays(2, {makeSplay("7.56", "307.7", "18.6")});
+
+    fixture.model.toggleSplaysExpanded(fixture.stationRow(1));
+    fixture.model.toggleSplaysExpanded(fixture.stationRow(2));
+
+    //title, a1, shot, a2, 3 splays, shot, a3, 1 splay
+    fixture.checkRowCount(10);
+
+    SECTION("one splay moves down to the station below") {
+        cwSurveyChunk::moveStationSplays(fixture.chunk, 1, fixture.chunk, 2, {0});
+
+        fixture.checkRowCount(10);
+        CHECK(fixture.rowData(3, cwSurveyEditorModel::StationSplayCountRole).toInt() == 2);
+        CHECK(fixture.rowData(4, cwSurveyEditorModel::SplayDistanceRole).toString() == QStringLiteral("5.42"));
+
+        const int a3Row = fixture.model.toModelRow(fixture.stationRow(2));
+        REQUIRE(a3Row == 7);
+        CHECK(fixture.rowData(a3Row, cwSurveyEditorModel::StationSplayCountRole).toInt() == 2);
+        CHECK(fixture.rowData(a3Row + 2, cwSurveyEditorModel::SplayDistanceRole).toString() == QStringLiteral("5.88"));
+    }
+
+    SECTION("a whole cluster moving away closes the cluster it left") {
+        cwSurveyChunk::moveStationSplays(fixture.chunk, 1, fixture.chunk, 2, {0, 1, 2});
+
+        //title, a1, shot, a2, shot, a3, 4 splays
+        fixture.checkRowCount(10);
+        CHECK_FALSE(fixture.rowData(3, cwSurveyEditorModel::StationSplaysExpandedRole).toBool());
+        CHECK(fixture.rowIndexOf(4).rowType() == cwSurveyEditorRowIndex::ShotRow);
+        CHECK(fixture.rowData(5, cwSurveyEditorModel::StationSplayCountRole).toInt() == 4);
+        CHECK(fixture.rowData(9, cwSurveyEditorModel::SplayDistanceRole).toString() == QStringLiteral("8.96"));
+    }
+
+    SECTION("splays move into a station in another chunk") {
+        auto secondChunk = new cwSurveyChunk();
+        secondChunk->appendShot(cwStation("b1"), cwStation("b2"), cwShot("5.0", "10.0", "190.0", "1.0", "-1.0"));
+        secondChunk->setStationSplays(1, {makeSplay("3.21", "12.4", "-8.2")});
+        fixture.trip.addChunk(secondChunk);
+
+        //The second chunk brings a title, two stations, and a shot
+        fixture.checkRowCount(14);
+
+        const cwSurveyEditorRowIndex b2Row(secondChunk, 1, cwSurveyEditorRowIndex::StationRow);
+        fixture.model.toggleSplaysExpanded(b2Row);
+        fixture.checkRowCount(15);
+
+        cwSurveyChunk::moveStationSplays(fixture.chunk, 1, secondChunk, 1, {1, 2});
+
+        //a2 gives up two rows and b2 gains them, so the table stays the same height
+        fixture.checkRowCount(15);
+        CHECK(fixture.rowData(3, cwSurveyEditorModel::StationSplayCountRole).toInt() == 1);
+        CHECK(fixture.rowData(4, cwSurveyEditorModel::SplayDistanceRole).toString() == QStringLiteral("5.88"));
+
+        const int b2ModelRow = fixture.model.toModelRow(b2Row);
+        REQUIRE(b2ModelRow > 0);
+        CHECK(fixture.rowData(b2ModelRow, cwSurveyEditorModel::StationSplayCountRole).toInt() == 3);
+        CHECK(fixture.rowIndexOf(b2ModelRow + 1).rowType() == cwSurveyEditorRowIndex::SplayRow);
+        CHECK(fixture.rowData(b2ModelRow + 2, cwSurveyEditorModel::SplayDistanceRole).toString()
+              == QStringLiteral("5.42"));
+        CHECK(fixture.rowData(b2ModelRow + 3, cwSurveyEditorModel::SplayDistanceRole).toString()
+              == QStringLiteral("8.96"));
+    }
+}
+
+TEST_CASE("Splays moving onto a closed station stay out of sight", "[cwSurveyEditorModel][SplayShot]") {
+    SplayFixture fixture;
+    fixture.model.toggleSplaysExpanded(fixture.stationRow(1));
+
+    //title, a1, shot, a2, 3 splays, shot, a3
+    fixture.checkRowCount(9);
+
+    QSignalSpy dataChanged(&fixture.model, &QAbstractItemModel::dataChanged);
+    REQUIRE(dataChanged.isValid());
+
+    cwSurveyChunk::moveStationSplays(fixture.chunk, 1, fixture.chunk, 2, {0});
+
+    //a2 gives up a row and the closed a3 shows the splay only on its chip
+    fixture.checkRowCount(8);
+
+    const int a3Row = fixture.model.toModelRow(fixture.stationRow(2));
+    REQUIRE(a3Row == 7);
+    CHECK(fixture.rowData(a3Row, cwSurveyEditorModel::StationSplayCountRole).toInt() == 1);
+    CHECK_FALSE(fixture.rowData(a3Row, cwSurveyEditorModel::StationSplaysExpandedRole).toBool());
+    CHECK(fixture.rowData(3, cwSurveyEditorModel::StationSplayCountRole).toInt() == 2);
+
+    const bool chipToldToRedraw = std::any_of(dataChanged.begin(), dataChanged.end(),
+                                              [a3Row](const QList<QVariant>& arguments) {
+                                                  const int first = arguments.at(0).value<QModelIndex>().row();
+                                                  const int last = arguments.at(1).value<QModelIndex>().row();
+                                                  return first <= a3Row && a3Row <= last;
+                                              });
+    CHECK(chipToldToRedraw);
 }
 
 TEST_CASE("An open cluster stays on its station when the chunk changes", "[cwSurveyEditorModel][SplayShot]") {
