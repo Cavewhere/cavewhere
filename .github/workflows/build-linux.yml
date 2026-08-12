@@ -70,7 +70,7 @@ jobs:
           host: ${{ matrix.qt_host }}
           target: 'desktop'
           arch: ${{ matrix.qt_arch }}
-          modules: 'qtshadertools qtcanvaspainter qtpdf'
+          modules: 'qtshadertools qtcanvaspainter qtpdf qtimageformats'
 
       - name: Install Conan
         run: pipx install conan
