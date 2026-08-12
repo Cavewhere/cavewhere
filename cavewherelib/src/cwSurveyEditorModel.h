@@ -241,6 +241,7 @@ private:
     void collapseSplays(cwSurveyChunk* chunk, int stationIndex);
     void emitSplayExpansionChanged(cwSurveyChunk* chunk, int stationIndex);
     void reconcileSplayRows(cwSurveyChunk* chunk, int stationIndex);
+    void retractAbandonedSplayEntries(const cwSurveyEditorRowIndex& focusedRowIndex);
     void shiftExpandedSplays(cwSurveyChunk* chunk, int firstStationIndex, int offset);
     bool hasVirtualTrailingStationShot(const cwSurveyChunk* chunk) const;
     bool hasVisibleVirtualRows(const cwSurveyChunk* chunk) const;

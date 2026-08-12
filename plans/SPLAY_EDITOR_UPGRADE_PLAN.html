@@ -367,7 +367,30 @@ virtual trailing station, shown on real zero-splay station); click the button an
 <div class="test"><b>Tests.</b> Space on a shot cell still starts a new chunk; Space on a splay
 cell still does nothing — existing tags plus one case per moved guard.</div>
 
-<h2><span class="commit">Commit 13</span> Splay box data carries its cell role</h2>
+<h2><span class="commit">Commit 13</span> Column ends and abandoned entry rows<span style="color:#2e7d32; font-size:0.8em;"> — done</span></h2>
+<p>Follow-ups 8 + 9 (added 2026-08-12) — two behavior fixes to the entry/navigation flow,
+landed before the behavior-neutral commits so the perf pass profiles the final interactions.</p>
+<ul>
+  <li><b>Up from the trip's first splay goes nowhere</b> (f8): delete commit 10's head-of-table
+      <code>clusterCell()</code> fallback in <code>cwSurveyEditorModel::nextCellIndex</code> —
+      when a splay reading cell is the top of its column, Up returns an invalid cell index and
+      the caret stays put, exactly like Down at the bottom of the table. This resolves the
+      position-dependent Splays-cell round trip flagged in commit 10's review: it now closes
+      nowhere, consistently.</li>
+  <li><b>An abandoned blank splay entry row disappears</b> (f9): open the entry row (via the
+      "+" button or by expanding), then click away without entering any data — the blank
+      entry-row delegates go away, matching how a fresh chunk hides its trailing empty shot and
+      station rows when focus leaves. Entering any reading keeps the row; only a fully blank,
+      unfocused entry row retracts. State lives in the model (never delegates), riding the
+      existing expansion/focus plumbing.</li>
+</ul>
+<div class="test"><b>Tests.</b> C++: Up from the first station's first splay cells returns an
+invalid index for all three columns; the former fallback case is retired. QML: open the entry
+row, click a cell elsewhere, tryVerify the blank row's delegates are gone; type a distance
+first and verify the row stays. <b>By hand:</b> press Up on the very first splay of a trip;
+start an entry, click away, watch the blank row retract.</div>
+
+<h2><span class="commit">Commit 14</span> Splay box data carries its cell role</h2>
 <p>Open refactor 5.</p>
 <ul>
   <li>A splay's <code>cwSurveyEditorBoxData</code> stops pairing a <code>SplayRow</code> with a
@@ -381,7 +404,7 @@ cell still does nothing — existing tags plus one case per moved guard.</div>
 <div class="test"><b>Tests.</b> <code>[cwSurveyEditorModel]</code> case: box data for a splay
 cell exposes the splay cell role and no shot role; existing menu tests keep passing.</div>
 
-<h2><span class="commit">Commit 14</span> Profiled performance pass</h2>
+<h2><span class="commit">Commit 15</span> Profiled performance pass</h2>
 <p>Open refactors 6, 7, 8 — <b>profile first, fix only what the profile confirms.</b></p>
 <ul>
   <li><b>Profile</b>: run <code>qmlprofiler</code> (or QML profiler via Qt Creator) on a
@@ -401,7 +424,7 @@ cell exposes the splay cell role and no shot role; existing menu tests keep pass
 the targeted C++ splay tags. The profile before/after numbers go in the commit body and the
 review notes.</div>
 
-<h2><span class="commit">Commit 15</span> Splay error model</h2>
+<h2><span class="commit">Commit 16</span> Splay error model</h2>
 <p>Open refactor 1 — the largest behavioral gap left: a splay with a garbage reading gets no
 red box and no error list, while the identical reading on a shot row does. Design work, last in
 the series.</p>

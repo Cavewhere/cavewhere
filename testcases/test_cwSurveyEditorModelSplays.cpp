@@ -1304,16 +1304,26 @@ TEST_CASE("The keyboard leaves a cluster the way it came in", "[cwSurveyEditorMo
               == cell(a1ShotRow, cwSurveyEditorCellIndex::ShotDistanceCell));
     }
 
-    SECTION("a cluster at the head of the table falls back on the cell it hangs from") {
+    SECTION("a cluster at the head of the table has nowhere above it to go") {
         //Nothing stands above a1's cluster in the reading columns, so up out of
-        //it lands on the cell that owns it rather than nowhere at all
+        //it stops where the caret is, the way down stops at the bottom row
         fixture.model.toggleSplaysExpanded(fixture.stationRow(0));
         fixture.checkRowCount(11);
 
-        const int a1Row = 1;
-        CHECK(fixture.model.nextCell(cell(a1Row + 1, cwSurveyEditorCellIndex::SplayDistanceCell),
-                                     cwSurveyEditorModel::Up, true, false)
-              == cell(a1Row, cwSurveyEditorCellIndex::StationSplaysCell));
+        const int a1BlankRow = 2;
+        for(auto role : {cwSurveyEditorCellIndex::SplayDistanceCell,
+                          cwSurveyEditorCellIndex::SplayCompassCell,
+                          cwSurveyEditorCellIndex::SplayClinoCell})
+        {
+            CHECK_FALSE(fixture.model.isCellValid(
+                fixture.model.nextCell(cell(a1BlankRow, role),
+                                       cwSurveyEditorModel::Up, true, false)));
+        }
+
+        //The cell that owns the cluster is still one shift-tab away
+        CHECK(fixture.model.nextCell(cell(a1BlankRow, cwSurveyEditorCellIndex::SplayDistanceCell),
+                                     cwSurveyEditorModel::BackTab, true, false)
+              == cell(1, cwSurveyEditorCellIndex::StationSplaysCell));
     }
 
     SECTION("a cluster on a chunk's last station leaves into the chunk below it") {
@@ -1349,6 +1359,76 @@ TEST_CASE("The keyboard leaves a cluster the way it came in", "[cwSurveyEditorMo
                                  cwSurveyEditorModel::Tab, 1);
         CHECK(tabbed.last() == cell(b1ModelRow, cwSurveyEditorCellIndex::StationNameCell));
         CHECK(walk(tabbed.last(), cwSurveyEditorModel::BackTab, 1) == reversed(tabbed));
+    }
+}
+
+TEST_CASE("An entry row nobody typed into goes away with the focus",
+          "[cwSurveyEditorModel][SplayShot]") {
+    SplayFixture fixture;
+
+    //a1 carries no splays, so opening it is the blank entry row alone
+    fixture.model.toggleSplaysExpanded(fixture.stationRow(0));
+    fixture.checkRowCount(7);
+
+    const int a1Row = 1;
+    const int entryRow = 2;
+    const auto entryCell = fixture.model.splayEntryCell(fixture.stationRow(0));
+    REQUIRE(entryCell == fixture.model.cellIndex(entryRow,
+                                                 cwSurveyEditorCellIndex::SplayDistanceCell));
+
+    //Focusing a cell of the chunk brings its trailing blank station and shot
+    //rows in, the same two rows the table shows the caver
+    fixture.model.setFocusedCell(entryCell);
+    fixture.checkRowCount(9);
+    CHECK(fixture.model.focusedRow() == entryRow);
+
+    auto stationCell = [&fixture](int stationIndex) {
+        const int row = fixture.model.toModelRow(fixture.stationRow(stationIndex));
+        return fixture.model.cellIndex(row, cwSurveyEditorCellIndex::StationNameCell);
+    };
+
+    SECTION("the focus landing elsewhere takes the row with it") {
+        fixture.model.setFocusedCell(stationCell(2));
+
+        fixture.checkRowCount(8);
+        CHECK_FALSE(fixture.rowData(a1Row, cwSurveyEditorModel::StationSplaysExpandedRole).toBool());
+        CHECK(fixture.rowIndexOf(entryRow).rowType() == cwSurveyEditorRowIndex::ShotRow);
+    }
+
+    SECTION("the station that owns the cluster keeps the row open") {
+        //The Splays cell and the readings beside it are all part of typing into
+        //the cluster the row hangs from
+        fixture.model.setFocusedCell(stationCell(0));
+
+        fixture.checkRowCount(9);
+        CHECK(fixture.rowData(a1Row, cwSurveyEditorModel::StationSplaysExpandedRole).toBool());
+    }
+
+    SECTION("a reading typed into the row keeps it") {
+        REQUIRE(fixture.model.setDataAt(entryCell, QStringLiteral("4.2")));
+
+        //The row that was blank holds a splay now, and a fresh blank waits under it
+        fixture.checkRowCount(10);
+
+        fixture.model.setFocusedCell(stationCell(2));
+
+        fixture.checkRowCount(10);
+        CHECK(fixture.rowData(a1Row, cwSurveyEditorModel::StationSplaysExpandedRole).toBool());
+        CHECK(fixture.chunk->stationSplayCount(0) == 1);
+        CHECK(fixture.splayReading(entryRow, cwSurveyEditorModel::SplayDistanceRole)
+              == QStringLiteral("4.2"));
+    }
+
+    SECTION("a cluster with splays keeps the blank row it carries") {
+        fixture.model.toggleSplaysExpanded(fixture.stationRow(1));
+        fixture.checkRowCount(13);
+
+        fixture.model.setFocusedCell(stationCell(2));
+
+        //a1's entry row goes, a2's cluster and its blank row stay
+        fixture.checkRowCount(12);
+        CHECK(fixture.rowData(fixture.model.toModelRow(fixture.stationRow(1)),
+                              cwSurveyEditorModel::StationSplaysExpandedRole).toBool());
     }
 }
 

@@ -535,17 +535,45 @@ MainWindowTest {
             const row = surveyTableId.rowItem(this, context, firstSplayRow)
             const rowMenu = findChild(row, "splayRowMenu")
             verify(rowMenu !== null, "a splay row should carry a menu")
+            const menuButton = findChild(row, "splayRowMenuButton")
+            verify(menuButton !== null, "a splay row should carry a menu button")
             menuItem(rowMenu, "moveSplayMenuItem").triggered()
 
             tryVerify(() => context.editorModel.splayMoveActive, 5000,
                       "one splay should be armed to move")
 
-            mouseClick(findChild(row, "splayRowMenuButton"))
+            mouseClick(menuButton)
 
             tryVerify(() => !context.editorModel.splayMoveActive, 5000,
                       "clicking the row's ⋯ during a move should call the move off")
+            wait(settleMilliseconds)
+            verify(!rowMenu.menu.opened,
+                   "the row's menu should stay shut while a move is armed")
             compare(splayCount(context, 0), a4Splays.length,
                     "a called-off move should leave the cluster alone")
+        }
+
+        // With no move waiting on it, the same ⋯ does what it's there for.
+        function test_theRowMenuButtonPopsTheRowsMenu() {
+            const context = gotoSurveyTable()
+            const firstSplayRow = openCluster(context, 0)
+
+            const row = surveyTableId.rowItem(this, context, firstSplayRow)
+            const rowMenu = findChild(row, "splayRowMenu")
+            verify(rowMenu !== null, "a splay row should carry a menu")
+            verify(!rowMenu.menu.opened, "the menu should start shut")
+            const menuButton = findChild(row, "splayRowMenuButton")
+            verify(menuButton !== null, "a splay row should carry a menu button")
+
+            mouseClick(menuButton)
+
+            tryVerify(() => rowMenu.menu.opened, 5000,
+                      "clicking the row's ⋯ should pop the row's menu")
+            compare(splayCount(context, 0), a4Splays.length,
+                    "opening the menu should leave the cluster alone")
+
+            rowMenu.menu.close()
+            tryVerify(() => !rowMenu.menu.opened, 5000)
         }
 
         // Removing a station takes its splays with it, so the preview strikes
@@ -869,11 +897,77 @@ MainWindowTest {
             tryCompare(context.editorModel, "focusedRole", SurveyEditorCellIndex.SplayCompassCell)
 
             keyClick(Qt.Key_Up)
+            tryCompare(context.editorModel, "focusedRow", firstSplayRow, 5000,
+                       "up should walk back along the column it came down")
+
+            // A1's cluster is the top of the table, and the end of a column is
+            // where the caret stays put — the same answer down gives at the
+            // bottom of the table
             keyClick(Qt.Key_Up)
+            wait(settleMilliseconds)
+            compare(context.editorModel.focusedRow, firstSplayRow,
+                    "up off the top of the column should leave the caret where it is")
+            compare(context.editorModel.focusedRole, SurveyEditorCellIndex.SplayCompassCell)
+        }
+
+        // A cluster opened to type into that never took a reading goes away
+        // when the focus lands elsewhere, the way the chunk's trailing blank
+        // rows do.
+        function test_anAbandonedEntryRowRetracts() {
+            const context = gotoSurveyTable()
+            const rowsWhileClosed = context.view.count
+            const entryRow = surveyTableId.stationRow(context, 1) + 1
+
+            // A2 carries no splays, so its cell opens on the blank row alone
+            mouseClick(splaysCell(context, 1))
+            tryCompare(context.view, "count", rowsWhileClosed + blankRow + virtualRows, 5000,
+                       "a station with no splays should open on its blank row")
+            tryCompare(context.editorModel, "focusedRow", entryRow, 5000)
+
+            mouseClick(stationNameBox(context, 0))
+
             tryCompare(context.editorModel, "focusedRow",
                        surveyTableId.stationRow(context, 0), 5000,
-                       "up out of the cluster should land on the cell it hangs from")
-            tryCompare(context.editorModel, "focusedRole", SurveyEditorCellIndex.StationSplaysCell)
+                       "the click should carry the focus out of the entry row")
+            tryCompare(context.view, "count", rowsWhileClosed + virtualRows, 5000,
+                       "the abandoned entry row should retract")
+            compare(findChild(surveyTableId.rowItem(this, context, entryRow), "splayRowLabel"),
+                    null,
+                    "the entry row's delegates should be gone")
+        }
+
+        // One reading is enough to keep it: the row holds a splay now, and the
+        // cluster stays open around it.
+        function test_anEntryRowTypedIntoStays() {
+            const context = gotoSurveyTable()
+            const rowsWhileClosed = context.view.count
+            const entryRow = surveyTableId.stationRow(context, 1) + 1
+
+            mouseClick(splaysCell(context, 1))
+            tryCompare(context.editorModel, "focusedRow", entryRow, 5000)
+
+            const distanceBox = cellBox(context, entryRow,
+                                        SurveyEditorCellIndex.SplayDistanceCell)
+            tryVerify(() => distanceBox.activeFocus, 5000,
+                      "the blank row's distance cell should have the keyboard")
+
+            keyClick(Qt.Key_4)
+            keyClick(Qt.Key_Period)
+            keyClick(Qt.Key_2)
+            keyClick(Qt.Key_Tab)
+
+            tryVerify(() => splayCount(context, 1) === 1, 5000,
+                      "the distance typed into the blank row should make a splay")
+
+            mouseClick(stationNameBox(context, 0))
+
+            tryCompare(context.editorModel, "focusedRow",
+                       surveyTableId.stationRow(context, 0), 5000)
+            wait(settleMilliseconds)
+            compare(context.view.count, rowsWhileClosed + 1 + blankRow + virtualRows,
+                    "the splay that was typed should keep its cluster open")
+            compare(splayReading(context, entryRow, SurveyEditorCellIndex.SplayDistanceCell),
+                    "4.2")
         }
 
         // The cluster is part of the tab chain: tab off the Splays cell walks

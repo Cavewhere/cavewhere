@@ -21,6 +21,18 @@ namespace {
     //! The blank row an open cluster carries under its splays, which is where
     //! the station's next splay is typed
     constexpr int kBlankSplayRowCount = 1;
+
+    //! A row a reading column runs onto, and what kind of row it is. Both
+    //! answers are needed at once: the row to build a cell on, and the row type
+    //! to know which column vocabulary that cell speaks
+    struct ReadingRow {
+        int row = -1;
+        cwSurveyEditorRowIndex::RowType rowType = cwSurveyEditorRowIndex::TitleRow;
+
+        bool isValid() const {
+            return row >= 0;
+        }
+    };
 }
 
 cwSurveyEditorModel::cwSurveyEditorModel()
@@ -1234,10 +1246,67 @@ void cwSurveyEditorModel::setFocusedCell(const cwSurveyEditorCellIndex& cell)
     }
 
     const int row = cell.modelRow();
+
+    //The rows around the cell move as the chunk's virtual rows and the
+    //abandoned clusters below go away, so the row the focus landed on is read
+    //while it still means what the caller meant. The focus itself rides a
+    //persistent index, which follows those removals on its own
+    const auto focusedRowIndex = toRowIndex(row);
+
     m_focusedRowIndex = QPersistentModelIndex(index(row, 0));
     m_focusedCellRole = cell.cellRole();
     setFocusedChunk(chunkForRow(row));
+    retractAbandonedSplayEntries(focusedRowIndex);
     syncFocusedCellSignals();
+}
+
+/**
+ * @brief cwSurveyEditorModel::retractAbandonedSplayEntries
+ * @param focusedRowIndex - The row the focus has just landed on
+ *
+ * A cluster opened to type a splay into that never took a reading closes again
+ * once the focus is elsewhere, the way a chunk's trailing empty station and
+ * shot rows go away when the focus leaves the chunk. Only a station with no
+ * splays has anything to retract — its blank entry row is the whole cluster —
+ * and its Splays cell opens it again the moment the user comes back to type.
+ */
+void cwSurveyEditorModel::retractAbandonedSplayEntries(const cwSurveyEditorRowIndex& focusedRowIndex)
+{
+    if(m_expandedSplays.isEmpty() || m_trip.isNull()) {
+        return;
+    }
+
+    //The cluster's own rows and the station row that owns it are all part of
+    //typing a splay into it, so the focus resting on any of them keeps the
+    //entry row open
+    const bool focusInsideCluster =
+        focusedRowIndex.rowType() == cwSurveyEditorRowIndex::SplayRow
+        || focusedRowIndex.rowType() == cwSurveyEditorRowIndex::StationRow;
+
+    const auto chunks = m_trip->chunks();
+    for(cwSurveyChunk* chunk : chunks) {
+        const ExpandedSplays* expanded = expandedSplays(chunk);
+        if(expanded == nullptr) {
+            continue;
+        }
+
+        //A copy, since collapsing a cluster takes its station out of the map
+        const QList<int> stationIndices = expanded->keys();
+        for(int stationIndex : stationIndices) {
+            if(chunk->stationSplayCount(stationIndex) > 0) {
+                continue;
+            }
+
+            const bool holdsTheFocus = focusInsideCluster
+                                       && chunk == focusedRowIndex.chunk()
+                                       && stationIndex == focusedRowIndex.indexInChunk();
+            if(holdsTheFocus) {
+                continue;
+            }
+
+            collapseSplays(chunk, stationIndex);
+        }
+    }
 }
 
 void cwSurveyEditorModel::dumpModel()
@@ -1484,22 +1553,23 @@ cwSurveyEditorCellIndex cwSurveyEditorModel::nextCellIndex(const cwSurveyEditorC
         return cellIndex(row, kSplayColumns.back());
     };
 
-    //The row above or below \a fromRow that the distance, compass and clino
-    //columns run through. Only splay rows and shot rows carry them — a station
-    //row's cells sit in columns of their own — so a column steps over it
-    auto readingRowNear = [&](int fromRow, int direction) {
+    //The row above or below the current one that the distance, compass and
+    //clino columns run through. Only splay rows and shot rows carry them — a
+    //station row's cells sit in columns of their own — so a column steps over it
+    auto readingRowNear = [&](int direction) {
         const int rows = rowCount();
-        for(int row = fromRow + direction; row >= 0 && row < rows; row += direction) {
-            switch(toRowIndex(row).rowType()) {
+        for(int row = currentCell.modelRow() + direction; row >= 0 && row < rows; row += direction) {
+            const auto rowType = toRowIndex(row).rowType();
+            switch(rowType) {
             case cwSurveyEditorRowIndex::SplayRow:
             case cwSurveyEditorRowIndex::ShotRow:
-                return row;
+                return ReadingRow{row, rowType};
             case cwSurveyEditorRowIndex::TitleRow:
             case cwSurveyEditorRowIndex::StationRow:
                 break;
             }
         }
-        return -1;
+        return ReadingRow();
     };
 
     //Where a column of splay readings lands on a shot row. A shot's compass and
@@ -1528,17 +1598,18 @@ cwSurveyEditorCellIndex cwSurveyEditorModel::nextCellIndex(const cwSurveyEditorC
     };
 
     //One step up or down a splay's column: the cluster's next row, the cluster
-    //the neighboring station has open, or the shot row the column runs onto.
-    //\a atEnd answers for a column that runs off the end of the table
-    auto splayColumnStep = [&](int column, int direction, const cwSurveyEditorCellIndex& atEnd) {
-        const int row = readingRowNear(currentCell.modelRow(), direction);
-        if(row < 0) {
-            return atEnd;
+    //the neighboring station has open, or the shot row the column runs onto. A
+    //column that runs off the end of the table stops there, the way every other
+    //column of the grid does
+    auto splayColumnStep = [&](int column, int direction) {
+        const auto readingRow = readingRowNear(direction);
+        if(!readingRow.isValid()) {
+            return cwSurveyEditorCellIndex();
         }
-        if(toRowIndex(row).rowType() == cwSurveyEditorRowIndex::SplayRow) {
-            return cellIndex(row, kSplayColumns.at(column));
+        if(readingRow.rowType == cwSurveyEditorRowIndex::SplayRow) {
+            return cellIndex(readingRow.row, kSplayColumns.at(column));
         }
-        return shotCellForSplayColumn(row, column, direction > 0);
+        return shotCellForSplayColumn(readingRow.row, column, direction > 0);
     };
 
     auto nextSplayCell = [&](cwSurveyEditorCellIndex::CellRole splayRole) {
@@ -1578,11 +1649,9 @@ cwSurveyEditorCellIndex cwSurveyEditorModel::nextCellIndex(const cwSurveyEditorC
             }
             return cwSurveyEditorCellIndex();
         case Up:
-            //A cluster at the head of the table has no reading above it, so the
-            //caret falls back on the cell the cluster hangs from
-            return splayColumnStep(column, -1, clusterCell());
+            return splayColumnStep(column, -1);
         case Down:
-            return splayColumnStep(column, 1, cwSurveyEditorCellIndex());
+            return splayColumnStep(column, 1);
         }
 
         return cwSurveyEditorCellIndex();
@@ -1609,9 +1678,9 @@ cwSurveyEditorCellIndex cwSurveyEditorModel::nextCellIndex(const cwSurveyEditorC
     //entered at its first row and going up at its last, which is the row the
     //walk reaches first either way
     auto shotRowStep = [&](cwSurveyEditorCellIndex::CellRole leavingRole, int direction) {
-        const int row = readingRowNear(currentCell.modelRow(), direction);
-        if(row >= 0 && toRowIndex(row).rowType() == cwSurveyEditorRowIndex::SplayRow) {
-            return cellIndex(row, splayColumnOfShotCell(currentCell.cellRole()));
+        const auto readingRow = readingRowNear(direction);
+        if(readingRow.rowType == cwSurveyEditorRowIndex::SplayRow) {
+            return cellIndex(readingRow.row, splayColumnOfShotCell(currentCell.cellRole()));
         }
         return offsetCurrentRowRole(leavingRole, direction);
     };
