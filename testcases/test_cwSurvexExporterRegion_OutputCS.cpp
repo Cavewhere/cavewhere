@@ -93,9 +93,32 @@ void appendEmptyFix(cwCavingRegion* region,
     region->cave(0)->fixStations()->appendFixStation(fix);
 }
 
-//! What the exported file names as *cs out, verbatim — a local projection is
-//! written in survex's CUSTOM form, so compare against toSurvexCS(). Empty when
-//! the file names nothing.
+//! The system \a csArgument names — the survex spelling read back off, so these
+//! tests compare systems rather than quoting. A CUSTOM argument carries the
+//! system inline or points at a `.prj` beside the file, and \a directory is
+//! where that file is.
+QString namedSystem(const QString& csArgument, const QDir& directory)
+{
+    const QString custom = QStringLiteral("CUSTOM ");
+    if (!csArgument.startsWith(custom)) {
+        return csArgument;
+    }
+
+    const QString argument = csArgument.mid(custom.size()).trimmed();
+    if (argument.startsWith(QLatin1Char('@'))) {
+        QFile sidecar(directory.filePath(argument.mid(1)));
+        REQUIRE(sidecar.open(QIODevice::ReadOnly));
+        return QString::fromUtf8(sidecar.readAll()).trimmed();
+    }
+
+    //An inline system goes back through the production reader, so the survex
+    //quoting grammar stays in one place.
+    const auto parsed = cwSurvexCS::fromSurvexCS(csArgument);
+    REQUIRE(parsed.has_value());
+    return parsed->projCS;
+}
+
+//! What the exported file names as *cs out. Empty when the file names nothing.
 QString exportedOutputCS(const cwCavingRegion* region,
                          const cwSurvexExporterRegion::Options& options)
 {
@@ -115,7 +138,7 @@ QString exportedOutputCS(const cwCavingRegion* region,
     const QString prefix = QStringLiteral("*cs out ");
     for (const QString& line : lines) {
         if (line.startsWith(prefix)) {
-            return line.mid(prefix.size()).trimmed();
+            return namedSystem(line.mid(prefix.size()).trimmed(), QDir(dir.path()));
         }
     }
     return QString();
@@ -147,8 +170,7 @@ TEST_CASE("cwSurvexExporterRegion resolves *cs out per policy",
         // anchored — never the fix's own zone.
         const QString frame = region->geoReference()->localCoordinateSystem();
         REQUIRE_FALSE(frame.isEmpty());
-        CHECK(exportedOutputCS(region.get(), Policy::WorkingFrame)
-              == cwSurvexCS::toSurvexCS(frame));
+        CHECK(exportedOutputCS(region.get(), Policy::WorkingFrame) == frame);
     }
 
     // The whole point of the split: a geographic fix would be no output system
@@ -164,8 +186,7 @@ TEST_CASE("cwSurvexExporterRegion resolves *cs out per policy",
         const QString frame = region->geoReference()->localCoordinateSystem();
         REQUIRE_FALSE(frame.isEmpty());
         CHECK(frame != kUtmZone13N);
-        CHECK(exportedOutputCS(region.get(), Policy::WorkingFrame)
-              == cwSurvexCS::toSurvexCS(frame));
+        CHECK(exportedOutputCS(region.get(), Policy::WorkingFrame) == frame);
     }
 
     SECTION("a fix that places nothing yet doesn't decide, so a later one does") {

@@ -70,7 +70,7 @@ void CsScope::ensure(QTextStream& stream, const QString& cs)
     if (trimmed.isEmpty() || trimmed == m_current) {
         return;
     }
-    cwSurvexCS::writeCsLine(stream, trimmed);
+    cwSurvexCS::writeCsLine(stream, m_sidecars, trimmed);
     m_current = trimmed;
 }
 
@@ -129,6 +129,7 @@ bool writeBlockDeclinationAuto(QTextStream& stream,
 }
 
 bool writeStandaloneTripHeader(QTextStream& stream,
+                               cwSurvexCS::SidecarWriter& sidecars,
                                const QList<cwFixStation>& fixes,
                                bool tripUsesAuto)
 {
@@ -146,8 +147,8 @@ bool writeStandaloneTripHeader(QTextStream& stream,
         return false;
     }
 
-    CsScope scope;
-    cwSurvexCS::writeCsLine(stream, outputCS, true);
+    CsScope scope(sidecars);
+    cwSurvexCS::writeCsLine(stream, sidecars, outputCS, true);
     writeDeclinationAuto(stream, *ctx, scope);
     stream << Qt::endl;
     return true;

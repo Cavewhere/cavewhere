@@ -118,7 +118,8 @@ QString exportRegion(const cwCavingRegion* region)
     REQUIRE(buffer.open(QIODevice::WriteOnly));
     {
         QTextStream stream(&buffer);
-        cwSurvexExporterRule::writeRegion(stream, snapshot);
+        cwSurvexCS::SidecarWriter sidecars;
+        cwSurvexExporterRule::writeRegion(stream, sidecars, snapshot);
     }
     return QString::fromUtf8(output);
 }

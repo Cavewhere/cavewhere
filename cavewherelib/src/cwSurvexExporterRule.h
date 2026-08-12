@@ -106,8 +106,13 @@ public:
         return m_survexFileArtifact;
     }
 
-    static Monad::ResultBase writeRegion(QTextStream& stream, const cwSurveyDataArtifact::Region& region);
+    //! \a sidecars takes the systems with no inline spelling, and its owner
+    //! writes it once the `.svx` is safely written.
+    static Monad::ResultBase writeRegion(QTextStream& stream,
+                                         cwSurvexCS::SidecarWriter& sidecars,
+                                         const cwSurveyDataArtifact::Region& region);
     static Monad::ResultBase writeCave(QTextStream& stream,
+                                       cwSurvexCS::SidecarWriter& sidecars,
                                        const cwSurveyDataArtifact::Cave& cave,
                                        const QString& globalCS = QString());
     //! \a autoDeclinationInScope says an enclosing block already carries

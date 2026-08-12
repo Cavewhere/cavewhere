@@ -54,7 +54,7 @@ void cwSurvexExporterTripTask::runTask() {
     QTextStream& stream = *OutputStream.data();
 
     const bool autoDeclinationInScope = cwSurvexExporterUtils::writeStandaloneTripHeader(
-        stream, CaveFixStations, Trip.calibrations.autoDeclination());
+        stream, sidecars(), CaveFixStations, Trip.calibrations.autoDeclination());
 
     writeTrip(stream, tripPtr.get(), autoDeclinationInScope);
     closeOutputFile();

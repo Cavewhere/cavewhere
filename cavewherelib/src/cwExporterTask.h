@@ -12,6 +12,7 @@
 #include "cwTask.h"
 #include "cwDebug.h"
 #include "cwGlobals.h"
+#include "cwSurvexCS.h"
 
 //Qt includes
 #include <QStringList>
@@ -32,6 +33,14 @@ public:
 
     void setOutputFile(QString outputFile);
 
+    //! The sidecar writer for the file this task's `*cs` lines end up in.
+    //!
+    //! A task that opens its own output file already has one, rooted at
+    //! setOutputFile()'s path. An exporter that writes the file itself and drives
+    //! this task to fill part of it — cwSurvexExporterRegion — hands in its own
+    //! instead. \a sidecars outlives the task, and its owner writes it.
+    void setSidecarWriter(cwSurvexCS::SidecarWriter* sidecars);
+
     QStringList errors();
 
 protected:
@@ -41,11 +50,15 @@ protected:
     bool openOutputFile();
     void closeOutputFile();
 
+    cwSurvexCS::SidecarWriter& sidecars();
+
 private:
     cwExporterTask* ParentExportTask;
 
     QString OutputFileName;
     QScopedPointer<QFile> OutputFile;
+    cwSurvexCS::SidecarWriter OwnSidecars;
+    cwSurvexCS::SidecarWriter* SharedSidecars = nullptr;
 };
 
 #endif // CWSURVEXEXPORTERTASK_H

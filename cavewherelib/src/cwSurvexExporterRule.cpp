@@ -87,6 +87,7 @@ ResultBase cwSurvexExporterRule::writeTrip(QTextStream &stream,
 }
 
 ResultBase cwSurvexExporterRule::writeCave(QTextStream& stream,
+                                           cwSurvexCS::SidecarWriter& sidecars,
                                            const cwSurveyDataArtifact::Cave& cave,
                                            const QString& globalCS)
 {
@@ -95,7 +96,7 @@ ResultBase cwSurvexExporterRule::writeCave(QTextStream& stream,
 
     stream << "*begin " << caveName << " ;" << cave.name << Qt::endl << Qt::endl;
 
-    cwSurvexExporterUtils::CsScope csScope;
+    cwSurvexExporterUtils::CsScope csScope(sidecars);
     writeFixStations(stream, cave, globalCS, csScope);
 
     const bool anyTripUsesAuto = !cave.fixStations.isEmpty()
@@ -123,7 +124,9 @@ ResultBase cwSurvexExporterRule::writeCave(QTextStream& stream,
     return ResultBase();
 }
 
-ResultBase cwSurvexExporterRule::writeRegion(QTextStream &stream, const cwSurveyDataArtifact::Region& region)
+ResultBase cwSurvexExporterRule::writeRegion(QTextStream &stream,
+                                             cwSurvexCS::SidecarWriter& sidecars,
+                                             const cwSurveyDataArtifact::Region& region)
 {
     stream << "*begin  ;All the caves" << Qt::endl;
 
@@ -134,13 +137,13 @@ ResultBase cwSurvexExporterRule::writeRegion(QTextStream &stream, const cwSurvey
     const QString outputCS = cwSurvexExporterUtils::resolveOutputCS(
         region, QString(), cwSurvexExporterUtils::OutputCSPolicy::Shareable);
     if (!outputCS.isEmpty()) {
-        cwSurvexCS::writeCsLine(stream, outputCS, true);
+        cwSurvexCS::writeCsLine(stream, sidecars, outputCS, true);
     }
 
     for(int i = 0; i < region.caves.size(); i++) {
         const cwSurveyDataArtifact::Cave& cave = region.caves.at(i);
 
-        auto result = writeCave(stream, cave, outputCS);
+        auto result = writeCave(stream, sidecars, cave, outputCS);
         if(result.hasError()) {
             return result;
         }
@@ -164,13 +167,30 @@ void cwSurvexExporterRule::updatePipeline()
 
         auto future = cwConcurrent::run([survexFilename, region = std::move(region)]()->ResultString {
             QSaveFile file(survexFilename);
-            (void)file.open(QIODeviceBase::WriteOnly);
-            {
-                QTextStream stream(&file);
-                writeRegion(stream, region);
+            if(!file.open(QIODeviceBase::WriteOnly)) {
+                return ResultString(QStringLiteral("Open file %1: %2")
+                                        .arg(survexFilename, file.errorString()),
+                                    ResultBase::Unknown);
             }
 
-            file.commit();
+            cwSurvexCS::SidecarWriter sidecars(survexFilename);
+            {
+                QTextStream stream(&file);
+                writeRegion(stream, sidecars, region);
+            }
+
+            if(!file.commit()) {
+                return ResultString(QStringLiteral("Write file %1: %2")
+                                        .arg(survexFilename, file.errorString()),
+                                    ResultBase::Unknown);
+            }
+
+            //The .svx appears only at commit, so the sidecars it names follow
+            //it rather than sitting beside a file that never arrived.
+            const QString sidecarError = sidecars.write();
+            if(!sidecarError.isEmpty()) {
+                return ResultString(sidecarError, ResultBase::Unknown);
+            }
 
             return survexFilename;
         });

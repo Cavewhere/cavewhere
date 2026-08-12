@@ -69,7 +69,10 @@ QString writeRegionToString(const cwSurveyDataArtifact::Region& region)
     QBuffer buffer(&bytes);
     REQUIRE(buffer.open(QIODevice::WriteOnly));
     QTextStream stream(&bytes);
-    auto result = cwSurvexExporterRule::writeRegion(stream, region);
+    //No file to sit beside, so every system here has to be one with an inline
+    //spelling — which the fixtures' EPSG codes and PROJ strings are.
+    cwSurvexCS::SidecarWriter sidecars;
+    auto result = cwSurvexExporterRule::writeRegion(stream, sidecars, region);
     REQUIRE(!result.hasError());
     stream.flush();
     return QString::fromUtf8(bytes);

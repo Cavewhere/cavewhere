@@ -97,7 +97,7 @@ bool cwSurvexExporterCaveTask::writeCave(QTextStream& stream, const cwCaveData& 
         return true;
     }
 
-    cwSurvexExporterUtils::CsScope csScope;
+    cwSurvexExporterUtils::CsScope csScope(sidecars());
     writeFixStations(stream, cave, globalCS, csScope);
 
     const bool anyTripUsesAuto = !cave.fixStations.isEmpty()
@@ -199,7 +199,7 @@ QString cwSurvexExporterCaveTask::writeStandaloneHeader(QTextStream& stream)
         return QString();
     }
 
-    cwSurvexCS::writeCsLine(stream, outputCS, true);
+    cwSurvexCS::writeCsLine(stream, sidecars(), outputCS, true);
     stream << Qt::endl;
     return outputCS;
 }

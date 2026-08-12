@@ -14,6 +14,7 @@
 #include "cwCoordinateTransform.h"
 #include "cwFixStation.h"
 #include "cwGeoPoint.h"
+#include "cwSurvexCS.h"
 
 class cwClinoReading;
 class cwShot;
@@ -65,11 +66,17 @@ void writeDeclinationCalibration(QTextStream& stream,
 class CsScope
 {
 public:
+    //! \a sidecars has to be the one the rest of the file draws from: the fix
+    //! rows written through here name systems of their own, and any of them can
+    //! be WKT.
+    explicit CsScope(cwSurvexCS::SidecarWriter& sidecars) : m_sidecars(sidecars) {}
+
     //! A CS-less request leaves the scope alone, matching cavern: a fix with no
     //! system of its own doesn't un-declare the enclosing one.
     void ensure(QTextStream& stream, const QString& cs);
 
 private:
+    cwSurvexCS::SidecarWriter& m_sidecars;
     QString m_current;
 };
 
@@ -130,6 +137,7 @@ bool writeBlockDeclinationAuto(QTextStream& stream,
  * the origin". \a fixes are read only for the location.
  */
 bool writeStandaloneTripHeader(QTextStream& stream,
+                               cwSurvexCS::SidecarWriter& sidecars,
                                const QList<cwFixStation>& fixes,
                                bool tripUsesAuto);
 

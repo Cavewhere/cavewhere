@@ -34,16 +34,21 @@ cwSurvexExporterRegion::exportRegion(const cwCavingRegionData& region,
 
     stream << "*begin  ;All the caves" << Qt::endl;
 
+    //One writer for the whole file: the region's *cs out and every fix row's own
+    //*cs land in it, and each system that needs a sidecar takes its own file.
+    cwSurvexCS::SidecarWriter sidecars(outputPath);
+
     const QString outputCS =
         cwSurvexExporterUtils::resolveOutputCS(region,
                                                region.geoReference.localCoordinateSystem,
                                                options.outputCSPolicy);
     if (!outputCS.isEmpty()) {
-        cwSurvexCS::writeCsLine(stream, outputCS, true);
+        cwSurvexCS::writeCsLine(stream, sidecars, outputCS, true);
     }
 
     cwSurvexExporterCaveTask caveExporter;
     caveExporter.setExportOptions(options);
+    caveExporter.setSidecarWriter(&sidecars);
 
     for (int i = 0; i < region.caves.size(); i++) {
         const cwCaveData& cave = region.caves.at(i);
@@ -64,6 +69,12 @@ cwSurvexExporterRegion::exportRegion(const cwCavingRegionData& region,
     stream << "*end" << Qt::endl;
     stream.flush();
     outputFile.close();
+
+    //Last, so no sidecar outlives a file that failed halfway.
+    const QString sidecarError = sidecars.write();
+    if (!sidecarError.isEmpty()) {
+        return Monad::ResultBase(sidecarError, static_cast<int>(LinePlotErrorCode::ExportFailed));
+    }
 
     return Monad::ResultBase();
 }
