@@ -16,22 +16,6 @@ void cwSurvexNodeData::addLRUDChunk()
 }
 
 /**
- * @brief cwSurvexNodeData::addSplay
- * @param stationName - The named station the splay was shot from
- * @param splay - The wall shot
- *
- * Buffers the splay until the block's chunks are complete
- */
-void cwSurvexNodeData::addSplay(const QString &stationName, const cwShotMeasurement &splay)
-{
-    cwStation& station = Splays[cwStation::canonicalKey(stationName)];
-    if(!station.isValid()) {
-        station.setName(stationName);
-    }
-    station.addSplay(splay);
-}
-
-/**
 * @brief cwSurvexBlockData::equatedStations
  * @return
  */

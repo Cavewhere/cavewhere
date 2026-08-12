@@ -6,6 +6,7 @@
 #include <QMap>
 #include <QSet>
 #include "cwSurvexLRUDChunk.h"
+#include "cwSplayBuffer.h"
 #include "cwStation.h"
 
 class cwSurvexNodeData : public QObject
@@ -25,16 +26,11 @@ public:
 
     void addLRUDChunk();
 
-    void addSplay(const QString& stationName, const cwShotMeasurement& splay);
-
 private:
     QList<cwSurvexLRUDChunk> LRUDChunks;
 
-    //A station's splays can appear before the leg that introduces the station,
-    //so they're buffered here while the block parses and attached once its
-    //chunks are complete. Keyed by cwStation::canonicalKey so "A4" and "a4"
-    //collect on the same station, which keeps its as-written name for warnings.
-    QMap<QString, cwStation> Splays;
+    //Holds the block's splays until its chunks are complete
+    cwSplayBuffer Splays;
 
     QList<QStringList> EqualStations;  //Each entry hold a list of station names's that are the same.
     QSet<QString> ExportStations; //Holds a station name that is exported for equates

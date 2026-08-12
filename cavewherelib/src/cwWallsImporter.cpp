@@ -7,6 +7,7 @@
 #include "cwStation.h"
 #include "cwShot.h"
 #include "cwLength.h"
+#include "cwMath.h"
 #include "wallssurveyparser.h"
 #include "wallsprojectparser.h"
 #include "wallstypes.h"
@@ -132,7 +133,35 @@ WallsImporterVisitor::WallsImporterVisitor(WallsSurveyParser* parser, cwWallsImp
 
 void WallsImporterVisitor::clearTrip()
 {
+    flushSplays();
     CurrentTrip.clear();
+}
+
+void WallsImporterVisitor::finishParsing()
+{
+    flushSplays();
+}
+
+/**
+ * @brief WallsImporterVisitor::flushSplays
+ *
+ * Hangs the current trip's buffered splays on the stations they were shot from
+ */
+void WallsImporterVisitor::flushSplays()
+{
+    if (CurrentTrip.isNull()) {
+        Splays.clear();
+        return;
+    }
+
+    const QList<cwStation> skipped = Splays.attachTo(CurrentTrip->chunks());
+
+    for (const cwStation& station : skipped) {
+        Importer->addImportError(WallsMessage("warning",
+            QString("Skipping %1 splay(s) at %2 because no shot in this trip reaches that station")
+                .arg(station.splayCount())
+                .arg(station.name())));
+    }
 }
 
 void WallsImporterVisitor::ensureValidTrip()
@@ -226,6 +255,12 @@ void WallsImporterVisitor::parsedVector(Vector v)
 
     cwStation* lrudStation;
 
+    //A leg with one end omitted is a wall shot: it hangs on the end the line
+    //does name, since it has no destination station to chain to. The raw names
+    //say which end that is — a #prefix would turn the omitted one into "PP:".
+    const bool fromOmitted = v.from().isEmpty();
+    const bool oneEndOmitted = fromOmitted != v.to().isEmpty();
+
     if (units.vectorType() == VectorType::RECT && v.north().isValid())
     {
         v.deriveCtFromRect();
@@ -307,9 +342,55 @@ void WallsImporterVisitor::parsedVector(Vector v)
 
         // TODO: exclude length flag/segment
 
-        lrudStation = units.lrud() == LrudType::From ||
-                units.lrud() == LrudType::FB ?
-                    &fromStation : &toStation;
+        if (oneEndOmitted)
+        {
+            //A splay hangs on the one end the line names, and the LRUDs on that
+            //line describe it too — the wall point has no passage around it
+            lrudStation = fromOmitted ? &toStation : &fromStation;
+
+            //A station carries foresights only, so a reading the line gives as
+            //a backsight has to be turned around before it can hang there
+            UAngle azimuth = v.frontAzimuth();
+            if (!azimuth.isValid() && v.backAzimuth().isValid())
+            {
+                azimuth = units.typeabCorrected()
+                        ? v.backAzimuth()
+                        : v.backAzimuth() + UAngle(cwHalfTurnDegrees, Angle::Degrees);
+            }
+
+            UAngle inclination = frontInclination;
+            if (!inclination.isValid() && backInclination.isValid())
+            {
+                inclination = units.typevbCorrected()
+                        ? backInclination
+                        : -backInclination;
+            }
+
+            //A plumbed shot leaves the azimuth out entirely
+            cwCompassReading compass;
+            if (azimuth.isValid())
+            {
+                compass = cwCompassReading(cwWrapDegrees360(azimuth.get(Angle::Degrees)));
+            }
+
+            const cwShotMeasurement asWritten(cwDistanceReading(distance.get(dUnit)),
+                                              compass,
+                                              cwClinoReading(inclination.get(Angle::Degrees)));
+
+            if (lrudStation->isValid())
+            {
+                //A leg written wall-point-first reads toward the station, so
+                //the reading has to be turned around to point at the wall
+                Splays.add(lrudStation->name(),
+                           fromOmitted ? asWritten.reversed() : asWritten);
+            }
+        }
+        else
+        {
+            lrudStation = units.lrud() == LrudType::From ||
+                    units.lrud() == LrudType::FB ?
+                        &fromStation : &toStation;
+        }
     }
     else
     {
@@ -321,58 +402,46 @@ void WallsImporterVisitor::parsedVector(Vector v)
     v.up() += units.correctLength(v.up(), units.incs());
     v.down() += units.correctLength(v.down(), units.incs());
 
-    if (v.left().isValid())
-    {
-        lrudStation->setLeft(cwDistanceReading(v.left().get(dUnit)));
-    }
-    else
-    {
-        lrudStation->setLeft(cwDistanceReading());
-    }
-    if (v.right().isValid())
-    {
-        lrudStation->setRight(cwDistanceReading(v.right().get(dUnit)));
-    }
-    else
-    {
-        lrudStation->setRight(cwDistanceReading());
-    }
-    if (v.up().isValid())
-    {
-        lrudStation->setUp(cwDistanceReading(v.up().get(dUnit)));
-    }
-    else
-    {
-        lrudStation->setUp(cwDistanceReading());
-    }
-    if (v.down().isValid())
-    {
-        lrudStation->setDown(cwDistanceReading(v.down().get(dUnit)));
-    }
-    else
-    {
-        lrudStation->setDown(cwDistanceReading());
-    }
+    //A line that measured no passage says nothing about the passage around the
+    //station, so whatever an earlier line recorded stands. Storing this one
+    //would blank those dimensions instead — which a splay line, having no
+    //passage of its own to describe, would otherwise do to the station it hangs on
+    const bool lineHasLruds = v.left().isValid() || v.right().isValid()
+            || v.up().isValid() || v.down().isValid();
 
-    // save the latest LRUDs associated with each station so that we can apply them in the end
-    if (v.date().isValid())
+    if (lineHasLruds)
     {
-        if (!Importer->StationDates.contains(lrudStation->name()) ||
-            v.date() >= Importer->StationDates[lrudStation->name()]) {
-            Importer->StationDates[lrudStation->name()] = v.date();
+        //A line that gives only some of the four restates the passage as a
+        //whole, so the ones it leaves out are cleared rather than kept
+        const auto reading = [dUnit](const ULength& length) {
+            return length.isValid() ? cwDistanceReading(length.get(dUnit))
+                                    : cwDistanceReading();
+        };
+
+        lrudStation->setLeft(reading(v.left()));
+        lrudStation->setRight(reading(v.right()));
+        lrudStation->setUp(reading(v.up()));
+        lrudStation->setDown(reading(v.down()));
+
+        // save the latest LRUDs associated with each station so that we can apply them in the end
+        if (v.date().isValid())
+        {
+            if (!Importer->StationDates.contains(lrudStation->name()) ||
+                v.date() >= Importer->StationDates[lrudStation->name()]) {
+                Importer->StationDates[lrudStation->name()] = v.date();
+                Importer->StationMap[lrudStation->name()] = *lrudStation;
+            }
+        }
+        else if (!Importer->StationDates.contains(lrudStation->name()))
+        {
             Importer->StationMap[lrudStation->name()] = *lrudStation;
         }
     }
-    else if (!Importer->StationDates.contains(lrudStation->name()))
-    {
-        Importer->StationMap[lrudStation->name()] = *lrudStation;
-    }
 
-    if(fromStation.name().isEmpty() || toStation.name().isEmpty()) {
-        Importer->addImportError(WallsMessage("warning", QString("Station \"%1\" to \"%2\" Walls importer currently doesn't support splay shots").arg(fromStation.name()).arg(toStation.name())));
-    }
-
-    if (v.distance().isValid() && !fromStation.name().isEmpty() && !toStation.name().isEmpty())
+    //A splay is already buffered against the end the line names, and it stays
+    //out of the centerline
+    if (!oneEndOmitted && v.distance().isValid()
+        && !fromStation.name().isEmpty() && !toStation.name().isEmpty())
     {
         CurrentTrip->addShotToLastChunk(fromStation, toStation, shot);
     }
@@ -570,11 +639,17 @@ void cwWallsImporter::applyLRUDs(cwTreeImportDataNode* block) {
     {
         for (int i = 0; i < chunk->stationCount(); i++)
         {
-            auto stations = chunk->stations();
-            QString name = stations.at(i).name();
-            if (StationMap.contains(name))
+            cwStation station = chunk->station(i);
+            const auto lruds = StationMap.constFind(station.name());
+            if (lruds != StationMap.constEnd())
             {
-                chunk->setStation(StationMap[name], i);
+                //Copy the LRUDs across rather than the whole station, so the
+                //station keeps the splays hanging on it and the id it already has
+                station.setLeft(lruds->left());
+                station.setRight(lruds->right());
+                station.setUp(lruds->up());
+                station.setDown(lruds->down());
+                chunk->setStation(station, i);
             }
         }
     }
@@ -815,6 +890,8 @@ bool cwWallsImporter::parseSrvFile(WpjEntryPtr survey, QList<cwTripPtr>& tripsOu
 
     if (!failed)
     {
+        visitor.finishParsing();
+
         if (!tripName.isEmpty())
         {
             int i = 0;

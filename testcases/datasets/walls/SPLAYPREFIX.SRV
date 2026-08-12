@@ -1,0 +1,5 @@
+; Prefixed Splays
+; Alice; Bob
+#units d=meters a=degrees v=degrees decl=0 prefix=PP
+C1	C2	5.0	0	0
+C1	--	1.5	90	-10

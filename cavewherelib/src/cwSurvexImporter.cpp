@@ -603,12 +603,15 @@ void cwSurvexImporter::parseNormalData(QString line) {
     const QString clino = stripSurvexSentinel(extractData(data, Clino));
 
     if(fromIsAnonymous || toIsAnonymous) {
-        //Survex anchors the splay at the named end and records the instrument
-        //reading as written, whichever column the anonymous station lands in
-        nodeData(CurrentBlock)->addSplay(fromIsAnonymous ? toStationName : fromStationName,
-                                         cwShotMeasurement(cwDistanceReading(distance),
-                                                           cwCompassReading(compass),
-                                                           cwClinoReading(clino)));
+        //The splay hangs on the named end. A leg written anonymous-end-first
+        //reads toward that station, so the reading has to be turned around
+        //before it points at the wall
+        const cwShotMeasurement asWritten{cwDistanceReading(distance),
+                                          cwCompassReading(compass),
+                                          cwClinoReading(clino)};
+
+        nodeData(CurrentBlock)->Splays.add(fromIsAnonymous ? toStationName : fromStationName,
+                                           fromIsAnonymous ? asWritten.reversed() : asWritten);
         return;
     }
 
@@ -1327,29 +1330,15 @@ void cwSurvexImporter::finishBlock()
  */
 void cwSurvexImporter::updateSplaysForCurrentBlock()
 {
-    cwSurvexNodeData* blockData = nodeData(CurrentBlock);
+    const QList<cwStation> skipped =
+            nodeData(CurrentBlock)->Splays.attachTo(CurrentBlock->Chunks);
 
-    for(const cwStation& station : std::as_const(blockData->Splays)) {
-        const auto hangOnFirstOccurrence = [&]() {
-            for(cwSurveyChunk* chunk : std::as_const(CurrentBlock->Chunks)) {
-                const QList<int> indices = chunk->indicesOfStation(station.name());
-                if(!indices.isEmpty()) {
-                    chunk->setStationSplays(indices.first(), station.splays());
-                    return true;
-                }
-            }
-            return false;
-        };
-
-        if(!hangOnFirstOccurrence()) {
-            addWarning(QString("Skipping %1 splay(s) at %2 because no shot in this block reaches "
-                               "that station")
-                           .arg(station.splayCount())
-                           .arg(station.name()));
-        }
+    for(const cwStation& station : skipped) {
+        addWarning(QString("Skipping %1 splay(s) at %2 because no shot in this block reaches "
+                           "that station")
+                       .arg(station.splayCount())
+                       .arg(station.name()));
     }
-
-    blockData->Splays.clear();
 }
 
 /**

@@ -123,12 +123,32 @@ TEST_CASE("Anonymous stations spelled out make splays too", "[SurvexImport][Spla
     REQUIRE(chunk->stationCount() == 2);
     CHECK(chunk->stationSplays(0) == QList<cwShotMeasurement>({makeSplay("1.00", "100.0", "5.0")}));
 
-    //"." and "..." are anonymous as well, and a leg written anonymous-end-first
-    //hangs on the named end with its reading untouched
+    //"." and "..." are anonymous as well. The last leg is written
+    //anonymous-end-first, so it reads toward b2 and its bearing has to be
+    //turned around to point at the wall
     CHECK(chunk->stationSplays(1) == QList<cwShotMeasurement>({
               makeSplay("2.00", "110.0", "6.0"),
               makeSplay("3.00", "120.0", "7.0"),
-              makeSplay("4.00", "130.0", "8.0")
+              makeSplay("4.00", "310", "-8")
+          }));
+}
+
+TEST_CASE("A plumbed splay written anonymous-end-first swaps up for down",
+          "[SurvexImport][SplayShot]") {
+    auto importer = importSurvex(QStringLiteral("survex/splaysEdgeCases.svx"));
+    auto chunk = onlyChunkOfBlock(importer.get(), QStringLiteral("anonplumb"));
+
+    REQUIRE(chunk->stationCount() == 2);
+
+    //A ceiling shot read from the wall point down to the station is a ceiling
+    //shot from the station, and it never had a bearing to turn around
+    CHECK(chunk->stationSplays(1) == QList<cwShotMeasurement>({
+              cwShotMeasurement(cwDistanceReading(QStringLiteral("1.50")),
+                                cwCompassReading(),
+                                cwClinoReading(QStringLiteral("up"))),
+              cwShotMeasurement(cwDistanceReading(QStringLiteral("2.50")),
+                                cwCompassReading(),
+                                cwClinoReading(QStringLiteral("down")))
           }));
 }
 
@@ -193,7 +213,14 @@ TEST_CASE("A splay whose station never shows up is reported", "[SurvexImport][Sp
     CHECK(chunk->stationSplays(0).isEmpty());
     CHECK(chunk->stationSplays(1).isEmpty());
 
-    CHECK(warnings(importer.get()).filter(QStringLiteral("h9")).size() == 1);
+    const QStringList skipped = warnings(importer.get())
+            .filter(QStringLiteral("no shot in this block reaches"));
+
+    //Reported in sorted order rather than the order they were read, so the same
+    //file warns the same way every time it's imported
+    REQUIRE(skipped.size() == 2);
+    CHECK(skipped.at(0).contains(QStringLiteral("h3")));
+    CHECK(skipped.at(1).contains(QStringLiteral("h9")));
 }
 
 TEST_CASE("*alias station - .. is understood", "[SurvexImport][SplayShot]") {

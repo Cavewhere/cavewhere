@@ -39,6 +39,14 @@
   e3 e4 12.00 92.0 2.0
 *end
 
+; Plumbed splays, one of them written anonymous-end-first
+*begin anonplumb
+  *data normal from to tape compass clino
+  g1 g2 10.00 90.0 0.0
+  g2 -  1.50 -     up
+  -  g2 2.50 -     up
+*end
+
 ; Station names CaveWhere can't use
 *begin badname
   *data normal from to tape compass clino
@@ -47,9 +55,11 @@
   f3.y f4 9.00 80.0 1.0
 *end
 
-; A splay whose station never shows up in a leg
+; Splays whose stations never show up in a leg. h9 is written before h3 so the
+; order they're reported in can't be the order they were read in.
 *begin orphan
   *data normal from to tape compass clino
   h1 h2 10.00 90.0 0.0
   h9 - 1.00 100.0 5.0
+  h3 - 2.00 200.0 -5.0
 *end
