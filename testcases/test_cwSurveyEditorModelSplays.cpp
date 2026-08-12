@@ -97,9 +97,37 @@ struct SplayFixture {
         return rowData(row, cwSurveyEditorModel::RowIndexRole).value<cwSurveyEditorRowIndex>();
     }
 
+    /**
+     * How many times the model told the view that \a changedRole changed on
+     * \a row. A delegate only re-reads a role it was told about, so a role left
+     * out of a change leaves the row drawn the way it last read.
+     */
+    int rowsTold(int row, int changedRole) const
+    {
+        int count = 0;
+        for(const auto& change : changes) {
+            const int first = change.at(0).value<QModelIndex>().row();
+            const int last = change.at(1).value<QModelIndex>().row();
+            const auto roles = change.at(2).value<QList<int>>();
+            //An empty role list is Qt's way of saying every role changed
+            const bool toldThisRole = roles.isEmpty() || roles.contains(changedRole);
+            if(first <= row && row <= last && toldThisRole) {
+                ++count;
+            }
+        }
+        return count;
+    }
+
+    //! Starts the change tally over, so a check only sees what comes next
+    void forgetChanges()
+    {
+        changes.clear();
+    }
+
     cwTrip trip;
     cwSurveyChunk* chunk;
     cwSurveyEditorModel model;
+    QSignalSpy changes {&model, &QAbstractItemModel::dataChanged};
     int lastCheckedRowCount = 0;
     int announcedRows = 0;
 };
@@ -203,23 +231,11 @@ TEST_CASE("Opening a cluster tells the shot below it", "[cwSurveyEditorModel][Sp
     //them, which is where an open cluster goes. The shot row only drops them
     //below the cluster if it hears that the cluster opened, so a rowsInserted
     //on its own leaves the shot drawn over the last splay
-    QSignalSpy changes(&fixture.model, &QAbstractItemModel::dataChanged);
-
-    const auto shotRowsTold = [&changes](int row) {
-        int count = 0;
-        for(const auto& change : changes) {
-            const int first = change.at(0).value<QModelIndex>().row();
-            const int last = change.at(1).value<QModelIndex>().row();
-            const auto roles = change.at(2).value<QList<int>>();
-            if(first <= row && row <= last
-                && roles.contains(cwSurveyEditorModel::StationSplaysExpandedRole))
-            {
-                ++count;
-            }
-        }
-        return count;
+    const auto shotRowsTold = [&fixture](int row) {
+        return fixture.rowsTold(row, cwSurveyEditorModel::StationSplaysExpandedRole);
     };
 
+    fixture.forgetChanges();
     fixture.model.toggleSplaysExpanded(fixture.stationRow(1));
 
     //a2's shot, now sitting under the three splay rows and the blank one
@@ -229,7 +245,7 @@ TEST_CASE("Opening a cluster tells the shot below it", "[cwSurveyEditorModel][Sp
     //a1's shot is above the cluster and keeps reaching up as it always has
     CHECK(shotRowsTold(2) == 0);
 
-    changes.clear();
+    fixture.forgetChanges();
     fixture.model.toggleSplaysExpanded(fixture.stationRow(1));
 
     CHECK(fixture.rowIndexOf(4).rowType() == cwSurveyEditorRowIndex::ShotRow);
@@ -979,7 +995,7 @@ TEST_CASE("A splay's readings are cells the table writes", "[cwSurveyEditorModel
     }
 
     SECTION("a written reading lands in the chunk and reaches the row") {
-        QSignalSpy changes(&fixture.model, &QAbstractItemModel::dataChanged);
+        fixture.forgetChanges();
 
         CHECK(fixture.model.setDataAt(cell(firstSplayRow, cwSurveyEditorCellIndex::SplayDistanceCell),
                                       QStringLiteral("6.02")));
@@ -1000,22 +1016,9 @@ TEST_CASE("A splay's readings are cells the table writes", "[cwSurveyEditorModel
         CHECK(fixture.splayReading(firstSplayRow + 2, cwSurveyEditorModel::SplayClinoRole)
               == QStringLiteral("-8.25"));
 
-        const auto rowsTold = [&changes](int row, int changedRole) {
-            int count = 0;
-            for(const auto& change : changes) {
-                const int first = change.at(0).value<QModelIndex>().row();
-                const int last = change.at(1).value<QModelIndex>().row();
-                const auto roles = change.at(2).value<QList<int>>();
-                if(first <= row && row <= last && roles.contains(changedRole)) {
-                    ++count;
-                }
-            }
-            return count;
-        };
-
-        CHECK(rowsTold(firstSplayRow, cwSurveyEditorModel::SplayDistanceRole) > 0);
-        CHECK(rowsTold(firstSplayRow + 1, cwSurveyEditorModel::SplayCompassRole) > 0);
-        CHECK(rowsTold(firstSplayRow + 2, cwSurveyEditorModel::SplayClinoRole) > 0);
+        CHECK(fixture.rowsTold(firstSplayRow, cwSurveyEditorModel::SplayDistanceRole) > 0);
+        CHECK(fixture.rowsTold(firstSplayRow + 1, cwSurveyEditorModel::SplayCompassRole) > 0);
+        CHECK(fixture.rowsTold(firstSplayRow + 2, cwSurveyEditorModel::SplayClinoRole) > 0);
     }
 
     SECTION("a cell on a row that shows no splay writes nothing") {
@@ -1074,12 +1077,12 @@ TEST_CASE("A splay's readings are cells the table writes", "[cwSurveyEditorModel
     }
 
     SECTION("writing the reading a splay already has tells the view nothing") {
-        QSignalSpy changes(&fixture.model, &QAbstractItemModel::dataChanged);
+        fixture.forgetChanges();
 
         CHECK(fixture.model.setDataAt(cell(firstSplayRow, cwSurveyEditorCellIndex::SplayCompassCell),
                                       QStringLiteral("124.1")));
 
-        CHECK(changes.isEmpty());
+        CHECK(fixture.changes.isEmpty());
         CHECK(fixture.chunk->stationSplayAt(1, 0).compass.value() == QStringLiteral("124.1"));
     }
 }
@@ -1487,6 +1490,21 @@ TEST_CASE("An entry row nobody typed into goes away with the focus",
               == QStringLiteral("4.2"));
     }
 
+    SECTION("two abandoned clusters go away in one focus change") {
+        //a3 carries no splays either, so opening it leaves two entry rows for
+        //the same focus change to retract
+        fixture.model.toggleSplaysExpanded(fixture.stationRow(2));
+        fixture.checkRowCount(10);
+
+        //a2's row is inside no open cluster, so neither entry row holds the focus
+        fixture.model.setFocusedCell(stationCell(1));
+
+        fixture.checkRowCount(8);
+        CHECK_FALSE(fixture.rowData(a1Row, cwSurveyEditorModel::StationSplaysExpandedRole).toBool());
+        CHECK_FALSE(fixture.rowData(fixture.model.toModelRow(fixture.stationRow(2)),
+                                    cwSurveyEditorModel::StationSplaysExpandedRole).toBool());
+    }
+
     SECTION("a cluster with splays keeps the blank row it carries") {
         fixture.model.toggleSplaysExpanded(fixture.stationRow(1));
         fixture.checkRowCount(13);
@@ -1520,6 +1538,79 @@ TEST_CASE("An entry row nobody typed into goes away with the focus",
         CHECK(fixture.rowIndexOf(entryRow).rowType() == cwSurveyEditorRowIndex::ShotRow);
         CHECK(fixture.model.focusedRow() == fixture.model.toModelRow(b1Row));
     }
+}
+
+TEST_CASE("A named trailing station tells the table it's real now",
+          "[cwSurveyEditorModel][SplayShot]") {
+    SplayFixture fixture;
+
+    //Focusing a cell of the chunk brings its trailing blank station and shot in
+    fixture.model.setFocusedCell(fixture.model.cellIndex(3, cwSurveyEditorCellIndex::StationNameCell));
+    fixture.checkRowCount(8);
+
+    //title, a1, shot, a2, shot, a3, and the blank shot and station below them
+    const int blankShotRow = 6;
+    const int blankStationRow = 7;
+    REQUIRE(fixture.rowData(blankStationRow, cwSurveyEditorModel::IsVirtualRole).toBool());
+    REQUIRE(fixture.rowData(blankShotRow, cwSurveyEditorModel::IsVirtualRole).toBool());
+
+    fixture.forgetChanges();
+    REQUIRE(fixture.model.setDataAt(
+        fixture.model.cellIndex(blankStationRow, cwSurveyEditorCellIndex::StationNameCell),
+        QStringLiteral("a4")));
+
+    //The pair that was blank holds a4 and its shot, and a fresh pair waits below
+    fixture.checkRowCount(10);
+    CHECK(fixture.chunk->stationCount() == 4);
+    CHECK_FALSE(fixture.rowData(blankStationRow, cwSurveyEditorModel::IsVirtualRole).toBool());
+    CHECK_FALSE(fixture.rowData(blankShotRow, cwSurveyEditorModel::IsVirtualRole).toBool());
+
+    //Every cue a real station carries — the Splays cell's "+" and its Enter
+    //hint among them — hangs off what the row was last told, so a change that
+    //leaves IsVirtualRole out keeps the row offering nothing
+    CHECK(fixture.rowsTold(blankStationRow, cwSurveyEditorModel::IsVirtualRole) > 0);
+    CHECK(fixture.rowsTold(blankShotRow, cwSurveyEditorModel::IsVirtualRole) > 0);
+}
+
+TEST_CASE("A named trailing station leaves the chunk below it on its own rows",
+          "[cwSurveyEditorModel][SplayShot]") {
+    SplayFixture fixture;
+
+    auto secondChunk = new cwSurveyChunk();
+    secondChunk->appendShot(cwStation("b1"), cwStation("b2"),
+                            cwShot("5.0", "10.0", "190.0", "1.0", "-1.0"));
+    fixture.trip.addChunk(secondChunk);
+
+    //The second chunk brings a title, two stations, and a shot
+    fixture.checkRowCount(10);
+
+    //Focusing a cell of the first chunk brings its trailing blank pair in,
+    //which sits above the second chunk's title rather than at the table's end
+    fixture.model.setFocusedCell(fixture.model.cellIndex(3, cwSurveyEditorCellIndex::StationNameCell));
+    fixture.checkRowCount(12);
+
+    const int blankStationRow = 7;
+    REQUIRE(fixture.rowData(blankStationRow, cwSurveyEditorModel::IsVirtualRole).toBool());
+
+    QSignalSpy insertions(&fixture.model, &QAbstractItemModel::rowsInserted);
+
+    REQUIRE(fixture.model.setDataAt(
+        fixture.model.cellIndex(blankStationRow, cwSurveyEditorCellIndex::StationNameCell),
+        QStringLiteral("a4")));
+
+    fixture.checkRowCount(14);
+
+    //The fresh blank pair belongs to the first chunk, so it lands just under
+    //the pair that turned real. A view told the rows were appended at the end
+    //draws every row of the second chunk two rows off
+    REQUIRE(insertions.count() == 1);
+    CHECK(insertions.at(0).at(1).toInt() == 8);
+    CHECK(insertions.at(0).at(2).toInt() == 9);
+
+    CHECK(fixture.rowIndexOf(8).chunk() == fixture.chunk);
+    CHECK(fixture.rowIndexOf(9).chunk() == fixture.chunk);
+    CHECK(fixture.rowIndexOf(10).rowType() == cwSurveyEditorRowIndex::TitleRow);
+    CHECK(fixture.rowIndexOf(10).chunk() == secondChunk);
 }
 
 TEST_CASE("Retiring a trip forgets which clusters were open", "[cwSurveyEditorModel][SplayShot]") {

@@ -359,6 +359,63 @@ MainWindowTest {
                     "the blank station's Splays cell should offer no entry hint")
         }
 
+        // A chunk is born with two stations; every station past them starts
+        // life as the trailing blank row and turns real when it's named. The
+        // row has to hear about that, or its Splays cell goes on treating
+        // itself as the blank station and offers neither cue.
+        function test_aStationNamedInTheBlankRowOffersTheEntryCues() {
+            const context = gotoSurveyTable()
+
+            // The hint yields to the pointer, so park the cursor clear of the table
+            mouseMove(rootId, rootId.width - 1, 0)
+
+            // Focusing a cell of the chunk is what brings the trailing blank
+            // station in, which is the row A3 is typed into
+            context.editorModel.setFocusedCell(
+                        context.editorModel.cellIndex(surveyTableId.stationRow(context, 1),
+                                                      SurveyChunk.StationNameRole))
+            tryCompare(context.editorModel, "focusedRow", surveyTableId.stationRow(context, 1))
+
+            // The cell the blank station is drawn on, held across the naming —
+            // the row keeps its delegate, so a cue that waits for a rebuild is
+            // a cue the caver never sees
+            const cell = splaysCell(context, 2)
+            verify(cell.isVirtual, "the blank station's cell should start out virtual")
+
+            surveyTableId.setStationName(this, context, 2, "A3")
+            tryCompare(context.chunk, "stationCount", 3, 5000,
+                       "naming the blank station should make it a station of the chunk")
+            tryVerify(() => !cell.isVirtual, 5000,
+                      "the row that was blank should hear that it holds a station now")
+
+            const stationRow = surveyTableId.stationRow(context, 2)
+            const rowsWhileClosed = context.view.count
+
+            context.editorModel.setFocusedCell(
+                        context.editorModel.cellIndex(stationRow,
+                                                      SurveyEditorCellIndex.StationSplaysCell))
+            tryCompare(context.editorModel, "focusedRole",
+                       SurveyEditorCellIndex.StationSplaysCell, 5000)
+            tryCompare(context.editorModel, "focusedRow", stationRow)
+
+            tryVerify(() => !cell.hovered, 5000, "the pointer starts away from the cell")
+            tryVerify(() => findChild(cell, "splayEntryHint") !== null, 5000,
+                      "A3's empty Splays cell should say how to add a splay")
+
+            mouseMove(cell, cell.width * 0.5, cell.height * 0.5)
+            tryVerify(() => cell.hovered, 5000, "A3's Splays cell should take the hover")
+            tryVerify(() => findChild(cell, "splayEntryButton") !== null, 5000,
+                      "hovering A3's empty Splays cell should offer the +")
+
+            // And the press the hint promises does what it says
+            mouseMove(rootId, rootId.width - 1, 0)
+            keyClick(Qt.Key_Return)
+            tryCompare(context.view, "count", rowsWhileClosed + blankRow, 5000,
+                       "Enter should open the row a splay is typed into")
+            tryCompare(context.editorModel, "focusedRow", stationRow + 1, 5000,
+                       "Enter should put the caret in the blank row")
+        }
+
         // Each rail bridges into the row below so the cluster draws one
         // unbroken line, except the blank row at the bottom — below it is the
         // shot row's bare background, where the bridge would show as a loose

@@ -426,7 +426,33 @@ splays never shows the hint. If the "+" is replaced, retire its hover tests rath
 skipping them. <b>By hand:</b> enter a fresh trip with the keyboard only — station, readings,
 tab to Splays, read the cue, Enter, type a splay.</div>
 
-<h2><span class="commit">Commit 16</span> Profiled performance pass</h2>
+<h2><span class="commit">Commit 16</span> Entry cues on every real station<span style="color:#2e7d32; font-size:0.8em;"> — done</span></h2>
+<p>Bug found by hand after commit 15 (follow-up 11, 2026-08-12): the "+" button and the
+"Press Enter to add" hint only appear on stations 0 and 1 of a chunk — station 2 and higher
+never show either cue, and Enter does nothing for them.</p>
+<ul>
+  <li><b>Failing test first — prove the bug before touching production code.</b> QML: build a
+      chunk, type through the virtual rows to create a third station, keyboard-focus (and
+      hover) its zero-splay Splays cell, and assert the hint and "+" appear — this must fail
+      against the current code. Add the C++ half at the model layer: when typing a name turns
+      the virtual trailing station real, the model must emit <code>dataChanged</code> covering
+      <code>IsVirtualRole</code> for that row (assert via the fixture's signal tally).</li>
+  <li><b>Prime suspect</b>: stations 0 and 1 exist from chunk birth; every later station begins
+      life as the virtual trailing row. <code>IsVirtualRole</code>
+      (<code>cwSurveyEditorModel.cpp:407</code>) computes the right answer on a fresh read, but
+      if no <code>dataChanged</code> announces the virtual→real transition, the delegate's
+      <code>required property bool isVirtual</code> keeps its stale <code>true</code> and
+      <code>offersEntry</code> (which requires <code>!isVirtual</code>) never turns on. Fix at
+      the model's emission site, not by re-deriving state in QML.</li>
+  <li>Audit the same transition for the other <code>isVirtual</code> consumers
+      (<code>DrySurveyComponent</code>'s <code>blankRow</code>, shot rows) — a missing
+      emission there has the same stale-delegate shape.</li>
+</ul>
+<div class="test"><b>Tests.</b> The two failing-first tests above, then green. Keep commit 15's
+cue tests passing unchanged. <b>By hand:</b> enter a fresh trip, add stations until the chunk
+has four, and check every real zero-splay station shows both cues.</div>
+
+<h2><span class="commit">Commit 17</span> Profiled performance pass</h2>
 <p>Open refactors 6, 7, 8 — <b>profile first, fix only what the profile confirms.</b></p>
 <ul>
   <li><b>Profile</b>: run <code>qmlprofiler</code> (or QML profiler via Qt Creator) on a
@@ -446,7 +472,7 @@ tab to Splays, read the cue, Enter, type a splay.</div>
 the targeted C++ splay tags. The profile before/after numbers go in the commit body and the
 review notes.</div>
 
-<h2><span class="commit">Commit 17</span> Splay error model</h2>
+<h2><span class="commit">Commit 18</span> Splay error model</h2>
 <p>Open refactor 1 — the largest behavioral gap left: a splay with a garbage reading gets no
 red box and no error list, while the identical reading on a shot row does. Design work, last in
 the series.</p>

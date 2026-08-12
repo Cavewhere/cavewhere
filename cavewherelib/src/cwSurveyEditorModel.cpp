@@ -677,7 +677,11 @@ bool cwSurveyEditorModel::setDataAt(const cwSurveyEditorCellIndex& cell, const Q
             return true;
         }
 
-        const int oldRowCount = rowCount();
+        //The two trailing blank rows are about to stand for a shot and a
+        //station that exist, and they keep the rows they are drawn on
+        const int firstFormerlyVirtualRow = firstVirtualRow(chunk);
+        const int lastFormerlyVirtualRow = firstFormerlyVirtualRow + 1;
+
         disconnectChunkSignals(chunk);
 
         chunk->appendNewShot();
@@ -689,8 +693,20 @@ bool cwSurveyEditorModel::setDataAt(const cwSurveyEditorCellIndex& cell, const Q
             emit dataChanged(changedModelIndex, changedModelIndex, changedRolesFor(*chunkRole));
         }
 
-        beginInsertRows(QModelIndex(), oldRowCount, oldRowCount + 1);
+        //The fresh blank pair sits just below the pair that turned real, which
+        //is inside this chunk's own rows — a chunk after it keeps every row it
+        //was drawn on
+        const int firstNewVirtualRow = firstVirtualRow(chunk);
+        beginInsertRows(QModelIndex(), firstNewVirtualRow, firstNewVirtualRow + 1);
         endInsertRows();
+
+        //Nothing else says that the pair the table drew as blanks is real now.
+        //A row keeps the answer it was last told, so a delegate that never
+        //hears this one goes on withholding every cue a real row carries — the
+        //Splays cell's "+" and its "Press Enter to add" among them
+        emit dataChanged(index(firstFormerlyVirtualRow),
+                         index(lastFormerlyVirtualRow),
+                         {IsVirtualRole});
         return true;
     }
 
