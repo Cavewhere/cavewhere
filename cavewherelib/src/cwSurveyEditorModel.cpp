@@ -440,7 +440,7 @@ QVariant cwSurveyEditorModel::data(const QModelIndex& index, int role) const
         return QVariant::fromValue(cwSurveyEditorBoxData(
             dataFn(),
             rowIndex,
-            dataRole,
+            cwSurveyEditorCellIndex::toCellRole(dataRole),
             rowIndex.chunk()->errorsAt(rowIndex.indexInChunk(), dataRole)
             ));
     };
@@ -565,11 +565,13 @@ QVariant cwSurveyEditorModel::data(const QModelIndex& index, int role) const
         }
 
         //A splay reading is edited through the same boxes the rest of the table
-        //uses, so it arrives in the same shape they read. Nothing checks a splay
-        //yet, so it carries no error model
+        //uses, so it arrives in the same shape they read. The box names one of
+        //the editor's own splay cells, since a splay's reading hangs off a
+        //station rather than a row the chunk stores, and no chunk role can name
+        //it. Nothing checks a splay yet, so it carries no error model
         auto splayReading = [&chunkIndex](const cwReading& reading,
-                                          cwSurveyChunk::DataRole readingRole) {
-            return QVariant::fromValue(cwSurveyEditorBoxData(reading, chunkIndex, readingRole));
+                                          cwSurveyEditorCellIndex::CellRole cellRole) {
+            return QVariant::fromValue(cwSurveyEditorBoxData(reading, chunkIndex, cellRole));
         };
 
         //The blank row reads empty in all three columns until the first reading
@@ -580,11 +582,11 @@ QVariant cwSurveyEditorModel::data(const QModelIndex& index, int role) const
                                             : chunk->stationSplayAt(stationIndex, splayIndex);
         switch(role) {
         case SplayDistanceRole:
-            return splayReading(splay.distance, cwSurveyChunk::ShotDistanceRole);
+            return splayReading(splay.distance, cwSurveyEditorCellIndex::SplayDistanceCell);
         case SplayCompassRole:
-            return splayReading(splay.compass, cwSurveyChunk::ShotCompassRole);
+            return splayReading(splay.compass, cwSurveyEditorCellIndex::SplayCompassCell);
         case SplayClinoRole:
-            return splayReading(splay.clino, cwSurveyChunk::ShotClinoRole);
+            return splayReading(splay.clino, cwSurveyEditorCellIndex::SplayClinoCell);
         default:
             return QVariant();
         }
@@ -1679,7 +1681,7 @@ cwSurveyEditorCellIndex cwSurveyEditorModel::nextCellIndex(const cwSurveyEditorC
     //walk reaches first either way
     auto shotRowStep = [&](cwSurveyEditorCellIndex::CellRole leavingRole, int direction) {
         const auto readingRow = readingRowNear(direction);
-        if(readingRow.rowType == cwSurveyEditorRowIndex::SplayRow) {
+        if(readingRow.isValid() && readingRow.rowType == cwSurveyEditorRowIndex::SplayRow) {
             return cellIndex(readingRow.row, splayColumnOfShotCell(currentCell.cellRole()));
         }
         return offsetCurrentRowRole(leavingRole, direction);

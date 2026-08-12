@@ -31,7 +31,7 @@ SurveyEditorCell {
     //The index informantion from cwSurveyEditorModel
     required property cwSurveyEditorBoxData dataValue
 
-    cellRole: dataBox.dataValue.chunkDataRole
+    cellRole: dataBox.dataValue.cellRole
     indexInChunk: dataBox.dataValue.indexInChunk
     chunk: dataBox.dataValue.chunk
     editing: editor.isEditting

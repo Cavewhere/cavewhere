@@ -3,17 +3,23 @@
 
 //Our inludes
 #include "cwSurveyChunk.h"
+#include "cwSurveyEditorCellIndex.h"
 #include "cwSurveyEditorRowIndex.h"
 #include "CaveWhereLibExport.h"
 
 //Qt includes
 #include <QQmlEngine>
 
+/**
+ * Where one box of the survey table lives: the row it sits in and the cell of
+ * that row it shows. The cell is the editor's own vocabulary, so a splay's box
+ * names a splay cell instead of borrowing a shot reading's chunk role.
+ */
 class CAVEWHERE_LIB_EXPORT cwSurveyEditorBoxIndex {
     Q_GADGET
     QML_VALUE_TYPE(cwSurveyEditorBoxIndex)
     Q_PROPERTY(cwSurveyEditorRowIndex rowIndex READ rowIndex WRITE setRowIndex)
-    Q_PROPERTY(cwSurveyChunk::DataRole chunkDataRole READ chunkDataRole WRITE setChunkDataRole)
+    Q_PROPERTY(cwSurveyEditorCellIndex::CellRole cellRole READ cellRole WRITE setCellRole)
 
     //Helper properties
     Q_PROPERTY(cwSurveyChunk* chunk READ chunk WRITE setChunk)
@@ -25,9 +31,9 @@ public:
     cwSurveyEditorBoxIndex() = default;
 
     cwSurveyEditorBoxIndex(const cwSurveyEditorRowIndex &rowIndex,
-                           cwSurveyChunk::DataRole chunkDataRole)
+                           cwSurveyEditorCellIndex::CellRole cellRole)
         : m_rowIndex(rowIndex),
-        m_chunkDataRole(chunkDataRole)
+        m_cellRole(cellRole)
     {
     }
 
@@ -38,11 +44,11 @@ public:
         m_rowIndex = rowIndex;
     }
 
-    cwSurveyChunk::DataRole chunkDataRole() const {
-        return m_chunkDataRole;
+    cwSurveyEditorCellIndex::CellRole cellRole() const {
+        return m_cellRole;
     }
-    void setChunkDataRole(cwSurveyChunk::DataRole chunkDataRole) {
-        m_chunkDataRole = chunkDataRole;
+    void setCellRole(cwSurveyEditorCellIndex::CellRole cellRole) {
+        m_cellRole = cellRole;
     }
 
     cwSurveyChunk* chunk() const {
@@ -68,16 +74,8 @@ public:
 
     // Equality operator for QML
     bool operator==(const cwSurveyEditorBoxIndex &rhs) const {
-
-        // qDebug() << "Equals:" << (m_rowIndex == rhs.m_rowIndex &&
-        //                           m_chunkDataRole == rhs.m_chunkDataRole)
-        //          << "rowIndex:" << m_rowIndex.rowType() << rhs.m_rowIndex.rowType()
-        //          << "chunk:" << m_rowIndex.chunk() << rhs.m_rowIndex.chunk()
-        //          << "indexInChunk:" << m_rowIndex.indexInChunk() << rhs.m_rowIndex.indexInChunk()
-        //          << "role:" << m_chunkDataRole << rhs.m_chunkDataRole;
-
         return m_rowIndex == rhs.m_rowIndex &&
-               m_chunkDataRole == rhs.m_chunkDataRole;
+               m_cellRole == rhs.m_cellRole;
     }
 
     bool operator!=(const cwSurveyEditorBoxIndex &rhs) const {
@@ -86,7 +84,7 @@ public:
 
 private:
     cwSurveyEditorRowIndex m_rowIndex;
-    cwSurveyChunk::DataRole m_chunkDataRole = cwSurveyChunk::StationNameRole;
+    cwSurveyEditorCellIndex::CellRole m_cellRole = cwSurveyEditorCellIndex::StationNameCell;
 };
 
 

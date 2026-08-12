@@ -24,6 +24,8 @@
 
 //Std includes
 #include <algorithm>
+#include <array>
+#include <utility>
 
 namespace {
 
@@ -888,6 +890,68 @@ TEST_CASE("The Splays cell is the last cell in a station row", "[cwSurveyEditorM
     }
 }
 
+TEST_CASE("A splay's box data names a splay cell", "[cwSurveyEditorModel][SplayShot]") {
+    SplayFixture fixture;
+    fixture.model.toggleSplaysExpanded(fixture.stationRow(1));
+
+    //title, a1, shot, a2, s1, s2, s3, blank, shot, a3
+    const int firstSplayRow = 4;
+    const int blankRow = 7;
+    const int a2ShotRow = 8;
+
+    auto boxData = [&fixture](int row, cwSurveyEditorModel::Role role) {
+        return fixture.rowData(row, role).value<cwSurveyEditorBoxData>();
+    };
+
+    const std::array<std::pair<cwSurveyEditorModel::Role, cwSurveyEditorCellIndex::CellRole>, 3>
+        splayCells = {{
+            {cwSurveyEditorModel::SplayDistanceRole, cwSurveyEditorCellIndex::SplayDistanceCell},
+            {cwSurveyEditorModel::SplayCompassRole, cwSurveyEditorCellIndex::SplayCompassCell},
+            {cwSurveyEditorModel::SplayClinoRole, cwSurveyEditorCellIndex::SplayClinoCell}
+        }};
+
+    SECTION("every reading of a splay carries its own cell") {
+        for(const auto& [modelRole, cellRole] : splayCells) {
+            for(int row : {firstSplayRow, firstSplayRow + 1, firstSplayRow + 2, blankRow}) {
+                const auto data = boxData(row, modelRole);
+                INFO("row: " << row << " cell: " << static_cast<int>(cellRole));
+                CHECK(data.cellRole() == cellRole);
+
+                //A splay hangs off a station at an index of its own, so no
+                //chunk reading can name it
+                CHECK_FALSE(cwSurveyEditorCellIndex::toChunkRole(data.cellRole()).has_value());
+                CHECK(cwSurveyEditorCellIndex::toSplayReadingRole(data.cellRole()).has_value());
+                CHECK(data.rowIndex() == fixture.rowIndexOf(row));
+            }
+        }
+    }
+
+    SECTION("the cell the box data names writes the reading it shows") {
+        for(const auto& [modelRole, cellRole] : splayCells) {
+            const auto data = boxData(firstSplayRow, modelRole);
+            const auto cell = fixture.model.cellIndex(firstSplayRow, data.cellRole());
+            INFO("cell: " << static_cast<int>(cellRole));
+            CHECK(fixture.model.isCellValid(cell));
+            CHECK(fixture.model.setDataAt(cell, QStringLiteral("7.75")));
+            CHECK(fixture.splayReading(firstSplayRow, modelRole) == QStringLiteral("7.75"));
+        }
+
+        fixture.checkRowCount(10);
+    }
+
+    SECTION("a shot's box data still names its shot cell") {
+        const auto distance = boxData(a2ShotRow, cwSurveyEditorModel::ShotDistanceRole);
+        CHECK(distance.cellRole() == cwSurveyEditorCellIndex::ShotDistanceCell);
+        CHECK(cwSurveyEditorCellIndex::toChunkRole(distance.cellRole())
+              == cwSurveyChunk::ShotDistanceRole);
+
+        const auto name = boxData(3, cwSurveyEditorModel::StationNameRole);
+        CHECK(name.cellRole() == cwSurveyEditorCellIndex::StationNameCell);
+        CHECK(cwSurveyEditorCellIndex::toChunkRole(name.cellRole())
+              == cwSurveyChunk::StationNameRole);
+    }
+}
+
 TEST_CASE("A splay's readings are cells the table writes", "[cwSurveyEditorModel][SplayShot]") {
     SplayFixture fixture;
     fixture.model.toggleSplaysExpanded(fixture.stationRow(1));
@@ -1393,6 +1457,10 @@ TEST_CASE("An entry row nobody typed into goes away with the focus",
         fixture.checkRowCount(8);
         CHECK_FALSE(fixture.rowData(a1Row, cwSurveyEditorModel::StationSplaysExpandedRole).toBool());
         CHECK(fixture.rowIndexOf(entryRow).rowType() == cwSurveyEditorRowIndex::ShotRow);
+
+        //The retracted row sat above the focus, so the focus rode the removal
+        //up to the row a3 sits on now
+        CHECK(fixture.model.focusedRow() == fixture.model.toModelRow(fixture.stationRow(2)));
     }
 
     SECTION("the station that owns the cluster keeps the row open") {
@@ -1429,6 +1497,28 @@ TEST_CASE("An entry row nobody typed into goes away with the focus",
         fixture.checkRowCount(12);
         CHECK(fixture.rowData(fixture.model.toModelRow(fixture.stationRow(1)),
                               cwSurveyEditorModel::StationSplaysExpandedRole).toBool());
+    }
+
+    SECTION("the focus landing in another chunk takes the row with it") {
+        auto secondChunk = new cwSurveyChunk();
+        secondChunk->appendShot(cwStation("b1"), cwStation("b2"),
+                                cwShot("5.0", "10.0", "190.0", "1.0", "-1.0"));
+        fixture.trip.addChunk(secondChunk);
+
+        //The second chunk brings a title, two stations, and a shot
+        fixture.checkRowCount(13);
+
+        const cwSurveyEditorRowIndex b1Row(secondChunk, 0, cwSurveyEditorRowIndex::StationRow);
+        fixture.model.setFocusedCell(
+            fixture.model.cellIndex(fixture.model.toModelRow(b1Row),
+                                    cwSurveyEditorCellIndex::StationNameCell));
+
+        //The trailing blank rows cross to the second chunk, so the table only
+        //loses a1's abandoned entry row
+        fixture.checkRowCount(12);
+        CHECK_FALSE(fixture.rowData(a1Row, cwSurveyEditorModel::StationSplaysExpandedRole).toBool());
+        CHECK(fixture.rowIndexOf(entryRow).rowType() == cwSurveyEditorRowIndex::ShotRow);
+        CHECK(fixture.model.focusedRow() == fixture.model.toModelRow(b1Row));
     }
 }
 

@@ -1063,27 +1063,27 @@ TEST_CASE("cwSurveyEditorModel should update when survey data changes", "[cwSurv
 
                 const auto stationNameData = model.data(index, cwSurveyEditorModel::StationNameRole).value<cwSurveyEditorBoxData>();
                 CHECK(stationNameData.reading().value().toStdString() == station.name().toStdString());
-                CHECK(stationNameData.chunkDataRole() == cwSurveyChunk::StationNameRole);
+                CHECK(stationNameData.cellRole() == cwSurveyEditorCellIndex::StationNameCell);
                 CHECK(stationNameData.rowIndex() == rowIndex);
 
                 const auto stationLeftData = model.data(index, cwSurveyEditorModel::StationLeftRole).value<cwSurveyEditorBoxData>();
                 CHECK(stationLeftData.reading().value().toStdString() == station.left().value().toStdString());
-                CHECK(stationLeftData.chunkDataRole() == cwSurveyChunk::StationLeftRole);
+                CHECK(stationLeftData.cellRole() == cwSurveyEditorCellIndex::StationLeftCell);
                 CHECK(stationLeftData.rowIndex() == rowIndex);
 
                 const auto stationRightData = model.data(index, cwSurveyEditorModel::StationRightRole).value<cwSurveyEditorBoxData>();
                 CHECK(stationRightData.reading().value().toStdString() == station.right().value().toStdString());
-                CHECK(stationRightData.chunkDataRole() == cwSurveyChunk::StationRightRole);
+                CHECK(stationRightData.cellRole() == cwSurveyEditorCellIndex::StationRightCell);
                 CHECK(stationRightData.rowIndex() == rowIndex);
 
                 const auto stationUpData = model.data(index, cwSurveyEditorModel::StationUpRole).value<cwSurveyEditorBoxData>();
                 CHECK(stationUpData.reading().value().toStdString() == station.up().value().toStdString());
-                CHECK(stationUpData.chunkDataRole() == cwSurveyChunk::StationUpRole);
+                CHECK(stationUpData.cellRole() == cwSurveyEditorCellIndex::StationUpCell);
                 CHECK(stationUpData.rowIndex() == rowIndex);
 
                 const auto stationDownData = model.data(index, cwSurveyEditorModel::StationDownRole).value<cwSurveyEditorBoxData>();
                 CHECK(stationDownData.reading().value().toStdString() == station.down().value().toStdString());
-                CHECK(stationDownData.chunkDataRole() == cwSurveyChunk::StationDownRole);
+                CHECK(stationDownData.cellRole() == cwSurveyEditorCellIndex::StationDownCell);
                 CHECK(stationDownData.rowIndex() == rowIndex);
 
                 row++;
@@ -1111,11 +1111,11 @@ TEST_CASE("cwSurveyEditorModel should update when survey data changes", "[cwSurv
                     CHECK(clino.reading().value().toStdString() == shot.clino().value().toStdString());
                     CHECK(backClino.reading().value().toStdString() == shot.backClino().value().toStdString());
 
-                    CHECK(distance.chunkDataRole() == cwSurveyChunk::ShotDistanceRole);
-                    CHECK(compass.chunkDataRole() == cwSurveyChunk::ShotCompassRole);
-                    CHECK(backCompass.chunkDataRole() == cwSurveyChunk::ShotBackCompassRole);
-                    CHECK(clino.chunkDataRole() == cwSurveyChunk::ShotClinoRole);
-                    CHECK(backClino.chunkDataRole() == cwSurveyChunk::ShotBackClinoRole);
+                    CHECK(distance.cellRole() == cwSurveyEditorCellIndex::ShotDistanceCell);
+                    CHECK(compass.cellRole() == cwSurveyEditorCellIndex::ShotCompassCell);
+                    CHECK(backCompass.cellRole() == cwSurveyEditorCellIndex::ShotBackCompassCell);
+                    CHECK(clino.cellRole() == cwSurveyEditorCellIndex::ShotClinoCell);
+                    CHECK(backClino.cellRole() == cwSurveyEditorCellIndex::ShotBackClinoCell);
 
                     CHECK(distance.rowIndex() == rowIndex);
                     CHECK(compass.rowIndex() == rowIndex);

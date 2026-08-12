@@ -287,7 +287,6 @@ Item {
 
                 opacity: splayRowId.readingOpacity
 
-                cellRole: SurveyEditorCellIndex.SplayDistanceCell
                 dataValue: itemId.splayDistance
                 listViewIndex: itemId.index
                 errorButtonGroup: itemId.errorButtonGroup
@@ -304,7 +303,6 @@ Item {
 
                 opacity: splayRowId.readingOpacity
 
-                cellRole: SurveyEditorCellIndex.SplayCompassCell
                 dataValue: itemId.splayCompass
                 listViewIndex: itemId.index
                 errorButtonGroup: itemId.errorButtonGroup
@@ -321,7 +319,6 @@ Item {
 
                 opacity: splayRowId.readingOpacity
 
-                cellRole: SurveyEditorCellIndex.SplayClinoCell
                 dataValue: itemId.splayClino
                 listViewIndex: itemId.index
                 errorButtonGroup: itemId.errorButtonGroup

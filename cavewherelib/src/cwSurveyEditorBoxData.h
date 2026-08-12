@@ -24,7 +24,7 @@ class CAVEWHERE_LIB_EXPORT cwSurveyEditorBoxData {
     Q_PROPERTY(cwSurveyEditorRowIndex rowIndex READ rowIndex WRITE setRowIndex)
 
     //Helper accessor properties
-    Q_PROPERTY(cwSurveyChunk::DataRole chunkDataRole READ chunkDataRole WRITE setChunkDataRole)
+    Q_PROPERTY(cwSurveyEditorCellIndex::CellRole cellRole READ cellRole WRITE setCellRole)
     Q_PROPERTY(cwSurveyChunk* chunk READ chunk WRITE setChunk)
     Q_PROPERTY(int indexInChunk READ indexInChunk WRITE setIndexInChunk)
     Q_PROPERTY(cwSurveyEditorRowIndex::RowType rowType READ rowType WRITE setRowType)
@@ -34,11 +34,11 @@ public:
 
     cwSurveyEditorBoxData(const cwReading &reading,
                           const cwSurveyEditorRowIndex &rowIndex,
-                          cwSurveyChunk::DataRole chunkDataRole,
+                          cwSurveyEditorCellIndex::CellRole cellRole,
                           cwErrorModel* errorModel = nullptr)
         : m_reading(reading)
         , m_errorModel(errorModel)
-        , m_boxIndex(rowIndex, chunkDataRole)
+        , m_boxIndex(rowIndex, cellRole)
     {
     }
     cwSurveyEditorBoxData(const cwReading &reading,
@@ -78,11 +78,11 @@ public:
         m_boxIndex.setRowIndex(rowIndex);
     }
 
-    cwSurveyChunk::DataRole chunkDataRole() const {
-        return m_boxIndex.chunkDataRole();
+    cwSurveyEditorCellIndex::CellRole cellRole() const {
+        return m_boxIndex.cellRole();
     }
-    void setChunkDataRole(cwSurveyChunk::DataRole chunkDataRole) {
-        m_boxIndex.setChunkDataRole(chunkDataRole);
+    void setCellRole(cwSurveyEditorCellIndex::CellRole cellRole) {
+        m_boxIndex.setCellRole(cellRole);
     }
 
     cwSurveyChunk* chunk() const {
@@ -109,7 +109,7 @@ public:
 private:
     QPointer<cwErrorModel> m_errorModel;
     cwReading m_reading;
-    cwSurveyEditorBoxIndex m_boxIndex; // Contains rowIndex and chunkDataRole
+    cwSurveyEditorBoxIndex m_boxIndex; // Contains rowIndex and cellRole
 };
 
 Q_DECLARE_METATYPE(cwSurveyEditorBoxData)
