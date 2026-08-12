@@ -209,6 +209,156 @@ MainWindowTest {
                        "Enter on the Splays cell should open the cluster")
         }
 
+        // The "+" only ever appears under the pointer, which a surveyor typing
+        // a trip from the keyboard never sees. Tabbing onto an empty Splays
+        // cell says what Enter does there, and Enter does it.
+        function test_theFocusedEmptySplaysCellHintsAtEnter() {
+            const context = gotoSurveyTable()
+            const rowsWhileClosed = context.view.count
+            const stationRow = surveyTableId.stationRow(context, 1)
+
+            // The hint yields to the pointer, so park the cursor clear of the
+            // table — an earlier case leaves it sitting on this very cell, and
+            // a rebuilt table takes the hover under a cursor that never moved
+            mouseMove(rootId, rootId.width - 1, 0)
+
+            context.editorModel.setFocusedCell(
+                        context.editorModel.cellIndex(stationRow, SurveyChunk.StationDownRole))
+            tryCompare(context.editorModel, "focusedRole", SurveyChunk.StationDownRole)
+
+            keyClick(Qt.Key_Tab)
+            tryCompare(context.editorModel, "focusedRole",
+                       SurveyEditorCellIndex.StationSplaysCell, 5000,
+                       "tabbing out of D should land on the Splays cell")
+            tryCompare(context.editorModel, "focusedRow", stationRow)
+
+            const cell = splaysCell(context, 1)
+            tryVerify(() => !cell.hovered, 5000,
+                      "the hint's precondition is a pointer that is elsewhere")
+
+            let hint = null
+            tryVerify(() => {
+                hint = findChild(cell, "splayEntryHint")
+                return hint !== null
+            }, 5000, "the focused empty Splays cell should say how to add a splay")
+            compare(hint.text, "Press Enter to add")
+            compare(findChild(cell, "splayEntryButton"), null,
+                    "the + belongs to the pointer, which is elsewhere")
+
+            keyClick(Qt.Key_Return)
+
+            const entryRow = stationRow + 1
+            tryCompare(context.view, "count", rowsWhileClosed + blankRow + virtualRows, 5000,
+                       "Enter should open the row a splay is typed into")
+            tryCompare(context.editorModel, "focusedRow", entryRow, 5000,
+                       "Enter should put the caret in the blank row")
+            tryCompare(context.editorModel, "focusedRole",
+                       SurveyEditorCellIndex.SplayDistanceCell)
+        }
+
+        // Both cues mark the same target, so the cell shows one at a time: the
+        // "+" where the pointer is, and the words where it isn't.
+        function test_thePointerTakesTheHintsPlace() {
+            const context = gotoSurveyTable()
+            const stationRow = surveyTableId.stationRow(context, 1)
+
+            mouseMove(rootId, rootId.width - 1, 0)
+
+            context.editorModel.setFocusedCell(
+                        context.editorModel.cellIndex(stationRow,
+                                                      SurveyEditorCellIndex.StationSplaysCell))
+            tryCompare(context.editorModel, "focusedRole",
+                       SurveyEditorCellIndex.StationSplaysCell, 5000)
+
+            const cell = splaysCell(context, 1)
+            tryVerify(() => !cell.hovered, 5000, "the pointer starts away from the cell")
+            tryVerify(() => findChild(cell, "splayEntryHint") !== null, 5000,
+                      "the focused cell should say how to add a splay")
+            compare(findChild(cell, "splayEntryButton"), null,
+                    "the + waits for the pointer")
+
+            mouseMove(cell, cell.width * 0.5, cell.height * 0.5)
+            tryVerify(() => cell.hovered, 5000, "A2's Splays cell should take the hover")
+            tryVerify(() => findChild(cell, "splayEntryButton") !== null, 5000,
+                      "the pointer over the focused cell should offer the +")
+            // A Loader hands its item to deleteLater, so a cue that stood down
+            // outlives the frame it stood down in
+            tryVerify(() => findChild(cell, "splayEntryHint") === null, 5000,
+                      "the + speaks for the hint while the pointer is there")
+
+            mouseMove(rootId, rootId.width - 1, 0)
+            tryVerify(() => !cell.hovered, 5000, "the pointer should leave the cell")
+            tryVerify(() => findChild(cell, "splayEntryHint") !== null, 5000,
+                      "the hint should come back when the pointer goes")
+            tryVerify(() => findChild(cell, "splayEntryButton") === null, 5000,
+                      "the + should go with the pointer")
+        }
+
+        // An open cluster already carries the blank row a splay is typed into,
+        // and Enter on the cell closes it — so neither cue offers an entry the
+        // press would throw away.
+        function test_theOpenEmptyClusterOffersNoEntryCue() {
+            const context = gotoSurveyTable()
+            const stationRow = surveyTableId.stationRow(context, 1)
+
+            mouseMove(rootId, rootId.width - 1, 0)
+
+            const cell = splaysCell(context, 1)
+            mouseClick(cell)
+            tryCompare(context.editorModel, "focusedRow", stationRow + 1, 5000,
+                       "clicking the empty cell should open the row a splay is typed into")
+
+            // Shift-tab out of the blank row's distance cell walks back to the
+            // Splays cell, which is where the cues would speak from
+            keyClick(Qt.Key_Backtab, Qt.ShiftModifier)
+            tryCompare(context.editorModel, "focusedRole",
+                       SurveyEditorCellIndex.StationSplaysCell, 5000,
+                       "shift-tab should come back to the Splays cell")
+            tryCompare(context.editorModel, "focusedRow", stationRow)
+
+            wait(settleMilliseconds)
+            compare(findChild(cell, "splayEntryHint"), null,
+                    "an open cluster's cell should promise no entry")
+
+            mouseMove(cell, cell.width * 0.5, cell.height * 0.5)
+            tryVerify(() => cell.hovered, 5000, "A2's Splays cell should take the hover")
+            wait(settleMilliseconds)
+            compare(findChild(cell, "splayEntryButton"), null,
+                    "an open cluster's cell should offer no +")
+        }
+
+        // A station that already carries splays has its chip to click and its
+        // cluster to walk, so its cell has nothing to hint at.
+        function test_aStationWithSplaysShowsNoEntryHint() {
+            const context = gotoSurveyTable()
+            const stationRow = surveyTableId.stationRow(context, 0)
+
+            context.editorModel.setFocusedCell(
+                        context.editorModel.cellIndex(stationRow,
+                                                      SurveyEditorCellIndex.StationSplaysCell))
+            tryCompare(context.editorModel, "focusedRole",
+                       SurveyEditorCellIndex.StationSplaysCell, 5000)
+
+            const cell = splaysCell(context, 0)
+            tryVerify(() => cell.focus, 5000, "A1's Splays cell should hold the caret")
+            wait(settleMilliseconds)
+            compare(findChild(cell, "splayEntryHint"), null,
+                    "a station with splays should offer no entry hint")
+
+            // The trailing blank station has no name to hang a splay from, so
+            // its cell stays as quiet focused as it is hovered
+            const blankCell = splaysCell(context, context.chunk.stationCount)
+            context.editorModel.setFocusedCell(
+                        context.editorModel.cellIndex(
+                            surveyTableId.stationRow(context, context.chunk.stationCount),
+                            SurveyEditorCellIndex.StationSplaysCell))
+            tryVerify(() => blankCell.focus, 5000,
+                      "the blank station's Splays cell should hold the caret")
+            wait(settleMilliseconds)
+            compare(findChild(blankCell, "splayEntryHint"), null,
+                    "the blank station's Splays cell should offer no entry hint")
+        }
+
         // Each rail bridges into the row below so the cluster draws one
         // unbroken line, except the blank row at the bottom — below it is the
         // shot row's bare background, where the bridge would show as a loose
@@ -843,8 +993,10 @@ MainWindowTest {
             // the chip that counts them
             tryVerify(() => findChild(splaysCell(context, 1), "splayChip") !== null, 5000,
                       "the chip should take the button's place")
-            compare(findChild(splaysCell(context, 1), "splayEntryButton"), null,
-                    "a station with splays offers no + button")
+            // A Loader hands its item to deleteLater, so the "+" outlives the
+            // frame that stopped offering it
+            tryVerify(() => findChild(splaysCell(context, 1), "splayEntryButton") === null, 5000,
+                      "a station with splays offers no + button")
         }
 
         // Tabbing across a blank row that was never typed into leaves it blank

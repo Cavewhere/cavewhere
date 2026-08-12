@@ -38,6 +38,26 @@ SurveyEditorCell {
     //cell is the target its "+" button marks
     readonly property bool clusterHasControls: splaysBox.splayCount > 0
 
+    //A station that could take its first splay here: no splays yet, a name to
+    //hang them from, and its cluster still closed. An open cluster already
+    //carries the blank row a splay is typed into, and both Enter and a tap on
+    //the cell close it again — so the cues stand down rather than promise an
+    //entry that would throw the open row away. Both cues say the same thing to
+    //two different users, so they share this one predicate
+    readonly property bool offersEntry: !splaysBox.clusterHasControls
+                                        && !splaysBox.isVirtual
+                                        && !splaysBox.splaysExpanded
+
+    //The pointer's cue and the keyboard's cue mark the same target, so only one
+    //of them shows at a time. The pointer wins where it is: a hand on the mouse
+    //has a button to click, and the hint is for the surveyor whose hands stay
+    //on the keys. Gating the button on the hover alone also keeps it alive
+    //through its own click, which focuses the cell
+    readonly property bool entryButtonVisible: splaysBox.offersEntry && splaysBox.hovered
+    readonly property bool entryHintVisible: splaysBox.offersEntry
+                                             && splaysBox.focus
+                                             && !splaysBox.hovered
+
     //The table's one challenge for deleting a whole cluster, owned by
     //SurveyEditor so it outlives the recycled row that asks for it
     required property SplayRemoveAskBox splayRemoveChallenge
@@ -95,12 +115,31 @@ SurveyEditorCell {
     //then the button that says splays can be typed here
     QQ.Loader {
         anchors.centerIn: parent
-        active: !splaysBox.clusterHasControls
-                && !splaysBox.isVirtual
-                && splaysBox.hovered
+        active: splaysBox.entryButtonVisible
 
         sourceComponent: SplayEntryButton {
             objectName: "splayEntryButton"
+        }
+    }
+
+    //A surveyor entering a trip from the keyboard never sees the pointer's "+",
+    //so the cell says what Enter does while the caret is in it. Same voice and
+    //look as the station cell's "Press Tab" guess hint, one size down because
+    //the Splays column is as wide as its title
+    QQ.Loader {
+        anchors.fill: parent
+        anchors.margins: Theme.delegatePadding
+        active: splaysBox.entryHintVisible
+
+        sourceComponent: QC.Label {
+            objectName: "splayEntryHint"
+            text: qsTr("Press Enter to add")
+            color: Theme.textSubtle
+            font.pixelSize: Theme.fontSizeCaption
+            font.bold: true
+            wrapMode: QQ.Text.WordWrap
+            horizontalAlignment: Qt.AlignHCenter
+            verticalAlignment: Qt.AlignVCenter
         }
     }
 

@@ -404,7 +404,29 @@ start an entry, click away, watch the blank row retract.</div>
 <div class="test"><b>Tests.</b> <code>[cwSurveyEditorModel]</code> case: box data for a splay
 cell exposes the splay cell role and no shot role; existing menu tests keep passing.</div>
 
-<h2><span class="commit">Commit 15</span> Profiled performance pass</h2>
+<h2><span class="commit">Commit 15</span> "Press Enter to add" hint on the focused Splays cell<span style="color:#2e7d32; font-size:0.8em;"> — done</span></h2>
+<p>Follow-up 10 (added 2026-08-12). During keyboard data entry, tabbing onto the Splays cell
+gives no cue that Enter opens the entry row — the "+" only appears on hover, which a
+keyboard-driven surveyor never sees.</p>
+<ul>
+  <li>When the Splays cell has keyboard focus and zero splays, show a <b>"Press Enter to add"</b>
+      hint styled like <code>StationBox</code>'s guess hint (bold <code>Theme.textSubtle</code>
+      "Press Tab" label, <code>StationBox.qml:146</code>) — same voice, same look, so the two
+      entry cues read as one system.</li>
+  <li><b>Decision in-code</b>: whether the hover-only round "+" button survives alongside the
+      focus hint or is replaced by it (one affordance for both mouse and keyboard). Philip's
+      lean: maybe replace the "+" with this. Whichever wins, keep the count-gated
+      <code>Loader</code> economy and the <code>clusterHasControls</code> predicate honest, and
+      remember commit 11's collision note: the cell's fallback tap rule is "no control handled
+      this tap".</li>
+</ul>
+<div class="test"><b>Tests.</b> QML: focus the zero-splay Splays cell by keyboard (tab from D)
+and tryVerify the hint appears; press Enter and verify the entry row opens; a station with
+splays never shows the hint. If the "+" is replaced, retire its hover tests rather than
+skipping them. <b>By hand:</b> enter a fresh trip with the keyboard only — station, readings,
+tab to Splays, read the cue, Enter, type a splay.</div>
+
+<h2><span class="commit">Commit 16</span> Profiled performance pass</h2>
 <p>Open refactors 6, 7, 8 — <b>profile first, fix only what the profile confirms.</b></p>
 <ul>
   <li><b>Profile</b>: run <code>qmlprofiler</code> (or QML profiler via Qt Creator) on a
@@ -424,7 +446,7 @@ cell exposes the splay cell role and no shot role; existing menu tests keep pass
 the targeted C++ splay tags. The profile before/after numbers go in the commit body and the
 review notes.</div>
 
-<h2><span class="commit">Commit 16</span> Splay error model</h2>
+<h2><span class="commit">Commit 17</span> Splay error model</h2>
 <p>Open refactor 1 — the largest behavioral gap left: a splay with a garbage reading gets no
 red box and no error list, while the identical reading on a shot row does. Design work, last in
 the series.</p>
