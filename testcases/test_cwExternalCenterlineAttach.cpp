@@ -958,3 +958,93 @@ TEST_CASE("replace refuses a busy owner without disturbing the attachment",
     CHECK(fixture->trip->externalCenterline().entryFile()
           == QStringLiteral("survex_nested.svx"));
 }
+
+// ---------------------------------------------------------------------
+// Missing in-project copy (plans/EXTERNAL_FILE_LIVE_LINK_RETIREMENT.html
+// §7 q1): the copy is the only file the project reads, so its absence is
+// the state worth surfacing and Replace is the way out.
+// ---------------------------------------------------------------------
+
+TEST_CASE("a deleted in-project copy is reported missing until the file returns",
+          "[Attach][MissingCopy]")
+{
+    auto fixture = makeSavedProject(QStringLiteral("missing-copy-report"));
+    auto manager = managerOf(fixture.get());
+    const QUuid ownerId = fixture->trip->id();
+    const QString source = datasetExternalCenterlinePath(QStringLiteral("survex_simple.svx"));
+
+    attachThroughManager(fixture.get(), source);
+    drainPipelines(fixture.get());
+    CHECK(manager->missingCopyPath(ownerId).isEmpty());
+
+    const QString copyPath = fixture->saveLoad()
+        ->externalCenterlineDir(fixture->trip)
+        .absoluteFilePath(QStringLiteral("survex_simple.svx"));
+    REQUIRE(QFileInfo::exists(copyPath));
+    const QByteArray copyContents = fileContents(copyPath);
+
+    cwSignalSpy missingSpy(manager, &cwExternalCenterlineManager::missingCopiesChanged);
+
+    // Deleting a watched file fires the watcher, which recomputes on its
+    // own - the same path a user emptying the folder in Finder takes.
+    REQUIRE(QFile::remove(copyPath));
+    REQUIRE(tryWait(kWatcherWaitMs, [&] {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, kInnerPollEventsMs);
+        return !manager->missingCopyPath(ownerId).isEmpty();
+    }));
+    CHECK(missingSpy.count() >= 1);
+
+    // Named the way it sits in the project: the copy is the file the user
+    // has now, so a path relative to the project's data root.
+    const QString relativePath = fixture->saveLoad()->dataRootDir().relativeFilePath(copyPath);
+    CHECK(manager->missingCopyPath(ownerId) == relativePath);
+    CHECK(relativePath.endsWith(QStringLiteral("survex_simple.svx")));
+    CHECK_FALSE(relativePath.startsWith(QStringLiteral("..")));
+    CHECK_FALSE(relativePath.startsWith(QStringLiteral("/")));
+
+    // Restoring the file behind the app's back is only noticed by a fresh
+    // scan - nothing watches a path that is not there.
+    overwriteFile(copyPath, copyContents);
+    manager->rescanAttachments();
+    REQUIRE(tryWait(kWatcherWaitMs, [&] {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, kInnerPollEventsMs);
+        return manager->missingCopyPath(ownerId).isEmpty();
+    }));
+
+    drainPipelines(fixture.get());
+    CHECK(manager->missingCopyPath(ownerId).isEmpty());
+}
+
+TEST_CASE("replacing an attachment whose copy went missing clears the report",
+          "[Attach][MissingCopy]")
+{
+    auto fixture = makeSavedProject(QStringLiteral("missing-copy-replace"));
+    auto manager = managerOf(fixture.get());
+    const QUuid ownerId = fixture->trip->id();
+    const QString simple = datasetExternalCenterlinePath(QStringLiteral("survex_simple.svx"));
+
+    attachThroughManager(fixture.get(), simple);
+    drainPipelines(fixture.get());
+
+    const QString copyPath = fixture->saveLoad()
+        ->externalCenterlineDir(fixture->trip)
+        .absoluteFilePath(QStringLiteral("survex_simple.svx"));
+    REQUIRE(QFile::remove(copyPath));
+    REQUIRE(tryWait(kWatcherWaitMs, [&] {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, kInnerPollEventsMs);
+        return !manager->missingCopyPath(ownerId).isEmpty();
+    }));
+
+    // The banner's own affordance: pick the file again. Replace copies a
+    // fresh closure into the same attachment dir, so the owner has a file
+    // to read again.
+    const QString nested = datasetExternalCenterlinePath(QStringLiteral("survex_nested.svx"));
+    auto replaceFuture = manager->replaceCenterline(fixture->trip, nested);
+    REQUIRE(AsyncFuture::waitForFinished(replaceFuture, kAttachWaitMs));
+    REQUIRE_FALSE(replaceFuture.result().hasError());
+    drainPipelines(fixture.get());
+
+    CHECK(manager->missingCopyPath(ownerId).isEmpty());
+    CHECK(fixture->trip->externalCenterline().entryFile()
+          == QStringLiteral("survex_nested.svx"));
+}

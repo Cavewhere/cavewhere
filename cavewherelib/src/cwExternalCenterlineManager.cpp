@@ -79,6 +79,18 @@ QString containmentErrorFor(const QStringList& escaping)
         .arg(named);
 }
 
+// How `absolutePath` reads to someone looking at the project. The project
+// copy is the only file the user has now, so it is named the way it sits in
+// the project folder. An empty boundary (no saveLoad, scan-only tests) leaves
+// the file name, which is still the shortest true name for it.
+QString projectRelativePath(const QString& absolutePath, const QString& boundary)
+{
+    if (boundary.isEmpty()) {
+        return QFileInfo(absolutePath).fileName();
+    }
+    return QDir(boundary).relativeFilePath(absolutePath);
+}
+
 // Deterministic presentation order: cave display name, then trip
 // display name (cave-level owners sort ahead of their trips via the
 // empty trip key), with ownerId as a stable tiebreak for duplicates.
@@ -278,6 +290,15 @@ void cwExternalCenterlineManager::recomputeWatchSet()
     });
 }
 
+void cwExternalCenterlineManager::rescanAttachments()
+{
+    // The solve is requested too: a file that appeared (or changed) while
+    // nothing watched it changes what the driver emits, and only the solve
+    // shows that.
+    m_solveOnScanApply = true;
+    recomputeWatchSet();
+}
+
 void cwExternalCenterlineManager::refreshAttachmentDirsFromSaveLoad()
 {
     if (m_saveLoad.isNull() || m_region.isNull()) {
@@ -420,6 +441,13 @@ cwExternalCenterlineManager::ExternalScanResult cwExternalCenterlineManager::sca
                     row.depCount = scan.value().dependencies.size();
                     row.warningCount = scan.value().warnings.size();
                 }
+            } else {
+                // The one file the project reads is gone. Nothing below can
+                // run against it, so this is also the only account the owner
+                // gets of why its stations and errors went quiet.
+                result.missingCopies.insert(
+                    owner.ownerId,
+                    projectRelativePath(projectEntry, owner.dataRootDir));
             }
         }
 
@@ -480,8 +508,18 @@ void cwExternalCenterlineManager::applyScanResult(ExternalScanResult result)
     // fresh names rather than the previous scan's.
     applyHarvestToTrips(result);
 
+    const bool missingCopiesChangedNow = result.missingCopies != m_missingCopies;
+    m_missingCopies = std::move(result.missingCopies);
+
     m_lastScanRows = result.rows;
     m_attachedCenterlinesModel->setRows(std::move(result.rows));
+
+    // Both emissions land after every member swap, so a handler — the trip
+    // panel re-reading missingCopyPath(), the consumer's buildInput —
+    // never sees a half-applied scan.
+    if (missingCopiesChangedNow) {
+        emit missingCopiesChanged();
+    }
 
     if (solveNow) {
         emit solveNeeded();

@@ -179,6 +179,28 @@ public:
         return m_fileOwnsDeclination.value(ownerId, true);
     }
 
+    // Project-relative path of ownerId's in-project centerline copy when
+    // that file is gone from disk; empty while the copy is there. The copy
+    // is the only file the project reads, so its absence is what the trip
+    // panel banners, offering Replace… as the way back. Derived at every
+    // recompute, which is what clears it when the file returns.
+    //
+    // A missing *member* of the closure is left to cavern: the harvest
+    // reads the entry file and names the include it could not open, which
+    // the file-error banner shows. Only the entry file's absence stops
+    // that from happening at all.
+    Q_INVOKABLE QString missingCopyPath(const QUuid& ownerId) const
+    {
+        return m_missingCopies.value(ownerId);
+    }
+
+    // Re-reads every attachment from disk right now — watch set,
+    // declination flags, harvest, and the missing-copy report — and
+    // requests the solve behind the apply. The panel's Reload runs this so
+    // a copy restored (or replaced) behind the app's back is noticed; a
+    // watched edit gets here on its own through the watcher.
+    Q_INVOKABLE void rescanAttachments();
+
     // One row per attached external centerline, rebuilt on every watch-set
     // recompute. Always non-null; owned by this object.
     cwAttachedCenterlinesModel* attachedCenterlinesModel() const { return m_attachedCenterlinesModel; }
@@ -207,6 +229,11 @@ signals:
     // declination flags changed. The consumer runs its solve here — the
     // ordering guarantees buildInput never reads half-applied flags.
     void solveNeeded();
+
+    // Emitted whenever the set of owners whose in-project copy is missing
+    // changes, including the paths it names. QML re-reads
+    // missingCopyPath() here.
+    void missingCopiesChanged();
 
     // Emitted whenever isOwnerBusy(ownerId) flips for ownerId — an
     // attach/replace/detach started or drained.
@@ -267,6 +294,11 @@ private:
         // harvest runs cavern over the entry file and cavern would read
         // the escaping path.
         QHash<QUuid, QString> containmentErrors;
+        // Owners whose in-project entry file was gone when the worker
+        // looked, mapped to the project-relative path of the file that
+        // should be there (the file name alone when no saveLoad gives the
+        // scan a project root).
+        QHash<QUuid, QString> missingCopies;
         QVector<cwAttachedCenterlinesModel::Row> rows;
     };
 
@@ -328,6 +360,11 @@ private:
     // what the file-error banner shows. Rebuilt wholesale on every
     // recompute, so fixing the file clears it.
     QHash<QUuid, QString> m_containmentErrors;
+
+    // Per-owner project-relative path of an in-project copy that is gone
+    // from disk, from the most recent recompute; read via
+    // missingCopyPath(). Rebuilt wholesale, so restoring the file clears it.
+    QHash<QUuid, QString> m_missingCopies;
 
     // Per-owner file-owns-declination flag from the most recent recompute;
     // read via fileOwnsDeclination() and baked into each solve's Input by

@@ -162,6 +162,72 @@ MainWindowTest {
                       "Reload reruns the solve and restamps the attached rows")
         }
 
+        // plans/EXTERNAL_FILE_LIVE_LINK_RETIREMENT.html §7 q1: the copy is
+        // the only file the project reads, so its absence is the state the
+        // panel has to name — and Replace is the way out of it.
+        function test_aMissingProjectCopyBannersItselfAndOffersReplace() {
+            const fixture = attachAndBind("trip-panel-missing-copy")
+            tryVerify(() => RootData.linePlotManager.lastSolveStationCount > 0,
+                      10000, "the attach-chained solve settles first")
+            RootData.futureManagerModel.waitForFinished()
+
+            const banner = findChild(panelId, "missingCenterlineCopyBanner")
+            verify(banner !== null, "missingCenterlineCopyBanner must exist")
+            verify(!banner.visible, "an attachment whose copy is on disk banners nothing")
+
+            const copyPath = TestHelper.externalCenterlineCopyPath(
+                RootData.project, rootId.trip, "survex_simple.svx")
+            verify(copyPath.length > 0, "the attachment dir must resolve")
+            const copyUrl = TestHelper.toLocalUrl(copyPath)
+            verify(TestHelper.fileExists(copyUrl),
+                   "the attach copied the file into the project")
+
+            // Deleting the copy fires the watcher, which recomputes.
+            TestHelper.removeFile(copyUrl)
+            tryVerify(() => banner.visible, 10000,
+                      "deleting the in-project copy banners the trip")
+
+            // Named by its project-relative path: the copy is the file the
+            // user has now, and the absolute one says nothing they can act on.
+            verify(banner.missingPath.length > 0, "the banner names a file")
+            verify(banner.missingPath.indexOf("/") !== 0,
+                   "the path is project-relative; got: " + banner.missingPath)
+            verify(banner.missingPath.indexOf("survex_simple.svx") >= 0,
+                   "the path names the missing file; got: " + banner.missingPath)
+            const detail = findChild(banner, "missingCopyDetail")
+            verify(detail !== null, "missingCopyDetail must exist")
+            verify(detail.text.indexOf(banner.missingPath) >= 0,
+                   "the banner text carries the path")
+
+            // The affordance the banner exists for opens the same dialog the
+            // actions row does.
+            const replaceButton = findChild(banner, "missingCopyReplaceButton")
+            verify(replaceButton !== null, "missingCopyReplaceButton must exist")
+            verify(findChild(panelId, "replaceCenterlineDialog") === null,
+                   "the panel defers the dialog until Replace is clicked")
+            waitForRendering(panelId)
+            mouseClick(replaceButton)
+            const dialog = findChild(panelId, "replaceCenterlineDialog")
+            verify(dialog !== null, "the banner's Replace opens the replace dialog")
+
+            // Modal — it has to be off the screen before anything else in the
+            // panel is clickable again, and the panel drops it once it is.
+            const dialogPopup = findChild(dialog, "replaceDialog")
+            verify(dialogPopup !== null, "replaceDialog must exist")
+            dialogPopup.close()
+            tryVerify(() => findChild(panelId, "replaceCenterlineDialog") === null,
+                      5000, "closing the dialog frees it")
+
+            // Putting the file back clears the banner on the next scan, which
+            // is what Reload runs.
+            verify(TestHelper.copyFile(fixture.source, copyPath),
+                   "the fixture copies back into the project")
+            const reloadButton = findChild(panelId, "reloadButton")
+            mouseClick(reloadButton)
+            tryVerify(() => !banner.visible, 10000,
+                      "the restored copy clears the banner")
+        }
+
         function test_viewCavernOutputNavigates() {
             attachAndBind("trip-panel-navigate")
 

@@ -26,6 +26,10 @@ QQ.Item {
 
     property Trip trip: null
 
+    // The dialog is off the screen again — succeeded, canceled, or dismissed.
+    // Whoever built it can drop it here.
+    signal closed()
+
     function open() {
         // The breadcrumb only chooses where Browse starts. The field
         // stays empty: the replacement is a different file than the one
@@ -141,5 +145,7 @@ QQ.Item {
                 }
             }
         }
+
+        onClosed: root.closed()
     }
 }

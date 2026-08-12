@@ -28,6 +28,7 @@
 #include "cwLinePlotManager.h"
 #include "cwErrorListModel.h"
 #include "cwRootData.h"
+#include "cwSaveLoad.h"
 #include "GitRepository.h"
 #include "Account.h"
 #include "cwGitHubCredentials.h"
@@ -402,6 +403,16 @@ int TestHelper::projectModifiedFileCount(cwProject* project) const
 
     project->repository()->checkStatus();
     return project->repository()->modifiedFileCount();
+}
+
+QString TestHelper::externalCenterlineCopyPath(cwProject* project,
+                                               cwTrip* trip,
+                                               const QString& fileName) const
+{
+    if (project == nullptr || project->saveLoad() == nullptr || trip == nullptr) {
+        return QString();
+    }
+    return project->saveLoad()->externalCenterlineDir(trip).absoluteFilePath(fileName);
 }
 
 void TestHelper::waitForProjectSaveToFinish(cwProject* project) const

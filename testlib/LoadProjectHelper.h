@@ -256,6 +256,14 @@ public:
     Q_INVOKABLE QString projectHeadCommitOid(cwProject* project) const;
     Q_INVOKABLE QString projectHeadCommitMessage(cwProject* project) const;
     Q_INVOKABLE int projectModifiedFileCount(cwProject* project) const;
+
+    // Absolute path of `fileName` inside `trip`'s external-centerline
+    // attachment directory. The directory is derived from the project's
+    // data root and the owner's sanitized name, which QML cannot compute —
+    // tests that need to touch an in-project copy on disk ask for it here.
+    Q_INVOKABLE QString externalCenterlineCopyPath(cwProject* project,
+                                                   cwTrip* trip,
+                                                   const QString& fileName) const;
     Q_INVOKABLE void waitForProjectSaveToFinish(cwProject* project) const;
     Q_INVOKABLE void waitForFutureManagerToFinish(cwFutureManagerModel* model) const;
     Q_INVOKABLE QString checkoutProjectRef(cwProject* project,

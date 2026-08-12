@@ -523,12 +523,16 @@ return srcInfo.lastModified() &lt;= dstInfo.lastModified();</code></pre>
 <ol>
   <li>
     <strong>What happens when the in-project copy itself goes missing?</strong>
-    <code>missingSourceOwners</code> covered a missing <em>source</em> and is now
-    deleted; nothing covers a missing <em>copy</em>. With the copy the only file,
-    that becomes
-    the state worth surfacing, and it is the one case where a
-    &ldquo;re-attach&rdquo; prompt is genuinely the right answer. Probably one
-    small addition rather than a repurposing of the banner being deleted.
+    <span class="pill done">RESOLVED</span> The scan now reports the owner's
+    missing entry file (<code>ExternalCenterlineManager.missingCopyPath</code>,
+    notified by <code>missingCopiesChanged</code>), and the trip panel banners it
+    by project-relative path with a <em>Replace&hellip;</em> button; the report
+    clears on the next recompute &mdash; which <em>Reload now</em> runs through
+    the new <code>rescanAttachments()</code> &mdash; or when a Replace lands.
+    <span class="dim">History: <code>missingSourceOwners</code> covered a missing
+    <em>source</em> and was deleted with the live link; a missing copy was the
+    one state left worth surfacing, and the one case where a
+    &ldquo;re-attach&rdquo; prompt is genuinely the right answer.</span>
   </li>
   <li>
     <strong>Should Replace warn when the project copy has local changes?</strong>

@@ -36,10 +36,25 @@ QQ.Item {
     // whenever the declination flags change.
     property bool fileOwnsDeclination: true
 
+    // Project-relative path of this trip's in-project copy while that file
+    // is gone from disk; empty otherwise. missingCopiesChanged drives the
+    // refresh, the same imperative shape as ownerBusy.
+    property string missingCopyPath: ""
+
     signal stationClicked(cwStationHandle stationHandle)
 
     function updateOwnerBusy() {
         ownerBusy = trip !== null && externalCenterlineManager.isOwnerBusy(trip.id)
+    }
+
+    function updateMissingCopyPath() {
+        missingCopyPath = trip === null
+                ? "" : externalCenterlineManager.missingCopyPath(trip.id)
+    }
+
+    function openReplaceDialog() {
+        replaceDialogLoaderId.active = true
+        replaceDialogLoaderId.item.open()
     }
 
     function updateFileOwnsDeclination() {
@@ -50,11 +65,13 @@ QQ.Item {
     onTripChanged: {
         updateOwnerBusy()
         updateFileOwnsDeclination()
+        updateMissingCopyPath()
     }
 
     QQ.Component.onCompleted: {
         updateOwnerBusy()
         updateFileOwnsDeclination()
+        updateMissingCopyPath()
     }
 
     QQ.Connections {
@@ -66,6 +83,10 @@ QQ.Item {
 
         function onSolveNeeded() {
             root.updateFileOwnsDeclination()
+        }
+
+        function onMissingCopiesChanged() {
+            root.updateMissingCopyPath()
         }
     }
 
@@ -100,6 +121,13 @@ QQ.Item {
         anchors.fill: parent
         anchors.margins: Theme.sectionSpacing
         spacing: Theme.sectionSpacing
+
+        MissingCenterlineCopyBanner {
+            id: missingCopyBannerId
+            Layout.fillWidth: true
+            missingPath: root.missingCopyPath
+            onReplaceRequested: root.openReplaceDialog()
+        }
 
         ExternalCenterlineFileErrorBanner {
             id: fileErrorBannerId
@@ -153,7 +181,11 @@ QQ.Item {
                 text: qsTr("Reload now")
                 visible: root.isAttached
                 enabled: !root.ownerBusy
-                onClicked: root.linePlotManager.rerunSurvex()
+                // Re-reads the attached files themselves, not just the
+                // solve: a copy restored or edited while nothing watched it
+                // is only noticed by a fresh scan, and the scan's apply asks
+                // for the solve.
+                onClicked: root.externalCenterlineManager.rescanAttachments()
             }
 
             QC.Button {
@@ -162,10 +194,7 @@ QQ.Item {
                 text: qsTr("Replace…")
                 visible: root.isAttached
                 enabled: !root.ownerBusy
-                onClicked: {
-                    replaceDialogLoaderId.active = true
-                    replaceDialogLoaderId.item.open()
-                }
+                onClicked: root.openReplaceDialog()
             }
 
             QQ.Item {
@@ -190,6 +219,11 @@ QQ.Item {
         sourceComponent: QQ.Component {
             ReplaceCenterlineDialog {
                 trip: root.trip
+
+                // Freed once it is off the screen, for the same reason it is
+                // built late. Deferred out of the close handler so the popup
+                // is not destroyed from inside its own emission.
+                onClosed: Qt.callLater(() => replaceDialogLoaderId.active = false)
             }
         }
     }
