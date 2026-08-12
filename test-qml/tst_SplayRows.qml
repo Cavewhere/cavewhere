@@ -477,6 +477,18 @@ MainWindowTest {
                                             SurveyEditorModel.StationSplayCountRole)
         }
 
+        // A splay row's menu waits to be built until a right click or the row's
+        // ⋯ asks for it, so a test that goes straight to a menu item asks for
+        // it here first.
+        function builtRowMenu(row) {
+            const rowMenu = findChild(row, "splayRowMenu")
+            verify(rowMenu !== null, "a splay row should carry a menu")
+            rowMenu.active = true
+            tryVerify(() => rowMenu.menu !== null, 5000,
+                      "asking for the row's menu should build it")
+            return rowMenu
+        }
+
         // Triggering a menu item runs what a click on it runs — popup() under
         // offscreen rendering is what's unreliable, not the handler.
         function menuItem(parentItem, itemName) {
@@ -499,9 +511,7 @@ MainWindowTest {
             verify(findChild(row, "splayRowMenuButton") !== null,
                    "a splay row should offer a ⋯ that opens its menu")
 
-            const menu = findChild(row, "splayRowMenu")
-            verify(menu !== null, "a splay row should carry a menu")
-            menuItem(menu, "removeSplayMenuItem").triggered()
+            menuItem(builtRowMenu(row), "removeSplayMenuItem").triggered()
 
             tryCompare(context.view, "count", openRows - 1, 5000,
                        "the removed splay should take its row with it")
@@ -691,9 +701,7 @@ MainWindowTest {
             const firstSplayRow = openCluster(context, 0)
 
             const row = surveyTableId.rowItem(this, context, firstSplayRow)
-            const menu = findChild(row, "splayRowMenu")
-            verify(menu !== null, "a splay row should carry a menu")
-            menuItem(menu, "moveSplayMenuItem").triggered()
+            menuItem(builtRowMenu(row), "moveSplayMenuItem").triggered()
 
             tryVerify(() => context.editorModel.splayMoveActive, 5000,
                       "one splay should be armed to move")
@@ -714,8 +722,7 @@ MainWindowTest {
             const firstSplayRow = openCluster(context, 0)
 
             const row = surveyTableId.rowItem(this, context, firstSplayRow)
-            const rowMenu = findChild(row, "splayRowMenu")
-            verify(rowMenu !== null, "a splay row should carry a menu")
+            const rowMenu = builtRowMenu(row)
             menuItem(rowMenu, "moveSplayMenuItem").triggered()
 
             tryVerify(() => context.editorModel.splayMoveActive, 5000,
@@ -740,8 +747,7 @@ MainWindowTest {
             const firstSplayRow = openCluster(context, 0)
 
             const row = surveyTableId.rowItem(this, context, firstSplayRow)
-            const rowMenu = findChild(row, "splayRowMenu")
-            verify(rowMenu !== null, "a splay row should carry a menu")
+            const rowMenu = builtRowMenu(row)
             const menuButton = findChild(row, "splayRowMenuButton")
             verify(menuButton !== null, "a splay row should carry a menu button")
             menuItem(rowMenu, "moveSplayMenuItem").triggered()
@@ -768,16 +774,39 @@ MainWindowTest {
             const row = surveyTableId.rowItem(this, context, firstSplayRow)
             const rowMenu = findChild(row, "splayRowMenu")
             verify(rowMenu !== null, "a splay row should carry a menu")
-            verify(!rowMenu.menu.opened, "the menu should start shut")
+
+            // Thirty splays are thirty rows the view builds, so none of them
+            // builds its menu until something asks for it
+            verify(rowMenu.menu === null, "the menu should start unbuilt")
             const menuButton = findChild(row, "splayRowMenuButton")
             verify(menuButton !== null, "a splay row should carry a menu button")
 
             mouseClick(menuButton)
 
-            tryVerify(() => rowMenu.menu.opened, 5000,
+            tryVerify(() => rowMenu.menu !== null && rowMenu.menu.opened, 5000,
                       "clicking the row's ⋯ should pop the row's menu")
             compare(splayCount(context, 0), a4Splays.length,
                     "opening the menu should leave the cluster alone")
+
+            rowMenu.menu.close()
+            tryVerify(() => !rowMenu.menu.opened, 5000)
+        }
+
+        // The ⋯ is the visible way in, but the row answers a right click the
+        // same way, and that click is what builds the menu in the first place.
+        function test_rightClickingTheRowPopsTheRowsMenu() {
+            const context = gotoSurveyTable()
+            const firstSplayRow = openCluster(context, 0)
+
+            const row = surveyTableId.rowItem(this, context, firstSplayRow)
+            const rowMenu = findChild(row, "splayRowMenu")
+            verify(rowMenu !== null, "a splay row should carry a menu")
+            verify(rowMenu.menu === null, "the menu should start unbuilt")
+
+            mouseClick(row, row.width / 2, row.height / 2, Qt.RightButton)
+
+            tryVerify(() => findChild(row, "splayRowMenuRoot") !== null, 5000,
+                      "right clicking a splay row should pop the row's menu")
 
             rowMenu.menu.close()
             tryVerify(() => !rowMenu.menu.opened, 5000)

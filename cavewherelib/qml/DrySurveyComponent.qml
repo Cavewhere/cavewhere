@@ -335,12 +335,33 @@ Item {
                 active: !splayRowId.blankRow
 
                 sourceComponent: Item {
+                    //Filling the row gives the menu somewhere to land on a
+                    //platform with no pointer to open under — Qt centers a
+                    //menu over its parent item there, and the row is the
+                    //parent that makes sense
                     SplayRowMenu {
                         id: splayRowMenuId
                         anchors.fill: parent
 
                         model: itemId.model
                         rowIndex: itemId.rowIndex
+                    }
+
+                    //The row's own right click, which used to belong to the
+                    //menu itself. It stays out here so the menu can wait to be
+                    //built until a click like this one asks for it
+                    TapHandler {
+                        acceptedButtons: Qt.RightButton
+                        acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+
+                        onTapped: splayRowMenuId.popup()
+                    }
+
+                    //Touch only, so a left click stays with the cells under it
+                    TapHandler {
+                        acceptedDevices: PointerDevice.TouchScreen
+
+                        onLongPressed: splayRowMenuId.popup()
                     }
 
                     SplayMenuButton {
@@ -359,7 +380,7 @@ Item {
                                 itemId.model.cancelSplayMove()
                                 return
                             }
-                            splayRowMenuId.menu.popup()
+                            splayRowMenuId.popup()
                         }
                     }
                 }
