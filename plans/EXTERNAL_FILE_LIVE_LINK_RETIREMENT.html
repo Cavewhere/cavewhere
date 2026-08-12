@@ -96,8 +96,8 @@
   plan has pending copies" &mdash; in the freshness probe
   <code>cwExternalCenterlineManager</code> ran per owner, deleted in commit 2
   &mdash; and a copy is planned whenever <code>destinationMatchesSource</code> is
-  false (<code>cwExternalCenterlineSync.cpp</code>, which survives because
-  attach and replace still need it):
+  false (<code>cwExternalCenterlineSync.cpp</code>, which survives as the test
+  attach runs after its copies to verify they landed):
 </p>
 
 <pre><code>if (!dstInfo.exists())                    return false;
@@ -298,10 +298,15 @@ return srcInfo.lastModified() &lt;= dstInfo.lastModified();</code></pre>
   </tr>
   <tr>
     <td><code>cwExternalCenterlineSync.cpp</code></td>
-    <td><code>destinationMatchesSource</code> keeps its job inside
-        attach/replace, but stops being the definition of staleness. The GC in
-        <code>computePlan</code> now only ever runs against a closure the user
-        just picked, which is the context it was safe in all along.</td>
+    <td><code>destinationMatchesSource</code> stops being the definition of
+        staleness, and stops gating attach and replace: those run
+        <code>computePlan</code> under <code>CopyPolicy::Overwrite</code>, so
+        the picked file's bytes always land. The predicate keeps one job — the
+        verification plan attach computes after its copies, where
+        &ldquo;no copy left to make&rdquo; means every destination is present
+        and current. The GC in <code>computePlan</code> now only ever runs
+        against a closure the user just picked, which is the context it was
+        safe in all along.</td>
   </tr>
   <tr>
     <td><code>ExternalCenterlineMissingSourceBanner.qml</code></td>
@@ -536,14 +541,24 @@ return srcInfo.lastModified() &lt;= dstInfo.lastModified();</code></pre>
   </li>
   <li>
     <strong>Should Replace warn when the project copy has local changes?</strong>
-    Without a baseline we cannot detect this, which is the point of the plan. The
-    honest answer is a plain confirmation on Replace &mdash; &ldquo;this replaces
-    the attached files&rdquo; &mdash; rather than a conditional warning we cannot
-    compute correctly.
+    <span class="pill done">RESOLVED</span> No &mdash; without a baseline we
+    cannot detect local changes, so <code>ReplaceCenterlineDialog</code> (itself
+    the confirmation step) carries a plain statement
+    (<code>replaceExplainerText</code>): replacing swaps the files copied into
+    the project for the picked file and everything it includes, the current
+    copies including any edits are replaced, and files the new one leaves out
+    are removed.
+    <span class="dim">The statement is only true because attach and replace
+    reconcile under <code>CopyPolicy::Overwrite</code>: the picked file's
+    version of every file in its closure is copied over whatever is there,
+    whatever its size and mtime. Under the older up-to-date skip, an edit to
+    the project copy that kept the byte size looked current and survived the
+    swap.</span>
   </li>
   <li>
     <strong>Release note wording</strong> for users whose Update button
-    disappears.
+    disappears. <span class="pill done">MOOT</span> No release ever shipped the
+    Update button, so there is no user to write the note for.
   </li>
 </ol>
 

@@ -52,6 +52,24 @@ class cwSaveLoad;
 namespace cwExternalCenterlineSync {
 
 /**
+ * What a reconcile does with a destination file that already looks
+ * like its source.
+ *
+ * - SkipUpToDate: keep a destination of the same size whose mtime is
+ *   the source's or newer. This is the cheap, idempotent pass.
+ * - Overwrite: copy every dependency, so the source's bytes win.
+ *   Attach and Replace use this: the user picked a file and expects
+ *   its contents in the project, and an edit to the project's copy
+ *   that keeps the byte size (a "5.2" turned into "5.3") reads as
+ *   up to date under the SkipUpToDate test, which would silently
+ *   keep the edit across the swap.
+ */
+enum class CopyPolicy {
+    SkipUpToDate,
+    Overwrite
+};
+
+/**
  * The set of operations reconcile would submit to cwSaveLoad for a
  * given (ScanResult, attachmentDir) pair. Returned by computePlan
  * and consumed by reconcile.
@@ -96,10 +114,12 @@ struct ReconcilePlan {
  * attachmentDir (cross-format includes pointing at siblings of
  * the entry's dir) are dropped from the plan with a warning.
  *
- * Existing files inside attachmentDir that match a source by size
- * and have a same-or-newer mtime are kept (no copy enqueued).
+ * Under CopyPolicy::SkipUpToDate, existing files inside
+ * attachmentDir that match a source by size and have a
+ * same-or-newer mtime are kept (no copy enqueued); under
+ * CopyPolicy::Overwrite every dependency is planned as a copy.
  * Files inside attachmentDir not part of the closure are slated
- * for removal.
+ * for removal either way.
  *
  * computePlan does not mutate the filesystem. It returns an empty
  * plan when scan.dependencies is empty (the caller's scan failed
@@ -107,12 +127,14 @@ struct ReconcilePlan {
  */
 CAVEWHERE_LIB_EXPORT ReconcilePlan computePlan(
     const cwExternalCenterlineScanner::ScanResult& scan,
-    const QString& attachmentDir);
+    const QString& attachmentDir,
+    CopyPolicy copyPolicy = CopyPolicy::SkipUpToDate);
 
 /**
  * Runs the reconcile plan through the cwSaveLoad job queue.
  *
- * Enqueues one copyIfNewer job per plan.copies entry and one
+ * Enqueues one copy job per plan.copies entry (an overwriting copy
+ * under CopyPolicy::Overwrite, an if-newer copy otherwise) and one
  * removeFile job per plan.removes entry; returns a future that
  * completes when the project's queued jobs drain (matching the
  * existing saveFlush primitive). Temporary / unsaved projects are
@@ -126,7 +148,8 @@ CAVEWHERE_LIB_EXPORT ReconcilePlan computePlan(
 CAVEWHERE_LIB_EXPORT QFuture<Monad::ResultBase> reconcile(
     cwSaveLoad* saveLoad,
     const cwExternalCenterlineScanner::ScanResult& scan,
-    const QString& attachmentDir);
+    const QString& attachmentDir,
+    CopyPolicy copyPolicy = CopyPolicy::SkipUpToDate);
 
 /**
  * True when `path` resolves at or inside `boundaryDir`.

@@ -187,6 +187,29 @@ MainWindowTest {
             tryVerify(() => !pathField.visible, 5000, "the dialog closes on cancel")
         }
 
+        // plans/EXTERNAL_FILE_LIVE_LINK_RETIREMENT.html §7 question 2: the
+        // dialog states plainly what Replace does to the in-project copies,
+        // because no baseline exists to warn about local edits specifically.
+        function test_replaceDialogStatesWhatItReplaces() {
+            const fixture = attachFixtureTrip("panel-replace-statement")
+            rootId.trip = fixture.trip
+
+            replaceDialogId.open()
+
+            const explainer = findChild(replaceDialogId, "replaceExplainerText")
+            verify(explainer !== null, "replaceExplainerText must exist")
+            tryVerify(() => explainer.visible, 5000, "the statement is on screen")
+            verify(explainer.text.length > 0, "the statement carries copy")
+            verify(explainer.text.indexOf("including any edits made to them") >= 0,
+                   "the statement says the in-project copies are replaced; got: "
+                   + explainer.text)
+
+            const cancelButton = findChild(replaceDialogId, "replaceCancelButton")
+            verify(cancelButton !== null, "replaceCancelButton must exist")
+            cancelButton.clicked()
+            tryVerify(() => !explainer.visible, 5000, "the dialog closes on cancel")
+        }
+
         function test_solveStatusDotColorsAndLink() {
             solveStatusId.hasError = false
             solveStatusId.warningCount = 0

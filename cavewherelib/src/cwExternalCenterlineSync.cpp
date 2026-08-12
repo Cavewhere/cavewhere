@@ -127,7 +127,8 @@ namespace cwExternalCenterlineSync {
 
 ReconcilePlan computePlan(
     const cwExternalCenterlineScanner::ScanResult& scan,
-    const QString& attachmentDir)
+    const QString& attachmentDir,
+    CopyPolicy copyPolicy)
 {
     ReconcilePlan plan;
 
@@ -159,7 +160,8 @@ ReconcilePlan computePlan(
 
         const QFileInfo srcInfo(source);
         const QFileInfo dstInfo(dest);
-        if (destinationMatchesSource(srcInfo, dstInfo)) {
+        if (copyPolicy == CopyPolicy::SkipUpToDate
+            && destinationMatchesSource(srcInfo, dstInfo)) {
             continue;
         }
         plan.copies.emplace_back(source, dest);
@@ -180,17 +182,22 @@ ReconcilePlan computePlan(
 QFuture<Monad::ResultBase> reconcile(
     cwSaveLoad* saveLoad,
     const cwExternalCenterlineScanner::ScanResult& scan,
-    const QString& attachmentDir)
+    const QString& attachmentDir,
+    CopyPolicy copyPolicy)
 {
     if (!saveLoad) {
         return AsyncFuture::completed(
             Monad::ResultBase(QStringLiteral("reconcile: cwSaveLoad is null")));
     }
 
-    const ReconcilePlan plan = computePlan(scan, attachmentDir);
+    const ReconcilePlan plan = computePlan(scan, attachmentDir, copyPolicy);
 
     for (const auto& [source, destination] : plan.copies) {
-        saveLoad->enqueueExternalCenterlineCopyIfNewer(source, destination);
+        if (copyPolicy == CopyPolicy::Overwrite) {
+            saveLoad->enqueueExternalCenterlineCopyOverwriting(source, destination);
+        } else {
+            saveLoad->enqueueExternalCenterlineCopyIfNewer(source, destination);
+        }
     }
     for (const QString& dead : plan.removes) {
         saveLoad->enqueueExternalCenterlineRemoveFile(dead);

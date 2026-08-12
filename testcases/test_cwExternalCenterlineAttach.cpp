@@ -98,6 +98,33 @@ QString datasetExternalCenterlinePath(const QString& fileName)
         QStringLiteral("external-centerlines/%1").arg(fileName));
 }
 
+// Wide margin so a hand-planted edit reads as newer than the source
+// whatever the filesystem's mtime granularity.
+constexpr int kEditIsNewerSeconds = 3600;
+
+QByteArray readWholeFile(const QString& path)
+{
+    QFile file(path);
+    REQUIRE(file.open(QFile::ReadOnly));
+    return file.readAll();
+}
+
+// Writes `content` to `path`, then forces lastModified to `mtime`
+// (QFile::setFileTime, Qt 6).
+void writeFileWithMtime(const QString& path, const QByteArray& content,
+                        const QDateTime& mtime)
+{
+    REQUIRE(QDir().mkpath(QFileInfo(path).absolutePath()));
+    {
+        QFile file(path);
+        REQUIRE(file.open(QFile::WriteOnly));
+        file.write(content);
+    }
+    QFile file(path);
+    REQUIRE(file.open(QFile::ReadWrite));
+    REQUIRE(file.setFileTime(mtime, QFileDevice::FileModificationTime));
+}
+
 Monad::Result<cwExternalCenterlineAttach::AttachReport> runAttach(
     SavedProjectFixture* fixture, const QString& sourceFile)
 {
@@ -890,6 +917,42 @@ TEST_CASE("replace swaps the closure, GCs the dropped deps, and re-solves",
     CHECK(report.success());
     CHECK(report.entryFile() == QStringLiteral("survex_simple.svx"));
     CHECK(report.ownerId() == ownerId);
+}
+
+TEST_CASE("replace overwrites an edit to the project copy that kept its size",
+          "[Attach][Replace]")
+{
+    // ReplaceCenterlineDialog promises the current copies, edits included,
+    // are replaced. An edit that keeps the byte count and moves the mtime
+    // forward is exactly the shape the reconcile's up-to-date test reads as
+    // already current, so it is the case that promise stands or falls on.
+    auto fixture = makeSavedProject(QStringLiteral("replace-overwrites-edit"));
+    auto manager = managerOf(fixture.get());
+
+    const QString simple = datasetExternalCenterlinePath(QStringLiteral("survex_simple.svx"));
+    attachThroughManager(fixture.get(), simple);
+    drainPipelines(fixture.get());
+
+    const QDir attachmentDir = fixture->saveLoad()->externalCenterlineDir(fixture->trip);
+    const QString copyPath =
+        attachmentDir.absoluteFilePath(QStringLiteral("survex_simple.svx"));
+
+    const QByteArray sourceBytes = readWholeFile(simple);
+    QByteArray editedBytes = sourceBytes;
+    editedBytes.replace(QByteArray("A2 A3 8.5"), QByteArray("A2 A3 9.5"));
+    REQUIRE(editedBytes.size() == sourceBytes.size());
+    REQUIRE(editedBytes != sourceBytes);
+
+    writeFileWithMtime(copyPath, editedBytes,
+                       QDateTime::currentDateTimeUtc().addSecs(kEditIsNewerSeconds));
+    REQUIRE(readWholeFile(copyPath) == editedBytes);
+
+    auto replaceFuture = manager->replaceCenterline(fixture->trip, simple);
+    REQUIRE(AsyncFuture::waitForFinished(replaceFuture, kAttachWaitMs));
+    REQUIRE_FALSE(replaceFuture.result().hasError());
+    drainPipelines(fixture.get());
+
+    CHECK(readWholeFile(copyPath) == sourceBytes);
 }
 
 TEST_CASE("replace refuses a trip with nothing attached", "[Attach][Replace]")

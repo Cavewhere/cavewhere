@@ -185,8 +185,14 @@ QFuture<Monad::Result<AttachReport>> attach(cwTrip* trip,
 
         const QString attachmentDir = saveLoad->externalCenterlineDir(trip).absolutePath();
 
-        auto reconcileFuture =
-            cwExternalCenterlineSync::reconcile(saveLoad, scan, attachmentDir);
+        // Overwrite: the user picked this file, so its bytes are the ones
+        // that belong in the project. Replace runs through here too, where
+        // the destination may hold an edit the user made to the project's
+        // copy — a same-size edit passes the up-to-date test and would
+        // otherwise survive the swap the user just confirmed.
+        auto reconcileFuture = cwExternalCenterlineSync::reconcile(
+            saveLoad, scan, attachmentDir,
+            cwExternalCenterlineSync::CopyPolicy::Overwrite);
 
         // Cancellation is deliberately not honored past this point -
         // the filesystem mutation has started, so the attach runs to

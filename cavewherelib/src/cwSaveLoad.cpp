@@ -3958,6 +3958,19 @@ void cwSaveLoad::enqueueOrphanDirectoryCleanup(const QString& orphanDirRelPath)
 void cwSaveLoad::enqueueExternalCenterlineCopyIfNewer(const QString& sourcePath,
                                                       const QString& destinationPath)
 {
+    enqueueExternalCenterlineCopy(sourcePath, destinationPath, true);
+}
+
+void cwSaveLoad::enqueueExternalCenterlineCopyOverwriting(const QString& sourcePath,
+                                                          const QString& destinationPath)
+{
+    enqueueExternalCenterlineCopy(sourcePath, destinationPath, false);
+}
+
+void cwSaveLoad::enqueueExternalCenterlineCopy(const QString& sourcePath,
+                                               const QString& destinationPath,
+                                               bool keepMatchingDestination)
+{
     // Deliberately not gated on d->isTemporary, unlike the project-rename
     // and cleanup jobs above. A temporary project already has a real root
     // dir, and Save As moves or re-zips that whole tree, so an attachment
@@ -3970,8 +3983,9 @@ void cwSaveLoad::enqueueExternalCenterlineCopyIfNewer(const QString& sourcePath,
     // (an attach or a Replace landing mid-session), so flip
     // cwProject::modified() via localMutationOccurred — otherwise the
     // copy is silently lost in a bundled .cw on quit-without-save.
-    // reconcile()'s planner skips up-to-date destinations, so a no-op
-    // reconcile never reaches this and the bit stays untouched.
+    // Under CopyPolicy::SkipUpToDate reconcile()'s planner skips
+    // up-to-date destinations, so a no-op reconcile never reaches this
+    // and the bit stays untouched.
     if (!d->suppressLocalMutationTracking) {
         emit localMutationOccurred();
     }
@@ -3984,7 +3998,8 @@ void cwSaveLoad::enqueueExternalCenterlineCopyIfNewer(const QString& sourcePath,
                 nullptr,
                 cwSaveLoadPrivate::Job::Kind::File,
                 cwSaveLoadPrivate::Job::Action::Custom,
-                [sourcePath, destinationPath, wroteDestination]() -> Monad::ResultBase {
+                [sourcePath, destinationPath, keepMatchingDestination,
+                 wroteDestination]() -> Monad::ResultBase {
         if (sourcePath == destinationPath) {
             // Identical paths is almost certainly a caller bug, but removing
             // and re-copying the same file would silently delete it. Treat
@@ -3995,7 +4010,7 @@ void cwSaveLoad::enqueueExternalCenterlineCopyIfNewer(const QString& sourcePath,
         const QFileInfo srcInfo(sourcePath);
         if (!srcInfo.exists() || !srcInfo.isFile()) {
             return Monad::ResultBase(
-                        QStringLiteral("copyIfNewer: missing source: %1")
+                        QStringLiteral("externalCenterlineCopy: missing source: %1")
                         .arg(sourcePath));
         }
 
@@ -4003,12 +4018,12 @@ void cwSaveLoad::enqueueExternalCenterlineCopyIfNewer(const QString& sourcePath,
         if (dstInfo.exists()) {
             const bool sameSize = srcInfo.size() == dstInfo.size();
             const bool srcOlderOrEqual = srcInfo.lastModified() <= dstInfo.lastModified();
-            if (sameSize && srcOlderOrEqual) {
+            if (keepMatchingDestination && sameSize && srcOlderOrEqual) {
                 return Monad::ResultBase();
             }
             if (!QFile::remove(destinationPath)) {
                 return Monad::ResultBase(
-                            QStringLiteral("copyIfNewer: failed to remove stale destination: %1")
+                            QStringLiteral("externalCenterlineCopy: failed to remove stale destination: %1")
                             .arg(destinationPath));
             }
             // The delete is itself a write the watcher sees, even if the
@@ -4023,7 +4038,7 @@ void cwSaveLoad::enqueueExternalCenterlineCopyIfNewer(const QString& sourcePath,
 
         if (!QFile::copy(sourcePath, destinationPath)) {
             return Monad::ResultBase(
-                        QStringLiteral("copyIfNewer: failed to copy %1 -> %2")
+                        QStringLiteral("externalCenterlineCopy: failed to copy %1 -> %2")
                         .arg(sourcePath, destinationPath));
         }
         *wroteDestination = true;

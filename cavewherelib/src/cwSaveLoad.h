@@ -327,8 +327,17 @@ public:
     // as Action::Custom because Action::Copy fails when the destination
     // already exists. Identical source and destination is treated as
     // a no-op.
+    //
+    // enqueueExternalCenterlineCopyOverwriting writes the source's bytes
+    // over whatever is at `destinationPath`, whatever its size and mtime.
+    // Replace uses it so the picked file's version wins even over an edit
+    // the user made to the project's copy — an edit that keeps the byte
+    // size looks up to date to the IfNewer test, which would silently
+    // keep it across a swap the user just confirmed.
     void enqueueExternalCenterlineCopyIfNewer(const QString& sourcePath,
                                               const QString& destinationPath);
+    void enqueueExternalCenterlineCopyOverwriting(const QString& sourcePath,
+                                                  const QString& destinationPath);
     void enqueueExternalCenterlineRemoveFile(const QString& path);
     void enqueueExternalCenterlineRemoveTree(const QString& path);
 
@@ -412,6 +421,14 @@ signals:
     void saveBlockedByVersion(const QString& entityDescription); //!< Emitted when a save is skipped because the project has newer-version entities
 
 private:
+    // Shared body of the two external-centerline copy entry points.
+    // `keepMatchingDestination` selects the IfNewer test: when true a
+    // destination of the same size and a same-or-newer mtime is left
+    // alone, when false the copy always lands.
+    void enqueueExternalCenterlineCopy(const QString& sourcePath,
+                                       const QString& destinationPath,
+                                       bool keepMatchingDestination);
+
     void initializeRepositoryForCurrentFile();
     // If the current projectFileName no longer exists on disk (e.g. after a git rename),
     // scan repoPath for a single .cwproj and update the in-memory filename to match.

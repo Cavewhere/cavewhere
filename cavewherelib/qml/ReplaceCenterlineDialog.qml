@@ -91,9 +91,10 @@ QQ.Item {
                 Layout.fillWidth: true
                 Layout.topMargin: Theme.sectionSpacing
                 wrapMode: QC.Label.WordWrap
-                text: qsTr("This replaces the attached files for this trip. The "
-                         + "project's current copy, and any file it includes that "
-                         + "the new one does not, are removed.")
+                text: qsTr("Replacing swaps the files copied into this project "
+                         + "for the picked file and everything it includes. The "
+                         + "current copies, including any edits made to them, are "
+                         + "replaced; files the new one leaves out are removed.")
             }
 
             RowLayout {

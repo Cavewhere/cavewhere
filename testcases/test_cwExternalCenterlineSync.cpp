@@ -201,6 +201,77 @@ TEST_CASE("computePlan is a no-op when sources match destinations by size+mtime"
     CHECK(plan.warnings.isEmpty());
 }
 
+TEST_CASE("computePlan under Overwrite copies destinations that already match",
+          "[Sync][Reconcile]")
+{
+    // Attach and replace run this policy: the user picked the file, so its
+    // bytes win over a destination that only looks current.
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString srcRoot = QDir(tempDir.path()).filePath(QStringLiteral("src"));
+    REQUIRE(QDir().mkpath(srcRoot));
+
+    const QDateTime mtime = QDateTime::currentDateTimeUtc().addSecs(-kOneHourSeconds);
+    const auto scan = makeScan(srcRoot,
+                                QStringLiteral("entry.svx"),
+                                { QStringLiteral("sibling.svx") },
+                                mtime);
+
+    const QString attachmentDir = QDir(tempDir.path()).filePath(QStringLiteral("external"));
+    const QDir attachDirObj(attachmentDir);
+    for (const QString& dep : scan.dependencies) {
+        const QString rel = QFileInfo(scan.dependencies.first()).absoluteDir().relativeFilePath(dep);
+        // Same size as the source, mtime an hour ahead: the shape a local
+        // edit leaves behind.
+        writeFile(attachDirObj.absoluteFilePath(rel),
+                  QByteArray(kFakeContent),
+                  mtime.addSecs(kOneHourSeconds));
+    }
+
+    const auto plan = cwExternalCenterlineSync::computePlan(
+        scan, attachmentDir, cwExternalCenterlineSync::CopyPolicy::Overwrite);
+
+    CHECK(plan.copies.size() == 2);
+    CHECK(plan.removes.isEmpty());
+    CHECK(plan.expectedFiles.size() == 2);
+    CHECK(plan.warnings.isEmpty());
+}
+
+TEST_CASE("reconcile under Overwrite replaces a same-size newer destination",
+          "[Sync][Reconcile]")
+{
+    auto fixture = makeSavedProject(QStringLiteral("reconcile-overwrite"));
+    const QString attachmentDir =
+        fixture->project->saveLoad()->externalCenterlineDir(fixture->cave).absolutePath();
+
+    const QString srcRoot = QDir(fixture->tempDir.path()).filePath(QStringLiteral("src"));
+    REQUIRE(QDir().mkpath(srcRoot));
+    const QDateTime mtime = QDateTime::currentDateTimeUtc().addSecs(-kOneHourSeconds);
+    const auto scan = makeScan(srcRoot,
+                                QStringLiteral("entry.svx"),
+                                {},
+                                mtime);
+
+    const QDir attachDirObj(attachmentDir);
+    const QString destPath = attachDirObj.absoluteFilePath(QStringLiteral("entry.svx"));
+    QByteArray editedContent(kFakeContent);
+    REQUIRE_FALSE(editedContent.isEmpty());
+    editedContent[0] = 'X';
+    REQUIRE(editedContent.size() == QByteArray(kFakeContent).size());
+    writeFile(destPath, editedContent, mtime.addSecs(kOneHourSeconds));
+
+    auto future = cwExternalCenterlineSync::reconcile(
+        fixture->project->saveLoad(), scan, attachmentDir,
+        cwExternalCenterlineSync::CopyPolicy::Overwrite);
+    fixture->project->waitSaveToFinish();
+    REQUIRE(AsyncFuture::waitForFinished(future, kReconcileWaitMs));
+
+    QFile landed(destPath);
+    REQUIRE(landed.open(QFile::ReadOnly));
+    CHECK(landed.readAll() == QByteArray(kFakeContent));
+}
+
 TEST_CASE("computePlan copies only the source whose mtime is newer than dest",
           "[Sync][Reconcile]")
 {
