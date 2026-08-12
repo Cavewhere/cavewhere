@@ -13,7 +13,10 @@
 #include <QImage>
 #include <QGraphicsItem>
 
-class cwGraphicsImageItem : public QGraphicsItem
+//Our includes
+#include "CaveWhereLibExport.h"
+
+class CAVEWHERE_LIB_EXPORT cwGraphicsImageItem : public QGraphicsItem
 {
 public:
     explicit cwGraphicsImageItem(QGraphicsItem *parent = 0);

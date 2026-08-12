@@ -33,8 +33,9 @@ class cwSurveyNetwork;
 #include "cwCaptureItem.h"
 #include "cwUnits.h"
 #include "cwRegionSceneManager.h"
+#include "CaveWhereLibExport.h"
 
-class cwCaptureViewport : public cwCaptureItem
+class CAVEWHERE_LIB_EXPORT cwCaptureViewport : public cwCaptureItem
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(CaptureViewport)
