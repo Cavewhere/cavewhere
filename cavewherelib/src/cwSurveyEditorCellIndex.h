@@ -28,6 +28,9 @@ public:
      * and act on that name nothing the chunk can store.
      */
     enum CellRole {
+        //No column of the table, which is what a default constructed index names
+        InvalidCell = -1,
+
         StationNameCell = cwSurveyChunk::StationNameRole,
         StationLeftCell = cwSurveyChunk::StationLeftRole,
         StationRightCell = cwSurveyChunk::StationRightRole,
@@ -53,6 +56,12 @@ public:
         SplayClinoCell
     };
     Q_ENUM(CellRole)
+
+    //! True when \a cellRole names a column of the table
+    static bool isValidCellRole(CellRole cellRole)
+    {
+        return cellRole != InvalidCell;
+    }
 
     static_assert(cwSurveyChunk::ShotBackClinoRole < kFirstEditorCell,
                   "The chunk's roles have grown into the editor's own cells. Raise "
@@ -96,6 +105,7 @@ public:
         case ShotClinoCell:
         case ShotBackClinoCell:
             return static_cast<cwSurveyChunk::DataRole>(cellRole);
+        case InvalidCell:
         case StationSplaysCell:
         case SplayDistanceCell:
         case SplayCompassCell:
@@ -132,6 +142,7 @@ public:
         case ShotClinoCell:
         case ShotBackClinoCell:
         case StationSplaysCell:
+        case InvalidCell:
             break;
         }
         return {};
@@ -149,7 +160,7 @@ public:
 
 private:
     int m_modelRow = -1;
-    CellRole m_cellRole = static_cast<CellRole>(-1);
+    CellRole m_cellRole = InvalidCell;
 };
 
 Q_DECLARE_METATYPE(cwSurveyEditorCellIndex)

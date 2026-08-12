@@ -84,7 +84,9 @@ public:
 
 private:
     cwSurveyEditorRowIndex m_rowIndex;
-    cwSurveyEditorCellIndex::CellRole m_cellRole = cwSurveyEditorCellIndex::StationNameCell;
+    //A box that names no cell yet stands for no column of the table, the same
+    //way a default constructed cell index does
+    cwSurveyEditorCellIndex::CellRole m_cellRole = cwSurveyEditorCellIndex::InvalidCell;
 };
 
 

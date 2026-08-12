@@ -103,9 +103,22 @@ void cwSurveyEditorModel::connectChunkSignals(cwSurveyChunk* chunk)
         }
     };
 
+    //An error appearing on a splay changes nothing about the reading it sits on,
+    //so the rows are told about the readings again to pick the error box up
+    auto splayErrorChange = [this, chunk](int stationIndex) {
+        const int stationRow = toModelRow({chunk, stationIndex, cwSurveyEditorRowIndex::StationRow});
+        const int splayRows = splayRowCount(chunk, stationIndex);
+        if(stationRow >= 0 && splayRows > 0) {
+            emit dataChanged(index(stationRow + 1),
+                             index(stationRow + splayRows),
+                             {SplayDistanceRole, SplayCompassRole, SplayClinoRole});
+        }
+    };
+
     connect(chunk, &cwSurveyChunk::dataChanged, this, chunkCellChange);
     connect(chunk, &cwSurveyChunk::dataChanged, this, renameSplayLabels);
     connect(chunk, &cwSurveyChunk::errorsChanged, this, chunkCellChange);
+    connect(chunk, &cwSurveyChunk::splayErrorsChanged, this, splayErrorChange);
 
     connect(chunk, &cwSurveyChunk::stationSplaysChanged, this, [this, chunk](int stationIndex) {
         //An armed move names its splays by index, so a splay leaving or joining
@@ -227,7 +240,7 @@ void cwSurveyEditorModel::setTrip(cwTrip* trip) {
         m_focusedChunk = nullptr;
         m_virtualRowsVisibleChunk = nullptr;
         m_focusedRowIndex = QPersistentModelIndex();
-        m_focusedCellRole = static_cast<cwSurveyEditorCellIndex::CellRole>(-1);
+        m_focusedCellRole = cwSurveyEditorCellIndex::InvalidCell;
         m_expandedSplays.clear();
 
         if(m_trip) {
@@ -564,22 +577,27 @@ QVariant cwSurveyEditorModel::data(const QModelIndex& index, int role) const
             return QVariant();
         }
 
-        //A splay reading is edited through the same boxes the rest of the table
-        //uses, so it arrives in the same shape they read. The box names one of
-        //the editor's own splay cells, since a splay's reading hangs off a
-        //station rather than a row the chunk stores, and no chunk role can name
-        //it. Nothing checks a splay yet, so it carries no error model
-        auto splayReading = [&chunkIndex](const cwReading& reading,
-                                          cwSurveyEditorCellIndex::CellRole cellRole) {
-            return QVariant::fromValue(cwSurveyEditorBoxData(reading, chunkIndex, cellRole));
-        };
-
         //The blank row reads empty in all three columns until the first reading
         //typed into it makes it a splay
         const bool isBlankRow = splayIndex == splayCount;
         const cwShotMeasurement splay = isBlankRow
                                             ? cwShotMeasurement()
                                             : chunk->stationSplayAt(stationIndex, splayIndex);
+
+        //A splay reading is edited through the same boxes the rest of the table
+        //uses, so it arrives in the same shape they read, errors and all. The
+        //box names one of the editor's own splay cells, since a splay's reading
+        //hangs off a station rather than a row the chunk stores, and no chunk
+        //role can name it. The blank row holds no splay to check yet
+        auto splayReading = [&](const cwReading& reading,
+                                cwSurveyEditorCellIndex::CellRole cellRole) {
+            const auto readingRole = cwSurveyEditorCellIndex::toSplayReadingRole(cellRole);
+            cwErrorModel* errors = isBlankRow || !readingRole.has_value()
+                                       ? nullptr
+                                       : chunk->splayErrorsAt(stationIndex, splayIndex, *readingRole);
+            return QVariant::fromValue(cwSurveyEditorBoxData(reading, chunkIndex, cellRole, errors));
+        };
+
         switch(role) {
         case SplayDistanceRole:
             return splayReading(splay.distance, cwSurveyEditorCellIndex::SplayDistanceCell);
@@ -1186,6 +1204,10 @@ bool cwSurveyEditorModel::isCellValid(const cwSurveyEditorCellIndex& cell) const
         return false;
     }
 
+    if(!cwSurveyEditorCellIndex::isValidCellRole(cell.cellRole())) {
+        return false;
+    }
+
     return rowIndex.rowType() == toRowType(cell.cellRole());
 }
 
@@ -1241,7 +1263,7 @@ bool cwSurveyEditorModel::isCellSelected(const cwSurveyEditorCellIndex& selected
 
 bool cwSurveyEditorModel::isFocusedCell(const cwSurveyEditorCellIndex& cell) const
 {
-    if(cell.modelRow() < 0 || cell.cellRole() < 0) {
+    if(cell.modelRow() < 0 || !cwSurveyEditorCellIndex::isValidCellRole(cell.cellRole())) {
         return false;
     }
     return focusedRow() == cell.modelRow() && focusedRole() == static_cast<int>(cell.cellRole());
@@ -1971,8 +1993,9 @@ cwSurveyEditorCellIndex cwSurveyEditorModel::nextCellIndex(const cwSurveyEditorC
     case cwSurveyEditorCellIndex::SplayClinoCell:
         return nextSplayCell(currentCell.cellRole());
     //The included checkbox rides along with the distance cell, so the keyboard
-    //never lands on it
+    //never lands on it, and a cell that names no column has nowhere to go from
     case cwSurveyEditorCellIndex::ShotDistanceIncludedCell:
+    case cwSurveyEditorCellIndex::InvalidCell:
         break;
     }
 
@@ -2534,10 +2557,12 @@ cwSurveyEditorRowIndex::RowType cwSurveyEditorModel::toRowType(cwSurveyEditorCel
     case cwSurveyEditorCellIndex::SplayCompassCell:
     case cwSurveyEditorCellIndex::SplayClinoCell:
         return cwSurveyEditorRowIndex::SplayRow;
+    case cwSurveyEditorCellIndex::InvalidCell:
+        //A cell that names no column belongs to no row of the table. Only a box
+        //the view hasn't given its data to yet reads this way
+        break;
     }
 
-    //Only a default constructed cell reaches here
-    Q_ASSERT(false);
     return cwSurveyEditorRowIndex::TitleRow;
 }
 
@@ -2790,7 +2815,7 @@ bool cwSurveyEditorModel::hasVisibleVirtualRows(const cwSurveyChunk* chunk) cons
 void cwSurveyEditorModel::syncFocusedCellSignals()
 {
     if(!m_focusedRowIndex.isValid()) {
-        m_focusedCellRole = static_cast<cwSurveyEditorCellIndex::CellRole>(-1);
+        m_focusedCellRole = cwSurveyEditorCellIndex::InvalidCell;
     }
 
     const int row = focusedRow();

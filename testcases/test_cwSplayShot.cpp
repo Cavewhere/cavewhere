@@ -11,6 +11,8 @@
 //Our includes
 #include "cwCave.h"
 #include "cwCavingRegion.h"
+#include "cwErrorListModel.h"
+#include "cwErrorModel.h"
 #include "cwFutureManagerModel.h"
 #include "cwProject.h"
 #include "cwProtoUtils.h"
@@ -19,6 +21,7 @@
 #include "cwStation.h"
 #include "cwSurveyChunk.h"
 #include "cwTrip.h"
+#include "cwTripCalibration.h"
 #include "cavewhere.pb.h"
 
 //Test includes
@@ -352,6 +355,205 @@ TEST_CASE("cwSurveyChunk moves splays onto another station", "[SplayShot][cwSurv
 
         CHECK(chunk->stationSplays(0) == a4Splays());
         CHECK(splaysChanged.count() == 0);
+    }
+}
+
+TEST_CASE("cwSurveyChunk checks a station's splays", "[SplayShot][cwSurveyChunk]") {
+    cwTrip trip;
+    auto chunk = new cwSurveyChunk();
+    trip.addChunk(chunk);
+    chunk->appendShot(cwStation("a4"), cwStation("a5"), cwShot("10.52", "52.2", "232.2", "-31.5", "31.5"));
+    chunk->setStationSplays(0, a4Splays());
+
+    REQUIRE(chunk->errorModel()->fatalCount() == 0);
+
+    cwSignalSpy splayErrorsChanged(chunk, &cwSurveyChunk::splayErrorsChanged);
+    REQUIRE(splayErrorsChanged.isValid());
+
+    auto splayErrors = [chunk](int splayIndex, cwSurveyChunk::DataRole role) {
+        cwErrorModel* model = chunk->splayErrorsAt(0, splayIndex, role);
+        return model == nullptr ? QList<cwError>() : model->errors()->toList();
+    };
+
+    SECTION("splays a survey reads cleanly carry no errors") {
+        for(int splayIndex = 0; splayIndex < chunk->stationSplayCount(0); splayIndex++) {
+            CHECK(splayErrors(splayIndex, cwSurveyChunk::ShotDistanceRole).isEmpty());
+            CHECK(splayErrors(splayIndex, cwSurveyChunk::ShotCompassRole).isEmpty());
+            CHECK(splayErrors(splayIndex, cwSurveyChunk::ShotClinoRole).isEmpty());
+        }
+
+        CHECK(chunk->errorModel()->fatalCount() == 0);
+        CHECK(splayErrorsChanged.count() == 0);
+    }
+
+    SECTION("a garbage reading fails the way the same reading on a shot does") {
+        chunk->setStationSplayData(cwSurveyChunk::ShotDistanceRole, 0, 1, QStringLiteral("banana"));
+        chunk->setData(cwSurveyChunk::ShotDistanceRole, 0, QStringLiteral("banana"));
+
+        cwErrorModel* shotModel = chunk->errorsAt(0, cwSurveyChunk::ShotDistanceRole);
+        REQUIRE(shotModel != nullptr);
+
+        CHECK(splayErrors(1, cwSurveyChunk::ShotDistanceRole) == shotModel->errors()->toList());
+        CHECK(splayErrorsChanged.count() == 1);
+    }
+
+    SECTION("every reading is checked by its own column's rules") {
+        chunk->setStationSplayData(cwSurveyChunk::ShotCompassRole, 0, 0, QStringLiteral("400.0"));
+        chunk->setStationSplayData(cwSurveyChunk::ShotClinoRole, 0, 0, QStringLiteral("100.0"));
+
+        CHECK(splayErrors(0, cwSurveyChunk::ShotDistanceRole).isEmpty());
+        CHECK(splayErrors(0, cwSurveyChunk::ShotCompassRole).size() == 1);
+        CHECK(splayErrors(0, cwSurveyChunk::ShotClinoRole).size() == 1);
+    }
+
+    SECTION("a splay's errors reach the trip through the chunk") {
+        chunk->setStationSplayData(cwSurveyChunk::ShotDistanceRole, 0, 1, QStringLiteral("banana"));
+
+        CHECK(chunk->errorModel()->fatalCount() == 1);
+        CHECK(trip.errorModel()->fatalCount() == 1);
+    }
+
+    SECTION("fixing the reading clears the error") {
+        chunk->setStationSplayData(cwSurveyChunk::ShotDistanceRole, 0, 1, QStringLiteral("banana"));
+        REQUIRE(chunk->splayErrorsAt(0, 1, cwSurveyChunk::ShotDistanceRole) != nullptr);
+
+        chunk->setStationSplayData(cwSurveyChunk::ShotDistanceRole, 0, 1, QStringLiteral("5.42"));
+
+        CHECK(chunk->splayErrorsAt(0, 1, cwSurveyChunk::ShotDistanceRole) == nullptr);
+        CHECK(chunk->errorModel()->fatalCount() == 0);
+        CHECK(splayErrorsChanged.count() == 2);
+    }
+
+    SECTION("a splay off a named station has to carry all three readings") {
+        chunk->setStationSplayData(cwSurveyChunk::ShotCompassRole, 0, 2, QString());
+
+        const auto errors = splayErrors(2, cwSurveyChunk::ShotCompassRole);
+        REQUIRE(errors.size() == 1);
+        CHECK(errors.first().type() == cwError::Fatal);
+        CHECK(errors.first().message()
+              == QStringLiteral("Missing \"compass\" from splay s3 off \"a4\""));
+    }
+
+    SECTION("splays off an unnamed station wait for the station's own error") {
+        chunk->setData(cwSurveyChunk::StationNameRole, 0, QString());
+        chunk->setStationSplayData(cwSurveyChunk::ShotCompassRole, 0, 2, QString());
+
+        CHECK(splayErrors(2, cwSurveyChunk::ShotCompassRole).isEmpty());
+    }
+
+    SECTION("renaming the station rewrites the errors it's named in") {
+        chunk->setStationSplayData(cwSurveyChunk::ShotClinoRole, 0, 0, QString());
+        chunk->setData(cwSurveyChunk::StationNameRole, 0, QStringLiteral("a9"));
+
+        const auto errors = splayErrors(0, cwSurveyChunk::ShotClinoRole);
+        REQUIRE(errors.size() == 1);
+        CHECK(errors.first().message()
+              == QStringLiteral("Missing \"clino\" from splay s1 off \"a9\""));
+    }
+
+    SECTION("a trip with no front sights says nothing about a splay's angles") {
+        trip.calibrations()->setFrontSights(false);
+        chunk->setStationSplayData(cwSurveyChunk::ShotCompassRole, 0, 0, QStringLiteral("400.0"));
+        chunk->setStationSplayData(cwSurveyChunk::ShotDistanceRole, 0, 0, QStringLiteral("banana"));
+
+        CHECK(splayErrors(0, cwSurveyChunk::ShotCompassRole).isEmpty());
+        CHECK(splayErrors(0, cwSurveyChunk::ShotDistanceRole).size() == 1);
+    }
+
+    SECTION("turning front sights off quiets a splay's angles and back on returns them") {
+        chunk->setStationSplayData(cwSurveyChunk::ShotCompassRole, 0, 0, QStringLiteral("400.0"));
+        REQUIRE(splayErrors(0, cwSurveyChunk::ShotCompassRole).size() == 1);
+        REQUIRE(chunk->errorModel()->fatalCount() == 1);
+        const int errorsAnnounced = splayErrorsChanged.count();
+
+        trip.calibrations()->setFrontSights(false);
+
+        CHECK(splayErrors(0, cwSurveyChunk::ShotCompassRole).isEmpty());
+        CHECK(chunk->errorModel()->fatalCount() == 0);
+        CHECK(splayErrorsChanged.count() == errorsAnnounced + 1);
+
+        trip.calibrations()->setFrontSights(true);
+
+        CHECK(splayErrors(0, cwSurveyChunk::ShotCompassRole).size() == 1);
+        CHECK(chunk->errorModel()->fatalCount() == 1);
+        CHECK(splayErrorsChanged.count() == errorsAnnounced + 2);
+    }
+
+    SECTION("a splay pointed straight up needs no compass") {
+        chunk->setStationSplayData(cwSurveyChunk::ShotClinoRole, 0, 0, QStringLiteral("up"));
+        chunk->setStationSplayData(cwSurveyChunk::ShotCompassRole, 0, 0, QString());
+
+        CHECK(splayErrors(0, cwSurveyChunk::ShotCompassRole).isEmpty());
+
+        SECTION("and neither does one reading 90") {
+            chunk->setStationSplayData(cwSurveyChunk::ShotClinoRole, 0, 0, QStringLiteral("90.0"));
+
+            CHECK(splayErrors(0, cwSurveyChunk::ShotCompassRole).isEmpty());
+        }
+
+        SECTION("while a splay off the vertical still does") {
+            chunk->setStationSplayData(cwSurveyChunk::ShotClinoRole, 0, 0, QStringLiteral("45.0"));
+
+            CHECK(splayErrors(0, cwSurveyChunk::ShotCompassRole).size() == 1);
+        }
+    }
+
+    SECTION("a splay that leaves takes its errors with it") {
+        chunk->setStationSplayData(cwSurveyChunk::ShotDistanceRole, 0, 2, QStringLiteral("banana"));
+        REQUIRE(chunk->errorModel()->fatalCount() == 1);
+
+        chunk->removeStationSplay(0, 2);
+
+        CHECK(chunk->splayErrorsAt(0, 2, cwSurveyChunk::ShotDistanceRole) == nullptr);
+        CHECK(chunk->errorModel()->fatalCount() == 0);
+    }
+
+    SECTION("the station's last splay leaving clears the whole cluster's errors") {
+        chunk->setStationSplayData(cwSurveyChunk::ShotDistanceRole, 0, 0, QStringLiteral("banana"));
+        chunk->setStationSplayData(cwSurveyChunk::ShotDistanceRole, 0, 1, QStringLiteral("banana"));
+        REQUIRE(chunk->errorModel()->fatalCount() == 2);
+
+        chunk->clearStationSplays(0);
+
+        CHECK(chunk->errorModel()->fatalCount() == 0);
+    }
+
+    SECTION("a splay that isn't there has no errors to ask about") {
+        CHECK(chunk->splayErrorsAt(0, 3, cwSurveyChunk::ShotDistanceRole) == nullptr);
+        CHECK(chunk->splayErrorsAt(1, 0, cwSurveyChunk::ShotDistanceRole) == nullptr);
+        CHECK(chunk->splayErrorsAt(0, 0, cwSurveyChunk::ShotBackCompassRole) == nullptr);
+    }
+
+    SECTION("moved splays take their errors to the station they land on") {
+        chunk->setStationSplayData(cwSurveyChunk::ShotDistanceRole, 0, 2, QStringLiteral("banana"));
+        REQUIRE(chunk->errorModel()->fatalCount() == 1);
+
+        cwSurveyChunk::moveStationSplays(chunk, 0, chunk, 1, {2});
+
+        CHECK(chunk->splayErrorsAt(0, 2, cwSurveyChunk::ShotDistanceRole) == nullptr);
+        REQUIRE(chunk->splayErrorsAt(1, 0, cwSurveyChunk::ShotDistanceRole) != nullptr);
+        CHECK(chunk->errorModel()->fatalCount() == 1);
+    }
+
+    SECTION("a splay moved to another chunk leaves its error behind and arrives with one") {
+        auto otherChunk = new cwSurveyChunk();
+        trip.addChunk(otherChunk);
+        otherChunk->appendShot(cwStation("b1"), cwStation("b2"), cwShot("4.20", "22.2", "202.2", "-5.5", "5.5"));
+
+        chunk->setStationSplayData(cwSurveyChunk::ShotDistanceRole, 0, 2, QStringLiteral("banana"));
+        REQUIRE(chunk->errorModel()->fatalCount() == 1);
+        REQUIRE(trip.errorModel()->fatalCount() == 1);
+
+        cwSurveyChunk::moveStationSplays(chunk, 0, otherChunk, 0, {2});
+
+        CHECK(chunk->splayErrorsAt(0, 2, cwSurveyChunk::ShotDistanceRole) == nullptr);
+        CHECK(chunk->errorModel()->fatalCount() == 0);
+
+        cwErrorModel* movedErrors = otherChunk->splayErrorsAt(0, 0, cwSurveyChunk::ShotDistanceRole);
+        REQUIRE(movedErrors != nullptr);
+        CHECK(movedErrors->errors()->size() == 1);
+        CHECK(otherChunk->errorModel()->fatalCount() == 1);
+        CHECK(trip.errorModel()->fatalCount() == 1);
     }
 }
 

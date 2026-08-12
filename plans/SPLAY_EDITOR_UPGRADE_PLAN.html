@@ -472,20 +472,31 @@ has four, and check every real zero-splay station shows both cues.</div>
 the targeted C++ splay tags. The profile before/after numbers go in the commit body and the
 review notes.</div>
 
-<h2><span class="commit">Commit 18</span> Splay error model</h2>
+<h2><span class="commit">Commit 18</span> Splay error model<span style="color:#2e7d32; font-size:0.8em;"> — done</span></h2>
 <p>Open refactor 1 — the largest behavioral gap left: a splay with a garbage reading gets no
 red box and no error list, while the identical reading on a shot row does. Design work, last in
 the series.</p>
 <ul>
-  <li>Validation errors hang off the splay reading itself (<code>cwShotMeasurement</code> has no
-      error list today — decide where splay errors live: on the measurement, the chunk, or
-      computed by the model), reusing the shot rows' validation rules for distance, compass, and
-      clino.</li>
+  <li>Splay errors live on the chunk, beside the shot and station cell errors it already keeps,
+      keyed by station, splay, and reading. <code>cwShotMeasurement</code> stays the value struct
+      it is, and a splay's error model is parented to the chunk's, so it rolls up into the trip's
+      error list the way a shot's does. <code>cwSurveyChunk::splayErrorsAt</code> answers one
+      reading's errors and <code>splayErrorsChanged</code> announces a cluster's.</li>
+  <li>The rules are the shot rows': the column's validator has to take the reading, and a splay
+      off a named station has to carry all three — except a vertical splay's compass, which a
+      shot row lets go too. The entry row holds no splay yet, so it's error free, and a trip
+      with front sights off says nothing about a splay's angles.</li>
   <li><code>cwSurveyEditorModel::data()</code> builds splay cells' box data with the error-model
       constructor instead of the three-argument no-error one
       (<code>cwSurveyEditorModel.cpp:558</code>).</li>
   <li><code>SplayDataBox</code> grows back the error UI <code>DataBox</code> already has: red
-      box, error text, and inclusion in the trip's error list/navigation.</li>
+      box, error text, and inclusion in the trip's error list/navigation. It comes from
+      <code>DataBox</code> unchanged once the box data carries an error model.</li>
+  <li>Carried from commit 14: a default constructed <code>cwSurveyEditorBoxIndex</code> named
+      <code>StationNameCell</code>. <code>CellRole</code> gained an <code>InvalidCell</code>
+      sentinel, both index types default to it, and the reads that branch on cell identity
+      (<code>toRowType</code>, <code>isCellValid</code>, <code>isFocusedCell</code>) answer it
+      instead of asserting.</li>
 </ul>
 <div class="test"><b>Tests.</b> C++: invalid splay reading produces the same error object a
 shot reading does; blank entry row stays error-free. QML: type garbage into a splay distance,

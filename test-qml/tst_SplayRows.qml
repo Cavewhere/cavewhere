@@ -1018,6 +1018,76 @@ MainWindowTest {
                               "splayRowLabel").text, "A2 · +")
         }
 
+        // A splay is checked by the rules a shot is checked by. A splay the
+        // survey only took a distance for is missing two readings, and each one
+        // wears the red box a shot's missing reading wears until it's typed in.
+        function test_aSplayMissingAReadingWearsTheErrorBox() {
+            const context = gotoSurveyTable()
+            const entryRow = surveyTableId.stationRow(context, 1) + 1
+
+            // The shot itself is still empty in this fixture, so the chunk
+            // already carries errors of its own — only the ones the splay adds
+            // are this test's business
+            const fatalsBeforeTheSplay = context.chunk.errorModel.fatalCount
+
+            mouseClick(splaysCell(context, 1))
+            tryCompare(context.editorModel, "focusedRow", entryRow, 5000,
+                       "opening an empty cluster should put the caret in the blank row")
+            tryCompare(context.editorModel, "focusedRole",
+                       SurveyEditorCellIndex.SplayDistanceCell)
+
+            const typeReading = function(keys) {
+                for (let i = 0; i < keys.length; i++) {
+                    keyClick(keys[i])
+                }
+                keyClick(Qt.Key_Tab)
+            }
+
+            typeReading([Qt.Key_4, Qt.Key_Period, Qt.Key_2])
+
+            tryVerify(() => splayCount(context, 1) === 1, 5000,
+                      "the distance typed into the blank row should make a splay")
+
+            const errorBox = function(cellRole) {
+                return findChild(cellBox(context, entryRow, cellRole), "errorIcon")
+            }
+
+            const fatalCount = function(cellRole) {
+                const model = cellBox(context, entryRow, cellRole).errorModel
+                return model === null ? 0 : model.fatalCount
+            }
+
+            tryVerify(() => fatalCount(SurveyEditorCellIndex.SplayCompassCell) === 1, 5000,
+                      "the compass the splay never got should read as a fatal error")
+            tryVerify(() => errorBox(SurveyEditorCellIndex.SplayCompassCell) !== null, 5000,
+                      "a splay's error should draw the box a shot's error draws")
+            tryVerify(() => context.chunk.errorModel.fatalCount === fatalsBeforeTheSplay + 2, 5000,
+                      "the splay's two missing readings should reach the chunk's error list")
+            tryVerify(() => errorBox(SurveyEditorCellIndex.SplayClinoCell) !== null, 5000,
+                      "the clino is missing too")
+
+            // The reading that was typed reads fine, so it wears nothing
+            compare(fatalCount(SurveyEditorCellIndex.SplayDistanceCell), 0)
+            compare(errorBox(SurveyEditorCellIndex.SplayDistanceCell), null,
+                    "a reading the validator takes should wear no error box")
+
+            typeReading([Qt.Key_1, Qt.Key_2, Qt.Key_0])
+
+            tryVerify(() => fatalCount(SurveyEditorCellIndex.SplayCompassCell) === 0, 5000,
+                      "typing the compass should take its error away")
+            tryVerify(() => errorBox(SurveyEditorCellIndex.SplayCompassCell) === null, 5000,
+                      "the error box should go with the error")
+
+            typeReading([Qt.Key_5])
+
+            tryVerify(() => fatalCount(SurveyEditorCellIndex.SplayClinoCell) === 0, 5000,
+                      "the last reading finishes the splay")
+            tryVerify(() => errorBox(SurveyEditorCellIndex.SplayClinoCell) === null, 5000,
+                      "a finished splay wears no error box")
+            tryVerify(() => context.chunk.errorModel.fatalCount === fatalsBeforeTheSplay, 5000,
+                      "a finished splay leaves nothing of its own in the chunk's error list")
+        }
+
         // The "+" is a button, not a hint: it's round, it's a target rather
         // than a character, and clicking it opens the row a splay is typed
         // into. Same manual-entry path as the keyboard's, reached by mouse.

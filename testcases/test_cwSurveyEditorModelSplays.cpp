@@ -15,6 +15,7 @@
 #include "cwShot.h"
 #include "cwStation.h"
 #include "cwSurveyChunk.h"
+#include "cwErrorModel.h"
 #include "cwSurveyEditorBoxData.h"
 #include "cwSurveyEditorModel.h"
 #include "cwTrip.h"
@@ -965,6 +966,78 @@ TEST_CASE("A splay's box data names a splay cell", "[cwSurveyEditorModel][SplayS
         CHECK(name.cellRole() == cwSurveyEditorCellIndex::StationNameCell);
         CHECK(cwSurveyEditorCellIndex::toChunkRole(name.cellRole())
               == cwSurveyChunk::StationNameRole);
+    }
+}
+
+TEST_CASE("A splay's box data carries the errors of its reading",
+          "[cwSurveyEditorModel][SplayShot]") {
+    SplayFixture fixture;
+    fixture.model.toggleSplaysExpanded(fixture.stationRow(1));
+
+    //title, a1, shot, a2, s1, s2, s3, blank, shot, a3
+    const int firstSplayRow = 4;
+    const int blankRow = 7;
+
+    auto boxData = [&fixture](int row, cwSurveyEditorModel::Role role) {
+        return fixture.rowData(row, role).value<cwSurveyEditorBoxData>();
+    };
+
+    auto distanceCell = [&fixture](int row) {
+        return fixture.model.cellIndex(row, cwSurveyEditorCellIndex::SplayDistanceCell);
+    };
+
+    SECTION("a splay the survey reads cleanly shows no error") {
+        CHECK(boxData(firstSplayRow, cwSurveyEditorModel::SplayDistanceRole).errorModel() == nullptr);
+        CHECK(boxData(firstSplayRow, cwSurveyEditorModel::SplayCompassRole).errorModel() == nullptr);
+        CHECK(boxData(firstSplayRow, cwSurveyEditorModel::SplayClinoRole).errorModel() == nullptr);
+    }
+
+    SECTION("a garbage reading arrives with the chunk's error model") {
+        fixture.model.setDataAt(distanceCell(firstSplayRow), QStringLiteral("banana"));
+
+        const auto data = boxData(firstSplayRow, cwSurveyEditorModel::SplayDistanceRole);
+        REQUIRE(data.errorModel() != nullptr);
+        CHECK(data.errorModel() == fixture.chunk->splayErrorsAt(1, 0, cwSurveyChunk::ShotDistanceRole));
+        CHECK(data.errorModel()->fatalCount() == 1);
+
+        //The other columns of the same splay are read on their own
+        CHECK(boxData(firstSplayRow, cwSurveyEditorModel::SplayCompassRole).errorModel() == nullptr);
+    }
+
+    SECTION("the rows are told to read their readings again when an error lands") {
+        fixture.forgetChanges();
+        fixture.model.setDataAt(distanceCell(firstSplayRow), QStringLiteral("banana"));
+
+        CHECK(fixture.rowsTold(firstSplayRow, cwSurveyEditorModel::SplayDistanceRole) > 0);
+    }
+
+    SECTION("fixing the reading takes the error away again") {
+        fixture.model.setDataAt(distanceCell(firstSplayRow), QStringLiteral("banana"));
+        REQUIRE(boxData(firstSplayRow, cwSurveyEditorModel::SplayDistanceRole).errorModel() != nullptr);
+
+        fixture.forgetChanges();
+        fixture.model.setDataAt(distanceCell(firstSplayRow), QStringLiteral("5.88"));
+
+        CHECK(boxData(firstSplayRow, cwSurveyEditorModel::SplayDistanceRole).errorModel() == nullptr);
+        CHECK(fixture.rowsTold(firstSplayRow, cwSurveyEditorModel::SplayDistanceRole) > 0);
+    }
+
+    SECTION("the entry row holds no splay to check") {
+        CHECK(boxData(blankRow, cwSurveyEditorModel::SplayDistanceRole).errorModel() == nullptr);
+        CHECK(boxData(blankRow, cwSurveyEditorModel::SplayCompassRole).errorModel() == nullptr);
+        CHECK(boxData(blankRow, cwSurveyEditorModel::SplayClinoRole).errorModel() == nullptr);
+    }
+
+    SECTION("the splay the entry row becomes is checked like the rest") {
+        fixture.model.setDataAt(distanceCell(blankRow), QStringLiteral("banana"));
+
+        const auto data = boxData(blankRow, cwSurveyEditorModel::SplayDistanceRole);
+        REQUIRE(data.errorModel() != nullptr);
+        CHECK(data.errorModel()->fatalCount() == 1);
+
+        //The station gained a splay, so the entry row moved down a row
+        CHECK(boxData(blankRow + 1, cwSurveyEditorModel::SplayDistanceRole).errorModel() == nullptr);
+        fixture.checkRowCount(11);
     }
 }
 

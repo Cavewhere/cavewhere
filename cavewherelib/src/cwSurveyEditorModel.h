@@ -203,7 +203,7 @@ private:
     QPointer<cwSurveyChunk> m_focusedChunk;
     QPointer<cwSurveyChunk> m_virtualRowsVisibleChunk;
     QPersistentModelIndex m_focusedRowIndex;
-    cwSurveyEditorCellIndex::CellRole m_focusedCellRole = static_cast<cwSurveyEditorCellIndex::CellRole>(-1);
+    cwSurveyEditorCellIndex::CellRole m_focusedCellRole = cwSurveyEditorCellIndex::InvalidCell;
     int m_lastNotifiedFocusedRow = -1;
     int m_lastNotifiedFocusedRole = -1;
 
