@@ -87,13 +87,9 @@ public:
 
     // One atomic value snapshot of this subsystem's contribution to a
     // solve (dirs + declination flags), for the consumer's buildInput.
-    cwLinePlotTask::ExternalCenterlineInputs solveInputs() const
-    {
-        return { m_caveAttachmentDirs,
-                 m_tripAttachmentDirs,
-                 m_fileOwnsDeclination,
-                 QSet<QUuid>(m_containmentErrors.keyBegin(), m_containmentErrors.keyEnd()) };
-    }
+    // The excluded set unions the two states that make an *include
+    // unusable: an escaping dependency and a missing in-project copy.
+    cwLinePlotTask::ExternalCenterlineInputs solveInputs() const;
 
     // Per-machine record of the file each attachment was last picked from,
     // owned by cwRootData. The manager holds it only to hand to attach and
@@ -182,8 +178,10 @@ public:
     // Project-relative path of ownerId's in-project centerline copy when
     // that file is gone from disk; empty while the copy is there. The copy
     // is the only file the project reads, so its absence is what the trip
-    // panel banners, offering Replace… as the way back. Derived at every
-    // recompute, which is what clears it when the file returns.
+    // panel banners, offering Replace… as the way back, and what keeps the
+    // owner's *include off the driver so the rest of the region still
+    // plots. Derived at every recompute, which is what clears it when the
+    // file returns.
     //
     // A missing *member* of the closure is left to cavern: the harvest
     // reads the entry file and names the include it could not open, which
@@ -363,7 +361,10 @@ private:
 
     // Per-owner project-relative path of an in-project copy that is gone
     // from disk, from the most recent recompute; read via
-    // missingCopyPath(). Rebuilt wholesale, so restoring the file clears it.
+    // missingCopyPath(). Membership also drops the owner from the solve
+    // (solveInputs), since cavern fatals on an *include it cannot open and
+    // would cost the whole region its plot. Rebuilt wholesale, so restoring
+    // the file clears it.
     QHash<QUuid, QString> m_missingCopies;
 
     // Per-owner file-owns-declination flag from the most recent recompute;

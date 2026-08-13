@@ -876,15 +876,36 @@ region-level log would also satisfy — per-trip attribution is proven in C++, n
       one will eventually be widened and the other won't. It is really one question ("can survex
       <code>*include</code> quote this path?") with one answer, and it belongs beside the code
       that writes the <code>*include</code> line. Small, mechanical, and blocked on nothing.
-      <em>Raised by the H1–H3 review.</em></li>
-  <li><strong>Three surfaces fire for one broken file.</strong> A file cavern rejects can light
-      <code>ExternalCenterlineFileErrorBanner</code> (the harvest's per-file complaint),
-      <code>ExternalCenterlineSolveStatus</code> (the region solve failing as a whole), and the
-      region-level cavern log page — three tellings of one problem, at three levels of detail, in
-      one panel. The per-file banner is the one that names the file, so it should be the one that
-      speaks, with the others deferring while it is up. Wants a precedence rule between the
-      surfaces rather than a fourth surface; touches the panel and the solve-status component
-      only. <em>Raised by the H1–H3 review.</em></li>
+      <em>Raised by the H1–H3 review.</em>
+      <strong>DONE in commit <code>17a0b467</code> (F6)</strong> — the blacklist
+      (<code>"</code>, newline, carriage return, Ctrl-Z, per cavern's <code>SPECIAL_EOL</code>
+      table) lives once as <code>cwSurvexExporterUtils::isQuotableIncludePath</code>, and both
+      <code>cwExternalStationHarvest</code> and
+      <code>cwSurvexExporterCaveTask::writeExternalInclude</code> call it.</li>
+  <li><strong>One broken file lit three surfaces — half fixed at the source.</strong> A file the
+      solve cannot read used to light <code>ExternalCenterlineFileErrorBanner</code> or
+      <code>MissingCenterlineCopyBanner</code> (the per-file complaint),
+      <code>ExternalCenterlineSolveStatus</code> reading "Solve failed" (the region solve failing
+      as a whole), and the region-level cavern log page — three tellings of one problem in one
+      panel, and the loudest of the three was the one the user could do least about.
+      <strong>Shipped:</strong> a <em>missing in-project copy</em> now joins the containment
+      errors in <code>cwExternalCenterlineManager::solveInputs()</code>'s excluded set, so the
+      driver writes no <code>*include</code> for it and the region keeps its plot. The status
+      strip goes back to counting the stations that solved, with no precedence rule and no QML
+      change: the second surface stops firing because the second problem stops happening. A
+      change in the missing-copy set, in either direction, also joins the scan-apply
+      solve-trigger diff, so Replace and a restored file re-include the owner on their own. The
+      equate paths needed nothing — <code>equateOperand</code> and <code>qualifiedOperand</code>
+      already drop a tie naming any excluded owner, which is what keeps cavern from
+      <em>creating</em> a phantom station under a scope the driver never opened.
+      <strong>Deferred to Phase 3:</strong> the other half — an owner cavern itself rejected
+      (<code>tripHarvestErrors</code>) — stays in the solve, because dropping it would hide a
+      whole survey behind a per-trip banner nobody has to be looking at. It waits on a
+      region-level visible-exclusion surface, which also covers the accepted trade-off here: a
+      <em>cave</em>-level missing copy is silent outside the attached-centerlines model, exactly
+      as a cave-level containment exclusion already is (B7's follow-up in
+      <a href="EXTERNAL_FILE_PHASE2.html">EXTERNAL_FILE_PHASE2.html</a>).
+      <em>Raised by the H1–H3 review; re-scoped and half-shipped 2026-08-12.</em></li>
   <li><strong>Fifth copy of the banner chassis.</strong>
       <code>FloatingSurveyBanner</code>, <code>ExternalCenterlineFileErrorBanner</code>,
       <code>ExternalCenterlineMissingSourceBanner</code> and two more repeat the same shape

@@ -402,6 +402,48 @@ TEST_CASE("An excluded owner's ties are dropped rather than left dangling",
     CHECK_FALSE(driver.contains("*equate"));
 }
 
+TEST_CASE("A cross-cave tie into an excluded owner is dropped too",
+          "[ExternalCenterline][Containment]")
+{
+    // The cave-scope drop above and this one share the excluded set, so an
+    // owner excluded for a missing in-project copy is dropped from a region
+    // tie by the same code the containment case exercises.
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    cwCavingRegion region;
+    AttachedSetup setup =
+        setupNativeAndAttached(tempRoot, region, QStringLiteral("survex_simple.svx"));
+
+    cwCave* other = addEmptyCave(region, QStringLiteral("Beta"));
+    addNativeTripWithShot(other, QStringLiteral("Native"),
+                          QStringLiteral("B1"), QStringLiteral("B2"));
+
+    region.equates()->appendEquate(cwEquate({
+        cwStationHandle(cwStationHandle::Trip, setup.attached->id(),
+                        QStringLiteral("simple.a1")),
+        cwStationHandle(cwStationHandle::NativeCave, other->id(),
+                        QStringLiteral("B1"))
+    }));
+
+    cwSurvexExporterRegion::Options options;
+    options.tripAttachmentDirs = setup.tripDirs;
+    options.excludedExternalOwners = QSet<QUuid> { setup.attached->id() };
+
+    const QString outputPath = QDir(tempRoot.path()).filePath(QStringLiteral("driver.svx"));
+    const auto result =
+        cwSurvexExporterRegion::exportRegion(region.data(), outputPath, options);
+    REQUIRE_FALSE(result.hasError());
+
+    // Same fabrication risk as the cave-scope tie, one scope out: cavern would
+    // create the named station under the excluded owner's label rather than
+    // reject the operand.
+    const QByteArray driver = fileContents(outputPath);
+    CHECK_FALSE(driver.contains("*equate"));
+    // The other cave still exported, so the drop cost the tie and nothing else.
+    CHECK(driver.contains("B1"));
+}
+
 TEST_CASE("An excluded cave-level attachment emits no empty survey block",
           "[ExternalCenterline][Containment]")
 {

@@ -21,6 +21,7 @@
 #include "cwRootData.h"
 #include "cwSaveLoad.h"
 #include "cwSignalSpy.h"
+#include "cwStationPositionLookup.h"
 #include "cwTeam.h"
 #include "cwTeamMember.h"
 #include "cwTrip.h"
@@ -1098,6 +1099,8 @@ TEST_CASE("replacing an attachment whose copy went missing clears the report",
         return !manager->missingCopyPath(ownerId).isEmpty();
     }));
 
+    CHECK(manager->solveInputs().excludedExternalOwners.contains(ownerId));
+
     // The banner's own affordance: pick the file again. Replace copies a
     // fresh closure into the same attachment dir, so the owner has a file
     // to read again.
@@ -1108,6 +1111,80 @@ TEST_CASE("replacing an attachment whose copy went missing clears the report",
     drainPipelines(fixture.get());
 
     CHECK(manager->missingCopyPath(ownerId).isEmpty());
+    // Replace is the whole fix the banner promises: the owner is back in the
+    // solve, not just out of the report.
+    CHECK_FALSE(manager->solveInputs().excludedExternalOwners.contains(ownerId));
     CHECK(fixture->trip->externalCenterline().entryFile()
           == QStringLiteral("survex_nested.svx"));
+}
+
+TEST_CASE("a missing copy costs its own survey, not the region's plot",
+          "[Attach][MissingCopy]")
+{
+    auto fixture = makeSavedProject(QStringLiteral("missing-copy-solve"));
+    auto manager = managerOf(fixture.get());
+    cwLinePlotManager* linePlotManager = fixture->rootData->linePlotManager();
+    const QString simple = datasetExternalCenterlinePath(QStringLiteral("survex_simple.svx"));
+
+    fixture->cave->addTrip();
+    cwTrip* survivor = fixture->cave->trip(1);
+    survivor->setName(QStringLiteral("SurvivingTrip"));
+
+    attachThroughManager(fixture.get(), simple);
+    auto survivorAttach = manager->attachCenterline(survivor, simple);
+    REQUIRE(AsyncFuture::waitForFinished(survivorAttach, kAttachWaitMs));
+    REQUIRE_FALSE(survivorAttach.result().hasError());
+    drainPipelines(fixture.get());
+
+    // survex_simple.svx opens "*begin Simple" and fixes a1, so each trip's
+    // stations land under its own "*begin <tripLabel>" wrapper.
+    const QString missingKey =
+        tripScopeLabel(fixture->trip) + QStringLiteral(".simple.a1");
+    const QString survivorKey =
+        tripScopeLabel(survivor) + QStringLiteral(".simple.a1");
+
+    INFO("solve error: " << linePlotManager->solveErrorMessage().toStdString());
+    REQUIRE_FALSE(linePlotManager->hasSolveError());
+    REQUIRE(fixture->cave->stationPositionLookup().hasPosition(missingKey));
+    REQUIRE(fixture->cave->stationPositionLookup().hasPosition(survivorKey));
+
+    const QString copyPath = fixture->saveLoad()
+        ->externalCenterlineDir(fixture->trip)
+        .absoluteFilePath(QStringLiteral("survex_simple.svx"));
+    const QByteArray copyContents = fileContents(copyPath);
+    REQUIRE(QFile::remove(copyPath));
+
+    // The watcher notices the deletion and recomputes; the recompute's
+    // solve request is what makes the driver drop the *include.
+    const QUuid missingOwnerId = fixture->trip->id();
+    REQUIRE(tryWait(kWatcherWaitMs, [&] {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, kInnerPollEventsMs);
+        return manager->solveInputs().excludedExternalOwners.contains(missingOwnerId);
+    }));
+    drainPipelines(fixture.get());
+
+    // Cavern fatals on an *include it cannot open, which would cost the
+    // whole region its plot — every trip panel reading "Solve failed" for
+    // one broken attachment the banner says Replace fixes.
+    INFO("solve error: " << linePlotManager->solveErrorMessage().toStdString());
+    CHECK_FALSE(linePlotManager->hasSolveError());
+    CHECK_FALSE(manager->missingCopyPath(missingOwnerId).isEmpty());
+    CHECK(fixture->cave->stationPositionLookup().hasPosition(survivorKey));
+    CHECK_FALSE(fixture->cave->stationPositionLookup().hasPosition(missingKey));
+
+    // Putting the file back is the other way out, and a fresh scan is what
+    // notices it — nothing watches a path that is not there.
+    overwriteFile(copyPath, copyContents);
+    manager->rescanAttachments();
+    REQUIRE(tryWait(kWatcherWaitMs, [&] {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, kInnerPollEventsMs);
+        return !manager->solveInputs().excludedExternalOwners.contains(missingOwnerId);
+    }));
+    drainPipelines(fixture.get());
+
+    CHECK(manager->missingCopyPath(missingOwnerId).isEmpty());
+    INFO("solve error: " << linePlotManager->solveErrorMessage().toStdString());
+    CHECK_FALSE(linePlotManager->hasSolveError());
+    CHECK(fixture->cave->stationPositionLookup().hasPosition(missingKey));
+    CHECK(fixture->cave->stationPositionLookup().hasPosition(survivorKey));
 }

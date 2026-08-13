@@ -218,6 +218,21 @@ void cwExternalCenterlineManager::setTripAttachmentDirs(QHash<QUuid, QString> di
     recomputeWatchSet();
 }
 
+cwLinePlotTask::ExternalCenterlineInputs cwExternalCenterlineManager::solveInputs() const
+{
+    // Both states name a file the solve cannot read, so both keep the
+    // owner's *include off the driver. A missing copy is the costlier of
+    // the two to leave in: cavern fatals on an *include it cannot open,
+    // which loses the whole region its plot rather than this one survey.
+    QSet<QUuid> excluded(m_containmentErrors.keyBegin(), m_containmentErrors.keyEnd());
+    excluded.unite(QSet<QUuid>(m_missingCopies.keyBegin(), m_missingCopies.keyEnd()));
+
+    return { m_caveAttachmentDirs,
+             m_tripAttachmentDirs,
+             m_fileOwnsDeclination,
+             std::move(excluded) };
+}
+
 void cwExternalCenterlineManager::setExternalSourceSettings(cwExternalSourceSettings* settings)
 {
     // No recompute, and nothing observed on the store: the scan reads the
@@ -494,22 +509,23 @@ void cwExternalCenterlineManager::applyScanResult(ExternalScanResult result)
     // never reads half-applied declination state; an owner entering or
     // leaving the map is a change too (its *include just appeared or
     // vanished).
+    const bool missingCopiesChangedNow = result.missingCopies != m_missingCopies;
     const bool solveNow = m_solveOnScanApply
         || result.fileOwnsDeclination != m_fileOwnsDeclination
-        || result.containmentErrors != m_containmentErrors;
+        || result.containmentErrors != m_containmentErrors
+        || missingCopiesChangedNow;
     m_solveOnScanApply = false;
     m_fileOwnsDeclination = std::move(result.fileOwnsDeclination);
     // An owner entering or leaving the excluded set changes the driver the
     // same way a declination flag does — its *include just vanished or
-    // reappeared — so the swap lands ahead of the solve request.
+    // reappeared — so both halves of that set swap ahead of the solve
+    // request.
     m_containmentErrors = result.containmentErrors;
+    m_missingCopies = std::move(result.missingCopies);
 
     // Ahead of the solve request, so the solve that follows snapshots the
     // fresh names rather than the previous scan's.
     applyHarvestToTrips(result);
-
-    const bool missingCopiesChangedNow = result.missingCopies != m_missingCopies;
-    m_missingCopies = std::move(result.missingCopies);
 
     m_lastScanRows = result.rows;
     m_attachedCenterlinesModel->setRows(std::move(result.rows));

@@ -81,10 +81,11 @@ public:
         // file-owned or unknown → the driver emits nothing for that trip.
         QHash<QUuid, double> tripInjectedDeclinations;
 
-        // Caves and trips whose externalCenterline is set but whose
-        // dependencies reach outside the project's data root. The driver
+        // Caves and trips whose externalCenterline is set but unreadable
+        // by the solve: dependencies reaching outside the project's data
+        // root, or an in-project copy that is gone from disk. The driver
         // skips their *include entirely rather than failing the export, so
-        // one unportable attachment costs its own survey and leaves the
+        // one broken attachment costs its own survey and leaves the
         // rest of the region solvable.
         QSet<QUuid> excludedExternalOwners;
     };
@@ -231,8 +232,9 @@ public:
         // declination baked into tripInjectedDeclinations. Owners
         // missing from the map are treated as file-owned.
         QHash<QUuid, bool> fileOwnsDeclination;
-        // Owners whose attachment reaches outside the project's data root.
-        // The driver writes no *include for them (see Input).
+        // Owners whose attachment reaches outside the project's data root,
+        // or whose in-project copy is gone from disk. The driver writes no
+        // *include for them (see Input).
         QSet<QUuid> excludedExternalOwners;
     };
 

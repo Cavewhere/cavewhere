@@ -228,6 +228,53 @@ MainWindowTest {
                       "the restored copy clears the banner")
         }
 
+        // plans/EXTERNAL_FILE_SCAN_STATION_HARVEST_PLAN.html §6: the banner
+        // promises Replace is the whole fix, so the missing copy has to cost
+        // its own survey and nothing else. Cavern fatals on an *include it
+        // cannot open, which would leave every panel in the region reading
+        // "Solve failed" instead.
+        function test_aMissingProjectCopyLeavesTheSolveStatusCountingStations() {
+            attachAndBind("trip-panel-missing-copy-solve")
+            tryVerify(() => RootData.linePlotManager.lastSolveStationCount > 0,
+                      10000, "the attach-chained solve settles first")
+
+            // A second attachment in the same cave: the survey the region
+            // still has to plot once this panel's copy is gone.
+            const cave = RootData.region.cave(0)
+            cave.addTrip()
+            const source = TestHelper.testcasesDatasetPath(
+                "external-centerlines/survex_simple.svx")
+            RootData.attachTripCenterline(cave.trip(1), source)
+            tryVerify(() => RootData.externalCenterlineManager
+                                .attachedCenterlinesModel.rowCount() === 2,
+                      10000, "the second attachment lands its own row")
+            RootData.futureManagerModel.waitForFinished()
+
+            const banner = findChild(panelId, "missingCenterlineCopyBanner")
+            const solveStatus = findChild(panelId, "solveStatus")
+            const statusLabel = findChild(solveStatus, "solveStatusLabel")
+            verify(banner !== null, "missingCenterlineCopyBanner must exist")
+            verify(statusLabel !== null, "solveStatusLabel must exist")
+
+            const copyPath = TestHelper.externalCenterlineCopyPath(
+                RootData.project, rootId.trip, "survex_simple.svx")
+            verify(copyPath.length > 0, "the attachment dir must resolve")
+
+            TestHelper.removeFile(TestHelper.toLocalUrl(copyPath))
+            tryVerify(() => banner.visible, 10000,
+                      "deleting the in-project copy banners the trip")
+
+            // The deletion's own solve is queued through the future manager,
+            // so draining it is what makes the status below the region's
+            // answer to the missing file rather than the previous one.
+            RootData.futureManagerModel.waitForFinished()
+            verify(!solveStatus.hasError, "the region still solved")
+            verify(solveStatus.stationCount > 0,
+                   "the surviving attachment's stations are counted")
+            verify(statusLabel.text.indexOf("stations") >= 0,
+                   "the status counts stations; got: " + statusLabel.text)
+        }
+
         function test_viewCavernOutputNavigates() {
             attachAndBind("trip-panel-navigate")
 

@@ -64,18 +64,21 @@ public:
      * (cavern-verified, master plan §8.8 q7).
      *
      * \c excludedExternalOwners lists caves and trips that carry an
-     * \c externalCenterline whose dependencies reach outside the project's
-     * data root, so the attachment cannot travel with the project. The
-     * exporter emits no \c *include for them and no \c *begin wrapper
-     * around it, and keeps writing the rest of the region, so one
-     * unportable attachment costs its own survey and leaves every other
-     * survey solvable. When it was the region's only data the driver comes
-     * out empty and cavern still fails the run with "No survey data" —
+     * \c externalCenterline the solve cannot read: dependencies reaching
+     * outside the project's data root, so the attachment cannot travel with
+     * the project, or an in-project copy that is gone from disk, which
+     * cavern would fatal on. The exporter emits no \c *include for them and
+     * no \c *begin wrapper around it, and keeps writing the rest of the
+     * region, so one broken attachment costs its own survey and leaves every
+     * other survey solvable. When it was the region's only data the driver
+     * comes out empty and cavern still fails the run with "No survey data" —
      * the same way an all-empty region already fails today.
      *
-     * A trip owner is told why through the file-error banner. A cave owner
-     * has no equivalent surface yet, so a cave-level exclusion is currently
-     * silent (see B7's follow-up in plans/EXTERNAL_FILE_PHASE2.html).
+     * A trip owner is told why through the file-error banner (containment)
+     * or the missing-copy banner. A cave owner has no equivalent surface
+     * yet, so a cave-level exclusion is currently silent outside the
+     * attached-centerlines model (see B7's follow-up in
+     * plans/EXTERNAL_FILE_PHASE2.html).
      *
      * \c scopeLabels carries the survey label every \c *begin block in the file
      * opens with. Filled by \c exportRegion itself rather than by the caller: a
