@@ -855,7 +855,23 @@ region-level log would also satisfy — per-trip attribution is proven in C++, n
       <code>&lt;project&gt;/ExternalCenterlines/&lt;uuid&gt;/foo.svx</code>, which was never the
       layout. Sequencing: do this</em> after <em>the
       <a href="EXTERNAL_FILE_LIVE_LINK_RETIREMENT.html">live-link retirement</a>, which removes the
-      remembered source and so removes the second candidate for "the file the user recognizes".</em></li>
+      remembered source and so removes the second candidate for "the file the user recognizes".</em>
+      <strong>DONE</strong> — and smaller than drafted. The manager owns a file-scope
+      <code>withProjectRelativePaths(message, boundary)</code> beside
+      <code>projectRelativePath</code>, applied where <code>scanOwners</code> fills
+      <code>tripHarvestErrors</code>: it strips the <code>dataRootDir</code> prefix (both
+      <code>QDir</code> and native separator forms, matched with the trailing separator so a
+      sibling directory sharing the prefix is left alone) and returns the message untouched for an
+      empty boundary, mirroring <code>projectRelativePath</code>'s scan-only branch. The banner and
+      its QML needed no change — the text it already showed verbatim is now project-relative, the
+      same name <code>MissingCenterlineCopyBanner</code> gives the same file. Two corrections to the
+      draft: <code>withoutDriverNoise</code> stays in
+      <code>cwExternalStationHarvest</code> (it is keyed on the harvest's private
+      <code>QTemporaryDir</code>, which the manager never sees), and containment errors keep their
+      absolute paths — an escaping <code>*include</code> genuinely resolves outside the project, so
+      absolute is the honest name there. Keying the rewrite on the stable data root also preserves
+      §3.7's run-to-run identical messages, which
+      <code>cwTrip::setExternalStationsError</code>'s equality early-out depends on.</li>
   <li><strong>Teaching <code>cwScopeStationListModel</code> the harvested names.</strong> It builds
       rows from <code>solvedStations()</code> alone
       (<code>cwScopeStationListModel.cpp:100-111</code>), so a dropped attachment's stations are

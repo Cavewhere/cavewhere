@@ -91,6 +91,32 @@ QString projectRelativePath(const QString& absolutePath, const QString& boundary
     return QDir(boundary).relativeFilePath(absolutePath);
 }
 
+// `message` as the project names its files: cavern echoes back the
+// machine-specific in-project path it was handed, so it is renamed the way
+// projectRelativePath names the same file for the missing-copy banner. Both
+// separator forms are rewritten, since a path can arrive natively spelled, and
+// the trailing separator keeps a sibling that merely shares the prefix intact.
+// Keying on the data root, which holds still between runs, is what keeps an
+// unchanged failure producing an identical message.
+QString withProjectRelativePaths(const QString& message, const QString& boundary)
+{
+    if (boundary.isEmpty()) {
+        return message;
+    }
+
+    const QString root = QDir::cleanPath(boundary);
+    const QString prefix = root.endsWith(QLatin1Char('/'))
+        ? root : root + QLatin1Char('/');
+    const QString nativePrefix = QDir::toNativeSeparators(prefix);
+
+    QString rewritten = message;
+    rewritten.replace(prefix, QString());
+    if (nativePrefix != prefix) {
+        rewritten.replace(nativePrefix, QString());
+    }
+    return rewritten;
+}
+
 // Deterministic presentation order: cave display name, then trip
 // display name (cave-level owners sort ahead of their trips via the
 // empty trip key), with ownerId as a stable tiebreak for duplicates.
@@ -432,7 +458,9 @@ cwExternalCenterlineManager::ExternalScanResult cwExternalCenterlineManager::sca
                     // nothing fixes.
                     const auto harvest = cwExternalStationHarvest::harvest(projectEntry);
                     if (harvest.hasError()) {
-                        result.tripHarvestErrors.insert(owner.ownerId, harvest.errorMessage());
+                        result.tripHarvestErrors.insert(
+                            owner.ownerId,
+                            withProjectRelativePaths(harvest.errorMessage(), owner.dataRootDir));
                     } else {
                         result.tripStations.insert(owner.ownerId, harvest.value());
                     }
