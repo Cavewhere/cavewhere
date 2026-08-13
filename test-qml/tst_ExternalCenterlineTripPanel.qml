@@ -194,6 +194,10 @@ MainWindowTest {
                    "the path is project-relative; got: " + banner.missingPath)
             verify(banner.missingPath.indexOf("survex_simple.svx") >= 0,
                    "the path names the missing file; got: " + banner.missingPath)
+            const title = findChild(banner, "missingCopyTitle")
+            verify(title !== null, "missingCopyTitle must render")
+            verify(title.visible && title.font.bold,
+                   "the banner leads with its bold title")
             const detail = findChild(banner, "missingCopyDetail")
             verify(detail !== null, "missingCopyDetail must exist")
             verify(detail.text.indexOf(banner.missingPath) >= 0,

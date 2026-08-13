@@ -922,17 +922,35 @@ region-level log would also satisfy — per-trip attribution is proven in C++, n
       as a cave-level containment exclusion already is (B7's follow-up in
       <a href="EXTERNAL_FILE_PHASE2.html">EXTERNAL_FILE_PHASE2.html</a>).
       <em>Raised by the H1–H3 review; re-scoped and half-shipped 2026-08-12.</em></li>
-  <li><strong>Fifth copy of the banner chassis.</strong>
-      <code>FloatingSurveyBanner</code>, <code>ExternalCenterlineFileErrorBanner</code>,
-      <code>ExternalCenterlineMissingSourceBanner</code> and two more repeat the same shape
-      verbatim: a rounded <code>QQ.Rectangle</code> keyed to a Theme color, a
-      <code>ColumnLayout</code> at <code>Theme.sectionSpacing</code> margins, a bold title
-      <code>QC.Label</code>, a <code>BodyText</code> detail, an optional action row, and
+  <li><strong>Third copy of the banner chassis.</strong>
+      <code>FloatingSurveyBanner</code>, <code>ExternalCenterlineFileErrorBanner</code> and
+      <code>MissingCenterlineCopyBanner</code> repeat the same shape verbatim: a rounded
+      <code>QQ.Rectangle</code> keyed to a Theme color, a <code>ColumnLayout</code> at
+      <code>Theme.sectionSpacing</code> margins with <code>Theme.tightSpacing</code>, a bold
+      word-wrapped title <code>QC.Label</code>, a body, an optional action row, and
       <code>implicitHeight: contentLayout.implicitHeight + Theme.sectionSpacing * 2</code>. The
       F12 log-height cap had to be written into one of them knowing the others have the same
       unbounded-content problem. A <code>NoticeBanner</code> base with a
       <code>default property alias</code> for the body would leave each of these holding only its
-      copy and its actions. <em>Raised by the H1–H3 review.</em></li>
+      copy and its actions. <em>Raised by the H1–H3 review; count corrected 2026-08-13 — the draft
+      said five. The live-link retirement deleted
+      <code>ExternalCenterlineMissingSourceBanner</code>, and the two toast-style banners
+      (<code>LfsMissingFilesBanner</code>, <code>VersionIncompatibleBanner</code>) were never this
+      shape, so they are out of scope.</em>
+      <strong>DONE</strong> — <code>cavewherelib/qml/NoticeBanner.qml</code> owns the card: the
+      corner radius, the <code>Theme.sectionSpacing</code> margins, the
+      <code>Theme.tightSpacing</code> rhythm, the bold word-wrapped title (named through a
+      <code>titleObjectName</code> passthrough so each banner keeps its own handle for tests), the
+      <code>implicitHeight</code> formula, and a <code>default property alias</code> onto an inner
+      <code>ColumnLayout</code> placed <em>below</em> the title, so injected children land under it
+      and <code>Layout.fillWidth</code> behaves as before. All three banners now hold only their
+      visibility predicate, color, title, body and actions; the file-error banner keeps its
+      <code>Flickable</code> and <code>maximumMessageHeight</code> cap unchanged inside the alias.
+      The existing QML tests stayed green unedited, which is the proof the extraction preserved
+      behavior; <code>tst_ExternalCenterlinePanelComponents</code> gained a chassis assertion
+      (title at the section margin, body under it, height covering both margins) and
+      <code>tst_ExternalCenterlineTripPanel</code> a title-renders check, since nothing addressed
+      those titles before.</li>
 </ul>
 
 </main>

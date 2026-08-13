@@ -5,7 +5,6 @@
 **
 **************************************************************************/
 
-import QtQuick as QQ
 import QtQuick.Controls as QC
 import QtQuick.Layouts
 import cavewherelib
@@ -17,12 +16,9 @@ import cavewherelib
 // silences everything else about the attachment: no stations, no scan, no
 // cavern complaint naming it. Picking the file again is the whole fix, which
 // is why this is the one banner that offers Replace… itself.
-QQ.Rectangle {
+NoticeBanner {
     id: root
     objectName: "missingCenterlineCopyBanner"
-
-    // Matches the corner of the sibling banners in the trip panel.
-    readonly property real cornerRadius: 5
 
     // Project-relative path of the file that should be there, from
     // ExternalCenterlineManager.missingCopyPath(). Empty hides the banner.
@@ -32,37 +28,22 @@ QQ.Rectangle {
 
     visible: missingPath.length > 0
     color: Theme.errorBackground
-    radius: cornerRadius
-    implicitHeight: contentLayoutId.implicitHeight + Theme.sectionSpacing * 2
+    title: qsTr("This survey's file is missing")
+    titleObjectName: "missingCopyTitle"
 
-    ColumnLayout {
-        id: contentLayoutId
-        anchors.fill: parent
-        anchors.margins: Theme.sectionSpacing
-        spacing: Theme.tightSpacing
+    BodyText {
+        objectName: "missingCopyDetail"
+        Layout.fillWidth: true
+        wrapMode: QC.Label.WordWrap
+        font.pixelSize: Theme.fontSizeSmall
+        text: qsTr("%1 is gone from the project folder, so this survey can't be read. Pick the file again to put it back.")
+              .arg(root.missingPath)
+    }
 
-        QC.Label {
-            objectName: "missingCopyTitle"
-            Layout.fillWidth: true
-            font.bold: true
-            wrapMode: QC.Label.WordWrap
-            text: qsTr("This survey's file is missing")
-        }
-
-        BodyText {
-            objectName: "missingCopyDetail"
-            Layout.fillWidth: true
-            wrapMode: QC.Label.WordWrap
-            font.pixelSize: Theme.fontSizeSmall
-            text: qsTr("%1 is gone from the project folder, so this survey can't be read. Pick the file again to put it back.")
-                  .arg(root.missingPath)
-        }
-
-        QC.Button {
-            objectName: "missingCopyReplaceButton"
-            Layout.topMargin: Theme.tightSpacing
-            text: qsTr("Replace…")
-            onClicked: root.replaceRequested()
-        }
+    QC.Button {
+        objectName: "missingCopyReplaceButton"
+        Layout.topMargin: Theme.tightSpacing
+        text: qsTr("Replace…")
+        onClicked: root.replaceRequested()
     }
 }

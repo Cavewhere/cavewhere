@@ -354,6 +354,22 @@ MainWindowTest {
             verify(stations.text.indexOf("a1, a2") >= 0,
                    "stations render in the survey's own namespace; got: " + stations.text)
 
+            // The card the notice banners share: bold title at the top of the
+            // section margin, body under it, and a height that holds both
+            // margins.
+            const title = findChild(floatingBannerId, "floatingSurveyTitle")
+            verify(title !== null, "floatingSurveyTitle must render")
+            verify(title.font.bold, "the title is the card's bold line")
+            tryVerify(() => title.mapToItem(floatingBannerId, 0, 0).y === Theme.sectionSpacing,
+                      1000, "the title sits at the card's section margin")
+            verify(detail.mapToItem(floatingBannerId, 0, 0).y
+                   > title.mapToItem(floatingBannerId, 0, 0).y,
+                   "the body lands under the title")
+            verify(floatingBannerId.implicitHeight
+                   >= stations.mapToItem(floatingBannerId, 0, 0).y + stations.height
+                      + Theme.sectionSpacing,
+                   "the card holds its content plus the bottom margin")
+
             const noTies = findChild(floatingBannerId, "tieSuggestionsEmpty")
             verify(noTies !== null, "tieSuggestionsEmpty must exist")
             verify(!noTies.visible,

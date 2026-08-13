@@ -17,7 +17,7 @@ import cavewherelib
 // attachment as one run and fails with one log, so it can say the region is
 // broken but not which file broke it. The harvest reads this file alone, right
 // after the attach and on every edit of it.
-QQ.Rectangle {
+NoticeBanner {
     id: root
     objectName: "externalCenterlineFileErrorBanner"
 
@@ -33,51 +33,36 @@ QQ.Rectangle {
 
     visible: errorMessage.length > 0
     color: Theme.errorBackground
-    radius: 5
-    implicitHeight: contentLayoutId.implicitHeight + Theme.sectionSpacing * 2
+    title: qsTr("This file has errors")
+    titleObjectName: "fileErrorTitle"
 
-    ColumnLayout {
-        id: contentLayoutId
-        anchors.fill: parent
-        anchors.margins: Theme.sectionSpacing
-        spacing: Theme.tightSpacing
+    QQ.Flickable {
+        id: messageAreaId
+        objectName: "fileErrorMessageArea"
 
-        QC.Label {
-            objectName: "fileErrorTitle"
-            Layout.fillWidth: true
-            font.bold: true
-            wrapMode: QC.Label.WordWrap
-            text: qsTr("This file has errors")
+        Layout.fillWidth: true
+        Layout.preferredHeight: Math.min(messageId.implicitHeight,
+                                         root.maximumMessageHeight)
+
+        contentWidth: width
+        contentHeight: messageId.implicitHeight
+        clip: true
+        boundsBehavior: QQ.Flickable.StopAtBounds
+
+        QC.ScrollBar.vertical: QC.ScrollBar {
+            policy: messageAreaId.contentHeight > messageAreaId.height
+                    ? QC.ScrollBar.AlwaysOn
+                    : QC.ScrollBar.AlwaysOff
         }
 
-        QQ.Flickable {
-            id: messageAreaId
-            objectName: "fileErrorMessageArea"
+        BodyText {
+            id: messageId
+            objectName: "fileErrorMessage"
 
-            Layout.fillWidth: true
-            Layout.preferredHeight: Math.min(messageId.implicitHeight,
-                                             root.maximumMessageHeight)
-
-            contentWidth: width
-            contentHeight: messageId.implicitHeight
-            clip: true
-            boundsBehavior: QQ.Flickable.StopAtBounds
-
-            QC.ScrollBar.vertical: QC.ScrollBar {
-                policy: messageAreaId.contentHeight > messageAreaId.height
-                        ? QC.ScrollBar.AlwaysOn
-                        : QC.ScrollBar.AlwaysOff
-            }
-
-            BodyText {
-                id: messageId
-                objectName: "fileErrorMessage"
-
-                width: messageAreaId.width
-                wrapMode: QC.Label.WordWrap
-                font.pixelSize: Theme.fontSizeSmall
-                text: root.errorMessage
-            }
+            width: messageAreaId.width
+            wrapMode: QC.Label.WordWrap
+            font.pixelSize: Theme.fontSizeSmall
+            text: root.errorMessage
         }
     }
 }
