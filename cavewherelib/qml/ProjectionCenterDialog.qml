@@ -272,9 +272,12 @@ QC.Dialog {
                         value: candidateId.stationId
                         // The cave carries the row: a station name means nothing
                         // on its own, and half the projects here have an
-                        // "entrance" in every cave.
-                        title: qsTr("<b>%1</b> at %2").arg(candidateId.caveName)
-                                                      .arg(candidateId.stationName)
+                        // "entrance" in every cave. The title is styled text and
+                        // the user wrote both names, so both are escaped: a cave
+                        // called "Smith & Sons" would otherwise start an entity.
+                        title: qsTr("<b>%1</b> at %2")
+                                   .arg(Utils.escapeHtml(candidateId.caveName))
+                                   .arg(Utils.escapeHtml(candidateId.stationName))
 
                         detail: rootId.detailLine(
                                     candidateId.hasCoordinate

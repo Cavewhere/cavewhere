@@ -622,6 +622,35 @@ TEST_CASE("A frame already frozen on the data's middle says so",
     CHECK_FALSE(openedCandidates(&region)->dataCenterIsCurrent());
 }
 
+TEST_CASE("Asking whether the frame is centered with a center in hand gives the same answer",
+          "[cwLocalProjectionManager][cwRecenter]")
+{
+    // The picker already holds dataCenter() when it asks, and recomputing it
+    // walks every input through PROJ again. The overload it uses instead has to
+    // answer identically, in both states of the frame.
+    cwCavingRegion region;
+    addCaveWithFixes(&region, {
+        makeFix(QStringLiteral("A1"), kUtm12N,
+                kAnchorEasting, kAnchorNorthing, kElevation),
+        makeFix(QStringLiteral("A2"), kUtm12N,
+                kNearbyEasting, kNearbyNorthing, kElevation)});
+
+    cwLocalProjectionManager* projection = region.localProjection();
+
+    REQUIRE(region.geoReference()->state() == cwGeoReference::Anchored);
+    CHECK(projection->isCenteredOnDataCenter(projection->dataCenter())
+          == projection->isCenteredOnDataCenter());
+
+    REQUIRE(projection->recenterOnDataCenter());
+    REQUIRE(region.geoReference()->state() == cwGeoReference::Frozen);
+    CHECK(projection->isCenteredOnDataCenter(projection->dataCenter())
+          == projection->isCenteredOnDataCenter());
+    CHECK(projection->isCenteredOnDataCenter(projection->dataCenter()));
+
+    // A project the frame can place nothing in has no middle to be centered on.
+    CHECK_FALSE(projection->isCenteredOnDataCenter(std::nullopt));
+}
+
 TEST_CASE("A station the project's data would sit far from can't be recentered on",
           "[cwLocalProjectionManager][cwRecenter]")
 {

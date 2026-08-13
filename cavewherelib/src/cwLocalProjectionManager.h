@@ -118,6 +118,11 @@ public:
     //! behind for an identity check to compare against.
     bool isCenteredOnDataCenter() const;
 
+    //! isCenteredOnDataCenter() against a center already computed, so a caller
+    //! holding dataCenter() answers this without walking every input and its
+    //! PROJ transform a second time.
+    bool isCenteredOnDataCenter(const std::optional<cwGeoPoint>& center) const;
+
     //! Where \a fix sits in the project's frame, or an empty result when the fix
     //! has no coordinate the frame can read. A station the frame can't place is
     //! not one the project can be centered on, so the two refusals are the same

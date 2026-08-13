@@ -356,6 +356,11 @@ bool cwLocalProjectionManager::recenterOnStation(const QUuid& stationId)
 
 bool cwLocalProjectionManager::isCenteredOnDataCenter() const
 {
+    return isCenteredOnDataCenter(dataCenter());
+}
+
+bool cwLocalProjectionManager::isCenteredOnDataCenter(const std::optional<cwGeoPoint>& center) const
+{
     // An anchored frame is never "already there", even with its anchor sitting
     // on the middle of the data: centering would still cut the frame loose from
     // the input it follows, which is a change worth offering.
@@ -363,7 +368,6 @@ bool cwLocalProjectionManager::isCenteredOnDataCenter() const
         return false;
     }
 
-    const auto center = dataCenter();
     return center.has_value()
             && horizontalMagnitude(*center) <= kFrameOriginToleranceMeters;
 }

@@ -90,7 +90,7 @@ void cwRecenterCandidateModel::refresh()
 
     const cwGeoReference* geoReference = m_region->geoReference();
     setDataCenter(toWgs84(geoReference->localCoordinateSystem(), *center),
-                  m_manager->isCenteredOnDataCenter());
+                  m_manager->isCenteredOnDataCenter(center));
 
     const cwGeoReference::Anchor anchor = geoReference->anchor();
 
