@@ -122,6 +122,23 @@ public:
     static QString deriveProjectedOutputCS(const QString& inputCS, const cwGeoPoint& point);
 
     /**
+     * \a cs respelled without a `"` in it, which is what a format that quotes a
+     * system — survex's `*cs CUSTOM "..."` — can carry inline.
+     *
+     * PROJ is asked to identify the system first, so a WKT that names a
+     * catalogued CRS comes back as the authority code it already carries
+     * ("EPSG:6318"), which is both the shortest and the most faithful spelling.
+     * A system PROJ recognizes with no confidence falls back to its PROJ string
+     * ("+proj=tmerc ..."), which every reader solves; that spelling drops what a
+     * modern datum knows beyond its ellipsoid, so it moves the cave by up to a
+     * couple of meters against the original WKT.
+     *
+     * Empty when PROJ can't read \a cs, and when the PROJ string would carry a
+     * quote of its own — both leave the caller its original spelling.
+     */
+    static QString quoteFreeCS(const QString& cs);
+
+    /**
      * Set the directories PROJ searches for proj.db and grid-shift files.
      * Should be called once at application startup (before any
      * cwCoordinateTransform / isValidCS call) with the result of

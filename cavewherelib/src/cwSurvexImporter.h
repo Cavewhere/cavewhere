@@ -199,6 +199,20 @@ private:
     void parseExport(QString line);
     void parseFlags(QString line);
     void parseCS(QString line);
+
+    /**
+     * The coordinate system a `*cs ... @name` reference reads from, or empty
+     * when the file it names can't be read.
+     *
+     * Resolved the way cavern resolves it (survex/src/commands.c,
+     * read_cs_from_file): relative to the directory of the file the `*cs` line
+     * is in, with a `.prj` extension assumed when the name as written names
+     * nothing. The contents are the system itself — WKT, a PROJ string, or an
+     * ESRI `.prj` — so its lines are joined with a single space and a leading
+     * BOM dropped, which PROJ refuses to read past.
+     */
+    QString readCSFromFile(const QString& reference) const;
+
     void parseFix(QString line);
 
     void runStats(QString filename);

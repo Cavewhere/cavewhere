@@ -522,6 +522,87 @@ QString cwCoordinateTransform::deriveProjectedOutputCS(const QString& inputCS,
 }
 
 namespace {
+    //! What proj_identify has to report before its match is taken for the system
+    //! itself. PROJ scores an exact match 100, a name-only match 90, and an
+    //! equivalent-parameters match 70; below that the candidate is a family
+    //! resemblance, and naming its code would move the cave.
+    constexpr int kMinIdentifyConfidence = 70;
+
+    //! The authority code PROJ is confident \a crs already has, or empty.
+    QString identifiedAuthorityCode(PJ_CONTEXT* ctx, const PJ* crs)
+    {
+        int* confidences = nullptr;
+        PJ_OBJ_LIST* matches = proj_identify(ctx, crs, nullptr, nullptr, &confidences);
+        if (!matches) {
+            return QString();
+        }
+
+        QString code;
+        const int count = proj_list_get_count(matches);
+        for (int i = 0; i < count && code.isEmpty(); ++i) {
+            if (confidences && confidences[i] < kMinIdentifyConfidence) {
+                continue;
+            }
+            PJ* match = proj_list_get(ctx, matches, i);
+            if (!match) {
+                continue;
+            }
+            const char* authority = proj_get_id_auth_name(match, 0);
+            const char* identifier = proj_get_id_code(match, 0);
+            if (authority && identifier) {
+                code = QStringLiteral("%1:%2").arg(QString::fromUtf8(authority),
+                                                   QString::fromUtf8(identifier));
+            }
+            proj_destroy(match);
+        }
+
+        if (confidences) {
+            proj_int_list_destroy(confidences);
+        }
+        proj_list_destroy(matches);
+        return code;
+    }
+}
+
+QString cwCoordinateTransform::quoteFreeCS(const QString& cs)
+{
+    const QString key = cs.trimmed();
+    if (key.isEmpty()) {
+        return QString();
+    }
+
+    // Per-thread cache with the same cap as the queries above: this runs once
+    // per *cs line per export, and proj_identify is a proj.db search on top of
+    // the proj_create every other query here pays.
+    thread_local QHash<QString, QString> cache;
+    return cachedValue(cache, key, [&key]() {
+        QString result;
+        PJ_CONTEXT* ctx = validatorContext();
+        if (!ctx) {
+            return result;
+        }
+        PJ* crs = proj_create(ctx, key.toUtf8().constData());
+        if (!crs) {
+            return result;
+        }
+
+        result = identifiedAuthorityCode(ctx, crs);
+        if (result.isEmpty()) {
+            const char* projString = proj_as_proj_string(ctx, crs, PJ_PROJ_5, nullptr);
+            if (projString) {
+                result = QString::fromUtf8(projString).trimmed();
+            }
+        }
+        proj_destroy(crs);
+
+        if (result.contains(QLatin1Char('"'))) {
+            return QString();
+        }
+        return result;
+    });
+}
+
+namespace {
     struct ParsedCS {
         cwCoordinateSystem::Mode mode = cwCoordinateSystem::Local;
         int  utmZone  = -1;

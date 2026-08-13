@@ -15,13 +15,17 @@
 #include "cwFixStation.h"
 #include "cwFixStationModel.h"
 #include "cwSurveyChunk.h"
+#include "cwSurvexCS.h"
 #include "cwSurvexExporterRegion.h"
+#include "cwSurvexImporter.h"
 #include "cwTrip.h"
 
 //Qt includes
+#include <QCoreApplication>
 #include <QDir>
 #include <QFile>
 #include <QTemporaryDir>
+#include <QTextStream>
 
 //Std includes
 #include <memory>
@@ -89,11 +93,14 @@ cwCavingRegionData snapshotWithFrame(const cwCavingRegion* region, const QString
     return data;
 }
 
-//! Export \a data to `region.svx` in \a dir, naming the frame in `*cs out`.
-QStringList exportToDir(const cwCavingRegionData& data, const QTemporaryDir& dir)
+//! Export \a data to `region.svx` in \a dir under \a policy, which for the
+//! working frame names it in `*cs out`.
+QStringList exportToDir(const cwCavingRegionData& data, const QTemporaryDir& dir,
+                        cwSurvexExporterRegion::OutputCSPolicy policy
+                            = cwSurvexExporterRegion::OutputCSPolicy::WorkingFrame)
 {
     cwSurvexExporterRegion::Options options;
-    options.outputCSPolicy = cwSurvexExporterRegion::OutputCSPolicy::WorkingFrame;
+    options.outputCSPolicy = policy;
 
     const auto result =
         cwSurvexExporterRegion::exportRegion(data, dir.filePath(QStringLiteral("region.svx")),
@@ -112,6 +119,57 @@ QString sidecarText(const QTemporaryDir& dir, const QString& fileName)
     QFile file(dir.filePath(fileName));
     REQUIRE(file.open(QIODevice::ReadOnly));
     return QString::fromUtf8(file.readAll()).trimmed();
+}
+
+const auto kCsOutPrefix = QStringLiteral("*cs out ");
+const auto kCsPrefix = QStringLiteral("*cs ");
+
+//! Every `*cs` argument in \a lines, output and input alike.
+QStringList csArguments(const QStringList& lines)
+{
+    QStringList arguments;
+    for (const QString& line : lines) {
+        if (line.startsWith(kCsOutPrefix)) {
+            arguments.append(line.mid(kCsOutPrefix.size()).trimmed());
+        } else if (line.startsWith(kCsPrefix)) {
+            arguments.append(line.mid(kCsPrefix.size()).trimmed());
+        }
+    }
+    return arguments;
+}
+
+//! Import `region.svx` from \a dir, and hand back the fixes it captured.
+QList<cwFixStation> importFrom(const QTemporaryDir& dir, cwSurvexImporter& importer)
+{
+    importer.setInputFiles(QStringList() << dir.filePath(QStringLiteral("region.svx")));
+    importer.start();
+    importer.waitToFinish();
+    return importer.capturedFixStations();
+}
+
+//! A one-shot, one-fix `.svx` in \a dir naming \a csArgument, ready to import.
+void writeSvxNaming(const QTemporaryDir& dir, const QString& csArgument)
+{
+    QFile file(dir.filePath(QStringLiteral("region.svx")));
+    REQUIRE(file.open(QIODevice::WriteOnly | QIODevice::Text));
+    QTextStream stream(&file);
+    stream << "*begin TestCave" << Qt::endl
+           << "*cs out EPSG:32616" << Qt::endl
+           << "*cs " << csArgument << Qt::endl
+           << "*data normal from to tape compass clino" << Qt::endl
+           << "*fix a1 " << kMammothEasting << ' ' << kMammothNorthing << ' '
+           << kMammothElevation << Qt::endl
+           << "a1 a2 10.0 0 0" << Qt::endl
+           << "*end TestCave" << Qt::endl;
+}
+
+//! Write \a contents as \a fileName in \a dir, the way a sidecar is written.
+void writeSidecar(const QTemporaryDir& dir, const QString& fileName, const QString& contents)
+{
+    QFile file(dir.filePath(fileName));
+    REQUIRE(file.open(QIODevice::WriteOnly | QIODevice::Text));
+    QTextStream stream(&file);
+    stream << contents << Qt::endl;
 }
 
 //! Solve the exported file, and say what cavern said about it.
@@ -212,4 +270,115 @@ TEST_CASE("One system named twice keeps one sidecar",
     CHECK_FALSE(QFile::exists(dir.filePath(QStringLiteral("region-2.prj"))));
 
     solves(dir);
+}
+
+TEST_CASE("A shared export spells every system out in official survex syntax",
+          "[cwSurvexExporterRegion_Sidecar]")
+{
+    //The @ reference is CaveWhere's own extension, so a file somebody else
+    //reads carries none of them — every system is spelled on the *cs line
+    //itself, however it was typed.
+    SECTION("a catalogued system comes back as its authority code") {
+        auto region = makeRegion(kFixWkt);
+
+        QTemporaryDir dir;
+        REQUIRE(dir.isValid());
+        const QStringList lines =
+            exportToDir(snapshotWithFrame(region.get(), kFrameWkt), dir,
+                        cwSurvexExporterRegion::OutputCSPolicy::Shareable);
+
+        const QStringList arguments = csArguments(lines);
+        REQUIRE_FALSE(arguments.isEmpty());
+        for (const QString& argument : arguments) {
+            CHECK_FALSE(argument.contains(QLatin1Char('@')));
+            CHECK(argument == kUtmZone16N);
+        }
+
+        CHECK_FALSE(QFile::exists(dir.filePath(QStringLiteral("region.prj"))));
+        solves(dir);
+    }
+
+    SECTION("a system PROJ can't name falls back to a quoted PROJ string") {
+        //The project's own frame has no catalogued code, so it goes out as the
+        //PROJ string every survex solves.
+        auto region = makeRegion(kFrameWkt);
+
+        QTemporaryDir dir;
+        REQUIRE(dir.isValid());
+        const QStringList lines =
+            exportToDir(snapshotWithFrame(region.get(), kFrameWkt), dir,
+                        cwSurvexExporterRegion::OutputCSPolicy::Shareable);
+
+        const QStringList arguments = csArguments(lines);
+        REQUIRE_FALSE(arguments.isEmpty());
+        for (const QString& argument : arguments) {
+            CHECK_FALSE(argument.contains(QLatin1Char('@')));
+            CHECK(argument.startsWith(QStringLiteral("CUSTOM \"+proj=tmerc")));
+
+            //Official grammar: the CUSTOM payload is one quoted run, so the
+            //production reader gets the whole system back off the line.
+            const auto parsed = cwSurvexCS::fromSurvexCS(argument);
+            REQUIRE(parsed.has_value());
+            CHECK(parsed->projCS.startsWith(QStringLiteral("+proj=tmerc")));
+        }
+
+        CHECK_FALSE(QFile::exists(dir.filePath(QStringLiteral("region.prj"))));
+        solves(dir);
+    }
+}
+
+TEST_CASE("A sidecar written for the solve reads back through the importer",
+          "[cwSurvexExporterRegion_Sidecar][SurvexImport]")
+{
+    auto region = makeRegion(kFixWkt);
+
+    QTemporaryDir dir;
+    REQUIRE(dir.isValid());
+    const QStringList lines = exportToDir(snapshotWithFrame(region.get(), kFrameWkt), dir);
+    REQUIRE(lines.contains(QStringLiteral("*cs CUSTOM @region-2.prj")));
+
+    cwSurvexImporter importer;
+    const QList<cwFixStation> fixes = importFrom(dir, importer);
+
+    const QString errors = importer.parseErrors().join(QStringLiteral("; "));
+    INFO(errors.toStdString());
+    CHECK_FALSE(errors.contains(QStringLiteral("coordinate system")));
+    REQUIRE(fixes.size() == 1);
+    CHECK(fixes.first().inputCS() == kFixWkt);
+}
+
+TEST_CASE("A quoted @reference with a space resolves against the .svx's directory",
+          "[cwSurvexExporterRegion_Sidecar][SurvexImport]")
+{
+    QTemporaryDir dir;
+    REQUIRE(dir.isValid());
+
+    //Named without its extension, which cavern assumes, and with a space, which
+    //puts the whole argument in quotes.
+    writeSidecar(dir, QStringLiteral("my frame.prj"), kFrameWkt);
+    writeSvxNaming(dir, QStringLiteral("CUSTOM \"@my frame\""));
+
+    cwSurvexImporter importer;
+    const QList<cwFixStation> fixes = importFrom(dir, importer);
+
+    INFO(importer.parseErrors().join(QStringLiteral("; ")).toStdString());
+    CHECK_FALSE(importer.hasParseErrors());
+    REQUIRE(fixes.size() == 1);
+    CHECK(fixes.first().inputCS() == kFrameWkt);
+}
+
+TEST_CASE("An @reference to a missing file warns and leaves the fixes without a system",
+          "[cwSurvexExporterRegion_Sidecar][SurvexImport]")
+{
+    QTemporaryDir dir;
+    REQUIRE(dir.isValid());
+    writeSvxNaming(dir, QStringLiteral("CUSTOM @gone.prj"));
+
+    cwSurvexImporter importer;
+    const QList<cwFixStation> fixes = importFrom(dir, importer);
+
+    CHECK(importer.hasParseErrors());
+    CHECK(importer.parseErrors().join(QStringLiteral("; ")).contains(QStringLiteral("gone.prj")));
+    REQUIRE(fixes.size() == 1);
+    CHECK(fixes.first().inputCS().isEmpty());
 }

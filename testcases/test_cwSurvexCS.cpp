@@ -77,6 +77,10 @@ TEST_CASE("fromSurvexCS leaves a sidecar reference to the file it names", "[cwSu
     //The unquoted spelling is the same reference, and survex defines no other
     //meaning for it either.
     CHECK_FALSE(fromSurvexCS(QStringLiteral("CUSTOM @region.prj")).has_value());
+
+    //A reference naming no file is still a reference, so "@" stays out of the
+    //systems as well.
+    CHECK_FALSE(fromSurvexCS(QStringLiteral("CUSTOM \"@\"")).has_value());
 }
 
 TEST_CASE("fromSurvexCS reads the keyword systems", "[cwSurvexCS]")
@@ -155,7 +159,8 @@ TEST_CASE("A system carrying a quote is written to a .prj beside the file",
     QTemporaryDir dir;
     REQUIRE(dir.isValid());
 
-    cwSurvexCS::SidecarWriter sidecars(dir.filePath(QStringLiteral("region.svx")));
+    cwSurvexCS::SidecarWriter sidecars(dir.filePath(QStringLiteral("region.svx")),
+                                       cwSurvexCS::SidecarPolicy::BundledCavern);
 
     CHECK(cwSurvexCS::toSurvexCS(wkt, sidecars)
           == QStringLiteral("CUSTOM @region.prj"));
@@ -191,10 +196,34 @@ TEST_CASE("A .prj whose name has a space is quoted whole", "[cwSurvexCS]")
 
     QTemporaryDir dir;
     REQUIRE(dir.isValid());
-    cwSurvexCS::SidecarWriter sidecars(dir.filePath(QStringLiteral("My Cave.svx")));
+    cwSurvexCS::SidecarWriter sidecars(dir.filePath(QStringLiteral("My Cave.svx")),
+                                       cwSurvexCS::SidecarPolicy::BundledCavern);
 
     CHECK(cwSurvexCS::toSurvexCS(wkt, sidecars)
           == QStringLiteral("CUSTOM \"@My Cave.prj\""));
+}
+
+TEST_CASE("Official syntax spells a quote-carrying system out on the line",
+          "[cwSurvexCS]")
+{
+    //The @ reference only the bundled cavern reads, so a file for everybody
+    //else names the system PROJ identifies it as.
+    const QString wgs84Wkt = QStringLiteral(
+        R"WKT(GEOGCRS["WGS 84",DATUM["World Geodetic System 1984",)WKT"
+        R"WKT(ELLIPSOID["WGS 84",6378137,298.257223563]],CS[ellipsoidal,2],)WKT"
+        R"WKT(AXIS["latitude",north],AXIS["longitude",east],)WKT"
+        R"WKT(UNIT["degree",0.0174532925199433],ID["EPSG",4326]])WKT");
+
+    QTemporaryDir dir;
+    REQUIRE(dir.isValid());
+    cwSurvexCS::SidecarWriter sidecars(dir.filePath(QStringLiteral("region.svx")));
+
+    CHECK(cwSurvexCS::toSurvexCS(wgs84Wkt, sidecars) == QStringLiteral("EPSG:4326"));
+
+    //Nothing was reserved, so the export leaves no file behind for a reader to
+    //go looking for.
+    REQUIRE(sidecars.write().isEmpty());
+    CHECK_FALSE(QFile::exists(dir.filePath(QStringLiteral("region.prj"))));
 }
 
 TEST_CASE("A retargeted writer names its sidecars after the new file", "[cwSurvexCS]")
@@ -207,7 +236,8 @@ TEST_CASE("A retargeted writer names its sidecars after the new file", "[cwSurve
     QTemporaryDir dir;
     REQUIRE(dir.isValid());
 
-    cwSurvexCS::SidecarWriter sidecars(dir.filePath(QStringLiteral("first.svx")));
+    cwSurvexCS::SidecarWriter sidecars(dir.filePath(QStringLiteral("first.svx")),
+                                       cwSurvexCS::SidecarPolicy::BundledCavern);
     CHECK(cwSurvexCS::toSurvexCS(wkt, sidecars) == QStringLiteral("CUSTOM @first.prj"));
 
     sidecars.setSurvexFile(dir.filePath(QStringLiteral("second.svx")));
@@ -224,7 +254,8 @@ TEST_CASE("A system with an inline spelling takes no file", "[cwSurvexCS]")
 {
     QTemporaryDir dir;
     REQUIRE(dir.isValid());
-    cwSurvexCS::SidecarWriter sidecars(dir.filePath(QStringLiteral("region.svx")));
+    cwSurvexCS::SidecarWriter sidecars(dir.filePath(QStringLiteral("region.svx")),
+                                       cwSurvexCS::SidecarPolicy::BundledCavern);
 
     CHECK(cwSurvexCS::toSurvexCS(QStringLiteral("EPSG:32616"), sidecars)
           == QStringLiteral("EPSG:32616"));

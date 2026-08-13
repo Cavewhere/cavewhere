@@ -36,7 +36,13 @@ cwSurvexExporterRegion::exportRegion(const cwCavingRegionData& region,
 
     //One writer for the whole file: the region's *cs out and every fix row's own
     //*cs land in it, and each system that needs a sidecar takes its own file.
-    cwSurvexCS::SidecarWriter sidecars(outputPath);
+    //Only the working-frame file gets sidecars — the bundled cavern is its only
+    //reader, and it is the only survex that reads an @ reference.
+    const auto sidecarPolicy =
+        options.outputCSPolicy == cwSurvexExporterUtils::OutputCSPolicy::WorkingFrame
+            ? cwSurvexCS::SidecarPolicy::BundledCavern
+            : cwSurvexCS::SidecarPolicy::OfficialSyntax;
+    cwSurvexCS::SidecarWriter sidecars(outputPath, sidecarPolicy);
 
     const QString outputCS =
         cwSurvexExporterUtils::resolveOutputCS(region,

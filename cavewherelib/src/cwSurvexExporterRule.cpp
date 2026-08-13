@@ -173,7 +173,10 @@ void cwSurvexExporterRule::updatePipeline()
                                     ResultBase::Unknown);
             }
 
-            cwSurvexCS::SidecarWriter sidecars(survexFilename);
+            //Official syntax: a rule-built .svx is for somebody else's survex,
+            //which reads no @ reference.
+            cwSurvexCS::SidecarWriter sidecars(survexFilename,
+                                               cwSurvexCS::SidecarPolicy::OfficialSyntax);
             {
                 QTextStream stream(&file);
                 writeRegion(stream, sidecars, region);

@@ -27,6 +27,7 @@
 #include <QThread>
 #include <QRegularExpression>
 #include <QRegularExpressionMatch>
+#include <QTextStream>
 
 //Std include
 #include "math.h"
@@ -37,6 +38,10 @@ namespace {
 QString stripSurvexSentinel(const QString& value) {
     return value.trimmed() == QLatin1String("-") ? QString() : value;
 }
+
+//! Byte-order mark, which a Windows-written .prj starts with and PROJ refuses
+//! to read past. Cavern skips it, so CaveWhere reads the same file.
+constexpr QChar kByteOrderMark = QChar(0xFEFF);
 }
 
 cwSurvexImporter::cwSurvexImporter(QObject* parent) :
@@ -1082,6 +1087,18 @@ void cwSurvexImporter::parseCS(QString line)
         return;
     }
 
+    const QString reference = cwSurvexCS::sidecarFileReference(trimmed);
+    if (!reference.isEmpty()) {
+        const QString fileCS = readCSFromFile(reference);
+        if (fileCS.isEmpty()) {
+            addWarning(QString("CaveWhere couldn't read the coordinate system file \"%1\"; the "
+                               "*fix stations under it carry none until you set one on them")
+                           .arg(reference));
+        }
+        setCurrentCS(cwSurvexCS::Parsed{ fileCS });
+        return;
+    }
+
     const std::optional<cwSurvexCS::Parsed> parsed = cwSurvexCS::fromSurvexCS(trimmed);
     if (!parsed.has_value()) {
         addWarning(QString("CaveWhere doesn't know the coordinate system \"%1\"; the "
@@ -1090,6 +1107,39 @@ void cwSurvexImporter::parseCS(QString line)
     }
 
     setCurrentCS(parsed.value_or(cwSurvexCS::Parsed()));
+}
+
+QString cwSurvexImporter::readCSFromFile(const QString& reference) const
+{
+    const QDir directory = QFileInfo(currentFile()).absoluteDir();
+
+    QString path = directory.filePath(reference);
+    if (!QFileInfo::exists(path)) {
+        path += cwSurvexCS::sidecarSuffix;
+    }
+
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        return QString();
+    }
+
+    //One system per file, however many lines it is printed across: PROJ reads
+    //WKT with any whitespace between its parts, and neither WKT nor PROJJSON
+    //allows a newline inside a quoted name.
+    QStringList parts;
+    QTextStream stream(&file);
+    while (!stream.atEnd()) {
+        const QString line = stream.readLine().trimmed();
+        if (!line.isEmpty()) {
+            parts.append(line);
+        }
+    }
+
+    QString cs = parts.join(QLatin1Char(' '));
+    if (cs.startsWith(kByteOrderMark)) {
+        cs.remove(0, 1);
+    }
+    return cs.trimmed();
 }
 
 /**

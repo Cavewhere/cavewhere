@@ -48,6 +48,37 @@ struct Parsed {
  */
 std::optional<Parsed> fromSurvexCS(const QString& csArgument);
 
+//! What cavern assumes when the name a `*cs` references is missing as written
+//! (survex/src/commands.c, fopen_portable with EXT_PRJ), and what makes the
+//! file an ESRI `.prj` too.
+inline constexpr auto sidecarSuffix = QLatin1String(".prj");
+
+/**
+ * The file name a `CUSTOM @name` argument reads its system from — as written,
+ * so the reader applies cavern's own `.prj` rule — or empty when \a csArgument
+ * carries the system itself.
+ *
+ * This is what fromSurvexCS() has no answer for: the system is in a file beside
+ * the `.svx`, and only a caller that knows which file the line came from can
+ * open it. Ask here first, and a caller with no file context still knows why
+ * fromSurvexCS() said nothing.
+ */
+QString sidecarFileReference(const QString& csArgument);
+
+/**
+ * Whether a `*cs` may point at a `.prj` beside the file rather than spell its
+ * system out.
+ *
+ * The `@` reference is CaveWhere's own extension to its bundled survex, and
+ * official releases reject it, so the default is to keep to the syntax every
+ * survex reads. Only the solve driver — whose `.svx` the bundled cavern reads
+ * and nobody else ever sees — asks for the other one.
+ */
+enum class SidecarPolicy {
+    OfficialSyntax,
+    BundledCavern
+};
+
 /**
  * Where a `*cs` line may put a `.prj` sidecar, and which ones the file it is
  * writing already has.
@@ -75,15 +106,17 @@ class SidecarWriter
 {
 public:
     SidecarWriter() = default;
-    explicit SidecarWriter(const QString& survexPath);
+    explicit SidecarWriter(const QString& survexPath,
+                           SidecarPolicy policy = SidecarPolicy::OfficialSyntax);
 
     //! The `.svx` the sidecars belong beside. They take its stem and its
     //! directory, and any name reserved for the previous one is forgotten.
     void setSurvexFile(const QString& survexPath);
 
     //! The sidecar file name to reference for \a cs, taking one when this is the
-    //! first request for that system. Empty when no `.svx` says where to put it,
-    //! which leaves the caller its old inline spelling.
+    //! first request for that system. Empty under SidecarPolicy::OfficialSyntax,
+    //! and empty when no `.svx` says where to put the file; both leave the caller
+    //! to spell the system out on the `*cs` line itself.
     QString reserve(const QString& cs);
 
     //! Write every reserved sidecar. Empty when they all got there, and
@@ -93,6 +126,7 @@ public:
     QString write() const;
 
 private:
+    SidecarPolicy m_policy = SidecarPolicy::OfficialSyntax;
     QString m_directory;
     QString m_stem;
     QHash<QString, QString> m_fileNameByCS;
@@ -104,7 +138,9 @@ private:
 //! refuses it with "Unknown coordinate system" (survex/src/commands.c, the
 //! CS_CUSTOM branch). The test is what a bare survex name may contain rather
 //! than what a PROJ string looks like. A system carrying a `"` of its own — WKT
-//! — has no inline spelling at all and goes to \a sidecars for a file.
+//! — has no inline spelling as it stands: it goes to \a sidecars for a file when
+//! that writer hands out files, and otherwise gets respelled without the quotes
+//! by cwCoordinateTransform::quoteFreeCS.
 QString toSurvexCS(const QString& cs, SidecarWriter& sidecars);
 
 //! Emit a `*cs` (or `*cs out`) line for \a cs, spelled as survex needs. Every

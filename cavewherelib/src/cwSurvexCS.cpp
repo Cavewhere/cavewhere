@@ -27,9 +27,18 @@ constexpr int kAuthorityCodeLimit = 1000000;
 
 const auto kOsgbPrefix = QLatin1String("OSGB:");
 
-//What cavern assumes when the name it is given doesn't exist as written
-//(fopen_portable with EXT_PRJ), and what makes the file an ESRI .prj too.
-const auto kSidecarSuffix = QLatin1String(".prj");
+//! Whether \a text is a name survex reads as it stands — a keyword or an
+//! authority code — rather than one it needs the CUSTOM keyword and quotes for.
+bool isBareSurvexName(const QString& text)
+{
+    if (text.isEmpty()) {
+        return true;
+    }
+    return std::all_of(text.cbegin(), text.cend(), [](QChar c) {
+        return c.isLetterOrNumber() || c == QLatin1Char('-') || c == QLatin1Char('_')
+            || c == QLatin1Char(':') || c == QLatin1Char('.');
+    });
+}
 
 //! `*cs` argument reading the system from \a fileName. Survex takes the name
 //! after an @; a name with a space needs the whole token quoted, which it
@@ -123,6 +132,31 @@ const QHash<QString, QString>& keywordSystems()
 
 namespace cwSurvexCS {
 
+QString sidecarFileReference(const QString& csArgument)
+{
+    const QString text = csArgument.trimmed();
+
+    //Quoted first: a name with a space arrives as CUSTOM "@name with space",
+    //and read_string keeps everything up to the closing quote.
+    static const QRegularExpression quotedExp(
+        QStringLiteral("^CUSTOM\\s+\"@([^\"]*)\"$"),
+        QRegularExpression::CaseInsensitiveOption);
+    const QRegularExpressionMatch quoted = quotedExp.match(text);
+    if (quoted.hasMatch()) {
+        return quoted.captured(1).trimmed();
+    }
+
+    static const QRegularExpression bareExp(
+        QStringLiteral("^CUSTOM\\s+@(\\S+)$"),
+        QRegularExpression::CaseInsensitiveOption);
+    const QRegularExpressionMatch bare = bareExp.match(text);
+    if (bare.hasMatch()) {
+        return bare.captured(1);
+    }
+
+    return QString();
+}
+
 std::optional<Parsed> fromSurvexCS(const QString& csArgument)
 {
     const QString text = csArgument.trimmed();
@@ -141,7 +175,8 @@ std::optional<Parsed> fromSurvexCS(const QString& csArgument)
         const QString payload = custom.captured(1).trimmed();
         //An @ names a file that holds the system, so the system is in there
         //rather than on this line; taking the name for one would georeference
-        //the cave on a string spelled like a file name.
+        //the cave on a string spelled like a file name. A caller that can open
+        //the file asks sidecarFileReference() before coming here.
         if (payload.startsWith(QLatin1Char('@'))) {
             return {};
         }
@@ -198,7 +233,8 @@ std::optional<Parsed> fromSurvexCS(const QString& csArgument)
     return {};
 }
 
-SidecarWriter::SidecarWriter(const QString& survexPath)
+SidecarWriter::SidecarWriter(const QString& survexPath, SidecarPolicy policy)
+    : m_policy(policy)
 {
     setSurvexFile(survexPath);
 }
@@ -226,7 +262,7 @@ void SidecarWriter::setSurvexFile(const QString& survexPath)
 
 QString SidecarWriter::reserve(const QString& cs)
 {
-    if (m_stem.isEmpty()) {
+    if (m_policy == SidecarPolicy::OfficialSyntax || m_stem.isEmpty()) {
         return QString();
     }
 
@@ -239,8 +275,8 @@ QString SidecarWriter::reserve(const QString& cs)
     //and, for a single-system file, doubles as the ESRI .prj for the same data.
     const int index = m_fileNameByCS.size() + 1;
     const QString fileName = index == 1
-        ? m_stem + kSidecarSuffix
-        : m_stem + QLatin1Char('-') + QString::number(index) + kSidecarSuffix;
+        ? m_stem + sidecarSuffix
+        : m_stem + QLatin1Char('-') + QString::number(index) + sidecarSuffix;
     m_fileNameByCS.insert(cs, fileName);
     return fileName;
 }
@@ -280,28 +316,27 @@ QString SidecarWriter::write() const
 QString toSurvexCS(const QString& cs, SidecarWriter& sidecars)
 {
     const QString trimmed = cs.trimmed();
-    const auto isBareName = [](const QString& text) {
-        if (text.isEmpty()) {
-            return true;
-        }
-        return std::all_of(text.cbegin(), text.cend(), [](QChar c) {
-            return c.isLetterOrNumber() || c == QLatin1Char('-') || c == QLatin1Char('_')
-                || c == QLatin1Char(':') || c == QLatin1Char('.');
-        });
-    };
 
-    if (isBareName(trimmed)) {
+    if (isBareSurvexName(trimmed)) {
         return trimmed;
     }
 
     //Everything but a quote survives inline, which covers a PROJ string. A
-    //system carrying one goes to a file — unless nothing said where files go,
-    //and then the inline spelling at least fails loudly in cavern, which reads
-    //it as far as that quote and says so.
+    //system carrying one goes to a file where the writer hands files out, and
+    //otherwise gets respelled — PROJ names the catalogued system it is, or
+    //spells it as a PROJ string. Failing both, the inline spelling at least
+    //fails loudly in cavern, which reads it as far as that quote and says so.
     if (trimmed.contains(QLatin1Char('"'))) {
         const QString sidecar = sidecars.reserve(trimmed);
         if (!sidecar.isEmpty()) {
             return sidecarReference(sidecar);
+        }
+
+        const QString quoteFree = cwCoordinateTransform::quoteFreeCS(trimmed);
+        if (!quoteFree.isEmpty()) {
+            return isBareSurvexName(quoteFree)
+                       ? quoteFree
+                       : QStringLiteral("CUSTOM \"%1\"").arg(quoteFree);
         }
     }
 
