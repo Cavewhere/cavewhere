@@ -314,9 +314,11 @@ void cwExternalCenterlineManager::recomputeWatchSet()
         const QVector<OwnerScanInput> owners = collectOwnerSnapshots();
 
         // Stage 2 (worker thread): the per-owner scans. The scanner is
-        // stateless; `owners` crosses by value.
-        auto future = cwConcurrent::run([owners]() {
-            return scanOwners(owners);
+        // stateless; `owners` crosses by value. The promise overload is
+        // what lets the worker see the restarter's cancel and abandon a
+        // superseded scan mid-batch.
+        auto future = cwConcurrent::run([owners](QPromise<ExternalScanResult>& promise) {
+            scanOwners(promise, owners);
         });
 
         // Stage 3 (main thread): install the result wholesale. A result
@@ -422,8 +424,8 @@ cwAttachedCenterlinesModel::Row cwExternalCenterlineManager::rowFromOwner(const 
     return row;
 }
 
-cwExternalCenterlineManager::ExternalScanResult cwExternalCenterlineManager::scanOwners(
-    const QVector<OwnerScanInput>& owners)
+void cwExternalCenterlineManager::scanOwners(QPromise<ExternalScanResult>& promise,
+                                             const QVector<OwnerScanInput>& owners)
 {
     ExternalScanResult result;
 
@@ -432,6 +434,18 @@ cwExternalCenterlineManager::ExternalScanResult cwExternalCenterlineManager::sca
     // contributes one row to the attached-centerlines model, counted from
     // the scan when it resolves.
     for (const OwnerScanInput& owner : owners) {
+        // A superseded scan stops here. The harvest below runs cavern,
+        // which serializes every caller on one global mutex, so each
+        // remaining owner of an already-obsolete scan delays the next
+        // scan's harvests and the solve behind them. Returning without a
+        // result is safe: the future is canceled, so the observe/context
+        // apply takes its canceled branch, and the restarter either drops
+        // the delivery as generation-stale (a supersede) or cancels the
+        // outer future (cancelScan) — it never reads a result.
+        if (promise.isCanceled()) {
+            return;
+        }
+
         cwAttachedCenterlinesModel::Row row = rowFromOwner(owner);
 
         if (!owner.attachmentDir.isEmpty()) {
@@ -510,7 +524,7 @@ cwExternalCenterlineManager::ExternalScanResult cwExternalCenterlineManager::sca
     }
     sortAttachedRows(result.rows);
 
-    return result;
+    promise.addResult(std::move(result));
 }
 
 void cwExternalCenterlineManager::applyScanResult(ExternalScanResult result)

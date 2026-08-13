@@ -809,8 +809,8 @@ region-level log would also satisfy — per-trip attribution is proven in C++, n
       completion — and each iteration is now a cavern run on the same global mutex the region
       solve needs. On a load that fires several recomputes across event-loop turns, that is N
       serialized cavern runs per superseded scan. Bounded and correct; potentially slow on an
-      attachment-heavy project. The mtime-keyed cache in §6 is the lever, and a cancellation check
-      is the cheaper half.</li>
+      attachment-heavy project. The cancellation check was the cheaper half and is <strong>done</strong>
+      (§6); the mtime-keyed cache stays measure-first.</li>
 </ul>
 </div>
 
@@ -825,15 +825,31 @@ region-level log would also satisfy — per-trip attribution is proven in C++, n
       project copy is the source of truth, and it's what the solve reads.</li>
   <li><strong>Persisting harvested names</strong> (proto). Derived data; the scan rebuilds it at
       every load before the first solve needs it.</li>
-  <li><strong>mtime-keyed harvest cache — and getting the scan off cavern's mutex.</strong>
-      Measure first; attachments are small. But the coupling is structural, not just a cost:
-      <code>cwCavernRunner</code> serializes every caller on one global mutex, so a scan of N
-      attachments now queues N cavern runs behind whatever solve is in flight, and the scan's
-      latency became the solve's latency the moment the harvest landed. <code>scanOwners</code>
-      also has no <code>isCanceled()</code> check between runs, so a superseded scan runs every
-      remaining harvest to completion before its result is thrown away — the restarter coalesces
-      the <em>starts</em>, not the work already begun. A per-file cache keyed on mtime is the
-      cheap half; a cancellation check in the loop is the cheaper half and worth doing first.
+  <li><strong>Cancelling a superseded scan mid-batch.</strong> <strong>DONE.</strong> The coupling
+      is structural, not just a cost: <code>cwCavernRunner::run</code> serializes every caller on
+      one function-static mutex (mandatory — cavern keeps global state), so a scan of N attachments
+      queues N cavern runs, and the scan's latency became the solve's latency the moment the
+      harvest landed. <code>scanOwners</code> ran through every remaining owner of an
+      already-superseded scan, because the restarter coalesces the <em>starts</em> and the plain
+      <code>cwConcurrent::run</code> overload gives the worker no promise to ask. A project load,
+      which fires one recompute per cave insertion, paid that in full ahead of the first solve.
+      The fix is the promise-taking <code>QtConcurrent::run</code> overload (already what
+      <code>cwCompassImporter</code> uses, so <code>cwConcurrent</code> needed nothing new) plus a
+      <code>promise.isCanceled()</code> poll at the top of the per-owner loop. The canceled worker
+      returns without <code>addResult</code>: the restarter cancels the inner future before a
+      restart, so the manager's <code>observe(...).context(...)</code> apply takes its canceled
+      branch, and the restarter either drops the delivery as generation-stale (a supersede) or
+      cancels the outer future (<code>cancelScan</code>) — it never reads a result.
+      <code>scanOwners</code> stays a pure function of its snapshot — the promise is its only
+      new input.</li>
+  <li><strong>mtime-keyed harvest cache.</strong> Still open, and deliberately
+      <em>measure first</em> — attachments are small, and the cancellation check above already
+      removes the wasted-work case that motivated the cache. Phase-0 note for whoever picks it up:
+      the cache key has to fingerprint the whole dependency closure the scan already computes
+      (<code>ExternalScanResult::watchedFiles</code> comes from
+      <code>cwExternalCenterlineScanner::scan</code>), never the entry file's mtime alone — cavern
+      follows <code>*include</code>, so editing an included file changes the harvested stations
+      while the entry file's mtime sits still, and an entry-keyed cache would serve stale names.
       <em>Raised by the H1–H3 review.</em></li>
   <li><strong>Proximity ranking / coordinates.</strong> Harvest coordinates are an arbitrary
       auto-fixed frame — meaningless against the cave. Name-only ranking remains complete for the

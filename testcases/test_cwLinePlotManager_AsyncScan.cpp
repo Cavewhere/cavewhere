@@ -23,6 +23,7 @@
 #include "cwSignalSpy.h"
 
 // Qt
+#include <QCoreApplication>
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
@@ -103,6 +104,48 @@ TEST_CASE("Setter burst coalesces into one scan and only the newest result appli
     CHECK(watchedSpy.count() == 1);
     CHECK(manager.externalCenterlineManager()->watchedFiles().contains(QFileInfo(copyB).canonicalFilePath()));
     CHECK_FALSE(manager.externalCenterlineManager()->watchedFiles().contains(QFileInfo(copyA).canonicalFilePath()));
+}
+
+TEST_CASE("Restart during an in-flight scan converges to the newest attachment dirs",
+          "[LinePlotManager][AsyncScan]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    const QString dirA = tempSubdir(tempRoot, QStringLiteral("inflight-a"));
+    const QString dirB = tempSubdir(tempRoot, QStringLiteral("inflight-b"));
+    const QString copyA = seedAttachment(dirA, fixturePath(QStringLiteral("survex_simple.svx")));
+    const QString copyB = seedAttachment(dirB, fixturePath(QStringLiteral("survex_simple.svx")));
+
+    cwCavingRegion region;
+    cwCave* cave = addEmptyCave(region, QStringLiteral("InFlight"));
+    cwTrip* attached = addAttachedTrip(cave, QStringLiteral("Attached"));
+
+    cwLinePlotManager manager;
+    manager.setRegion(&region);
+    manager.waitToFinish();
+
+    QHash<QUuid, QString> dirsA;
+    dirsA.insert(attached->id(), dirA);
+    manager.externalCenterlineManager()->setTripAttachmentDirs(dirsA);
+
+    // Let the queued start fire so the worker is actually running, then
+    // supersede it. The worker abandons its remaining owners as soon as it
+    // sees the cancel; whatever it had built by then must stay invisible.
+    QCoreApplication::processEvents();
+
+    QHash<QUuid, QString> dirsB;
+    dirsB.insert(attached->id(), dirB);
+    manager.externalCenterlineManager()->setTripAttachmentDirs(dirsB);
+
+    manager.waitToFinish();
+
+    const cwExternalCenterlineManager* external = manager.externalCenterlineManager();
+    CHECK(external->watchedFiles().contains(QFileInfo(copyB).canonicalFilePath()));
+    CHECK_FALSE(external->watchedFiles().contains(QFileInfo(copyA).canonicalFilePath()));
+    REQUIRE(external->attachedCenterlinesModel()->rowCount() == 1);
+    CHECK(roleAt(external->attachedCenterlinesModel(), 0,
+                 cwAttachedCenterlinesModel::DepCountRole).toInt() == 1);
 }
 
 TEST_CASE("Rename re-sorts and renames rows synchronously from cached counts",

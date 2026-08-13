@@ -25,6 +25,7 @@ class cwTrip;
 #include <QHash>
 #include <QObject>
 #include <QPointer>
+#include <QPromise>
 #include <QQmlEngine>
 #include <QSet>
 #include <QStringList>
@@ -491,8 +492,12 @@ private:
 
     // Stage 2, runs on the worker thread: scans each owner's in-project
     // entry file. Static and pure — touches no member state, only the
-    // filesystem.
-    static ExternalScanResult scanOwners(const QVector<OwnerScanInput>& owners);
+    // filesystem and the promise. It produces one result when it runs to
+    // completion, and none when `promise` is canceled partway through: a
+    // superseded scan abandons its remaining owners instead of paying for
+    // harvests nothing will read.
+    static void scanOwners(QPromise<ExternalScanResult>& promise,
+                           const QVector<OwnerScanInput>& owners);
 
     // Identity fields of a model row from an owner snapshot (counts and
     // lastSolved are filled by the caller).
