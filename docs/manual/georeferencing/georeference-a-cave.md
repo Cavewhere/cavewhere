@@ -107,8 +107,8 @@ system your reader can paste elsewhere.
 
 The **Data** page's **Project** box has a **Coordinate System** group. **Units** is
 the one row there you set; the rest report the frame CaveWhere derived and are
-read-only. None of those is a picker: a datum chosen by hand could only disagree
-with the coordinates you typed, which already say which datum they are on.
+read-only. None of those is a picker — a datum you pick by hand could only
+disagree with your own coordinates.
 
 - **Units** is the project-wide unit system — the one row here you can change,
   through the **Edit** button on the group's heading.
@@ -119,12 +119,13 @@ with the coordinates you typed, which already say which datum they are on.
   cannot give you on the fix row itself. Before anything places the project it
   reads `Not georeferenced`.
 - **Centered on** names that first thing: `entrance — Phake Cave` for a fix
-  station, or the file name for a point cloud. It follows renames, so it always
-  names the station as you have it now.
+  station, or the file name for a point cloud. It follows renames.
 - **Datum** names the model of the Earth's shape your coordinates measure
   against, inherited from that same first input: `North American Datum 1983` for
-  most US data. Different parts of the world work on different datums, and
-  CaveWhere adopts whichever one your data declares.
+  most US data. Declare a datum and you get it. Plain GPS coordinates declare
+  nothing but `WGS84`, which slides about 2 cm a year against the continent
+  under you, so those get the national datum for where the cave is:
+  `NAD83 (National Spatial Reference System 2011)` in the US, ETRS89 in Europe.
 - **Elevations** names the surface heights are measured from, as your point cloud
   declared it, `NAVD88` on most recent US scans. When nothing declared one it
   says `Not declared by your data` rather than going quiet, so you can tell the
@@ -149,17 +150,15 @@ eastern edge.
 
 The picker opens with **Middle of your data**, then your fix stations, each as
 its cave and the station in it (`Phake Cave at entrance`). Every row carries
-its latitude and longitude, which tells two `entrance` stations apart and
-catches a wrong-zone fix. Click a row, then **Center**: a click alone only
-selects. I pick Middle of your data unless one station matters more. The row the
-frame already sits on stays listed, marked `Projection's center`. A station over
-50 km from the middle of your data goes gray with the reason under it: centering
-that far off gives you a worse frame than the one you have.
+its latitude and longitude, which tells two `entrance` stations apart. Click a
+row, then **Center**: a click alone only selects. I pick Middle of your data
+unless one station matters more. The row the frame already sits on stays listed,
+marked `Projection's center`. A station over 50 km from the middle of your data
+goes gray: centering that far off gives you a worse frame than the one you have.
 
 Centering re-projects your coordinates onto the new center, and point clouds
 reload once. Nothing moves on the ground: the cave keeps its coordinates in
-every real-world system, and only the grid CaveWhere draws it on changes. Your
-data still decides the datum.
+every real-world system, and only the grid CaveWhere draws it on changes.
 
 ## Read coordinates back out
 

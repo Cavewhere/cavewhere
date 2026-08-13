@@ -766,20 +766,23 @@ TEST_CASE("The frame takes the datum of the station it is recentered on",
     // datum — the same rule that applies when the state machine anchors. Both
     // stations are within a few kilometers of each other; only the datum they
     // are declared on differs.
+    //
+    // Both datums are declared ones, so cwLocalProjection's plate-fixed rule
+    // leaves them alone and the datum that arrives is the station's alone.
     cwCavingRegion region;
-    const cwFixStation onWgs84 = makeFix(QStringLiteral("A1"),
-                                         QStringLiteral("EPSG:32616"),
+    const cwFixStation onNad27 = makeFix(QStringLiteral("A1"),
+                                         QStringLiteral("EPSG:26716"),
                                          kAnchorEasting, kAnchorNorthing, kElevation);
     const cwFixStation onNad83 = makeFix(QStringLiteral("B1"),
                                          QStringLiteral("EPSG:26916"),
                                          kAnchorEasting + 2000.0, kAnchorNorthing,
                                          kElevation);
-    addCaveWithFixes(&region, {onWgs84, onNad83});
+    addCaveWithFixes(&region, {onNad27, onNad83});
 
     auto* geoReference = region.geoReference();
-    REQUIRE(geoReference->anchor().id == onWgs84.id());
+    REQUIRE(geoReference->anchor().id == onNad27.id());
     REQUIRE_THAT(geoReference->datumName().toStdString(),
-                 ContainsSubstring("World Geodetic System 1984"));
+                 ContainsSubstring("North American Datum 1927"));
 
     REQUIRE(region.localProjection()->recenterOnStation(onNad83.id()));
 
@@ -808,6 +811,43 @@ TEST_CASE("Recentering on the data's middle keeps the frame's datum",
 
     CHECK_THAT(geoReference->datumName().toStdString(),
                ContainsSubstring("North American Datum 1983"));
+}
+
+TEST_CASE("A stored frame on WGS84 stays on WGS84 when it is recentered",
+          "[cwLocalProjectionManager][cwRecenter]")
+{
+    // A project placed before CaveWhere started choosing plate-fixed datums
+    // carries a WGS84 frame. Recentering it is a move, not a migration: the
+    // datum a frame is stored with is the one it keeps, whichever path moves it.
+    cwCavingRegion region;
+    constexpr double kSpacing = 1000.0;
+    addCaveWithFixes(&region, {
+        makeFix(QStringLiteral("A1"), kUtm12N,
+                kAnchorEasting - kSpacing, kAnchorNorthing - kSpacing, kElevation),
+        makeFix(QStringLiteral("A2"), kUtm12N,
+                kAnchorEasting, kAnchorNorthing, kElevation),
+        makeFix(QStringLiteral("A3"), kUtm12N,
+                kAnchorEasting + kSpacing, kAnchorNorthing + kSpacing, kElevation)});
+
+    const QString legacyFrame = cwLocalProjection::deriveFrom(
+        kUtm12N, cwGeoPoint(kAnchorEasting, kAnchorNorthing + 200000.0, 0.0),
+        cwLocalProjection::DatumSource::StoredFrame);
+    REQUIRE_THAT(cwLocalProjection::datumName(legacyFrame).toStdString(),
+                 ContainsSubstring("World Geodetic System 1984"));
+
+    auto* geoReference = region.geoReference();
+
+    // The automatic path: the frame arrives 200 km off its data and the manager
+    // moves it onto the middle of it.
+    restoreFrozenFrame(&region, legacyFrame);
+    REQUIRE(geoReference->localCoordinateSystem() != legacyFrame);
+    CHECK_THAT(geoReference->datumName().toStdString(),
+               ContainsSubstring("World Geodetic System 1984"));
+
+    // And the Recenter dialog's path, which asks for the same move outright.
+    REQUIRE(region.localProjection()->recenterOnDataCenter());
+    CHECK_THAT(geoReference->datumName().toStdString(),
+               ContainsSubstring("World Geodetic System 1984"));
 }
 
 TEST_CASE("The manager names what the frame is centered on",

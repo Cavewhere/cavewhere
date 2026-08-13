@@ -38,6 +38,77 @@ namespace {
     constexpr double kMaxLatitude = 90.0;
     constexpr double kMaxLongitude = 180.0;
 
+    //! One part of the world and the plate-fixed geodetic CRS customary there.
+    //! The box is coarse on purpose: it decides a datum, and neighboring national
+    //! frames agree to within centimeters along the borders they share.
+    struct PlateFixedRegion {
+        double minLatitude;
+        double maxLatitude;
+        double minLongitude;
+        double maxLongitude;
+        const char* coordinateSystem;
+    };
+
+    /**
+     * Where each national plate-fixed frame applies, first match winning.
+     *
+     * These frames are tied to their own plate, so a cave keeps the coordinates
+     * it was surveyed on; WGS84 is tied to the whole Earth and slides under North
+     * America by about 2 cm a year.
+     *
+     * The United States comes first, so the strips it shares with Canada and
+     * Mexico resolve to NAD83(2011) — the two answers there differ by a few
+     * centimeters, and a box drawn along the real border would still be a guess
+     * about which side of it a cave is on. Alaska takes two rows so that its
+     * main box stops at the 141st meridian, the border it shares with the
+     * Yukon, and the panhandle is the strip east of it: one box out to -129
+     * would reach Whitehorse and most of the Yukon, which is inland Canada
+     * rather than a shared border.
+     *
+     * Europe takes four rows because ETRS89 is tied to the stable part of the
+     * Eurasian plate and stops where Europe does: the boxes are drawn to leave
+     * out North Africa (Morocco reaches 35.9N, Algeria 37.1N and Tunisia 37.4N)
+     * and Anatolia, which are on plates of their own and have national frames
+     * of their own. The southern Spanish coast and the Aegean islands fall
+     * outside them and keep WGS84, which is the modest answer rather than a
+     * wrong one.
+     *
+     * These frames get replaced on decade scales (NAD83 → NATRF2022 is coming).
+     * A changed entry only reaches frames derived after it changed, because a
+     * stored frame is never re-derived.
+     */
+    constexpr PlateFixedRegion kPlateFixedRegions[] = {
+        {  24.5,  49.5, -125.0,  -66.5, "EPSG:6318" },  // Conterminous US, NAD83(2011)
+        {  51.0,  72.0, -173.0, -141.0, "EPSG:6318" },  // Alaska west of the Yukon border
+        {  54.5,  60.5, -141.0, -129.5, "EPSG:6318" },  // The Alaskan panhandle
+        {  18.0,  23.0, -161.0, -154.0, "EPSG:6318" },  // Hawaii
+        {  17.5,  18.6,  -68.0,  -64.5, "EPSG:6318" },  // Puerto Rico and the Virgin Islands
+        {  41.5,  84.0, -141.0,  -52.0, "EPSG:4617" },  // Canada, NAD83(CSRS)
+        {  14.0,  33.0, -118.0,  -86.0, "EPSG:6365" },  // Mexico ITRF2008
+        {  36.0,  72.0,  -12.0,   -1.0, "EPSG:4258" },  // Iberia and the British Isles, ETRS89
+        {  37.5,  72.0,   -1.0,   12.0, "EPSG:4258" },  // France to western Italy and Scandinavia
+        {  34.0,  42.0,   12.0,   26.0, "EPSG:4258" },  // Sicily, the Adriatic and Greece
+        {  42.0,  72.0,   12.0,   40.0, "EPSG:4258" },  // Central and eastern Europe
+        {  24.0,  46.0,  122.0,  154.0, "EPSG:6668" },  // Japan, JGD2011
+        { -44.0,  -9.0,  112.0,  154.0, "EPSG:7844" },  // Australia, GDA2020
+        { -48.0, -33.0,  166.0,  179.0, "EPSG:4167" },  // New Zealand, NZGD2000
+    };
+
+    //! The plate-fixed geodetic CRS customary where (\a latitude, \a longitude)
+    //! is, or "" where no entry covers it — the caller then keeps WGS84. A static
+    //! table rather than a PROJ database query, so the answer depends only on the
+    //! shipped binary, never on which proj.db a machine has.
+    QString plateFixedDatumFor(double latitude, double longitude)
+    {
+        for (const PlateFixedRegion& region : kPlateFixedRegions) {
+            if (latitude >= region.minLatitude && latitude <= region.maxLatitude
+                && longitude >= region.minLongitude && longitude <= region.maxLongitude) {
+                return QString::fromLatin1(region.coordinateSystem);
+            }
+        }
+        return {};
+    }
+
     struct PjDeleter {
         void operator()(PJ* pj) const { proj_destroy(pj); }
     };
@@ -113,20 +184,23 @@ namespace {
     }
 
     /**
-     * A transform from \a horizontal to the geographic CRS \a base it is built
-     * on, normalized so it reads x-first and answers longitude-first whatever
-     * axis order either CRS declares — the same convention
-     * cwCoordinateTransform hands its callers.
+     * A transform from \a source to the geographic CRS \a geographic,
+     * normalized so it reads x-first and answers longitude-first whatever axis
+     * order either CRS declares — the same convention cwCoordinateTransform
+     * hands its callers.
      *
      * Without the normalization the transform would take a geographic point
      * latitude-first, so a caller in the codebase's x-first convention would
      * silently transpose it. That makes a failure to normalize fatal rather
      * than something to fall back from, which is how cwCoordinateTransform
      * treats it too.
+     *
+     * Both CRSes must have been created in \a context, which is what a PJ
+     * carries its thread affinity through.
      */
-    PjPtr toGeographicTransform(PJ_CONTEXT* context, PJ* horizontal, PJ* base)
+    PjPtr toGeographicTransform(PJ_CONTEXT* context, PJ* source, PJ* geographic)
     {
-        PjPtr transform(proj_create_crs_to_crs_from_pj(context, horizontal, base,
+        PjPtr transform(proj_create_crs_to_crs_from_pj(context, source, geographic,
                                                        nullptr, nullptr));
         if (!transform) {
             return {};
@@ -168,9 +242,100 @@ namespace {
 
         return GeodeticFrame{std::move(context), std::move(horizontal), std::move(base)};
     }
+
+    /**
+     * How PROJ names the datum \a base is on, for a reader.
+     *
+     * Forced, because WGS84 is a datum ensemble in modern PROJ and
+     * proj_crs_get_datum answers nothing at all for one. The forced form names
+     * the datum the ensemble stands for, which is what a reader recognizes.
+     */
+    QString forcedDatumName(PJ_CONTEXT* context, PJ* base)
+    {
+        PjPtr datum(proj_crs_get_datum_forced(context, base));
+        if (!datum) {
+            return {};
+        }
+
+        const char* name = proj_get_name(datum.get());
+        return name != nullptr ? QString::fromUtf8(name) : QString();
+    }
+
+    //! Whether \a base is on the WGS84 ensemble itself, as opposed to one of its
+    //! realizations — someone who typed a realization meant that realization.
+    bool isWgs84Ensemble(PJ_CONTEXT* context, PJ* base)
+    {
+        // A realization answers a longer name of its own ("World Geodetic System
+        // 1984 (G1762)"), so matching the whole string leaves realizations alone.
+        return forcedDatumName(context, base) == QStringLiteral("World Geodetic System 1984");
+    }
+
+    /**
+     * Move \a frame and the origin (\a latitude, \a longitude) onto the
+     * plate-fixed datum customary where that origin is, when the frame is on the
+     * WGS84 ensemble and the table covers the place. Leaves both exactly as they
+     * were otherwise.
+     *
+     * Failure runs the opposite way from derive()'s rule about a declared system.
+     * The declared one is what the user said, so an unreadable one is refused;
+     * this is CaveWhere's own suggestion, so a CS that won't resolve or a point
+     * that won't transform keeps the WGS84 frame rather than costing the user a
+     * frame at all.
+     *
+     * The origin travels across rather than being reused as typed, which keeps
+     * the frame's origin the anchor's position on the frame's own datum — the
+     * ~1.4 m the ensemble differs by is irrelevant to centering and load-bearing
+     * for what origin() promises to read back.
+     */
+    void adoptPlateFixedDatum(GeodeticFrame& frame, double& latitude, double& longitude)
+    {
+        PJ_CONTEXT* context = frame.context.get();
+        if (!isWgs84Ensemble(context, frame.base.get())) {
+            return;
+        }
+
+        // The WGS84 lat/long picks the box directly: the ensemble offset is
+        // meters, and no box edge is drawn that finely.
+        const QString plateCS = plateFixedDatumFor(latitude, longitude);
+        if (plateCS.isEmpty()) {
+            return;
+        }
+
+        // Resolved in the frame's own context, because the transform below can
+        // only relate two CRSes that were created in one.
+        PjPtr plateHorizontal = horizontalCrs(context, plateCS);
+        if (!plateHorizontal) {
+            return;
+        }
+
+        PjPtr plateBase = geodeticBase(context, plateHorizontal.get());
+        if (!plateBase) {
+            return;
+        }
+
+        PjPtr toPlate = toGeographicTransform(context, frame.base.get(), plateBase.get());
+        if (!toPlate) {
+            return;
+        }
+
+        // Normalized, so this is x-first on both ends: x is the longitude.
+        const PJ_COORD source = proj_coord(longitude, latitude, 0.0, 0.0);
+        const PJ_COORD plate = proj_trans(toPlate.get(), PJ_FWD, source);
+
+        // proj_trans reports failure as HUGE_VAL.
+        if (!std::isfinite(plate.xy.x) || !std::isfinite(plate.xy.y)) {
+            return;
+        }
+
+        longitude = plate.xy.x;
+        latitude = plate.xy.y;
+        frame.horizontal = std::move(plateHorizontal);
+        frame.base = std::move(plateBase);
+    }
 }
 
-QString cwLocalProjection::derive(double latitude, double longitude, const QString& datumSourceCS)
+QString cwLocalProjection::derive(double latitude, double longitude, const QString& datumSourceCS,
+                                  DatumSource datumSource)
 {
     if (!std::isfinite(latitude) || !std::isfinite(longitude)
         || std::abs(latitude) > kMaxLatitude || std::abs(longitude) > kMaxLongitude) {
@@ -190,11 +355,22 @@ QString cwLocalProjection::derive(double latitude, double longitude, const QStri
         return {};
     }
 
+    // A plain lat/long carries no plate with it, so a frame derived from data
+    // gets the one its part of the world holds still against. Anything with a
+    // datum of its own — including a named WGS84 realization — passes through
+    // untouched, and so does a frame being recentered: the datum was settled
+    // when the project was placed, and moving the origin is about position.
+    double originLatitude = latitude;
+    double originLongitude = longitude;
+    if (datumSource == DatumSource::DataInput) {
+        adoptPlateFixedDatum(*frame, originLatitude, originLongitude);
+    }
+
     const ContextPtr& context = frame->context;
     const PjPtr& base = frame->base;
 
     PjPtr conversion(proj_create_conversion_transverse_mercator(
-                         context.get(), latitude, longitude, kScaleFactor,
+                         context.get(), originLatitude, originLongitude, kScaleFactor,
                          kFalseOrigin, kFalseOrigin,
                          kAngularUnitName, kRadiansPerDegree,
                          kLinearUnitName, kMetersPerLinearUnit));
@@ -214,13 +390,22 @@ QString cwLocalProjection::derive(double latitude, double longitude, const QStri
         return {};
     }
 
+    // Preferred for how short and how readable it is, but only when the datum
+    // survives it. proj_as_proj_string has keywords for a handful of datums and
+    // drops the rest rather than refusing, so all that comes back of NAD83(2011)
+    // is "+ellps=GRS80" — a frame that names no datum at all, stored for good.
+    const QString frameDatum = forcedDatumName(context.get(), base.get());
     const char* projString = proj_as_proj_string(context.get(), projected.get(), PJ_PROJ_5, nullptr);
     if (projString != nullptr && *projString != '\0') {
-        return QString::fromUtf8(projString);
+        const QString spelling = QString::fromUtf8(projString);
+        if (cwLocalProjection::datumName(spelling) == frameDatum) {
+            return spelling;
+        }
     }
 
-    // A datum with no proj-string spelling (a datum ensemble, or one that needs
-    // a transformation grid) still has a WKT form, and PROJ reads either back.
+    // A datum with no proj-string spelling (a datum ensemble, a national
+    // realization, or one that needs a transformation grid) still has a WKT
+    // form, and PROJ reads either back.
     const char* wkt = proj_as_wkt(context.get(), projected.get(), PJ_WKT2_2019, nullptr);
     if (wkt != nullptr && *wkt != '\0') {
         return QString::fromUtf8(wkt);
@@ -229,7 +414,8 @@ QString cwLocalProjection::derive(double latitude, double longitude, const QStri
     return {};
 }
 
-QString cwLocalProjection::deriveFrom(const QString& anchorCS, const cwGeoPoint& anchorPoint)
+QString cwLocalProjection::deriveFrom(const QString& anchorCS, const cwGeoPoint& anchorPoint,
+                                      DatumSource datumSource)
 {
     if (!std::isfinite(anchorPoint.x) || !std::isfinite(anchorPoint.y)) {
         return {};
@@ -253,7 +439,7 @@ QString cwLocalProjection::deriveFrom(const QString& anchorCS, const cwGeoPoint&
     const PJ_COORD geographic = proj_trans(toGeographic.get(), PJ_FWD, source);
 
     // proj_trans reports failure as HUGE_VAL, which derive() rejects.
-    return derive(geographic.xy.y, geographic.xy.x, cs);
+    return derive(geographic.xy.y, geographic.xy.x, cs, datumSource);
 }
 
 QString cwLocalProjection::datumName(const QString& cs)
@@ -263,16 +449,7 @@ QString cwLocalProjection::datumName(const QString& cs)
         return {};
     }
 
-    // Forced, because WGS84 is a datum ensemble in modern PROJ and
-    // proj_crs_get_datum answers nothing at all for one. The forced form names
-    // the datum the ensemble stands for, which is what a reader recognizes.
-    PjPtr datum(proj_crs_get_datum_forced(frame->context.get(), frame->base.get()));
-    if (!datum) {
-        return {};
-    }
-
-    const char* name = proj_get_name(datum.get());
-    return name != nullptr ? QString::fromUtf8(name) : QString();
+    return forcedDatumName(frame->context.get(), frame->base.get());
 }
 
 std::optional<cwGeoPoint> cwLocalProjection::origin(const QString& localCS)

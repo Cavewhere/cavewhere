@@ -388,9 +388,12 @@ bool cwLocalProjectionManager::freezeAt(const cwGeoPoint& center)
 
     // The center is in the frame's coordinates and the frame carries the datum
     // pinned when the project was first placed, so deriving from it keeps that
-    // datum: inputs on mixed datums vote on position, never on datum.
+    // datum: inputs on mixed datums vote on position, never on datum. StoredFrame
+    // is what says so — without it a legacy frame on WGS84 would come back on the
+    // plate-fixed datum, which is a migration, not a move.
     const QString candidate =
-        cwLocalProjection::deriveFrom(geoReference->localCoordinateSystem(), center);
+        cwLocalProjection::deriveFrom(geoReference->localCoordinateSystem(), center,
+                                      cwLocalProjection::DatumSource::StoredFrame);
     if (candidate.isEmpty()) {
         // Nothing we could vouch for. Leave the frame alone rather than
         // half-move it, the way anchorTo() does.

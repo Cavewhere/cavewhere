@@ -47,14 +47,52 @@
  * the vertical is recorded elsewhere and never applied, because converting
  * heights between the geoid and the ellipsoid would shift the whole project by
  * the geoid separation.
+ *
+ * The one datum CaveWhere does choose is the one nobody claimed. A coordinate
+ * on the bare WGS84 ensemble says only "somewhere on Earth as GPS reads it
+ * today", and WGS84 slides under each continent at a couple of centimeters a
+ * year; the frame instead gets the national plate-fixed datum customary where
+ * the anchor is — NAD83(2011) in the United States, ETRS89 in Europe — so a
+ * cave keeps the coordinates it was surveyed on. A declared datum, a named
+ * WGS84 realization, and anywhere the table doesn't cover are all left exactly
+ * as they arrive.
+ *
+ * That choice is made once, when a frame is derived from a data input. Moving
+ * an existing frame — recentering it on a station or on the middle of the
+ * data — derives from the frame's own stored system, which already carries the
+ * datum the project was placed on, and DatumSource::StoredFrame is how the
+ * caller says so.
  */
 class CAVEWHERE_LIB_EXPORT cwLocalProjection
 {
 public:
     /**
+     * What the coordinate system handed to derive() or deriveFrom() is, which
+     * is what decides whether CaveWhere may choose a datum for the frame.
+     */
+    enum class DatumSource {
+        //! A fix station's or a lidar tile's system. A coordinate that arrives on
+        //! the bare WGS84 ensemble claims no datum, so the frame gets the
+        //! plate-fixed one for where it is.
+        DataInput,
+
+        //! The project's own frame, being recentered. Its datum was settled when
+        //! the project was placed and travels through untouched — including a
+        //! legacy frame on WGS84, because a stored frame is never migrated.
+        StoredFrame
+    };
+
+    /**
      * The LDP centered on (\a latitude, \a longitude) — degrees, on the datum
      * of \a datumSourceCS. An empty \a datumSourceCS falls back to WGS84, which
      * is what a typed coordinate means when nothing says otherwise.
+     *
+     * A coordinate that reaches here on the WGS84 ensemble — typed, or declared
+     * through anything that resolves to it, such as a WGS84 UTM zone — comes out
+     * on the plate-fixed datum of wherever it is, with the origin transformed
+     * across. See the class doc. \a datumSource says whether that substitution
+     * is allowed at all: a StoredFrame keeps the datum it arrives with, whatever
+     * it is.
      *
      * Returns "" for a latitude/longitude that isn't a location, when PROJ
      * can't express the result, or when \a datumSourceCS says something PROJ
@@ -63,7 +101,8 @@ public:
      * would bake a datum-sized shift into a string that is never re-derived.
      * Callers must treat "" as "no LDP" rather than storing it.
      */
-    static QString derive(double latitude, double longitude, const QString& datumSourceCS);
+    static QString derive(double latitude, double longitude, const QString& datumSourceCS,
+                          DatumSource datumSource = DatumSource::DataInput);
 
     /**
      * The LDP centered on \a anchorPoint, in \a anchorCS's units. Converts the
@@ -78,8 +117,13 @@ public:
      * geographic CRS's own order is latitude-first, so handing this function a
      * point in the CRS's declared order transposes the origin, and the wrong
      * frame is then stored for good.
+     *
+     * \a datumSource passes through to derive(). Recentering an existing frame
+     * hands its own system in here, and StoredFrame is what keeps that move
+     * about position alone.
      */
-    static QString deriveFrom(const QString& anchorCS, const cwGeoPoint& anchorPoint);
+    static QString deriveFrom(const QString& anchorCS, const cwGeoPoint& anchorPoint,
+                              DatumSource datumSource = DatumSource::DataInput);
 
     /**
      * The name of the datum \a cs is on, as PROJ spells it for a reader —

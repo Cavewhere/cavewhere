@@ -46,8 +46,11 @@ derive-time policy change, in four phases:</p>
     <li><b>Phase 4 — plate-fixed frame datum.</b> When the anchor's coordinate system
         resolves to the WGS84 datum ensemble (what the UI stamps on every typed
         lat/long), derive the frame on the plate-fixed datum customary at that location
-        instead — NAD83(2011) in the US, ETRS89 in Europe — via a small curated
-        location table. Declared non-WGS84 systems are untouched.</li>
+        instead — NAD83(2011) in the US, ETRS89 in Europe, GDA2020 in Australia — via a
+        small curated location table. Declared non-WGS84 systems are untouched. Most of
+        those datums can only be spelled as WKT, so the phase also teaches the survex
+        exporter to write a <code>.prj</code> sidecar (§7.5); that is the larger half of
+        the work.</li>
 </ol>
 
 <h2>1. Settled design decisions</h2>
@@ -83,7 +86,13 @@ choice, and "WGS84" on an anchor is a label of convenience (the CS picker stamps
 <code>EPSG:4326</code> on every typed lat/long), never a deliberate frame preference.
 This is a derive-time default only — <b>not</b> the rejected "datum upgrade" event:
 no new lifecycle event, no persisted flag, and stored frames never move on their
-own.</div>
+own.
+<p><b>Amended 2026-08-11, restored 2026-08-12.</b> For one day this shipped as North
+America only, because a frame carrying any of these datums can only be spelled as WKT
+and survex could not read a WKT coordinate system. Survex submodule commit
+<code>68a001eb</code> adds <code>*cs custom @FILENAME</code>, so the frame now travels
+in a <code>.prj</code> file beside the <code>.svx</code> and the reasoning above ships
+at full reach. §7.5 has the mechanism and its one cost.</p></div>
 
 <div class="decision">The "Centered on:" row shows only in the Anchored state, resolved
 live from the persisted anchor id — so it survives save/load and follows renames. A
@@ -625,9 +634,62 @@ station or the middle of the data, and that the datum still comes from the data.
 
 <h2>7. Phase 4 — plate-fixed frame datum for WGS84-labeled anchors</h2>
 
-<p>Independent of Phases 1–3; it can land before or after them. Everything in this
-phase lives in <code>cavewherelib/src/cwLocalProjection.cpp</code> plus tests and
-docs.</p>
+<p>Independent of Phases 1–3; it can land before or after them. Most of this phase
+lives in <code>cavewherelib/src/cwLocalProjection.cpp</code> plus tests and docs; §7.5
+adds the <code>.prj</code> sidecar to <code>cwSurvexCS.cpp</code> and its five
+callers.</p>
+
+<div class="decision">2026-08-12, after the survex submodule gained
+<code>*cs custom @FILENAME</code> (<code>68a001eb</code>). <b>The frame is stored in
+whichever spelling keeps its datum — a proj string where PROJ has a
+<code>+datum=</code> keyword, WKT everywhere else — and survex is handed the WKT
+through a <code>.prj</code> file beside the <code>.svx</code>. The table hands out the
+real national datums worldwide.</b>
+
+<p>This supersedes the 2026-08-11 decision one paragraph down, which restricted the
+table to NAD83 in North America. That restriction existed only because a WKT frame
+could not survive the trip through survex, and that is now fixed rather than worked
+around.</p>
+
+<p><b>Superseded on 2026-08-11:</b> <i>the stored frame stays a proj string, so the
+table hands out only NAD83, and only in North America.</i> The chain that forced it:
+<code>proj_as_proj_string</code> has <code>+datum=</code> keywords for a fixed handful
+of datums and <i>silently drops</i> anything else rather than failing, so a frame on
+NAD83(2011) came back as <code>+proj=tmerc … +ellps=GRS80</code> and
+<code>datumName()</code> read "Unknown based on GRS 1980 ellipsoid". Keeping the datum
+meant storing WKT, and survex's string reader had no escape syntax, so a WKT frame took
+cavern down. Kept here because the measurement below is still the reason the two
+spellings exist at all.</p>
+
+<p>Measured, not assumed — a <code>[cwProbeSpellable]</code> test ran every candidate
+through <code>derive()</code> and checked whether the result came back as
+<code>+proj=…</code> or as WKT:</p>
+
+<pre>EPSG:4269  NAD83                        => PROJSTRING  'North American Datum 1983'
+EPSG:4267  NAD27                        => PROJSTRING  'North American Datum 1927'
+EPSG:6318  NAD83(2011)                  => WKT
+EPSG:4617  NAD83(CSRS)                  => WKT
+EPSG:6365  Mexico ITRF2008              => WKT
+EPSG:4258  ETRS89                       => WKT
+EPSG:7844  GDA2020                      => WKT
+EPSG:4283  GDA94                        => WKT
+EPSG:4167  NZGD2000                     => WKT
+EPSG:6668  JGD2011                      => WKT
+</pre>
+
+<p>That split is now a <i>fact about spelling</i> rather than a limit on the feature.
+Two of the ten frames stay short and readable; the other eight are stored as WKT and
+carry their datum intact. What the phase buys is the same everywhere: a cave keeps the
+coordinates it was surveyed on, instead of a frame that slides ~2 cm a year under the
+continent. A second benefit still falls out in North America — a typed lat/long and a
+declared NAD83 UTM zone now derive frames on datums a meter apart rather than
+disagreeing by the WGS84 ensemble's ambiguity.</p>
+
+<p><b>The cost moved rather than vanished.</b> It is now an export-compatibility cost,
+priced in §7.5: an exported <code>.svx</code> whose frame is WKT needs its
+<code>.prj</code> beside it and needs survex 1.4.23 or newer to process. The
+proj-string spelling is kept wherever it is lossless precisely so the common North
+American case keeps producing a single self-contained file that older survex reads.</p></div>
 
 <h3>7.1 The rule</h3>
 
@@ -666,22 +728,49 @@ QString plateFixedDatumFor(double latitude, double longitude);
 </pre>
 
 <p>Backed by a <code>constexpr</code> array of coarse bounding boxes, first match wins
-(order entries most-specific first). Candidate entries — <b>verify every EPSG code and
-its forced datum name against the vendored proj 9.3.1 before trusting this table</b>
-(a throwaway test that calls <code>cwLocalProjection::datumName("EPSG:xxxx")</code> and
-prints with <code>-s</code> is enough):</p>
+(order entries most-specific first). Every EPSG code and its forced datum name below
+was <b>verified against the vendored PROJ</b> on 2026-08-11, with a throwaway
+<code>[cwProbeDatumNames]</code> test that called
+<code>cwLocalProjection::datumName("EPSG:xxxx")</code> and printed the answer. The
+right-hand column is that answer verbatim — none of them is spelled the way its CRS
+is, so a test may never guess one:</p>
 
 <table>
-<tr><th>Region (coarse bbox, degrees)</th><th>CRS</th><th>Code</th></tr>
-<tr><td>Conterminous US + Alaska + Hawaii + Puerto Rico</td><td>NAD83(2011) geographic 2D</td><td>EPSG:6318</td></tr>
-<tr><td>Canada</td><td>NAD83(CSRS) geographic 2D</td><td>EPSG:4617</td></tr>
-<tr><td>Mexico</td><td>Mexico ITRF2008 (epoch-frozen)</td><td>EPSG:6365</td></tr>
-<tr><td>Europe (ETRS89 area of use)</td><td>ETRS89 geographic 2D</td><td>EPSG:4258</td></tr>
-<tr><td>Australia</td><td>GDA2020 geographic 2D</td><td>EPSG:7844</td></tr>
-<tr><td>New Zealand</td><td>NZGD2000 geographic 2D</td><td>EPSG:4167</td></tr>
-<tr><td>Japan</td><td>JGD2011 geographic 2D</td><td>EPSG:6668</td></tr>
-<tr><td>Everywhere else</td><td colspan="2">"" — keep WGS84</td></tr>
+<tr><th>Region (coarse bbox, degrees)</th><th>CRS</th><th>Code</th><th>Forced datum name (verified)</th></tr>
+<tr><td>Conterminous US, lat 24.5–49.5, lon −125–−66.5</td><td rowspan="5">NAD83(2011)</td><td rowspan="5">EPSG:6318</td><td rowspan="5"><code>NAD83 (National Spatial Reference System 2011)</code></td></tr>
+<tr><td>Alaska west of the Yukon border, lat 51–72, lon −173–−141</td></tr>
+<tr><td>The Alaskan panhandle, lat 54.5–60.5, lon −141–−129.5</td></tr>
+<tr><td>Hawaii, lat 18–23, lon −161–−154</td></tr>
+<tr><td>Puerto Rico and the Virgin Islands, lat 17.5–18.6, lon −68–−64.5</td></tr>
+<tr><td>Canada, lat 41.5–84, lon −141–−52</td><td>NAD83(CSRS)</td><td>EPSG:4617</td><td><code>NAD83 Canadian Spatial Reference System</code></td></tr>
+<tr><td>Mexico, lat 14–33, lon −118–−86</td><td>Mexico ITRF2008</td><td>EPSG:6365</td><td><code>Mexico ITRF2008</code></td></tr>
+<tr><td>Europe, four boxes: lat 36–72 lon −12–−1; lat 37.5–72 lon −1–12; lat 34–42 lon 12–26; lat 42–72 lon 12–40</td><td>ETRS89</td><td>EPSG:4258</td><td><code>European Terrestrial Reference System 1989</code></td></tr>
+<tr><td>Japan, lat 24–46, lon 122–154</td><td>JGD2011</td><td>EPSG:6668</td><td><code>Japanese Geodetic Datum 2011</code></td></tr>
+<tr><td>Australia, lat −44–−9, lon 112–154</td><td>GDA2020</td><td>EPSG:7844</td><td><code>Geocentric Datum of Australia 2020</code></td></tr>
+<tr><td>New Zealand, lat −48–−33, lon 166–179</td><td>NZGD2000</td><td>EPSG:4167</td><td><code>New Zealand Geodetic Datum 2000</code></td></tr>
+<tr><td>Everywhere else</td><td colspan="3">"" — keep WGS84</td></tr>
 </table>
+
+<p>Fourteen boxes over ten regions, first match wins, most specific first. Only the
+five US entries and the four European ones share a CRS; the rest each name their own
+national frame, which is the arrangement the 2026-08-11 scope cut had collapsed and the
+survex fix restores. Alaska takes two boxes so its main one stops at the 141st
+meridian, the border it shares with the Yukon: one box out to −129 would reach
+Whitehorse and most of the Yukon, inland Canada rather than a shared border strip.
+Europe takes four boxes because ETRS89 stops where Europe does:
+they are drawn to leave out North Africa and Anatolia, which sit on plates of their own
+and would otherwise be labeled with a datum that says nothing true about them.</p>
+
+<p>Nine of the ten resolve to a datum PROJ has no <code>+datum=</code> keyword for, so
+nine of the ten produce a WKT frame and, on export, a <code>.prj</code> sidecar. That is
+the expected outcome, not a warning sign — those are the frames whose datum a proj
+string would have thrown away.</p>
+
+<p>The same probe confirmed the detection rule from both sides:
+<code>EPSG:4326</code> and <code>EPSG:32616</code> (a WGS84 UTM zone) both answer
+<code>World Geodetic System 1984</code> exactly, while <code>EPSG:9057</code>
+(WGS84 G1762) answers <code>World Geodetic System 1984 (G1762)</code> — so a
+whole-string match substitutes for the ensemble and leaves realizations alone.</p>
 
 <ul>
     <li>Bboxes are deliberately coarse; on a US/Canada border overlap the first match
@@ -714,6 +803,235 @@ if (/* forced datum name of frame->base == "World Geodetic System 1984" */) {
 // frame->base and lat0/lon0
 </pre>
 
+<p>Two shapes make this fit the file rather than sit on top of it. The plate CS is
+resolved <b>in the frame's own context</b> — with the existing
+<code>horizontalCrs()</code> and <code>geodeticBase()</code> helpers rather than
+<code>resolveGeodeticFrame()</code>, which would mint a second context — because
+<code>proj_create_crs_to_crs_from_pj</code> can only relate two CRSes created in one.
+And <code>toGeographicTransform()</code> is reused for the origin hop, with its
+parameters renamed from <code>(horizontal, base)</code> to
+<code>(source, geographic)</code>: it was already just a normalized crs-to-crs, and
+generalizing its doc beats a second copy of the normalize dance.</p>
+
+<h3>7.3b The tail of derive() keeps the datum</h3>
+
+<p><b>Take the proj-string spelling only when it reads the same datum back out; store
+WKT otherwise.</b> This is the check that was built on 2026-08-11 and backed out the
+same day, and it is now the right rule as well as the obvious one — the only reason to
+back it out was that WKT frames crashed cavern, and §7.5 removes that.</p>
+
+<pre>const QString frameDatum = forcedDatumName(context.get(), base.get());
+const char* projString = proj_as_proj_string(context.get(), projected.get(), PJ_PROJ_5, nullptr);
+if (projString != nullptr &amp;&amp; *projString != '\0') {
+    const QString spelling = QString::fromUtf8(projString);
+    if (cwLocalProjection::datumName(spelling) == frameDatum) {
+        return spelling;   // lossless — keep the short readable form
+    }
+}
+// otherwise fall through to the existing WKT export
+</pre>
+
+<p>The comparison has to run through <code>datumName()</code> on the <i>rendered</i>
+string rather than trusting <code>proj_as_proj_string</code>'s return, because the
+failure being caught is a silent drop: PROJ returns a perfectly well-formed string that
+happens to name no datum. Round-tripping it is the only way to see that.
+<code>forcedDatumName()</code> is the same helper §7.3 extracts for the ensemble
+check, so this adds no new PROJ machinery.</p>
+
+<div class="done-check"><b>This closes a pre-existing gap</b> that the 2026-08-11 draft
+had to record as out of scope. Typing <code>EPSG:6318</code> into a fix row today
+derives <code>+proj=tmerc … +ellps=GRS80</code>, and the Datum row reads "Unknown based
+on GRS 1980 ellipsoid" — a frame naming no datum, from a user who declared one
+explicitly. With the check reinstated that frame comes out as WKT and keeps
+<code>NAD83 (National Spatial Reference System 2011)</code>. It is worth a test of its
+own (§7.4), because it is reachable without the lookup table being involved at all.</div>
+
+<h3>7.5 Handing the frame to survex: the <code>.prj</code> sidecar</h3>
+
+<div class="decision">2026-08-12. <b>A WKT frame is written to a <code>.prj</code> file
+beside the <code>.svx</code> and referenced as <code>*cs out CUSTOM
+@&lt;name&gt;.prj</code>.</b> The proj-string spelling stays inline as today wherever
+it is lossless, so the North American common case still produces one self-contained
+file. This replaces the 2026-08-11 decision to leave <code>cwSurvexCS.cpp</code>
+alone.</div>
+
+<p>The enabling change is in the vendored survex submodule, commit
+<code>68a001eb</code> "cavern: Allow *cs custom to read the CRS from a file", written
+after the ticket in <code>doc/</code> — <code>*cs custom @FILENAME</code> reads the
+coordinate system from its own file, which lets it be WKT or PROJJSON. Landing in
+survex 1.4.23.</p>
+
+<p>What the mechanism guarantees, read out of <code>read_cs_from_file()</code>
+(<code>survex/src/commands.c:2460</code>) and <code>doc/datafile.rst:537</code>:</p>
+
+<ul>
+    <li><b>The path is relative to the file containing the <code>*cs</code></b>
+        (<code>path_from_fnm(file.filename)</code>), so a sidecar written next to the
+        <code>.svx</code> resolves with a bare filename and nothing has to know an
+        absolute path.</li>
+    <li><b>A <code>.prj</code> extension is assumed</b> when the name as given doesn't
+        exist, via <code>fopen_portable(..., EXT_PRJ, ...)</code>.</li>
+    <li><b>The file may be pretty-printed.</b> Lines are joined with a single space and
+        leading/trailing blanks on each line are dropped — safe because neither WKT nor
+        PROJJSON allows a newline inside a quoted name. So the sidecar can be written
+        with PROJ's default <code>MULTILINE=YES</code> output, which is also what makes
+        it a drop-in ESRI <code>.prj</code>.</li>
+    <li><b>A UTF-8 BOM is skipped</b> (PROJ rejects a description that starts with
+        one).</li>
+    <li><b>Quoting:</b> <code>@"My Cave.prj"</code> and <code>"@My Cave.prj"</code> both
+        work, so a name with spaces is expressible. CaveWhere should still emit a name
+        with no spaces.</li>
+    <li><b>A missing file is a hard error</b> — <i>Couldn't open file "…"</i>, then
+        <i>The input projection is set but the output projection isn't</i>, exit 1 and
+        no <code>.3d</code>. A sidecar that fails to write can therefore never be
+        mistaken for a successful ungeoreferenced solve.</li>
+</ul>
+
+<div class="done-check"><b>Verified end to end on 2026-08-12</b>, with CaveWhere's own
+build of cavern (<code>build/&lt;preset&gt;/survex/cavern</code>) on a
+<code>*cs out CUSTOM @mammoth.prj</code> file whose sidecar is the multi-line WKT2 for
+a tmerc LDP on EPSG:6318: zero errors, <code>.3d</code> written, and
+<code>dump3d</code> shows the CS line carrying
+<code>DATUM["NAD83 (National Spatial Reference System 2011)"…]</code>. Running cavern
+by hand needs <code>SURVEXLIB</code> pointed at the build directory (for
+<code>en.msg</code>) and <code>PROJ_DATA</code> at a <code>proj.db</code>; neither
+matters in-process, where CaveWhere already sets both up.</div>
+
+<h4>What changes in CaveWhere</h4>
+
+<p><code>cwSurvexCS::toSurvexCS()</code> currently decides between two spellings, and
+gains a third:</p>
+
+<table>
+<tr><th>Frame</th><th>Written as</th><th>Sidecar</th></tr>
+<tr><td>Bare name (<code>EPSG:6318</code>, <code>UTM16N</code>)</td><td><code>*cs out EPSG:6318</code></td><td>none</td></tr>
+<tr><td>Proj string</td><td><code>*cs out CUSTOM "+proj=tmerc …"</code></td><td>none</td></tr>
+<tr><td>WKT</td><td><code>*cs out CUSTOM @&lt;stem&gt;.prj</code></td><td><code>&lt;stem&gt;.prj</code> beside the <code>.svx</code>, one per unique CS string (see the trap below)</td></tr>
+</table>
+
+<p>The existing <code>isBareName()</code> test already separates row 1 from the rest.
+Rows 2 and 3 split on whether the string starts with <code>+</code> — or, more honestly,
+on whether it contains a <code>"</code>, since that is the actual property that decides
+whether it can go inline.</p>
+
+<div class="trap"><b>The need for a sidecar is per CS string, not per file — a
+<code>.svx</code> can need more than one.</b> <code>toSurvexCS()</code> serves both
+<code>*cs</code> writes, and the <i>input</i> side can carry user WKT too:
+<code>CsScope::ensure</code> (<code>cwSurvexExporterUtils.cpp:73</code>) writes each fix
+row's typed CS verbatim, and PROJ parses pasted WKT, so such a row validates as
+<code>Valid</code> and reaches export (today it crashes cavern exactly like the
+historical trap below). On the Shareable policy the <i>output</i> CS is
+<code>shareableCSForFix()</code>'s "a projected CS as it stands" — again the fix's typed
+string — so <code>*cs out</code> can carry user WKT with <code>derive()</code> uninvolved.
+A single fixed stem would then collide: frame = WKT LDP plus one fix row holding WKT of
+a different CRS → two writes to <code>region.prj</code>, last writer wins, and cavern
+reads one CRS for both roles — a silently wrong georeference, the exact failure class
+this phase removes. So: <b>one sidecar per unique CS string</b>, deterministic stems
+(<code>region.prj</code> for the first, <code>region-2.prj</code>, … for later distinct
+strings), and dedup so a repeated CS reuses its file.</div>
+
+<div class="trap"><b><code>writeCsLine()</code> has no idea where it is writing.</b> Its
+signature is <code>writeCsLine(QTextStream&amp;, const QString&amp; cs, bool
+isOutput)</code> — a stream and nothing else — so it cannot place a file next to the
+one being written. All five call sites
+(<code>cwSurvexExporterRule.cpp:137</code>, <code>cwSurvexExporterCaveTask.cpp:202</code>,
+<code>cwSurvexExporterUtils.cpp:73</code> and <code>:150</code>,
+<code>cwSurvexExporterRegion.cpp:42</code>) need the destination passed down, and each
+of those sits at the end of a chain that was written when a stream was all that was
+needed. Because the dedup and numbering above need somewhere to live, thread a small
+<b>sidecar-writer context</b> (output directory + stem + seen-CS map) rather than a bare
+path string — <code>CsScope</code> is constructed in several places and can carry it.
+The threading is shallow at the task level: every standalone exporter task already
+knows its destination via <code>cwExporterTask::setOutputFile</code>, and
+<code>cwSurvexExporterRegion::writeRegion</code> has <code>outputPath</code> in scope at
+its call site; the depth is in the Rule path's static <code>writeRegion → writeCave →
+Utils</code> chain. <b>This is the real cost of the phase and it is bigger than the
+lookup table it enables</b> — plan it as its own commit, ahead of the table (§9).</div>
+
+<p>The first sidecar's stem should follow the <code>.svx</code> being written
+(<code>region.svx</code> → <code>region.prj</code>), which keeps it obvious to a human,
+makes it a valid ESRI <code>.prj</code> for the same data, and means a second export
+into the same directory overwrites its own sidecar rather than accumulating files.</p>
+
+<p><b>Atomicity on the Rule path.</b> <code>cwSurvexExporterRule::updatePipeline</code>
+writes its <code>.svx</code> through a <code>QSaveFile</code> and only
+<code>commit()</code>s at the end; a sidecar written as a plain file could land beside a
+<code>.svx</code> whose commit then fails. Write each sidecar via its own
+<code>QSaveFile</code> and commit it only after the <code>.svx</code> commits.</p>
+
+<p><b>The internal loop-closure path needs no special handling.</b>
+<code>cwLinePlotTask</code> writes <code>region.svx</code> into a
+<code>QTemporaryDir</code> (<code>cwLinePlotTask.cpp:175-186</code>) and runs cavern on
+it; the sidecar lands in that same directory and is removed with it. The temporary
+directory already owns the <code>.3d</code>, <code>.log</code> and <code>.err</code>
+files, so one more is free.</p>
+
+<h4>Export compatibility — the one genuine cost</h4>
+
+<p>An exported <code>.svx</code> with a WKT frame is now <b>two files</b>, and it needs
+survex 1.4.23 or newer. Older survex reports <i>Unknown coordinate system</i> and
+refuses. Three things keep that from being a regression:</p>
+
+<ul>
+    <li>Wherever the proj string is lossless it is still used, so North American
+        projects keep producing a single file that any survex reads.</li>
+    <li>The alternative was not "a working single file" — it was a frame with no datum
+        in it, quietly transforming every <code>*fix</code> through a datum-sized shift.
+        Two files that are right beat one file that is wrong.</li>
+    <li>Nothing that already exists changes. Stored frames never re-derive (§1), so a
+        project georeferenced before this phase keeps exporting exactly what it does
+        today.</li>
+</ul>
+
+<p>Worth telling the user in the export UI when a sidecar is produced, so the two files
+travel together. Not in this phase — noted in §10.</p>
+
+<h4>Historical: the crash this replaces</h4>
+
+<div class="trap"><b>Before <code>68a001eb</code>, a WKT frame crashed cavern.</b>
+<code>toSurvexCS()</code> wrote any non-bare CS as <code>*cs out CUSTOM
+"&lt;string&gt;"</code>, and survex read it with <code>read_string()</code>, which has
+no escape syntax — so the first <code>"</code> inside the payload ended the string,
+cavern took <code>PROJCRS[</code> as the whole coordinate system, and then read the
+remaining WKT lines as survey data. <code>tst_MarkStationFixed</code> went from 18
+passed to SIGABRT ("pointer being freed was not allocated", inside
+<code>cavern_run</code>) the moment the substitution reached its Colorado fixture on
+<code>EPSG:32613</code>. The faulting free was never pinned down and does not need to
+be. <b>Keep <code>tst_MarkStationFixed.qml</code> in this phase's test list</b> — it is
+the canary that caught this, and it exercises the export path end to end.</div>
+
+<p>The rest of the <code>*cs</code> contract, still true and still worth having written
+down:</p>
+
+<ul>
+    <li><b>Accepted forms:</b> <code>EPSG:&lt;n&gt;</code>, <code>ESRI:&lt;n&gt;</code>,
+        <code>CUSTOM "&lt;proj string&gt;"</code>, <code>CUSTOM @&lt;file&gt;</code>,
+        and the named ones — <code>UTM&lt;zone&gt;[N|S]</code>, <code>LAT-LONG</code>,
+        <code>LONG-LAT</code>, <code>LOCAL</code>, <code>OSGB:&lt;XX&gt;</code>,
+        <code>S-MERC</code>, <code>EUR79Z30</code>,
+        <code>JTSK</code>/<code>IJTSK</code>/<code>…03</code>.</li>
+    <li><b>Inline, everything except <code>"</code> and the line ending is fine</b> —
+        spaces, <code>+ = ,</code>, even <code>;</code> (the comment character is only
+        honored on the unquoted path). Unquoted, the string also stops at the first
+        blank. <b>No length limit</b> either way; survex's <code>string</code> grows on
+        demand.</li>
+    <li><b>Cavern validates what it is given:</b> <code>proj_create(PJ_DEFAULT_CTX,
+        proj_str)</code>, then for <code>out</code> it rejects a geographic 2D or 3D
+        CRS as "unsuitable for output" (<code>commands.c:2781</code>) — output has to
+        be eastings and northings in meters. The LDP is a projected CRS in meters, so
+        it passes; note this is the same <code>PJ_DEFAULT_CTX</code> that
+        <code>cwCoordinateTransform::setProjSearchPaths()</code> already sets search
+        paths on for exactly this reason.</li>
+    <li><b><code>*cs out</code> takes effect once</b> — later ones are silently
+        ignored, by design, so two datasets can be combined.</li>
+    <li>Because cavern hands the string straight to <code>proj_create</code>, anything
+        PROJ reads works. A URN needs no sidecar at all —
+        <code>*cs out CUSTOM urn:ogc:def:crs:EPSG::6346</code> processes cleanly on
+        stock survex 1.4.15, since it contains neither a space nor a quote. Not useful
+        for an LDP, which has no authority code, but it is the proof that the parser was
+        always the only obstacle.</li>
+</ul>
+
 <div class="trap">Failure direction is the opposite of the declared-CS rule.
 <code>derive()</code> refuses a declared CS PROJ can't read, because the data is on a
 datum we failed to identify. The plate lookup is CaveWhere's <i>own suggestion</i> —
@@ -736,17 +1054,51 @@ frame's own datum</i>, and <code>origin()</code> reads back the point
 <code>derive()</code> was handed. The moved distance is the ~1.4 m ensemble offset —
 irrelevant to centering, load-bearing for the docs' honesty.</p>
 
+<p>How far it actually moves depends on the machine. Without a NAD83 transformation
+grid installed PROJ answers this hop with a <i>ballpark</i> transformation — a shift
+of exactly zero — so the origin comes back byte-identical to what was typed, and the
+frame differs from today's only in the datum it names. That is PROJ's best available
+answer rather than a failure, and taking it is right: refusing would cost the
+substitution entirely. It is also why the §7.4 tolerance is a range and not an
+expected distance, and why no test may assert that the origin <i>moved</i>.</p>
+
 <h3>7.4 Ripples to check, and Phase 4 tests</h3>
 
 <ul>
-    <li><b>Existing tests that assert a WGS84 frame.</b> Search
-        <code>testcases/</code> and <code>test-qml/</code> for
-        <code>"World Geodetic System 1984"</code> and for datum expectations built on
-        typed lat/long fixtures — any fixture whose point falls inside a table bbox now
-        derives on the table's datum and those assertions must be updated (or the
-        fixture moved to open ocean if the test is <i>about</i> the WGS84 default).
-        <code>tst_DataMainPage_Georeference.qml</code> uses EPSG:26916 and is
-        unaffected.</li>
+    <li><b>Existing tests that assert a WGS84 frame.</b> The sweep was run on
+        2026-08-11; this is what it found, so it need not be re-derived.
+        <ul>
+            <li><code>test_cwLocalProjection.cpp</code> — <b>three</b> cases break, not
+                two. The two that are <i>about</i> the WGS84 default ("a WGS84 anchor
+                gives a WGS84 frame", and <code>datumName</code>'s "a WGS84 frame"), and
+                also <b>"derives a transverse Mercator on the anchor"</b>, which reads
+                <code>+proj=tmerc</code>, <code>+lat_0</code>, <code>+k</code>,
+                <code>+x_0</code> and <code>+type=crs</code> out of the frame — none of
+                which a WKT frame contains. The 2026-08-11 sweep found only two because
+                the NAD83-only table left the Kentucky fixture spellable; with EPSG:6318
+                in the table it is not.
+                <br>All three move to an open-ocean fixture:
+                <code>kOpenOceanLatitude = 5.0</code>,
+                <code>kOpenOceanLongitude = -150.0</code>. Open ocean is a table miss, so
+                the frame stays WGS84, stays a proj string, and the tmerc assertions keep
+                asserting what they were written to assert. A separate case (7 below)
+                covers the tmerc parameters surviving into WKT.</li>
+            <li>Two <code>origin()</code> sections also move to open ocean. They assert
+                to <code>1e-9</code> degrees, which only survives at the Kentucky
+                fixture because this machine has no NAD83 grid and PROJ ballparks the
+                hop to a zero shift — a machine <i>with</i> the grids would fail them.
+                A test must not depend on which grids are installed.</li>
+            <li><code>test_cwGeoReference.cpp:292,325</code> — <b>unaffected.</b> They
+                build the frame from a literal <code>kLocalCS</code> rather than
+                calling <code>derive()</code>.</li>
+            <li><code>test_cwLocalProjectionManager.cpp:782</code> — this is the
+                cross-commit case flagged at the end of §9, and it does need the fix
+                promised there.</li>
+            <li><code>test-qml/</code> — <code>tst_DataMainPage_Georeference.qml</code>
+                uses EPSG:26916 and is unaffected. <code>tst_MarkStationFixed.qml</code>
+                is the one that went down under the WKT draft (§7.5); it must come back
+                green, and it is the phase's canary either way.</li>
+        </ul></li>
     <li><b>Recenter interaction (Phases 2–3):</b> a recenter-on-station pick re-derives
         through the same <code>derive()</code>, so picking a WGS84-labeled station in
         the US now lands the frame on NAD83(2011) — including in a pre-existing project
@@ -757,29 +1109,88 @@ irrelevant to centering, load-bearing for the docs' honesty.</p>
     <li><b>New tests</b> (<code>test_cwLocalProjection.cpp</code>, tag
         <code>[cwLocalProjection]</code>):
         <ol>
-            <li>Kentucky lat/long, empty CS → <code>datumName</code> of the derived
-                frame is NAD83(2011)'s forced datum name (print the actual string with
-                <code>-s</code> first — it is <i>not</i> "North American Datum 1983";
-                expect something like "NAD83 (National Spatial Reference System
-                2011)").</li>
-            <li>Same point via <code>EPSG:32616</code> (WGS84 UTM) → same substitution
-                (proves the datum-not-string trigger).</li>
-            <li>Same point via <code>EPSG:26916</code> (declared NAD83 UTM) → NAD83
-                exactly as today (regression: declared systems untouched).</li>
-            <li>Mid-Pacific point (e.g. 0°, −150°), empty CS → WGS84 kept (table
-                miss).</li>
-            <li>European and Australian points → ETRS89 / GDA2020 names.</li>
+            <li>Kentucky lat/long, empty CS → the frame's <code>datumName</code> is
+                <code>NAD83 (National Spatial Reference System 2011)</code>. Assert the
+                datum name, never the spelling — the spelling is WKT here, and which
+                form PROJ picks is §7.3b's business, not this test's.</li>
+            <li>Same point via <code>EPSG:32616</code> (WGS84 UTM) → same substitution.
+                This is the one that proves the trigger is the resolved datum and not
+                the CS string, since nothing about "EPSG:32616" says WGS84.</li>
+            <li>Same point via <code>EPSG:26916</code> (declared NAD83 UTM) → plain
+                <code>North American Datum 1983</code>, exactly as today (regression:
+                declared systems untouched).
+                <div class="trap">Cases 1 and 3 now answer <i>different</i> datum names
+                for the same ground — NAD83(2011) from a typed lat/long, NAD83 from a
+                declared NAD83 UTM zone. That is correct (a declared datum is always
+                inherited verbatim) and it is a real reversal: the 2026-08-11 draft
+                advertised these agreeing as a benefit of the scope cut, which only held
+                because the table was handing out plain NAD83. Both are plate-fixed and
+                differ by ~1–2 m, so nothing about the phase's purpose changes — but the
+                test must assert two different strings, and no doc may claim they
+                match.</div></li>
+            <li>Mid-Pacific point (e.g. 5°N, −150°), empty CS → WGS84 kept (table
+                miss). Pick the fixture's latitude and longitude from bands that
+                cannot overlap, so a transposed pair is a latitude no place on Earth
+                has.</li>
+            <li>A European point → <code>European Terrestrial Reference System
+                1989</code>. This is the case the 2026-08-11 scope cut had asserting the
+                opposite (WGS84 kept); it is now the proof that the table reaches past
+                North America.</li>
             <li><code>origin()</code> of a substituted frame round-trips to the typed
-                point within a loose tolerance (~3e-5°, the ensemble transform slop) —
-                and the fixture's latitude/longitude bands must not overlap.</li>
+                point within a loose tolerance (~3e-5°, the datum-shift slop) —
+                <i>never</i> asserting that it moved; see the ballpark note in §7.3.</li>
+            <li><b>A WKT frame is still an LDP.</b> At the Kentucky point, the frame
+                parses and <code>origin()</code> reads back the anchor, and its
+                projection method is transverse Mercator with unit scale and no false
+                easting or northing — asserted through PROJ rather than by string
+                matching, since the <code>+proj=tmerc</code> assertions moved to open
+                ocean. Without this, nothing checks that the recipe in the class doc
+                still holds for nine of the ten table entries.</li>
+            <li>A named WGS84 realization is left alone: <code>EPSG:9057</code> at the
+                Kentucky point still answers a datum name containing
+                <code>G1762</code>. This is the other half of the datum-not-string
+                trigger and the table's §7.1 promise, and nothing else covers it.</li>
+            <li><b>Every table entry keeps its datum.</b> For a point inside each of the
+                fourteen boxes, <code>datumName()</code> of the derived frame equals the
+                table's expected name. This is the test that fails if PROJ's database
+                changes underfoot or someone mistypes a code, and it replaces the
+                2026-08-11 "all frames are one line with no quote" test, whose invariant
+                the sidecar retires.</li>
+            <li><b>A declared unspellable CS keeps its datum too</b> —
+                <code>EPSG:6318</code> typed into <code>deriveFrom()</code> answers
+                <code>NAD83 (National Spatial Reference System 2011)</code> rather than
+                "Unknown based on GRS 1980 ellipsoid". This is §7.3b's gap closing, and
+                it is reachable with the lookup table uninvolved.</li>
+            <li><b>The export round-trips through cavern.</b> Export a project whose
+                frame is WKT, then confirm the <code>.svx</code> carries
+                <code>*cs out CUSTOM @&lt;stem&gt;.prj</code>, that
+                <code>&lt;stem&gt;.prj</code> exists beside it, and that cavern
+                processes the pair without error. A unit test on
+                <code>toSurvexCS()</code> alone would pass while the sidecar never got
+                written — the file on disk is the assertion that matters. A second case
+                exports a WKT frame plus a fix row holding WKT of a different CRS and
+                asserts <i>two</i> sidecars with distinct stems, each holding its own
+                CRS — the collision the §7.5 trap describes, and the dedup path's only
+                coverage.</li>
         </ol></li>
     <li><b>Docs in this phase:</b> update the <code>derive()</code>/class doc comments
         in <code>cwLocalProjection.h</code> (they currently say the datum is pinned
         from the anchor, full stop), the <code>projectionHelpArea</code> datum sentence,
         and the manual's datum paragraph — the new truth is: a declared datum is
-        inherited; a plain lat/long gets the national plate-fixed datum for that part of
-        the world, because those hold still while WGS84 drifts with the continents
-        (~2 cm/yr). Run <code>humanize</code> over the manual prose.</li>
+        inherited; a plain lat/long gets the national plate-fixed datum for where the
+        cave is, because those ride the continent while WGS84 slides under it at
+        ~2 cm/yr. "The national datum for where your cave is" is now accurate and is the
+        phrasing to use; name one or two examples (<code>NAD83 (National Spatial
+        Reference System 2011)</code> in the US, ETRS89 in Europe) rather than reciting
+        §7.2's ten rows. Run <code>humanize</code> over the manual prose. Also refresh
+        <code>docs/manual/llms.txt</code>, which states the old rule twice.
+        <br>The manual page sits at its 1697-word ceiling, so the datum bullet's new
+        sentences must be paid for on the same page. Three donors, all of them
+        restatement: the "Centered on" bullet's "so it always names the station as you
+        have it now" repeats "It follows renames"; the picker paragraph's "and catches
+        a wrong-zone fix" repeats the Location bullet; and "Your data still decides the
+        datum" at the end of "Move the center" is exactly what the rewritten datum
+        bullet now says.</li>
 </ul>
 
 <h2>8. Documentation (part of Phase 3)</h2>
@@ -815,24 +1226,41 @@ irrelevant to centering, load-bearing for the docs' honesty.</p>
 <tr><td>3</td><td>"Add the Recenter picker to the project page"</td>
     <td>§6 + §8 (popup, entry button, QML tests, manual)</td>
     <td>Both full suites green; screenshot of the popup</td></tr>
-<tr><td>4</td><td>"Derive frames on the local plate-fixed datum"</td>
-    <td>§7 (lookup table, derive() substitution, tests, doc-comment and manual
-        updates)</td>
-    <td><code>cavewhere-test "[cwLocalProjection]"</code> green, then both full suites
-        (the WGS84-expectation sweep in §7.4 decides which other files change)</td></tr>
+<tr><td>4</td><td>"Write the frame's coordinate system to a .prj sidecar"</td>
+    <td>§7.5 only — the survex submodule bump to <code>68a001eb</code>, the third branch
+        in <code>toSurvexCS()</code>, and the sidecar-writer context (directory + stem +
+        seen-CS dedup) threaded through <code>writeCsLine()</code>'s five call sites. No
+        table, no
+        <code>derive()</code> change: this commit is pure plumbing and is verifiable on
+        its own by handing the exporter a WKT frame.</td>
+    <td>Both full suites green, <code>tst_MarkStationFixed.qml</code> explicitly, plus
+        the cavern round-trip case from §7.4. Note the submodule bump in the commit
+        message.</td></tr>
+<tr><td>5</td><td>"Derive frames on the local plate-fixed datum"</td>
+    <td>§7.1–7.4 (lookup table, derive() substitution, the §7.3b datum-preserving tail,
+        tests, doc-comment and manual updates)</td>
+    <td><code>cavewhere-test "[cwLocalProjection]"</code> green, then both full suites.
+        <code>tst_MarkStationFixed.qml</code> must be run explicitly — a targeted
+        georeferencing sweep misses it.</td></tr>
 </table>
 
+<div class="trap"><b>4 before 5, and the order is load-bearing.</b> Commit 5 is what
+first makes <code>derive()</code> produce a WKT frame; if the sidecar isn't already in
+place, the exporter writes <code>*cs out CUSTOM "PROJCRS["…</code> and cavern goes down
+the way it did on 2026-08-11. Landing 4 first also means the plumbing gets reviewed on
+its own, without a datum table in the diff.</div>
+
 <p><b>Dependencies and parallelism.</b> The only hard edges are 3 ← 1 (the button and
-the attribution row live in the restructured box) and 3 ← 2 (the invokables it calls);
-commit 4 depends on nothing. Two agents can therefore run in two waves:
-<b>{1 ∥ 2}, then {3 ∥ 4}</b>. Soft overlaps to manage rather than dependencies:
-commits 1, 3, and 4 all touch <code>projectionHelpArea</code> and the manual page — so
-keep 4 out of the first wave (it would collide with 1's restructure of that block), and
-expect a one-line merge if 3 and 4 run together; run 4 after 3 for zero merge friction.
-Whichever of 2 and 4 lands second must re-read Phase 2's "datum follows the pick" test:
-once Phase 4 is in, a WGS84-labeled fixture no longer produces a WGS84 frame, so the
-test's starting datum must be chosen to still prove the claim (start from a declared
-CS, or assert the datum changed to the picked station's).</p>
+the attribution row live in the restructured box), 3 ← 2 (the invokables it calls), and
+5 ← 4 (the trap above). Commit 4 depends on nothing at all — it touches only the survex
+exporter. Two agents can run in three waves: <b>{1 ∥ 2}, then {3 ∥ 4}, then {5}</b>.
+Soft overlaps to manage rather than dependencies: commits 1, 3, and 5 all touch
+<code>projectionHelpArea</code> and the manual page — so keep 5 out of the first wave
+(it would collide with 1's restructure of that block), and run it after 3 for zero merge
+friction. Whichever of 2 and 5 lands second must re-read Phase 2's "datum follows the
+pick" test: once Phase 4 is in, a WGS84-labeled fixture no longer produces a WGS84
+frame, so the test's starting datum must be chosen to still prove the claim (start from
+a declared CS, or assert the datum changed to the picked station's).</p>
 
 <p>Build/test commands (build dir is <code>build/Qt_6_11_1_for_macOS-Debug</code>):</p>
 
@@ -864,6 +1292,16 @@ plan: C++ 1824 cases / 1 known flake; QML 900 passed / 0 failed / 82 skipped.</d
         an ungeoreferenced project.</li>
     <li>Attribution for Frozen frames ("centered on the middle of your data") — no
         persisted record exists and none is added.</li>
+    <li>Telling the user, in the export UI, that a <code>.prj</code> sidecar was written
+        and travels with the <code>.svx</code> (§7.5). Worth doing — a survex export is
+        the one place where a second file can be left behind by accident — but it is
+        export-UI work, not frame work, and none of the export dialogs currently report
+        what they wrote.</li>
+    <li>Reading a <code>.prj</code> sidecar back on <i>import</i>. Survex files
+        CaveWhere imports may now carry <code>*cs custom @file</code>;
+        <code>cwSurvexCS</code>'s parser doesn't know the form and will treat it as an
+        unrecognized system, which is the same outcome as any other CS it can't read.
+        Worth its own look once files in the wild start using it.</li>
 </ul>
 
 </body>

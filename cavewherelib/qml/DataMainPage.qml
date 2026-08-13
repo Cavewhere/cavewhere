@@ -376,7 +376,12 @@ StandardPage {
                               "<p>The <b>datum</b> is the model of the Earth's shape your " +
                               "coordinates are measured against, and it comes from that same " +
                               "first input — it is shown here rather than chosen, because every " +
-                              "coordinate you enter already says which datum it is on.</p>" +
+                              "coordinate you enter already says which datum it is on. Plain " +
+                              "GPS coordinates are the exception: those say only \"WGS84\", " +
+                              "which drifts about 2 cm a year against the continent under you, " +
+                              "so CaveWhere uses the national datum for where your cave is " +
+                              "instead — <b>NAD83 (National Spatial Reference System 2011)</b> " +
+                              "in the US.</p>" +
                               "<p><b>Elevations</b> names the surface heights are measured from, " +
                               "as your LiDAR declared it. CaveWhere passes elevations through " +
                               "exactly as given and never converts between height systems.</p>"
