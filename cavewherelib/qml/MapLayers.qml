@@ -31,10 +31,7 @@ ColumnLayout {
             objectName: "addLayerButton"
             text: " Add Layer"
             icon.source: "qrc:/twbs-icons/icons/layers.svg"
-            onClicked: {
-                selectionTool.activate()
-                RootData.pageSelectionModel.gotoPageByName(null, "View");
-            }
+            onClicked: ViewTools.arm(ViewTools.selectExportArea)
         }
 
         HelpQuoteBox {

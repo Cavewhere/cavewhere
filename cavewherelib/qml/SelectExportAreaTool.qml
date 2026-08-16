@@ -52,6 +52,13 @@ QQ.Item {
     //     // toolButtonId.state = "INIT"
     // }
 
+    // The Map page's Add Layer button is on the other side of this name.
+    ViewToolRegistration {
+        toolName: ViewTools.selectExportArea
+
+        onArmed: toolId.activate()
+    }
+
     QQ.Component {
         id: captureViewComponentId
         CaptureViewport { }

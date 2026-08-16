@@ -295,6 +295,7 @@ set(qml_singletons
     "qml/RootPopupItem.qml"
 	"qml/Theme.qml"
     "qml/SelectableValueGroup.qml"
+    "qml/ViewTools.qml"
 )
 
 # Remove the singleton files from the regular QML file list
