@@ -12,6 +12,7 @@
 #include <QAbstractListModel>
 #include <QList>
 #include <QQmlEngine>
+#include <QVector3D>
 
 //Our includes
 #include "cwFixStation.h"
@@ -81,6 +82,13 @@ public:
     //! matches nothing, so a blank scaffold row is never "the fix for no
     //! station".
     Q_INVOKABLE int indexOf(const QString& stationName) const;
+
+    //! Row of the fix carrying \a fixId, or -1. The identity that survives an
+    //! edit somewhere else — a rename, a row inserted above, a re-sort — which
+    //! is what anything holding onto a row across such an edit has to address it
+    //! by (setPickedPoint(), cwFixStationValidator).
+    int indexOf(const QUuid& fixId) const;
+
     Q_INVOKABLE bool isFixed(const QString& stationName) const;
 
     //! Row of the fix for \a stationName, appending one if the station isn't
@@ -110,6 +118,36 @@ public:
     Q_INVOKABLE QString setCoordinateText(int row,
                                           const QString& text,
                                           cwUnits::UnitSystem units);
+
+    //! Write \a scenePoint — a point in the project's local frame, straight off
+    //! the 3D view's ray-cast — as the coordinate of the fix carrying \a fixId.
+    //! Returns whether the fix was written.
+    //!
+    //! \a frameCS is the system \a scenePoint is expressed in
+    //! (cwGeoReference::localCoordinateSystem) and \a datum the geographic
+    //! system the coordinate is written on, which becomes the row's inputCS —
+    //! a pick over a lidar tile lands on the same datum as the tile rather than
+    //! 1.5 m from it. \a pickedSourceCS is the system of what the pick landed
+    //! on: when it says what its heights are measured from, so can the fix
+    //! (cwFixStation::MeanSeaLevel), and otherwise the row stays Unknown. The
+    //! caller decides which three those are — the model reads no region.
+    //!
+    //! False leaves the row untouched: there is no such fix, or the point
+    //! can't be put on \a datum, which the 3D view answers by keeping the pick
+    //! pending so the user can orbit and click again.
+    //!
+    //! \a fixId is spelled as a string because that is what QML can hold onto
+    //! across the trip to the view and back; QUuid is not a QML value type.
+    //!
+    //! Everything this moves lands in a single dataChanged(): three setData()
+    //! calls would re-solve the line plot three times, and the first two would
+    //! leave the row momentarily saying something untrue — a coordinate read
+    //! under the system it is about to replace.
+    Q_INVOKABLE bool setPickedPoint(const QString& fixId,
+                                    const QVector3D& scenePoint,
+                                    const QString& frameCS,
+                                    const QString& datum,
+                                    const QString& pickedSourceCS);
 
     void appendFixStation(const cwFixStation& fix);
     void setFixStations(const QList<cwFixStation>& fixes);

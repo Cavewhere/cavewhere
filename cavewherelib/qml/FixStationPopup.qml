@@ -234,6 +234,14 @@ QC.Popup {
                     popupId.row, text, ProjectUnits.unitSystem)
     }
 
+    // Hands this fix to the 3D view to be placed by clicking the terrain. The
+    // popup closes and is not reopened when the pick lands (v1): the write goes
+    // through the model, so the row it edits already carries the answer.
+    function pickFromView(): void {
+        popupId.close()
+        FixStationPick.begin(popupId.cave, popupId.row)
+    }
+
     QQ.Connections {
         target: popupId.diagnostics
 
@@ -330,20 +338,29 @@ QC.Popup {
                       : qsTr("East, North, Elev")
             }
 
-            QC.TextField {
-                id: coordinateFieldId
-                objectName: "fixStationPopupCoordinate"
+            RowLayout {
+                spacing: Theme.tightSpacing
 
-                Layout.preferredWidth: Theme.fixPopupCoordinateWidth
+                QC.TextField {
+                    id: coordinateFieldId
+                    objectName: "fixStationPopupCoordinate"
 
-                //Tinted for text this surface refused, and for a stored
-                //coordinate that can't be read either — the field is showing
-                //that text, so the complaint belongs on it.
-                color: popupId.parseError !== "" || popupId.coordinateError !== ""
-                       ? Theme.errorText
-                       : Theme.text
+                    Layout.preferredWidth: Theme.fixPopupCoordinateWidth
 
-                onEditingFinished: popupId.commitCoordinate(coordinateFieldId.text)
+                    //Tinted for text this surface refused, and for a stored
+                    //coordinate that can't be read either — the field is showing
+                    //that text, so the complaint belongs on it.
+                    color: popupId.parseError !== "" || popupId.coordinateError !== ""
+                           ? Theme.errorText
+                           : Theme.text
+
+                    onEditingFinished: popupId.commitCoordinate(coordinateFieldId.text)
+                }
+
+                PickFromViewButton {
+                    objectName: "fixStationPopupPickFromView"
+                    onClicked: popupId.pickFromView()
+                }
             }
         }
 

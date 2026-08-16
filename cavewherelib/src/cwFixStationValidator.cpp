@@ -216,12 +216,8 @@ QString stationNameFor(cwCave* cave, const QUuid& fixId)
     if (cave == nullptr || cave->fixStations() == nullptr) {
         return QString();
     }
-    for (const cwFixStation& fix : cave->fixStations()->fixStations()) {
-        if (fix.id() == fixId) {
-            return fix.stationName();
-        }
-    }
-    return QString();
+    const int row = cave->fixStations()->indexOf(fixId);
+    return row < 0 ? QString() : cave->fixStations()->fixStationAt(row).stationName();
 }
 
 } // namespace

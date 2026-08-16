@@ -30,6 +30,7 @@ QQ.QtObject {
     // The tool vocabulary, spelled once. These are matched against
     // ViewToolRegistration.toolName, so nothing but this file can drift.
     readonly property string selectExportArea: "SELECT-EXPORT-AREA"
+    readonly property string fixStationPick: "FIX-STATION-PICK"
 
     // The page every armable tool overlays.
     readonly property string viewPageName: "View"

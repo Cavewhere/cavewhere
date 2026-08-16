@@ -343,6 +343,38 @@ namespace {
     }
 
     /**
+     * What kind of CRS \a cs is, or PJ_TYPE_UNKNOWN when PROJ can't build one —
+     * a system still half-typed in CSComboBox, or a context that failed to come
+     * up. The empty string is asked about often enough to answer without PROJ.
+     *
+     * Per-thread and capped like the queries around it: isGeographic() runs on
+     * every fix-station edit and declaresVerticalDatum() on every enabled lidar
+     * layer, and both ask this same question of the same handful of systems.
+     */
+    PJ_TYPE crsType(const QString& cs)
+    {
+        const QString key = cs.trimmed();
+        if (key.isEmpty()) {
+            return PJ_TYPE_UNKNOWN;
+        }
+
+        thread_local QHash<QString, PJ_TYPE> cache;
+        return cachedValue(cache, key, [&key]() {
+            PJ_CONTEXT* ctx = validatorContext();
+            if (!ctx) {
+                return PJ_TYPE_UNKNOWN;
+            }
+            PJ* p = proj_create(ctx, key.toUtf8().constData());
+            if (!p) {
+                return PJ_TYPE_UNKNOWN;
+            }
+            const PJ_TYPE type = proj_get_type(p);
+            proj_destroy(p);
+            return type;
+        });
+    }
+
+    /**
      * The per-thread transform memo behind transformPoint() and domainCheck().
      * The cost it skips is documented on transformPoint(); pairs that fail to
      * build are cached too, for the same reason failures are cached above.
@@ -418,33 +450,17 @@ std::optional<cwGeoPoint> cwCoordinateTransform::transformPoint(const QString& s
     return transformed;
 }
 
+bool cwCoordinateTransform::declaresVerticalDatum(const QString& cs)
+{
+    return crsType(cs) == PJ_TYPE_COMPOUND_CRS;
+}
+
 bool cwCoordinateTransform::isGeographic(const QString& cs)
 {
-    const QString key = cs.trimmed();
-    if (key.isEmpty()) {
-        return false;
-    }
-
-    // Per-thread cache: callers like cwCave::recomputeGridConvergence
-    // hit this on every fix-station edit. Without the cache each call pays
-    // proj_create + proj_get_type + proj_destroy. Capped like nameFor's
-    // cache so CSCustomDialog browsing can't grow it unboundedly.
-    thread_local QHash<QString, bool> cache;
-    return cachedValue(cache, key, [&key]() {
-        PJ_CONTEXT* ctx = validatorContext();
-        if (!ctx) {
-            return false;
-        }
-        PJ* p = proj_create(ctx, key.toUtf8().constData());
-        if (!p) {
-            return false;
-        }
-        const PJ_TYPE type = proj_get_type(p);
-        proj_destroy(p);
-        return type == PJ_TYPE_GEOGRAPHIC_2D_CRS
-            || type == PJ_TYPE_GEOGRAPHIC_3D_CRS
-            || type == PJ_TYPE_GEOGRAPHIC_CRS;
-    });
+    const PJ_TYPE type = crsType(cs);
+    return type == PJ_TYPE_GEOGRAPHIC_2D_CRS
+        || type == PJ_TYPE_GEOGRAPHIC_3D_CRS
+        || type == PJ_TYPE_GEOGRAPHIC_CRS;
 }
 
 namespace {

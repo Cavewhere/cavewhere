@@ -10,12 +10,20 @@
 //Our includes
 #include "cwCoordinateText.h"
 #include "cwCoordinateTransform.h"
+#include "cwGeoPoint.h"
 #include "cwStation.h"
 
 //Qt includes
+#include <QLocale>
 #include <QMetaEnum>
 
 namespace {
+
+//! Decimals a picked latitude or longitude is written to. The 8th is about a
+//! millimeter of latitude, which is finer than any pick and matches what the
+//! coordinate-picker popup offers for copying — a fix placed by clicking and one
+//! pasted from that popup then read identically.
+constexpr int kPickedDegreeDecimals = 8;
 
 //! A row created through the UI, which always starts on a coordinate system.
 //! Without one there is no axis order, so a fix's numbers can't be said to mean
@@ -259,6 +267,19 @@ int cwFixStationModel::indexOf(const QString& stationName) const
     return -1;
 }
 
+int cwFixStationModel::indexOf(const QUuid& fixId) const
+{
+    if (fixId.isNull()) {
+        return -1;
+    }
+    for (int i = 0; i < m_fixStations.size(); i++) {
+        if (m_fixStations.at(i).id() == fixId) {
+            return i;
+        }
+    }
+    return -1;
+}
+
 bool cwFixStationModel::isFixed(const QString& stationName) const
 {
     return indexOf(stationName) >= 0;
@@ -328,6 +349,63 @@ QString cwFixStationModel::setCoordinateText(int row,
     const QModelIndex changed = index(row);
     emit dataChanged(changed, changed, movedCoordinateRoles(before, m_fixStations.at(row)));
     return QString();
+}
+
+bool cwFixStationModel::setPickedPoint(const QString& fixId,
+                                       const QVector3D& scenePoint,
+                                       const QString& frameCS,
+                                       const QString& datum,
+                                       const QString& pickedSourceCS)
+{
+    //The fix can go away while the user is off in the 3D view — the row
+    //removed, the cave closed. Then there is nothing to write.
+    const int row = indexOf(QUuid::fromString(fixId));
+    if (row < 0) {
+        return false;
+    }
+
+    const auto placed = cwCoordinateTransform::transformPoint(
+        frameCS, datum, cwGeoPoint::fromSceneLocal(scenePoint));
+    if (!placed.has_value()) {
+        return false;
+    }
+
+    //PROJ is normalized for visualization in cwCoordinateTransform, so the
+    //result reads x = longitude, y = latitude.
+    const QLocale locale = QLocale::c();
+    const QString coordinate = QStringLiteral("%1, %2, %3%4")
+        .arg(locale.toString(placed->y, 'f', kPickedDegreeDecimals),
+             locale.toString(placed->x, 'f', kPickedDegreeDecimals),
+             locale.toString(placed->z, 'f', QLocale::FloatingPointShortest),
+             cwUnits::unitName(cwUnits::Meters));
+
+    //Copied rather than referenced — see setCoordinateText().
+    const cwFixStation before = m_fixStations.at(row);
+
+    cwFixStation& fix = m_fixStations[row];
+    //The system first, always: it is what decides which axis the text leads
+    //with (see cwFixStation::setInputCS).
+    fix.setInputCS(datum);
+    fix.setCoordinate(coordinate);
+    fix.setElevationReference(cwCoordinateTransform::declaresVerticalDatum(pickedSourceCS)
+                              ? cwFixStation::MeanSeaLevel
+                              : cwFixStation::UnknownElevationReference);
+
+    if (fix == before) {
+        return true;
+    }
+
+    QList<int> roles = movedCoordinateRoles(before, fix);
+    if (fix.inputCS() != before.inputCS()) {
+        roles.append(InputCSRole);
+    }
+    if (fix.elevationReference() != before.elevationReference()) {
+        roles.append(ElevationReferenceRole);
+    }
+
+    const QModelIndex changed = index(row);
+    emit dataChanged(changed, changed, roles);
+    return true;
 }
 
 void cwFixStationModel::removeFixStation(const QString& stationName)

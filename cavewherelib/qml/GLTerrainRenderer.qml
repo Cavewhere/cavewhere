@@ -198,6 +198,13 @@ Item {
         defaultInteraction: turnTableInteractionId
     }
 
+    // Armed from a fix-station surface rather than from the tool rail: it exists
+    // to answer a question another page asked (FixStationPick).
+    FixStationPickTool {
+        objectName: "fixStationPickTool"
+        view: rootId
+    }
+
     LinePlotLabelView {
         id: labelView
         anchors.fill: parent
@@ -299,8 +306,12 @@ Item {
         objectName: "coordinatePickerPopup"
         parent: rendererId
         picker: coordinatePickerId
+        // Silent during a fix-station pick: that click is answered by writing
+        // the fix and returning to the page it came from, so a readout to copy
+        // numbers out of would only flash on the way out.
         visible: coordinatePickerId.hasPick
                  && interactionManagerId.activeInteraction === coordinatePickerId
+                 && !FixStationPick.active
     }
 
     MeasurementReadoutPopup {

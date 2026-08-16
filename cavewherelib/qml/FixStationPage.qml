@@ -64,6 +64,12 @@ StandardPage {
         fixStationPage.fixStationsModel.setCoordinateText(rowIndex, newText, Units.Metric)
     }
 
+    // Hands row \a rowIndex to the 3D view to be placed by clicking the terrain,
+    // the way the Map page's Add Layer hands its selection to the view.
+    function pickFromView(rowIndex: int): void {
+        FixStationPick.begin(fixStationPage.cave, rowIndex)
+    }
+
     // Both coordinate-system cells commit through here so the transposition
     // question is asked once rather than per layout. `orderWasUnknown` and
     // `coordinateText` are the row as it stood *before* this write — the write
@@ -423,6 +429,13 @@ StandardPage {
                            || wideDelegateId.northingDomainError
                 }
 
+                PickFromViewButton {
+                    objectName: "pickFromViewButton." + wideDelegateId.index
+                    Layout.leftMargin: Theme.tightSpacing
+                    Layout.alignment: Qt.AlignVCenter
+                    onClicked: fixStationPage.pickFromView(wideDelegateId.index)
+                }
+
                 InlineWarning {
                     objectName: "stationWarning." + wideDelegateId.index
                     Layout.leftMargin: Theme.tightSpacing
@@ -546,6 +559,11 @@ StandardPage {
                     error: narrowDelegateId.coordinateError !== ""
                            || narrowDelegateId.eastingDomainError
                            || narrowDelegateId.northingDomainError
+                }
+
+                PickFromViewButton {
+                    objectName: "pickFromViewButton." + narrowDelegateId.index
+                    onClicked: fixStationPage.pickFromView(narrowDelegateId.index)
                 }
             }
         }

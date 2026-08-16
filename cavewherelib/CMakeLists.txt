@@ -296,6 +296,7 @@ set(qml_singletons
 	"qml/Theme.qml"
     "qml/SelectableValueGroup.qml"
     "qml/ViewTools.qml"
+    "qml/FixStationPick.qml"
 )
 
 # Remove the singleton files from the regular QML file list

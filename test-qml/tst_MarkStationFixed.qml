@@ -739,5 +739,42 @@ MainWindowTest {
             findChild(popup, "fixStationPopupDone").clicked()
             tryCompare(popup, "opened", false)
         }
+
+        // The popup offers the same "pick it off the 3D view" the Fix Stations
+        // page does, and starts the same pick — so the fix a station was marked
+        // with from the survey table can be placed by clicking the terrain
+        // without going anywhere else first.
+        function test_popupOffersThePickFromViewButton() {
+            const context = gotoSurveyTable()
+            const popup = popupForA1(context)
+
+            const pickButton = findChild(popup, "fixStationPopupPickFromView")
+            verify(pickButton !== null, "the popup should offer a pick button")
+
+            // Nothing is anywhere in particular until the project has a frame.
+            compare(pickButton.enabled, false)
+
+            findChild(popup, "fixStationPopupCS").committed("EPSG:4326")
+            const coordinate = findChild(popup, "fixStationPopupCoordinate")
+            coordinate.text = "37, -84, 300m"
+            coordinate.editingFinished()
+            tryVerify(() => RootData.region.geoReference.hasCoordinateSystem, 5000,
+                      "the typed fix should have anchored a frame")
+            tryCompare(pickButton, "enabled", true, 5000)
+
+            pickButton.clicked()
+
+            // The popup gets out of the way and the pick names this fix.
+            tryCompare(popup, "opened", false)
+            compare(FixStationPick.active, true)
+            compare(FixStationPick.cave, context.cave)
+            compare(FixStationPick.stationName, "A1")
+
+            tryVerify(() => RootData.pageView.currentPageItem !== null
+                            && RootData.pageView.currentPageItem.objectName === "viewPage",
+                      5000, "the pick should jump to the 3D view")
+
+            FixStationPick.cancel()
+        }
     }
 }

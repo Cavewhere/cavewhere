@@ -77,26 +77,27 @@ cwCavingRegion::cwCavingRegion(QObject *parent) :
             this, &cwCavingRegion::defaultFixDatumChanged);
 }
 
-QString cwCavingRegion::defaultFixDatum() const
+QString cwCavingRegion::defaultFixSourceCS() const
 {
     for (const cwLazLayer* layer : m_lazLayers->layers()) {
-        if (!layer->enabled()) {
-            continue;
-        }
-
-        const QString layerDatum = cwCoordinateTransform::geographicDatumFor(layer->sourceCS());
-        if (!layerDatum.isEmpty()) {
-            return layerDatum;
+        if (layer->enabled()
+            && !cwCoordinateTransform::geographicDatumFor(layer->sourceCS()).isEmpty()) {
+            return layer->sourceCS();
         }
     }
 
-    const QString frameDatum =
-        cwCoordinateTransform::geographicDatumFor(m_geoReference->localCoordinateSystem());
-    if (!frameDatum.isEmpty()) {
-        return frameDatum;
+    const QString frameCS = m_geoReference->localCoordinateSystem();
+    if (!cwCoordinateTransform::geographicDatumFor(frameCS).isEmpty()) {
+        return frameCS;
     }
 
-    return cwCoordinateTransform::Wgs84;
+    return QString();
+}
+
+QString cwCavingRegion::defaultFixDatum() const
+{
+    const QString datum = cwCoordinateTransform::geographicDatumFor(defaultFixSourceCS());
+    return datum.isEmpty() ? cwCoordinateTransform::Wgs84 : datum;
 }
 
 void cwCavingRegion::setUnitSystem(cwUnits::UnitSystem system)
