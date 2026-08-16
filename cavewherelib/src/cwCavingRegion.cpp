@@ -8,8 +8,10 @@
 //Our includes
 #include "cwCavingRegion.h"
 #include "cwCave.h"
+#include "cwCoordinateTransform.h"
 #include "cwDebug.h"
 #include "cwFixStationValidator.h"
+#include "cwLazLayer.h"
 #include "cwLazLayerModel.h"
 #include "cwLocalProjectionManager.h"
 #include "cwLocalProjectionToken.h"
@@ -53,6 +55,48 @@ cwCavingRegion::cwCavingRegion(QObject *parent) :
             m_lazLayers, &cwLazLayerModel::reloadAll);
     connect(m_geoReference, &cwGeoReference::localProjectionChanged, this, recomputeConvergence);
     connect(this, &cwCavingRegion::caveCountChanged, this, recomputeConvergence);
+
+    // What the default datum is derived from: the layers and the frame. Rows
+    // coming and going, and the two roles the ladder reads, are the whole of
+    // the layer half — a point count landing says nothing about a datum.
+    connect(m_lazLayers, &QAbstractItemModel::rowsInserted,
+            this, &cwCavingRegion::defaultFixDatumChanged);
+    connect(m_lazLayers, &QAbstractItemModel::rowsRemoved,
+            this, &cwCavingRegion::defaultFixDatumChanged);
+    connect(m_lazLayers, &QAbstractItemModel::modelReset,
+            this, &cwCavingRegion::defaultFixDatumChanged);
+    connect(m_lazLayers, &QAbstractItemModel::dataChanged, this,
+            [this](const QModelIndex&, const QModelIndex&, const QList<int>& roles) {
+        if (roles.isEmpty()
+            || roles.contains(cwLazLayerModel::SourceCSRole)
+            || roles.contains(cwLazLayerModel::EnabledRole)) {
+            emit defaultFixDatumChanged();
+        }
+    });
+    connect(m_geoReference, &cwGeoReference::localCoordinateSystemChanged,
+            this, &cwCavingRegion::defaultFixDatumChanged);
+}
+
+QString cwCavingRegion::defaultFixDatum() const
+{
+    for (const cwLazLayer* layer : m_lazLayers->layers()) {
+        if (!layer->enabled()) {
+            continue;
+        }
+
+        const QString layerDatum = cwCoordinateTransform::geographicDatumFor(layer->sourceCS());
+        if (!layerDatum.isEmpty()) {
+            return layerDatum;
+        }
+    }
+
+    const QString frameDatum =
+        cwCoordinateTransform::geographicDatumFor(m_geoReference->localCoordinateSystem());
+    if (!frameDatum.isEmpty()) {
+        return frameDatum;
+    }
+
+    return cwCoordinateTransform::Wgs84;
 }
 
 void cwCavingRegion::setUnitSystem(cwUnits::UnitSystem system)

@@ -46,6 +46,7 @@ class CAVEWHERE_LIB_EXPORT cwCavingRegion : public QAbstractListModel, public cw
     Q_PROPERTY(cwLazLayerModel* lazLayers READ lazLayers CONSTANT)
     Q_PROPERTY(cwLocalProjectionManager* localProjection READ localProjection CONSTANT)
     Q_PROPERTY(cwUnits::UnitSystem unitSystem READ unitSystem WRITE setUnitSystem NOTIFY unitSystemChanged)
+    Q_PROPERTY(QString defaultFixDatum READ defaultFixDatum NOTIFY defaultFixDatumChanged)
 
 public:
     enum Roles {
@@ -80,6 +81,22 @@ public:
     //! recenters it from. Owned here because the policy needs the region's caves
     //! and layers; read through region.localProjection, not through the region.
     cwLocalProjectionManager* localProjection() const { return m_localProjectionManager; }
+
+    //! The datum a coordinate typed into this project is most likely on, as a
+    //! geographic code from cwCoordinateSystem's datum table. Read by every
+    //! surface that offers a datum, so that the answer comes from what the
+    //! project already holds rather than from a hardcoded WGS84.
+    //!
+    //! The first enabled GIS layer that names a datum wins, because a fix is
+    //! usually being placed against the terrain those tiles draw and a datum
+    //! shift shows up as the cave sitting beside the sinkhole it belongs in.
+    //! Without a layer the frame answers, since it inherited its datum from
+    //! whatever georeferenced the project. With neither, WGS84 — what a phone
+    //! reports.
+    //!
+    //! Answered on demand rather than cached: it is asked at commit and pick
+    //! time, and the PROJ lookup behind it is memoized per thread.
+    Q_INVOKABLE QString defaultFixDatum() const;
 
     void setFutureManagerToken(const cwFutureManagerToken& token);
 
@@ -120,6 +137,12 @@ public:
 signals:
     void nameChanged();
     void unitSystemChanged();
+
+    //! Something defaultFixDatum() reads changed — a layer arrived, left, was
+    //! enabled or disabled or renamed its system, or the frame moved. Coarse on
+    //! purpose: it reports the inputs moving rather than the answer changing,
+    //! which keeps the PROJ-backed resolve on the reader's side of the signal.
+    void defaultFixDatumChanged();
 
     void beginInsertCaves(int begin, int end);
     void insertedCaves(int begin, int end);
