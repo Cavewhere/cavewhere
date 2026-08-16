@@ -236,6 +236,39 @@ MainWindowTest {
                       "editing the zone must commit the new zone onto the row")
         }
 
+        //! A row on a non-WGS84 UTM series keeps its datum when the zone moves:
+        //! ETRS89 zone 32N to zone 33N stays ETRS89 (EPSG:25833), rather than
+        //! landing on WGS84's EPSG:32633 a meter or two away.
+        function test_inputCSPickerZoneEditKeepsTheDatum() {
+            const cave = gotoFixStations()
+            cave.fixStations.addFixStation()
+            cave.fixStations.setData(cave.fixStations.index(0), "EPSG:25832",
+                                     FixStationModel.InputCSRole)
+            tryCompare(cave.fixStations, "count", 1)
+
+            const picker = waitForPicker(0)
+            tryCompare(picker, "currentMode", CoordinateSystem.UTM)
+
+            const zoneSpin = findChild(picker, "csUtmZone")
+            verify(zoneSpin !== null, "csUtmZone should be reachable")
+            compare(zoneSpin.value, 32)
+
+            const inputCS = () => cave.fixStations.data(cave.fixStations.index(0),
+                                                       FixStationModel.InputCSRole)
+
+            zoneSpin.value = 33
+            zoneSpin.valueModified()
+            tryVerify(() => inputCS() === "EPSG:25833", 5000,
+                      "the zone edit must stay on ETRS89")
+
+            // Zone 60 is past the end of ETRS89's series, so the commit falls
+            // back to WGS84 — the one series covering every zone.
+            zoneSpin.value = 60
+            zoneSpin.valueModified()
+            tryVerify(() => inputCS() === "EPSG:32660", 5000,
+                      "a zone outside the datum's series falls back to WGS84")
+        }
+
         function test_removeFixConfirmed() {
             const cave = gotoFixStations()
             cave.fixStations.addFixStation()

@@ -12,6 +12,10 @@
 //Our includes
 #include "cwCoordinateTransform.h"
 #include "cwGeoPoint.h"
+#include "cwLocalProjection.h"
+
+//Std includes
+#include <iterator>
 
 using Catch::Matchers::WithinAbs;
 
@@ -369,8 +373,11 @@ TEST_CASE("cwCoordinateSystem::modeFor classifies CS strings",
         CHECK(cwCoordinateSystem::utmNorthFor("EPSG:32760") == false);
     }
 
-    SECTION("Non-WGS84 UTM falls through to Custom (e.g. ETRS89/UTM 32N)") {
-        CHECK(cwCoordinateSystem::modeFor("EPSG:25832") == Mode::Custom);
+    SECTION("A datum's own UTM series is UTM, on that datum (ETRS89/UTM 32N)") {
+        CHECK(cwCoordinateSystem::modeFor("EPSG:25832")    == Mode::UTM);
+        CHECK(cwCoordinateSystem::utmZoneFor("EPSG:25832")  == 32);
+        CHECK(cwCoordinateSystem::utmNorthFor("EPSG:25832") == true);
+        CHECK(cwCoordinateSystem::datumFor("EPSG:25832")    == "EPSG:4258");
     }
 
     SECTION("OSGB / Lambert / arbitrary → Custom") {
@@ -390,5 +397,326 @@ TEST_CASE("cwCoordinateSystem::modeFor classifies CS strings",
         CHECK(cwCoordinateSystem::utmZoneFor("")           == -1);
         CHECK(cwCoordinateSystem::utmZoneFor("EPSG:4326")  == -1);
         CHECK(cwCoordinateSystem::utmZoneFor("EPSG:27700") == -1);
+    }
+}
+
+namespace {
+    //! One row of the datum table, restated independently of it: what proj.db is
+    //! expected to call the geographic code, and the label CaveWhere shows.
+    struct DatumExpectation {
+        const char* code;
+        const char* projName;
+        const char* displayName;
+    };
+
+    constexpr DatumExpectation kExpectedDatums[] = {
+        { "EPSG:4326", "WGS 84",          "WGS84"           },
+        { "EPSG:6318", "NAD83(2011)",     "NAD83(2011)"     },
+        { "EPSG:4617", "NAD83(CSRS)",     "NAD83(CSRS)"     },
+        { "EPSG:6365", "Mexico ITRF2008", "Mexico ITRF2008" },
+        { "EPSG:4258", "ETRS89",          "ETRS89"          },
+        { "EPSG:6668", "JGD2011",         "JGD2011"         },
+        { "EPSG:7844", "GDA2020",         "GDA2020"         },
+        { "EPSG:4167", "NZGD2000",        "NZGD2000"        },
+    };
+
+    /**
+     * A datum's UTM series as the table is expected to build it. `firstCode`
+     * pins the base — a base off by one still produces valid EPSG codes, so
+     * only naming the code catches it — and `nameFormat` (with %1 the zone) is
+     * what proj.db must call every code the series builds.
+     */
+    struct UtmSeriesExpectation {
+        const char* datumCode;
+        bool north;
+        int zoneMin;
+        int zoneMax;
+        const char* firstCode;
+        const char* nameFormat;
+    };
+
+    constexpr UtmSeriesExpectation kExpectedSeries[] = {
+        { "EPSG:4326", true,   1, 60, "EPSG:32601", "WGS 84 / UTM zone %1N"          },
+        { "EPSG:4326", false,  1, 60, "EPSG:32701", "WGS 84 / UTM zone %1S"          },
+        { "EPSG:6318", true,   1, 19, "EPSG:6330",  "NAD83(2011) / UTM zone %1N"     },
+        { "EPSG:6365", true,  11, 16, "EPSG:6366",  "Mexico ITRF2008 / UTM zone %1N" },
+        { "EPSG:4258", true,  28, 38, "EPSG:25828", "ETRS89 / UTM zone %1N"          },
+        { "EPSG:6668", true,  51, 55, "EPSG:6688",  "JGD2011 / UTM zone %1N"         },
+        { "EPSG:7844", false, 46, 59, "EPSG:7846",  "GDA2020 / MGA zone %1"          },
+        { "EPSG:4167", false, 58, 60, "EPSG:2133",  "NZGD2000 / UTM zone %1S"        },
+    };
+
+    //! The lowest and highest UTM zone numbers any series may name.
+    constexpr int kFirstUtmZone = 1;
+    constexpr int kLastUtmZone = 60;
+
+    //! The series covering \a datumCode on \a north, or nullptr when the datum
+    //! has none there.
+    const UtmSeriesExpectation* expectedSeries(const QString& datumCode, bool north)
+    {
+        for (const UtmSeriesExpectation& series : kExpectedSeries) {
+            if (datumCode == QLatin1StringView(series.datumCode) && series.north == north) {
+                return &series;
+            }
+        }
+        return nullptr;
+    }
+
+    //! Whether \a datumCode's expected series names \a zone on \a north.
+    bool seriesCovers(const QString& datumCode, int zone, bool north)
+    {
+        const UtmSeriesExpectation* series = expectedSeries(datumCode, north);
+        return series && zone >= series->zoneMin && zone <= series->zoneMax;
+    }
+
+    //! What a lidar tile declares: a projected horizontal CRS and a vertical one,
+    //! spelled the WKT1 way a LAS 1.4 header carries.
+    const char* const kLazCompoundWkt = R"WKT(COMPD_CS["NAD83(2011) / UTM zone 17N + NAVD88 height",
+    PROJCS["NAD83(2011) / UTM zone 17N",
+        GEOGCS["NAD83(2011)",
+            DATUM["NAD83_National_Spatial_Reference_System_2011",
+                SPHEROID["GRS 1980",6378137,298.257222101,
+                    AUTHORITY["EPSG","7019"]],
+                AUTHORITY["EPSG","1116"]],
+            PRIMEM["Greenwich",0,
+                AUTHORITY["EPSG","8901"]],
+            UNIT["degree",0.0174532925199433,
+                AUTHORITY["EPSG","9122"]],
+            AUTHORITY["EPSG","6318"]],
+        PROJECTION["Transverse_Mercator"],
+        PARAMETER["latitude_of_origin",0],
+        PARAMETER["central_meridian",-81],
+        PARAMETER["scale_factor",0.9996],
+        PARAMETER["false_easting",500000],
+        PARAMETER["false_northing",0],
+        UNIT["metre",1,
+            AUTHORITY["EPSG","9001"]],
+        AXIS["Easting",EAST],
+        AXIS["Northing",NORTH],
+        AUTHORITY["EPSG","6346"]],
+    VERT_CS["NAVD88 height",
+        VERT_DATUM["North American Vertical Datum 1988",2005,
+            AUTHORITY["EPSG","5103"]],
+        UNIT["metre",1,
+            AUTHORITY["EPSG","9001"]],
+        AXIS["Gravity-related height",UP],
+        AUTHORITY["EPSG","5703"]]])WKT";
+}
+
+TEST_CASE("cwCoordinateSystem's datum table matches proj.db", "[cwCoordinateSystem][datumTable]")
+{
+    SECTION("Every geographic code resolves to the datum it claims")
+    {
+        const QStringList datums = cwCoordinateSystem::datumList();
+        REQUIRE(datums.size() == std::ssize(kExpectedDatums));
+        CHECK(datums.first() == "EPSG:4326");
+
+        for (int i = 0; i < std::ssize(kExpectedDatums); ++i) {
+            const DatumExpectation& expected = kExpectedDatums[i];
+            const QString code = QString::fromLatin1(expected.code);
+            INFO("datum " << expected.code);
+
+            CHECK(datums.at(i) == code);
+            CHECK(cwCoordinateTransform::nameFor(code) == QLatin1StringView(expected.projName));
+            CHECK(cwCoordinateTransform::isGeographic(code));
+            CHECK(cwCoordinateSystem::datumDisplayName(code)
+                  == QLatin1StringView(expected.displayName));
+        }
+    }
+
+    SECTION("Every UTM code the table builds is that datum's zone in proj.db")
+    {
+        for (const UtmSeriesExpectation& series : kExpectedSeries) {
+            const QString datum = QString::fromLatin1(series.datumCode);
+            INFO("series " << series.datumCode << (series.north ? " north" : " south"));
+
+            CHECK(cwCoordinateSystem::utmZoneToEpsg(series.zoneMin, series.north, datum)
+                  == QLatin1StringView(series.firstCode));
+
+            for (int zone = series.zoneMin; zone <= series.zoneMax; ++zone) {
+                const QString cs = cwCoordinateSystem::utmZoneToEpsg(zone, series.north, datum);
+                INFO("zone " << zone << " -> " << cs.toStdString());
+                REQUIRE_FALSE(cs.isEmpty());
+                CHECK(cwCoordinateTransform::nameFor(cs)
+                      == QString::fromLatin1(series.nameFormat).arg(zone));
+            }
+        }
+    }
+
+    SECTION("A code is built exactly where a series covers the zone")
+    {
+        for (const QString& datum : cwCoordinateSystem::datumList()) {
+            for (const bool north : {true, false}) {
+                for (int zone = kFirstUtmZone; zone <= kLastUtmZone; ++zone) {
+                    const bool built =
+                        !cwCoordinateSystem::utmZoneToEpsg(zone, north, datum).isEmpty();
+                    INFO(datum.toStdString() << (north ? " north" : " south") << " zone " << zone);
+                    CHECK(built == seriesCovers(datum, zone, north));
+                }
+            }
+        }
+    }
+
+    SECTION("NAD83(CSRS) ships lat/long only")
+    {
+        // Its UTM zones are scattered across three unrelated EPSG blocks, so no
+        // base plus zone reaches them.
+        CHECK(cwCoordinateSystem::latLonCS("EPSG:4617") == "EPSG:4617");
+        CHECK(expectedSeries(QStringLiteral("EPSG:4617"), true) == nullptr);
+        CHECK(expectedSeries(QStringLiteral("EPSG:4617"), false) == nullptr);
+    }
+}
+
+TEST_CASE("cwCoordinateSystem round-trips every datum's CS strings",
+          "[cwCoordinateSystem][parseCS]")
+{
+    using Mode = cwCoordinateSystem::Mode;
+
+    SECTION("latLonCS parses back to LatLon on the same datum")
+    {
+        for (const QString& datum : cwCoordinateSystem::datumList()) {
+            const QString cs = cwCoordinateSystem::latLonCS(datum);
+            INFO("datum " << datum.toStdString());
+            CHECK(cs == datum);
+            CHECK(cwCoordinateSystem::modeFor(cs) == Mode::LatLon);
+            CHECK(cwCoordinateSystem::datumFor(cs) == datum);
+            CHECK(cwCoordinateSystem::utmZoneFor(cs) == -1);
+        }
+    }
+
+    SECTION("utmZoneToEpsg parses back to the same zone, hemisphere and datum")
+    {
+        for (const UtmSeriesExpectation& series : kExpectedSeries) {
+            const QString datum = QString::fromLatin1(series.datumCode);
+            for (int zone = series.zoneMin; zone <= series.zoneMax; ++zone) {
+                const QString cs = cwCoordinateSystem::utmZoneToEpsg(zone, series.north, datum);
+                INFO(cs.toStdString());
+                CHECK(cwCoordinateSystem::modeFor(cs) == Mode::UTM);
+                CHECK(cwCoordinateSystem::utmZoneFor(cs) == zone);
+                CHECK(cwCoordinateSystem::utmNorthFor(cs) == series.north);
+                CHECK(cwCoordinateSystem::datumFor(cs) == datum);
+            }
+        }
+    }
+
+    SECTION("Zones past a series edge build nothing")
+    {
+        for (const UtmSeriesExpectation& series : kExpectedSeries) {
+            const QString datum = QString::fromLatin1(series.datumCode);
+            INFO("series " << series.datumCode << (series.north ? " north" : " south"));
+            CHECK(cwCoordinateSystem::utmZoneToEpsg(series.zoneMin - 1, series.north, datum)
+                      .isEmpty());
+            CHECK(cwCoordinateSystem::utmZoneToEpsg(series.zoneMax + 1, series.north, datum)
+                      .isEmpty());
+        }
+
+        CHECK(cwCoordinateSystem::utmZoneToEpsg(0, true).isEmpty());
+        CHECK(cwCoordinateSystem::utmZoneToEpsg(61, true).isEmpty());
+        CHECK(cwCoordinateSystem::utmZoneToEpsg(0, false).isEmpty());
+        CHECK(cwCoordinateSystem::utmZoneToEpsg(61, false).isEmpty());
+    }
+
+    SECTION("The two-argument utmZoneToEpsg still means WGS84")
+    {
+        CHECK(cwCoordinateSystem::utmZoneToEpsg(16, true) == "EPSG:32616");
+        CHECK(cwCoordinateSystem::utmZoneToEpsg(16, true)
+              == cwCoordinateSystem::utmZoneToEpsg(16, true, cwCoordinateSystem::wgs84()));
+        CHECK(cwCoordinateSystem::utmZoneToEpsg(60, false)
+              == cwCoordinateSystem::utmZoneToEpsg(60, false, cwCoordinateSystem::wgs84()));
+    }
+
+    SECTION("A datum outside the table names nothing")
+    {
+        CHECK(cwCoordinateSystem::latLonCS("EPSG:26916").isEmpty());
+        CHECK(cwCoordinateSystem::latLonCS("").isEmpty());
+        CHECK(cwCoordinateSystem::datumDisplayName("EPSG:26916").isEmpty());
+        CHECK(cwCoordinateSystem::utmZoneToEpsg(16, true, "EPSG:26916").isEmpty());
+    }
+
+    SECTION("A system the table doesn't spell stays Custom with no datum")
+    {
+        CHECK(cwCoordinateSystem::modeFor("EPSG:26916") == Mode::Custom);
+        CHECK(cwCoordinateSystem::datumFor("EPSG:26916").isEmpty());
+        CHECK(cwCoordinateSystem::datumFor("EPSG:27700").isEmpty());
+        CHECK(cwCoordinateSystem::datumFor("").isEmpty());
+        CHECK(cwCoordinateSystem::datumFor("not a coordinate system").isEmpty());
+    }
+
+    SECTION("utmDatumList offers exactly the datums whose series reaches the zone")
+    {
+        for (const bool north : {true, false}) {
+            for (int zone = kFirstUtmZone; zone <= kLastUtmZone; ++zone) {
+                QStringList expected;
+                for (const QString& datum : cwCoordinateSystem::datumList()) {
+                    if (seriesCovers(datum, zone, north)) {
+                        expected.append(datum);
+                    }
+                }
+                INFO("zone " << zone << (north ? " north" : " south"));
+                CHECK(cwCoordinateSystem::utmDatumList(zone, north) == expected);
+            }
+        }
+
+        // The shape of that, spelled out: zone 16N is North American, zone 32N
+        // European, and WGS84 is everywhere.
+        CHECK(cwCoordinateSystem::utmDatumList(16, true)
+              == QStringList({"EPSG:4326", "EPSG:6318", "EPSG:6365"}));
+        CHECK(cwCoordinateSystem::utmDatumList(32, true)
+              == QStringList({"EPSG:4326", "EPSG:4258"}));
+        CHECK(cwCoordinateSystem::utmDatumList(59, false)
+              == QStringList({"EPSG:4326", "EPSG:7844", "EPSG:4167"}));
+    }
+}
+
+TEST_CASE("cwCoordinateTransform::geographicDatumFor names the datum a system is on",
+          "[cwCoordinateSystem][geographicDatumFor]")
+{
+    SECTION("A lidar tile's compound WKT answers for its horizontal half")
+    {
+        CHECK(cwCoordinateTransform::geographicDatumFor(QString::fromLatin1(kLazCompoundWkt))
+              == "EPSG:6318");
+    }
+
+    SECTION("A compound spelled as two authority codes answers the same")
+    {
+        CHECK(cwCoordinateTransform::geographicDatumFor("EPSG:6346+EPSG:5703") == "EPSG:6318");
+    }
+
+    SECTION("A derived frame's WKT2 answers with the datum it was built over")
+    {
+        // A plain lat/long in the conterminous US derives a frame on NAD83(2011),
+        // and that frame is stored as WKT2 because the datum has no proj-string
+        // spelling.
+        constexpr double kUsLatitude = 37.0;
+        constexpr double kUsLongitude = -84.0;
+        const QString frame = cwLocalProjection::derive(kUsLatitude, kUsLongitude, QString());
+        REQUIRE_FALSE(frame.isEmpty());
+        CHECK(cwCoordinateTransform::geographicDatumFor(frame) == "EPSG:6318");
+    }
+
+    SECTION("Plain codes answer for themselves and for their UTM zones")
+    {
+        CHECK(cwCoordinateTransform::geographicDatumFor("EPSG:4326") == "EPSG:4326");
+        CHECK(cwCoordinateTransform::geographicDatumFor("EPSG:32616") == "EPSG:4326");
+        CHECK(cwCoordinateTransform::geographicDatumFor("EPSG:6318") == "EPSG:6318");
+        CHECK(cwCoordinateTransform::geographicDatumFor("EPSG:6345") == "EPSG:6318");
+        CHECK(cwCoordinateTransform::geographicDatumFor("EPSG:25832") == "EPSG:4258");
+        CHECK(cwCoordinateTransform::geographicDatumFor("EPSG:7855") == "EPSG:7844");
+    }
+
+    SECTION("A datum outside the table has no answer")
+    {
+        // NAD83 (1986) is a real datum the table doesn't name.
+        CHECK(cwCoordinateTransform::geographicDatumFor("EPSG:26916").isEmpty());
+        CHECK(cwCoordinateTransform::geographicDatumFor("EPSG:27700").isEmpty());
+    }
+
+    SECTION("Garbage has no answer")
+    {
+        CHECK(cwCoordinateTransform::geographicDatumFor("").isEmpty());
+        CHECK(cwCoordinateTransform::geographicDatumFor("   ").isEmpty());
+        CHECK(cwCoordinateTransform::geographicDatumFor("not a coordinate system").isEmpty());
+        CHECK(cwCoordinateTransform::geographicDatumFor("EPSG:999999").isEmpty());
+        CHECK(cwCoordinateTransform::geographicDatumFor("COMPD_CS[\"broken").isEmpty());
     }
 }

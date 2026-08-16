@@ -57,11 +57,18 @@ QQ.Item {
         case CoordinateSystem.LatLon:
             rootId.committed(CoordinateSystem.wgs84())
             return
-        case CoordinateSystem.UTM:
-            rootId.committed(CoordinateSystem.utmZoneToEpsg(
-                zoneSpinId.value,
-                hemiComboId.currentIndex === 0))
+        case CoordinateSystem.UTM: {
+            const zone = zoneSpinId.value
+            const north = hemiComboId.currentIndex === 0
+            // Keep the row on the datum it already carries, so editing a zone or
+            // a hemisphere moves only the zone. A datum whose UTM series stops
+            // short of the new zone falls back to WGS84, the one series that
+            // covers all sixty. The datum itself becomes selectable later.
+            const datum = CoordinateSystem.datumFor(rootId.value)
+            const cs = datum === "" ? "" : CoordinateSystem.utmZoneToEpsg(zone, north, datum)
+            rootId.committed(cs === "" ? CoordinateSystem.utmZoneToEpsg(zone, north) : cs)
             return
+        }
         case CoordinateSystem.Custom:
             customDialogLoader.active = true
             customDialogLoader.item.open()

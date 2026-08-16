@@ -15,6 +15,7 @@
 //Std includes
 #include <algorithm>
 #include <cmath>
+#include <iterator>
 #include <map>
 #include <utility>
 #include <vector>
@@ -33,6 +34,87 @@ namespace {
     bool sameCS(const QString& a, const QString& b)
     {
         return a.trimmed().compare(b.trimmed(), Qt::CaseInsensitive) == 0;
+    }
+
+    /**
+     * A geodetic datum CaveWhere can spell a coordinate on, with the UTM series
+     * belonging to it. `utmNorthBase`/`utmSouthBase` are the EPSG code a zone
+     * number is added to; kNoUtmSeries means the datum has no series on that
+     * hemisphere. `utmZoneMin`/`utmZoneMax` bound the zones the series covers,
+     * because most series run only across the datum's own part of the world and
+     * the codes past the end belong to something else entirely.
+     */
+    struct GeographicDatum {
+        const char* geographicCode;
+        const char* displayName;
+        int utmNorthBase;
+        int utmSouthBase;
+        int utmZoneMin;
+        int utmZoneMax;
+    };
+
+    constexpr int kNoUtmSeries = 0;
+
+    /**
+     * WGS84 first, then the eight datums cwLocalProjection's kPlateFixedRegions
+     * can adopt, so a fix can be typed on the same datum the frame and the lidar
+     * tiles hold still against.
+     *
+     * A static table rather than a proj.db query, for two reasons. Curation:
+     * proj.db knows thousands of datums, and this table states which ones
+     * CaveWhere offers, what to call them, and which UTM series the picker
+     * exposes — a product decision proj.db can't answer. Cost: parseCS runs in
+     * QML binding paths per fix-station row, and the table keeps it at pure
+     * string and integer matching. Every code here is checked against the
+     * bundled proj.db by test_cwCoordinateTransform's datum table cases — that
+     * test is what makes the numbers trustworthy, so a row that disagrees with
+     * proj.db is a wrong row, never a wrong test.
+     *
+     * NAD83(CSRS) ships lat/long only: its UTM zones are scattered across three
+     * unrelated EPSG blocks, so no base plus zone reaches them.
+     */
+    constexpr GeographicDatum kGeographicDatums[] = {
+        { "EPSG:4326", "WGS84",                 32600,        32700,  1, 60 },
+        { "EPSG:6318", "NAD83(2011)",            6329, kNoUtmSeries,  1, 19 },
+        { "EPSG:4617", "NAD83(CSRS)",     kNoUtmSeries, kNoUtmSeries,  0,  0 },
+        { "EPSG:6365", "Mexico ITRF2008",        6355, kNoUtmSeries, 11, 16 },
+        { "EPSG:4258", "ETRS89",                25800, kNoUtmSeries, 28, 38 },
+        { "EPSG:6668", "JGD2011",                6637, kNoUtmSeries, 51, 55 },
+        { "EPSG:7844", "GDA2020",         kNoUtmSeries,         7800, 46, 59 },
+        { "EPSG:4167", "NZGD2000",        kNoUtmSeries,         2075, 58, 60 },
+    };
+
+    //! The row \a datumCode names, or nullptr.
+    const GeographicDatum* datumRow(const QString& datumCode)
+    {
+        const QString key = datumCode.trimmed();
+        for (const GeographicDatum& datum : kGeographicDatums) {
+            if (key.compare(QLatin1StringView(datum.geographicCode), Qt::CaseInsensitive) == 0) {
+                return &datum;
+            }
+        }
+        return nullptr;
+    }
+
+    //! The base \a datum adds a zone to on the given hemisphere, or kNoUtmSeries.
+    int utmSeriesBase(const GeographicDatum& datum, bool north)
+    {
+        return north ? datum.utmNorthBase : datum.utmSouthBase;
+    }
+
+    //! Whether \a datum's series reaches \a zone on the given hemisphere.
+    bool hasUtmZone(const GeographicDatum& datum, int zone, bool north)
+    {
+        return utmSeriesBase(datum, north) != kNoUtmSeries
+            && zone >= datum.utmZoneMin
+            && zone <= datum.utmZoneMax;
+    }
+
+    const QString kEpsgPrefix = QStringLiteral("EPSG:");
+
+    QString epsgCode(int code)
+    {
+        return kEpsgPrefix + QString::number(code);
     }
 }
 
@@ -485,11 +567,7 @@ cwCoordinateTransform::domainCheck(const QString& cs, const cwGeoPoint& point)
 
 QString cwCoordinateTransform::utmZoneToEpsg(int zone, bool north)
 {
-    if (zone < 1 || zone > 60) {
-        return QString();
-    }
-    const int base = north ? 32600 : 32700;
-    return QStringLiteral("EPSG:%1").arg(base + zone);
+    return cwCoordinateSystem::utmZoneToEpsg(zone, north, Wgs84);
 }
 
 QString cwCoordinateTransform::deriveProjectedOutputCS(const QString& inputCS,
@@ -607,8 +685,14 @@ namespace {
         cwCoordinateSystem::Mode mode = cwCoordinateSystem::Local;
         int  utmZone  = -1;
         bool utmNorth = true;
+        QString datumCode;
     };
 
+    /**
+     * The datum table read backwards: a CS string to the mode, zone, hemisphere
+     * and datum it spells. Pure string and integer matching, because this runs in
+     * QML binding paths.
+     */
     ParsedCS parseCS(const QString& cs)
     {
         ParsedCS r;
@@ -617,26 +701,27 @@ namespace {
             return r;
         }
 
-        if (trimmed.compare(cwCoordinateTransform::Wgs84, Qt::CaseInsensitive) == 0) {
+        if (const GeographicDatum* datum = datumRow(trimmed)) {
             r.mode = cwCoordinateSystem::LatLon;
+            r.datumCode = QString::fromLatin1(datum->geographicCode);
             return r;
         }
 
-        if (trimmed.startsWith(QStringLiteral("EPSG:"), Qt::CaseInsensitive)) {
+        if (trimmed.startsWith(kEpsgPrefix, Qt::CaseInsensitive)) {
             bool ok = false;
-            const int code = trimmed.mid(5).toInt(&ok);
+            const int code = trimmed.mid(kEpsgPrefix.size()).toInt(&ok);
             if (ok) {
-                if (code >= 32601 && code <= 32660) {
-                    r.mode = cwCoordinateSystem::UTM;
-                    r.utmZone = code - 32600;
-                    r.utmNorth = true;
-                    return r;
-                }
-                if (code >= 32701 && code <= 32760) {
-                    r.mode = cwCoordinateSystem::UTM;
-                    r.utmZone = code - 32700;
-                    r.utmNorth = false;
-                    return r;
+                for (const GeographicDatum& datum : kGeographicDatums) {
+                    for (const bool north : {true, false}) {
+                        const int zone = code - utmSeriesBase(datum, north);
+                        if (hasUtmZone(datum, zone, north)) {
+                            r.mode = cwCoordinateSystem::UTM;
+                            r.utmZone = zone;
+                            r.utmNorth = north;
+                            r.datumCode = QString::fromLatin1(datum.geographicCode);
+                            return r;
+                        }
+                    }
                 }
             }
         }
@@ -644,6 +729,53 @@ namespace {
         r.mode = cwCoordinateSystem::Custom;
         return r;
     }
+}
+
+QString cwCoordinateTransform::geographicDatumFor(const QString& cs)
+{
+    const QString key = cs.trimmed();
+    if (key.isEmpty()) {
+        return QString();
+    }
+
+    // Per-thread cache with the same cap as the queries above: proj_identify is
+    // a proj.db search on top of proj_create, and QML asks this per fix-station
+    // row and per lidar layer whenever either model changes.
+    thread_local QHash<QString, QString> cache;
+    return cachedValue(cache, key, [&key]() {
+        QString result;
+        PJ_CONTEXT* ctx = validatorContext();
+        if (!ctx) {
+            return result;
+        }
+
+        PJ* crs = proj_create(ctx, key.toUtf8().constData());
+        if (!crs) {
+            return result;
+        }
+
+        // A compound CRS's vertical half names no geodetic datum, so only the
+        // horizontal component can answer — the rule cwLocalProjection follows.
+        if (proj_get_type(crs) == PJ_TYPE_COMPOUND_CRS) {
+            PJ* horizontal = proj_crs_get_sub_crs(ctx, crs, 0);
+            proj_destroy(crs);
+            crs = horizontal;
+            if (!crs) {
+                return result;
+            }
+        }
+
+        // A geodetic CRS is its own base; a projected one — a UTM zone or a
+        // derived frame — hands back the geographic CRS it was built over.
+        PJ* geodetic = proj_crs_get_geodetic_crs(ctx, crs);
+        const QString code = identifiedAuthorityCode(ctx, geodetic ? geodetic : crs);
+        if (geodetic) {
+            proj_destroy(geodetic);
+        }
+        proj_destroy(crs);
+
+        return cwCoordinateSystem::latLonCS(code);
+    });
 }
 
 QString cwCoordinateTransform::nameFor(const QString& cs)
@@ -701,7 +833,49 @@ bool cwCoordinateSystem::isGeographic(const QString& cs)
 
 QString cwCoordinateSystem::utmZoneToEpsg(int zone, bool north)
 {
-    return cwCoordinateTransform::utmZoneToEpsg(zone, north);
+    return utmZoneToEpsg(zone, north, cwCoordinateTransform::Wgs84);
+}
+
+QString cwCoordinateSystem::utmZoneToEpsg(int zone, bool north, const QString& datumCode)
+{
+    const GeographicDatum* datum = datumRow(datumCode);
+    if (!datum || !hasUtmZone(*datum, zone, north)) {
+        return QString();
+    }
+    return epsgCode(utmSeriesBase(*datum, north) + zone);
+}
+
+QString cwCoordinateSystem::latLonCS(const QString& datumCode)
+{
+    const GeographicDatum* datum = datumRow(datumCode);
+    return datum ? QString::fromLatin1(datum->geographicCode) : QString();
+}
+
+QStringList cwCoordinateSystem::datumList()
+{
+    QStringList codes;
+    codes.reserve(std::size(kGeographicDatums));
+    for (const GeographicDatum& datum : kGeographicDatums) {
+        codes.append(QString::fromLatin1(datum.geographicCode));
+    }
+    return codes;
+}
+
+QStringList cwCoordinateSystem::utmDatumList(int zone, bool north)
+{
+    QStringList codes;
+    for (const GeographicDatum& datum : kGeographicDatums) {
+        if (hasUtmZone(datum, zone, north)) {
+            codes.append(QString::fromLatin1(datum.geographicCode));
+        }
+    }
+    return codes;
+}
+
+QString cwCoordinateSystem::datumDisplayName(const QString& datumCode)
+{
+    const GeographicDatum* datum = datumRow(datumCode);
+    return datum ? QString::fromLatin1(datum->displayName) : QString();
 }
 
 cwCoordinateSystem::Mode cwCoordinateSystem::modeFor(const QString& cs)
@@ -717,6 +891,11 @@ int cwCoordinateSystem::utmZoneFor(const QString& cs)
 bool cwCoordinateSystem::utmNorthFor(const QString& cs)
 {
     return parseCS(cs).utmNorth;
+}
+
+QString cwCoordinateSystem::datumFor(const QString& cs)
+{
+    return parseCS(cs).datumCode;
 }
 
 QString cwCoordinateSystem::nameFor(const QString& cs)

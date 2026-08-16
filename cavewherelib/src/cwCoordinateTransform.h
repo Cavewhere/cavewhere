@@ -110,6 +110,23 @@ public:
     static QString nameFor(const QString& cs);
 
     /**
+     * The geographic CRS from cwCoordinateSystem's datum table that \a cs is
+     * expressed on ("EPSG:6318" for anything on NAD83(2011)), or "" when PROJ
+     * can't read \a cs or its datum is one the table doesn't name.
+     *
+     * A compound CRS — what a lidar tile declares — contributes only its
+     * horizontal half, the same rule cwLocalProjection follows, so a tile's WKT
+     * answers with the datum its easting and northing are on. A derived frame's
+     * WKT2 answers with the datum it was built over.
+     *
+     * PROJ-backed (proj_identify against EPSG) and cached per thread like
+     * nameFor, because QML bindings ask it. Callers that only need to read a
+     * code the table itself spells want cwCoordinateSystem::datumFor, which is
+     * pure string matching.
+     */
+    static QString geographicDatumFor(const QString& cs);
+
+    /**
      * Derive a *projected* coordinate system usable as the region's global
      * (output) CS from a single fix's input CS and coordinate. survex/cavern
      * only emits projected output, so a geographic input can't seed the global
@@ -204,13 +221,52 @@ public:
     Q_INVOKABLE static QString utmZoneToEpsg(int zone, bool north);
 
     /**
-     * Round-trip a CS string back to a picker mode. Splitting the parse into three
+     * The UTM code for \a zone and hemisphere on \a datumCode's own series, e.g.
+     * ("EPSG:6318", 16, north) → "EPSG:6345" (NAD83(2011) / UTM zone 16N).
+     * Returns "" when the datum isn't in the table or its series stops short of
+     * the zone — NAD83(2011) has no southern series and no zone past 19, and
+     * NAD83(CSRS)'s codes aren't consecutive so it carries no series at all.
+     * Pure table arithmetic, like the two-argument form it generalizes.
+     */
+    Q_INVOKABLE static QString utmZoneToEpsg(int zone, bool north, const QString& datumCode);
+
+    /**
+     * The geographic (lat/long) CRS for \a datumCode, which for a code the table
+     * names is the code itself, and "" for one it doesn't. QML picks a datum by
+     * code and asks this for the CS to commit.
+     */
+    Q_INVOKABLE static QString latLonCS(const QString& datumCode);
+
+    /**
+     * Every datum the table names, WGS84 first, as geographic codes.
+     * utmDatumList narrows that to the datums whose UTM series reaches \a zone
+     * on the given hemisphere, so a UTM picker offers only codes it can build.
+     */
+    Q_INVOKABLE static QStringList datumList();
+    Q_INVOKABLE static QStringList utmDatumList(int zone, bool north);
+
+    /**
+     * The short label for a datum code ("NAD83(2011)" for "EPSG:6318"), or ""
+     * for a code the table doesn't name. Shipped with the binary rather than
+     * read from proj.db, so every machine shows the same words.
+     */
+    Q_INVOKABLE static QString datumDisplayName(const QString& datumCode);
+
+    /**
+     * Round-trip a CS string back to a picker mode. Splitting the parse into four
      * Q_INVOKABLEs lets QML bind each slice as a strict-typed property.
-     * utmZoneFor returns -1 and utmNorthFor returns true when mode is not UTM.
+     * utmZoneFor returns -1 and utmNorthFor returns true when mode is not UTM;
+     * datumFor returns "" for a mode with no datum (Local, Custom).
+     *
+     * The parse is pure string and integer matching against the datum table — no
+     * PROJ call — because these run in binding paths. A system the table doesn't
+     * spell reads as Custom even when PROJ knows it well; cwCoordinateTransform::
+     * geographicDatumFor is the one that asks PROJ.
      */
     Q_INVOKABLE static Mode modeFor(const QString& cs);
     Q_INVOKABLE static int  utmZoneFor(const QString& cs);
     Q_INVOKABLE static bool utmNorthFor(const QString& cs);
+    Q_INVOKABLE static QString datumFor(const QString& cs);
 
     /**
      * Human-readable description for a CS (e.g. "OSGB36 / British National
