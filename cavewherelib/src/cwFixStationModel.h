@@ -53,7 +53,11 @@ public:
         //! components in the project's units, so display and edit deliberately
         //! differ. Written through setCoordinateText(), the one path that
         //! validates a string before it becomes the coordinate.
-        CoordinateTextRole
+        CoordinateTextRole,
+        //! cwFixStation::ElevationReference — what the row's elevation is
+        //! measured from. Metadata: nothing derives from it, and writing it
+        //! moves no other role.
+        ElevationReferenceRole
     };
     Q_ENUM(Roles)
 

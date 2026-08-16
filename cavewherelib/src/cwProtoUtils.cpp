@@ -43,6 +43,16 @@ void saveReading(StringFunc getProtoString, const cwReading& reading, State empt
     }
 }
 
+// The elevation reference crosses into the proto by static_cast, so its values
+// are file format: reordering the C++ enum would re-read every stored fix as
+// something else. Pin them here so that becomes a compile error.
+static_assert(static_cast<int>(cwFixStation::UnknownElevationReference)
+              == CavewhereProto::FixStation_ElevationReference_ELEVATION_REFERENCE_UNKNOWN);
+static_assert(static_cast<int>(cwFixStation::Ellipsoid)
+              == CavewhereProto::FixStation_ElevationReference_ELLIPSOID);
+static_assert(static_cast<int>(cwFixStation::MeanSeaLevel)
+              == CavewhereProto::FixStation_ElevationReference_MEAN_SEA_LEVEL);
+
 } // anonymous namespace
 
 namespace cwProtoUtils {
@@ -821,6 +831,10 @@ void saveFixStation(CavewhereProto::FixStation* protoFix, const cwFixStation& fi
     if (!fix.coordinate().isEmpty()) {
         saveString(protoFix->mutable_coordinate(), fix.coordinate());
     }
+    if (fix.elevationReference() != cwFixStation::UnknownElevationReference) {
+        protoFix->set_elevationreference(
+            static_cast<CavewhereProto::FixStation_ElevationReference>(fix.elevationReference()));
+    }
 }
 
 cwFixStation fromProtoFixStation(const CavewhereProto::FixStation& protoFix)
@@ -848,6 +862,11 @@ cwFixStation fromProtoFixStation(const CavewhereProto::FixStation& protoFix)
     //opening it.
     if (protoFix.has_coordinate()) {
         fix.setCoordinate(QString::fromStdString(protoFix.coordinate()));
+    }
+
+    if (protoFix.has_elevationreference()) {
+        fix.setElevationReference(
+            static_cast<cwFixStation::ElevationReference>(protoFix.elevationreference()));
     }
 
     return fix;

@@ -491,3 +491,37 @@ TEST_CASE("cwFixStation equality compares all fields", "[FixStation][cwFixStatio
     }
 }
 
+TEST_CASE("cwFixStation says nothing about what its elevation is measured from",
+          "[FixStation][cwFixStation]") {
+    //Every fix that exists today, and every one typed by hand, arrives without
+    //that knowledge — so Unknown is the default rather than a guess at MSL.
+    cwFixStation fix;
+    CHECK(fix.elevationReference() == cwFixStation::UnknownElevationReference);
+
+    SECTION("and keeps what it is told") {
+        fix.setElevationReference(cwFixStation::MeanSeaLevel);
+        CHECK(fix.elevationReference() == cwFixStation::MeanSeaLevel);
+
+        fix.setElevationReference(cwFixStation::Ellipsoid);
+        CHECK(fix.elevationReference() == cwFixStation::Ellipsoid);
+    }
+
+    SECTION("without touching the coordinate it describes") {
+        fix.setInputCS(kUtmZ11N);
+        fix.setCoordinate(QStringLiteral("610016.792, 5615117.075, 304m"));
+        fix.setElevationReference(cwFixStation::Ellipsoid);
+
+        CHECK(fix.coordinate() == QStringLiteral("610016.792, 5615117.075, 304m"));
+        CHECK(fix.elevation() == 304.0);
+        CHECK(fix.state() == cwFixStation::Valid);
+    }
+
+    SECTION("and two fixes that disagree about it are different fixes") {
+        cwFixStation other;
+        other.setId(fix.id());
+        REQUIRE(fix == other);
+
+        other.setElevationReference(cwFixStation::Ellipsoid);
+        CHECK(fix != other);
+    }
+}

@@ -111,6 +111,17 @@ message FixStation {
     // numbers are read back out of this under the axis order inputCS implies.
     // Kept verbatim even when it doesn't parse. Absent means no coordinate.
     optional string coordinate = 9;
+
+    // What the coordinate's elevation is measured from, as declared by whoever
+    // supplied it. Recorded and displayed, never applied: no transform reads
+    // it, so a fix means the same thing whatever this says. Absent — every
+    // project written before this field existed — means UNKNOWN.
+    enum ElevationReference {
+        ELEVATION_REFERENCE_UNKNOWN = 0;
+        ELLIPSOID = 1;
+        MEAN_SEA_LEVEL = 2;
+    }
+    optional ElevationReference elevationReference = 11;
 }
 
 message ExternalCenterline {

@@ -32,6 +32,7 @@ public:
     QString InputCS;
     double HorizontalVariance = 0.0;
     double VerticalVariance = 0.0;
+    cwFixStation::ElevationReference ElevationReference = cwFixStation::UnknownElevationReference;
 
     //! The coordinate, as it was written.
     QString Coordinate;
@@ -143,7 +144,8 @@ bool cwFixStation::operator==(const cwFixStation& other) const
             && data->InputCS == other.data->InputCS
             && data->Coordinate == other.data->Coordinate
             && data->HorizontalVariance == other.data->HorizontalVariance
-            && data->VerticalVariance == other.data->VerticalVariance;
+            && data->VerticalVariance == other.data->VerticalVariance
+            && data->ElevationReference == other.data->ElevationReference;
 }
 
 QUuid cwFixStation::id() const { return data->Id; }
@@ -204,3 +206,6 @@ void cwFixStation::setHorizontalVariance(double v) { data->HorizontalVariance = 
 
 double cwFixStation::verticalVariance() const { return data->VerticalVariance; }
 void cwFixStation::setVerticalVariance(double v) { data->VerticalVariance = v; }
+
+cwFixStation::ElevationReference cwFixStation::elevationReference() const { return data->ElevationReference; }
+void cwFixStation::setElevationReference(ElevationReference reference) { data->ElevationReference = reference; }

@@ -36,6 +36,8 @@ class cwFixStationData;
  */
 class CAVEWHERE_LIB_EXPORT cwFixStation
 {
+    Q_GADGET
+
 public:
     //! What this fix's coordinate amounts to — see state().
     enum CoordinateState {
@@ -76,6 +78,23 @@ public:
         //! cwCoordinateText::swapHorizontal()).
         NoSystem
     };
+
+    //! What the coordinate's elevation is measured from. Metadata: it is
+    //! recorded, shown and saved, and no transform reads it — elevation()
+    //! passes through every projection untouched whichever of these it says.
+    //! Converting between the two takes a geoid grid, which is its own plan.
+    enum ElevationReference {
+        //! Whoever supplied the coordinate said nothing about its vertical
+        //! reference, which is every fix entered before this field existed and
+        //! every one typed by hand since. The default.
+        UnknownElevationReference,
+        //! Height above the ellipsoid — what a GPS reports.
+        Ellipsoid,
+        //! Height above the geoid, i.e. an orthometric height off a datasheet,
+        //! a topo map, or a LiDAR tile carrying a vertical datum.
+        MeanSeaLevel
+    };
+    Q_ENUM(ElevationReference)
 
     cwFixStation();
     cwFixStation(const cwFixStation& other);
@@ -168,6 +187,11 @@ public:
 
     double verticalVariance() const;
     void setVerticalVariance(double v);
+
+    //! What elevation() is measured from — see ElevationReference. A fix says
+    //! UnknownElevationReference until something that knows says otherwise.
+    ElevationReference elevationReference() const;
+    void setElevationReference(ElevationReference reference);
 
 private:
     QSharedDataPointer<cwFixStationData> data;

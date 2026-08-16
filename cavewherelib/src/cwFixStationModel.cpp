@@ -12,6 +12,9 @@
 #include "cwCoordinateTransform.h"
 #include "cwStation.h"
 
+//Qt includes
+#include <QMetaEnum>
+
 namespace {
 
 //! A row created through the UI, which always starts on a coordinate system.
@@ -109,6 +112,7 @@ QVariant cwFixStationModel::data(const QModelIndex& index, int role) const
     case VerticalVarianceRole:   return fix.verticalVariance();
     case IdRole:                 return fix.id();
     case CoordinateTextRole:     return fix.coordinate();
+    case ElevationReferenceRole: return QVariant::fromValue(fix.elevationReference());
     default:                     return QVariant();
     }
 }
@@ -182,6 +186,22 @@ bool cwFixStationModel::setData(const QModelIndex& index, const QVariant& value,
         }
         break;
     }
+    case ElevationReferenceRole: {
+        bool valid = false;
+        const int raw = value.toInt(&valid);
+        //Q_ENUM already knows which values name a reference, so ask it rather
+        //than repeat the range here.
+        const auto metaEnum = QMetaEnum::fromType<cwFixStation::ElevationReference>();
+        if (!valid || metaEnum.valueToKey(raw) == nullptr) {
+            return false;
+        }
+        const auto reference = static_cast<cwFixStation::ElevationReference>(raw);
+        if (fix.elevationReference() != reference) {
+            fix.setElevationReference(reference);
+            changed = true;
+        }
+        break;
+    }
     case IdRole: {
         const QUuid id = value.toUuid();
         if (fix.id() != id) {
@@ -215,7 +235,8 @@ QHash<int, QByteArray> cwFixStationModel::roleNames() const
         {HorizontalVarianceRole, "horizontalVariance"},
         {VerticalVarianceRole,   "verticalVariance"},
         {IdRole,                 "id"},
-        {CoordinateTextRole,     "coordinateText"}
+        {CoordinateTextRole,     "coordinateText"},
+        {ElevationReferenceRole, "elevationReference"}
     };
 }
 
