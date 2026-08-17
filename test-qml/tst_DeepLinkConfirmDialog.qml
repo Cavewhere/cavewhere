@@ -95,7 +95,13 @@ Item {
 
         // Clicking Clone & Open when clone fails keeps the dialog open and shows the error
         function test_cloneError_keepsDialogOpenAndShowsError() {
-            dialogId.open(Qt.url("https://github.com/user/repo"))
+            // Clone a file:// URL whose repository path is absent from disk:
+            // libgit2's local transport fails immediately, so the failure is
+            // deterministic and stays entirely on the local machine.
+            var cloneParentUrl = TestHelper.tempDirectoryUrl()
+            RootData.recentProjectModel.defaultRepositoryDir = cloneParentUrl
+
+            dialogId.open(Qt.url(cloneParentUrl + "/missing-remote.git"))
             var dialog = findChild(rootId, "deepLinkConfirmDialog")
             verify(dialog !== null)
             tryVerify(function() { return dialog.visible }, 1000)
@@ -104,9 +110,8 @@ Item {
             verify(cloneButton !== null)
             mouseClick(cloneButton)
 
-            // The clone will fail (fake URL / no network in test env).
-            // Error area must become visible — either from a synchronous
-            // destination-path error or from the async network failure.
+            // The async clone reports the missing repository path through the
+            // real cloner, which makes the error area visible.
             var errorArea = findChild(rootId, "remoteCloneErrorArea")
             verify(errorArea !== null, "remoteCloneErrorArea not found")
             tryVerify(function() { return errorArea.visible }, 5000,
