@@ -800,11 +800,11 @@ void cwSaveLoadPrivate::addFileSystemJob(Job job, cwSaveLoad* context) {
     };
 
     auto oldPath = [this, toDirOrFilePath](const Job& job) {
-        return toDirOrFilePath(job, m_objectStates[job.objectId].currentPath);
+        return toDirOrFilePath(job, m_objectStates.value(job.objectId).currentPath);
     };
 
     auto path = [this, context, toDirOrFilePath](const Job& job) {
-        return toDirOrFilePath(job, absolutePathFor(context, static_cast<const QObject*>(job.objectId)));
+        return toDirOrFilePath(job, absolutePathFor(context, job.objectId));
     };
 
     job.path = path(job);
@@ -828,7 +828,7 @@ void cwSaveLoadPrivate::addFileSystemJob(Job job, cwSaveLoad* context) {
     };
 
     if (job.action == Job::Action::WriteFile && job.kind == Job::Kind::File) {
-        auto& state = m_objectStates[job.objectId];
+        auto& state = stateFor(job.objectId, context);
         if (state.currentPath.isEmpty()) {
             state.currentPath = job.path;
         } else {
@@ -838,7 +838,7 @@ void cwSaveLoadPrivate::addFileSystemJob(Job job, cwSaveLoad* context) {
             state.currentPath = job.path;
         }
     } else if (job.kind == Job::Kind::File && job.action == Job::Action::Move) {
-        auto& state = m_objectStates[job.objectId];
+        auto& state = stateFor(job.objectId, context);
         if (state.currentPath == job.path) {
             return;
         }
@@ -849,12 +849,12 @@ void cwSaveLoadPrivate::addFileSystemJob(Job job, cwSaveLoad* context) {
                 [this,
                 emitObjectPathHelper,
                 context,
-                objectId = job.objectId,
+                objectGuard = job.objectGuard,
                 originalOnDone]
                 (const Monad::ResultBase& result)
         {
-            emitObjectPathHelper(result, originalOnDone, [objectId, context]() {
-                if (auto* object = static_cast<QObject*>(const_cast<void*>(objectId))) {
+            emitObjectPathHelper(result, originalOnDone, [objectGuard, context]() {
+                if (QObject* object = objectGuard.data()) {
                     emit context->objectPathReady(object);
                 }
             });
@@ -882,13 +882,13 @@ void cwSaveLoadPrivate::addFileSystemJob(Job job, cwSaveLoad* context) {
                 [this,
                 emitObjectPathHelper,
                 context,
-                objectId = job.objectId,
+                objectGuard = job.objectGuard,
                 originalOnDone]
                 (const Monad::ResultBase& result)
         {
-            emitObjectPathHelper(result, originalOnDone, [objectId, context]() {
+            emitObjectPathHelper(result, originalOnDone, [objectGuard, context]() {
                 // Emit only for the directory object; listeners cascade so we avoid N per-file signals.
-                if (auto* object = static_cast<QObject*>(const_cast<void*>(objectId))) {
+                if (QObject* object = objectGuard.data()) {
                     emit context->objectPathReady(object);
                 }
             });
@@ -1031,13 +1031,31 @@ cwSaveLoadPrivate::LoadedPathIndex cwSaveLoadPrivate::buildLoadedPathIndex(const
     return index;
 }
 
-void cwSaveLoadPrivate::seedStatePathFromLoaded(const void* objectId, const QString& absolutePath)
+void cwSaveLoadPrivate::watchObjectLifetime(const QObject* object, cwSaveLoad* context)
+{
+    if (object == nullptr || m_lifetimeWatched.contains(object)) {
+        return;
+    }
+    m_lifetimeWatched.insert(object);
+
+    // m_objectStates is keyed by pointer, so an entry that outlives its
+    // object could be inherited by a new object allocated at the recycled
+    // address — and its stale currentPath would become the oldPath of that
+    // object's next move. Erase the entry at destruction, before the
+    // allocator can hand the address out again.
+    QObject::connect(object, &QObject::destroyed, context, [this, object]() {
+        m_lifetimeWatched.remove(object);
+        m_objectStates.remove(object);
+    });
+}
+
+void cwSaveLoadPrivate::seedStatePathFromLoaded(cwSaveLoad* context, const QObject* objectId, const QString& absolutePath)
 {
     if (objectId == nullptr || absolutePath.isEmpty()) {
         return;
     }
 
-    auto& state = m_objectStates[objectId];
+    auto& state = stateFor(objectId, context);
     const QString normalizedLoadedPath = normalizeQueuedPath(absolutePath);
     state.loadedPath = normalizedLoadedPath;
     if (state.currentPath.isEmpty()) {
@@ -1065,7 +1083,7 @@ void cwSaveLoadPrivate::resetObjectStates(cwSaveLoad* context) {
 
     auto addObjects = [this, context](auto objects) {
         for(const auto object : objects) {
-            auto& state = stateFor(object);
+            auto& state = stateFor(object, context);
             state.currentPath = normalizeQueuedPath(absolutePathFor(context, object));
             state.loadedPath.clear();
         }
@@ -1107,7 +1125,7 @@ void cwSaveLoadPrivate::seedObjectStatesFromLoadedData(cwSaveLoad* context,
 
         const QString caveDirName = cwSaveLoad::sanitizeFileName(caveNameIt.value());
         const QString caveFileName = cwSaveLoad::sanitizeFileName(caveNameIt.value() + QStringLiteral(".cwcave"));
-        seedStatePathFromLoaded(cave, baseDataRootDir.filePath(QDir(caveDirName).filePath(caveFileName)));
+        seedStatePathFromLoaded(context, cave, baseDataRootDir.filePath(QDir(caveDirName).filePath(caveFileName)));
     }
 
     for (cwTrip* trip : m_regionTreeModel->all<cwTrip*>(QModelIndex(), &cwRegionTreeModel::trip)) {
@@ -1122,7 +1140,7 @@ void cwSaveLoadPrivate::seedObjectStatesFromLoadedData(cwSaveLoad* context,
         const QString caveDirName = cwSaveLoad::sanitizeFileName(partsIt->caveName);
         const QString tripDirName = cwSaveLoad::sanitizeFileName(partsIt->tripName);
         const QString tripFileName = cwSaveLoad::sanitizeFileName(partsIt->tripName + QStringLiteral(".cwtrip"));
-        seedStatePathFromLoaded(trip, baseDataRootDir.filePath(QDir(caveDirName).filePath(
+        seedStatePathFromLoaded(context, trip, baseDataRootDir.filePath(QDir(caveDirName).filePath(
                                                                    QDir(QStringLiteral("trips")).filePath(
                                                                        QDir(tripDirName).filePath(tripFileName)))));
     }
@@ -1139,7 +1157,7 @@ void cwSaveLoadPrivate::seedObjectStatesFromLoadedData(cwSaveLoad* context,
         const QString caveDirName = cwSaveLoad::sanitizeFileName(partsIt->caveName);
         const QString tripDirName = cwSaveLoad::sanitizeFileName(partsIt->tripName);
         const QString noteFileName = cwSaveLoad::sanitizeFileName(partsIt->noteName + QStringLiteral(".cwnote"));
-        seedStatePathFromLoaded(note, baseDataRootDir.filePath(QDir(caveDirName).filePath(
+        seedStatePathFromLoaded(context, note, baseDataRootDir.filePath(QDir(caveDirName).filePath(
                                                                    QDir(QStringLiteral("trips")).filePath(
                                                                        QDir(tripDirName).filePath(
                                                                            QDir(QStringLiteral("notes")).filePath(noteFileName))))));
@@ -1157,7 +1175,7 @@ void cwSaveLoadPrivate::seedObjectStatesFromLoadedData(cwSaveLoad* context,
         const QString caveDirName = cwSaveLoad::sanitizeFileName(partsIt->caveName);
         const QString tripDirName = cwSaveLoad::sanitizeFileName(partsIt->tripName);
         const QString noteFileName = cwSaveLoad::sanitizeFileName(partsIt->noteName + QStringLiteral(".cwnote3d"));
-        seedStatePathFromLoaded(note, baseDataRootDir.filePath(QDir(caveDirName).filePath(
+        seedStatePathFromLoaded(context, note, baseDataRootDir.filePath(QDir(caveDirName).filePath(
                                                                    QDir(QStringLiteral("trips")).filePath(
                                                                        QDir(tripDirName).filePath(
                                                                            QDir(QStringLiteral("notes")).filePath(noteFileName))))));
@@ -1175,7 +1193,7 @@ void cwSaveLoadPrivate::seedObjectStatesFromLoadedData(cwSaveLoad* context,
         const QString caveDirName = cwSaveLoad::sanitizeFileName(partsIt->caveName);
         const QString tripDirName = cwSaveLoad::sanitizeFileName(partsIt->tripName);
         const QString sketchFileName = cwSaveLoad::sanitizeFileName(partsIt->sketchName + QStringLiteral(".cwsketch"));
-        seedStatePathFromLoaded(sketch, baseDataRootDir.filePath(QDir(caveDirName).filePath(
+        seedStatePathFromLoaded(context, sketch, baseDataRootDir.filePath(QDir(caveDirName).filePath(
                                                                      QDir(QStringLiteral("trips")).filePath(
                                                                          QDir(tripDirName).filePath(
                                                                              QDir(QStringLiteral("notes")).filePath(sketchFileName))))));
@@ -1485,7 +1503,7 @@ QList<cwSurveyChunkData> cwSaveLoadPrivate::fromProtoSurveyChunks(const google::
 void cwSaveLoadPrivate::saveProtoMessage(
         cwSaveLoad* context,
         std::unique_ptr<const google::protobuf::Message> message,
-        const void* objectId)
+        const QObject* objectId)
 {
     Job job(
                 objectId,

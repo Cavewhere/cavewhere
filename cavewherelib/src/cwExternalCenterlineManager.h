@@ -484,7 +484,10 @@ private:
     // I/O). Runs at every recompute snapshot when a saveLoad is wired,
     // so the maps track attach/detach/load without per-path bookkeeping;
     // the setters remain the seam for scan-only tests with no saveLoad.
-    void refreshAttachmentDirsFromSaveLoad();
+    // Returns true when an owner already in the maps came back with a
+    // different dir — the files the driver already *includes moved, so
+    // the caller owes them a solve that re-reads them at the new path.
+    bool refreshAttachmentDirsFromSaveLoad();
 
     // Stage 1: one value-type input per attached owner with a non-empty
     // entry file. Pure region/member reads, no filesystem access.
@@ -533,6 +536,15 @@ private slots:
     void recomputeWatchSet();
 
     void onWatchedFileChanged(const QString& path);
+
+    // An object whose on-disk directory just finished moving — cwSaveLoad
+    // emits this once a rename's move job has landed. Every attachment dir
+    // is derived from that directory, so the maps naming the files (and
+    // the *include the driver emits) are stale until the recompute this
+    // schedules re-derives them. Waiting for the move to land is what
+    // keeps the scan from reading the empty new path and reporting the
+    // copy missing.
+    void onOwnerPathReady(QObject* object);
 
     // Cave/trip rename: rebuild the model rows from fresh names plus the
     // cached per-owner scan counts (m_lastScanRows) — zero disk I/O and

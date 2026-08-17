@@ -238,7 +238,7 @@ public:
 
     void saveProtoMessage(
         std::unique_ptr<const google::protobuf::Message> message,
-        const void* pointerId);
+        const QObject* pointerId);
 
     static std::unique_ptr<CavewhereProto::Cave> toProtoCave(const cwCave* cave);
     static std::unique_ptr<CavewhereProto::Trip> toProtoTrip(const cwTrip* trip);

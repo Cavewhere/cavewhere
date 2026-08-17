@@ -1208,7 +1208,7 @@ ResultBase cwSaveLoad::transferProjectTo(const QString& destinationFileUrl, Proj
     // fires only for re-created rows, and the retarget above keeps the rows.
     if (lazLayers != nullptr) {
         for (cwLazLayer* layer : lazLayers->layers()) {
-            d->seedStatePathFromLoaded(layer, absolutePathPrivate(layer));
+            d->seedStatePathFromLoaded(this, layer, absolutePathPrivate(layer));
         }
     }
     saveProject(targetRootDir, region);
@@ -2557,10 +2557,9 @@ QFuture<ResultString> cwSaveLoad::saveAllFromV6(
 
             // AsyncFuture::Deferred<ResultBase> noteDeferred;
 
-            cwSaveLoadPrivate::Job saveImageJob;
-            saveImageJob.objectId = note;
-            saveImageJob.kind = cwSaveLoadPrivate::Job::Kind::File;
-            saveImageJob.action = cwSaveLoadPrivate::Job::Action::Custom;
+            cwSaveLoadPrivate::Job saveImageJob(note,
+                                                cwSaveLoadPrivate::Job::Kind::File,
+                                                cwSaveLoadPrivate::Job::Action::Custom);
             saveImageJob.payload = cwSaveLoadPrivate::Job::CustomPayload{[protoVersion, projectFileName, dataRootDir, noteData, imageIndex, noteDir, updatedNoteData]() {
                 cwImageProvider provider;
                 provider.setProjectPath(projectFileName);
@@ -3688,10 +3687,9 @@ void cwSaveLoad::connectTreeModel()
 
                 if (!oldSourcePath.isEmpty() && !newSourcePath.isEmpty()
                         && oldSourcePath != newSourcePath) {
-                    cwSaveLoadPrivate::Job sourceMove;
-                    sourceMove.objectId = layer;
-                    sourceMove.kind = cwSaveLoadPrivate::Job::Kind::File;
-                    sourceMove.action = cwSaveLoadPrivate::Job::Action::Move;
+                    cwSaveLoadPrivate::Job sourceMove(layer,
+                                                      cwSaveLoadPrivate::Job::Kind::File,
+                                                      cwSaveLoadPrivate::Job::Action::Move);
                     sourceMove.tag = QStringLiteral("source");
                     sourceMove.oldPath = oldSourcePath;
                     sourceMove.path = newSourcePath;
@@ -3708,8 +3706,10 @@ void cwSaveLoad::connectTreeModel()
             // Bookkeeping: drop the m_objectStates entry for every removed
             // layer regardless of cause (user remove OR rescan-driven
             // file-vanished removal). File-kind Remove jobs don't clean it
-            // up themselves (only Directory-kind Remove does), and the
-            // layer pointer becomes dangling once deleteLater fires.
+            // up themselves (only Directory-kind Remove does), and a layer
+            // can outlive its row (a project transfer keeps layers alive),
+            // so the destroyed-based cleanup alone would leave the entry
+            // stale for as long as the object lives.
             //
             // Either cause is a user-visible mutation of the project's
             // on-disk shape, so emit localMutationOccurred — this is what
@@ -3744,7 +3744,7 @@ void cwSaveLoad::connectTreeModel()
                 }
                 const QString metadataPath = absolutePathPrivate(layer);
                 if (!metadataPath.isEmpty()) {
-                    d->seedStatePathFromLoaded(layer, metadataPath);
+                    d->seedStatePathFromLoaded(this, layer, metadataPath);
                     // Write the .cwlaz only while the .laz it describes is
                     // still there. A reconcile re-wires rows in the window
                     // between git deleting a layer's files and the rescan
@@ -3798,8 +3798,8 @@ void cwSaveLoad::rescanLazLayersAfterGitWrite()
     }
 
     // Dropping a row still has to run — the rowsAboutToBeRemoved handler is
-    // what releases the layer's m_objectStates entry before the pointer
-    // dangles. Only its localMutationOccurred emit is unwanted, and rescan()
+    // what releases the m_objectStates entry of a layer that outlives its
+    // row. Only its localMutationOccurred emit is unwanted, and rescan()
     // emits its row signals synchronously, so the rollback covers exactly the
     // rows this scan touches.
     QScopedValueRollback<bool> suppressTracking(d->suppressLocalMutationTracking, true);
@@ -4932,7 +4932,7 @@ QDir cwSaveLoad::dirPrivate(const cwSketch* sketch) const
 }
 
 void cwSaveLoad::saveProtoMessage(std::unique_ptr<const google::protobuf::Message> message,
-                                  const void* objectId)
+                                  const QObject* objectId)
 {
     Q_ASSERT(message);
     d->saveProtoMessage(this,

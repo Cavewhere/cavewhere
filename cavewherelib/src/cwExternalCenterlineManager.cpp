@@ -275,9 +275,14 @@ void cwExternalCenterlineManager::setSaveLoad(cwSaveLoad* saveLoad)
     if (!m_saveLoad.isNull()) {
         disconnect(m_saveLoad.data(), &cwSaveLoad::dataRootChanged,
                    this, &cwExternalCenterlineManager::recomputeWatchSet);
+        disconnect(m_saveLoad.data(), &cwSaveLoad::objectPathReady,
+                   this, &cwExternalCenterlineManager::onOwnerPathReady);
     }
     m_saveLoad = saveLoad;
     if (!m_saveLoad.isNull()) {
+        connect(m_saveLoad.data(), &cwSaveLoad::objectPathReady,
+                this, &cwExternalCenterlineManager::onOwnerPathReady);
+
         // Every attachment dir is derived from the data root, so moving it
         // — a temporary project's first Save As does exactly that — leaves
         // the whole watch set naming files that are no longer there. The
@@ -310,7 +315,15 @@ void cwExternalCenterlineManager::recomputeWatchSet()
     m_scanRestarter.restart([this]() {
         // Stage 1 (main thread, no I/O): snapshot the per-owner value
         // inputs.
-        refreshAttachmentDirsFromSaveLoad();
+        if (refreshAttachmentDirsFromSaveLoad()) {
+            // These maps are where the driver's *include paths come from,
+            // so a dir that moved (a rename, or a Save As relocating the
+            // data root) leaves the last solve reading a path that no
+            // longer holds the file. Cavern fatals on an *include it
+            // cannot open, which costs the whole region its plot until
+            // something re-solves.
+            m_solveOnScanApply = true;
+        }
         const QVector<OwnerScanInput> owners = collectOwnerSnapshots();
 
         // Stage 2 (worker thread): the per-owner scans. The scanner is
@@ -342,27 +355,55 @@ void cwExternalCenterlineManager::rescanAttachments()
     recomputeWatchSet();
 }
 
-void cwExternalCenterlineManager::refreshAttachmentDirsFromSaveLoad()
+bool cwExternalCenterlineManager::refreshAttachmentDirsFromSaveLoad()
 {
     if (m_saveLoad.isNull() || m_region.isNull()) {
-        return;
+        return false;
     }
     QHash<QUuid, QString> caveDirs;
     QHash<QUuid, QString> tripDirs;
+
+    // An owner that is only now entering the maps got here through an
+    // attach, which requests its own solve; a moved dir is the case
+    // nothing else notices.
+    bool trackedDirMoved = false;
+    const auto insertDir = [&trackedDirMoved](QHash<QUuid, QString>& dirs,
+                                              const QHash<QUuid, QString>& previous,
+                                              const QUuid& id,
+                                              const QString& dir) {
+        const auto previousDir = previous.constFind(id);
+        if (previousDir != previous.constEnd() && *previousDir != dir) {
+            trackedDirMoved = true;
+        }
+        dirs.insert(id, dir);
+    };
+
     for (cwCave* cave : m_region->caves()) {
         if (!cave->externalCenterline().isEmpty()) {
-            caveDirs.insert(cave->id(),
-                            m_saveLoad->externalCenterlineDir(cave).absolutePath());
+            insertDir(caveDirs, m_caveAttachmentDirs, cave->id(),
+                      m_saveLoad->externalCenterlineDir(cave).absolutePath());
         }
         for (cwTrip* trip : cave->trips()) {
             if (!trip->externalCenterline().isEmpty()) {
-                tripDirs.insert(trip->id(),
-                                m_saveLoad->externalCenterlineDir(trip).absolutePath());
+                insertDir(tripDirs, m_tripAttachmentDirs, trip->id(),
+                          m_saveLoad->externalCenterlineDir(trip).absolutePath());
             }
         }
     }
     m_caveAttachmentDirs = std::move(caveDirs);
     m_tripAttachmentDirs = std::move(tripDirs);
+    return trackedDirMoved;
+}
+
+void cwExternalCenterlineManager::onOwnerPathReady(QObject* object)
+{
+    // Every other object cwSaveLoad reports (notes, sketches, LAZ layers)
+    // sits outside the attachment tree. Whether this cave or trip owns an
+    // attachment is left to the recompute's own map diff, so the rule
+    // lives in one place.
+    if (qobject_cast<cwCave*>(object) || qobject_cast<cwTrip*>(object)) {
+        recomputeWatchSet();
+    }
 }
 
 QVector<cwExternalCenterlineManager::OwnerScanInput> cwExternalCenterlineManager::collectOwnerSnapshots() const

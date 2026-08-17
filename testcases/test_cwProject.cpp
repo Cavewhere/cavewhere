@@ -60,6 +60,8 @@ using namespace Catch;
 #include <QCoreApplication>
 #include <QProcess>
 #include <QThread>
+#include <QPointer>
+#include <QUndoStack>
 #include <QtCore/qscopeguard.h>
 
 //libgit2
@@ -1201,6 +1203,71 @@ TEST_CASE("objectPathReady emits for renamed objects", "[cwProject][cwSaveLoad]"
     CHECK(countFor(cave) >= 1);
     CHECK(countFor(trip) == 0);
     CHECK(countFor(note) == 0);
+}
+
+TEST_CASE("objectPathReady stays silent for an object deleted before its move ran",
+          "[cwProject][cwSaveLoad]") {
+    qRegisterMetaType<QObject*>("QObject*");
+
+    // A rename queues a directory move whose completion emits objectPathReady,
+    // carrying the object it renamed. The job holds that object as a raw
+    // identity, so deleting the object while its move is still queued leaves
+    // the emit handing every listener a freed pointer - and each of them
+    // (cwScrapManager, cwSurveyNoteModel, cwNoteLiDARManager,
+    // cwExternalCenterlineManager) qobject_casts it, reading the metaObject of
+    // deleted memory.
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+    auto region = project->cavingRegion();
+
+    region->addCave();
+    auto cave = region->cave(0);
+    cave->setName(QStringLiteral("DanglingCave"));
+    cave->addTrip();
+    auto trip = cave->trip(0);
+    trip->setName(QStringLiteral("DanglingTrip"));
+
+    // A note gives the trip a directory on disk, so the rename has a real
+    // directory to move - a move that fails never reaches the emit.
+    const QString sourceImage = copyToTempFolder(testcasesDatasetPath("test_cwTextureUploadTask/PhakeCave.PNG"));
+    REQUIRE(QFileInfo::exists(sourceImage));
+    trip->notes()->addFromFiles({QUrl::fromLocalFile(sourceImage)});
+
+    project->waitSaveToFinish();
+    rootData->futureManagerModel()->waitForFinished();
+
+    const QDir projectDataRoot = QFileInfo(project->absolutePath(project->dataRoot())).absoluteDir();
+    REQUIRE(QFileInfo::exists(
+        projectDataRoot.filePath(QStringLiteral("DanglingCave/trips/DanglingTrip"))));
+
+    // Only ever compared, never dereferenced: this is the address the deleted
+    // trip occupied, which is what the job would hand back.
+    const QObject* deletedTripAddress = trip;
+    QPointer<cwTrip> tripLifetime(trip);
+
+    int emitsForDeletedTrip = 0;
+    QObject::connect(project, &cwProject::objectPathReady,
+                     project, [&emitsForDeletedTrip, deletedTripAddress](QObject* object) {
+        if (object == deletedTripAddress) {
+            ++emitsForDeletedTrip;
+        }
+    });
+
+    trip->setName(QStringLiteral("DanglingTripRenamed"));
+
+    // Deleting the trip now, with the move still queued. The undo stack owns
+    // the removed trip until it is cleared - which is what any later
+    // undo-clearing action (a new project, a stack that outgrows its limit)
+    // does.
+    cave->removeTrip(0);
+    rootData->undoStack()->clear();
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    REQUIRE(tripLifetime.isNull());
+
+    project->waitSaveToFinish();
+    rootData->futureManagerModel()->waitForFinished();
+
+    CHECK(emitsForDeletedTrip == 0);
 }
 
 TEST_CASE("Queued copy and rename should preserve note assets", "[cwProject][cwSaveLoad]") {

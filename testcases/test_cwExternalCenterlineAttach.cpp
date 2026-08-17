@@ -62,9 +62,9 @@ struct SavedProjectFixture {
     cwExternalSourceSettings* settings() const { return rootData->externalSourceSettings(); }
 };
 
-std::unique_ptr<SavedProjectFixture> makeSavedProject(
-    const QString& projectFileBase,
-    const QString& extension = QStringLiteral(".cwproj"))
+// One cave, one trip, never saved: the state the user is in right after
+// launching CaveWhere and adding a cave.
+std::unique_ptr<SavedProjectFixture> makeNewProject()
 {
     auto fixture = std::make_unique<SavedProjectFixture>();
     REQUIRE(fixture->tempDir.isValid());
@@ -79,6 +79,15 @@ std::unique_ptr<SavedProjectFixture> makeSavedProject(
     fixture->cave->addTrip();
     fixture->trip = fixture->cave->trip(0);
     fixture->trip->setName(QStringLiteral("AttachTrip"));
+
+    return fixture;
+}
+
+std::unique_ptr<SavedProjectFixture> makeSavedProject(
+    const QString& projectFileBase,
+    const QString& extension = QStringLiteral(".cwproj"))
+{
+    auto fixture = makeNewProject();
 
     const QString projectPath =
         QDir(fixture->tempDir.path()).filePath(projectFileBase + extension);
@@ -581,6 +590,40 @@ void attachThroughManager(SavedProjectFixture* fixture, const QString& sourcePat
     auto future = managerOf(fixture)->attachCenterline(fixture->trip, sourcePath);
     REQUIRE(AsyncFuture::waitForFinished(future, kAttachWaitMs));
     REQUIRE_FALSE(future.result().hasError());
+}
+
+// nameTripFromFileAndNavigate's naming step: the entry file's base name,
+// deduped against the cave.
+void nameTripFromEntryFile(SavedProjectFixture* fixture)
+{
+    const QString baseName =
+        QFileInfo(fixture->trip->externalCenterline().entryFile()).completeBaseName();
+    fixture->trip->setName(fixture->cave->uniqueTripName(baseName));
+}
+
+// The copy is the only file the project reads, so "attached" means: the
+// entry file sits where externalCenterlineDir points, the manager reports
+// no missing copy, and the solve placed the station the file fixes.
+void checkAttachmentIsReadable(SavedProjectFixture* fixture)
+{
+    auto manager = managerOf(fixture);
+    const QDir attachmentDir = fixture->saveLoad()->externalCenterlineDir(fixture->trip);
+
+    INFO("attachment dir: " << attachmentDir.absolutePath().toStdString());
+    INFO("missing copy: " << manager->missingCopyPath(fixture->trip->id()).toStdString());
+    CHECK(QFileInfo::exists(
+        attachmentDir.absoluteFilePath(QStringLiteral("survex_simple.svx"))));
+    CHECK(manager->missingCopyPath(fixture->trip->id()).isEmpty());
+    CHECK_FALSE(manager->solveInputs().excludedExternalOwners.contains(fixture->trip->id()));
+
+    // survex_simple.svx opens "*begin Simple" and fixes a1, so the station
+    // lands under the trip's own scope. Without the *include the driver
+    // emits nothing for this trip and the station never appears.
+    INFO("solve error: "
+         << fixture->rootData->linePlotManager()->solveErrorMessage().toStdString());
+    CHECK_FALSE(fixture->rootData->linePlotManager()->hasSolveError());
+    CHECK(fixture->cave->stationPositionLookup().hasPosition(
+        tripScopeLabel(fixture->trip) + QStringLiteral(".simple.a1")));
 }
 
 } // namespace
@@ -1187,4 +1230,66 @@ TEST_CASE("a missing copy costs its own survey, not the region's plot",
     CHECK_FALSE(linePlotManager->hasSolveError());
     CHECK(fixture->cave->stationPositionLookup().hasPosition(missingKey));
     CHECK(fixture->cave->stationPositionLookup().hasPosition(survivorKey));
+}
+
+// ---------------------------------------------------------------------
+// Add Trip -> "Add trip from survey file..." (master §8.7). CavePage
+// creates the trip first, attaches to it, and only then names it after
+// the picked file - so the attachment dir the copies landed in belongs
+// to the trip's placeholder name, and the rename has to bring them
+// along. Both cases below run that exact order.
+// ---------------------------------------------------------------------
+
+TEST_CASE("naming a trip from its file after attach keeps the copy the project reads",
+          "[Attach][NewTripFromFile]")
+{
+    // The reported bug's setup is the unsaved project: a cave added to a
+    // brand-new project, then a trip added through Add trip from survey
+    // file. The saved project runs the same order from a durable home,
+    // which separates "the rename lost the files" from "an unsaved
+    // project never had a place to move them from".
+    std::unique_ptr<SavedProjectFixture> fixture;
+    SECTION("unsaved project") { fixture = makeNewProject(); }
+    SECTION("saved project") {
+        fixture = makeSavedProject(QStringLiteral("attach-name-from-file"));
+    }
+
+    const QString source = datasetExternalCenterlinePath(QStringLiteral("survex_simple.svx"));
+
+    attachThroughManager(fixture.get(), source);
+    drainPipelines(fixture.get());
+
+    // The copies landed under the placeholder name the dialog attached to.
+    REQUIRE(QFileInfo::exists(fixture->saveLoad()
+                                  ->externalCenterlineDir(fixture->trip)
+                                  .absoluteFilePath(QStringLiteral("survex_simple.svx"))));
+
+    nameTripFromEntryFile(fixture.get());
+    drainPipelines(fixture.get());
+    CHECK(fixture->trip->name() == QStringLiteral("survex_simple"));
+
+    checkAttachmentIsReadable(fixture.get());
+}
+
+TEST_CASE("a scan racing the rename's move stops reporting the copy missing",
+          "[Attach][NewTripFromFile]")
+{
+    // The banner half of the same defect. In the app the rename's move
+    // fires the watcher, and that recompute can scan the new attachment
+    // dir while the move is still queued - so the entry file is at
+    // neither path and the owner is reported missing. The move's own
+    // completion is what has to correct it; without that trigger the
+    // banner stays up for the rest of the session.
+    auto fixture = makeNewProject();
+    const QString source = datasetExternalCenterlinePath(QStringLiteral("survex_simple.svx"));
+
+    attachThroughManager(fixture.get(), source);
+    drainPipelines(fixture.get());
+
+    auto manager = managerOf(fixture.get());
+    nameTripFromEntryFile(fixture.get());
+    manager->rescanAttachments(); // races the move, as the watcher's does
+    drainPipelines(fixture.get());
+
+    checkAttachmentIsReadable(fixture.get());
 }

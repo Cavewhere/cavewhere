@@ -64,7 +64,22 @@ struct cwSaveLoadPrivate {
         struct CustomPayload { std::function<Monad::ResultBase()> action; };
         using Payload = std::variant<EmptyPayload, WriteFilePayload, CopyFilePayload, CustomPayload>;
 
-        const void* objectId = nullptr;
+        // The object this job acts for. Held as a plain pointer because it is
+        // an identity: jobs are grouped and compressed by it, and a job
+        // outlives the object often enough that a clearing QPointer could not
+        // serve as the key. Never dereference it after the job is queued —
+        // objectGuard is what says whether there is still an object there.
+        const QObject* objectId = nullptr;
+
+        // Says whether objectId still points at a live object. A move job
+        // reports completion by handing that object back through
+        // cwSaveLoad::objectPathReady, and a queued move can outlive the
+        // object that asked for it — deleting a trip while its rename is
+        // still pending does exactly that. A move whose guard has cleared
+        // finishes silently rather than handing listeners a freed pointer to
+        // qobject_cast.
+        QPointer<QObject> objectGuard;
+
         Kind kind = Kind::File;
         Action action = Action::Move;
         std::function<void(const Monad::ResultBase&)> onDone;
@@ -86,38 +101,42 @@ struct cwSaveLoadPrivate {
         QString tag;
 
         Job() = default;
-        Job(const void* objectId, Kind kind, Action action)
+        Job(const QObject* objectId, Kind kind, Action action)
             : objectId(objectId),
+              objectGuard(const_cast<QObject*>(objectId)),
               kind(kind),
               action(action),
               payload(EmptyPayload{})
         {
         }
 
-        Job(const void* objectId,
+        Job(const QObject* objectId,
             Kind kind,
             Action action,
             std::shared_ptr<const google::protobuf::Message> message)
             : objectId(objectId),
+              objectGuard(const_cast<QObject*>(objectId)),
               kind(kind),
               action(action),
               payload(WriteFilePayload{std::move(message)})
         {
         }
 
-        Job(const void* objectId, Kind kind, Action action, QString sourcePath)
+        Job(const QObject* objectId, Kind kind, Action action, QString sourcePath)
             : objectId(objectId),
+              objectGuard(const_cast<QObject*>(objectId)),
               kind(kind),
               action(action),
               payload(CopyFilePayload{std::move(sourcePath)})
         {
         }
 
-        Job(const void* objectId,
+        Job(const QObject* objectId,
             Kind kind,
             Action action,
             std::function<Monad::ResultBase()> customAction)
             : objectId(objectId),
+              objectGuard(const_cast<QObject*>(objectId)),
               kind(kind),
               action(action),
               payload(CustomPayload{std::move(customAction)})
@@ -209,7 +228,14 @@ struct cwSaveLoadPrivate {
 
     //Where the objects are currently being saved
     //This the absolute directory to the m_rootDir
-    QHash<const void*, ObjectState> m_objectStates;
+    QHash<const QObject*, ObjectState> m_objectStates;
+
+    // Objects whose destruction is already wired to erase their
+    // m_objectStates entry. Tracked separately from the hash itself so an
+    // entry erased for another reason (a directory Remove job,
+    // resetObjectStates) keeps its existing connection instead of growing a
+    // duplicate on the next insert.
+    QSet<const QObject*> m_lifetimeWatched;
 
     //For watching when object data has changed
     cwRegionTreeModel* m_regionTreeModel;
@@ -511,13 +537,20 @@ struct cwSaveLoadPrivate {
 
     static QString normalizedAbsolutePath(const QString& path);
 
-    ObjectState& stateFor(const void* object) {
-        return m_objectStates[object];
+    ObjectState& stateFor(const QObject* object, cwSaveLoad* context) {
+        auto it = m_objectStates.find(object);
+        if (it == m_objectStates.end()) {
+            it = m_objectStates.insert(object, ObjectState());
+            watchObjectLifetime(object, context);
+        }
+        return it.value();
     }
+
+    void watchObjectLifetime(const QObject* object, cwSaveLoad* context);
 
     static LoadedPathIndex buildLoadedPathIndex(const cwCavingRegionData& loadedRegion);
 
-    void seedStatePathFromLoaded(const void* objectId, const QString& absolutePath);
+    void seedStatePathFromLoaded(cwSaveLoad* context, const QObject* objectId, const QString& absolutePath);
 
     template<typename TObject>
     void enqueueRenameIfNeeded(cwSaveLoad* context, const TObject* object)
@@ -526,7 +559,7 @@ struct cwSaveLoadPrivate {
             return;
         }
 
-        auto& state = stateFor(object);
+        auto& state = stateFor(object, context);
         const QString desiredPath = normalizedAbsolutePath(absolutePathFor(context, object));
         if (desiredPath.isEmpty()) {
             return;
@@ -571,14 +604,14 @@ struct cwSaveLoadPrivate {
     void saveProtoMessage(
             cwSaveLoad* context,
             std::unique_ptr<const google::protobuf::Message> message,
-            const void* objectId
+            const QObject* objectId
             );
 
     // Group key for compression: jobs that share (objectId, tag) are
     // considered the same artifact-stream and may be merged or cancelled
     // against each other. Jobs that differ in either field are independent.
     struct GroupKey {
-        const void* objectId = nullptr;
+        const QObject* objectId = nullptr;
         QString tag;
 
         bool operator==(const GroupKey& other) const noexcept {
@@ -586,7 +619,7 @@ struct cwSaveLoadPrivate {
         }
 
         friend size_t qHash(const GroupKey& key, size_t seed = 0) noexcept {
-            return qHashMulti(seed, reinterpret_cast<quintptr>(key.objectId), key.tag);
+            return qHashMulti(seed, key.objectId, key.tag);
         }
     };
 
@@ -646,7 +679,7 @@ struct cwSaveLoadPrivate {
     template<typename T>
     void renameDirectoryAndFile(cwSaveLoad* context, const T* object) {
         // Capture paths now to avoid partial state during rename.
-        auto& state = stateFor(object);
+        auto& state = stateFor(object, context);
         const QString oldFilePath = state.currentPath;
         QString newDirPath;
         if constexpr (std::is_same_v<T, cwCave>) {
