@@ -126,7 +126,7 @@ TEST_CASE("Survex importer captures *fix without preceding *cs as empty inputCS"
     // from them yet — the fix says it has no system, and naming one reads them
     // straight back out.
     CHECK(fixes.first().state() == cwFixStation::NoSystem);
-    CHECK(fixes.first().coordinate() == QStringLiteral("1, 2, 3m"));
+    CHECK(fixes.first().coordinate() == QStringLiteral("1, 2, 3.000m"));
 
     cwFixStation named = fixes.first();
     named.setInputCS(QStringLiteral("EPSG:32611"));
@@ -181,7 +181,7 @@ TEST_CASE("A *cs LOCAL survey is ungeoreferenced without complaint",
     REQUIRE(fixes.size() == 1);
     CHECK(fixes.first().inputCS().isEmpty());
     CHECK(fixes.first().state() == cwFixStation::NoSystem);
-    CHECK(fixes.first().coordinate() == QStringLiteral("1, 2, 3m"));
+    CHECK(fixes.first().coordinate() == QStringLiteral("1, 2, 3.000m"));
 }
 
 TEST_CASE("A *cs spelling survex doesn't define leaves the fix saying so",
@@ -352,7 +352,7 @@ TEST_CASE("One cave's *cs doesn't reach the next cave in the file",
 
     CHECK(fixes.at(1).inputCS().isEmpty());
     CHECK(fixes.at(1).state() == cwFixStation::NoSystem);
-    CHECK(fixes.at(1).coordinate() == QStringLiteral("100, 200, 300m"));
+    CHECK(fixes.at(1).coordinate() == QStringLiteral("100, 200, 300.000m"));
 }
 
 TEST_CASE("A block inherits the *cs of the block around it",

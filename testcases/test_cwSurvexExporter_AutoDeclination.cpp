@@ -586,7 +586,7 @@ TEST_CASE("cwSurvexExporterUtils::makeDeclinationContext does not borrow the pro
     // would be a test about an empty fix rather than a CS-less one.
     a.setCoordinate(478000.0, 4430000.0, 1655.0);
     REQUIRE(a.inputCS().isEmpty());
-    REQUIRE(a.coordinate() == QStringLiteral("478000, 4430000, 1655m"));
+    REQUIRE(a.coordinate() == QStringLiteral("478000, 4430000, 1655.000m"));
 
     CHECK_FALSE(cwSurvexExporterUtils::makeDeclinationContext({ a }).has_value());
 
