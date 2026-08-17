@@ -21,7 +21,12 @@
 #include "cwCavingRegion.h"
 #include "cwExternalCenterline.h"
 #include "cwExternalCenterlineManager.h"
+#include "cwExternalSourceSettings.h"
+#include "cwFutureManagerModel.h"
 #include "cwLinePlotManager.h"
+#include "cwProject.h"
+#include "cwRootData.h"
+#include "cwSaveLoad.h"
 #include "cwShot.h"
 #include "cwStation.h"
 #include "cwSurveyChunk.h"
@@ -47,6 +52,7 @@
 
 // Std
 #include <functional>
+#include <memory>
 
 // Watcher events flow through OS notifications and worker scans settle
 // on the next event-loop spins. Tests poll a predicate against this
@@ -160,6 +166,61 @@ inline QByteArray fileContents(const QString& path)
     QFile file(path);
     REQUIRE(file.open(QFile::ReadOnly));
     return file.readAll();
+}
+
+struct SavedProjectFixture {
+    QTemporaryDir tempDir;
+    std::unique_ptr<cwRootData> rootData;
+    cwProject* project = nullptr;
+    cwCave* cave = nullptr;
+    cwTrip* trip = nullptr;
+
+    cwSaveLoad* saveLoad() const { return project->saveLoad(); }
+    cwExternalSourceSettings* settings() const { return rootData->externalSourceSettings(); }
+};
+
+// One cave, one trip, never saved: the state the user is in right after
+// launching CaveWhere and adding a cave.
+inline std::unique_ptr<SavedProjectFixture> makeNewProject(const QString& caveName,
+                                                           const QString& tripName)
+{
+    auto fixture = std::make_unique<SavedProjectFixture>();
+    REQUIRE(fixture->tempDir.isValid());
+
+    fixture->rootData = std::make_unique<cwRootData>();
+    fixture->project = fixture->rootData->project();
+
+    auto region = fixture->project->cavingRegion();
+    region->addCave();
+    fixture->cave = region->cave(0);
+    fixture->cave->setName(caveName);
+    fixture->cave->addTrip();
+    fixture->trip = fixture->cave->trip(0);
+    fixture->trip->setName(tripName);
+
+    return fixture;
+}
+
+// Builds a saved-to-disk project with one cave + one trip already on disk.
+// All paths under tempDir.path(); safe to run in parallel processes because
+// QTemporaryDir generates a unique suffix per process.
+inline std::unique_ptr<SavedProjectFixture> makeSavedProject(
+    const QString& projectFileBase,
+    const QString& caveName,
+    const QString& tripName,
+    const QString& extension = QStringLiteral(".cwproj"))
+{
+    auto fixture = makeNewProject(caveName, tripName);
+
+    const QString projectPath =
+        QDir(fixture->tempDir.path()).filePath(projectFileBase + extension);
+    REQUIRE(fixture->project->saveAs(projectPath));
+    fixture->project->waitSaveToFinish();
+    // Drain the queued fileSaved delivery so modified() is settled false
+    // before tests take a baseline (same idiom as test_cwLazLayerSaveLoad).
+    fixture->rootData->futureManagerModel()->waitForFinished();
+    QCoreApplication::processEvents();
+    return fixture;
 }
 
 inline cwCave* addEmptyCave(cwCavingRegion& region, const QString& name)

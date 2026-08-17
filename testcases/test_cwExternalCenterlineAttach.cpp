@@ -51,53 +51,18 @@ namespace {
 // valgrind / busy CI; the actual attach finishes in milliseconds.
 constexpr int kAttachWaitMs = 10000;
 
-struct SavedProjectFixture {
-    QTemporaryDir tempDir;
-    std::unique_ptr<cwRootData> rootData;
-    cwProject* project = nullptr;
-    cwCave* cave = nullptr;
-    cwTrip* trip = nullptr;
-
-    cwSaveLoad* saveLoad() const { return project->saveLoad(); }
-    cwExternalSourceSettings* settings() const { return rootData->externalSourceSettings(); }
-};
-
-// One cave, one trip, never saved: the state the user is in right after
-// launching CaveWhere and adding a cave.
 std::unique_ptr<SavedProjectFixture> makeNewProject()
 {
-    auto fixture = std::make_unique<SavedProjectFixture>();
-    REQUIRE(fixture->tempDir.isValid());
-
-    fixture->rootData = std::make_unique<cwRootData>();
-    fixture->project = fixture->rootData->project();
-
-    auto region = fixture->project->cavingRegion();
-    region->addCave();
-    fixture->cave = region->cave(0);
-    fixture->cave->setName(QStringLiteral("AttachCave"));
-    fixture->cave->addTrip();
-    fixture->trip = fixture->cave->trip(0);
-    fixture->trip->setName(QStringLiteral("AttachTrip"));
-
-    return fixture;
+    return makeNewProject(QStringLiteral("AttachCave"), QStringLiteral("AttachTrip"));
 }
 
 std::unique_ptr<SavedProjectFixture> makeSavedProject(
     const QString& projectFileBase,
     const QString& extension = QStringLiteral(".cwproj"))
 {
-    auto fixture = makeNewProject();
-
-    const QString projectPath =
-        QDir(fixture->tempDir.path()).filePath(projectFileBase + extension);
-    REQUIRE(fixture->project->saveAs(projectPath));
-    fixture->project->waitSaveToFinish();
-    // Drain the queued fileSaved delivery so modified() is settled false
-    // before tests take a baseline (same idiom as test_cwLazLayerSaveLoad).
-    fixture->rootData->futureManagerModel()->waitForFinished();
-    QCoreApplication::processEvents();
-    return fixture;
+    return makeSavedProject(projectFileBase,
+                            QStringLiteral("AttachCave"), QStringLiteral("AttachTrip"),
+                            extension);
 }
 
 QString datasetExternalCenterlinePath(const QString& fileName)

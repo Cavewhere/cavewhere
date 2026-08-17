@@ -13,9 +13,7 @@
 #include "cwCavingRegion.h"
 #include "cwExternalCenterlineScanner.h"
 #include "cwExternalCenterlineSync.h"
-#include "cwFutureManagerModel.h"
 #include "cwProject.h"
-#include "cwRootData.h"
 #include "cwSaveLoad.h"
 #include "cwTrip.h"
 #include "ExternalCenterlineTestHelpers.h"
@@ -25,7 +23,6 @@
 
 // Qt
 #include <QByteArray>
-#include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
 #include <QDirIterator>
@@ -44,39 +41,10 @@ constexpr qint64 kFreshOffsetSeconds = 120;
 // in milliseconds.
 constexpr int kReconcileWaitMs = 5000;
 
-struct SavedProjectFixture {
-    QTemporaryDir tempDir;
-    std::unique_ptr<cwRootData> rootData;
-    cwProject* project = nullptr;
-    cwCave* cave = nullptr;
-    cwTrip* trip = nullptr;
-};
-
 std::unique_ptr<SavedProjectFixture> makeSavedProject(const QString& projectFileBase)
 {
-    auto fixture = std::make_unique<SavedProjectFixture>();
-    REQUIRE(fixture->tempDir.isValid());
-
-    fixture->rootData = std::make_unique<cwRootData>();
-    fixture->project = fixture->rootData->project();
-
-    auto region = fixture->project->cavingRegion();
-    region->addCave();
-    fixture->cave = region->cave(0);
-    fixture->cave->setName(QStringLiteral("SyncCave"));
-    fixture->cave->addTrip();
-    fixture->trip = fixture->cave->trip(0);
-    fixture->trip->setName(QStringLiteral("SyncTrip"));
-
-    const QString projectPath =
-        QDir(fixture->tempDir.path()).filePath(projectFileBase + QStringLiteral(".cwproj"));
-    REQUIRE(fixture->project->saveAs(projectPath));
-    fixture->project->waitSaveToFinish();
-    // Drain the queued fileSaved delivery so modified() is settled false
-    // before tests take a baseline (same idiom as test_cwLazLayerSaveLoad).
-    fixture->rootData->futureManagerModel()->waitForFinished();
-    QCoreApplication::processEvents();
-    return fixture;
+    return makeSavedProject(projectFileBase,
+                            QStringLiteral("SyncCave"), QStringLiteral("SyncTrip"));
 }
 
 // Shared content for all generated dep files keeps file size and content

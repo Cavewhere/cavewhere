@@ -52,45 +52,14 @@ constexpr qint64 kFreshOffsetSeconds = 120;
 // the file is unambiguous rather than lost to timestamp resolution.
 constexpr unsigned long kMtimeGapMs = 50;
 
-struct SavedProjectFixture {
-    QTemporaryDir tempDir;
-    std::unique_ptr<cwRootData> rootData;
-    cwProject* project = nullptr;
-    cwCave* cave = nullptr;
-    cwTrip* trip = nullptr;
-};
-
-// Builds a saved-to-disk project with one cave + one trip already on disk.
-// All paths under tempDir.path(); safe to run in parallel processes because
-// QTemporaryDir generates a unique suffix per process.
 std::unique_ptr<SavedProjectFixture> makeSavedProject(
     const QString& projectFileBase,
     const QString& extension = QStringLiteral(".cwproj"))
 {
-    auto fixture = std::make_unique<SavedProjectFixture>();
-    REQUIRE(fixture->tempDir.isValid());
-
-    fixture->rootData = std::make_unique<cwRootData>();
-    fixture->project = fixture->rootData->project();
-
-    auto region = fixture->project->cavingRegion();
-    region->addCave();
-    fixture->cave = region->cave(0);
-    fixture->cave->setName(QString::fromLatin1(kOriginalCaveName));
-    fixture->cave->addTrip();
-    fixture->trip = fixture->cave->trip(0);
-    fixture->trip->setName(QString::fromLatin1(kOriginalTripName));
-
-    const QString projectPath =
-        QDir(fixture->tempDir.path()).filePath(projectFileBase + extension);
-    REQUIRE(fixture->project->saveAs(projectPath));
-    fixture->project->waitSaveToFinish();
-    // Drain the queued fileSaved delivery so modified() is settled false
-    // before tests take a baseline (same idiom as test_cwLazLayerSaveLoad).
-    fixture->rootData->futureManagerModel()->waitForFinished();
-    QCoreApplication::processEvents();
-
-    return fixture;
+    return makeSavedProject(projectFileBase,
+                            QString::fromLatin1(kOriginalCaveName),
+                            QString::fromLatin1(kOriginalTripName),
+                            extension);
 }
 
 // Creates `<ownerDir>/external-centerline/planted.svx` with kPlantedContent.
