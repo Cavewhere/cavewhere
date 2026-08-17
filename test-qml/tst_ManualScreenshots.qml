@@ -2018,8 +2018,8 @@ MainWindowTest {
             // meaningful part of the coordinate. Scroll each field to the start.
             let csField = findChild(popup, "CSField");
             if (csField) { csField.cursorPosition = 0; }
-            let wgsField = findChild(popup, "WgsField");
-            if (wgsField) { wgsField.cursorPosition = 0; }
+            let latLonField = findChild(popup, "LatLonField");
+            if (latLonField) { latLonField.cursorPosition = 0; }
             settle();
 
             let path = WindowGrabber.grabItemToFile(popup.contentItem,

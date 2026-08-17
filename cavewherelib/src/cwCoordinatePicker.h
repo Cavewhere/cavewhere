@@ -25,7 +25,8 @@ class cwGeoReference;
 /**
  * Interaction that ray-casts a screen-space click against the geometry
  * intersector and exposes the hit point in three coordinate frames:
- * local scene XYZ, the region's projected CRS, and WGS84 lat/lon.
+ * local scene XYZ, the region's projected CRS, and lat/lon on the datum the
+ * host names.
  *
  * Lives in InteractionManager like any other Interaction — toggle via
  * activate()/deactivate(); the manager's signal wiring restores the
@@ -37,15 +38,16 @@ class cwCoordinatePicker : public cwScenePicker
     QML_NAMED_ELEMENT(CoordinatePicker)
 
     Q_PROPERTY(cwGeoReference* geoReference READ geoReference WRITE setGeoReference NOTIFY geoReferenceChanged)
+    Q_PROPERTY(QString datum READ datum WRITE setDatum NOTIFY datumChanged)
 
     Q_PROPERTY(bool hasPick READ hasPick NOTIFY pickChanged)
     Q_PROPERTY(QPointF pickScreenPoint READ pickScreenPoint NOTIFY pickChanged)
     Q_PROPERTY(QVector3D scenePoint READ scenePoint NOTIFY pickChanged)
-    Q_PROPERTY(double wgs84Latitude  READ wgs84Latitude  NOTIFY pickChanged)
-    Q_PROPERTY(double wgs84Longitude READ wgs84Longitude NOTIFY pickChanged)
+    Q_PROPERTY(double latitude  READ latitude  NOTIFY pickChanged)
+    Q_PROPERTY(double longitude READ longitude NOTIFY pickChanged)
     Q_PROPERTY(double elevation READ elevation NOTIFY pickChanged)
     Q_PROPERTY(bool hasCoordinateSystem READ hasCoordinateSystem NOTIFY coordinateSystemChanged)
-    Q_PROPERTY(bool hasWgs84 READ hasWgs84 NOTIFY pickChanged)
+    Q_PROPERTY(bool hasLatLon READ hasLatLon NOTIFY pickChanged)
 
 public:
     explicit cwCoordinatePicker(QQuickItem* parent = nullptr);
@@ -54,11 +56,21 @@ public:
     cwGeoReference* geoReference() const;
     void setGeoReference(cwGeoReference* geoReference);
 
+    //! The geographic datum latitude() and longitude() read on, as a geographic
+    //! EPSG code. Hosts bind it to cwCavingRegion::defaultFixDatum so numbers
+    //! copied out of the readout land on the same datum a fix defaults to.
+    //!
+    //! Reads back the datum the numbers are actually on, which is why a code
+    //! cwCoordinateSystem's table doesn't name resolves to WGS84 here rather
+    //! than being stored as written.
+    QString datum() const { return m_datum; }
+    void setDatum(const QString& datum);
+
     bool hasPick() const { return m_hasPick; }
     QPointF pickScreenPoint() const { return m_pickScreenPoint; }
     QVector3D scenePoint() const { return m_scenePoint; }
-    double wgs84Latitude()  const { return m_wgs84Lat; }
-    double wgs84Longitude() const { return m_wgs84Lon; }
+    double latitude()  const { return m_latitude; }
+    double longitude() const { return m_longitude; }
     double elevation() const { return double(m_scenePoint.z()); }
 
     //! Whether the pick can be placed in a real-world CRS. Delegates to the
@@ -66,32 +78,37 @@ public:
     //! so consumers don't re-derive the rule.
     bool hasCoordinateSystem() const;
 
-    bool hasWgs84() const { return m_hasWgs84; }
+    bool hasLatLon() const { return m_hasLatLon; }
 
     Q_INVOKABLE void pick(QPointF screenPoint);
     Q_INVOKABLE void clearPick();
 
 signals:
     void geoReferenceChanged();
+    void datumChanged();
     void pickChanged();
     void coordinateSystemChanged();
 
 private slots:
-    void rebuildWgs84Transform();
+    void rebuildLatLonTransform();
 
 private:
+    void updateLatLon();
+
     QPointer<cwGeoReference> m_geoReference;
+    QString m_datum;
 
     bool m_hasPick = false;
-    bool m_hasWgs84 = false;
+    bool m_hasLatLon = false;
     QPointF m_pickScreenPoint;
     QVector3D m_scenePoint;
-    double m_wgs84Lat = 0.0;
-    double m_wgs84Lon = 0.0;
+    double m_latitude = 0.0;
+    double m_longitude = 0.0;
 
     // PROJ setup (proj_create_crs_to_crs + normalize) is non-trivial. Cache the
-    // transform and rebuild only when the geo-reference's frame changes.
-    std::unique_ptr<cwCoordinateTransform> m_wgs84Transform;
+    // transform and rebuild only when the geo-reference's frame or the datum
+    // changes.
+    std::unique_ptr<cwCoordinateTransform> m_latLonTransform;
 };
 
 #endif // CWCOORDINATEPICKER_H

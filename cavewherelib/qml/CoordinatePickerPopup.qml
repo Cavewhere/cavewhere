@@ -22,8 +22,12 @@ QC.Popup {
     // elevation beside it already reads to (cwUnits::lengthDecimals). The 7th
     // holds latitude to ~11 mm, coarser than the scan under the pick; the float
     // the pick arrives as runs out around the 9th.
-    readonly property int _wgsPrecision: 8
+    readonly property int _degreePrecision: 8
     readonly property int _messageWidth: 240
+
+    //! What to call the datum the picker reports on. The picker resolves its own
+    //! datum to one the table names, so this always has a name to give.
+    readonly property string _datumName: CoordinateSystem.datumDisplayName(root.picker.datum)
 
     // True when the project has nothing to anchor its local projection to, so the
     // pick can't be placed in real-world coordinates.
@@ -49,16 +53,20 @@ QC.Popup {
 
     // Latitude, longitude and elevation as one comma-separated triple, so a
     // single copy carries the full 3D position. Only the elevation carries a
-    // unit — degrees are degrees.
+    // unit — degrees are degrees, and the datum belongs in the header rather
+    // than in text on its way to a coordinate field that reads numbers.
     function _formatLatLonElevation(lat, lon, elevationInMeters) {
         return "%1, %2, %3"
-            .arg(lat.toFixed(root._wgsPrecision))
-            .arg(lon.toFixed(root._wgsPrecision))
+            .arg(lat.toFixed(root._degreePrecision))
+            .arg(lon.toFixed(root._degreePrecision))
             .arg(root._formatElevation(elevationInMeters))
     }
 
     component CopySection: ColumnLayout {
         id: sectionId
+
+        objectName: sectionId.objectNameRoot + "Section"
+
         required property string headerText
         required property string valueText
         property string objectNameRoot: ""
@@ -67,6 +75,7 @@ QC.Popup {
         spacing: 2
 
         QC.Label {
+            objectName: sectionId.objectNameRoot + "Header"
             text: sectionId.headerText
             color: Theme.textSecondary
             font.bold: true
@@ -169,18 +178,18 @@ QC.Popup {
         }
 
         CopySection {
-            visible: root.picker.hasWgs84
-            objectNameRoot: "Wgs"
-            headerText: qsTr("WGS84 (lat, lon, elevation)")
-            valueText: root._formatLatLonElevation(root.picker.wgs84Latitude,
-                                                   root.picker.wgs84Longitude,
+            visible: root.picker.hasLatLon
+            objectNameRoot: "LatLon"
+            headerText: qsTr("%1 (lat, lon, elevation)").arg(root._datumName)
+            valueText: root._formatLatLonElevation(root.picker.latitude,
+                                                   root.picker.longitude,
                                                    root.picker.elevation)
         }
 
-        // A pick with a coordinate system whose WGS84 transform failed to build
+        // A pick with a coordinate system whose lat/lon transform failed to build
         // still has a height to report — show it alone rather than an empty popup.
         CopySection {
-            visible: root.picker.hasCoordinateSystem && !root.picker.hasWgs84
+            visible: root.picker.hasCoordinateSystem && !root.picker.hasLatLon
             objectNameRoot: "Elev"
             headerText: qsTr("Elevation")
             valueText: root._formatElevation(root.picker.elevation)

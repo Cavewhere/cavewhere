@@ -164,6 +164,9 @@ Item {
         camera: rendererId.camera
         scene: rendererId.scene
         geoReference: RootData.region.geoReference
+        // Numbers copied out of the readout are usually on their way into a fix,
+        // which defaults to this same datum — so they arrive consistent.
+        datum: RootData.region.defaultFixDatum
         turnTableInteraction: turnTableInteractionId
     }
 
