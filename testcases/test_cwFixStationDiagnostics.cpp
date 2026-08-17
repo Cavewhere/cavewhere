@@ -37,6 +37,14 @@ constexpr double kBadEasting = 1478000.0;
 constexpr double kNorthing = 4430000.0;
 constexpr double kElevation = 1655.0;
 
+// A geographic coordinate inside NAD83(2011)'s area of use, and one in Bavaria
+// that is outside it. Longitude leads: a geographic CS writes it where a
+// projected one writes the easting.
+constexpr double kKentuckyLongitude = -84.0;
+constexpr double kKentuckyLatitude = 37.0;
+constexpr double kBavarianLongitude = 10.0;
+constexpr double kBavarianLatitude = 48.0;
+
 cwFixStation makeFix(const QString& cs, double easting, double northing = kNorthing)
 {
     cwFixStation fix;
@@ -129,6 +137,36 @@ TEST_CASE("cwFixStationDiagnostics::domainCheck judges a fix under its own CS",
         unreadable.setCoordinate(QStringLiteral("N 46 07 16 W 115 35 56"));
         REQUIRE(unreadable.state() == cwFixStation::Unreadable);
         CHECK(cwFixStationDiagnostics::isDomainValid(unreadable));
+    }
+
+    SECTION("A fix on a datum other than WGS84 is judged the same way") {
+        // The datum combo lets a row carry EPSG:6318 where it always carried
+        // EPSG:4326, and those codes reach this check through inputCS. A
+        // geographic code the domain check has not seen before has to be
+        // evaluated like WGS84 rather than waved through.
+        const QString nad83 = QStringLiteral("EPSG:6318");
+
+        CHECK(cwFixStationDiagnostics::isDomainValid(
+            makeFix(nad83, kKentuckyLongitude, kKentuckyLatitude)));
+        CHECK(cwFixStationDiagnostics::isDomainValid(
+            makeFix(cwCoordinateTransform::Wgs84, kKentuckyLongitude, kKentuckyLatitude)));
+
+        // NAD83(2011)'s area of use runs across the antimeridian, which the
+        // check declines to reason about — so it answers "no complaint"
+        // wherever the coordinate is, exactly as the world-wide WGS84 does.
+        CHECK(cwFixStationDiagnostics::isDomainValid(
+            makeFix(nad83, kBavarianLongitude, kBavarianLatitude)));
+        CHECK(cwFixStationDiagnostics::isDomainValid(
+            makeFix(cwCoordinateTransform::Wgs84, kBavarianLongitude, kBavarianLatitude)));
+
+        // ETRS89 is the premise for all of the above: a table datum whose area
+        // of use really is bounded gets judged, so the passes above are the
+        // check answering rather than the check ignoring geographic codes.
+        const QString etrs89 = QStringLiteral("EPSG:4258");
+        CHECK(cwFixStationDiagnostics::isDomainValid(
+            makeFix(etrs89, kBavarianLongitude, kBavarianLatitude)));
+        CHECK_FALSE(cwFixStationDiagnostics::isDomainValid(
+            makeFix(etrs89, kKentuckyLongitude, kKentuckyLatitude)));
     }
 
     SECTION("Per-axis attribution survives the fix-level wrapper") {

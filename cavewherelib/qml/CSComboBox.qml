@@ -22,6 +22,9 @@ QQ.Item {
 
     property alias value: pickerId.value
 
+    //! Passed through to the picker — see CSPicker.defaultDatum.
+    property alias defaultDatum: pickerId.defaultDatum
+
     readonly property int currentMode: pickerId.currentMode
 
     readonly property bool showsResolvedName: rootId.currentMode === CoordinateSystem.Custom

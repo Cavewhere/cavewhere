@@ -47,6 +47,11 @@ QC.Popup {
     property string domainError: ""
     property string stationError: ""
 
+    //! What the row says its elevation is measured from. Filled on open like
+    //! the coordinate — it is read through a model role, which no binding can
+    //! depend on.
+    property int elevationReference: FixStation.UnknownElevationReference
+
     // Whether anything records which axis the stored coordinate leads with.
     // False for every row that names a coordinate system, which is all a row
     // created here ever is — this speaks for the ones that arrive from an older
@@ -145,7 +150,18 @@ QC.Popup {
     function reload(): void {
         popupId.parseError = ""
         popupId.reloadCoordinate()
+        popupId.reloadElevationReference()
         popupId.reloadErrors()
+    }
+
+    function reloadElevationReference(): void {
+        const model = popupId.fixStations
+        if (model === null || popupId.row < 0) {
+            popupId.elevationReference = FixStation.UnknownElevationReference
+            return
+        }
+        popupId.elevationReference = model.data(model.index(popupId.row),
+                                                FixStationModel.ElevationReferenceRole)
     }
 
     // Re-renders the field from the model. Kept apart from reload() because a
@@ -302,6 +318,7 @@ QC.Popup {
             CSPicker {
                 id: csPickerId
                 objectName: "fixStationPopupCS"
+                defaultDatum: RootData.region.defaultFixDatum
                 // CSPicker doesn't own its value — the table rows feed it back from
                 // the model role they're bound to. This editor fills its fields by
                 // hand, so it has to close that loop itself or the controls would
@@ -360,6 +377,18 @@ QC.Popup {
                 PickFromViewButton {
                     objectName: "fixStationPopupPickFromView"
                     onClicked: popupId.pickFromView()
+                }
+            }
+
+            QC.Label { text: qsTr("Elevation ref") }
+
+            ElevationReferenceComboBox {
+                objectName: "fixStationPopupElevationReference"
+                reference: popupId.elevationReference
+
+                onCommitted: (newReference) => {
+                    popupId.elevationReference = newReference
+                    popupId.commit(FixStationModel.ElevationReferenceRole, newReference)
                 }
             }
         }

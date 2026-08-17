@@ -70,6 +70,27 @@ MainWindowTest {
             return row
         }
 
+        //! The datum a frame derived in the conterminous US is plate-fixed to,
+        //! so a project anchored there has a context datum that is not the
+        //! WGS84 fallback.
+        readonly property string nad83Datum: "EPSG:6318"
+
+        //! Lands on the fix page with row 0 anchoring the project in Kentucky,
+        //! giving the region a frame and a default fix datum of its own.
+        function anchorProjectOnNad83() {
+            const cave = gotoFixStations()
+            const model = cave.fixStations
+
+            // The system goes in before the numbers — it decides which axis the
+            // coordinate leads with.
+            compare(model.addFixStation("A1"), 0)
+            model.setData(model.index(0), "EPSG:4326", FixStationModel.InputCSRole)
+            model.setCoordinateText(0, "37.0, -84.0, 300m", Units.Metric)
+
+            tryCompare(RootData.region, "defaultFixDatum", nad83Datum, 5000)
+            return cave
+        }
+
         function findPicker(rowIndex) {
             const fixPage = RootData.pageView.currentPageItem
             return findChild(fixPage, "inputCSComboBox." + rowIndex)
@@ -199,8 +220,10 @@ MainWindowTest {
             // mean, and it is what this whole change exists to retire.
             const modeCombo = findChild(picker, "csModePicker")
             verify(modeCombo !== null, "csModePicker should be reachable")
-            verify(modeCombo.model.indexOf("Lat/Lon (WGS84)") >= 0,
+            verify(modeCombo.model.indexOf("Lat/Lon") >= 0,
                    "a fix-station row must offer a geographic CS")
+            verify(modeCombo.model.indexOf("Lat/Lon (WGS84)") < 0,
+                   "the mode must not name a datum — the datum combo does")
             verify(modeCombo.model.indexOf("Local") < 0,
                    "a fix-station row must not offer Local")
             compare(modeCombo.model.length, 3, "Lat/Lon, UTM and Custom")
@@ -267,6 +290,133 @@ MainWindowTest {
             zoneSpin.valueModified()
             tryVerify(() => inputCS() === "EPSG:32660", 5000,
                       "a zone outside the datum's series falls back to WGS84")
+        }
+
+        //! A row whose system names no datum takes the project's — which here is
+        //! not WGS84, because a fix in the conterminous US derives a frame that
+        //! is plate-fixed to NAD83(2011).
+        function test_aRowWithNoDatumTakesTheProjectsDatum() {
+            const cave = anchorProjectOnNad83()
+            const model = cave.fixStations
+
+            // Row 1 carries numbers nobody could read an axis order for, which
+            // is what a hand-edited file or an svx *fix with no *cs leaves.
+            model.addFixStation()
+            model.setData(model.index(1), "", FixStationModel.InputCSRole)
+            tryCompare(model, "count", 2)
+
+            const picker = waitForPicker(1)
+            const modeCombo = findChild(picker, "csModePicker")
+            verify(modeCombo !== null, "csModePicker should be reachable")
+
+            modeCombo.activated(modeCombo.model.indexOf("Lat/Lon"))
+            tryVerify(() => model.data(model.index(1), FixStationModel.InputCSRole)
+                            === nad83Datum, 5000,
+                      "naming Lat/Lon on a datum-less row commits the project's datum")
+
+            const datumCombo = findChild(picker, "csDatum")
+            verify(datumCombo !== null, "csDatum should be reachable")
+            tryVerify(() => datumCombo.visible, 5000, "Lat/Lon mode shows the datum")
+            tryCompare(datumCombo, "currentText", "NAD83(2011)")
+        }
+
+        //! The datum is demoted, never imposed: WGS84 is one click away in a
+        //! NAD83 project, which is what a coordinate off a phone needs.
+        function test_theDatumComboOverridesTheProjectsDatum() {
+            const cave = anchorProjectOnNad83()
+            const model = cave.fixStations
+
+            model.addFixStation()
+            model.setData(model.index(1), nad83Datum, FixStationModel.InputCSRole)
+            tryCompare(model, "count", 2)
+
+            const datumCombo = findChild(waitForPicker(1), "csDatum")
+            verify(datumCombo !== null, "csDatum should be reachable")
+
+            datumCombo.activated(datumCombo.model.indexOf("WGS84"))
+            tryVerify(() => model.data(model.index(1), FixStationModel.InputCSRole)
+                            === "EPSG:4326", 5000,
+                      "picking WGS84 commits the WGS84 geographic code")
+        }
+
+        //! UTM offers only the datums whose series reaches the zone on screen,
+        //! and the row follows the same rule the list does.
+        function test_theUtmDatumListFollowsTheZone() {
+            const cave = gotoFixStations()
+            cave.fixStations.addFixStation()
+            cave.fixStations.setData(cave.fixStations.index(0), "EPSG:25832",
+                                     FixStationModel.InputCSRole)
+            tryCompare(cave.fixStations, "count", 1)
+
+            const picker = waitForPicker(0)
+            const datumCombo = findChild(picker, "csDatum")
+            verify(datumCombo !== null, "csDatum should be reachable")
+            tryVerify(() => datumCombo.visible, 5000, "UTM mode shows the datum")
+            tryVerify(() => datumCombo.model.indexOf("ETRS89") >= 0, 5000,
+                      "zone 32 is inside ETRS89's series")
+            tryCompare(datumCombo, "currentText", "ETRS89")
+
+            const zoneSpin = findChild(picker, "csUtmZone")
+            zoneSpin.value = 60
+            zoneSpin.valueModified()
+
+            // ETRS89's series stops at zone 38, so it leaves both the list and
+            // the row — the two agree on the WGS84 fallback.
+            tryVerify(() => datumCombo.model.indexOf("ETRS89") < 0, 5000,
+                      "a zone outside a datum's series drops it from the list")
+            tryCompare(datumCombo, "currentText", "WGS84")
+            tryVerify(() => cave.fixStations.data(cave.fixStations.index(0),
+                                                  FixStationModel.InputCSRole)
+                            === "EPSG:32660", 5000)
+        }
+
+        //! A Custom CRS carries its datum inside itself, so there is nothing for
+        //! the combo to pick and it stays out of the way.
+        function test_customHidesTheDatumCombo() {
+            const cave = gotoFixStations()
+            cave.fixStations.addFixStation()
+            tryCompare(cave.fixStations, "count", 1)
+
+            const datumCombo = findChild(waitForPicker(0), "csDatum")
+            verify(datumCombo !== null, "csDatum should be reachable")
+            tryVerify(() => datumCombo.visible, 5000,
+                      "a new row is on Lat/Lon, which shows the datum")
+
+            cave.fixStations.setData(cave.fixStations.index(0), "EPSG:27700",
+                                     FixStationModel.InputCSRole)
+            tryVerify(() => !datumCombo.visible, 5000,
+                      "Custom must hide the datum combo")
+        }
+
+        //! Display and storage only — but it has to survive both directions, or
+        //! the combo is showing something the row doesn't hold.
+        function test_elevationReferenceRoundTripsThroughTheModel() {
+            const cave = gotoFixStations()
+            const model = cave.fixStations
+            model.addFixStation()
+            tryCompare(model, "count", 1)
+
+            let combo = null
+            tryVerify(() => {
+                combo = findChild(RootData.pageView.currentPageItem,
+                                  "elevationReferenceComboBox.0")
+                return combo !== null
+            }, 5000, "row 0 elevation-reference combo should be reachable")
+
+            compare(model.data(model.index(0), FixStationModel.ElevationReferenceRole),
+                    FixStation.UnknownElevationReference,
+                    "a row says nothing about its elevation until asked")
+
+            combo.activated(combo.references.indexOf(FixStation.MeanSeaLevel))
+            tryVerify(() => model.data(model.index(0),
+                                       FixStationModel.ElevationReferenceRole)
+                            === FixStation.MeanSeaLevel, 5000,
+                      "picking a reference writes it to the row")
+
+            model.setData(model.index(0), FixStation.Ellipsoid,
+                          FixStationModel.ElevationReferenceRole)
+            tryCompare(combo, "currentIndex",
+                       combo.references.indexOf(FixStation.Ellipsoid))
         }
 
         function test_removeFixConfirmed() {

@@ -13,6 +13,7 @@
 #include <QString>
 #include <QUuid>
 #include <QMetaType>
+#include <QtQml/qqmlregistration.h>
 
 //Our includes
 #include "cwGlobals.h"
@@ -198,5 +199,17 @@ private:
 };
 
 Q_DECLARE_METATYPE(cwFixStation)
+
+// Re-export cwFixStation as a QML namespace so its ElevationReference enum is
+// reachable as `FixStation.MeanSeaLevel` — the fix surfaces offer it in a combo,
+// and the values have to be spelled somewhere both halves agree on.
+// QML_FOREIGN_NAMESPACE avoids the "value type names should begin with a
+// lowercase letter" warning a Q_GADGET registered with QML_NAMED_ELEMENT emits.
+struct cwFixStationForeign
+{
+    Q_GADGET
+    QML_FOREIGN_NAMESPACE(cwFixStation)
+    QML_NAMED_ELEMENT(FixStation)
+};
 
 #endif // CWFIXSTATION_H

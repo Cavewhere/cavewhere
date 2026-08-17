@@ -158,6 +158,13 @@ QtObject {
     // project panel or a fix-station table cell.
     readonly property int csZoneFieldWidth: 84
     readonly property int csHemisphereFieldWidth: 64
+    // Wide enough for the longest datum the table names ("Mexico ITRF2008") at
+    // the picker's smaller datum font.
+    readonly property int csDatumFieldWidth: 130
+    // Wide enough for "Ellipsoid (GPS)", the longest vertical reference offered.
+    readonly property int elevationReferenceFieldWidth: 150
+    // How long a pointer rests before a tooltip appears.
+    readonly property int toolTipDelay: 500
     // Cap the inline Custom resolved-name label so a long CRS name elides
     // instead of stretching the picker past its host cell / wrapping the Flow.
     readonly property int csResolvedLabelMaxWidth: 180

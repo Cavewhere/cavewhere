@@ -461,11 +461,49 @@ MainWindowTest {
             // is no "Local" here — that is what a blank input CS used to mean.
             const modeCombo = findChild(picker, "csModePicker")
             verify(modeCombo !== null, "csModePicker should be reachable")
-            verify(modeCombo.model.indexOf("Lat/Lon (WGS84)") >= 0,
+            verify(modeCombo.model.indexOf("Lat/Lon") >= 0,
                    "the popup must offer a geographic fix CS")
             verify(modeCombo.model.indexOf("Local") < 0,
                    "a fix-station row must not offer Local")
             compare(modeCombo.model.length, 3, "Lat/Lon, UTM and Custom")
+
+            findChild(popup, "fixStationPopupDone").clicked()
+            tryCompare(popup, "opened", false)
+        }
+
+        //! The popup is the other place a fix is typed, so what a row's elevation
+        //! is measured from has to be answerable here too — and the answer has to
+        //! be the row's, in both directions.
+        function test_popupRecordsWhatTheElevationIsMeasuredFrom() {
+            const context = gotoSurveyTable()
+            const popup = popupForA1(context)
+            const model = context.cave.fixStations
+            const row = model.indexOf("A1")
+            verify(row >= 0, "the popup should have created a fix for A1")
+
+            const combo = findChild(popup, "fixStationPopupElevationReference")
+            verify(combo !== null, "the popup should offer an elevation reference")
+            compare(combo.currentIndex, combo.references.indexOf(
+                        FixStation.UnknownElevationReference),
+                    "a new fix says nothing about its elevation")
+
+            combo.activated(combo.references.indexOf(FixStation.Ellipsoid))
+            tryVerify(() => model.data(model.index(row),
+                                       FixStationModel.ElevationReferenceRole)
+                            === FixStation.Ellipsoid, 5000,
+                      "picking a reference writes it to the row")
+
+            // Reopening reads the row rather than remembering the click: the
+            // popup fills its fields by hand, so a stale one would show the
+            // reference the previous fix had.
+            findChild(popup, "fixStationPopupDone").clicked()
+            tryCompare(popup, "opened", false)
+
+            model.setData(model.index(row), FixStation.MeanSeaLevel,
+                          FixStationModel.ElevationReferenceRole)
+            popupForA1(context)
+            tryCompare(combo, "currentIndex",
+                       combo.references.indexOf(FixStation.MeanSeaLevel))
 
             findChild(popup, "fixStationPopupDone").clicked()
             tryCompare(popup, "opened", false)

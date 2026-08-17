@@ -23,10 +23,29 @@ QQ.Item {
 
     property string value: ""
 
+    //! The datum a value that names none is committed on. The host binds the
+    //! project's context datum here (cwCavingRegion::defaultFixDatum) — this
+    //! item knows nothing about regions, and both fix surfaces bind it.
+    property string defaultDatum: CoordinateSystem.wgs84()
+
     readonly property int currentMode: CoordinateSystem.modeFor(rootId.value)
 
     // Whether the zone and hemisphere controls apply.
     readonly property bool showsUtm: rootId.currentMode === CoordinateSystem.UTM
+
+    // What the controls are on: the value's own datum whenever it names one, so
+    // a stored row keeps saying what it stores, and the host's default only for
+    // a value that names none — a blank system, or a Custom CRS on its way to
+    // Lat/Lon.
+    readonly property string currentDatum: {
+        const own = CoordinateSystem.datumFor(rootId.value)
+        if (own !== "") {
+            return own
+        }
+        return CoordinateSystem.latLonCS(rootId.defaultDatum) !== ""
+                ? rootId.defaultDatum
+                : CoordinateSystem.wgs84()
+    }
 
     // The width the visible controls need on a single line, summed generically
     // from the Flow's children (their explicit/implicit widths and spacing) so
@@ -52,28 +71,36 @@ QQ.Item {
     implicitWidth: rootId.oneLineWidth
     implicitHeight: flowId.implicitHeight
 
-    function commitMode(mode) {
+    // Commits the system \a mode names on \a datumCode, built from the zone and
+    // hemisphere on screen. A datum whose series stops short of that zone falls
+    // back to WGS84, the one series covering all sixty — the same fallback the
+    // datum combo shows, so the two agree on what a zone edit did.
+    function commitCS(mode: int, datumCode: string): void {
         switch (mode) {
-        case CoordinateSystem.LatLon:
-            rootId.committed(CoordinateSystem.wgs84())
+        case CoordinateSystem.LatLon: {
+            const cs = CoordinateSystem.latLonCS(datumCode)
+            rootId.committed(cs === "" ? CoordinateSystem.wgs84() : cs)
             return
+        }
         case CoordinateSystem.UTM: {
             const zone = zoneSpinId.value
             const north = hemiComboId.currentIndex === 0
-            // Keep the row on the datum it already carries, so editing a zone or
-            // a hemisphere moves only the zone. A datum whose UTM series stops
-            // short of the new zone falls back to WGS84, the one series that
-            // covers all sixty. The datum itself becomes selectable later.
-            const datum = CoordinateSystem.datumFor(rootId.value)
-            const cs = datum === "" ? "" : CoordinateSystem.utmZoneToEpsg(zone, north, datum)
+            const cs = CoordinateSystem.utmZoneToEpsg(zone, north, datumCode)
             rootId.committed(cs === "" ? CoordinateSystem.utmZoneToEpsg(zone, north) : cs)
             return
         }
-        case CoordinateSystem.Custom:
+        }
+    }
+
+    function commitMode(mode) {
+        if (mode === CoordinateSystem.Custom) {
             customDialogLoader.active = true
             customDialogLoader.item.open()
             return
         }
+        // Keep the row on the datum the controls show, so editing a zone or a
+        // hemisphere moves only the zone.
+        rootId.commitCS(mode, rootId.currentDatum)
     }
 
     QQ.Flow {
@@ -93,7 +120,9 @@ QQ.Item {
                 CoordinateSystem.Custom
             ]
 
-            model: [qsTr("Lat/Lon (WGS84)"), qsTr("UTM"), qsTr("Custom...")]
+            // The datum is the combo beside this one, so the mode names only
+            // the shape of the coordinate.
+            model: [qsTr("Lat/Lon"), qsTr("UTM"), qsTr("Custom...")]
 
             function modeAt(index) {
                 return modes[index]
@@ -154,6 +183,37 @@ QQ.Item {
                     rootId.commitMode(CoordinateSystem.UTM)
                 }
             }
+        }
+
+        // Last in the row and quieter than the controls before it: the datum is
+        // the answer most rows never change, and a wrong one moves a fix by a
+        // meter or two rather than by a zone.
+        QC.ComboBox {
+            id: datumComboId
+            objectName: "csDatum"
+
+            // UTM offers only the datums whose series reaches the zone and
+            // hemisphere on screen, so every entry names a system this picker
+            // can build.
+            readonly property list<string> datumCodes: rootId.showsUtm
+                ? CoordinateSystem.utmDatumList(zoneSpinId.value, hemiComboId.currentIndex === 0)
+                : CoordinateSystem.datumList()
+
+            // Custom carries its datum inside the CRS the dialog picked, and
+            // Local has none, so only Lat/Lon and UTM ask for one.
+            visible: rootId.currentMode === CoordinateSystem.LatLon || rootId.showsUtm
+            width: Theme.csDatumFieldWidth
+            height: modeComboId.height
+            font.pixelSize: Theme.fontSizeSmall
+            // WGS84 leads the table, so index 0 is the fallback a datum outside
+            // this list commits to — which is what a zone edit past the end of
+            // a series does.
+            model: datumComboId.datumCodes.map(
+                       (code) => CoordinateSystem.datumDisplayName(code))
+            currentIndex: Math.max(0, datumComboId.datumCodes.indexOf(rootId.currentDatum))
+
+            onActivated: (index) => rootId.commitCS(rootId.currentMode,
+                                                    datumComboId.datumCodes[index])
         }
     }
 
