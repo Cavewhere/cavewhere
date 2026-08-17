@@ -4,11 +4,13 @@
 
 //Catch includes
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 //Qt includes
 #include <QUuid>
 
 //Std includes
+#include <cmath>
 #include <limits>
 
 namespace {
@@ -272,7 +274,7 @@ TEST_CASE("cwFixStation writes the coordinate back out when a component is set",
         fix.setNorthing(5615117.075);
         fix.setElevation(304.0);
 
-        CHECK(fix.coordinate() == QStringLiteral("610016.792, 5615117.075, 304m"));
+        CHECK(fix.coordinate() == QStringLiteral("610016.792, 5615117.075, 304.000m"));
 
         const cwFixStation read = reread(fix);
         CHECK(read.easting() == 610016.792);
@@ -290,20 +292,24 @@ TEST_CASE("cwFixStation writes the coordinate back out when a component is set",
         fix.setNorthing(40.015);
         fix.setElevation(1655.0);
 
-        CHECK(fix.coordinate() == QStringLiteral("40.015, -105.27, 1655m"));
+        CHECK(fix.coordinate() == QStringLiteral("40.015, -105.27, 1655.000m"));
 
         const cwFixStation read = reread(fix);
         CHECK(read.easting() == -105.27);
         CHECK(read.northing() == 40.015);
     }
 
-    SECTION("awkward doubles survive the round trip exactly") {
+    SECTION("awkward doubles survive the round trip") {
         //shortestNumber() writes the shortest text that reads back as the same
-        //double, so this is exact rather than close — a fixed precision would
-        //lose the low bits of one of these.
+        //double, so the horizontals are exact rather than close — a fixed
+        //precision would lose the low bits of one of these. The elevation is
+        //the one component written to a display precision instead: a fix is
+        //stored in meters, so it keeps the millimeter and nothing finer.
         const QList<double> awkward = {
             0.1, 1.0 / 3.0, 46.121129999999997, 1e-7, 123456789.123456789, -0.0000001234
         };
+        const double halfMillimeter =
+            0.5 * std::pow(10.0, -cwUnits::lengthDecimals(cwUnits::Meters));
         for (double value : awkward) {
             cwFixStation fix;
             fix.setInputCS(kUtmZ11N);
@@ -314,7 +320,7 @@ TEST_CASE("cwFixStation writes the coordinate back out when a component is set",
             const cwFixStation read = reread(fix);
             CHECK(read.easting() == value);
             CHECK(read.northing() == value);
-            CHECK(read.elevation() == value);
+            CHECK_THAT(read.elevation(), Catch::Matchers::WithinAbs(value, halfMillimeter));
         }
     }
 
@@ -325,7 +331,7 @@ TEST_CASE("cwFixStation writes the coordinate back out when a component is set",
         REQUIRE_FALSE(fix.hasElevation());
 
         fix.setEasting(9.0);
-        CHECK(fix.coordinate() == QStringLiteral("9, 2, 0m"));
+        CHECK(fix.coordinate() == QStringLiteral("9, 2, 0.000m"));
 
         //Read back out of the string rather than off the fix: an elevation the
         //setter merely left at zero and one the string actually spells out look
@@ -384,7 +390,7 @@ TEST_CASE("cwFixStation writes the coordinate back out when a component is set",
         fix.setCoordinate(610016.792, 5615117.075, 304.0);
 
         CHECK(fix.state() == cwFixStation::NoSystem);
-        CHECK(fix.coordinate() == QStringLiteral("610016.792, 5615117.075, 304m"));
+        CHECK(fix.coordinate() == QStringLiteral("610016.792, 5615117.075, 304.000m"));
         CHECK(fix.easting() == 0.0);
 
         //And naming the system they were written in reads all three back.

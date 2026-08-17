@@ -480,27 +480,28 @@ MainWindowTest {
                 return coordinateCell !== null
             }, 5000, "row 0 coordinate cell should be reachable")
 
-            tryCompare(coordinateCell, "text", "46.12113, -115.59902, 304m", 5000,
-                       "the cell spells out the whole coordinate with its elevation unit")
+            tryCompare(coordinateCell, "text", "46.12113, -115.59902, 304.000m", 5000,
+                       "the cell spells out the whole coordinate with its elevation unit, "
+                       + "the elevation to the millimeter meters read to")
 
             // A component edited elsewhere has to move the field with it.
             model.setData(idx, 305.0, FixStationModel.ElevationRole)
-            tryCompare(coordinateCell, "text", "46.12113, -115.59902, 305m", 5000,
+            tryCompare(coordinateCell, "text", "46.12113, -115.59902, 305.000m", 5000,
                        "the cell tracks the model rather than caching what it drew")
 
             // Switching the project to imperial has to move both the number and
             // the suffix: a bare elevation is read back in the project's units,
             // so a field that kept saying "305" would now mean 305 ft.
-            // The long decimal is the price of an exact round trip: the field is
-            // its own input, so a converted elevation is rendered to whatever it
-            // takes to read back as the same value.
+            // The elevation reads to the unit's own precision either way — a
+            // hundredth of a foot here, a millimeter in meters — not to whatever
+            // it takes to round-trip the double.
             const previousUnits = RootData.region.unitSystem
             RootData.region.unitSystem = Units.Imperial
-            tryCompare(coordinateCell, "text", "46.12113, -115.59902, 1000.6561679790026ft",
+            tryCompare(coordinateCell, "text", "46.12113, -115.59902, 1000.66ft",
                        5000, "the elevation follows the project's unit system, suffix and all")
 
             RootData.region.unitSystem = previousUnits
-            tryCompare(coordinateCell, "text", "46.12113, -115.59902, 305m", 5000)
+            tryCompare(coordinateCell, "text", "46.12113, -115.59902, 305.000m", 5000)
         }
 
         function test_coordinateCellCommitsAWholeCoordinate() {
@@ -546,7 +547,7 @@ MainWindowTest {
                 return coordinateCell !== null
             }, 5000, "row 0 coordinate cell should be reachable")
 
-            tryCompare(coordinateCell, "text", "46.12113, -115.59902, 304m", 5000,
+            tryCompare(coordinateCell, "text", "46.12113, -115.59902, 304.000m", 5000,
                        "a geographic row leads with the latitude")
 
             // Switching to a projected CS re-reads that same string easting
@@ -554,7 +555,7 @@ MainWindowTest {
             // it swap. That is the whole point of the coordinate being the
             // string: correcting the system corrects how it is read.
             model.setData(idx, "EPSG:32613", FixStationModel.InputCSRole)
-            tryCompare(coordinateCell, "text", "46.12113, -115.59902, 304m", 5000,
+            tryCompare(coordinateCell, "text", "46.12113, -115.59902, 304.000m", 5000,
                        "a projected row leads with the easting")
             compare(model.data(idx, FixStationModel.EastingRole), 46.12113,
                     "and the easting is now what the string leads with")
@@ -583,7 +584,7 @@ MainWindowTest {
 
             // Round trip: what the cell now shows must commit back unchanged.
             const coordinateCell = findChild(fixPage, "coordinateCell.0")
-            tryCompare(coordinateCell, "text", "46.12113, -115.59902, 304m", 5000)
+            tryCompare(coordinateCell, "text", "46.12113, -115.59902, 304.000m", 5000)
             fixPage.commitCoordinate(0, coordinateCell.text)
             fuzzyCompare(model.data(idx, FixStationModel.NorthingRole), 46.12113, 1e-9)
             fuzzyCompare(model.data(idx, FixStationModel.EastingRole), -115.59902, 1e-9)
@@ -634,8 +635,8 @@ MainWindowTest {
             const fixPage = RootData.pageView.currentPageItem
             const coordinateCell = findCoordinateCell(0)
 
-            tryCompare(coordinateCell, "text", "46.12113, -115.59902, 304m", 5000)
-            tryCompare(coordinateCell, "editText", "46.12113, -115.59902, 304m", 5000,
+            tryCompare(coordinateCell, "text", "46.12113, -115.59902, 304.000m", 5000)
+            tryCompare(coordinateCell, "editText", "46.12113, -115.59902, 304.000m", 5000,
                        "with no string of its own, the editor opens on the cell")
 
             // A component written elsewhere invalidates a string that was there,
@@ -645,16 +646,16 @@ MainWindowTest {
             tryCompare(coordinateCell, "editText", "46.12113, -115.59902, 30ft", 5000)
 
             model.setData(idx, 500.0, FixStationModel.ElevationRole)
-            tryCompare(coordinateCell, "editText", "46.12113, -115.59902, 500m", 5000,
+            tryCompare(coordinateCell, "editText", "46.12113, -115.59902, 500.000m", 5000,
                        "the string went with the number it described")
         }
 
         function test_coordinateCellOpenedAndLeftWritesNothing() {
             // The commonest gesture on this page, and the one the no-op rule
-            // exists for. In an imperial project the offered string crosses a
-            // unit conversion in each direction, and m→ft→m is not an identity
-            // in IEEE arithmetic — so a commit that trusted the numbers would
-            // drift the fix by an ulp, dirty the project and re-solve the plot.
+            // exists for. In an imperial project the cell reads out to the
+            // hundredth of a foot, so a commit that trusted what it shows would
+            // move the fix by a quarter of an inch, dirty the project and
+            // re-solve the plot. The editor opens on the stored string instead.
             const cave = gotoFixStations()
             addProjectedFixStation(cave)
             tryCompare(cave.fixStations, "count", 1)
@@ -669,7 +670,8 @@ MainWindowTest {
             model.setData(idx, 1.0, FixStationModel.ElevationRole)
 
             const coordinateCell = findCoordinateCell(0)
-            tryCompare(coordinateCell, "text", "46.12113, -115.59902, 3.280839895013123ft", 5000)
+            tryCompare(coordinateCell, "text", "46.12113, -115.59902, 3.28ft", 5000,
+                       "an imperial project reads the elevation to the hundredth of a foot")
 
             // Watched, not just compared afterwards: a commit that rewrote the
             // row with the identical string would leave every value below
@@ -684,7 +686,7 @@ MainWindowTest {
             compare(model.data(idx, FixStationModel.ElevationRole), 1.0,
                     "and the elevation is exactly where it was, to the last bit")
             compare(model.data(idx, FixStationModel.CoordinateTextRole),
-                    "46.12113, -115.59902, 1m",
+                    "46.12113, -115.59902, 1.000m",
                     "the stored coordinate is untouched — the editor opened on it, "
                     + "not on the imperial rendering the cell shows")
 
@@ -931,7 +933,7 @@ MainWindowTest {
             // now read, renders as numbers and the complaint goes away.
             waitForPicker(row).committed("EPSG:32611")
             tryVerify(() => !cell.error, 5000, "naming the system clears the flag")
-            compare(cell.value, "610016.792, 5615117.075, 304m",
+            compare(cell.value, "610016.792, 5615117.075, 304.000m",
                     "and the cell now renders the numbers it read out of that text, "
                     + "rather than going on showing the text")
             tryVerify(() => !warning.visible, 5000, "and the warning goes with it")

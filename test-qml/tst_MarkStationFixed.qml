@@ -342,7 +342,7 @@ MainWindowTest {
 
             openFixMenu(focusedStationBox(context, 0)).mark.triggered()
             tryCompare(popup, "opened", true)
-            compare(coordinate.text, "500200.5, 4194100, 1000m",
+            compare(coordinate.text, "500200.5, 4194100, 1000.000m",
                     "with no string of its own the field renders the numbers")
 
             done.clicked()
@@ -752,7 +752,7 @@ MainWindowTest {
             verify(pickButton !== null, "the popup should offer a pick button")
 
             // Nothing is anywhere in particular until the project has a frame.
-            compare(pickButton.enabled, false)
+            compare(pickButton.canPick, false)
 
             findChild(popup, "fixStationPopupCS").committed("EPSG:4326")
             const coordinate = findChild(popup, "fixStationPopupCoordinate")
@@ -760,7 +760,7 @@ MainWindowTest {
             coordinate.editingFinished()
             tryVerify(() => RootData.region.geoReference.hasCoordinateSystem, 5000,
                       "the typed fix should have anchored a frame")
-            tryCompare(pickButton, "enabled", true, 5000)
+            tryCompare(pickButton, "canPick", true, 5000)
 
             pickButton.clicked()
 

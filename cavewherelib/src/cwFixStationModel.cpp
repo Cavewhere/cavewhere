@@ -12,6 +12,7 @@
 #include "cwCoordinateTransform.h"
 #include "cwGeoPoint.h"
 #include "cwStation.h"
+#include "cwUnits.h"
 
 //Qt includes
 #include <QLocale>
@@ -24,6 +25,10 @@ namespace {
 //! coordinate-picker popup offers for copying — a fix placed by clicking and one
 //! pasted from that popup then read identically.
 constexpr int kPickedDegreeDecimals = 8;
+
+//! Decimals a picked elevation is written to. A fix's coordinate is stored in
+//! meters, so this is the millimeter every other surface reads meters to.
+constexpr int kPickedElevationDecimals = cwUnits::lengthDecimals(cwUnits::Meters);
 
 //! A row created through the UI, which always starts on a coordinate system.
 //! Without one there is no axis order, so a fix's numbers can't be said to mean
@@ -376,7 +381,7 @@ bool cwFixStationModel::setPickedPoint(const QString& fixId,
     const QString coordinate = QStringLiteral("%1, %2, %3%4")
         .arg(locale.toString(placed->y, 'f', kPickedDegreeDecimals),
              locale.toString(placed->x, 'f', kPickedDegreeDecimals),
-             locale.toString(placed->z, 'f', QLocale::FloatingPointShortest),
+             locale.toString(placed->z, 'f', kPickedElevationDecimals),
              cwUnits::unitName(cwUnits::Meters));
 
     //Copied rather than referenced — see setCoordinateText().

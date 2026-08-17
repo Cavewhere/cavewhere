@@ -219,6 +219,17 @@ QString shortestNumber(double value)
     return QLocale::c().toString(value, 'f', QLocale::FloatingPointShortest);
 }
 
+//! An elevation at its unit's own display precision — a millimeter in meters, a
+//! hundredth of a foot in feet — rather than at whatever it takes to round-trip
+//! the double. A picked elevation carries the full width of a ray-cast, and
+//! "304.00000000000006m" says nothing about the ground it landed on. Only the
+//! elevation is written this way: the horizontals are the coordinate's own
+//! precision, and a UTM easting rounded to three places is a different place.
+QString elevationNumber(double value, cwUnits::LengthUnit unit)
+{
+    return QLocale::c().toString(value, 'f', cwUnits::lengthDecimals(unit));
+}
+
 //! One number as it was written: what it says, the span it occupies, and
 //! everything written around it.
 //!
@@ -813,7 +824,7 @@ QString cwCoordinateText::format(double easting,
     return QStringLiteral("%1, %2, %3%4")
         .arg(shortestNumber(first),
              shortestNumber(second),
-             shortestNumber(elevation),
+             elevationNumber(elevation, unit),
              cwUnits::unitName(unit));
 }
 

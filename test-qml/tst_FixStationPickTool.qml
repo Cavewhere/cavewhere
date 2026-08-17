@@ -97,8 +97,8 @@ MainWindowTest {
             return view
         }
 
-        //! Steps the terrain probe walks the view in, and the bottom strip the
-        //! tool's banner sits in — a click landing there would be answered by
+        //! Steps the terrain probe walks the view in, and the top strip the
+        //! tool's banner hangs in — a click landing there would be answered by
         //! the banner rather than by the scene.
         readonly property int probeStep: 20
         readonly property int bannerBand: 120
@@ -121,7 +121,7 @@ MainWindowTest {
             const picker = view.coordinatePickerInteraction
             let found = null
             for (let x = probeStep; x < view.width && found === null; x += probeStep) {
-                for (let y = probeStep; y < view.height - bannerBand; y += probeStep) {
+                for (let y = probeStep + bannerBand; y < view.height; y += probeStep) {
                     picker.pick(Qt.point(x, y))
                     if (picker.hasPick) {
                         found = Qt.point(x, y)
@@ -150,7 +150,7 @@ MainWindowTest {
         function startPick(rowIndex) {
             waitForRendering(rootId)
             const button = findPickButton(rowIndex)
-            verify(button.enabled, "the pick button needs a frame to be enabled")
+            verify(button.canPick, "the pick button needs a frame before it can pick")
             mouseClick(button)
 
             tryVerify(() => RootData.pageView.currentPageItem !== null
@@ -203,6 +203,13 @@ MainWindowTest {
             fuzzyCompare(model.data(row, FixStationModel.EastingRole), anchorLongitude, 1e-6)
             fuzzyCompare(model.data(row, FixStationModel.ElevationRole), 300.0, 1e-4)
 
+            // A ray-cast hands back every bit the double has. The row keeps the
+            // millimeter a cave surveyor can act on (cwUnits::lengthDecimals),
+            // the same precision the picker's own readout offers for copying.
+            const text = model.data(row, FixStationModel.CoordinateTextRole)
+            verify(/, -?\d+\.\d{3}m$/.test(text),
+                   "the picked elevation reads to the millimeter: " + text)
+
             // Nothing in this project declares a vertical datum, so the pick
             // claims no more about its elevation than a row typed by hand does.
             // (Which reference a pick over lidar tiles writes is a question for
@@ -219,13 +226,41 @@ MainWindowTest {
         function test_escapeCancelsThePick() {
             const cave = gotoFixStations()
             const model = cave.fixStations
-            startPick(1)
+            const tool = startPick(1)
             compare(FixStationPick.active, true)
+
+            // Aim at the terrain first, which is what a user does between
+            // arming the pick and giving up on it. Moving the pointer over the
+            // view hands the focus to GLTerrainRenderer — it wants the keyboard
+            // for hold-P + wheel — so this is the focus an Escape really
+            // arrives on, and a focus-scoped handler on the picker would be
+            // dead by now.
+            const view = renderer()
+            mouseMove(view, view.width / 2, view.height / 2)
+            tryVerify(() => view.activeFocus, 5000,
+                      "hovering the view should hand it the keyboard focus")
+            verify(!tool.picker.activeFocus,
+                   "so the picker is not the item Escape is delivered to")
 
             keyClick(Qt.Key_Escape)
 
             tryCompare(FixStationPick, "active", false, 5000)
             compare(model.data(model.index(1), FixStationModel.CoordinateTextRole), "")
+            tryVerify(() => !tool.visible, 5000, "and the tool stands down")
+        }
+
+        function test_theBannerHangsFromTheTopOfTheView() {
+            gotoFixStations()
+            const tool = startPick(1)
+
+            const help = findChild(tool, "fixStationPickHelpBox")
+            verify(help !== null, "the tool should carry a banner")
+            // Where every banner over the 3D scene sits — the measurement tool's
+            // and the clip tool's included. HelpBox itself defaults to the
+            // bottom, which is the notes editor's convention, not this view's.
+            compare(help.y, tool.bannerMargin)
+            verify(help.y + help.height < tool.height / 2,
+                   "the banner belongs in the top half of the view")
         }
 
         function test_navigatingAwayCancelsThePick() {
@@ -285,7 +320,7 @@ MainWindowTest {
             waitForRendering(rootId)
 
             const button = findPickButton(1)
-            verify(button.enabled, "the narrow layout's pick button should be usable")
+            verify(button.canPick, "the narrow layout's pick button should be usable")
             mouseClick(button)
 
             tryCompare(FixStationPick, "active", true, 5000)
@@ -308,7 +343,30 @@ MainWindowTest {
                    "a fix with no coordinate anchors no frame")
 
             const button = findPickButton(0)
-            tryCompare(button, "enabled", false, 5000)
+            tryCompare(button, "canPick", false, 5000)
+
+            // A grayed-out crosshair with no explanation is the state a user is
+            // most likely to be stuck in, so the tooltip has to say what gives
+            // the project a frame.
+            verify(button.helpText.indexOf("fix station") >= 0,
+                   "the disabled tooltip should name typing a coordinate: " + button.helpText)
+            verify(button.helpText.indexOf("georeferenced layer") >= 0,
+                   "and adding a georeferenced layer: " + button.helpText)
+
+            // Qt delivers no hover to a disabled item, so the crosshair the user
+            // can't use has to stay enabled itself and disable the button inside
+            // it — otherwise the tooltip explaining the gray never comes up.
+            compare(button.enabled, true,
+                    "the wrapper stays enabled so the tooltip still answers a hover")
+        }
+
+        function test_theEnabledCrosshairSaysWhatItDoes() {
+            gotoFixStations()
+            const button = findPickButton(1)
+            tryCompare(button, "canPick", true, 5000)
+
+            verify(button.helpText.indexOf("3D view") >= 0,
+                   "the enabled tooltip should say where the click goes: " + button.helpText)
         }
 
         //! The click a user makes, start to finish: a project with survey

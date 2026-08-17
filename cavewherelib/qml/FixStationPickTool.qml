@@ -20,8 +20,8 @@ import cavewherelib
 // Three things end a pick that was never answered: Escape and arming another
 // tool both take the picker out of the active slot, so watching the active
 // interaction covers them together, and leaving the View page is watched
-// through ViewTools. The picker holds focus while it is armed, so its own
-// Escape handler is the one the banner promises.
+// through ViewTools. The Escape the banner promises is the picker's own
+// window-context shortcut, which answers wherever the focus happens to sit.
 QQ.Item {
     id: toolId
 
@@ -29,6 +29,9 @@ QQ.Item {
 
     readonly property CoordinatePicker picker: toolId.view.coordinatePickerInteraction
     readonly property InteractionManager interactionManager: toolId.view.interactionManager
+
+    //! The gap every banner over the 3D scene keeps from the edge it hangs on.
+    readonly property int bannerMargin: 20
 
     anchors.fill: parent
     // Clickable chrome has to claim the overlay layer: LeadView and
@@ -124,6 +127,11 @@ QQ.Item {
 
     HelpBox {
         objectName: "fixStationPickHelpBox"
+        // Top, like every other banner over the 3D scene — HelpBox itself
+        // defaults to the bottom, which is where the notes editor wants it.
+        anchors.top: parent.top
+        anchors.topMargin: toolId.bannerMargin
+        anchors.bottom: undefined
         // The station name is the user's own text, so it can't be pasted into
         // markup — HelpBox reads AutoText by default.
         textFormat: QC.Label.PlainText

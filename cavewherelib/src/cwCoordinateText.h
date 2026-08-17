@@ -145,11 +145,12 @@ public:
 
     //! \a easting, \a northing and \a elevationInMeters as one string, with the
     //! elevation expressed in \a units. Given the same \a units and \a order,
-    //! parse() reads the horizontals back bit-for-bit; the <i>elevation</i>
-    //! crosses a unit conversion in each direction, and m→ft→m is not an
-    //! identity in IEEE arithmetic, so an imperial round trip can land one ulp
-    //! away. Nothing stores that round trip: an editor opens on the coordinate
-    //! as it was written, and cwFixStation writes and reads its own in meters.
+    //! parse() reads the horizontals back bit-for-bit; the <i>elevation</i> is
+    //! written to its unit's display precision (cwUnits::lengthDecimals — a
+    //! millimeter in meters, a hundredth of a foot in feet), so it reads back to
+    //! within that. Nothing stores that round trip: an editor opens on the
+    //! coordinate as it was written, and cwFixStation writes and reads its own
+    //! in meters.
     Q_INVOKABLE static QString format(double easting,
                                       double northing,
                                       double elevationInMeters,

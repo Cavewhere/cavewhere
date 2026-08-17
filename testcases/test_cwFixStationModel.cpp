@@ -1059,7 +1059,9 @@ TEST_CASE("cwFixStationModel keeps the coordinate as it was written",
         QSignalSpy dataChangedSpy(&model, &QAbstractItemModel::dataChanged);
         model.setData(idx, 500.0, cwFixStationModel::ElevationRole);
 
-        CHECK(model.fixStationAt(0).coordinate() == QStringLiteral("1, 2, 500m"));
+        //Written back at the millimeter meters read to, which is what the row
+        //shows either way (cwUnits::lengthDecimals).
+        CHECK(model.fixStationAt(0).coordinate() == QStringLiteral("1, 2, 500.000m"));
         //A view showing the string has to hear that it changed.
         REQUIRE(dataChangedSpy.count() == 1);
         const auto roles = dataChangedSpy.first().at(2).value<QList<int>>();
@@ -1139,9 +1141,11 @@ TEST_CASE("cwFixStationModel keeps the coordinate as it was written",
 
         //And it stays that way when the editor opens on the zeros the row
         //renders as and hands them straight back. Taking that would make an
-        //unfilled row a fix at the origin, dirty the project and re-solve.
+        //unfilled row a fix at the origin, dirty the project and re-solve. The
+        //text is the rendering itself, elevation decimals and all — what the
+        //editor offers is what this has to recognize coming back.
         QSignalSpy dataChangedSpy(&model, &QAbstractItemModel::dataChanged);
-        CHECK(model.setCoordinateText(0, QStringLiteral("0, 0, 0m"),
+        CHECK(model.setCoordinateText(0, QStringLiteral("0, 0, 0.000m"),
                                       cwUnits::Metric) == QString());
         CHECK(model.fixStationAt(0).state() == cwFixStation::Empty);
         CHECK(dataChangedSpy.count() == 0);

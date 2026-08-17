@@ -11,6 +11,9 @@
 #include <QLocale>
 #include <QString>
 
+//Std includes
+#include <cmath>
+
 using Catch::Approx;
 
 namespace {
@@ -147,10 +150,10 @@ TEST_CASE("cwCoordinateText writes latitude first for a geographic CS",
         //whole parameter exists to prevent.
         CHECK(cwCoordinateText::format(-115.59902, 46.12113, 304.0, cwUnits::Metric,
                                        cwCoordinateText::LatitudeLongitude)
-              == QStringLiteral("46.12113, -115.59902, 304m"));
+              == QStringLiteral("46.12113, -115.59902, 304.000m"));
         CHECK(cwCoordinateText::format(-115.59902, 46.12113, 304.0, cwUnits::Metric,
                                        cwCoordinateText::EastingNorthing)
-              == QStringLiteral("-115.59902, 46.12113, 304m"));
+              == QStringLiteral("-115.59902, 46.12113, 304.000m"));
     }
 }
 
@@ -629,7 +632,7 @@ TEST_CASE("cwCoordinateText reads and writes in the C locale, both directions",
     const QString text = cwCoordinateText::format(46.12113, -115.59902, 304.0,
                                                   cwUnits::Metric,
                                                   cwCoordinateText::EastingNorthing);
-    CHECK(text == QStringLiteral("46.12113, -115.59902, 304m"));
+    CHECK(text == QStringLiteral("46.12113, -115.59902, 304.000m"));
     CHECK(parsed(text).easting == tight(46.12113));
 
     QLocale::setDefault(previous);
@@ -744,27 +747,43 @@ TEST_CASE("cwCoordinateText explains itself in the order being read",
 }
 
 TEST_CASE("cwCoordinateText formats what it parses", "[FixStation][cwCoordinateText]") {
-    SECTION("metric writes meters") {
+    SECTION("metric writes meters, to the millimeter") {
         CHECK(cwCoordinateText::format(46.12113, -115.59902, 304.0, cwUnits::Metric,
                                        cwCoordinateText::EastingNorthing)
-              == QStringLiteral("46.12113, -115.59902, 304m"));
+              == QStringLiteral("46.12113, -115.59902, 304.000m"));
     }
 
-    SECTION("imperial writes feet") {
+    SECTION("imperial writes feet, to the hundredth") {
         CHECK(cwCoordinateText::format(46.12113, -115.59902, 304.0 * kFeetToMeters,
                                        cwUnits::Imperial, cwCoordinateText::EastingNorthing)
-              == QStringLiteral("46.12113, -115.59902, 304ft"));
+              == QStringLiteral("46.12113, -115.59902, 304.00ft"));
     }
 
-    SECTION("round trip keeps the horizontals bit-for-bit and the elevation to the ulp") {
+    SECTION("the elevation stops at the unit's display precision") {
+        //What a ray-cast into the terrain hands back: every bit the double has.
+        //The row shows what a cave surveyor can act on instead.
+        CHECK(cwCoordinateText::format(1.0, 2.0, 304.00000000000006, cwUnits::Metric,
+                                       cwCoordinateText::EastingNorthing)
+              == QStringLiteral("1, 2, 304.000m"));
+        CHECK(cwCoordinateText::format(1.0, 2.0, 92.65920000000001, cwUnits::Imperial,
+                                       cwCoordinateText::EastingNorthing)
+              == QStringLiteral("1, 2, 304.00ft"));
+
+        //The horizontals keep every digit they need: a UTM easting rounded to
+        //three places is a different place.
+        CHECK(cwCoordinateText::format(610016.7921234, 5615117.0754321, 0.0,
+                                       cwUnits::Metric, cwCoordinateText::EastingNorthing)
+              == QStringLiteral("610016.7921234, 5615117.0754321, 0.000m"));
+    }
+
+    SECTION("round trip keeps the horizontals bit-for-bit and the elevation to what it shows") {
         //The single field is both the display and the input, so a user who opens
         //the editor and presses Enter writes back exactly what format() gave
-        //them. The horizontals survive that exactly. The elevation crosses a
-        //unit conversion in each direction and m→ft→m is not an IEEE identity,
-        //so it is pinned tight rather than exact — tight enough that rendering
-        //it at a fixed precision (which would drift ~1e-4) fails here.
+        //them. The horizontals survive that exactly. The elevation is written to
+        //the unit's display precision, so it comes back inside half of the last
+        //digit shown — a millimeter in meters, a hundredth of a foot in feet.
         //cwFixStationModel::setCoordinateText carries the no-op guarantee that
-        //the last ulp can't.
+        //rounding can't.
         const auto check = [](double easting, double northing, double elevation,
                               cwUnits::UnitSystem units, cwCoordinateText::AxisOrder order) {
             const QString text = cwCoordinateText::format(easting, northing, elevation,
@@ -774,9 +793,13 @@ TEST_CASE("cwCoordinateText formats what it parses", "[FixStation][cwCoordinateT
             REQUIRE_FALSE(result.hasError());
             CHECK(result.value().easting == easting);
             CHECK(result.value().northing == northing);
+
+            const cwUnits::LengthUnit unit = cwCoordinateText::elevationUnit(units);
+            const double halfDigit =
+                0.5 * std::pow(10.0, -cwUnits::lengthDecimals(unit));
+            const double tolerance = cwUnits::convert(halfDigit, unit, cwUnits::Meters);
             CHECK_THAT(result.value().elevation,
-                       Catch::Matchers::WithinRel(elevation, 1e-15)
-                           || Catch::Matchers::WithinAbs(elevation, 1e-12));
+                       Catch::Matchers::WithinAbs(elevation, tolerance));
         };
 
         //Both orders, since a swap that format() and parse() made in lockstep
