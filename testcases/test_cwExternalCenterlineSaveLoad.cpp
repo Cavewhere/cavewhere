@@ -18,6 +18,7 @@
 #include "cwRootData.h"
 #include "cwSaveLoad.h"
 #include "cwTrip.h"
+#include "ExternalCenterlineTestHelpers.h"
 #include "ProjectFilenameTestHelper.h"
 
 // Qt
@@ -107,24 +108,6 @@ QString plantExternalCenterlineFile(const QDir& ownerDir)
     REQUIRE(QFileInfo::exists(plantedPath));
 
     return plantedPath;
-}
-
-// Writes `content` to `path`, then forces lastModified to `mtime` via QFile::setFileTime
-// (Qt 6 API). Returns the absolute path so callers can pipe it into copyIfNewer.
-QString writeFileWithMtime(const QString& path, const QByteArray& content, const QDateTime& mtime)
-{
-    REQUIRE(QDir().mkpath(QFileInfo(path).absolutePath()));
-    {
-        QFile f(path);
-        REQUIRE(f.open(QFile::WriteOnly));
-        f.write(content);
-        f.close();
-    }
-    QFile f(path);
-    REQUIRE(f.open(QFile::ReadWrite));
-    REQUIRE(f.setFileTime(mtime, QFileDevice::FileModificationTime));
-    f.close();
-    return path;
 }
 
 } // namespace

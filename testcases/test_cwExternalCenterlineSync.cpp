@@ -18,6 +18,7 @@
 #include "cwRootData.h"
 #include "cwSaveLoad.h"
 #include "cwTrip.h"
+#include "ExternalCenterlineTestHelpers.h"
 
 // AsyncFuture
 #include <asyncfuture.h>
@@ -78,20 +79,6 @@ std::unique_ptr<SavedProjectFixture> makeSavedProject(const QString& projectFile
     return fixture;
 }
 
-QString writeFile(const QString& path, const QByteArray& content, const QDateTime& mtime)
-{
-    REQUIRE(QDir().mkpath(QFileInfo(path).absolutePath()));
-    {
-        QFile f(path);
-        REQUIRE(f.open(QFile::WriteOnly));
-        f.write(content);
-    }
-    QFile f(path);
-    REQUIRE(f.open(QFile::ReadWrite));
-    REQUIRE(f.setFileTime(mtime, QFileDevice::FileModificationTime));
-    return path;
-}
-
 // Shared content for all generated dep files keeps file size and content
 // identical across entries, so test plants of matching dests don't have
 // to track per-file content.
@@ -109,12 +96,12 @@ cwExternalCenterlineScanner::ScanResult makeScan(const QString& sourceRoot,
     cwExternalCenterlineScanner::ScanResult result;
     const QDir root(sourceRoot);
     const QString entryAbs = root.absoluteFilePath(entryRelative);
-    writeFile(entryAbs, QByteArray(kFakeContent), mtime);
+    writeFileWithMtime(entryAbs, QByteArray(kFakeContent), mtime);
     result.dependencies.append(QFileInfo(entryAbs).canonicalFilePath());
 
     for (const QString& sib : siblings) {
         const QString sibAbs = root.absoluteFilePath(sib);
-        writeFile(sibAbs, QByteArray(kFakeContent), mtime);
+        writeFileWithMtime(sibAbs, QByteArray(kFakeContent), mtime);
         result.dependencies.append(QFileInfo(sibAbs).canonicalFilePath());
     }
     return result;
@@ -190,7 +177,7 @@ TEST_CASE("computePlan is a no-op when sources match destinations by size+mtime"
     for (const QString& dep : scan.dependencies) {
         const QString rel = QFileInfo(scan.dependencies.first()).absoluteDir().relativeFilePath(dep);
         const QString dest = attachDirObj.absoluteFilePath(rel);
-        writeFile(dest, QByteArray(kFakeContent), mtime); // same content+size as sources
+        writeFileWithMtime(dest, QByteArray(kFakeContent), mtime); // same content+size as sources
     }
 
     const auto plan = cwExternalCenterlineSync::computePlan(scan, attachmentDir);
@@ -224,9 +211,9 @@ TEST_CASE("computePlan under Overwrite copies destinations that already match",
         const QString rel = QFileInfo(scan.dependencies.first()).absoluteDir().relativeFilePath(dep);
         // Same size as the source, mtime an hour ahead: the shape a local
         // edit leaves behind.
-        writeFile(attachDirObj.absoluteFilePath(rel),
-                  QByteArray(kFakeContent),
-                  mtime.addSecs(kOneHourSeconds));
+        writeFileWithMtime(attachDirObj.absoluteFilePath(rel),
+                           QByteArray(kFakeContent),
+                           mtime.addSecs(kOneHourSeconds));
     }
 
     const auto plan = cwExternalCenterlineSync::computePlan(
@@ -259,7 +246,7 @@ TEST_CASE("reconcile under Overwrite replaces a same-size newer destination",
     REQUIRE_FALSE(editedContent.isEmpty());
     editedContent[0] = 'X';
     REQUIRE(editedContent.size() == QByteArray(kFakeContent).size());
-    writeFile(destPath, editedContent, mtime.addSecs(kOneHourSeconds));
+    writeFileWithMtime(destPath, editedContent, mtime.addSecs(kOneHourSeconds));
 
     auto future = cwExternalCenterlineSync::reconcile(
         fixture->project->saveLoad(), scan, attachmentDir,
@@ -301,8 +288,8 @@ TEST_CASE("computePlan copies only the source whose mtime is newer than dest",
     // Plant identical-content but older-mtime files at both destinations.
     const QString entryDestPath = attachDirObj.absoluteFilePath(QStringLiteral("entry.svx"));
     const QString sibDestPath = attachDirObj.absoluteFilePath(QStringLiteral("sibling.svx"));
-    writeFile(entryDestPath, QByteArray(kFakeContent), base);
-    writeFile(sibDestPath, QByteArray(kFakeContent), base);
+    writeFileWithMtime(entryDestPath, QByteArray(kFakeContent), base);
+    writeFileWithMtime(sibDestPath, QByteArray(kFakeContent), base);
 
     const auto plan = cwExternalCenterlineSync::computePlan(scan, attachmentDir);
 
@@ -332,11 +319,11 @@ TEST_CASE("computePlan garbage-collects files not in the new closure",
     const QDir attachDirObj(attachmentDir);
 
     // Plant the (still-current) entry and a stale file from a previous scan.
-    writeFile(attachDirObj.absoluteFilePath(QStringLiteral("entry.svx")),
-              QByteArray(kFakeContent),
-              mtime);
+    writeFileWithMtime(attachDirObj.absoluteFilePath(QStringLiteral("entry.svx")),
+                       QByteArray(kFakeContent),
+                       mtime);
     const QString stalePath = attachDirObj.absoluteFilePath(QStringLiteral("dropped.svx"));
-    writeFile(stalePath, QByteArrayLiteral("; dropped\n"), mtime);
+    writeFileWithMtime(stalePath, QByteArrayLiteral("; dropped\n"), mtime);
 
     const auto plan = cwExternalCenterlineSync::computePlan(scan, attachmentDir);
 
@@ -361,12 +348,12 @@ TEST_CASE("computePlan warns when a dep escapes the attachment dir",
     const QDateTime mtime = QDateTime::currentDateTimeUtc().addSecs(-kOneHourSeconds);
     cwExternalCenterlineScanner::ScanResult scan;
     const QString entryAbs = QDir(srcRoot).filePath(QStringLiteral("entry.svx"));
-    writeFile(entryAbs, QByteArrayLiteral("; entry\n"), mtime);
+    writeFileWithMtime(entryAbs, QByteArrayLiteral("; entry\n"), mtime);
     scan.dependencies.append(QFileInfo(entryAbs).canonicalFilePath());
 
     // Sibling lives in the parent dir of entry's parent: ../escaped.svx
     const QString escapedAbs = QDir(outsideRoot).filePath(QStringLiteral("escaped.svx"));
-    writeFile(escapedAbs, QByteArrayLiteral("; escaped\n"), mtime);
+    writeFileWithMtime(escapedAbs, QByteArrayLiteral("; escaped\n"), mtime);
     scan.dependencies.append(QFileInfo(escapedAbs).canonicalFilePath());
 
     const QString attachmentDir = QDir(tempDir.path()).filePath(QStringLiteral("external"));
@@ -440,7 +427,7 @@ TEST_CASE("reconcile removes stranded files inside the attachment dir",
     const QDir attachDirObj(attachmentDir);
     REQUIRE(QDir().mkpath(attachmentDir));
     const QString stranded = attachDirObj.absoluteFilePath(QStringLiteral("ghost.svx"));
-    writeFile(stranded, QByteArrayLiteral("; ghost\n"), mtime);
+    writeFileWithMtime(stranded, QByteArrayLiteral("; ghost\n"), mtime);
     REQUIRE(QFileInfo::exists(stranded));
 
     auto future = cwExternalCenterlineSync::reconcile(
@@ -471,7 +458,7 @@ TEST_CASE("reconcile is a no-op when source and dest already match",
     // Plant matching dest before reconciling.
     const QDir attachDirObj(attachmentDir);
     const QString destPath = attachDirObj.absoluteFilePath(QStringLiteral("entry.svx"));
-    writeFile(destPath, QByteArray(kFakeContent), mtime);
+    writeFileWithMtime(destPath, QByteArray(kFakeContent), mtime);
     const QDateTime destMtimeBefore = QFileInfo(destPath).lastModified();
 
     auto future = cwExternalCenterlineSync::reconcile(
@@ -577,9 +564,9 @@ TEST_CASE("no-op reconcile leaves the modified bit untouched",
 
     // Plant a matching destination so the plan has no copies and no removes.
     const QDir attachDirObj(attachmentDir);
-    writeFile(attachDirObj.absoluteFilePath(QStringLiteral("entry.svx")),
-              QByteArray(kFakeContent),
-              mtime);
+    writeFileWithMtime(attachDirObj.absoluteFilePath(QStringLiteral("entry.svx")),
+                       QByteArray(kFakeContent),
+                       mtime);
 
     auto future = cwExternalCenterlineSync::reconcile(
         fixture->project->saveLoad(), scan, attachmentDir);
@@ -609,11 +596,11 @@ TEST_CASE("GC-only reconcile flips the project modified bit",
     // Matching entry (no copy needed) plus a stranded file from a previous
     // scan, so the plan is removes-only.
     const QDir attachDirObj(attachmentDir);
-    writeFile(attachDirObj.absoluteFilePath(QStringLiteral("entry.svx")),
-              QByteArray(kFakeContent),
-              mtime);
+    writeFileWithMtime(attachDirObj.absoluteFilePath(QStringLiteral("entry.svx")),
+                       QByteArray(kFakeContent),
+                       mtime);
     const QString stranded = attachDirObj.absoluteFilePath(QStringLiteral("ghost.svx"));
-    writeFile(stranded, QByteArrayLiteral("; ghost\n"), mtime);
+    writeFileWithMtime(stranded, QByteArrayLiteral("; ghost\n"), mtime);
 
     auto future = cwExternalCenterlineSync::reconcile(
         fixture->project->saveLoad(), scan, attachmentDir);

@@ -34,10 +34,12 @@
 #include <QAbstractItemModel>
 #include <QByteArray>
 #include <QCoreApplication>
+#include <QDateTime>
 #include <QDir>
 #include <QElapsedTimer>
 #include <QEventLoop>
 #include <QFile>
+#include <QFileDevice>
 #include <QFileInfo>
 #include <QString>
 #include <QTemporaryDir>
@@ -133,6 +135,24 @@ inline void overwriteFile(const QString& path, const QByteArray& content)
     REQUIRE(f.open(QFile::WriteOnly | QFile::Truncate));
     REQUIRE(f.write(content) == content.size());
     f.close();
+}
+
+// Writes `content` to `path`, then forces lastModified to `mtime` via
+// QFile::setFileTime (Qt 6 API). Returns the path so callers can pipe it
+// into copyIfNewer.
+inline QString writeFileWithMtime(const QString& path, const QByteArray& content,
+                                  const QDateTime& mtime)
+{
+    REQUIRE(QDir().mkpath(QFileInfo(path).absolutePath()));
+    {
+        QFile f(path);
+        REQUIRE(f.open(QFile::WriteOnly));
+        f.write(content);
+    }
+    QFile f(path);
+    REQUIRE(f.open(QFile::ReadWrite));
+    REQUIRE(f.setFileTime(mtime, QFileDevice::FileModificationTime));
+    return path;
 }
 
 inline QByteArray fileContents(const QString& path)

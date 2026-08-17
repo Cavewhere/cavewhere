@@ -119,22 +119,6 @@ QByteArray readWholeFile(const QString& path)
     return file.readAll();
 }
 
-// Writes `content` to `path`, then forces lastModified to `mtime`
-// (QFile::setFileTime, Qt 6).
-void writeFileWithMtime(const QString& path, const QByteArray& content,
-                        const QDateTime& mtime)
-{
-    REQUIRE(QDir().mkpath(QFileInfo(path).absolutePath()));
-    {
-        QFile file(path);
-        REQUIRE(file.open(QFile::WriteOnly));
-        file.write(content);
-    }
-    QFile file(path);
-    REQUIRE(file.open(QFile::ReadWrite));
-    REQUIRE(file.setFileTime(mtime, QFileDevice::FileModificationTime));
-}
-
 Monad::Result<cwExternalCenterlineAttach::AttachReport> runAttach(
     SavedProjectFixture* fixture, const QString& sourceFile)
 {
