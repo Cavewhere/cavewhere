@@ -23,9 +23,20 @@ ColumnLayout {
 
     readonly property alias count: listViewId.count
 
+    // One text line plus a padding band on each side — the default
+    // QC.ItemDelegate is touch-sized, far taller than a name list needs.
+    readonly property int rowHeight: Math.ceil(rowFontMetricsId.height)
+                                     + 2 * Theme.delegatePadding
+
     spacing: Theme.tightSpacing
 
     signal stationClicked(cwStationHandle stationHandle)
+
+    QQ.FontMetrics {
+        id: rowFontMetricsId
+        font.family: Theme.fontFamily
+        font.pixelSize: Theme.fontSizeBody
+    }
 
     QC.Label {
         objectName: "stationsListHeader"
@@ -49,6 +60,9 @@ ColumnLayout {
             required property cwStationHandle stationHandle
 
             width: QQ.ListView.view.width
+            height: root.rowHeight
+            padding: Theme.delegatePadding
+            font.pixelSize: Theme.fontSizeBody
             text: stationName
 
             onClicked: root.stationClicked(stationHandle)

@@ -16,6 +16,12 @@ MainWindowTest {
         trip: rootId.trip
     }
 
+    QQ.FontMetrics {
+        id: fontMetricsId
+        font.family: Theme.fontFamily
+        font.pixelSize: Theme.fontSizeBody
+    }
+
     QQ.Column {
         id: componentColumnId
         width: 500
@@ -129,6 +135,25 @@ MainWindowTest {
                 replaceCancel.clicked()
             }
             RootData.newProject()
+        }
+
+        // Attaches a fixture to the panel's trip and returns the stations
+        // ListView once its first delegate has materialized.
+        function stationsListViewWithRows(fixtureName) {
+            const fixture = attachFixtureTrip(fixtureName)
+            //The scope model lists one trip's stations, so it needs the trip
+            rootId.trip = fixture.trip
+
+            tryVerify(() => RootData.linePlotManager.lastSolveStationCount > 0,
+                      10000, "the attach-chained solve should publish stations")
+            tryVerify(() => stationsListId.count > 0, 10000,
+                      "rows appear once the solve lands in the cave's lookup")
+
+            const listView = findChild(stationsListId, "stationsListView")
+            verify(listView !== null, "stationsListView must exist")
+            tryVerify(() => listView.itemAtIndex(0) !== null, 5000,
+                      "first delegate must materialize")
+            return listView
         }
 
         function test_attachedHeaderShowsFileFormatAndSource() {
@@ -301,19 +326,7 @@ MainWindowTest {
         }
 
         function test_stationsListShowsRowsAndClickEmits() {
-            const fixture = attachFixtureTrip("panel-stations")
-            //The scope model lists one trip's stations, so it needs the trip
-            rootId.trip = fixture.trip
-
-            tryVerify(() => RootData.linePlotManager.lastSolveStationCount > 0,
-                      10000, "the attach-chained solve should publish stations")
-            tryVerify(() => stationsListId.count > 0, 10000,
-                      "rows appear once the solve lands in the cave's lookup")
-
-            const listView = findChild(stationsListId, "stationsListView")
-            verify(listView !== null, "stationsListView must exist")
-            tryVerify(() => listView.itemAtIndex(0) !== null, 5000,
-                      "first delegate must materialize")
+            const listView = stationsListViewWithRows("panel-stations")
 
             mouseClick(listView.itemAtIndex(0))
             compare(stationClickSpyId.count, 1, "clicking a station emits stationClicked")
@@ -325,6 +338,19 @@ MainWindowTest {
                     "the handle names the clicked station's trip")
             compare(handle.tail, listView.itemAtIndex(0).text,
                     "the handle carries the row's scope-relative tail")
+        }
+
+        function test_stationsListRowsAreCompact() {
+            const listView = stationsListViewWithRows("panel-station-rows")
+
+            //The bound is the component's own row height: one body-font
+            //line plus a delegate padding band above and below.
+            const bound = Math.ceil(fontMetricsId.height) + 2 * Theme.delegatePadding
+            compare(stationsListId.rowHeight, bound,
+                    "rowHeight is a body-text line plus two padding bands")
+            verify(listView.itemAtIndex(0).height <= bound,
+                   "a station row stays within the tightened bound; got: "
+                   + listView.itemAtIndex(0).height + " > " + bound)
         }
 
         function test_tripMetadataDateAndDeclination() {
