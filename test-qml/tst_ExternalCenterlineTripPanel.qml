@@ -69,8 +69,6 @@ MainWindowTest {
         function test_attachRendersSubComponentsInOrder() {
             attachAndBind("trip-panel-attach")
 
-            verify(panelId.isAttached, "panel mode is Attached after the fixture attach")
-
             compare(attachCompletedSpyId.count, 1, "attach emits exactly one completion")
             const report = attachCompletedSpyId.signalArguments[0][0]
             verify(report.success, "the fixture attach reports success")
@@ -91,21 +89,47 @@ MainWindowTest {
             const stationsList = findChild(panelId, "stationsList")
             const metadata = findChild(panelId, "tripMetadata")
             verify(header !== null && header.visible, "attached header renders")
+            verify(header.attached, "the header reads Attached after the fixture attach")
             verify(solveStatus !== null && solveStatus.visible, "solve status renders")
             verify(stationsList !== null && stationsList.visible, "stations list renders")
             verify(metadata !== null && metadata.visible, "trip metadata renders")
 
-            const headerY = header.mapToItem(panelId, 0, 0).y
-            const solveY = solveStatus.mapToItem(panelId, 0, 0).y
-            const stationsY = stationsList.mapToItem(panelId, 0, 0).y
-            const metadataY = metadata.mapToItem(panelId, 0, 0).y
-            verify(headerY < solveY, "header above solve status")
-            verify(solveY < stationsY, "solve status above stations list")
-            verify(stationsY < metadataY, "stations list above metadata")
+            // §16 B2a order: header row, solve status, Date/Declination/
+            // Team, then the station list at the bottom.
+            waitForRendering(panelId)
+            const panelY = (item) => item.mapToItem(panelId, 0, 0).y
+            tryVerify(() => panelY(header) < panelY(solveStatus),
+                      5000, "header above solve status")
+            tryVerify(() => panelY(solveStatus) < panelY(metadata),
+                      5000, "solve status above trip metadata")
+            tryVerify(() => panelY(metadata) < panelY(stationsList),
+                      5000, "trip metadata above the stations list")
 
             const fileLabel = findChild(header, "attachedFileLabel")
             verify(fileLabel !== null, "attachedFileLabel must exist")
             tryCompare(fileLabel, "text", "survex_simple.svx")
+
+            // The actions ride the file-name row, so their vertical centers
+            // fall inside the file label's band.
+            const reloadButton = findChild(header, "reloadButton")
+            const replaceButton = findChild(header, "replaceButton")
+            verify(reloadButton !== null, "reloadButton must exist")
+            verify(replaceButton !== null, "replaceButton must exist")
+            const centersOnFileRow = () => {
+                const labelTop = panelY(fileLabel)
+                const labelBottom = labelTop + fileLabel.height
+                return [reloadButton, replaceButton].every(button => {
+                    const center = panelY(button) + button.height / 2
+                    return center >= labelTop && center <= labelBottom
+                })
+            }
+            tryVerify(centersOnFileRow, 5000,
+                      "Reload now and Replace… sit on the file-name row")
+
+            // The Date label leads the metadata block in bold.
+            const dateLabel = findChild(metadata, "tripMetadataDateLabel")
+            verify(dateLabel !== null, "tripMetadataDateLabel must exist")
+            verify(dateLabel.font.bold, "the Date label is bold")
 
             // The real per-trip scope prefix ("<caveLabel>.<tripLabel>.")
             // must select the solved stations.
@@ -298,22 +322,24 @@ MainWindowTest {
             attachAndBind("trip-panel-actions")
             RootData.futureManagerModel.waitForFinished()
 
-            const actionsRow = findChild(panelId, "externalCenterlineActions")
-            verify(actionsRow !== null, "externalCenterlineActions must exist")
+            // §16 B2a parked the actions on the header's file-name row.
+            const fileRow = findChild(panelId, "attachedHeaderFileRow")
+            verify(fileRow !== null, "attachedHeaderFileRow must exist")
 
-            const actionNames = []
-            for (let i = 0; i < actionsRow.children.length; ++i) {
-                const child = actionsRow.children[i]
+            const rowNames = []
+            for (let i = 0; i < fileRow.children.length; ++i) {
+                const child = fileRow.children[i]
                 if (child.objectName.length > 0) {
-                    actionNames.push(child.objectName)
+                    rowNames.push(child.objectName)
                 }
             }
-            compare(actionNames.join(","), "reloadButton,replaceButton",
+            compare(rowNames.join(","),
+                    "attachedFileLabel,attachedFormatLabel,reloadButton,replaceButton",
                     "an attached panel offers Reload now and Replace… and nothing else")
-            // The two buttons plus the fill spacer — pins the row's size so
-            // an action added without an objectName fails here too.
-            compare(actionsRow.children.length, 3,
-                    "the actions row holds exactly Reload, Replace… and the spacer")
+            // The two labels, the fill spacer and the two buttons — pins the
+            // row's size so an action added without an objectName fails here too.
+            compare(fileRow.children.length, 5,
+                    "the file row holds the name, format, spacer, Reload and Replace…")
 
             const reloadButton = findChild(panelId, "reloadButton")
             const replaceButton = findChild(panelId, "replaceButton")

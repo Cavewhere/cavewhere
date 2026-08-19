@@ -12,9 +12,10 @@ import cavewherelib
 
 // Replaces SurveyEditor on TripPage for an externally-backed trip
 // (master plan §8.5.1 + Phase-2 §9 deltas). Assembles the commit-10
-// sub-components: attached header, solve status, scoped station list,
-// and trip metadata. The Scope mode is Phase 3 — the header Loader is
-// hard-coded to the attached header.
+// sub-components, top to bottom: attached header (file name, format
+// and the file actions), solve status, trip metadata, and the scoped
+// station list, which takes the leftover height. The Scope mode is
+// Phase 3 — the header Loader is hard-coded to the attached header.
 QQ.Item {
     id: root
     objectName: "externalCenterlineTripPanel"
@@ -23,9 +24,6 @@ QQ.Item {
     property LinePlotManager linePlotManager: RootData.linePlotManager
     property ExternalCenterlineManager externalCenterlineManager: RootData.externalCenterlineManager
     property ExternalSourceSettings externalSourceSettings: RootData.externalSourceSettings
-
-    readonly property bool isAttached: trip !== null
-                                       && trip.externalCenterline.entryFile.length > 0
 
     // isOwnerBusy has no property NOTIFY — ownerBusyChanged drives the
     // imperative refresh below.
@@ -161,52 +159,19 @@ QQ.Item {
             }
         }
 
+        ExternalCenterlineTripMetadata {
+            id: tripMetadataId
+            Layout.fillWidth: true
+            trip: root.trip
+            fileOwnsDeclination: root.fileOwnsDeclination
+        }
+
         ExternalCenterlineStationsList {
             id: stationsListId
             Layout.fillWidth: true
             Layout.fillHeight: true
             stationModel: scopeStationModelId
             onStationClicked: (stationHandle) => root.stationClicked(stationHandle)
-        }
-
-        RowLayout {
-            id: actionsRowId
-            objectName: "externalCenterlineActions"
-            Layout.fillWidth: true
-            spacing: Theme.flowSpacing
-
-            QC.Button {
-                id: reloadButtonId
-                objectName: "reloadButton"
-                text: qsTr("Reload now")
-                visible: root.isAttached
-                enabled: !root.ownerBusy
-                // Re-reads the attached files themselves, not just the
-                // solve: a copy restored or edited while nothing watched it
-                // is only noticed by a fresh scan, and the scan's apply asks
-                // for the solve.
-                onClicked: root.externalCenterlineManager.rescanAttachments()
-            }
-
-            QC.Button {
-                id: replaceButtonId
-                objectName: "replaceButton"
-                text: qsTr("Replace…")
-                visible: root.isAttached
-                enabled: !root.ownerBusy
-                onClicked: root.openReplaceDialog()
-            }
-
-            QQ.Item {
-                Layout.fillWidth: true
-            }
-        }
-
-        ExternalCenterlineTripMetadata {
-            id: tripMetadataId
-            Layout.fillWidth: true
-            trip: root.trip
-            fileOwnsDeclination: root.fileOwnsDeclination
         }
     }
 
@@ -233,6 +198,14 @@ QQ.Item {
         ExternalCenterlineAttachedHeader {
             trip: root.trip
             externalSourceSettings: root.externalSourceSettings
+            actionsEnabled: !root.ownerBusy
+
+            // Reload re-reads the attached files themselves, not just the
+            // solve: a copy restored or edited while nothing watched it
+            // is only noticed by a fresh scan, and the scan's apply asks
+            // for the solve.
+            onReloadRequested: root.externalCenterlineManager.rescanAttachments()
+            onReplaceRequested: root.openReplaceDialog()
         }
     }
 }

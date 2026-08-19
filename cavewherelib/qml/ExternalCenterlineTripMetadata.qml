@@ -29,6 +29,8 @@ ColumnLayout {
         spacing: Theme.tightSpacing
 
         QC.Label {
+            objectName: "tripMetadataDateLabel"
+            font.bold: true
             text: qsTr("Date")
         }
 

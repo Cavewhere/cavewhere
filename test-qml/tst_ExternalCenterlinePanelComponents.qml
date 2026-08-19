@@ -90,6 +90,18 @@ MainWindowTest {
             signalName: "dateChanged"
         }
 
+        SignalSpy {
+            id: reloadRequestedSpyId
+            target: attachedHeaderId
+            signalName: "reloadRequested"
+        }
+
+        SignalSpy {
+            id: replaceRequestedSpyId
+            target: attachedHeaderId
+            signalName: "replaceRequested"
+        }
+
         function init() {
             RootData.futureManagerModel.waitForFinished()
             RootData.newProject()
@@ -98,6 +110,9 @@ MainWindowTest {
             viewOutputSpyId.clear()
             stationClickSpyId.clear()
             dateSpyId.clear()
+            reloadRequestedSpyId.clear()
+            replaceRequestedSpyId.clear()
+            attachedHeaderId.actionsEnabled = true
         }
 
         function cleanup() {
@@ -134,6 +149,34 @@ MainWindowTest {
             tryVerify(() => sourceLabel.text === "Source forgotten (this machine)",
                       5000, "forgotten-source line renders after clearing; got: "
                             + sourceLabel.text)
+        }
+
+        // §16 B2a: the header carries the two file actions and only raises
+        // signals — the panel owns the manager wiring.
+        function test_attachedHeaderActionsRaiseSignals() {
+            const reloadButton = findChild(attachedHeaderId, "reloadButton")
+            const replaceButton = findChild(attachedHeaderId, "replaceButton")
+            verify(reloadButton !== null, "reloadButton must exist")
+            verify(replaceButton !== null, "replaceButton must exist")
+            verify(!reloadButton.visible, "an unattached header shows no Reload")
+            verify(!replaceButton.visible, "an unattached header shows no Replace")
+
+            const fixture = attachFixtureTrip("panel-header-actions")
+            rootId.trip = fixture.trip
+            tryVerify(() => reloadButton.visible && replaceButton.visible,
+                      5000, "attaching shows both file actions")
+            // A just-shown item has no layout until the next frame, so a
+            // click before it lands on the header's old geometry.
+            waitForRendering(attachedHeaderId)
+
+            mouseClick(reloadButton)
+            compare(reloadRequestedSpyId.count, 1, "Reload raises reloadRequested")
+            mouseClick(replaceButton)
+            compare(replaceRequestedSpyId.count, 1, "Replace raises replaceRequested")
+
+            attachedHeaderId.actionsEnabled = false
+            tryVerify(() => !reloadButton.enabled && !replaceButton.enabled,
+                      5000, "a busy owner disables both actions")
         }
 
         // The commit-4 gate (plans/EXTERNAL_FILE_LIVE_LINK_RETIREMENT.html
