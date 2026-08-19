@@ -125,6 +125,7 @@ MainWindowTest {
             reloadRequestedSpyId.clear()
             replaceRequestedSpyId.clear()
             attachedHeaderId.actionsEnabled = true
+            attachedHeaderId.entryFilePath = ""
         }
 
         function cleanup() {
@@ -208,6 +209,77 @@ MainWindowTest {
             attachedHeaderId.actionsEnabled = false
             tryVerify(() => !reloadButton.enabled && !replaceButton.enabled,
                       5000, "a busy owner disables both actions")
+        }
+
+        // §16 B2e: right-clicking the file name reaches the file on disk.
+        // The menu only has to offer both verbs — running them would hand
+        // the file to the desktop.
+        function test_attachedFileRightClickOffersRevealAndOpen() {
+            const fixture = attachFixtureTrip("panel-header-context-menu")
+            rootId.trip = fixture.trip
+
+            // The panel resolves this for the real header; here the
+            // resolution itself is the thing being handed over.
+            attachedHeaderId.entryFilePath = FileRevealer.resolvedPath(
+                        RootData.externalCenterlineManager.attachmentDir(fixture.trip.id),
+                        fixture.trip.externalCenterline.entryFile)
+            verify(attachedHeaderId.entryFilePath.indexOf("survex_simple.svx") > 0,
+                   "the in-project copy resolves to an absolute path; got: "
+                   + attachedHeaderId.entryFilePath)
+            verify(RootData.pathExists(attachedHeaderId.entryFilePath),
+                   "the resolved path names a file that is there")
+
+            const contextMenu = findChild(attachedHeaderId, "attachedFileContextMenu")
+            verify(contextMenu !== null, "attachedFileContextMenu must exist")
+
+            const fileLabel = findChild(attachedHeaderId, "attachedFileLabel")
+            verify(fileLabel !== null, "attachedFileLabel must exist")
+            waitForRendering(attachedHeaderId)
+            mouseClick(fileLabel, fileLabel.width / 2, fileLabel.height / 2,
+                       Qt.RightButton)
+            tryVerify(() => contextMenu.menu.opened, 5000,
+                      "right-clicking the file name opens the menu")
+
+            const revealItem = findChild(contextMenu, "showInFileManagerAction")
+            verify(revealItem !== null, "showInFileManagerAction must exist")
+            verify(revealItem.enabled, "a resolved path can be revealed")
+            verify(revealItem.text.indexOf("Show in") === 0,
+                   "the reveal item names the platform's file manager; got: "
+                   + revealItem.text)
+
+            const openItem = findChild(contextMenu, "openFileAction")
+            verify(openItem !== null, "openFileAction must exist")
+            verify(openItem.enabled, "a resolved path can be opened")
+            compare(openItem.text, "Open")
+
+            contextMenu.menu.dismiss()
+            tryVerify(() => !contextMenu.menu.opened, 5000, "the menu closes")
+
+            // A path that names a file which is gone (the missing-copy
+            // case) leaves Open unavailable — the desktop would do nothing
+            // with it — while reveal stays available and lands on the
+            // containing folder.
+            attachedHeaderId.entryFilePath = attachedHeaderId.entryFilePath + ".gone"
+            mouseClick(fileLabel, fileLabel.width / 2, fileLabel.height / 2,
+                       Qt.RightButton)
+            tryVerify(() => contextMenu.menu.opened, 5000, "the menu opens again")
+            verify(revealItem.enabled, "a deleted file still reveals its folder")
+            verify(!openItem.enabled, "a deleted file offers nothing to open")
+
+            contextMenu.menu.dismiss()
+            tryVerify(() => !contextMenu.menu.opened, 5000, "the menu closes")
+
+            // Nothing resolved leaves both verbs unavailable rather than
+            // handing the desktop an empty path.
+            attachedHeaderId.entryFilePath = ""
+            mouseClick(fileLabel, fileLabel.width / 2, fileLabel.height / 2,
+                       Qt.RightButton)
+            tryVerify(() => contextMenu.menu.opened, 5000, "the menu opens again")
+            tryVerify(() => !revealItem.enabled && !openItem.enabled, 5000,
+                      "an unresolved path disables both actions")
+
+            contextMenu.menu.dismiss()
+            tryVerify(() => !contextMenu.menu.opened, 5000, "the menu closes")
         }
 
         // The commit-4 gate (plans/EXTERNAL_FILE_LIVE_LINK_RETIREMENT.html

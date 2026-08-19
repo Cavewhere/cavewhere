@@ -39,6 +39,12 @@ QQ.Item {
     // refresh, the same imperative shape as ownerBusy.
     property string missingCopyPath: ""
 
+    // Absolute on-disk path of the trip's entry file — the attachment
+    // directory the manager holds, joined with the project-relative
+    // entryFile. Refreshed imperatively: attachmentDir has no NOTIFY, and
+    // an attach that fills it lands with solveNeeded.
+    property string entryFilePath: ""
+
     signal stationClicked(cwStationHandle stationHandle)
 
     function updateOwnerBusy() {
@@ -48,6 +54,13 @@ QQ.Item {
     function updateMissingCopyPath() {
         missingCopyPath = trip === null
                 ? "" : externalCenterlineManager.missingCopyPath(trip.id)
+    }
+
+    function updateEntryFilePath() {
+        entryFilePath = trip === null
+                ? "" : FileRevealer.resolvedPath(
+                           externalCenterlineManager.attachmentDir(trip.id),
+                           trip.externalCenterline.entryFile)
     }
 
     function openReplaceDialog() {
@@ -64,12 +77,14 @@ QQ.Item {
         updateOwnerBusy()
         updateFileOwnsDeclination()
         updateMissingCopyPath()
+        updateEntryFilePath()
     }
 
     QQ.Component.onCompleted: {
         updateOwnerBusy()
         updateFileOwnsDeclination()
         updateMissingCopyPath()
+        updateEntryFilePath()
     }
 
     QQ.Connections {
@@ -81,6 +96,7 @@ QQ.Item {
 
         function onSolveNeeded() {
             root.updateFileOwnsDeclination()
+            root.updateEntryFilePath()
         }
 
         function onMissingCopiesChanged() {
@@ -212,6 +228,7 @@ QQ.Item {
             trip: root.trip
             externalSourceSettings: root.externalSourceSettings
             actionsEnabled: !root.ownerBusy
+            entryFilePath: root.entryFilePath
 
             // Reload re-reads the attached files themselves, not just the
             // solve: a copy restored or edited while nothing watched it

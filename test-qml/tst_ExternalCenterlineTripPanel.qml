@@ -390,6 +390,14 @@ MainWindowTest {
             compare(fileRow.children.length, 5,
                     "the file row holds the name, format, spacer, Reload and Replace…")
 
+            // §16 B2e: the panel hands the header an absolute path, so the
+            // file-name context menu acts on the copy inside the project.
+            const header = findChild(panelId, "attachedHeader")
+            verify(header !== null, "attachedHeader must exist")
+            verify(RootData.pathExists(header.entryFilePath),
+                   "the panel resolves the entry file on disk; got: "
+                   + header.entryFilePath)
+
             const reloadButton = findChild(panelId, "reloadButton")
             const replaceButton = findChild(panelId, "replaceButton")
             verify(reloadButton.visible && reloadButton.enabled,

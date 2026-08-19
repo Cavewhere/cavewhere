@@ -23,6 +23,17 @@ ColumnLayout {
     property ExternalSourceSettings externalSourceSettings: null
     property bool actionsEnabled: true
 
+    // Absolute on-disk path of entryFile, resolved by the panel against
+    // the trip's attachment directory. Empty when there is nothing to
+    // resolve, which leaves the file-name context menu disabled.
+    property string entryFilePath: ""
+
+    // Refreshed each time the file-name context menu opens: the in-project
+    // copy can be deleted (the missing-copy case) long after
+    // entryFilePath was resolved, and opening a file that is gone would
+    // do nothing at all.
+    property bool entryFileExists: false
+
     // Refreshed imperatively: breadcrumbsChanged is a plain signal, so
     // a declarative binding can't observe it.
     property string rememberedSourcePath: ""
@@ -36,6 +47,10 @@ ColumnLayout {
 
     signal reloadRequested()
     signal replaceRequested()
+
+    function refreshEntryFileExists() {
+        entryFileExists = entryFilePath.length > 0 && RootData.pathExists(entryFilePath)
+    }
 
     function updateRememberedSource() {
         if (trip === null || externalSourceSettings === null) {
@@ -67,6 +82,33 @@ ColumnLayout {
             elide: QC.Label.ElideMiddle
             font.bold: true
             text: root.fileName
+
+            // Right-click reaches the file itself — the copy inside the
+            // project, which is the file this panel is showing.
+            ContextMenuArea {
+                id: fileContextMenuId
+                objectName: "attachedFileContextMenu"
+                anchors.fill: parent
+
+                RevealInFileManagerMenuItem {
+                    objectName: "showInFileManagerAction"
+                    filePath: root.entryFilePath
+                }
+
+                QC.MenuItem {
+                    objectName: "openFileAction"
+                    text: qsTr("Open")
+                    enabled: root.entryFileExists
+                    onTriggered: FileRevealer.openFile(root.entryFilePath)
+                }
+            }
+
+            QQ.Connections {
+                target: fileContextMenuId.menu
+                function onAboutToShow() {
+                    root.refreshEntryFileExists()
+                }
+            }
         }
 
         QC.Label {

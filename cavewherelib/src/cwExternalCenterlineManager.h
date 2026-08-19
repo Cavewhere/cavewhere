@@ -193,6 +193,15 @@ public:
         return m_missingCopies.value(ownerId);
     }
 
+    // Absolute path of the in-project directory holding ownerId's copies
+    // of its external files. Every entryFile is relative to this, so the
+    // pair names a file on disk. Empty for an owner with no attachment.
+    Q_INVOKABLE QString attachmentDir(const QUuid& ownerId) const
+    {
+        return m_tripAttachmentDirs.value(ownerId,
+                                          m_caveAttachmentDirs.value(ownerId));
+    }
+
     // Re-reads every attachment from disk right now — watch set,
     // declination flags, harvest, and the missing-copy report — and
     // requests the solve behind the apply. The panel's Reload runs this so

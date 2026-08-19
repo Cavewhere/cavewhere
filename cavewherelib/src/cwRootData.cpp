@@ -11,6 +11,7 @@
 #include "cwRegionTreeModel.h"
 #include "cwCavingRegion.h"
 #include "cwExternalCenterlineManager.h"
+#include "cwFileRevealer.h"
 #include "cwLinePlotManager.h"
 #include "cwScrapManager.h"
 #include "cwProject.h"
@@ -46,8 +47,6 @@
 #include <QStandardPaths>
 #include <QApplication>
 #include <QStyle>
-#include <QProcess>
-#include <QDesktopServices>
 #include <QClipboard>
 #include <QFileInfo>
 
@@ -426,31 +425,7 @@ QFuture<Monad::ResultBase> cwRootData::detachTripCenterline(cwTrip* trip)
 
 void cwRootData::showInFolder(const QString &path) const
 {
-    QFileInfo info(path);
-#if defined(Q_OS_WIN)
-    QStringList args;
-    if (!info.isDir())
-        args << "/select,";
-    args << QDir::toNativeSeparators(path);
-    if (QProcess::startDetached("explorer", args))
-        return;
-#elif defined(Q_OS_MAC) && QT_CONFIG(process)
-    QStringList args;
-    args << "-e";
-    args << "tell application \"Finder\"";
-    args << "-e";
-    args << "activate";
-    args << "-e";
-    args << "select POSIX file \"" + path + "\"";
-    args << "-e";
-    args << "end tell";
-    args << "-e";
-    args << "return";
-    if (!QProcess::execute("/usr/bin/osascript", args))
-        return;
-#endif
-    QDesktopServices::openUrl(QUrl::fromLocalFile(info.isDir()? path : info.path()));
-
+    cwFileRevealer::showInFileManager(path);
 }
 
 #ifdef Q_OS_IOS
