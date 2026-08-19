@@ -14,7 +14,7 @@ import cavewherelib
 // (master plan §8.5.1 + Phase-2 §9 deltas). Assembles the commit-10
 // sub-components, top to bottom: attached header (file name, format
 // and the file actions), solve status, trip metadata, and the scoped
-// station list, which takes the leftover height. The Scope mode is
+// station list. The whole column scrolls. The Scope mode is
 // Phase 3 — the header Loader is hard-coded to the attached header.
 QQ.Item {
     id: root
@@ -114,64 +114,77 @@ QQ.Item {
         trip: root.trip
     }
 
-    ColumnLayout {
-        id: contentLayoutId
+    // Every block stays reachable on a short viewport: the whole column
+    // scrolls here (§16 B2d), and the station list caps its own height
+    // rather than filling, so this is the only vertical scroll that
+    // matters. contentWidth follows the viewport, so the page never
+    // scrolls sideways.
+    QC.ScrollView {
+        id: panelScrollId
+        objectName: "panelScrollView"
+
         anchors.fill: parent
-        anchors.margins: Theme.sectionSpacing
-        spacing: Theme.sectionSpacing
+        padding: Theme.sectionSpacing
+        clip: true
+        contentWidth: panelScrollId.availableWidth
 
-        MissingCenterlineCopyBanner {
-            id: missingCopyBannerId
-            Layout.fillWidth: true
-            missingPath: root.missingCopyPath
-            onReplaceRequested: root.openReplaceDialog()
-        }
+        ColumnLayout {
+            id: contentLayoutId
+            width: panelScrollId.availableWidth
+            spacing: Theme.sectionSpacing
 
-        ExternalCenterlineFileErrorBanner {
-            id: fileErrorBannerId
-            Layout.fillWidth: true
-            errorMessage: root.trip !== null ? root.trip.externalStationsError : ""
-        }
-
-        FloatingSurveyBanner {
-            id: floatingBannerId
-            Layout.fillWidth: true
-            floating: floatingStatusId.floating
-            stations: floatingStatusId.stations
-            suggestions: tieSuggestionsId
-        }
-
-        QQ.Loader {
-            id: headerLoaderId
-            Layout.fillWidth: true
-            // Phase 3 swaps in a scope header for prefix-scoped trips.
-            sourceComponent: attachedHeaderComp
-        }
-
-        ExternalCenterlineSolveStatus {
-            id: solveStatusId
-            Layout.fillWidth: true
-            hasError: root.linePlotManager.hasSolveError
-            warningCount: root.linePlotManager.lastSolveWarningCount
-            stationCount: root.linePlotManager.lastSolveStationCount
-            onViewCavernOutputRequested: {
-                RootData.pageSelectionModel.gotoPageByName(null, "Cavern")
+            MissingCenterlineCopyBanner {
+                id: missingCopyBannerId
+                Layout.fillWidth: true
+                missingPath: root.missingCopyPath
+                onReplaceRequested: root.openReplaceDialog()
             }
-        }
 
-        ExternalCenterlineTripMetadata {
-            id: tripMetadataId
-            Layout.fillWidth: true
-            trip: root.trip
-            fileOwnsDeclination: root.fileOwnsDeclination
-        }
+            ExternalCenterlineFileErrorBanner {
+                id: fileErrorBannerId
+                Layout.fillWidth: true
+                errorMessage: root.trip !== null ? root.trip.externalStationsError : ""
+            }
 
-        ExternalCenterlineStationsList {
-            id: stationsListId
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            stationModel: scopeStationModelId
-            onStationClicked: (stationHandle) => root.stationClicked(stationHandle)
+            FloatingSurveyBanner {
+                id: floatingBannerId
+                Layout.fillWidth: true
+                floating: floatingStatusId.floating
+                stations: floatingStatusId.stations
+                suggestions: tieSuggestionsId
+            }
+
+            QQ.Loader {
+                id: headerLoaderId
+                Layout.fillWidth: true
+                // Phase 3 swaps in a scope header for prefix-scoped trips.
+                sourceComponent: attachedHeaderComp
+            }
+
+            ExternalCenterlineSolveStatus {
+                id: solveStatusId
+                Layout.fillWidth: true
+                hasError: root.linePlotManager.hasSolveError
+                warningCount: root.linePlotManager.lastSolveWarningCount
+                stationCount: root.linePlotManager.lastSolveStationCount
+                onViewCavernOutputRequested: {
+                    RootData.pageSelectionModel.gotoPageByName(null, "Cavern")
+                }
+            }
+
+            ExternalCenterlineTripMetadata {
+                id: tripMetadataId
+                Layout.fillWidth: true
+                trip: root.trip
+                fileOwnsDeclination: root.fileOwnsDeclination
+            }
+
+            ExternalCenterlineStationsList {
+                id: stationsListId
+                Layout.fillWidth: true
+                stationModel: scopeStationModelId
+                onStationClicked: (stationHandle) => root.stationClicked(stationHandle)
+            }
         }
     }
 

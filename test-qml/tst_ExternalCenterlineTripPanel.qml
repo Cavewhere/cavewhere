@@ -12,10 +12,14 @@ MainWindowTest {
 
     property Trip trip: null
 
+    // Tall enough for the whole column; the short-viewport test shrinks the
+    // panel and init() puts it back.
+    readonly property int fullPanelHeight: 650
+
     ExternalCenterlineTripPanel {
         id: panelId
         width: 500
-        height: 650
+        height: rootId.fullPanelHeight
         trip: rootId.trip
     }
 
@@ -46,6 +50,7 @@ MainWindowTest {
         }
 
         function init() {
+            panelId.height = rootId.fullPanelHeight
             RootData.futureManagerModel.waitForFinished()
             RootData.newProject()
             RootData.futureManagerModel.waitForFinished()
@@ -146,6 +151,50 @@ MainWindowTest {
             verify(declEditor !== null, "tripMetadataDeclination must exist")
             tryVerify(() => declEditor.visible, 5000,
                       "declination editor shows when CaveWhere owns declination")
+        }
+
+        // §16 B2d: a viewport shorter than the content must still reach
+        // every block, and it must never scroll sideways.
+        function test_aShortPanelScrollsToTheLastBlock() {
+            attachAndBind("trip-panel-scroll")
+
+            const stationsList = findChild(panelId, "stationsList")
+            verify(stationsList !== null, "stationsList must exist")
+            tryVerify(() => stationsList.count > 0, 10000,
+                      "scoped rows appear for the attached trip")
+
+            const scrollView = findChild(panelId, "panelScrollView")
+            verify(scrollView !== null, "panelScrollView must exist")
+            const flickable = scrollView.contentItem
+
+            const shortViewportHeight = 180
+            panelId.height = shortViewportHeight
+            waitForRendering(panelId)
+
+            tryVerify(() => flickable.contentHeight > flickable.height, 5000,
+                      "the short viewport leaves content below the fold; got "
+                      + flickable.contentHeight + " in " + flickable.height)
+
+            // The whole width fits, so there is nothing to scroll sideways to.
+            tryCompare(flickable, "contentWidth", flickable.width,
+                       5000, "the content is exactly the viewport wide")
+
+            // The last block in the B2a order is the station list, and
+            // scrolling to the end has to bring it into the viewport.
+            // mapToItem(flickable) is already viewport-relative: the
+            // flickable's own content item carries the -contentY offset.
+            const listBottom = () => stationsList.mapToItem(flickable, 0, 0).y
+                    + stationsList.height
+            verify(listBottom() > flickable.height,
+                   "the stations list starts out below the fold")
+
+            // Fractional layout heights round, so allow a pixel of slack.
+            const roundingSlack = 1
+            flickable.contentY = flickable.contentHeight - flickable.height
+            waitForRendering(panelId)
+            tryVerify(() => listBottom() <= flickable.height + roundingSlack, 5000,
+                      "scrolling to the end reveals the stations list; bottom at "
+                      + listBottom() + " in " + flickable.height)
         }
 
         function test_stationClickForwardsStationHandle() {

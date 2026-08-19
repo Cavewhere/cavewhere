@@ -28,6 +28,12 @@ ColumnLayout {
     readonly property int rowHeight: Math.ceil(rowFontMetricsId.height)
                                      + 2 * Theme.delegatePadding
 
+    // The list sizes itself to its rows so the page around it can scroll
+    // (§16 B2d), and stops growing here so a long survey still leaves the
+    // rest of the panel reachable — past this many rows the list scrolls
+    // on its own.
+    readonly property int maxVisibleRows: 12
+
     spacing: Theme.tightSpacing
 
     signal stationClicked(cwStationHandle stationHandle)
@@ -49,7 +55,8 @@ ColumnLayout {
         objectName: "stationsListView"
 
         Layout.fillWidth: true
-        Layout.fillHeight: true
+        Layout.preferredHeight: root.rowHeight
+                                * Math.min(listViewId.count, root.maxVisibleRows)
         clip: true
         model: root.stationModel
 
