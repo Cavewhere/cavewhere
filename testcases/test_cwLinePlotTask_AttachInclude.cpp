@@ -1027,6 +1027,62 @@ TEST_CASE("External scrap guessNeighborStationName returns the tail name",
     CHECK(guessed == QStringLiteral("simple.a2"));
 }
 
+// Scrap consumers meet B6's dotted Compass names: here the tail itself
+// contains '.', so any decode that split on dots would shear the station
+// name apart. The solved accessors alias by prefix-strip, which keeps the
+// dotted tails whole for note-station position lookup and returns them
+// intact from the neighbor guess.
+TEST_CASE("External scrap resolution keeps dots inside Compass station names",
+          "[Attach][Scrap][Compass]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    const QString attachDir = seedAttachment(tempSubdir(tempRoot, QStringLiteral("dotted-scrap")),
+                                             fixturePath(QStringLiteral("compass_dotted.dat")));
+
+    cwCavingRegion region;
+    cwCave* cave = addEmptyCave(region, QStringLiteral("Alpha"));
+    cwTrip* attached = addEmptyTrip(cave, QStringLiteral("Attached"));
+    attached->setExternalCenterline(cwExternalCenterline(QStringLiteral("compass_dotted.dat")));
+
+    cwNote* note = new cwNote(attached->notes());
+    attached->notes()->addNotes({note});
+    cwScrap* scrap = new cwScrap();
+    note->addScrap(scrap);
+
+    cwLinePlotManager manager;
+    QHash<QUuid, QString> tripDirs;
+    tripDirs.insert(attached->id(), attachDir);
+    manager.externalCenterlineManager()->setTripAttachmentDirs(tripDirs);
+    manager.setRegion(&region);
+    manager.waitToFinish();
+
+    REQUIRE_FALSE(manager.hasSolveError());
+
+    const QString scope = tripScopeLabel(attached);
+
+    // A note/scrap station carries the bare dotted tail; the solved view must
+    // resolve it at the same world position the scoped cave key carries.
+    const cwStationPositionLookup solved = attached->solvedStationPositions();
+    REQUIRE(solved.hasPosition(QStringLiteral("sa1.1")));
+    REQUIRE(solved.hasPosition(QStringLiteral("sb2.1")));
+    CHECK(solved.position(QStringLiteral("sa1.1"))
+          == cave->stationPositionLookup().position(scope + QStringLiteral(".sa1.1")));
+
+    // Neighbors speak dotted tails too.
+    CHECK(attached->solvedNetwork().neighbors(QStringLiteral("sb2.1"))
+              .contains(QStringLiteral("sa1.2")));
+
+    // sa1.2 is sb2.1's sole survey neighbor, so the guess is
+    // geometry-independent — and it must come back with its dot intact.
+    cwNoteStation previous;
+    previous.setName(QStringLiteral("sb2.1"));
+    previous.setPositionOnNote(QPointF(0.5, 0.5));
+    CHECK(scrap->guessNeighborStationName(previous, QPointF(0.6, 0.5))
+          == QStringLiteral("sa1.2"));
+}
+
 TEST_CASE("Broken external centerline surfaces SolveError with Step::Cavern",
           "[Attach][Error]")
 {
