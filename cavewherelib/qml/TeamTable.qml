@@ -17,6 +17,8 @@ QQ.Item {
 
     property Team model
 
+    property bool canAddTeamMembers: true
+
     implicitHeight: childrenRect.height
 
     function updateState() {
@@ -32,7 +34,7 @@ QQ.Item {
         id: titleRow
         anchors.horizontalCenter: parent.horizontalCenter
         text: "Team"
-        showAddButton: true
+        showAddButton: teamTable.canAddTeamMembers
         onAddClicked: {
             teamTable.model.addTeamMember();
             teamList.currentIndex = teamList.count - 1

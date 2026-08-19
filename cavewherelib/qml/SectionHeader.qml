@@ -26,6 +26,7 @@ RowLayout {
     }
 
     QC.RoundButton {
+        objectName: "sectionHeaderAddButton"
         visible: sectionHeader.showAddButton && sectionHeader.addControl === null
         icon.source: "qrc:twbs-icons/icons/plus.svg"
         icon.width: Theme.iconSizeSmall

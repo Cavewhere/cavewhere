@@ -68,6 +68,7 @@ ColumnLayout {
     TeamTable {
         objectName: "tripMetadataTeam"
         Layout.fillWidth: true
+        canAddTeamMembers: false
         model: root.trip !== null ? root.trip.team : null
     }
 }

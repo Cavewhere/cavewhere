@@ -46,6 +46,12 @@ MainWindowTest {
             trip: rootId.trip
         }
 
+        // A TeamTable at its defaults, standing in for a native trip's.
+        TeamTable {
+            id: nativeTeamTableId
+            width: parent.width
+        }
+
         // No trip, so it never has a row — which is the state the banner's
         // "nothing to tie to" copy exists for.
         TieSuggestionModel {
@@ -377,6 +383,23 @@ MainWindowTest {
 
             tripMetadataId.fileOwnsDeclination = false
             dateSpyId.target = null
+        }
+
+        // §16 B2b: the file owns an externally-backed trip's team, so the
+        // panel's team table drops the "+". A native TeamTable keeps it.
+        function test_externalTeamTableOffersNoAddButton() {
+            const externalTeam = findChild(tripMetadataId, "tripMetadataTeam")
+            verify(externalTeam !== null, "tripMetadataTeam must exist")
+
+            const externalAdd = findChild(externalTeam, "sectionHeaderAddButton")
+            verify(externalAdd !== null, "the Team header's add button must exist")
+            tryVerify(() => !externalAdd.visible, 1000,
+                      "an externally-backed team offers no +")
+
+            const nativeAdd = findChild(nativeTeamTableId, "sectionHeaderAddButton")
+            verify(nativeAdd !== null, "the native Team header's add button must exist")
+            tryVerify(() => nativeAdd.visible, 1000,
+                      "a native team keeps its +")
         }
 
         function test_floatingBannerSpeaksForBothWaysASurveyFloats() {
