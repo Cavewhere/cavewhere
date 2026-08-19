@@ -1,0 +1,23 @@
+Dotted Cave
+SURVEY NAME: D
+SURVEY DATE: 1 1 2026
+SURVEY TEAM: 
+Tester
+DECLINATION:    0.00  FORMAT: DDDDLRUDLAaDdCT  CORRECTIONS:  0.00 0.00 0.00  CORRECTIONS2:  0.00 0.00  DISCOVERY: 1 1 2026  PREFIX:
+
+                FROM                   TO   LENGTH  BEARING      INC     LEFT       UP     DOWN    RIGHT     AZM2     INC2   FLAGS  COMMENTS
+
+                  S1                SA1.1    10.00     0.00     0.00     1.00     1.00     1.00     1.00   180.00     0.00
+               SA1.1                SA1.2     8.50    90.00     0.00     1.00     1.00     1.00     1.00   270.00     0.00
+
+Dotted Cave
+SURVEY NAME: E
+SURVEY DATE: 2 1 2026
+SURVEY TEAM: 
+Tester
+DECLINATION:    0.00  FORMAT: DDDDLRUDLAaDdCT  CORRECTIONS:  0.00 0.00 0.00  CORRECTIONS2:  0.00 0.00  DISCOVERY: 2 1 2026  PREFIX:
+
+                FROM                   TO   LENGTH  BEARING      INC     LEFT       UP     DOWN    RIGHT     AZM2     INC2   FLAGS  COMMENTS
+
+               SA1.2                SB2.1     6.25   180.00     0.00     1.00     1.00     1.00     1.00  -999.00  -999.00
+

@@ -3723,7 +3723,7 @@ Stations list   &larr; denser rows; consider abbreviated UsedStations view</code
   extraction happens.
 </p>
 
-<h3 id="bug-b6">B6 &mdash; Attaching a Compass <code>.dat</code> file does not work</h3>
+<h3 id="bug-b6">B6 &mdash; Attaching a Compass <code>.dat</code> file does not work <em>(FIXED 2026-08-19)</em></h3>
 
 <p>
   <em>(Reported 2026-07-22.)</em> Attaching a Compass <code>.dat</code>
@@ -3737,6 +3737,49 @@ Stations list   &larr; denser rows; consider abbreviated UsedStations view</code
   attaches but nothing solves / solves but nothing draws) when diagnosing,
   and add a regression test that attaches a <code>.dat</code> fixture and
   asserts the resulting external trip has solved stations.
+</p>
+<p>
+  <strong>Symptom (diagnosed):</strong> "solves but nothing draws." The
+  picker accepted the <code>.dat</code>, attach copied the closure, and
+  cavern solved with no error, but zero stations reached the cave lookup,
+  so the trip had no solved stations and the renderer had nothing to draw.
+</p>
+<p>
+  <strong>Root cause:</strong> cavern picks the <code>.3d</code> label
+  separator per run (<code>find_output_separator</code> in
+  <code>survex/src/commands.c</code>): it emits <code>':'</code> whenever
+  <code>'.'</code> occurs as a station-name character. Compass permits
+  <code>'.'</code> inside station names (the repro file has
+  <code>SAA1.1</code>, <code>SR1.1</code>, ...), so its labels came back
+  <code>':'</code>-joined. The decode
+  (<code>cwLinePlotTask::splitLookupByCave</code>) splits the cave scope on
+  <code>'.'</code>, so <code>scopeHeadOf()</code> matched no cave label and
+  every station was dropped with "Cavern emitted station with unknown cave
+  scope." A <code>.dat</code> whose names carry no dot kept <code>'.'</code>
+  as separator and worked, which is why simple fixtures never showed it.
+</p>
+<p>
+  <strong>Fix:</strong> already landed with the C7 scope-lens commit
+  (3f7ddbfe, 2026-07-22): <code>cwSurvex3DFileReader::read</code>
+  normalizes <code>pimg-&gt;separator</code> to <code>'.'</code> at the one
+  point labels enter CaveWhere. The chosen separator is guaranteed never to
+  occur inside a name, so the rewrite is lossless. Spaces in the source
+  filename were a red herring &mdash; <code>writeExternalInclude</code>
+  quotes the <code>*include</code> path.
+</p>
+<p>
+  <strong>Test (proves the bug, red&rarr;green):</strong>
+  <code>test_cwExternalCenterlineAttach.cpp</code> &mdash; "manager attach
+  solves a Compass .dat whose station names contain dots"
+  (<code>[Attach][Manager][Compass]</code>). Attaches the new
+  <code>compass_dotted.dat</code> fixture (multi-survey form feeds, dotted
+  names, <code>-999.00</code> backsight sentinels) through the real manager
+  + line-plot pipeline &mdash; once straight from the fixture and once via a
+  copy whose filename contains spaces &mdash; and asserts all four dotted
+  stations land in the cave lookup under the trip's scope. With the
+  separator normalization disabled the test fails on every station lookup
+  in both sections; the real repro file attaches and solves 240 stations
+  on the fixed tree.
 </p>
 
 <h3 id="bug-b7">B7 &mdash; A project-side <code>*include</code> can escape the attachment directory <em>(FIXED 2026-08-04)</em></h3>

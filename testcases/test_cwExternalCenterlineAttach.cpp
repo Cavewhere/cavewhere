@@ -611,6 +611,49 @@ TEST_CASE("manager attach holds the owner token, refuses re-entry, and derives t
           == fixture->saveLoad()->externalCenterlineDir(fixture->trip).absolutePath());
 }
 
+TEST_CASE("manager attach solves a Compass .dat whose station names contain dots",
+          "[Attach][Manager][Compass]")
+{
+    // B6 regression (plans/EXTERNAL_FILE_PHASE2.html section 16). A '.' inside
+    // a station name flips cavern's .3d label separator to ':'
+    // (find_output_separator in survex/src/commands.c). Before
+    // cwSurvex3DFileReader normalized pimg->separator back to '.', the decode
+    // split those labels on '.', matched no cave scope, and dropped every
+    // station: the attach reported success and cavern solved cleanly, but the
+    // trip had no solved stations and nothing drew. Compass permits dotted
+    // names, so any real-world .dat like the B6 repro hit this; a plain-named
+    // .dat kept '.' as separator and passed even without the fix.
+    auto fixture = makeSavedProject(QStringLiteral("manager-attach-compass"));
+    QTemporaryDir spacedDir;
+    QString source = datasetExternalCenterlinePath(QStringLiteral("compass_dotted.dat"));
+
+    SECTION("straight from the fixture") {
+    }
+    SECTION("through a copy whose filename contains spaces") {
+        REQUIRE(spacedDir.isValid());
+        const QString spaced = QDir(spacedDir.path())
+            .absoluteFilePath(QStringLiteral("compass dotted - Copy.dat"));
+        REQUIRE(QFile::copy(source, spaced));
+        source = spaced;
+    }
+
+    attachThroughManager(fixture.get(), source);
+    drainPipelines(fixture.get());
+
+    INFO("solve error: "
+         << fixture->rootData->linePlotManager()->solveErrorMessage().toStdString());
+    CHECK_FALSE(fixture->rootData->linePlotManager()->hasSolveError());
+
+    // Both surveys of the multi-survey .dat land under the trip's scope,
+    // dotted names intact.
+    const cwStationPositionLookup lookup = fixture->cave->stationPositionLookup();
+    const QString scope = tripScopeLabel(fixture->trip);
+    CHECK(lookup.hasPosition(scope + QStringLiteral(".s1")));
+    CHECK(lookup.hasPosition(scope + QStringLiteral(".sa1.1")));
+    CHECK(lookup.hasPosition(scope + QStringLiteral(".sa1.2")));
+    CHECK(lookup.hasPosition(scope + QStringLiteral(".sb2.1")));
+}
+
 TEST_CASE("manager detach drops the settings entry and dir map synchronously",
           "[Attach][Manager]")
 {
