@@ -224,30 +224,6 @@ StandardPage {
         }
     }
 
-    component ElevationReferenceCell : QQ.Item {
-        id: elevationReferenceCell
-        property int columnWidth: 0
-        property int reference: FixStation.UnknownElevationReference
-        property int rowIndex
-
-        implicitWidth: columnWidth
-        implicitHeight: combo.implicitHeight
-        clip: true
-
-        ElevationReferenceComboBox {
-            id: combo
-            objectName: "elevationReferenceComboBox." + elevationReferenceCell.rowIndex
-            anchors.left: parent.left
-            anchors.verticalCenter: parent.verticalCenter
-            reference: elevationReferenceCell.reference
-            // Metadata: it records what the row's elevation is measured from
-            // and moves nothing else, so it needs none of commitCS's care.
-            onCommitted: (newReference) => fixStationPage.commitEdit(
-                elevationReferenceCell.rowIndex,
-                FixStationModel.ElevationReferenceRole, newReference)
-        }
-    }
-
     RemoveAskBox {
         id: removeChallengeId
         onRemove: fixStationPage.removeFix(indexToRemove)
@@ -289,11 +265,6 @@ StandardPage {
                 // easting first. The headers this column replaced ("Easting /
                 // Long", "Northing / Lat") were the only place that was said.
                 text: "Coordinate (East, North / Lat, Long)"
-            },
-            TableStaticColumn {
-                id: elevationReferenceColumn
-                columnWidth: Theme.elevationReferenceFieldWidth
-                text: "Elevation ref"
             }
         ]
     }
@@ -372,7 +343,6 @@ StandardPage {
             required property string coordinateError
             required property bool coordinateOrderUnknown
             required property string stationError
-            required property int elevationReference
 
             // The two coordinate complaints can't both speak: the domain check
             // judges a coordinate the row has, and this one says there isn't one
@@ -460,12 +430,6 @@ StandardPage {
                            || wideDelegateId.northingDomainError
                 }
 
-                ElevationReferenceCell {
-                    columnWidth: elevationReferenceColumn.columnWidth
-                    reference: wideDelegateId.elevationReference
-                    rowIndex: wideDelegateId.index
-                }
-
                 PickFromViewButton {
                     objectName: "pickFromViewButton." + wideDelegateId.index
                     Layout.leftMargin: Theme.tightSpacing
@@ -509,7 +473,6 @@ StandardPage {
             required property string coordinateError
             required property bool coordinateOrderUnknown
             required property string stationError
-            required property int elevationReference
 
             //! Mutually exclusive with the domain error — see the wide delegate.
             readonly property string coordinateWarning: narrowDelegateId.coordinateError !== ""
@@ -603,24 +566,6 @@ StandardPage {
                 PickFromViewButton {
                     objectName: "pickFromViewButton." + narrowDelegateId.index
                     onClicked: fixStationPage.pickFromView(narrowDelegateId.index)
-                }
-
-                QC.Label { text: "·"; color: Theme.textSubtle }
-
-                // The narrow layout has no header row to carry the column's
-                // name, so the field says what it is.
-                QC.Label {
-                    text: qsTr("Elevation ref:")
-                    color: Theme.textSubtle
-                    font.pixelSize: Theme.fontSizeSmall
-                }
-
-                ElevationReferenceComboBox {
-                    objectName: "elevationReferenceComboBox." + narrowDelegateId.index
-                    reference: narrowDelegateId.elevationReference
-                    onCommitted: (newReference) => fixStationPage.commitEdit(
-                        narrowDelegateId.index,
-                        FixStationModel.ElevationReferenceRole, newReference)
                 }
             }
         }

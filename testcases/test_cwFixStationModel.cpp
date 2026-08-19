@@ -33,6 +33,13 @@
 #include <QDateTime>
 #include <QThread>
 
+namespace {
+    //FixStation's reserved elevation reference, as it appears on the wire:
+    //field 11, wire type 0 (varint), carrying what MEAN_SEA_LEVEL was.
+    constexpr char kRetiredElevationReferenceTag = 11 << 3;
+    constexpr char kRetiredMeanSeaLevelValue = 2;
+}
+
 TEST_CASE("cwFixStationModel starts empty", "[FixStation][cwFixStationModel]") {
     cwFixStationModel model;
     CHECK(model.rowCount() == 0);
@@ -101,12 +108,11 @@ TEST_CASE("cwFixStationModel exposes role names for QML", "[FixStation][cwFixSta
     CHECK(roles.value(cwFixStationModel::ElevationRole) == "elevation");
     CHECK(roles.value(cwFixStationModel::IdRole) == "id");
     CHECK(roles.value(cwFixStationModel::CoordinateTextRole) == "coordinateText");
-    CHECK(roles.value(cwFixStationModel::ElevationReferenceRole) == "elevationReference");
 
     // Only persisted roles live here. The read-only warnings derived from the
     // solve are added by cwFixStationDiagnosticsModel, so that dataChanged on
     // this model keeps meaning "save and re-solve this".
-    CHECK(roles.size() == 10);
+    CHECK(roles.size() == 9);
 }
 
 TEST_CASE("cwFixStationModel setFixStations replaces contents", "[FixStation][cwFixStationModel]") {
@@ -1196,78 +1202,24 @@ TEST_CASE("cwFixStationModel gives a new row a coordinate system to start on",
     CHECK(cwFixStation().inputCS().isEmpty());
 }
 
-TEST_CASE("cwFixStationModel reads and writes what an elevation is measured from",
-          "[FixStation][cwFixStationModel]") {
-    cwFixStationModel model;
-    model.addFixStation();
-    const QModelIndex idx = model.index(0);
-
-    CHECK(model.data(idx, cwFixStationModel::ElevationReferenceRole)
-          .value<cwFixStation::ElevationReference>() == cwFixStation::UnknownElevationReference);
-
-    QSignalSpy spy(&model, &QAbstractItemModel::dataChanged);
-    REQUIRE(model.setData(idx, cwFixStation::MeanSeaLevel,
-                          cwFixStationModel::ElevationReferenceRole));
-    CHECK(model.data(idx, cwFixStationModel::ElevationReferenceRole)
-          .value<cwFixStation::ElevationReference>() == cwFixStation::MeanSeaLevel);
-    CHECK(model.fixStationAt(0).elevationReference() == cwFixStation::MeanSeaLevel);
-
-    //Metadata: it moves itself and nothing else, so a view of the coordinate
-    //has no reason to re-read.
-    REQUIRE(spy.count() == 1);
-    const QList<int> roles = spy.first().at(2).value<QList<int>>();
-    CHECK(roles == QList<int>{cwFixStationModel::ElevationReferenceRole});
-
-    SECTION("re-writing the same reference is a no-op") {
-        CHECK_FALSE(model.setData(idx, cwFixStation::MeanSeaLevel,
-                                  cwFixStationModel::ElevationReferenceRole));
-        CHECK(spy.count() == 1);
-    }
-
-    SECTION("a value that names no reference is refused, and the row keeps what it had") {
-        CHECK_FALSE(model.setData(idx, 17, cwFixStationModel::ElevationReferenceRole));
-        CHECK_FALSE(model.setData(idx, QStringLiteral("mean sea level"),
-                                  cwFixStationModel::ElevationReferenceRole));
-        CHECK(model.fixStationAt(0).elevationReference() == cwFixStation::MeanSeaLevel);
-        CHECK(spy.count() == 1);
-    }
-}
-
-TEST_CASE("cwFixStation round-trips what its elevation is measured from", "[FixStation][proto]") {
-    cwFixStation original;
-    original.setInputCS(QStringLiteral("EPSG:4326"));
-    original.setCoordinate(QStringLiteral("46.12113, -115.59902, 304m"));
-    original.setElevationReference(cwFixStation::Ellipsoid);
-
-    CavewhereProto::FixStation proto;
-    cwProtoUtils::saveFixStation(&proto, original);
-    REQUIRE(proto.has_elevationreference());
-    CHECK(proto.elevationreference()
-          == CavewhereProto::FixStation_ElevationReference_ELLIPSOID);
-
-    const cwFixStation restored = cwProtoUtils::fromProtoFixStation(proto);
-    CHECK(restored.elevationReference() == cwFixStation::Ellipsoid);
-    CHECK(restored == original);
-}
-
-TEST_CASE("cwFixStation loads a project written before elevation references existed",
-          "[FixStation][proto]") {
-    //Such a file simply has no such field, and a fix that says nothing about
-    //its vertical reference is exactly Unknown — so old projects arrive
-    //correct with no migration.
+TEST_CASE("cwFixStation ignores the retired elevation-reference field", "[FixStation][proto]") {
+    //Tag 11 is reserved: an unpushed build wrote an elevation reference there,
+    //and a file carrying one still reads back as the fix it describes.
     CavewhereProto::FixStation proto;
     cwProtoUtils::saveString(proto.mutable_inputcs(), QStringLiteral("EPSG:32611"));
     cwProtoUtils::saveString(proto.mutable_coordinate(),
                              QStringLiteral("610016.792, 5615117.075, 304m"));
-    REQUIRE_FALSE(proto.has_elevationreference());
 
-    const cwFixStation restored = cwProtoUtils::fromProtoFixStation(proto);
-    CHECK(restored.elevationReference() == cwFixStation::UnknownElevationReference);
+    std::string bytes;
+    REQUIRE(proto.SerializeToString(&bytes));
+    bytes.push_back(kRetiredElevationReferenceTag);
+    bytes.push_back(kRetiredMeanSeaLevelValue);
+
+    CavewhereProto::FixStation reparsed;
+    REQUIRE(reparsed.ParseFromString(bytes));
+
+    const cwFixStation restored = cwProtoUtils::fromProtoFixStation(reparsed);
+    CHECK(restored.inputCS() == QStringLiteral("EPSG:32611"));
     CHECK(restored.elevation() == 304.0);
-
-    //And a fix that means Unknown writes nothing back, so saving one leaves
-    //the file the shape it was.
-    CavewhereProto::FixStation resaved;
-    cwProtoUtils::saveFixStation(&resaved, restored);
-    CHECK_FALSE(resaved.has_elevationreference());
+    CHECK(restored.state() == cwFixStation::Valid);
 }

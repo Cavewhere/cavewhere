@@ -388,37 +388,6 @@ MainWindowTest {
                       "Custom must hide the datum combo")
         }
 
-        //! Display and storage only — but it has to survive both directions, or
-        //! the combo is showing something the row doesn't hold.
-        function test_elevationReferenceRoundTripsThroughTheModel() {
-            const cave = gotoFixStations()
-            const model = cave.fixStations
-            model.addFixStation()
-            tryCompare(model, "count", 1)
-
-            let combo = null
-            tryVerify(() => {
-                combo = findChild(RootData.pageView.currentPageItem,
-                                  "elevationReferenceComboBox.0")
-                return combo !== null
-            }, 5000, "row 0 elevation-reference combo should be reachable")
-
-            compare(model.data(model.index(0), FixStationModel.ElevationReferenceRole),
-                    FixStation.UnknownElevationReference,
-                    "a row says nothing about its elevation until asked")
-
-            combo.activated(combo.references.indexOf(FixStation.MeanSeaLevel))
-            tryVerify(() => model.data(model.index(0),
-                                       FixStationModel.ElevationReferenceRole)
-                            === FixStation.MeanSeaLevel, 5000,
-                      "picking a reference writes it to the row")
-
-            model.setData(model.index(0), FixStation.Ellipsoid,
-                          FixStationModel.ElevationReferenceRole)
-            tryCompare(combo, "currentIndex",
-                       combo.references.indexOf(FixStation.Ellipsoid))
-        }
-
         function test_removeFixConfirmed() {
             const cave = gotoFixStations()
             cave.fixStations.addFixStation()

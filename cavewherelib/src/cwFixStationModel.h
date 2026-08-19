@@ -54,11 +54,7 @@ public:
         //! components in the project's units, so display and edit deliberately
         //! differ. Written through setCoordinateText(), the one path that
         //! validates a string before it becomes the coordinate.
-        CoordinateTextRole,
-        //! cwFixStation::ElevationReference — what the row's elevation is
-        //! measured from. Metadata: nothing derives from it, and writing it
-        //! moves no other role.
-        ElevationReferenceRole
+        CoordinateTextRole
     };
     Q_ENUM(Roles)
 
@@ -127,10 +123,8 @@ public:
     //! (cwGeoReference::localCoordinateSystem) and \a datum the geographic
     //! system the coordinate is written on, which becomes the row's inputCS —
     //! a pick over a lidar tile lands on the same datum as the tile rather than
-    //! 1.5 m from it. \a pickedSourceCS is the system of what the pick landed
-    //! on: when it says what its heights are measured from, so can the fix
-    //! (cwFixStation::MeanSeaLevel), and otherwise the row stays Unknown. The
-    //! caller decides which three those are — the model reads no region.
+    //! 1.5 m from it. The caller decides which two those are — the model reads
+    //! no region.
     //!
     //! False leaves the row untouched: there is no such fix, or the point
     //! can't be put on \a datum, which the 3D view answers by keeping the pick
@@ -139,15 +133,14 @@ public:
     //! \a fixId is spelled as a string because that is what QML can hold onto
     //! across the trip to the view and back; QUuid is not a QML value type.
     //!
-    //! Everything this moves lands in a single dataChanged(): three setData()
-    //! calls would re-solve the line plot three times, and the first two would
-    //! leave the row momentarily saying something untrue — a coordinate read
-    //! under the system it is about to replace.
+    //! Everything this moves lands in a single dataChanged(): two setData()
+    //! calls would re-solve the line plot twice, and the first would leave the
+    //! row momentarily saying something untrue — a coordinate read under the
+    //! system it is about to replace.
     Q_INVOKABLE bool setPickedPoint(const QString& fixId,
                                     const QVector3D& scenePoint,
                                     const QString& frameCS,
-                                    const QString& datum,
-                                    const QString& pickedSourceCS);
+                                    const QString& datum);
 
     void appendFixStation(const cwFixStation& fix);
     void setFixStations(const QList<cwFixStation>& fixes);

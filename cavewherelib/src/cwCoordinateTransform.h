@@ -127,20 +127,6 @@ public:
     static QString geographicDatumFor(const QString& cs);
 
     /**
-     * Whether \a cs says what its heights are measured from — i.e. it is a
-     * compound CRS, the form a lidar tile's WKT takes when it carries a vertical
-     * datum such as NAVD88.
-     *
-     * The one thing a fix picked off that tile can honestly claim about its
-     * elevation (cwFixStation::MeanSeaLevel). A horizontal-only system says
-     * nothing, which is not the same as saying "ellipsoidal", so it answers
-     * false and the fix stays Unknown.
-     *
-     * PROJ-backed and cached per thread, like the queries beside it.
-     */
-    static bool declaresVerticalDatum(const QString& cs);
-
-    /**
      * Derive a *projected* coordinate system usable as the region's global
      * (output) CS from a single fix's input CS and coordinate. survex/cavern
      * only emits projected output, so a geographic input can't seed the global

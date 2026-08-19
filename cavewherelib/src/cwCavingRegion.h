@@ -101,12 +101,7 @@ public:
     //! The system defaultFixDatum() reads its answer off — the enabled GIS
     //! layer that names a datum, else the frame — and empty when neither does,
     //! which is the case the datum answers with the WGS84 fallback.
-    //!
-    //! It is the *whole* system, not just its datum, so a caller can ask it the
-    //! other question a picked point raises: whether what the pick landed on
-    //! says what its heights are measured from
-    //! (cwCoordinateTransform::declaresVerticalDatum).
-    Q_INVOKABLE QString defaultFixSourceCS() const;
+    QString defaultFixSourceCS() const;
 
     void setFutureManagerToken(const cwFutureManagerToken& token);
 

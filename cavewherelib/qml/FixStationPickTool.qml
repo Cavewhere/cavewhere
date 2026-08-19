@@ -54,8 +54,7 @@ QQ.Item {
         let wrote = cave.fixStations.setPickedPoint(FixStationPick.fixId,
                                                     scenePoint,
                                                     region.geoReference.localCoordinateSystem,
-                                                    region.defaultFixDatum,
-                                                    region.defaultFixSourceCS())
+                                                    region.defaultFixDatum)
         if (!wrote) {
             // Nothing the pick could be written as. It stays pending, so the
             // user can orbit and click somewhere else.

@@ -16,7 +16,6 @@
 
 //Qt includes
 #include <QLocale>
-#include <QMetaEnum>
 
 namespace {
 
@@ -125,7 +124,6 @@ QVariant cwFixStationModel::data(const QModelIndex& index, int role) const
     case VerticalVarianceRole:   return fix.verticalVariance();
     case IdRole:                 return fix.id();
     case CoordinateTextRole:     return fix.coordinate();
-    case ElevationReferenceRole: return QVariant::fromValue(fix.elevationReference());
     default:                     return QVariant();
     }
 }
@@ -199,22 +197,6 @@ bool cwFixStationModel::setData(const QModelIndex& index, const QVariant& value,
         }
         break;
     }
-    case ElevationReferenceRole: {
-        bool valid = false;
-        const int raw = value.toInt(&valid);
-        //Q_ENUM already knows which values name a reference, so ask it rather
-        //than repeat the range here.
-        const auto metaEnum = QMetaEnum::fromType<cwFixStation::ElevationReference>();
-        if (!valid || metaEnum.valueToKey(raw) == nullptr) {
-            return false;
-        }
-        const auto reference = static_cast<cwFixStation::ElevationReference>(raw);
-        if (fix.elevationReference() != reference) {
-            fix.setElevationReference(reference);
-            changed = true;
-        }
-        break;
-    }
     case IdRole: {
         const QUuid id = value.toUuid();
         if (fix.id() != id) {
@@ -248,8 +230,7 @@ QHash<int, QByteArray> cwFixStationModel::roleNames() const
         {HorizontalVarianceRole, "horizontalVariance"},
         {VerticalVarianceRole,   "verticalVariance"},
         {IdRole,                 "id"},
-        {CoordinateTextRole,     "coordinateText"},
-        {ElevationReferenceRole, "elevationReference"}
+        {CoordinateTextRole,     "coordinateText"}
     };
 }
 
@@ -359,8 +340,7 @@ QString cwFixStationModel::setCoordinateText(int row,
 bool cwFixStationModel::setPickedPoint(const QString& fixId,
                                        const QVector3D& scenePoint,
                                        const QString& frameCS,
-                                       const QString& datum,
-                                       const QString& pickedSourceCS)
+                                       const QString& datum)
 {
     //The fix can go away while the user is off in the 3D view — the row
     //removed, the cave closed. Then there is nothing to write.
@@ -392,9 +372,6 @@ bool cwFixStationModel::setPickedPoint(const QString& fixId,
     //with (see cwFixStation::setInputCS).
     fix.setInputCS(datum);
     fix.setCoordinate(coordinate);
-    fix.setElevationReference(cwCoordinateTransform::declaresVerticalDatum(pickedSourceCS)
-                              ? cwFixStation::MeanSeaLevel
-                              : cwFixStation::UnknownElevationReference);
 
     if (fix == before) {
         return true;
@@ -403,9 +380,6 @@ bool cwFixStationModel::setPickedPoint(const QString& fixId,
     QList<int> roles = movedCoordinateRoles(before, fix);
     if (fix.inputCS() != before.inputCS()) {
         roles.append(InputCSRole);
-    }
-    if (fix.elevationReference() != before.elevationReference()) {
-        roles.append(ElevationReferenceRole);
     }
 
     const QModelIndex changed = index(row);

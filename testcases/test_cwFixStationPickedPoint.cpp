@@ -12,7 +12,6 @@
 //Our includes
 #include "cwCave.h"
 #include "cwCavingRegion.h"
-#include "cwCoordinateTransform.h"
 #include "cwFixStation.h"
 #include "cwFixStationModel.h"
 #include "cwGeoReference.h"
@@ -39,12 +38,7 @@ const QString kNad83 = QStringLiteral("EPSG:6318");
 
 //! What a lidar tile from a US state survey declares: NAD83(2011) / UTM 16N
 //! with NAVD88 heights, spelled as PROJ's horizontal+vertical compound form.
-//! The vertical half is the whole point — it is what lets a fix picked off this
-//! tile say its elevation is measured from the geoid.
 const QString kNad83Utm16NWithNavd88 = QStringLiteral("EPSG:6345+5703");
-
-//! The same horizontal system with nothing said about heights.
-const QString kNad83Utm16N = QStringLiteral("EPSG:6345");
 
 //! Where the frame under test is centered — the conterminous US, so the derived
 //! frame is plate-fixed to NAD83(2011) and the default fix datum is not the
@@ -84,7 +78,7 @@ struct PickFixture {
         fixId = fixes->fixStationAt(0).id().toString();
     }
 
-    //! The pick the 3D view makes: the same three systems FixStationPickTool
+    //! The pick the 3D view makes: the same two systems FixStationPickTool
     //! reads off the region, so a test can't answer a question production
     //! doesn't ask.
     bool pick(const QVector3D& scenePoint) const
@@ -98,8 +92,7 @@ struct PickFixture {
         return fixes->setPickedPoint(id,
                                      scenePoint,
                                      region.geoReference()->localCoordinateSystem(),
-                                     region.defaultFixDatum(),
-                                     region.defaultFixSourceCS());
+                                     region.defaultFixDatum());
     }
 };
 
@@ -122,19 +115,7 @@ void addTile(cwCavingRegion* region, const QTemporaryDir& tempDir, const QString
 
 } // namespace
 
-TEST_CASE("A compound system is the one that declares a vertical datum",
-          "[cwFixStationPickedPoint]")
-{
-    // The fixture spelling has to really be compound, or every elevation
-    // reference a pick writes is decided by a typo.
-    CHECK(cwCoordinateTransform::declaresVerticalDatum(kNad83Utm16NWithNavd88));
-    CHECK_FALSE(cwCoordinateTransform::declaresVerticalDatum(kNad83Utm16N));
-    CHECK_FALSE(cwCoordinateTransform::declaresVerticalDatum(QString()));
-    CHECK_FALSE(cwCoordinateTransform::declaresVerticalDatum(QStringLiteral("not a system")));
-    CHECK(cwCoordinateTransform::geographicDatumFor(kNad83Utm16NWithNavd88) == kNad83);
-}
-
-TEST_CASE("A pick writes the coordinate, its system and its elevation reference",
+TEST_CASE("A pick writes the coordinate and the system it is written on",
           "[cwFixStationPickedPoint]")
 {
     PickFixture fixture;
@@ -153,14 +134,11 @@ TEST_CASE("A pick writes the coordinate, its system and its elevation reference"
     CHECK(fix.easting() == Approx(kFrameLongitude).margin(kDegreeTolerance));
     CHECK(fix.elevation() == Approx(kPickElevation).margin(1e-6));
 
-    //Nothing in this project says what heights are measured from.
-    CHECK(fix.elevationReference() == cwFixStation::UnknownElevationReference);
-
     //One edit, not three: the line plot re-solves once for a pick.
     CHECK(dataSpy.size() == 1);
 }
 
-TEST_CASE("A pick over tiles that carry a vertical datum is mean sea level",
+TEST_CASE("A pick over a scanned tile lands on the tile's datum",
           "[cwFixStationPickedPoint]")
 {
     QTemporaryDir tempDir;
@@ -173,44 +151,12 @@ TEST_CASE("A pick over tiles that carry a vertical datum is mean sea level",
     REQUIRE(fixture.pick(QVector3D(0.0f, 0.0f, kPickElevation)));
 
     const cwFixStation fix = fixture.fixes->fixStationAt(0);
-    CHECK(fix.elevationReference() == cwFixStation::MeanSeaLevel);
-    //The tile's datum, which is what the fix is being placed against. Where the
-    //pick lands is a question for the fixture above: a scanned tile moves the
-    //frame onto its own data, so the scene origin is no longer the degrees the
-    //fixture froze.
+    //The tile's datum — a compound system names its horizontal half's, which is
+    //what the fix is being placed against. Where the pick lands is a question
+    //for the fixture above: a scanned tile moves the frame onto its own data,
+    //so the scene origin is no longer the degrees the fixture froze.
     CHECK(fix.inputCS() == kNad83);
     CHECK(fix.state() == cwFixStation::Valid);
-}
-
-TEST_CASE("Tiles that say nothing about heights leave the reference unknown",
-          "[cwFixStationPickedPoint]")
-{
-    QTemporaryDir tempDir;
-    REQUIRE(tempDir.isValid());
-
-    PickFixture fixture;
-    addTile(&fixture.region, tempDir, kNad83Utm16N);
-
-    REQUIRE(fixture.pick(QVector3D(0.0f, 0.0f, kPickElevation)));
-
-    CHECK(fixture.fixes->fixStationAt(0).elevationReference()
-          == cwFixStation::UnknownElevationReference);
-}
-
-TEST_CASE("A disabled tile's vertical datum doesn't speak for the pick",
-          "[cwFixStationPickedPoint]")
-{
-    QTemporaryDir tempDir;
-    REQUIRE(tempDir.isValid());
-
-    PickFixture fixture;
-    addTile(&fixture.region, tempDir, kNad83Utm16NWithNavd88);
-    fixture.region.lazLayers()->layerAt(0)->setEnabled(false);
-
-    REQUIRE(fixture.pick(QVector3D(0.0f, 0.0f, kPickElevation)));
-
-    CHECK(fixture.fixes->fixStationAt(0).elevationReference()
-          == cwFixStation::UnknownElevationReference);
 }
 
 TEST_CASE("A pick lands on the row the fix's id names, not on its old index",
@@ -262,7 +208,6 @@ TEST_CASE("A pick with no frame writes nothing", "[cwFixStationPickedPoint]")
     CHECK_FALSE(cave->fixStations()->setPickedPoint(fixId,
                                                     QVector3D(0.0f, 0.0f, kPickElevation),
                                                     region.geoReference()->localCoordinateSystem(),
-                                                    region.defaultFixDatum(),
-                                                    region.defaultFixSourceCS()));
+                                                    region.defaultFixDatum()));
     CHECK(cave->fixStations()->fixStationAt(0).state() == cwFixStation::Empty);
 }

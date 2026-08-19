@@ -210,13 +210,6 @@ MainWindowTest {
             verify(/, -?\d+\.\d{3}m$/.test(text),
                    "the picked elevation reads to the millimeter: " + text)
 
-            // Nothing in this project declares a vertical datum, so the pick
-            // claims no more about its elevation than a row typed by hand does.
-            // (Which reference a pick over lidar tiles writes is a question for
-            // the C++ tests, where a tile's compound WKT can be set up.)
-            compare(model.data(row, FixStationModel.ElevationReferenceRole),
-                    model.data(model.index(0), FixStationModel.ElevationReferenceRole))
-
             compare(FixStationPick.active, false)
             tryVerify(() => RootData.pageView.currentPageItem !== null
                             && RootData.pageView.currentPageItem.objectName === "fixStationPage",

@@ -64,6 +64,7 @@ Each row **Add Fix** creates carries 5 fields:
   systems live side by side.
 - **Easting**, **Northing**, **Elevation**: the coordinates, in meters. Under a
   Lat/Lon input CS these 3 hold longitude, latitude, and elevation instead.
+  CaveWhere treats every elevation as a height above sea level.
 
 ![The Fix Stations page with one row: station a1, Input CS set to UTM, easting 350000, northing 4300000, elevation 1200.](../images/georef-fix-station.png)
 *One fixed station anchors the cave. The **Input CS** picker sits on the row, so
@@ -122,16 +123,15 @@ disagree with your own coordinates.
   station, or the file name for a point cloud. It follows renames.
 - **Datum** names the model of the Earth's shape your coordinates measure
   against, inherited from that same first input: `North American Datum 1983` for
-  most US data. Declare a datum and you get it. Plain GPS coordinates declare
-  nothing but `WGS84`, which slides about 2 cm a year against the continent
-  under you, so those get the national datum for where the cave is:
+  most US data. Plain GPS coordinates declare nothing but `WGS84`, which slides
+  about 2 cm a year against the continent under you, so those get the national
+  datum for where the cave is:
   `NAD83 (National Spatial Reference System 2011)` in the US, ETRS89 in Europe.
 - **Elevations** names the surface heights are measured from, as your point cloud
   declared it, `NAVD88` on most recent US scans. When nothing declared one it
   says `Not declared by your data` rather than going quiet, so you can tell the
-  two apart. CaveWhere passes elevations through exactly as they arrive and never
-  converts between height systems, so this row records what you handed it rather
-  than a correction it applied.
+  two apart. CaveWhere passes elevations through as they arrive and never converts
+  between height systems, so this row records what you handed it.
 
 Once the project has a frame, every row stays on screen.
 

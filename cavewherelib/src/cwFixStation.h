@@ -13,7 +13,6 @@
 #include <QString>
 #include <QUuid>
 #include <QMetaType>
-#include <QtQml/qqmlregistration.h>
 
 //Our includes
 #include "cwGlobals.h"
@@ -79,23 +78,6 @@ public:
         //! cwCoordinateText::swapHorizontal()).
         NoSystem
     };
-
-    //! What the coordinate's elevation is measured from. Metadata: it is
-    //! recorded, shown and saved, and no transform reads it — elevation()
-    //! passes through every projection untouched whichever of these it says.
-    //! Converting between the two takes a geoid grid, which is its own plan.
-    enum ElevationReference {
-        //! Whoever supplied the coordinate said nothing about its vertical
-        //! reference, which is every fix entered before this field existed and
-        //! every one typed by hand since. The default.
-        UnknownElevationReference,
-        //! Height above the ellipsoid — what a GPS reports.
-        Ellipsoid,
-        //! Height above the geoid, i.e. an orthometric height off a datasheet,
-        //! a topo map, or a LiDAR tile carrying a vertical datum.
-        MeanSeaLevel
-    };
-    Q_ENUM(ElevationReference)
 
     cwFixStation();
     cwFixStation(const cwFixStation& other);
@@ -189,27 +171,10 @@ public:
     double verticalVariance() const;
     void setVerticalVariance(double v);
 
-    //! What elevation() is measured from — see ElevationReference. A fix says
-    //! UnknownElevationReference until something that knows says otherwise.
-    ElevationReference elevationReference() const;
-    void setElevationReference(ElevationReference reference);
-
 private:
     QSharedDataPointer<cwFixStationData> data;
 };
 
 Q_DECLARE_METATYPE(cwFixStation)
-
-// Re-export cwFixStation as a QML namespace so its ElevationReference enum is
-// reachable as `FixStation.MeanSeaLevel` — the fix surfaces offer it in a combo,
-// and the values have to be spelled somewhere both halves agree on.
-// QML_FOREIGN_NAMESPACE avoids the "value type names should begin with a
-// lowercase letter" warning a Q_GADGET registered with QML_NAMED_ELEMENT emits.
-struct cwFixStationForeign
-{
-    Q_GADGET
-    QML_FOREIGN_NAMESPACE(cwFixStation)
-    QML_NAMED_ELEMENT(FixStation)
-};
 
 #endif // CWFIXSTATION_H
