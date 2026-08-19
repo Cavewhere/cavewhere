@@ -3652,32 +3652,45 @@ cwSurveyNetwork         cwTrip::solvedNetwork() const;</code></pre>
   sub-item lands as its own commit with its own QML (or C++) gate so a
   regression in one doesn't block the others.
 </p>
+<p>
+  <em>(Sketch refreshed 2026-08-19 against the post-live-link-retirement
+  panel: the Detach action is gone; the panel's actions are
+  <code>[Reload now]</code> and <code>[Replace…]</code>, today parked in
+  an <code>actionsRow</code> <em>below</em> the station list. Current
+  order is banners &rarr; attached header &rarr; solve status &rarr;
+  stations &rarr; actions &rarr; metadata.)</em>
+</p>
 <p><strong>Target content order</strong> (top &rarr; bottom):</p>
-<pre><code>Cunchhold_cave.svx   Survex     [Reload now]  [Detach…]   &larr; header row
-24 stations
-View cavern output
+<pre><code>Cunchhold_cave.svx   Survex     [Reload now]  [Replace…]   &larr; header row
+24 stations   View cavern output                            &larr; solve-status strip (already one row)
 Date            &larr; label bold
 Declination
 Team            &larr; no "+" add affordance
 Stations list   &larr; denser rows; consider abbreviated UsedStations view</code></pre>
 <ul>
   <li>
-    <strong>B2a &mdash; Element order + header row.</strong> Reorder
-    the panel so the file name, <code>Survex</code> format tag, and
-    <code>[Reload now]</code>/<code>[Detach…]</code> actions sit on
-    the header row, followed by the station count, the "View cavern
-    output" affordance, then Date / Declination / Team, then the
-    station list. Make the <strong>Date label bold</strong>. QML test:
-    assert relative <code>y</code> order of the objectName'd rows and
-    the Date label's <code>font.bold</code>.
+    <strong>B2a &mdash; Element order + header row.</strong> Move the
+    <code>[Reload now]</code>/<code>[Replace…]</code> actions from the
+    bottom <code>actionsRow</code> onto the attached header's file-name
+    row (file name, format tag, actions), then order the rest as: solve
+    status (station count + "View cavern output"), Date / Declination /
+    Team (<code>ExternalCenterlineTripMetadata</code> moves above the
+    station list), then the station list. Make the <strong>Date label
+    bold</strong>. QML test: assert relative <code>y</code> order of the
+    objectName'd rows and the Date label's <code>font.bold</code>.
   </li>
   <li>
     <strong>B2b &mdash; Team without the "+".</strong> The external
-    trip's Team section still shows the add ("+") affordance; an
-    externally-backed trip's team is read-only. Hide/remove the add
-    control when the trip is externally backed. QML test: "+" not
-    visible for an attached trip. (Natural consumer of the &sect;15
-    <code>externallyBacked</code> predicate follow-up.)
+    trip's Team section still shows the add ("+") affordance
+    (<code>TeamTable.qml</code>'s <code>SectionHeader
+    showAddButton: true</code>); an externally-backed trip's team is
+    read-only. Give <code>TeamTable</code> a property that hides the add
+    control and have the external panel's metadata block set it &mdash;
+    the panel itself is the externally-backed predicate (there is no
+    separate <code>externallyBacked</code> helper in the code; the
+    &sect;15 follow-up never landed and the panel already gates on
+    <code>trip.externalCenterline.entryFile</code>). QML test: "+" not
+    visible for an attached trip.
   </li>
   <li>
     <strong>B2c &mdash; Denser station list / abbreviated view.</strong>
@@ -3700,27 +3713,29 @@ Stations list   &larr; denser rows; consider abbreviated UsedStations view</code
     Explorer" (reveal in the system file manager) and "Open" (system
     default handler). Needs a small C++ invokable
     (<code>QDesktopServices</code>/platform reveal); keep it on a
-    focused helper rather than in QML. Test: the invokable is called
-    with the resolved absolute path (C++), plus a QML test that the
-    menu exposes both actions.
+    focused helper rather than in QML. <code>entryFile</code> is
+    project-relative &mdash; resolve the absolute path against the
+    trip's attachment directory from
+    <code>cwExternalCenterlineManager</code>. Test: the helper resolves
+    to the correct absolute path (C++), plus a QML test that the menu
+    exposes both actions.
   </li>
 </ul>
 
-<h3 id="bug-b3">B3 &mdash; Detach confirm popover is clipped</h3>
+<h3 id="bug-b3">B3 &mdash; Detach confirm popover is clipped <em>(MOOT 2026-08-19)</em></h3>
 
 <p>
-  Clicking <code>[Detach…]</code> in the trip panel opens the
-  <code>RemoveAskBox</code> confirm popover, but it is
-  <strong>clipped</strong> by its container's bounds instead of
-  floating above the panel. Fix the popover's layering so it renders
-  fully within the window (a true <code>Popup</code>/overlay layer, or
-  re-parenting/z so it escapes the clipping ancestor &mdash; the panel
-  or its <code>ScrollView</code> from B2d is the likely clipper). QML
-  test: after opening the detach confirm, its bounds lie inside the
-  window and are not clipped by the panel. Relates to the &sect;15
-  "Split <code>RemoveAskBox</code> into a generic ConfirmPopover"
-  follow-up &mdash; fix the clipping here regardless of whether that
-  extraction happens.
+  <em>(Original symptom: clicking <code>[Detach…]</code> opened the
+  <code>RemoveAskBox</code> confirm popover clipped by its container's
+  bounds instead of floating above the panel.)</em>
+  <strong>Moot:</strong> the live-link retirement removed the Detach
+  action from the trip panel entirely, so the popover this bug
+  describes no longer exists. The underlying concern &mdash; a confirm
+  popover must escape its clipping ancestor (the panel, or B2d's
+  <code>ScrollView</code>) &mdash; transfers to any future popup the
+  panel grows (e.g. B2e's context menu), and the &sect;15 "Split
+  <code>RemoveAskBox</code> into a generic ConfirmPopover" follow-up
+  stands on its own.
 </p>
 
 <h3 id="bug-b6">B6 &mdash; Attaching a Compass <code>.dat</code> file does not work <em>(FIXED 2026-08-19)</em></h3>
