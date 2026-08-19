@@ -22,8 +22,11 @@ QQ.Item {
 
     property alias value: pickerId.value
 
-    //! Passed through to the picker — see CSPicker.defaultDatum.
-    property alias defaultDatum: pickerId.defaultDatum
+    //! Passed through to the picker — see CSPicker.availableDatums.
+    property alias availableDatums: pickerId.availableDatums
+
+    //! Passed through to the picker — see CSPicker.datumEnabled.
+    property alias datumEnabled: pickerId.datumEnabled
 
     readonly property int currentMode: pickerId.currentMode
 

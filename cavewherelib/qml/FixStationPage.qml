@@ -225,6 +225,10 @@ StandardPage {
         //! leads with — see fixStationPage.commitCS().
         property string coordinateText: ""
         property bool orderUnknown: false
+        //! What the row's datum combo may offer, and whether it may be used at
+        //! all — see CSPicker.availableDatums / datumEnabled.
+        property list<string> availableDatums: []
+        property bool datumEnabled: false
 
         implicitWidth: columnWidth
         implicitHeight: combo.implicitHeight
@@ -237,7 +241,8 @@ StandardPage {
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
             value: csCell.value
-            defaultDatum: RootData.region.defaultFixDatum
+            availableDatums: csCell.availableDatums
+            datumEnabled: csCell.datumEnabled
             onCommitted: (newCS) => fixStationPage.commitCS(
                 csCell.rowIndex, newCS, csCell.orderUnknown, csCell.coordinateText)
         }
@@ -372,6 +377,13 @@ StandardPage {
             required property string coordinateError
             required property bool coordinateOrderUnknown
             required property string stationError
+            required property list<string> availableDatums
+
+            //! Whether the datum may be changed: there has to be a coordinate
+            //! for a datum to say anything about, and it has to read as one.
+            readonly property bool hasReadableCoordinate:
+                wideDelegateId.coordinateText.trim() !== ""
+                && wideDelegateId.coordinateError === ""
 
             // The two coordinate complaints can't both speak: the domain check
             // judges a coordinate the row has, and this one says there isn't one
@@ -423,6 +435,8 @@ StandardPage {
                     rowIndex: wideDelegateId.index
                     coordinateText: wideDelegateId.coordinateText
                     orderUnknown: wideDelegateId.coordinateOrderUnknown
+                    availableDatums: wideDelegateId.availableDatums
+                    datumEnabled: wideDelegateId.hasReadableCoordinate
                 }
 
                 WideCell {
@@ -504,6 +518,12 @@ StandardPage {
             required property string coordinateError
             required property bool coordinateOrderUnknown
             required property string stationError
+            required property list<string> availableDatums
+
+            //! See the wide delegate.
+            readonly property bool hasReadableCoordinate:
+                narrowDelegateId.coordinateText.trim() !== ""
+                && narrowDelegateId.coordinateError === ""
 
             //! Mutually exclusive with the domain error — see the wide delegate.
             readonly property string coordinateWarning: narrowDelegateId.coordinateError !== ""
@@ -566,7 +586,8 @@ StandardPage {
                 CSComboBox {
                     objectName: "inputCSComboBox." + narrowDelegateId.index
                     value: narrowDelegateId.inputCS
-                    defaultDatum: RootData.region.defaultFixDatum
+                    availableDatums: narrowDelegateId.availableDatums
+                    datumEnabled: narrowDelegateId.hasReadableCoordinate
                     onCommitted: (newCS) => fixStationPage.commitCS(
                         narrowDelegateId.index, newCS,
                         narrowDelegateId.coordinateOrderUnknown,

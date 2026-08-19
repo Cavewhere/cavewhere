@@ -10,6 +10,7 @@
 
 //Qt includes
 #include <QString>
+#include <QStringList>
 
 //Std includes
 #include <optional>
@@ -152,6 +153,18 @@ public:
      * nullopt when \a localCS is empty or PROJ can't read it.
      */
     static std::optional<cwGeoPoint> origin(const QString& localCS);
+
+    /**
+     * Every plate-fixed geodetic datum whose region covers (\a latitude,
+     * \a longitude), deduped and in table order. Empty out at sea, or anywhere
+     * else no region reaches — WGS84 is what such a place keeps.
+     *
+     * The regions overlap on purpose (the US and Canada boxes share the whole
+     * border strip), so a cave near a border is served by both frames and the
+     * picker offers both. derive() has to pick one, and takes the first of
+     * these.
+     */
+    static QStringList plateFixedDatumsFor(double latitude, double longitude);
 };
 
 #endif // CWLOCALPROJECTION_H

@@ -13,6 +13,7 @@
 
 //Qt includes
 #include <QSignalSpy>
+#include <QStringList>
 
 namespace {
 
@@ -61,6 +62,10 @@ struct FixFixture {
     QString coordinateError() const
     {
         return read(cwFixStationDiagnosticsModel::CoordinateErrorRole).toString();
+    }
+    QStringList availableDatums() const
+    {
+        return read(cwFixStationDiagnosticsModel::AvailableDatumsRole).toStringList();
     }
     bool orderUnknown() const
     {
@@ -121,10 +126,11 @@ TEST_CASE("cwFixStationDiagnosticsModel merges the source's role names with its 
     CHECK(roles.value(cwFixStationDiagnosticsModel::CoordinateErrorRole) == "coordinateError");
     CHECK(roles.value(cwFixStationDiagnosticsModel::CoordinateOrderUnknownRole)
           == "coordinateOrderUnknown");
+    CHECK(roles.value(cwFixStationDiagnosticsModel::AvailableDatumsRole) == "availableDatums");
 
     // The two role blocks must not collide, or the merge would silently drop one
     // side: every name in the merged hash is still reachable by its own value.
-    CHECK(roles.size() == fixture.source->roleNames().size() + 6);
+    CHECK(roles.size() == fixture.source->roleNames().size() + 7);
 }
 
 TEST_CASE("cwFixStationDiagnosticsModel passes persisted rows through untouched",
@@ -569,4 +575,80 @@ TEST_CASE("A text edit that moves no component still re-emits the domain verdict
     CHECK(seen.contains(cwFixStationDiagnosticsModel::DomainErrorRole));
     CHECK(seen.contains(cwFixStationDiagnosticsModel::EastingDomainErrorRole));
     CHECK(seen.contains(cwFixStationDiagnosticsModel::NorthingDomainErrorRole));
+}
+
+TEST_CASE("cwFixStationDiagnosticsModel offers the datums the row's coordinate could be on",
+          "[FixStation][cwFixStationDiagnosticsModel]") {
+    SECTION("a readable coordinate offers WGS84 and the frame its region holds still against")
+    {
+        // A Tennessee cave, typed on WGS84 lat/long. NAD83(2011) is what the
+        // continent under it is fixed to, so the picker gets to recommend it.
+        FixFixture fixture;
+        fixture.edit(cwFixStationModel::InputCSRole, QStringLiteral("EPSG:4326"));
+        REQUIRE(fixture.source->setCoordinateText(0, QStringLiteral("36.1, -85.5, 300m"),
+                                                  cwUnits::Metric) == QString());
+
+        CHECK(fixture.availableDatums()
+              == QStringList({QStringLiteral("EPSG:4326"), QStringLiteral("EPSG:6318")}));
+        CHECK(fixture.domainError().isEmpty());
+    }
+
+    SECTION("a coordinate outside its own datum's region still offers that datum")
+    {
+        // Stored on ETRS89, placed in Tennessee. The bounds recommend
+        // NAD83(2011), and nothing rewrites the row: the combo has to be able to
+        // show what the row is on, and the warning is what says the pairing is
+        // wrong.
+        FixFixture fixture;
+        fixture.edit(cwFixStationModel::InputCSRole, QStringLiteral("EPSG:4258"));
+        REQUIRE(fixture.source->setCoordinateText(0, QStringLiteral("36.1, -85.5, 300m"),
+                                                  cwUnits::Metric) == QString());
+
+        const QStringList datums = fixture.availableDatums();
+        CHECK(datums.contains(QStringLiteral("EPSG:6318")));
+        CHECK(datums.contains(QStringLiteral("EPSG:4258")));
+        CHECK(datums.first() == QStringLiteral("EPSG:4326"));
+        CHECK_FALSE(fixture.domainError().isEmpty());
+    }
+
+    SECTION("a coordinate no region reaches offers WGS84 alone")
+    {
+        FixFixture fixture;
+        fixture.edit(cwFixStationModel::InputCSRole, QStringLiteral("EPSG:4326"));
+        REQUIRE(fixture.source->setCoordinateText(0, QStringLiteral("5.0, -150.0, 0m"),
+                                                  cwUnits::Metric) == QString());
+
+        CHECK(fixture.availableDatums() == QStringList{QStringLiteral("EPSG:4326")});
+    }
+
+    SECTION("a coordinate that can't be read offers WGS84 and whatever the row stores")
+    {
+        // No location to filter by, so the list is the two the combo may have to
+        // display. The picker locks the combo for such a row anyway.
+        FixFixture fixture;
+        fixture.edit(cwFixStationModel::InputCSRole, QStringLiteral("EPSG:6318"));
+        fixture.setStoredCoordinate(QStringLiteral("not a coordinate"));
+        REQUIRE(fixture.source->fixStationAt(0).state() == cwFixStation::Unreadable);
+
+        CHECK(fixture.availableDatums()
+              == QStringList({QStringLiteral("EPSG:4326"), QStringLiteral("EPSG:6318")}));
+    }
+
+    SECTION("a blank row offers WGS84 alone")
+    {
+        FixFixture fixture;
+        CHECK(fixture.availableDatums() == QStringList{QStringLiteral("EPSG:4326")});
+    }
+}
+
+TEST_CASE("A coordinate edit re-offers the datums it moved between",
+          "[FixStation][cwFixStationDiagnosticsModel]") {
+    FixFixture fixture;
+    fixture.edit(cwFixStationModel::InputCSRole, QStringLiteral("EPSG:4326"));
+
+    QSignalSpy spy(fixture.diagnostics, &QAbstractItemModel::dataChanged);
+    REQUIRE(fixture.source->setCoordinateText(0, QStringLiteral("36.1, -85.5, 300m"),
+                                              cwUnits::Metric) == QString());
+
+    CHECK(rolesSeen(spy).contains(cwFixStationDiagnosticsModel::AvailableDatumsRole));
 }

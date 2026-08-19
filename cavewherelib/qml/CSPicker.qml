@@ -23,10 +23,17 @@ QQ.Item {
 
     property string value: ""
 
-    //! The datum a value that names none is committed on. The host binds the
-    //! project's context datum here (cwCavingRegion::defaultFixDatum) — this
-    //! item knows nothing about regions, and both fix surfaces bind it.
-    property string defaultDatum: CoordinateSystem.wgs84()
+    //! The datum codes this picker may offer, WGS84 first. The fix surfaces bind
+    //! cwFixStationDiagnosticsModel's AvailableDatumsRole, which filters the
+    //! table down to the datums plausible for where the row's coordinate lands;
+    //! the default keeps any other host offering the whole table.
+    property list<string> availableDatums: CoordinateSystem.datumList()
+
+    //! Whether the datum may be changed. The fix surfaces clear it until the row
+    //! has a coordinate: the datum says what existing numbers mean, so there is
+    //! nothing to reinterpret before they are typed. Only the datum combo locks
+    //! — mode, zone and hemisphere stay live.
+    property bool datumEnabled: true
 
     readonly property int currentMode: CoordinateSystem.modeFor(rootId.value)
 
@@ -34,17 +41,44 @@ QQ.Item {
     readonly property bool showsUtm: rootId.currentMode === CoordinateSystem.UTM
 
     // What the controls are on: the value's own datum whenever it names one, so
-    // a stored row keeps saying what it stores, and the host's default only for
-    // a value that names none — a blank system, or a Custom CRS on its way to
-    // Lat/Lon.
+    // a stored row keeps saying what it stores. A value that names none — a
+    // blank system, or a Custom CRS on its way to Lat/Lon — reads as WGS84, and
+    // stays there until the user picks something else.
     readonly property string currentDatum: {
         const own = CoordinateSystem.datumFor(rootId.value)
-        if (own !== "") {
-            return own
+        return own !== "" ? own : CoordinateSystem.wgs84()
+    }
+
+    //! The plate-fixed datum worth recommending for this row: the first entry
+    //! availableDatums offers past WGS84, which is the bounds check's own answer
+    //! for where the coordinate lands. Empty where no plate-fixed frame reaches.
+    //!
+    //! Only a row still on WGS84 gets one. Past that, the row names a datum of
+    //! its own, and availableDatums carries that datum whether the bounds check
+    //! chose it or not — recommending from the list would read a mid-ocean row's
+    //! own ETRS89 back to it as the frame for where it sits. A row whose datum
+    //! stopped fitting its coordinate hears that from the warning beside it.
+    readonly property string recommendedDatum: {
+        const wgs84 = CoordinateSystem.wgs84()
+        if (rootId.currentDatum !== wgs84) {
+            return ""
         }
-        return CoordinateSystem.latLonCS(rootId.defaultDatum) !== ""
-                ? rootId.defaultDatum
-                : CoordinateSystem.wgs84()
+        return rootId.availableDatums.find((code) => code !== wgs84) ?? ""
+    }
+
+    //! What the datum combo explains about itself. Locked, it says what to do
+    //! first; unlocked, it says what a datum is, and names the frame this part
+    //! of the world holds still against when there is one.
+    readonly property string datumToolTipText: {
+        if (!rootId.datumEnabled) {
+            return qsTr("Enter a coordinate to choose its datum")
+        }
+        const explanation = qsTr("The datum is the reference frame the numbers are measured in — the same point lands a meter or two apart on different datums. Use the one your source states; a GPS reading is WGS84.")
+        if (rootId.recommendedDatum === "") {
+            return explanation
+        }
+        return explanation + " " + qsTr("For a lasting fix, %1 holds better: it moves with the continent, so the coordinate stays put while WGS84 drifts about 2 cm a year.")
+            .arg(CoordinateSystem.datumDisplayName(rootId.recommendedDatum))
     }
 
     // The width the visible controls need on a single line, summed generically
@@ -188,69 +222,97 @@ QQ.Item {
         // Last in the row and quieter than the controls before it: the datum is
         // the answer most rows never change, and a wrong one moves a fix by a
         // meter or two rather than by a zone.
-        QC.ComboBox {
-            id: datumComboId
-            objectName: "csDatum"
-
-            // UTM offers only the datums whose series reaches the zone and
-            // hemisphere on screen, so every entry names a system this picker
-            // can build.
-            readonly property list<string> datumCodes: rootId.showsUtm
-                ? CoordinateSystem.utmDatumList(zoneSpinId.value, hemiComboId.currentIndex === 0)
-                : CoordinateSystem.datumList()
-
-            //! What one popup row needs: the widest label as the style lays it
-            //! out, and at least the closed control's own width.
-            readonly property real popupRowWidth:
-                Math.max(datumComboId.width, datumRowProbeId.implicitWidth)
-
+        //
+        // The combo is wrapped because a disabled control reports no hover of
+        // its own, and the locked state is exactly when it has something to
+        // say. The wrapper stays enabled and carries the hover and the tooltip.
+        QQ.Item {
             // Custom carries its datum inside the CRS the dialog picked, and
             // Local has none, so only Lat/Lon and UTM ask for one.
             visible: rootId.currentMode === CoordinateSystem.LatLon || rootId.showsUtm
-            width: Theme.csDatumFieldWidth
-            height: modeComboId.height
-            font.pixelSize: Theme.fontSizeSmall
-            // The rows lead with the region because that, rather than the
-            // acronym, is what tells a caver which datum is theirs. The closed
-            // control keeps the short name, so the field stays as narrow as the
-            // table column it sits in.
-            model: datumComboId.datumCodes.map(
-                       (code) => CoordinateSystem.datumRegionName(code) + " · "
-                                 + CoordinateSystem.datumDisplayName(code))
-            // WGS84 leads the table, so index 0 is the fallback a datum outside
-            // this list commits to — which is what a zone edit past the end of
-            // a series does.
-            currentIndex: Math.max(0, datumComboId.datumCodes.indexOf(rootId.currentDatum))
-            displayText: CoordinateSystem.datumDisplayName(
-                             datumComboId.datumCodes[datumComboId.currentIndex] ?? "")
+            implicitWidth: Theme.csDatumFieldWidth
+            implicitHeight: modeComboId.height
 
-            // A ComboBox popup is as wide as its control, which would elide
-            // every region-led row. Both the rows and the popup take the width
-            // the probe below measures.
-            popup.width: datumComboId.popupRowWidth
-                         + datumComboId.popup.leftPadding
-                         + datumComboId.popup.rightPadding
-
-            delegate: QC.ItemDelegate {
-                id: datumItemId
-
-                required property int index
-                required property string modelData
-
-                width: datumComboId.popupRowWidth
-                highlighted: datumComboId.highlightedIndex === datumItemId.index
-
-                contentItem: QC.Label {
-                    objectName: "csDatumItemLabel." + datumItemId.index
-                    text: datumItemId.modelData
-                    font.pixelSize: Theme.fontSizeSmall
-                    elide: QQ.Text.ElideRight
-                    verticalAlignment: QQ.Text.AlignVCenter
-                }
+            QQ.HoverHandler {
+                id: datumSlotHoverId
             }
 
-            onActivated: (index) => rootId.commitCS(rootId.currentMode,
-                                                    datumComboId.datumCodes[index])
+            QC.ToolTip {
+                objectName: "csDatumToolTip"
+                text: rootId.datumToolTipText
+                delay: Theme.toolTipDelay
+                // The handler rides the wrapper because a disabled control
+                // reports no hover of its own; the wrapper is the combo's own
+                // geometry, so it answers for both states.
+                visible: datumSlotHoverId.hovered && !datumComboId.popup.visible
+            }
+
+            QC.ComboBox {
+                id: datumComboId
+                objectName: "csDatum"
+
+                // UTM offers only the datums whose series reaches the zone and
+                // hemisphere on screen, so every entry names a system this picker
+                // can build.
+                readonly property list<string> datumCodes: {
+                    if (!rootId.showsUtm) {
+                        return rootId.availableDatums
+                    }
+                    const series = CoordinateSystem.utmDatumList(zoneSpinId.value,
+                                                                 hemiComboId.currentIndex === 0)
+                    return rootId.availableDatums.filter((code) => series.indexOf(code) >= 0)
+                }
+
+                //! What one popup row needs: the widest label as the style lays it
+                //! out, and at least the closed control's own width.
+                readonly property real popupRowWidth:
+                    Math.max(datumComboId.width, datumRowProbeId.implicitWidth)
+
+                anchors.fill: parent
+                enabled: rootId.datumEnabled
+                font.pixelSize: Theme.fontSizeSmall
+                // The rows lead with the region because that, rather than the
+                // acronym, is what tells a caver which datum is theirs. The closed
+                // control keeps the short name, so the field stays as narrow as the
+                // table column it sits in.
+                model: datumComboId.datumCodes.map(
+                           (code) => CoordinateSystem.datumRegionName(code) + " · "
+                                     + CoordinateSystem.datumDisplayName(code))
+                // WGS84 leads the table, so index 0 is the fallback a datum outside
+                // this list commits to — which is what a zone edit past the end of
+                // a series does.
+                currentIndex: Math.max(0, datumComboId.datumCodes.indexOf(rootId.currentDatum))
+                displayText: CoordinateSystem.datumDisplayName(
+                                 datumComboId.datumCodes[datumComboId.currentIndex] ?? "")
+
+                // A ComboBox popup is as wide as its control, which would elide
+                // every region-led row. Both the rows and the popup take the width
+                // the probe below measures.
+                popup.width: datumComboId.popupRowWidth
+                             + datumComboId.popup.leftPadding
+                             + datumComboId.popup.rightPadding
+
+                delegate: QC.ItemDelegate {
+                    id: datumItemId
+
+                    required property int index
+                    required property string modelData
+
+                    width: datumComboId.popupRowWidth
+                    highlighted: datumComboId.highlightedIndex === datumItemId.index
+
+                    contentItem: QC.Label {
+                        objectName: "csDatumItemLabel." + datumItemId.index
+                        text: datumItemId.modelData
+                        font.pixelSize: Theme.fontSizeSmall
+                        elide: QQ.Text.ElideRight
+                        verticalAlignment: QQ.Text.AlignVCenter
+                    }
+                }
+
+                onActivated: (index) => rootId.commitCS(rootId.currentMode,
+                                                        datumComboId.datumCodes[index])
+            }
         }
     }
 

@@ -14,6 +14,11 @@
 #include "cwFixStation.h"
 #include "cwFixStationDiagnostics.h"
 #include "cwFixStationModel.h"
+#include "cwGeoPoint.h"
+#include "cwLocalProjection.h"
+
+//Std includes
+#include <optional>
 
 using cwFixStationDiagnostics::StationReference;
 
@@ -61,6 +66,44 @@ QString coordinateErrorMessage(const cwFixStation& fix)
     return QString();
 }
 
+//! The datum codes the picker may offer for this row — see AvailableDatumsRole.
+//! The geodesy runs here, in C++, off the same per-thread transform cache the
+//! domain check uses, so no QML binding ever reaches PROJ.
+QStringList availableDatums(const cwFixStation& fix)
+{
+    QStringList datums{cwCoordinateTransform::Wgs84};
+
+    const auto appendDatum = [&datums](const QString& datum) {
+        if (!datum.isEmpty() && !datums.contains(datum, Qt::CaseInsensitive)) {
+            datums.append(datum);
+        }
+    };
+
+    // Only a row with a readable coordinate has a place to filter by. The rest
+    // keep WGS84 and whatever they already store, appended below.
+    if (fix.state() == cwFixStation::Valid) {
+        const std::optional<cwGeoPoint> geographic =
+            cwCoordinateTransform::transformPoint(fix.inputCS(),
+                                                  cwCoordinateTransform::Wgs84,
+                                                  cwGeoPoint(fix.easting(),
+                                                             fix.northing(),
+                                                             fix.elevation()));
+        if (geographic.has_value()) {
+            const QStringList plateFixed =
+                cwLocalProjection::plateFixedDatumsFor(geographic->y, geographic->x);
+            for (const QString& datum : plateFixed) {
+                appendDatum(datum);
+            }
+        }
+    }
+
+    // Last, and only when the region boxes left it out: the combo has to be able
+    // to display what the row is on, whatever that is. The domain warning is
+    // what reports an out-of-region pairing.
+    appendDatum(cwCoordinateSystem::datumFor(fix.inputCS()));
+    return datums;
+}
+
 }
 
 cwFixStationDiagnosticsModel::cwFixStationDiagnosticsModel(cwCave* cave) :
@@ -106,6 +149,9 @@ void cwFixStationDiagnosticsModel::augmentSourceChange(const QModelIndex& topLef
         derived.append(DomainErrorRole);
         derived.append(EastingDomainErrorRole);
         derived.append(NorthingDomainErrorRole);
+        // Same inputs as the domain verdict — where the coordinate lands, read
+        // under the CS it names — so it moves with it.
+        derived.append(AvailableDatumsRole);
     }
     // What the row's coordinate amounts to is a function of the text and the CS
     // together — naming a system turns unreadable text into a coordinate without
@@ -178,6 +224,7 @@ QVariant cwFixStationDiagnosticsModel::data(const QModelIndex& index, int role) 
     case CoordinateErrorRole:
     case CoordinateOrderUnknownRole:
     case StationErrorRole:
+    case AvailableDatumsRole:
         break;
     default:
         return QIdentityProxyModel::data(index, role);
@@ -193,6 +240,7 @@ QVariant cwFixStationDiagnosticsModel::data(const QModelIndex& index, int role) 
     case CoordinateErrorRole:        return coordinateErrorMessage(*fix);
     case CoordinateOrderUnknownRole: return fix->state() == cwFixStation::NoSystem;
     case StationErrorRole:           return stationErrorMessage(*fix);
+    case AvailableDatumsRole:        return availableDatums(*fix);
     default:                         break;
     }
 
@@ -214,5 +262,6 @@ QHash<int, QByteArray> cwFixStationDiagnosticsModel::roleNames() const
     names.insert(CoordinateErrorRole, "coordinateError");
     names.insert(CoordinateOrderUnknownRole, "coordinateOrderUnknown");
     names.insert(StationErrorRole, "stationError");
+    names.insert(AvailableDatumsRole, "availableDatums");
     return names;
 }

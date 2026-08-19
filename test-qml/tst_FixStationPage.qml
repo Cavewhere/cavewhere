@@ -97,6 +97,25 @@ MainWindowTest {
             return datumCombo.model.findIndex((label) => label.endsWith(" · " + datumName))
         }
 
+        //! Row \a rowIndex's datum combo.
+        function datumComboFor(rowIndex) {
+            const combo = findChild(waitForPicker(rowIndex), "csDatum")
+            verify(combo !== null, "csDatum should be reachable")
+            return combo
+        }
+
+        //! The tooltip beside row \a rowIndex's datum combo.
+        function datumToolTipFor(rowIndex) {
+            const toolTip = findChild(waitForPicker(rowIndex), "csDatumToolTip")
+            verify(toolTip !== null, "csDatumToolTip should be reachable")
+            return toolTip
+        }
+
+        //! The datum codes the combo is currently offering, short names.
+        function datumNamesOf(datumCombo) {
+            return datumCombo.model.map((label) => label.split(" \u00b7 ")[1])
+        }
+
         function findPicker(rowIndex) {
             const fixPage = RootData.pageView.currentPageItem
             return findChild(fixPage, "inputCSComboBox." + rowIndex)
@@ -298,10 +317,11 @@ MainWindowTest {
                       "a zone outside the datum's series falls back to WGS84")
         }
 
-        //! A row whose system names no datum takes the project's — which here is
-        //! not WGS84, because a fix in the conterminous US derives a frame that
-        //! is plate-fixed to NAD83(2011).
-        function test_aRowWithNoDatumTakesTheProjectsDatum() {
+        //! A row whose system names no datum is born WGS84 and stays there, even
+        //! in a project whose own frame is plate-fixed to NAD83(2011). The datum
+        //! reinterprets numbers the row already has, so it is the user's to
+        //! change and nobody else's.
+        function test_aRowWithNoDatumStaysOnWgs84() {
             const cave = anchorProjectOnNad83()
             const model = cave.fixStations
 
@@ -317,30 +337,31 @@ MainWindowTest {
 
             modeCombo.activated(modeCombo.model.indexOf("Lat/Lon"))
             tryVerify(() => model.data(model.index(1), FixStationModel.InputCSRole)
-                            === nad83Datum, 5000,
-                      "naming Lat/Lon on a datum-less row commits the project's datum")
+                            === "EPSG:4326", 5000,
+                      "naming Lat/Lon on a datum-less row commits WGS84")
 
             const datumCombo = findChild(picker, "csDatum")
             verify(datumCombo !== null, "csDatum should be reachable")
             tryVerify(() => datumCombo.visible, 5000, "Lat/Lon mode shows the datum")
-            tryCompare(datumCombo, "displayText", "NAD83(2011)")
+            tryCompare(datumCombo, "displayText", "WGS84")
         }
 
-        //! The datum is demoted, never imposed: WGS84 is one click away in a
-        //! NAD83 project, which is what a coordinate off a phone needs.
-        function test_theDatumComboOverridesTheProjectsDatum() {
-            const cave = anchorProjectOnNad83()
+        //! The datum is offered, never imposed: WGS84 stays one click away on a
+        //! NAD83 row, which is what a coordinate off a phone needs.
+        function test_theDatumComboCommitsWgs84OverNad83() {
+            const cave = gotoFixStations()
             const model = cave.fixStations
 
-            model.addFixStation()
-            model.setData(model.index(1), nad83Datum, FixStationModel.InputCSRole)
-            tryCompare(model, "count", 2)
+            compare(model.addFixStation("A1"), 0)
+            model.setData(model.index(0), nad83Datum, FixStationModel.InputCSRole)
+            compare(model.setCoordinateText(0, "36.1, -85.5, 300m", Units.Metric), "")
 
-            const datumCombo = findChild(waitForPicker(1), "csDatum")
-            verify(datumCombo !== null, "csDatum should be reachable")
+            const datumCombo = datumComboFor(0)
+            tryVerify(() => datumCombo.enabled, 5000,
+                      "a row with a readable coordinate may change its datum")
 
             datumCombo.activated(datumRowFor(datumCombo, "WGS84"))
-            tryVerify(() => model.data(model.index(1), FixStationModel.InputCSRole)
+            tryVerify(() => model.data(model.index(0), FixStationModel.InputCSRole)
                             === "EPSG:4326", 5000,
                       "picking WGS84 commits the WGS84 geographic code")
         }
@@ -437,6 +458,177 @@ MainWindowTest {
                                      FixStationModel.InputCSRole)
             tryVerify(() => !datumCombo.visible, 5000,
                       "Custom must hide the datum combo")
+        }
+
+
+        //! The datum says what existing numbers mean, so there is nothing for it
+        //! to say before they are typed: a fresh row shows WGS84, locks the
+        //! combo, and explains what to do first.
+        function test_theDatumComboLocksUntilTheRowHasACoordinate() {
+            const cave = gotoFixStations()
+            cave.fixStations.addFixStation()
+            tryCompare(cave.fixStations, "count", 1)
+
+            const picker = waitForPicker(0)
+            const datumCombo = datumComboFor(0)
+            tryVerify(() => datumCombo.visible, 5000, "a new row is on Lat/Lon")
+            tryVerify(() => !datumCombo.enabled, 5000,
+                      "a row with no coordinate may not change its datum")
+            tryCompare(datumCombo, "displayText", "WGS84")
+
+            // Mode and zone stay live — only the datum waits on the coordinate.
+            const modeCombo = findChild(picker, "csModePicker")
+            verify(modeCombo.enabled, "the mode combo stays usable")
+
+            const toolTip = datumToolTipFor(0)
+            compare(toolTip.text, "Enter a coordinate to choose its datum")
+
+            // A disabled control reports no hover of its own, so the tooltip
+            // rides a handler on the wrapper around it.
+            waitForRendering(rootId)
+            mouseMove(datumCombo, datumCombo.width / 2, datumCombo.height / 2)
+            tryVerify(() => toolTip.visible, 5000,
+                      "hovering the locked datum combo should explain the lock")
+        }
+
+        //! A readable coordinate unlocks the datum and narrows the list to the
+        //! frames that reach where it lands — WGS84 plus the plate-fixed one.
+        function test_aReadableCoordinateUnlocksAndFiltersTheDatumList() {
+            const cave = gotoFixStations()
+            const model = cave.fixStations
+            compare(model.addFixStation("A1"), 0)
+
+            const datumCombo = datumComboFor(0)
+            tryVerify(() => !datumCombo.enabled, 5000, "locked before the coordinate")
+
+            compare(model.setCoordinateText(0, "36.1, -85.5, 300m", Units.Metric), "")
+
+            tryVerify(() => datumCombo.enabled, 5000,
+                      "a Tennessee coordinate unlocks the datum")
+            tryVerify(() => datumCombo.model.length === 2, 5000,
+                      "only WGS84 and the frame North America is fixed to")
+            compare(datumCombo.model[0], "World (GPS) \u00b7 WGS84")
+            compare(datumCombo.model[1], "North America (USA) \u00b7 NAD83(2011)")
+
+            const toolTip = datumToolTipFor(0)
+            verify(toolTip.text.indexOf("NAD83(2011)") >= 0,
+                   "the unlocked tooltip recommends the plate-fixed datum")
+            verify(toolTip.text.indexOf("reference frame") >= 0,
+                   "the unlocked tooltip explains what a datum is")
+
+            // The unlocked combo hovers through the same wrapper the locked one
+            // does, so the explanation reaches the user either way.
+            waitForRendering(rootId)
+            mouseMove(datumCombo, datumCombo.width / 2, datumCombo.height / 2)
+            tryVerify(() => toolTip.visible, 5000,
+                      "hovering the unlocked datum combo should explain the datum")
+        }
+
+        //! Out at sea no plate-fixed frame reaches, so the tooltip explains the
+        //! datum and stops — there is nothing to recommend.
+        function test_theDatumTooltipRecommendsNothingWhereNoFrameReaches() {
+            const cave = gotoFixStations()
+            const model = cave.fixStations
+            compare(model.addFixStation("A1"), 0)
+            compare(model.setCoordinateText(0, "5.0, -150.0, 0m", Units.Metric), "")
+
+            const datumCombo = datumComboFor(0)
+            tryVerify(() => datumCombo.enabled, 5000, "a mid-ocean fix is still a fix")
+            tryVerify(() => datumCombo.model.length === 1, 5000, "WGS84 alone")
+
+            const toolTip = datumToolTipFor(0)
+            verify(toolTip.text.indexOf("reference frame") >= 0,
+                   "the tooltip still explains what a datum is")
+            verify(toolTip.text.indexOf("holds better") < 0,
+                   "there is no plate-fixed frame here to recommend")
+        }
+
+        //! The list carries the row's own datum whether the bounds check chose it
+        //! or not, so a row that names one gets no recommendation: out at sea an
+        //! ETRS89 row must not be told ETRS89 is the frame for where it sits.
+        function test_theDatumTooltipRecommendsNothingForARowOnItsOwnDatum() {
+            const cave = gotoFixStations()
+            const model = cave.fixStations
+            compare(model.addFixStation("A1"), 0)
+            model.setData(model.index(0), "EPSG:4258", FixStationModel.InputCSRole)
+            compare(model.setCoordinateText(0, "5.0, -150.0, 0m", Units.Metric), "")
+
+            const datumCombo = datumComboFor(0)
+            tryVerify(() => datumCombo.enabled, 5000, "a mid-ocean fix is still a fix")
+            tryCompare(datumCombo, "displayText", "ETRS89")
+            tryVerify(() => datumCombo.model.length === 2, 5000,
+                      "WGS84 plus the datum the row stores")
+
+            const toolTip = datumToolTipFor(0)
+            verify(toolTip.text.indexOf("reference frame") >= 0,
+                   "the tooltip still explains what a datum is")
+            verify(toolTip.text.indexOf("holds better") < 0,
+                   "the row's own datum is no recommendation")
+        }
+
+        //! Changing the datum reinterprets the numbers; it never moves them. And
+        //! moving the coordinate never changes the datum — the warning beside the
+        //! row is what reports a pairing that no longer fits.
+        function test_aCoordinateEditNeverRewritesTheDatum() {
+            const cave = gotoFixStations()
+            const model = cave.fixStations
+            compare(model.addFixStation("A1"), 0)
+            // Slovenia, where ETRS89 is the plate-fixed frame.
+            compare(model.setCoordinateText(0, "46.0, 14.5, 300m", Units.Metric), "")
+
+            const datumCombo = datumComboFor(0)
+            tryVerify(() => datumNamesOf(datumCombo).indexOf("ETRS89") >= 0, 5000,
+                      "Europe's frame should be offered")
+
+            const eastingBefore = model.data(model.index(0), FixStationModel.EastingRole)
+            const northingBefore = model.data(model.index(0), FixStationModel.NorthingRole)
+
+            datumCombo.activated(datumRowFor(datumCombo, "ETRS89"))
+            tryVerify(() => model.data(model.index(0), FixStationModel.InputCSRole)
+                            === "EPSG:4258", 5000,
+                      "picking ETRS89 commits the ETRS89 geographic code")
+            compare(model.data(model.index(0), FixStationModel.EastingRole), eastingBefore)
+            compare(model.data(model.index(0), FixStationModel.NorthingRole), northingBefore)
+
+            // The same fix, retyped in Tennessee: the list follows the numbers,
+            // the choice does not.
+            compare(model.setCoordinateText(0, "36.1, -85.5, 300m", Units.Metric), "")
+            tryVerify(() => datumNamesOf(datumCombo).indexOf("NAD83(2011)") >= 0, 5000,
+                      "North America's frame joins the list")
+            compare(model.data(model.index(0), FixStationModel.InputCSRole), "EPSG:4258")
+            tryCompare(datumCombo, "displayText", "ETRS89")
+            verify(datumNamesOf(datumCombo).indexOf("ETRS89") >= 0,
+                   "the combo can still display what the row is on")
+
+            const warning = findChild(RootData.pageView.currentPageItem, "coordinateWarning.0")
+            verify(warning !== null, "the row's coordinate warning should be reachable")
+            tryVerify(() => warning.visible, 5000,
+                      "an out-of-bounds pairing is what the warning reports")
+        }
+
+        //! UTM narrows the list twice over: to the datums whose series reaches
+        //! the zone on screen, and to the ones the coordinate's region allows.
+        function test_theUtmDatumListMeetsTheRegionList() {
+            const cave = gotoFixStations()
+            const model = cave.fixStations
+            compare(model.addFixStation("A1"), 0)
+            // NAD83(2011) UTM zone 16N, in Tennessee.
+            model.setData(model.index(0), "EPSG:6345", FixStationModel.InputCSRole)
+            compare(model.setCoordinateText(0, "610016.79, 3995117.07, 300m", Units.Metric), "")
+
+            const datumCombo = datumComboFor(0)
+            tryVerify(() => datumCombo.enabled, 5000, "the coordinate reads, so the datum opens")
+            tryVerify(() => datumCombo.model.length === 2, 5000,
+                      "WGS84 and NAD83(2011) both run a zone 16N series")
+            compare(datumNamesOf(datumCombo), ["WGS84", "NAD83(2011)"])
+
+            // ETRS89 reaches zone 32, but this coordinate is nowhere near Europe,
+            // so the region list keeps it out.
+            const zoneSpin = findChild(waitForPicker(0), "csUtmZone")
+            zoneSpin.value = 32
+            zoneSpin.valueModified()
+            tryVerify(() => datumNamesOf(datumCombo).indexOf("ETRS89") < 0, 5000,
+                      "a datum the region rules out stays out whatever the zone is")
         }
 
         function test_removeFixConfirmed() {

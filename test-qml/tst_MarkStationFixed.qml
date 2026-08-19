@@ -471,6 +471,36 @@ MainWindowTest {
             tryCompare(popup, "opened", false)
         }
 
+        //! The popup gates its datum on a readable coordinate exactly as
+        //! FixStationPage does, and narrows the list the same way. It wires its
+        //! picker by hand, so the two surfaces can drift apart unwatched.
+        function test_popupGatesAndFiltersTheDatumTheFixStationPageWay() {
+            const context = gotoSurveyTable()
+            const popup = popupForA1(context)
+
+            const picker = findChild(popup, "fixStationPopupCS")
+            verify(picker !== null, "popup should offer a CS picker")
+            const datumCombo = findChild(picker, "csDatum")
+            verify(datumCombo !== null, "csDatum should be reachable")
+
+            tryVerify(() => !datumCombo.enabled, 5000,
+                      "a fix with no coordinate yet may not choose a datum")
+            tryCompare(datumCombo, "displayText", "WGS84")
+
+            const coordinate = findChild(popup, "fixStationPopupCoordinate")
+            coordinate.text = "36.1, -85.5, 300m"
+            coordinate.editingFinished()
+
+            tryVerify(() => datumCombo.enabled, 5000,
+                      "a Tennessee coordinate unlocks the datum")
+            tryVerify(() => datumCombo.model.length === 2, 5000,
+                      "WGS84 and the frame North America is fixed to")
+            compare(datumCombo.model[1], "North America (USA) \u00b7 NAD83(2011)")
+
+            findChild(popup, "fixStationPopupDone").clicked()
+            tryCompare(popup, "opened", false)
+        }
+
         function test_popupShowsTheWarningsTheFixStationPageShows() {
             // U12 — before this, a coordinate typed here could sit outside its
             // own CS and the popup looked exactly the same either way. The only

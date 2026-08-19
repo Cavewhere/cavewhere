@@ -95,18 +95,11 @@ namespace {
     };
 
     //! The plate-fixed geodetic CRS customary where (\a latitude, \a longitude)
-    //! is, or "" where no entry covers it — the caller then keeps WGS84. A static
-    //! table rather than a PROJ database query, so the answer depends only on the
-    //! shipped binary, never on which proj.db a machine has.
+    //! is, or "" where no entry covers it — the caller then keeps WGS84. A frame
+    //! has to pick one, so it takes the first of the datums the boxes offer.
     QString plateFixedDatumFor(double latitude, double longitude)
     {
-        for (const PlateFixedRegion& region : kPlateFixedRegions) {
-            if (latitude >= region.minLatitude && latitude <= region.maxLatitude
-                && longitude >= region.minLongitude && longitude <= region.maxLongitude) {
-                return QString::fromLatin1(region.coordinateSystem);
-            }
-        }
-        return {};
+        return cwLocalProjection::plateFixedDatumsFor(latitude, longitude).value(0);
     }
 
     struct PjDeleter {
@@ -474,4 +467,23 @@ std::optional<cwGeoPoint> cwLocalProjection::origin(const QString& localCS)
     }
 
     return cwGeoPoint(geographic.xy.x, geographic.xy.y, 0.0);
+}
+
+QStringList cwLocalProjection::plateFixedDatumsFor(double latitude, double longitude)
+{
+    QStringList datums;
+    for (const PlateFixedRegion& region : kPlateFixedRegions) {
+        const bool contains = latitude >= region.minLatitude && latitude <= region.maxLatitude
+            && longitude >= region.minLongitude && longitude <= region.maxLongitude;
+        if (!contains) {
+            continue;
+        }
+        const QString datum = QString::fromLatin1(region.coordinateSystem);
+        // One datum spans several boxes (the US takes five), and a point can
+        // fall in two of them, so the same answer must reach the caller once.
+        if (!datums.contains(datum)) {
+            datums.append(datum);
+        }
+    }
+    return datums;
 }

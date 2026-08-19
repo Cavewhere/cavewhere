@@ -17,6 +17,7 @@
 
 //Qt includes
 #include <QString>
+#include <QStringList>
 
 #include <cmath>
 #include <limits>
@@ -539,5 +540,52 @@ TEST_CASE("cwLocalProjection recenters a stored frame without touching its datum
             legacyFrame, center, cwLocalProjection::DatumSource::DataInput);
         REQUIRE_FALSE(derived.isEmpty());
         CHECK_THAT(datumNameOf(derived), ContainsSubstring(kNad83_2011DatumName));
+    }
+}
+
+TEST_CASE("cwLocalProjection::plateFixedDatumsFor answers with every frame that reaches a point",
+          "[cwLocalProjection]")
+{
+    SECTION("inland, one frame reaches — the answer is the single one")
+    {
+        CHECK(cwLocalProjection::plateFixedDatumsFor(kAnchorLatitude, kAnchorLongitude)
+              == QStringList{QStringLiteral("EPSG:6318")});
+    }
+
+    SECTION("along a shared border, both frames reach, in table order")
+    {
+        // Northern Wisconsin: inside the conterminous US box and inside Canada's,
+        // which start at 41.5N together. A cave here is served by both frames, and
+        // the picker offers the user the choice derive() has to make alone.
+        CHECK(cwLocalProjection::plateFixedDatumsFor(45.0, -90.0)
+              == QStringList({QStringLiteral("EPSG:6318"), QStringLiteral("EPSG:4617")}));
+    }
+
+    SECTION("one datum spanning several boxes still answers once")
+    {
+        // Juneau is in the panhandle box; Canada's box covers it too. NAD83(2011)
+        // must appear once whichever of its five boxes matched.
+        const QStringList datums =
+            cwLocalProjection::plateFixedDatumsFor(kJuneauLatitude, kJuneauLongitude);
+        CHECK(datums.count(QStringLiteral("EPSG:6318")) == 1);
+        CHECK(datums.contains(QStringLiteral("EPSG:4617")));
+    }
+
+    SECTION("out at sea no frame reaches, so nothing is offered")
+    {
+        CHECK(cwLocalProjection::plateFixedDatumsFor(kOpenOceanLatitude, kOpenOceanLongitude)
+              == QStringList());
+    }
+
+    SECTION("the single-answer form stays the first match")
+    {
+        // The two forms agree on what comes first — the frame derive() pins is
+        // the frame the picker leads with.
+        const QStringList datums = cwLocalProjection::plateFixedDatumsFor(45.0, -90.0);
+        REQUIRE_FALSE(datums.isEmpty());
+        const QString ldp = cwLocalProjection::derive(45.0, -90.0, cwCoordinateTransform::Wgs84);
+        REQUIRE_FALSE(ldp.isEmpty());
+        CHECK_THAT(datumNameOf(ldp), ContainsSubstring(kNad83_2011DatumName));
+        CHECK(datums.first() == QStringLiteral("EPSG:6318"));
     }
 }

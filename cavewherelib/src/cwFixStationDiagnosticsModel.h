@@ -96,7 +96,23 @@ public:
         //! there is no name at all. A cave whose network hasn't been computed yet
         //! never flags a *named* fix (nothing to check against); an empty name is
         //! flagged regardless.
-        StationErrorRole
+        StationErrorRole,
+        //! Read-only QStringList: the datum codes the row's coordinate could
+        //! sensibly be on, WGS84 first, for the picker's datum combo to offer.
+        //! Refreshed exactly when DomainErrorRole is — both are functions of the
+        //! coordinate and the CS it is read under.
+        //!
+        //! A row with a readable coordinate offers WGS84 plus every plate-fixed
+        //! datum whose region covers it (a border cave gets two), and, when the
+        //! regions leave it out, whatever the row already stores: the combo has
+        //! to be able to display what the row is on. Nothing here rewrites the
+        //! row — an out-of-region pairing is what DomainErrorRole reports, and
+        //! changing the datum is the user's act alone.
+        //!
+        //! A row with no readable coordinate offers WGS84 and its own datum,
+        //! since there is no location to filter by. The picker disables the
+        //! combo in that case, so the list is only what it displays.
+        AvailableDatumsRole
     };
     Q_ENUM(Roles)
 

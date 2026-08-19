@@ -47,6 +47,18 @@ QC.Popup {
     property string domainError: ""
     property string stationError: ""
 
+    // What the datum combo may offer for this row, and the row's coordinate as
+    // the model holds it — the second is what says whether the datum may be
+    // changed at all. Both are re-read with the warnings, since they move with
+    // the same edits.
+    property list<string> availableDatums: []
+    property string storedCoordinateText: ""
+
+    //! Whether the datum may be changed: the row has to have a coordinate, and
+    //! it has to read as one. See CSPicker.datumEnabled.
+    readonly property bool hasReadableCoordinate:
+        popupId.storedCoordinateText.trim() !== "" && popupId.coordinateError === ""
+
     // Whether anything records which axis the stored coordinate leads with.
     // False for every row that names a coordinate system, which is all a row
     // created here ever is — this speaks for the ones that arrive from an older
@@ -202,10 +214,14 @@ QC.Popup {
             popupId.coordinateOrderUnknown = false
             popupId.domainError = ""
             popupId.stationError = ""
+            popupId.availableDatums = []
+            popupId.storedCoordinateText = ""
             return
         }
 
         const modelIndex = model.index(popupId.row)
+        popupId.availableDatums = model.data(modelIndex, FixStationDiagnosticsModel.AvailableDatumsRole)
+        popupId.storedCoordinateText = popupId.storedCoordinate()
         popupId.coordinateError = model.data(modelIndex, FixStationDiagnosticsModel.CoordinateErrorRole)
         popupId.coordinateOrderUnknown = model.data(
                     modelIndex, FixStationDiagnosticsModel.CoordinateOrderUnknownRole)
@@ -302,7 +318,8 @@ QC.Popup {
             CSPicker {
                 id: csPickerId
                 objectName: "fixStationPopupCS"
-                defaultDatum: RootData.region.defaultFixDatum
+                availableDatums: popupId.availableDatums
+                datumEnabled: popupId.hasReadableCoordinate
                 // CSPicker doesn't own its value — the table rows feed it back from
                 // the model role they're bound to. This editor fills its fields by
                 // hand, so it has to close that loop itself or the controls would
