@@ -1241,6 +1241,40 @@ MainWindowTest {
             askBox.close()
         }
 
+        //! The page swaps layouts on whether the wide table fits, so the two
+        //! sides of that answer are checked a couple of pixels apart. The wide
+        //! side also proves the point of the whole exercise: the pick button,
+        //! the rightmost thing a row draws, is still on screen.
+        function test_theLayoutFollowsWhetherTheWideTableFits() {
+            const cave = gotoFixStations()
+            const page = RootData.pageView.currentPageItem
+            cave.fixStations.addFixStation()
+
+            // The window is wider than the page by whatever chrome sits beside
+            // it, so the page is driven to a width, not the window.
+            const chrome = rootId.width - page.width
+            const fits = Math.ceil(page.wideMinimumWidth)
+
+            rootId.width = fits + chrome - 2
+            tryVerify(() => findChild(page, "narrowFixRow.0") !== null, 5000,
+                      "a page too narrow for the table takes the narrow layout")
+
+            rootId.width = fits + chrome + 2
+            tryVerify(() => findChild(page, "narrowFixRow.0") === null, 5000,
+                      "and it takes the wide table back once the table fits")
+
+            let pickButton = null
+            tryVerify(() => {
+                pickButton = findChild(page, "pickFromViewButton.0")
+                return pickButton !== null && pickButton.visible
+            }, 5000, "the wide row's pick button should be on screen")
+
+            const rightEdge = pickButton.mapToItem(page, pickButton.width, 0).x
+            verify(rightEdge <= page.width,
+                   "the pick button's right edge (" + rightEdge
+                   + ") should sit inside the page (" + page.width + ")")
+        }
+
         function test_fixStationsLinkCount() {
             const cave = gotoFixStations()
             cave.fixStations.addFixStation()

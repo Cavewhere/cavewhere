@@ -19,7 +19,20 @@ StandardPage {
 
     property Cave cave
 
-    readonly property bool isNarrow: width < Theme.breakpointPanelCollapse
+    // The wide layout is a fixed-width table and nothing scrolls it sideways, so
+    // it may only stay up while the whole row fits: every column, the two
+    // trailing warning icons with their gaps, the page's margins, and room for
+    // the vertical scrollbar.
+    readonly property real wideMinimumWidth: columnModelId.totalWidth
+                                             + 2 * (Theme.iconSizeButton + Theme.tightSpacing)
+                                             + 2 * Theme.pageMargin
+                                             + Theme.scrollBarAllowance
+
+    // Measured against the page's own width, never the table's content width, so
+    // the fit answer stays a one-way read. The floor keeps a genuinely narrow
+    // host on the narrow layout even if the column set shrinks further someday.
+    readonly property bool isNarrow: width < Math.max(Theme.breakpointPanelCollapse,
+                                                      fixStationPage.wideMinimumWidth)
     readonly property FixStationModel fixStationsModel: cave ? cave.fixStations : null
 
     // Edits go to fixStationsModel; the rows the table shows come from the
@@ -135,6 +148,10 @@ StandardPage {
     component WideCell : QQ.Item {
         id: cell
         property int columnWidth: 0
+        //! An item the cell parks at its right edge, declared as a child of the
+        //! cell; the field gives up the room it takes. The coordinate column
+        //! uses it so the "Coordinate" header owns the crosshair that fills it.
+        property QQ.Item trailingItem: null
         property alias value: field.value
         property alias role: field.role
         property alias rowIndex: field.rowIndex
@@ -147,13 +164,15 @@ StandardPage {
         property alias fieldObjectName: field.objectName
 
         implicitWidth: columnWidth
-        implicitHeight: field.implicitHeight
+        implicitHeight: Math.max(field.implicitHeight,
+                                 cell.trailingItem ? cell.trailingItem.implicitHeight : 0)
         clip: true
 
         FixField {
             id: field
             anchors.left: parent.left
-            anchors.right: parent.right
+            anchors.right: cell.trailingItem ? cell.trailingItem.left : parent.right
+            anchors.rightMargin: cell.trailingItem ? Theme.tightSpacing : 0
             anchors.verticalCenter: parent.verticalCenter
         }
     }
@@ -239,6 +258,15 @@ StandardPage {
             row, swappedCoordinate)
     }
 
+    // The coordinate column carries the crosshair, so it has to know how much
+    // room the crosshair takes. A tool button's footprint is its icon plus
+    // whatever padding the style puts around it, so the column asks a button
+    // rather than guessing. Invisible: it exists to be measured.
+    PickFromViewButton {
+        id: pickButtonMetricsId
+        visible: false
+    }
+
     TableStaticColumnModel {
         id: columnModelId
         columns: [
@@ -258,8 +286,9 @@ StandardPage {
             TableStaticColumn {
                 id: coordinateColumn
                 // Wide enough for a UTM triple with its elevation unit, e.g.
-                // "610016.792, 5615117.075, 2545.34m".
-                columnWidth: 300
+                // "610016.792, 5615117.075, 2545.34m", plus the footprint of
+                // the pick-from-view crosshair that shares the column with it.
+                columnWidth: 300 + pickButtonMetricsId.implicitWidth + Theme.tightSpacing
                 // Both orders are named because the order is per row, not per
                 // column: a geographic CS writes latitude first, a projected one
                 // easting first. The headers this column replaced ("Easting /
@@ -399,6 +428,8 @@ StandardPage {
                 WideCell {
                     fieldObjectName: "coordinateCell." + wideDelegateId.index
                     columnWidth: coordinateColumn.columnWidth
+                    coordinate: true
+                    trailingItem: pickButtonId
                     // Normally the cell renders the numbers, so it needs the
                     // same axis order they were read under. A CS flip swaps the
                     // numbers and the render order together, so what this
@@ -420,7 +451,6 @@ StandardPage {
                     // units; the editor re-offers the coordinate as written.
                     editValue: wideDelegateId.coordinateText
                     rowIndex: wideDelegateId.index
-                    coordinate: true
                     axisOrder: CoordinateText.axisOrderFor(wideDelegateId.inputCS)
                     // One field now holds both horizontal components, so the
                     // two per-axis domain flags share the one tint — and so does
@@ -428,13 +458,14 @@ StandardPage {
                     error: wideDelegateId.coordinateError !== ""
                            || wideDelegateId.eastingDomainError
                            || wideDelegateId.northingDomainError
-                }
 
-                PickFromViewButton {
-                    objectName: "pickFromViewButton." + wideDelegateId.index
-                    Layout.leftMargin: Theme.tightSpacing
-                    Layout.alignment: Qt.AlignVCenter
-                    onClicked: fixStationPage.pickFromView(wideDelegateId.index)
+                    PickFromViewButton {
+                        id: pickButtonId
+                        objectName: "pickFromViewButton." + wideDelegateId.index
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        onClicked: fixStationPage.pickFromView(wideDelegateId.index)
+                    }
                 }
 
                 InlineWarning {
@@ -503,6 +534,7 @@ StandardPage {
 
             QQ.Flow {
                 id: narrowFlow
+                objectName: "narrowFixRow." + narrowDelegateId.index
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter

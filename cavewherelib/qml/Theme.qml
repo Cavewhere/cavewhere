@@ -189,6 +189,9 @@ QtObject {
     // Comfortable width for an inline banner that floats over a page: wide
     // enough to read a sentence or two without crowding the page behind it.
     readonly property int inlineBannerWidth: 460
+    // Room a fixed-width table sets aside for a vertical scrollbar when it works
+    // out whether it still fits the page it is on.
+    readonly property int scrollBarAllowance: 16
 
     // Utility
     readonly property color transparent: "#00000000"
