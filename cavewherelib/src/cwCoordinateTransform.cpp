@@ -38,7 +38,9 @@ namespace {
 
     /**
      * A geodetic datum CaveWhere can spell a coordinate on, with the UTM series
-     * belonging to it. `utmNorthBase`/`utmSouthBase` are the EPSG code a zone
+     * belonging to it. `regionName` is the part of the world the datum serves,
+     * which is how the picker sorts one short acronym from another.
+     * `utmNorthBase`/`utmSouthBase` are the EPSG code a zone
      * number is added to; kNoUtmSeries means the datum has no series on that
      * hemisphere. `utmZoneMin`/`utmZoneMax` bound the zones the series covers,
      * because most series run only across the datum's own part of the world and
@@ -47,6 +49,7 @@ namespace {
     struct GeographicDatum {
         const char* geographicCode;
         const char* displayName;
+        const char* regionName;
         int utmNorthBase;
         int utmSouthBase;
         int utmZoneMin;
@@ -74,14 +77,14 @@ namespace {
      * unrelated EPSG blocks, so no base plus zone reaches them.
      */
     constexpr GeographicDatum kGeographicDatums[] = {
-        { "EPSG:4326", "WGS84",                 32600,        32700,  1, 60 },
-        { "EPSG:6318", "NAD83(2011)",            6329, kNoUtmSeries,  1, 19 },
-        { "EPSG:4617", "NAD83(CSRS)",     kNoUtmSeries, kNoUtmSeries,  0,  0 },
-        { "EPSG:6365", "Mexico ITRF2008",        6355, kNoUtmSeries, 11, 16 },
-        { "EPSG:4258", "ETRS89",                25800, kNoUtmSeries, 28, 38 },
-        { "EPSG:6668", "JGD2011",                6637, kNoUtmSeries, 51, 55 },
-        { "EPSG:7844", "GDA2020",         kNoUtmSeries,         7800, 46, 59 },
-        { "EPSG:4167", "NZGD2000",        kNoUtmSeries,         2075, 58, 60 },
+        { "EPSG:4326", "WGS84",           "World (GPS)",          32600,        32700,  1, 60 },
+        { "EPSG:6318", "NAD83(2011)",     "North America (USA)",   6329, kNoUtmSeries,  1, 19 },
+        { "EPSG:4617", "NAD83(CSRS)",     "Canada",         kNoUtmSeries, kNoUtmSeries,  0,  0 },
+        { "EPSG:6365", "Mexico ITRF2008", "Mexico",                6355, kNoUtmSeries, 11, 16 },
+        { "EPSG:4258", "ETRS89",          "Europe",               25800, kNoUtmSeries, 28, 38 },
+        { "EPSG:6668", "JGD2011",         "Japan",                 6637, kNoUtmSeries, 51, 55 },
+        { "EPSG:7844", "GDA2020",         "Australia",      kNoUtmSeries,         7800, 46, 59 },
+        { "EPSG:4167", "NZGD2000",        "New Zealand",    kNoUtmSeries,         2075, 58, 60 },
     };
 
     //! The row \a datumCode names, or nullptr.
@@ -874,6 +877,12 @@ QString cwCoordinateSystem::datumDisplayName(const QString& datumCode)
 {
     const GeographicDatum* datum = datumRow(datumCode);
     return datum ? QString::fromLatin1(datum->displayName) : QString();
+}
+
+QString cwCoordinateSystem::datumRegionName(const QString& datumCode)
+{
+    const GeographicDatum* datum = datumRow(datumCode);
+    return datum ? QString::fromLatin1(datum->regionName) : QString();
 }
 
 cwCoordinateSystem::Mode cwCoordinateSystem::modeFor(const QString& cs)

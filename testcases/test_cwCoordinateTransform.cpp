@@ -407,17 +407,18 @@ namespace {
         const char* code;
         const char* projName;
         const char* displayName;
+        const char* regionName;
     };
 
     constexpr DatumExpectation kExpectedDatums[] = {
-        { "EPSG:4326", "WGS 84",          "WGS84"           },
-        { "EPSG:6318", "NAD83(2011)",     "NAD83(2011)"     },
-        { "EPSG:4617", "NAD83(CSRS)",     "NAD83(CSRS)"     },
-        { "EPSG:6365", "Mexico ITRF2008", "Mexico ITRF2008" },
-        { "EPSG:4258", "ETRS89",          "ETRS89"          },
-        { "EPSG:6668", "JGD2011",         "JGD2011"         },
-        { "EPSG:7844", "GDA2020",         "GDA2020"         },
-        { "EPSG:4167", "NZGD2000",        "NZGD2000"        },
+        { "EPSG:4326", "WGS 84",          "WGS84",           "World (GPS)"         },
+        { "EPSG:6318", "NAD83(2011)",     "NAD83(2011)",     "North America (USA)" },
+        { "EPSG:4617", "NAD83(CSRS)",     "NAD83(CSRS)",     "Canada"              },
+        { "EPSG:6365", "Mexico ITRF2008", "Mexico ITRF2008", "Mexico"              },
+        { "EPSG:4258", "ETRS89",          "ETRS89",          "Europe"              },
+        { "EPSG:6668", "JGD2011",         "JGD2011",         "Japan"               },
+        { "EPSG:7844", "GDA2020",         "GDA2020",         "Australia"           },
+        { "EPSG:4167", "NZGD2000",        "NZGD2000",        "New Zealand"         },
     };
 
     /**
@@ -521,6 +522,8 @@ TEST_CASE("cwCoordinateSystem's datum table matches proj.db", "[cwCoordinateSyst
             CHECK(cwCoordinateTransform::isGeographic(code));
             CHECK(cwCoordinateSystem::datumDisplayName(code)
                   == QLatin1StringView(expected.displayName));
+            CHECK(cwCoordinateSystem::datumRegionName(code)
+                  == QLatin1StringView(expected.regionName));
         }
     }
 
@@ -630,6 +633,8 @@ TEST_CASE("cwCoordinateSystem round-trips every datum's CS strings",
         CHECK(cwCoordinateSystem::latLonCS("EPSG:26916").isEmpty());
         CHECK(cwCoordinateSystem::latLonCS("").isEmpty());
         CHECK(cwCoordinateSystem::datumDisplayName("EPSG:26916").isEmpty());
+        CHECK(cwCoordinateSystem::datumRegionName("EPSG:26916").isEmpty());
+        CHECK(cwCoordinateSystem::datumRegionName("").isEmpty());
         CHECK(cwCoordinateSystem::utmZoneToEpsg(16, true, "EPSG:26916").isEmpty());
     }
 

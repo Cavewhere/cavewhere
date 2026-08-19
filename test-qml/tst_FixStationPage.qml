@@ -91,6 +91,12 @@ MainWindowTest {
             return cave
         }
 
+        //! The datum combo's row index for the short name \a datumName. The rows
+        //! read "<region> · <name>", so the short name alone matches none.
+        function datumRowFor(datumCombo, datumName) {
+            return datumCombo.model.findIndex((label) => label.endsWith(" · " + datumName))
+        }
+
         function findPicker(rowIndex) {
             const fixPage = RootData.pageView.currentPageItem
             return findChild(fixPage, "inputCSComboBox." + rowIndex)
@@ -317,7 +323,7 @@ MainWindowTest {
             const datumCombo = findChild(picker, "csDatum")
             verify(datumCombo !== null, "csDatum should be reachable")
             tryVerify(() => datumCombo.visible, 5000, "Lat/Lon mode shows the datum")
-            tryCompare(datumCombo, "currentText", "NAD83(2011)")
+            tryCompare(datumCombo, "displayText", "NAD83(2011)")
         }
 
         //! The datum is demoted, never imposed: WGS84 is one click away in a
@@ -333,7 +339,7 @@ MainWindowTest {
             const datumCombo = findChild(waitForPicker(1), "csDatum")
             verify(datumCombo !== null, "csDatum should be reachable")
 
-            datumCombo.activated(datumCombo.model.indexOf("WGS84"))
+            datumCombo.activated(datumRowFor(datumCombo, "WGS84"))
             tryVerify(() => model.data(model.index(1), FixStationModel.InputCSRole)
                             === "EPSG:4326", 5000,
                       "picking WGS84 commits the WGS84 geographic code")
@@ -352,9 +358,9 @@ MainWindowTest {
             const datumCombo = findChild(picker, "csDatum")
             verify(datumCombo !== null, "csDatum should be reachable")
             tryVerify(() => datumCombo.visible, 5000, "UTM mode shows the datum")
-            tryVerify(() => datumCombo.model.indexOf("ETRS89") >= 0, 5000,
+            tryVerify(() => datumRowFor(datumCombo, "ETRS89") >= 0, 5000,
                       "zone 32 is inside ETRS89's series")
-            tryCompare(datumCombo, "currentText", "ETRS89")
+            tryCompare(datumCombo, "displayText", "ETRS89")
 
             const zoneSpin = findChild(picker, "csUtmZone")
             zoneSpin.value = 60
@@ -362,12 +368,57 @@ MainWindowTest {
 
             // ETRS89's series stops at zone 38, so it leaves both the list and
             // the row — the two agree on the WGS84 fallback.
-            tryVerify(() => datumCombo.model.indexOf("ETRS89") < 0, 5000,
+            tryVerify(() => datumRowFor(datumCombo, "ETRS89") < 0, 5000,
                       "a zone outside a datum's series drops it from the list")
-            tryCompare(datumCombo, "currentText", "WGS84")
+            tryCompare(datumCombo, "displayText", "WGS84")
             tryVerify(() => cave.fixStations.data(cave.fixStations.index(0),
                                                   FixStationModel.InputCSRole)
                             === "EPSG:32660", 5000)
+        }
+
+        //! An acronym like NAD83(2011) says nothing about where it applies, so
+        //! the open list leads each row with the region while the closed control
+        //! keeps the short name the narrow field was sized for.
+        function test_theDatumRowsNameTheirRegion() {
+            const cave = gotoFixStations()
+            cave.fixStations.addFixStation()
+            cave.fixStations.setData(cave.fixStations.index(0), nad83Datum,
+                                     FixStationModel.InputCSRole)
+            tryCompare(cave.fixStations, "count", 1)
+
+            const datumCombo = findChild(waitForPicker(0), "csDatum")
+            verify(datumCombo !== null, "csDatum should be reachable")
+            tryVerify(() => datumCombo.visible, 5000, "Lat/Lon mode shows the datum")
+            tryCompare(datumCombo, "displayText", "NAD83(2011)")
+
+            const nad83Row = datumRowFor(datumCombo, "NAD83(2011)")
+            verify(nad83Row >= 0, "NAD83(2011) should be one of the rows")
+            compare(datumCombo.model[nad83Row], "North America (USA) · NAD83(2011)")
+            compare(datumCombo.model[datumRowFor(datumCombo, "WGS84")],
+                    "World (GPS) · WGS84")
+
+            datumCombo.popup.open()
+            tryVerify(() => datumCombo.popup.opened, 5000, "the datum popup should open")
+
+            let label = null
+            tryVerify(() => {
+                label = findChild(datumCombo.popup.contentItem,
+                                  "csDatumItemLabel." + nad83Row)
+                return label !== null
+            }, 5000, "the NAD83 row's label should be reachable")
+
+            compare(label.text, "North America (USA) · NAD83(2011)")
+            tryVerify(() => !label.truncated, 5000,
+                      "the popup must show a region-led row whole")
+            verify(datumCombo.popup.width >= label.parent.width,
+                   "the popup must be at least as wide as its rows")
+            verify(datumCombo.popup.width > datumCombo.width,
+                   "a region-led row needs more width than the closed field")
+
+            datumCombo.popup.close()
+            tryVerify(() => !datumCombo.popup.visible, 5000,
+                      "the datum popup should close")
+            tryCompare(datumCombo, "displayText", "NAD83(2011)")
         }
 
         //! A Custom CRS carries its datum inside itself, so there is nothing for

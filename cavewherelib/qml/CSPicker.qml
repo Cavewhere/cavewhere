@@ -199,21 +199,85 @@ QQ.Item {
                 ? CoordinateSystem.utmDatumList(zoneSpinId.value, hemiComboId.currentIndex === 0)
                 : CoordinateSystem.datumList()
 
+            //! What one popup row needs: the widest label as the style lays it
+            //! out, and at least the closed control's own width.
+            readonly property real popupRowWidth:
+                Math.max(datumComboId.width, datumRowProbeId.implicitWidth)
+
             // Custom carries its datum inside the CRS the dialog picked, and
             // Local has none, so only Lat/Lon and UTM ask for one.
             visible: rootId.currentMode === CoordinateSystem.LatLon || rootId.showsUtm
             width: Theme.csDatumFieldWidth
             height: modeComboId.height
             font.pixelSize: Theme.fontSizeSmall
+            // The rows lead with the region because that, rather than the
+            // acronym, is what tells a caver which datum is theirs. The closed
+            // control keeps the short name, so the field stays as narrow as the
+            // table column it sits in.
+            model: datumComboId.datumCodes.map(
+                       (code) => CoordinateSystem.datumRegionName(code) + " · "
+                                 + CoordinateSystem.datumDisplayName(code))
             // WGS84 leads the table, so index 0 is the fallback a datum outside
             // this list commits to — which is what a zone edit past the end of
             // a series does.
-            model: datumComboId.datumCodes.map(
-                       (code) => CoordinateSystem.datumDisplayName(code))
             currentIndex: Math.max(0, datumComboId.datumCodes.indexOf(rootId.currentDatum))
+            displayText: CoordinateSystem.datumDisplayName(
+                             datumComboId.datumCodes[datumComboId.currentIndex] ?? "")
+
+            // A ComboBox popup is as wide as its control, which would elide
+            // every region-led row. Both the rows and the popup take the width
+            // the probe below measures.
+            popup.width: datumComboId.popupRowWidth
+                         + datumComboId.popup.leftPadding
+                         + datumComboId.popup.rightPadding
+
+            delegate: QC.ItemDelegate {
+                id: datumItemId
+
+                required property int index
+                required property string modelData
+
+                width: datumComboId.popupRowWidth
+                highlighted: datumComboId.highlightedIndex === datumItemId.index
+
+                contentItem: QC.Label {
+                    objectName: "csDatumItemLabel." + datumItemId.index
+                    text: datumItemId.modelData
+                    font.pixelSize: Theme.fontSizeSmall
+                    elide: QQ.Text.ElideRight
+                    verticalAlignment: QQ.Text.AlignVCenter
+                }
+            }
 
             onActivated: (index) => rootId.commitCS(rootId.currentMode,
                                                     datumComboId.datumCodes[index])
+        }
+    }
+
+    QQ.FontMetrics {
+        id: datumFontMetricsId
+        font.pixelSize: Theme.fontSizeSmall
+    }
+
+    // A row of the popup's own kind, off the Flow and out of sight, carrying the
+    // longest label: its implicitWidth is what the style needs for that row,
+    // padding included, which is the one number the popup and its rows share.
+    QC.ItemDelegate {
+        id: datumRowProbeId
+
+        visible: false
+        font.pixelSize: Theme.fontSizeSmall
+        text: {
+            let widest = ""
+            let widestWidth = 0
+            for (const label of datumComboId.model) {
+                const labelWidth = datumFontMetricsId.advanceWidth(label)
+                if (labelWidth > widestWidth) {
+                    widestWidth = labelWidth
+                    widest = label
+                }
+            }
+            return widest
         }
     }
 

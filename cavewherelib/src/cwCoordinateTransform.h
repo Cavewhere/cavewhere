@@ -253,6 +253,14 @@ public:
     Q_INVOKABLE static QString datumDisplayName(const QString& datumCode);
 
     /**
+     * The part of the world a datum serves ("North America (USA)" for
+     * "EPSG:6318"), or "" for a code the table doesn't name. The picker leads
+     * its dropdown rows with this, because the region is what tells a caver
+     * which acronym is theirs.
+     */
+    Q_INVOKABLE static QString datumRegionName(const QString& datumCode);
+
+    /**
      * Round-trip a CS string back to a picker mode. Splitting the parse into four
      * Q_INVOKABLEs lets QML bind each slice as a strict-typed property.
      * utmZoneFor returns -1 and utmNorthFor returns true when mode is not UTM;
