@@ -21,6 +21,10 @@ QQ.Item {
     // which findChild can't traverse before the popup is materialized.
     readonly property alias menu: rightClickMenu
 
+    // Raised just before the popup appears, so consumers can refresh item
+    // state that only a live source (e.g. the disk) can answer.
+    signal aboutToShow()
+
     function showMenu(x, y) {
         clickPos = Qt.point(x, y)
         rightClickMenu.popup()
@@ -42,5 +46,6 @@ QQ.Item {
 
     QC.Menu {
         id: rightClickMenu
+        onAboutToShow: root.aboutToShow()
     }
 }

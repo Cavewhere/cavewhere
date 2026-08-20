@@ -39,6 +39,15 @@ ColumnLayout {
     // a declarative binding can't observe it.
     property string rememberedSourcePath: ""
 
+    // Refreshed each time the source context menu opens: the source sits
+    // outside the project, where it can move or vanish between menus.
+    property bool sourceFileExists: false
+
+    // Whether the remembered source can be re-copied into the project.
+    // Only the manager knows the answer, so the panel writes it back on
+    // sourceEligibilityRefreshRequested and the header stays manager-free.
+    property bool sourceReloadable: false
+
     readonly property string entryFile: trip !== null ? trip.externalCenterline.entryFile : ""
     readonly property string fileName: entryFile.substring(entryFile.lastIndexOf("/") + 1)
     readonly property string formatName: trip !== null ? trip.externalCenterline.format : ""
@@ -47,6 +56,14 @@ ColumnLayout {
     spacing: Theme.tightSpacing
 
     signal replaceRequested()
+    signal reloadFromSourceRequested()
+    signal sourceEligibilityRefreshRequested()
+
+    function refreshSourceState() {
+        sourceFileExists = rememberedSourcePath.length > 0
+                && RootData.pathExists(rememberedSourcePath)
+        sourceEligibilityRefreshRequested()
+    }
 
     function refreshEntryFileExists() {
         entryFileExists = entryFilePath.length > 0 && RootData.pathExists(entryFilePath)
@@ -86,9 +103,10 @@ ColumnLayout {
             // Right-click reaches the file itself — the copy inside the
             // project, which is the file this panel is showing.
             ContextMenuArea {
-                id: fileContextMenuId
                 objectName: "attachedFileContextMenu"
                 anchors.fill: parent
+
+                onAboutToShow: root.refreshEntryFileExists()
 
                 RevealInFileManagerMenuItem {
                     objectName: "showInFileManagerAction"
@@ -100,13 +118,6 @@ ColumnLayout {
                     text: qsTr("Open")
                     enabled: root.entryFileExists
                     onTriggered: FileRevealer.openFile(root.entryFilePath)
-                }
-            }
-
-            QQ.Connections {
-                target: fileContextMenuId.menu
-                function onAboutToShow() {
-                    root.refreshEntryFileExists()
                 }
             }
         }
@@ -138,5 +149,35 @@ ColumnLayout {
         text: root.rememberedSourcePath.length > 0
               ? qsTr("Copied from: %1").arg(root.rememberedSourcePath)
               : qsTr("Copied from an unknown location (this machine)")
+
+        // Right-click reaches the source itself — the only place on this
+        // panel whose verbs act on the original rather than the copy. It
+        // needs a path to act on, so an unknown origin offers no menu.
+        ContextMenuArea {
+            objectName: "sourceContextMenu"
+            anchors.fill: parent
+            visible: root.rememberedSourcePath.length > 0
+
+            onAboutToShow: root.refreshSourceState()
+
+            QC.MenuItem {
+                objectName: "reloadFromSourceAction"
+                text: qsTr("Reload")
+                enabled: root.actionsEnabled && root.sourceReloadable
+                onTriggered: root.reloadFromSourceRequested()
+            }
+
+            RevealInFileManagerMenuItem {
+                objectName: "showSourceInFileManagerAction"
+                filePath: root.rememberedSourcePath
+            }
+
+            QC.MenuItem {
+                objectName: "openSourceAction"
+                text: qsTr("Open")
+                enabled: root.sourceFileExists
+                onTriggered: FileRevealer.openFile(root.rememberedSourcePath)
+            }
+        }
     }
 }

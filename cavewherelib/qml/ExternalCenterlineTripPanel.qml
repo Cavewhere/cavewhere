@@ -225,12 +225,25 @@ QQ.Item {
     QQ.Component {
         id: attachedHeaderComp
         ExternalCenterlineAttachedHeader {
+            id: attachedHeaderItemId
+
             trip: root.trip
             externalSourceSettings: root.externalSourceSettings
             actionsEnabled: !root.ownerBusy
             entryFilePath: root.entryFilePath
 
             onReplaceRequested: root.openReplaceDialog()
+
+            onReloadFromSourceRequested: {
+                root.externalCenterlineManager.reloadFromSource(root.trip)
+            }
+
+            // canReloadFromSource follows the disk and has no change
+            // signal, so the header asks at the moment its menu opens.
+            onSourceEligibilityRefreshRequested: {
+                attachedHeaderItemId.sourceReloadable =
+                        root.externalCenterlineManager.canReloadFromSource(root.trip)
+            }
         }
     }
 }

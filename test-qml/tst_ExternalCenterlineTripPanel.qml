@@ -474,6 +474,44 @@ MainWindowTest {
             })
         }
 
+        // §16 B9c: the header stays manager-free, so the panel is what
+        // answers the eligibility refresh and what runs the verb. Reload
+        // re-copies the source over the in-project copy, which reports
+        // through the attach bridge like every other replace.
+        function test_sourceMenuReloadRunsTheManagersVerb() {
+            attachAndBind("trip-panel-source-reload")
+            compare(attachCompletedSpyId.count, 1,
+                    "the fixture attach reported once")
+
+            const header = findChild(panelId, "attachedHeader")
+            const sourceLabel = findChild(panelId, "sourceModeLabel")
+            verify(sourceLabel !== null, "sourceModeLabel must exist")
+            const contextMenu = findChild(panelId, "sourceContextMenu")
+            verify(contextMenu !== null, "sourceContextMenu must exist")
+
+            waitForRendering(panelId)
+            mouseClick(sourceLabel, sourceLabel.width / 2,
+                       sourceLabel.height / 2, Qt.RightButton)
+            tryVerify(() => contextMenu.menu.opened, 5000,
+                      "right-clicking the source line opens the menu")
+            tryVerify(() => header.sourceReloadable, 5000,
+                      "the panel answers eligibility from the manager")
+
+            const reloadItem = findChild(contextMenu, "reloadFromSourceAction")
+            verify(reloadItem !== null, "reloadFromSourceAction must exist")
+            verify(reloadItem.enabled, "an existing external source can be reloaded")
+
+            reloadItem.triggered()
+            contextMenu.menu.dismiss()
+            tryVerify(() => !contextMenu.menu.opened, 5000, "the menu closes")
+
+            tryVerify(() => attachCompletedSpyId.count === 2, 15000,
+                      "the reload reports through the attach bridge")
+            const report = attachCompletedSpyId.signalArguments[1][0]
+            verify(report.success, "the reload succeeds; got: " + report.errorMessage)
+            tryVerify(() => !panelId.ownerBusy, 10000, "the busy token releases")
+        }
+
         function test_aSecondAttachmentNothingTiesInBannersItself() {
             const fixture = attachAndBind("trip-panel-floating")
             const cave = RootData.region.cave(0)

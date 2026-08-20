@@ -76,6 +76,18 @@ MainWindowTest {
         }
     }
 
+    // Stands in for the panel's manager wiring: the header raises the
+    // refresh and someone else answers it. Here the answer is the rule
+    // the staged paths below exercise — the source has to be on this
+    // machine before it can be copied back in.
+    QQ.Connections {
+        target: attachedHeaderId
+        function onSourceEligibilityRefreshRequested() {
+            attachedHeaderId.sourceReloadable =
+                    RootData.pathExists(attachedHeaderId.rememberedSourcePath)
+        }
+    }
+
     ReplaceCenterlineDialog {
         id: replaceDialogId
         trip: rootId.trip
@@ -108,6 +120,12 @@ MainWindowTest {
             signalName: "replaceRequested"
         }
 
+        SignalSpy {
+            id: reloadFromSourceSpyId
+            target: attachedHeaderId
+            signalName: "reloadFromSourceRequested"
+        }
+
         function init() {
             RootData.futureManagerModel.waitForFinished()
             RootData.newProject()
@@ -119,6 +137,8 @@ MainWindowTest {
             replaceRequestedSpyId.clear()
             attachedHeaderId.actionsEnabled = true
             attachedHeaderId.entryFilePath = ""
+            attachedHeaderId.sourceReloadable = false
+            reloadFromSourceSpyId.clear()
         }
 
         function cleanup() {
@@ -275,6 +295,85 @@ MainWindowTest {
 
             contextMenu.menu.dismiss()
             tryVerify(() => !contextMenu.menu.opened, 5000, "the menu closes")
+        }
+
+        // §16 B9c: right-clicking the provenance line reaches the source
+        // file — the one path on this panel that no other verb touches.
+        // Reload only raises a signal (the panel runs the manager's verb),
+        // and reveal/open would hand the file to the desktop, so the menu
+        // is checked for what it offers rather than run.
+        function test_sourceLineRightClickOffersReloadRevealAndOpen() {
+            const fixture = attachFixtureTrip("panel-source-context-menu")
+            rootId.trip = fixture.trip
+
+            const sourceLabel = findChild(attachedHeaderId, "sourceModeLabel")
+            verify(sourceLabel !== null, "sourceModeLabel must exist")
+            tryVerify(() => attachedHeaderId.rememberedSourcePath.length > 0,
+                      5000, "the attach remembered where the copy came from")
+
+            const contextMenu = findChild(attachedHeaderId, "sourceContextMenu")
+            verify(contextMenu !== null, "sourceContextMenu must exist")
+            verify(contextMenu.visible, "a known origin offers its menu")
+
+            waitForRendering(attachedHeaderId)
+            mouseClick(sourceLabel, sourceLabel.width / 2,
+                       sourceLabel.height / 2, Qt.RightButton)
+            tryVerify(() => contextMenu.menu.opened, 5000,
+                      "right-clicking the source line opens the menu")
+
+            const reloadItem = findChild(contextMenu, "reloadFromSourceAction")
+            verify(reloadItem !== null, "reloadFromSourceAction must exist")
+            compare(reloadItem.text, "Reload")
+            verify(reloadItem.enabled,
+                   "a source sitting on this machine can be copied back in")
+
+            const revealItem = findChild(contextMenu, "showSourceInFileManagerAction")
+            verify(revealItem !== null, "showSourceInFileManagerAction must exist")
+            verify(revealItem.enabled, "a remembered source can be revealed")
+            verify(revealItem.text.indexOf("Show in") === 0,
+                   "the reveal item names the platform's file manager; got: "
+                   + revealItem.text)
+
+            const openItem = findChild(contextMenu, "openSourceAction")
+            verify(openItem !== null, "openSourceAction must exist")
+            compare(openItem.text, "Open")
+            verify(openItem.enabled, "a source that is there can be opened")
+
+            reloadItem.triggered()
+            compare(reloadFromSourceSpyId.count, 1,
+                    "Reload raises reloadFromSourceRequested for the panel")
+
+            contextMenu.menu.dismiss()
+            tryVerify(() => !contextMenu.menu.opened, 5000, "the menu closes")
+
+            // A breadcrumb naming a file that is gone from this machine —
+            // a moved source, or a project that arrived through Git. Both
+            // verbs that touch the file go quiet; reveal stays available
+            // and lands on the containing folder.
+            attachedHeaderId.rememberedSourcePath = fixture.source + ".gone"
+            mouseClick(sourceLabel, sourceLabel.width / 2,
+                       sourceLabel.height / 2, Qt.RightButton)
+            tryVerify(() => contextMenu.menu.opened, 5000, "the menu opens again")
+            tryVerify(() => !reloadItem.enabled, 5000,
+                      "a source that is gone offers nothing to copy back in")
+            verify(!openItem.enabled, "a source that is gone offers nothing to open")
+            verify(revealItem.enabled, "a missing source still reveals its folder")
+
+            contextMenu.menu.dismiss()
+            tryVerify(() => !contextMenu.menu.opened, 5000, "the menu closes")
+
+            // An unknown origin names no path at all, so the line carries
+            // no menu rather than a menu of dead actions.
+            RootData.externalSourceSettings.clearBreadcrumb(fixture.trip.id)
+            tryVerify(() => attachedHeaderId.rememberedSourcePath.length === 0,
+                      5000, "clearing forgets the remembered source")
+            verify(!contextMenu.visible, "an unknown origin offers no menu")
+
+            mouseClick(sourceLabel, sourceLabel.width / 2,
+                       sourceLabel.height / 2, Qt.RightButton)
+            wait(100)
+            verify(!contextMenu.menu.opened,
+                   "right-clicking an unknown origin opens nothing")
         }
 
         // The commit-4 gate (plans/EXTERNAL_FILE_LIVE_LINK_RETIREMENT.html
