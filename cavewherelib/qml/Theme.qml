@@ -131,6 +131,10 @@ QtObject {
     // roughly the same words per line instead of wrapping sooner.
     readonly property int helpBoxMaxWidth: Math.round(350 * fontScale)
 
+    // Timing
+    // Hover time, in milliseconds, before a tooltip appears.
+    readonly property int toolTipDelay: 500
+
     // Utility
     readonly property color transparent: "#00000000"
     readonly property color shadow: dark ? "#33000000" : "#22000000"

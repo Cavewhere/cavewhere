@@ -48,6 +48,10 @@ ColumnLayout {
     // sourceEligibilityRefreshRequested and the header stays manager-free.
     property bool sourceReloadable: false
 
+    // Whether the breadcrumb still names where the copy came from. An
+    // unknown origin has no path to spell out, reveal, or reload.
+    readonly property bool sourceKnown: rememberedSourcePath.length > 0
+
     readonly property string entryFile: trip !== null ? trip.externalCenterline.entryFile : ""
     readonly property string fileName: entryFile.substring(entryFile.lastIndexOf("/") + 1)
     readonly property string formatName: trip !== null ? trip.externalCenterline.format : ""
@@ -60,8 +64,7 @@ ColumnLayout {
     signal sourceEligibilityRefreshRequested()
 
     function refreshSourceState() {
-        sourceFileExists = rememberedSourcePath.length > 0
-                && RootData.pathExists(rememberedSourcePath)
+        sourceFileExists = sourceKnown && RootData.pathExists(rememberedSourcePath)
         sourceEligibilityRefreshRequested()
     }
 
@@ -99,6 +102,17 @@ ColumnLayout {
             elide: QC.Label.ElideMiddle
             font.bold: true
             text: root.fileName
+
+            // The row shows a bare file name and elides it; hovering names
+            // the whole path of the copy inside the project, which is the
+            // file every verb on this panel acts on.
+            QC.ToolTip.visible: fileHoverId.hovered && root.entryFilePath.length > 0
+            QC.ToolTip.text: root.entryFilePath
+            QC.ToolTip.delay: Theme.toolTipDelay
+
+            QQ.HoverHandler {
+                id: fileHoverId
+            }
 
             // Right-click reaches the file itself — the copy inside the
             // project, which is the file this panel is showing.
@@ -146,9 +160,20 @@ ColumnLayout {
         elide: QC.Label.ElideMiddle
         font.pixelSize: Theme.fontSizeSmall
         color: Theme.textSubtle
-        text: root.rememberedSourcePath.length > 0
+        text: root.sourceKnown
               ? qsTr("Copied from: %1").arg(root.rememberedSourcePath)
               : qsTr("Copied from an unknown location (this machine)")
+
+        // The line elides, and this path is the one that differs from the
+        // project copy above, so hovering spells the source out in full.
+        // An unknown origin names no path, so it offers no tooltip.
+        QC.ToolTip.visible: sourceHoverId.hovered && root.sourceKnown
+        QC.ToolTip.text: root.rememberedSourcePath
+        QC.ToolTip.delay: Theme.toolTipDelay
+
+        QQ.HoverHandler {
+            id: sourceHoverId
+        }
 
         // Right-click reaches the source itself — the only place on this
         // panel whose verbs act on the original rather than the copy. It
@@ -156,7 +181,7 @@ ColumnLayout {
         ContextMenuArea {
             objectName: "sourceContextMenu"
             anchors.fill: parent
-            visible: root.rememberedSourcePath.length > 0
+            visible: root.sourceKnown
 
             onAboutToShow: root.refreshSourceState()
 

@@ -30,7 +30,7 @@ QQ.Rectangle {
     QC.ToolTip {
         visible: container.toolTip !== "" && mouseArea.containsMouse
         text: container.toolTip
-        delay: 500
+        delay: Theme.toolTipDelay
     }
 
     radius: 3

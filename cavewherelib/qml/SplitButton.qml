@@ -150,7 +150,7 @@ QQ.Row {
 
         QC.ToolTip.visible: hovered && splitButtonId.menuToolTip.length > 0
         QC.ToolTip.text: splitButtonId.menuToolTip
-        QC.ToolTip.delay: 500
+        QC.ToolTip.delay: Theme.toolTipDelay
 
         onClicked: {
             splitButtonId.menu.popup(menuButtonId, 0, menuButtonId.height)

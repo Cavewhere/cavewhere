@@ -217,7 +217,7 @@ StandardPage {
                     // the full WKT for every delegate on every hover event
                     // elsewhere in the list.
                     QC.ToolTip.text: csCellHover.hovered ? wideDelegateId.sourceCS : ""
-                    QC.ToolTip.delay: 500
+                    QC.ToolTip.delay: Theme.toolTipDelay
                 }
 
                 QC.Label {
@@ -310,7 +310,7 @@ StandardPage {
                         QC.ToolTip.visible: narrowCSHover.hovered
                                             && narrowDelegateId.sourceCS.length > 0
                         QC.ToolTip.text: narrowCSHover.hovered ? narrowDelegateId.sourceCS : ""
-                        QC.ToolTip.delay: 500
+                        QC.ToolTip.delay: Theme.toolTipDelay
                     }
 
                     QC.Label { text: "·"; color: Theme.textSubtle }

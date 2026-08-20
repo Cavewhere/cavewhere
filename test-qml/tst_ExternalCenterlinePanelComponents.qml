@@ -1,4 +1,5 @@
 import QtQuick as QQ
+import QtQuick.Controls as QC
 import QtTest
 import cavewherelib
 import cw.TestLib
@@ -170,6 +171,15 @@ MainWindowTest {
             return listView
         }
 
+        // Resolves the in-project copy the way the panel does and hands it
+        // to the isolated header, which has no manager of its own.
+        function stageEntryFilePath(fixture) {
+            attachedHeaderId.entryFilePath = FileRevealer.resolvedPath(
+                        RootData.externalCenterlineManager.attachmentDir(fixture.trip.id),
+                        fixture.trip.externalCenterline.entryFile)
+            return attachedHeaderId.entryFilePath
+        }
+
         function test_attachedHeaderShowsFileFormatAndSource() {
             const fixture = attachFixtureTrip("panel-header")
             rootId.trip = fixture.trip
@@ -235,9 +245,7 @@ MainWindowTest {
 
             // The panel resolves this for the real header; here the
             // resolution itself is the thing being handed over.
-            attachedHeaderId.entryFilePath = FileRevealer.resolvedPath(
-                        RootData.externalCenterlineManager.attachmentDir(fixture.trip.id),
-                        fixture.trip.externalCenterline.entryFile)
+            stageEntryFilePath(fixture)
             verify(attachedHeaderId.entryFilePath.indexOf("survex_simple.svx") > 0,
                    "the in-project copy resolves to an absolute path; got: "
                    + attachedHeaderId.entryFilePath)
@@ -374,6 +382,43 @@ MainWindowTest {
             wait(100)
             verify(!contextMenu.menu.opened,
                    "right-clicking an unknown origin opens nothing")
+        }
+
+        // §16 B9d: both labels elide, and the two paths they name are
+        // different — the copy inside the project and where it came from.
+        // Hovering spells each one out in full. The attached text is the
+        // gate; the hover timing itself is Qt's.
+        function test_bothPathsCarryFullPathTooltips() {
+            const fixture = attachFixtureTrip("panel-path-tooltips")
+            rootId.trip = fixture.trip
+
+            const entryFilePath = stageEntryFilePath(fixture)
+            verify(entryFilePath.length > 0,
+                   "the in-project copy resolves to a real path to name")
+
+            const fileLabel = findChild(attachedHeaderId, "attachedFileLabel")
+            verify(fileLabel !== null, "attachedFileLabel must exist")
+            verify(fileLabel.text.indexOf("/") < 0,
+                   "the row shows a bare file name; got: " + fileLabel.text)
+            compare(fileLabel.QC.ToolTip.text, entryFilePath,
+                    "the file name names the whole project-copy path on hover")
+
+            const sourceLabel = findChild(attachedHeaderId, "sourceModeLabel")
+            verify(sourceLabel !== null, "sourceModeLabel must exist")
+            tryVerify(() => attachedHeaderId.rememberedSourcePath.length > 0,
+                      5000, "the attach remembered where the copy came from")
+            compare(sourceLabel.QC.ToolTip.text,
+                    attachedHeaderId.rememberedSourcePath,
+                    "the provenance line names the whole source path on hover")
+            verify(sourceLabel.QC.ToolTip.text !== fileLabel.QC.ToolTip.text,
+                   "the two tooltips name two different files")
+
+            // An unknown origin names no path, so it offers no tooltip.
+            RootData.externalSourceSettings.clearBreadcrumb(fixture.trip.id)
+            tryVerify(() => attachedHeaderId.rememberedSourcePath.length === 0,
+                      5000, "clearing forgets the remembered source")
+            compare(sourceLabel.QC.ToolTip.text, "",
+                    "an unknown origin carries no tooltip")
         }
 
         // The commit-4 gate (plans/EXTERNAL_FILE_LIVE_LINK_RETIREMENT.html
