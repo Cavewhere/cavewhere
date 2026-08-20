@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>External Source Change Notification — Notify + One-Click Update, At Project Scope</title>
+<style>
+  :root {
+    --bg: #1b1d21;
+    --panel: #22252a;
+    --panel2: #26292e;
+    --border: #3a3f47;
+    --text: #e6e8eb;
+    --dim: #9aa0a8;
+    --accent: #61afef;
+    --good: #98c379;
+    --warn: #e5c07b;
+    --bad: #e06c75;
+    --mono: "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 15px/1.55 -apple-system, "Segoe UI", sans-serif;
+    margin: 0; padding: 2rem 1rem 6rem;
+  }
+  main { max-width: 1000px; margin: 0 auto; }
+  h1 { font-size: 1.7rem; margin: 0 0 .2rem; }
+  h2 { font-size: 1.25rem; margin: 2.6rem 0 .8rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+  h3 { font-size: 1.05rem; margin: 1.6rem 0 .5rem; color: var(--accent); }
+  .meta { color: var(--dim); font-size: .9rem; margin-bottom: 1.5rem; }
+  code, .mono { font-family: var(--mono); font-size: .86em; }
+  code { background: var(--panel2); border: 1px solid var(--border); border-radius: 4px; padding: .08em .35em; }
+  pre {
+    background: var(--panel2); border: 1px solid var(--border); border-radius: 8px;
+    padding: .9rem 1.1rem; overflow-x: auto; font-family: var(--mono); font-size: .82rem; line-height: 1.5;
+  }
+  pre code { background: none; border: none; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .92rem; }
+  th, td { border: 1px solid var(--border); padding: .5rem .7rem; text-align: left; vertical-align: top; }
+  th { background: var(--panel2); }
+  td code { white-space: nowrap; }
+  .pill { display: inline-block; border-radius: 999px; padding: .05rem .6rem; font-size: .75rem; font-weight: 600; letter-spacing: .3px; vertical-align: middle; }
+  .pill.draft { background: #3d3524; color: var(--warn); border: 1px solid var(--warn); }
+  .pill.done { background: #2b3a2b; color: var(--good); border: 1px solid var(--good); }
+  .pill.active { background: #23303d; color: var(--accent); border: 1px solid var(--accent); }
+  .callout { border-left: 3px solid var(--accent); background: var(--panel); padding: .7rem 1rem; border-radius: 0 8px 8px 0; margin: 1rem 0; }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout.bad { border-left-color: var(--bad); }
+  .callout.good { border-left-color: var(--good); }
+  .callout .title { font-weight: 700; margin-bottom: .2rem; }
+  ul, ol { padding-left: 1.4rem; }
+  li { margin: .3rem 0; }
+  .dim { color: var(--dim); }
+  .good { color: var(--good); }
+  .bad { color: var(--bad); }
+</style>
+</head>
+<body>
+<main>
+
+<h1>External Source Change Notification <span class="pill draft">DRAFT</span></h1>
+<p class="meta">
+  Filed 2026-08-20. Grows out of
+  <a href="EXTERNAL_FILE_PHASE2.html#bug-b9">Phase 2 §16 B9</a> and the
+  <a href="EXTERNAL_FILE_LIVE_LINK_RETIREMENT.html">live-link retirement</a>.
+  Design settled in discussion with Philip; implementation unscheduled.
+</p>
+
+<h2 id="story">1. The user story, and what the retirement left unfinished</h2>
+
+<p>
+  A user modifies several external source files (e.g. an evening of .svx
+  edits in a text editor) and expects CaveWhere to pick them up. They will
+  not visit every trip page to check whether each project copy is current
+  &mdash; and the same holds for cave-level attachments. Today CaveWhere
+  gives them nothing: the live-link retirement removed source watching
+  entirely, so a diverged source is invisible until the user thinks to
+  Reload by hand.
+</p>
+
+<div class="callout">
+  <div class="title">The 2026-07-16 direction, completed</div>
+  The external-file direction change dropped <em>auto-reconcile</em> in
+  favor of "notify + one-click update", with the project copy as the
+  source of truth. The retirement shipped the "project copy is
+  authoritative" half and deleted source watching; this plan builds the
+  notify half properly &mdash; at <strong>project scope</strong>, not
+  per-trip. The line that stays firm: <strong>no auto-update</strong>.
+  Detection flips a status bit and shows UI; copying into the project
+  only ever happens on an explicit user action.
+</div>
+
+<h2 id="detection">2. Detection: fingerprint at copy time + notification-only watchers</h2>
+
+<p>
+  The two mechanisms cover different windows and are both needed:
+</p>
+
+<table>
+  <tr><th></th><th>Copy-time fingerprint</th><th>Session watcher</th></tr>
+  <tr>
+    <th>Covers</th>
+    <td>Edits made while CaveWhere was closed &mdash; caught by a sweep at
+        project open (one <code>stat</code> per source).</td>
+    <td>Edits made while the app runs &mdash; the banner count ticks up
+        live.</td>
+  </tr>
+  <tr>
+    <th>Mechanism</th>
+    <td>At every copy into the project (Attach, Replace, Reload/Update),
+        stamp the owner's breadcrumb entry in
+        <code>cwExternalSourceSettings</code> with a fingerprint of the
+        source. "Changed" = current fingerprint &ne; recorded one.</td>
+    <td><code>QFileSystemWatcher</code> on the breadcrumb source paths
+        that exist on this machine. An event re-stats and updates the
+        status model. Nothing else.</td>
+  </tr>
+</table>
+
+<h3>Fingerprint contents (decided)</h3>
+<ul>
+  <li><strong>All dependencies, not just the entry file.</strong> The
+      scanner already produces the source's <code>*include</code>
+      dependency list; fingerprint every file in it. A dependency edit is
+      as real a change as an entry-file edit.</li>
+  <li><strong>Size + mtime + content hash per file; stat is the fast
+      path, the hash is the verdict.</strong> Sources are small text
+      files (~100&nbsp;KB max), so hashing (SHA-256 via
+      <code>QCryptographicHash</code>) costs microseconds. A check
+      compares size+mtime first: unchanged &rarr; UpToDate with no file
+      read; changed &rarr; read and hash, and only a hash mismatch
+      reports <em>Changed</em> &mdash; a hash match silently refreshes
+      the stored mtime so the fast path goes quiet again. This kills the
+      realistic false positives (a source directory under git rewrites
+      identical files with fresh mtimes on checkout/pull; editors that
+      rewrite unchanged content on save) while keeping the
+      focus-regained re-sweep at pure <code>stat</code> cost when
+      nothing changed. Accepted blind spot: a content change with
+      deliberately preserved mtime <em>and</em> size. Stored in the
+      breadcrumb's QSettings entry, which is per-user per-machine
+      &mdash; exactly the scope the source path itself has.</li>
+</ul>
+
+<h3>Why watching sources is safe this time</h3>
+<p>
+  The retired live link hurt because watcher events <em>drove
+  reconciliation</em>: copies, solves, state merges. Here an event does
+  one thing &mdash; recompute one owner's status enum. No file copying,
+  no solve, no project mutation. The fiddly part is known scar tissue
+  from the B8 project-copy watcher: editors save via atomic rename,
+  which silently drops the path from the watcher, so every event
+  re-adds the path, and the parent directory is watched to catch
+  re-creation. Canonicalize paths before they enter the watch set
+  (lesson from retirement commit 3).
+</p>
+
+<h3>Check triggers</h3>
+<ul>
+  <li>Project open: full fingerprint sweep.</li>
+  <li>Watcher event: re-stat that owner's source set.</li>
+  <li>Main window regains focus: cheap re-sweep (the "edited in another
+      app and came back" moment; also catches anything a platform
+      watcher missed).</li>
+</ul>
+
+<h2 id="model">3. One status model, every surface reads it</h2>
+
+<p>
+  A central per-owner status source &mdash; fed by
+  <code>cwExternalCenterlineManager</code>, covering trip <em>and</em>
+  cave owners through the existing owner-id scheme &mdash; exposing for
+  each attachment:
+</p>
+
+<pre><code>ownerId (QUuid)      trip or cave
+sourcePath           breadcrumb path ("" when no breadcrumb)
+status               UpToDate | Changed | SourceMissing | NoBreadcrumb</code></pre>
+
+<p>
+  The app-level banner, the review list, and the trip panel's inline
+  "changed since copied" state (Phase 2 B9's source line) all bind to
+  this one model, so they can never disagree. Collaborator degradation
+  is automatic and correct: a synced machine with no breadcrumb has no
+  fingerprint, no watcher, no banner &mdash; there is no source there to
+  compare against.
+</p>
+
+<h2 id="ui">4. Presentation: a persistent banner, never a modal</h2>
+
+<pre><code>┌────────────────────────────────────────────────────────────────────┐
+│ 3 external sources have changed since they were copied into this   │
+│ project.                     [Update all]   [Show]   [✕]           │
+└────────────────────────────────────────────────────────────────────┘</code></pre>
+
+<ul>
+  <li><strong>Non-modal, persistent, dismissable</strong> &mdash; the
+      browser "restore session?" pattern, hosted at the top of the main
+      window via the per-window <code>AppOverlay</code> host. Appears
+      when the open-time sweep finds changes; count updates live from
+      watcher events. No project-open dialog, no popup.</li>
+  <li><strong>[Update all]</strong> re-copies every <em>Changed</em>
+      source through the shared Replace/Reload overwrite path and
+      requests one coalesced solve at the end.
+      <strong>Decided: Update-all skips <em>SourceMissing</em> rows</strong>
+      &mdash; a gone source has nothing to copy; those keep the existing
+      missing-source treatment and stay visible in the list.</li>
+  <li><strong>[Show]</strong> opens a compact list: owner (cave/trip
+      name), source path, status &mdash; with a per-row Update for the
+      user who diverged one file on purpose.</li>
+  <li><strong>Dismissal is per-fingerprint.</strong> Dismissing the
+      banner records the dismissed fingerprints; the banner returns only
+      when a source changes <em>again</em>. It never nags twice about
+      the same edit.</li>
+  <li><strong>Trip panel inline state</strong>: the "Copied from:" line
+      gains a "&mdash; changed since copied" suffix bound to the model,
+      with the source context menu's Reload (B9b/B9c) right there.</li>
+</ul>
+
+<h2 id="commits">5. Commit breakdown</h2>
+
+<p>
+  Prerequisite: Phase 2 <a href="EXTERNAL_FILE_PHASE2.html#bug-b9">B9b</a>
+  (Reload = re-copy from source through the Replace overwrite path) is
+  the update verb everything here invokes.
+</p>
+
+<ol>
+  <li><strong>N1 &mdash; Fingerprint recording.</strong> Extend the
+      breadcrumb entry with per-file size+mtime+SHA-256 for the source's
+      full dependency set; stamp on Attach/Replace/Reload. C++ gate:
+      fingerprints written on each copy path; older settings entries
+      without fingerprints read back as "no fingerprint" (treated as
+      UpToDate &mdash; never nag on data older than this feature).</li>
+  <li><strong>N2 &mdash; Status model + open-time sweep.</strong> The
+      per-owner status source and the project-open fingerprint sweep.
+      C++ gate: statuses for changed / missing / no-breadcrumb / stale
+      sources; cave and trip owners.</li>
+  <li><strong>N3 &mdash; Session watchers, notification-only.</strong>
+      Watch existing breadcrumb sources + parent dirs; atomic-rename
+      re-add; window-focus re-sweep. C++ gate: an on-disk edit flips the
+      status without touching the project copy, the solve, or
+      <code>cwProject::modified()</code> (the B8 asymmetry: source-side
+      events never dirty the project).</li>
+  <li><strong>N4 &mdash; Trip-panel inline state.</strong> The
+      "changed since copied" suffix on the source line, bound to the
+      model. QML gate.</li>
+  <li><strong>N5 &mdash; App banner + review list.</strong> Banner with
+      live count, Update-all (coalesced single solve, skips missing),
+      Show list with per-row Update, per-fingerprint dismissal. QML
+      gates: banner appears from a seeded Changed status, Update-all
+      invokes the shared overwrite path once per changed owner, dismiss
+      suppresses until the fingerprint moves again.</li>
+</ol>
+
+<h2 id="non-goals">6. Non-goals</h2>
+<ul>
+  <li><strong>No auto-update</strong> &mdash; explicit user action only,
+      per the 2026-07-16 decision.</li>
+  <li><strong>No modal or project-open dialog.</strong></li>
+  <li><strong>No cross-machine change detection</strong> &mdash; the
+      breadcrumb and fingerprint are per-machine by design; a
+      collaborator without the source sees nothing.</li>
+  <li><strong>No hashing on the quiet path</strong> &mdash; a file whose
+      size+mtime are unchanged is never read; hashing only confirms or
+      refutes a stat-level change.</li>
+</ul>
+
+</main>
+</body>
+</html>

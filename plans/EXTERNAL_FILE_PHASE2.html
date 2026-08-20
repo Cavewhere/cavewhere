@@ -4227,5 +4227,88 @@ Stations list   &larr; denser rows; consider abbreviated UsedStations view</code
   downgrade rather than a simplification.
 </p>
 
+<h3 id="bug-b9">B9 &mdash; Source-line UX: provenance labeling, source verbs, tooltips</h3>
+
+<p>
+  <em>(Filed 2026-08-20, from manual review of the B2 series.)</em> The
+  panel's one visible path is the one path no action touches. The header
+  shows <code>Source: &lt;original pick path&gt;</code>, but every verb
+  operates on the in-project copy: <code>[Reload now]</code> rescans the
+  project copy, and B2e's "Show in Finder"/"Open" reveal the project
+  copy. A user reading "Source:" reasonably expects those actions to
+  target that path. The watcher confirms the model: the watch set is
+  built only from the project copy's in-project dependencies
+  (<code>cwExternalCenterlineManager.cpp</code> scan of
+  <code>projectEntry</code>); source paths are never watched (live-link
+  retirement). Split into testable commits:
+</p>
+<ul>
+  <li>
+    <strong>B9a &mdash; "Copied from:" label.</strong> Rename the
+    breadcrumb line from <code>Source: %1</code> to
+    <code>Copied from: %1</code> (and reword the forgotten-breadcrumb
+    variant to match), so the line reads as provenance rather than
+    authority. QML test: label text.
+  </li>
+  <li>
+    <strong>B9b &mdash; Reload moves to the source and means
+    "re-copy from source".</strong> Remove <code>[Reload now]</code>
+    from the header row (the watcher already covers project-copy
+    edits, so the manual rescan verb earns no prime placement).
+    Reload becomes a <em>source</em> action: re-copy the original
+    source file into the project (through the same overwrite path
+    Replace uses), offered <strong>only when the breadcrumb source is
+    known, exists on this machine, and lies outside the project</strong>
+    &mdash; on a git-synced machine the breadcrumb may point at a path
+    that was never there, and a source inside the project is already
+    the copy. QML test: Reload present with an existing external
+    source, absent when the breadcrumb is empty or the file is gone.
+  </li>
+  <li>
+    <strong>B9c &mdash; Context menu on the source line.</strong>
+    Right-click "Copied from:" offers <strong>Reload</strong> (B9b),
+    <strong>Show in Finder</strong>, and <strong>Open</strong> &mdash;
+    all targeting the <em>source</em> path, mirroring B2e's menu on
+    the project file so each path on screen reveals itself.
+    Reuse <code>cwFileRevealer</code> and the shared
+    <code>RevealInFileManagerMenuItem</code>. QML test: menu exposes
+    the three actions; reveal/open are not invoked for real.
+  </li>
+  <li>
+    <strong>B9d &mdash; Tooltips on both paths.</strong> The header
+    filename gets a tooltip with the project copy's full path; the
+    "Copied from:" line gets a tooltip with the full source path
+    (both elide today, and the two paths being different is exactly
+    the confusion this section exists to dissolve). QML test: tooltip
+    text on both items.
+  </li>
+</ul>
+<p>
+  <strong>Follow-on plan:</strong> "the source changed and the user
+  should know" grew past a B9 bullet into its own design &mdash;
+  copy-time fingerprints, notification-only session watchers, a central
+  status model, and a project-scope banner with Update-all. See
+  <a href="EXTERNAL_SOURCE_CHANGE_NOTIFY.html">External Source Change
+  Notification</a>; its update verb is B9b's Reload, so B9 lands first.
+</p>
+
+<h3 id="bug-b10">B10 &mdash; External trip metadata must be read-only</h3>
+
+<p>
+  <em>(Filed 2026-08-20, follow-up to B2b <code>6db939c7</code>.)</em>
+  B2b hid the Team "+" for an externally-backed trip, but the rest of
+  the metadata stayed editable: team member <strong>names and
+  roles</strong> can still be edited (and rows deleted), and the
+  <strong>Date</strong> is still a <code>DoubleClickTextInput</code>.
+  The project copy is the source of truth for external survey data,
+  and the panel's metadata should present, not edit. Make TeamTable
+  fully read-only for the external panel (no name/role editing, no row
+  delete, no role add &mdash; extend the B2b property or give TeamTable
+  a single <code>readOnly</code>-style switch, keeping every native
+  consumer unchanged), and render the Date as a plain label. QML test:
+  double-click on a team name/role and on the date starts no editor
+  for an attached trip; a native trip still edits.
+</p>
+
 </body>
 </html>
