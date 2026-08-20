@@ -12,9 +12,10 @@ import cavewherelib
 
 // Attached-mode header for the external-centerline trip panel:
 // entry filename + format + the file actions (Reload now / Replace…),
-// and the remembered-source line ("Source: <path>" or "Source
-// forgotten (this machine)"). The actions only raise signals — the
-// panel owns the manager wiring.
+// and the provenance line ("Copied from: <path>" or "Copied from an
+// unknown location (this machine)"), which names where the copy came
+// from — every action on this panel targets the copy inside the project.
+// The actions only raise signals — the panel owns the manager wiring.
 ColumnLayout {
     id: root
     objectName: "attachedHeader"
@@ -144,7 +145,7 @@ ColumnLayout {
         font.pixelSize: Theme.fontSizeSmall
         color: Theme.textSubtle
         text: root.rememberedSourcePath.length > 0
-              ? qsTr("Source: %1").arg(root.rememberedSourcePath)
-              : qsTr("Source forgotten (this machine)")
+              ? qsTr("Copied from: %1").arg(root.rememberedSourcePath)
+              : qsTr("Copied from an unknown location (this machine)")
     }
 }

@@ -172,14 +172,17 @@ MainWindowTest {
 
             const sourceLabel = findChild(attachedHeaderId, "sourceModeLabel")
             verify(sourceLabel !== null, "sourceModeLabel must exist")
-            verify(sourceLabel.text.indexOf("Source:") === 0,
+            // §16 B9a: the line reads as provenance — where the copy came
+            // from — because every verb on this panel acts on the copy.
+            verify(sourceLabel.text.startsWith("Copied from:"),
                    "remembered source renders; got: " + sourceLabel.text)
-            verify(sourceLabel.text.indexOf("survex_simple.svx") >= 0,
+            verify(sourceLabel.text.includes("survex_simple.svx"),
                    "source line carries the path; got: " + sourceLabel.text)
 
             RootData.externalSourceSettings.clearBreadcrumb(fixture.trip.id)
-            tryVerify(() => sourceLabel.text === "Source forgotten (this machine)",
-                      5000, "forgotten-source line renders after clearing; got: "
+            tryVerify(() => sourceLabel.text
+                            === "Copied from an unknown location (this machine)",
+                      5000, "unknown-origin line renders after clearing; got: "
                             + sourceLabel.text)
         }
 

@@ -498,7 +498,8 @@ MainWindowTest {
             // the layout, or the comparison races the relayout it causes.
             const sourceLabel = findChild(panelId, "sourceModeLabel")
             verify(sourceLabel !== null, "sourceModeLabel must exist")
-            tryCompare(sourceLabel, "text", "Source forgotten (this machine)")
+            tryCompare(sourceLabel, "text",
+                       "Copied from an unknown location (this machine)")
 
             componentNames.forEach((name, i) => {
                 const item = findChild(panelId, name)
