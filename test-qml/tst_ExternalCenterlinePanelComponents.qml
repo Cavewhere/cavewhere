@@ -103,12 +103,6 @@ MainWindowTest {
         }
 
         SignalSpy {
-            id: reloadRequestedSpyId
-            target: attachedHeaderId
-            signalName: "reloadRequested"
-        }
-
-        SignalSpy {
             id: replaceRequestedSpyId
             target: attachedHeaderId
             signalName: "replaceRequested"
@@ -122,7 +116,6 @@ MainWindowTest {
             viewOutputSpyId.clear()
             stationClickSpyId.clear()
             dateSpyId.clear()
-            reloadRequestedSpyId.clear()
             replaceRequestedSpyId.clear()
             attachedHeaderId.actionsEnabled = true
             attachedHeaderId.entryFilePath = ""
@@ -186,32 +179,31 @@ MainWindowTest {
                             + sourceLabel.text)
         }
 
-        // §16 B2a: the header carries the two file actions and only raises
-        // signals — the panel owns the manager wiring.
-        function test_attachedHeaderActionsRaiseSignals() {
-            const reloadButton = findChild(attachedHeaderId, "reloadButton")
+        // §16 B2a: the header carries the file action and only raises a
+        // signal — the panel owns the manager wiring. §16 B9b took Reload
+        // off this row: the watcher already covers project-copy edits.
+        function test_attachedHeaderReplaceRaisesSignal() {
+            verify(findChild(attachedHeaderId, "reloadButton") === null,
+                   "the file row carries no Reload button")
+
             const replaceButton = findChild(attachedHeaderId, "replaceButton")
-            verify(reloadButton !== null, "reloadButton must exist")
             verify(replaceButton !== null, "replaceButton must exist")
-            verify(!reloadButton.visible, "an unattached header shows no Reload")
             verify(!replaceButton.visible, "an unattached header shows no Replace")
 
             const fixture = attachFixtureTrip("panel-header-actions")
             rootId.trip = fixture.trip
-            tryVerify(() => reloadButton.visible && replaceButton.visible,
-                      5000, "attaching shows both file actions")
+            tryVerify(() => replaceButton.visible,
+                      5000, "attaching shows the file action")
             // A just-shown item has no layout until the next frame, so a
             // click before it lands on the header's old geometry.
             waitForRendering(attachedHeaderId)
 
-            mouseClick(reloadButton)
-            compare(reloadRequestedSpyId.count, 1, "Reload raises reloadRequested")
             mouseClick(replaceButton)
             compare(replaceRequestedSpyId.count, 1, "Replace raises replaceRequested")
 
             attachedHeaderId.actionsEnabled = false
-            tryVerify(() => !reloadButton.enabled && !replaceButton.enabled,
-                      5000, "a busy owner disables both actions")
+            tryVerify(() => !replaceButton.enabled,
+                      5000, "a busy owner disables the action")
         }
 
         // §16 B2e: right-clicking the file name reaches the file on disk.
@@ -585,7 +577,7 @@ MainWindowTest {
             compare(message.text, complaint)
 
             // A file cavern hates produces a complaint per problem, and the
-            // panel's way out of that state — Reload, Replace — sits below this
+            // panel's way out of that state — Replace — sits below this
             // banner. So the log scrolls past a point instead of growing.
             const shortHeight = fileErrorBannerId.height
             let manyComplaints = []

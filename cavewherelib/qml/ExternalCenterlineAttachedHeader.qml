@@ -10,12 +10,12 @@ import QtQuick.Controls as QC
 import QtQuick.Layouts
 import cavewherelib
 
-// Attached-mode header for the external-centerline trip panel:
-// entry filename + format + the file actions (Reload now / Replace…),
-// and the provenance line ("Copied from: <path>" or "Copied from an
-// unknown location (this machine)"), which names where the copy came
-// from — every action on this panel targets the copy inside the project.
-// The actions only raise signals — the panel owns the manager wiring.
+// Attached-mode header for the external-centerline trip panel: entry
+// filename + format + the Replace… action, and the provenance line
+// ("Copied from: <path>" or "Copied from an unknown location (this
+// machine)"), which names where the copy came from — every action on
+// this panel targets the copy inside the project. The action only
+// raises a signal — the panel owns the manager wiring.
 ColumnLayout {
     id: root
     objectName: "attachedHeader"
@@ -46,7 +46,6 @@ ColumnLayout {
 
     spacing: Theme.tightSpacing
 
-    signal reloadRequested()
     signal replaceRequested()
 
     function refreshEntryFileExists() {
@@ -120,14 +119,6 @@ ColumnLayout {
         }
 
         QQ.Item { Layout.fillWidth: true }
-
-        QC.Button {
-            objectName: "reloadButton"
-            text: qsTr("Reload now")
-            visible: root.attached
-            enabled: root.actionsEnabled
-            onClicked: root.reloadRequested()
-        }
 
         QC.Button {
             objectName: "replaceButton"

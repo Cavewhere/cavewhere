@@ -136,6 +136,25 @@ public:
     QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
     replaceCenterline(cwTrip* trip, const QString& sourcePath);
 
+    // Re-copies the file this owner was last attached (or replaced) from
+    // into the project, through replaceCenterline — one scan → reconcile →
+    // GC → re-solve pass that brings the in-project copy back in line with
+    // its origin. The source is the breadcrumb this manager looks up
+    // itself, so QML asks for the verb rather than naming a path. Refuses a
+    // null trip, a busy owner, and an owner with no reloadable source, each
+    // through the attach bridge like every other refusal.
+    Q_INVOKABLE QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
+    reloadFromSource(cwTrip* trip);
+
+    // True when reloadFromSource has a file to copy: this machine
+    // remembers where the copy came from, that file is on disk here, and it
+    // lies outside the owner's attachment dir (a source inside the project
+    // already is the copy). A machine that received the project through Git
+    // reads false, which is what keeps the verb off the menu there. Read at
+    // the UI's own refresh points — the answer follows the disk, so it has
+    // no change signal.
+    Q_INVOKABLE bool canReloadFromSource(cwTrip* trip) const;
+
     // Requests cancellation of ownerId's in-flight attachCenterline.
     // Honored only until the attach's internal scan lands - the flag
     // is consulted exactly once, at that point, so a later call is a
@@ -487,6 +506,11 @@ private:
         emitReportDeferred(signal, cwExternalCenterlineReport::failed(ownerId, error));
         return AsyncFuture::completed(ResultT(error));
     }
+
+    // The file reloadFromSource would copy for `trip`, or an empty string
+    // when this machine has none — the one place the eligibility rules
+    // live, shared by the verb and canReloadFromSource.
+    QString reloadSourcePath(cwTrip* trip) const;
 
     // Rebuilds both attachment-dir maps wholesale from the region walk
     // via cwSaveLoad::externalCenterlineDir (pure path math, no disk

@@ -12,10 +12,10 @@ import cavewherelib
 
 // Replaces SurveyEditor on TripPage for an externally-backed trip
 // (master plan §8.5.1 + Phase-2 §9 deltas). Assembles the commit-10
-// sub-components, top to bottom: attached header (file name, format
-// and the file actions), solve status, trip metadata, and the scoped
-// station list. The whole column scrolls. The Scope mode is
-// Phase 3 — the header Loader is hard-coded to the attached header.
+// sub-components, top to bottom: attached header (file name, format and
+// Replace…), solve status, trip metadata, and the scoped station list.
+// The whole column scrolls. The Scope mode is Phase 3 — the header
+// Loader is hard-coded to the attached header.
 QQ.Item {
     id: root
     objectName: "externalCenterlineTripPanel"
@@ -230,11 +230,6 @@ QQ.Item {
             actionsEnabled: !root.ownerBusy
             entryFilePath: root.entryFilePath
 
-            // Reload re-reads the attached files themselves, not just the
-            // solve: a copy restored or edited while nothing watched it
-            // is only noticed by a fresh scan, and the scan's apply asks
-            // for the solve.
-            onReloadRequested: root.externalCenterlineManager.rescanAttachments()
             onReplaceRequested: root.openReplaceDialog()
         }
     }

@@ -27,8 +27,8 @@ NoticeBanner {
 
     // Cavern reports every complaint in a file, not the first, and a badly
     // broken one runs to dozens of lines. Past this the log scrolls instead of
-    // growing, so it can't push the panel's Reload and Replace buttons — the
-    // only way out of the state the log is describing — off the bottom.
+    // growing, so it can't push the panel's Replace button — the way out of
+    // the state the log is describing — off the bottom.
     readonly property real maximumMessageHeight: 120
 
     visible: errorMessage.length > 0

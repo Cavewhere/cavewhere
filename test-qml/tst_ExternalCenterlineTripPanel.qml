@@ -27,16 +27,6 @@ MainWindowTest {
         name: "ExternalCenterlineTripPanel"
         when: windowShown
 
-        // cavernOutputChanged dedups identical output, so a reload of an
-        // unchanged file may not fire it. markSolved stamps the attached
-        // rows on every successful solve — dataChanged is the reliable
-        // "a solve completed" observable.
-        SignalSpy {
-            id: solvedSpyId
-            target: RootData.externalCenterlineManager.attachedCenterlinesModel
-            signalName: "dataChanged"
-        }
-
         SignalSpy {
             id: attachCompletedSpyId
             target: RootData.externalCenterlineManager
@@ -56,7 +46,6 @@ MainWindowTest {
             RootData.futureManagerModel.waitForFinished()
             RootData.pageSelectionModel.currentPageAddress = "View"
             rootId.trip = null
-            solvedSpyId.clear()
             attachCompletedSpyId.clear()
             stationClickSpyId.clear()
         }
@@ -114,22 +103,18 @@ MainWindowTest {
             verify(fileLabel !== null, "attachedFileLabel must exist")
             tryCompare(fileLabel, "text", "survex_simple.svx")
 
-            // The actions ride the file-name row, so their vertical centers
-            // fall inside the file label's band.
-            const reloadButton = findChild(header, "reloadButton")
+            // The action rides the file-name row, so its vertical center
+            // falls inside the file label's band.
             const replaceButton = findChild(header, "replaceButton")
-            verify(reloadButton !== null, "reloadButton must exist")
             verify(replaceButton !== null, "replaceButton must exist")
             const centersOnFileRow = () => {
                 const labelTop = panelY(fileLabel)
                 const labelBottom = labelTop + fileLabel.height
-                return [reloadButton, replaceButton].every(button => {
-                    const center = panelY(button) + button.height / 2
-                    return center >= labelTop && center <= labelBottom
-                })
+                const center = panelY(replaceButton) + replaceButton.height / 2
+                return center >= labelTop && center <= labelBottom
             }
             tryVerify(centersOnFileRow, 5000,
-                      "Reload now and Replace… sit on the file-name row")
+                      "Replace… sits on the file-name row")
 
             // The Date label leads the metadata block in bold.
             const dateLabel = findChild(metadata, "tripMetadataDateLabel")
@@ -218,23 +203,6 @@ MainWindowTest {
                     "the panel forwards the clicked row's handle")
         }
 
-        function test_reloadRerunsSolve() {
-            attachAndBind("trip-panel-reload")
-            tryVerify(() => RootData.linePlotManager.lastSolveStationCount > 0,
-                      10000, "the attach-chained solve settles first")
-            RootData.futureManagerModel.waitForFinished()
-
-            const reloadButton = findChild(panelId, "reloadButton")
-            verify(reloadButton !== null, "reloadButton must exist")
-            verify(reloadButton.visible && reloadButton.enabled,
-                   "Reload is clickable on an idle attached trip")
-
-            solvedSpyId.clear()
-            mouseClick(reloadButton)
-            tryVerify(() => solvedSpyId.count > 0, 10000,
-                      "Reload reruns the solve and restamps the attached rows")
-        }
-
         // plans/EXTERNAL_FILE_LIVE_LINK_RETIREMENT.html §7 q1: the copy is
         // the only file the project reads, so its absence is the state the
         // panel has to name — and Replace is the way out of it.
@@ -295,12 +263,10 @@ MainWindowTest {
             tryVerify(() => findChild(panelId, "replaceCenterlineDialog") === null,
                       5000, "closing the dialog frees it")
 
-            // Putting the file back clears the banner on the next scan, which
-            // is what Reload runs.
+            // Putting the file back clears the banner on the next scan.
             verify(TestHelper.copyFile(fixture.source, copyPath),
                    "the fixture copies back into the project")
-            const reloadButton = findChild(panelId, "reloadButton")
-            mouseClick(reloadButton)
+            RootData.externalCenterlineManager.rescanAttachments()
             tryVerify(() => !banner.visible, 10000,
                       "the restored copy clears the banner")
         }
@@ -363,11 +329,12 @@ MainWindowTest {
         }
 
         // The commit-3b gate (plans/EXTERNAL_FILE_LIVE_LINK_RETIREMENT.html
-        // §4.1): the panel keeps the two verbs that are about the file.
-        // Detaching is now "remove the trip" on the Cave page, so the panel
-        // must offer nothing else — enumerated rather than spot-checked, so
-        // a re-added action fails here instead of shipping unnoticed.
-        function test_attachedPanelOffersReloadAndReplaceOnly() {
+        // §4.1), narrowed by §16 B9b to the one verb that is about the file
+        // row. Detaching is now "remove the trip" on the Cave page, so the
+        // panel must offer nothing else — enumerated rather than
+        // spot-checked, so a re-added action fails here instead of shipping
+        // unnoticed.
+        function test_attachedPanelOffersReplaceOnly() {
             attachAndBind("trip-panel-actions")
             RootData.futureManagerModel.waitForFinished()
 
@@ -383,12 +350,12 @@ MainWindowTest {
                 }
             }
             compare(rowNames.join(","),
-                    "attachedFileLabel,attachedFormatLabel,reloadButton,replaceButton",
-                    "an attached panel offers Reload now and Replace… and nothing else")
-            // The two labels, the fill spacer and the two buttons — pins the
+                    "attachedFileLabel,attachedFormatLabel,replaceButton",
+                    "an attached panel offers Replace… and nothing else")
+            // The two labels, the fill spacer and the button — pins the
             // row's size so an action added without an objectName fails here too.
-            compare(fileRow.children.length, 5,
-                    "the file row holds the name, format, spacer, Reload and Replace…")
+            compare(fileRow.children.length, 4,
+                    "the file row holds the name, format, spacer and Replace…")
 
             // §16 B2e: the panel hands the header an absolute path, so the
             // file-name context menu acts on the copy inside the project.
@@ -398,10 +365,7 @@ MainWindowTest {
                    "the panel resolves the entry file on disk; got: "
                    + header.entryFilePath)
 
-            const reloadButton = findChild(panelId, "reloadButton")
             const replaceButton = findChild(panelId, "replaceButton")
-            verify(reloadButton.visible && reloadButton.enabled,
-                   "Reload is clickable on an idle attached trip")
             verify(replaceButton.visible && replaceButton.enabled,
                    "Replace is clickable on an idle attached trip")
 

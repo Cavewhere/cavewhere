@@ -1059,6 +1059,162 @@ TEST_CASE("replace refuses a busy owner without disturbing the attachment",
 }
 
 // ---------------------------------------------------------------------
+// Reload verb (plans/EXTERNAL_FILE_PHASE2.html §16 B9b): re-copy the file
+// the attachment was picked from, through the same overwrite path Replace
+// uses, and only when this machine still has that file outside the project.
+// ---------------------------------------------------------------------
+
+namespace {
+
+// Wide margin so a hand-planted edit reads as older than the project copy
+// whatever the filesystem's mtime granularity.
+constexpr int kEditIsOlderSeconds = 3600;
+
+// A writable copy of `fixtureName` outside the project, so a test can edit
+// the source the way a user editing it in Survex would.
+QString externalSourceCopy(SavedProjectFixture* fixture, const QString& fixtureName)
+{
+    const QString sourcePath = QDir(fixture->tempDir.path())
+                                   .filePath(QStringLiteral("source/") + fixtureName);
+    return writeFileWithMtime(sourcePath,
+                              readWholeFile(datasetExternalCenterlinePath(fixtureName)),
+                              QDateTime::currentDateTimeUtc());
+}
+
+} // namespace
+
+TEST_CASE("reload re-copies the remembered source over the project copy",
+          "[Attach][Reload]")
+{
+    auto fixture = makeSavedProject(QStringLiteral("reload-from-source"));
+    auto manager = managerOf(fixture.get());
+
+    const QString sourcePath =
+        externalSourceCopy(fixture.get(), QStringLiteral("survex_simple.svx"));
+    attachThroughManager(fixture.get(), sourcePath);
+    drainPipelines(fixture.get());
+
+    const QString copyPath = fixture->saveLoad()
+        ->externalCenterlineDir(fixture->trip)
+        .absoluteFilePath(QStringLiteral("survex_simple.svx"));
+    const QByteArray originalBytes = readWholeFile(copyPath);
+
+    // The source moves on after the copy was taken — the state Reload exists
+    // for. Same byte count and an mtime the copy already beats: a conditional
+    // copy reads this source as up to date and leaves it alone, so only an
+    // unconditional overwrite lands the edit.
+    QByteArray editedBytes = originalBytes;
+    editedBytes.replace(QByteArray("A2 A3 8.5"), QByteArray("A2 A3 9.5"));
+    REQUIRE(editedBytes.size() == originalBytes.size());
+    REQUIRE(editedBytes != originalBytes);
+    writeFileWithMtime(sourcePath, editedBytes,
+                       QDateTime::currentDateTimeUtc().addSecs(-kEditIsOlderSeconds));
+
+    CHECK(manager->canReloadFromSource(fixture->trip));
+
+    cwSignalSpy solveSpy(manager, &cwExternalCenterlineManager::solveNeeded);
+    cwSignalSpy attachSpy(manager, &cwExternalCenterlineManager::attachCompleted);
+
+    auto reloadFuture = manager->reloadFromSource(fixture->trip);
+    REQUIRE(AsyncFuture::waitForFinished(reloadFuture, kAttachWaitMs));
+    REQUIRE_FALSE(reloadFuture.result().hasError());
+    drainPipelines(fixture.get());
+
+    CHECK(readWholeFile(copyPath) == editedBytes);
+    CHECK(fixture->trip->externalCenterline().entryFile()
+          == QStringLiteral("survex_simple.svx"));
+    CHECK(solveSpy.count() > 0);
+
+    // A reload is a replace, so it reports through the attach bridge like
+    // every other operation the surfaces observe.
+    REQUIRE(attachSpy.count() == 1);
+    const auto report = attachSpy.at(0).at(0).value<cwExternalCenterlineReport>();
+    CHECK(report.success());
+    CHECK(report.ownerId() == fixture->trip->id());
+}
+
+TEST_CASE("reload refuses a busy owner", "[Attach][Reload]")
+{
+    auto fixture = makeSavedProject(QStringLiteral("reload-busy"));
+    auto manager = managerOf(fixture.get());
+    const QUuid ownerId = fixture->trip->id();
+
+    const QString sourcePath =
+        externalSourceCopy(fixture.get(), QStringLiteral("survex_simple.svx"));
+    attachThroughManager(fixture.get(), sourcePath);
+    drainPipelines(fixture.get());
+
+    const QString nested = datasetExternalCenterlinePath(QStringLiteral("survex_nested.svx"));
+    auto replaceFuture = manager->replaceCenterline(fixture->trip, nested);
+    REQUIRE(manager->isOwnerBusy(ownerId));
+
+    auto refused = manager->reloadFromSource(fixture->trip);
+    REQUIRE(refused.isFinished());
+    CHECK(refused.result().hasError());
+    CHECK(refused.result().errorMessage().contains(QStringLiteral("in progress")));
+
+    REQUIRE(AsyncFuture::waitForFinished(replaceFuture, kAttachWaitMs));
+    REQUIRE_FALSE(replaceFuture.result().hasError());
+    drainPipelines(fixture.get());
+
+    // The refusal took no token and touched no file: the replace is what
+    // landed.
+    CHECK_FALSE(manager->isOwnerBusy(ownerId));
+    CHECK(fixture->trip->externalCenterline().entryFile()
+          == QStringLiteral("survex_nested.svx"));
+}
+
+TEST_CASE("reload is offered only for a source this machine has outside the project",
+          "[Attach][Reload]")
+{
+    auto fixture = makeSavedProject(QStringLiteral("reload-eligibility"));
+    auto manager = managerOf(fixture.get());
+    const QUuid ownerId = fixture->trip->id();
+
+    const QString sourcePath =
+        externalSourceCopy(fixture.get(), QStringLiteral("survex_simple.svx"));
+    attachThroughManager(fixture.get(), sourcePath);
+    drainPipelines(fixture.get());
+    REQUIRE(manager->canReloadFromSource(fixture->trip));
+
+    SECTION("no breadcrumb: the machine never learned where the copy came from")
+    {
+        fixture->settings()->clearBreadcrumb(ownerId);
+        CHECK_FALSE(manager->canReloadFromSource(fixture->trip));
+    }
+
+    SECTION("the remembered file is gone from this machine")
+    {
+        REQUIRE(QFile::remove(sourcePath));
+        CHECK_FALSE(manager->canReloadFromSource(fixture->trip));
+    }
+
+    SECTION("the remembered file is the project copy itself")
+    {
+        const QString copyPath = fixture->saveLoad()
+            ->externalCenterlineDir(fixture->trip)
+            .absoluteFilePath(QStringLiteral("survex_simple.svx"));
+        fixture->settings()->setBreadcrumbPath(ownerId, copyPath);
+        CHECK_FALSE(manager->canReloadFromSource(fixture->trip));
+    }
+
+    // Whatever made it ineligible, asking anyway is refused through the
+    // bridge rather than copying something unexpected.
+    cwSignalSpy attachSpy(manager, &cwExternalCenterlineManager::attachCompleted);
+    auto refused = manager->reloadFromSource(fixture->trip);
+    REQUIRE(refused.isFinished());
+    CHECK(refused.result().hasError());
+    CHECK(refused.result().errorMessage().contains(QStringLiteral("no source file")));
+    CHECK_FALSE(manager->isOwnerBusy(ownerId));
+
+    REQUIRE(attachSpy.wait(kAttachWaitMs));
+    const auto report = attachSpy.at(0).at(0).value<cwExternalCenterlineReport>();
+    CHECK_FALSE(report.success());
+
+    drainPipelines(fixture.get());
+}
+
+// ---------------------------------------------------------------------
 // Missing in-project copy (plans/EXTERNAL_FILE_LIVE_LINK_RETIREMENT.html
 // §7 q1): the copy is the only file the project reads, so its absence is
 // the state worth surfacing and Replace is the way out.

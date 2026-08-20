@@ -775,6 +775,63 @@ cwExternalCenterlineManager::replaceCenterline(cwTrip* trip, const QString& sour
     return attachCenterline(trip, sourcePath);
 }
 
+QString cwExternalCenterlineManager::reloadSourcePath(cwTrip* trip) const
+{
+    if (trip == nullptr || m_externalSourceSettings.isNull()
+        || trip->externalCenterline().isEmpty()) {
+        return QString();
+    }
+
+    const QUuid ownerId = trip->id();
+    const QString sourcePath = m_externalSourceSettings->breadcrumbPath(ownerId);
+    if (sourcePath.isEmpty() || !QFileInfo::exists(sourcePath)) {
+        return QString();
+    }
+
+    // A breadcrumb pointing inside the attachment dir names the copy
+    // itself, and copying a file over itself is no reload at all.
+    const QString ownerAttachmentDir = attachmentDir(ownerId);
+    if (!ownerAttachmentDir.isEmpty()
+        && cwExternalCenterlineSync::isContainedIn(sourcePath, ownerAttachmentDir)) {
+        return QString();
+    }
+
+    return sourcePath;
+}
+
+bool cwExternalCenterlineManager::canReloadFromSource(cwTrip* trip) const
+{
+    return !reloadSourcePath(trip).isEmpty();
+}
+
+QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
+cwExternalCenterlineManager::reloadFromSource(cwTrip* trip)
+{
+    using ReportResult = Monad::Result<cwExternalCenterlineAttach::AttachReport>;
+
+    if (trip == nullptr) {
+        return refuseOperation<ReportResult>(
+            &cwExternalCenterlineManager::attachCompleted, QUuid(),
+            QStringLiteral("reload: trip is null"));
+    }
+
+    const QUuid ownerId = trip->id();
+    if (isOwnerBusy(ownerId)) {
+        return refuseOperation<ReportResult>(
+            &cwExternalCenterlineManager::attachCompleted, ownerId,
+            QStringLiteral("reload: another operation for this trip is still in progress"));
+    }
+
+    const QString sourcePath = reloadSourcePath(trip);
+    if (sourcePath.isEmpty()) {
+        return refuseOperation<ReportResult>(
+            &cwExternalCenterlineManager::attachCompleted, ownerId,
+            QStringLiteral("reload: this machine has no source file to copy from"));
+    }
+
+    return replaceCenterline(trip, sourcePath);
+}
+
 void cwExternalCenterlineManager::cancelAttach(const QUuid& ownerId)
 {
     const auto it = m_activeOperations.constFind(ownerId);
