@@ -143,12 +143,17 @@ cwNoteLiDARManager::cwNoteLiDARManager(QObject* parent) :
 
 cwNoteLiDARManager::~cwNoteLiDARManager()
 {
-    //Ahead of the wait below, which pumps the event loop: see
-    //cwUpdatable::beginTeardown().
+    //See cwUpdatable::beginTeardown().
     beginTeardown();
 
+    //Cancel without waiting: the batch triangulates cwTriangulateLiDARInData
+    //value copies (note stations, model matrix, station lookup, network, glTF
+    //path), so a worker that outlives this manager touches nothing that died
+    //with it. The result continuation is bound with context(this) and is
+    //dropped here. This line finishes the outer future; the cancel the worker
+    //itself sees comes from ~Restarter, which cancels the inner future
+    //synchronously as m_restarter is destroyed.
     m_restarter.future().cancel();
-    waitForFinish();
 }
 
 void cwNoteLiDARManager::setProject(cwProject* project)

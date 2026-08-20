@@ -132,12 +132,17 @@ cwLinePlotManager::cwLinePlotManager(QObject *parent) :
 }
 
 cwLinePlotManager::~cwLinePlotManager() {
-    //Ahead of the wait below, which pumps the event loop: see
-    //cwUpdatable::beginTeardown().
+    //See cwUpdatable::beginTeardown().
     beginTeardown();
 
+    //Cancel without waiting: the worker solves a value copy of the region
+    //(cwLinePlotTask::Input) and polls for cancel between its phases, so nothing
+    //it touches dies with this manager. The result continuation is bound with
+    //context(this), so it is dropped here rather than delivered to a
+    //half-destroyed manager. This line finishes the outer future; the cancel the
+    //worker itself sees comes from ~Restarter, which cancels the inner future
+    //synchronously as m_restarter is destroyed.
     m_restarter.future().cancel();
-    waitToFinish();
 
     // m_keywordRegistry's destructor tears down the keyword items
     // synchronously.

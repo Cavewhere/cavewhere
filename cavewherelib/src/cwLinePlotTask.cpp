@@ -33,8 +33,10 @@
 #include <QFile>
 #include <QDir>
 #include <QUuid>
+#include <QPromise>
 #include <QtGlobal>
 #include <cmath>
+#include <functional>
 
 namespace {
 
@@ -147,8 +149,11 @@ cwLinePlotTask::StationTripScrapLookup::StationTripScrapLookup(cwCave *cave)
 }
 
 struct cwLinePlotTask::LinePlotWorker {
-    explicit LinePlotWorker(cwLinePlotTask::Input input)
-        : InputData(std::move(input))
+    // IsCanceled is polled between the solve's phases so a canceled run stops at
+    // the next boundary instead of finishing a solve nobody will read.
+    LinePlotWorker(cwLinePlotTask::Input input, std::function<bool ()> isCanceled)
+        : InputData(std::move(input)),
+          IsCanceled(std::move(isCanceled))
     {
     }
 
@@ -167,6 +172,10 @@ struct cwLinePlotTask::LinePlotWorker {
         initializeCaveStationLookups();
 
         if (!checkForErrors(result)) {
+            return result;
+        }
+
+        if (IsCanceled()) {
             return result;
         }
 
@@ -189,7 +198,15 @@ struct cwLinePlotTask::LinePlotWorker {
             return result;
         }
 
+        if (IsCanceled()) {
+            return result;
+        }
+
         if (!runCavern(svxPath, output3dPath, result)) {
+            return result;
+        }
+
+        if (IsCanceled()) {
             return result;
         }
 
@@ -208,6 +225,10 @@ struct cwLinePlotTask::LinePlotWorker {
         updateSplayTipsForCaves(caveSplayTips, result);
         result.setRegionNetwork(std::move(parsed.network));
 
+        if (IsCanceled()) {
+            return result;
+        }
+
         cwLinePlotGeometry::Result geometry = generateGeometry(caveSplayTips);
         result.setPositions(geometry.points);
         result.setTripVertexRanges(geometry.tripVertexRanges);
@@ -222,6 +243,7 @@ struct cwLinePlotTask::LinePlotWorker {
 
 private:
     cwLinePlotTask::Input InputData;
+    std::function<bool ()> IsCanceled;
     cwCavingRegion Region;
     // All cave-keyed bookkeeping uses cwCave::id() rather than an integer
     // position: the driver emits "cave_<uuid>" prefixes, so integer cave
@@ -699,8 +721,19 @@ cwLinePlotTask::Input cwLinePlotTask::buildInput(const cwCavingRegion* region,
 
 QFuture<cwLinePlotTask::LinePlotResultData> cwLinePlotTask::run(cwLinePlotTask::Input input)
 {
-    return cwConcurrent::run([input = std::move(input)]() mutable {
-        cwLinePlotTask::LinePlotWorker worker(std::move(input));
-        return worker.run();
+    // The QPromise form is what makes cancel() reach the worker: the solve polls
+    // promise.isCanceled() between its phases, so a restart or a manager being
+    // torn down stops the run at the next boundary rather than paying for cavern
+    // and the geometry pass. A canceled run publishes no result, which every
+    // caller already handles by checking resultCount().
+    return cwConcurrent::run([input = std::move(input)]
+                             (QPromise<cwLinePlotTask::LinePlotResultData>& promise) mutable {
+        cwLinePlotTask::LinePlotWorker worker(std::move(input),
+                                              [&promise]() { return promise.isCanceled(); });
+        auto result = worker.run();
+        if (promise.isCanceled()) {
+            return;
+        }
+        promise.addResult(std::move(result));
     });
 }

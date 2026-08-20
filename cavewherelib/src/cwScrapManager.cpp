@@ -111,12 +111,17 @@ cwScrapManager::cwScrapManager(QObject *parent) :
 
 cwScrapManager::~cwScrapManager()
 {
-    //Ahead of the wait below, which pumps the event loop: see
-    //cwUpdatable::beginTeardown().
+    //See cwUpdatable::beginTeardown().
     beginTeardown();
 
+    //Cancel without waiting: each scrap is triangulated from a
+    //cwTriangulateInData value copy (image, outline, stations, view matrix), so
+    //a worker that outlives this manager touches nothing that died with it. The
+    //result continuation is bound with context(this) and is dropped here. This
+    //line finishes the outer future; the cancel the worker itself sees comes
+    //from ~Restarter, which cancels the inner future synchronously as
+    //TriangulateRestarter is destroyed.
     TriangulateRestarter.future().cancel();
-    waitForFinish();
 }
 
 /**
