@@ -25,9 +25,8 @@ namespace cw::gltf {
 
 // ---------- Scene cache ----------
 //
-// Loads run on cwConcurrent worker threads and the same file is loaded by both
-// the note editor and the 3D view, once per declination/station edit. Keeping
-// the most recent scenes avoids re-reading and re-decoding the file every time.
+// The note editor and the 3D view load the same file, once per
+// declination/station edit, from cwConcurrent worker threads.
 
 namespace {
 
@@ -75,10 +74,8 @@ std::shared_ptr<const SceneCPU> cachedScene(const QString& key)
 
     for (int i = 0; i < cache.size(); ++i) {
         if (cache.at(i).key == key) {
-            const SceneCacheEntry entry = cache.at(i);
-            cache.removeAt(i);
-            cache.prepend(entry);
-            return entry.scene;
+            cache.move(i, 0);
+            return cache.constFirst().scene;
         }
     }
 
@@ -527,8 +524,8 @@ SceneCPU Loader::loadGltf(const QString &filePath, const LoadOptions& options)
 {
     const QString cacheKey = sceneCacheKey(filePath, options);
     if (const auto cached = cachedScene(cacheKey)) {
-        // SceneCPU's members are implicitly shared, so this copy is a refcount
-        // bump and any later mutation by the caller detaches from the cache.
+        // SceneCPU's members are implicitly shared: the copy is a refcount bump
+        // and a caller that mutates the scene detaches from the cached one.
         return *cached;
     }
 
@@ -637,9 +634,8 @@ QImage TextureCPU::toImage() const
         return {};
     }
 
-    // The QImage borrows the QByteArray's payload; the holder below keeps a
-    // reference alive for as long as the image (or any copy of it) exists.
-    // Painting on such an image detaches first, so this stays copy-on-write.
+    // The QImage borrows the pixel payload; the holder keeps a reference alive
+    // for as long as the image, or any copy of it, exists.
     auto* holder = new QByteArray(pixels);
     QImage image(reinterpret_cast<const uchar*>(holder->constData()),
                  width,
