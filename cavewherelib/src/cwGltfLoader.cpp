@@ -11,97 +11,9 @@
 #include <QtGlobal>
 #include <QFileInfo>
 #include <QColorSpace>
-#include <QDateTime>
-#include <QList>
-#include <QMutex>
-#include <QMutexLocker>
-#include <QTimeZone>
-
-// Std
-#include <memory>
 
 // Local helpers kept in the same namespace
 namespace cw::gltf {
-
-// ---------- Scene cache ----------
-//
-// The note editor and the 3D view load the same file, once per
-// declination/station edit, from cwConcurrent worker threads.
-
-namespace {
-
-constexpr int kSceneCacheCapacity = 4;
-
-struct SceneCacheEntry {
-    QString key;
-    std::shared_ptr<const SceneCPU> scene;
-};
-
-QMutex& sceneCacheMutex()
-{
-    static QMutex mutex;
-    return mutex;
-}
-
-// Most recently used first.
-QList<SceneCacheEntry>& sceneCache()
-{
-    static QList<SceneCacheEntry> cache;
-    return cache;
-}
-
-QString sceneCacheKey(const QString& filePath, const LoadOptions& options)
-{
-    const QFileInfo info(filePath);
-
-    QString key = info.absoluteFilePath();
-    key += QStringLiteral("|")
-           + QString::number(info.lastModified(QTimeZone::UTC).toMSecsSinceEpoch());
-    key += QStringLiteral("|") + QString::number(info.size());
-
-    for (const auto& desc : options.requestedLayout) {
-        key += QStringLiteral("|") + QString::number(static_cast<int>(desc.semantic))
-               + QStringLiteral(":") + QString::number(static_cast<int>(desc.format));
-    }
-
-    return key;
-}
-
-std::shared_ptr<const SceneCPU> cachedScene(const QString& key)
-{
-    QMutexLocker locker(&sceneCacheMutex());
-    auto& cache = sceneCache();
-
-    for (int i = 0; i < cache.size(); ++i) {
-        if (cache.at(i).key == key) {
-            cache.move(i, 0);
-            return cache.constFirst().scene;
-        }
-    }
-
-    return {};
-}
-
-void insertScene(const QString& key, std::shared_ptr<const SceneCPU> scene)
-{
-    QMutexLocker locker(&sceneCacheMutex());
-    auto& cache = sceneCache();
-
-    for (int i = 0; i < cache.size(); ++i) {
-        if (cache.at(i).key == key) {
-            cache.removeAt(i);
-            break;
-        }
-    }
-
-    cache.prepend({key, std::move(scene)});
-
-    while (cache.size() > kSceneCacheCapacity) {
-        cache.removeLast();
-    }
-}
-
-} // namespace
 
 // ---------- Helpers: attribute/index plumbing ----------
 
@@ -522,13 +434,6 @@ SceneCPU Loader::loadGltf(const QString &filePath)
 
 SceneCPU Loader::loadGltf(const QString &filePath, const LoadOptions& options)
 {
-    const QString cacheKey = sceneCacheKey(filePath, options);
-    if (const auto cached = cachedScene(cacheKey)) {
-        // SceneCPU's members are implicitly shared: the copy is a refcount bump
-        // and a caller that mutates the scene detaches from the cached one.
-        return *cached;
-    }
-
     tinygltf::TinyGLTF loader;
     tinygltf::Model model;
     std::string error;
@@ -570,8 +475,6 @@ SceneCPU Loader::loadGltf(const QString &filePath, const LoadOptions& options)
             }
         }
     }
-
-    insertScene(cacheKey, std::make_shared<const SceneCPU>(scene));
 
     return scene;
 }

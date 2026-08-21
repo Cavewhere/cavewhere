@@ -7,8 +7,6 @@
 #include "LoadProjectHelper.h"
 
 //Qt includes
-#include <QDateTime>
-#include <QFile>
 #include <QFileInfo>
 #include <QImage>
 
@@ -168,7 +166,7 @@ TEST_CASE("baseColorImage handles materials without a baseColor texture", "[cwGl
     }
 }
 
-TEST_CASE("GLTF loader caches scenes and shares texture pixels", "[cwGltfLoader]")
+TEST_CASE("GLTF loader shares texture pixels with the images it hands out", "[cwGltfLoader]")
 {
     const QString gltfPath = copyToTempFolder(testcasesDatasetPath("test_cwGltfLoader/test.glb"));
     REQUIRE_FALSE(gltfPath.isEmpty());
@@ -177,34 +175,22 @@ TEST_CASE("GLTF loader caches scenes and shares texture pixels", "[cwGltfLoader]
     cw::gltf::LoadOptions options;
     options.requestedLayout = cwRenderTexturedItems::geometryLayout();
 
-    const auto firstScene = cw::gltf::Loader::loadGltf(gltfPath, options);
-    REQUIRE_FALSE(firstScene.textures.isEmpty());
-    const auto& firstTexture = firstScene.textures.at(0);
-    REQUIRE_FALSE(firstTexture.pixels.isEmpty());
-
-    SECTION("a second load of the same file shares the first load's pixels") {
-        const auto secondScene = cw::gltf::Loader::loadGltf(gltfPath, options);
-        REQUIRE_FALSE(secondScene.textures.isEmpty());
-        REQUIRE(secondScene.textures.at(0).pixels.constData() == firstTexture.pixels.constData());
-    }
-
-    SECTION("a modified file loads fresh pixels") {
-        QFile file(gltfPath);
-        REQUIRE(file.open(QIODevice::ReadWrite));
-        REQUIRE(file.setFileTime(QDateTime::currentDateTimeUtc().addSecs(60),
-                                 QFileDevice::FileModificationTime));
-        file.close();
-
-        const auto reloadedScene = cw::gltf::Loader::loadGltf(gltfPath, options);
-        REQUIRE_FALSE(reloadedScene.textures.isEmpty());
-        REQUIRE(reloadedScene.textures.at(0).pixels.constData() != firstTexture.pixels.constData());
-    }
+    const auto scene = cw::gltf::Loader::loadGltf(gltfPath, options);
+    REQUIRE_FALSE(scene.textures.isEmpty());
+    const auto& texture = scene.textures.at(0);
+    REQUIRE_FALSE(texture.pixels.isEmpty());
 
     SECTION("toImage borrows the texture's pixel buffer") {
-        const QImage image = firstTexture.toImage();
+        const QImage image = texture.toImage();
         REQUIRE_FALSE(image.isNull());
-        REQUIRE(image.width() == firstTexture.width);
-        REQUIRE(image.height() == firstTexture.height);
-        REQUIRE(reinterpret_cast<const char*>(image.constBits()) == firstTexture.pixels.constData());
+        REQUIRE(image.width() == texture.width);
+        REQUIRE(image.height() == texture.height);
+        REQUIRE(reinterpret_cast<const char*>(image.constBits()) == texture.pixels.constData());
+    }
+
+    SECTION("two images of the same texture share one pixel buffer") {
+        const QImage first = texture.toImage();
+        const QImage second = texture.toImage();
+        REQUIRE(first.constBits() == second.constBits());
     }
 }
