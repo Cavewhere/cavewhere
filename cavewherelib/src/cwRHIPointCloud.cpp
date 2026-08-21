@@ -129,8 +129,9 @@ void cwRHIPointCloud::updateResources(const ResourceUpdateData& data)
             const int stride = bufferViews.at(i).stride;
             const qint64 byteSize = bufferData->size();
             const qint64 uploadBytes = cw::clampedVertexBytes(byteSize, stride);
+            const bool clamped = uploadBytes < byteSize;
 
-            if (uploadBytes < byteSize) {
+            if (clamped) {
                 const qint64 keptVertexCount = cw::clampedVertexCount(byteSize, stride);
                 qWarning() << "Point cloud vertex buffer" << i
                            << "exceeds the" << cw::kMaxRhiBufferBytes
@@ -147,8 +148,17 @@ void cwRHIPointCloud::updateResources(const ResourceUpdateData& data)
                 m_vertexBuffers[i]->create();
                 m_vertexBufferCapacities[i] = qsizetype(uploadBytes);
             }
-            batch->uploadStaticBuffer(m_vertexBuffers[i], 0, quint32(uploadBytes),
-                                      bufferData->constData());
+            if (clamped) {
+                // A partial upload needs the pointer overload with an explicit
+                // size — the whole array no longer fits the buffer.
+                batch->uploadStaticBuffer(m_vertexBuffers[i], 0, quint32(uploadBytes),
+                                          bufferData->constData());
+            } else {
+                // QByteArray by value: the batch holds a refcounted reference
+                // instead of deep-copying the array (1.2 GB of transient copy
+                // at 100 M points).
+                batch->uploadStaticBuffer(m_vertexBuffers[i], *bufferData);
+            }
         }
         m_uploadedVertexCount = uploadedVertexCount;
     }
