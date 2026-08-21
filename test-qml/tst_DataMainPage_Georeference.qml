@@ -278,11 +278,36 @@ MainWindowTest {
             editButton().editMode = false
         }
 
-        // The location and the button that moves it read as one thing. Measured
-        // on a page narrow enough to drop the info column's width cap, which is
-        // where the row has slack to hand out: a value label that took that
-        // slack would strand the button against the far border.
-        function test_theRecenterButtonSitsBesideTheLocation() {
+        // Where the coordinate's text actually lands, in the group's own
+        // coordinates: a wrapped label paints its longest line, which is what
+        // runs into the button when the row is too narrow for both.
+        function paintedTextRect(group, name) {
+            const item = label(name)
+            const topLeft = group.mapFromItem(item, item.leftPadding, item.topPadding)
+            return {
+                left: topLeft.x,
+                top: topLeft.y,
+                right: topLeft.x + item.contentWidth,
+                bottom: topLeft.y + item.contentHeight
+            }
+        }
+
+        function itemRect(group, name) {
+            const item = label(name)
+            const topLeft = group.mapFromItem(item, 0, 0)
+            return {
+                left: topLeft.x,
+                top: topLeft.y,
+                right: topLeft.x + item.width,
+                bottom: topLeft.y + item.height
+            }
+        }
+
+        // Sharing the Location row with the button squeezed the coordinate
+        // narrower than it reads, and its text painted out from under the
+        // button. The button gets a row of its own, below the coordinate and
+        // starting where the rows inside the frame start.
+        function test_theRecenterButtonSitsBelowTheLocation() {
             addUtm16NFix()
             tryVerify(() => label("projectionDatumValue").visible, 5000)
 
@@ -292,26 +317,44 @@ MainWindowTest {
             tryVerify(() => button.visible, 5000)
 
             const wideWidth = rootId.width
+            const measure = where => {
+                const group = label("coordinateSystemGroup")
+                const content = group.contentItem
+                const text = paintedTextRect(group, "projectionOriginValue")
+                const buttonRect = itemRect(group, "recenterButton")
+
+                const overlaps = buttonRect.left < text.right
+                                 && text.left < buttonRect.right
+                                 && buttonRect.top < text.bottom
+                                 && text.top < buttonRect.bottom
+                verify(!overlaps,
+                       where + ": the coordinate is clear of the button — text spans "
+                       + text.left + "," + text.top + " to " + text.right + "," + text.bottom
+                       + ", the button spans " + buttonRect.left + "," + buttonRect.top
+                       + " to " + buttonRect.right + "," + buttonRect.bottom)
+
+                verify(buttonRect.top >= text.bottom,
+                       where + ": the button sits on the row below the coordinate, "
+                       + "which ends at " + text.bottom + " while the button starts at "
+                       + buttonRect.top)
+
+                compare(buttonRect.left, content.x,
+                        where + ": the button starts where the rows inside the frame do")
+
+                verify(text.left >= content.x && text.right <= content.x + content.width,
+                       where + ": the coordinate's text stays inside the frame: it spans "
+                       + text.left + " to " + text.right + ", the frame holds " + content.x
+                       + " to " + (content.x + content.width))
+            }
+
+            // Showing the button re-lays the rows out, so let that pass run
+            // before measuring where they ended up.
+            waitForRendering(dataPage())
+            measure("wide")
+
             rootId.width = Theme.breakpointPanelCollapse - 1
             waitForRendering(dataPage())
-
-            const value = label("projectionOriginValue")
-            const row = value.parent
-            verify(row.width > value.implicitWidth + button.width,
-                   "the row must have slack for the button to be stranded by")
-
-            // Measured from the end of the text rather than the end of the
-            // label: a label given the row's slack keeps its own gap to the
-            // button while the coordinate ends far short of it.
-            const textEnd = row.mapFromItem(value, 0, 0).x
-                            + value.leftPadding + value.contentWidth
-            const gap = row.mapFromItem(button, 0, 0).x - textEnd
-
-            // One gap, plus the whole pixel the label's width is rounded up to.
-            const room = row.spacing + value.rightPadding + 1
-            verify(gap >= 0 && gap <= room,
-                   "the button follows the coordinate by one gap of " + row.spacing
-                   + ", it sits " + gap + " away")
+            measure("narrow")
 
             // The page has to settle back into the wide layout before the next
             // test drives it: the narrow one proxies the same items elsewhere.

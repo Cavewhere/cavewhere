@@ -270,29 +270,32 @@ StandardPage {
 
                         QC.Label {
                             objectName: "projectionOriginValue"
-                            // Capping the fill at the text's own width leaves the
-                            // surplus to the spacer, so the button stays beside the
-                            // coordinate, and still lets the row shrink the label
-                            // into a wrap when the frame is too narrow for it. The
-                            // cap is rounded up because the layout floors the width
-                            // it hands out, and a width a fraction short of the text
-                            // wraps it.
+                            // The coordinate takes the whole rest of the row and
+                            // wraps inside it. Sharing the row with the Recenter…
+                            // button squeezed the label narrower than the
+                            // coordinate needs in the 200 px info column, and the
+                            // text spilled out from under the button.
                             Layout.fillWidth: true
-                            Layout.maximumWidth: Math.ceil(implicitWidth)
-                            wrapMode: QQ.Text.WordWrap
+                            wrapMode: QQ.Text.Wrap
                             text: RootData.region.geoReference.hasOrigin
                                   ? regionInfoBox.formatOrigin(RootData.region.geoReference.originLatitude,
                                                                RootData.region.geoReference.originLongitude)
                                   : qsTr("Not georeferenced")
                         }
+                    }
 
-                        // Recentering re-derives a frame that already exists, so
-                        // it has nothing to offer a project nothing has placed
-                        // yet.
+                    // The button gets a row of its own, so the coordinate keeps
+                    // the frame's full width to itself. Recentering
+                    // re-derives a frame that already exists, so it has nothing
+                    // to offer a project nothing has placed yet.
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: Theme.delegatePadding
+                        visible: regionInfoBox.editMode
+                                 && RootData.region.geoReference.hasCoordinateSystem
+
                         QC.Button {
                             objectName: "recenterButton"
-                            visible: regionInfoBox.editMode
-                                     && RootData.region.geoReference.hasCoordinateSystem
                             text: qsTr("Recenter…")
                             onClicked: projectionCenterDialogId.open()
                         }
