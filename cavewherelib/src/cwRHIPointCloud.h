@@ -32,6 +32,13 @@ public:
     void updateResources(const ResourceUpdateData& data) override;
     bool gather(const GatherContext& context, QVector<PipelineBatch>& batches) override;
     bool usesPointCloudPass() const override;
+
+    // The loaded cloud's bounds, inflated by the sprite radius. cwLazLoader
+    // derives bboxMin/bboxMax from the very vertices it writes into the vertex
+    // buffer, and PointCloud.vert multiplies those vertices by the
+    // view-projection alone — no model matrix — so the box is already world
+    // space. nullopt until the first non-empty geometry arrives.
+    std::optional<QBox3D> worldBounds() const override;
     cwAppearanceSlotted* appearanceSlots() override { return this; }
 
     // cwAppearanceSlotted: unpack a cwPointCloudAppearance from the opaque payload

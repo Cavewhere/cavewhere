@@ -11,6 +11,8 @@ class QRhiResourceUpdateBatch;
 #include <rhi/qrhi.h>
 #include <array>
 #include <functional>
+#include <optional>
+#include <QBox3D>
 #include <QMatrix4x4>
 #include <QSize>
 #include <QVector>
@@ -21,6 +23,7 @@ class cwRhiFrameRenderer;
 class cwRenderObject;
 class cwAppearanceSlotted;
 class cwVisibilitySnapshot;
+class cwFrustum;
 
 class cwRHIObject {
 
@@ -119,6 +122,11 @@ public:
         // happened in gatherScene, so most gather()s never touch it. Null is
         // treated as everything-visible.
         const cwVisibilitySnapshot* visibility = nullptr;
+        // The frame's view frustum, built by gatherScene from this job's camera.
+        // Objects with sub-item granularity cull their own items against it;
+        // whole objects were already culled in gatherScene. Null means cull
+        // nothing, mirroring the visibility field's null-means-visible contract.
+        const cwFrustum* frustum = nullptr;
         // Per-object appearance slot this render job selects (0 = the live
         // appearance in slot 0; higher slots = a per-job override the offscreen
         // renderer acquired and uploaded for this object before gathering). The
@@ -214,6 +222,15 @@ public:
     // callback runs, so subclasses may rely on it being non-null in
     // initialize/synchronize/updateResources/gather.
     void setFrameRenderer(cwRhiFrameRenderer* frame) { m_frame = frame; }
+
+    // This object's axis-aligned bounding box in world space, used by
+    // cwRhiFrameRenderer::gatherScene to skip objects the camera cannot see.
+    // The box must be conservative — err large, and inflate it by whatever the
+    // shaders add around the vertices (sprite radius, line width) — because a
+    // box smaller than what the object draws makes geometry vanish at some
+    // camera angles. nullopt, the default, means "never cull me": backgrounds,
+    // overlays, billboards, the grid, and the compass keep drawing every frame.
+    virtual std::optional<QBox3D> worldBounds() const { return std::nullopt; }
 
     // True when this object draws into the PointCloud pass with real geometry.
     // cwRhiScene polls this before gathering to decide whether to engage the

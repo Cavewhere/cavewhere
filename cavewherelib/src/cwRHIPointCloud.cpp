@@ -295,6 +295,20 @@ bool cwRHIPointCloud::usesPointCloudPass() const
     return m_geometry.value().geometry.vertexCount() > 0;
 }
 
+std::optional<QBox3D> cwRHIPointCloud::worldBounds() const
+{
+    const auto& geometryState = m_geometry.value();
+    if (geometryState.geometry.vertexCount() == 0) {
+        return std::nullopt;
+    }
+
+    // Each point draws as a sprite of worldRadius meters around its position,
+    // so the drawn cloud reaches that far past the vertex bounds.
+    const float worldRadius = m_renderState.value().worldRadius;
+    const QVector3D padding(worldRadius, worldRadius, worldRadius);
+    return QBox3D(geometryState.bboxMin - padding, geometryState.bboxMax + padding);
+}
+
 bool cwRHIPointCloud::ensurePipeline(const RenderData& data)
 {
     if (!m_resourcesInitialized) {
