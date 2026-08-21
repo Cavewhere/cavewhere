@@ -24,6 +24,8 @@
 #include "cwNoteLiDAR.h"
 #include "cwSurveyNoteLiDARModel.h"
 #include "cwScrap.h"
+#include "SplayFixtureHelper.h"
+#include "cwSurveyChunk.h"
 #include "cwLead.h"
 #include "cwUnits.h"
 #include "cwLinePlotManager.h"
@@ -619,6 +621,38 @@ bool TestHelper::liDARSurveyNetworkIsEmpty(cwNoteLiDAR* note) const
     }
 
     return cave->network().isEmpty();
+}
+
+void TestHelper::addStationSplay(cwSurveyChunk* chunk,
+                                 int stationIndex,
+                                 const QString& distance,
+                                 const QString& compass,
+                                 const QString& clino) const
+{
+    if (chunk == nullptr || stationIndex < 0 || stationIndex >= chunk->stationCount()) {
+        return;
+    }
+
+    QList<cwShotMeasurement> splays = chunk->stationSplays(stationIndex);
+    splays.append(makeSplay(distance, compass, clino));
+    chunk->setStationSplays(stationIndex, splays);
+}
+
+QVariantList TestHelper::a4SplayReadings() const
+{
+    QVariantList readings;
+    const QList<cwShotMeasurement> splays = a4Splays();
+    readings.reserve(splays.size());
+
+    for (const cwShotMeasurement& splay : splays) {
+        readings.append(QVariantMap {
+            {QStringLiteral("distance"), splay.distance.value()},
+            {QStringLiteral("compass"), splay.compass.value()},
+            {QStringLiteral("clino"), splay.clino.value()}
+        });
+    }
+
+    return readings;
 }
 
 QString TestHelper::firstUnusedTripStationName(cwTrip* trip,

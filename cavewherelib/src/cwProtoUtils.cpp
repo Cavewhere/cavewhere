@@ -254,6 +254,16 @@ void saveStationShot(CavewhereProto::StationShot* protoStation, const cwStation&
     saveReading([&](){return protoStation->mutable_right();}, station.right(), cwDistanceReading::State::Empty);
     saveReading([&](){return protoStation->mutable_up();}, station.up(), cwDistanceReading::State::Empty);
     saveReading([&](){return protoStation->mutable_down();}, station.down(), cwDistanceReading::State::Empty);
+
+    for(const cwShotMeasurement& splay : station.splays()) {
+        //Splays are front sights only, so SplayShot has nowhere to put a backsight
+        Q_ASSERT(splay.direction == cwShotMeasurement::Direction::Front);
+
+        auto protoSplay = protoStation->add_splays();
+        saveReading([&](){return protoSplay->mutable_distance();}, splay.distance, cwDistanceReading::State::Empty);
+        saveReading([&](){return protoSplay->mutable_compass();}, splay.compass, cwCompassReading::State::Empty);
+        saveReading([&](){return protoSplay->mutable_clino();}, splay.clino, cwClinoReading::State::Empty);
+    }
 }
 
 void saveStationShot(CavewhereProto::StationShot* protoShot, const cwShot& shot)
@@ -475,6 +485,17 @@ cwStation fromProtoStation(const CavewhereProto::StationShot& protoStation)
 
     if (protoStation.has_down()) {
         station.setDown(QString::fromStdString(protoStation.down()));
+    }
+
+    if(protoStation.splays_size() > 0) {
+        QList<cwShotMeasurement> splays;
+        splays.reserve(protoStation.splays_size());
+        for(const CavewhereProto::SplayShot& protoSplay : protoStation.splays()) {
+            splays.emplaceBack(cwDistanceReading(QString::fromStdString(protoSplay.distance())),
+                               cwCompassReading(QString::fromStdString(protoSplay.compass())),
+                               cwClinoReading(QString::fromStdString(protoSplay.clino())));
+        }
+        station.setSplays(splays);
     }
 
     return station;

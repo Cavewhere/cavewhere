@@ -12,10 +12,21 @@
 #include <QVector3D>
 #include <QString>
 #include <QMap>
+#include <QHash>
+#include <QList>
 
 //Our includes
 #include "cwGlobals.h"
 #include "cwStation.h"
+
+/**
+  Where a cave's splays end, keyed by the cwStation::canonicalKey of the station
+  each splay hangs off — the same key space cwStationPositionLookup uses.
+
+  A splay ends at an anonymous station, so its tip has no name to key on and no
+  place in the position lookup; the station it hangs off carries the whole list.
+  */
+using cwSplayTipsByStation = QHash<QString, QList<QVector3D>>;
 
 /**
   The station position model holds the position of all the stations

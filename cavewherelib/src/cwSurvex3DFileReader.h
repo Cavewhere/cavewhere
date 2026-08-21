@@ -29,12 +29,13 @@ public:
     struct NetworkAndLookup {
         cwSurveyNetwork network;
         cwStationPositionLookup lookup;
+        cwSplayTipsByStation splayTips;
     };
 
-    // Parses a .3d file once, returning both the survey network (station names,
-    // shot connectivity, positions) and a standalone position lookup. Two-pass
-    // using img_rewind(): pass 1 indexes LABEL items, pass 2 resolves LINE
-    // endpoints by coordinate match.
+    // Parses a .3d file once, returning the survey network (station names,
+    // shot connectivity, positions), a standalone position lookup, and the
+    // splay tips. Two-pass using img_rewind(): pass 1 indexes LABEL items,
+    // pass 2 resolves LINE endpoints by coordinate match.
     NetworkAndLookup readNetworkAndLookup(const QString& threeDFilePath);
 };
 

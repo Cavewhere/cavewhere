@@ -10,122 +10,53 @@ import cavewherelib
 import QtQuick.Controls as QC
 import QtQuick.Controls as QC
 
-QQ.Item {
+SurveyEditorCell {
     id: dataBox
     objectName: listViewIndex >= 0 ?
-                    ("dataBox." + listViewIndex + "." + dataValue.chunkDataRole) :
-                    ("templateCell." + listViewIndex + "." + dataValue.chunkDataRole)
+                    ("dataBox." + listViewIndex + "." + cellRole) :
+                    ("templateCell." + listViewIndex + "." + cellRole)
 
     property alias dataValidator: editor.validator
 
-    required property SurveyEditorModel model
     property alias aboutToDelete: removeBoxId.visible
+
+    //Space starts the next chunk from the cells that make up a shot, which is
+    //the cells the chunk stores a reading for — a splay's reading stands
+    //outside that flow, so the model answers it from the cell
+    readonly property bool startsChunkOnSpace: dataBox.model !== null
+                                               && dataBox.model.isChunkCell(dataBox.cellRole)
     readonly property ErrorModel errorModel: dataValue.errorModel
     required property QC.ButtonGroup errorButtonGroup
-    property RemovePreview removePreview: null
-    property QQ.Loader rightClickMenuLoader: null
-    property TripCalibration calibration: null
-    readonly property bool frontSights: calibration !== null && calibration.frontSights
-    readonly property bool backSights: calibration !== null && calibration.backSights
-    readonly property bool removePreviewActive: {
-        if(removePreview === null || removePreview.chunk === null) {
-            return false
-        }
-        if(dataValue.chunk !== removePreview.chunk) {
-            return false
-        }
-        if(removePreview.previewChunkRemoval) {
-            if(model.isStationRole(dataValue.chunkDataRole)) {
-                return dataValue.chunk.isStationRole(dataValue.chunkDataRole)
-            } else if(model.isShotRole(dataValue.chunkDataRole)) {
-                return dataValue.chunk.isShotRole(dataValue.chunkDataRole)
-            }
-            return false
-        }
-        if(model.isStationRole(dataValue.chunkDataRole)) {
-            return dataValue.chunk.isStationRole(dataValue.chunkDataRole) && removePreview.stationIndex === dataValue.indexInChunk
-        } else if(model.isShotRole(dataValue.chunkDataRole)) {
-            return dataValue.chunk.isShotRole(dataValue.chunkDataRole) && removePreview.shotIndex === dataValue.indexInChunk
-        }
-        return false
-    }
 
     //The index informantion from cwSurveyEditorModel
     required property cwSurveyEditorBoxData dataValue
 
-    //Index in the ListView
-    required property int listViewIndex
+    cellRole: dataBox.dataValue.cellRole
+    indexInChunk: dataBox.dataValue.indexInChunk
+    chunk: dataBox.dataValue.chunk
+    editing: editor.isEditting
 
-    required property QQ.ListView view
-
-    property bool hasEditorFocus: false
     property int editTargetRow: -1
     property int editTargetRole: -1
 
     property GlobalShadowTextInput _globalShadowTextInput: GlobalShadowTextInput
     property GlobalTextInputHelper _globalTextInput: GlobalShadowTextInput.textInput
 
-    signal rightClick(var mouse);
     signal enteredPressed();
     signal deletePressed();
-    signal tabPressed();
 
     //Uncomment to visualize indexes for the box
     // QC.Label {
     //     color: "red"
     //     font.pixelSize: 10
-    //     text: dataBox.objectName + "\nF:" + dataBox.focus + "\nEF:" + hasEditorFocus
+    //     text: dataBox.objectName + "\nF:" + dataBox.focus
     //     z: 1
     // }
-
-    function shouldHaveFocus() {
-        if(listViewIndex < 0) {
-            return false
-        }
-        return model.focusedRow === listViewIndex && model.focusedRole === dataValue.chunkDataRole
-    }
 
     function deletePressedHandler() {
         editor.text = "";
         editor.openEditor();
         state = 'MiddleTyping';
-    }
-
-    function syncEditorFocusState() {
-        let selected = shouldHaveFocus()
-        if(hasEditorFocus === selected && focus === selected) {
-            return
-        }
-        hasEditorFocus = selected
-        if(hasEditorFocus) {
-            forceActiveFocus()
-        }
-        focus = hasEditorFocus
-    }
-
-    function moveFocus(navKey) {
-        let currentCell = model.cellIndex(listViewIndex, dataValue.chunkDataRole)
-        let nextCell = model.nextCell(currentCell,
-                                      navKey,
-                                      frontSights,
-                                      backSights)
-        dataBox.model.setFocusedCell(nextCell)
-    }
-
-    function handleNextTab() {
-        moveFocus(SurveyEditorModel.Tab)
-    }
-
-    function handleTab(eventKey) {
-        if(eventKey.key === Qt.Key_Tab) {
-            tabPressed();
-            handleNextTab();
-            eventKey.accepted = true
-        } else if(eventKey.key === 1 + Qt.Key_Tab) {
-            //Shift tab -- 1 + Qt.Key_Tab is a hack but it works
-            moveFocus(SurveyEditorModel.BackTab)
-            eventKey.accepted = true
-        }
     }
 
     function errorImageSource(errorType) {
@@ -154,7 +85,7 @@ QQ.Item {
         //This simulates highlight. The error box will overdraw
         //and cover the databox highlighting
         let color = errorColor(errorType)
-        if(interalHighlight.visible) {
+        if(dataBox.highlightVisible) {
             return Qt.darker(color);
         }
         return color
@@ -171,46 +102,20 @@ QQ.Item {
         return ""
     }
 
+    //! Starts the trip's next chunk, or focuses the empty one it already has
     function addNewChunk() {
         var trip = dataValue.chunk.parentTrip;
         if(trip.chunkCount > 0) {
             var lastChunkIndex = trip.chunkCount - 1
             var lastChunk = trip.chunk(lastChunkIndex);
             if(lastChunk.isStationAndShotsEmpty()) {
-                let row = model.modelRowForChunkRole(lastChunk, 0, SurveyChunk.StationNameRole)
-                model.setFocusedCell(model.cellIndex(row, SurveyChunk.StationNameRole))
+                let row = model.modelRowForCellRole(lastChunk, 0, SurveyEditorCellIndex.StationNameCell)
+                model.setFocusedCell(model.cellIndex(row, SurveyEditorCellIndex.StationNameCell))
                 return;
             }
         }
 
         dataValue.chunk.parentTrip.addNewChunk();
-    }
-
-    onHasEditorFocusChanged: {
-        focus = hasEditorFocus
-    }
-
-    //We need to watch on currentIndex changed because the view
-    //set the focus on the row delegate. This will disable the focus on the
-    //correct databox.
-    QQ.Connections {
-        target: dataBox.view
-        function onCurrentIndexChanged() {
-            dataBox.syncEditorFocusState()
-            if(dataBox.focus) {
-                dataBox.forceActiveFocus()
-            }
-        }
-    }
-
-    QQ.Connections {
-        target: dataBox.model
-        function onFocusedRowChanged() {
-            dataBox.syncEditorFocusState()
-        }
-        function onFocusedRoleChanged() {
-            dataBox.syncEditorFocusState()
-        }
     }
 
     onEnteredPressed: {
@@ -221,11 +126,6 @@ QQ.Item {
         deletePressedHandler()
     }
 
-    onRightClick: {
-        rightClickMenuLoader.active = true;
-        rightClickMenuLoader.item.popup();
-    }
-
     RemoveDataRectangle {
         id: removeBoxId
         visible: false
@@ -234,102 +134,16 @@ QQ.Item {
         z: 1
     }
 
-    QQ.Rectangle {
-        id: removePreviewLine
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.verticalCenter: parent.verticalCenter
-        height: 2
-        color: Theme.text
-        // opacity: 0.9
-        visible: removePreviewActive
-        z: 2
-    }
-
-    QQ.MouseArea {
-        anchors.fill: parent
-
-        enabled: !editor.isEditting
-
-        acceptedButtons: Qt.LeftButton | Qt.RightButton
-
-        onClicked: (mouse) => {
-                       dataBox.model.setFocusedCell(dataBox.model.cellIndex(dataBox.listViewIndex, dataBox.dataValue.chunkDataRole))
-                       // dataBox.focus = true
-
-                       if(mouse.button === Qt.RightButton) {
-                           dataBox.rightClick(mouse)
-                       }
-                   }
-    }
-
-    QQ.Rectangle {
-        id: backgroundStation
-        anchors.fill: parent
-
-        gradient: QQ.Gradient {
-            QQ.GradientStop {
-                position: dataBox.dataValue.indexInChunk % 2 === 0 ? 1.0 : 0.0
-                color:  Theme.surfaceRaised
-            }
-            QQ.GradientStop {
-                position: dataBox.dataValue.indexInChunk % 2 === 0 ? 0.4 : 0.6
-                color:  Theme.surface
-            }
-        }
-
-        visible: dataBox.dataValue.chunk !== null
-                 && dataBox.dataValue.chunk.isStationRole(dataBox.dataValue.chunkDataRole)
-    }
-
-    QQ.Rectangle {
-        id: backgroundShot
-        property bool offsetColor: dataBox.dataValue.indexInChunk % 2 === 0
-                                   && dataBox.dataValue.chunk !== null
-                                   && dataBox.dataValue.chunk.isShotRole(dataBox.dataValue.chunkDataRole)
-        anchors.fill: parent
-        visible: dataBox.dataValue.chunk ? dataBox.dataValue.chunk.isShotRole(dataBox.dataValue.chunkDataRole) : false
-        color: offsetColor ? Theme.surfaceRaised : Theme.surface
-    }
-
-    QQ.Rectangle {
-        id: border
-        anchors.fill: parent
-        border.color:  Theme.borderSubtle
-        color: Theme.transparent
-        border.width: 1
-    }
-
-    QQ.Rectangle {
-        id: interalHighlight
-        border.color: Theme.border
-        anchors.fill: parent
-        anchors.margins: 1
-        border.width: 1
-        color: Theme.highlight
-        visible: dataBox.shouldHaveFocus() || editor.isEditting
-    }
-
     QQ.Keys.onPressed: (event) => {
+                           if(dataBox.handleNavigationKey(event)) {
+                               return;
+                           }
+
+                           //This cell swallows the rest: an unhandled key here
+                           //would reach the view and scroll it
                            event.accepted = true
-                           handleTab(event);
+
                            switch(event.key) {
-                               case Qt.Key_Left:
-                               dataBox.moveFocus(SurveyEditorModel.Left)
-                               event.accepted = true
-                               break;
-                               case Qt.Key_Right:
-                               dataBox.moveFocus(SurveyEditorModel.Right)
-                               event.accepted = true
-                               break;
-                               case Qt.Key_Up:
-                               dataBox.moveFocus(SurveyEditorModel.Up)
-                               event.accepted = true
-                               break;
-                               case Qt.Key_Down:
-                               dataBox.moveFocus(SurveyEditorModel.Down)
-                               event.accepted = true
-                               break;
                                case Qt.Key_Enter:
                                case Qt.Key_Return:
                                dataBox.state = 'MiddleTyping'
@@ -349,31 +163,15 @@ QQ.Item {
                        }
 
     QQ.Keys.onSpacePressed: {
-        addNewChunk();
-    }
-
-
-    onFocusChanged: {
-        if(listViewIndex < 0) {
-            return
-        }
-        if(focus) {
-            model.setFocusedCell(model.cellIndex(listViewIndex, dataValue.chunkDataRole))
+        if(dataBox.startsChunkOnSpace) {
+            dataBox.addNewChunk();
         }
     }
+
 
     onDataValueChanged: {
-        syncEditorFocusState()
+        dataBox.syncFocusState()
     }
-
-    onListViewIndexChanged: {
-        syncEditorFocusState()
-    }
-
-    QQ.Component.onCompleted: {
-        syncEditorFocusState()
-    }
-
 
     DoubleClickTextInput {
         id: editor
@@ -388,12 +186,20 @@ QQ.Item {
                             }
 
         onStartedEditting: {
+            //The cell the edit commits to, not the reading behind it: a splay's
+            //cells are the editor's own and name no chunk role
             dataBox.editTargetRow = dataBox.listViewIndex
-            dataBox.editTargetRole = dataBox.dataValue.chunkDataRole
+            dataBox.editTargetRole = dataBox.cellRole
             dataBox.state = 'MiddleTyping';
         }
 
+        //The editor's own handler takes the click before the cell's does, so a
+        //splay move waiting for a station to land on is finished from here
         onClicked: {
+            if(!dataBox.shouldTakeTap()) {
+                return
+            }
+
             dataBox.forceActiveFocus();
         }
 
@@ -505,7 +311,7 @@ QQ.Item {
                         if(!commited) { return; }
                     }
 
-                    if(pressKeyEvent.key === Qt.Key_Space) {
+                    if(pressKeyEvent.key === Qt.Key_Space && dataBox.startsChunkOnSpace) {
                         dataBox.addNewChunk();
                     }
 

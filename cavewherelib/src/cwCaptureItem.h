@@ -16,7 +16,10 @@
 #include <QRectF>
 #include <QQmlEngine>
 
-class cwCaptureItem : public QObject
+//Our includes
+#include "CaveWhereLibExport.h"
+
+class CAVEWHERE_LIB_EXPORT cwCaptureItem : public QObject
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(CaptureItem)

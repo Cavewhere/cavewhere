@@ -263,6 +263,22 @@ public:
                                            bool force = true) const;
     Q_INVOKABLE int noteScrapCount(cwNote* note) const;
     /**
+     * Hangs one splay on station \a stationIndex of \a chunk. Splays reach a
+     * chunk through an importer or a load, neither of which a QML test wants to
+     * run just to get a station with wall shots on it.
+     */
+    Q_INVOKABLE void addStationSplay(cwSurveyChunk* chunk,
+                                     int stationIndex,
+                                     const QString& distance,
+                                     const QString& compass,
+                                     const QString& clino) const;
+    /**
+     * The ground-truth a4 splay readings from SplayFixtureHelper.h, as
+     * {distance, compass, clino} maps, so a QML test seeds and asserts against
+     * the same copy of the numbers the C++ tests use.
+     */
+    Q_INVOKABLE QVariantList a4SplayReadings() const;
+    /**
      * A note named \a noteName added to \a trip with one empty scrap, so a test
      * can hang leads or stations off it without the note-import UI. The image is
      * path-mode, as the project serializer requires, and points at a file that

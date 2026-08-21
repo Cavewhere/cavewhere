@@ -10,82 +10,36 @@ import QmlTestRecorder
 MainWindowTest {
     id: rootId
 
+    SurveyTableTestHelper {
+        id: surveyTableId
+        mainWindow: rootId.mainWindow
+    }
+
     TestCase {
         name: "MarkStationFixed"
         when: windowShown
 
         function init() {
-            if (GlobalShadowTextInput.coreClickInput !== null) {
-                GlobalShadowTextInput.coreClickInput.closeEditor()
-            }
-            GlobalShadowTextInput.enabled = false
-
-            RootData.futureManagerModel.waitForFinished()
-            RootData.newProject()
-            RootData.pageSelectionModel.currentPageAddress = "View"
-            tryVerify(() => RootData.pageView.currentPageItem !== null
-                            && RootData.pageView.currentPageItem.objectName === "viewPage",
-                      5000, "should be on view page at start of test")
+            surveyTableId.resetToViewPage(this)
         }
 
         function cleanup() {
-            RootData.pageSelectionModel.currentPageAddress = "View"
-            RootData.newProject()
+            surveyTableId.leaveSurveyTable()
         }
 
         // A cave with one trip whose chunk has two named stations, sitting on the
         // trip page with the survey table up.
         function gotoSurveyTable() {
-            RootData.region.addCave()
-            const cave = RootData.region.cave(RootData.region.caveCount - 1)
-            cave.name = "FixCave"
-            cave.addTrip()
-            const trip = cave.trip(0)
-            trip.name = "FixTrip"
-            trip.addNewChunk()
-            const chunk = trip.chunk(0)
+            const context = surveyTableId.openSurveyTable(this, "FixCave", "FixTrip")
 
-            RootData.pageSelectionModel.currentPageAddress =
-                    "Source/Data/Cave=" + cave.name + "/Trip=" + trip.name
-            tryVerify(() => RootData.pageView.currentPageItem !== null
-                            && RootData.pageView.currentPageItem.objectName === "tripPage",
-                      5000, "should land on tripPage")
-
-            let view = null
-            tryVerify(() => {
-                view = ObjectFinder.findObjectByChain(
-                            mainWindow, "rootId->tripPage->surveyEditor->view")
-                return view !== null && view.model !== null
-            }, 5000, "survey editor view should be reachable")
-
-            const editorModel = view.model
-            const context = {
-                cave: cave,
-                chunk: chunk,
-                view: view,
-                editorModel: editorModel
-            }
-
-            setStationName(context, 0, "A1")
-            setStationName(context, 1, "A2")
+            surveyTableId.setStationName(this, context, 0, "A1")
+            surveyTableId.setStationName(this, context, 1, "A2")
 
             return context
         }
 
         function stationRow(context, indexInChunk) {
-            return context.editorModel.toModelRow(
-                        context.editorModel.rowIndex(context.chunk,
-                                                     indexInChunk,
-                                                     SurveyEditorRowIndex.StationRow))
-        }
-
-        function setStationName(context, indexInChunk, name) {
-            const row = stationRow(context, indexInChunk)
-            verify(row >= 0, "station " + indexInChunk + " should have a model row")
-            context.editorModel.setDataAt(
-                        context.editorModel.cellIndex(row, SurveyChunk.StationNameRole), name)
-            tryVerify(() => context.chunk.data(SurveyChunk.StationNameRole, indexInChunk) === name,
-                      5000, "station " + indexInChunk + " should be named " + name)
+            return surveyTableId.stationRow(context, indexInChunk)
         }
 
         // The station cell for `indexInChunk`, scrolled into view and focused —

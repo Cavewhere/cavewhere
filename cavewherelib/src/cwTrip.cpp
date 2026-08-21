@@ -533,12 +533,34 @@ void cwTrip::updateKeywordMetadata()
  */
 cwKeywordModel* cwTrip::linePlotKeywordModel()
 {
-    if(m_linePlotKeywordModel == nullptr) {
-        m_linePlotKeywordModel = new cwKeywordModel(this);
-        m_linePlotKeywordModel->add(cwKeyword(cwKeywordModel::TypeKey, QStringLiteral("Line Plot")));
-        m_linePlotKeywordModel->addExtension(KeywordModel);
+    return identityKeywordModel(m_linePlotKeywordModel, QStringLiteral("Line Plot"));
+}
+
+/**
+ * Keyword model for this trip's splay shots. Carries Type="Splays" and extends
+ * the trip's own keyword model, the splay counterpart of linePlotKeywordModel():
+ * filtering out the Type keyword hides the trip's splays while the centerline
+ * stays visible, and trip-level filters (Trip, Year, Date, Cave, Caver, ...)
+ * hide both. Created lazily on first use.
+ */
+cwKeywordModel* cwTrip::splaysKeywordModel()
+{
+    return identityKeywordModel(m_splaysKeywordModel, QStringLiteral("Splays"));
+}
+
+/**
+ * Lazily builds a trip-owned identity keyword model: a Type keyword plus an
+ * extension of the trip's own keyword model, so the item filters both by its
+ * type and alongside its trip (Trip, Year, Date, Cave, Caver, ...).
+ */
+cwKeywordModel* cwTrip::identityKeywordModel(cwKeywordModel*& model, const QString& type)
+{
+    if(model == nullptr) {
+        model = new cwKeywordModel(this);
+        model->add(cwKeyword(cwKeywordModel::TypeKey, type));
+        model->addExtension(KeywordModel);
     }
-    return m_linePlotKeywordModel;
+    return model;
 }
 
 cwTrip::NameCommand::NameCommand(cwTrip* trip, QString name) {

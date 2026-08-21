@@ -28,9 +28,20 @@
 #include <QRegularExpression>
 
 //Std includes
+#include <algorithm>
+#include <array>
+#include <functional>
 #include <math.h>
 
 namespace {
+//The three readings a splay carries. A splay is a front sight with no
+//destination, so it answers to the shot's front-sight roles and nothing else
+constexpr std::array<cwSurveyChunk::DataRole, 3> kSplayRoles = {
+    cwSurveyChunk::ShotDistanceRole,
+    cwSurveyChunk::ShotCompassRole,
+    cwSurveyChunk::ShotClinoRole
+};
+
 double absAngleDifferenceDegrees(double first, double second)
 {
     double raw = fmod(fabs(first - second), 360.0);
@@ -53,6 +64,15 @@ bool isVerticalClinoReading(const cwClinoReading& reading)
     }
 
     return qAbs(qAbs(value) - 90.0) < 0.001;
+}
+
+//A splay whose clino reads up, down, or ±90 points straight at the ceiling or
+//floor, and a compass means nothing there
+bool isVerticalSplay(const cwShotMeasurement& splay)
+{
+    return splay.clino.state() == cwClinoReading::State::Up
+           || splay.clino.state() == cwClinoReading::State::Down
+           || isVerticalClinoReading(splay.clino);
 }
 }
 
@@ -591,6 +611,11 @@ QString cwSurveyChunk::guessNextStation(QString stationName) const {
  */
 void cwSurveyChunk::setStation(cwStation station, int index){
     if(index < 0 || index >= d.stations.size()) { return; }
+
+    //Each emission below re-serializes the whole trip for the save queue, so only
+    //announce splays when they actually changed
+    const bool splaysChanged = d.stations.at(index).splays() != station.splays();
+
     d.stations[index] = station;
     emit dataChanged(StationNameRole, index);
     emit dataChanged(StationLeftRole, index);
@@ -598,7 +623,214 @@ void cwSurveyChunk::setStation(cwStation station, int index){
     emit dataChanged(StationUpRole, index);
     emit dataChanged(StationDownRole, index);
 
+    if(splaysChanged) {
+        announceStationSplaysChanged(index);
+    }
+
     checkForStationError(index);
+}
+
+/**
+ * @brief cwSurveyChunk::stationSplays
+ * @param index - The index of the station
+ * @return The station's splays, or an empty list if the index is out of range
+ */
+QList<cwShotMeasurement> cwSurveyChunk::stationSplays(int index) const
+{
+    if(!stationIndexCheck(index)) { return QList<cwShotMeasurement>(); }
+    return d.stations.at(index).splays();
+}
+
+/**
+ * @brief cwSurveyChunk::stationSplayCount
+ * @param index - The index of the station
+ * @return How many splays the station carries, or zero if the index is out of range
+ */
+int cwSurveyChunk::stationSplayCount(int index) const
+{
+    if(!stationIndexCheck(index)) { return 0; }
+    return d.stations.at(index).splayCount();
+}
+
+/**
+ * @brief cwSurveyChunk::stationSplayAt
+ * @param index - The index of the station
+ * @param splayIndex - The index of the splay, which must be in range
+ * @return The splay, by reference
+ */
+const cwShotMeasurement& cwSurveyChunk::stationSplayAt(int index, int splayIndex) const
+{
+    Q_ASSERT(stationIndexCheck(index));
+    return d.stations.at(index).splayAt(splayIndex);
+}
+
+/**
+ * @brief cwSurveyChunk::setStationSplays
+ * @param index - The index of the station
+ * @param splays - The station's new splays
+ *
+ * If the index is out of range, this function will do nothing
+ */
+void cwSurveyChunk::setStationSplays(int index, const QList<cwShotMeasurement> &splays)
+{
+    if(!stationIndexCheck(index)) { return; }
+    if(d.stations.at(index).splays() == splays) { return; }
+
+    d.stations[index].setSplays(splays);
+    announceStationSplaysChanged(index);
+}
+
+/**
+ * @brief cwSurveyChunk::appendStationSplay
+ * @param index - The index of the station
+ * @param splay - The splay that's added to the end of the station's splays
+ *
+ * If the index is out of range, this function will do nothing
+ */
+void cwSurveyChunk::appendStationSplay(int index, const cwShotMeasurement &splay)
+{
+    if(!stationIndexCheck(index)) { return; }
+
+    d.stations[index].addSplay(splay);
+    announceStationSplaysChanged(index);
+}
+
+/**
+ * @brief cwSurveyChunk::removeStationSplay
+ * @param index - The index of the station
+ * @param splayIndex - The index of the splay that's removed
+ *
+ * If either index is out of range, this function will do nothing
+ */
+void cwSurveyChunk::removeStationSplay(int index, int splayIndex)
+{
+    if(!splayIndexCheck(index, splayIndex)) { return; }
+
+    QList<cwShotMeasurement> splays = d.stations.at(index).splays();
+    splays.removeAt(splayIndex);
+
+    d.stations[index].setSplays(splays);
+    announceStationSplaysChanged(index);
+}
+
+/**
+ * @brief cwSurveyChunk::clearStationSplays
+ * @param index - The index of the station that loses all its splays
+ *
+ * If the index is out of range, or the station has no splays, this function
+ * will do nothing
+ */
+void cwSurveyChunk::clearStationSplays(int index)
+{
+    if(!stationIndexCheck(index)) { return; }
+    if(d.stations.at(index).splayCount() == 0) { return; }
+
+    d.stations[index].setSplays({});
+    announceStationSplaysChanged(index);
+}
+
+/**
+ * @brief cwSurveyChunk::setStationSplayData
+ * @param role - Which of the splay's readings changes. A splay is a front
+ * sight with no destination, so it only answers to ShotDistanceRole,
+ * ShotCompassRole, and ShotClinoRole
+ * @param index - The index of the station
+ * @param splayIndex - The index of the splay
+ * @param data - The new reading, as the text the user wrote
+ *
+ * If either index is out of range, the role names something a splay doesn't
+ * carry, or the reading already reads that way, this function will do nothing
+ */
+void cwSurveyChunk::setStationSplayData(cwSurveyChunk::DataRole role, int index, int splayIndex, const QVariant &data)
+{
+    if(!splayIndexCheck(index, splayIndex)) {
+        qDebug().noquote() << QStringLiteral("Can't set splay data for role \"%1\" at station: \"%2\" splay: \"%3\"")
+                                  .arg(role).arg(index).arg(splayIndex) << LOCATION;
+        return;
+    }
+
+    if(!data.canConvert<QString>()) {
+        qDebug() << "Can't convert data to variant" << LOCATION;
+        return;
+    }
+
+    const QString value = data.toString();
+    QList<cwShotMeasurement> splays = d.stations.at(index).splays();
+    cwShotMeasurement& splay = splays[splayIndex];
+
+    switch(role) {
+    case ShotDistanceRole: {
+        const cwDistanceReading distance(value);
+        if(splay.distance == distance) { return; }
+        splay.distance = distance;
+        break;
+    }
+    case ShotCompassRole: {
+        const cwCompassReading compass(value);
+        if(splay.compass == compass) { return; }
+        splay.compass = compass;
+        break;
+    }
+    case ShotClinoRole: {
+        const cwClinoReading clino(value);
+        if(splay.clino == clino) { return; }
+        splay.clino = clino;
+        break;
+    }
+    default:
+        qDebug() << "A splay has no reading for role:" << role << LOCATION;
+        return;
+    }
+
+    d.stations[index].setSplays(splays);
+    announceStationSplaysChanged(index);
+}
+
+/**
+ * @brief cwSurveyChunk::moveStationSplays
+ * @param from - The chunk the splays are leaving
+ * @param fromStation - The index of the station the splays are leaving
+ * @param to - The chunk the splays are landing in, which can be \a from
+ * @param toStation - The index of the station the splays land on
+ * @param splayIndices - Which of the source station's splays move. Indices out
+ * of range are skipped, and the survivors land in the order they were in
+ *
+ * The splays are appended to the target station, so a move announces one
+ * stationSplaysChanged per side. Moving a station's splays onto itself, or
+ * moving nothing, does nothing.
+ */
+void cwSurveyChunk::moveStationSplays(cwSurveyChunk *from, int fromStation,
+                                      cwSurveyChunk *to, int toStation,
+                                      const QList<int> &splayIndices)
+{
+    if(from == nullptr || to == nullptr) { return; }
+    if(!from->stationIndexCheck(fromStation) || !to->stationIndexCheck(toStation)) { return; }
+    if(from == to && fromStation == toStation) { return; }
+
+    //Taken from the back so each index still names the splay it named before
+    QList<int> descending = splayIndices;
+    std::sort(descending.begin(), descending.end(), std::greater<int>());
+    descending.erase(std::unique(descending.begin(), descending.end()), descending.end());
+
+    QList<cwShotMeasurement> sourceSplays = from->d.stations.at(fromStation).splays();
+    QList<cwShotMeasurement> moved;
+    for(int splayIndex : std::as_const(descending)) {
+        if(splayIndex < 0 || splayIndex >= sourceSplays.size()) { continue; }
+        moved.prepend(sourceSplays.takeAt(splayIndex));
+    }
+
+    if(moved.isEmpty()) { return; }
+
+    QList<cwShotMeasurement> targetSplays = to->d.stations.at(toStation).splays();
+    targetSplays.append(moved);
+
+    //Both sides land before either is announced, so the model sees one settled
+    //move rather than a station that briefly owns the same splays twice
+    from->d.stations[fromStation].setSplays(sourceSplays);
+    to->d.stations[toStation].setSplays(targetSplays);
+
+    from->announceStationSplaysChanged(fromStation);
+    to->announceStationSplaysChanged(toStation);
 }
 
 /**
@@ -870,6 +1102,10 @@ void cwSurveyChunk::checkForErrorOnDataChanged(cwSurveyChunk::DataRole role, int
             checkForError(ShotClinoRole, index);
             checkForError(ShotBackClinoRole, index);
         }
+
+        //A splay's errors name the station it hangs off, and a station only
+        //waits on its splays once it has a name
+        checkForSplayErrors(index);
         break;
     }
     case StationLeftRole:
@@ -1047,6 +1283,9 @@ void cwSurveyChunk::checkForStationError(int index)
     checkForError(StationRightRole, index);
     checkForError(StationUpRole, index);
     checkForError(StationDownRole, index);
+
+    //A splay's errors name the station they hang off, so a rename rewrites them
+    checkForSplayErrors(index);
 }
 
 /**
@@ -1063,6 +1302,219 @@ void cwSurveyChunk::checkForShotError(int index)
     checkForError(ShotBackCompassRole, index);
     checkForError(ShotClinoRole, index);
     checkForError(ShotBackClinoRole, index);
+}
+
+/**
+ * @brief cwSurveyChunk::checkForSplayErrors
+ * @param index - The index of the station whose splays are checked
+ *
+ * Rechecks every reading of every splay on the station and forgets the errors
+ * of splays the station no longer carries. Announces splayErrorsChanged once
+ * when any of them changed.
+ */
+void cwSurveyChunk::checkForSplayErrors(int index)
+{
+    if(updateSplayErrors(index)) {
+        emit splayErrorsChanged(index);
+    }
+}
+
+/**
+ * @brief cwSurveyChunk::updateSplayErrors
+ * @param index - The index of the station whose splays are checked
+ * @return True when any of the station's splay errors changed, otherwise false
+ *
+ * Rechecks every reading of every splay on the station and forgets the errors of
+ * splays the station no longer carries, leaving the announcement to the caller.
+ */
+bool cwSurveyChunk::updateSplayErrors(int index)
+{
+    if(!stationIndexCheck(index)) { return false; }
+
+    bool changed = false;
+    const int splayCount = d.stations.at(index).splayCount();
+    for(int splayIndex = 0; splayIndex < splayCount; splayIndex++) {
+        for(auto role : kSplayRoles) {
+            changed = checkForSplayError(index, splayIndex, role) || changed;
+        }
+    }
+
+    return removeSplayErrorsFrom(index, splayCount) || changed;
+}
+
+/**
+ * @brief cwSurveyChunk::checkForSplayError
+ * @param index - The index of the station the splay hangs off
+ * @param splayIndex - The index of the splay
+ * @param role - Which of the splay's readings is checked
+ * @return True when the cell's errors changed, otherwise false
+ *
+ * The error model lives under the chunk's own, so a splay's errors reach the
+ * trip's error list the same way a shot's do.
+ */
+bool cwSurveyChunk::checkForSplayError(int index, int splayIndex, cwSurveyChunk::DataRole role)
+{
+    const QList<cwError> errors = checkSplayDataError(role, index, splayIndex);
+    const SplayCellIndex cellIndex(index, splayIndex, role);
+    cwErrorModel* cellModel = SplayCellErrorModels.value(cellIndex, nullptr);
+
+    if(cellModel == nullptr) {
+        if(errors.isEmpty()) {
+            return false;
+        }
+
+        cellModel = new cwErrorModel(ErrorModel);
+        cellModel->setParentModel(ErrorModel);
+        cellModel->errors()->append(errors);
+        SplayCellErrorModels.insert(cellIndex, cellModel);
+        return true;
+    }
+
+    if(errors.isEmpty()) {
+        cellModel->setParentModel(nullptr);
+        cellModel->deleteLater();
+        SplayCellErrorModels.remove(cellIndex);
+        return true;
+    }
+
+    if(cellModel->errors()->toList() == errors) {
+        return false;
+    }
+
+    cellModel->errors()->clear();
+    cellModel->errors()->append(errors);
+    return true;
+}
+
+/**
+ * @brief cwSurveyChunk::removeSplayErrorsFrom
+ * @param index - The index of the station
+ * @param firstSplayIndex - The first splay index that's forgotten
+ * @return True when any errors were forgotten, otherwise false
+ */
+bool cwSurveyChunk::removeSplayErrorsFrom(int index, int firstSplayIndex)
+{
+    QList<SplayCellIndex> stale;
+    for(auto iter = SplayCellErrorModels.constBegin(); iter != SplayCellErrorModels.constEnd(); ++iter) {
+        if(iter.key().station() == index && iter.key().splay() >= firstSplayIndex) {
+            stale.append(iter.key());
+        }
+    }
+
+    for(const auto& cellIndex : std::as_const(stale)) {
+        cwErrorModel* cellModel = SplayCellErrorModels.take(cellIndex);
+        cellModel->setParentModel(nullptr);
+        cellModel->deleteLater();
+    }
+
+    return !stale.isEmpty();
+}
+
+/**
+ * @brief cwSurveyChunk::announceStationSplaysChanged
+ * @param index - The index of the station whose splays changed
+ *
+ * The errors are brought up to date before either change is announced, so
+ * anything that reads the splays when it hears about them reads today's errors
+ * with them. The error announcement comes second because a cluster that grew or
+ * shrank only takes its new shape once the splays themselves are announced, and
+ * an error lands on the rows that reading sits on.
+ */
+void cwSurveyChunk::announceStationSplaysChanged(int index)
+{
+    const bool errorsChanged = updateSplayErrors(index);
+
+    emit stationSplaysChanged(index);
+
+    if(errorsChanged) {
+        emit splayErrorsChanged(index);
+    }
+}
+
+/**
+ * @brief cwSurveyChunk::checkSplayDataError
+ * @param role - Which of the splay's readings is checked
+ * @param index - The index of the station the splay hangs off
+ * @param splayIndex - The index of the splay
+ * @return The errors of that one reading
+ *
+ * A splay is checked by the rules its shot-row twin is checked by: the reading
+ * has to pass the column's validator, and a splay off a named station has to
+ * carry all three readings. The entry row at the bottom of a cluster holds no
+ * splay yet, so it's out of range here and stays error free.
+ */
+QList<cwError> cwSurveyChunk::checkSplayDataError(cwSurveyChunk::DataRole role, int index, int splayIndex) const
+{
+    QList<cwError> errors;
+
+    if(!splayIndexCheck(index, splayIndex)) { return errors; }
+
+    //A splay is a front sight, so a trip that takes no front sights has nothing
+    //to say about its angles — the same silence a shot's front sights get
+    const bool frontSights = parentTrip() == nullptr
+                             || parentTrip()->calibrations()->hasFrontSights();
+
+    const cwShotMeasurement& splay = d.stations.at(index).splayAt(splayIndex);
+
+    QScopedPointer<cwValidator> validator;
+    QString roleName;
+    QString value;
+
+    switch(role) {
+    case ShotDistanceRole:
+        roleName = QStringLiteral("distance");
+        validator.reset(new cwDistanceValidator());
+        value = splay.distance.value();
+        break;
+    case ShotCompassRole:
+        if(!frontSights) { return errors; }
+        roleName = QStringLiteral("compass");
+        validator.reset(new cwCompassValidator());
+        value = splay.compass.value();
+        break;
+    case ShotClinoRole:
+        if(!frontSights) { return errors; }
+        roleName = QStringLiteral("clino");
+        validator.reset(new cwClinoValidator());
+        value = splay.clino.value();
+        break;
+    default:
+        //A splay carries no other reading
+        return errors;
+    }
+
+    if(value.isEmpty()) {
+        //A splay shot straight up or down needs no compass, the same way a
+        //vertical shot row doesn't
+        if(role != ShotDistanceRole && isVerticalSplay(splay)) {
+            return errors;
+        }
+
+        //An unnamed station's splays are as unfinished as the station is, and
+        //the station's own error already says so
+        const QString stationName = d.stations.at(index).name();
+        if(!stationName.isEmpty()) {
+            cwError error;
+            error.setType(cwError::Fatal);
+            error.setMessage(QStringLiteral("Missing \"%1\" from splay s%2 off \"%3\"")
+                                 .arg(roleName)
+                                 .arg(splayIndex + 1)
+                                 .arg(stationName));
+            errors.append(error);
+        }
+        return errors;
+    }
+
+    int position = 0;
+    QString text = value;
+    if(validator->validate(text, position) != QValidator::Acceptable) {
+        cwError error;
+        error.setMessage(validator->errorText());
+        error.setType(cwError::Fatal);
+        errors.append(error);
+    }
+
+    return errors;
 }
 
 /**
@@ -1477,6 +1929,21 @@ void cwSurveyChunk::updateErrors()
 {
     clearErrors();
 
+    //A splay's errors are pinned to the station it hangs off, and a structural
+    //change can leave entries on stations the chunk no longer has. Nothing below
+    //visits those, so they're forgotten here; the stations that are still around
+    //are rechecked below, and checkForSplayErrors announces what it changes
+    QSet<int> goneStations;
+    const QList<SplayCellIndex> splayCells = SplayCellErrorModels.keys();
+    for(const auto& cellIndex : splayCells) {
+        if(cellIndex.station() >= d.stations.size()) {
+            goneStations.insert(cellIndex.station());
+        }
+    }
+    for(int station : std::as_const(goneStations)) {
+        removeSplayErrorsFrom(station, 0);
+    }
+
     for(int i = 0; i < d.shots.size(); i++) {
         checkForShotError(i);
     }
@@ -1573,6 +2040,12 @@ void cwSurveyChunk::updateCompassClinoErrors()
        checkForError(ShotClinoRole, i);
        checkForError(ShotBackClinoRole, i);
    }
+
+   //A splay's angles are front sights too, so turning front sights off quiets
+   //them as well
+   for(int i = 0; i < stationCount(); i++) {
+       checkForSplayErrors(i);
+   }
 }
 
 /**
@@ -1608,6 +2081,18 @@ void cwSurveyChunk::setData(DataRole role, int index, QVariant data) {
 cwErrorModel* cwSurveyChunk::errorsAt(int index, cwSurveyChunk::DataRole role) const
 {
     return CellErrorModels.value(CellIndex(index, role), nullptr);
+}
+
+/**
+ * @brief cwSurveyChunk::splayErrorsAt
+ * @param index - The index of the station the splay hangs off
+ * @param splayIndex - The index of the splay
+ * @param role - Which of the splay's readings is asked about
+ * @return The errors of that one reading, or null when it has none
+ */
+cwErrorModel* cwSurveyChunk::splayErrorsAt(int index, int splayIndex, cwSurveyChunk::DataRole role) const
+{
+    return SplayCellErrorModels.value(SplayCellIndex(index, splayIndex, role), nullptr);
 }
 
 /**

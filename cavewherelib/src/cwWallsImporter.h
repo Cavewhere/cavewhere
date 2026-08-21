@@ -9,6 +9,7 @@
 #include "cwTrip.h"
 #include "cwSurveyChunk.h"
 #include "cwStationRenamer.h"
+#include "cwSplayBuffer.h"
 #include "wallsunits.h"
 #include "wallsprojectparser.h"
 #include "fixstation.h"
@@ -59,6 +60,12 @@ public:
 
     void clearTrip();
     void ensureValidTrip();
+
+    //Hangs the splays the last trip buffered. The file has to be read to the
+    //end first, because a splay can be written before the leg that names the
+    //station it was shot from
+    void finishParsing();
+
     inline QList<cwTripPtr> trips() const { return Trips; }
     inline QString comment() const { return Comment; }
 
@@ -72,6 +79,8 @@ public slots:
     void message(WallsMessage message);
 
 private:
+    void flushSplays();
+
     WallsUnits priorUnits;
     WallsSurveyParser* Parser;
     cwWallsImporter* Importer;
@@ -80,6 +89,9 @@ private:
     QList<cwTripPtr> Trips;
     cwTripPtr CurrentTrip;
     WallsReferenceCS ReferenceCS;
+
+    //Holds the current trip's splays until its chunks are complete
+    cwSplayBuffer Splays;
 };
 
 class CAVEWHERE_LIB_EXPORT cwWallsImporter : public cwTreeDataImporter

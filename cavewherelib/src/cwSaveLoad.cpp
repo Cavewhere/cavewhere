@@ -4105,6 +4105,7 @@ void cwSaveLoad::connectTrip(cwTrip* trip)
         connect(chunk, &cwSurveyChunk::removed, this, saveTrip);
 
         connect(chunk, &cwSurveyChunk::dataChanged, this, saveTrip);
+        connect(chunk, &cwSurveyChunk::stationSplaysChanged, this, saveTrip);
     };
 
     if(!rebindIfTracked(trip)) {

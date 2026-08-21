@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Splay editing — interactive prototype</title>
+<style>
+  :root {
+    --page: #f5f5f4;
+    --surface: #ffffff;
+    --surface-raised: #f0f0f0;
+    --surface-muted: #f6f6f6;
+    --border: #d3d3d3;
+    --border-subtle: #e4e4e4;
+    --text: #1c1c1a;
+    --text-subtle: #616469;
+    --splay-surface: #f7f1e3;
+    --splay-border: #8a6d3b;
+    --splay-text: #8a6d3b;
+    --highlight: #a5cdff;
+    --danger: #FF6736;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --page: #16181d;
+      --surface: #1f232a;
+      --surface-raised: #242933;
+      --surface-muted: #292d35;
+      --border: #4a4f58;
+      --border-subtle: #353a42;
+      --text: #e6e9ee;
+      --text-subtle: #9fa6b1;
+      --splay-surface: #322a1a;
+      --splay-border: #c9a35e;
+      --splay-text: #c9a35e;
+      --highlight: #314f78;
+      --danger: #6f312e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--page); color: var(--text);
+    font: 15px/1.5 -apple-system, "Segoe UI", sans-serif;
+  }
+  header { padding: 20px 30px 6px; }
+  header h1 { margin: 0 0 6px; font-size: 22px; }
+  header p { margin: 0 0 4px; color: var(--text-subtle); max-width: 86ch; }
+  header ul { margin: 8px 0 0; color: var(--text-subtle); max-width: 86ch; padding-left: 22px; }
+  header li { margin-bottom: 3px; }
+  header b { color: var(--text); font-weight: 600; }
+  main { padding: 10px 30px 120px; }
+
+  .banner {
+    display: none;
+    max-width: 660px; margin-bottom: 10px; padding: 8px 14px;
+    background: var(--highlight); color: var(--text);
+    border-radius: 6px; font-size: 14px;
+  }
+  .banner.active { display: block; }
+
+  .editor {
+    position: relative;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    display: inline-block;
+  }
+  .cell {
+    position: absolute;
+    border: 1px solid var(--border-subtle);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px;
+  }
+  .cell.grad-a { background: linear-gradient(to bottom, var(--surface) 40%, var(--surface-raised) 100%); }
+  .cell.grad-b { background: linear-gradient(to top, var(--surface) 40%, var(--surface-raised) 100%); }
+  .cell.shot-a { background: var(--surface-raised); }
+  .cell.shot-b { background: var(--surface); }
+  .cell.station-name { font-weight: 600; justify-content: flex-start; padding-left: 8px; }
+
+  .cell.pick-target {
+    outline: 2px solid var(--splay-border); outline-offset: -2px;
+    cursor: pointer;
+  }
+  .cell.pick-target:hover { background: var(--splay-surface); }
+  .cell.pick-source { opacity: 0.45; }
+
+  /* DataBox focus: Theme.border ring over a Theme.highlight fill */
+  .cell.focus-ring {
+    outline: 2px solid var(--border); outline-offset: -3px;
+    background: var(--highlight);
+  }
+
+  .coltitle {
+    position: absolute;
+    display: flex; align-items: flex-end; justify-content: center;
+    font-size: 12px; color: var(--text-subtle); padding-bottom: 3px;
+  }
+
+  .splays-cell { cursor: pointer; gap: 4px; }
+  .splays-cell .hint { color: var(--text-subtle); opacity: 0; font-size: 13px; }
+  .splays-cell:hover .hint { opacity: 0.7; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    border: 1px solid var(--splay-border); color: var(--splay-text); background: var(--splay-surface);
+    border-radius: 999px; padding: 1px 9px; font-size: 12px;
+    cursor: pointer; user-select: none; white-space: nowrap;
+  }
+  .chip .tri { font-size: 9px; display: inline-block; transition: transform .12s; }
+  .chip.open .tri { transform: rotate(90deg); }
+
+  .splaycell {
+    position: absolute;
+    border: 1px solid var(--border-subtle);
+    background: var(--splay-surface);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; color: var(--text);
+    cursor: default; user-select: none;
+  }
+  .splaycell.blank { border-style: dashed; background: transparent; color: var(--text-subtle); }
+  .splaycell.focused { outline: 2px solid var(--splay-border); outline-offset: -2px; }
+  .splaycell input {
+    width: 100%; height: 100%; border: none; outline: none;
+    background: var(--surface); color: var(--text);
+    font: 12px -apple-system, "Segoe UI", sans-serif; text-align: center;
+  }
+  .splaytag {
+    position: absolute;
+    display: flex; align-items: center; justify-content: flex-end;
+    font-size: 11px; color: var(--splay-text); padding-right: 8px;
+    white-space: nowrap; overflow: hidden;
+  }
+  .rail { position: absolute; background: var(--splay-border); width: 2px; }
+
+  .rowmenu-btn, .clustermenu-btn {
+    position: absolute;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-subtle); font-size: 14px; cursor: pointer;
+    border-radius: 4px; user-select: none;
+  }
+  .rowmenu-btn:hover, .clustermenu-btn:hover { background: var(--surface-muted); color: var(--text); }
+
+  .menu {
+    position: absolute; z-index: 10;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    box-shadow: 0 6px 24px rgba(0,0,0,.25);
+    padding: 4px; min-width: 170px;
+  }
+  .menu .item {
+    padding: 6px 12px; font-size: 13px; border-radius: 4px; cursor: pointer;
+    white-space: nowrap;
+  }
+  .menu .item:hover { background: var(--highlight); }
+  .menu .item.disabled { color: var(--text-subtle); opacity: .5; pointer-events: none; }
+  .menu .sep { height: 1px; background: var(--border-subtle); margin: 4px 6px; }
+
+  /* RemoveAskBox: Theme.errorBackground fill, inline Remove/Cancel challenge */
+  .askbox {
+    position: absolute; z-index: 20;
+    background: var(--danger);
+    border-radius: 4px;
+    box-shadow: 0 4px 16px rgba(0,0,0,.3);
+    padding: 6px 8px;
+    display: flex; align-items: center; gap: 8px;
+    font-size: 13px; color: #fff;
+    animation: askfade .15s ease-out;
+  }
+  @keyframes askfade { from { opacity: 0; } to { opacity: 1; } }
+  .askbox button {
+    font: 12px -apple-system, "Segoe UI", sans-serif;
+    padding: 3px 10px; border-radius: 4px;
+    border: 1px solid var(--border); background: var(--surface); color: var(--text);
+    cursor: pointer;
+  }
+  .askbox button:hover { background: var(--surface-raised); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Splay editing — interactive prototype</h1>
+  <p>Variant C plus the full interaction model. The Splays column is now a real cell on every
+     station row; splay readings are editable cells; move and delete hang off small menus with
+     the off-by-one moves listed first; the general move uses pick-a-target mode.</p>
+  <ul>
+    <li><b>Expand:</b> click the chip. Click an <b>empty</b> Splays cell (A1, A3, A5) to start
+        manual entry — it opens with a blank entry row.</li>
+    <li><b>Edit:</b> click a reading to focus it, then type (or press Enter). Tab/Enter advance
+        distance → azimuth → inclination → next row. Esc cancels.</li>
+    <li><b>Add:</b> type into the dashed blank row at the bottom of any open cluster; committing
+        grows a fresh blank underneath. Tabbing through the blank row <b>empty</b> exits the
+        cluster — focus lands on the next station's name box.</li>
+    <li><b>Move / delete one splay:</b> the ⋯ at the end of each splay row (or right-click the
+        row): "Move to…" and "Remove splay".</li>
+    <li><b>Move / delete the cluster:</b> the ⋯ beside the chip (or right-click the Splays
+        cell): "Move all to…" and "Delete all N splays" — the delete goes through a
+        RemoveAskBox challenge before anything happens.</li>
+    <li><b>Pick-a-target:</b> after "Move to…", station boxes light up — click one, or press
+        Esc to cancel. The source station is dimmed.</li>
+  </ul>
+</header>
+
+<main>
+  <div class="banner" id="banner"></div>
+  <div id="editorHolder"></div>
+</main>
+
+<script>
+"use strict";
+
+const COL = { station: [0, 110], dist: [109, 72], comp: [180, 72], clino: [251, 72],
+              l: [322, 52], r: [373, 52], u: [424, 52], d: [475, 52], splays: [526, 86] };
+const ROW_H = 50, TITLE_H = 26, EDITOR_W = 660;
+const SP_H = 28, SP_STEP = 27, SP_PAD = 3;
+
+const stations = [
+  { name: "A1", lrud: [1.2, 0.8, 3.1, 0.4], splays: [] },
+  { name: "A2", lrud: [2.1, 1.4, 2.6, 0.9],
+    splays: [[4.5,20,15],[2.2,110,0],[1.9,200,-6],[3.8,290,3],[2.4,340,45],[1.6,155,-30]] },
+  { name: "A3", lrud: [0.6, 2.2, 4.0, 1.1], splays: [] },
+  { name: "A4", lrud: [1.8, 1.8, 1.9, 0.6],
+    splays: [[5.1,15,8],[3.3,100,-4],[2.7,190,1],[4.2,275,12],[1.9,60,-22],[2.5,130,35],[3.0,310,-8],[1.2,225,4]] },
+  { name: "A5", lrud: [0.9, 0.5, 2.2, 0.3], splays: [] },
+];
+const shots = [
+  [8.23, 271.5, -4.0], [12.61, 265.0, 2.5], [6.15, 291.0, -12.0], [9.87, 254.5, 1.0],
+];
+
+const DIGITS = [2, 1, 1];
+const fmtCol = (v, col) => v === null || v === undefined ? "" : v.toFixed(DIGITS[col]);
+
+const state = {
+  open: new Set([1]),
+  // focus: {st, row, col} — row === splays.length is the blank entry row
+  focus: null,
+  // stationFocus: station index whose name box holds focus (tab exit from a cluster)
+  stationFocus: null,
+  editing: false,
+  // pick: {st, rows: [indices]} or {st, all: true}
+  pick: null,
+};
+
+const holder = document.getElementById("editorHolder");
+const banner = document.getElementById("banner");
+let menuEl = null;
+
+function closeMenu() {
+  if (menuEl) { menuEl.remove(); menuEl = null; }
+}
+
+function div(parent, cls, x, y, w, h, text) {
+  const e = document.createElement("div");
+  e.className = cls;
+  e.style.left = x + "px"; e.style.top = y + "px";
+  if (w !== null) { e.style.width = w + "px"; }
+  if (h !== null) { e.style.height = h + "px"; }
+  if (text !== undefined) { e.textContent = text; }
+  parent.appendChild(e);
+  return e;
+}
+
+// Open clusters always show one dashed blank entry row after the data rows
+const clusterRows = st => stations[st].splays.length + 1;
+const clusterHeight = st => clusterRows(st) * SP_STEP + SP_PAD * 2;
+
+function moveSplays(fromSt, rows, toSt) {
+  const src = stations[fromSt].splays;
+  const moved = rows.slice().sort((a, b) => b - a).map(k => src.splice(k, 1)[0]).reverse();
+  stations[toSt].splays.push(...moved);
+  state.open.add(toSt);
+  if (src.length === 0) { state.open.delete(fromSt); }
+}
+
+function startPick(st, rows, all) {
+  state.pick = { st, rows, all };
+  state.focus = null;
+  state.stationFocus = null;
+  const n = all ? "all " + stations[st].splays.length + " splays" :
+            rows.length + " splay" + (rows.length > 1 ? "s" : "");
+  banner.textContent = "Click a station to move " + n + " from " + stations[st].name +
+                       " — Esc cancels";
+  banner.classList.add("active");
+  render();
+}
+
+function endPick() {
+  state.pick = null;
+  banner.classList.remove("active");
+}
+
+function openMenu(items, x, y) {
+  closeMenu();
+  menuEl = document.createElement("div");
+  menuEl.className = "menu";
+  menuEl.style.left = x + "px"; menuEl.style.top = y + "px";
+  items.forEach(it => {
+    if (it === "-") {
+      const s = document.createElement("div"); s.className = "sep"; menuEl.appendChild(s);
+      return;
+    }
+    const e = document.createElement("div");
+    e.className = "item" + (it.disabled ? " disabled" : "");
+    e.textContent = it.label;
+    e.onclick = ev => { ev.stopPropagation(); closeMenu(); it.action(); render(); };
+    menuEl.appendChild(e);
+  });
+  document.querySelector(".editor").appendChild(menuEl);
+}
+
+// RemoveAskBox equivalent: inline Remove/Cancel challenge on Theme.errorBackground.
+// Appended after the menu action's render() pass so the rebuild keeps it alive.
+function openAskBox(label, x, y, onRemove) {
+  setTimeout(() => buildAskBox(label, x, y, onRemove), 0);
+}
+
+function buildAskBox(label, x, y, onRemove) {
+  const box = document.createElement("div");
+  box.className = "askbox";
+  box.style.left = x + "px"; box.style.top = y + "px";
+
+  const msg = document.createElement("span");
+  msg.innerHTML = "Remove <b>" + label + "</b>?";
+  box.appendChild(msg);
+
+  const removeBtn = document.createElement("button");
+  removeBtn.textContent = "Remove";
+  removeBtn.onclick = ev => { ev.stopPropagation(); onRemove(); render(); };
+  box.appendChild(removeBtn);
+
+  const cancelBtn = document.createElement("button");
+  cancelBtn.textContent = "Cancel";
+  cancelBtn.onclick = ev => { ev.stopPropagation(); box.remove(); };
+  box.appendChild(cancelBtn);
+
+  // Click outside dismisses, matching RemoveAskBox's RootPopupItem MouseArea
+  setTimeout(() => document.addEventListener("click", function dismiss(ev) {
+    if (!box.contains(ev.target)) {
+      box.remove();
+      document.removeEventListener("click", dismiss);
+    }
+  }), 0);
+
+  document.querySelector(".editor").appendChild(box);
+}
+
+function rowMenuItems(st, row) {
+  return [
+    { label: "Move to…", action: () => startPick(st, [row], false) },
+    "-",
+    { label: "Remove splay", action: () => {
+        stations[st].splays.splice(row, 1);
+        if (stations[st].splays.length === 0) { state.open.delete(st); }
+      } },
+  ];
+}
+
+function clusterMenuItems(st, menuX, menuY) {
+  const all = () => stations[st].splays.map((_, k) => k);
+  const n = stations[st].splays.length;
+  return [
+    { label: "Move all to…", action: () => startPick(st, all(), true) },
+    "-",
+    { label: "Delete all " + n + " splays", action: () => {
+        openAskBox("all " + n + " splays from " + stations[st].name, menuX, menuY, () => {
+          stations[st].splays.length = 0;
+          state.open.delete(st);
+        });
+      } },
+  ];
+}
+
+function commitValue(st, row, col, text) {
+  const v = parseFloat(text);
+  const value = isNaN(v) ? null : v;
+  if (row === stations[st].splays.length) {
+    if (value === null) { return; }
+    const s = [null, null, null];
+    s[col] = value;
+    stations[st].splays.push(s);
+  } else {
+    stations[st].splays[row][col] = value;
+  }
+}
+
+function advanceFocus() {
+  const f = state.focus;
+  if (!f) { return; }
+  if (f.col < 2) { f.col += 1; }
+  else if (f.row < stations[f.st].splays.length) { f.row += 1; f.col = 0; }
+  else {
+    // Tabbed through the blank entry row empty: leave the cluster and land
+    // on the next station's name box, like tabbing through the table today
+    state.focus = null;
+    state.stationFocus = f.st < stations.length - 1 ? f.st + 1 : null;
+  }
+}
+
+function startEdit() {
+  state.editing = true;
+  render();
+  const input = holder.querySelector(".splaycell input");
+  if (input) { input.focus(); input.select(); }
+}
+
+function render() {
+  closeMenu();
+  holder.innerHTML = "";
+  const ed = document.createElement("div");
+  ed.className = "editor";
+  holder.appendChild(ed);
+
+  for (const [key, label] of [["station","Station"],["dist","Distance"],["comp","Compass"],
+                              ["clino","Clino"],["l","L"],["r","R"],["u","U"],["d","D"],
+                              ["splays","Splays"]]) {
+    div(ed, "coltitle", COL[key][0], 0, COL[key][1], TITLE_H, label);
+  }
+
+  const yTop = [];
+  let y = TITLE_H;
+  stations.forEach((st, i) => {
+    yTop.push(y);
+    y += ROW_H;
+    if (state.open.has(i)) { y += clusterHeight(i); }
+  });
+  ed.style.width = EDITOR_W + "px";
+  ed.style.height = (y + ROW_H * 0.5) + "px";
+
+  stations.forEach((st, i) => {
+    const g = i % 2 === 0 ? "grad-a" : "grad-b";
+
+    let stationCls = "cell station-name " + g;
+    if (state.pick) {
+      stationCls += i === state.pick.st ? " pick-source" : " pick-target";
+    }
+    if (state.stationFocus === i) { stationCls += " focus-ring"; }
+    const stationCell = div(ed, stationCls, COL.station[0], yTop[i], COL.station[1], ROW_H, st.name);
+    if (state.pick && i !== state.pick.st) {
+      const pick = state.pick;
+      stationCell.onclick = () => { moveSplays(pick.st, pick.rows, i); endPick(); render(); };
+    }
+
+    [COL.l, COL.r, COL.u, COL.d].forEach(([x, w], k) =>
+      div(ed, "cell " + g, x, yTop[i], w, ROW_H, st.lrud[k].toFixed(1)));
+
+    // Splays column: a real cell on every station row
+    const spCell = div(ed, "cell splays-cell " + g, COL.splays[0], yTop[i], COL.splays[1], ROW_H);
+    if (st.splays.length > 0) {
+      const chip = document.createElement("span");
+      chip.className = "chip" + (state.open.has(i) ? " open" : "");
+      chip.innerHTML = `<span class="tri">▶</span>${st.splays.length}`;
+      chip.onclick = ev => {
+        ev.stopPropagation();
+        state.open.has(i) ? state.open.delete(i) : state.open.add(i);
+        state.focus = null;
+        render();
+      };
+      spCell.appendChild(chip);
+
+      const dots = document.createElement("span");
+      dots.className = "clustermenu-btn";
+      dots.textContent = "⋯";
+      dots.style.position = "static";
+      dots.style.padding = "0 4px";
+      dots.onclick = ev => {
+        ev.stopPropagation();
+        openMenu(clusterMenuItems(i, COL.splays[0] - 90, yTop[i] + ROW_H - 6),
+                 COL.splays[0] - 90, yTop[i] + ROW_H - 6);
+      };
+      spCell.appendChild(dots);
+      spCell.oncontextmenu = ev => {
+        ev.preventDefault();
+        openMenu(clusterMenuItems(i, COL.splays[0] - 90, yTop[i] + ROW_H - 6),
+                 COL.splays[0] - 90, yTop[i] + ROW_H - 6);
+      };
+    } else {
+      const hint = document.createElement("span");
+      hint.className = "hint";
+      hint.textContent = "+ splay";
+      spCell.appendChild(hint);
+      spCell.title = "Add a splay";
+      spCell.onclick = () => {
+        state.open.add(i);
+        state.focus = { st: i, row: 0, col: 0 };
+        state.stationFocus = null;
+        state.editing = false;
+        render();
+      };
+    }
+
+    if (state.open.has(i)) {
+      const y0 = yTop[i] + ROW_H;
+      div(ed, "rail", COL.station[0] + 12, y0, 2, clusterHeight(i));
+
+      for (let k = 0; k < clusterRows(i); k++) {
+        const isBlank = k === st.splays.length;
+        const ry = y0 + SP_PAD + k * SP_STEP;
+        const tag = isBlank ? "" : st.name + " · s" + (k + 1);
+        div(ed, "splaytag", 20, ry, COL.station[1] - 28, SP_H, tag);
+
+        [[COL.dist, 0], [COL.comp, 1], [COL.clino, 2]].forEach(([[x, w], col]) => {
+          const focused = state.focus && state.focus.st === i &&
+                          state.focus.row === k && state.focus.col === col;
+          const cls = "splaycell" + (isBlank ? " blank" : "") + (focused ? " focused" : "");
+          const val = isBlank ? "" : fmtCol(st.splays[k][col], col);
+          const cell = div(ed, cls, x, ry, w, SP_H, focused && state.editing ? "" : val);
+
+          if (focused && state.editing) {
+            const input = document.createElement("input");
+            input.value = val;
+            input.onkeydown = ev => {
+              ev.stopPropagation();
+              if (ev.key === "Enter" || ev.key === "Tab") {
+                ev.preventDefault();
+                commitValue(i, k, col, input.value);
+                state.editing = false;
+                advanceFocus();
+                render();
+              } else if (ev.key === "Escape") {
+                state.editing = false;
+                render();
+              }
+            };
+            input.onblur = () => {
+              if (state.editing) {
+                commitValue(i, k, col, input.value);
+                state.editing = false;
+                render();
+              }
+            };
+            cell.appendChild(input);
+          } else {
+            cell.onclick = () => {
+              state.focus = { st: i, row: k, col };
+              state.stationFocus = null;
+              state.editing = false;
+              render();
+            };
+            cell.ondblclick = () => {
+              state.focus = { st: i, row: k, col };
+              state.stationFocus = null;
+              startEdit();
+            };
+            if (!isBlank) {
+              cell.oncontextmenu = ev => {
+                ev.preventDefault();
+                openMenu(rowMenuItems(i, k), COL.clino[0] + COL.clino[1] + 30, ry + SP_H);
+              };
+            }
+          }
+        });
+
+        if (!isBlank) {
+          const btn = div(ed, "rowmenu-btn", COL.clino[0] + COL.clino[1] + 6, ry, 22, SP_H, "⋯");
+          btn.onclick = ev => {
+            ev.stopPropagation();
+            openMenu(rowMenuItems(i, k), COL.clino[0] + COL.clino[1] + 30, ry + SP_H);
+          };
+        }
+      }
+    }
+
+    if (i < shots.length) {
+      const clusterH = state.open.has(i) ? clusterHeight(i) : 0;
+      const sy = yTop[i] + ROW_H + clusterH - ROW_H * 0.5;
+      const sg = i % 2 === 0 ? "shot-a" : "shot-b";
+      div(ed, "cell " + sg, COL.dist[0],  sy, COL.dist[1],  ROW_H, shots[i][0].toFixed(2));
+      div(ed, "cell " + sg, COL.comp[0],  sy, COL.comp[1],  ROW_H, shots[i][1].toFixed(1));
+      div(ed, "cell " + sg, COL.clino[0], sy, COL.clino[1], ROW_H, shots[i][2].toFixed(1));
+    }
+  });
+}
+
+document.addEventListener("keydown", ev => {
+  if (state.editing) { return; }
+  if (ev.key === "Escape") {
+    if (state.pick) { endPick(); render(); }
+    else if (menuEl) { closeMenu(); }
+    else if (state.focus || state.stationFocus !== null) {
+      state.focus = null;
+      state.stationFocus = null;
+      render();
+    }
+    return;
+  }
+  const f = state.focus;
+  if (!f) { return; }
+
+  if (ev.key === "Enter") { ev.preventDefault(); startEdit(); return; }
+  if (ev.key === "Tab") {
+    ev.preventDefault();
+    advanceFocus();
+    render();
+    return;
+  }
+  if (ev.key === "ArrowLeft" && f.col > 0) { f.col -= 1; render(); return; }
+  if (ev.key === "ArrowRight" && f.col < 2) { f.col += 1; render(); return; }
+  if (ev.key === "ArrowUp" && f.row > 0) { f.row -= 1; render(); return; }
+  if (ev.key === "ArrowDown" && f.row < stations[f.st].splays.length) { f.row += 1; render(); return; }
+  if (ev.key === "Delete" || ev.key === "Backspace") {
+    if (f.row < stations[f.st].splays.length) {
+      stations[f.st].splays[f.row][f.col] = null;
+      render();
+    }
+    return;
+  }
+  // Typing a value character starts editing with that character
+  if (/^[0-9.\-]$/.test(ev.key)) {
+    ev.preventDefault();
+    state.editing = true;
+    render();
+    const input = holder.querySelector(".splaycell input");
+    if (input) { input.value = ev.key; input.focus(); }
+  }
+});
+
+document.addEventListener("click", ev => {
+  if (menuEl && !menuEl.contains(ev.target)) { closeMenu(); }
+});
+
+render();
+</script>
+</body>
+</html>

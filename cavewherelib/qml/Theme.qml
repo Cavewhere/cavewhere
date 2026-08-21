@@ -45,6 +45,27 @@ QtObject {
     readonly property color icon: palette.buttonText
     readonly property color tag: dark ? "#656565" : border
 
+    // Splays: wall shots that hang off a station instead of joining the
+    // centerline. An earth tone keeps them apart from the survey data they sit
+    // next to without reading as an error.
+    readonly property color splaySurface: dark ? "#322a1a" : "#f7f1e3"
+    readonly property color splayBorder: dark ? "#c9a35e" : "#8a6d3b"
+    readonly property color splayText: dark ? "#c9a35e" : "#8a6d3b"
+
+    // How far back the blank row at the bottom of an open splay cluster sits
+    // while it waits for a reading. Qt Quick draws no dashed border without
+    // Shapes, which the survey table stays clear of, so it fades instead.
+    readonly property real splayWaitingOpacity: 0.55
+
+    // The round "+" a station with no splays offers while the pointer is over
+    // its Splays cell. It reads as a button in a 50pt station row, where the
+    // small-sized glyph it replaced read as a stray character. The bars that
+    // draw the "+" span a little under half the button, leaving a ring of the
+    // button's own fill around them.
+    readonly property int splayEntryButtonSize: 28
+    readonly property int splayEntryGlyphThickness: 2
+    readonly property real splayEntryGlyphSpan: 0.45
+
     // Lines and outlines
     readonly property color border: dark ? "#4a4f58" : "#d3d3d3"
     readonly property color borderSubtle: dark ? "#353a42" : "#e4e4e4"

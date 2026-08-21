@@ -27,10 +27,32 @@ DataBox {
 
     readonly property string stationNameValue: stationBox.dataValue.reading.value
 
+    // A station is where a splay move lands, so while one is armed this cell
+    // stops being a place to type and becomes a place to click.
+    readonly property bool splayMoveActive: stationBox.model !== null
+                                            && stationBox.model.splayMoveActive
+    readonly property bool splayMoveTarget: stationBox.splayMoveActive
+                                            && stationBox.model.isSplayMoveTarget(stationBox.rowIndex)
+    readonly property bool splayMoveSource: stationBox.splayMoveActive
+                                            && stationBox.model.isSplayMoveSource(stationBox.rowIndex)
+
+    // The station the splays are leaving steps back so the stations that can
+    // take them read as the ones to click
+    readonly property real splayMoveSourceOpacity: 0.4
+    readonly property int splayMoveOutlineWidth: 2
+
+    // The outline draws inside the cell's own border, so the neighboring
+    // distance cell has no stroke of ours to clip
+    readonly property int splayMoveOutlineInset: 1
+
     // A blank name has nothing to anchor — that's the trailing virtual station
     // row, which shouldn't offer to fix itself.
     readonly property bool canFix: stationBox.fixStationPopup !== null
                                    && stationBox.stationNameValue.trim() !== ""
+
+    acceptsSplayMove: true
+
+    opacity: stationBox.splayMoveSource ? stationBox.splayMoveSourceOpacity : 1.0
 
     StationMenu {
         id: removeMenuId
@@ -43,12 +65,12 @@ DataBox {
     rightClickMenuLoader: removeMenuId
 
     function guessedStationName() {
-        return model.guessStationNameAt(model.cellIndex(listViewIndex, dataValue.chunkDataRole))
+        return model.guessStationNameAt(model.cellIndex(listViewIndex, stationBox.cellRole))
     }
 
     function commitAutoStation() {
         var stationName = guessedStationName();
-        model.setDataAt(model.cellIndex(listViewIndex, dataValue.chunkDataRole), stationName)
+        model.setDataAt(model.cellIndex(listViewIndex, stationBox.cellRole), stationName)
     }
 
     onFocusChanged: {
@@ -77,6 +99,22 @@ DataBox {
                     }
                 }
             }
+        }
+    }
+
+    // Every station row would otherwise carry an outline that is only ever seen
+    // while a move is armed, which is almost never
+    QQ.Loader {
+        anchors.fill: parent
+        anchors.margins: stationBox.splayMoveOutlineInset
+        active: stationBox.splayMoveTarget
+        z: 1
+
+        sourceComponent: QQ.Rectangle {
+            objectName: "splayMoveTargetOutline"
+            color: Theme.transparent
+            border.color: Theme.splayBorder
+            border.width: stationBox.splayMoveOutlineWidth
         }
     }
 

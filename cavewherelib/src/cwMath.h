@@ -18,6 +18,9 @@
 #include <algorithm>
 #include <cmath>
 
+//Half a turn around the compass, which is what reversing a bearing adds
+constexpr double cwHalfTurnDegrees = 180.0;
+
 inline double cwWrapDegrees360(double degrees) {
     if(!std::isfinite(degrees)) {
         return 0.0;

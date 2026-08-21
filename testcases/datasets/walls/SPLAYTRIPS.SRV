@@ -1,0 +1,10 @@
+; Two Dated Trips
+; Alice; Bob
+#units d=meters a=degrees v=degrees decl=0
+#date 2026-01-01
+G1	G2	5.0	0	0
+G1	--	1.5	90	-10
+; a new date starts a new trip, and G2 is surveyed in both of them
+#date 2026-02-02
+G2	G3	4.0	90	0
+G2	--	2.5	45	5

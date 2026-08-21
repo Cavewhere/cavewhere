@@ -198,6 +198,7 @@ private:
     void parseEquate(QString line);
     void parseExport(QString line);
     void parseFlags(QString line);
+    void parseAlias(QString line);
     void parseCS(QString line);
 
     /**
@@ -217,8 +218,10 @@ private:
 
     void runStats(QString filename);
 
+    void finishBlock();
     void updateLRUDForCurrentBlock();
     void updateStationLRUD(cwStation before, cwStation station, cwStation after);
+    void updateSplaysForCurrentBlock();
 };
 
 /**

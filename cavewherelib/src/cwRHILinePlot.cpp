@@ -7,13 +7,22 @@
 #include <QFile>
 #include <QDebug>
 
+namespace {
+
+// The fixed TriangleStrip the vertex shader expands per instance: 4 corners
+// selected from gl_VertexIndex, no corner vertex buffer.
+constexpr quint32 kVerticesPerQuad = 4;
+
+} // namespace
+
 cwRHILinePlot::cwRHILinePlot()
 {
 }
 
 cwRHILinePlot::~cwRHILinePlot()
 {
-    delete m_vertexBuffer;
+    delete m_segmentBuffer;
+    delete m_typeBuffer;
     delete m_visibilityBuffer;
     delete m_srb;
     // m_pipelines releases its held pipeline references on destruction.
@@ -32,25 +41,29 @@ void cwRHILinePlot::initializeResources(const ResourceUpdateData& data)
 {
     auto rhi = data.renderData.cb->rhi();
 
-    // Create buffers — positions plus a parallel per-vertex visibility buffer.
-    // Non-indexed line list, so there is no index buffer.
-    m_vertexBuffer = rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::VertexBuffer, 0);
-    m_vertexBuffer->create();
+    m_segmentBuffer = rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::VertexBuffer, 0);
+    m_segmentBuffer->create();
+
+    m_typeBuffer = rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::VertexBuffer, 0);
+    m_typeBuffer->create();
 
     m_visibilityBuffer = rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::VertexBuffer, 0);
     m_visibilityBuffer->create();
 
-    // Input layout: binding 0 = vec3 position, binding 1 = uint visibility
-    // (0 = hidden, non-zero = visible). A uint keeps the attribute 4-byte
+    // All bindings step per instance; binding 0 reuses the point-pair layout
+    // as one {from, to} per segment, and the uint attributes stay 4-byte
     // aligned across every RHI backend.
     QRhiVertexInputLayout inputLayout;
     inputLayout.setBindings({
-        { sizeof(QVector3D) },
-        { sizeof(quint32) }
+        { 2 * sizeof(QVector3D), QRhiVertexInputBinding::PerInstance },
+        { sizeof(quint32), QRhiVertexInputBinding::PerInstance },
+        { sizeof(quint32), QRhiVertexInputBinding::PerInstance }
     });
     inputLayout.setAttributes({
-        { 0, 0, QRhiVertexInputAttribute::Float3, 0 },
-        { 1, 1, QRhiVertexInputAttribute::UInt, 0 }
+        { 0, 0, QRhiVertexInputAttribute::Float3, 0 },                  // iFrom
+        { 0, 1, QRhiVertexInputAttribute::Float3, sizeof(QVector3D) },  // iTo
+        { 1, 2, QRhiVertexInputAttribute::UInt, 0 },                    // iType
+        { 2, 3, QRhiVertexInputAttribute::UInt, 0 }                     // iVisibility
     });
     m_inputLayout = inputLayout;
 }
@@ -70,16 +83,26 @@ void cwRHILinePlot::updateResources(const ResourceUpdateData& data)
 
     if(m_data.isChanged()) {
 
-        const auto data = m_data.value();
+        const auto& value = m_data.value();
 
-        if (!data.points.isEmpty()) {
-            // Update vertex buffer
-            int vertexBufferSize = data.points.size() * sizeof(QVector3D);
-            if (m_vertexBuffer->size() != vertexBufferSize) {
-                m_vertexBuffer->setSize(vertexBufferSize);
-                m_vertexBuffer->create();
+        if (!value.points.isEmpty()) {
+            // The point pairs upload byte-for-byte as the per-instance
+            // {from, to} buffer — the stride does the pairing.
+            const int segmentBufferSize = value.points.size() * sizeof(QVector3D);
+            if (m_segmentBuffer->size() != segmentBufferSize) {
+                m_segmentBuffer->setSize(segmentBufferSize);
+                m_segmentBuffer->create();
             }
-            batch->updateDynamicBuffer(m_vertexBuffer, 0, vertexBufferSize, data.points.constData());
+            batch->updateDynamicBuffer(m_segmentBuffer, 0, segmentBufferSize,
+                                       value.points.constData());
+
+            const int typeBufferSize = value.segmentTypes.size() * int(sizeof(quint32));
+            if (m_typeBuffer->size() != typeBufferSize) {
+                m_typeBuffer->setSize(typeBufferSize);
+                m_typeBuffer->create();
+            }
+            batch->updateDynamicBuffer(m_typeBuffer, 0, typeBufferSize,
+                                       value.segmentTypes.constData());
         }
     }
 
@@ -88,19 +111,20 @@ void cwRHILinePlot::updateResources(const ResourceUpdateData& data)
     updateVisibilityBuffer(batch);
 }
 
-// Uploads the per-vertex visibility attribute from the frame's snapshot of the
-// scene visibility store, gated on the entry's store version so unrelated
-// visibility churn never re-uploads. The store mask is sparse — null means all
-// visible — so that case synthesizes a full buffer (the shader reads one uint
-// per vertex unconditionally). The mask is one byte per vertex; the GPU
-// attribute is a uint (4-byte aligned on every backend), so expand on upload.
-// Only runs on a toggle or a new solve, so the expansion cost is off the hot
-// path. A geometry replacement changes the vertex count and resets the store
-// entry, so both feed the gate.
+// Uploads the per-instance visibility attribute from the frame's snapshot of
+// the scene visibility store, gated on the entry's store version so unrelated
+// visibility churn never re-uploads. The store mask stays per-vertex — it is
+// the intersecter's generic pick contract — and both vertices of a segment
+// share their value (setRangeVisible spans whole trips), so the upload takes
+// byte 2i as segment i's flag. A null mask means all visible and synthesizes
+// a full buffer (the shader reads one uint per instance unconditionally).
+// Only runs on a toggle or a new solve, so the compression cost is off the
+// hot path. A geometry replacement changes the segment count and resets the
+// store entry, so both feed the gate.
 //
 // This reads the frame-global snapshot, not a GatherContext: updateResources
 // has no gather context, and the mask buffer is one shared GPU resource — so
-// the per-vertex mask is per-frame by construction. Per-job overlays
+// the per-instance mask is per-frame by construction. Per-job overlays
 // (cwSceneGatherOptions) hide whole objects only; that split is by design.
 void cwRHILinePlot::updateVisibilityBuffer(QRhiResourceUpdateBatch* batch)
 {
@@ -111,28 +135,32 @@ void cwRHILinePlot::updateVisibilityBuffer(QRhiResourceUpdateBatch* batch)
     const cwVisibilitySnapshot& visibility = m_frame->visibilitySnapshot();
     const cwRenderObjectId id = renderObjectId();
     const quint64 entryVersion = visibility.entryVersion(id, cwRenderLinePlot::kSubId);
-    const qsizetype vertexCount = m_data.value().points.size();
+    const qsizetype segmentCount = m_data.value().points.size() / 2;
     if (entryVersion == m_uploadedMaskVersion
-        && vertexCount == m_uploadedMaskVertexCount) {
+        && segmentCount == m_uploadedMaskSegmentCount) {
         return;
     }
 
     const QVector<quint8>* mask = visibility.mask(id, cwRenderLinePlot::kSubId);
-    const QVector<quint32> expanded = mask
-        ? QVector<quint32>(mask->cbegin(), mask->cend())
-        : QVector<quint32>(vertexCount, cwRenderLinePlot::kVisible);
+    QVector<quint32> perInstance(segmentCount, cwRenderLinePlot::kVisible);
+    if (mask) {
+        const qsizetype maskedSegments = qMin(segmentCount, mask->size() / 2);
+        for (qsizetype segment = 0; segment < maskedSegments; ++segment) {
+            perInstance[segment] = mask->at(2 * segment);
+        }
+    }
 
-    const int bufferSize = expanded.size() * int(sizeof(quint32));
+    const int bufferSize = perInstance.size() * int(sizeof(quint32));
     if (bufferSize > 0) {
         if (m_visibilityBuffer->size() != bufferSize) {
             m_visibilityBuffer->setSize(bufferSize);
             m_visibilityBuffer->create();
         }
-        batch->updateDynamicBuffer(m_visibilityBuffer, 0, bufferSize, expanded.constData());
+        batch->updateDynamicBuffer(m_visibilityBuffer, 0, bufferSize, perInstance.constData());
     }
 
     m_uploadedMaskVersion = entryVersion;
-    m_uploadedMaskVertexCount = vertexCount;
+    m_uploadedMaskSegmentCount = segmentCount;
 }
 
 bool cwRHILinePlot::gather(const GatherContext& context, QVector<PipelineBatch>& batches)
@@ -152,7 +180,7 @@ bool cwRHILinePlot::gather(const GatherContext& context, QVector<PipelineBatch>&
     }
 
     auto* pipeline = m_pipelineRecord ? m_pipelineRecord->pipeline : nullptr;
-    if (!pipeline || !m_vertexBuffer || !m_visibilityBuffer || !m_srb) {
+    if (!pipeline || !m_segmentBuffer || !m_typeBuffer || !m_visibilityBuffer || !m_srb) {
         return false;
     }
 
@@ -163,9 +191,11 @@ bool cwRHILinePlot::gather(const GatherContext& context, QVector<PipelineBatch>&
     auto& batch = acquirePipelineBatch(batches, state);
     cwRHIObject::Drawable drawable;
     drawable.type = cwRHIObject::Drawable::Type::NonIndexed;
-    drawable.vertexBindings.append(QRhiCommandBuffer::VertexInput(m_vertexBuffer, 0));
+    drawable.vertexBindings.append(QRhiCommandBuffer::VertexInput(m_segmentBuffer, 0));
+    drawable.vertexBindings.append(QRhiCommandBuffer::VertexInput(m_typeBuffer, 0));
     drawable.vertexBindings.append(QRhiCommandBuffer::VertexInput(m_visibilityBuffer, 0));
-    drawable.vertexCount = static_cast<quint32>(value.points.size());
+    drawable.vertexCount = kVerticesPerQuad;
+    drawable.instanceCount = static_cast<quint32>(value.points.size() / 2);
     drawable.bindings = m_srb;
     drawable.globalCameraBinding = 0; // slot 0 binds the global camera UBO (dynamic offset)
 
@@ -214,7 +244,7 @@ bool cwRHILinePlot::ensurePipeline(const RenderData& data)
         record->pipeline->setSampleCount(key.sampleCount);
         record->pipeline->setCullMode(QRhiGraphicsPipeline::None);
         record->pipeline->setVertexInputLayout(m_inputLayout);
-        record->pipeline->setTopology(QRhiGraphicsPipeline::Lines);
+        record->pipeline->setTopology(QRhiGraphicsPipeline::TriangleStrip);
 
         QRhiGraphicsPipeline::TargetBlend blendState;
         blendState.enable = false;
@@ -301,6 +331,6 @@ cwRhiPipelineKey cwRHILinePlot::buildPipelineKey(QRhiRenderPassDescriptor* rende
     key.perDrawStages = 0;
     key.textureStages = 0;
     key.hasPerDraw = 0;
-    key.topology = static_cast<quint8>(QRhiGraphicsPipeline::Lines);
+    key.topology = static_cast<quint8>(QRhiGraphicsPipeline::TriangleStrip);
     return key;
 }

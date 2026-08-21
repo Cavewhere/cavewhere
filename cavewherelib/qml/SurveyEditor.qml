@@ -43,6 +43,66 @@ QQ.Item {
         id: removePreviewId
     }
 
+    // Deleting a whole splay cluster is the one splay action that can't be
+    // shrugged off, so it asks first. One box serves the whole table, since the
+    // row that asks for it is recycled out from under the answer.
+    SplayRemoveAskBox {
+        id: removeSplaysChallengeId
+        objectName: "removeSplaysChallenge"
+
+        onRemove: {
+            editorModel.clearSplaysAt(removeSplaysChallengeId.rowIndexToRemove)
+        }
+    }
+
+    // A move is armed from a menu and finished by clicking a station that can be
+    // rows away, so the table says what it's waiting for while it waits.
+    QQ.Rectangle {
+        id: splayMoveBannerId
+        objectName: "splayMoveBanner"
+
+        readonly property string splayWord: editorModel.splayMoveCount === 1 ? "splay" : "splays"
+
+        anchors.left: parent.left
+        anchors.top: parent.top
+
+        //Sits above the table rather than over it: the stations the banner asks
+        //the user to click are the ones it would otherwise cover
+        width: scrollAreaId.width
+        height: splayMoveLabelId.implicitHeight + 2 * Theme.delegatePadding
+        visible: editorModel.splayMoveActive
+
+        color: Theme.splaySurface
+        border.color: Theme.splayBorder
+        border.width: 1
+
+        QC.Label {
+            id: splayMoveLabelId
+            objectName: "splayMoveBannerLabel"
+            anchors.centerIn: parent
+            width: parent.width - 2 * Theme.delegatePadding
+
+            text: "Click a station to move " + editorModel.splayMoveCount + " "
+                  + splayMoveBannerId.splayWord + " from " + editorModel.splayMoveStationName
+                  + " — Esc cancels"
+            color: Theme.splayText
+            font.pixelSize: Theme.fontSizeSmall
+            horizontalAlignment: QQ.Text.AlignHCenter
+            elide: QQ.Text.ElideRight
+        }
+    }
+
+    // A window-context Shortcut instead of Keys.onEscapePressed: Esc has to
+    // reach the move wherever the focus sits — a cell, the shadow editor, or
+    // nothing at all. Live only while this table is showing an armed move, so it
+    // stays out of the way of the 3D view's own Escape shortcuts.
+    QQ.Shortcut {
+        sequences: ["Escape"]
+        enabled: clipArea.visible && editorModel.splayMoveActive
+        context: Qt.WindowShortcut
+        onActivated: editorModel.cancelSplayMove()
+    }
+
     // One editor for the whole table, shared by every station cell's caret — see
     // FixStationPopup on why it can't live in the cell that opens it.
     FixStationPopup {
@@ -89,7 +149,7 @@ QQ.Item {
     QC.ScrollView {
         id: scrollAreaId
 
-        anchors.top: parent.top
+        anchors.top: splayMoveBannerId.visible ? splayMoveBannerId.bottom : parent.top
         anchors.bottom: parent.bottom
         anchors.left: parent.left
         anchors.margins: 1;
@@ -138,7 +198,7 @@ QQ.Item {
 
                 editorModel.setFocusedChunk(editorModel.chunkForRow(row))
 
-                if(editorModel.isShotRole(role)) {
+                if(editorModel.isShotCell(role)) {
                     //Since the shot row has a height of zero, this -1 and +1 forces shot to be visible in the list view
                     viewId.positionViewAtIndex(row - 1, QQ.ListView.Contain)
                     viewId.positionViewAtIndex(row + 1, QQ.ListView.Contain)
@@ -388,6 +448,7 @@ QQ.Item {
                 model: editorModel
                 removePreview: removePreviewId
                 fixStationPopup: fixStationPopupId
+                splayRemoveChallenge: removeSplaysChallengeId
                 stationValidator: stationValidatorId
                 distanceValidator: distanceValidatorId
                 compassValidator: compassValidatorId

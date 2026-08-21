@@ -1,4 +1,5 @@
 #include "cwSurvexNodeData.h"
+#include "cwStation.h"
 
 cwSurvexNodeData::cwSurvexNodeData(QObject *parent) : QObject(parent)
 {

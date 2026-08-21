@@ -305,6 +305,15 @@ message Shot {
     optional ClinoReading legacy_backClinoReading = 16;
 }
 
+//A wall shot taken from a station with no named destination station. Splays are
+//front sights only and never contribute to cave length, so unlike Shot there's
+//no backsight or includeDistance to store.
+message SplayShot {
+    optional string distance = 1;
+    optional string compass = 2;
+    optional string clino = 3;
+}
+
 //This merges stations and shots together, so it's easier to read in JSON
 //This allows for interleaving stations and shots, this a union of cwStation and cwShot
 //Proto array of stationshot is interleaved Station -> shot -> station -> shot -> station.
@@ -321,6 +330,7 @@ message StationShot {
     optional string right = 102;
     optional string up = 103;
     optional string down = 104;
+    repeated SplayShot splays = 105;
 
     //Shot data
     optional bool includeDistance = 1000;

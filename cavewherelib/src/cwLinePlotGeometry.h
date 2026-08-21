@@ -11,7 +11,9 @@
 #include "CaveWhereLibExport.h"
 #include "Monad/Result.h"
 #include "cwCavingRegionData.h"
+#include "cwStationPositionLookup.h"
 
+#include <QHash>
 #include <QVector>
 #include <QVector3D>
 #include <QUuid>
@@ -29,12 +31,23 @@
  * per shot. Collapsing a shot's two vertices therefore affects exactly that
  * shot, with no shared-vertex bookkeeping.
  *
- * Each trip's vertices are emitted contiguously; tripVertexRanges[i] gives the
- * [start, count) span of running trip i, and tripUuids[i] maps that running id
- * back to a stable cwTripData::id so callers can re-attach it to a live trip
- * without relying on list position. A running id is assigned to every trip in
- * cave->trip iteration order, even trips that emit no geometry (count 0), so
- * both tables are the total trip count.
+ * Each trip's vertices are emitted contiguously — centerline segments first,
+ * then the trip's splay segments (station position -> solved splay tip, also
+ * two vertices per segment). tripVertexRanges[i] gives the full [start, count)
+ * span of running trip i, and tripSplayVertexRanges[i] the splay sub-span at
+ * its tail, so hiding a trip covers its splays and a splay-only toggle can
+ * address just the tail. tripUuids[i] maps that running id back to a stable
+ * cwTripData::id so callers can re-attach it to a live trip without relying on
+ * list position. A running id is assigned to every trip in cave->trip
+ * iteration order, even trips that emit no geometry (count 0), so all three
+ * tables are the total trip count.
+ *
+ * Splay tips arrive keyed per cave-level station name while the survey data
+ * stores splays per station occurrence, so a name shared between trips merges
+ * its tips into one bucket. Attribution rule: a station's tips belong to the
+ * first trip holding an occurrence of that station with splays, falling back
+ * to the first trip holding the station at all (tips from an external .svx
+ * include have no stored splays to match).
  *
  * Pure compute — no file I/O, no Qt object machinery. Caller invokes from
  * any thread; only reads the const region snapshot.
@@ -66,13 +79,16 @@ public:
     };
 
     struct Result {
-        QVector<QVector3D> points;              // 2 per drawn shot (non-indexed line list)
-        QVector<VertexRange> tripVertexRanges;  // running trip id -> span in points
+        QVector<QVector3D> points;              // 2 per drawn segment (non-indexed line list)
+        QVector<VertexRange> tripVertexRanges;  // running trip id -> full span in points
+        QVector<VertexRange> tripSplayVertexRanges; // running trip id -> splay tail of that span
         QVector<QUuid> tripUuids;               // running trip id -> stable cwTripData::id
         QVector<CaveLengthAndDepth> cavesLengthAndDepths;
     };
 
-    static Monad::Result<Result> generate(const cwCavingRegionData& region);
+    static Monad::Result<Result> generate(
+        const cwCavingRegionData& region,
+        const QHash<QUuid, cwSplayTipsByStation>& splayTipsByCave = {});
 };
 
 #endif // CWLINEPLOTGEOMETRY_H
