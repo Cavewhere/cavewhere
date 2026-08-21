@@ -67,6 +67,49 @@ MainWindowTest {
                    "row shows the entry file; got: " + rowLabel.text)
         }
 
+        function test_attachedRowShowsTheExclusionReason() {
+            const attached = attachFixtureTrip("cavern-attached-error")
+
+            // Edit the in-project copy the way a user's editor would, into
+            // an *include that reaches outside the project's data root —
+            // the solve drops the owner and the row is where it says so.
+            const copyPath = TestHelper.externalCenterlineCopyPath(
+                RootData.project, attached.trip, "survex_simple.svx")
+            verify(copyPath.length > 0, "the in-project copy must have a path")
+            const copyDir = copyPath.substring(0, copyPath.lastIndexOf("/"))
+
+            const escapingTarget = "../../../../../outside.svx"
+            verify(TestHelper.writeTextFile(
+                       copyDir + "/" + escapingTarget,
+                       "*begin Included\n*fix I1 0 0 0\n*end Included\n"),
+                   "the escaping include target must be written")
+            verify(TestHelper.writeTextFile(
+                       copyPath,
+                       "*begin Entry\n*include \"" + escapingTarget + "\"\n*end Entry\n"),
+                   "the entry copy must be rewritten")
+
+            RootData.externalCenterlineManager.rescanAttachments()
+
+            const page = gotoCavernOutput()
+            const section = findChild(page, "attachedCenterlinesSection")
+            verify(section !== null, "attachedCenterlinesSection must exist")
+            tryVerify(() => section.visible, 5000,
+                      "attached section becomes visible after attach")
+
+            // The delegate is looked up under tryVerify: the page item is
+            // cached across tests, so it may still be laying out on the frame
+            // the page first shows.
+            let errorLabel = null
+            tryVerify(() => {
+                          errorLabel = findChild(page, "attachedRowError")
+                          return errorLabel !== null
+                      }, 5000, "attached row must carry an error label")
+            tryVerify(() => errorLabel.visible
+                            && errorLabel.text.indexOf("outside.svx") >= 0,
+                      10000,
+                      "row shows the containment reason; got: " + errorLabel.text)
+        }
+
         function test_cavernInputShowsDriverSource() {
             attachFixtureTrip("cavern-driver-source")
 

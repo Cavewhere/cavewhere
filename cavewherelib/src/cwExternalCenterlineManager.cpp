@@ -648,8 +648,12 @@ void cwExternalCenterlineManager::scanOwners(QPromise<ExternalScanResult>& promi
                     : escapingDependencies(scan.value().dependencies, owner.dataRootDir);
 
                 if (!escaping.isEmpty()) {
-                    result.containmentErrors.insert(owner.ownerId,
-                                                    containmentErrorFor(escaping));
+                    // The row carries the reason too, since it is the only
+                    // surface a cave-level owner has — cwTrip's banner reads
+                    // externalStationsError, cwCave has no counterpart.
+                    const QString containmentError = containmentErrorFor(escaping);
+                    result.containmentErrors.insert(owner.ownerId, containmentError);
+                    row.error = containmentError;
                 } else if (owner.ownerKind == kTripOwnerKind) {
                     // Station names, from cavern reading this one attachment on its
                     // own — the region solve can't supply them for exactly the
@@ -918,6 +922,7 @@ void cwExternalCenterlineManager::rebuildAttachedRowsFromNames()
         if (cached != m_lastScanRows.cend()) {
             row.depCount = cached->depCount;
             row.warningCount = cached->warningCount;
+            row.error = cached->error;
         }
         rows.append(row);
     }

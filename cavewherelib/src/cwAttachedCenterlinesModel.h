@@ -45,7 +45,8 @@ public:
         EntryFileRole,
         DepCountRole,
         WarningCountRole,
-        LastSolvedRole
+        LastSolvedRole,
+        ErrorRole
     };
     Q_ENUM(Roles)
 
@@ -58,6 +59,12 @@ public:
         int depCount = 0;
         int warningCount = 0;
         QDateTime lastSolved;
+        // Why this owner was left out of the solve, in the user's words.
+        // Empty for an owner the solve reads. This is the only account a
+        // cave-level owner gets — cwTrip has externalStationsError, cwCave
+        // has no equivalent (plans/EXTERNAL_FILE_PHASE3.html, "a cave-level
+        // owner has nowhere to show a file error").
+        QString error;
     };
 
     explicit cwAttachedCenterlinesModel(QObject* parent = nullptr);

@@ -16,6 +16,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 // Cavewhere
+#include "cwAttachedCenterlinesModel.h"
 #include "cwCave.h"
 #include "cwCavingRegion.h"
 #include "cwExternalCenterline.h"
@@ -57,6 +58,11 @@ namespace {
 constexpr auto kEscapesDataRoot = "../../../../../outside.svx";
 constexpr auto kStaysInDataRoot = "../../../../sibling.svx";
 
+// The same pair for a cave owner, whose attachment sits two levels higher
+// at <dataRoot>/<Cave>/external-centerline.
+constexpr auto kCaveEscapesDataRoot = "../../../outside.svx";
+constexpr auto kCaveStaysInDataRoot = "../../sibling.svx";
+
 const QByteArray kIncludedSurvey =
     "*begin Included\n"
     "*fix I1 0 0 0\n"
@@ -71,11 +77,21 @@ QByteArray entryIncluding(const char* relativePath)
         + "\"\n*end Entry\n";
 }
 
+// Which owner kind carries the attachment. A cave owner has no error
+// property of its own, so its only account of an exclusion is the
+// attached-centerlines model row.
+enum class OwnerKind {
+    Trip,
+    Cave
+};
+
 struct ContainmentFixture {
     QTemporaryDir tempDir;
     std::unique_ptr<cwRootData> rootData;
     cwProject* project = nullptr;
+    cwCave* cave = nullptr;
     cwTrip* trip = nullptr;
+    QUuid ownerId;
     QString attachmentDir;
     QString dataRootDir;
     // The directory holding the .cwproj file, one level above the data
@@ -99,7 +115,8 @@ void writeFile(const QString& path, const QByteArray& content)
 // A saved project holding one trip whose attachment entry file *includes
 // `includeTarget`, with the included survey written at `includeLandsAt`
 // (resolved against the attachment dir) so the scanner can follow it.
-std::unique_ptr<ContainmentFixture> makeFixture(const char* includeTarget)
+std::unique_ptr<ContainmentFixture> makeFixture(const char* includeTarget,
+                                                OwnerKind ownerKind = OwnerKind::Trip)
 {
     auto fixture = std::make_unique<ContainmentFixture>();
     REQUIRE(fixture->tempDir.isValid());
@@ -112,9 +129,18 @@ std::unique_ptr<ContainmentFixture> makeFixture(const char* includeTarget)
     cwCave* cave = region->cave(0);
     cave->setName(QStringLiteral("Containment"));
     cave->addTrip();
+    fixture->cave = cave;
     fixture->trip = cave->trip(0);
     fixture->trip->setName(QStringLiteral("Attached"));
-    fixture->trip->setExternalCenterline(cwExternalCenterline(QStringLiteral("entry.svx")));
+
+    const cwExternalCenterline attachment{QStringLiteral("entry.svx")};
+    if (ownerKind == OwnerKind::Cave) {
+        cave->setExternalCenterline(attachment);
+        fixture->ownerId = cave->id();
+    } else {
+        fixture->trip->setExternalCenterline(attachment);
+        fixture->ownerId = fixture->trip->id();
+    }
 
     const QString projectPath =
         QDir(fixture->tempDir.path()).filePath(QStringLiteral("containment.cwproj"));
@@ -122,8 +148,9 @@ std::unique_ptr<ContainmentFixture> makeFixture(const char* includeTarget)
     fixture->project->waitSaveToFinish();
 
     cwSaveLoad* saveLoad = fixture->project->saveLoad();
-    fixture->attachmentDir =
-        saveLoad->externalCenterlineDir(fixture->trip).absolutePath();
+    fixture->attachmentDir = ownerKind == OwnerKind::Cave
+        ? saveLoad->externalCenterlineDir(cave).absolutePath()
+        : saveLoad->externalCenterlineDir(fixture->trip).absolutePath();
     fixture->dataRootDir = saveLoad->dataRootDir().absolutePath();
     // cwSaveLoad::projectRootDir() is private; the .cwproj file's own
     // directory is the same place.
@@ -162,6 +189,23 @@ void scanFixture(cwLinePlotManager& manager, ContainmentFixture& fixture)
     manager.externalCenterlineManager()->setSaveLoad(fixture.project->saveLoad());
     manager.setRegion(fixture.project->cavingRegion());
     manager.waitToFinish();
+}
+
+// The exclusion reason the attached-centerlines model publishes for the row
+// named `ownerName`. The row has to be there: an owner dropped from the model
+// would otherwise read the same as an owner with nothing to report, and the
+// empty-reason assertions below would pass on a vanished attachment.
+QString rowErrorFor(const cwAttachedCenterlinesModel* model, const QString& ownerName)
+{
+    for (int i = 0; i < model->rowCount(); ++i) {
+        if (roleAt(model, i, cwAttachedCenterlinesModel::OwnerNameRole).toString()
+            == ownerName) {
+            return roleAt(model, i, cwAttachedCenterlinesModel::ErrorRole).toString();
+        }
+    }
+    FAIL("The attached-centerlines model holds no row named "
+         << ownerName.toStdString());
+    return QString();
 }
 
 } // namespace
@@ -330,6 +374,63 @@ TEST_CASE("Fixing the *include clears the exclusion without reopening the projec
     CHECK(fixture->trip->externalStationsError().isEmpty());
     // Back in the solve means the names are readable again.
     CHECK_FALSE(fixture->trip->externalStations().isEmpty());
+}
+
+TEST_CASE("A cave-level attachment that escapes says why on its model row",
+          "[ExternalCenterline][Containment]")
+{
+    auto fixture = makeFixture(kCaveEscapesDataRoot, OwnerKind::Cave);
+
+    const QString escapingPath = fixture->includeTargetPath;
+    REQUIRE(QFile::exists(escapingPath));
+    REQUIRE_FALSE(cwExternalCenterlineSync::isContainedIn(escapingPath, fixture->dataRootDir));
+    REQUIRE(cwExternalCenterlineSync::isContainedIn(escapingPath, fixture->projectRootDir));
+
+    cwLinePlotManager manager;
+    scanFixture(manager, *fixture);
+
+    auto* external = manager.externalCenterlineManager();
+    REQUIRE(external->solveInputs().excludedExternalOwners.contains(fixture->ownerId));
+
+    // cwCave has no error property, so the row is the whole account the
+    // user gets of why this cave left the plot.
+    const QString rowError = rowErrorFor(external->attachedCenterlinesModel(),
+                                         fixture->cave->name());
+    CHECK_FALSE(rowError.isEmpty());
+    CHECK(rowError.contains(QStringLiteral("outside.svx")));
+
+    // Fixing the directive clears the row the same way it clears the
+    // exclusion — the entry file is watched, so no reopen is needed.
+    const QString localCopy =
+        QDir(fixture->attachmentDir).filePath(QStringLiteral("included.svx"));
+    writeFile(localCopy, kIncludedSurvey);
+    overwriteFile(fixture->entryPath, entryIncluding("included.svx"));
+
+    REQUIRE(tryWait(kWatcherWaitMs, [&] {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, kInnerPollEventsMs);
+        return !external->solveInputs().excludedExternalOwners.contains(fixture->ownerId);
+    }));
+
+    manager.waitToFinish();
+    CHECK(rowErrorFor(external->attachedCenterlinesModel(),
+                      fixture->cave->name()).isEmpty());
+}
+
+TEST_CASE("A contained cave-level attachment reports no reason on its row",
+          "[ExternalCenterline][Containment]")
+{
+    auto fixture = makeFixture(kCaveStaysInDataRoot, OwnerKind::Cave);
+
+    REQUIRE(fixture->includeTargetPath
+            == QDir(fixture->dataRootDir).filePath(QStringLiteral("sibling.svx")));
+
+    cwLinePlotManager manager;
+    scanFixture(manager, *fixture);
+
+    auto* external = manager.externalCenterlineManager();
+    CHECK_FALSE(external->solveInputs().excludedExternalOwners.contains(fixture->ownerId));
+    CHECK(rowErrorFor(external->attachedCenterlinesModel(),
+                      fixture->cave->name()).isEmpty());
 }
 
 TEST_CASE("An excluded owner costs its own survey, not the whole region export",

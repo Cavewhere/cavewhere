@@ -73,6 +73,8 @@ QVariant cwAttachedCenterlinesModel::data(const QModelIndex& index, int role) co
         return row.warningCount;
     case LastSolvedRole:
         return row.lastSolved;
+    case ErrorRole:
+        return row.error;
     }
     return QVariant();
 }
@@ -85,7 +87,8 @@ QHash<int, QByteArray> cwAttachedCenterlinesModel::roleNames() const
         { EntryFileRole, QByteArrayLiteral("entryFile") },
         { DepCountRole, QByteArrayLiteral("depCount") },
         { WarningCountRole, QByteArrayLiteral("warningCount") },
-        { LastSolvedRole, QByteArrayLiteral("lastSolved") }
+        { LastSolvedRole, QByteArrayLiteral("lastSolved") },
+        { ErrorRole, QByteArrayLiteral("error") }
     };
 }
 
@@ -98,7 +101,8 @@ bool cwAttachedCenterlinesModel::rowDataEqual(const Row& left, const Row& right)
         && left.entryFile == right.entryFile
         && left.depCount == right.depCount
         && left.warningCount == right.warningCount
-        && left.lastSolved == right.lastSolved;
+        && left.lastSolved == right.lastSolved
+        && left.error == right.error;
 }
 
 void cwAttachedCenterlinesModel::setRows(QVector<Row> rows)

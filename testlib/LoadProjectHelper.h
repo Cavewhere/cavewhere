@@ -264,6 +264,9 @@ public:
     Q_INVOKABLE QString externalCenterlineCopyPath(cwProject* project,
                                                    cwTrip* trip,
                                                    const QString& fileName) const;
+    // Writes `contents` to `path`, so a test can edit an in-project copy the
+    // way a user's editor would.
+    Q_INVOKABLE bool writeTextFile(const QString& path, const QString& contents) const;
     Q_INVOKABLE void waitForProjectSaveToFinish(cwProject* project) const;
     Q_INVOKABLE void waitForFutureManagerToFinish(cwFutureManagerModel* model) const;
     Q_INVOKABLE QString checkoutProjectRef(cwProject* project,

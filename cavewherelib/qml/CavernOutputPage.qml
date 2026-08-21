@@ -85,7 +85,7 @@ StandardPage {
                 model: root.externalManager !== null
                        ? root.externalManager.attachedCenterlinesModel : null
 
-                delegate: RowLayout {
+                delegate: ColumnLayout {
                     id: attachedRowId
                     objectName: "attachedCenterlineRow" + index
 
@@ -95,27 +95,47 @@ StandardPage {
                     required property string entryFile
                     required property int depCount
                     required property int warningCount
+                    // Why this owner was left out of the solve. A trip also
+                    // says so in its own banner; for a cave this row is the
+                    // only place it is ever said.
+                    required property string error
 
                     Layout.fillWidth: true
-                    spacing: Theme.sectionSpacing
+                    spacing: Theme.tightSpacing
 
-                    QC.Label {
-                        objectName: "attachedRowLabel"
+                    RowLayout {
                         Layout.fillWidth: true
-                        elide: QC.Label.ElideMiddle
-                        text: qsTr("%1 %2 — %3")
-                              .arg(attachedRowId.ownerKind)
-                              .arg(attachedRowId.ownerName)
-                              .arg(attachedRowId.entryFile)
+                        spacing: Theme.sectionSpacing
+
+                        QC.Label {
+                            objectName: "attachedRowLabel"
+                            Layout.fillWidth: true
+                            elide: QC.Label.ElideMiddle
+                            text: qsTr("%1 %2 — %3")
+                                  .arg(attachedRowId.ownerKind)
+                                  .arg(attachedRowId.ownerName)
+                                  .arg(attachedRowId.entryFile)
+                        }
+
+                        QC.Label {
+                            color: Theme.textSubtle
+                            text: attachedRowId.warningCount > 0
+                                  ? qsTr("%1 files, %2 warnings")
+                                        .arg(attachedRowId.depCount)
+                                        .arg(attachedRowId.warningCount)
+                                  : qsTr("%1 files").arg(attachedRowId.depCount)
+                        }
                     }
 
                     QC.Label {
-                        color: Theme.textSubtle
-                        text: attachedRowId.warningCount > 0
-                              ? qsTr("%1 files, %2 warnings")
-                                    .arg(attachedRowId.depCount)
-                                    .arg(attachedRowId.warningCount)
-                              : qsTr("%1 files").arg(attachedRowId.depCount)
+                        objectName: "attachedRowError"
+
+                        Layout.fillWidth: true
+                        visible: attachedRowId.error.length > 0
+                        wrapMode: QC.Label.WordWrap
+                        color: Theme.danger
+                        font.pixelSize: Theme.fontSizeSmall
+                        text: attachedRowId.error
                     }
                 }
             }

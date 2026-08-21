@@ -415,6 +415,17 @@ QString TestHelper::externalCenterlineCopyPath(cwProject* project,
     return project->saveLoad()->externalCenterlineDir(trip).absoluteFilePath(fileName);
 }
 
+bool TestHelper::writeTextFile(const QString& path, const QString& contents) const
+{
+    QFile file(QDir::cleanPath(path));
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate)) {
+        return false;
+    }
+
+    const QByteArray bytes = contents.toUtf8();
+    return file.write(bytes) == bytes.size();
+}
+
 void TestHelper::waitForProjectSaveToFinish(cwProject* project) const
 {
     if (project == nullptr) {
