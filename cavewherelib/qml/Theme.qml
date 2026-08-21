@@ -127,6 +127,11 @@ QtObject {
     // coordinate-system editor (mode + UTM zone + hemisphere) isn't clipped.
     readonly property int infoColumnEditMaxWidth: 320
 
+    // Tallest a floating list (a review list, a popup's rows) grows before it
+    // scrolls, so it leaves the window behind it usable. Font-scaled so a
+    // larger base size still shows about as many rows.
+    readonly property int floatingListMaxHeight: Math.round(220 * fontScale)
+
     // Wrap width for help callouts. Font-scaled so a larger base size keeps
     // roughly the same words per line instead of wrapping sooner.
     readonly property int helpBoxMaxWidth: Math.round(350 * fontScale)

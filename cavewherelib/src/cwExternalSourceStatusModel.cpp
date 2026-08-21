@@ -41,6 +41,8 @@ QVariant cwExternalSourceStatusModel::data(const QModelIndex& index, int role) c
         return row.sourcePath;
     case StatusRole:
         return QVariant::fromValue(row.status);
+    case SourceRevisionRole:
+        return row.sourceRevision;
     default:
         return QVariant();
     }
@@ -51,7 +53,8 @@ QHash<int, QByteArray> cwExternalSourceStatusModel::roleNames() const
     return {
         { OwnerIdRole, QByteArrayLiteral("ownerId") },
         { SourcePathRole, QByteArrayLiteral("sourcePath") },
-        { StatusRole, QByteArrayLiteral("status") }
+        { StatusRole, QByteArrayLiteral("status") },
+        { SourceRevisionRole, QByteArrayLiteral("sourceRevision") }
     };
 }
 
@@ -85,6 +88,27 @@ cwExternalSourceStatusModel::statusFor(const QUuid& ownerId) const
 {
     const Row* row = findRow(ownerId);
     return row == nullptr ? Status::NoBreadcrumb : row->status;
+}
+
+QString cwExternalSourceStatusModel::sourceRevisionFor(const QUuid& ownerId) const
+{
+    const Row* row = findRow(ownerId);
+    return row == nullptr ? QString() : row->sourceRevision;
+}
+
+cwExternalSourceStatusModel::Row
+cwExternalSourceStatusModel::rowFor(const QUuid& ownerId) const
+{
+    const Row* row = findRow(ownerId);
+    return row == nullptr ? Row { ownerId, QString(), Status::NoBreadcrumb, QString() } : *row;
+}
+
+int cwExternalSourceStatusModel::changedCount() const
+{
+    return static_cast<int>(std::count_if(m_rows.cbegin(), m_rows.cend(),
+                                          [](const Row& row) {
+        return row.status == Status::Changed;
+    }));
 }
 
 QString cwExternalSourceStatusModel::sourcePathFor(const QUuid& ownerId) const

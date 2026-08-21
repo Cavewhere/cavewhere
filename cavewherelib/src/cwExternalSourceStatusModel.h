@@ -41,6 +41,8 @@ class CAVEWHERE_LIB_EXPORT cwExternalSourceStatusModel : public QAbstractListMod
     QML_NAMED_ELEMENT(ExternalSourceStatusModel)
     QML_UNCREATABLE("Owned by ExternalCenterlineManager")
 
+    Q_PROPERTY(int changedCount READ changedCount NOTIFY statusesChanged FINAL)
+
 public:
     /**
      * How an owner's source compares with the copy in the project.
@@ -66,7 +68,8 @@ public:
     enum Roles {
         OwnerIdRole = Qt::UserRole + 1,
         SourcePathRole,
-        StatusRole
+        StatusRole,
+        SourceRevisionRole
     };
     Q_ENUM(Roles)
 
@@ -74,6 +77,13 @@ public:
         QUuid ownerId;
         QString sourcePath; // empty when the owner has no breadcrumb
         Status status = Status::NoBreadcrumb;
+        // Opaque token for the contents the source has right now, carried
+        // only by a Changed row (the one state where the source differs
+        // from the copy and the contents were therefore read). It moves
+        // whenever the source is edited again, which is what lets the app
+        // banner tell a fresh edit from the one the user already dismissed
+        // (plans/EXTERNAL_SOURCE_CHANGE_NOTIFY.html §4).
+        QString sourceRevision;
 
         bool operator==(const Row& other) const = default;
     };
@@ -97,6 +107,19 @@ public:
     // The file this owner's copy came from, empty when this machine
     // remembers none.
     Q_INVOKABLE QString sourcePathFor(const QUuid& ownerId) const;
+
+    // The token for the contents this owner's source has now, empty for
+    // every status but Changed (see Row::sourceRevision).
+    Q_INVOKABLE QString sourceRevisionFor(const QUuid& ownerId) const;
+
+    // How many owners read Changed right now — what the app banner counts.
+    // statusesChanged notifies.
+    int changedCount() const;
+
+    // Everything this model knows about one owner in a single read, a
+    // default (NoBreadcrumb, empty) row for an owner it has none for. For
+    // callers that want more than one field.
+    Row rowFor(const QUuid& ownerId) const;
 
 signals:
     // Emitted after setRows installs a row set that differs from the

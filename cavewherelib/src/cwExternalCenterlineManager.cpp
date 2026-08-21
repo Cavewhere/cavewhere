@@ -150,6 +150,21 @@ bool contentsMatch(const cwExternalSourceSettings::SourceFingerprint& left,
     });
 }
 
+// An opaque token for the contents `fingerprint` describes: the file
+// hashes in order, which moves whenever any of those files is edited
+// again. What the app banner remembers when the user dismisses it, so a
+// second edit of the same source is told apart from the first
+// (plans/EXTERNAL_SOURCE_CHANGE_NOTIFY.html §4).
+QString revisionOf(const cwExternalSourceSettings::SourceFingerprint& fingerprint)
+{
+    QStringList hashes;
+    hashes.reserve(fingerprint.files.size());
+    for (const auto& record : fingerprint.files) {
+        hashes.append(record.sha256);
+    }
+    return hashes.join(QLatin1Char('-'));
+}
+
 QStringList fingerprintedPaths(const cwExternalSourceSettings::SourceFingerprint& fingerprint)
 {
     QStringList paths;
@@ -830,6 +845,7 @@ cwExternalCenterlineManager::sourceStatusFor(
     }
 
     row.status = Status::Changed;
+    row.sourceRevision = revisionOf(current);
     return row;
 }
 
@@ -1081,6 +1097,70 @@ cwExternalCenterlineManager::reloadFromSource(cwTrip* trip)
     }
 
     return replaceCenterline(trip, sourcePath);
+}
+
+cwTrip* cwExternalCenterlineManager::tripForOwner(const QUuid& ownerId) const
+{
+    if (m_region.isNull()) {
+        return nullptr;
+    }
+
+    for (cwCave* cave : m_region->caves()) {
+        for (cwTrip* trip : cave->trips()) {
+            if (trip->id() == ownerId) {
+                return trip;
+            }
+        }
+    }
+    return nullptr;
+}
+
+void cwExternalCenterlineManager::updateFromSource(const QUuid& ownerId)
+{
+    cwTrip* trip = tripForOwner(ownerId);
+    if (trip == nullptr) {
+        return;
+    }
+    reloadFromSource(trip);
+}
+
+void cwExternalCenterlineManager::updateAllChangedSources()
+{
+    for (const cwAttachedCenterlinesModel::Row& attached : std::as_const(m_lastScanRows)) {
+        if (m_sourceStatusModel->statusFor(attached.ownerId)
+            == cwExternalSourceStatusModel::Status::Changed) {
+            updateFromSource(attached.ownerId);
+        }
+    }
+}
+
+QVariantList cwExternalCenterlineManager::sourcesNeedingAttention() const
+{
+    using Status = cwExternalSourceStatusModel::Status;
+
+    QVariantList sources;
+    for (const cwAttachedCenterlinesModel::Row& attached : std::as_const(m_lastScanRows)) {
+        const auto statusRow = m_sourceStatusModel->rowFor(attached.ownerId);
+        if (statusRow.status != Status::Changed && statusRow.status != Status::SourceMissing) {
+            continue;
+        }
+
+        sources.append(QVariantMap {
+            // The id spelled for JavaScript, which has no QUuid to compare
+            // or to key a map with. It parses back into a QUuid on its way
+            // into updateFromSource.
+            { QStringLiteral("ownerKey"), attached.ownerId.toString(QUuid::WithoutBraces) },
+            { QStringLiteral("ownerName"), attached.ownerName },
+            { QStringLiteral("ownerKind"), attached.ownerKind },
+            { QStringLiteral("caveName"), attached.caveName },
+            { QStringLiteral("sourcePath"), statusRow.sourcePath },
+            { QStringLiteral("sourceRevision"), statusRow.sourceRevision },
+            // As an int: QML compares it against the
+            // ExternalSourceStatusModel enum values, which are numbers there.
+            { QStringLiteral("status"), static_cast<int>(statusRow.status) }
+        });
+    }
+    return sources;
 }
 
 void cwExternalCenterlineManager::cancelAttach(const QUuid& ownerId)

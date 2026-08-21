@@ -31,6 +31,7 @@ class cwTrip;
 #include <QSet>
 #include <QStringList>
 #include <QUuid>
+#include <QVariant>
 
 //Std includes
 #include <atomic>
@@ -168,6 +169,34 @@ public:
     // the UI's own refresh points — the answer follows the disk, so it has
     // no change signal.
     Q_INVOKABLE bool canReloadFromSource(cwTrip* trip) const;
+
+    // Re-copies ownerId's remembered source into the project, the same
+    // overwrite path the trip panel's Reload runs — the verb the app
+    // banner's per-row Update calls, which knows owners by id rather than
+    // by object. Does nothing for an owner this region has no trip for
+    // (a cave-level attachment among them: nothing copies into a cave
+    // owner yet). Reports through attachCompleted like every other
+    // operation.
+    Q_INVOKABLE void updateFromSource(const QUuid& ownerId);
+
+    // Runs updateFromSource for every owner the status model reads as
+    // Changed — the banner's [Update all]. Owners whose source is gone
+    // (SourceMissing) are skipped: there is nothing to copy from, and they
+    // keep their missing-source treatment
+    // (plans/EXTERNAL_SOURCE_CHANGE_NOTIFY.html §4).
+    //
+    // The solves coalesce through the machinery every copy path already
+    // uses: each update's landing sets the solve-on-apply flag and asks for
+    // a recompute, and m_scanRestarter collapses the batch into the one
+    // scan whose apply requests the solve.
+    Q_INVOKABLE void updateAllChangedSources();
+
+    // One entry per attachment whose source needs the user's attention —
+    // Changed or SourceMissing — for the banner's review list: the owner's
+    // display name and kind joined onto the status model's path, status and
+    // source revision. Ordered like the attached-centerlines rows (cave
+    // name, then trip name). Re-read on the status model's statusesChanged.
+    Q_INVOKABLE QVariantList sourcesNeedingAttention() const;
 
     // Requests cancellation of ownerId's in-flight attachCenterline.
     // Honored only until the attach's internal scan lands - the flag
@@ -547,6 +576,10 @@ private:
     // when this machine has none — the one place the eligibility rules
     // live, shared by the verb and canReloadFromSource.
     QString reloadSourcePath(cwTrip* trip) const;
+
+    // The live trip carrying ownerId, or null when this region has none —
+    // the lookup the id-keyed verbs need to reach the trip-shaped API.
+    cwTrip* tripForOwner(const QUuid& ownerId) const;
 
     // Rebuilds both attachment-dir maps wholesale from the region walk
     // via cwSaveLoad::externalCenterlineDir (pure path math, no disk
