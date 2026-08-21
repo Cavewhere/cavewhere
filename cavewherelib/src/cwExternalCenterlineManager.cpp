@@ -1134,31 +1134,25 @@ void cwExternalCenterlineManager::updateAllChangedSources()
     }
 }
 
-QVariantList cwExternalCenterlineManager::sourcesNeedingAttention() const
+QList<cwExternalSourceAttentionRow> cwExternalCenterlineManager::sourcesNeedingAttention() const
 {
     using Status = cwExternalSourceStatusModel::Status;
 
-    QVariantList sources;
+    QList<cwExternalSourceAttentionRow> sources;
     for (const cwAttachedCenterlinesModel::Row& attached : std::as_const(m_lastScanRows)) {
         const auto statusRow = m_sourceStatusModel->rowFor(attached.ownerId);
         if (statusRow.status != Status::Changed && statusRow.status != Status::SourceMissing) {
             continue;
         }
 
-        sources.append(QVariantMap {
-            // The id spelled for JavaScript, which has no QUuid to compare
-            // or to key a map with. It parses back into a QUuid on its way
-            // into updateFromSource.
-            { QStringLiteral("ownerKey"), attached.ownerId.toString(QUuid::WithoutBraces) },
-            { QStringLiteral("ownerName"), attached.ownerName },
-            { QStringLiteral("ownerKind"), attached.ownerKind },
-            { QStringLiteral("caveName"), attached.caveName },
-            { QStringLiteral("sourcePath"), statusRow.sourcePath },
-            { QStringLiteral("sourceRevision"), statusRow.sourceRevision },
-            // As an int: QML compares it against the
-            // ExternalSourceStatusModel enum values, which are numbers there.
-            { QStringLiteral("status"), static_cast<int>(statusRow.status) }
-        });
+        sources.append(cwExternalSourceAttentionRow(
+            attached.ownerId.toString(QUuid::WithoutBraces),
+            attached.ownerName,
+            attached.ownerKind,
+            attached.caveName,
+            statusRow.sourcePath,
+            statusRow.sourceRevision,
+            statusRow.status));
     }
     return sources;
 }

@@ -16,6 +16,7 @@ class cwTrip;
 #include "cwAttachedCenterlinesModel.h"
 #include "cwExternalCenterlineAttach.h"
 #include "cwExternalCenterlineReport.h"
+#include "cwExternalSourceAttentionRow.h"
 #include "cwExternalSourceSettings.h"
 #include "cwExternalSourceStatusModel.h"
 #include "cwFutureManagerToken.h"
@@ -196,7 +197,7 @@ public:
     // display name and kind joined onto the status model's path, status and
     // source revision. Ordered like the attached-centerlines rows (cave
     // name, then trip name). Re-read on the status model's statusesChanged.
-    Q_INVOKABLE QVariantList sourcesNeedingAttention() const;
+    Q_INVOKABLE QList<cwExternalSourceAttentionRow> sourcesNeedingAttention() const;
 
     // Requests cancellation of ownerId's in-flight attachCenterline.
     // Honored only until the attach's internal scan lands - the flag

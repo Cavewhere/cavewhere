@@ -252,7 +252,54 @@ status               UpToDate | Changed | SourceMissing | NoBreadcrumb</code></p
       suppresses until the fingerprint moves again.</li>
 </ol>
 
-<h2 id="non-goals">6. Non-goals</h2>
+<h2 id="follow-ups">6. Follow-ups</h2>
+
+<ul>
+  <li id="fu-overlay-banner-abstraction">
+    <strong>Abstract banner hosting out of <code>AppOverlay</code></strong>
+    <span class="dim">(filed 2026-08-21, from Philip's review of N5)</span>.
+    N5 mounted the banner by hardcoding an
+    <code>ExternalSourceChangeHost</code> child inside
+    <code>AppOverlay.qml</code> and exporting it feature-by-name
+    (<code>readonly property alias sourceChangeHost</code>). That couples
+    the shared per-window overlay to one feature: every future app-scope
+    surface (sync conflicts, long-running exports, update notices) means
+    editing <code>AppOverlay</code> and adding another alias, and the
+    overlay accumulates knowledge of every banner's stacking and layout.
+    Replace the hardcoded child with a generic banner-hosting mechanism the
+    overlay owns &mdash; e.g. a top-anchored banner slot/stack that features
+    register into (the way popups already reparent into the overlay rather
+    than being declared inside it), with the overlay deciding only
+    placement and stacking order. The source-change banner becomes the
+    first client; the <code>sourceChangeHost</code> alias goes away (its
+    only consumer today is <code>tst_ExternalSourceChangeBanner.qml</code>,
+    which should find the host through the generic mechanism instead).
+  </li>
+  <li id="fu-save-as-breadcrumb">
+    <strong>BUG: Save As orphans the breadcrumb</strong>
+    <span class="dim">(filed 2026-08-21, reported by Philip)</span>.
+    Repro: New Project &rarr; attach an external file &rarr; Save As. The
+    source line then shows "Copied from an unknown location (this
+    machine)" even though the source file is still on this computer.
+    Likely the QSettings breadcrumb is stranded: entries are keyed by
+    owner UUID, so if the Save As path leaves the panel resolving a
+    different trip id than the one the attach stamped (an id assigned or
+    repaired on the save/reload, or a lookup running against a stale
+    trip object), the entry still exists under the old key and reads back
+    as no-breadcrumb. Diagnose where the id or lookup diverges
+    (<code>cwProject::saveAs</code> &rarr;
+    <code>saveBundledArchive</code> / <code>transferProjectTo</code>;
+    <code>repairTopLevelIds</code> regenerates ids on null/duplicate) and
+    re-stamp or re-key the breadcrumb across Save As. This bites the
+    N-series too: the fingerprint lives in the same entry, so an orphaned
+    breadcrumb also silently degrades the changed-source detection to
+    NoBreadcrumb. <strong>Test both project formats</strong>: Save As to
+    a bundled <code>.cw</code> and to a <code>.cwproj</code> directory
+    &mdash; the two take different transfer paths.
+  </li>
+</ul>
+
+<h2 id="non-goals">7. Non-goals</h2>
 <ul>
   <li><strong>No auto-update</strong> &mdash; explicit user action only,
       per the 2026-07-16 decision.</li>
