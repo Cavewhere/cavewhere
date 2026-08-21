@@ -45,7 +45,19 @@ QQ.Item {
     // an attach that fills it lands with solveNeeded.
     property string entryFilePath: ""
 
+    // Whether the file this trip's copy came from has moved on since the
+    // copy. Read from the manager's status model, whose statusFor has no
+    // NOTIFY — statusesChanged drives the refresh, the same imperative
+    // shape as ownerBusy.
+    property bool sourceChangedSinceCopy: false
+
     signal stationClicked(cwStationHandle stationHandle)
+
+    function updateSourceChangedSinceCopy() {
+        sourceChangedSinceCopy = trip !== null
+                && externalCenterlineManager.sourceStatusModel.statusFor(trip.id)
+                   === ExternalSourceStatusModel.Changed
+    }
 
     function updateOwnerBusy() {
         ownerBusy = trip !== null && externalCenterlineManager.isOwnerBusy(trip.id)
@@ -73,18 +85,26 @@ QQ.Item {
                 || externalCenterlineManager.fileOwnsDeclination(trip.id)
     }
 
-    onTripChanged: {
+    // Everything the manager answers imperatively, read in one go — for a
+    // trip that just arrived, and for this panel's own first frame.
+    function refreshFromManager() {
         updateOwnerBusy()
         updateFileOwnsDeclination()
         updateMissingCopyPath()
         updateEntryFilePath()
+        updateSourceChangedSinceCopy()
     }
 
-    QQ.Component.onCompleted: {
-        updateOwnerBusy()
-        updateFileOwnsDeclination()
-        updateMissingCopyPath()
-        updateEntryFilePath()
+    onTripChanged: refreshFromManager()
+
+    QQ.Component.onCompleted: refreshFromManager()
+
+    QQ.Connections {
+        target: root.externalCenterlineManager.sourceStatusModel
+
+        function onStatusesChanged() {
+            root.updateSourceChangedSinceCopy()
+        }
     }
 
     QQ.Connections {
@@ -231,6 +251,7 @@ QQ.Item {
             externalSourceSettings: root.externalSourceSettings
             actionsEnabled: !root.ownerBusy
             entryFilePath: root.entryFilePath
+            sourceChangedSinceCopy: root.sourceChangedSinceCopy
 
             onReplaceRequested: root.openReplaceDialog()
 

@@ -48,9 +48,19 @@ ColumnLayout {
     // sourceEligibilityRefreshRequested and the header stays manager-free.
     property bool sourceReloadable: false
 
+    // Whether the file this copy came from has moved on since the copy
+    // was taken. The answer lives in the manager's status model, so the
+    // panel resolves it and writes it here — the header stays
+    // manager-free.
+    property bool sourceChangedSinceCopy: false
+
     // Whether the breadcrumb still names where the copy came from. An
     // unknown origin has no path to spell out, reveal, or reload.
     readonly property bool sourceKnown: rememberedSourcePath.length > 0
+
+    // An unknown origin names no file to have changed, so it stays on the
+    // plain line.
+    readonly property bool showChangedSuffix: sourceKnown && sourceChangedSinceCopy
 
     readonly property string entryFile: trip !== null ? trip.externalCenterline.entryFile : ""
     readonly property string fileName: entryFile.substring(entryFile.lastIndexOf("/") + 1)
@@ -159,9 +169,15 @@ ColumnLayout {
         Layout.fillWidth: true
         elide: QC.Label.ElideMiddle
         font.pixelSize: Theme.fontSizeSmall
-        color: Theme.textSubtle
+
+        // A quiet hint, one step out of the subtle gray the line normally
+        // reads in: the source having moved on is news the user can act on
+        // through this line's own Reload, and never an error.
+        color: root.showChangedSuffix ? Theme.textSecondary : Theme.textSubtle
         text: root.sourceKnown
-              ? qsTr("Copied from: %1").arg(root.rememberedSourcePath)
+              ? (root.showChangedSuffix
+                 ? qsTr("Copied from: %1 — changed since copied")
+                 : qsTr("Copied from: %1")).arg(root.rememberedSourcePath)
               : qsTr("Copied from an unknown location (this machine)")
 
         // The line elides, and this path is the one that differs from the

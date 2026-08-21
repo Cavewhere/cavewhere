@@ -512,6 +512,44 @@ MainWindowTest {
             tryVerify(() => !panelId.ownerBusy, 10000, "the busy token releases")
         }
 
+        // EXTERNAL_SOURCE_CHANGE_NOTIFY §4: the panel reads the manager's
+        // status model and hands the answer to the header, so an edit of
+        // the source on disk reaches the provenance line live.
+        function test_sourceLineMarksAChangedSourceLive() {
+            const trip = makeSavedTrip("trip-panel-source-changed")
+            const source = TestHelper.copyToTempDir(
+                        TestHelper.testcasesDatasetPath(
+                            "external-centerlines/survex_simple.svx"))
+            attachSourceToTrip(trip, source)
+            rootId.trip = trip
+
+            const header = findChild(panelId, "attachedHeader")
+            verify(header !== null, "attachedHeader must exist")
+            const sourceLabel = findChild(panelId, "sourceModeLabel")
+            verify(sourceLabel !== null, "sourceModeLabel must exist")
+            verify(!panelId.sourceChangedSinceCopy,
+                   "a fresh copy matches the source it came from")
+            verify(!sourceLabel.text.includes("changed since copied"),
+                   "the line reads plain while the copy is current; got: "
+                   + sourceLabel.text)
+
+            // A real edit: different contents, so the fingerprint check
+            // reaches its hash verdict.
+            verify(TestHelper.copyFile(
+                       TestHelper.testcasesDatasetPath(
+                           "external-centerlines/survex_no_metadata.svx"),
+                       source),
+                   "the source is rewritten with different contents")
+
+            tryVerify(() => panelId.sourceChangedSinceCopy, 15000,
+                      "the source sweep reports the edited source as changed")
+            verify(header.sourceChangedSinceCopy,
+                   "the panel hands the state to the manager-free header")
+            tryVerify(() => sourceLabel.text.includes("changed since copied"),
+                      5000, "the source line says so inline; got: "
+                      + sourceLabel.text)
+        }
+
         function test_aSecondAttachmentNothingTiesInBannersItself() {
             const fixture = attachAndBind("trip-panel-floating")
             const cave = RootData.region.cave(0)

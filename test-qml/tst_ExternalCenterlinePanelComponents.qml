@@ -146,6 +146,7 @@ MainWindowTest {
             attachedHeaderId.actionsEnabled = true
             attachedHeaderId.entryFilePath = ""
             attachedHeaderId.sourceReloadable = false
+            attachedHeaderId.sourceChangedSinceCopy = false
             reloadFromSourceSpyId.clear()
             componentColumnId.y = 0
             rootId.closeAnyOpenEditor()
@@ -216,6 +217,42 @@ MainWindowTest {
                             === "Copied from an unknown location (this machine)",
                       5000, "unknown-origin line renders after clearing; got: "
                             + sourceLabel.text)
+        }
+
+        // EXTERNAL_SOURCE_CHANGE_NOTIFY §4: the provenance line carries the
+        // "changed since copied" state inline, right where the source
+        // context menu's Reload can act on it.
+        function test_attachedHeaderMarksAChangedSource() {
+            const fixture = attachFixtureTrip("panel-header-changed")
+            rootId.trip = fixture.trip
+
+            const sourceLabel = findChild(attachedHeaderId, "sourceModeLabel")
+            verify(sourceLabel !== null, "sourceModeLabel must exist")
+            tryVerify(() => attachedHeaderId.rememberedSourcePath.length > 0,
+                      5000, "the attach remembers a source")
+            verify(!sourceLabel.text.includes("changed since copied"),
+                   "a source that matches its copy reads plain; got: "
+                   + sourceLabel.text)
+
+            attachedHeaderId.sourceChangedSinceCopy = true
+            tryVerify(() => sourceLabel.text.includes("changed since copied"),
+                      5000, "the suffix follows the state; got: "
+                      + sourceLabel.text)
+            verify(sourceLabel.text.includes(attachedHeaderId.rememberedSourcePath),
+                   "the suffixed line still names the source; got: "
+                   + sourceLabel.text)
+
+            attachedHeaderId.sourceChangedSinceCopy = false
+            tryVerify(() => !sourceLabel.text.includes("changed since copied"),
+                      5000, "the suffix leaves with the state; got: "
+                      + sourceLabel.text)
+
+            // An unknown origin names no file that could have changed, so
+            // it keeps the plain unknown-origin line.
+            attachedHeaderId.sourceChangedSinceCopy = true
+            RootData.externalSourceSettings.clearBreadcrumb(fixture.trip.id)
+            tryCompare(sourceLabel, "text",
+                       "Copied from an unknown location (this machine)")
         }
 
         // §16 B2a: the header carries the file action and only raises a

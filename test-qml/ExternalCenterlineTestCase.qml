@@ -26,6 +26,19 @@ CWTestCase {
         return trip
     }
 
+    // Attaches source to trip through the cwRootData wrapper and waits
+    // for this attachment to land. Counts rows from where the model
+    // already stood, so a project that holds earlier attachments still
+    // waits for the new one.
+    function attachSourceToTrip(trip, source) {
+        const model = RootData.externalCenterlineManager.attachedCenterlinesModel
+        const rowsBefore = model.rowCount()
+        RootData.attachTripCenterline(trip, source)
+        tryVerify(() => model.rowCount() > rowsBefore,
+                  10000, "attach should land a row in the attached model")
+        RootData.futureManagerModel.waitForFinished()
+    }
+
     // Saves the fresh project as .cwproj and attaches the
     // survex_simple.svx fixture to a new trip via the cwRootData
     // wrapper. Returns { trip, source }.
@@ -34,11 +47,7 @@ CWTestCase {
 
         const source = TestHelper.testcasesDatasetPath(
             "external-centerlines/survex_simple.svx")
-        RootData.attachTripCenterline(trip, source)
-        tryVerify(() => RootData.externalCenterlineManager
-                            .attachedCenterlinesModel.rowCount() > 0,
-                  10000, "attach should land a row in the attached model")
-        RootData.futureManagerModel.waitForFinished()
+        attachSourceToTrip(trip, source)
         return { trip: trip, source: source }
     }
 }
