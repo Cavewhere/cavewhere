@@ -46,11 +46,6 @@ QFuture<Monad::Result<QVector<cwRenderTexturedItems::Item> > > cwTriangulateLiDA
 
         QVector<cwRenderTexturedItems::Item> renderItems = reserveRenderItems(gltf.meshes);
 
-        auto toImage = [&](uint64_t textureIndex) {
-            //Probably should use caching so we don't have duplicate
-            return gltf.textures.at(textureIndex).toImage();
-        };
-
         //Morph the vertexes
         for(auto& mesh : gltf.meshes) {
             for(auto& geometry : mesh.geometries) {
@@ -58,7 +53,7 @@ QFuture<Monad::Result<QVector<cwRenderTexturedItems::Item> > > cwTriangulateLiDA
 
                 //Add the render item
                 renderItems.emplaceBack(std::move(geometry),
-                                        toImage(mesh.material.baseColorTextureIndex));
+                                        cw::gltf::baseColorImage(gltf, mesh.material));
             }
         }
 

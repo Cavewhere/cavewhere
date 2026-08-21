@@ -54,18 +54,13 @@ void cwRenderGLTF::setGLTFFilePath(const QString &filePath)
                 Load load;
                 load.items = cwTriangulateLiDARTask::reserveRenderItems(data.meshes);
 
-                auto toImage = [&](uint64_t textureIndex) {
-                    //Probably should use caching so we don't have duplicate
-                    return data.textures.at(textureIndex).toImage();
-                };
-
                 //Morph the vertexes
                 for(auto& mesh : data.meshes) {
                     for(auto& geometry : mesh.geometries) {
 
                         //Add the render item
                         load.items.emplaceBack(std::move(geometry),
-                                               toImage(mesh.material.baseColorTextureIndex));
+                                               cw::gltf::baseColorImage(data, mesh.material));
                     }
                 }
 

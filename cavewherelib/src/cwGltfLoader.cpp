@@ -529,6 +529,15 @@ void SceneCPU::dump() const
 }
 
 
+QImage baseColorImage(const SceneCPU& scene, const MaterialCPU& material)
+{
+    const int index = material.baseColorTextureIndex;
+    if (index < 0 || index >= scene.textures.size()) {
+        return {};
+    }
+    return scene.textures.at(index).toImage();
+}
+
 QImage TextureCPU::toImage() const
 {
     if (width <= 0 || height <= 0) {

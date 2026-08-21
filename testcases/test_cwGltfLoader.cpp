@@ -8,6 +8,7 @@
 
 //Qt includes
 #include <QFileInfo>
+#include <QImage>
 
 namespace {
 constexpr int kExpectedVertexCount = 130010;
@@ -126,4 +127,41 @@ TEST_CASE("GLTF loader preserves full geometry when no options are provided", "[
     }
 
     REQUIRE(sawGeometry);
+}
+
+TEST_CASE("baseColorImage handles materials without a baseColor texture", "[cwGltfLoader]")
+{
+    constexpr int kTextureWidth = 4;
+    constexpr int kTextureHeight = 2;
+
+    cw::gltf::TextureCPU texture;
+    texture.width = kTextureWidth;
+    texture.height = kTextureHeight;
+    texture.isSRGB = true;
+    texture.pixels = QByteArray(kTextureWidth * kTextureHeight * 4, char(0xFF));
+
+    cw::gltf::SceneCPU scene;
+    scene.textures.append(texture);
+
+    SECTION("valid index returns the texture's image") {
+        cw::gltf::MaterialCPU material;
+        material.baseColorTextureIndex = 0;
+
+        const QImage image = cw::gltf::baseColorImage(scene, material);
+        REQUIRE_FALSE(image.isNull());
+        REQUIRE(image.width() == kTextureWidth);
+        REQUIRE(image.height() == kTextureHeight);
+    }
+
+    SECTION("default material returns a null image") {
+        const cw::gltf::MaterialCPU material;
+        REQUIRE(material.baseColorTextureIndex == -1);
+        REQUIRE(cw::gltf::baseColorImage(scene, material).isNull());
+    }
+
+    SECTION("out of range index returns a null image") {
+        cw::gltf::MaterialCPU material;
+        material.baseColorTextureIndex = scene.textures.size();
+        REQUIRE(cw::gltf::baseColorImage(scene, material).isNull());
+    }
 }
