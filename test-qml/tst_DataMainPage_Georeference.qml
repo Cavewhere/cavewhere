@@ -4,8 +4,7 @@ import cavewherelib
 import cw.TestLib
 
 // The read-only frame readout on the Data page: where the project's local
-// projection is centered, the datum it inherited, and the vertical datum its
-// elevations are reported against.
+// projection is centered and the datum it inherited.
 MainWindowTest {
     id: rootId
 
@@ -133,11 +132,9 @@ MainWindowTest {
             compare(label("projectionOriginValue").text, "Not georeferenced")
 
             // Nothing placed the project, so there is no datum it could have
-            // inherited, no elevations to describe, and nothing centering it.
+            // inherited and nothing centering it.
             verify(!label("projectionDatumValue").visible,
                    "the datum row stays hidden until a frame exists")
-            verify(!label("projectionVerticalDatumValue").visible,
-                   "the elevations row stays hidden until a frame exists")
             verify(!label("projectionAnchorValue").visible,
                    "nothing anchors an ungeoreferenced project")
         }
@@ -187,23 +184,6 @@ MainWindowTest {
             editButton().editMode = false
         }
 
-        function test_theElevationsRowSaysSoWhenNothingDeclaredAVerticalDatum() {
-            addUtm16NFix()
-            tryVerify(() => label("projectionDatumValue").visible, 5000)
-
-            // The row stays put and says what it knows. Vanishing would leave
-            // the reader unable to tell "your data never said" from "CaveWhere
-            // forgot to show it".
-            const vertical = label("projectionVerticalDatumValue")
-            verify(vertical.visible,
-                   "the elevations row shows once there is a frame")
-            compare(vertical.text, "Not declared by your data")
-
-            RootData.region.geoReference.verticalDatum = "NAVD88"
-
-            tryCompare(vertical, "text", "NAVD88", 3000)
-        }
-
         function test_theProjectSaysWhichStationItIsCenteredOn() {
             addUtm16NFix()
 
@@ -225,7 +205,6 @@ MainWindowTest {
             inGroup("projectionOriginValue")
             inGroup("projectionAnchorValue")
             inGroup("projectionDatumValue")
-            inGroup("projectionVerticalDatumValue")
 
             // Edit unlocks Units and nothing else, so it belongs to the group
             // rather than to the Project box around it.
@@ -256,6 +235,90 @@ MainWindowTest {
             }
             clears(title)
             clears(edit)
+        }
+
+        // The group draws a frame around its rows, and the rows only have a
+        // width to fill because the column inside tracks the frame. Without
+        // that, a value as long as a cave's full name runs out past the border.
+        function test_theValuesStayInsideTheGroupFrame() {
+            addUtm16NFix()
+            tryVerify(() => label("projectionAnchorValue").visible, 5000)
+
+            RootData.region.cave(0).name =
+                "Mammoth Cave and Flint Ridge and Roppel Cave Integrated System"
+
+            // The rename re-lays the rows out, so let that pass run before
+            // measuring where they ended up.
+            waitForRendering(dataPage())
+
+            const group = label("coordinateSystemGroup")
+            const content = group.contentItem
+            const staysInside = name => {
+                const item = label(name)
+                const left = group.mapFromItem(item, 0, 0).x
+                verify(left >= content.x && left + item.width <= content.x + content.width,
+                       name + " stays inside the frame: it spans " + left + " to "
+                       + (left + item.width) + ", the frame holds " + content.x
+                       + " to " + (content.x + content.width))
+            }
+            const measureAll = () => {
+                staysInside("projectionOriginValue")
+                staysInside("projectionAnchorValue")
+                staysInside("projectionDatumValue")
+                staysInside("projectionHelp")
+            }
+            measureAll()
+
+            // Edit mode puts the Recenter… button and the units combo in the
+            // same rows, which is the widest the frame's contents ever get.
+            editButton().editMode = true
+            waitForRendering(dataPage())
+            measureAll()
+
+            editButton().editMode = false
+        }
+
+        // The location and the button that moves it read as one thing. Measured
+        // on a page narrow enough to drop the info column's width cap, which is
+        // where the row has slack to hand out: a value label that took that
+        // slack would strand the button against the far border.
+        function test_theRecenterButtonSitsBesideTheLocation() {
+            addUtm16NFix()
+            tryVerify(() => label("projectionDatumValue").visible, 5000)
+
+            editButton().editMode = true
+
+            const button = label("recenterButton")
+            tryVerify(() => button.visible, 5000)
+
+            const wideWidth = rootId.width
+            rootId.width = Theme.breakpointPanelCollapse - 1
+            waitForRendering(dataPage())
+
+            const value = label("projectionOriginValue")
+            const row = value.parent
+            verify(row.width > value.implicitWidth + button.width,
+                   "the row must have slack for the button to be stranded by")
+
+            // Measured from the end of the text rather than the end of the
+            // label: a label given the row's slack keeps its own gap to the
+            // button while the coordinate ends far short of it.
+            const textEnd = row.mapFromItem(value, 0, 0).x
+                            + value.leftPadding + value.contentWidth
+            const gap = row.mapFromItem(button, 0, 0).x - textEnd
+
+            // One gap, plus the whole pixel the label's width is rounded up to.
+            const room = row.spacing + value.rightPadding + 1
+            verify(gap >= 0 && gap <= room,
+                   "the button follows the coordinate by one gap of " + row.spacing
+                   + ", it sits " + gap + " away")
+
+            // The page has to settle back into the wide layout before the next
+            // test drives it: the narrow one proxies the same items elsewhere.
+            rootId.width = wideWidth
+            waitForRendering(dataPage())
+
+            editButton().editMode = false
         }
 
         // Deleting the anchor of a project that has a second georeferenced

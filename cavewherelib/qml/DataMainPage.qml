@@ -220,8 +220,14 @@ StandardPage {
                     }
                 }
 
+                // The column tracks the frame's inside edges, so the rows below
+                // have a width to fill and a long value has somewhere to wrap
+                // instead of running past the frame.
                 ColumnLayout {
                     id: coordinateSystemColumn
+
+                    anchors.left: parent.left
+                    anchors.right: parent.right
 
                     spacing: Theme.tightSpacing
 
@@ -264,6 +270,16 @@ StandardPage {
 
                         QC.Label {
                             objectName: "projectionOriginValue"
+                            // Capping the fill at the text's own width leaves the
+                            // surplus to the spacer, so the button stays beside the
+                            // coordinate, and still lets the row shrink the label
+                            // into a wrap when the frame is too narrow for it. The
+                            // cap is rounded up because the layout floors the width
+                            // it hands out, and a width a fraction short of the text
+                            // wraps it.
+                            Layout.fillWidth: true
+                            Layout.maximumWidth: Math.ceil(implicitWidth)
+                            wrapMode: QQ.Text.WordWrap
                             text: RootData.region.geoReference.hasOrigin
                                   ? regionInfoBox.formatOrigin(RootData.region.geoReference.originLatitude,
                                                                RootData.region.geoReference.originLongitude)
@@ -299,16 +315,19 @@ StandardPage {
 
                         QC.Label {
                             objectName: "projectionAnchorValue"
+                            Layout.fillWidth: true
+                            Layout.maximumWidth: Math.ceil(implicitWidth)
+                            wrapMode: QQ.Text.WordWrap
                             text: RootData.region.geoReference.anchorDescription
                         }
 
                         QQ.Item { Layout.fillWidth: true }
                     }
 
-                    // Once there is a frame, these rows stay put and say what they
-                    // know — a row that vanished would leave the reader guessing
-                    // whether the project has no vertical datum or the app forgot
-                    // to show it.
+                    // Once there is a frame, the row stays put and says what it
+                    // knows — a row that vanished would leave the reader guessing
+                    // whether the project has no datum or the app forgot to show
+                    // it.
                     RowLayout {
                         Layout.fillWidth: true
                         spacing: Theme.delegatePadding
@@ -324,36 +343,15 @@ StandardPage {
 
                             readonly property bool unnamed: RootData.region.geoReference.datumName === ""
 
+                            Layout.fillWidth: true
+                            Layout.maximumWidth: Math.ceil(implicitWidth)
+                            wrapMode: QQ.Text.WordWrap
+
                             text: datumValueId.unnamed
                                   ? qsTr("Unknown")
                                   : RootData.region.geoReference.datumName
                             color: datumValueId.unnamed ? Theme.textSubtle : Theme.text
                             font.italic: datumValueId.unnamed
-                        }
-
-                        QQ.Item { Layout.fillWidth: true }
-                    }
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: Theme.delegatePadding
-                        visible: RootData.region.geoReference.hasCoordinateSystem
-
-                        QC.Label {
-                            text: qsTr("Elevations:")
-                        }
-
-                        QC.Label {
-                            id: verticalDatumValueId
-                            objectName: "projectionVerticalDatumValue"
-
-                            readonly property bool undeclared: RootData.region.geoReference.verticalDatum === ""
-
-                            text: verticalDatumValueId.undeclared
-                                  ? qsTr("Not declared by your data")
-                                  : RootData.region.geoReference.verticalDatum
-                            color: verticalDatumValueId.undeclared ? Theme.textSubtle : Theme.text
-                            font.italic: verticalDatumValueId.undeclared
                         }
 
                         QQ.Item { Layout.fillWidth: true }
@@ -381,10 +379,7 @@ StandardPage {
                               "which drifts about 2 cm a year against the continent under you, " +
                               "so CaveWhere uses the national datum for where your cave is " +
                               "instead — <b>NAD83 (National Spatial Reference System 2011)</b> " +
-                              "in the US.</p>" +
-                              "<p><b>Elevations</b> names the surface heights are measured from, " +
-                              "as your LiDAR declared it. CaveWhere passes elevations through " +
-                              "exactly as given and never converts between height systems.</p>"
+                              "in the US.</p>"
                     }
                 }
             }
