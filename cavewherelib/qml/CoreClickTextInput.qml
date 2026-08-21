@@ -103,6 +103,12 @@ QQ.Item {
     }
 
     function openEditor() {
+        //A read-only field stays read-only however the open is asked for: a tap,
+        //focus arriving, or a caller reaching in.
+        if(clickTextInput.readOnly) {
+            return
+        }
+
         let host = clickTextInput._shadowEditor
         if(host === null) {
             console.warn("No AppOverlay in this field's window, so there is "

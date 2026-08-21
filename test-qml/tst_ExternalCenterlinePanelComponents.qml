@@ -17,6 +17,12 @@ MainWindowTest {
         trip: rootId.trip
     }
 
+    // The team a native trip's table edits, kept out of any trip so the
+    // read-only comparison stays a property of the table alone.
+    Team {
+        id: nativeTeamModelId
+    }
+
     QQ.FontMetrics {
         id: fontMetricsId
         font.family: Theme.fontFamily
@@ -57,6 +63,7 @@ MainWindowTest {
         TeamTable {
             id: nativeTeamTableId
             width: parent.width
+            model: nativeTeamModelId
         }
 
         // No trip, so it never has a row — which is the state the banner's
@@ -140,6 +147,8 @@ MainWindowTest {
             attachedHeaderId.entryFilePath = ""
             attachedHeaderId.sourceReloadable = false
             reloadFromSourceSpyId.clear()
+            componentColumnId.y = 0
+            rootId.closeAnyOpenEditor()
         }
 
         function cleanup() {
@@ -585,12 +594,13 @@ MainWindowTest {
             rootId.trip = trip
 
             dateSpyId.target = trip
-            const dateInput = findChild(tripMetadataId, "tripMetadataDate")
-            verify(dateInput !== null, "tripMetadataDate must exist")
-            dateInput.finishedEditting("2025-03-04")
+            const dateItem = findChild(tripMetadataId, "tripMetadataDate")
+            verify(dateItem !== null, "tripMetadataDate must exist")
+            compare(dateItem.text, "2024-06-01", "the date renders as the file has it")
+            trip.date = new Date(2025, 2, 4)
             tryVerify(() => dateSpyId.count === 1, 1000,
-                      "date edit emits trip.dateChanged")
-            compare(Qt.formatDate(trip.date, "yyyy-MM-dd"), "2025-03-04")
+                      "the trip's date change reaches the panel")
+            tryCompare(dateItem, "text", "2025-03-04")
 
             const declEditor = findChild(tripMetadataId, "tripMetadataDeclination")
             verify(declEditor !== null, "tripMetadataDeclination must exist")
@@ -637,6 +647,149 @@ MainWindowTest {
             verify(nativeAdd !== null, "the native Team header's add button must exist")
             tryVerify(() => nativeAdd.visible, 1000,
                       "a native team keeps its +")
+        }
+
+        // Every descendant of item carrying objectName, in declaration order.
+        function collectByObjectName(item, objectNameToFind) {
+            let found = []
+            for(let i = 0; i < item.children.length; i++) {
+                const child = item.children[i]
+                if(child.objectName === objectNameToFind) {
+                    found.push(child)
+                }
+                found = found.concat(collectByObjectName(child, objectNameToFind))
+            }
+            return found
+        }
+
+        // The components column is taller than the window, and a click only
+        // lands on an item the window actually shows.
+        function scrollIntoView(item) {
+            const position = item.mapToItem(rootId, 0, 0)
+            componentColumnId.y -= position.y - rootId.height * 0.5
+            waitForRendering(rootId)
+        }
+
+        // Fills a team with one member who has one role.
+        function seedTeam(team, memberName) {
+            while(team.rowCount() > 0) {
+                team.removeTeamMember(0)
+            }
+            team.addTeamMember()
+            team.setData(0, Team.NameRole, memberName)
+            team.setData(0, Team.JobsRole, ["Sketch"])
+        }
+
+        // Selects a team table's first row and returns the parts that editing
+        // turns on or off — selecting is what brings them out at all.
+        function selectedFirstTeamRowParts(teamTable) {
+            const teamList = findChild(teamTable, "teamList")
+            verify(teamList !== null, "teamList must exist")
+            tryVerify(() => teamList.itemAtIndex(0) !== null, 5000,
+                      "the first team row must materialize")
+
+            const row = teamList.itemAtIndex(0)
+            scrollIntoView(row)
+            mouseClick(row)
+            tryVerify(() => teamList.currentIndex === 0, 1000,
+                      "clicking a row selects it")
+
+            const deleteButton = findChild(teamTable, "deletePersonButton.0")
+            verify(deleteButton !== null, "deletePersonButton.0 must exist")
+
+            const addJobButton = findChild(teamTable, "addJobButton.0")
+            verify(addJobButton !== null, "addJobButton.0 must exist")
+
+            const fields = collectByObjectName(row, "coreTextInput")
+            compare(fields.length, 2, "the row shows a name and one role")
+
+            return {
+                "row": row,
+                "deleteButton": deleteButton,
+                "addJobButton": addJobButton,
+                "nameField": fields[0],
+                "roleField": fields[1],
+                "roleChip": fields[1].parent
+            }
+        }
+
+        // §16 B10: the survey file owns an externally-backed trip's date and
+        // team, so the panel presents both and edits neither.
+        function test_externalTripMetadataPresentsWithoutEditing() {
+            RootData.region.addCave()
+            const cave = RootData.region.cave(0)
+            cave.addTrip()
+            const trip = cave.trip(0)
+            trip.date = new Date(2024, 5, 1)
+            seedTeam(trip.team, "Alice")
+            rootId.trip = trip
+
+            const dateItem = findChild(tripMetadataId, "tripMetadataDate")
+            verify(dateItem !== null, "tripMetadataDate must exist")
+            compare(dateItem.text, "2024-06-01", "the date reads as the file has it")
+            verify(findChild(dateItem.parent, "coreTextInput") === null,
+                   "the date row holds a label, not a text field")
+            scrollIntoView(dateItem)
+            mouseDoubleClickSequence(dateItem)
+            verify(rootId.shadowEditor.coreClickInput === null,
+                   "double-clicking the date opens no editor")
+
+            const externalTeam = findChild(tripMetadataId, "tripMetadataTeam")
+            verify(externalTeam !== null, "tripMetadataTeam must exist")
+            const parts = selectedFirstTeamRowParts(externalTeam)
+            verify(!parts.deleteButton.visible, "a selected row offers no delete")
+            verify(!parts.addJobButton.visible, "a selected row offers no role to add")
+
+            mouseDoubleClickSequence(parts.row)
+            verify(rootId.shadowEditor.coreClickInput === null,
+                   "double-clicking a team name opens no editor")
+
+            scrollIntoView(parts.roleChip)
+            mouseDoubleClickSequence(parts.roleChip)
+            verify(rootId.shadowEditor.coreClickInput === null,
+                   "double-clicking a role opens no editor")
+
+            // A role chip still takes focus, so the keyboard is a second way
+            // in and Delete has to be refused as well.
+            tryVerify(() => parts.roleChip.activeFocus, 1000,
+                      "clicking a role focuses its chip")
+            keyClick(Qt.Key_Delete)
+            compare(trip.team.data(trip.team.index(0, 0), Team.JobsRole).length, 1,
+                    "pressing Delete on a role leaves the file's team alone")
+
+            compare(trip.team.data(trip.team.index(0, 0), Team.NameRole), "Alice",
+                    "the team survives every double-click intact")
+        }
+
+        // The same table at its defaults still edits, which is what keeps the
+        // read-only switch a property of the panel and not of TeamTable.
+        function test_nativeTeamTableStillEdits() {
+            seedTeam(nativeTeamModelId, "Bob")
+
+            const parts = selectedFirstTeamRowParts(nativeTeamTableId)
+            tryVerify(() => parts.deleteButton.visible, 1000,
+                      "a selected native row offers delete")
+            verify(parts.addJobButton.visible, "a selected native row offers a role to add")
+
+            mouseDoubleClickSequence(parts.row)
+            compare(rootId.shadowEditor.coreClickInput, parts.nameField,
+                    "double-clicking a native team name opens its editor")
+            rootId.closeAnyOpenEditor()
+
+            scrollIntoView(parts.roleChip)
+            mouseDoubleClickSequence(parts.roleChip)
+            compare(rootId.shadowEditor.coreClickInput, parts.roleField,
+                    "double-clicking a native role opens its editor")
+
+            rootId.closeAnyOpenEditor()
+
+            mouseClick(parts.roleChip)
+            tryVerify(() => parts.roleChip.activeFocus, 1000,
+                      "clicking a native role focuses its chip")
+            keyClick(Qt.Key_Delete)
+            tryVerify(() => nativeTeamModelId.data(
+                          nativeTeamModelId.index(0, 0), Team.JobsRole).length === 0,
+                      1000, "Delete drops a native role")
         }
 
         function test_floatingBannerSpeaksForBothWaysASurveyFloats() {
