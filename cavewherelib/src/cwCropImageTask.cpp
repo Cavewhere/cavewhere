@@ -22,6 +22,11 @@
 //Std includes
 #include <algorithm>
 
+namespace {
+    //Keeps scrap textures below the smallest common driver texture limit
+    constexpr int kMaxCropPixelDimension = 4096;
+}
+
 cwCropImageTask::cwCropImageTask(QObject* parent) :
     QObject(parent) {
 
@@ -75,7 +80,8 @@ QFuture<cwTrackedImagePtr> cwCropImageTask::crop()
                                  QImage image,
                                  QString pathToImage,
                                  const QRectF& crop,
-                                 quint64 parentHash) {
+                                 quint64 parentHash,
+                                 const QString& keySuffix) {
         // QFileInfo info(pathToImage);
 
         auto toString = [](const QRectF crop) {
@@ -110,7 +116,7 @@ QFuture<cwTrackedImagePtr> cwCropImageTask::crop()
                                                 image,
                                                 cwImageProvider::imageCacheKey(
                                                     pathToImage,
-                                                    toString(crop) + QStringLiteral("crop"),
+                                                    toString(crop) + QStringLiteral("crop") + keySuffix,
                                                     parentHash)
                                                 );
     };
@@ -129,8 +135,24 @@ QFuture<cwTrackedImagePtr> cwCropImageTask::crop()
 
             if(!image.isNull()) {
                 QImage croppedImage = image.copy(cropArea);
-                auto key = addCropToDatabase(croppedImage, originalImage.path(), cropArea, hash(image));
-                return Image({key, croppedImage, originalImage.originalDotsPerMeter()});
+                int dotsPerMeter = originalImage.originalDotsPerMeter();
+                QString keySuffix;
+
+                if(std::max(croppedImage.width(), croppedImage.height()) > kMaxCropPixelDimension) {
+                    croppedImage = croppedImage.scaled(kMaxCropPixelDimension,
+                                                       kMaxCropPixelDimension,
+                                                       Qt::KeepAspectRatio,
+                                                       Qt::SmoothTransformation);
+
+                    const double scale = static_cast<double>(croppedImage.width())
+                                         / static_cast<double>(cropArea.width());
+                    dotsPerMeter = static_cast<int>(std::round(dotsPerMeter * scale));
+                    keySuffix = QStringLiteral("-max")
+                                + QString::number(kMaxCropPixelDimension);
+                }
+
+                auto key = addCropToDatabase(croppedImage, originalImage.path(), cropArea, hash(image), keySuffix);
+                return Image({key, croppedImage, dotsPerMeter});
             }
 
             QImage badImage(cropArea.size(), QImage::Format_ARGB32);
@@ -152,6 +174,7 @@ QFuture<cwTrackedImagePtr> cwCropImageTask::crop()
                     auto filePath = cacher.filePath(cropRGBImage.key);
                     cwImage image;
                     image.setOriginalSize(cropRGBImage.croppedImage.size());
+                    image.setOriginalDotsPerMeter(cropRGBImage.dotsPerMeter);
                     image.setPath(filePath);
 
                     return cwTrackedImage::createShared(image,
