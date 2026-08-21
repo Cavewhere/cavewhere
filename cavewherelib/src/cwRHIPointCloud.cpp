@@ -14,6 +14,7 @@
 #include "cwRhiAttributeFormat.h"
 #include "cwRhiItemRenderer.h"
 #include "cwRhiFrameRenderer.h"
+#include "cwRhiLimits.h"
 #include "cwScene.h"
 
 // Qt includes
@@ -117,19 +118,39 @@ void cwRHIPointCloud::updateResources(const ResourceUpdateData& data)
 
         // Immutable buffers must be recreated on size change. We're here
         // only because the geometry changed, so the upload is unconditional.
+        //
+        // A QRhiBuffer size is a quint32, so anything past 4 GiB (~358 M
+        // interleaved points) has to be truncated to a whole-vertex multiple.
+        // Phase 0 turns that into a warning plus a short draw; chunked buffers
+        // for genuinely huge clouds come with the octree work.
+        qint64 uploadedVertexCount = geometry.vertexCount();
         for (qsizetype i = 0; i < bufferViews.size(); ++i) {
-            const QByteArray* bufferData = bufferViews[i].data;
-            const qsizetype byteSize = bufferData->size();
-            if (!m_vertexBuffers[i] || m_vertexBufferCapacities[i] != byteSize) {
+            const QByteArray* bufferData = bufferViews.at(i).data;
+            const int stride = bufferViews.at(i).stride;
+            const qint64 byteSize = bufferData->size();
+            const qint64 uploadBytes = cw::clampedVertexBytes(byteSize, stride);
+
+            if (uploadBytes < byteSize) {
+                const qint64 keptVertexCount = cw::clampedVertexCount(byteSize, stride);
+                qWarning() << "Point cloud vertex buffer" << i
+                           << "exceeds the" << cw::kMaxRhiBufferBytes
+                           << "byte QRhiBuffer limit; drawing" << keptVertexCount
+                           << "of" << geometry.vertexCount() << "points";
+                uploadedVertexCount = std::min(uploadedVertexCount, keptVertexCount);
+            }
+
+            if (!m_vertexBuffers[i] || m_vertexBufferCapacities[i] != uploadBytes) {
                 delete m_vertexBuffers[i];
                 m_vertexBuffers[i] = rhi->newBuffer(QRhiBuffer::Immutable,
                                                     QRhiBuffer::VertexBuffer,
-                                                    quint32(byteSize));
+                                                    quint32(uploadBytes));
                 m_vertexBuffers[i]->create();
-                m_vertexBufferCapacities[i] = byteSize;
+                m_vertexBufferCapacities[i] = qsizetype(uploadBytes);
             }
-            batch->uploadStaticBuffer(m_vertexBuffers[i], bufferData->constData());
+            batch->uploadStaticBuffer(m_vertexBuffers[i], 0, quint32(uploadBytes),
+                                      bufferData->constData());
         }
+        m_uploadedVertexCount = uploadedVertexCount;
     }
 
     // Per-cloud uniform — world-space sprite radius in meters. A fixed default
@@ -236,7 +257,9 @@ bool cwRHIPointCloud::gather(const GatherContext& context, QVector<PipelineBatch
     for (QRhiBuffer* buffer : m_vertexBuffers) {
         drawable.vertexBindings.append(QRhiCommandBuffer::VertexInput(buffer, 0));
     }
-    drawable.vertexCount = quint32(vertexCount);
+    // Draw only what the vertex buffers actually hold — a cloud past the
+    // QRhiBuffer size limit was truncated at upload.
+    drawable.vertexCount = quint32(m_uploadedVertexCount);
     drawable.bindings = m_srb;
     drawable.globalCameraBinding = 0; // binding 0 = global camera UBO (dynamic offset)
 
