@@ -48,11 +48,15 @@ QT_FORWARD_DECLARE_CLASS(QFileSystemWatcher)
  * reads the dirs and declination flags for each solve's buildInput and
  * runs a solve whenever solveNeeded() fires.
  *
- * The in-project copy is the only file the subsystem ever reads. The file
- * an attachment was picked from is a breadcrumb held elsewhere
- * (cwExternalSourceSettings) and is never watched, scanned, or copied from
+ * The in-project copy is the only file the subsystem ever reads for the
+ * solve. The file an attachment was picked from is a breadcrumb held
+ * elsewhere (cwExternalSourceSettings) and is never scanned or copied from
  * on the manager's own initiative — see
- * plans/EXTERNAL_FILE_LIVE_LINK_RETIREMENT.html.
+ * plans/EXTERNAL_FILE_LIVE_LINK_RETIREMENT.html. A second watcher does
+ * observe those sources, purely to tell the user their source moved on:
+ * a source-side event only recomputes sourceStatusModel() rows, so it
+ * copies nothing, solves nothing, and leaves the project unmodified
+ * (plans/EXTERNAL_SOURCE_CHANGE_NOTIFY.html §5 N3).
  */
 class CAVEWHERE_LIB_EXPORT cwExternalCenterlineManager : public QObject
 {
@@ -112,6 +116,14 @@ public:
     // only: a remembered source lives outside the project and is left
     // alone.
     QStringList watchedFiles() const;
+
+    // The remembered source files this session watches for change
+    // notification — the fingerprinted dependency set of every attachment,
+    // canonicalized, and only the files that are on disk here. Their parent
+    // directories are watched too, which is how a deleted source is noticed
+    // coming back; those are left out of this list. Sorted, so a caller can
+    // compare it against an expected set.
+    QStringList watchedSourceFiles() const;
 
     // Trip-level attach/detach through the cwExternalCenterlineAttach
     // orchestrator, using the wired saveLoad and settings store. Both
@@ -359,12 +371,26 @@ private:
 
     QFileSystemWatcher* m_watcher = nullptr;
 
+    // Notification-only watcher over the files outside the project that
+    // the attachments were copied from. Kept apart from m_watcher because
+    // the two mean opposite things: an in-project event is an edit the
+    // project owns, while a source-side event only updates a status the
+    // user may act on (plans/EXTERNAL_SOURCE_CHANGE_NOTIFY.html §2).
+    QFileSystemWatcher* m_sourceWatcher = nullptr;
+
     // The full intended watch set — the in-project dependencies of every
     // attachment — sorted and deduplicated. Compared against on every
     // recompute to figure out which addPath/removePath calls to send.
     // Paths that do not exist on disk are kept here too — they re-arm the
     // next time recompute runs and they appear.
     QStringList m_watchedFiles;
+
+    // The source files and directories the last sweep armed
+    // m_sourceWatcher on, sorted and deduplicated. Each sweep re-arms by
+    // comparing this intent against what the watcher reports it holds, so
+    // a path the watcher dropped or refused comes back.
+    QStringList m_watchedSourceFiles;
+    QStringList m_watchedSourceDirectories;
 
     // Sticky "request a solve when the next scan applies" flag, set by
     // paths that used to do recompute-then-solve synchronously. The
@@ -560,23 +586,30 @@ private:
     // scan is cleared instead of keeping names it no longer owns.
     void applyHarvestToTrips(const ExternalScanResult& result);
 
-    // Re-reads every owner's remembered source and installs the result in
-    // sourceStatusModel(). Runs behind every scan apply, so a project
-    // open — which re-reads the attachments — sweeps the sources with it.
-    // Quiet-path cost is one stat per fingerprinted file; only a file
-    // whose size or mtime moved is read and hashed.
-    void refreshSourceStatuses();
+    // How ownerId's remembered source, fingerprinted as `stored` when it
+    // was copied, compares with that source on disk now. Reads the disk,
+    // and silently refreshes the stored stats when a stat-level difference
+    // turns out to be identical content, so the fast path goes quiet again.
+    cwExternalSourceStatusModel::Row
+    sourceStatusFor(const QUuid& ownerId,
+                    const cwExternalSourceSettings::SourceFingerprint& stored);
 
-    // How ownerId's remembered source compares with what was copied from
-    // it. Reads the disk, and silently refreshes the stored stats when a
-    // stat-level difference turns out to be identical content, so the
-    // fast path goes quiet again.
-    cwExternalSourceStatusModel::Row sourceStatusFor(const QUuid& ownerId);
+    // The whole answer to a source-side trigger — a watcher event, the
+    // window regaining focus, a breadcrumb re-stamped: re-check every
+    // remembered source into sourceStatusModel(), and arm m_sourceWatcher
+    // on the fingerprinted files that are on disk here plus their parent
+    // directories. It reads files outside the project and writes rows in
+    // sourceStatusModel(); it copies nothing, requests no solve, and never
+    // marks the project modified. Runs behind every scan apply too, so a
+    // project open — which re-reads the attachments — sweeps the sources
+    // with it. Quiet-path cost is one stat per fingerprinted file; only a
+    // file whose size or mtime moved is read and hashed.
+    void sweepSources();
 
-    // Re-arms the watcher for `path` (the file that just fired) so we
+    // Re-arms `watcher` for `path` (the file that just fired) so we
     // continue to receive change events for it; on macOS the watcher
     // implicitly drops a path after an atomic-write replace.
-    void rearmWatcher(const QString& path);
+    static void rearmWatcher(QFileSystemWatcher* watcher, const QString& path);
 
 private slots:
     // Async three-stage recompute: snapshot per-owner value inputs on
@@ -592,6 +625,16 @@ private slots:
     void recomputeWatchSet();
 
     void onWatchedFileChanged(const QString& path);
+
+    // A remembered source changed on disk. Re-arms the path (an editor's
+    // save-by-rename drops it) and re-checks the statuses. Nothing else:
+    // the project copy stays exactly as it was until the user asks for an
+    // update.
+    void onSourceFileChanged(const QString& path);
+
+    // A directory holding a remembered source changed — the event that
+    // catches a source deleted, or written back after it was gone.
+    void onSourceDirectoryChanged();
 
     // An object whose on-disk directory just finished moving — cwSaveLoad
     // emits this once a rename's move job has landed. Every attachment dir
