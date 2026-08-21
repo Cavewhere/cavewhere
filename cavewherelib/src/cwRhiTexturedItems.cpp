@@ -15,6 +15,9 @@
 
 namespace {
 constexpr int kFallbackUniformSize = 16; // minimum to satisfy uniform alignment
+// cwGeometry keeps indices as uint32 on the CPU; meshes with this few vertices
+// index fine with uint16, halving the index buffer on the GPU.
+constexpr qsizetype kMaxUInt16VertexCount = 65535;
 }
 
 cwRhiTexturedItems::cwRhiTexturedItems() = default;
@@ -235,7 +238,7 @@ bool cwRhiTexturedItems::gather(const GatherContext& context, QVector<PipelineBa
         drawable.type = cwRHIObject::Drawable::Type::Indexed;
         drawable.bindings = item->srb;
         drawable.indexBuffer = item->indexBuffer;
-        drawable.indexFormat = QRhiCommandBuffer::IndexUInt32;
+        drawable.indexFormat = item->indexFormat;
         drawable.indexCount = static_cast<quint32>(item->numberOfIndices);
         drawable.vertexBindings.append(QRhiCommandBuffer::VertexInput(item->vertexBuffer, 0));
         // The material's global UBO binding is dynamic-offset; cwRhiScene supplies
@@ -290,7 +293,24 @@ void cwRhiTexturedItems::Item::updateGeometryBuffers(const ResourceUpdateData& d
     Q_ASSERT(bufferViews.size() <= 1);
     const QByteArray vertexData = bufferViews.isEmpty() ? QByteArray() : *bufferViews[0].data;
     const auto indices = geometry.indices();
-    const int indexBytes = indices.size() * int(sizeof(uint32_t));
+
+    const bool narrowIndices = geometry.vertexCount() <= kMaxUInt16VertexCount;
+    QByteArray narrowedIndices;
+    if (narrowIndices) {
+        narrowedIndices.resize(indices.size() * qsizetype(sizeof(quint16)));
+        auto* narrowed = reinterpret_cast<quint16*>(narrowedIndices.data());
+        for (qsizetype i = 0; i < indices.size(); i++) {
+            narrowed[i] = static_cast<quint16>(indices.at(i));
+        }
+    }
+    indexFormat = narrowIndices ? QRhiCommandBuffer::IndexUInt16 : QRhiCommandBuffer::IndexUInt32;
+
+    const qsizetype indexBytes = narrowIndices
+                                     ? narrowedIndices.size()
+                                     : indices.size() * qsizetype(sizeof(uint32_t));
+    const void* indexData = narrowIndices
+                                ? static_cast<const void*>(narrowedIndices.constData())
+                                : static_cast<const void*>(indices.constData());
 
     if (vertexBuffer->size() != vertexData.size()) {
         vertexBuffer->setSize(vertexData.size());
@@ -300,12 +320,12 @@ void cwRhiTexturedItems::Item::updateGeometryBuffers(const ResourceUpdateData& d
         batch->uploadStaticBuffer(vertexBuffer, 0, vertexData.size(), vertexData.constData());
     }
 
-    if (indexBuffer->size() != indexBytes) {
-        indexBuffer->setSize(indexBytes);
+    if (indexBuffer->size() != quint32(indexBytes)) {
+        indexBuffer->setSize(quint32(indexBytes));
         indexBuffer->create();
     }
     if (indexBytes > 0) {
-        batch->uploadStaticBuffer(indexBuffer, 0, indexBytes, indices.constData());
+        batch->uploadStaticBuffer(indexBuffer, 0, quint32(indexBytes), indexData);
     }
 
     numberOfIndices = indices.size();

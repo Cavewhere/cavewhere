@@ -42,6 +42,7 @@ private:
         cwRhiPipelineRecord* pipelineRecord = nullptr;
 
         int numberOfIndices = 0;
+        QRhiCommandBuffer::IndexFormat indexFormat = QRhiCommandBuffer::IndexUInt32;
 
         cwGeometry geometry;
         QImage image;
