@@ -265,10 +265,13 @@ void cwRhiTexturedItems::Item::initializeResources(const ResourceUpdateData& dat
 {
     QRhi* rhi = data.renderData.cb->rhi();
 
-    vertexBuffer = rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::VertexBuffer, 0);
+    // Geometry changes only on re-triangulation, so Immutable buffers keep the
+    // data device-local instead of paying for host-visible copies per frame in
+    // flight. Only uniformBuffer stays Dynamic.
+    vertexBuffer = rhi->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, 0);
     vertexBuffer->create();
 
-    indexBuffer = rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::IndexBuffer, 0);
+    indexBuffer = rhi->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::IndexBuffer, 0);
     indexBuffer->create();
 
     resourcesInitialized = true;
@@ -294,7 +297,7 @@ void cwRhiTexturedItems::Item::updateGeometryBuffers(const ResourceUpdateData& d
         vertexBuffer->create();
     }
     if (!vertexData.isEmpty()) {
-        batch->updateDynamicBuffer(vertexBuffer, 0, vertexData.size(), vertexData.constData());
+        batch->uploadStaticBuffer(vertexBuffer, 0, vertexData.size(), vertexData.constData());
     }
 
     if (indexBuffer->size() != indexBytes) {
@@ -302,7 +305,7 @@ void cwRhiTexturedItems::Item::updateGeometryBuffers(const ResourceUpdateData& d
         indexBuffer->create();
     }
     if (indexBytes > 0) {
-        batch->updateDynamicBuffer(indexBuffer, 0, indexBytes, indices.constData());
+        batch->uploadStaticBuffer(indexBuffer, 0, indexBytes, indices.constData());
     }
 
     numberOfIndices = indices.size();
