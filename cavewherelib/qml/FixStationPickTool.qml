@@ -43,7 +43,7 @@ QQ.Item {
     // the pick names, and returns to the page it was started from. Split out
     // from the picker's own signal so a test can drive the write without a
     // ray-cast: an offscreen scene has no geometry to hit.
-    function commitPick(scenePoint: vector3d): void {
+    function commitPick(scenePoint: QQ.vector3d): void {
         let cave = FixStationPick.cave
         if (cave === null || cave.fixStations === null) {
             FixStationPick.cancel()
