@@ -9,7 +9,15 @@
 #include <QtTypes>
 
 class cwLazLayer;
+class cwLazLayerModel;
 class cwRootData;
+
+/**
+ * The OGC WKT for a WGS 84 / UTM zone — the minimal form PROJ accepts, which is
+ * all a fixture needs. Parameterized so a test can give two files CRSs that no
+ * single frame could have come from.
+ */
+QString utmZoneWkt(int zone, int centralMeridian);
 
 /**
  * One synthetic point carrying the standard LAS attributes a clip must pass
@@ -84,6 +92,30 @@ QString writeMinimalLaz(const QString& path, const QString& wktCS = QString());
  * Returns true if a terminal state was reached.
  */
 bool waitForLazLayerLoaded(cwLazLayer* layer, int timeoutMs = 5000);
+
+/**
+ * Wait until @a layer's header probe has landed, or @a timeoutMs elapses.
+ * Returns hasReadHeader(). Unlike the load, the probe runs for a disabled
+ * layer too, so this is the wait a test wants when it never enables one.
+ */
+bool waitForLazLayerHeader(cwLazLayer* layer, int timeoutMs = 5000);
+
+/**
+ * Give queued events, and the threaded reads that deliver through them, one
+ * slice of time to land. processEvents returns as soon as the queue is empty,
+ * so the sleep is what actually lets a read in flight arrive.
+ */
+void spinEventLoopSlice();
+
+/**
+ * Spin until every layer in @a layers has read its header and no row is still
+ * Loading, or @a timeoutMs elapses. Returns whether the model settled.
+ *
+ * Both halves matter: the frame is derived from the headers, and the point
+ * decodes wait on the frame, so a model whose probes have all landed can still
+ * have every row mid-decode.
+ */
+bool waitForLazLayerModelSettled(cwLazLayerModel* layers, int timeoutMs = 10000);
 
 /**
  * Hand @a externalPaths to @a root's region.lazLayers via addFromFiles and

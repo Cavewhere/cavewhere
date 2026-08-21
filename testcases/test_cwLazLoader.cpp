@@ -21,7 +21,7 @@ namespace {
 constexpr int kMultiWorkerPointCount = 600 * 1024;
 } // namespace
 
-TEST_CASE("cwLazLoader: empty source CS short-circuits and applies worldOrigin", "[cwLazLoader]") {
+TEST_CASE("cwLazLoader: empty source CS short-circuits to the file's own coordinates", "[cwLazLoader]") {
     QTemporaryDir tempDir;
     REQUIRE(tempDir.isValid());
 
@@ -35,8 +35,7 @@ TEST_CASE("cwLazLoader: empty source CS short-circuits and applies worldOrigin",
     const QString path = tempLazPath(tempDir, QStringLiteral("identity"));
     REQUIRE(writeSyntheticLazFile(path, input));
 
-    const cwGeoPoint origin(100.0, 200.0, 50.0);
-    auto future = cwLazLoader::load({.path = path, .worldOrigin = origin});
+    auto future = cwLazLoader::load({.path = path});
     future.waitForFinished();
     REQUIRE(future.resultCount() == 1);
     cwLazLoadResult result = future.result();
@@ -49,18 +48,19 @@ TEST_CASE("cwLazLoader: empty source CS short-circuits and applies worldOrigin",
         result.geometry.values<QVector3D>(cwGeometry::Semantic::Position);
     REQUIRE(out.size() == input.size());
 
-    // Each point should have worldOrigin subtracted.
-    REQUIRE_THAT(out[0].x(), WithinAbs(0.0f, 1e-3f));
-    REQUIRE_THAT(out[0].y(), WithinAbs(0.0f, 1e-3f));
-    REQUIRE_THAT(out[0].z(), WithinAbs(0.0f, 1e-3f));
-    REQUIRE_THAT(out[1].x(), WithinAbs(10.0f, 1e-3f));
-    REQUIRE_THAT(out[1].y(), WithinAbs(10.0f, 1e-3f));
-    REQUIRE_THAT(out[1].z(), WithinAbs(5.0f, 1e-3f));
+    // With no destination frame to transform into, the points arrive exactly
+    // as the file holds them.
+    REQUIRE_THAT(out[0].x(), WithinAbs(100.0f, 1e-3f));
+    REQUIRE_THAT(out[0].y(), WithinAbs(200.0f, 1e-3f));
+    REQUIRE_THAT(out[0].z(), WithinAbs(50.0f, 1e-3f));
+    REQUIRE_THAT(out[1].x(), WithinAbs(110.0f, 1e-3f));
+    REQUIRE_THAT(out[1].y(), WithinAbs(210.0f, 1e-3f));
+    REQUIRE_THAT(out[1].z(), WithinAbs(55.0f, 1e-3f));
 
     REQUIRE(result.sourceCS.isEmpty());
 }
 
-TEST_CASE("cwLazLoader: bbox tracks min/max in worldOrigin space", "[cwLazLoader]") {
+TEST_CASE("cwLazLoader: bbox tracks min/max of the loaded points", "[cwLazLoader]") {
     QTemporaryDir tempDir;
     REQUIRE(tempDir.isValid());
 

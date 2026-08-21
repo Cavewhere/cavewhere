@@ -7,6 +7,7 @@
 
 //Our includes
 #include "cwSurvex3DFileReader.h"
+#include "cwStation.h"
 
 //Survex library
 #include "img.h"
@@ -40,8 +41,6 @@ size_t qHash(const CoordKey& key, size_t seed = 0) noexcept {
     return qHashMulti(seed, key.x, key.y, key.z);
 }
 
-// Keyed on the file's own coordinates, not the offset ones: pass 2 only ever
-// matches line endpoints against pass-1 labels read from the same file.
 CoordKey toKey(const img_point& p) {
     return {
         static_cast<qint64>(std::llround(p.x * kCoordKeyScale)),
@@ -50,10 +49,13 @@ CoordKey toKey(const img_point& p) {
     };
 }
 
+QVector3D toVector3D(const img_point& p) {
+    return QVector3D(p.x, p.y, p.z);
+}
+
 } // namespace
 
-cwSurvex3DFileReader::NetworkAndLookup cwSurvex3DFileReader::readNetworkAndLookup(const QString& threeDFilePath,
-                                                                                 const cwGeoPoint& worldOrigin)
+cwSurvex3DFileReader::NetworkAndLookup cwSurvex3DFileReader::readNetworkAndLookup(const QString& threeDFilePath)
 {
     NetworkAndLookup out;
 
@@ -81,7 +83,7 @@ cwSurvex3DFileReader::NetworkAndLookup cwSurvex3DFileReader::readNetworkAndLooku
                 continue;
             }
             QString name = QString::fromUtf8(pimg->label);
-            const QVector3D position = cwGeoPoint(pt.x, pt.y, pt.z).toVector3D(worldOrigin);
+            const QVector3D position = toVector3D(pt);
             out.lookup.setPosition(name, position);
             out.network.setPosition(name, position);
 
@@ -98,7 +100,9 @@ cwSurvex3DFileReader::NetworkAndLookup cwSurvex3DFileReader::readNetworkAndLooku
     // Pass 2: walk MOVE/LINE sequence, resolving shot endpoints by coordinate.
     // img_LINE's pimg->label is the survey-name prefix for the leg, not a
     // station name, so we look up both endpoints in the coord index built
-    // above.
+    // above. Splay legs (img_FLAG_SPLAY) have an anonymous end that pass 1
+    // skipped, so only their anchor station resolves; the other end is the
+    // splay tip.
     if (!img_rewind(pimg)) {
         qWarning() << "cwSurvex3DFileReader: img_rewind failed for" << threeDFilePath;
         img_close(pimg);
@@ -119,8 +123,19 @@ cwSurvex3DFileReader::NetworkAndLookup cwSurvex3DFileReader::readNetworkAndLooku
             if (hasPrev) {
                 const auto fromIt = coordToName.constFind(toKey(prev));
                 const auto toIt   = coordToName.constFind(toKey(pt));
-                if (fromIt != coordToName.constEnd() && toIt != coordToName.constEnd()) {
+                const bool fromIsNamed = fromIt != coordToName.constEnd();
+                const bool toIsNamed = toIt != coordToName.constEnd();
+
+                if (fromIsNamed && toIsNamed) {
+                    // Both ends are real stations, so this is a leg of the
+                    // network even when it carries *flags splay.
                     out.network.addShot(*fromIt, *toIt);
+                } else if ((pimg->flags & img_FLAG_SPLAY) && (fromIsNamed || toIsNamed)) {
+                    // Exactly one end named: that end is the station the splay
+                    // hangs off, and the anonymous end is where it lands.
+                    const QString& anchor = fromIsNamed ? *fromIt : *toIt;
+                    const img_point& tip = fromIsNamed ? pt : prev;
+                    out.splayTips[cwStation::canonicalKey(anchor)].append(toVector3D(tip));
                 }
             }
             prev = pt;

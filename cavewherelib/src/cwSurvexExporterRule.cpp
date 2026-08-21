@@ -3,9 +3,13 @@
 #include "cwTrip.h"
 #include "cwTripCalibration.h"
 #include "cwSurvexExporterUtils.h"
+#include "cwSurvexCS.h"
 
 //Qt includes
 #include <QTextStream>
+
+//Std includes
+#include <algorithm>
 
 //Monad include
 #include "Monad/Result.h"
@@ -63,14 +67,15 @@ void cwSurvexExporterRule::setSurvexFileName(cwFileNameArtifact* survexFilename)
 
 ResultBase cwSurvexExporterRule::writeTrip(QTextStream &stream,
                                            const cwSurveyDataArtifact::Trip& trip,
-                                           const std::optional<cwSurvexExporterUtils::DeclinationContext>& declinationContext)
+                                           bool autoDeclinationInScope,
+                                           double gridConvergence)
 {
     //Write header
     stream << "*begin ; " << trip.name << Qt::endl;
 
     writeDate(stream, trip.date);
     writeTeamData(stream, trip.teamMembers);
-    writeCalibrations(stream, trip.calibration, declinationContext);
+    writeCalibrations(stream, trip.calibration, autoDeclinationInScope, gridConvergence);
     stream << Qt::endl;
     writeShotData(stream, trip);
     stream << Qt::endl;
@@ -90,14 +95,26 @@ ResultBase cwSurvexExporterRule::writeCave(QTextStream& stream,
 
     stream << "*begin " << caveName << " ;" << cave.name << Qt::endl << Qt::endl;
 
-    writeFixStations(stream, cave, globalCS);
+    cwSurvexExporterUtils::CsScope csScope;
+    writeFixStations(stream, cave, globalCS, csScope);
 
-    const auto declinationContext = cwSurvexExporterUtils::makeDeclinationContext(
-        cave.fixStations, globalCS);
+    const bool anyTripUsesAuto = !cave.fixStations.isEmpty()
+                                 && std::any_of(cave.trips.begin(), cave.trips.end(),
+                                                [](const cwSurveyDataArtifact::Trip& trip) {
+                                                    return trip.calibration.autoDeclination();
+                                                });
+    const bool autoDeclinationInScope =
+        cwSurvexExporterUtils::writeBlockDeclinationAuto(stream, cave.fixStations,
+                                                        anyTripUsesAuto, csScope);
+
+    // One convergence for the whole cave: it is a property of the grid at the
+    // cave's location, and every trip inside is solved on the same grid.
+    const double gridConvergence = cwSurvexExporterUtils::gridConvergenceForBlock(
+        cwSurvexExporterUtils::makeDeclinationContext(cave.fixStations), globalCS);
 
     for(int i = 0; i < cave.trips.size(); i++) {
         const cwSurveyDataArtifact::Trip& trip = cave.trips.at(i);
-        writeTrip(stream, trip, declinationContext);
+        writeTrip(stream, trip, autoDeclinationInScope, gridConvergence);
         stream << Qt::endl;
     }
 
@@ -110,9 +127,14 @@ ResultBase cwSurvexExporterRule::writeRegion(QTextStream &stream, const cwSurvey
 {
     stream << "*begin  ;All the caves" << Qt::endl;
 
-    const QString outputCS = cwSurvexExporterUtils::resolveOutputCS(region);
+    // Shareable, because a rule-built .svx is a file for somebody else: the
+    // working frame is now the project's local projection, which would name a
+    // PROJ string built around this one cave and place the file nowhere a
+    // reader could use.
+    const QString outputCS = cwSurvexExporterUtils::resolveOutputCS(
+        region, QString(), cwSurvexExporterUtils::OutputCSPolicy::Shareable);
     if (!outputCS.isEmpty()) {
-        stream << "*cs out " << outputCS << Qt::endl;
+        cwSurvexCS::writeCsLine(stream, outputCS, true);
     }
 
     for(int i = 0; i < region.caves.size(); i++) {
@@ -164,46 +186,29 @@ void cwSurvexExporterRule::updatePipeline()
   */
 void cwSurvexExporterRule::writeCalibrations(QTextStream& stream,
                                              const cwTripCalibrationData& calibrations,
-                                             const std::optional<cwSurvexExporterUtils::DeclinationContext>& declinationContext) {
+                                             bool autoDeclinationInScope,
+                                             double gridConvergence) {
+    using namespace cwSurvexExporterUtils;
+
     writeLengthUnits(stream, calibrations.distanceUnit());
 
-    writeCalibration(stream, "TAPE", calibrations.tapeCalibration());
+    writeCalibration(stream, QStringLiteral("TAPE"), calibrations.tapeCalibration());
 
     double correctFrontsightCompass = calibrations.hasCorrectedCompassFrontsight() ? -180.0 : 0.0;
-    writeCalibration(stream, "COMPASS", calibrations.frontCompassCalibration() + correctFrontsightCompass);
+    writeCalibration(stream, QStringLiteral("COMPASS"), calibrations.frontCompassCalibration() + correctFrontsightCompass);
 
     double correctBacksightCompass = calibrations.hasCorrectedCompassBacksight() ? -180.0 : 0.0;
-    writeCalibration(stream, "BACKCOMPASS", calibrations.backCompassCalibration() + correctBacksightCompass);
+    writeCalibration(stream, QStringLiteral("BACKCOMPASS"), calibrations.backCompassCalibration() + correctBacksightCompass);
 
     double frontClinoScale = calibrations.hasCorrectedClinoFrontsight() ? -1.0 : 1.0;
-    writeCalibration(stream, "CLINO", calibrations.frontClinoCalibration(), frontClinoScale);
+    writeCalibration(stream, QStringLiteral("CLINO"), calibrations.frontClinoCalibration(), frontClinoScale);
 
     double backClinoScale = calibrations.hasCorrectedClinoBacksight() ? -1.0 : 1.0;
-    writeCalibration(stream, "BACKCLINO", calibrations.backClinoCalibration(), backClinoScale);
+    writeCalibration(stream, QStringLiteral("BACKCLINO"), calibrations.backClinoCalibration(), backClinoScale);
 
-    if (calibrations.autoDeclination() && declinationContext) {
-        cwSurvexExporterUtils::writeDeclinationAuto(stream, *declinationContext);
-    } else {
-        writeCalibration(stream, "DECLINATION",
-                         cwSurvexExporterUtils::manualDeclinationForGrid(
-                             stream, calibrations.declinationManual(), declinationContext));
-    }
-}
-
-void cwSurvexExporterRule::writeCalibration(QTextStream& stream, QString type, double value, double scale) {
-    if(value == 0.0 && scale == 1.0) { return; }
-    value = -value; //Flip the value be survex is counter intuitive
-
-    QString calibrationString = QString("*calibrate %1 %2")
-                                    .arg(type)
-                                    .arg(value, 0, 'f', 2);
-
-    if(scale != 1.0) {
-        QString scaleString = QString(" %3").arg(scale, 0, 'f', 2);
-        calibrationString += scaleString;
-    }
-
-    stream << calibrationString << Qt::endl;
+    writeDeclinationCalibration(stream, calibrations.autoDeclination(),
+                                calibrations.declinationManual(), autoDeclinationInScope,
+                                gridConvergence);
 }
 
 /**
@@ -289,10 +294,10 @@ void cwSurvexExporterRule::writeShotData(QTextStream& stream, const cwSurveyData
   */
 void cwSurvexExporterRule::writeLRUDData(QTextStream& stream, const cwSurveyDataArtifact::Trip trip, int textPadding) {
 
-    QString dataLineTemplate("%1 %2 %3 %4 %5");
+    const QString dataLineTemplate(QStringLiteral("%1 %2 %3 %4 %5"));
 
     for(const cwSurveyDataArtifact::SurveyChunk& chunk : trip.chunks) {
-        stream << "*data passage station left right up down ignoreall" << Qt::endl;
+        QStringList dataLines;
 
         for(const cwStation& station : chunk.stations) {
             if(!station.isValid()) { continue; }
@@ -302,16 +307,19 @@ void cwSurvexExporterRule::writeLRUDData(QTextStream& stream, const cwSurveyData
             // any exported shot (e.g. orphans from dropped empty rows).
             if(!cwSurvexExporterUtils::stationHasLrudData(station)) { continue; }
 
-            QString dataLine = dataLineTemplate
-                                   .arg(station.name(), textPadding)
-                                   .arg(toSupportedLength(trip, station.left()), textPadding)
-                                   .arg(toSupportedLength(trip, station.right()), textPadding)
-                                   .arg(toSupportedLength(trip, station.up()), textPadding)
-                                   .arg(toSupportedLength(trip, station.down()), textPadding);
-
-            stream << dataLine << Qt::endl;
+            dataLines.append(dataLineTemplate
+                                 .arg(station.name(), textPadding)
+                                 .arg(toSupportedLength(trip, station.left()), textPadding)
+                                 .arg(toSupportedLength(trip, station.right()), textPadding)
+                                 .arg(toSupportedLength(trip, station.up()), textPadding)
+                                 .arg(toSupportedLength(trip, station.down()), textPadding));
         }
 
+        //A header with no cross sections under it is noise for the reader
+        if(dataLines.isEmpty()) { continue; }
+
+        stream << cwSurvexExporterUtils::passageDataHeader() << Qt::endl;
+        stream << dataLines.join(QLatin1Char('\n')) << Qt::endl;
         stream << Qt::endl;
     }
 }
@@ -552,7 +560,8 @@ ResultBase cwSurvexExporterRule::writeChunk(QTextStream& stream,
  */
 void cwSurvexExporterRule::writeFixStations(QTextStream &stream,
                                             const cwSurveyDataArtifact::Cave &cave,
-                                            const QString& globalCS)
+                                            const QString& globalCS,
+                                            cwSurvexExporterUtils::CsScope& scope)
 {
     QString fallback;
     if (cave.fixStations.isEmpty() && !cave.trips.isEmpty()) {
@@ -568,5 +577,5 @@ void cwSurvexExporterRule::writeFixStations(QTextStream &stream,
         }
     }
 
-    cwSurvexExporterUtils::writeFixStations(stream, cave.fixStations, fallback, globalCS);
+    cwSurvexExporterUtils::writeFixStations(stream, cave.fixStations, fallback, globalCS, scope);
 }

@@ -18,17 +18,45 @@ message FileVersion {
     optional string cavewhereVersion = 2;
 }
 
+// The project's working frame: an automatically derived local projection (LDP)
+// centered on the project, plus the lifecycle state that decides when it is
+// allowed to move. The string is stored rather than re-derived on load —
+// two machines with different PROJ data must not disagree about where the
+// project is. See plans/LDP_AUTO_COORDINATE_SYSTEM_PLAN.html.
+message GeoReference {
+    enum State {
+        UNGEOREFERENCED = 0; // no LDP; nothing georeferenced has been entered
+        ANCHORED = 1;        // derived from an input that still exists
+        FROZEN = 2;          // no anchor left; moves only when asked
+    }
+
+    enum AnchorKind {
+        NO_ANCHOR = 0;
+        FIX_STATION = 1;
+        LAZ_LAYER = 2;
+    }
+
+    optional State state = 1;
+    optional string localCoordinateSystem = 2; // PROJ string
+    optional AnchorKind anchorKind = 3;
+    optional string anchorId = 4;              // cwFixStation / cwLazLayer UUID
+    // The vertical datum the project's elevations are in, as declared by
+    // whatever supplied them. Recorded, never applied — see the plan's §5.
+    optional string verticalDatum = 5;
+}
+
 message ProjectMetadata {
     optional string dataRoot = 1;
     reserved 2; // Removed: GitMode enum (only ManagedNew was ever used)
-    reserved 5; // Removed: worldOrigin (derived from fix-station centroid; recomputed on load)
+    reserved 4; // Removed: globalCoordinateSystem (replaced by geoReference's local projection)
+    reserved 5; // Removed: worldOrigin (was an offset into the globalCoordinateSystem)
     reserved 6; // Removed: lazLayers (now discovered via folder scan of "GIS Layers/")
     reserved 7; // Removed: lazLayerStates (now persisted per-layer in <basename>.cwlaz)
     optional bool syncEnabled = 3;
-    optional string globalCoordinateSystem = 4;
     // Project-wide default unit system. Absent (old files) loads as Metric and
     // never retroactively reinterprets existing trips — it only seeds new ones.
     optional Units.UnitSystem unitSystem = 8;
+    optional GeoReference geoReference = 9;
 }
 
 // Per-LAZ-layer persistent state. Stored as <basename>.cwlaz next to the
@@ -66,11 +94,23 @@ message FixStation {
     optional string id = 1;
     optional string stationName = 2;
     optional string inputCS = 3;
-    optional double easting = 4;
-    optional double northing = 5;
-    optional double elevation = 6;
+
+    // The three numbers, and the axis order that told a reader how to arrange
+    // them. Both are derived from the coordinate below now rather than stored.
+    // A project written while they were stored must be converted by
+    // scripts/migrate_fixstation_coordinates.py before this build opens it —
+    // the parser ignores unknown fields, so it would otherwise read every fix
+    // station as having no coordinate at all.
+    reserved 4, 5, 6, 10;
+    reserved "easting", "northing", "elevation", "coordinateTextAxisOrder";
+
     optional double horizontalVariance = 7;
     optional double verticalVariance = 8;
+
+    // The coordinate, as it was written. The only stored form: the three
+    // numbers are read back out of this under the axis order inputCS implies.
+    // Kept verbatim even when it doesn't parse. Absent means no coordinate.
+    optional string coordinate = 9;
 }
 
 message ExternalCenterline {
@@ -264,6 +304,15 @@ message Shot {
     optional ClinoReading legacy_backClinoReading = 16;
 }
 
+//A wall shot taken from a station with no named destination station. Splays are
+//front sights only and never contribute to cave length, so unlike Shot there's
+//no backsight or includeDistance to store.
+message SplayShot {
+    optional string distance = 1;
+    optional string compass = 2;
+    optional string clino = 3;
+}
+
 //This merges stations and shots together, so it's easier to read in JSON
 //This allows for interleaving stations and shots, this a union of cwStation and cwShot
 //Proto array of stationshot is interleaved Station -> shot -> station -> shot -> station.
@@ -280,6 +329,7 @@ message StationShot {
     optional string right = 102;
     optional string up = 103;
     optional string down = 104;
+    repeated SplayShot splays = 105;
 
     //Shot data
     optional bool includeDistance = 1000;

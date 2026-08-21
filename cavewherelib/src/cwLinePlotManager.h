@@ -20,9 +20,9 @@ class cwRenderLinePlot;
 class cwSurveyChunkSignaler;
 class cwErrorListModel;
 class cwSaveLoad;
-class cwKeywordItem;
-class cwKeywordItemModel;
+class cwKeywordModel;
 class cwLinePlotTripVisibility;
+#include "cwKeywordItemRegistry.h"
 #include "cwLinePlotTask.h"
 #include "cwLocalSettings.h"
 #include "cwSurveyNetwork.h"
@@ -72,8 +72,9 @@ public:
     Q_INVOKABLE void setRenderLinePlot(cwRenderLinePlot* linePlot);
     void setFutureManagerToken(cwFutureManagerToken token);
 
-    // Registers one keyword item per trip so the centerline participates in
-    // keyword visibility filtering (trip / year / date / cave / caver). Items
+    // Registers keyword items per trip — Type="Line Plot" for the centerline
+    // and Type="Splays" for the splay tail — so both participate in keyword
+    // visibility filtering (type / trip / year / date / cave / caver). Items
     // are (re)created on each solve in updateLinePlot(). Mirrors the scrap and
     // note managers.
     void setKeywordItemModel(cwKeywordItemModel* keywordItemModel);
@@ -193,12 +194,20 @@ private:
 
     QList<QUuid> m_missingSourceOwners;
 
-    // Per-trip centerline keyword visibility. One keyword item per trip, keyed
-    // by the live cwTrip*. The visibility proxy (reachable via item->object())
-    // owns the running id and pushes toggles straight to the render object, so
-    // the manager keeps no flag array or running-id map of its own.
-    QPointer<cwKeywordItemModel> m_keywordItemModel;
-    QHash<cwTrip*, QPointer<cwKeywordItem>> m_tripKeywordEntries;
+    // Per-trip line-plot keyword visibility, keyed by the live cwTrip* plus
+    // the kind. Each trip carries a centerline item (Type="Line Plot") and,
+    // when the trip has splay geometry, a splays item (Type="Splays"); the two
+    // visibility proxies (reachable via item->object()) address disjoint
+    // vertex ranges and push keyword toggles straight to the render object, so
+    // the manager keeps no flag array or running-id map of its own. The
+    // registry owns the add/remove/delete mechanics.
+    enum class TripKeywordKind : quint8 { Centerline, Splays };
+    cwKeywordItemRegistry<QPair<cwTrip*, TripKeywordKind>> m_keywordRegistry;
+
+    // Trips with registered items, so a trip that is destroyed or leaves the
+    // solved geometry releases its items and destroyed() connection exactly
+    // once.
+    QSet<cwTrip*> m_trackedTrips;
 
     bool m_needsUpdate = false;
 
@@ -222,15 +231,17 @@ private:
     // items to match, re-binds each trip's visibility proxy to its new vertex
     // span, and re-seeds the render object's hidden trips. Identity (UUID)
     // keyed, so it is immune to list-order drift; trips deleted mid-solve simply
-    // fail to resolve and are skipped. tripVertexRanges is parallel to
-    // tripUuids (both running-id indexed).
+    // fail to resolve and are skipped. tripVertexRanges and
+    // tripSplayVertexRanges are parallel to tripUuids (all running-id indexed).
     void reconcileTripKeywordItems(const QVector<QUuid>& tripUuids,
-                                   const QVector<cwLinePlotGeometry::VertexRange>& tripVertexRanges);
-    void removeTripKeywordEntry(cwTrip* trip);
+                                   const QVector<cwLinePlotGeometry::VertexRange>& tripVertexRanges,
+                                   const QVector<cwLinePlotGeometry::VertexRange>& tripSplayVertexRanges);
+    void removeTripKeywordItems(cwTrip* trip);
 
-    // Tears down every keyword entry synchronously (for manager destruction /
-    // model swap); removeTripKeywordEntry drops a single entry via deleteLater.
-    void clearTripKeywordEntries();
+    // Registry factory: builds one keyword item whose keywords extend
+    // `keywordModel` (a trip-owned identity model) and whose object is a fresh
+    // visibility proxy for `trip`. The registry adds it to the model.
+    cwKeywordItem* makeTripKeywordItem(cwTrip* trip, cwKeywordModel* keywordModel);
 
     void publishResults(const cwLinePlotTask::LinePlotResultData& results);
     void publishCavernOutput(QString cavernLog,

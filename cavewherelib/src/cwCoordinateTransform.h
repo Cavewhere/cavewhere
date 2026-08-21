@@ -14,6 +14,7 @@
 #include <QStringList>
 #include <QtQml/qqmlregistration.h>
 #include <memory>
+#include <optional>
 
 //Our includes
 #include "cwGeoPoint.h"
@@ -58,8 +59,67 @@ public:
     static QStringList commonProjectedCSList();
     static bool isValidCS(const QString& cs);
     static bool isGeographic(const QString& cs);
+
+    /**
+     * Transform a point between two systems, memoizing the built transforms
+     * per thread (same pattern and cap as isValidCS). Building one costs
+     * proj_create_crs_to_crs — a proj.db query and a pipeline build, the most
+     * expensive PROJ call there is — while callers like
+     * cwLocalProjectionManager ask this on every keystroke in a coordinate
+     * field.
+     *
+     * Empty when either system is empty, the two can't be related, or the
+     * result's x/y isn't finite — an unanswerable question must not read as an
+     * answer. z passes through untouched by the finiteness check.
+     */
+    static std::optional<cwGeoPoint> transformPoint(const QString& sourceCS,
+                                                    const QString& destCS,
+                                                    const cwGeoPoint& point);
+
+    /**
+     * Which horizontal components of `point` (in cs's own axis order and units)
+     * fall outside cs's declared area of use — i.e. whether it inverse-projects
+     * to a geographic location within the CRS's valid domain, widened by a small
+     * margin. `eastingValid`/`northingValid` are true when the corresponding axis
+     * (longitude for the easting, latitude for the northing) is inside, so a
+     * caller can tint just the offending cell; an axis goes false only when PROJ
+     * can evaluate the CRS and places the point well outside that domain — the
+     * signature of a transposed digit, wrong UTM zone, or wrong hemisphere.
+     *
+     * Both stay true — never flags — when cs is empty or unparseable or its area
+     * of use is unknown, so an un-checkable CS defers to the cluster rule rather
+     * than crying wolf. z is not part of the domain test, so elevation is never
+     * reported.
+     *
+     * Callers judging a *fix station* should go through
+     * cwFixStationDiagnostics::domainCheck instead, which resolves the fix's
+     * effective CS first — that resolution is the rule, and skipping it judges a
+     * fix under the wrong CS.
+     *
+     * Attribution is best-effort: a coordinate whose inverse projection wraps
+     * (a northing far past the pole flips the longitude ~180°) can't be blamed
+     * on one axis, so both are reported invalid rather than the wrong one.
+     */
+    struct DomainCheck {
+        bool eastingValid = true;
+        bool northingValid = true;
+    };
+    static DomainCheck domainCheck(const QString& cs, const cwGeoPoint& point);
+
     static QString utmZoneToEpsg(int zone, bool north);
     static QString nameFor(const QString& cs);
+
+    /**
+     * Derive a *projected* coordinate system usable as the region's global
+     * (output) CS from a single fix's input CS and coordinate. survex/cavern
+     * only emits projected output, so a geographic input can't seed the global
+     * CS directly:
+     *   - inputCS already valid and projected -> returned unchanged.
+     *   - inputCS geographic -> the WGS84 UTM zone containing the fix.
+     *   - inputCS empty/invalid, or nothing projected can be derived -> "".
+     * `point` is in inputCS's own axis order and units.
+     */
+    static QString deriveProjectedOutputCS(const QString& inputCS, const cwGeoPoint& point);
 
     /**
      * Set the directories PROJ searches for proj.db and grid-shift files.
@@ -99,6 +159,11 @@ public:
 
     /**
      * Picker modes. Custom is the escape hatch that opens the CSCustomDialog.
+     *
+     * Local is what a blank CS string reads as. The picker doesn't offer it —
+     * every surface that picks a system is a fix station, and a fix station
+     * always has one — but modeFor() still has to name the blank a hand-edited
+     * file can carry.
      */
     enum Mode { Local, LatLon, UTM, Custom };
     Q_ENUM(Mode)
@@ -111,8 +176,6 @@ public:
 
     /**
      * True iff cs parses as a geographic CRS (lat/long), e.g. EPSG:4326.
-     * Used by the picker to keep geographic systems out of region-level
-     * globalCS — survex's cavern only emits projected output.
      */
     Q_INVOKABLE static bool isGeographic(const QString& cs);
 
@@ -124,10 +187,9 @@ public:
     Q_INVOKABLE static QString utmZoneToEpsg(int zone, bool north);
 
     /**
-     * Round-trip a CS string back to a picker mode (Local / LatLon / UTM /
-     * Custom). Splitting the parse into three Q_INVOKABLEs lets QML bind
-     * each slice as a strict-typed property. utmZoneFor returns -1 and
-     * utmNorthFor returns true when mode is not UTM.
+     * Round-trip a CS string back to a picker mode. Splitting the parse into three
+     * Q_INVOKABLEs lets QML bind each slice as a strict-typed property.
+     * utmZoneFor returns -1 and utmNorthFor returns true when mode is not UTM.
      */
     Q_INVOKABLE static Mode modeFor(const QString& cs);
     Q_INVOKABLE static int  utmZoneFor(const QString& cs);

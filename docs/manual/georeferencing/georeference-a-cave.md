@@ -1,8 +1,8 @@
 ---
 title: Georeference a Cave
-summary: Give the project a coordinate system and fix a station to real-world coordinates, so the cave sits at its true place on Earth.
+summary: Fix a station to real-world coordinates, so the cave sits at its true place on Earth.
 problem: Place a floating survey on the real-world map, so caves stop overlapping, overlays line up, and auto declination works.
-keywords: [georeference, fix station, coordinate system, utm, epsg, wgs84, easting, northing, elevation, world origin, projection, datum, overlap]
+keywords: [georeference, fix station, coordinate system, utm, epsg, wgs84, easting, northing, elevation, projection, datum, overlap]
 related: [grid-convergence.md, ../concepts/coordinate-systems.md, ../survey-data/declination.md]
 ---
 
@@ -27,46 +27,18 @@ Georeferencing also lets you drop georeferenced
 [point clouds](../point-clouds/add-a-point-cloud.md) into the same space, and
 hand real coordinates to whoever asks.
 
-## Two things to set
+## One thing to set
 
-1. **Choose the project's coordinate system**, the real-world grid the whole
-   project reports in. Set once, on the **Data** page, shared by every cave.
-2. **Fix at least one station** to known coordinates, the anchor that pins the
-   floating survey to that grid. Per cave, on the cave's **Fix Stations** page.
+Georeferencing a project is one step: **fix at least one station** to known
+coordinates. That is the anchor that pins the floating survey to the real world,
+and it is per cave, on the cave's **Fix Stations** page.
 
-Fixing a station moves the cave onto the map; the coordinate system is the frame
-it lands in. You normally set both.
-
-## Choose the project's coordinate system
-
-On the **Data** page, the **Project** box lists **Coordinate system:** read-only
-until you click its **Edit** pencil, which flips to **Done**. That extra click
-is there because changing the units or the coordinate system on a project full
-of data can wreck it.
-
-In edit mode the picker offers 3 kinds:
-
-- **Local**, the default: no real-world grid, the cave floats. This is what "not
-  georeferenced" means.
-- **UTM**: pick a **zone** (1 to 60) and a hemisphere, **N** or **S**. UTM is the
-  usual choice for cave survey, a metric grid, and most surface data you will
-  meet already sits in a zone. Zone 13 N resolves to
-  `EPSG:32613`, printed gray beside the picker as shown below.
-- **Custom...**: search the EPSG catalog by name or code (for a national grid
-  such as the British National Grid). Before you type anything the dialog lists
-  17 common projections. Pasting a whole `EPSG:nnnn` code works too. The dialog
-  pulls roughly 7000 rows out of `proj.db`, so it is built on first use rather
-  than with the page.
-
-![The Coordinate system row set to UTM, with a zone spinner reading 13, a hemisphere combo reading N, and EPSG:32613 beside them, all ringed in orange.](../images/georef-coordinate-system.png)
-*The coordinate system, ringed. Picking **UTM** reveals the zone and hemisphere.*
-
-No **Lat/Lon** option appears here, deliberately: CaveWhere solves with Survex's
-`cavern`, which cannot emit a geographic system, so the project needs metric
-eastings and northings. You can still *enter* a fix in latitude and longitude.
-
-**Pick the system your other data already uses.** Matching it is what makes the
-cave and any point cloud line up.
+There is no project coordinate system to choose. CaveWhere works out the frame
+the project is drawn in from the first thing that says where the project is — a
+fixed station, or a georeferenced [point
+cloud](../point-clouds/add-a-point-cloud.md) — and centers that frame on it. The
+frame follows your data instead of you having to pick a grid for it, which also
+means you can never pick the wrong one.
 
 ## Fix a station
 
@@ -85,16 +57,17 @@ Each row **Add Fix** creates carries 5 fields:
 - **Station**: the real survey station you are fixing, `a1` in the shot shown
   below. It has to match a station in the cave, or the fix has nothing to
   anchor.
-- **Input CS**: the system *the numbers you are typing* sit in, independent of
-  the project's. If your GPS gave latitude and longitude, set the row to
-  **Lat/Lon (WGS84)** and type those even inside a UTM project; CaveWhere
-  transforms them. Leave it on **UTM** for eastings and northings.
+- **Input CS**: the system *the numbers you are typing* sit in, and nothing else
+  reads them. If your GPS gave latitude and longitude, set the row to **Lat/Lon
+  (WGS84)** and type those; CaveWhere transforms them. Leave it on **UTM** for
+  eastings and northings. Each row carries its own, so fixes entered in different
+  systems live side by side.
 - **Easting**, **Northing**, **Elevation**: the coordinates, in meters. Under a
   Lat/Lon input CS these 3 hold longitude, latitude, and elevation instead.
 
 ![The Fix Stations page with one row: station a1, Input CS set to UTM, easting 350000, northing 4300000, elevation 1200.](../images/georef-fix-station.png)
-*One fixed station anchors the cave. The **Input CS** picker sits on the row, not
-on the project.*
+*One fixed station anchors the cave. The **Input CS** picker sits on the row, so
+each fix is read under the system its numbers were taken in.*
 
 Double-click a text field to edit; the change applies when you finish. Right-click
 a row for **Remove** plus the station name, then confirm. Fix more than one and
@@ -102,14 +75,15 @@ the survey ties to every fixed point at once, adjusted between them the way
 CaveWhere closes any loop.
 
 Nothing warns you about a fix typed into the wrong UTM zone. The bad coordinate
-drags the world origin off the real data and inflates the scene bounds until the
-cave renders as a sub-pixel dot.
+drags the frame off the real data and inflates the scene bounds until the cave
+renders as a sub-pixel dot.
 
 ## What fixing does
 
-The moment a cave has a valid fix, CaveWhere re-solves it anchored to those
-coordinates instead of the local origin, and lays the 3D model out on the
-project grid. You will see it move:
+The moment a cave has a valid fix, CaveWhere re-solves the survey anchored to
+those real coordinates instead of the local origin, and lays the 3D model out on
+the project's frame. If the project had no frame yet, that first fix is also what
+gives it one. You will see it move:
 
 - **The cave jumps to its true position**, and several caves separate out of the
   pile at the origin into their real layout.
@@ -122,34 +96,38 @@ project grid. You will see it move:
 - **[Auto declination](../survey-data/declination.md#let-cavewhere-work-it-out-auto)**
   becomes available, because the cave now has a location to compute from.
 
-CaveWhere also keeps a **world origin**, an offset near the survey that the 3D
-scene draws relative to. Vertex positions are 32-bit floats, and a 23-bit
-mantissa holds render jitter under 1 cm only out to about 84 km, so raw UTM
-coordinates would wobble visibly without the offset. The origin is the mean of
-every valid fix in the project, computed on the first solve that finds one and
-sticky after that, so editing a fix never jumps the whole scene. You do not set
-it: the Data page's region menu offers **Cavern Output** and nothing else.
-CaveWhere never saves it, and works it out again on each open.
+The frame CaveWhere derives is centered on that anchor, so the coordinates the
+3D scene works in stay small no matter where on Earth the cave is — which is what
+keeps the model precise hundreds of kilometers from any grid's zero. Refining the
+anchor later moves the station, not the frame; only a correction big enough to
+mean the project is somewhere else re-derives it. Exports still name a standard
+system your reader can paste elsewhere.
 
 ## Read coordinates back out
 
 In the **3D view**, click the crosshair **Pick** button in the bottom toolbar
 (tooltip "Pick coordinates"), then click the model. A **Picked coordinates**
-panel reports it 3 ways, each with a **Copy** button: the project CRS and the
-elevation to 3 decimals, **WGS84 (lat, lon)** to 6. Escape puts the tool away.
+panel reports it as **WGS84 (lat, lon, elevation)** — one line, with a **Copy**
+button, so a paste carries the height along with the position. The elevation is
+in the project's units, `2206.890m` or `6000.00ft` — the same millimeter
+resolution the [measurement tool](../measurement/measure-distance-and-bearing.md)
+reads to. Escape puts the tool away.
+It's a quick way to grab an entrance coordinate for a permit, a callout, or a
+landowner.
 
 **I recommend checking every new fix this way.** Pick the station you fixed and
 confirm the latitude and longitude land on the entrance, as shown below.
 
-![The Picked coordinates panel over the 3D view: the project CRS reading WGS 84 / UTM zone 13N at easting 350000.000, WGS84 lat, lon 38.836032, and Elevation 1200.000 m, each beside a Copy button.](../images/georef-coordinate-picker.png)
-*The picker reads one point back out in 3 frames at once.*
+![The 3D view with the Pick tool active: a marker on the cave and a "Picked coordinates" panel reading the point as WGS84 lat, lon and elevation on one line, with a Copy button.](../images/georef-coordinate-picker.png)
+*The coordinate picker reads one point back out as WGS84 lat/lon and elevation.*
 
-On a project still set to Local the panel has nothing to place the pick in:
+Until something places the project, the panel has nothing to read the pick
+against:
 
-> This tool needs a coordinate system to place the pick in real-world
+> This project isn't positioned yet, so the pick can't be shown in real-world
 > coordinates.
 
-A **Set the coordinate system** link jumps to the Data page.
+An **Add a fix station or a geospatial layer** link says what to do about it.
 
 ## Next steps
 

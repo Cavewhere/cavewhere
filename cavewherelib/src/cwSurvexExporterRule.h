@@ -110,9 +110,14 @@ public:
     static Monad::ResultBase writeCave(QTextStream& stream,
                                        const cwSurveyDataArtifact::Cave& cave,
                                        const QString& globalCS = QString());
+    //! \a autoDeclinationInScope says an enclosing block already carries
+    //! `*declination auto`, so a trip with auto on writes no declination line
+    //! and inherits it. \a gridConvergence is subtracted from a literal
+    //! declination — see cwSurvexExporterUtils::writeDeclinationCalibration.
     static Monad::ResultBase writeTrip(QTextStream& stream,
                                        const cwSurveyDataArtifact::Trip& trip,
-                                       const std::optional<cwSurvexExporterUtils::DeclinationContext>& declinationContext = std::nullopt);
+                                       bool autoDeclinationInScope = false,
+                                       double gridConvergence = 0.0);
 
 signals:
     void surveyDataChanged();
@@ -132,8 +137,8 @@ private:
 
     static void writeCalibrations(QTextStream& stream,
                                   const cwTripCalibrationData& calibrations,
-                                  const std::optional<cwSurvexExporterUtils::DeclinationContext>& declinationContext);
-    static void writeCalibration(QTextStream& stream, QString type, double value, double scale = 1.0);
+                                  bool autoDeclinationInScope,
+                                  double gridConvergence);
 
     static void writeLengthUnits(QTextStream &stream, cwUnits::LengthUnit unit);
     static void writeShotData(QTextStream &stream, const cwSurveyDataArtifact::Trip trip, int textPadding = -11);
@@ -151,7 +156,8 @@ private:
                            int textPadding = -11);
     static void writeFixStations(QTextStream& stream,
                                  const cwSurveyDataArtifact::Cave& cave,
-                                 const QString& globalCS);
+                                 const QString& globalCS,
+                                 cwSurvexExporterUtils::CsScope& scope);
 };
 
 #endif // CWSURVEXEXPORTERRULE_H

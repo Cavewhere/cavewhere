@@ -7,7 +7,6 @@
 
 // Our includes
 #include "cwCaptureLeads.h"
-#include "cwCamera.h"
 #include "cwCaptureLabelPlacer.h"
 #include "cwCaptureLeadLines.h"
 #include "cwCavingRegion.h"
@@ -21,9 +20,7 @@
 // Qt includes
 #include <QFontMetricsF>
 #include <QPainter>
-#include <QPainterPath>
 #include <QtGlobal>
-#include <QtMath>
 
 // Std includes
 #include <algorithm>
@@ -38,18 +35,15 @@ constexpr qreal MinLeaderLengthPaperPx = 4.0;
 }
 
 cwCaptureLeads::cwCaptureLeads(QGraphicsItem* parent)
-    : QGraphicsItem(parent)
-    , m_camera(nullptr)
-    , m_imageScale(1.0)
+    : cwCaptureLabelItem(parent)
     , m_glyphPen(ForegroundColor)
-    , m_labelPen(ForegroundColor)
     , m_textMaxWidth(TextMaxWidth)
 {
     m_glyphPen.setWidthF(PenWidth);
     m_glyphFont.setPointSizeF(FontPointSize);
     m_glyphFont.setBold(true);
+    m_labelPen.setColor(ForegroundColor);
     m_labelFont.setPointSizeF(FontPointSize);
-    setFlag(QGraphicsItem::ItemClipsToShape, true);
 }
 
 void cwCaptureLeads::setRegion(cwCavingRegion* region)
@@ -59,52 +53,6 @@ void cwCaptureLeads::setRegion(cwCavingRegion* region)
     }
     m_region = region;
     rebuildGeometry();
-}
-
-void cwCaptureLeads::setCamera(cwCamera* camera)
-{
-    if(m_camera == camera) {
-        return;
-    }
-    m_camera = camera;
-    rebuildGeometry();
-}
-
-void cwCaptureLeads::setViewport(const QRect& viewport)
-{
-    if(m_viewport == viewport) {
-        return;
-    }
-    prepareGeometryChange();
-    m_viewport = viewport;
-    m_boundingRect = QRectF(QPointF(0.0, 0.0), QSizeF(m_viewport.size()) * m_imageScale);
-    rebuildGeometry();
-}
-
-void cwCaptureLeads::setImageScale(double scale)
-{
-    if(qFuzzyCompare(m_imageScale, scale)) {
-        return;
-    }
-    prepareGeometryChange();
-    m_imageScale = scale;
-    m_boundingRect = QRectF(QPointF(0.0, 0.0), QSizeF(m_viewport.size()) * m_imageScale);
-    rebuildGeometry();
-}
-
-void cwCaptureLeads::setExportDpi(int dpi)
-{
-    m_exportDpi = qMax(1, dpi);
-}
-
-void cwCaptureLeads::setPlacer(cwCaptureLabelPlacer* placer)
-{
-    m_placer = placer;
-}
-
-void cwCaptureLeads::setPaperPxToLocal(double scale)
-{
-    m_paperPxToLocal = qMax(0.0, scale);
 }
 
 qreal cwCaptureLeads::markerRadius() const
@@ -119,31 +67,14 @@ QFont cwCaptureLeads::scaledGlyphFont() const
     return cwCaptureLabelPlacer::scaledFont(m_glyphFont, m_exportDpi);
 }
 
-QFont cwCaptureLeads::scaledLabelFont() const
-{
-    return cwCaptureLabelPlacer::scaledFont(m_labelFont, m_exportDpi);
-}
-
 QVector<QPointF> cwCaptureLeads::leadMarkerPositions() const
 {
     QVector<QPointF> positions;
     positions.reserve(m_leads.size());
     for(const auto& lead : m_leads) {
-        positions.append(lead.markerPos);
+        positions.append(lead.anchor);
     }
     return positions;
-}
-
-QRectF cwCaptureLeads::boundingRect() const
-{
-    return m_boundingRect;
-}
-
-QPainterPath cwCaptureLeads::shape() const
-{
-    QPainterPath path;
-    path.addRect(m_boundingRect);
-    return path;
 }
 
 void cwCaptureLeads::paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget)
@@ -164,16 +95,16 @@ void cwCaptureLeads::paint(QPainter* painter, const QStyleOptionGraphicsItem* op
     const qreal radius = markerRadius();
 
     for(const auto& lead : std::as_const(m_leads)) {
-        if(!m_boundingRect.contains(lead.markerPos)) {
+        if(!m_boundingRect.contains(lead.anchor)) {
             continue;
         }
 
         painter->setPen(m_glyphPen);
         painter->setBrush(Qt::NoBrush);
-        painter->drawEllipse(lead.markerPos, radius, radius);
+        painter->drawEllipse(lead.anchor, radius, radius);
 
-        const QRectF glyphRect(lead.markerPos.x() - radius,
-                               lead.markerPos.y() - radius,
+        const QRectF glyphRect(lead.anchor.x() - radius,
+                               lead.anchor.y() - radius,
                                radius * 2.0,
                                radius * 2.0);
         painter->drawText(glyphRect, Qt::AlignCenter, QStringLiteral("?"));
@@ -200,6 +131,7 @@ void cwCaptureLeads::paint(QPainter* painter, const QStyleOptionGraphicsItem* op
 void cwCaptureLeads::rebuildGeometry()
 {
     m_leads.clear();
+    clearRequestIndex();
 
     if(m_camera == nullptr
        || m_viewport.width() <= 0 || m_viewport.height() <= 0
@@ -227,11 +159,6 @@ void cwCaptureLeads::rebuildGeometry()
             return QStringLiteral("(") + sizeStr + QStringLiteral(")");
         }
         return description + QStringLiteral(" (") + sizeStr + QStringLiteral(")");
-    };
-
-    auto projectToPaper = [&](const QVector3D& world) -> QPointF {
-        const QPointF projected = m_camera->project(world);
-        return (projected - m_viewport.topLeft()) * m_imageScale;
     };
 
     QVector<LeadDrawData> draws;
@@ -274,7 +201,7 @@ void cwCaptureLeads::rebuildGeometry()
                         }
 
                         LeadDrawData entry;
-                        entry.markerPos = projectToPaper(leadPositions.at(i));
+                        entry.anchor = projectToLocal(leadPositions.at(i));
                         entry.text = formatLeadText(lead);
                         entry.hasLeader = false;
                         draws.append(entry);
@@ -284,71 +211,27 @@ void cwCaptureLeads::rebuildGeometry()
         }
     }
 
-    // Stable order: top-to-bottom, left-to-right.
-    std::sort(draws.begin(), draws.end(),
-              [](const LeadDrawData& a, const LeadDrawData& b) {
-                  if(a.markerPos.y() != b.markerPos.y()) {
-                      return a.markerPos.y() < b.markerPos.y();
-                  }
-                  return a.markerPos.x() < b.markerPos.x();
-              });
+    std::sort(draws.begin(), draws.end(), anchorOrder);
 
     m_leads = draws;
     update();
 }
 
-void cwCaptureLeads::placeLeadLabels()
+QVector<cwCaptureLabelPlacer::LabelRequest> cwCaptureLeads::buildLabelRequests(
+    const cwLabelPlacementControl& control,
+    const cwCaptureLabelPlacer::PlacementViewport& viewport)
 {
-    if(m_placer == nullptr || m_leads.isEmpty()) {
-        return;
-    }
+    // placeAll registers each accepted leader as a hard line obstacle so
+    // every later label (remaining leads + all stations, in any DT window)
+    // avoids sitting on the drawn line. Leaders shorter than
+    // MinLeaderLengthPaperPx aren't drawn, so they aren't registered.
+    return buildRequests(m_leads, control, viewport,
+                         cwCaptureLeadLines::LeaderPenWidthPaperPx * m_paperPxToLocal,
+                         MinLeaderLengthPaperPx);
+}
 
-    // Use the same scaled font for placement that paint() uses, so the
-    // placer's reserved rect matches the painter's rendered glyph rect.
-    const QFont placementLabelFont = scaledLabelFont();
-
-    for(LeadDrawData& entry : m_leads) {
-        if(entry.text.isEmpty()) {
-            entry.labelRect = QRectF();
-            entry.hasLeader = false;
-            continue;
-        }
-
-        // Compute the tight glyph rect for the single-line label. Multi-line
-        // wrapping would split into multiple <text> runs on the SVG side; for
-        // a placer-driven layout we treat the label as one block of its full
-        // single-line size and let viewBox-clamp drop labels that don't fit.
-        QPainterPath path;
-        path.addText(QPointF(0.0, 0.0), placementLabelFont, entry.text);
-        const QRectF tightInk = path.boundingRect();
-        if(tightInk.isEmpty()) {
-            entry.labelRect = QRectF();
-            entry.hasLeader = false;
-            continue;
-        }
-
-        cwCaptureLabelPlacer::LabelRequest req{
-            entry.text,
-            entry.markerPos,
-            tightInk.size()
-        };
-        const cwCaptureLabelPlacer::Placement p = m_placer->placeLabel(req);
-        if(p.placed) {
-            entry.labelRect = p.labelRect;
-            entry.leaderStart = p.leaderStart;
-            entry.leaderEnd = p.leaderEnd;
-            const qreal leaderLength = QLineF(entry.leaderStart, entry.leaderEnd).length();
-            entry.hasLeader = leaderLength >= MinLeaderLengthPaperPx;
-            if(entry.hasLeader) {
-                // Register the leader so subsequent label placements (later
-                // leads + all stations) avoid sitting on the drawn line.
-                m_placer->addLineObstacle(
-                    QLineF(entry.leaderStart, entry.leaderEnd),
-                    cwCaptureLeadLines::LeaderPenWidthPaperPx * m_paperPxToLocal);
-            }
-        } else {
-            entry.labelRect = QRectF();
-            entry.hasLeader = false;
-        }
-    }
+void cwCaptureLeads::applyPlacements(
+    const QVector<cwCaptureLabelPlacer::Placement>& placements)
+{
+    applyPlacementsTo(m_leads, placements);
 }

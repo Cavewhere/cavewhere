@@ -254,6 +254,16 @@ void saveStationShot(CavewhereProto::StationShot* protoStation, const cwStation&
     saveReading([&](){return protoStation->mutable_right();}, station.right(), cwDistanceReading::State::Empty);
     saveReading([&](){return protoStation->mutable_up();}, station.up(), cwDistanceReading::State::Empty);
     saveReading([&](){return protoStation->mutable_down();}, station.down(), cwDistanceReading::State::Empty);
+
+    for(const cwShotMeasurement& splay : station.splays()) {
+        //Splays are front sights only, so SplayShot has nowhere to put a backsight
+        Q_ASSERT(splay.direction == cwShotMeasurement::Direction::Front);
+
+        auto protoSplay = protoStation->add_splays();
+        saveReading([&](){return protoSplay->mutable_distance();}, splay.distance, cwDistanceReading::State::Empty);
+        saveReading([&](){return protoSplay->mutable_compass();}, splay.compass, cwCompassReading::State::Empty);
+        saveReading([&](){return protoSplay->mutable_clino();}, splay.clino, cwClinoReading::State::Empty);
+    }
 }
 
 void saveStationShot(CavewhereProto::StationShot* protoShot, const cwShot& shot)
@@ -475,6 +485,17 @@ cwStation fromProtoStation(const CavewhereProto::StationShot& protoStation)
 
     if (protoStation.has_down()) {
         station.setDown(QString::fromStdString(protoStation.down()));
+    }
+
+    if(protoStation.splays_size() > 0) {
+        QList<cwShotMeasurement> splays;
+        splays.reserve(protoStation.splays_size());
+        for(const CavewhereProto::SplayShot& protoSplay : protoStation.splays()) {
+            splays.emplaceBack(cwDistanceReading(QString::fromStdString(protoSplay.distance())),
+                               cwCompassReading(QString::fromStdString(protoSplay.compass())),
+                               cwClinoReading(QString::fromStdString(protoSplay.clino())));
+        }
+        station.setSplays(splays);
     }
 
     return station;
@@ -816,11 +837,11 @@ void saveFixStation(CavewhereProto::FixStation* protoFix, const cwFixStation& fi
     if (!fix.inputCS().isEmpty()) {
         saveString(protoFix->mutable_inputcs(), fix.inputCS());
     }
-    protoFix->set_easting(fix.easting());
-    protoFix->set_northing(fix.northing());
-    protoFix->set_elevation(fix.elevation());
     protoFix->set_horizontalvariance(fix.horizontalVariance());
     protoFix->set_verticalvariance(fix.verticalVariance());
+    if (!fix.coordinate().isEmpty()) {
+        saveString(protoFix->mutable_coordinate(), fix.coordinate());
+    }
 }
 
 cwFixStation fromProtoFixStation(const CavewhereProto::FixStation& protoFix)
@@ -837,11 +858,19 @@ cwFixStation fromProtoFixStation(const CavewhereProto::FixStation& protoFix)
     if (protoFix.has_inputcs()) {
         fix.setInputCS(QString::fromStdString(protoFix.inputcs()));
     }
-    fix.setEasting(protoFix.easting());
-    fix.setNorthing(protoFix.northing());
-    fix.setElevation(protoFix.elevation());
     fix.setHorizontalVariance(protoFix.horizontalvariance());
     fix.setVerticalVariance(protoFix.verticalvariance());
+
+    //The string is the whole coordinate — there is nothing to reconcile it
+    //against, and no legacy branch. A file that still carries the three numbers
+    //has them in fields that are reserved now, and loadMessage parses with
+    //ignore_unknown_fields, so it comes back with no coordinate at all: run
+    //scripts/migrate_fixstation_coordinates.py over such a project before
+    //opening it.
+    if (protoFix.has_coordinate()) {
+        fix.setCoordinate(QString::fromStdString(protoFix.coordinate()));
+    }
+
     return fix;
 }
 

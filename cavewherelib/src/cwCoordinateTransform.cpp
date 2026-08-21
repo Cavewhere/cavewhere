@@ -13,12 +13,22 @@
 #include <QDir>
 
 //Std includes
+#include <algorithm>
+#include <cmath>
+#include <map>
+#include <utility>
 #include <vector>
 
 const QString cwCoordinateTransform::Wgs84 = QStringLiteral("EPSG:4326");
 
 namespace {
     QStringList g_projSearchPaths;
+
+    //! Cap on the per-thread CS caches below, so browsing CSCustomDialog can't
+    //! grow one unboundedly. Reached by clearing rather than evicting: the
+    //! working set is a handful of systems, so a full clear costs one re-lookup
+    //! each and needs no eviction order.
+    constexpr int kCsCacheLimit = 256;
 
     bool sameCS(const QString& a, const QString& b)
     {
@@ -230,25 +240,100 @@ namespace {
         }
         return tls.ctx;
     }
+
+    // The capped per-thread memo shared by the QHash-backed PROJ query caches
+    // below. On overflow every entry is dropped — this cache's values come back
+    // by value, so nothing escapes it. Failures are cached too: a CS the user is
+    // still typing would otherwise rebuild and fail on every keystroke.
+    template <typename Key, typename Value, typename Compute>
+    Value cachedValue(QHash<Key, Value>& cache, const Key& key, Compute compute)
+    {
+        const auto it = cache.constFind(key);
+        if (it != cache.constEnd()) {
+            return *it;
+        }
+        const Value value = compute();
+        if (cache.size() >= kCsCacheLimit) {
+            cache.clear();
+        }
+        cache.insert(key, value);
+        return value;
+    }
+
+    /**
+     * The per-thread transform memo behind transformPoint() and domainCheck().
+     * The cost it skips is documented on transformPoint(); pairs that fail to
+     * build are cached too, for the same reason failures are cached above.
+     *
+     * std::map rather than QHash because cwCoordinateTransform is move-only with
+     * no default constructor; try_emplace builds it in place. Per-thread, which
+     * is also what the class's one-transform-one-thread contract wants.
+     *
+     * The returned reference lives only until the next call on this thread — an
+     * overflowing cache clears every entry.
+     */
+    const cwCoordinateTransform& cachedTransform(const QString& source, const QString& dest)
+    {
+        thread_local std::map<std::pair<QString, QString>, cwCoordinateTransform> cache;
+        const auto key = std::make_pair(source, dest);
+
+        auto it = cache.find(key);
+        if (it == cache.end()) {
+            if (cache.size() >= static_cast<size_t>(kCsCacheLimit)) {
+                cache.clear();
+            }
+            it = cache.try_emplace(key, source, dest).first;
+        }
+        return it->second;
+    }
 }
 
 bool cwCoordinateTransform::isValidCS(const QString& cs)
 {
-    if (cs.trimmed().isEmpty()) {
+    const QString key = cs.trimmed();
+    if (key.isEmpty()) {
         return false;
     }
 
-    PJ_CONTEXT* ctx = validatorContext();
-    if (!ctx) {
-        return false;
+    // Per-thread cache, same reasoning and same cap as isGeographic below:
+    // CSComboBox asks this on every keystroke, and so does
+    // cwLocalProjectionManager once per fix station per edit. Without it each
+    // call pays proj_create + proj_destroy.
+    thread_local QHash<QString, bool> cache;
+    return cachedValue(cache, key, [&key]() {
+        PJ_CONTEXT* ctx = validatorContext();
+        if (!ctx) {
+            return false;
+        }
+        PJ* p = proj_create(ctx, key.toUtf8().constData());
+        const bool valid = (p != nullptr);
+        if (p) {
+            proj_destroy(p);
+        }
+        return valid;
+    });
+}
+
+std::optional<cwGeoPoint> cwCoordinateTransform::transformPoint(const QString& sourceCS,
+                                                                const QString& destCS,
+                                                                const cwGeoPoint& point)
+{
+    const QString source = sourceCS.trimmed();
+    const QString dest = destCS.trimmed();
+    if (source.isEmpty() || dest.isEmpty()) {
+        return std::nullopt;
     }
 
-    PJ* p = proj_create(ctx, cs.toUtf8().constData());
-    const bool valid = (p != nullptr);
-    if (p) {
-        proj_destroy(p);
+    const cwCoordinateTransform& transform = cachedTransform(source, dest);
+    if (!transform.isValid()) {
+        return std::nullopt;
     }
-    return valid;
+
+    const cwGeoPoint transformed = transform.transform(point);
+    if (!std::isfinite(transformed.x) || !std::isfinite(transformed.y)) {
+        return std::nullopt;
+    }
+    return transformed;
 }
 
 bool cwCoordinateTransform::isGeographic(const QString& cs)
@@ -263,32 +348,139 @@ bool cwCoordinateTransform::isGeographic(const QString& cs)
     // proj_create + proj_get_type + proj_destroy. Capped like nameFor's
     // cache so CSCustomDialog browsing can't grow it unboundedly.
     thread_local QHash<QString, bool> cache;
-    auto it = cache.constFind(key);
-    if (it != cache.constEnd()) {
-        return *it;
+    return cachedValue(cache, key, [&key]() {
+        PJ_CONTEXT* ctx = validatorContext();
+        if (!ctx) {
+            return false;
+        }
+        PJ* p = proj_create(ctx, key.toUtf8().constData());
+        if (!p) {
+            return false;
+        }
+        const PJ_TYPE type = proj_get_type(p);
+        proj_destroy(p);
+        return type == PJ_TYPE_GEOGRAPHIC_2D_CRS
+            || type == PJ_TYPE_GEOGRAPHIC_3D_CRS
+            || type == PJ_TYPE_GEOGRAPHIC_CRS;
+    });
+}
+
+namespace {
+    //! domainCheck()'s cache key: the CS and the horizontal coordinate it was
+    //! asked about. A struct rather than the three spelled into one string, so
+    //! that a hit costs no allocation and no 17-digit double formatting — the
+    //! model asks for three domain roles per row on every dataChanged.
+    struct DomainKey {
+        QString cs;
+        double x;
+        double y;
+
+        bool operator==(const DomainKey& other) const = default;
+    };
+
+    size_t qHash(const DomainKey& key, size_t seed = 0) noexcept
+    {
+        return qHashMulti(seed, key.cs, key.x, key.y);
+    }
+}
+
+cwCoordinateTransform::DomainCheck
+cwCoordinateTransform::domainCheck(const QString& cs, const cwGeoPoint& point)
+{
+    const QString key = cs.trimmed();
+    if (key.isEmpty()) {
+        return {};
     }
 
-    PJ_CONTEXT* ctx = validatorContext();
-    if (!ctx) {
-        return false;
-    }
+    // Per-thread cache keyed by the CS and the horizontal coordinate (z is not
+    // part of the domain test). revalidate() re-runs this for every fix on each
+    // fix-station edit, and the model recomputes the domain roles per row on each
+    // dataChanged; without the cache each call pays a fresh proj_create and
+    // area-of-use lookup. The two valid flags pack into one byte. Capped like
+    // isGeographic/nameFor so a long edit session can't grow it unboundedly.
+    thread_local QHash<DomainKey, DomainCheck> cache;
+    return cachedValue(cache, DomainKey{key, point.x, point.y}, [&]() -> DomainCheck {
+        PJ_CONTEXT* ctx = validatorContext();
+        if (!ctx) {
+            return {};
+        }
 
-    PJ* p = proj_create(ctx, key.toUtf8().constData());
-    if (!p) {
-        return false;
-    }
+        PJ* crs = proj_create(ctx, key.toUtf8().constData());
+        if (!crs) {
+            return {};
+        }
 
-    const PJ_TYPE type = proj_get_type(p);
-    proj_destroy(p);
-    const bool geographic = type == PJ_TYPE_GEOGRAPHIC_2D_CRS
-        || type == PJ_TYPE_GEOGRAPHIC_3D_CRS
-        || type == PJ_TYPE_GEOGRAPHIC_CRS;
+        double west = 0.0;
+        double south = 0.0;
+        double east = 0.0;
+        double north = 0.0;
+        const int haveArea =
+            proj_get_area_of_use(ctx, crs, &west, &south, &east, &north, nullptr);
+        proj_destroy(crs);
 
-    if (cache.size() >= 256) {
-        cache.clear();
-    }
-    cache.insert(key, geographic);
-    return geographic;
+        // PROJ reports unknown bounds as -1000 and outright failure as 0. An area
+        // that wraps the antimeridian (west > east) we don't try to reason about.
+        // In any of these cases we can't judge the domain, so defer to the caller.
+        constexpr double kUnknownBound = -1000.0;
+        if (haveArea != 1
+            || west <= kUnknownBound || south <= kUnknownBound
+            || east <= kUnknownBound || north <= kUnknownBound
+            || west > east) {
+            return {};
+        }
+
+        // Inverse-project the fix into geographic lon/lat to compare against the
+        // area of use. normalize_for_visualization (applied by the constructor)
+        // makes the output x=lon, y=lat. Memoized per CS: the cache key above
+        // includes the coordinate, so every keystroke misses it while the
+        // transform it needs is the same one every time.
+        const cwCoordinateTransform& toGeographic = cachedTransform(key, Wgs84);
+        if (!toGeographic.isValid()) {
+            return {};
+        }
+        const cwGeoPoint geo = toGeographic.transform(point);
+        if (!std::isfinite(geo.x) || !std::isfinite(geo.y)) {
+            // The coordinate can't even be inverse-projected — both horizontal
+            // components are suspect.
+            return {false, false};
+        }
+
+        // A generous margin absorbs legitimately surveying just past a UTM zone's
+        // nominal edge; a transposed digit or wrong zone lands many multiples of
+        // this far out, so the two never overlap. Longitude gates the easting,
+        // latitude the northing, so the caller can point at the wrong one.
+        constexpr double kDomainMarginDegrees = 5.0;
+        const double lonLow = west - kDomainMarginDegrees;
+        const double lonHigh = east + kDomainMarginDegrees;
+        DomainCheck fields;
+        fields.eastingValid = geo.x >= lonLow && geo.x <= lonHigh;
+        fields.northingValid = geo.y >= south - kDomainMarginDegrees
+                            && geo.y <= north + kDomainMarginDegrees;
+
+        // Per-axis attribution only holds while the inverse projection stays near
+        // the domain. A northing far past the pole wraps the longitude ~180°
+        // (EPSG:32613 at 478000E/14430000N inverts to 75E/50N: a latitude that
+        // still looks valid and a longitude that does not), which would tint the
+        // easting for a bad northing. When an already-failing longitude is that
+        // far outside, the axes can't be told apart — call both suspect rather
+        // than point at the wrong cell. Gated on eastingValid being false so a
+        // wide-domain CS (a geographic one spans the globe) can never be dragged
+        // in. isWithinDomain() is unaffected either way: it only asks whether
+        // some axis failed.
+        constexpr double kMaxAttributableLonExcessDegrees = 90.0;
+        if (!fields.eastingValid) {
+            const auto angularDistance = [](double a, double b) {
+                const double delta = std::fmod(std::abs(a - b), 360.0);
+                return delta > 180.0 ? 360.0 - delta : delta;
+            };
+            const double excess = (std::min)(angularDistance(geo.x, lonLow),
+                                             angularDistance(geo.x, lonHigh));
+            if (excess > kMaxAttributableLonExcessDegrees) {
+                return {false, false};
+            }
+        }
+        return fields;
+    });
 }
 
 QString cwCoordinateTransform::utmZoneToEpsg(int zone, bool north)
@@ -298,6 +490,35 @@ QString cwCoordinateTransform::utmZoneToEpsg(int zone, bool north)
     }
     const int base = north ? 32600 : 32700;
     return QStringLiteral("EPSG:%1").arg(base + zone);
+}
+
+QString cwCoordinateTransform::deriveProjectedOutputCS(const QString& inputCS,
+                                                       const cwGeoPoint& point)
+{
+    const QString cs = inputCS.trimmed();
+    if (cs.isEmpty() || !isValidCS(cs)) {
+        return QString();
+    }
+    if (!isGeographic(cs)) {
+        // Already projected — usable as the output CS verbatim.
+        return cs;
+    }
+
+    // A geographic input can't be the output CS; pick the WGS84 UTM zone that
+    // contains the fix. transformPoint memoizes the transform per thread,
+    // normalizes the axis order to x=longitude, y=latitude, and rejects
+    // non-finite results.
+    const auto geo = transformPoint(cs, Wgs84, point);
+    if (!geo.has_value()) {
+        return QString();
+    }
+
+    constexpr double kDegreesPerZone = 6.0;
+    constexpr double kZoneOriginLongitude = 180.0;
+    const int rawZone = int(std::floor((geo->x + kZoneOriginLongitude) / kDegreesPerZone)) + 1;
+    const int zone = qBound(1, rawZone, 60);
+    const bool north = geo->y >= 0.0;
+    return utmZoneToEpsg(zone, north);
 }
 
 namespace {
@@ -357,31 +578,22 @@ QString cwCoordinateTransform::nameFor(const QString& cs)
     // with the thread_local validatorContext() above; no mutex needed. Capped
     // because CSCustomDialog lets users browse all ~7000 EPSG entries.
     thread_local QHash<QString, QString> cache;
-    auto it = cache.constFind(key);
-    if (it != cache.constEnd()) {
-        return *it;
-    }
-
-    PJ_CONTEXT* ctx = validatorContext();
-    if (!ctx) {
-        return QString();
-    }
-
-    PJ* p = proj_create(ctx, key.toUtf8().constData());
-    QString result;
-    if (p) {
-        const char* name = proj_get_name(p);
-        if (name) {
-            result = QString::fromUtf8(name);
+    return cachedValue(cache, key, [&key]() {
+        QString result;
+        PJ_CONTEXT* ctx = validatorContext();
+        if (!ctx) {
+            return result;
         }
-        proj_destroy(p);
-    }
-
-    if (cache.size() >= 256) {
-        cache.clear();
-    }
-    cache.insert(key, result);
-    return result;
+        PJ* p = proj_create(ctx, key.toUtf8().constData());
+        if (p) {
+            const char* name = proj_get_name(p);
+            if (name) {
+                result = QString::fromUtf8(name);
+            }
+            proj_destroy(p);
+        }
+        return result;
+    });
 }
 
 // ---- cwCoordinateSystem (QML singleton facade) ----

@@ -9,12 +9,16 @@
 #include "cwSurvexExporterCaveTask.h"
 #include "cwSurvexExporterTripTask.h"
 #include "cwSurvexExporterUtils.h"
+#include "cwSurvexCS.h"
 #include "cwTrip.h"
 
 //Qt includes
 #include <QDir>
 #include <QFileInfo>
 #include <QSet>
+
+//Std includes
+#include <algorithm>
 
 namespace {
 
@@ -93,10 +97,22 @@ bool cwSurvexExporterCaveTask::writeCave(QTextStream& stream, const cwCaveData& 
         return true;
     }
 
-    writeFixStations(stream, cave, globalCS);
+    cwSurvexExporterUtils::CsScope csScope;
+    writeFixStations(stream, cave, globalCS, csScope);
 
-    const auto declinationContext = cwSurvexExporterUtils::makeDeclinationContext(
-        cave.fixStations, globalCS);
+    const bool anyTripUsesAuto = !cave.fixStations.isEmpty()
+                                 && std::any_of(cave.trips.begin(), cave.trips.end(),
+                                                [](const cwTripData& trip) {
+                                                    return trip.calibrations.autoDeclination();
+                                                });
+    const bool autoDeclinationInScope =
+        cwSurvexExporterUtils::writeBlockDeclinationAuto(stream, cave.fixStations,
+                                                        anyTripUsesAuto, csScope);
+
+    // One convergence for the whole cave: it is a property of the grid at the
+    // cave's location, and every trip inside is solved on the same grid.
+    const double gridConvergence = cwSurvexExporterUtils::gridConvergenceForBlock(
+        cwSurvexExporterUtils::makeDeclinationContext(cave.fixStations), globalCS);
 
     //Haven't done anything
     TotalProgress = 0;
@@ -126,7 +142,7 @@ bool cwSurvexExporterCaveTask::writeCave(QTextStream& stream, const cwCaveData& 
 
         auto trip = std::make_unique<cwTrip>();
         trip->setData(tripData);
-        TripExporter->writeTrip(stream, trip.get(), declinationContext);
+        TripExporter->writeTrip(stream, trip.get(), autoDeclinationInScope, gridConvergence);
         TotalProgress += trip->numberOfStations();
         stream << Qt::endl;
     }
@@ -144,7 +160,8 @@ bool cwSurvexExporterCaveTask::writeCave(QTextStream& stream, const cwCaveData& 
  * Falls back to `*fix <firstStation> 0 0 0` when no valid fix exists so
  * un-fixed caves still resolve in cavern.
  */
-void cwSurvexExporterCaveTask::writeFixStations(QTextStream &stream, const cwCaveData &cave, const QString& globalCS)
+void cwSurvexExporterCaveTask::writeFixStations(QTextStream &stream, const cwCaveData &cave, const QString& globalCS,
+                                               cwSurvexExporterUtils::CsScope& scope)
 {
     QSet<QString> stationNamesLower;
     QString firstValidStation;
@@ -168,7 +185,23 @@ void cwSurvexExporterCaveTask::writeFixStations(QTextStream &stream, const cwCav
         Errors.append(message);
     }
 
-    cwSurvexExporterUtils::writeFixStations(stream, validFixes, firstValidStation, globalCS);
+    cwSurvexExporterUtils::writeFixStations(stream, validFixes, firstValidStation, globalCS, scope);
+}
+
+QString cwSurvexExporterCaveTask::writeStandaloneHeader(QTextStream& stream)
+{
+    // Survex requires *cs out whenever any *cs appears, and the cave block is
+    // about to emit one for its fixes. Exported from the region this comes from
+    // the region writer; exported on its own, the cave has to name it itself or
+    // cavern rejects the *fix outright.
+    const QString outputCS = cwSurvexExporterUtils::shareableCSForFixes(Cave.fixStations);
+    if (outputCS.isEmpty()) {
+        return QString();
+    }
+
+    cwSurvexCS::writeCsLine(stream, outputCS, true);
+    stream << Qt::endl;
+    return outputCS;
 }
 
 bool cwSurvexExporterCaveTask::writeExternalInclude(QTextStream& stream,

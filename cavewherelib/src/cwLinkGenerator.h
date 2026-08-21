@@ -46,6 +46,7 @@ public:
 
     Q_INVOKABLE QString dataPageLink();
     Q_INVOKABLE QString caveLink(cwCave* cave);
+    Q_INVOKABLE QString fixStationsLink(cwCave* cave);
     Q_INVOKABLE QString tripLink(cwTrip* trip);
     Q_INVOKABLE QString scrapLink(cwScrap* scrap);
     Q_INVOKABLE QString noteLink(cwNote* note);

@@ -9,6 +9,7 @@
 #include "cwLinePlotErrorCodes.h"
 #include "cwSurvexExporterCaveTask.h"
 #include "cwSurvexExporterUtils.h"
+#include "cwSurvexCS.h"
 
 #include <QFile>
 #include <QTextStream>
@@ -33,9 +34,12 @@ cwSurvexExporterRegion::exportRegion(const cwCavingRegionData& region,
 
     stream << "*begin  ;All the caves" << Qt::endl;
 
-    const QString outputCS = cwSurvexExporterUtils::resolveOutputCS(region);
+    const QString outputCS =
+        cwSurvexExporterUtils::resolveOutputCS(region,
+                                               region.geoReference.localCoordinateSystem,
+                                               options.outputCSPolicy);
     if (!outputCS.isEmpty()) {
-        stream << "*cs out " << outputCS << Qt::endl;
+        cwSurvexCS::writeCsLine(stream, outputCS, true);
     }
 
     cwSurvexExporterCaveTask caveExporter;

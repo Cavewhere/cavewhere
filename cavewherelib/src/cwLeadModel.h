@@ -13,6 +13,7 @@
 #include <QAbstractListModel>
 #include <QPointer>
 #include <QQmlEngine>
+#include <QSet>
 
 //Our includes
 #include "cwRegionTreeModel.h"
@@ -32,6 +33,7 @@ class CAVEWHERE_LIB_EXPORT cwLeadModel : public QAbstractListModel
     Q_OBJECT
     QML_NAMED_ELEMENT(LeadModel)
 
+    Q_PROPERTY(int count READ rowCount NOTIFY countChanged)
     Q_PROPERTY(cwRegionTreeModel* regionModel READ regionModel WRITE setRegionTreeModel NOTIFY regionModelChanged)
     Q_PROPERTY(cwCave* cave READ cave WRITE setCave NOTIFY caveChanged)
     Q_PROPERTY(QString referanceStation READ referanceStation WRITE setReferanceStation NOTIFY referanceStationChanged)
@@ -73,6 +75,7 @@ public:
     QHash<int, QByteArray> roleNames() const;
 
 signals:
+    void countChanged();
     void regionModelChanged();
     void caveChanged();
     void referanceStationChanged();
@@ -83,7 +86,8 @@ private:
     QPointer<cwRegionTreeModel> RegionTreeModel; //!<
     QPointer<cwCave> Cave;
 
-    QMap<cwScrap*, int> ScrapToOffset;
+    QSet<cwScrap*> AttachedScraps; //!< Every scrap connected to the model, with or without leads
+    QMap<cwScrap*, int> ScrapToOffset; //!< Only scraps that hold leads
     QMap<int, cwScrap*> OffsetToScrap;
 
     QString ReferanceStation; //!< For calculating the distance to the leads
@@ -93,7 +97,10 @@ private:
     void removeScrap(cwScrap* scrap);
     void addScrap(cwScrap* scrap);
 
-    void updateOffsets(cwScrap* startScrap);
+    void detachScrap(cwScrap* scrap);
+    void attachScrap(cwScrap* scrap);
+
+    void updateOffsets();
     QString nearestStation(cwScrap* scrap, int leadIndex) const;
 
     QPair<cwScrap*, int> scrapAndIndex(QModelIndex index) const;

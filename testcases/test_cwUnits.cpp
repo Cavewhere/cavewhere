@@ -64,6 +64,43 @@ TEST_CASE("cwUnits length unit names and parsing", "[cwUnits]") {
     CHECK(names.contains("mi"));
 }
 
+TEST_CASE("cwUnits::formatLength renders a length at its unit's decimals",
+          "[cwUnits]") {
+    // Every unit reads to about a millimeter, so the same length resolves the
+    // same whichever unit it is shown in.
+    CHECK(cwUnits::formatLength(60.0, cwUnits::Meters) == QStringLiteral("60.000 m"));
+    CHECK(cwUnits::formatLength(60.0, cwUnits::Feet) == QStringLiteral("196.85 ft"));
+    CHECK(cwUnits::formatLength(6000.0, cwUnits::Kilometers) == QStringLiteral("6.000 km"));
+    CHECK(cwUnits::formatLength(6000.0, cwUnits::Miles) == QStringLiteral("3.728 mi"));
+
+    // The sign decision acts on the rounded value, so a length below half the
+    // last digit prints a clean zero.
+    CHECK(cwUnits::formatLength(-0.0004, cwUnits::Meters, true) == QStringLiteral("0.000 m"));
+    CHECK(cwUnits::formatLength(0.001, cwUnits::Meters, true) == QStringLiteral("+0.001 m"));
+}
+
+TEST_CASE("cwUnits::formatAngle renders degrees at the asked precision", "[cwUnits]") {
+    CHECK(cwUnits::formatAngle(0.376) == QStringLiteral("0.4°"));
+    CHECK(cwUnits::formatAngle(0.376, 3) == QStringLiteral("0.376°"));
+    CHECK(cwUnits::formatAngle(-1.25, 1) == QStringLiteral("-1.3°"));
+    CHECK(cwUnits::formatAngle(0.0, 0) == QStringLiteral("0°"));
+}
+
+TEST_CASE("cwUnits::formatAngle drops the sign on a value that prints as zero",
+          "[cwUnits]") {
+    // The reason this exists: a reading a hair below its reference direction —
+    // a cave just west of the projection's central meridian, a level shot
+    // reading fractionally down — would otherwise render a minus sign with no
+    // digits to back it up, which reads as a broken value rather than a zero.
+    CHECK(cwUnits::formatAngle(-0.0) == QStringLiteral("0.0°"));
+    CHECK(cwUnits::formatAngle(-0.004) == QStringLiteral("0.0°"));
+    CHECK(cwUnits::formatAngle(-0.0000004, 6) == QStringLiteral("0.000000°"));
+
+    // The sign survives wherever the printed digits still carry it.
+    CHECK(cwUnits::formatAngle(-0.06) == QStringLiteral("-0.1°"));
+    CHECK(cwUnits::formatAngle(-0.004, 3) == QStringLiteral("-0.004°"));
+}
+
 TEST_CASE("cwUnits image resolution conversions are consistent", "[cwUnits]") {
     const double value = 300.0;
     const cwUnits::ImageResolutionUnit units[] = {

@@ -65,12 +65,13 @@ namespace {
 inline const QString kSketchTextureCacheKeyPrefix =
     QStringLiteral("sketch-texture");
 
-// A dirty scrap is only worth (re)triangulating once it is out of editing and
-// attached to a cave. Shared by updateState() and the run path.
-bool isRunnableScrap(const cwScrap* scrap) {
-    return scrap != nullptr && !scrap->editing() && scrap->parentCave() != nullptr;
-}
 } // namespace
+
+// A dirty scrap is only worth (re)triangulating once it is out of editing and
+// still attached to a cave. Shared by updateState() and the run path.
+bool cwScrapManager::DirtyScrap::isRunnable() const {
+    return scrap != nullptr && !scrap->editing() && !cave.isNull();
+}
 
 cwScrapManager::cwScrapManager(QObject *parent) :
     QObject(parent),
@@ -110,12 +111,17 @@ cwScrapManager::cwScrapManager(QObject *parent) :
 
 cwScrapManager::~cwScrapManager()
 {
-    //Ahead of the wait below, which pumps the event loop: see
-    //cwUpdatable::beginTeardown().
+    //See cwUpdatable::beginTeardown().
     beginTeardown();
 
+    //Cancel without waiting: each scrap is triangulated from a
+    //cwTriangulateInData value copy (image, outline, stations, view matrix), so
+    //a worker that outlives this manager touches nothing that died with it. The
+    //result continuation is bound with context(this) and is dropped here. This
+    //line finishes the outer future; the cancel the worker itself sees comes
+    //from ~Restarter, which cancels the inner future synchronously as
+    //TriangulateRestarter is destroyed.
     TriangulateRestarter.future().cancel();
-    waitForFinish();
 }
 
 /**
@@ -320,7 +326,8 @@ void cwScrapManager::markScrapDirty(cwScrap* scrap)
             this, &cwScrapManager::scrapDeleted,
             Qt::UniqueConnection);
 
-    DirtyScraps.insert(scrap);
+    //Overwrites any earlier entry, so a re-mark refreshes the cached cave.
+    DirtyScraps.insert(scrap, DirtyScrap{scrap, scrap->parentCave()});
 }
 
 /**
@@ -355,14 +362,15 @@ cwUpdatable::State cwScrapManager::doUpdateState() const {
     // dispatched, a running task reports Working until it completes.
     // See cwUpdatable::State.
     const bool runnableDirty =
-        std::any_of(DirtyScraps.begin(), DirtyScraps.end(), &isRunnableScrap);
+        std::any_of(DirtyScraps.begin(), DirtyScraps.end(),
+                    [](const DirtyScrap& dirty) { return dirty.isRunnable(); });
     if(m_workPending && runnableDirty) { return cwUpdatable::State::Dirty; }
     if(isRunning())                    { return cwUpdatable::State::Working; }
     return cwUpdatable::State::Clean;
 }
 
 QFuture<void> cwScrapManager::doRun() {
-    return updateScrapGeometryHelper(cw::toList(DirtyScraps));
+    return updateScrapGeometryHelper(DirtyScraps.keys());
 }
 
 /**
@@ -389,7 +397,7 @@ void cwScrapManager::updateStationPositionChangedForScraps(QList<cwScrap *> scra
 
 void cwScrapManager::rerunDirtyScraps()
 {
-    updateScrapGeometry({DirtyScraps.begin(), DirtyScraps.end()});
+    updateScrapGeometry(DirtyScraps.keys());
 }
 
 /**
@@ -404,10 +412,10 @@ void cwScrapManager::scrapDeleted(QObject *scrapObj)
     //Whether this scrap was pending, not a state comparison across the removal.
     //This slot runs from cwScrap::destroyed, i.e. from ~QObject after ~cwScrap has
     //already run, so a "before" state would walk DirtyScraps with the dying scrap
-    //still in it and isRunnableScrap() would read it — a use-after-free that ASAN
+    //still in it and DirtyScrap::isRunnable() would read it — a use-after-free that ASAN
     //catches in [cwProject], which a release build survives only until the memory
     //is reused.
-    const bool wasPending = DirtyScraps.remove(scrap);
+    const bool wasPending = DirtyScraps.remove(scrap) > 0;
     m_sketchScrapBoundingBox.remove(scrap);
 
     //Deleting the last dirty scrap takes the pipeline Dirty -> Clean, which the
@@ -1159,7 +1167,9 @@ QFuture<void> cwScrapManager::updateScrapGeometryHelper(QList<cwScrap *> scraps)
     //     scrap->setTriangulationData(oldData);
     // }
 
-    const bool hasRunnableScrap = std::any_of(DirtyScraps.begin(), DirtyScraps.end(), &isRunnableScrap);
+    const bool hasRunnableScrap =
+        std::any_of(DirtyScraps.begin(), DirtyScraps.end(),
+                    [](const DirtyScrap& dirty) { return dirty.isRunnable(); });
 
     if(!hasRunnableScrap) {
         return currentRun();
@@ -1176,8 +1186,9 @@ QFuture<void> cwScrapManager::updateScrapGeometryHelper(QList<cwScrap *> scraps)
 
         //Running
         auto dirtyScrapsRange =
-            cw::toList(DirtyScraps)
-            | std::views::filter(&isRunnableScrap);
+            DirtyScraps.values()
+            | std::views::filter([](const DirtyScrap& dirty) { return dirty.isRunnable(); })
+            | std::views::transform([](const DirtyScrap& dirty) { return dirty.scrap; });
 
         QList<cwScrap*> dirtyScraps(dirtyScrapsRange.begin(), dirtyScrapsRange.end());
 
@@ -1642,7 +1653,7 @@ void cwScrapManager::taskFinished(const QList<cwScrap*>& scrapsToUpdate,
     }
 
     //Clear all the scraps that need to be update, because we are updating now
-    foreach(cwScrap* scrap, DirtyScraps) {
+    for(cwScrap* scrap : DirtyScraps.keys()) {
         disconnect(scrap, &cwScrap::destroyed, this, &cwScrapManager::scrapDeleted);
     }
     DirtyScraps.clear();
@@ -1744,5 +1755,5 @@ void cwScrapManager::waitForFinish()
 
 QList<cwScrap*> cwScrapManager::dirtyScraps() const
 {
-    return DirtyScraps.values();
+    return DirtyScraps.keys();
 }

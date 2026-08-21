@@ -18,10 +18,15 @@
 
 //Std includes
 #include <limits>
+#include <utility>
 
 cwLeadModel::cwLeadModel(QObject *parent) : QAbstractListModel(parent)
 {
-
+    //Derived from the model's own change signals, so every lead added, lead
+    //removed and cave switch announces the count from one place.
+    connect(this, &QAbstractItemModel::rowsInserted, this, &cwLeadModel::countChanged);
+    connect(this, &QAbstractItemModel::rowsRemoved, this, &cwLeadModel::countChanged);
+    connect(this, &QAbstractItemModel::modelReset, this, &cwLeadModel::countChanged);
 }
 
 cwLeadModel::~cwLeadModel()
@@ -168,16 +173,20 @@ void cwLeadModel::fullModelReset()
 
    beginResetModel();
 
-   //Remove all the scraps
-   foreach(cwScrap* scrap, ScrapToOffset.keys()) {
-       removeScrap(scrap);
+   //Remove all the scraps. The add pass below rebuilds the offsets, so this
+   //skips the per-scrap reindex that detachScrap() does.
+   for(cwScrap* scrap : std::as_const(AttachedScraps)) {
+       disconnect(scrap, nullptr, this, nullptr);
    }
+   AttachedScraps.clear();
+   ScrapToOffset.clear();
+   OffsetToScrap.clear();
 
    //Add all the scraps
    foreach(cwTrip* trip, cave()->trips()) {
        foreach(cwNote* note, trip->notes()->notes()) {
            foreach(cwScrap* scrap, note->scraps()) {
-               addScrap(scrap);
+               attachScrap(scrap);
            }
        }
    }
@@ -198,25 +207,83 @@ void cwLeadModel::fullModelReset()
  * @brief cwLeadModel::removeScrap
  * @param scrap
  *
- * This is a helper function that will remove a scrap to the leadModel. This will disconnect the
- * scrap from the model, and remove it from the offset database.
+ * Removes scrap from the leadModel, announcing the rows that its leads occupied.
  */
 void cwLeadModel::removeScrap(cwScrap *scrap)
 {
-    removeScrapFromOffsetDatabase(scrap);
-    disconnect(scrap, 0, this, 0);
+    const int leadCount = scrap->numberOfLeads();
+
+    if(leadCount == 0 || !ScrapToOffset.contains(scrap)) {
+        detachScrap(scrap);
+        return;
+    }
+
+    const int firstRow = ScrapToOffset.value(scrap);
+
+    beginRemoveRows(QModelIndex(), firstRow, firstRow + leadCount - 1);
+    detachScrap(scrap);
+    endRemoveRows();
 }
 
 /**
  * @brief cwLeadModel::addScrap
  * @param scrap
  *
- * This is helper function that will add scrap to the leadModel. This will connect the scrap
- * to the model and update offset database.
+ * Adds scrap to the leadModel, announcing the rows for the leads it arrives with.
+ * Loading a project and undoing a scrap removal both hand over a scrap that
+ * already holds leads.
  */
 void cwLeadModel::addScrap(cwScrap *scrap)
 {
-    Q_ASSERT(!ScrapToOffset.contains(scrap));
+    //fullModelReset() walks the cave and insertScraps() listens to the region
+    //tree, so the same scrap can arrive twice. The one the model holds stays put.
+    if(AttachedScraps.contains(scrap)) { return; }
+
+    const int leadCount = scrap->numberOfLeads();
+
+    if(leadCount == 0) {
+        attachScrap(scrap);
+        return;
+    }
+
+    const int firstRow = rowCount();
+
+    beginInsertRows(QModelIndex(), firstRow, firstRow + leadCount - 1);
+    attachScrap(scrap);
+    endInsertRows();
+}
+
+/**
+ * @brief cwLeadModel::detachScrap
+ * @param scrap
+ *
+ * Takes scrap out of the offset database and disconnects it, leaving the
+ * remaining scraps' offsets contiguous.
+ *
+ * This only uses scrap as a lookup key, which is all scrapDeleted() allows.
+ */
+void cwLeadModel::detachScrap(cwScrap *scrap)
+{
+    AttachedScraps.remove(scrap);
+    removeScrapFromOffsetDatabase(scrap);
+    updateOffsets();
+    disconnect(scrap, nullptr, this, nullptr);
+}
+
+/**
+ * @brief cwLeadModel::attachScrap
+ * @param scrap
+ *
+ * Puts scrap in the offset database and connects it to the model.
+ *
+ * attachScrap() and detachScrap() say nothing about rows, so callers that
+ * change the row count go through addScrap() and removeScrap() instead.
+ */
+void cwLeadModel::attachScrap(cwScrap *scrap)
+{
+    Q_ASSERT(!AttachedScraps.contains(scrap));
+
+    AttachedScraps.insert(scrap);
 
     if(scrap->numberOfLeads() > 0) {
         addScrapToOffsetDatabase(scrap);
@@ -240,19 +307,12 @@ void cwLeadModel::addScrap(cwScrap *scrap)
 
 /**
  * @brief cwLeadModel::updateOffsets
- * @param startScrap
  *
- * This updates all the offset's after startScrap
+ * This makes every scrap's offset the running sum of the preceding scraps' lead
+ * counts, preserving the current scrap order (OffsetToScrap is sorted by offset).
  */
-void cwLeadModel::updateOffsets(cwScrap *startScrap)
+void cwLeadModel::updateOffsets()
 {
-    Q_UNUSED(startScrap);
-
-    // Recompute every scrap's offset as the running sum of the preceding scraps'
-    // lead counts, preserving the current scrap order (OffsetToScrap is sorted by
-    // offset). This is correct whether startScrap's lead count merely changed or
-    // the scrap was already removed from the database (its last lead deleted) —
-    // the previous lowerBound(startScrap) lookup asserted in the latter case.
     const QList<cwScrap*> ordered = OffsetToScrap.values();
 
     OffsetToScrap.clear();
@@ -299,10 +359,7 @@ void cwLeadModel::endInsertLeads(int begin, int end)
     Q_UNUSED(begin);
     Q_UNUSED(end);
 
-    Q_ASSERT(qobject_cast<cwScrap*>(sender())  != nullptr);
-    cwScrap* scrap = static_cast<cwScrap*>(sender());
-
-    updateOffsets(scrap);
+    updateOffsets();
 
     endInsertRows();
 }
@@ -342,7 +399,7 @@ void cwLeadModel::endRemoveLeads(int begin, int end)
         removeScrapFromOffsetDatabase(scrap);
     }
 
-    updateOffsets(scrap);
+    updateOffsets();
 
     endRemoveRows();
 }
@@ -370,7 +427,11 @@ void cwLeadModel::leadDataUpdated(cwScrap* scrap, int begin, int end, const QLis
  * @brief cwLeadModel::scrapDeleted
  * @param scrapObj
  *
- * Called when a scrap is deleted.
+ * Called when a scrap is deleted. The region tree model announces scrap removal
+ * for cave, trip, note and scrap deletion alike, so removeScraps() handles those
+ * while the scrap is still whole. This detaches quietly for the rest: a scrap
+ * dying with its parent, and cwNote::setScraps(), which announces a scrapsReset()
+ * that the region tree model leaves alone.
  *
  * Note: this is connected to QObject::destroyed(QObject*), which fires from
  * inside ~QObject() after the cwScrap-derived vtable has been reset. That
@@ -381,7 +442,7 @@ void cwLeadModel::leadDataUpdated(cwScrap* scrap, int begin, int end, const QLis
 void cwLeadModel::scrapDeleted(QObject *scrapObj)
 {
     cwScrap* scrap = static_cast<cwScrap*>(scrapObj);
-    removeScrap(scrap);
+    detachScrap(scrap);
 }
 
 /**

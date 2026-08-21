@@ -24,7 +24,10 @@
 #include "cwNoteLiDAR.h"
 #include "cwSurveyNoteLiDARModel.h"
 #include "cwScrap.h"
+#include "SplayFixtureHelper.h"
+#include "cwSurveyChunk.h"
 #include "cwLead.h"
+#include "cwUnits.h"
 #include "cwLinePlotManager.h"
 #include "cwErrorListModel.h"
 #include "cwRootData.h"
@@ -61,6 +64,14 @@
     } while (false)
 
 namespace {
+//! The resolution note scans are usually imported at
+constexpr int kFixtureDotsPerInch = 300;
+constexpr int kFixtureDotsPerMeter =
+    static_cast<int>(cwUnits::convert(kFixtureDotsPerInch,
+                                      cwUnits::DotsPerInch,
+                                      cwUnits::DotsPerMeter));
+constexpr QSize kFixtureImageSize(1024, 1024);
+
 std::unique_ptr<LfsServer> g_syncLfsServer;
 std::atomic<int> g_tempSubdirCounter{0};
 
@@ -463,6 +474,25 @@ int TestHelper::noteScrapCount(cwNote* note) const
     return note->scraps().size();
 }
 
+cwNote* TestHelper::addNoteWithScrap(cwTrip* trip, const QString& noteName) const
+{
+    if (trip == nullptr) {
+        return nullptr;
+    }
+
+    cwImage image;
+    image.setPath(noteName + QStringLiteral(".png"));
+    image.setOriginalSize(kFixtureImageSize);
+    image.setOriginalDotsPerMeter(kFixtureDotsPerMeter);
+
+    auto* note = new cwNote();
+    note->setName(noteName);
+    note->setImage(image);
+    note->addScrap(new cwScrap());
+    trip->notes()->addNotes({note});
+    return note;
+}
+
 QVariantMap TestHelper::scrapOutlineState(cwNote* note, int scrapIndex) const
 {
     if (note == nullptr || scrapIndex < 0 || scrapIndex >= note->scraps().size()) {
@@ -535,6 +565,21 @@ bool TestHelper::addScrapLead(cwNote* note,
     return true;
 }
 
+bool TestHelper::removeScrapLead(cwNote* note, int scrapIndex, int leadIndex) const
+{
+    if (note == nullptr) {
+        return false;
+    }
+
+    cwScrap* scrap = note->scrap(scrapIndex);
+    if (scrap == nullptr || leadIndex < 0 || leadIndex >= scrap->numberOfLeads()) {
+        return false;
+    }
+
+    scrap->removeLead(leadIndex);
+    return true;
+}
+
 bool TestHelper::addLiDARStation(cwNoteLiDAR* note,
                                  const QString& name,
                                  const QVector3D& positionOnNote) const
@@ -576,6 +621,38 @@ bool TestHelper::liDARSurveyNetworkIsEmpty(cwNoteLiDAR* note) const
     }
 
     return cave->network().isEmpty();
+}
+
+void TestHelper::addStationSplay(cwSurveyChunk* chunk,
+                                 int stationIndex,
+                                 const QString& distance,
+                                 const QString& compass,
+                                 const QString& clino) const
+{
+    if (chunk == nullptr || stationIndex < 0 || stationIndex >= chunk->stationCount()) {
+        return;
+    }
+
+    QList<cwShotMeasurement> splays = chunk->stationSplays(stationIndex);
+    splays.append(makeSplay(distance, compass, clino));
+    chunk->setStationSplays(stationIndex, splays);
+}
+
+QVariantList TestHelper::a4SplayReadings() const
+{
+    QVariantList readings;
+    const QList<cwShotMeasurement> splays = a4Splays();
+    readings.reserve(splays.size());
+
+    for (const cwShotMeasurement& splay : splays) {
+        readings.append(QVariantMap {
+            {QStringLiteral("distance"), splay.distance.value()},
+            {QStringLiteral("compass"), splay.compass.value()},
+            {QStringLiteral("clino"), splay.clino.value()}
+        });
+    }
+
+    return readings;
 }
 
 QString TestHelper::firstUnusedTripStationName(cwTrip* trip,

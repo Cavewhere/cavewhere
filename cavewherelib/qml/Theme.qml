@@ -24,6 +24,9 @@ QtObject {
     readonly property color textSubtle: dark ? "#9fa6b1" : "#616469"
     readonly property color textInverse: dark ? "#111318" : "#f5f5f5"
     readonly property color textLink: dark ? "#85c1f4" : "#1d4d77"
+    // Red foreground for an invalid value (e.g. an out-of-domain coordinate cell),
+    // legible on the page background in both themes — danger is a fill, not text.
+    readonly property color errorText: dark ? "#f47067" : "#cf222e"
 
     // Accents & states
     readonly property color accent: palette.accent
@@ -41,6 +44,27 @@ QtObject {
     readonly property color hover: Qt.lighter(highlight, dark ? 1.4 : 1.15)
     readonly property color icon: palette.buttonText
     readonly property color tag: dark ? "#656565" : border
+
+    // Splays: wall shots that hang off a station instead of joining the
+    // centerline. An earth tone keeps them apart from the survey data they sit
+    // next to without reading as an error.
+    readonly property color splaySurface: dark ? "#322a1a" : "#f7f1e3"
+    readonly property color splayBorder: dark ? "#c9a35e" : "#8a6d3b"
+    readonly property color splayText: dark ? "#c9a35e" : "#8a6d3b"
+
+    // How far back the blank row at the bottom of an open splay cluster sits
+    // while it waits for a reading. Qt Quick draws no dashed border without
+    // Shapes, which the survey table stays clear of, so it fades instead.
+    readonly property real splayWaitingOpacity: 0.55
+
+    // The round "+" a station with no splays offers while the pointer is over
+    // its Splays cell. It reads as a button in a 50pt station row, where the
+    // small-sized glyph it replaced read as a stray character. The bars that
+    // draw the "+" span a little under half the button, leaving a ring of the
+    // button's own fill around them.
+    readonly property int splayEntryButtonSize: 28
+    readonly property int splayEntryGlyphThickness: 2
+    readonly property real splayEntryGlyphSpan: 0.45
 
     // Lines and outlines
     readonly property color border: dark ? "#4a4f58" : "#d3d3d3"
@@ -150,6 +174,20 @@ QtObject {
     readonly property int iconSizeSmall: 24
     readonly property int iconSizeMedium: 32
 
+    // Coordinate-system picker: keep the UTM zone spinbox and N/S combo
+    // compact so mode + zone + hemisphere fit one row without overflowing the
+    // project panel or a fix-station table cell.
+    readonly property int csZoneFieldWidth: 84
+    readonly property int csHemisphereFieldWidth: 64
+    // Cap the inline Custom resolved-name label so a long CRS name elides
+    // instead of stretching the picker past its host cell / wrapping the Flow.
+    readonly property int csResolvedLabelMaxWidth: 180
+    // The whole-coordinate field in the inline fix-station editor: wide enough
+    // for a UTM triple with its elevation unit, e.g.
+    // "610016.792, 5615117.075, 2545.34m". Also caps the error line below it, so
+    // a long message wraps inside the popup instead of widening it.
+    readonly property int fixPopupCoordinateWidth: 260
+
     // Touch target sizing — scale up hit points on mobile builds
     readonly property real pointSizeFactor: RootData.mobileBuild ? 2.0 : 1.0
 
@@ -164,9 +202,9 @@ QtObject {
     readonly property int statsPadding: 10
     readonly property int floatingToolbarPadding: 12
     readonly property int infoColumnMaxWidth: 200
-    // The info column grows while its settings are being edited so the wider
-    // coordinate-system editor (mode + UTM zone + hemisphere) isn't clipped.
-    readonly property int infoColumnEditMaxWidth: 320
+    // Comfortable width for an inline banner that floats over a page: wide
+    // enough to read a sentence or two without crowding the page behind it.
+    readonly property int inlineBannerWidth: 460
 
     // Utility
     readonly property color transparent: "#00000000"

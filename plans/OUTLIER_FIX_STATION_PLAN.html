@@ -90,6 +90,9 @@ where the user can act on it. Grows out of <a href="https://github.com/Cavewhere
   <a href="#tests">9. Test plan</a><br>
   <a href="#risks">10. Risks &amp; open decisions</a><br>
   <a href="#scope">11. Out of scope (v2)</a><br>
+  <a href="#fewcaves">12. Commit 6 — the few-caves case</a><br>
+  <a href="#usability">13. Usability &amp; error-handling backlog</a><br>
+  <a href="#commit9followups">14. Follow-ups raised by the Commit 9 review</a><br>
 </div>
 
 <h2 id="problem">2. Problem &amp; precision math</h2>
@@ -147,7 +150,10 @@ public:
     QString warningMessage() const;                    // render-view summary ("" when clean)
     int outlierCount() const;
 
-public slots:
+private:
+    // Landed private (not a public slot): the self-owned connections — each cave's
+    // fix stations + the region CS — invoke it; no external caller. Tracks offending
+    // caves in QSet&lt;cwCave*&gt; m_cavesWithWarning (rows found by stable errorTypeId).
     void revalidate();          // recompute + append/remove cwError on each cave
 
 signals:
@@ -264,8 +270,12 @@ caves 100 km apart would form two clusters — a large <code>s</code>, nothing f
 <p>This math is the <b>pure static</b> <code>cwFixStationValidator::classifyCandidates()</code> from §3 — no
 region, no side effects, so the threshold logic is unit-testable with hand-built candidates.
 <code>currentClassification()</code> wraps it with the gather/reproject step. Both
-<code>recomputeWorldOrigin()</code> (via <code>robustWorldOrigin()</code>) and the per-cave attribution consume
-the same classification — one gather, two readers.</p>
+<code>recomputeWorldOrigin()</code> (via <code>robustWorldOrigin()</code>) and the per-cave attribution run the
+<i>same</i> classification logic. Note they do <b>not</b> share a single gather: each call to
+<code>currentClassification()</code> re-runs <code>gatherCandidates()</code>, so a solve that recomputes the
+origin and then revalidates (Commit 3) gathers twice. That is acceptable at solve-time (not per-frame);
+if Commit 3 wants one gather per solve, cache <code>currentClassification()</code>'s result and invalidate it
+on the same triggers that drive <code>revalidate()</code>.</p>
 
 <h2 id="robust">5. Robust world origin <span class="pill edit">behavior change</span></h2>
 <p>Today <code>recomputeWorldOrigin()</code> sets the origin to the <b>mean</b> of all fixes. The mean is not
@@ -330,7 +340,7 @@ wired into existing components.</p>
     <td>Top-anchored banner over the 3D view: "Part of your survey is off-screen — a fix-station coordinate
     in <i>[Cave]</i> looks wrong." Directly answers "why isn't my data rendering?"</td>
     <td>New overlay copying <code>LazClipInteractionView.qml:182-199</code> (top-anchored <code>ErrorHelpBox</code>
-    bound to a string), reading a new <code>cwCavingRegion</code> summary property.</td>
+    bound to a string), reading a new <code>cwFixStationValidator</code> summary property.</td>
     <td><span class="pill edit">medium</span></td>
   </tr>
 </table>
@@ -378,15 +388,14 @@ wired into existing components.</p>
   <li><span class="pill new">new</span> tests — <code>SignalSpy</code> on <code>cave.errorModel().warningCount</code>;
   warning appears on typo, clears on correction, updates in place on edit. Lights up the cave-list badge for free.</li>
 </ul>
-<div class="callout warn">
-  <b>Review before implementing — empty global CS.</b> When <code>geoReference()-&gt;globalCoordinateSystem()</code>
-  is empty, <code>gatherCandidates()</code> takes every fix's <i>raw</i> coordinate with no reprojection target
-  (<code>cwFixStationValidator.cpp:151-153</code>), so two caves whose fixes use <i>different</i> input CSs would be
-  compared as raw eastings and a legitimate station could be flagged. It mirrors today's
-  <code>recomputeWorldOrigin()</code> behavior and is harmless while nothing triggers classification without a
-  global CS — but Commit 3 wires the self-owned triggers, which is exactly where that assumption stops holding.
-  Decide here: skip classification when the global CS is empty (recommended), or require a global CS before
-  gathering. Add a test for the empty-global-CS + mixed-input-CS case.
+<div class="callout ok">
+  <b>Decided (implemented) — empty global CS ⇒ skip classification.</b> When
+  <code>geoReference()-&gt;globalCoordinateSystem()</code> is empty there is no common frame to reproject into, so
+  <code>currentClassification()</code> now short-circuits to an empty result and the old <i>raw</i>-coordinate
+  fallback branch was <b>removed</b> from <code>gatherCandidates()</code> (its sole caller now guarantees a
+  non-empty CS). This also means <code>robustWorldOrigin()</code> returns <code>nullopt</code> with no global CS,
+  so <code>recomputeWorldOrigin()</code> leaves the origin untouched — the intended behavior. Covered by the test
+  "revalidate raises no warning without a region global CS" (empty-global-CS + mixed-input-CS).
 </div>
 
 <h3><span class="commit">Commit 4</span> — CavePage banner (QML)</h3>
@@ -409,6 +418,15 @@ wired into existing components.</p>
   <li><span class="pill new">new</span> QML test — overlay visible when a cave has an outlier; a link/hint routes
   the user toward the cave's fix stations.</li>
 </ul>
+
+<div class="callout warn">
+  <b>Follow-up (review, out of scope for Commit 5) — banners can overlap.</b> The outlier overlay takes the same
+  top-center <code>topMargin:20</code> slot as the LazClip help/error boxes (<code>LazClipInteractionView.qml</code>),
+  and the two visibility conditions are independent, so an active Clip tool plus a live outlier stack both banners on
+  the same pixels. The right fix is a shared <b>banner manager</b> (a <code>ListView</code>/<code>Repeater</code> that
+  owns and lays out the render-view banners) so overlays queue instead of overlapping — a broader render-view UI change,
+  not a Commit-5 concern.
+</div>
 
 <div class="callout ok">
   <b>Each commit is independently green.</b> 1 adds dormant pure code; 2 is a self-contained behavior change; 3
@@ -436,20 +454,36 @@ wired into existing components.</p>
   the existing renamed <code>tst_DataMainPage_globalCS.qml</code> stays green.</li>
   <li>Run both suites before pushing (repo rule). Logs to <code>/tmp/</code>.</li>
 </ul>
+<p class="mono-note"><b>Added by Commits 6–9</b> (the list above covers only Commits 1–2):
+<code>test_cwCoordinateTransform.cpp</code> (<code>domainCheck</code> axis attribution, incl. the past-the-pole
+wrap case) · <code>test_cwErrorListModel.cpp</code> (<code>warningMessagesForTypeIds</code> scoping) ·
+<code>test_cwFixStationModel.cpp</code> (per-component domain roles, <code>StationErrorRole</code>, whitespace
+trimming, globalCS fallback) · <code>test_cwFixStationValidator.cpp</code> (598 reference warnings) ·
+<code>test_cwLinePlotManager.cpp</code> (the endless-re-solve regression — deadline-based, anchored on a real solve) ·
+<code>test_cwCave.cpp</code> (<code>setSurveyNetwork</code> equality guard) · <code>test_cwSurveyNetwork.cpp</code>
+(<code>hasStation</code>) · <code>tst_FixStationPage.qml</code> (inline warnings + the U4 red-cell tint) ·
+<code>tst_CavePage_outlierWarning.qml</code> (the U9 badge).</p>
 
 <h2 id="risks">10. Risks &amp; open decisions</h2>
 <table>
   <tr><th>Item</th><th>Note</th></tr>
   <tr><td><b>Trigger timing</b></td><td>The validator owns its own connections to each cave's
   <code>fixStations</code> signals, so it re-runs on a coordinate <i>edit</i> independent of the solve/origin
-  gate. Resolved by design in Commit 3 — no reliance on the line-plot re-firing.</td></tr>
+  gate. Resolved by design in Commit 3 — no reliance on the line-plot re-firing.
+  <span class="mono-note"><b>No longer wholly true after Commit 9.</b> The new <b>598</b> reference check is judged
+  against <code>cave-&gt;network()</code>, which only a line-plot solve populates, so an unknown-station reference stays
+  undetected until a solve has run (<code>classifyStationReference</code> defers on an empty network). The 596/597
+  cluster and domain checks remain solve-independent as described.</span></td></tr>
   <tr><td><b>Ownership / lifetime</b></td><td>Region constructs the validator after <code>geoReference</code> and
   <code>caves</code> exist; validator holds a raw <code>cwCavingRegion*</code> parent back-pointer (it is a child
   QObject, dies with the region). It must rewire per-cave connections as caves are added/removed.</td></tr>
   <tr><td><b>False positives</b></td><td>A real, remote fix (e.g. a distant tie-in) would flag. Mitigated by
   Warning severity + suppression via <code>errorTypeId</code>. <code>kMadMultiplier</code> tunable.</td></tr>
-  <tr><td><b>Few fixes</b></td><td>1–3 fixes → no cluster → detection off (by design). A two-fix survey with one
-  typo won't be caught; acceptable (nothing to compare against).</td></tr>
+  <tr><td><b>Few fixes</b></td><td><s>1–3 fixes → no cluster → detection off (by design); a two-fix survey with one
+  typo won't be caught; acceptable.</s> <b>Revised — this is the <i>common</i> case, not an edge.</b> "2–3 caves, one
+  with bad coordinates" is more likely than one survey with five clustered fixes, and the pooled-cluster rule catches
+  almost none of it (below the min, or a balanced split with no majority). Addressed in <b>Commit 6</b> (§12): a
+  neighbor-free per-fix CS-domain check as the primary signal, with the cluster rule relaxed to a secondary one.</td></tr>
   <tr><td><b>cwCave child aggregation</b></td><td>cwCave's errorModel does <i>not</i> roll up trip children today
   (wiring commented out). We append directly to the cave list, so no dependence on aggregation.</td></tr>
   <tr><td class="pill-cell"><b>Decision — Commit 2</b></td><td>Include robust origin? Recommended <b>yes</b> (it's
@@ -470,10 +504,1518 @@ wired into existing components.</p>
   <code>cwGeoReference::reproject(cwGeoPoint, inputCS) → std::optional&lt;cwGeoPoint&gt;</code> on the CS authority
   itself (blast radius: one method + 1–2 callers). Deferred because the duplication self-resolves in Commit 2; this
   is a further consolidation, and routing everything through the validator is a defensible alternative.</li>
+  <li><b>Shared <code>cwError</code> lifecycle helper</b> (surfaced by the Commit 3 review). <code>setCaveWarning()</code>
+  is now the <i>second</i> hand-rolled copy of the "own one suppressible <code>cwError</code> against an
+  <code>errorModel</code>, reconcile on text change (append / <code>setData(MessageRole)</code> in place / remove)"
+  pattern; the first is <code>cwTripCalibration</code>'s declination warning, and the two have already diverged
+  (this one sets an <code>errorTypeId</code>, the trip one doesn't). A shared <code>cwManagedError</code> (owns a
+  <code>cwError</code> + target <code>cwErrorModel*</code>; <code>set(message,type,typeId)</code> / <code>clear()</code>,
+  finding its row by stable <code>errorTypeId</code>) would collapse both. Blast radius: new small helper + 2 callers
+  (touches <code>cwTripCalibration</code>, unrelated to #596, so its own commit + tests).</li>
+  <li><b>Central <code>errorTypeId</code> registry</b> (surfaced by the Commit 3 review) &mdash; <b>DONE in Commit 6</b>.
+  Commit 6 added a second stable id (<code>597</code>), meeting the trigger this item named, so the
+  <code>enum class cwErrorTypeId : int</code> registry now lives in <code>cwError.h</code> with
+  <code>FixStationOutlier = 596</code> and <code>FixStationDomain = 597</code> (values pinned because the
+  suppression-serialization layer keys on them). <code>cwFixStationValidator</code> allocates and compares ids
+  through the enum instead of bare literals, giving one authoritative allocation point + collision guard. Note:
+  <code>cwError</code>'s <code>errorTypeId()</code>/<code>setErrorTypeId()</code> stay <code>int</code>-typed (the enum
+  is cast at that boundary); migrating the <code>cwError</code> API to the enum type is the still-deferred larger
+  refactor.</li>
+  <li><b>Tooltip-delay consistency</b> (nit, surfaced by the Commit 6 review). <span class="mono-note">Updated after
+  Commit 9: the component is now <code>InlineWarning</code> and there are <b>four</b> such tooltips — two per fix row
+  (station + domain) plus the new <code>FixStationErrorBadge</code> on both CavePage layouts — so the duplication this
+  item describes has grown.</span> The inline <code>InlineWarning</code>
+  tooltip on <code>FixStationPage.qml</code> uses <code>delay: 300</code>, while the rest of the app's explicit
+  <code>QC.ToolTip</code> delays use <code>500</code>. There is no <code>Theme</code> token for tooltip delay, so the
+  real cleanup is to add one (e.g. <code>Theme.tooltipDelay</code>) and route all tooltip delays through it, then
+  drop the literal. Cosmetic; batch with any future tooltip-token work.</li>
+</ul>
+
+<h2 id="fewcaves">12. Commit 6 — Detecting the few-caves case <span class="pill new">post-Commit-5 follow-up</span></h2>
+
+<div class="callout ok">
+  <b>Implemented</b> (dev_3, uncommitted; C++ + QML gates green). Resolutions of the open decisions below:
+  <ul>
+    <li><b>Domain bound → decision (a).</b> New <code>cwCoordinateTransform::isWithinDomain(cs, point)</code> queries
+    <code>proj_get_area_of_use()</code> for the CRS's lon/lat bbox, inverse-projects the fix to geographic, and flags it
+    when the result is non-finite or lands more than a <b>5° margin</b> outside the bbox. PROJ stays encapsulated in
+    <code>cwCoordinateTransform</code>; the validator never includes <code>&lt;proj.h&gt;</code>. Un-checkable CS
+    (empty / unparseable / unknown area of use) returns <i>within</i> — it never cries wolf, deferring to the cluster rule.</li>
+    <li><b>Distinct errorTypeId.</b> Domain warnings use <code>kDomainErrorTypeId = 597</code> (cluster keeps
+    <code>596</code>), so the two kinds coexist on one cave and are suppressed independently. <code>setCaveWarning()</code>
+    is now keyed by id; a small <code>updateWarningTracking()</code> keeps <code>m_cavesWithWarning</code> correct while a
+    cave carries either.</li>
+    <li><b>Part B.</b> <code>kMinFixesForDetection</code> lowered <b>4 → 3</b>; domain-bad fixes are pulled out
+    (<code>Classification.domainOutliers</code>) <i>before</i> the cluster median, and are excluded from
+    <code>robustWorldOrigin()</code> via the inlier set.</li>
+    <li><b>Summary/overlay.</b> A domain outlier names the culprit first; <code>outlierCount</code> now totals both kinds;
+    the render-view message stays generic ("looks wrong").</li>
+    <li><b>Inline on the FixStationPage</b> (follow-up, additive). Because the domain check is <i>pure per-fix</i> (no
+    neighbours), it also surfaces right on the row that owns the coordinate: a read-only <code>DomainErrorRole</code> on
+    <code>cwFixStationModel</code> (computed from the row's own input CS via <code>isWithinDomain</code>, empty when
+    in-range or when the CS is blank) drives a warning icon + tooltip in both the wide and narrow row delegates. A blank
+    input CS defers to the region-level 596/597 path; the cave banner and world-origin exclusion are unchanged (kept
+    per the "both altitudes" decision).</li>
+  </ul>
+</div>
+
+<p>Commits 1–5 flag an outlier only when a <b>majority</b> of the pooled fix stations form one tight cluster and a
+<b>minority</b> stray from it. The realistic data shape is the opposite: <b>2–3 caves, one with a typo</b>, each cave
+carrying only one or two fixes. The pooled-cluster rule catches almost none of it, because the component-wise median
+center only sits on the real data when a majority is clustered there.</p>
+
+<table>
+  <tr><th>Real-world setup</th><th>Total fixes</th><th>Current behavior</th></tr>
+  <tr><td>2 caves, 1 fix each, one bad</td><td>2</td><td><b>Nothing</b> — below the min-4 floor</td></tr>
+  <tr><td>3 caves, 1 fix each, one bad</td><td>3</td><td><b>Nothing</b> — below the min-4 floor</td></tr>
+  <tr><td>2 caves, 2 fixes each, one cave bad</td><td>4</td><td><b>Nothing</b> — median center sits <i>midway</i>
+    between the two clusters, so the bad cave is only half the gap from center and the 6× threshold is enormous</td></tr>
+  <tr><td>1 cave w/ 4 good fixes + 1 cave w/ 1 bad fix</td><td>5</td><td><b>Caught</b> ✓ (the demo case: a clear
+    majority + one straggler)</td></tr>
+  <tr><td>2 caves legitimately ~300 km apart, minority has fewer fixes</td><td>≥4</td><td>Risk of a <b>false positive</b>
+    on the legitimate distant cave</td></tr>
+</table>
+
+<div class="callout warn">
+  <b>Key insight.</b> "Outlier relative to a cluster of <i>other</i> fixes" is the wrong question when there are only
+  2–3 caves. A fix-station coordinate is wrong in ways that need <b>no neighbors</b> to prove. So make a per-fix check
+  the primary signal (Part A), and demote the cluster rule to a complementary secondary signal (Part B).
+</div>
+
+<h3><span class="commit">Part A</span> — Per-fix CS-domain check <span class="pill new">primary signal</span></h3>
+<ul class="files">
+  <li>For each gathered fix, independent of clustering, test whether its coordinate is <b>plausible for its declared
+  input CS</b>. A transposed-digit UTM easting (<code>1478000</code> in UTM 13N) falls outside the projection's valid
+  domain; a fix that inverse-projects to a geographic location outside the CRS's area-of-use — or that makes PROJ error
+  outright — is almost certainly a typo. This catches the <b>single-cave, single-fix</b> case, which is the whole point.</li>
+  <li><b>Open decision — how to bound the domain.</b> (a) PROJ area-of-use via <code>proj_get_area_of_use()</code>
+  (needs a small accessor on <code>cwCoordinateTransform</code>), then bounds-check the reprojected lon/lat against it;
+  or (b) round-trip inverse-project to <code>EPSG:4326</code> and flag <code>NaN</code> / <code>|lat|&gt;90</code> /
+  <code>|lon|&gt;180</code> / gross out-of-zone. Prefer (a) if the accessor is cheap; (b) is the fallback. Both are
+  CS-agnostic — no hardcoded UTM ranges.</li>
+  <li><b>Attribution.</b> Same per-cave <code>errorModel</code> Warning as Commit 3, but a distinct message, e.g.
+  <i>"Fix station "X" has a coordinate outside the valid range for its coordinate system — check for a transposed digit
+  or the wrong CS/zone."</i> Open decision: a distinct <code>errorTypeId</code> vs. reusing <code>596</code> (affects
+  independent suppression of the two warning kinds — lean toward a distinct id, which also motivates the §11
+  <code>errorTypeId</code> registry).</li>
+  <li><b>Origin coupling.</b> A domain-bad fix must also be excluded from <code>robustWorldOrigin()</code> — fold it
+  into <code>Classification.outliers</code> so the inlier centroid ignores it, otherwise the typo still blows up the
+  world origin even though it's now flagged.</li>
+</ul>
+
+<h3><span class="commit">Part B</span> — Relax the cluster rule <span class="pill edit">secondary signal</span></h3>
+<ul class="files">
+  <li>Lower <code>kMinFixesForDetection</code> (4 → 3, possibly 2). With an <b>odd</b> count the component-wise median
+  lands on the majority, so "2 good + 1 bad" <i>is</i> caught; the pathological case is the <b>even balanced split</b>
+  (2 vs 2), which Part A's domain check covers instead.</li>
+  <li>Keep the ~84 km float-precision floor (<code>kOutlierFloorMeters</code>) and <code>kMadMultiplier</code>. Document
+  in the code that the cluster rule is <b>best-effort for small N</b> — the domain check is the reliable path; the
+  cluster check adds the wrong-CS-but-in-domain typo (declared the wrong zone, numbers are in-range) when a majority
+  reference exists.</li>
+  <li><b>Ordering.</b> Run Part A first and drop provably-bad fixes before computing the cluster's median center, so a
+  wild typo doesn't pull the center off the real data and mask a second, subtler outlier.</li>
+</ul>
+
+<h3>Tests (extend <code>test_cwFixStationValidator.cpp</code>)</h3>
+<ul>
+  <li>2 caves, 1 fix each, one out-of-domain → flagged (Part A; the cluster rule alone can't, N&lt;min and no majority).</li>
+  <li>3 caves, 1 fix each, one in-domain-but-wrong-CS → flagged via the relaxed cluster rule (Part B; odd count lands
+  the median on the majority).</li>
+  <li>2 caves, 2 fixes each, one cave out-of-domain → flagged (Part A); assert the balanced split alone would not.</li>
+  <li>Two caves legitimately ~300 km apart, all in-domain → <b>not</b> flagged (no false positive).</li>
+  <li>A domain-bad fix is excluded from <code>robustWorldOrigin()</code> (origin unmoved by the typo).</li>
+</ul>
+
+<div class="callout ok">
+  <b>Net.</b> Part A makes the feature work for the common 2–3-cave typo with no cluster required; Part B keeps the
+  original cross-cave signal as a bonus where a majority exists. The two together replace the "few fixes → acceptable"
+  concession in §10.
+</div>
+
+<h2 id="usability">13. Fix-station usability &amp; error-handling backlog <span class="pill new">post-detection workstream</span></h2>
+
+<p>Commits 1–6 make the app <b>detect</b> a bad fix-station coordinate. This section tracks the hands-on
+feedback about <b>living with fix stations</b> — entering them, reading the errors, and getting a new project
+into a real-world coordinate system in the first place. It is a distinct workstream from the detection math:
+mostly QML, plus a couple of small model/accessor additions. Item IDs <b>U1–U10</b> match the feedback list so
+they can be referenced directly; <b>U11–U12</b> were added later (see §13.8). A suggested commit grouping is in §13.7.</p>
+
+<div class="callout">
+  <b>All anchors below were confirmed against the tree</b> (dev_3, post-Commit-6). The two hubs almost every
+  item touches: <code>CSComboBox.qml</code> (the one CS picker reused by the project CS <i>and</i> every
+  fix-station row) and <code>FixStationPage.qml</code> (a <code>ListView</code>-based <code>TableStaticView</code>
+  with a wide <code>RowLayout</code> delegate and a narrow <code>Flow</code> delegate).
+</div>
+
+<table>
+  <tr><th>ID</th><th>Item</th><th>Area</th><th>Rough size</th></tr>
+  <tr><td><b>U1</b></td><td>Input CS column clips the UTM zone combo</td><td>CSComboBox / FixStationPage column width</td><td><span class="pill new">small</span></td></tr>
+  <tr><td><b>U2</b></td><td>Mark a station <b>Fixed</b> from the survey table (caret menu + badge + inline coords)</td><td>StationBox / StationMenu / cwFixStationModel</td><td><span class="pill edit">large</span></td></tr>
+  <tr><td><b>U3</b></td><td>Tab order broken on the Fix Stations page</td><td>shared table-input stack</td><td><span class="pill edit">medium (shared)</span></td></tr>
+  <tr><td><b>U4</b></td><td>Highlight <i>which</i> coordinate component is out of domain (red)</td><td>cwFixStationModel + cell styling</td><td><span class="pill new">small–medium</span></td></tr>
+  <tr><td><b>U5</b></td><td>Easting / Northing headers should read “Easting / Long”, “Northing / Lat”</td><td>FixStationPage column text</td><td><span class="pill ok">trivial</span></td></tr>
+  <tr><td><b>U6</b></td><td>New project’s first fix is still Local → cave renders far away; prompt/auto-set a <b>projected</b> output CS</td><td>validator/region + a QML prompt</td><td><span class="pill edit">medium</span></td></tr>
+  <tr><td><b>U7</b></td><td>Project UTM zone spinbox + N/S combo overflow the box</td><td>CSComboBox widths</td><td><span class="pill ok">trivial</span></td></tr>
+  <tr><td><b>U8</b></td><td>Project CS as a 3-line GroupBox (combo · CS name · EPSG); UTM shows only EPSG today</td><td>DataMainPage + CSComboBox</td><td><span class="pill new">small</span></td></tr>
+  <tr><td><b>U9</b></td><td>Badge next to the “Fix stations:” line on CavePage when a fix errors</td><td>CavePage</td><td><span class="pill new">small</span></td></tr>
+  <tr><td><b>U10</b></td><td>Error on a fix row whose station name is <b>empty</b> or <b>doesn’t exist</b> in the cave’s survey</td><td>cwFixStationModel + FixStationPage row</td><td><span class="pill new">small–medium</span></td></tr>
+  <tr><td><b>U11</b></td><td><b>Free-form coordinate entry</b> — paste a whole coordinate as one string instead of three fields (<a href="https://github.com/Cavewhere/cavewhere/issues/621">#621</a>)</td><td>new C++ parser + FixStationPage row + FixStationPopup</td><td><span class="pill edit">medium–large</span></td></tr>
+  <tr><td><b>U12</b></td><td>The inline <b>fix popup shows no errors at all</b> — no domain flag, no station-reference flag, no message line</td><td>FixStationPopup</td><td><span class="pill new">small–medium</span></td></tr>
+</table>
+
+<h3 id="cspicker">13.1 — The coordinate-system picker (U1, U7, U8)</h3>
+<div class="callout ok"><b>Superseded by the Commit 7 callout + review-refactor below (§13.6).</b> The prose in this
+subsection was the pre-implementation sketch: it predates the split of the picker into
+<code>CSPicker</code> (core controls) + <code>CSComboBox</code> (inline shell) + <code>CSFormat</code>
+(presentation), so its line-number citations and the "flat <code>RowLayout</code>" / <code>Layout.preferredWidth</code>
+descriptions are stale. Read it for the U1/U7/U8 <i>intent</i> only; the shipped structure is described in §13.6.
+One correction of record: <code>CSComboBox</code> is used by the project CS and fix-station rows <b>only</b> —
+<code>CoordinatePickerPopup.qml</code> does <i>not</i> use it (host-inventory error below).</div>
+<p>One component, <code>CSComboBox.qml</code>, is the shared CS picker for the project CS
+(<code>DataMainPage.qml:186-195</code>, <code>allowGeographic:false</code>), every fix-station row
+(<code>FixStationPage.qml:112-121</code> wide, <code>:363-365</code> narrow, <code>allowGeographic:true</code>),
+and <code>CoordinatePickerPopup.qml</code>. It is a flat <code>RowLayout</code> (<code>CSComboBox.qml:55</code>) of:
+mode combo (<code>:62-101</code>), UTM zone <code>SpinBox</code> (<code>:103-119</code>), N/S combo
+(<code>:121-132</code>), resolved-CS label (<code>:134-143</code>). U1/U7/U8 all live here, so do them as one pass.</p>
+<ul>
+  <li><b>U7 (root cause of U1 too).</b> Neither the zone <code>SpinBox</code> (<code>CSComboBox.qml:103</code>) nor
+  the N/S combo (<code>:121</code>) has a width cap, and the resolved label is <code>Layout.fillWidth</code>
+  (<code>:134</code>). On the project page they push past the panel edge; in a fix-station row they overflow the
+  fixed 140&nbsp;px CS cell. Fix: give the zone spinbox and hemisphere combo a <code>Layout.preferredWidth</code>
+  sized for their content (2-digit zone, single N/S letter). This one edit relieves both surfaces.</li>
+  <li><b>U1 (column clipping).</b> The row CS picker sits in <code>CSCell</code> — <code>implicitWidth: columnWidth</code>
+  with <code>clip:true</code> (<code>FixStationPage.qml:108-117</code>), where <code>columnWidth</code> = the
+  <code>csColumn</code> width <b>140</b> (<code>:146</code>). In UTM mode the extra controls appear inside that clipped
+  140&nbsp;px cell and are cut off. Fix: after U7 shrinks the controls, widen the Input CS column to fit UTM mode
+  (raise <code>csColumn.columnWidth</code>, or let the column grow to content). Verify under both the project’s
+  <code>Layout.fillWidth</code> host and the clipped fixed-width cell (the two differ).</li>
+  <li><b>U8 (friendly name + 3-line GroupBox).</b> Today <code>resolvedDescription</code>
+  (<code>CSComboBox.qml:22-28</code>) returns the bare <code>value</code> (EPSG) for UTM and only appends a name for
+  <i>Custom</i> — so UTM shows just <code>EPSG:326xx</code>. The human name is available for any valid CS:
+  <code>CoordinateSystem.nameFor(cs)</code> → PROJ <code>proj_get_name</code>
+  (<code>cwCoordinateTransform.cpp:430,456</code>) yields e.g. “WGS 84 / UTM zone 13N”. Fix: on the <b>project</b> CS
+  surface (<code>DataMainPage.qml:186-195</code>), wrap the picker in a <code>GroupBox</code> with three lines —
+  (1)&nbsp;the mode combo (+ UTM zone/hemi), (2)&nbsp;the CS name via <code>nameFor(value)</code>, (3)&nbsp;the EPSG
+  code — and make UTM show the name, not only the code. The read-only mirror <code>coordinateSystemText</code>
+  (<code>DataMainPage.qml:106-116</code>) has the same UTM-only-EPSG behavior; fold it in or drop it.
+  <br><span class="mono-note">Open decision: the 3-line GroupBox is for the project CS only; a fix-station table row
+  can’t afford three lines, so rows keep the compact inline form (name in the resolved label is enough there).</span></li>
+</ul>
+
+<h3 id="fixrows">13.2 — Fix Stations page rows (U3, U4, U5)</h3>
+<ul>
+  <li><b>U5 (headers).</b> Column labels are set on <code>TableStaticColumn</code>: easting <code>"Easting"</code>
+  (<code>FixStationPage.qml:143-147</code>), northing <code>"Northing"</code> (<code>:148-152</code>). For a lat/lon
+  input CS these fields are really longitude/latitude. Cheapest fix: relabel to <code>"Easting / Long"</code> and
+  <code>"Northing / Lat"</code> (the narrow <code>Flow</code> has no headers, so only the wide layout changes). A
+  CS-aware header (switch label by the row’s mode) is possible but the header is per-column while the CS is per-row,
+  so a static combined label is the pragmatic call.</li>
+  <li><b>U4 (which component is bad).</b>
+  <span class="pill ok">Implemented (Commit 9)</span> <code>cwCoordinateTransform::isWithinDomain</code> was refactored to
+  delegate to a new <code>domainCheck(cs, point)</code> that returns a <code>{eastingValid, northingValid}</code> struct
+  (longitude gates the easting, latitude the northing); the cached PROJ path is unchanged and <code>isWithinDomain</code>
+  is now exactly "both valid". The model exposes two new read-only bool roles <code>EastingDomainErrorRole</code> /
+  <code>NorthingDomainErrorRole</code>, and the page tints just the offending coordinate cell red via a new
+  <code>error</code> flag on <code>FixField</code> (<code>Theme.errorText</code>). Elevation is never flagged — z is not
+  part of the domain test. The row-end <code>DomainErrorRole</code> icon (renamed component <code>InlineWarning</code>)
+  still carries the explanation.
+  <br><b>Attribution caveat (found in the Commit 9 review).</b> “Longitude gates the easting, latitude the northing”
+  only holds while the inverse projection stays near the domain. A northing far past the pole wraps the longitude
+  ~180° — EPSG:32613 at <code>478000E / 14430000N</code> inverts to <b>75E / 50N</b>, a latitude that still looks valid
+  and a longitude that does not — which tinted the <i>easting</i> for a bad <i>northing</i>. <code>domainCheck</code>
+  now declines to attribute when an already-failing longitude is more than 90° outside the domain and reports both
+  components suspect instead. Gated on <code>eastingValid</code> being false so a wide-domain (geographic) CS is never
+  dragged in; <code>isWithinDomain()</code> is unaffected either way.
+  <br><b>Blank per-row CS (found in the Commit 9 review).</b> The per-row check now falls back to the region’s
+  <code>globalCS</code> when a fix omits its own <code>inputCS</code> — matching <code>gatherCandidates()</code> and
+  <code>cwCave::recomputeGridConvergence</code>. Before, the cave-level 597 warning could fire while the page showed no
+  red cell and no icon. Refresh is wired in <code>cwCavingRegion</code> beside the existing
+  <code>recomputeGridConvergence</code> connect, via <code>cwCave::refreshFixStationDomainErrors</code>.
+  <span class="mono-note">Original sketch below — still accurate on the <i>problem</i>, but its “the coordinate cells
+  carry no error/color property” claim and all its line citations are now superseded by the implementation above.</span>
+  <br>The domain flag is a single row-level string: <code>DomainErrorRole</code>
+  (<code>cwFixStationModel</code>) drove one shared <code>DomainWarning</code> icon at the row’s end
+  (<code>FixStationPage.qml:76-100</code>, wide <code>:294-299</code> / narrow <code>:349-352</code> — all pre-Commit-9
+  locations). The coordinate
+  cells (<code>WideCell</code>/<code>FixField</code>, <code>:43-72</code>) carried no error/color property. Fix: have the
+  model attribute the domain failure to a component (easting vs northing vs elevation) and expose it — a per-field
+  role or a small flags role — then tint the offending cell red. Requires the domain check to identify the bad
+  component (e.g. easting outside the zone’s valid easting band vs northing outside the lat band) rather than just
+  “the point is out of domain”. <span class="mono-note">Relates to the §11 “per-fix-station-row flagging” item — that
+  was resolved at row granularity by <code>DomainErrorRole</code>; U4 is the finer per-component granularity.</span></li>
+  <li><b>U3 (tab order).</b> There is no focus wiring anywhere in the fix-station stack — no <code>KeyNavigation</code>,
+  <code>activeFocusOnTab</code>, or <code>nextItemInFocusChain</code> in <code>FixStationPage.qml</code>,
+  <code>CSComboBox.qml</code>, <code>TableStaticView.qml</code>, or <code>DoubleClickTextInput.qml</code>. The cells
+  (<code>FixField</code> → <code>DoubleClickTextInput</code> → <code>CoreClickTextInput</code>) host no focusable
+  editor; editing is deferred to a single shared overlay singleton, <code>GlobalShadowTextInput</code>
+  (<code>CoreClickTextInput.qml:39-40,78-117</code>), positioned over the double-clicked cell. With one shared editor
+  and no focus chain, Tab has nothing to traverse.
+  <div class="callout warn" style="margin-top:8px"><b>Bigger than a FixStationPage tweak.</b> The fix lives in the
+  shared <code>CoreClickTextInput</code>/<code>GlobalShadowTextInput</code>/<code>TableStaticView</code> stack, which
+  other tables use, so it must be designed and tested there: on Tab, commit the current overlay edit and advance to the
+  next cell/row (the overlay needs a notion of its “next cell”). Treat as its own change with a careful blast-radius
+  check, not a one-line addition.</div></li>
+</ul>
+
+<h3 id="markfixed">13.3 — Mark a station Fixed from the survey table (U2)</h3>
+<div class="callout ok">
+  <b>Implemented</b> (Commit 10; dev_3; C++ + QML gates green). The open decision below is resolved: <b>inline
+  popup</b>, as recommended — no routing to <code>FixStationPage</code>.
+  <ul>
+    <li><b>Model API (C++).</b> <code>cwFixStationModel</code> gained <code>indexOf(name)</code>,
+    <code>isFixed(name)</code>, <code>addFixStation(name)</code> and <code>removeFixStation(name)</code>. Name matching
+    is factored into one file-local <code>fixKey()</code> = trim then <code>cwStation::canonicalKey</code>, deliberately
+    the same rule <code>cwFixStationDiagnostics::classifyStationReference</code> resolves a fix by, so a fix survex
+    anchors fine can't read as a different station here. An empty name matches nothing, so a blank scaffold row is never
+    "the fix for no station".</li>
+    <li><b>Two corrections to the spec below.</b> (1) <code>addFixStation(name)</code> returns the <b>row index</b>
+    (<code>int</code>), not a <code>cwFixStation</code> — QML needs the row to edit through, and <code>cwFixStation</code>
+    isn't a <code>Q_GADGET</code>, so QML couldn't read its accessors anyway (already recorded in
+    <code>tst_FixStationPage.qml</code>). (2) <code>isFixed()</code> alone can't drive the badge: it's a lookup, not a
+    bindable property, so a new <code>fixedStationsChanged()</code> signal covers every way the answer can move.
+    <code>countChanged()</code> can't stand in — <b>renaming</b> a fix changes which station shows as Fixed without
+    changing how many fixes there are. <span class="mono-note"><b>Both halves of (2) were superseded by the
+    <code>StationFixedRole</code> follow-up below — see correction (3).</b></span></li>
+    <li><b>(3) Correction added 2026-07-26 — the badge is a model role, not a QML lookup.</b> Commit 10 shipped the badge
+    as an imperative <code>fixStations.isFixed(name)</code> call in <code>StationBox.qml</code>, made reactive by a
+    <code>_fixStationsRevision</code> counter bumped from <code>fixedStationsChanged</code>. The follow-up moved the
+    question onto <code>cwSurveyEditorModel</code> as a derived read-only <code>StationFixedRole</code>
+    (<code>roleNames()</code> = <code>"stationFixed"</code>), read by <code>DrySurveyComponent</code>'s
+    <code>required property bool stationFixed</code> and passed to <code>StationBox.stationIsFixed</code>; the counter,
+    the <code>Connections</code> and the cell's borrowed <code>fixStations</code> handle are all deleted. Three claims
+    above are now wrong:
+      <ul>
+        <li><code>fixedStationsChanged()</code> does <b>not</b> cover every way the answer can move. Renaming the
+        <b>station</b> is a chunk edit that fires no fix-model signal at all. That is why
+        <code>cwSurveyEditorModel::changedRolesFor()</code> exists — it adds <code>StationFixedRole</code> to the
+        <code>dataChanged</code> a <code>StationNameRole</code> edit already emits, at both emit sites. Commit 10's QML
+        got away with it only because <code>stationNameValue</code> was independently reactive.</li>
+        <li><code>isFixed()</code> has no QML caller left. It is called once, in C++, inside <code>data()</code>;
+        reactivity is ordinary <code>dataChanged</code>.</li>
+        <li><code>canFix</code> no longer consults a model — it is <code>fixStationPopup !== null</code> plus a non-empty
+        name — and <b>Remove Fix</b> calls a new <code>FixStationPopup.removeFixFor(name)</code> rather than reaching
+        through the popup for <code>removeFixStation</code>. The cell holds no <code>FixStationModel</code> handle.</li>
+      </ul>
+      Cave lookup rides <code>cwTrip::parentCaveChanged</code>, so a trip reparented or attached after
+      <code>setTrip</code> repoints at the right cave's fixes. Tests: thirteen sections in
+      <code>test_cwSurveyEditorModel.cpp</code>, mutation-checked against removal of the connection and of either emit
+      site's role list.</li>
+    <li><b>Caret only, not <code>StationMenu</code>.</b> The section offers "and/or"; the caret is what mirrors the
+    Exclude-distance template it calls the one to copy, and duplicating the action into the right-click menu would mean
+    two paths to keep in step. <code>StationBox</code> gained a focus-activated <code>ContextMenuButton</code> with
+    <b>Mark Station as Fixed</b> / <b>Edit Fixed Coordinates...</b> (one action, two labels — opening the editor creates
+    the fix when there isn't one) plus <b>Remove Fix</b>. Gated on <code>canFix</code>: a non-empty name and a
+    resolvable model, so the trailing virtual row offers nothing. <span class="mono-note">The "resolvable model" half is
+    now "a wired-up popup" — see correction (3).</span></li>
+    <li><b>The pill was extracted, not copied.</b> New shared <code>DataBoxBadge.qml</code> carries the cell-state pill;
+    <code>ShotDistanceDataBox</code>'s "Excluded" badge now uses it too, and <code>StationBox</code>'s "Fixed" badge is
+    three lines rather than a second copy of the same rectangle.</li>
+    <li><b>The popup lives at page level, not in the cell.</b> New <code>FixStationPopup.qml</code> is hosted by
+    <code>SurveyEditor</code> and injected down through <code>DrySurveyComponent</code> — the survey table destroys cell
+    delegates as they scroll out of view, which would take a cell-owned popup down with an open edit. It is positioned
+    once from the caret's item on open rather than anchored to it, for the same reason.</li>
+    <li><b><code>CSPicker</code>, not <code>CSComboBox</code>.</b> Commit 7 split the picker; the popup labels its own
+    rows, so it drives <code>CSPicker</code> directly and adds a <code>CSFormat.displayName</code> line the way
+    <code>OutputCSPrompt</code> does. <span class="mono-note"><b>Trap found in review:</b> <code>CSPicker</code> does not
+    own its <code>value</code> — the table rows feed it back from the model role they're bound to. A host that fills its
+    fields imperatively (this popup does, since roles are read through <code>data()</code>, which no binding can depend
+    on) has to write the committed CS back into the picker itself, or its controls keep showing the CS the fix had
+    before.</span></li>
+    <li><b>Dismissal.</b> Escape or <b>Done</b>, plus an auto-close when the editor model's focused cell moves — the
+    popup isn't modal, so left open it would float over the cells the user moved on to. Deliberately <i>not</i>
+    <code>CloseOnPressOutside</code>: the CS picker opens popups of its own (mode combo, Custom CRS dialog), and a press
+    in one of those is a press outside this one. Coordinate fields carry a <code>DoubleValidator</code> so
+    <code>editingFinished</code> can't commit a <code>NaN</code> into the line plot.</li>
+    <li><b>Tests.</b> C++: name lookup / trim + case-insensitivity / no-double-anchor / remove-by-name / one case per
+    way <code>fixedStationsChanged</code> must and must not fire, in <code>test_cwFixStationModel.cpp</code>. QML: new
+    <code>tst_MarkStationFixed.qml</code> — blank station offers no caret, mark adds the fix, badge tracks the rows
+    (including the rename case), marking twice doesn't duplicate, Remove Fix drops it, and the popup edits coordinates +
+    CS in place and re-reads them on reopen.</li>
+  </ul>
+</div>
+<p>Today the only way to fix a station is to open <code>FixStationPage</code>. U2 wants it inline on the survey
+table: right-click / caret a station and mark it Fixed, show a badge, and enter coordinates without leaving the page.
+The <b>“Exclude distance”</b> feature is the exact template to copy.</p>
+<ul>
+  <li><b>Reuse targets.</b> Focus-activated caret loader: <code>ShotDistanceDataBox.qml:52-84</code> +
+  <code>ContextMenuButton.qml</code> (a caret <code>RoundButton</code> that <code>popup()</code>s a menu). Menu action
+  toggling a model role: <code>ShotDistanceDataBox.qml:73-81</code>. The “Excluded” pill badge:
+  <code>ShotDistanceDataBox.qml:27-50</code> — the template for a “Fixed” badge.</li>
+  <li><b>Where it goes.</b> Station cells are <code>StationBox.qml</code> (no caret today; it wires a right-click
+  <code>StationMenu.qml:17-25</code>). Add a “Mark station as Fixed” item to <code>StationMenu.qml</code> and/or a
+  focus caret on <code>StationBox</code>, plus a “Fixed” badge. Gate on a non-empty station name — trailing
+  virtual/auto-name rows exist (<code>StationBox.qml:44-60</code>); the name value is
+  <code>dataValue.reading.value</code>.</li>
+  <li><b>Model support (C++).</b> A cave owns one <code>cwFixStationModel</code> (<code>cwCave.h:50,81</code>). The
+  QML-facing <code>addFixStation()</code> takes <b>no args</b> and appends a blank row
+  (<code>cwFixStationModel.cpp:146</code> — the <code>:182-194</code> this line used to cite was moved by commits 8/9);
+  stations are keyed only by <code>stationName</code> string + a
+  <code>QUuid</code> with no dedup. Add a convenience <code>Q_INVOKABLE cwFixStation addFixStation(const QString&amp;
+  name)</code> with a name-lookup guard (don’t double-add an already-fixed station), and an
+  <code>Q_INVOKABLE bool isFixed(const QString&amp; name)</code> (or a role) so the badge can reflect state.</li>
+  <li><b>Coordinate entry — recommended inline.</b> After marking Fixed, let the user enter easting/northing/CS in a
+  small inline element (a popup/expander anchored to the caret, reusing <code>CSComboBox</code>) rather than bouncing
+  to <code>FixStationPage</code>. The fallback (route to <code>FixStationPage</code>) is simpler but loses context.
+  <span class="mono-note"><b>Decided — inline popup</b> (Commit 10). Built on <code>CSPicker</code>, not
+  <code>CSComboBox</code>: Commit 7 split the picker and this popup labels its own rows. See the callout above.</span></li>
+  <li><b>Biggest item</b> — own commit(s). Sub-steps: (a) model API + <code>isFixed</code>; (b) caret + menu item;
+  (c) Fixed badge; (d) inline coordinate popup; (e) tests (mark → appears in <code>cave.fixStations</code>; badge on;
+  no double-add).</li>
+</ul>
+
+<h3 id="firstfix">13.4 — New project: derive a projected output CS from the first fix (U6)</h3>
+<div class="callout ok">
+  <b>Implemented</b> (Commit 8; dev_3, uncommitted; C++ + QML gates green). Decision (b) — auto-derive with a confirm —
+  with the prompt shown on the <b>Fix Stations page</b>, the <b>Data page</b>, and the <b>3D view</b> (not CavePage):
+  <ul>
+    <li><b>Pure derivation.</b> New <code>cwCoordinateTransform::deriveProjectedOutputCS(inputCS, point)</code>: an
+    already-projected input passes through; a geographic input transforms to WGS84 (axis order normalized to x=lon) and
+    returns the <b>UTM zone</b> containing the fix via <code>utmZoneToEpsg</code>; empty/invalid input → "". PROJ stays
+    encapsulated in <code>cwCoordinateTransform</code>. Unit-tested in <code>test_cwCoordinateTransform.cpp</code>.</li>
+    <li><b>Trigger + state on the validator.</b> <code>cwFixStationValidator</code> gained
+    <code>needsOutputCS</code> / <code>suggestedOutputCS</code> / <code>outputCSCoordinateInvalid</code> properties,
+    recomputed in a new <code>updateOutputCSPrompt()</code> called at the end of <code>revalidate()</code> — so it tracks
+    on the same triggers (a fix edit, a cave joining/leaving, the global CS changing). <code>needsOutputCS</code> is true
+    once a fix carries an <i>input CS</i> (a blank scaffold row doesn't fire it). The suggestion is derived from the first
+    such fix that also has a <i>real</i> coordinate — a fix still at the origin counts as "not entered yet" (empty
+    suggestion, not invalid), so a freshly-picked CS doesn't momentarily read as an error. If that first real coordinate
+    falls outside its input CS's valid domain (<code>cwCoordinateTransform::isWithinDomain</code>), it is almost certainly
+    a data-entry error: <code>outputCSCoordinateInvalid</code> goes true and the suggestion is withheld.</li>
+    <li><b>Confirmed, not silent.</b> Each host adopts the picker's selection with a direct write to
+    <code>region.geoReference.globalCoordinateSystem</code> (the same setter DataMainPage's project picker and the LAZ
+    loader already use; it clears the stale world origin so the next line-plot recomputes it). There is no undo command for
+    the global CS anywhere, so "undoable" in the spec below is not wired; the explicit <b>Use this</b> click satisfies
+    "confirmed, not silent". (The earlier <code>applySuggestedOutputCS()</code> invokable was dropped — the inline picker
+    can apply an edited selection, not just the raw suggestion.)</li>
+    <li><b>Prompt.</b> New presentation-only <code>OutputCSPrompt.qml</code>: a message, an <b>inline projected-CS
+    picker</b> (<code>CSPicker</code>, <code>allowGeographic:false</code>) pre-filled with <code>suggestedCS</code>, and an
+    adjacent <b>Use this</b> button that applies the picker's current selection via a <code>useSuggested(cs)</code> signal.
+    Below the picker, two labels resolve the picker's live selection to a friendly name (<code>CSFormat.displayName</code>)
+    and its authority code (EPSG, mono/subtle), so the abstract mode/zone controls name a concrete system. When
+    <code>coordinateInvalid</code> is set, the picker, button, and both labels gray out / hide and a "correct the coordinate
+    on the Fix Stations page" line appears instead of a suggestion. Reused across three hosts, visibility driven by
+    <code>needsOutputCS</code>: the <b>Fix Stations page</b> (top of the column, where fixes are typed), the <b>Data
+    page</b> (info column, proxied into the wide/narrow layouts — while the prompt is up the redundant "Coordinate system"
+    GroupBox is hidden, since the banner carries the same picker, and the info column widens to
+    <code>Theme.infoColumnPromptMaxWidth</code>), and the <b>3D view</b> (top overlay in <code>GLTerrainRenderer.qml</code>,
+    stacked under the outlier banner, clamped to <code>Theme.outputCSPromptWidth</code>). Covered by
+    <code>tst_OutputCSPrompt.qml</code> (Data + Fix Stations hosts, including the grayed-out bad-coordinate state, the
+    hidden GroupBox, and the name/EPSG labels; the view host reuses the same component and validator API).</li>
+  </ul>
+</div>
+<p>A fresh project has an empty global CS (<code>cwGeoReference.h:77</code>; <code>hasCoordinateSystem()</code> =
+<code>!isEmpty()</code>, <code>:54</code>) — the UI shows “Local” (<code>DataMainPage.qml:108-110</code>). When the
+global CS is empty the validator short-circuits (<code>cwFixStationValidator.cpp:190-196</code>), so
+<code>robustWorldOrigin()</code> is <code>nullopt</code> and <code>recomputeWorldOrigin()</code> leaves the origin at
+<code>(0,0,0)</code> (<code>cwCavingRegion.cpp:292-300</code>). The line plot then renders relative to an untouched
+origin → the cave lands far away / garbage. Nothing auto-sets the global CS from a fix’s <code>inputCS</code> today;
+the only existing “set your CS” prompt is in <code>CoordinatePickerPopup.qml:138-157</code> (routes to the Data page).</p>
+<div class="callout warn"><b>Hard constraint.</b> The output CS <b>must be projected</b> — survex/cavern only emits
+projected output, so a geographic (lat/long) CS can’t be the global CS. Test with
+<code>CoordinateSystem.isGeographic(cs)</code> (<code>cwCoordinateTransform.h:60,131</code>); the project combo already
+enforces this by hiding the geographic option (<code>allowGeographic:false</code>, <code>DataMainPage.qml:191</code>).
+“Valid output CS” = <code>isValidCS(cs) &amp;&amp; !isGeographic(cs)</code>.</div>
+<ul>
+  <li><b>Trigger.</b> <span class="pill">Superseded — see the Implemented callout above.</span> Original spec: "on first
+  fix added while <code>!hasCoordinateSystem()</code>, watch <code>cwFixStationModel::countChanged</code>." As built, the
+  prompt state recomputes in <code>updateOutputCSPrompt()</code> at the tail of <code>revalidate()</code>, so it fires on
+  the validator's full trigger set — <code>countChanged</code> <b>and</b> <code>dataChanged</code>/<code>modelReset</code>,
+  plus <code>caveCountChanged</code> and <code>globalCoordinateSystemChanged</code> — and the condition is "a fix carries an
+  <i>input CS</i>," not "first fix added."</li>
+  <li><b>(a) Prompt.</b> Show a banner/dialog “Your project has no output coordinate system — set one to place the
+  cave,” linking to the Data page CS picker (reuse the <code>CoordinatePickerPopup</code> message pattern).</li>
+  <li><b>(b) Auto-derive — recommended, with a confirm.</b> If the fix’s <code>inputCS</code> is already projected,
+  offer it as the global CS. If it’s geographic, compute the UTM zone from the fix’s WGS84 longitude + hemisphere and
+  build the EPSG via <code>CoordinateSystem.utmZoneToEpsg(zone, north)</code> (<code>cwCoordinateTransform.h:75,138</code>),
+  then call <code>setGlobalCoordinateSystem(...)</code> (<code>cwGeoReference.cpp:15-31</code> — which conveniently
+  clears the stale world origin, so the next line-plot recomputes it). Make it an <i>undoable, confirmed</i> action, not
+  a silent write.</li>
+</ul>
+
+<div class="callout">
+  <b>Review follow-ups (Commit 8, out of scope; 2026-07-22).</b>
+  <ul>
+    <li><b>Centralize the projected-CS invariant.</b> <code>setGlobalCoordinateSystem()</code>
+    (<code>cwGeoReference.cpp:14-31</code>) accepts <i>any</i> string; the "output CS must be projected" hard constraint
+    above is enforced only UI-side, re-stated per-caller via <code>allowGeographic:false</code> on each picker
+    (<code>OutputCSPrompt.qml</code>, <code>DataMainPage.qml</code>, and the LAZ loader). A
+    <code>region.adoptOutputCoordinateSystem(cs)</code> that rejects geographic/invalid CS — and is the <i>undoable</i>
+    write the spec above still asks for — would put the invariant in one place instead of N picker configs. Blast radius:
+    <code>cwGeoReference</code> setter + project picker + LAZ loader + the three new prompt hosts. Deferred: cross-cutting,
+    and no global-CS undo command exists yet.</li>
+    <li><b>De-duplicate the domain scan.</b> <code>updateOutputCSPrompt()</code>
+    (<code>cwFixStationValidator.cpp:395-408</code>) independently re-scans the caves and re-runs
+    <code>isWithinDomain()</code> on the first fix, duplicating the domain verdict <code>revalidate()</code> just produced
+    in <code>classification.domainOutliers</code>. Folding "first real fix + its domain verdict" out of the existing
+    classification would remove a second scan and a second source of truth. Low payoff — the two scans track different
+    sets (all outliers vs. first-entered) — so nice-to-have, not urgent.</li>
+  </ul>
+</div>
+
+<h3 id="cavepagebadge">13.5 — Surface fix-station errors on CavePage (U9)</h3>
+<div class="callout ok">
+  <b>Implemented</b> (Commit 9; dev_3, uncommitted; C++ + QML gates green). A new presentation-only
+  <code>FixStationErrorBadge.qml</code> — a warning icon with a hover tooltip — sits right after the “Fix stations:”
+  link in <b>both</b> layouts (wide <code>fixStationsRow</code> + the narrow mirror). It binds the cave's
+  <code>errorModel</code> but scopes to the fix-station warning kinds via a new
+  <code>region.fixStationValidator.fixStationErrorTypeIds</code> property ({596, 597, <b>598</b>}), so it stays distinct
+  from the page banner's all-warnings roll-up. The scoped slice comes from a generic new
+  <code>cwErrorListModel::warningMessagesForTypeIds(ids)</code> (non-suppressed Warnings whose id is in the set); the
+  badge subscribes to <code>warningMessagesChanged</code> (by reading <code>warningMessages</code>) so it tracks adds,
+  removals, and suppression toggles live. The <code>ErrorIconBar</code> reuse in the original sketch was dropped — it
+  shows a good/warning/fatal triad for a whole model, whereas U9 wants a single scoped indicator that vanishes when clean.
+</div>
+<p>Commit 4 added a page-level <b>banner</b> on CavePage that joins <i>all</i> of a cave’s non-suppressed warnings.
+U9 is complementary and finer: a small <b>badge on the “Fix stations:” line itself</b> so the error is attached to the
+thing it’s about. The line is <code>fixStationsRow</code> (<code>CavePage.qml:169-181</code>, link at <code>:176</code>),
+mirrored in the narrow layout at <code>CavePage.qml:765-770</code>. There is a reusable <code>ErrorIconBar</code> already
+bound to an <code>errorModel</code> on this page (<code>CavePage.qml:603-604,871-872</code>).</p>
+<ul>
+  <li>Place an <code>ErrorIconBar</code> (or a compact warning badge) next to the “Fix stations:” label, bound to a
+  <b>fix-station-scoped</b> view of <code>currentCave.errorModel</code> — only the fix-station error types
+  (<code>cwErrorTypeId::FixStationOutlier</code>=596, <code>FixStationDomain</code>=597) light it, so it stays distinct
+  from the page banner’s all-warnings roll-up. Needs a filtered model/count by <code>errorTypeId ∈ {596,597}</code>.</li>
+  <li>Do both layouts (<code>fixStationsRow</code> wide + the narrow mirror at <code>:765-770</code>).</li>
+</ul>
+
+<h3 id="stationexists">13.6 — Validate the fix’s station reference (U10)</h3>
+<div class="callout ok">
+  <b>Implemented</b> (Commit 9; dev_3, uncommitted; C++ + QML gates green). The empty-vs-unknown distinction the open
+  question asked for is honored, and yes — it rolls into both the U9 badge and the page banner as a new
+  <code>cwErrorTypeId::FixStationReference = 598</code>.
+  <ul>
+    <li><b>Shared verdict.</b> A static <code>cwFixStationModel::classifyStationReference(name, network)</code> →
+    <code>{Ok, Empty, Unknown}</code> is the single source both surfaces read. <b>Revised (post-review, per user):</b>
+    an <b>Empty</b> name is now <i>flagged</i>, not quiet — survex silently drops a fix that names no station, so a blank
+    row is a real error, not a benign not-done-yet state. Only an <b>un-computed network</b> defers a <i>named</i> fix to
+    Ok (nothing to check against yet); the empty-name check runs <i>before</i> that deferral, so a blank row is flagged
+    even before a network exists. Membership is <b>case-insensitive</b> (<code>cwSurveyNetwork::stations()</code>).</li>
+    <li><b>Inline row flag.</b> New read-only <code>StationErrorRole</code> on the model (distinct messages for
+    <i>Empty</i> and <i>Unknown</i>). The model gained a <code>setCave()</code> back-reference (wired in the cwCave ctor)
+    so it can reach <code>cave->network()</code> — <i>later replaced by constructor injection in A1;
+    <code>setCave()</code> no longer exists</i> — and re-emits <code>dataChanged</code> for the role on
+    <code>surveyNetworkChanged</code> and on a station-name edit. Driven on the row by the shared <code>InlineWarning</code>
+    component (a sibling icon of the domain warning, distinct <code>objectName</code> <code>stationWarning.N</code>) plus a
+    red tint on the station-name cell.</li>
+    <li><b>Cave-level warning.</b> <code>cwFixStationValidator</code> pushes/clears the <b>598</b> warning per cave
+    (<code>referenceWarnings()</code>, reconciled alongside 596/597, tracked in <code>updateWarningTracking</code>,
+    torn down in <code>syncCaveConnections</code>), and re-runs on <code>cwCave::surveyNetworkChanged</code>. This is what
+    lights the U9 badge and joins the page banner. It is <i>not</i> fed into the 3D render-view summary — a broken
+    reference doesn't push the cave off-screen.</li>
+  </ul>
+  <span class="mono-note">Duplication note (as with DomainErrorRole vs FixStationDomain): the row flag and the cave warning
+  both classify independently — the review-followup "de-duplicate the domain scan" applies here too. Left as nice-to-have.</span>
+</div>
+<div class="callout warn">
+  <b>Regression found &amp; fixed (post-Commit-9).</b> Commit 9's <code>surveyNetworkChanged → dataChanged(StationErrorRole)</code>
+  re-emit created an <b>endless line-plot re-solve loop</b> whenever a fix station existed: add a fix (even a blank row) and
+  <code>cwLinePlotManager</code> re-ran loop closure forever. Proven by a bounded C++ regression test
+  (<code>test_cwLinePlotManager.cpp</code>, "An empty fix station must not trigger endless line-plot re-solves" — 19 solves
+  in ~80&nbsp;ms of idle time before the fix, 0 after). <b>Root cause:</b> the line-plot worker rebuilds each cave's survey
+  network every solve and can't see the cave's current one (its region snapshot carries no network), so it always reports
+  the network as "changed"; <code>cwCave::setSurveyNetwork</code> then fired <code>surveyNetworkChanged</code> on
+  <i>every</i> solve, and Commit 9's error-role refresh fed that straight back into <code>runSurvex</code> via the fix-model
+  <code>dataChanged</code> wiring. <b>Fix (two layers):</b>
+  <ul>
+    <li><b>Root:</b> added the standard CLAUDE.md equality guard to <code>cwCave::setSurveyNetwork</code>
+    (<code>if (Network == network) return;</code>) so <code>surveyNetworkChanged</code> fires only on a genuine change —
+    it also stops <code>revalidate</code>/artifact churn on every solve. <span class="mono-note">Correction (Commit 9
+    review): it was <i>not</i> “the only setter missing the house-rule guard” — <code>cwCave::setStationPositionLookup</code>
+    (<code>cwCave.cpp:565</code>) also emits unconditionally. The guard itself is sound; only the superlative was wrong.
+    Pinned by a dedicated test in <code>test_cwCave.cpp</code> covering both halves (equal network stays silent, genuine
+    change still notifies).</span></li>
+    <li><b>Intent:</b> the read-only computed error roles (<code>DomainErrorRole</code>, <code>Easting/NorthingDomainErrorRole</code>,
+    <code>StationErrorRole</code>) must never trigger a re-solve or declination refresh. New static
+    <code>cwFixStationModel::isErrorOnlyRoleChange(roles)</code>; <code>cwLinePlotManager::connectFixStations</code> and
+    <code>cwTripCalibration::rewireCaveSignals</code> now skip an error-only <code>dataChanged</code>. Prevents a redundant
+    survex run per real network-changing edit.</li>
+    <li><b>Two more consumers, found in the Commit 9 review.</b> The list above was incomplete — the fix model's
+    <code>dataChanged</code> has <b>five</b> consumers, and two were left unfiltered:
+    <ul>
+      <li><code>cwSaveLoad::connectCave</code> (<code>cwSaveLoad.cpp:4009</code>) routed it to <code>saveCave</code>, so a
+      pure solve counted as a local mutation: <b>open a saved project with ≥1 fix station, touch nothing, and it reported
+      unsaved changes and rewrote the cave file</b> (dirtying the git working tree in <code>.cwproj</code> mode) via
+      <code>saveObject</code> → <code>localMutationOccurred()</code> → <code>setModified(true)</code>. Now filtered.</li>
+      <li><code>cwFixStationValidator::syncCaveConnections</code> (<code>:534</code>) re-ran the PROJ-heavy
+      <code>revalidate()</code> a second time per network change (once directly off <code>surveyNetworkChanged</code>,
+      once via the error-role echo). Now filtered.</li>
+    </ul>
+    <code>cwCave</code>'s grid-convergence handler was already safe via its positive role allowlist.</li>
+  </ul>
+  <span class="mono-note">Latent, pre-existing: the worker's "network always looks changed" comparison (snapshot
+  carries no network) is harmless here (guard absorbs it) but wasteful — a real efficiency fix would carry the network into the
+  snapshot or compare against the live cave. It also makes <code>changedStations(empty, network)</code> report <i>every</i>
+  station changed each solve, so every trip and scrap is marked changed too. Out of scope here — see A2 in §14.
+  <b>Fixed 2026-07-26 in A2</b>, which also found a second hole this note missed (the snapshot drops station
+  positions too) and that the cost was not merely wasteful: every solve re-morphed every scrap. See A2 for the
+  correction.</span>
+</div>
+<p>A fix station anchors a <b>named survey station</b> to absolute coordinates. Two ways the reference is broken, both
+of which silently produce a fix that anchors nothing:</p>
+<ul>
+  <li><b>Empty station name.</b> The <code>StationNameRole</code> (<code>cwFixStationModel.h:35</code>) is blank — an
+  unfinished row. Today <code>addFixStation()</code> appends exactly such a blank row, so this is the default state
+  until the user types a name.</li>
+  <li><b>Non-existent station.</b> The name doesn’t match any station in the cave’s survey. The authority is
+  <code>cwCave::network()</code> → <code>cwSurveyNetwork::stations()</code> (<code>cwSurveyNetwork.h:30</code>), the
+  <code>QStringList</code> of every station name; membership must be <b>case-insensitive</b> (CaveWhere is, Compass
+  isn’t — see CLAUDE.md). A fix on <code>XYZ1</code> when the survey only has <code>A1…A9</code> anchors nothing and
+  survex/cavern just ignores it.</li>
+</ul>
+<p><b>Approach.</b> Add a read-only <code>StationErrorRole</code> to <code>cwFixStationModel</code> (mirrors the
+<code>DomainErrorRole</code> pattern from Commit 6): empty string when fine, else a message (“Enter a station name” /
+“No station <i>XYZ1</i> in this cave”). Drive an inline indicator on the row reusing the existing
+<code>DomainWarning</code> component (<code>FixStationPage.qml:76-100</code>) — or a sibling of it so station-vs-domain
+read distinctly. The model needs the owning <code>cwCave*</code> (it already lives under one) to reach
+<code>network().stations()</code>, and must re-emit <code>dataChanged</code> for the role when the network changes
+(connect to the cave’s network/relink signal) so a station appearing/disappearing updates the flag live.
+<span class="mono-note">As shipped: one renamed <code>InlineWarning</code> instantiated twice per row (distinct
+<code>objectName</code>s <code>stationWarning.N</code> / <code>domainWarning.N</code>), not a separate sibling
+component; membership is a single <code>cwSurveyNetwork::hasStation()</code> hash probe rather than a scan of
+<code>stations()</code>.</span></p>
+<p class="mono-note"><b>Open question — resolved.</b> An empty name is <i>flagged</i>, not quieted: survex silently
+drops a fix that names no station, so a blank row is a real error. And yes, it rolls into both the U9 badge and the
+page banner as <code>cwErrorTypeId::FixStationReference = 598</code>.</p>
+<p class="mono-note"><b>Source of truth — decided (Commit 9 review).</b> <code>classifyStationReference</code> judges
+against <code>cwSurveyNetwork</code>, <i>not</i> the chunk station set the survex exporter uses
+(<code>cwSurvexExporterCaveTask::writeFixStations</code>). These diverge today — <code>addShot</code> drops a shot with
+either end empty, so a half-entered trip’s stations are missing from the network while survex still honours a fix on
+them, producing a transient false “the fix is ignored” during data entry. The network is nonetheless the right long-term
+authority: <b>external svx / Compass / Walls centreline files</b> populate <code>cwSurveyNetwork</code> but never appear
+in chunks at all, so the chunk set would miss those stations entirely. Do not switch this to
+<code>cwSurveyDataArtifact</code> — that is an unused pipeline prototype.</p>
+
+<h3 id="commitgrouping">13.7 — Suggested commit grouping</h3>
+<table>
+  <tr><th>Commit</th><th>Items</th><th>Why together</th></tr>
+  <tr><td><b>7</b> — CS picker polish <span class="pill ok">implemented</span></td><td>U7, U1, U8, U5</td><td>All small QML on <code>CSComboBox</code>/<code>FixStationPage</code>/<code>DataMainPage</code>; U7 unblocks U1; U5 is a free header relabel that rides along.</td></tr>
+  <tr><td><b>8</b> — First-fix output CS</td><td>U6</td><td>Self-contained validator/region + one prompt; the highest-impact correctness item (fixes “cave renders far away”).</td></tr>
+  <tr><td><b>9</b> — Error surfacing <span class="pill ok">implemented</span></td><td>U9, U4, U10</td><td>All three are “show the error where it belongs”: U9 the CavePage line badge, U4 the per-component red cell, U10 the empty/unknown-station flag — each is a model role + inline indicator (new <code>cwErrorTypeId::FixStationReference</code>=598 for U10). See the Implemented callouts in §13.5 / §13.6 / §13.2.</td></tr>
+  <tr><td><b>10</b> — Mark Fixed inline <span class="pill ok">implemented</span></td><td>U2</td><td>Largest, standalone feature (model API + caret + badge + inline coords); its own commit(s). See the Implemented callout in §13.3.</td></tr>
+  <tr><td><b>11</b> — Free-form coordinates <span class="pill ok">implemented</span></td><td>U11, U12</td><td>One parser feeding both entry surfaces, plus the error line that a parse failure needs somewhere to land. See §13.8 for why U12 rides along rather than waiting, and the Implemented callout there for the two decisions that shaped it.</td></tr>
+  <tr><td><b>12</b> — Keep what the user typed <span class="pill ok">implemented</span></td><td>U14</td><td>Stores the raw coordinate string beside the numbers, so the <i>editor</i> re-offers what was typed while the cell keeps rendering in project units (§13.10). Its own commit: it touches the model, <code>cavewhere.proto</code> and both entry surfaces, and it supersedes A6 rather than sitting beside it. A CS change deliberately writes <b>nothing</b> — the stored axis order exists so the no-op guard can tell a re-commit under a new order apart from a genuine no-op.</td></tr>
+  <tr><td><b>13</b> — Remove Fix into the popup</td><td>U13</td><td>Small, self-contained QML (§13.9) — delete the cell menu item, add the action to the editor; the caret and its menu stay. Deliberately <i>after</i> U14 only because both edit <code>FixStationPopup</code>; nothing else couples them, so the order is reversible.</td></tr>
+  <tr><td><b>—</b> — Tab order</td><td>U3</td><td>Separate: it edits the <i>shared</i> table-input stack used by other tables, so it stands alone with its own blast-radius review; not gated on the fix-station work.</td></tr>
+</table>
+<p class="mono-note">Grouping is a recommendation, not a commitment — U5/U7/U9 are each shippable on their own if you want
+smaller commits. U2, U3 and U11 are the three that genuinely need their own space.</p>
+
+<div class="callout ok">
+<b>Commit 7 implemented 2026-07-22 — uncommitted, gates green.</b> Four files:
+<ul>
+  <li><b>U7</b> — <code>CSComboBox.qml</code>: width caps on the UTM zone spinbox
+  (<code>Theme.csZoneFieldWidth</code> = 84) and N/S combo (<code>Theme.csHemisphereFieldWidth</code> = 64).</li>
+  <li><b>U8</b> — <code>CSComboBox.qml</code>: <code>resolvedDescription</code> now appends the friendly
+  <code>nameFor()</code> for <i>any</i> non-Local CS (UTM included), and a new <code>showResolvedLabel</code>
+  property lets a host drop the inline label. <code>DataMainPage.qml</code>: the project CS is a
+  <code>QC.GroupBox</code> “Coordinate system” with three lines — combo (edit only, label off) · friendly name ·
+  EPSG code. The GroupBox is wrapped in a plain <code>Item</code> the outer <code>ColumnLayout</code> manages (a
+  Control placed directly as a Layout child there lands unmanaged at the top and overlaps the pencil). Old
+  <code>coordinateSystemText</code> helper replaced by <code>csValue</code>/<code>csName</code>.</li>
+  <li><b>U1</b> — <code>FixStationPage.qml</code>: <code>csColumn.columnWidth</code> 140 → 300 (measured: mode combo
+  sizes to “Lat/Lon (WGS84)” = 120, + zone 84 + hemi 64 + spacing ⇒ hemisphere’s right edge at 280, now inside the
+  cell).</li>
+  <li><b>U5</b> — <code>FixStationPage.qml</code>: wide-layout headers relabelled “Easting / Long”, “Northing / Lat”.</li>
+</ul>
+Verified: <code>tst_DataMainPage_globalCS</code> (7), <code>tst_FixStationPage</code> (13),
+<code>tst_FixStations_RoundTrip</code> (3), <code>tst_CavePage_outlierWarning</code> (7),
+<code>tst_CoordinatePickerInteraction</code> (4) all green; screenshots of both surfaces confirm no clipping.
+<br><br>
+<b>Review follow-ups (same commit, 2026-07-22):</b>
+<ul>
+  <li><b>Project GroupBox overflow — real root cause.</b> The UTM controls spilled out of the CS
+  <code>GroupBox</code> at every window width (measured: at a 900&nbsp;px window the hemisphere combo’s right edge sat
+  90&nbsp;px past the group border). The Flow-wrap below was necessary but <i>inert on its own</i>: the picker never
+  received a constrained width to wrap within. Cause — the picker’s <code>ColumnLayout</code> was a <i>free-floating
+  child</i> of the GroupBox’s auto-created <code>contentItem</code>, so it kept its implicit width (280) and
+  overflowed while the frame tracked <code>availableWidth</code> correctly. Fix: assign the <code>ColumnLayout</code>
+  as the GroupBox’s <code>contentItem</code> directly (a Control resizes <code>contentItem.width = availableWidth</code>),
+  so the picker now shrinks to the group. Verified by geometry probe: combo w tracks the group (187 / 139 / 536&hellip;)
+  and the hemisphere’s right edge is always ≤ the group’s right edge.</li>
+  <li><b>Graceful wrap (needed once width propagates).</b> A <code>RowLayout</code> can’t shrink the fixed-width combos,
+  so once the picker is constrained below its natural width it would clip. <code>CSComboBox</code>’s inner layout is a
+  <code>QQ.Flow</code>: one line when the host is ≥ its natural width (a fix-station row, cell = 300, or the full-width
+  narrow layout), <b>wraps</b> the trailing controls to a second/third line when the group is narrow (wide layout’s
+  ~200&nbsp;px info column). Root <code>implicitWidth</code> is the manual one-line width so unconstrained hosts (the
+  narrow fix-station <code>Flow</code>) still get one line; <code>implicitHeight</code> follows the wrapped Flow height.</li>
+  <li><b>Inline resolved label scoped to Custom.</b> UTM is fully described by its zone + hemisphere, so the inline
+  <code>csResolvedLabel</code> now shows only for <i>Custom</i> mode (where there are no zone/hemi controls) — this
+  also keeps fix-station UTM rows single-line under the Flow. The label is width-capped to the Flow so a long custom
+  name elides instead of overflowing.</li>
+  <li><b>Selectable name/EPSG.</b> The project GroupBox’s name and EPSG lines are now
+  <code>SelectableValue</code> (the shared flat copyable read-only field: drag-select + right-click Copy / Select All,
+  single-highlight via <code>SelectableValueGroup</code>) instead of plain <code>QC.Label</code>s.</li>
+</ul>
+
+<p><b>Review refactor (same commit, 2026-07-22) — R1/A1/A2 from the cavewhere-review triage.</b> The Flow/label
+machinery above was then split so no component straddles two roles and CS presentation has one home:</p>
+<ul>
+  <li><b>A1 · one presentation source — <code>CSFormat.qml</code> (new singleton).</b> The name/code/Local composition
+  lived in two places (<code>CSComboBox.resolvedDescription</code> and <code>DataMainPage</code>’s
+  <code>csName</code>/<code>csValue</code> fallback). Both now call <code>CSFormat</code> — <code>localLabel()</code>,
+  <code>hasName(cs)</code>, <code>displayName(cs)</code>, <code>inlineDescription(cs)</code> — backed by
+  <code>CoordinateSystem.nameFor</code>. This also fixed the nameless-Custom double-render (the project name line is
+  now hidden via <code>hasName</code> when only the raw code exists, so the code shows once).</li>
+  <li><b>A2 · split the picker — <code>CSPicker.qml</code> (new core) + <code>CSComboBox.qml</code> (inline shell).</b>
+  <code>CSPicker</code> is the presentation-free controls (mode + UTM zone/hemi) + commit logic, in a <code>QQ.Flow</code>
+  (still wraps in the slim project column). <code>CSComboBox</code> is now a thin shell = <code>CSPicker</code> + the
+  Custom-only inline label. The project GroupBox drives a <code>CSPicker</code> <b>directly</b> (name/EPSG as its own
+  lines), so the <code>showResolvedLabel</code> dual-personality flag is deleted.</li>
+  <li><b>R1 · generic self-sizing.</b> <code>CSPicker.oneLineWidth</code> now sums the Flow’s visible children’s widths
+  + spacing generically (loop over <code>flowId.children</code>), replacing the mode-enumerated hand-math — adding or
+  hiding a control needs no edit to the width calc.</li>
+  <li><b>Test gate (closed the U8 coverage gap).</b> <code>tst_DataMainPage_globalCS.qml</code> gains
+  <code>test_projectCSShowsFriendlyNameAndCode</code>: after <code>committed("EPSG:32613")</code> the name line shows the
+  PROJ name and the code line reads <code>EPSG:32613</code>; unset CS read-only shows “Local” with the code line hidden.
+  Verified: 5 affected QML suites green (35 tests); geometry probe confirms the overflow fix held through the split
+  (fix row one line ≤ cell; project picker wraps ≤ group at a narrow column).</li>
+</ul>
+</div>
+
+<h3 id="freeform">13.8 — Free-form coordinate entry (U11, <a href="https://github.com/Cavewhere/cavewhere/issues/621">#621</a>) and the popup's missing errors (U12) <span class="pill ok">implemented</span></h3>
+
+<p>Added 2026-07-26, after Commit 10. Three separate numeric fields make the common case — <b>paste a coordinate you
+got from somewhere else</b> — into a manual split-and-retype. Issue #621 asks for one field that takes the whole
+thing:</p>
+
+<pre>Lat / long        46.12113, -115.59902, 304m
+                  46.12113, -115.59902, 304ft
+                  46.12113, -115.59902, 304        (project units)
+
+UTM               610016.792, 5615117.075, 2545.340m
+                  610016.792, 5615117.075, 2545.340 feet</pre>
+
+<h4>Where it lands</h4>
+<p>There are now <b>two</b> coordinate-entry surfaces, and they must not each grow their own parser:</p>
+<ul>
+  <li><code>FixStationPage.qml</code> — the wide <code>RowLayout</code> and narrow <code>Flow</code> delegates, three
+  <code>ValueField</code>s bound to <code>EastingRole</code> / <code>NorthingRole</code> / <code>ElevationRole</code>.</li>
+  <li><code>FixStationPopup.qml</code> — the Commit 10 inline editor, same three roles, filled imperatively through
+  <code>data()</code> rather than by binding (see the §13.3 callout).</li>
+</ul>
+<p>So the parser belongs in <b>C++</b>, called from both — one function, one set of accepted formats, one place a new
+format gets added. The natural shape is a small free function or value class returning the monad submodule's
+<code>Result&lt;T&gt;</code>: a struct of three doubles on success, a human-readable reason on failure (the message U12
+then has to display).</p>
+
+<h4>Three design questions worth settling before writing it</h4>
+<ul>
+  <li><b>The elevation unit is the real trap.</b> <code>cwFixStation::elevation()</code> is a <b>bare, unitless
+  double</b> (<code>cwFixStation.h:63</code>) fed straight into <code>cwGeoPoint(easting, northing, elevation)</code>
+  (<code>cwFixStationValidator.cpp:243</code>, <code>cwGridConvergence.cpp:141</code>,
+  <code>cwTripCalibration.cpp:266</code>) and serialized as-is (<code>cwProtoUtils.cpp:821</code>) — nothing downstream
+  carries a unit, and <code>cwGeoPoint</code> has none either. A <code>304ft</code> suffix therefore has to be
+  <b>converted at parse time</b> into whatever the fix's <code>effectiveCS()</code> expresses its vertical axis in; the
+  suffix cannot be stored. Reuse targets already exist: <code>cwUnits::toLengthUnit(QString)</code> for the suffix and
+  <code>cwUnits::convert(value, from, to)</code> for the conversion.</li>
+  <li><b>"Use the project's units" needs a source.</b> A fix belongs to a <i>cave</i>, not a trip, so the per-trip
+  <code>cwTripCalibration</code> distance unit is the wrong well — it would make the same pasted string mean different
+  things depending on which trip was last open. Most likely the settings unit system via
+  <code>cwUnits::surveyUnit(UnitSystem)</code>; decide once and write it down, because a silent wrong answer here moves
+  a cave by a factor of 3.28.</li>
+  <li><b>Lat/long vs. UTM is not decidable from the numbers alone.</b> <code>46.12113, -115.59902</code> is a legal
+  (if absurd) UTM pair. The row already declares an <b>Input CS</b>, so the honest rule is: parse under the CS the row
+  currently has, and let the <b>existing</b> per-fix CS-domain check (§12 Part A) say when the result is outside it —
+  rather than inventing a second magnitude-based inference that can disagree with the domain check. Inferring the CS
+  from the paste is a possible nicety, but it should <i>propose</i> a CS, never silently switch one.</li>
+</ul>
+
+<h4>Validation</h4>
+<p>#621 asks for a validator, but not a <code>QValidator</code>: a free-form field must accept partial text while the
+user is still typing, so blocking keystrokes is the wrong mechanism. Validate <b>on commit</b> and show the reason.
+Note this <i>replaces</i>, and must not simply sit beside, the per-field <code>DoubleValidator</code> Commit 10 put on
+the popup's coordinate fields (§13.3) — that guard exists so <code>editingFinished</code> can't push a
+<code>NaN</code> into the line plot, and the free-form path needs its own equivalent guarantee.</p>
+
+<div class="callout warn">
+<b>U12 — the inline popup has no error surface at all.</b> Commit 9 gave <code>FixStationPage</code> rows a full set:
+red field text via <code>error:</code> on the station name and on whichever coordinate component is out of domain
+(<code>eastingDomainError</code> / <code>northingDomainError</code>, U4), plus message bars for
+<code>stationError</code> (U10) and <code>domainError</code>. <code>FixStationPopup</code> got <b>none</b> of it — a
+coordinate typed there can be outside its CS's domain, or anchored to a station that doesn't exist, and the popup
+looks exactly the same either way. The user only learns about it by navigating to the Fix Stations page or the CavePage
+badge, which defeats the point of editing inline.
+<br><br>
+<b>Recommendation: fold U12 into the U11 commit rather than scheduling it separately.</b> Free-form parsing
+<i>creates</i> a new error class ("couldn't make sense of that") that has nowhere to go today, so U11 has to build a
+message line in the popup regardless. Once that line exists, wiring the two error roles the model already exposes into
+it is a few bindings — strictly less work than a second pass, and it avoids shipping a parse-error line that
+conspicuously ignores the errors sitting right next to it.
+</div>
+
+<div class="callout ok">
+<b>Commit 11 implemented 2026-07-26 — U11 + U12 together, gates green.</b> New
+<code>cwCoordinateText</code> (<code>parse</code> returning <code>Monad::Result&lt;Coordinate&gt;</code>,
+<code>format</code> as a <code>QML_SINGLETON</code> invokable, plus <code>cwCoordinateTextValidator</code>),
+a new <code>cwFixStationModel::setCoordinateText(row, text, units)</code>, and both entry surfaces rebuilt
+around one field.
+
+<h4>The two decisions that shaped it</h4>
+<ul>
+  <li><b>One field replaces three</b>, on both surfaces — <code>FixStationPage</code> now has a single
+  <i>Coordinate</i> column where Easting / Northing / Elevation were. The consequence, accepted knowingly:
+  <b>U4's per-component tint is gone.</b> <code>EastingDomainErrorRole</code> and
+  <code>NorthingDomainErrorRole</code> both still exist and are both still read, but they now feed one
+  <code>||</code> into one tint, so a bad easting and a bad northing look the same. The per-axis
+  <i>attribution</i> survives only in C++ and in <code>DomainErrorRole</code>'s message.</li>
+  <li><b>A bare elevation is read in the project's unit system</b> (the <code>Metric ⇒ m / Imperial ⇒ ft</code>
+  rule via <code>cwUnits::surveyUnit</code>), which is what #621's "(use the projects units)" line asks for.
+  That decision forced a second one: because the single field is <i>both</i> the display and the input,
+  <code>format()</code> has to write the unit suffix — otherwise an Imperial user who opened the editor and
+  pressed Enter without typing would divide their elevation by 3.28 every time.</li>
+</ul>
+
+<h4>Settled while implementing</h4>
+<ul>
+  <li><b>The elevation is meters, full stop</b> — the plan's open question, now answered from the source
+  rather than assumed. <code>survex/src/commands.c:1195-1224</code> reads <code>*fix</code>'s three numbers
+  raw and hands them straight to <code>proj_trans</code>; no <code>*units</code> scaling is applied. Every CS
+  CaveWhere offers is 2D, so PROJ passes <code>z</code> through untouched, and survex's own internal length
+  unit is metres — so a fix's elevation has to be metres to line up with the survey it anchors. A
+  <code>ft</code> suffix is therefore converted at parse time and never stored, exactly as feared.</li>
+  <li><b>The first two components are not always the same axis — and this was got wrong first.</b> #621's
+  lat/long examples are written <i>latitude first</i> (46.12113 is a latitude in Idaho, -115.59902 the longitude),
+  while its UTM examples are easting first. The model stores easting/northing, so a geographic row has to render and
+  read its two horizontal components in the opposite order from a projected one. The plan already said the two can't
+  be told apart from the numbers — "46.12113, -115.59902 is a legal (if absurd) UTM pair" — but the first cut of the
+  parser still mapped component 0 to the easting unconditionally, which transposed every pasted lat/long.
+  <br>
+  The rule now: <code>cwCoordinateText::AxisOrder</code>, resolved by <code>axisOrderFor(cs)</code> from
+  <code>cwCoordinateTransform::isGeographic</code> (per-thread cached, so it is safe inside a delegate binding).
+  <b>parse() and format() must be handed the same order</b> or a value transposes itself on every trip through the
+  field, so both take it as an explicit argument and neither has a default. An empty or unresolvable CS is
+  <code>EastingNorthing</code>: a fix that declares none defers to the region's global CS, which survex requires to be
+  projected, so no geographic case hides behind the empty string. The popup's field label and placeholder switch with
+  it ("Lat, Long, Elev" vs "East, North, Elev") — with one free-form field the user has no other way to know which
+  order is wanted.</li>
+  <li><b>"Project units" comes from <code>cwCave::unitSystem()</code>'s well</b>, reached in QML through the
+  existing <code>ProjectUnits.qml</code> singleton (region's <code>unitSystem</code>, falling back to the app
+  default). The per-trip <code>cwTripCalibration</code> is not involved, as the plan required.</li>
+  <li><b>Numbers are formatted shortest-exact</b> (<code>QLocale::c().toString(v, 'g',
+  QLocale::FloatingPointShortest)</code>), not to a fixed precision. 15 digits loses a double's low bits and
+  17 renders 46.12113 as "46.121129999999997"; shortest-exact gives both. <i>Known cost:</i> a
+  unit-<i>converted</i> elevation renders long — 305 m shows as <code>1000.6561679790026ft</code> under
+  Imperial. Rounding it would be prettier but would break the guarantee that re-committing an untouched
+  field writes nothing, so it was left exact. Prettifying this needs
+  <code>setCoordinateText</code> to short-circuit on <i>text</i> identity as well as numeric equality; see
+  A6 in §14 — <b>and its successor U14 (§13.10)</b>, which removes the problem instead, by keeping the string the
+  user typed rather than re-deriving one.</li>
+  <li><b>The validator is stateless.</b> It carries neither a unit system nor an axis order, because neither can
+  change its verdict — both decide what the numbers <i>mean</i>, never whether they can be read. A test pins that
+  claim down so a change making the verdict unit-dependent fails loudly rather than validating against the wrong
+  project.</li>
+  <li><b>Where the validator went.</b> #621 asks for a validator, and there is one — but only on
+  <code>FixStationPage</code>. <code>cwCoordinateTextValidator</code> never returns
+  <code>Invalid</code> (that would reject the keystroke, and every coordinate is half-typed on its way to
+  being whole); incomplete text is <code>Intermediate</code>, which <code>CoreClickTextInput</code> already
+  knows how to handle — it holds the editor open, keeps what was typed, and shows <code>errorText</code>.
+  <code>FixStationPopup</code> installs <b>no</b> validator, because <code>QC.TextField</code> withholds
+  <code>editingFinished</code> while a validator reports unacceptable input, which would swallow the very
+  message U12 exists to show. It validates by committing and displaying what
+  <code>setCoordinateText</code> returns.</li>
+  <li><b>One <code>dataChanged</code> per paste.</b> <code>setCoordinateText</code> writes all three
+  components and emits once with <code>{Easting, Northing, Elevation}</code>. Three
+  <code>setData</code> calls would have been three <code>runSurvex()</code> calls
+  (<code>cwLinePlotManager::connectFixStations</code> reruns on every <code>dataChanged</code>) for one paste.</li>
+  <li><b>Two components are legal</b> — "46.12113, -115.59902" leaves the elevation at 0. A unit suffix is
+  accepted only on the elevation; on a horizontal it is a hard error, since those are in the CS's own units
+  and this parser has no way to know them.</li>
+</ul>
+
+<h4>U12's error surface</h4>
+<p>The popup shows one line, worst-first: a parse failure outranks <code>DomainErrorRole</code>, which
+outranks <code>StationErrorRole</code>. It reads the warnings from the cave's
+<code>cwFixStationDiagnosticsModel</code> — the same proxy <code>FixStationPage</code> binds to, with row
+indices passing through unchanged. Because the popup fills itself imperatively rather than by binding
+(§13.3), the warnings are re-read from a <code>Connections</code> on the proxy's <code>dataChanged</code>,
+not only on open: a re-solve or a CS change moves them with nobody touching the popup.</p>
+
+<p class="mono-note"><b>Verification</b> <span class="pill new">counts corrected 2026-07-27 · P6</span>. The figures
+first written here were taken mid-implementation and never revised, so every one of them undercounted the shipped
+commit. As of <code>4f59d8ba</code>: C++ — <code>test_cwCoordinateText.cpp</code> (new, <b>13 cases / 33
+sections</b>), <b>3 new cases / 11 sections</b> in <code>test_cwFixStationModel.cpp</code>, and <b>1 new section</b>
+in <code>test_cwFixStationDiagnostics.cpp</code> (the origin guard, which the original note omitted entirely
+because it was added later). QML — <b>9 new cases</b> in <code>tst_FixStationPage.qml</code> and <b>5 new</b> in
+<code>tst_MarkStationFixed.qml</code>, plus both files' existing coordinate tests rewritten for the single field.
+<b>23 mutants were injected across three passes and all 23 killed</b>: 8 during implementation, 10 during the
+review, 5 during the 🟡 triage that followed it. The implementation eight were the reactive error refresh, the
+popup's <code>parseError</code> assignment, <code>reload()</code>'s error reset, the northing term of the domain
+tint, the unchanged-coordinate short-circuit, <code>format()</code>'s unit suffix, <code>axisOrderFor()</code>
+never reporting geographic, and <code>format()</code> swapping the axes when <code>parse()</code> doesn't.
+<b>Take the ratio seriously: the later fifteen mutants exist because the first eight tests were written by the same
+person who wrote the code, and ten of the review's findings were tests that could not fail.</b>
+Worth recording: the round-trip test does <i>not</i> catch a missing suffix (a suffix-less format still
+round-trips, since parse falls back to the same unit) — the explicit <code>format()</code> assertions are what
+cover it. For the same reason the round trip is run under <i>both</i> axis orders: a swap that format and parse
+made in lockstep would be invisible to a one-order check.</p>
+</div>
+
+<p class="mono-note">Also in #621, <b>not</b> planned here: "a fixed station tool, for moving the station" — the issue
+itself is ambivalent about it ("might pollute the tool bar with a tool that won't be used that much"). Left open; it is
+a 3D-view interaction, not a coordinate-entry one, and shares nothing with U11 beyond the subject.</p>
+
+<div class="callout">
+<b>Decide while you're in here: is <code>FixStationPopup</code> still the right owner?</b> <i>Raised 2026-07-26 by the
+<code>StationFixedRole</code> review; noted here because U11/U12 is the next thing to touch this file.</i>
+The cell's <b>read</b> path is now a model role (§13.3 correction (3)), but its <b>write</b> path calls sideways into a
+sibling view component: <code>StationBox.qml:143,150</code> reach <code>fixStationPopup.openFor()</code> and
+<code>fixStationPopup.removeFixFor()</code>, so a <code>QC.Popup</code> is the cell's API for adding and removing cave
+data. Two consequences worth weighing before adding a third responsibility:
+<ul>
+  <li><code>canFix</code> now derives "may the user fix this station" from "is a popup wired up"
+  (<code>StationBox.qml:32</code>) — a presentation fact standing in for a capability. With the cell's
+  <code>fixStations</code> handle deleted, invoking actions is the <i>only</i> remaining reason a station cell holds a
+  <code>FixStationPopup</code> at all.</li>
+  <li><code>removeFixFor</code> has to open-code a "close if I'm showing that row" guard
+  (<code>FixStationPopup.qml:81-83</code>) purely because the mutation is hosted by the view that displays it.</li>
+</ul>
+U11/U12 gives this popup a parser and an error surface — a third role. If a non-visual controller (or invokables on
+<code>cwSurveyEditorModel</code>, which is already cave-aware after the follow-up) is ever going to happen, doing it
+<i>with</i> U11 is cheaper than after. Blast radius either way: <code>StationBox</code>,
+<code>DrySurveyComponent</code>, <code>SurveyEditor</code>, <code>FixStationPopup</code>,
+<code>tst_MarkStationFixed</code>.
+<br><br>
+<b>Decided 2026-07-26 when Commit 11 landed: not now, deliberately.</b> The popup kept the write path and did take the
+third role. Two reasons. First, the parser itself did <i>not</i> land in the popup — it is
+<code>cwCoordinateText</code>, reached through <code>cwFixStationModel::setCoordinateText()</code>, so the popup holds
+one <code>commitCoordinate()</code> forwarder and no parsing logic; the accumulation this callout warned about went to
+C++ instead. Second, moving the write path is a pure refactor across five files with no user-visible effect, and
+folding it into an already-large feature commit would have buried the feature in it.
+<br><br>
+<b>Correction, 2026-07-27 <span class="pill new">P1</span> — the sentence that closed this paragraph said "the cost of
+deferring is unchanged, because the third role turned out thin". That was wrong, and it was wrong in the direction
+that matters: it argued for deferring on the strength of a measurement nobody took.</b> The popup went
+<b>211 → 318 lines</b> (+137/−30 in <code>4f59d8ba</code>). What arrived is not bulk — it is <i>policy</i>, which is
+exactly the accumulation this callout was watching for:
+<ul>
+  <li><b>An error-precedence chain</b> — <code>parseError</code> &gt; <code>domainError</code> &gt;
+  <code>stationError</code>, resolved in an <code>errorMessage</code> binding. Which of three simultaneous complaints
+  a user is shown is a product decision, and it is now written in QML, in one of the two entry surfaces.</li>
+  <li><b>An axis-order derivation</b> (<code>axisOrderFor(csPickerId.value)</code>) driving the field label and every
+  <code>format()</code>/<code>parse()</code> call — the rule whose violation transposes a coordinate.</li>
+  <li><b>A non-obvious invariant found only in review:</b> <code>reload()</code> had to split into
+  <code>reloadCoordinate()</code> / <code>reloadErrors()</code> so a CS change does not re-render over text the model
+  refused. That is a state machine about pending-but-uncommitted input, living in a <code>QC.Popup</code>.</li>
+  <li><b>A subscription to the diagnostics proxy's <code>dataChanged</code></b>, because the popup fills itself
+  imperatively and its warnings move without anyone touching it.</li>
+</ul>
+None of that is reachable from <code>FixStationPage</code>, which grew its own answers to the same questions —
+<b>which is §14 A3's point, and the two surfaces diverged inside a single commit</b>. So the honest reading is the
+opposite of the original: the deferral was still <i>right</i> (a pure five-file refactor does not belong inside a
+large feature commit), but its <b>cost went up, not sideways</b>. Re-weight this item accordingly — it is no longer
+"same weight as before", and U14 will add a fourth surface's worth of state to the same file.
+</div>
+
+<h3 id="removefix">13.9 — <b>Remove Fix</b> moves out of the survey-table menu and into the popup (U13)
+<span class="pill new">requested 2026-07-27</span></h3>
+
+<p>Today the station cell's caret menu carries the removal itself
+(<code>StationBox.qml:145-151</code>, <code>removeStationFixMenuItem</code> → <code>FixStationPopup.removeFixFor()</code>),
+gated <code>enabled: stationBox.stationIsFixed</code>. <b>Decision: delete that menu item.</b> Dropping a fix is done
+from inside the editor that owns the fix, the same way every other destructive action in this feature already works —
+<code>FixStationPage</code> removes a row from within the page (<code>FixStationPage.qml:171</code>), not from a menu
+somewhere else that points at it.</p>
+
+<ul>
+  <li><b>Why it's the right move.</b> The menu item is a second, blind path to a mutation whose consequences are only
+  visible in the popup: from the cell you can't see <i>which</i> coordinate you're about to discard. It also duplicates
+  reachability — the same caret already opens the editor, so removal costs one more click there and buys the user the
+  coordinate in front of them while they decide.</li>
+  <li><b>Free consequence — Remove becomes the undo for an accidental Mark Fixed.</b> <code>openFor()</code> creates the
+  fix on open, so a user who opens the editor on an unfixed station has already added a blank row. Today backing out of
+  that means closing the popup and finding <b>Remove Fix</b> in the menu behind it; with the action inside, it is the
+  button right there. This is the strongest argument for the move and should shape the button's placement (next to
+  <b>Done</b>), not just its existence.</li>
+  <li><b><code>removeFixFor(name)</code> collapses to <code>removeFix()</code>.</b> Its open-coded
+  <i>“close first if I happen to be showing that row”</i> guard (<code>FixStationPopup.qml:102-112</code>) exists only
+  because the caller might be pointing at some <i>other</i> station. With the popup as the sole caller, the row is always
+  the one on screen: close, then remove, unconditionally, and the name argument goes away.</li>
+  <li><b>The caret keeps its menu — decided 2026-07-27.</b> One item left (<b>Mark Station as Fixed</b> /
+  <b>Edit Fixed Coordinates…</b>) is a menu that only ever offers its own title, and the alternative was to have the
+  caret open the editor on click and drop <code>fixStationMenu</code>. Rejected: the caret one column over
+  (exclude-distance) <i>is</i> a menu, and §13.3 chose the caret specifically so the two cell actions would “share an
+  affordance rather than resembling one” — a click-caret sitting next to a menu-caret is exactly that
+  resemblance-without-sameness. The menu also stays open for growth, which it has already had once. So this stays a
+  pure deletion: <code>DataBoxCaret</code> and <code>fixStationMenu</code> are untouched, one
+  <code>QC.MenuItem</code> goes away.</li>
+  <li><b>Confirmation — decide, don't default.</b> <code>RemoveAskBox</code> is the house pattern for “are you sure” and
+  <code>FixStationPage</code> already uses it for this exact deletion, so the two surfaces would otherwise disagree about
+  whether dropping a fix is worth a challenge. But a challenge is a popup, and this popup is deliberately
+  <b>not</b> <code>CloseOnPressOutside</code> precisely because nested popups (the CS mode combo, the Custom CRS dialog)
+  read as a press outside — so a nested <code>RemoveAskBox</code> needs that interaction checked, not assumed.
+  <i>Recommended:</i> no challenge here — unlike the page, the popup shows the coordinate being discarded, and re-adding
+  is one caret away.</li>
+  <li><b>Interaction with <a href="https://github.com/Cavewhere/cavewhere/issues/640">#640</a>.</b> The item's
+  <code>enabled: stationBox.stationIsFixed</code> binding is one instance of the stale menu-enable-state class #640
+  tracks. Deleting the item removes an instance; it does not fix the class, and shouldn't be reported as doing so.</li>
+  <li><b>Tests.</b> <code>tst_MarkStationFixed.qml:228</code> (<code>test_removeFixDropsTheFix</code>) drives
+  <code>removeStationFixMenuItem</code> through the helper at <code>:130</code> — both must be redriven through the popup
+  rather than deleted, since the behavior under test (the fix row disappears, the badge clears) is unchanged. Add a case
+  for the undo path above: open on an unfixed station, Remove, and assert the cave is back to no fix for that station.</li>
+</ul>
+
+<p class="mono-note"><b>Revisit §13.8's ownership callout when this lands.</b> One of its two pieces of evidence that the
+popup is the wrong owner of the write path was exactly this <code>removeFixFor</code> guard — “open-coded purely because
+the mutation is hosted by the view that displays it”. Moving Remove <i>inside</i> dissolves that argument (the closing is
+then simply correct, not a workaround) while adding to the other one: another role on the popup. The callout's evidence
+list will be half stale, so it needs rewriting rather than re-reading.</p>
+
+<h3 id="rawtext">13.10 — Keep what the user typed (U14) <span class="pill new">requested 2026-07-27</span></h3>
+
+<p>Commit 11 stores a fix as three doubles and <i>re-derives</i> the text on every read
+(<code>cwCoordinateText::format()</code>). So the field can show something the user never typed: enter
+<code>304m</code> in an imperial project and it reads back <code>997.3753280839895ft</code>. <b>Decision: store the
+user's string.</b> The pipeline becomes <b>user text → parse → numbers</b>, with the text kept alongside the numbers
+rather than thrown away — and the <i>editor</i>, not the cell, is where it comes back.</p>
+
+<ul>
+  <li><b>Display and edit show different strings, deliberately</b> <span class="pill new">decided 2026-07-27</span>.
+  The cell keeps rendering the numbers through <code>format()</code> in project units and the row's axis order,
+  exactly as Commit 11 does. Opening the editor swaps in the stored string. The worked example, in the units it was
+  asked in: a project in meters, the user types <code>46.12113, -115.59902, 30ft</code>.
+  <br>&nbsp;&nbsp;&nbsp;&nbsp;cell&nbsp;&nbsp;&nbsp;<code>46.12113, -115.59902, 9.144m</code>
+  <br>&nbsp;&nbsp;&nbsp;&nbsp;editor&nbsp;<code>46.12113, -115.59902, 30ft</code>
+  <br>Each half is right for its job. A <i>column</i> of fixes is only comparable when every row is in one unit
+  system — a page where one row reads <code>9.144m</code> and the next <code>997.375ft</code> is harder to scan than
+  one that reads <code>9.144m</code> and <code>304.008m</code>. An <i>edit</i>, on the other hand, starts from what
+  you wrote; being handed a machine's rounding of your own number and told to correct it is the complaint this item
+  exists to answer. The cost, stated plainly: the field stops being WYSIWYG, which is a real loss and the reason the
+  split has to be deliberate rather than incidental.
+  <br>This makes the no-op rule load-bearing rather than merely nice: opening an editor and closing it commits a
+  string that differs from the displayed one, so identity against the stored string must short-circuit the write.
+  Without it every focus-and-leave rewrites the row, dirties the project and re-solves the line plot. Identity here
+  means <i>text and axis order together</i> — see Trap 2, where the same string under a different order is the one
+  case that must not be swallowed.
+  <code>FixStationPopup</code> has no display/edit distinction — its field is always an editor — so it shows the
+  stored string throughout.</li>
+  <li><b>Shape.</b> <code>cwFixStation</code> gains a coordinate-text member next to
+  <code>easting</code>/<code>northing</code>/<code>elevation</code>;
+  <code>cwFixStationModel::setCoordinateText()</code> stores the raw string <i>and</i> the parsed doubles in the one
+  edit it already makes. The doubles stay authoritative for everything downstream — the line plot and survex need
+  meters, and nothing outside the editor should have to parse. The string is display state, not the source of truth.</li>
+  <li><b><code>format()</code> stays the display path, and becomes the <i>editor's</i> fallback.</b> Every cell renders
+  through it, so the display needs no notion of stored text at all and rows that have none are not a special case.
+  The editor is where the fallback lives: empty text ⇒ open on <code>format()</code>'s rendering. That covers more
+  rows than it looks — a fix loaded from a project written before this field existed, one imported from
+  svx/Compass/Walls, or one whose numbers were written by anything other than the coordinate field.</li>
+  <li><b>The load-bearing invariant — any write to a component invalidates the text.</b> The moment easting, northing or
+  elevation changes by some path that isn't <code>setCoordinateText</code>, the stored string is a lie about the row.
+  Clear it there and let the fallback re-render. This has to hold at <i>every</i> setter, not just the ones that exist
+  today, which argues for making the components private to the class and clearing in one place rather than trusting
+  future call sites.</li>
+  <li><b>Trap 1 — a bare elevation changes meaning when the project's units flip.</b> <code>46.1, -115.6, 304</code>
+  means "304 in project units" at parse time. Store it verbatim, switch the project to imperial, and the
+  <i>editor</i> now offers <code>304</code> for a fix that is 304&nbsp;m — accept it unchanged and it re-parses as
+  304&nbsp;ft, moving the fix 213&nbsp;m. The display is safe under the split above (it renders the numbers), so this
+  is squarely an edit-path bug: the one string the user is invited to accept is the one that changed meaning while
+  they weren't looking. <i>Recommended:</i> normalize on store by
+  appending the unit that was actually resolved, so the stored string is always self-describing. That is the smallest
+  edit to the user's text that keeps it honest, and it is the only place this feature should rewrite what was typed.</li>
+  <li><b>Trap 2 — a CS change touches nothing.</b>
+  <span class="pill new">settled 2026-07-27</span> Not the stored text, not the numbers. Geographic and projected
+  write their axes in opposite orders (§13.8), which makes it tempting to compensate; the answer is that changing the
+  CS is not an edit to the coordinate and must not behave like one. <b>Only a commit ever changes a number.</b>
+  <br><b>The use case that settles it.</b> A user copies numbers from a source into a row whose CS is wrong. The
+  coordinate is impossible for that CS, so U4's domain warning fires. They change the CS to the right one, and the
+  warning clears — the numbers were correct the whole time and only ever needed to be read under the right system.
+  Any rule that rewrites something on the CS change breaks this: the numbers move out from under a user who was
+  fixing metadata, not data.
+  <br><b>This is the second reversal of the same item, so both rejected rules are recorded</b> to keep them from
+  being re-proposed as obvious cleanups. (a) <i>Re-emit the tokens in the new axis order</i> — rejected because it
+  assumes the numbers were right and only their interpretation changed, and hands a user who typed
+  <code>46.12113, -115.59902</code> back their own numbers as <code>-115.59902, 46.12113</code>, something they
+  never wrote. (b) <i>Re-parse the stored text under the new order and rewrite the components</i> — rejected because
+  it silently moves the fix on what the user experienced as a metadata correction, which is the one thing this whole
+  item exists to stop.
+  <br><b>The dominant shape has no axis-order question at all.</b> Wrong UTM zone, wrong projected CS for the region
+  — projected → projected, same order, numbers and text both already right. This is what the use case above
+  describes and it costs nothing to support.
+  <br><b>The flip case is handled by the warning, not by compensation.</b> Switch a row from projected to geographic
+  and its numbers are re-read in the opposite order; the domain check catches that in practice, because a UTM pair
+  read as a latitude and longitude is far out of range and a lat/long pair read as a UTM easting/northing
+  inverse-projects nowhere near any area of use. That is an observation about realistic coordinates, not a guarantee
+  — but the failure mode is a <i>visible warning on a fix the user is already looking at</i>, and the string they
+  typed is sitting in the editor one keystroke from fixing it.</li>
+  <li><b>The trap the "touch nothing" rule creates — the no-op short-circuit would swallow the fix.</b> The split
+  above needs a commit of unchanged text to write nothing. But after an axis-order flip, re-committing the
+  byte-identical string is <i>exactly</i> the gesture that corrects the row, and a short-circuit keyed on text alone
+  would silently discard it — leaving the user pressing Enter on a visibly-warned fix and watching nothing happen.
+  <b>So store the axis order the text was parsed under, alongside the text, and short-circuit only when the order
+  matches too.</b> Same string under a different order is a real edit and must re-parse. This is also the cheapest
+  way to know the stored text is stale, should a later commit want to say so in the UI.</li>
+  <li><b>Persistence.</b> An additive field on the fix station in <code>cavewhere.proto</code> plus its save/load leg.
+  Old projects simply have none and take the fallback, so there is no migration — but a fix edited and saved by a new
+  build then opened by an old one loses only the display text, never the coordinate.</li>
+  <li><b>This closes A6, and closes it better.</b> §14's A6 proposes short-circuiting
+  <code>setCoordinateText</code> on <i>text</i> identity so the display is free to round. Storing the text gets that for
+  free — the incoming string either matches the stored one (write nothing) or replaces it — and goes further, because
+  A6 would still have rendered a <i>rounded</i> machine string rather than the user's own. When U14 lands, A6 should be
+  struck rather than left as a parallel proposal. The shortest-exact rule in <code>format()</code> stays for the
+  fallback path, where there is no user text to prefer.</li>
+  <li><b>Tests.</b> The character of the round-trip test changes: today it asserts
+  <code>parse(format(x)) == x</code>; it should also assert that a stored string survives a read unchanged. The cases,
+  now that the split and the reversal have moved several of them:
+  <ul>
+    <li><b>The motivating one, in both halves.</b> Project in meters, <code>46.12113, -115.59902, 30ft</code> typed:
+    the <i>cell</i> reads <code>9.144m</code>, the <i>editor</i> reads <code>30ft</code>, the model holds
+    9.144&nbsp;m. Asserting only one half lets the split be implemented as a no-op in the other.</li>
+    <li><b>A component write clears the text</b>, so the editor falls back rather than offering a string that no
+    longer describes the row.</li>
+    <li><b>A CS change writes nothing — under either kind of change.</b> Projected → projected (the use case:
+    wrong UTM zone corrected) and projected → geographic both leave the text byte-identical <i>and</i> every
+    component untouched. Assert both halves on both changes, or the test passes against either rejected rule.</li>
+    <li><b>The warning is what carries the flip case.</b> Paste <code>610016.792, 5615117.075, 304m</code> under a
+    geographic CS, assert the domain warning fires; change to the UTM zone it belongs to, assert it clears and the
+    numbers never moved. That is the use case end to end.</li>
+    <li><b>Re-committing the unchanged string after an order flip is <i>not</i> a no-op.</b> The mutant to kill: a
+    short-circuit keyed on text alone. Flip the order, commit the byte-identical text, assert the components are now
+    the other way round. Without this the user presses Enter on a warned fix and nothing happens.</li>
+    <li><b>A row with no stored text</b> takes the fallback in the editor and is unaffected by a CS change beyond
+    the re-render.</li>
+    <li><b>Focus and leave is a no-op.</b> Open the editor on an imperial row, commit the offered string unchanged,
+    and assert no <code>dataChanged</code> — this is the assertion that would have caught A6's ULP bug, and under the
+    split it now guards a much wider gap than one ulp.</li>
+  </ul>
+  Mutation-check the invalidation and the order half of the no-op guard: a test that only reads back what it wrote
+  will pass with either deleted.</li>
+</ul>
+
+<div class="callout ok">
+  <b>Implemented 2026-07-27 (Commit 12).</b> <code>cwFixStation</code> gained <code>coordinateText()</code> +
+  <code>coordinateTextAxisOrder()</code>, with the three component setters clearing the text so the invariant holds for
+  call sites that don't exist yet; <code>CoordinateTextRole</code> carries it to QML;
+  <code>CoreClickTextInput</code> gained a generic <code>editText</code> (defaults to <code>text</code>) so the page's
+  cell and editor can differ at all. Persisted as <code>FixStation.coordinateText</code> + a nested
+  <code>AxisOrder</code> enum, written <i>after</i> the components on load for the same reason.
+  <ul>
+    <li><b>The no-op guard needed three comparisons, not one.</b> Raw text vs. stored (so a stored string that no longer
+    parses still round-trips), then the <i>normalized</i> text vs. stored — which is where re-typing <code>304</code>
+    against a stored <code>304m</code> lands — and only then the numbers. Writing the first two as one check let a
+    plain re-commit of a bare elevation clear the stored string and dirty the project; the test that caught it is
+    "a bare elevation is stored with the unit it was read in".</li>
+    <li><b>Text that renders the row as-is is stored as <i>no</i> text</b>, rather than kept. A row holding none renders
+    exactly that string through <code>format()</code>, so the two states are indistinguishable to the user — and this
+    is what keeps "open the editor and leave" free for a row that never had a string, which is most rows. It also
+    subsumes the old numeric ulp guard: the components are left untouched rather than round-tripped.</li>
+    <li><b>A two-component paste is stored as two components</b>, so the editor re-offers two while the cell keeps
+    showing three. Faithful to what was typed and a true no-op on re-commit, at the cost of an editor that shows less
+    than the cell. The alternative — appending the elevation the row kept — rewrites more of the user's string than
+    Trap 1 asks for.</li>
+    <li><b>The §13.10 test sketch for the flip case was half a case.</b> "Paste a UTM pair under a geographic CS, then
+    correct the CS and the warning clears" cannot happen: the geographic row reads the paste <i>latitude first</i>, so
+    the fix lands transposed and correcting the CS — which writes nothing, by Trap 2 — leaves it transposed and still
+    flagged. What actually clears it is the next keystroke: re-committing the stored string under the row's new order.
+    The test in <code>test_cwFixStationDiagnostics.cpp</code> asserts all three steps. The plan's simpler version
+    describes the <i>projected → projected</i> case (wrong UTM zone), which is covered in the model tests.</li>
+    <li><b>One existing QML assertion inverted.</b> <code>tst_MarkStationFixed.qml</code> asserted that a CS change
+    re-renders the popup field in the new order; with a stored string that is precisely the rewrite Trap 2 rejects, so
+    it now asserts the field is byte-identical and that <i>committing</i> it is what transposes the numbers.</li>
+  </ul>
+</div>
+
+<h2 id="commit9followups">14. Follow-ups raised by the Commit 9 review</h2>
+<p>Recorded from the pre-commit review of Commit 9. None is in scope for Commit 9 itself; all were left as code-untouched
+notes. Ordered by payoff-vs-cost, not by confidence.</p>
+
+<h3>Architecture</h3>
+<table>
+  <tr><th>Item</th><th>Why</th><th>Blast radius</th></tr>
+  <tr><td><b>A1 — Derived diagnostics should not ride <code>dataChanged</code></b>
+  (<code>cwFixStationModel.cpp:96</code>) — <b>DONE</b></td>
+  <td><b>Highest-payoff item here.</b> <code>dataChanged</code> meant both “the user edited persisted data” and
+  “a computed warning changed”, so every present and future consumer had to remember to call
+  <code>isErrorOnlyRoleChange()</code>. Two of the five forgot (the save path and the validator, both fixed in Commit 9)
+  and the failure mode is <i>silent</i> — a stray save, a redundant re-solve, or an infinite loop.
+  <span class="mono-note">Resolved 2026-07-26 by <b>cwFixStationDiagnosticsModel</b>, a <code>QIdentityProxyModel</code>
+  that layers the four computed roles (renumbered to <code>Qt::UserRole + 100</code>…) on top of the row model and owns
+  the classification, the <code>cwCave*</code> back-reference and both refresh triggers. The four consumers connect to
+  the <i>source</i>, which no longer defines those roles, so the opt-out is structural rather than remembered:
+  <code>isErrorOnlyRoleChange</code> and all four filter lambdas are deleted. FixStationPage binds its delegates to the
+  proxy — one <code>model:</code> line changed, both delegates untouched, since the role <i>names</i> pass through.
+  Note for the record: the plan’s fallback suggestion (“give them their own notification signal”) does not work as
+  written — QML delegate role properties refresh only on <code>dataChanged</code>, so a custom signal would leave the
+  eight bindings permanently stale. The question was never which signal but which <i>object</i>.</span></td>
+  <td><code>cwFixStationModel</code>, <code>cwLinePlotManager</code>, <code>cwTripCalibration</code>,
+  <code>cwSaveLoad</code>, <code>cwFixStationValidator</code>, <code>FixStationPage.qml</code>, 4 test files</td></tr>
+
+  <tr><td><b>A2 — The line-plot worker's snapshot carries no previous solve</b>
+  (<code>cwLinePlotTask.cpp:592</code>, <code>cwCaveData</code>) — <b>DONE</b></td>
+  <td>The snapshot's caves have an empty network, so <code>updateCaveNetworks</code> reports “changed” on <i>every</i>
+  solve and <code>changedStations(empty, network)</code> marks every station — hence every trip and scrap — changed each
+  time. Commit 9's equality guard on <code>setSurveyNetwork</code> is currently what stops that from becoming an endless
+  re-solve, i.e. correctness now leans on a guard masking this. Carry the network into the snapshot, or compare against
+  the live cave.
+
+  <span class="mono-note"><b>Done 2026-07-26. Three things above are wrong; recorded here rather than silently
+  fixed, because each one changes what the item was.</b>
+
+  <b>(1) It is a performance bug, not a latent-correctness one.</b> The framing above says the equality guard keeps
+  this from becoming an endless re-solve, implying the cost is hypothetical. It is not: the changed-station set flows
+  through <code>cwLinePlotManager</code>'s <code>stationPositionInScrapsChanged</code> into
+  <code>cwScrapManager::updateStationPositionChangedForScraps</code> (<code>cwScrapManager.cpp:335</code>), which is an
+  unconditional <code>updateNoteTransformation()</code> + <code>updateScrapGeometry()</code> — the comment there reads
+  “Explicit call, don't check automatic update”. So <b>every line-plot solve re-morphed every scrap in the region</b>.
+  The guard suppressed the re-solve loop, not the work.
+
+  <b>(2) There were TWO holes, and fixing only the network would have been a no-op.</b> The item names only
+  <code>surveyNetwork</code> (absent from <code>cwCaveData</code> entirely). But
+  <code>stationPositionModel</code> <i>is</i> in <code>cwCaveData</code> and <i>is</i> filled by
+  <code>cwCave::data()</code> — and <code>cwCave::setData()</code> silently drops it (see the commented-out
+  <code>setStationPositionLookup</code> at <code>cwCave.cpp:108</code>). Carried across the thread boundary, thrown
+  away on arrival. With the network fixed alone, the position path still marks every station changed and nothing
+  observable improves.
+
+  <b>(3) “Carry the network into the snapshot” was rejected.</b> Putting derived state in <code>cwCaveData</code>
+  would grow the type that mirrors save/load. Both baselines now ride on
+  <code>cwLinePlotTask::Input</code> instead (<code>previousStationPositions</code>, <code>previousNetworks</code>,
+  keyed by <code>cwCave::id()</code>), filled in <code>buildInput()</code> from the live caves — which hold the last
+  <i>applied</i> solve, so a restarted run diffs against what the user last saw. <code>cwCaveData</code>,
+  <code>cwCave::setData</code>, save and load are untouched, and empty maps reproduce the old
+  everything-changed behavior for any hand-built <code>Input</code>.
+
+  <b>Constraint discovered while fixing it — the reason the first attempt broke 10 assertions.</b>
+  <code>updateExteralCaveStationLookups</code> had two jobs behind one guard: publishing positions to the result,
+  <i>and</i> writing them into the worker's own <code>Region</code>. The second is not bookkeeping —
+  <code>generateGeometry()</code> (<code>cwLinePlotTask.cpp:323</code>) rebuilds the plot from
+  <code>Region.data()</code>, and <code>cwCave::data()</code> only carries positions that were set on the internal
+  cave. That guard was never taken while everything always “changed”; the moment change detection worked, an unmoved
+  cave dropped out of the plot and lost its length and depth with it. Now split into
+  <code>refreshInternalStationLookups()</code> (unconditional, takes no <code>result</code> parameter so it cannot be
+  re-gated by mistake) and <code>publishChangedStationLookups()</code>.
+
+  <b>Still true after this:</b> <code>stationPositionModel</code> cannot be removed from <code>cwCaveData</code>
+  despite its <code>//TODO: remove stationPositionModel?</code> — <code>cwLinePlotGeometry.cpp:24</code> reads
+  <code>cave.stationPositionModel.positions()</code>, and this change makes the worker's dependence on that
+  round-trip sharper, not weaker. Disk caching of station positions remains deferred.
+
+  <b>Tests:</b> new <code>[LinePlotManager]</code> case “Line plot reports only the stations that actually moved” —
+  an idle re-solve reports an empty changed-trip set (this one case covers <i>both</i> holes, since either baseline
+  left un-seeded fails it), plus moved-station and added-station cases guarding against over-filtering.
+  Full C++ 1618/0/1 (313,432 assertions); full QML 774/2/83 = baseline.</span></td>
+  <td><code>cwLinePlotTask</code> (<code>Input</code> + worker), <code>cwTripLinePlotTask</code> (contract comment),
+  <code>test_cwLinePlotManager</code>. <code>cwCaveData</code>/<code>cwCave::data</code> deliberately untouched.</td></tr>
+
+  <tr><td><b>A3 — Cave-owned child model reaching back up into its owner</b>
+  (<code>cwFixStationModel.h:124</code>) — <b>CLOSED</b></td>
+  <td>The row model holds <code>cwCave*</code> to read <code>cave-&gt;network()</code> (and now the region's globalCS),
+  inverting the ownership arrow. Either the cave pushes those down, or classification moves to the validator — which is
+  A1, and makes this item disappear. <span class="mono-note">Note: §13.6 explicitly prescribed this back-reference, so
+  it is a documented decision rather than drift.</span>
+  <span class="mono-note"><b>Closed 2026-07-26 — the coupling that had teeth is gone; what remains is acceptable.</b>
+  A1 removed the part that was actually wrong: <code>cwFixStationModel</code>, whose job is holding what the user typed,
+  no longer depends on cave, region or network. <b>Amended 2026-07-27 <span class="pill new">P4</span>:</b> this
+  sentence originally ended "…cave, region, network or PROJ <i>at all</i>", and Commit 11 falsified the last term.
+  <code>cwFixStationModel.h</code> now includes <code>cwCoordinateText.h</code> (for the <code>AxisOrder</code> enum in
+  <code>setCoordinateText</code>'s signature), and <code>cwCoordinateText::axisOrderFor()</code> calls into
+  <code>cwCoordinateTransform</code>, which is PROJ. <b>Three qualifications keep this from re-opening A3, and they are
+  the reason the item stays closed rather than the reason to ignore it:</b> (1) the new header does <i>not</i> transit
+  PROJ — <code>cwCoordinateText.h</code> includes only <code>Monad/Result.h</code>, <code>cwGlobals.h</code>,
+  <code>cwUnits.h</code>, <code>cwValidator.h</code>; (2) the model calls only <code>parse()</code> and
+  <code>format()</code>, neither of which touches PROJ — <code>axisOrderFor()</code> is called by the <i>callers</i>;
+  (3) it is a dependency on a <b>leaf utility passed its context as arguments</b>, the exact opposite of A3's subject,
+  which was a child reaching <i>up</i> to its owner for ambient state. <b>What it does raise is a different item:
+  <code>units</code> and <code>order</code> are ambient project context now threaded through a persistence model's
+  signature. That belongs to A5, and is filed there — do not re-litigate it here.</b>
+  The back-reference now lives on
+  <code>cwFixStationDiagnosticsModel</code>, and three properties make it fine rather than merely tolerated —
+  (1) <b>lifetime is strictly nested</b>: parented to the cave, destroyed with it, can never outlive it;
+  (2) it is <b>read-only and compiler-enforced</b> (<code>const cwCave* const m_cave</code>), so the two failure modes
+  feared from a child→parent pointer — the child mutating its owner, or being re-pointed at another one — both fail to
+  compile; (3) the <b>alternative is worse</b>: having the cave push the network and fallback CS down means the proxy
+  <i>stores copies</i> kept in sync by two setters, trading a safe read-through for duplicated state and a staleness
+  invariant. Consistent with §13.6, which prescribed this back-reference deliberately. Revisit only if the proxy ever
+  needs to <i>write</i> to the cave, or is handed a cave it does not belong to.</span></td>
+  <td>Closed by design decision — no code change</td></tr>
+
+  <tr><td><b>A5 — No stated rule for where a computed model role lives</b>
+  (<code>cwSurveyEditorModel.h:138</code>) — <i>added 2026-07-26</i></td>
+  <td>The feature now ships <b>two opposite answers</b> and neither is written down. A1 concluded that computed roles
+  must not ride the data model's <code>dataChanged</code> and resolved it structurally, with a
+  <code>QIdentityProxyModel</code> (<code>cwFixStationDiagnosticsModel</code>) owning the computed roles, the cave
+  back-reference and both refresh triggers. The <code>StationFixedRole</code> follow-up (§13.3 correction (3)) does the
+  identical job for the survey table the other way: role, <code>QPointer&lt;cwFixStationModel&gt;</code>, sync wiring and
+  a role-dependency branch all baked into the base model.
+  <span class="mono-note">Both are defensible <i>here</i> — <code>cwSurveyEditorModel</code> has zero non-view consumers
+  of <code>dataChanged</code>, so A1's failure mode (a computed-role emit mistaken for a user edit) cannot bite, and the
+  model is already a pure view transform rather than persisted data. But note A3's closure criteria do <b>not</b>
+  transfer: A3 accepted its cave back-reference because it was <code>const cwCave* const</code> and strictly
+  lifetime-nested inside the cave, whereas <code>m_fixStations</code> is a non-const <code>QPointer</code> on a
+  QML-owned object that can outlive the cave. It is still safe, just safe for different reasons than the ones A3
+  recorded — so neither A1 nor A3 should be read as covering this site.</span>
+  The next cave-scoped derived role for the survey table is easy to name (station absent from the cave's
+  <code>cwSurveyNetwork</code>, station missing from the plot's position lookup). Landing it the current way costs a
+  second <code>QPointer</code>, a second <code>sync*Signals()</code>, a second <code>invalidate*()</code> and a second
+  <code>if</code> in <code>changedRolesFor()</code>. Decide the criterion — <i>proxy when the base model is persisted
+  data, in-model when it is already a view transform</i>, or whatever replaces it — before that second role lands.</td>
+  <td><code>cwSurveyEditorModel</code>, <code>cwFixStationDiagnosticsModel</code>, 3 QML sites, 2 test files</td></tr>
+
+  <tr><td><b>A6 — The coordinate field trades readability for an exact round trip</b>
+  (<code>cwCoordinateText.cpp</code>, <code>cwFixStationModel.cpp</code>) — <i>added 2026-07-26</i></td>
+  <td>Commit 11 put the whole coordinate in one field, which makes that field both the display and the input. So
+  <code>format()</code> renders shortest-<i>exact</i>: re-committing an untouched field has to write nothing, and
+  <code>setCoordinateText</code> decides "nothing changed" by comparing doubles. The price is that a
+  unit-<b>converted</b> elevation renders long — 305 m reads as <code>1000.6561679790026ft</code> in an imperial
+  project. Rounding the display to, say, three decimals would fix that (sub-millimetre elevation is noise in a cave
+  survey) but would break the no-op guarantee: the rounded text parses back to a <i>slightly</i> different double, so
+  opening the editor and pressing Enter would silently dirty the project. The way out is to short-circuit on
+  <b>text</b> identity as well as numeric equality — if the incoming text is exactly what <code>format()</code> would
+  produce for that row, write nothing — after which the display is free to round. Not urgent: the ugly case is
+  metric-entered data viewed in an imperial project, and it is cosmetic, not wrong.
+  <br><b>Superseded 2026-07-27 by U14 (§13.10)</b> — keeping the user's own string subsumes this: the text
+  short-circuit falls out of storing the text, and the field shows what was typed rather than a prettier machine
+  rendering of it. Strike A6 when U14 lands; don't implement both.
+  <br><b>Closed 2026-07-27 with U14 — but only the half about round-tripping.</b> The no-op guard no longer depends on
+  the rendering being exact, and any row whose elevation was <i>typed</i> now reads back as it was typed. What is
+  <b>still on screen</b> is the original complaint: a row with no stored string — an import, an old project, a
+  coordinate set from anywhere but this field — still renders <code>1000.6561679790026ft</code> in the cell. U14 is what
+  makes the fix cheap rather than what applies it: the cell and the editor are now separate strings, so the cell can
+  round while the editor's fallback keeps rendering exact. That is a new, smaller item, not this one.</td>
+  <td><code>cwCoordinateText</code>, <code>cwFixStationModel</code>, 2 test files</td></tr>
+
+  <tr><td><b>A4 — No first-class scoped view of an <code>errorModel</code></b>
+  (<code>cwErrorListModel.h:44</code>)</td>
+  <td>Three unrelated idioms now read cave errors in QML: <code>ErrorIconBar</code> (counts), the CavePage banner
+  (<code>warningMessages.join</code>), and the new badge (an <code>Q_INVOKABLE</code> inside a binding <i>plus</i> a
+  discarded read of <code>warningMessages</code> purely to register the dependency). That last one is load-bearing but
+  reads as dead code. A small filter proxy exposing <code>count</code>/<code>messages</code> as real properties would
+  make all three declarative.</td>
+  <td><code>cwErrorListModel</code>/<code>cwErrorModel</code> + 3 QML sites</td></tr>
+</table>
+
+<h3>Refactors</h3>
+<ul>
+  <li><b>R1 — Promote <code>InlineWarning</code> to a shared component + add <code>Theme.tooltipDelay</code></b>
+  (<code>FixStationPage.qml:139</code> vs <code>FixStationErrorBadge.qml:43</code>). The badge re-implements the
+  component near-verbatim (warning.svg + <code>HoverHandler</code> + <code>ToolTip{delay:300}</code> +
+  hidden-means-zero-width). See also the §11 tooltip-delay nit, which this would close.
+  <span class="mono-note"><b>Restated 2026-07-27 <span class="pill new">P3</span> — there are now three sites, and
+  the third breaks the shape this item assumed.</b> Commit 11 added <code>FixStationPopup.qml:294</code>: the same
+  <code>warning.svg</code> at the same <code>Theme.iconSizeButton</code>, carrying the same class of message — but
+  <b>inline and always visible</b>, next to a wrapping <code>QC.Label</code>, not on hover in a tooltip. So
+  "promote <code>InlineWarning</code>" no longer describes the refactor. The thing actually duplicated three ways is
+  <i>"warning icon + explanatory text about this fix"</i>, and it has <b>two legitimate presentations</b> — tooltip
+  where space is one cell (page rows, CavePage badge), inline where the message is the point (popup). A single
+  component with a <code>presentation</code> knob is the shape; a shared component that only does tooltips would
+  leave the popup out and quietly become the fourth copy's excuse.
+  <br><b>The popup site also carries the <code>PlainText</code> pin</b> that R6/A1 are about, so whatever component
+  absorbs these three owns the escaping decision for all of them — which is the strongest argument yet for doing R1
+  and A1 as one piece of work rather than two.</span></li>
+  <li><b>R2 — CavePage's wide/narrow layouts are hand-mirrored</b> (<code>CavePage.qml:167</code> vs <code>:771</code>).
+  Every stat row must be added twice; the narrow badge silently lost its <code>objectName</code>, so only the wide one is
+  test-reachable. A shared <code>FixStationsStat</code>-style component would make the mirror structural.</li>
+  <li><b>R3 — Three near-identical singular/plural sentence builders in the validator</b>
+  (<code>cwFixStationValidator.cpp:301</code>, <code>:323</code>, <code>:404</code>). <code>referenceWarnings()</code>
+  added the third and fourth copy of “join fragments → pick phrasing → one sentence per cave”; wants a
+  <code>joinCaveWarning(parts, singular, plural)</code> helper. — <b>DONE</b>.
+  <span class="mono-note"><b>Done 2026-07-26 — the helper landed, named <code>namedCaveWarning</code></b> rather than the
+  <code>joinCaveWarning</code> sketched above: a file-scope free function in the validator's anonymous namespace,
+  <code>singular.arg(parts.first())</code> for one fragment, <code>plural.arg(parts.join(kFragmentSeparator))</code>
+  otherwise. Three of the four sites call it — cluster, domain, and the unknown-name half of
+  <code>referenceWarnings()</code>. The rename is deliberate: “join” describes only the plural path, and
+  <i>named</i> marks the contrast with the count-based fourth builder six lines below it, which was the thing a reader
+  would otherwise misread as an oversight.
+  <br><b>A review pass removed a dead guard and paired the separators.</b> The first cut opened with
+  <code>if (parts.isEmpty()) return QString();</code> plus a doc sentence promising “empty in, empty out” — unreachable
+  from all three sites: two iterate hashes whose only mutation is <code>parts[cave].append(...)</code> (insert and append
+  in one expression, so no entry can hold zero fragments) and the third is already inside
+  <code>if (!unknownNames.isEmpty())</code>. Deleted, and the contract is now one line stating the precondition.
+  <code>kFragmentSeparator</code> also moved up to join the file's other constants and gained a sibling,
+  <code>kSentenceSeparator</code> — the two levels of joining (names inside a sentence vs. sentences inside a warning)
+  are not interchangeable, and naming only one of the pair documented neither.
+  <br><b>The cluster site changed shape, not text.</b> It was the only one doing <i>word</i>-level pluralization —
+  a single <code>"Fix %1 %2 %3 far from…"</code> template with <code>station</code>/<code>stations</code> and
+  <code>is</code>/<code>are</code> slotted in — which is the form that cannot be translated, since a language whose
+  number agreement touches more than those two words has nowhere to put it. It now selects between two whole sentences
+  like the others. Verified byte-identical output for both counts.
+  <br><b>The fourth builder was deliberately left alone</b> (<code>emptyCount</code>, now <code>:435</code>). It is
+  count-based rather than name-based, and its singular form has no placeholder at all, so routing it through a helper
+  that calls <code>arg()</code> would emit a Qt “Argument missing” warning. A second single-use helper to avoid that
+  would be abstraction for its own sake.
+  <br><b>The pluralization had no test coverage before this</b> — the one assertion that touched these messages
+  (<code>test_cwFixStationValidator.cpp:672</code>) matched <code>"far from the rest"</code>, which is common to both
+  wordings, so R3 could have silently changed user-facing text. Now pinned in both directions: singular and plural
+  domain, singular cluster, singular unknown-name, and a new case
+  (<i>“several broken fixes in one cave collapse into one plural sentence per kind”</i>) covering plural unknown-name
+  plus the counted empty-name form. 79 cases / 472 assertions on the fix-station tags, QML 16/16 and 10/10.
+  <br><b>Line count went slightly up</b> (+12 in the <code>.cpp</code>): the three sites shed ~8 lines while the
+  documented helper costs 20. What collapsed is conceptual — one pluralization decision instead of three — not bulk.
+  <br><b>Not folded in: the <code>tr()</code> asymmetry.</b> The row message goes through
+  <code>cwFixStationDiagnosticsModel::tr()</code> while these cave-level messages are raw <code>QStringLiteral</code>.
+  Checked before deciding: CaveWhere has <i>no</i> translation infrastructure — no <code>.ts</code> files, no
+  <code>qt_add_translations</code>, no <code>lupdate</code>, and <b>(as of 2026-07-26)</b> only 27 <code>tr()</code>
+  calls in all of <code>cavewherelib/src/*.cpp</code> across 5 files (one of them the <code>tr()</code> A1 itself
+  added). Marking four more strings would make nothing translatable; whether to ship translations at all is a
+  project-level call, not R3's. Logged as a §14 item instead. <b>That count has since moved — see R5, which carries
+  the current figure and a constraint this note did not know about; do not cite the 27 as live.</b>
+  <br><b>Test cleanup in the same pass.</b> <code>cave-&gt;errorModel()-&gt;toStringList().join(QChar(' '))</code> appeared
+  nine times in <code>test_cwFixStationValidator.cpp</code>, and the new assertions were about to make it eleven with two
+  spellings (some inline, some bound to a local). Extracted as <code>warningText(cave)</code> in the file's existing
+  anonymous namespace and applied to all nine, so no split idiom is left behind.</span></li>
+  <li><b>R6 — Station names reach a <code>RichText</code> label unescaped</b> — <b>DONE</b> (pre-existing; found while
+  tracing R3's message path). <code>HelpArea.qml:74</code> sets <code>textFormat: QC.Label.RichText</code> and
+  <code>CavePage.qml:132</code> joins a cave's <code>warningMessages</code> into it with <code>&lt;br&gt;</code>. Every
+  fragment built at <code>cwFixStationValidator.cpp:314</code>, <code>:333</code> and <code>:411</code> interpolates a
+  user-typed station name with no escaping, so a station named <code>A&amp;B</code> or <code>A&lt;b&gt;</code> renders
+  wrong — and <code>&lt;img src=…&gt;</code> renders worse. <code>.arg()</code> itself is safe (replacements are not
+  re-scanned for placeholders), so this is purely a markup-escaping gap. Note this is the one argument for structured
+  errors that has teeth: escaping belongs at the view boundary, and today there is no boundary to put it at. Deserves its
+  own issue.
+  <span class="mono-note"><b>Done 2026-07-26 — fixed by removing the markup, not by escaping into it.</b> The banner never
+  needed rich text; it was inheriting it. <code>HelpArea</code> gained a <code>textFormat</code> alias and the banner
+  declares <code>QC.Label.PlainText</code>, joining its messages with <code>\n</code> instead of <code>&lt;br&gt;</code>.
+  Nothing builds markup any more, so no escape helper was written and none is needed.
+  <br><b>Re-opened and re-closed within one commit — 2026-07-27 <span class="pill new">P2</span>. Downgrade this from
+  DONE to RECURRING.</b> Commit 11 added a brand-new error label to <code>FixStationPopup</code>, and it defaulted to
+  <code>AutoText</code> over text that quotes what the user just typed: a coordinate pasted as
+  <code>1, 2, 3 &lt;b&gt;x</code> came back rendered as markup inside the very message explaining it was rejected. The
+  review caught it and pinned <code>PlainText</code>. <b>The sentence above — "nothing builds markup any more" — was
+  true when written and stopped being true the next time somebody added a label.</b> That is the actual finding:
+  R6's fix is <i>per surface</i>, and the codebase has no mechanism that makes a new surface inherit it. There were
+  three known surfaces; there are four; the fifth will arrive the same way.
+  <br><b>The safe default is backwards, and that is the root cause.</b> <code>AutoText</code> guesses via
+  <code>Qt::mightBeRichText()</code>, so a label is rich-text-by-accident precisely when its content contains a tag —
+  i.e. exactly in the case that hurts. Every fix so far has been to state the format explicitly at one more site.
+  <b>§14 A1's structured/escaped error contract is what actually closes this</b>; until then, treat "does this new
+  label render user data, and has it stated its <code>textFormat</code>?" as a standing review question, and expect
+  U14 to add another one — it stores and re-displays the user's raw typed string by design.
+  <br><b>Why <code>ErrorHelpArea</code> couldn't just be flipped wholesale.</b> The obvious move — make the error variant
+  plain for everyone — breaks a real caller: <code>CloneArea.qml:132</code> shows
+  <code>cwGitHostingProvider::notFoundOrAccessMessage()</code>, which appends an <code>&lt;a href&gt;</code> (already
+  <code>toHtmlEscaped</code>) and wires <code>onLinkActivated</code> to open it. So rich text stays the default for the 29
+  <code>HelpArea</code> callers and the one supplying user data opts out. That is the boundary the note above said didn't
+  exist — it did, it just wasn't declared.
+  <br><b>A third surface needed the opposite treatment, and R6's note had missed it.</b> The render-view overlay
+  (<code>GLTerrainRenderer.qml:183</code>) concatenates the validator's summary — which quotes the offending
+  <i>cave</i> name, also user-typed — with <code>&lt;br&gt;Open the cave's &lt;a href="fixStations"&gt;…</code>, and that
+  link is the whole point of the banner. Plain text is not an option there, so this is the one place that actually
+  escapes: <code>Utils.escapeHtml()</code> (new, in the existing shared <code>Utils.js</code>) wraps the summary, and the
+  box now states <code>RichText</code> outright instead of letting <code>AutoText</code> infer it from the
+  <code>&lt;a&gt;</code> it happens to contain. Note what the two halves of R6 have in common: neither surface was
+  <i>wrong</i> about which format it wanted — neither had been asked.
+  <br><b>The overlay's exposure is narrower than R6 assumed, and the test is what found it.</b> The first version of
+  <code>test_overlayEscapesCaveNameIntoMarkup</code> renamed the cave to <code>A&lt;b&gt;B &amp; Co</code> and failed with
+  the name still reading <code>OutlierCave</code>: <code>cwCave::setName</code> drops any name that
+  <code>cwNameUtils::sanitizeFileName</code> would alter, and its forbidden set is
+  <code>\ / : * ? " &lt; &gt; |</code> — a cave name becomes a directory name in a <code>.cwproj</code>. So no cave name
+  can carry a tag. <code>&amp;</code> <i>is</i> accepted, and it still opens an entity, so the escape is right and the
+  test now pins the reachable case (<code>Bat &amp; Ball</code> → <code>Bat &amp;amp; Ball</code>) and asserts the
+  rename took. <b>Station names have no such validator</b> — <code>cwFixStationModel::setData</code> stores whatever is
+  typed — which is why the tag case is real for the CavePage banner and not here.
+  <br><b>Second surface fixed in the same pass.</b> <code>ErrorListQuoteBox.qml</code>'s message label was
+  <code>AutoText</code>, whose <code>Qt::mightBeRichText()</code> heuristic fires on a tag before the first line break — so
+  the same names mis-rendered in the error list. Pinned to <code>PlainText</code>, which also makes it agree with sibling
+  <code>ErrorListView.qml</code>, whose <code>TextEdit</code> has defaulted to plain all along.
+  <br><b>Deliberately left open — see R8.</b> The two fix-station tooltips still run <code>AutoText</code> over a message
+  quoting a station name. <code>QC.ToolTip</code> has no <code>textFormat</code> (checked against the Qt 6.11 docs: only
+  <code>delay</code>, <code>text</code>, <code>timeout</code>), so pinning one means replacing its styled
+  <code>contentItem</code> — and ~20 tooltip sites app-wide carry the same exposure with CS and cave names. Too broad to
+  smuggle in here.
+  <br><b>Test.</b> <code>tst_CavePage_outlierWarning</code> gained <code>test_bannerRendersStationNameLiterally</code>: a
+  fix named <code>A&lt;b&gt;B</code> must survive into <code>banner.text</code> verbatim <i>and</i> the banner must report
+  <code>PlainText</code> — the second assertion is the one that actually pins the rendering, since the
+  <code>text</code> property is unchanged either way. <code>tst_GLTerrainRenderer_outlierWarning</code> gained
+  <code>test_overlayEscapesCaveNameIntoMarkup</code>: a cave named <code>A&lt;b&gt;B &amp; Co</code> must reach the label
+  as entities while the overlay's own <code>&lt;a href&gt;</code> survives. That case renames the cave, so
+  <code>init()</code> now restores the name — the routing case downstream asserts on it. 11/11 and 7/7 on the two files;
+  full QML suite clean apart from the standing <code>MainSideBarResponsive::autoUpdateLabel</code> pair. No C++ changed.</span></li>
+  <li><b>R7 — <code>gatherCandidates()</code> builds a <code>cwCoordinateTransform</code> inside its per-fix loop</b>
+  (<code>cwFixStationValidator.cpp:255</code>), and that constructor does <code>proj_context_create</code> +
+  <code>proj_create_crs_to_crs</code> + <code>proj_normalize_for_visualization</code> with no caching — hundreds of µs to
+  ms per cross-CS fix, per <code>revalidate()</code>. Two things keep it from being urgent: the loop short-circuits when
+  the fix's CS already equals the global CS (<code>:252</code>, so a single-zone project builds no PROJ object at all),
+  and the neighbouring domain check already caches. This is the same cost centre as
+  <a href="https://github.com/Cavewhere/cavewhere/issues/633">#633</a> and was
+  <a href="https://github.com/Cavewhere/cavewhere/issues/633#issuecomment-5084127547">reported there</a> rather than
+  tracked here, together with the ordering it implies: caching the transform per CS pair collapses this loop from N
+  constructions to one and makes the hand-hoist unnecessary. It dwarfs every string cost in this feature by six orders of
+  magnitude, which is the honest reason none of R3's micro-costs mattered.
+  <br><b>Also corrected while filing:</b> both earlier comments on #633 linked to
+  <code>blob/master/cavewherelib/src/…</code>, a path that does not exist on <code>master</code> — the C++ tree lives on
+  <code>dev</code>, so those links 404. Noted in the same comment.</li>
+  <li><b>R8 — Tooltips guess whether user data is markup</b> (app-wide; split out of R6). Every
+  <code>QC.ToolTip</code> renders through the style's default <code>Text</code>, which is <code>AutoText</code>, and
+  <code>QC.ToolTip</code> exposes no <code>textFormat</code> to override it — only <code>delay</code>,
+  <code>text</code> and <code>timeout</code>. <code>Qt::mightBeRichText()</code> then decides per string, so a station
+  named <code>A&lt;b&gt;B</code> renders as markup at <code>FixStationErrorBadge.qml:53</code> and
+  <code>FixStationPage.qml:111</code>, and the same holds for the ~20 other tooltip sites that show CS names, cave names
+  and file paths. The fix is one shared tooltip component with an explicit <code>PlainText</code>
+  <code>contentItem</code> — which is also where R1's <code>Theme.tooltipDelay</code> belongs, since every site currently
+  repeats <code>delay: 300</code> or <code>500</code> by hand. Doing both at once is the cheap version.</li>
+  <li><b>R4 — The row flag and the cave warning classify independently</b>
+  (<code>cwFixStationDiagnosticsModel.cpp:25</code> vs <code>cwFixStationValidator.cpp:231</code>) — <b>DONE</b>. Already
+  noted for the domain check; U10 doubled it for the reference check.
+  <span class="mono-note"><b>Done 2026-07-26 — both rules now live in one headless unit,
+  <code>cwFixStationDiagnostics</code>.</b> New <code>cwFixStationDiagnostics.{h,cpp}</code>: a plain namespace (no
+  QObject, no UI) holding <code>domainCheck(fix, globalCS)</code> / <code>isDomainValid(fix, globalCS)</code> and
+  <code>classifyStationReference(name, network)</code>, moved off <code>cwFixStationDiagnosticsModel</code>. Three
+  domain-check call sites collapsed to one rule: the proxy's <code>data()</code>, the validator's
+  <code>gatherCandidates()</code> (Part A), and <code>updateOutputCSPrompt()</code>. The validator no longer includes a
+  view model header at all, which was the layering cost of A1's placement.
+  <br><b>Second pass (same day) fixed a dependency the first pass introduced and finished the job.</b> Sharing the CS
+  resolution via <code>cwSurvexExporterUtils::resolveFixCS</code> made the headless validator include the survex
+  <i>writer's</i> header — <code>QTextStream</code>, <code>cwShot</code>, <code>cwStation</code> and three reading types,
+  for a 4-line string helper, with the dependency arrow pointing validation&nbsp;&rarr;&nbsp;export. And it only covered
+  three of five sites: <code>cwGridConvergence</code> and <code>cwTripCalibration</code> still hand-rolled the identical
+  fallback. Resolved by putting the rule on the value type it belongs to —
+  <b><code>cwFixStation::effectiveCS(globalCS)</code></b>, pure <code>QString</code> work adding no includes to a
+  protobuf-serialized class. <code>resolveFixCS</code> deleted; all five sites (exporter&nbsp;&times;2, diagnostics,
+  validator, convergence, calibration) now call the one method.
+  <code>cwCoordinateTransform::isWithinDomain</code> also deleted — this refactor removed its last two production callers,
+  and leaving a second "both axes valid" collapse one level down invited a fix-level caller to skip the CS resolution that
+  <i>is</i> the rule; <code>domainCheck</code>'s doc now says so explicitly.
+  <br><b>The plan's sketched approach was rejected.</b> "The proxy sources verdicts from the validator" would make a
+  cave-owned row model depend on a region-scoped, refresh-driven object — a
+  cave&nbsp;&rarr;&nbsp;region&nbsp;&rarr;&nbsp;validator&nbsp;&rarr;&nbsp;cave read cycle, plus per-row staleness
+  whenever the proxy asks before <code>revalidate()</code> has run. Sharing the <i>rule</i> instead of the <i>result</i>
+  needs no lookup surface, no ordering guarantee, and no new coupling in either direction.
+  <br><b>Pure refactor — no behavior change.</b> The two paths already agreed (both resolved the CS the same way and
+  <code>isWithinDomain</code> is exactly "both axes valid"), so this removes a latent drift risk rather than fixing a
+  live bug; the existing validator/proxy tests are the regression net. New
+  <code>testcases/test_cwFixStationDiagnostics.cpp</code> pins the shared contract — CS resolution (own&nbsp;/ global
+  fallback&nbsp;/ neither&nbsp;/ unparseable), per-axis attribution surviving the fix-level wrapper, name classification,
+  and one test asserting the invariant itself: for the same fix, the inline row flag and the cave banner both fire or
+  both stay quiet, including the global-CS fallback case where the two used to resolve independently.</span></li>
+  <li><b>R5 — Decide whether user-facing strings are translatable at all</b> (project-level, surfaced by R3).
+  This feature ships both conventions: the row messages use <code>cwFixStationDiagnosticsModel::tr()</code>, the
+  cave-level warnings use raw <code>QStringLiteral</code>. Neither is wrong today because <b>nothing is translated</b> —
+  there are no <code>.ts</code> files, no <code>qt_add_translations</code> and no <code>lupdate</code> step. So the real
+  question is not which convention this feature should follow but whether CaveWhere intends to be localizable.
+  <i>Yes</i> ⇒ a wrapping pass plus a <code>.ts</code>/<code>lupdate</code> build step, and the <code>tr()</code> calls
+  that exist become meaningful; <i>no</i> ⇒ drop the stray <code>tr()</code> calls so the codebase stops implying a
+  pipeline that isn't there. Worth answering once, region-wide — not per feature, which is how the split arose.
+  <span class="mono-note"><b>Updated 2026-07-27 <span class="pill new">P5</span> — the count is stale, and the framing
+  missed a constraint that outranks all of it.</b> The tally above read "27 <code>tr()</code> calls across 5 files";
+  it is now <b>38 across 6</b>, and <b>11 of the 11 new ones are in <code>cwCoordinateText.cpp</code> alone</b> — a
+  single commit moved the needle by 40%, because free-form parsing needs a lot of ways to say "I couldn't read that".
+  Expect this number to keep drifting; do not re-cite it without re-running the grep.
+  <br><b>The constraint: <code>cwCoordinateText::parse()</code> is C-locale only.</b> It reads numbers via
+  <code>QString::toDouble</code> and writes them via <code>QLocale::c()</code> — deliberately, and there is a test
+  pinning it under a German default locale, because a field that refuses to read its own output is worse than one that
+  is merely untranslated. <b>The consequence is that localizing CaveWhere is not a string-wrapping exercise here.</b>
+  A user in a comma-decimal locale (de, fr, es — most of Europe) cannot paste a coordinate the way their own tools
+  emit it: <code>46,12113</code> would tokenize as two components, and <code>46,12113, -115,59902</code> as four. They
+  get a rejection message that, once translated, would be in their language and still wrong about their numbers.
+  <br><b>So R5 has a hard sub-question that must be answered first:</b> does a localized CaveWhere accept
+  locale-formatted <i>numeric input</i>, or only locale-formatted <i>prose</i>? Accepting both means the comma can no
+  longer be a separator, which changes the format #621 asked for. That is a design decision about coordinate entry,
+  not a build-system one — and it lands on U14, which is about to persist the user's typed string verbatim.</span></li>
+</ul>
+
+<h3>Known gaps left open</h3>
+<ul>
+  <li><b>Reference check vs. survex's real authority.</b> See the “Source of truth — decided” note in §13.6: the network
+  and the exporter's chunk-station set diverge for a half-entered trip, producing a transient false warning. Accepted
+  deliberately so external svx/Compass/Walls centrelines stay covered.</li>
+  <li><b>The narrow-layout badge is untested</b> — no <code>objectName</code>, and no existing QML suite drives
+  <code>isNarrow</code>.</li>
+  <li><b><s><code>setCave()</code> is single-call by contract.</s> — no longer applies (2026-07-26).</b>
+  A1 replaced the setter with constructor injection (<code>cwFixStationDiagnosticsModel(cwCave*)</code>) and deleted
+  <code>setCave()</code>, so there is no second call to guard against: the back-reference is now <code>const</code> for the
+  model's lifetime. Commit 9's equality guard and disconnect-previous went with it.</li>
 </ul>
 
 <hr>
-<p class="mono-note">#596 · fix-station outlier detection · 5 commits (Commit 2 optional) · dev_3</p>
+<p class="mono-note">#596 · fix-station outlier detection (Commits 1–6) + usability &amp; error-handling backlog (§13, U1–U14) · dev_3</p>
 
 </div>
 </body>

@@ -12,45 +12,31 @@ import QtQuick.Controls as QC
 import QtQuick.Layouts
 import cavewherelib
 
+// The compact inline coordinate-system field used in fix-station table rows: the
+// shared CSPicker controls, plus a trailing resolved-name label that appears only
+// in Custom mode. Custom has no zone/hemisphere controls to convey the CS, so the
+// label carries it there; UTM and Lat-Lon are self-describing from the controls
+// alone.
 QQ.Item {
     id: rootId
 
-    property string value: ""
-    property bool allowGeographic: true
+    property alias value: pickerId.value
 
-    readonly property int currentMode: CoordinateSystem.modeFor(rootId.value)
-    readonly property string resolvedDescription: {
-        if (rootId.currentMode !== CoordinateSystem.Custom) {
-            return rootId.value
-        }
-        const name = CoordinateSystem.nameFor(rootId.value)
-        return name.length > 0 ? rootId.value + " — " + name : rootId.value
-    }
+    readonly property int currentMode: pickerId.currentMode
+
+    readonly property bool showsResolvedName: rootId.currentMode === CoordinateSystem.Custom
 
     signal committed(string newCS)
 
-    implicitWidth: rowId.implicitWidth
+    // One line width = the picker, plus the label only when it shows. The label
+    // contribution is capped so a long CRS name elides rather than stretching
+    // this field past its host cell (fix-station) or wrapping the narrow-delegate
+    // Flow onto extra lines.
+    implicitWidth: rootId.showsResolvedName
+                   ? pickerId.oneLineWidth + rowId.spacing
+                     + Math.min(labelId.implicitWidth, Theme.csResolvedLabelMaxWidth)
+                   : pickerId.oneLineWidth
     implicitHeight: rowId.implicitHeight
-
-    function commitMode(mode) {
-        switch (mode) {
-        case CoordinateSystem.Local:
-            rootId.committed("")
-            return
-        case CoordinateSystem.LatLon:
-            rootId.committed(CoordinateSystem.wgs84())
-            return
-        case CoordinateSystem.UTM:
-            rootId.committed(CoordinateSystem.utmZoneToEpsg(
-                zoneSpinId.value,
-                hemiComboId.currentIndex === 0))
-            return
-        case CoordinateSystem.Custom:
-            customDialogLoader.active = true
-            customDialogLoader.item.open()
-            return
-        }
-    }
 
     RowLayout {
         id: rowId
@@ -59,103 +45,27 @@ QQ.Item {
         anchors.verticalCenter: parent.verticalCenter
         spacing: 6
 
-        QC.ComboBox {
-            id: modeComboId
-            objectName: "csModePicker"
+        CSPicker {
+            id: pickerId
+            Layout.alignment: Qt.AlignVCenter
 
-            // allowGeographic == false hides LatLon — survex's cavern can't
-            // emit geographic output.
-            readonly property bool hideGeographic: !rootId.allowGeographic
-
-            readonly property var modes: hideGeographic
-                ? [CoordinateSystem.Local,
-                   CoordinateSystem.UTM,
-                   CoordinateSystem.Custom]
-                : [CoordinateSystem.Local,
-                   CoordinateSystem.LatLon,
-                   CoordinateSystem.UTM,
-                   CoordinateSystem.Custom]
-
-            model: hideGeographic
-                ? [qsTr("Local"), qsTr("UTM"), qsTr("Custom...")]
-                : [qsTr("Local"), qsTr("Lat/Lon (WGS84)"), qsTr("UTM"), qsTr("Custom...")]
-
-            function modeAt(index) {
-                return modes[index]
-            }
-
-            function indexForMode(mode) {
-                const i = modes.indexOf(mode)
-                return i >= 0 ? i : 0
-            }
-
-            currentIndex: indexForMode(rootId.currentMode)
-
-            onActivated: (index) => {
-                const mode = modeAt(index)
-                if (mode === rootId.currentMode && mode !== CoordinateSystem.Custom) {
-                    return
-                }
-                rootId.commitMode(mode)
-            }
-        }
-
-        QC.SpinBox {
-            id: zoneSpinId
-            objectName: "csUtmZone"
-            visible: rootId.currentMode === CoordinateSystem.UTM
-            from: 1
-            to: 60
-            value: {
-                const z = CoordinateSystem.utmZoneFor(rootId.value)
-                return z > 0 ? z : 16
-            }
-            editable: true
-            onValueModified: {
-                if (rootId.currentMode === CoordinateSystem.UTM) {
-                    rootId.commitMode(CoordinateSystem.UTM)
-                }
-            }
-        }
-
-        QC.ComboBox {
-            id: hemiComboId
-            objectName: "csUtmHemisphere"
-            visible: rootId.currentMode === CoordinateSystem.UTM
-            model: ["N", "S"]
-            currentIndex: CoordinateSystem.utmNorthFor(rootId.value) ? 0 : 1
-            onActivated: {
-                if (rootId.currentMode === CoordinateSystem.UTM) {
-                    rootId.commitMode(CoordinateSystem.UTM)
-                }
-            }
+            onCommitted: (newCS) => rootId.committed(newCS)
         }
 
         QC.Label {
+            id: labelId
             objectName: "csResolvedLabel"
-            visible: rootId.currentMode === CoordinateSystem.Custom
-                     || rootId.currentMode === CoordinateSystem.UTM
-            text: rootId.resolvedDescription
+            visible: rootId.showsResolvedName
+            text: CSFormat.inlineDescription(pickerId.value)
             color: Theme.textSubtle
             font.family: Theme.fontFamilyMono
             elide: QC.Label.ElideRight
             Layout.fillWidth: true
-        }
-    }
+            Layout.maximumWidth: Theme.csResolvedLabelMaxWidth
 
-    // Lazy: each fix-station row instantiates a CSComboBox, so we defer
-    // CSCustomDialog (and its CRSSearchModel, which loads ~7000 EPSG rows
-    // from proj.db on first use) until the user actually picks "Custom...".
-    QQ.Loader {
-        id: customDialogLoader
-        active: false
-        sourceComponent: customDialogComponent
-    }
-
-    QQ.Component {
-        id: customDialogComponent
-        CSCustomDialog {
-            onAccepted: (cs) => rootId.committed(cs)
+            QC.ToolTip.text: labelId.text
+            QC.ToolTip.visible: labelHover.hovered && labelId.truncated
+            QQ.HoverHandler { id: labelHover }
         }
     }
 }

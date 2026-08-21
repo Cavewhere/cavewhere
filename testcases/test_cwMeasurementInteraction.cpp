@@ -25,6 +25,7 @@
 #include "cwGeometryItersecter.h"
 #include "TestGeometryBuilders.h"
 #include "cwGridConvergence.h"
+#include "cwLocalProjection.h"
 #include "cwMath.h"
 #include "cwProjection.h"
 #include "cwRenderLinePlot.h"
@@ -38,7 +39,9 @@ namespace {
 
 // A perspective camera at the origin looking down -Z, so points at z < 0 are in
 // front of the eye (matching test_cwScenePick).
-void configureCamera(cwCamera& camera)
+//! \a eyeX places the camera along scene x, so a measurement far from the
+//! project's origin still lands in the viewport.
+void configureCamera(cwCamera& camera, float eyeX = 0.0f)
 {
     camera.setViewport(QRect(0, 0, 800, 600));
 
@@ -47,8 +50,8 @@ void configureCamera(cwCamera& camera)
     camera.setProjection(projection);
 
     QMatrix4x4 view;
-    view.lookAt(QVector3D(0.0f, 0.0f, 0.0f),
-                QVector3D(0.0f, 0.0f, -1.0f),
+    view.lookAt(QVector3D(eyeX, 0.0f, 0.0f),
+                QVector3D(eyeX, 0.0f, -1.0f),
                 QVector3D(0.0f, 1.0f, 0.0f));
     camera.setViewMatrix(view);
 }
@@ -113,9 +116,9 @@ TEST_CASE("cwMeasurementInteraction measures between two stations", "[cwMeasurem
 
     SECTION("the clipboard readout matches the on-screen popup labels and signs") {
         // Regression for #565: the copied text must read like the panel — grouped
-        // labels, signed by-axis components, and two-decimal lengths — not the old
-        // flat "Distance:/ΔEast:", unsigned, three-decimal form. Clear so the
-        // asserted metre suffixes don't depend on a sibling section's persisted unit.
+        // labels and signed by-axis components — not the old flat
+        // "Distance:/ΔEast:", unsigned form. Clear so a sibling section's stored
+        // azimuth reference can't reach the copied text.
         QSettings().clear();
         QClipboard* clipboard = QGuiApplication::clipboard();
         REQUIRE(clipboard != nullptr);
@@ -131,20 +134,20 @@ TEST_CASE("cwMeasurementInteraction measures between two stations", "[cwMeasurem
         CHECK(text.contains(QStringLiteral("Distance\n")));
         CHECK(text.contains(QStringLiteral("Direction\n")));
         CHECK(text.contains(QStringLiteral("By Axis\n")));
-        CHECK(text.contains(QStringLiteral("Straight-line (3D): 60.00 m")));
-        CHECK(text.contains(QStringLiteral("Horizontal (2D): 60.00 m")));
+        // Meters read to the millimeter, the resolution a disto measures at.
+        CHECK(text.contains(QStringLiteral("Straight-line (3D): 60.000 m")));
+        CHECK(text.contains(QStringLiteral("Horizontal (2D): 60.000 m")));
         CHECK(text.contains(QStringLiteral("Inclination: 0.0°")));
 
         // By-axis components carry their sign; a component that rounds to zero
-        // shows none (never "-0.00 m").
-        CHECK(text.contains(QStringLiteral("Easting (X): +60.00 m")));
-        CHECK(text.contains(QStringLiteral("Northing (Y): 0.00 m")));
-        CHECK(text.contains(QStringLiteral("Vertical (Z): 0.00 m")));
+        // shows none (never "-0.000 m").
+        CHECK(text.contains(QStringLiteral("Easting (X): +60.000 m")));
+        CHECK(text.contains(QStringLiteral("Northing (Y): 0.000 m")));
+        CHECK(text.contains(QStringLiteral("Vertical (Z): 0.000 m")));
 
-        // The retired flat labels and three-decimal lengths must be gone.
+        // The retired flat labels must be gone.
         CHECK_FALSE(text.contains(QStringLiteral("ΔEast")));
         CHECK_FALSE(text.contains(QStringLiteral("ΔNorth")));
-        CHECK_FALSE(text.contains(QStringLiteral("60.000 m")));
     }
 
     SECTION("the clipboard reports lengths in the selected unit") {
@@ -289,8 +292,12 @@ TEST_CASE("cwMeasurementInteraction resolves the azimuth north reference",
 
     cwScene scene;
 
-    const QVector3D a(-30.0f, 0.0f, -100.0f);
-    const QVector3D b(30.0f, 0.0f, -100.0f);
+    // 50 km east of the project's origin, where the local projection's grid
+    // convergence is clearly non-zero and positive. At the origin itself it is
+    // zero by construction — the frame's central meridian runs through it.
+    constexpr float kEastOfOrigin = 50000.0f;
+    const QVector3D a(kEastOfOrigin - 30.0f, 0.0f, -100.0f);
+    const QVector3D b(kEastOfOrigin + 30.0f, 0.0f, -100.0f);
     QVector<QVector3D> points;
     points << a << b;
 
@@ -300,18 +307,19 @@ TEST_CASE("cwMeasurementInteraction resolves the azimuth north reference",
     scene.geometryItersecter()->waitForFinish();
 
     cwCamera camera;
-    configureCamera(camera);
+    configureCamera(camera, kEastOfOrigin);
 
-    // UTM 13N with an origin well east of the central meridian, so the grid
-    // convergence is clearly non-zero and positive.
-    const QString cs = QStringLiteral("EPSG:32613");
-    cwCoordinateTransform geoToUtm(QStringLiteral("EPSG:4326"), cs);
+    cwCoordinateTransform geoToUtm(QStringLiteral("EPSG:4326"),
+                                   QStringLiteral("EPSG:32613"));
     REQUIRE(geoToUtm.isValid());
-    const cwGeoPoint origin = geoToUtm.transform(cwGeoPoint(-104.0, 40.015, 1655.0));
+    const cwGeoPoint anchor = geoToUtm.transform(cwGeoPoint(-104.0, 40.015, 1655.0));
+    const QString cs = cwLocalProjection::deriveFrom(QStringLiteral("EPSG:32613"), anchor);
+    REQUIRE_FALSE(cs.isEmpty());
 
     cwCavingRegion region;
-    region.geoReference()->setGlobalCoordinateSystem(cs);
-    region.geoReference()->setWorldOrigin(origin);
+    // Frozen: no fix station or layer put this frame here, and nothing in this
+    // test should move it.
+    region.geoReference()->restore(cwGeoReference::Frozen, cs, {}, QString());
 
     cwMeasurementInteraction interaction;
     interaction.setCamera(&camera);
@@ -328,10 +336,8 @@ TEST_CASE("cwMeasurementInteraction resolves the azimuth north reference",
     REQUIRE(interaction.hasMeasurement());
     REQUIRE(interaction.azimuth() == Approx(90.0));
 
-    // The location the resolver sees is the first point plus the worldOrigin.
-    const cwGeoPoint location(double(a.x()) + origin.x,
-                              double(a.y()) + origin.y,
-                              double(a.z()) + origin.z);
+    // Scene coordinates are already coordinates in the project's frame.
+    const cwGeoPoint location = cwGeoPoint::fromSceneLocal(a);
 
     SECTION("Grid is the default and mirrors the grid azimuth") {
         CHECK(interaction.azimuthReference() == cwAzimuthReference::Reference::Grid);
@@ -402,7 +408,8 @@ TEST_CASE("cwMeasurementInteraction resolves the azimuth north reference",
 
         // An invalid CRS leaves True selected but unresolvable: the line pastes
         // an honest n/a with the reason, never a silently-wrong grid number.
-        region.geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:999999"));
+        region.geoReference()->restore(cwGeoReference::Frozen,
+                                       QStringLiteral("EPSG:999999"), {}, QString());
         REQUIRE(interaction.azimuthReference() == cwAzimuthReference::Reference::True);
         interaction.copyToClipboard();
         CHECK(clipboard->text().contains(QStringLiteral("Azimuth (true): n/a (")));
@@ -412,7 +419,7 @@ TEST_CASE("cwMeasurementInteraction resolves the azimuth north reference",
         interaction.setAzimuthReference(cwAzimuthReference::Reference::True);
         REQUIRE(interaction.azimuthReference() == cwAzimuthReference::Reference::True);
 
-        region.geoReference()->setGlobalCoordinateSystem(QString());
+        region.geoReference()->clear();
         CHECK_FALSE(interaction.geoReferenced());
         CHECK(interaction.azimuthReference() == cwAzimuthReference::Reference::Grid);
         CHECK(interaction.referenceAvailable());
@@ -420,7 +427,7 @@ TEST_CASE("cwMeasurementInteraction resolves the azimuth north reference",
     }
 
     SECTION("a local-only project can't select True or Magnetic") {
-        region.geoReference()->setGlobalCoordinateSystem(QString());
+        region.geoReference()->clear();
         REQUIRE_FALSE(interaction.geoReferenced());
 
         interaction.setAzimuthReference(cwAzimuthReference::Reference::True);
@@ -434,7 +441,8 @@ TEST_CASE("cwMeasurementInteraction resolves the azimuth north reference",
     SECTION("a present but invalid coordinate system reports n/a") {
         // geoReferenced is true (the CRS is non-empty) so True stays selectable,
         // but the resolve fails and surfaces as n/a for the readout.
-        region.geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:999999"));
+        region.geoReference()->restore(cwGeoReference::Frozen,
+                                       QStringLiteral("EPSG:999999"), {}, QString());
         REQUIRE(interaction.geoReferenced());
 
         interaction.setAzimuthReference(cwAzimuthReference::Reference::True);

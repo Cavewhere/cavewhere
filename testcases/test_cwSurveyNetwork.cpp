@@ -131,3 +131,25 @@ TEST_CASE("cwSurveyNetwork position accessors", "[cwSurveyNetwork]") {
     CHECK(net.hasPosition("B2") == false);
     CHECK(net.position("B2") == QVector3D());
 }
+
+TEST_CASE("cwSurveyNetwork::hasStation matches trimmed and case-insensitively",
+          "[cwSurveyNetwork]") {
+    cwSurveyNetwork network;
+    CHECK_FALSE(network.hasStation(QStringLiteral("A1")));
+
+    network.addShot(QStringLiteral("A1"), QStringLiteral("A2"));
+
+    CHECK(network.hasStation(QStringLiteral("A1")));
+    CHECK(network.hasStation(QStringLiteral("a1")));
+    CHECK(network.hasStation(QStringLiteral("  A1  ")));
+    CHECK_FALSE(network.hasStation(QStringLiteral("A3")));
+
+    // An empty or whitespace-only name is never a station.
+    CHECK_FALSE(network.hasStation(QString()));
+    CHECK_FALSE(network.hasStation(QStringLiteral("   ")));
+
+    // Agrees with the list it replaces scanning.
+    for (const QString& name : network.stations()) {
+        CHECK(network.hasStation(name));
+    }
+}

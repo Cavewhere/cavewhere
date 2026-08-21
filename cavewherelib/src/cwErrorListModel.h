@@ -12,6 +12,7 @@
 //Qt includes
 #include <QQmlEngine>
 #include <QAbstractListModel>
+#include <QStringList>
 
 //Our inculdes
 #include "cwError.h"
@@ -23,6 +24,7 @@ class CAVEWHERE_LIB_EXPORT cwErrorListModel : public QAbstractListModel {
     QML_NAMED_ELEMENT(ErrorListModel)
 
     Q_PROPERTY(int count READ count NOTIFY countChanged FINAL)
+    Q_PROPERTY(QStringList warningMessages READ warningMessages NOTIFY warningMessagesChanged FINAL)
 
     Q_ENUMS(ErrorRoles)
 
@@ -38,6 +40,16 @@ public:
 
     int roleForName(const QByteArray& roleName) const;
     int count() const;
+    QStringList warningMessages() const;
+
+    //! The non-suppressed Warning messages whose errorTypeId is one of `ids` —
+    //! a scoped slice of warningMessages() for surfacing one feature's errors on
+    //! their own (e.g. the fix-station badge). Generic: the caller supplies the
+    //! id set, so this model stays feature-agnostic. Reactive off the same
+    //! warningMessagesChanged() as warningMessages(), which fires on every add,
+    //! remove, suppression toggle, and message edit — so a QML binding that also
+    //! reads warningMessages (or its length) tracks this live.
+    Q_INVOKABLE QStringList warningMessagesForTypeIds(const QList<int>& ids) const;
     cwError at(int index) const;
     int indexOf(const cwError& error) const;
     QList<cwError> toList() const { return m_errors; }
@@ -67,6 +79,7 @@ public slots:
 
 signals:
     void countChanged();
+    void warningMessagesChanged();
 
 
 private:

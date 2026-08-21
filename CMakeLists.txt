@@ -216,6 +216,8 @@ if(BUILD_TESTING)
             testlib/GeoreferenceFixtureHelper.h
             testlib/BoulderFixtureHelper.cpp
             testlib/BoulderFixtureHelper.h
+            testlib/FixStationFixtureHelper.cpp
+            testlib/FixStationFixtureHelper.h
             testlib/MockAuthProvider.cpp
             testlib/MockAuthProvider.h
             testlib/SvgOverlapAnalyzer.cpp

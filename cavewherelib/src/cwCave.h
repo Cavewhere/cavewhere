@@ -23,6 +23,7 @@ class cwKeywordModel;
 #include "cwSanitizedNameSet.h"
 #include "cwSurveyNetwork.h"
 #include "cwCaveData.h"
+#include "cwFixStationDiagnosticsModel.h"
 #include "cwFixStationModel.h"
 
 //Qt includes
@@ -48,6 +49,7 @@ class CAVEWHERE_LIB_EXPORT cwCave : public QAbstractListModel, public cwUndoer
     Q_PROPERTY(cwLength* depth READ depth CONSTANT)
     Q_PROPERTY(cwErrorModel* errorModel READ errorModel CONSTANT)
     Q_PROPERTY(cwFixStationModel* fixStations READ fixStations CONSTANT)
+    Q_PROPERTY(cwFixStationDiagnosticsModel* fixStationDiagnostics READ fixStationDiagnostics CONSTANT)
     Q_PROPERTY(cwGridConvergence* gridConvergence READ gridConvergence CONSTANT)
     Q_PROPERTY(cwExternalCenterline externalCenterline READ externalCenterline WRITE setExternalCenterline NOTIFY externalCenterlineChanged)
     Q_PROPERTY(cwKeywordModel* keywordModel READ keywordModel CONSTANT)
@@ -80,10 +82,20 @@ public:
     cwErrorModel* errorModel() const;
     cwFixStationModel* fixStations() const { return FixStations; }
 
+    /// The fix stations plus their read-only, computed warnings (coordinate
+    /// domain, station reference). A proxy over fixStations() that the
+    /// FixStationPage delegates bind to; the warnings are derived from the solve
+    /// and each row's own inputCS(), so they deliberately do not reach
+    /// fixStations()' dataChanged, which means "persisted data changed" and
+    /// nothing else.
+    cwFixStationDiagnosticsModel* fixStationDiagnostics() const { return m_fixStationDiagnostics; }
+
     /// Per-cave grid-convergence readout (angle + state + display text).
-    /// Recomputed from the fix stations / region CS via recomputeGridConvergence();
-    /// cwScrap reads gridConvergence()->angle() to remove grid rotation from the
-    /// note transform.
+    /// Recomputed via recomputeGridConvergence() in the region's local
+    /// projection — the grid cavern plots the stations in — at the location the
+    /// cave's first usable fix station gives. cwScrap reads
+    /// gridConvergence()->angle() to remove that grid's rotation from the note
+    /// transform, so it has to be the same grid the stations came back in.
     cwGridConvergence* gridConvergence() const { return m_gridConvergence; }
 
     int tripCount() const;
@@ -142,10 +154,10 @@ signals:
     void externalCenterlineChanged();
 
 public slots:
-    /// Feed the cave's current fix stations and region coordinate system into
-    /// the gridConvergence() readout, which caches the PROJ result and only
-    /// re-emits when it actually changes. Wired to fix-station edits (here) and
-    /// the region's globalCS changes (in cwCavingRegion).
+    /// Feed the cave's current fix stations and the region's frame into the
+    /// gridConvergence() readout, which caches the PROJ result and only re-emits
+    /// when it actually changes. Wired to fix-station edits here, and to frame
+    /// moves by the region.
     void recomputeGridConvergence();
 
 private:
@@ -170,6 +182,11 @@ private:
     cwExternalCenterline m_externalCenterline;
 
     cwKeywordModel* m_keywordModel = nullptr;
+
+    //! Proxy over FixStations adding the computed warning roles. Constructed
+    //! last so both its source model and this cave exist to bind to.
+    cwFixStationDiagnosticsModel* m_fixStationDiagnostics = nullptr;
+
     void updateKeywords();
 
     cwCave& Copy(const cwCave& object);

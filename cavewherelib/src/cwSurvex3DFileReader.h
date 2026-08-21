@@ -9,7 +9,6 @@
 #define CWSURVEX3DFILEREADER_H
 
 //Our includes
-#include "cwGeoPoint.h"
 #include "cwStationPositionLookup.h"
 #include "cwSurveyNetwork.h"
 #include "CaveWhereLibExport.h"
@@ -20,10 +19,9 @@
 /**
  * Reads cavern's .3d output into a position lookup and a survey network.
  *
- * Coordinates arrive as doubles in the region's globalCS, so a georeferenced
- * cave's are at full UTM magnitude. \a worldOrigin is subtracted before they
- * are narrowed to QVector3D, which cannot hold a UTM coordinate. Callers with
- * no georeference pass a default-constructed cwGeoPoint.
+ * Coordinates arrive in whatever *cs out named, which for CaveWhere's export is
+ * the project's local projection — centered on the project and small enough to
+ * narrow to QVector3D without losing metres to float.
  */
 class CAVEWHERE_LIB_EXPORT cwSurvex3DFileReader
 {
@@ -31,14 +29,14 @@ public:
     struct NetworkAndLookup {
         cwSurveyNetwork network;
         cwStationPositionLookup lookup;
+        cwSplayTipsByStation splayTips;
     };
 
-    // Parses a .3d file once, returning both the survey network (station names,
-    // shot connectivity, positions) and a standalone position lookup. Two-pass
-    // using img_rewind(): pass 1 indexes LABEL items, pass 2 resolves LINE
-    // endpoints by coordinate match.
-    NetworkAndLookup readNetworkAndLookup(const QString& threeDFilePath,
-                                          const cwGeoPoint& worldOrigin);
+    // Parses a .3d file once, returning the survey network (station names,
+    // shot connectivity, positions), a standalone position lookup, and the
+    // splay tips. Two-pass using img_rewind(): pass 1 indexes LABEL items,
+    // pass 2 resolves LINE endpoints by coordinate match.
+    NetworkAndLookup readNetworkAndLookup(const QString& threeDFilePath);
 };
 
 #endif // CWSURVEX3DFILEREADER_H

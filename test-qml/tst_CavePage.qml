@@ -19,6 +19,81 @@ MainWindowTest {
             RootData.project.newProject()
         }
 
+        //! The note carrying the leads, so a caller can add and remove more
+        function setupCaveWithLeads(caveName, leadCount) {
+            RootData.region.addCave()
+            let cave = RootData.region.cave(RootData.region.caveCount - 1)
+            cave.name = caveName
+
+            cave.addTrip()
+            let trip = cave.trip(0)
+            trip.name = caveName + "-Trip"
+
+            let note = TestHelper.addNoteWithScrap(trip, caveName + "-Note")
+            verify(note !== null, "note with a scrap should be added to " + caveName)
+
+            for (let i = 0; i < leadCount; ++i) {
+                TestHelper.addScrapLead(note, 0, Qt.point(i, i), Qt.size(1, 1),
+                                        caveName + " lead " + i)
+            }
+
+            return note
+        }
+
+        function gotoCavePage(caveName) {
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=" + caveName
+            tryVerify(() => {
+                          let page = RootData.pageView.currentPageItem
+                          return page !== null && page.objectName === "cavePage"
+                              && page.currentCave !== null && page.currentCave.name === caveName
+                      }, 5000, "cave page should be showing " + caveName)
+            return RootData.pageView.currentPageItem
+        }
+
+        function gotoCaveLeadsLink(caveName) {
+            let leadsLink = findChild(gotoCavePage(caveName), "leadsLink")
+            verify(leadsLink !== null, "leadsLink should exist on the cave page")
+            return leadsLink
+        }
+
+        // Regression test for issue #657: the page view keeps one CavePage item
+        // and reassigns currentCave, so the "Leads:" count has to follow the
+        // cave the page is showing rather than the one it was created with.
+        function test_leadCountFollowsCurrentCave() {
+            setupCaveWithLeads("LeadCaveA", 3)
+            setupCaveWithLeads("LeadCaveB", 1)
+
+            let leadsLink = gotoCaveLeadsLink("LeadCaveA")
+            tryCompare(leadsLink, "text", "3", 5000,
+                       "cave page should show LeadCaveA's 3 leads")
+
+            gotoCavePage("LeadCaveB")
+            tryCompare(leadsLink, "text", "1", 5000,
+                       "cave page should show LeadCaveB's 1 lead, not the count it was showing for LeadCaveA")
+
+            gotoCavePage("LeadCaveA")
+            tryCompare(leadsLink, "text", "3", 5000,
+                       "cave page should show LeadCaveA's 3 leads again")
+        }
+
+        // The count also has to follow leads coming and going in the cave the
+        // page is already showing, not just a switch to another cave.
+        function test_leadCountFollowsLeadEdits() {
+            let note = setupCaveWithLeads("LeadEditCave", 2)
+
+            let leadsLink = gotoCaveLeadsLink("LeadEditCave")
+            tryCompare(leadsLink, "text", "2", 5000,
+                       "cave page should show the 2 leads it started with")
+
+            verify(TestHelper.addScrapLead(note, 0, Qt.point(9, 9), Qt.size(1, 1), "added lead"))
+            tryCompare(leadsLink, "text", "3", 5000,
+                       "adding a lead should raise the count")
+
+            verify(TestHelper.removeScrapLead(note, 0, 0))
+            tryCompare(leadsLink, "text", "2", 5000,
+                       "removing a lead should lower the count")
+        }
+
         function setupCaveWithTrips() {
             RootData.region.addCave()
             let cave = RootData.region.cave(0)
@@ -33,8 +108,7 @@ MainWindowTest {
             cave.addTrip()
             cave.trip(2).name = "B-Trip"
 
-            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=TestCave"
-            tryVerify(() => RootData.pageView.currentPageItem.objectName === "cavePage")
+            gotoCavePage("TestCave")
             waitForRendering(rootId)
 
             return cave

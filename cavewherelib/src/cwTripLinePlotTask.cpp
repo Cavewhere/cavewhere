@@ -203,6 +203,11 @@ cwLinePlotTask::Input buildLinePlotInput(const QString &tripName,
     cwLinePlotTask::Input input;
     input.regionData.name = QStringLiteral("sketch-region");
     input.regionData.caves.append(caveData);
+    // previousStationPositions / previousNetworks are left empty on purpose, so
+    // the worker treats every station as changed and always populates
+    // result.Caves — which runLinePlot() below requires. That stays correct only
+    // while caveData.id is freshly generated per call; a caller that starts
+    // reusing a stable cave id here has to seed them to stay incremental.
 
     return input;
 }

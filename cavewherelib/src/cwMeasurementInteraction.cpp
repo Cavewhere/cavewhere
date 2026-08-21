@@ -11,6 +11,7 @@
 #include "cwGeoPoint.h"
 #include "cwGeoReference.h"
 #include "cwMeasurementMath.h"
+#include "cwUnits.h"
 
 //Qt includes
 #include <QClipboard>
@@ -108,22 +109,18 @@ void cwMeasurementInteraction::setGeoReference(cwGeoReference* geoReference)
     if (m_geoReference == geoReference) {
         return;
     }
-    // The geo-reference supplies the worldOrigin and CRS that turn the grid
-    // azimuth into a true/magnetic bearing. A CRS change can also invalidate the
-    // current reference (a local-only project has none), so it routes through
-    // syncReferenceToGeoReference; an origin change only moves the location.
+    // The geo-reference supplies the frame that turns the grid azimuth into a
+    // true/magnetic bearing. Losing it invalidates the current reference (a
+    // local-only project has none), so it routes through
+    // syncReferenceToGeoReference rather than a plain refresh.
     if (m_geoReference) {
-        disconnect(m_geoReference, &cwGeoReference::globalCoordinateSystemChanged,
+        disconnect(m_geoReference, &cwGeoReference::localProjectionChanged,
                    this, &cwMeasurementInteraction::syncReferenceToGeoReference);
-        disconnect(m_geoReference, &cwGeoReference::worldOriginChanged,
-                   this, &cwMeasurementInteraction::refreshReference);
     }
     m_geoReference = geoReference;
     if (m_geoReference) {
-        connect(m_geoReference, &cwGeoReference::globalCoordinateSystemChanged,
+        connect(m_geoReference, &cwGeoReference::localProjectionChanged,
                 this, &cwMeasurementInteraction::syncReferenceToGeoReference);
-        connect(m_geoReference, &cwGeoReference::worldOriginChanged,
-                this, &cwMeasurementInteraction::refreshReference);
     }
     emit geoReferenceChanged();
     syncReferenceToGeoReference();
@@ -191,9 +188,9 @@ void cwMeasurementInteraction::refreshReference()
 
     // Resolve against the first picked point (per spec). UTC is enough for IGRF
     // (it keys on the decimal year) and is faster and DST-stable versus local.
-    const cwGeoPoint location = m_geoReference ? m_geoReference->toGlobal(m_firstPoint)
+    const cwGeoPoint location = m_geoReference ? cwGeoPoint::fromSceneLocal(m_firstPoint)
                                                : cwGeoPoint{};
-    const QString sourceCS = m_geoReference ? m_geoReference->globalCoordinateSystem()
+    const QString sourceCS = m_geoReference ? m_geoReference->localCoordinateSystem()
                                             : QString{};
     applyReferenceResult(cwAzimuthReference::resolve(
                 m_azimuth, m_azimuthReference, location, sourceCS,
@@ -330,7 +327,7 @@ void cwMeasurementInteraction::copyToClipboard() const
     // pastes "n/a (reason)" rather than a silently-wrong grid value. Grid always
     // resolves, so m_referenceAzimuth is the grid azimuth in that case.
     const QString azimuthValue = m_referenceAvailable
-            ? QStringLiteral("%1°").arg(m_referenceAzimuth, 0, 'f', kAngleDecimals)
+            ? cwUnits::formatAngle(m_referenceAzimuth, kAngleDecimals)
             : QStringLiteral("n/a (%1)").arg(m_referenceReason);
     const QString azimuthLine =
             QStringLiteral("Azimuth (%1): %2")
@@ -352,12 +349,12 @@ void cwMeasurementInteraction::copyToClipboard() const
                    m_lengthUnit->format(m_horizontal))
             + azimuthLine
             + QStringLiteral("\n"
-                             "  Inclination: %1°\n"
+                             "  Inclination: %1\n"
                              "By Axis\n"
                              "  Easting (X): %2\n"
                              "  Northing (Y): %3\n"
                              "  Vertical (Z): %4")
-              .arg(QString::number(m_inclination, 'f', kAngleDecimals),
+              .arg(cwUnits::formatAngle(m_inclination, kAngleDecimals),
                    m_lengthUnit->format(m_deltaEast, true),
                    m_lengthUnit->format(m_deltaNorth, true),
                    m_lengthUnit->format(m_vertical, true));

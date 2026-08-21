@@ -13,8 +13,14 @@ ShadowRectangle {
     id: helpBox
 
     property alias text: textId.text
+    // Left to AutoText by default, as the older callers rely on. State it
+    // outright wherever the text is assembled rather than literal — guessing
+    // per string is what lets a user-typed name turn into a tag.
+    property alias textFormat: textId.textFormat
     property alias font: textId.font
     property alias animateHide: hideTransitionId.enabled
+
+    signal linkActivated(string link)
 
     width: textId.width + 10
     height: textId.height + 10
@@ -34,6 +40,8 @@ ShadowRectangle {
 
         font.pixelSize: Theme.fontSizeUI
         horizontalAlignment: QC.Label.AlignHCenter
+
+        onLinkActivated: (link) => helpBox.linkActivated(link)
     }
 
     onVisibleChanged: {

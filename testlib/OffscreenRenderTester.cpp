@@ -1,6 +1,12 @@
 #include "OffscreenRenderTester.h"
 #include "LazFixtureHelper.h"
 #include "cwRootData.h"
+#include "cwCavingRegion.h"
+#include "cwCave.h"
+#include "cwTrip.h"
+#include "cwSurveyChunk.h"
+#include "cwShotMeasurement.h"
+#include "cwRenderLinePlot.h"
 #include "cwRhiViewer.h"
 #include "cwScene.h"
 #include "cwGeometryItersecter.h"
@@ -33,6 +39,8 @@
 #include <QVector3D>
 
 #include <asyncfuture.h>
+
+// Std includes
 
 namespace {
 // Alpha (0..255) above which a pixel counts as drawn content rather than the
@@ -158,6 +166,77 @@ bool OffscreenRenderTester::addSyntheticPointCloud(QObject* rootData)
     writeMinimalLaz(lazPath);
     addLazAndWait(root, QStringList{lazPath});
     return true;
+}
+
+bool OffscreenRenderTester::addSplaysToFirstStation(QObject* rootData)
+{
+    auto* root = qobject_cast<cwRootData*>(rootData);
+    if (!root || root->region()->caveCount() == 0) {
+        return false;
+    }
+    cwCave* cave = root->region()->cave(0);
+    if (cave->tripCount() == 0 || cave->trip(0)->chunkCount() == 0) {
+        return false;
+    }
+    cwSurveyChunk* chunk = cave->trip(0)->chunk(0);
+    if (chunk->stationCount() == 0) {
+        return false;
+    }
+
+    // Size the splays from the solved plot's extent so the star is a clearly
+    // visible fraction of the frame at the default fit-to-cave zoom — a
+    // fixed few-meter splay is sub-pixel on a large cave.
+    const cwRenderLinePlot* linePlot = root->regionSceneManager()->linePlot();
+    QBox3D plotBounds;
+    for (const QVector3D& point : linePlot->points()) {
+        plotBounds.unite(point);
+    }
+    const double splayLength =
+        qMax(8.0, 0.25 * double(plotBounds.size().length()));
+
+    const auto splay = [splayLength](const QString& compass, const QString& clino) {
+        return cwShotMeasurement(cwDistanceReading(QString::number(splayLength, 'f', 1)),
+                                 cwCompassReading(compass),
+                                 cwClinoReading(clino));
+    };
+    // Diagonal directions: an axis-aligned 1 px splay can land exactly on
+    // pixel boundaries at devicePixelRatio 1 (the offscreen default) and
+    // rasterize no pixel centers at all; a 45-degree line always hits some.
+    chunk->setStationSplays(0, {splay(QStringLiteral("45.0"), QStringLiteral("0.0")),
+                                splay(QStringLiteral("135.0"), QStringLiteral("0.0")),
+                                splay(QStringLiteral("225.0"), QStringLiteral("0.0")),
+                                splay(QStringLiteral("315.0"), QStringLiteral("0.0"))});
+
+    // The app wires the manager to the update coordinator, so the splay edit
+    // only marks the pipeline dirty; drive the solve now and wait for it.
+    const int pointsBefore = linePlot->points().size();
+    root->updateCoordinator()->updateNow(root->linePlotManager());
+    root->linePlotManager()->waitToFinish();
+
+    // 4 splays * 2 vertices each landed in the render geometry.
+    return linePlot->points().size() == pointsBefore + 8;
+}
+
+double OffscreenRenderTester::colorFraction(const QString& path, const QColor& color,
+                                            int tolerance) const
+{
+    const QImage image(path);
+    if (image.isNull()) {
+        return 0.0;
+    }
+
+    qint64 matching = 0;
+    for (int y = 0; y < image.height(); ++y) {
+        for (int x = 0; x < image.width(); ++x) {
+            const QColor pixel = image.pixelColor(x, y);
+            if (qAbs(pixel.red() - color.red()) <= tolerance
+                && qAbs(pixel.green() - color.green()) <= tolerance
+                && qAbs(pixel.blue() - color.blue()) <= tolerance) {
+                matching++;
+            }
+        }
+    }
+    return double(matching) / (double(image.width()) * double(image.height()));
 }
 
 int OffscreenRenderTester::visiblePointCloudCount(QObject* sceneManager) const

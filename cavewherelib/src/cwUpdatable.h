@@ -138,14 +138,12 @@ protected:
         Announces that this pipeline is being torn down: from here on
         updateState() reports Clean and run() starts nothing.
 
-        Call it as the first statement of the destructor, ahead of anything that
-        pumps an event loop. Every pipeline cancels its run and waits for the
-        worker to stop on the way out, and that wait runs the event queue, so a
-        driver's queued continuation can land inside the destructor body — while
-        a state transition emitted from that same body reaches a driver
-        synchronously, with no loop involved at all. QObject::destroyed is
-        emitted by ~QObject, after the derived destructor body has finished, so
-        it is too late to be the latch.
+        Call it as the first statement of the destructor. A state transition
+        emitted from the destructor body reaches a driver synchronously, with no
+        event loop involved, and anything in that body that pumps the event queue
+        would additionally hand a driver's queued continuation a half-destroyed
+        pipeline. QObject::destroyed is emitted by ~QObject, after the derived
+        destructor body has finished, so it is too late to be the latch.
 
         The guard lives on this side of the call rather than in the driver
         because a pipeline also drives itself — runIfStandalone(), and each
@@ -200,8 +198,8 @@ class cwUpdatableBase : public cwUpdatable
 public:
     ~cwUpdatableBase() override
     {
-        //Every pipeline has to announce teardown before its destructor pumps an
-        //event loop; a miss is a use-after-free waiting for the right timing, so
+        //Every pipeline has to announce teardown as its first destructor
+        //statement; a miss is a use-after-free waiting for the right timing, so
         //fail here where the cause is obvious rather than there.
         Q_ASSERT_X(isTearingDown(), "~cwUpdatableBase",
                    "the destructor must call beginTeardown() first");

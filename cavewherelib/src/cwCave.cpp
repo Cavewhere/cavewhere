@@ -13,6 +13,7 @@
 #include "cwErrorModel.h"
 #include "cwCavingRegion.h"
 #include "cwData.h"
+#include "cwFixStationDiagnosticsModel.h"
 #include "cwFixStationModel.h"
 #include "cwGridConvergence.h"
 #include "cwNameUtils.h"
@@ -41,6 +42,10 @@ cwCave::cwCave(QObject* parent) :
     Depth->setUpdateValue(true);
 
 //    ErrorModel->addParent(this);
+
+    // Built in the body, not the init list: it reads FixStations through this
+    // cave, so that member has to already exist.
+    m_fixStationDiagnostics = new cwFixStationDiagnosticsModel(this);
 
     connect(FixStations, &cwFixStationModel::countChanged,
             this, &cwCave::recomputeGridConvergence);
@@ -280,11 +285,14 @@ cwUnits::UnitSystem cwCave::unitSystem() const
 void cwCave::recomputeGridConvergence()
 {
     // The readout owns the PROJ work and change detection; we just feed it the
-    // current fix stations plus the region CS to fall back on when a fix
-    // station omits its own input CS.
+    // current fix stations and the grid they are plotted in. That grid is the
+    // project's local projection — cavern solves under it — so a cave with no
+    // region has none, and converges to nothing.
     const cwCavingRegion* region = parentRegion();
-    const QString fallbackCS = region ? region->geoReference()->globalCoordinateSystem() : QString();
-    m_gridConvergence->update(FixStations->fixStations(), fallbackCS);
+    const QString frameCS = region == nullptr
+        ? QString()
+        : region->geoReference()->localCoordinateSystem();
+    m_gridConvergence->update(FixStations->fixStations(), frameCS);
 }
 
 /**
@@ -577,6 +585,15 @@ void cwCave::setStationPositionLookup(const cwStationPositionLookup &model) {
  */
 void cwCave::setSurveyNetwork(const cwSurveyNetwork &network)
 {
+    // The line-plot worker rebuilds the network on every solve and cannot see
+    // the cave's current one (its region snapshot carries no network), so it
+    // reports "changed" every time. Guard here so surveyNetworkChanged only
+    // fires on a genuine change — otherwise every solve re-notifies listeners,
+    // and any listener that re-runs the solve (fix-station error refresh,
+    // declination) would feed back into an endless re-solve loop.
+    if (Network == network) {
+        return;
+    }
     Network = network;
     emit surveyNetworkChanged();
 }

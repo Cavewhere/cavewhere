@@ -11,6 +11,7 @@
 
 //Cavewhere includes
 #include "cwCave.h"
+#include "cwCavingRegion.h"
 #include "cwTrip.h"
 #include "cwNote.h"
 #include "cwScrap.h"
@@ -23,11 +24,21 @@
 namespace {
     constexpr double kStoredAzimuth = 90.0;
 
-    // Georeferences the cave east of the central meridian so grid convergence
-    // is a non-trivial positive angle, mirroring the #628 test fixtures.
+    // A cave in a region whose frame is anchored on a *different* cave, so this
+    // one sits off the frame's central meridian and has a convergence at all.
+    cwCave* addCaveOffAnchor(cwCavingRegion* region) {
+        cwGeoreferenceFixture::fixAtAnchorPoint(cwGeoreferenceFixture::addAnchorCave(region));
+        region->addCave();
+        cwCave* cave = region->cave(region->caveCount() - 1);
+        REQUIRE(cave != nullptr);
+        return cave;
+    }
+
+    // Georeferences the cave east of the frame's anchor so grid convergence is
+    // a non-trivial positive angle, mirroring the #628 test fixtures.
     double georeferenceCave(cwCave* cave) {
         const double convergence =
-                cwGeoreferenceFixture::georeferenceEastOfUtm13N(cave, QStringLiteral("a1"));
+                cwGeoreferenceFixture::fixEastOfAnchor(cave, QStringLiteral("a1"));
         REQUIRE(convergence > 0.1);
         return convergence;
     }
@@ -48,9 +59,10 @@ TEST_CASE("Manual projected-profile azimuth is magnetic", "[cwProjectedProfileAz
     // the plot, while the stored value (and Data::matrix()) stay untouched
     // (issue #644).
 
-    cwCave cave;
-    auto* trip = new cwTrip(&cave);
-    cave.addTrip(trip);
+    cwCavingRegion region;
+    cwCave* cave = addCaveOffAnchor(&region);
+    auto* trip = new cwTrip(cave);
+    cave->addTrip(trip);
 
     auto* note = new cwNote();
     trip->notes()->addNotes({note});
@@ -70,7 +82,7 @@ TEST_CASE("Manual projected-profile azimuth is magnetic", "[cwProjectedProfileAz
         calibration->setAutoDeclination(false);
         calibration->setDeclinationManual(12.5);
 
-        const double convergence = georeferenceCave(&cave);
+        const double convergence = georeferenceCave(cave);
 
         const double expected = cwWrapDegrees360(
             kStoredAzimuth + calibration->declination() - convergence);
@@ -86,7 +98,7 @@ TEST_CASE("Manual projected-profile azimuth is magnetic", "[cwProjectedProfileAz
         calibration->setDeclinationManual(12.5);
 
         // No fix station -> convergence is zero, so only declination applies.
-        REQUIRE(cave.gridConvergence()->angle() == Catch::Approx(0.0).margin(1e-12));
+        REQUIRE(cave->gridConvergence()->angle() == Catch::Approx(0.0).margin(1e-12));
         const double expected = cwWrapDegrees360(kStoredAzimuth + calibration->declination());
         CHECK(resolvedAzimuth(scrap) == Catch::Approx(expected).epsilon(1e-9));
     }
@@ -98,7 +110,7 @@ TEST_CASE("Manual projected-profile azimuth is magnetic", "[cwProjectedProfileAz
         calibration->setAutoDeclination(false);
         calibration->setDeclinationManual(12.5);
 
-        georeferenceCave(&cave);
+        georeferenceCave(cave);
 
         CHECK(resolvedAzimuth(scrap) == Catch::Approx(kStoredAzimuth).epsilon(1e-9));
     }
@@ -135,9 +147,10 @@ TEST_CASE("Running-profile scraps ignore azimuth resolution", "[cwProjectedProfi
     // gravity-up with no bearing, so its resolved view matrix equals the stored
     // one even in a georeferenced, declinated cave.
 
-    cwCave cave;
-    auto* trip = new cwTrip(&cave);
-    cave.addTrip(trip);
+    cwCavingRegion region;
+    cwCave* cave = addCaveOffAnchor(&region);
+    auto* trip = new cwTrip(cave);
+    cave->addTrip(trip);
     auto* note = new cwNote();
     trip->notes()->addNotes({note});
     auto* scrap = new cwScrap();
@@ -148,7 +161,7 @@ TEST_CASE("Running-profile scraps ignore azimuth resolution", "[cwProjectedProfi
     trip->calibrations()->setAutoDeclination(false);
     trip->calibrations()->setDeclinationManual(12.5);
 
-    georeferenceCave(&cave);
+    georeferenceCave(cave);
 
     CHECK(scrap->resolvedPlacement().viewMatrix->matrix() == scrap->viewMatrix()->matrix());
 }

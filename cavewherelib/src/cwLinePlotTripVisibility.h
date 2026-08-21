@@ -15,17 +15,24 @@
 //Our includes
 #include "cwGlobals.h"
 #include "cwVisibilityProxy.h"
+#include "cwLinePlotGeometry.h"
 class cwRenderLinePlot;
 class cwTrip;
 
 /**
- * \brief The setVisible() target for a trip's centerline keyword item.
+ * \brief The setVisible() target for one of a trip's line-plot keyword items.
  *
  * cwKeywordVisibility calls setVisible() on this object when keyword filters
- * change. It flips the trip's contiguous span in the render object's per-vertex
- * visibility buffer, exactly like cwRenderTexturedItemVisibility does for
- * scraps. The manager re-points the proxy (setTarget) after every solve,
- * because the vertex range shifts each time the geometry is rebuilt.
+ * change. It flips one contiguous vertex span in the render object's
+ * per-vertex visibility buffer, exactly like cwRenderTexturedItemVisibility
+ * does for scraps. The manager re-points the proxy (setTarget) after every
+ * solve, because the vertex range shifts each time the geometry is rebuilt.
+ *
+ * A trip carries up to two of these over disjoint spans: the centerline item
+ * (Type="Line Plot") owns the centerline sub-range and the splays item
+ * (Type="Splays") owns the splay tail. Disjoint ranges keep each keyword
+ * toggle independent, and both items inherit the trip's keywords so a
+ * trip-level filter hides both spans.
  */
 class CAVEWHERE_LIB_EXPORT cwLinePlotTripVisibility : public cwVisibilityProxy
 {
@@ -37,8 +44,13 @@ public:
 
     cwTrip* trip() const { return m_trip; }
 
-    // Re-binds the proxy to the render object and the trip's current vertex span.
-    void setTarget(cwRenderLinePlot* linePlot, int vertexStart, int vertexCount);
+    // Re-binds the proxy to the render object and its current vertex span.
+    void setTarget(cwRenderLinePlot* linePlot,
+                   cwLinePlotGeometry::VertexRange range);
+
+    // Re-applies the current keyword state to the render object; used after a
+    // solve resets the visibility mask.
+    void pushToTarget() { applyVisible(isVisible()); }
 
 protected:
     void applyVisible(bool visible) override;
@@ -46,8 +58,7 @@ protected:
 private:
     QPointer<cwRenderLinePlot> m_linePlot;
     QPointer<cwTrip> m_trip;
-    int m_vertexStart = 0;
-    int m_vertexCount = 0;
+    cwLinePlotGeometry::VertexRange m_range;
 };
 
 #endif // CWLINEPLOTTRIPVISIBILITY_H

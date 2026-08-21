@@ -8,12 +8,11 @@
 //Our includes
 #include "cwCavingRegion.h"
 #include "cwCave.h"
-#include "cwCoordinateTransform.h"
 #include "cwDebug.h"
-#include "cwFixStation.h"
-#include "cwFixStationModel.h"
 #include "cwFixStationValidator.h"
 #include "cwLazLayerModel.h"
+#include "cwLocalProjectionManager.h"
+#include "cwLocalProjectionToken.h"
 #include "cwProject.h"
 #include "cwData.h"
 #include "cwNameUtils.h"
@@ -26,19 +25,34 @@ cwCavingRegion::cwCavingRegion(QObject *parent) :
     QAbstractListModel(parent),
     m_geoReference(new cwGeoReference(this)),
     m_lazLayers(new cwLazLayerModel(this)),
-    m_fixStationValidator(new cwFixStationValidator(this))
+    m_fixStationValidator(new cwFixStationValidator(this)),
+    m_localProjectionManager(new cwLocalProjectionManager(this))
 {
-    // geoReference owns the CS + worldOrigin; the region only mirrors each change
-    // into the LAZ layer model (it owns lazLayers). Consumers that react to CS /
-    // worldOrigin connect to geoReference directly. The worldOrigin push runs
-    // before the CS push for a CS-driven reset, matching the prior in-setter
-    // ordering.
-    connect(m_geoReference, &cwGeoReference::worldOriginChanged, this, [this] {
-        m_lazLayers->setRegionWorldOrigin(m_geoReference->worldOrigin());
-    });
-    connect(m_geoReference, &cwGeoReference::globalCoordinateSystemChanged, this, [this] {
-        m_lazLayers->setRegionGlobalCS(m_geoReference->globalCoordinateSystem());
-    });
+    // Every GIS layer loads into the frame, and the frame is derived from what
+    // those layers say about themselves — so each one is handed the manager it
+    // reads the frame off, and waits on, before it decodes.
+    m_lazLayers->setLocalProjectionToken(cwLocalProjectionToken(m_localProjectionManager));
+
+    // geoReference owns the frame; the region tells the things it owns when it
+    // moves — the LAZ layers, whose points are in the frame they were decoded
+    // into, and every cave's grid convergence, which is an angle in the frame
+    // and so moves with it. A cave can't watch the frame itself: it learns which
+    // region it belongs to only when it is parented, so joining is the other
+    // half — a cave converges to nothing until it has a region to read the frame
+    // off. Consumers the region doesn't own connect to geoReference directly.
+    const auto recomputeConvergence = [this] {
+        for (cwCave* cave : std::as_const(m_caves)) {
+            cave->recomputeGridConvergence();
+        }
+    };
+
+    // Re-decoding a directory of point clouds is the most expensive thing the
+    // frame can cause, so it hangs off the narrower signal: a freeze or a change
+    // of anchor leaves every coordinate where it was.
+    connect(m_geoReference, &cwGeoReference::localCoordinateSystemChanged,
+            m_lazLayers, &cwLazLayerModel::reloadAll);
+    connect(m_geoReference, &cwGeoReference::localProjectionChanged, this, recomputeConvergence);
+    connect(this, &cwCavingRegion::caveCountChanged, this, recomputeConvergence);
 }
 
 void cwCavingRegion::setUnitSystem(cwUnits::UnitSystem system)
@@ -292,70 +306,17 @@ cwProject *cwCavingRegion::parentProject() const
     return dynamic_cast<cwProject*>(parent());
 }
 
-void cwCavingRegion::recomputeWorldOrigin()
-{
-    const QString globalCSTrimmed = m_geoReference->globalCoordinateSystem().trimmed();
-
-    QList<cwGeoPoint> candidates;
-    for (cwCave* cave : m_caves) {
-        if (cave == nullptr || cave->fixStations() == nullptr) {
-            continue;
-        }
-        for (const cwFixStation& fix : cave->fixStations()->fixStations()) {
-            QString inputCS = fix.inputCS().trimmed();
-            if (inputCS.isEmpty()) {
-                inputCS = globalCSTrimmed;
-            }
-            if (inputCS.isEmpty() || !cwCoordinateTransform::isValidCS(inputCS)) {
-                continue;
-            }
-
-            const cwGeoPoint p(fix.easting(), fix.northing(), fix.elevation());
-
-            if (globalCSTrimmed.isEmpty()
-                || inputCS.compare(globalCSTrimmed, Qt::CaseInsensitive) == 0) {
-                candidates.append(p);
-            } else {
-                cwCoordinateTransform t(inputCS, globalCSTrimmed);
-                if (!t.isValid()) {
-                    continue;
-                }
-                candidates.append(t.transform(p));
-            }
-        }
-    }
-
-    if (candidates.isEmpty()) {
-        return;
-    }
-
-    cwGeoPoint sum;
-    for (const auto& p : candidates) {
-        sum.x += p.x;
-        sum.y += p.y;
-        sum.z += p.z;
-    }
-    const double n = double(candidates.size());
-    m_geoReference->setWorldOrigin(cwGeoPoint{sum.x / n, sum.y / n, sum.z / n});
-}
-
 void cwCavingRegion::setData(const cwCavingRegionData &data)
 {
     setName(data.name);
     setUnitSystem(data.unitSystem);
-    m_geoReference->setGlobalCoordinateSystem(data.globalCoordinateSystem);
-    // worldOrigin is intentionally not persisted (see cavewhere.proto:
-    // "reserved 5; // Removed: worldOrigin ... recomputed on load"). On
-    // disk-load, data.worldOrigin is always default-constructed cwGeoPoint{},
-    // and setGlobalCoordinateSystem above already reset our state to match.
-    // Only call setWorldOrigin when the data carries a non-default value —
-    // otherwise we'd flip the explicit-set flag for a value the user never
-    // actually chose, and the next LAZ add would skip its bbox-center
-    // auto-adopt. (In-process data → setData round-trips still work because
-    // a non-default value will be present.)
-    if (data.worldOrigin != cwGeoPoint{}) {
-        m_geoReference->setWorldOrigin(data.worldOrigin);
-    }
+
+    // A load must not derive the local projection: it is stored precisely so
+    // that opening a project can't move it, and the caves arriving is an event
+    // cwLocalProjectionManager reacts to. Quiescing the manager until the
+    // stored frame is restored keeps it from building a frame that restore()
+    // would overwrite moments later.
+    m_localProjectionManager->setLoading(true);
 
     clearCaves();
 
@@ -367,16 +328,26 @@ void cwCavingRegion::setData(const cwCavingRegionData &data)
         newCaves.append(newCave);
     }
     addCaves(newCaves);
+
+    m_geoReference->restore(data.geoReference.state,
+                            data.geoReference.localCoordinateSystem,
+                            data.geoReference.anchor,
+                            data.geoReference.verticalDatum);
+    m_localProjectionManager->setLoading(false);
 }
 
 cwCavingRegionData cwCavingRegion::data() const
 {
     return {
-        m_name.value(),
-        cwData::toDataList<cwCaveData>(m_caves),
-        m_geoReference->globalCoordinateSystem(),
-        m_geoReference->worldOrigin(),
-        m_unitSystem
+        .name = m_name.value(),
+        .caves = cwData::toDataList<cwCaveData>(m_caves),
+        .unitSystem = m_unitSystem,
+        .geoReference = {
+            .state = m_geoReference->state(),
+            .localCoordinateSystem = m_geoReference->localCoordinateSystem(),
+            .anchor = m_geoReference->anchor(),
+            .verticalDatum = m_geoReference->verticalDatum()
+        }
     };
 }
 
@@ -437,14 +408,6 @@ void cwCavingRegion::InsertRemoveCave::insertCaves() {
         regionPtr->m_caves.insert(index, Caves.at(i));
         regionPtr->m_caveNames.insert(Caves.at(i)->name());
         Caves.at(i)->setParent(regionPtr);
-
-        // The cave's grid-convergence readout depends on the region's
-        // globalCS when a fix station omits its own inputCS. UniqueConnection
-        // keeps re-insert/undo paths from doubling up.
-        QObject::connect(regionPtr->geoReference(), &cwGeoReference::globalCoordinateSystemChanged,
-                         Caves.at(i), &cwCave::recomputeGridConvergence,
-                         Qt::UniqueConnection);
-        Caves.at(i)->recomputeGridConvergence();
     }
 
     OwnsCaves = false;

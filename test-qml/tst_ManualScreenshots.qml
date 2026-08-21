@@ -1858,11 +1858,10 @@ MainWindowTest {
         readonly property real georefNorthing: 4300000
         readonly property real georefElevation: 1200
 
-        // Set the project coordinate system and fix `page.currentCave`'s first
-        // station to real coordinates, so the cave is georeferenced. Both changes
-        // are undone by the restoreDemoProject() reload each georef shot ends with.
+        // Fix `page.currentCave`'s first station to real coordinates, which
+        // georeferences the cave — the fix anchors the project's frame. Undone
+        // by the restoreDemoProject() reload each georef shot ends with.
         function georeferenceDemoCave(page) {
-            RootData.region.geoReference.globalCoordinateSystem = georefCS;
 
             let model = page.currentCave.fixStations;
             model.addFixStation();
@@ -1908,37 +1907,6 @@ MainWindowTest {
             }
             tryVerify(() => interaction.hasMeasurement, 2000,
                       "a two-point measurement is complete");
-        }
-
-        // The project Coordinate system control on the Data page, set to UTM so the
-        // zone / hemisphere / resolved-EPSG fields are all showing.
-        // Backs docs/manual/georeferencing/georeference-a-cave.md.
-        //
-        // Cropped to the Project group box (label + control) rather than grabbed
-        // whole-window: the control is one small row on an otherwise full Data page,
-        // so a cropped shot reads in the manual's narrow column where a whole-window
-        // one would not.
-        function test_georefCoordinateSystem() {
-            let page = openDataPage("Source/Data", "dataMainPage");
-            if (!page) { return; }
-
-            RootData.region.geoReference.globalCoordinateSystem = georefCS;
-
-            let group = findByName(page, "regionInfoBox");
-            verify(group, "found the Project group box");
-            let combo = findByName(page, "globalCoordinateSystemComboBox");
-            verify(combo, "found the coordinate system combo box");
-
-            highlightOverlayId.target = combo;
-            settle();
-
-            let path = WindowGrabber.grabItemToFile(group, "georef-coordinate-system",
-                                                    panelCropMargin);
-            verify(path.length > 0, "grabItemToFile wrote the coordinate-system shot");
-            verify(OffscreenRenderTester.imageIsNonUniform(path),
-                   "georef-coordinate-system is not blank");
-
-            restoreDemoProject();
         }
 
         // Two shots from one georeferenced cave: the Fix Stations page with a fixed
@@ -2008,10 +1976,9 @@ MainWindowTest {
             verify(glTerrain, "found the GLTerrainRenderer");
 
             // Georeference cave 0 so the picked point resolves to real coordinates:
-            // the popup's CRS / WGS84 / Elevation sections only show with a CS set.
+            // the popup's WGS84 / Elevation sections only show with a frame set.
             let cave = RootData.region.cave(0);
             verify(cave, "found the demo cave");
-            RootData.region.geoReference.globalCoordinateSystem = georefCS;
             let model = cave.fixStations;
             model.addFixStation();
             model.setData(model.index(0), georefStation, FixStationModel.StationNameRole);
@@ -2186,10 +2153,9 @@ MainWindowTest {
             verify(glTerrain, "found the GLTerrainRenderer");
 
             // Georeference cave 0 so the azimuth selector's True and Magnetic options
-            // are enabled (both need a coordinate system). Undone by restoreDemoProject.
+            // are enabled (both need a frame). Undone by restoreDemoProject.
             let cave = RootData.region.cave(0);
             verify(cave, "found the demo cave");
-            RootData.region.geoReference.globalCoordinateSystem = georefCS;
             let model = cave.fixStations;
             model.addFixStation();
             model.setData(model.index(0), georefStation, FixStationModel.StationNameRole);
@@ -2790,8 +2756,8 @@ MainWindowTest {
             let chunk = model.chunkForRow(0);
             verify(chunk, "found the trip's first data block");
 
-            let row = model.modelRowForChunkRole(chunk, 0,
-                                                 SurveyChunk.ShotDistanceRole);
+            let row = model.modelRowForCellRole(chunk, 0,
+                                                SurveyEditorCellIndex.ShotDistanceCell);
             verify(row >= 0, "found the model row of the first shot's Distance");
 
             // Focus the cell rather than clicking it: the caret button's Loader is
@@ -2868,8 +2834,8 @@ MainWindowTest {
 
             let chunk = model.chunkForRow(0);
             verify(chunk, "found the trip's first data block");
-            let row = model.modelRowForChunkRole(chunk, 0,
-                                                 SurveyChunk.ShotDistanceRole);
+            let row = model.modelRowForCellRole(chunk, 0,
+                                                SurveyEditorCellIndex.ShotDistanceCell);
             verify(row >= 0, "found the model row of the first shot's Distance");
 
             chunk.setData(SurveyChunk.ShotDistanceRole, 0, "");

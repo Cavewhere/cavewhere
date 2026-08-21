@@ -22,7 +22,7 @@ class LASheader;
 
 /**
  * Result of a single LAZ load. Geometry holds Type::Points with one
- * Position(Vec3) attribute, in worldOrigin-relative coordinates.
+ * Position(Vec3) attribute, in the project's frame (frameCS).
  */
 struct CAVEWHERE_LIB_EXPORT cwLazLoadResult
 {
@@ -30,6 +30,14 @@ struct CAVEWHERE_LIB_EXPORT cwLazLoadResult
     QVector3D bboxMin;
     QVector3D bboxMax;
     QString sourceCS; // CS actually used during load (override > LAZ-embedded > "")
+
+    // The header's bounding box in the file's own CRS, before the transform
+    // into frameCS that bboxMin/bboxMax carry.
+    // A cloud's position in its own CRS exists nowhere else in the result, and
+    // deriving a coordinate frame from a cloud needs exactly that. Read during
+    // the header pass, so it costs nothing beyond what the load already does.
+    cwGeoPoint sourceBboxMin;
+    cwGeoPoint sourceBboxMax;
     // Mean planar spacing between points in meters, derived from XY bbox area:
     //   sqrt((dx * dy) / pointCount)
     // Drives world-space point radius in PointCloud.vert so points just touch
@@ -58,8 +66,7 @@ public:
     struct Request {
         QString path;              //!< absolute filesystem path to a .laz / .las file
         QString sourceCSOverride;  //!< empty → use LAZ-embedded CS (or identity)
-        QString globalCS;          //!< destination CS for the output points
-        cwGeoPoint worldOrigin;    //!< subtracted before narrowing to QVector3D
+        QString frameCS;           //!< destination CS: the project's local projection
         qsizetype maxPoints = -1;  //!< stop after this many; -1 means all
     };
 
@@ -67,16 +74,21 @@ public:
 
     /**
      * Header-only probe. Opens the LAZ, reads the embedded CS (OGC WKT) and
-     * raw bounding box, then closes — no point iteration, microseconds. Used
-     * to auto-adopt the project CS + worldOrigin on the first add to an
-     * otherwise empty project.
+     * raw bounding box, then closes — no point iteration, microseconds.
+     *
+     * This is how a project whose only georeferenced input is a point cloud
+     * gets a frame at all: the loader transforms points into the project's
+     * frame, so the frame has to exist before the load can run, but the frame
+     * is derived from the cloud's own coordinates. The probe breaks the cycle
+     * by reading the position out of the header without loading anything.
+     * cwLazLayer runs one per layer off the GUI thread, including for layers
+     * that are disabled and will never decode a point.
      */
     struct ProbeResult {
         bool valid = false;        //!< false if the file could not be opened
         QString sourceCS;          //!< empty for older GeoTIFF-only LAZs
         cwGeoPoint bboxMin;        //!< raw LAZ source-CS coordinates
         cwGeoPoint bboxMax;        //!< raw LAZ source-CS coordinates
-        cwGeoPoint bboxCenter;     //!< midpoint of bbox in source CS
     };
 
     static ProbeResult probeHeader(const QString& path);

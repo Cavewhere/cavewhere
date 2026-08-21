@@ -99,6 +99,14 @@ StandardPage {
 
     readonly property bool isNarrow: width < Theme.breakpointPanelCollapse
 
+    // Whether the current cave carries any non-suppressed warning. Drives the
+    // banner proxies' visibility directly — the banner's own visibility is
+    // controlled by whichever proxy hosts it, so this must not read off the
+    // banner (that clobbers the proxy's imperative control and deadlocks).
+    readonly property bool hasCaveWarning: cavePageArea.currentCave
+        ? cavePageArea.currentCave.errorModel.errors.warningMessages.length > 0
+        : false
+
     // Renders a trip's length in the project's unit system (magnitude-based
     // m/km, ft/mi), converting from the trip's own calibration unit so the
     // wide table and narrow list never mix unit systems.
@@ -128,6 +136,24 @@ StandardPage {
                             }
     }
 
+    ErrorHelpArea {
+        id: outlierWarningBanner
+        objectName: "outlierWarningBanner"
+
+        // The cave's own non-suppressed warnings (the fix-station outlier among
+        // them), joined for the banner. Read straight off the cave's errorModel
+        // list — trip warnings live in child models, so they never leak in here.
+        // Plain text, joined with newlines rather than <br>: the messages quote
+        // user-typed station names, so treating them as markup would swallow a
+        // name like A<b>B and render whatever it happens to spell.
+        textFormat: QC.Label.PlainText
+        text: cavePageArea.currentCave
+              ? cavePageArea.currentCave.errorModel.errors.warningMessages.join("\n")
+              : ""
+        // Visibility is owned by the hosting proxy (visible: hasCaveWarning);
+        // don't set it here or it fights the proxy's imperative control.
+    }
+
     SelectableCaveStat {
         id: lengthStat
         label: "Length:"
@@ -151,7 +177,7 @@ StandardPage {
 
         LinkText {
             objectName: "leadsLink"
-            text: leadModelId.rowCount()
+            text: leadModelId.count
             onClicked: {
                 RootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page, "Leads");
             }
@@ -172,6 +198,12 @@ StandardPage {
             onClicked: {
                 RootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page, "Fix Stations");
             }
+        }
+
+        FixStationErrorBadge {
+            objectName: "fixStationsBadge"
+            errorModel: cavePageArea.currentCave ? cavePageArea.currentCave.errorModel : null
+            errorTypeIds: RootData.region.fixStationValidator.fixStationErrorTypeIds
         }
     }
 
@@ -195,9 +227,12 @@ StandardPage {
                     id: gridConvergenceHoverId
                 }
 
+                // The n/a readings have nothing the label doesn't already say —
+                // detailText repeats it verbatim — so only a real angle earns a
+                // tooltip.
                 QC.ToolTip.visible: gridConvergenceHoverId.hovered
                                     && cavePageArea.currentCave
-                                    && cavePageArea.currentCave.gridConvergence.detailText !== cavePageArea.currentCave.gridConvergence.text
+                                    && cavePageArea.currentCave.gridConvergence.state === GridConvergence.Valid
                 QC.ToolTip.text: cavePageArea.currentCave ? cavePageArea.currentCave.gridConvergence.detailText : ""
             }
         }
@@ -209,9 +244,10 @@ StandardPage {
             text: "<p><b>Grid convergence</b> is the angle between <i>true north</i> " +
                   "(the direction to the geographic pole) and <i>grid north</i> " +
                   "(the y-axis of the projected coordinate system).</p>" +
-                  "<p>It depends on both the projection and the location — inside one " +
-                  "UTM zone, convergence can vary by a degree or more between the " +
-                  "central meridian and the zone edge.</p>" +
+                  "<p>The projection here is the one CaveWhere derived for the " +
+                  "project, centered on the first thing you georeferenced — so " +
+                  "convergence is zero right there and grows as a cave sits farther " +
+                  "east or west of it.</p>" +
                   "<p>When CaveWhere computes 3D positions via survex/cavern, the " +
                   "bearing correction applied to each compass reading is " +
                   "<b>(magnetic declination − grid convergence)</b>, so corrected " +
@@ -313,21 +349,35 @@ StandardPage {
             spacing: Theme.columnGap
 
             ColumnLayout {
-                Layout.minimumWidth: statsColumnId.implicitWidth + Theme.statsPadding
+                Layout.minimumWidth: statsColumnId.implicitWidth + Theme.statsPadding * 2
                 Layout.maximumWidth: Theme.infoColumnMaxWidth
                 Layout.alignment: Qt.AlignTop
                 spacing: Theme.flowSpacing
 
                 LayoutItemProxy { target: caveNameText }
 
+                LayoutItemProxy {
+                    objectName: "outlierWarningBannerProxy"
+                    target: cavePageArea.isNarrow ? null : outlierWarningBanner
+                    // Hide the proxy when there is no warning: a visible proxy
+                    // whose target is invisible still forwards the target's
+                    // implicit height, reserving an empty full-width slot (an
+                    // empty "badge"). An invisible layout item is excluded.
+                    visible: cavePageArea.hasCaveWarning
+                    Layout.fillWidth: true
+                }
+
                 QQ.Rectangle {
                     Layout.fillWidth: true
-                    implicitHeight: statsColumnId.implicitHeight + Theme.statsPadding
+                    implicitHeight: statsColumnId.implicitHeight + Theme.statsPadding * 2
                     color: Theme.borderSubtle
 
                     ColumnLayout {
                         id: statsColumnId
-                        anchors.centerIn: parent
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.margins: Theme.statsPadding
                         spacing: Theme.tightSpacing
 
                         LayoutItemProxy { target: lengthStat }
@@ -495,8 +545,10 @@ StandardPage {
                         },
                         TableStaticColumn {
                             id: declColumn
-                            columnWidth: 95
-                            text: "Decl"
+                            // Fits "Declination" plus the sort indicator with
+                            // headroom at larger font scales.
+                            columnWidth: 115
+                            text: "Declination"
                             sortRole: CavePageModel.DeclinationRole
                         }
                     ]
@@ -690,6 +742,12 @@ StandardPage {
                                         }
                 }
 
+                LayoutItemProxy {
+                    target: cavePageArea.isNarrow ? outlierWarningBanner : null
+                    visible: cavePageArea.hasCaveWarning
+                    Layout.fillWidth: true
+                }
+
                 QQ.Flow {
                     Layout.fillWidth: true
                     spacing: Theme.flowSpacing
@@ -715,7 +773,7 @@ StandardPage {
                         QC.Label { text: "Leads:" }
 
                         LinkText {
-                            text: leadModelId.rowCount()
+                            text: leadModelId.count
                             onClicked: {
                                 RootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page, "Leads");
                             }
@@ -734,6 +792,11 @@ StandardPage {
                             onClicked: {
                                 RootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page, "Fix Stations");
                             }
+                        }
+
+                        FixStationErrorBadge {
+                            errorModel: cavePageArea.currentCave ? cavePageArea.currentCave.errorModel : null
+                            errorTypeIds: RootData.region.fixStationValidator.fixStationErrorTypeIds
                         }
                     }
                 }

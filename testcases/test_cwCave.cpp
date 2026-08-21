@@ -3,7 +3,11 @@
 
 //Our includes
 #include "cwCave.h"
+#include "cwSurveyNetwork.h"
 #include "cwTrip.h"
+
+//Test helpers
+#include "cwSignalSpy.h"
 
 TEST_CASE("cwCave setData should reset trips", "[cwCave]") {
     cwCave cave;
@@ -87,4 +91,37 @@ TEST_CASE("cwCave clearTrips should remove all trips", "[cwCave]") {
         CHECK(trip1Ptr.isNull());
         CHECK(trip2Ptr.isNull());
     }
+}
+
+// The equality guard on setSurveyNetwork is what keeps the line-plot solve from
+// re-notifying on every run (the worker's region snapshot carries no network, so
+// it always reports one as "changed"). Anything listening to surveyNetworkChanged
+// that also re-runs the solve — the fix-station error-role refresh does — turns a
+// missing guard into an endless re-solve loop, so pin both halves here.
+TEST_CASE("cwCave::setSurveyNetwork notifies only on a genuine change", "[cwCave]") {
+    cwCave cave;
+    cwSignalSpy networkSpy(&cave, &cwCave::surveyNetworkChanged);
+
+    cwSurveyNetwork network;
+    network.addShot(QStringLiteral("A1"), QStringLiteral("A2"));
+
+    cave.setSurveyNetwork(network);
+    CHECK(networkSpy.count() == 1);
+
+    // Re-setting an equal network must stay silent.
+    cave.setSurveyNetwork(network);
+    CHECK(networkSpy.count() == 1);
+
+    cwSurveyNetwork equalCopy;
+    equalCopy.addShot(QStringLiteral("A1"), QStringLiteral("A2"));
+    cave.setSurveyNetwork(equalCopy);
+    CHECK(networkSpy.count() == 1);
+
+    // A real change still notifies — the guard must not swallow it.
+    cwSurveyNetwork grown;
+    grown.addShot(QStringLiteral("A1"), QStringLiteral("A2"));
+    grown.addShot(QStringLiteral("A2"), QStringLiteral("A3"));
+    cave.setSurveyNetwork(grown);
+    CHECK(networkSpy.count() == 2);
+    CHECK(cave.network() == grown);
 }

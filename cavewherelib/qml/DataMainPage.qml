@@ -91,9 +91,9 @@ StandardPage {
         }
     }
 
-    // Units and the coordinate system are project-wide choices a user rarely
-    // changes but can wreck a project by flipping. They show read-only until
-    // the user clicks Edit, which is the extra click the design asks for.
+    // The unit system is a project-wide choice a user rarely changes but can
+    // wreck a project by flipping. It shows read-only until the user clicks
+    // Edit, which is the extra click the design asks for.
     QQ.Rectangle {
         id: regionInfoBox
         objectName: "regionInfoBox"
@@ -102,18 +102,6 @@ StandardPage {
         color: Theme.borderSubtle
 
         property bool editMode: settingsEditButton.editMode
-
-        readonly property string coordinateSystemText: {
-            const value = RootData.region.geoReference.globalCoordinateSystem
-            if (value === "") {
-                return qsTr("Local")
-            }
-            if (CoordinateSystem.modeFor(value) === CoordinateSystem.Custom) {
-                const name = CoordinateSystem.nameFor(value)
-                return name.length > 0 ? value + " — " + name : value
-            }
-            return value
-        }
 
         ColumnLayout {
             id: infoColumnId
@@ -167,52 +155,41 @@ StandardPage {
                 QQ.Item { Layout.fillWidth: true }
             }
 
-            RowLayout {
+            ColumnLayout {
                 Layout.fillWidth: true
-                spacing: Theme.delegatePadding
+                spacing: Theme.tightSpacing
 
-                QC.Label {
-                    text: qsTr("Coordinate system:")
-                }
-
-                QC.Label {
-                    objectName: "coordinateSystemValue"
-                    visible: !regionInfoBox.editMode
+                RowLayout {
                     Layout.fillWidth: true
-                    elide: QQ.Text.ElideRight
-                    text: regionInfoBox.coordinateSystemText
+                    spacing: Theme.delegatePadding
+
+                    LabelWithHelp {
+                        objectName: "gisSourcesLabel"
+                        text: qsTr("GIS Sources:")
+                        helpArea: gisSourcesHelpArea
+                    }
+
+                    LinkText {
+                        objectName: "geospatialLayersLink"
+                        text: RootData.region.lazLayers.count
+                        onClicked: {
+                            RootData.pageSelectionModel.gotoPageByName(pageId.PageView.page,
+                                                                       "Geospatial Layers");
+                        }
+                    }
+
+                    QQ.Item { Layout.fillWidth: true }
                 }
 
-                CSComboBox {
-                    objectName: "globalCoordinateSystemComboBox"
-                    visible: regionInfoBox.editMode
+                HelpArea {
+                    id: gisSourcesHelpArea
+                    objectName: "gisSourcesHelp"
                     Layout.fillWidth: true
-                    value: RootData.region.geoReference.globalCoordinateSystem
-                    allowGeographic: false
-                    onCommitted: (newCS) => {
-                        RootData.region.geoReference.globalCoordinateSystem = newCS
-                    }
+                    text: "<p>A <b>GIS source</b> is a georeferenced file CaveWhere can draw " +
+                          "with your survey. Currently, only LiDAR point clouds are " +
+                          "supported, <b>.laz</b> or <b>.las</b>.</p>" +
+                          "<p>Click the number to add or remove files.</p>"
                 }
-            }
-
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: Theme.delegatePadding
-
-                QC.Label {
-                    text: qsTr("Layers:")
-                }
-
-                LinkText {
-                    objectName: "geospatialLayersLink"
-                    text: RootData.region.lazLayers.count
-                    onClicked: {
-                        RootData.pageSelectionModel.gotoPageByName(pageId.PageView.page,
-                                                                   "Geospatial Layers");
-                    }
-                }
-
-                QQ.Item { Layout.fillWidth: true }
             }
         }
     }
@@ -374,9 +351,7 @@ StandardPage {
             spacing: Theme.columnGap
 
             ColumnLayout {
-                Layout.maximumWidth: regionInfoBox.editMode
-                                     ? Theme.infoColumnEditMaxWidth
-                                     : Theme.infoColumnMaxWidth
+                Layout.maximumWidth: Theme.infoColumnMaxWidth
                 Layout.alignment: Qt.AlignTop
                 spacing: Theme.sectionSpacing
 

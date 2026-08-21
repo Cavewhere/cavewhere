@@ -1,17 +1,21 @@
 ---
 title: Understand Grid Convergence
-summary: The per-cave readout that appears once a cave is georeferenced, what its four "n/a" states mean, and the one setting that decides whether the solve uses it.
-problem: Read the grid convergence on the cave page, check the number yourself, and find out whether your trips are actually corrected for it.
-keywords: [grid convergence, grid north, true north, bearing correction, declination, auto declination, utm, projection, central meridian, georeference, fixed station, cavern, aerial lidar, point cloud, grid bearing]
-related: [georeference-a-cave.md, ../concepts/coordinate-systems.md, ../survey-data/declination.md, ../loop-closure/check-loop-closure.md]
+summary: The correction georeferencing turns on — what grid convergence is, where the grid comes from, and why it changes your bearing correction.
+problem: Understand why a georeferenced cave's bearing correction is more than its declination, and why correcting for grid convergence is what lets multiple fixed stations close and a cave align with aerial LiDAR.
+keywords: [grid convergence, grid north, true north, bearing correction, declination, utm, projection, low-distortion projection, ldp, scale factor, transverse mercator, meridian, georeference, fixed station, loop closure, aerial lidar, point cloud, alignment, grid bearing]
+related: [georeference-a-cave.md, ../concepts/coordinate-systems.md, ../survey-data/declination.md]
 ---
 
 # Understand Grid Convergence
 
 ## Why / when you need this
 
-[Georeference a cave](georeference-a-cave.md) and a line you never asked for
-appears in its stat block, under **Fix stations**:
+Once you [georeference a cave](georeference-a-cave.md), a second correction
+switches on: **grid convergence**. It's not something you set or see — CaveWhere
+computes and applies it — but it's worth understanding, because it quietly
+rotates every compass reading in the cave onto the grid, and that rotation is
+what lets the cave line up with anything measured on the grid. Two cases make it
+matter:
 
 ```
 Grid convergence: -1.08° at a1
@@ -34,10 +38,18 @@ system. A projection lines its grid up with true north along one line only, its
 **central meridian**. East or west of that, grid north leans away from true, and
 that lean is the convergence. Positive means grid north lies east of true north.
 
-![A map graticule with two families of north lines: orange true-north meridians fanning out toward the pole, and a blue square UTM grid. Points A and B sit on the same orange meridian, both at longitude 108°E, so a sight from A to B is due true north; but the meridian leans against the grid, so B falls left of the vertical grid line through A and gets a smaller UTM easting.](../images/illustrations/utm-grid-convergence.svg)
-*The lean is drawn much larger than life. At A, 108°E and 3° east of UTM zone
-48N's central meridian, the real angle is 1.4°. Based on a diagram by
-**Mike Futrell**.*
+Unlike [declination](../survey-data/declination.md), grid convergence has
+nothing to do with the Earth's magnetic field, so it doesn't drift with time —
+it depends only on location and projection. CaveWhere reads it at the cave's
+first fixed station, in the
+[projection it derived for your project](#the-grid-is-a-low-distortion-projection) —
+and that choice of projection is what keeps the angle down to a fraction of a
+degree instead of the couple of degrees a UTM zone would hand you.
+
+So it takes two things: a projection for the project, *and* a fixed station that
+says where this cave sits in it. Until both are there — nothing georeferenced
+yet, or a cave with no [fixed station](georeference-a-cave.md#fix-a-station) of
+its own — the convergence is zero and the cave is drawn to true north.
 
 To check the readout by hand:
 
@@ -54,63 +66,127 @@ projection you picked: inside zone 13N at latitude 40° it varies by 1.9° betwe
 the central meridian and the zone edge. It has no magnetic component, so unlike
 [declination](../survey-data/declination.md) it never drifts with time.
 
+## The grid is a low-distortion projection
+
+Which projection you land on decides how big the convergence gets, and CaveWhere
+doesn't put you in a UTM zone. The first thing you georeference — a fixed station
+or a point cloud — becomes the center of a **low-distortion projection** (LDP): a
+transverse Mercator built for your project alone, running through your own cave.
+Three things follow, and they're the reason the LDP exists:
+
+- **Distances on the grid are the distances you surveyed.** A UTM zone shrinks
+  everything by 400 ppm at its central meridian — 40 cm of every kilometer — and
+  stretches it by about as much out at the zone edge, so a 1 km survey leg is
+  never quite 1 km on the grid. CaveWhere's LDP sits at true scale where you are:
+  even 50 km out from its center — about as far as a project ever reaches — the
+  error is around 3 cm per kilometer, under the noise of the tape that measured
+  it.
+- **Grid north is essentially true north.** Convergence is exactly zero along the
+  meridian running through the LDP's center, and it grows only with **east–west**
+  distance from that line — a cave 50 km due *north* of the center has none at
+  all. Due east or west, 50 km out, it reaches about 0.26° at 30°N, 0.38° at
+  40°N, and 0.53° at 50°N. The same cave placed at the edge of a UTM zone would
+  carry 1.93° at 40°N — five times as much. So the bearing correction stays close
+  to the [declination](../survey-data/declination.md) alone. Small isn't zero,
+  though, so CaveWhere still applies it: a third of a degree is the same order as
+  the precision of the compass that took the reading, and it keeps growing the
+  farther east or west the cave runs.
+- **There are no zone seams.** A cave that straddles a UTM zone boundary would
+  otherwise be split between two grids with different norths; the LDP has one
+  center and no edges.
+
+The trade is that the LDP belongs to this project — it isn't a published system
+another program will recognize by name. That only matters on the way out, which
+is why [exporting a survey](../import-export/export-surveys.md) writes a standard
+coordinate system rather than the project's own frame.
+
 ## Reading the value
 
-Clicking the **Grid convergence:** label opens a help panel; hovering the value
-names the coordinate system the way PROJ spells it,
-`-1.08° at a1 (WGS 84 / UTM zone 13N)`. CaveWhere computes at the **first** fix
-station, using that fix's own **Input CS** and falling back to the project's.
+The **Grid convergence** cell sits next to the **Fix stations** link on the cave
+page. When the cave is georeferenced it reads as an angle at a station — for
+example `0.376° at a1` — and hovering it gives the value at full precision plus
+the grid it's measured in.
 
-![The cave page for Phake Cave 3000: Length 152.23 m, Depth 36.41 m, Leads 5, Fix stations 1, and the Grid convergence row ringed in orange reading -1.08° at a1. Beside it one trip, Release 0.08, dated 2020-02-26, stations A 1-14, 152.54 m, declination 0° manual.](../images/georef-grid-convergence.png)
-*The readout, ringed. The **Decl** column beside it reads `0°`, tagged `manual`,
-which matters more than the convergence does.*
+The readout carries three decimals because the
+[LDP](#the-grid-is-a-low-distortion-projection) keeps the angle small on
+purpose. Convergence grows by roughly 0.008° per kilometer of east–west distance
+from the projection's center at 40°N, so at coarser precision most caves in a
+project would round to a flat zero — which would read as a correction that isn't
+running, when in fact it's running and tiny. That's the point the cell is making.
+
+The **first** thing you georeference always reads `0.000°`, and that's the right
+answer rather than a missing one: it defines the projection's center, and grid
+north and true north are the same direction along the meridian through it. The
+tooltip says as much, so the zero doesn't look like a failure.
+
+Before a cave is georeferenced, the cell explains *why* it has nothing to report:
 
 | Reading | Meaning |
 |---------|---------|
-| `-1.08° at a1` | The angle CaveWhere computed, at that station. A fix with no station name reads `at fix station`. |
-| `n/a (no fix station)` | No [fixed station](georeference-a-cave.md#fix-a-station), so no location to compute at. |
-| `n/a (no coordinate system)` | There is a fix, but neither it nor the [project](georeference-a-cave.md#choose-the-projects-coordinate-system) supplies a system. |
-| `n/a (geographic CS)` | The **fix's** system is latitude and longitude, which has no grid. Watch this one: a Lat/Lon fix inside a UTM project reads `n/a` here while the solve still applies the project grid's convergence. |
-| `n/a (Failed to transform from 'EPSG:999999' to WGS84: …)` | PROJ rejected the system it was handed, and the parenthesis carries its complaint. |
+| `0.376° at a1` | The convergence CaveWhere is applying, measured at that fixed station. |
+| `0.000° at a1` | The cave sits on the projection's central meridian — usually because it's the one that defined it. |
+| `n/a (no fix station)` | Nothing places this cave: it has no [fixed station](georeference-a-cave.md#fix-a-station), or the ones it has name no [coordinate system](georeference-a-cave.md#fix-a-station) to read their numbers under. |
+| `n/a (no coordinate system)` | Nothing in the project is georeferenced yet, so there is no projection to converge to and the model is drawn to true north. |
 
-The fix station is tested first, so a cave missing both a fix and a coordinate
-system reports `n/a (no fix station)` and says nothing about the second gap.
+Both "n/a" readings are a checklist: convergence needs a projection for the
+project *and* a fixed station that says where this cave sits in it, and the
+readout tells you which one is still missing.
 
-## It only applies on Auto
+![The cave page showing the Fix stations count and the Grid convergence readout, with the help panel open explaining the value.](../images/georef-grid-convergence.png)
+*The grid convergence readout on the cave page. The help panel (the **?**) spells
+out what the value means and how it's applied.*
 
-**CaveWhere applies the convergence only when the trip's declination is on
-Auto**, which is the default on new trips.
+## Why it changes your correction
 
-On Auto it writes survex a `*declination auto` directive at the fix's
-coordinates. Survex computes the IGRF declination for the trip's date, subtracts
-its own convergence, and applies both to every compass reading:
+Here's what it does. When CaveWhere
+solves the survey, it turns each magnetic compass reading into a **grid bearing** —
+one that lines up with your projected coordinates. That's two corrections in turn:
+
+1. **Correct to true north** — add the [declination](../survey-data/declination.md):
+   *magnetic reading + declination = true bearing*.
+2. **Correct for the grid** — subtract the grid convergence:
+   *true bearing − grid convergence = grid bearing*.
+
+Chained together, that's the whole correction at once:
 
 > **grid bearing = magnetic reading + declination − grid convergence**
 
-That grid is the project coordinate system itself, so in plan view north on
-screen *is* grid north. On Manual, CaveWhere writes a plain
-`*calibrate DECLINATION` line, which survex applies verbatim and never pairs
-with a convergence; a manual `0` writes no line at all. So the cave shown above,
-tagged `0° manual`, reports a −1.08° convergence that nothing in its plot uses.
+So the bearing CaveWhere ends up plotting is a *grid* bearing, not a true one —
+and that grid isn't an abstract reference direction. **The grid is the projection
+CaveWhere derived for the project** when you
+[georeferenced the cave](georeference-a-cave.md#fix-a-station), and that same
+frame is the one it lays the 3D model out in. Look at a georeferenced cave in plan view and north on the screen *is* grid
+north; the model's eastings and northings are the grid's. So the second correction
+isn't bending your survey toward some outside grid — it's aligning it to the map
+CaveWhere already draws. On a local (un-georeferenced) cave there's no projection,
+so convergence is zero, the correction stops at step 1, and the model is drawn to
+true north instead. Georeference the cave and step 2 switches on automatically.
 
-[Set the Declination](../survey-data/declination.md) gives 3 reasons to sit in
-Manual. The first, no fixed station, costs nothing, since a cave without a fix
-has no convergence to lose. The other 2 cost you this correction silently. The
-plan-view [scrap](../scraps/digitize-a-scrap.md) fit reads the same switch.
+This is why you can't read a georeferenced cave's total bearing correction off
+its declination alone, and why the same survey can point very slightly
+differently once it's placed on a grid. The shift is usually small — a fraction
+of a degree to a couple of degrees — but it's real, and it's what keeps the cave
+aligned with everything else in its coordinate system.
+
+It runs whichever way the trip's declination is set. On Auto, survex folds the
+convergence in itself; on Manual, CaveWhere subtracts it from the declination it
+writes out, and says so in a comment on the exported line. Either way the plotted
+bearings are grid bearings, and the plan-view [scrap](../scraps/digitize-a-scrap.md)
+fit matches.
 
 When the alignment matters **I read the cavern log rather than the cave page**,
 since the log reports what cavern applied. Open **Cavern Output** and look for
-`Declination: … , grid convergence: …`, printed to 1 decimal, so a1's `-1.08°`
-reads `-1.1°`. A missing line means no trip date, not necessarily no
-convergence.
+`Declination: … , grid convergence: …`, printed to 1 decimal, so a cave reading
+`0.376°` here shows `0.4dg` there. A missing line means no trip date, not
+necessarily no convergence.
 
 ## Next steps
 
-- [Georeference a Cave](georeference-a-cave.md): the coordinate system and fixed
-  station that turn this readout on.
-- [Set the Declination](../survey-data/declination.md): the other half of the
-  correction, and the Auto switch it depends on.
-- [Check Loop Closure](../loop-closure/check-loop-closure.md): where a missing
+- [Georeference a Cave](georeference-a-cave.md) — fix the station that turns this
+  correction on.
+- [Set the Declination](../survey-data/declination.md) — the other half of the
+  bearing correction.
+- [Check Loop Closure](../loop-closure/check-loop-closure.md) — where a missing
   convergence correction shows up as an error between fixed stations.
-- [Directions and Coordinate Systems](../concepts/coordinate-systems.md): the
+- [Directions and Coordinate Systems](../concepts/coordinate-systems.md) — the
   three norths in full.

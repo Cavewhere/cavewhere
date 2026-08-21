@@ -6,8 +6,10 @@
 **************************************************************************/
 
 import QtQuick
+import QtQuick.Controls as QC
 import QtQuick.Window
 import cavewherelib
+import "Utils.js" as Utils
 
 
 Item {
@@ -33,7 +35,7 @@ Item {
             iconSource: "qrc:/twbs-icons/icons/crosshair.svg"
             text: qsTr("Pick")
             toolTip: qsTr("Pick coordinates")
-            group: qsTr("Measure & Pick")
+            group: qsTr("Pick & Measure")
             groupId: "measurePick"
         },
         ToolItem {
@@ -42,7 +44,7 @@ Item {
             iconSource: "qrc:/twbs-icons/icons/rulers.svg"
             text: qsTr("Measure")
             toolTip: qsTr("Measure distance and bearing")
-            group: qsTr("Measure & Pick")
+            group: qsTr("Pick & Measure")
             groupId: "measurePick"
         },
         ToolItem {
@@ -221,6 +223,44 @@ Item {
         // items grab their taps exclusively, so this only fires off a lead.
         TapHandler {
             onTapped: leadViewId.selectionManager.selectedItem = null
+        }
+    }
+
+    // cwLinkGenerator owns the page-address scheme, so the banner's link doesn't
+    // hardcode the page tree.
+    LinkGenerator {
+        id: outlierLinkGeneratorId
+        pageSelectionModel: RootData.pageSelectionModel
+    }
+
+    // A fix-station coordinate typo puts one station thousands of kilometers
+    // from the rest and blows the scene bounds up until the cave is a sub-pixel
+    // dot — the 3D view just looks empty. This top banner names the culprit so
+    // an empty render has a cause the user can act on, instead of looking like a
+    // bug, and links straight to the offending cave's fix stations to fix it.
+    ErrorHelpBox {
+        id: fixStationOutlierBox
+        objectName: "fixStationOutlierBox"
+        anchors.top: parent.top
+        anchors.topMargin: 20
+        anchors.bottom: undefined
+        // The banner carries a link, so it needs the chrome layer, not just a
+        // spot above the scene: LeadView's tap-away handler fills this item at
+        // zLabels and takes the press first, leaving the link unclickable.
+        z: rootId.zOverlay
+        visible: RootData.region.fixStationValidator.warningMessage !== ""
+        // Markup here is real — the link is what makes the banner actionable —
+        // so the message it is glued to has to be escaped: the summary quotes
+        // the offending cave's name, and the user chose that name.
+        textFormat: QC.Label.RichText
+        text: Utils.escapeHtml(RootData.region.fixStationValidator.warningMessage)
+              + qsTr("<br>Open the cave's <a href=\"fixStations\">Fix Stations</a> to correct the coordinate.")
+
+        onLinkActivated: {
+            let cave = RootData.region.fixStationValidator.firstOutlierCave
+            if (cave !== null) {
+                RootData.pageSelectionModel.currentPageAddress = outlierLinkGeneratorId.fixStationsLink(cave)
+            }
         }
     }
 

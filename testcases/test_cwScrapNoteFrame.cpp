@@ -22,6 +22,12 @@
 #include "cwStationPositionLookup.h"
 #include "cwSurveyNoteModel.h"
 #include "cwTrip.h"
+#include "cwSurveyChunk.h"
+#include "cwShot.h"
+#include "cwStation.h"
+#include "cwDistanceReading.h"
+#include "cwCompassReading.h"
+#include "cwClinoReading.h"
 #include "cwTripCalibration.h"
 #include "GeoreferenceFixtureHelper.h"
 
@@ -49,8 +55,10 @@ namespace {
     // float32 before subtracting worldOrigin instead moves stations 13-22cm.
     constexpr double kMaxStationDrift = 0.05; //metres
 
-    cwScrap* firstScrap(const cwProject* project) {
-        return project->cavingRegion()->cave(0)->trip(0)->notes()->notes().at(0)->scrap(0);
+    //Keyed on the cave rather than the region, because georeferencing inserts
+    //an anchor cave ahead of the loaded one and cave(0) stops meaning it.
+    cwScrap* firstScrap(const cwCave* cave) {
+        return cave->trip(0)->notes()->notes().at(0)->scrap(0);
     }
 
     // The world -> normalized-note composition cwScrapStationView::updateShotLines()
@@ -106,9 +114,8 @@ namespace {
 
     // Worst distance, over every drawn shot in the scrap, between a leader line's
     // far end and the station it points at - both in normalized note coordinates.
-    double worstLeaderError(cwProject* project) {
-        cwScrap* scrap = firstScrap(project);
-        cwCave* cave = project->cavingRegion()->cave(0);
+    double worstLeaderError(cwCave* cave) {
+        cwScrap* scrap = firstScrap(cave);
         const cwStationPositionLookup lookup = cave->stationPositionLookup();
 
         double worst = 0.0;
@@ -129,10 +136,9 @@ namespace {
     // Where the world -> note bridge lands every drawn station, anchored on the
     // scrap's first station. Same composition the shot leaders use, keyed by
     // lower-cased name because station names are case-insensitive.
-    QHash<QString, QPointF> drawnStationsOnNote(cwProject* project) {
-        cwScrap* scrap = firstScrap(project);
-        const cwStationPositionLookup lookup =
-                project->cavingRegion()->cave(0)->stationPositionLookup();
+    QHash<QString, QPointF> drawnStationsOnNote(cwCave* cave) {
+        cwScrap* scrap = firstScrap(cave);
+        const cwStationPositionLookup lookup = cave->stationPositionLookup();
 
         const QList<cwNoteStation> stations = scrap->stations();
         REQUIRE_FALSE(stations.isEmpty());
@@ -187,11 +193,11 @@ namespace {
 
     // Every neighbor of every drawn station, asked for by its note position -
     // exactly what a surveyor gets when clicking along a shot leader.
-    bool guessesEveryNeighborName(cwProject* project) {
-        cwScrap* scrap = firstScrap(project);
+    bool guessesEveryNeighborName(cwCave* cave) {
+        cwScrap* scrap = firstScrap(cave);
         bool everyGuessCorrect = true;
 
-        forEachDrawnShot(scrap, project->cavingRegion()->cave(0)->trip(0),
+        forEachDrawnShot(scrap, cave->trip(0),
                          [&](const cwNoteStation& from, const cwNoteStation& drawn) {
             const QString guess = scrap->guessNeighborStationName(from, drawn.positionOnNote());
             if(guess.compare(drawn.name(), Qt::CaseInsensitive) != 0) {
@@ -210,10 +216,13 @@ namespace {
     struct PlottedProject {
         std::shared_ptr<cwProject> project;
         std::unique_ptr<cwLinePlotManager> plotManager;
+        //Held rather than looked up by index: georeferencing inserts an anchor
+        //cave ahead of this one, which would change what cave(0) means.
+        cwCave* loadedCave = nullptr;
 
-        cwCave* cave() const { return project->cavingRegion()->cave(0); }
+        cwCave* cave() const { return loadedCave; }
         cwTrip* trip() const { return cave()->trip(0); }
-        cwScrap* scrap() const { return firstScrap(project.get()); }
+        cwScrap* scrap() const { return firstScrap(loadedCave); }
         void replot() { plotManager->waitToFinish(); }
     };
 
@@ -230,6 +239,9 @@ namespace {
                                  scrap->updateNoteTransformation();
                              }
                          });
+        plotted.loadedCave = plotted.project->cavingRegion()->cave(0);
+        REQUIRE(plotted.loadedCave != nullptr);
+
         plotted.plotManager->setRegion(plotted.project->cavingRegion());
         plotted.replot();
 
@@ -245,10 +257,10 @@ namespace {
     QHash<QString, QPointF> settledStationsOnNote(PlottedProject& plotted) {
         constexpr int kMaxSolves = 4;
 
-        QHash<QString, QPointF> positions = drawnStationsOnNote(plotted.project.get());
+        QHash<QString, QPointF> positions = drawnStationsOnNote(plotted.cave());
         for(int i = 0; i < kMaxSolves; i++) {
             plotted.replot();
-            const QHash<QString, QPointF> next = drawnStationsOnNote(plotted.project.get());
+            const QHash<QString, QPointF> next = drawnStationsOnNote(plotted.cave());
             if(next == positions) { return next; }
             positions = next;
         }
@@ -265,8 +277,28 @@ namespace {
         plotted.replot();
     }
 
+    // The frame is centered on whatever anchors it, and convergence is 0 there,
+    // so the anchor goes on a cave of its own and the loaded cave is fixed east
+    // of it. The anchor cave carries a shot because cavern rejects a *fix naming
+    // a station no survey mentions.
     void addCoordinateSystem(PlottedProject& plotted) {
-        const double convergence = cwGeoreferenceFixture::georeferenceEastOfUtm13N(
+        cwCavingRegion* region = plotted.project->cavingRegion();
+        cwCave* anchor = cwGeoreferenceFixture::addAnchorCave(region);
+
+        auto* anchorTrip = new cwTrip(anchor);
+        anchor->addTrip(anchorTrip);
+        auto* anchorChunk = new cwSurveyChunk();
+        anchorTrip->addChunk(anchorChunk);
+        cwShot anchorShot;
+        anchorShot.setDistance(cwDistanceReading(QStringLiteral("10.0")));
+        anchorShot.setCompass(cwCompassReading(QStringLiteral("0.0")));
+        anchorShot.setClino(cwClinoReading(QStringLiteral("0.0")));
+        anchorChunk->appendShot(cwStation(QStringLiteral("anchor1")),
+                                cwStation(QStringLiteral("anchor2")), anchorShot);
+
+        cwGeoreferenceFixture::fixAtAnchorPoint(anchor, QStringLiteral("anchor1"));
+
+        const double convergence = cwGeoreferenceFixture::fixEastOfAnchor(
                     plotted.cave(), plotted.scrap()->stations().first().name());
         REQUIRE(convergence > 0.1);
         plotted.replot();
@@ -288,13 +320,13 @@ TEST_CASE("Shot leader lines point at the station they name", "[cwScrapNoteFrame
     PlottedProject plotted = loadPlottedProject(dataset);
     const double storedNorth = plotted.scrap()->noteTransformation()->northUp();
 
-    CHECK(worstLeaderError(plotted.project.get()) < kMaxLeaderError);
+    CHECK(worstLeaderError(plotted.cave()) < kMaxLeaderError);
 
     addDeclination(plotted);
-    CHECK(worstLeaderError(plotted.project.get()) < kMaxLeaderError);
+    CHECK(worstLeaderError(plotted.cave()) < kMaxLeaderError);
 
     addCoordinateSystem(plotted);
-    CHECK(worstLeaderError(plotted.project.get()) < kMaxLeaderError);
+    CHECK(worstLeaderError(plotted.cave()) < kMaxLeaderError);
 
     // The note itself never moved - only the resolution absorbed the rotation.
     CHECK(plotted.scrap()->noteTransformation()->northUp() == storedNorth);
@@ -307,12 +339,10 @@ TEST_CASE("Georeferencing leaves a scrap's stations where they were on the note"
     // coordinate system has to leave every drawn station where it already was.
     //
     // What this pins is precision, not rotation - the rotation is the leader-line
-    // test's job. Georeferencing pushes the solve to UTM magnitude, where float32
-    // has a 0.5 m ULP at a 4.4e6 northing, so narrowing before subtracting
-    // worldOrigin snaps the survey onto a half-metre grid. Measuring a scrap
-    // against its own un-georeferenced twin cancels the least-squares note fit
-    // both share, which is what lets this run centimetres tight where the leader
-    // check has to allow 5% of the note's width.
+    // test's job. Measuring a scrap against its own un-georeferenced twin cancels
+    // the least-squares note fit both share, which is what lets this run
+    // centimetres tight where the leader check has to allow 5% of the note's
+    // width.
 
     const QString dataset = GENERATE(QStringLiteral("scrapGuessNeighbor/scrapGuessNeigborPlan.cw"),
                                      QStringLiteral("scrapAutoCalculate/ProjectProfile-test-v3.cw"));
@@ -341,11 +371,11 @@ TEST_CASE("Station names are guessed in the scrap's local frame", "[cwScrapNoteF
     PlottedProject plotted =
             loadPlottedProject(QStringLiteral("scrapGuessNeighbor/scrapGuessNeigborPlan.cw"));
 
-    CHECK(guessesEveryNeighborName(plotted.project.get()));
+    CHECK(guessesEveryNeighborName(plotted.cave()));
 
     addDeclination(plotted);
-    CHECK(guessesEveryNeighborName(plotted.project.get()));
+    CHECK(guessesEveryNeighborName(plotted.cave()));
 
     addCoordinateSystem(plotted);
-    CHECK(guessesEveryNeighborName(plotted.project.get()));
+    CHECK(guessesEveryNeighborName(plotted.cave()));
 }

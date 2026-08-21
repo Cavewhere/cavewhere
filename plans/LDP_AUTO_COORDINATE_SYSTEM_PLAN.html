@@ -1,0 +1,1841 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="color-scheme" content="dark light">
+<title>Automatic Local Coordinate System (LDP) — Plan</title>
+<style>
+  :root {
+    --bg: #1b1d21;
+    --panel: #22252a;
+    --panel2: #26292e;
+    --border: #3a3f47;
+    --text: #e6e8eb;
+    --dim: #9aa0a8;
+    --accent: #61afef;
+    --good: #98c379;
+    --warn: #e5c07b;
+    --bad: #e06c75;
+    /* Tints behind pills and SVG boxes — one per accent color. */
+    --tint-accent: #253141;
+    --tint-good: #2b3a2b;
+    --tint-warn: #3d3524;
+    --shadow: none;
+    --mono: "SF Mono", Menlo, Consolas, monospace;
+  }
+
+  /* Light mode. Every rule below reads these variables — including the SVG
+     classes — so the whole document, diagrams included, follows the system
+     setting without any per-element overrides. */
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #ffffff;
+      --panel: #f6f7f9;
+      --panel2: #eceff3;
+      --border: #d0d7de;
+      --text: #1c2024;
+      --dim: #59626c;
+      --accent: #0a5fc2;
+      --good: #1a7f37;
+      --warn: #8a6100;
+      --bad: #c1352b;
+      --tint-accent: #e6effb;
+      --tint-good: #e8f4ea;
+      --tint-warn: #fbf2dc;
+      --shadow: 0 1px 2px rgba(16, 22, 26, .06);
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 15px/1.55 -apple-system, "Segoe UI", sans-serif;
+    margin: 0; padding: 2rem 1rem 6rem;
+  }
+  main { max-width: 1000px; margin: 0 auto; }
+  h1 { font-size: 1.7rem; margin: 0 0 .2rem; }
+  h2 { font-size: 1.25rem; margin: 2.6rem 0 .8rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+  h3 { font-size: 1.05rem; margin: 1.6rem 0 .5rem; color: var(--accent); }
+  .meta { color: var(--dim); font-size: .9rem; margin-bottom: 1.5rem; }
+  .meta a { color: var(--accent); }
+  code, .mono { font-family: var(--mono); font-size: .86em; }
+  code { background: var(--panel2); border: 1px solid var(--border); border-radius: 4px; padding: .08em .35em; }
+  pre {
+    background: var(--panel2); border: 1px solid var(--border); border-radius: 8px;
+    box-shadow: var(--shadow);
+    padding: .9rem 1.1rem; overflow-x: auto; font-family: var(--mono); font-size: .82rem; line-height: 1.5;
+  }
+  pre code { background: none; border: none; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .92rem; }
+  th, td { border: 1px solid var(--border); padding: .5rem .7rem; text-align: left; vertical-align: top; }
+  th { background: var(--panel2); }
+  .pill { display: inline-block; border-radius: 999px; padding: .05rem .6rem; font-size: .75rem; font-weight: 600; letter-spacing: .3px; vertical-align: middle; }
+  .pill.draft { background: var(--tint-warn); color: var(--warn); border: 1px solid var(--warn); }
+  .pill.done { background: var(--tint-good); color: var(--good); border: 1px solid var(--good); }
+  .pill.phase { background: var(--tint-accent); color: var(--accent); border: 1px solid var(--accent); }
+  .callout { border-left: 3px solid var(--accent); background: var(--panel); padding: .7rem 1rem; border-radius: 0 8px 8px 0; margin: 1rem 0; }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout.bad { border-left-color: var(--bad); }
+  .callout.good { border-left-color: var(--good); }
+  .callout .title { font-weight: 700; margin-bottom: .2rem; }
+  figure { margin: 1.4rem 0; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 1rem; overflow-x: auto; box-shadow: var(--shadow); }
+  figcaption { color: var(--dim); font-size: .85rem; margin-top: .6rem; }
+  ul, ol { padding-left: 1.4rem; }
+  li { margin: .3rem 0; }
+  .dim { color: var(--dim); }
+  .good { color: var(--good); }
+  .bad { color: var(--bad); }
+  .warn { color: var(--warn); }
+  /* SVG shared classes */
+  .box   { fill: var(--panel2); stroke: var(--border); rx: 9; }
+  .boxAccent { fill: var(--tint-accent); stroke: var(--accent); rx: 9; }
+  .boxGood   { fill: var(--tint-good); stroke: var(--good); rx: 9; }
+  .boxWarn   { fill: var(--tint-warn); stroke: var(--warn); rx: 9; }
+  .lbl   { fill: var(--text); font: 600 13px -apple-system, "Segoe UI", sans-serif; }
+  .sub   { fill: var(--dim); font: 11px -apple-system, "Segoe UI", sans-serif; }
+  .edge  { stroke: var(--dim); stroke-width: 1.5; fill: none; }
+  .edgeGood { stroke: var(--good); stroke-width: 1.5; fill: none; }
+  .edgeWarn { stroke: var(--warn); stroke-width: 1.5; fill: none; }
+  .edgeBad  { stroke: var(--bad); stroke-width: 1.5; fill: none; }
+  .elbl  { fill: var(--text); font: 11.5px -apple-system, "Segoe UI", sans-serif; }
+  .elblDim { fill: var(--dim); font: 10.5px -apple-system, "Segoe UI", sans-serif; }
+</style>
+</head>
+<body>
+<main>
+
+<h1>Automatic Local Coordinate System (LDP) <span class="pill draft">DRAFT</span></h1>
+<p class="meta">
+  Replaces the user-chosen project coordinate system with an automatically derived
+  low-distortion projection (LDP). Dissolves
+  <a href="https://github.com/Cavewhere/cavewhere/issues/618">#618</a> rather than solving it.
+  Builds directly on the fix-station coordinate-string source-of-truth work
+  (commits <code>7bd98d2</code>…<code>ad2d6c21</code> on <code>dev_3</code>) — the string stays
+  the only stored form; the LDP is purely derived state downstream of it.
+</p>
+
+<h2 id="decisions">1. Decisions (settled in discussion, 2026-08-03)</h2>
+<table>
+  <tr><th>#</th><th>Decision</th><th>Rationale</th></tr>
+  <tr><td>D1</td><td>The project's working frame is a custom transverse Mercator centered on the project, derived automatically. No user-facing project-CS picker.</td><td>Standard low-distortion-projection (LDP) practice. Kills convergence/scale confusion, GPU float precision problems, and the most error-prone choice in the georeferencing flow.</td></tr>
+  <tr><td>D2</td><td><code>k_0 = 1</code>, <code>x_0 = y_0 = 0</code>. No elevation tuning of <code>k_0</code>, ever.</td><td>Elevation tuning gains ~16 ppm per 100 m — below survey noise. Retuning later would be a re-derive with churn for nothing.</td></tr>
+  <tr><td>D3</td><td><b>Reversed 2026-08-05.</b> Grid convergence keeps the internal math (line-plot azimuth rotation) <i>and</i> its cave-page readout — at three decimals, with the full-precision value in the tooltip. <s>Delete all user-facing display of it.</s></td><td>The original row read the measurements backwards. Convergence in the LDP is exactly 0 on the central meridian and grows only with east-west offset — 0.0075° per km at 40N, reaching ~0.38° at the 50 km the frame allows, against 1.93° at a UTM zone edge. Small is the <i>point</i>, not a reason to hide it: a visible 0.008° says the app models grid rotation and the LDP is doing its job. Two decimals rounded every cave within 1.3 km of the anchor to "0.00°", which reads as a correction that is switched off; three resolves 130 m. User decision 2026-08-05.</td></tr>
+  <tr><td>D4</td><td>Horizontal datum: pinned automatically from the first georeferenced input (LAZ header, else WGS84 for typed coordinates). Displayed read-only; <b>not pickable</b>.</td><td>A datum dropdown is the dialog class this design deletes; a wrong pick is a silent 1–1.5 m shift. Per-input CS already tells PROJ everything it needs.</td></tr>
+  <tr><td>D5</td><td>Vertical frame: geoid ("above sea level") heights, adopted from the lidar. Typed elevations assumed to be the same kind. z is <b>never</b> converted to ellipsoidal height. Reprojection is horizontal-only + z unit scale (survey ft → m).</td><td>Matches lidar, topo maps, and Google Earth. Converting would shift the project ~30 m (geoid separation) and disagree with everything users type. See §5.</td></tr>
+  <tr><td>D6</td><td>Anchor-on-first-input with a distance threshold <code>R</code> (proposed 50 km). See state machine, §4.</td><td>Origin ends up near the data; moves only when it was meaningfully wrong; every move is caused by the user correcting/deleting the input that placed it.</td></tr>
+  <tr><td>D7</td><td>No migration path. Current format is unreleased; existing dev projects self-heal via automatic recentering (<b>amended 2026-08-04 by D20</b> — the manual Recenter action this row originally named was replaced by the automatic rule).</td><td>User decision 2026-08-03; recentering made automatic 2026-08-04.</td></tr>
+  <tr><td>D8</td><td>Remove the <code>Project</code> mode from the per-fix CS picker.</td><td>Users must not enter coordinates in the LDP frame — Recenter can move its origin out from under them.</td></tr>
+  <tr><td>D9</td><td>Display coordinates are lat/long only (plus each fix's own stored string). No display-CS chooser.</td><td>Matches the Google Earth audience; one less concept.</td></tr>
+  <tr><td>D10</td><td>Anchoring an already-drawn cave keeps it at the scene origin.</td><td>The new LDP is centered on the new fix, so scene-local coordinates barely move by construction.</td></tr>
+  <tr><td>D11</td><td>Re-derive shows a non-cancelable progress bar when reprojection is slow. Disk-cache invalidation is <b>deferred</b> (no disk cache exists yet).</td><td>User decision 2026-08-03. When a cache lands, its key must include the LDP string.</td></tr>
+  <tr><td>D12</td><td>Collaboration: LDP changes are ordinary edits, last-writer-wins on merge.</td><td>Rare; self-healing since everything is derivable from inputs.</td></tr>
+  <tr><td>D13</td><td>Sequencing: this plan lands <b>before</b> R1. R1 = "one predicate for 'are this fix's numbers usable?'" — a follow-up from the source-of-truth work, defined in <a href="FIXSTATION_COORDINATE_SOURCE_OF_TRUTH.html#followups">FIXSTATION_COORDINATE_SOURCE_OF_TRUTH.html §13</a> (11 C++ sites across 8 files + 8 QML expressions, each to be read individually, not sed'd). The <code>cwGridConvergence.cpp:133</code> live bug it carries is expected to die with the display path.</td><td>R1's consumer list shrinks; doing R1 first reworks sites twice.</td></tr>
+  <tr><td>D14</td><td>Everything commit 1–4 built <b>stays</b>: per-fix <code>inputCS</code>, coordinate string as source of truth, <code>NoSystem</code>/<code>Unreadable</code> states, <code>CoordinateOrderAskBox</code>, far-from-origin outlier flagging.</td><td>Those solve input capture. The LDP removes the <i>working/output</i> CS confusion, not the input question.</td></tr>
+  <tr><td>D15</td><td><b>The LAZ bootstrap reads the header once, before the load</b> (option&nbsp;a).
+      <code>cwLazLayerModel::maybeAdoptRegionDefaultsFromLaz</code> becomes "derive the LDP from
+      the first layer's header" and keeps its single <code>cwLazLoader::probeHeader</code> call.
+      This is the one surviving caller of <code>probeHeader</code>.</td>
+      <td>User decision 2026-08-03. The loader transforms points <i>into</i> the destination
+      frame, so the frame must exist before a load runs — but under the LDP the frame is derived
+      from the layer's own coordinates. Something has to read the header first. A header-only
+      probe is microseconds; the alternatives each pay a full extra pass over every point
+      (two-phase load, or load-then-reproject). One call at add time is not the duplicated-cache
+      problem §10 removed.</td></tr>
+  <tr><td>D16</td><td><b>No "locating…" state.</b> A project whose only georeferenced input is a
+      still-loading LAZ simply stays local until the load completes — or until a fix station
+      arrives first and anchors it.</td>
+      <td>User decision 2026-08-03. The layer already reports a loading state of its own;
+      "un-anchored while loading" is not a separate condition worth a second indicator. Staying
+      local is the correct answer, not a placeholder for one.</td></tr>
+  <tr><td>D17</td><td><b>Survex names the frame with <code>CUSTOM</code>.</b> The working-frame
+      <code>*cs out</code> is a raw PROJ string, and cavern refuses one bare — it wants
+      <code>*cs out CUSTOM "&lt;proj string&gt;"</code> (survex/src/commands.c, the
+      <code>CS_CUSTOM</code> branch). <code>cwSurvexExporterUtils::toSurvexCS()</code> wraps
+      anything starting with <code>+</code> and passes everything else through; every
+      <code>*cs</code> emission site goes through it.</td>
+      <td>Found while implementing P2.2 (2026-08-03). Without it the solve fails with
+      "Unknown coordinate system" the moment the LDP becomes the working frame, which is
+      every georeferenced project.</td></tr>
+  <tr><td>D18</td><td><b>An input the frame can't be derived from is skipped, not fatal.</b>
+      <code>cwLocalProjectionManager::anchorToFirstUsable()</code> walks the inputs in order and
+      takes the first that yields a projection.</td>
+      <td>Found while implementing P2.2 (2026-08-03). A UTM easting typed into a row that says
+      lat/long is nowhere on Earth, so <code>deriveFrom</code> yields nothing; stopping there
+      left the whole project unplaced with a perfectly good fix sitting behind it.</td></tr>
+  <tr><td>D19</td><td><b>The output-CS prompt is deleted</b> —
+      <code>needsOutputCS</code>/<code>suggestedOutputCS</code>/<code>outputCSCoordinateInvalid</code>,
+      <code>OutputCSPrompt.qml</code> and its three hosts.</td>
+      <td>Structurally unreachable under the LDP (2026-08-03): the prompt asked for an output CS
+      when fixes existed and the project had none, and a fix with a readable coordinate is
+      exactly what anchors the frame. Its accept button also had nowhere left to write.</td></tr>
+  <tr><td>D20</td><td><b>Recentering is automatic; there is no manual Recenter action.</b>
+      In <code>cwLocalProjectionManager::evaluate()</code>: when inputs exist and <i>none</i>
+      is within R (<code>kAnchorThresholdMeters</code>, 50&nbsp;km) of the current origin,
+      re-derive the frame at the component-wise <b>median</b> of all inputs (readable fix
+      locals + LAZ source-bbox centers) → Frozen. Idempotence guard: if the computed median
+      equals the current origin, do nothing. <b>Must land after §11 F1's async probe</b> —
+      before universal probing, a still-loading layer makes "nothing within R" spuriously
+      true at project open and would move a stored frame (the V1 failure mode).</td>
+      <td>User decision 2026-08-04, supersedes the manual action in D7. The rule preserves
+      the §4 invariant: the wrong-county-tile case never fires (the good fix <i>is</i> within
+      R, so the frame stays and the tile keeps its outlier flag), and it self-heals old dev
+      projects on open — D7's migration path with no button and no user-facing concept.
+      Threshold analysis: at 50&nbsp;km a tmerc k₀=1 frame carries ~31&nbsp;ppm scale error and
+      ~0.4° convergence (below instrument noise), and float32 scene rendering degrades only to
+      ~4–8&nbsp;mm vertex quantization with cm-scale close-up jitter at worst — no depth-buffer
+      impact (depth precision is eye-space, travels with the camera). Median derivation also
+      halves the worst-case offset for spread-out data. A softer "off-center" trigger was
+      rejected: it reintroduces reload churn for precision gains below the noise floor.</td></tr>
+</table>
+
+<h2 id="recipe">2. The LDP recipe</h2>
+<p>Derived once at anchor time from the anchor's position (lat₀, lon₀) and datum:</p>
+<pre><code>+proj=tmerc +lat_0=&lt;lat₀&gt; +lon_0=&lt;lon₀&gt; +k_0=1 +x_0=0 +y_0=0
++datum=&lt;from first input: LAZ header datum, else WGS84&gt; +units=m +no_defs +type=crs</code></pre>
+<p>Properties this buys, all consequences of the origin sitting on the data:</p>
+<ul>
+  <li><b>Convergence ≈ 0</b> at the origin (exactly 0 on the central meridian); ~0.14° at 15 km, ~0.4° at 45 km — applied internally <i>and</i> shown on the cave page at three decimals (D3).</li>
+  <li><b>Scale distortion</b>: ~1 ppm at 10 km, ~11 ppm at 30 km, ~120 ppm at 100 km (1 ppm = 1 mm/km). UTM's designed worst case is ~400 ppm.</li>
+  <li><b>Small coordinates</b> → float32-safe on the GPU with no offset hacks; <code>worldOrigin</code> becomes unnecessary (§3).</li>
+  <li><b>Analytic + invertible</b> via the persisted PROJ string — any point round-trips to lat/long/h exactly, which is the single load-bearing requirement for the future VadoseEarth globe morph (§8).</li>
+</ul>
+
+<h2 id="current">3. Current architecture → target</h2>
+<p>Today <code>cwGeoReference</code> (owned by <code>cwCavingRegion</code>) bundles two things:
+a user-or-auto <code>globalCoordinateSystem</code> string and a <code>worldOrigin</code> offset
+(with an <code>explicitlySet</code> flag) that translates scene-local points into that CS.
+<code>cwCavingRegion::recomputeWorldOrigin()</code> <i>averages</i> the fixes (skipping outliers)
+and re-arms on CS change; <code>cwLazLayerModel</code> auto-adopts a LAZ's CS + bbox center into
+an empty project (covered by <code>test_cwLazLayerAutoAdoptCS.cpp</code> and
+<code>test_cwCavingRegion_worldOrigin.cpp</code>).</p>
+<p>The target collapses the pair into one value. The LDP <i>is</i> the origin — scene-local
+coordinates are LDP coordinates directly:</p>
+<table>
+  <tr><th>Concept</th><th>Today</th><th>Target</th></tr>
+  <tr><td>Working CS</td><td><code>globalCoordinateSystem</code> — user-picked or LAZ auto-adopted</td><td>Derived tmerc PROJ string, never user-picked</td></tr>
+  <tr><td>Scene origin</td><td><code>worldOrigin</code> offset inside globalCS, averaged from fixes, <code>explicitlySet</code> flag</td><td>Gone — <code>x_0=y_0=0</code> at the anchor; scene-local = LDP coords</td></tr>
+  <tr><td>Derivation policy</td><td>Average of fixes, re-armed by CS change; LAZ bbox-center adoption</td><td>Anchor-on-first-input state machine (§4); no averaging, no re-arming</td></tr>
+  <tr><td>Stored state</td><td>CS string + origin point + flag</td><td>PROJ string + state (§4) + anchor identity + vertical-datum name (§5)</td></tr>
+  <tr><td>"Is georeferenced?"</td><td><code>hasCoordinateSystem()</code></td><td>Same predicate, now meaning "an LDP exists"</td></tr>
+</table>
+<div class="callout">
+  <div class="title">The LDP is stored, not computed</div>
+  On load, always use the persisted string — never re-derive at load time (two machines with
+  different PROJ data must not disagree, and determinism matters for tests and Git sync).
+  Every state transition in §4 writes the new string <b>transactionally with the edit that
+  caused it</b>, so undo restores the identical LDP. It is a stored value that changes on
+  events, never a live function of the data.
+</div>
+
+<h2 id="statemachine">4. When the LDP updates — the state machine</h2>
+<p>Three states. <b>Anchor</b> = the identity (not the value) of the first georeferenced
+input: the first fix station whose coordinate is <em>readable</em>
+(<code>state() == Valid</code> — an <code>Unreadable</code>/<code>NoSystem</code> row must never
+anchor), or the first LAZ layer with a CRS. Threshold <code>R</code> = 50 km (proposed;
+scale error there ≈ 30 ppm, and real mistakes — zone errors, hemisphere flips — are always
+far larger).</p>
+
+<figure>
+<svg viewBox="0 0 960 560" width="960" height="560" role="img" aria-label="LDP state machine">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--dim)"/>
+    </marker>
+    <marker id="arrG" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--good)"/>
+    </marker>
+    <marker id="arrW" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--warn)"/>
+    </marker>
+    <marker id="arrB" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--bad)"/>
+    </marker>
+  </defs>
+
+  <!-- S0 Ungeoreferenced -->
+  <rect class="box" x="40" y="60" width="230" height="90"/>
+  <text class="lbl" x="155" y="95" text-anchor="middle">S0 · Ungeoreferenced</text>
+  <text class="sub" x="155" y="115" text-anchor="middle">No LDP. Cave renders in a</text>
+  <text class="sub" x="155" y="130" text-anchor="middle">floating local frame.</text>
+
+  <!-- S1 Anchored -->
+  <rect class="boxAccent" x="380" y="60" width="250" height="90"/>
+  <text class="lbl" x="505" y="95" text-anchor="middle">S1 · Anchored</text>
+  <text class="sub" x="505" y="115" text-anchor="middle">LDP persisted. Anchor identity</text>
+  <text class="sub" x="505" y="130" text-anchor="middle">tracked (first fix or LAZ layer).</text>
+
+  <!-- S2 Frozen -->
+  <rect class="boxGood" x="720" y="60" width="210" height="90"/>
+  <text class="lbl" x="825" y="95" text-anchor="middle">S2 · Frozen</text>
+  <text class="sub" x="825" y="115" text-anchor="middle">LDP persisted, no anchor.</text>
+  <text class="sub" x="825" y="130" text-anchor="middle">Moves only via auto-recenter (D20).</text>
+
+  <!-- S0 -> S1: first input -->
+  <path class="edgeGood" d="M270 90 L378 90" marker-end="url(#arrG)"/>
+  <text class="elbl" x="324" y="80" text-anchor="middle" fill="var(--good)">first georeferenced input</text>
+
+  <!-- S1 self loop: anchor edited beyond R (re-derive) -->
+  <path class="edgeWarn" d="M440 60 C 410 10, 600 10, 570 58" marker-end="url(#arrW)"/>
+  <text class="elbl" x="505" y="22" text-anchor="middle" fill="var(--warn)">anchor location edited &gt; R → re-derive at new location</text>
+
+  <!-- S1 self loop bottom: anchor edited within R (keep) -->
+  <path class="edge" d="M440 150 C 415 195, 595 195, 570 152" marker-end="url(#arr)"/>
+  <text class="elblDim" x="505" y="188" text-anchor="middle">anchor edited ≤ R → keep LDP (no churn)</text>
+
+  <!-- S1 -> S2: anchor deleted, remaining within R -->
+  <path class="edgeGood" d="M630 90 L718 90" marker-end="url(#arrG)"/>
+  <text class="elbl" x="674" y="70" text-anchor="middle" fill="var(--good)">anchor deleted,</text>
+  <text class="elbl" x="674" y="84" text-anchor="middle" fill="var(--good)">rest ≤ R</text>
+
+  <!-- S1 -> S1 via re-anchor: anchor deleted, remaining beyond R -->
+  <path class="edgeBad" d="M505 150 C 505 250, 505 250, 505 152" opacity="0"/>
+  <path class="edgeBad" d="M460 150 C 430 235, 580 235, 550 152" marker-end="url(#arrB)"/>
+  <text class="elbl" x="505" y="232" text-anchor="middle" fill="var(--bad)">anchor deleted, rest &gt; R → re-derive from oldest remaining (new anchor)</text>
+
+  <!-- S1 -> S0 and S2 -> S0: last input deleted -->
+  <path class="edge" d="M380 130 C 330 160, 300 150, 272 132" marker-end="url(#arr)"/>
+  <text class="elblDim" x="308" y="168" text-anchor="middle">last georeferenced</text>
+  <text class="elblDim" x="308" y="182" text-anchor="middle">input deleted</text>
+  <path class="edge" d="M760 150 C 600 330, 240 300, 152 152" marker-end="url(#arr)"/>
+  <text class="elblDim" x="460" y="292" text-anchor="middle">last georeferenced input deleted</text>
+
+  <!-- Recenter: S1/S2 -> S2 -->
+  <path class="edgeGood" d="M680 260 C 760 260, 810 220, 822 152" marker-end="url(#arrG)"/>
+  <rect class="boxGood" x="520" y="240" width="160" height="40"/>
+  <text class="lbl" x="600" y="265" text-anchor="middle">Auto-recenter (D20): no input within R</text>
+  <text class="elblDim" x="762" y="238" text-anchor="middle">from any state with data → S2</text>
+
+  <!-- Annotation: non-anchor far input -->
+  <rect class="boxWarn" x="40" y="360" width="880" height="80"/>
+  <text class="lbl" x="60" y="388">Not a transition: a non-anchor input added or edited &gt; R from the origin</text>
+  <text class="sub" x="60" y="410">Never moves the LDP. It gets the existing far-from-origin outlier flag (#596 machinery), which now doubles</text>
+  <text class="sub" x="60" y="426">as the projection-validity check. Whichever input is wrong, deleting or correcting it converges via the edges above.</text>
+
+  <!-- Annotation: what a re-derive does -->
+  <rect class="box" x="40" y="460" width="880" height="80"/>
+  <text class="lbl" x="60" y="488">What every re-derive does (all derived state, lossless)</text>
+  <text class="sub" x="60" y="510">Recompute fix locals from their stored strings · reproject LAZ clouds (horizontal-only + z unit scale) · regenerate</text>
+  <text class="sub" x="60" y="526">plots/caches · quiet one-line notice. Progress bar (non-cancelable) when slow. Coordinates users see don't change (D9).</text>
+</svg>
+<figcaption>
+LDP lifecycle. Green edges converge toward a correct origin; the yellow self-loop is the
+only automatic move of an existing origin, and it fires only when the anchor itself was
+corrected by more than R. The invariant: <i>the origin always ends up near the data, moves
+only when it was meaningfully wrong, and every move is caused by the user deleting or
+correcting the input that put it there.</i>
+</figcaption>
+</figure>
+
+<h3>Worked mistake scenarios</h3>
+<table>
+  <tr><th>Scenario</th><th>What happens</th></tr>
+  <tr><td>Wrong entrance typed first (200 km off), then corrected</td><td>Anchor edited &gt; R → re-derive at corrected location. Flags clear. (S1 yellow loop)</td></tr>
+  <tr><td>Entrance refined by 3 m after lidar loaded</td><td>Anchor edited ≤ R → LDP untouched, zero churn. (S1 gray loop)</td></tr>
+  <tr><td>Correct fix first, then wrong county's LAZ tile</td><td>Tile is non-anchor → flagged far-from-origin; LDP never moves. Delete tile, add right one → flag clears.</td></tr>
+  <tr><td>Wrong LAZ tile first (it anchors), then correct fix (gets flagged!), user deletes the tile</td><td>Anchor deleted, remaining fix &gt; R → re-derive from it; it becomes the new anchor; flags clear. (red edge)</td></tr>
+  <tr><td>Anchor fix legitimately deleted, 20 other fixes nearby</td><td>Remaining ≤ R → S2 Frozen. No silent hand-off of the anchor role. (green edge)</td></tr>
+  <tr><td>Everything georeferenced deleted</td><td>Back to S0; next input re-anchors fresh — the "New Project state" reset.</td></tr>
+</table>
+
+<h2 id="vertical">5. Vertical datum (D5, explained)</h2>
+<p>Two different "zero elevation" surfaces exist:</p>
+<ul>
+  <li>The <b>ellipsoid</b> — the smooth mathematical WGS84 surface. GPS chips measure height above this.</li>
+  <li>The <b>geoid</b> — the bumpy mean-sea-level surface. Lidar (NAVD88), topo maps, and Google Earth's displayed altitude are heights above this.</li>
+</ul>
+<p>They disagree by the local <i>geoid separation</i> N — roughly −30 m in the eastern US.
+CaveWhere's z axis is <b>geoid height</b>, adopted from whatever the lidar declares; typed
+elevations are assumed to be the same kind. We never convert z to ellipsoidal height —
+doing so would shift the whole project ~30 m and disagree with every typed elevation.</p>
+<div class="callout warn">
+  <div class="title">PROJ trap: never request a 3D compound transform</div>
+  Handing PROJ the lidar's full compound CRS (e.g. "NAD83 / KY single zone + NAVD88 height")
+  with a 3D target will make it apply the geoid model and return ellipsoidal heights —
+  silently, and only on machines where the geoid grids happen to be installed. Build the
+  transform from the <b>horizontal</b> CRSs only; handle z as a pure unit scale
+  (US survey ft → m). This matches what the existing project-CS reprojection implicitly does.
+</div>
+<p>What we <i>record</i> (not apply): the lidar's vertical-datum name from the LAZ header,
+stored on the geo-reference. That single string is the bridge a future globe renderer needs
+to reconstruct ellipsoidal height (h = H + N) for ECEF placement (§8). Optionally cache N₀
+at the origin when geoid grids are available. Mixed vertical datums across tiles
+(NAVD88 vs NGVD29, ~0.3 m) are detectable from headers → import-time notice, deferred.</p>
+
+<h2 id="removed">6. What this removes vs. keeps</h2>
+<table>
+  <tr><th class="good">Removed</th><th class="good">Kept (unchanged)</th></tr>
+  <tr>
+    <td>
+      <ul>
+        <li>Project CS picker + all its error states (#618 dissolves)</li>
+        <li><code>Project</code> mode in the per-fix CS picker (D8; partial unwind of commit 3's picker)</li>
+        <li>Grid convergence <s>display/</s>warnings (math stays, D3) — the warnings go; the display <b>stays</b> and gained precision (D3 reversed 2026-08-05, P4 step 2)</li>
+        <li><s><code>cwGridConvergence.cpp:133</code> origin-convergence bug (dies with the display path)</s>
+            — fixed in P4 step 1 by the <code>hasPlacedCoordinate()</code> predicate</li>
+        <li><code>worldOrigin</code> + <code>explicitlySet</code> + averaging <code>recomputeWorldOrigin()</code></li>
+        <li>LAZ bbox-center world-origin adoption (subsumed by anchoring)</li>
+        <li>The output-CS prompt — <code>needsOutputCS</code> and everything it drove (D19)</li>
+        <li><code>horizontalMetersPerUnit()</code> scaling of physical constants (clouds land in meters once, at import)</li>
+        <li>Ground-vs-grid scale and float-precision workarounds</li>
+      </ul>
+    </td>
+    <td>
+      <ul>
+        <li>Per-fix <code>inputCS</code> + coordinate string as source of truth (commits 1–4, all of it)</li>
+        <li><code>NoSystem</code>/<code>Unreadable</code> states + messages</li>
+        <li><code>CoordinateOrderAskBox</code> (axis-order question is about <i>input</i>, unaffected)</li>
+        <li>Far-from-origin outlier flagging (#596) — now also the projection-validity check</li>
+        <li>Convergence + declination applied in the line plot</li>
+        <li>Blank <code>inputCS</code> is an error (Q5); "Project copies, not links" becomes moot</li>
+      </ul>
+    </td>
+  </tr>
+</table>
+
+<h2 id="export">7. Exports</h2>
+<ul>
+  <li><b>Survex</b>: <code>*cs out custom "&lt;LDP proj string&gt;"</code> is accepted by cavern —
+      or export in a derived standard CS. <code>cwCoordinateTransform::deriveProjectedOutputCS()</code>
+      already exists and derives a UTM zone from a point; it becomes the default export CS
+      (auto UTM zone at the origin). The <code>isUnusableAsSurvexOutputCS</code> refusal list stays.</li>
+  <li><b>Compass</b>: only understands UTM — always reproject to the derived UTM zone (already the shape of the current exporter).</li>
+  <li><b>Export CS chooser</b>: the one place a CS choice legitimately survives. Default = auto UTM zone; the GIS crowd can pick.</li>
+</ul>
+
+<h2 id="vadose">8. VadoseEarth openness (future, design-only)</h2>
+<p>VadoseEarth is an ECEF WGS84 globe engine (<code>EarthEllipsoid</code>, <code>Geodetic3D</code>,
+high/low float split). The globe↔LDP zoom morph is proven technique (Cesium's 3D↔Columbus
+morph; Google Maps globe↔Mercator): both worlds map analytically from (lat, lon, h), and a
+per-vertex blend between the two mappings is a smooth deformation. Requirements this plan
+must preserve — all already satisfied by the design above:</p>
+<ol>
+  <li>LDP analytic + invertible via the persisted PROJ string (§3).</li>
+  <li>Vertical-datum name recorded so ellipsoidal height is recoverable (§5).</li>
+  <li>One frozen origin per project = the tangent point (§4).</li>
+  <li>Doubles on CPU interchange types (both projects use <code>QDoubleVector3D</code>).</li>
+</ol>
+
+<h2 id="phases">9. Implementation phases</h2>
+<p class="dim">High-level; per-phase site lists get gathered at implementation time. Each phase
+lands green on both suites before the next.</p>
+<table>
+  <tr><th></th><th>Phase</th><th>Content</th></tr>
+  <tr><td><span class="pill phase">P1</span></td><td>LDP core <b>— done</b></td>
+      <td>Derivation function (anchor point + datum → tmerc PROJ string). Rework
+      <code>cwGeoReference</code>: LDP string + state + anchor identity + vertical-datum name.
+      Proto: add the geo-reference message. The old frame
+      (<code>worldOrigin</code>/<code>explicitlySet</code>, the <code>globalCoordinateSystem</code>
+      field) stays until P2.2 swaps the working frame.
+      <div class="callout" style="margin-top:10px">
+      <b>What landed, and what moved</b>
+      <ul>
+        <li><code>cwLocalProjection::derive(lat, lon, datumSourceCS)</code> and
+            <code>deriveFrom(anchorCS, point)</code> — PROJ builds the CRS
+            (<code>proj_experimental.h</code>), so the datum is inherited rather than
+            spelled by hand, and a compound CRS contributes its horizontal half only.</li>
+        <li><code>cwGeoReference</code> gained <code>State</code> (S0/S1/S2),
+            <code>localCoordinateSystem</code>, <code>Anchor</code>, <code>verticalDatum</code>,
+            with <code>anchorTo()</code> / <code>freeze()</code> / <code>clear()</code> /
+            <code>restore()</code> as the only ways to move them — all three parts write
+            together, and <code>restore()</code> repairs states a file can't legitimately hold.</li>
+        <li><b>Anchor identity = kind + persisted UUID</b> (<code>cwFixStation::id</code>,
+            <code>cwLazLayer::id</code>) — the open question from §14, settled: both already
+            carry one, so identity survives save/load and outlives a rename.</li>
+        <li><b><code>worldOrigin</code>/<code>explicitlySet</code> moved to P2</b> — since
+            re-split: the deletion now lands in P2.2 (user decision,
+            2026-08-03). Deleting the offset is not a local edit to <code>cwGeoReference</code> —
+            it takes <code>recomputeWorldOrigin()</code>, the line-plot first-solve auto-compute,
+            the LAZ bbox-center adopt, and the two test files with it. Doing that before an LDP
+            exists removes a frame without replacing one, so scene-local would be absolute
+            UTM-scale coordinates in float32 (~3 cm at 500 km eastings) for the span of a phase.
+            The two frames sit side by side for exactly one phase.</li>
+      </ul></div></td></tr>
+  <tr><td><span class="pill phase">P2</span></td><td>State machine <b>— anchoring done</b></td>
+      <td>Anchoring/re-derive/freeze transitions, replacing
+      <code>recomputeWorldOrigin()</code> averaging and the LAZ auto-adopt semantics.
+      Threshold R constant; the §4 worked scenarios as tests. The frame swap and the
+      <code>worldOrigin</code>/<code>globalCoordinateSystem</code> deletion move to
+      <span class="pill phase">P2.2</span> (user decision, 2026-08-03) — see below.
+      <div class="callout" style="margin-top:10px">
+      <b>Half landed: the anchoring</b>
+      <ul>
+        <li><code>cwLocalProjectionManager</code>, owned by <code>cwCavingRegion</code> alongside
+            <code>cwFixStationValidator</code> — the states live on <code>cwGeoReference</code>,
+            the policy for moving between them needs the region's caves and layers, so it lives
+            there. R = 50&nbsp;km (<code>kAnchorThresholdMeters</code>), settling §14's first
+            open question.</li>
+        <li>Distance is measured <i>in the current frame</i>: with
+            <code>x_0 = y_0 = 0</code> a point's distance from the origin is just its magnitude
+            once transformed into the LDP, so "did the anchor move more than R" needs no second
+            derivation.</li>
+        <li><b>Only witnessed disappearances count as deletions.</b> LAZ layers are rescanned off
+            disk <i>after</i> the caves load, so an anchor that is merely absent has not
+            necessarily been deleted — and acting on that would move a frame that is stored
+            precisely so opening a project can't move it. The manager tracks whether it has seen
+            the current anchor at all, and resets that whenever the anchor changes underneath it
+            (which is what a load looks like from here).</li>
+        <li><b>A load quiesces the manager.</b> <code>cwCavingRegion::setData()</code> brackets the
+            whole load in <code>cwLocalProjectionManager::setLoading()</code>: evaluation is
+            suspended from <code>clearCaves()</code> until the stored frame is restored, then runs
+            once against it. The caves arriving is an ordinary event the manager reacts to, so
+            without this a re-derivation built a frame that <code>restore()</code> overwrote
+            moments later — invisible on the machine that wrote it, and not on the next one.
+            Statement order inside <code>setData</code> is no longer load-bearing.</li>
+        <li>Inputs are enumerated by one <code>gatherInputs()</code> returning a
+            <code>QList&lt;Input&gt;</code>, in a fixed order so the frame doesn't depend on load
+            timing. Gathering every input on every call is cheap enough for a keystroke in a
+            coordinate field: <code>isValidCS</code> memoizes the PROJ database lookup per thread,
+            so per input it is a hash lookup.</li>
+        <li>11 cases in <code>test_cwLocalProjectionManager.cpp</code>, one per §4 scenario plus
+            the two load orderings; both load claims mutation-tested.</li>
+      </ul>
+      </div></td></tr>
+  <tr><td><span class="pill phase">P2.1</span></td><td>Export CS decoupling</td>
+      <td><code>cwSurvexExporterUtils::resolveOutputCS</code> has two callers with opposite
+      needs, hidden today because the project has one CS. The <b>solve</b>
+      (<code>cwLinePlotTask</code> → <code>cwSurvexExporterRegion</code>) wants its
+      <code>*cs out</code> to be the working frame — exactly what P2.2 makes the LDP. The
+      user's <b>File→Export</b> (<code>cwSurveyExportManager</code>) wants a pasteable UTM
+      zone, never an LDP proj-string. Split them <i>before</i> the frame swap: file export
+      derives its own output CS via <code>cwCoordinateTransform::deriveProjectedOutputCS()</code>
+      (already written, tested, and used by the validator's suggestion path); the solve keeps
+      the existing fallback chain untouched. Fully testable against the current code, with
+      <code>globalCoordinateSystem</code> still present. Absorbs the "default export CS =
+      derived UTM zone" piece of P5.</td></tr>
+  <tr><td><span class="pill phase">P2.2</span></td><td>Frame swap <b>— done</b></td>
+      <td>The LDP becomes the working frame; <code>worldOrigin</code>/<code>explicitlySet</code>
+      <i>and</i> <code>globalCoordinateSystem</code> are deleted <b>together</b> — they are one
+      concept split in half (a frame and an offset into it), and neither is deletable alone:
+      dropping the offset while consumers work in UTM puts absolute UTM in float32
+      (~0.25&nbsp;m ulp at a 4,000&nbsp;km northing); dropping the CS first leaves consumers
+      with no frame at all. The LDP kills the offset structurally — <code>x_0 = y_0 = 0</code>
+      at the anchor means LDP coordinates already <i>are</i> scene coordinates; there is
+      nothing left to subtract.
+      <ul>
+        <li><b>Frame consumers</b> (mechanical swap to <code>localCoordinateSystem</code>):
+            survex <code>*cs out</code> connect in <code>cwLinePlotManager</code>, the LAZ
+            reprojection push (<code>setRegionGlobalCS</code>),
+            <code>cwLazClipInteraction</code>'s <code>outputWktCS</code>.</li>
+        <li><b>Scene→global readers</b> (<code>cwCoordinatePicker</code>,
+            <code>cwMeasurementInteraction</code>, <code>cwAzimuthReference</code>): the LDP is
+            just a different source CS, with no offset to add first.</li>
+        <li><b>Validation gates</b> (<code>cwFixStationValidator</code>'s "is a global CS set"):
+            become <code>state() != Ungeoreferenced</code>.</li>
+        <li><b>Offset plumbing deleted</b>: <code>recomputeWorldOrigin()</code>,
+            <code>robustWorldOrigin()</code>, the <code>cwLinePlotManager</code> first-solve
+            auto-compute + <code>worldOriginChanged</code> connect,
+            <code>cwLinePlotTask::applyWorldOriginOffset()</code>, the
+            <code>setRegionWorldOrigin</code> push through <code>cwLazLayer</code> →
+            <code>cwLazLoader</code> → <code>cwLazClipOperation</code> (LAZ header offsets go
+            to zero — LDP coordinates need less int32 range than UTM's did).</li>
+        <li><b>UI pulled forward from P4</b> — only the <i>project's</i> CS surface, not the
+            picker machinery: <code>DataMainPage.qml</code>'s
+            <code>globalCoordinateSystemComboBox</code> group-box entry goes;
+            <code>Project</code> mode leaves the fix CS picker (D8). The reusable
+            <code>CSPicker</code> component stays for fix stations and LAZ overrides.
+            <code>CoordinatePickerPopup</code>'s "Project CRS" coordinate section collapses to
+            lat/long + elevation (D9) — LDP eastings are "meters from the anchor," not a
+            pasteable CRS coordinate.</li>
+        <li><b>The bootstrap cycle</b> <span class="pill">settled — D15</span> — the loader
+            transforms points <i>into</i> the destination frame, so the frame has to exist before
+            a load can run, but under the LDP the frame is derived from the layer's own
+            coordinates. Resolution: <code>maybeAdoptRegionDefaultsFromLaz</code> keeps its single
+            <code>probeHeader</code> call and becomes "derive the LDP from the first layer's
+            header." That call is why <code>cwLazLoader::probeHeader</code> survives §10 — do not
+            delete it while chasing the §10 cleanup.</li>
+        <li><b>Anchoring is load-completion-timed</b>, not insert-timed (a consequence of §10
+            part&nbsp;B: only a finished load has read the header). Per <b>D16</b> this needs no
+            new UI — the project stays local until the load lands or a fix station anchors it
+            first. What it does need: anything asserting on the frame right after an add must
+            wait for the load, since <code>addLazAndWait</code> returns with the layer still
+            <code>Loading</code> (see §10 B5).</li>
+        <li>Proto: reserve field 4 (<code>globalCoordinateSystem</code>) beside the already
+            reserved 5. Rewrite <code>test_cwCavingRegion_worldOrigin.cpp</code> /
+            <code>test_cwLazLayerAutoAdoptCS.cpp</code> against the new policy; the ~8 QML
+            tests that set <code>globalCoordinateSystem</code> and assert it sticks are
+            rewritten here, not in P4.</li>
+      </ul>
+      <div class="callout" style="margin-top:10px">
+      <b>What landed beyond the list above</b>
+      <ul>
+        <li><b>The output-CS prompt went with it</b> (<b>D19</b>) — the whole
+            <code>needsOutputCS</code> machinery, <code>OutputCSPrompt.qml</code>, its three
+            hosts, <code>tst_OutputCSPrompt.qml</code> and the validator's prompt tests.</li>
+        <li><b><code>toSurvexCS()</code></b> (<b>D17</b>) — the LDP has to reach cavern as
+            <code>CUSTOM "…"</code>, or every georeferenced solve fails. The test is what a bare
+            survex name may contain, not what a PROJ string looks like, so
+            <code>cwLocalProjection</code>'s WKT fallback is quoted too; all five
+            <code>*cs</code> emitters route through one <code>writeCsLine()</code>.</li>
+        <li><b><code>anchorToFirstUsable()</code></b> (<b>D18</b>) — an input no projection can
+            be centered on is skipped rather than leaving the project unplaced.</li>
+        <li><b>The picker's <code>Project</code> mode, <code>allowLocal</code> and
+            <code>allowGeographic</code> went too</b> — with the project's own picker gone, every
+            remaining host was a fix-station surface passing the same flags, and Project had no CS
+            to copy. <code>CSPicker</code>'s model is now constant, which also retired the
+            <code>onModelChanged</code> binding-restore workaround.</li>
+        <li><b><code>shareableCSForFix</code> falls back to the fix's own CS string</b> when
+            PROJ can't parse it <i>at all</i>: survex's own spellings (UTM16N, S-MERC, OSGB:XX) are
+            fine for output, and switching the Rule exporter to Shareable had silently dropped them.
+            The fallback is gated on <code>isValidCS</code> — a CS PROJ <i>does</i> know that
+            yielded nothing failed for a different reason (the point wouldn't transform), and
+            falling back there would name a geographic CS as <code>*cs out</code>.</li>
+        <li><b>The manual</b> — <code>georeference-a-cave.md</code> (two steps → one, the world
+            origin section, the picker section), <code>add-a-point-cloud.md</code>,
+            <code>grid-convergence.md</code> and their <code>llms.txt</code> entries.</li>
+      </ul>
+      <p style="margin:.6rem 0 0">A four-angle simplify pass then ran over the result;
+      what it applied and the four follow-ups it deliberately left are in
+      <a href="#p22followups">§11</a>.</p>
+      </div></td></tr>
+  <tr><td><span class="pill phase">P3</span></td><td>Consumers <b>— done (absorbed by P2/P2.2)</b></td>
+      <td>All four items landed with the frame swap, verified 2026-08-04: fix-station locals
+      derive into the LDP (<code>cwFixStationValidator.cpp:257</code> via the memoized
+      <code>transformPoint</code>; the solve gets <code>*cs out</code> = frame through
+      WorkingFrame); LAZ reprojection targets the LDP (<code>cwLazLoader.cpp:147</code>,
+      horizontal-only + z unit scale, §5), and a frame change fans out region → layer model →
+      every layer, reloading the clouds; convergence/declination consume the LDP
+      (<code>cwMeasurementInteraction.cpp:197</code> feeds <code>localCoordinateSystem</code>
+      into <code>cwAzimuthReference</code>; auto-declination resolves from the first Valid
+      fix's own <code>inputCS</code>; scraps add grid convergence to the resolved
+      declination). D11's progress UI needs no new surface: layer reloads register with the
+      future manager (<code>cwLazLayer.cpp:44</code>) and show in <code>MainSideBar</code>'s
+      <code>TaskListView</code>; fix-local recompute and plot regeneration are fast paths with
+      their own feedback.</td></tr>
+  <tr><td><span class="pill phase">P4</span></td><td>UI removal <b>— shrunk by P2.2</b></td>
+      <td><b>Decisions settled 2026-08-04; implementation order:</b>
+      <ol style="margin:.4rem 0 .4rem 1.2rem; padding:0">
+        <li><s><b>Convergence frame-CS fix</b> — a real math bug, user-found:
+            <code>cwGridConvergence::update</code> computes convergence from the first fix's
+            own <code>inputCS</code> (<code>cwGridConvergence.cpp:130-141</code>) instead of
+            the working frame, and <code>cwScrap::autoDeclinationGridConvergence()</code>
+            bakes that value into scrap note-transform north (<code>cwScrap.cpp:646</code>) —
+            injecting another grid's convergence (UTM can exceed ±1°) where the LDP's ≈0 is
+            correct. Fix: compute at the fix's location in the frame from
+            <code>localCoordinateSystem()</code>. (<code>cwMeasurementInteraction</code>
+            already passes the frame.)</s>
+            <b>DONE 2026-08-04.</b> <code>update()</code> now takes the frame CS;
+            <code>cwCave::recomputeGridConvergence()</code> reads it from
+            <code>parentRegion()->geoReference()</code>, and the region drives every cave from
+            one lambda hung off both <code>localProjectionChanged</code> and its own
+            <code>caveCountChanged</code> — the <code>cwFixStationValidator</code> pattern, which
+            covers insert, remove, undo/redo and load through a single choke point (a cave can't
+            watch a frame it reaches through its parent). The location comes from the first fix
+            that passes <code>cwFixStation::hasPlacedCoordinate()</code> under a valid CS,
+            transformed into the frame — so neither an unreadable coordinate nor a CS picked
+            before any coordinate was typed converges at the frame's origin. States were
+            re-cut around the frame: <code>NoCoordinateSystem</code> = the project has no LDP,
+            <code>NoFixStation</code> = nothing places this cave, and <code>Geographic</code>
+            was deleted (the LDP is always a tmerc, and <code>computeAt()</code> already answers
+            0 for a geographic CS).
+            <code>detailText()</code> names the grid instead of asking PROJ for a name it
+            doesn't have for a derived proj string, which retired
+            <code>m_coordinateSystem</code>. Tests: 5 new cases in
+            <code>test_cwGridConvergence.cpp</code> (frame-not-inputCS, offset-from-anchor,
+            frame-move recompute, no-region, unplaceable fix); the two convergence tests in
+            <code>test_cwScrap.cpp</code> now build their caves in a region anchored on a
+            <i>second</i> cave, which is the only way to get a non-zero convergence in an LDP.
+            The region+cave+fix builders those tests share now live in
+            <code>testlib/FixStationFixtureHelper.h</code>.
+            Docs updated (<code>grid-convergence.md</code>, <code>llms.txt</code>, the
+            <code>CavePage</code> help text) — step&nbsp;2 deletes them.</li>
+        <li><b>Give the convergence display more precision</b> (D3, reversed) —
+            <code>CavePage.qml</code>'s <code>gridConvergenceCell</code> stays; the readout
+            goes to three decimals and the tooltip to six.
+            <b>DONE 2026-08-05.</b> The deletion this step originally called for was written
+            and then reverted in the same working tree (nothing of it was committed), after
+            measuring what the LDP actually does to the angle — see D3 for the numbers that
+            turned the decision around. What landed instead:
+            <code>kCompactDecimals</code>&nbsp;=&nbsp;3 for <code>text()</code> and
+            <code>kDetailDecimals</code>&nbsp;=&nbsp;6 for <code>detailText()</code>, both
+            both routed through <code>cwUnits::formatAngle()</code>, which drops the sign on a
+            value it rounds to zero — PROJ answers the anchor with a tiny <i>negative</i>, so
+            the unguarded format printed "-0.000000°", a signed zero that reads as a broken
+            minus. <code>detailText()</code> also explains the zero rather than just
+            printing it: a cave inside <code>printsAsZero(m_angle, kDetailDecimals)</code> of
+            the central meridian is told it sits on it, which is the case the <i>first</i>
+            georeferenced cave always hits (it defines the center) and the one that would
+            otherwise look broken. The tooltip's old
+            <code>detailText !== text</code> visibility guard became
+            <code>state === GridConvergence.Valid</code>: the two strings now always differ
+            for a valid value, but they are still <i>equal</i> for the three n/a readings,
+            which would otherwise pop a tooltip repeating the label verbatim.
+            <b>The signed-zero rule was then generalized</b> (a <code>/simplify</code> pass
+            found it duplicated <code>cwUnits::formatLength</code>'s own "-0 never prints"
+            collapse): <code>cwUnits::formatAngle(degrees, decimals)</code> now owns it for
+            every angle readout, converting <code>cwMeasurementInteraction</code>'s clipboard
+            azimuth + inclination, <code>cwTripCalibration</code>'s declination-mismatch
+            warning, and <code>MeasurementReadoutPopup.qml</code>'s <code>_angle()</code> and
+            azimuth detail — the last of which was rendering a live
+            <code>Convergence -0.0°</code> for any cave near the meridian.
+            Tests: <code>tst_CavePage_GridConvergence.qml</code> kept and grown to 15 cases —
+            three-decimals-compact/six-in-tooltip, the tooltip naming the grid, the anchor's
+            explained zero, and the signed-zero regression (a fix 50 m <i>west</i> of the
+            meridian, the one place the compact format rounds a real negative away).
+            Docs: <code>grid-convergence.md</code>'s "Reading the value" now says why three
+            decimals and why the first cave reads <code>0.000°</code>;
+            <code>llms.txt</code>'s READOUT block matches.
+            Still stale: <code>georef-grid-convergence.png</code> and
+            <code>survey-add-trip.png</code> show the old two-decimal cell and need
+            regenerating on a GPU-backed platform (<code>tst_ManualScreenshots.qml</code>
+            skips under offscreen).</li>
+        <li><b>§11 F1</b> — the async universal probe with a <code>Probed</code> status
+            <span class="pill">done 2026-08-05</span>. <code>cwLazLayer</code> reads every
+            file's header off the GUI thread, enabled or not, and
+            <code>gatherInputs()</code> gathers on <code>hasReadHeader()</code>; retires V1.
+            <b>§11 F2</b> — take <code>deriveFrameFromLaz</code> out of
+            <code>cwLazLayerModel</code> so one class owns the frame. <b>Scope revised
+            2026-08-05: this is a scheduling change, not a deletion</b> — the blocking probe it
+            removes is what currently orders every decode behind the frame and keeps the anchor
+            deterministic. It lands as one commit with the probe barrier, the settled-frame gate on
+            <code>reload()</code>, and the revert of F1's global-pool call; see
+            <a href="#lazchain">§14</a>. Prerequisite for step&nbsp;4.</li>
+        <li><b>Automatic recentering</b> (D20) — the "nothing within R → re-derive at the
+            median" rule in <code>evaluate()</code>; replaces the manual Recenter action
+            and D7's migration path. Requires F1's complete input set.</li>
+        <li><b>Read-only datum/frame display</b> in project info
+            (<code>DataMainPage.qml</code>, where the CS combo box used to live) —
+            <code>localCoordinateSystem</code>/<code>state</code>/<code>verticalDatum</code>
+            via <code>cwCoordinateTransform::nameFor</code>.</li>
+      </ol>
+      <b>Deferred (decision 2026-08-04):</b> the per-layer CS override UI — the C++
+      mechanism (<code>setSourceCSOverride</code>, override&nbsp;&gt;&nbsp;embedded in loader
+      and clip) stays, but no UI/persistence until a real CS-less <code>.las</code> demands
+      it; instead the Geospatial Layers help box should name <i>which</i> layer lacks a CS.
+      Noted for later, outside P4: the clip writes its output in the LDP
+      (<code>cwLazClipInteraction.cpp:217</code>, needed for multi-CS merges); if
+      single-source clips should keep the source projection, that's a separate change.
+      The project CS picker (#618), the fix-picker <code>Project</code> mode (D8) and the
+      picker popup's lat/long-only collapse (D9) already left in P2.2.</td></tr>
+  <tr><td><span class="pill phase">P5</span></td><td>Exports</td>
+      <td>Export CS chooser; Compass exporter CS handling. The default derived-UTM export CS
+      already landed in P2.1. Carry <a href="#p22followups">§11 F3</a> here — the
+      <code>*cs CUSTOM "…"</code> encoding has no importer-side inverse. Also
+      <a href="https://github.com/Cavewhere/cavewhere/issues/489">#489</a>: its
+      datum-by-station ask is dissolved by fix stations + the LDP (station coordinates and
+      depth no longer depend on which station comes first); the surviving ask is
+      <b>date-ordered export</b> to Compass/survex, which belongs here. Comment on the issue
+      when this ships.</td></tr>
+  <tr><td><span class="pill phase">P6</span></td><td>Cleanup</td>
+      <td>R1 one-predicate cleanup on the (now smaller) consumer set
+      (<a href="FIXSTATION_COORDINATE_SOURCE_OF_TRUTH.html#followups">FIXSTATION_COORDINATE_SOURCE_OF_TRUTH.html §13</a>,
+      "R1 — one predicate for 'are this fix's numbers usable?'");
+      <s>retire <code>cwGridConvergence</code> display path and its :133 bug</s>
+      (both done in P4 steps 1–2; what's left here is deciding whether the class still
+      needs to be a <code>QObject</code> — <code>changed()</code> has no listeners now);
+      <a href="#p22followups">§11 F4</a>; docs.</td></tr>
+</table>
+
+<h2 id="cache">10. Cache ownership refactor (decided 2026-08-03, sequenced before P2.2, part B revised 2026-08-03)</h2>
+
+<p><code>cwLocalProjectionManager</code> carries three kinds of member state. Only one of them
+belongs there:</p>
+
+<table>
+  <tr><th>State</th><th>What it is</th><th>Verdict</th></tr>
+  <tr><td><code>m_anchorSeen</code> / <code>m_lastAnchor</code> / <code>m_sawAnyInput</code></td>
+      <td>Witness bookkeeping — "not loaded yet" vs. "deleted" is not derivable from current
+      inputs.</td>
+      <td><b>Keep.</b> Irreducible session state; the only data the manager should own.</td></tr>
+  <tr><td><code>m_transform</code> + <code>m_transformSourceCS</code> + <code>m_transformLocalCS</code></td>
+      <td>Single-slot cache of a built PROJ transform (~7.7&nbsp;ms per build, keystroke path).</td>
+      <td><b>Move down</b> into <code>cwCoordinateTransform</code> as a memoized static —
+      part&nbsp;A below. That class already memoizes <code>isValidCS</code> and
+      <code>isGeographic</code> in capped thread-local caches; construction — the most expensive
+      PROJ call of all — is the inconsistency. Other data sources will use
+      <code>cwCoordinateTransform</code> too, so the memo pays for every future caller, and the
+      keyed cache kills the single-slot thrash in the anchor-deleted <code>any_of</code> walk
+      for free.</td></tr>
+  <tr><td><code>m_layerProbes</code> + <code>probe()</code></td>
+      <td>Cache of <code>cwLazLoader::probeHeader()</code> results, keyed by layer id.</td>
+      <td><b>Delete</b> — part&nbsp;B below. The loader already reads every one of these facts
+      while decoding; the layer keeps them from the load and the probe cache goes away entirely,
+      taking the id-keying, the pruning pass, the "never remember a pointer" discipline, and a
+      live staleness bug (see the callout) with it.</td></tr>
+</table>
+
+<div class="callout bad">
+  <div class="title">Live bug fixed by part B: probe() caches a derived value</div>
+  <code>cwLocalProjectionManager.cpp:166</code> writes the user's <code>sourceCSOverride</code>
+  <i>into</i> the cached entry, overwriting the header's own reading. Set an override, then
+  <b>clear</b> it: <code>sourcePath</code> is unchanged so the header is not re-probed, the
+  override branch no longer fires, and the cache returns the old override as if it were the
+  file's own CS — permanently, until the path changes. Part&nbsp;B's revised design removes the
+  bug rather than patching it: the resolved CS comes from the load, which recomputes it from the
+  override every time it runs, so there is no stored derived value anywhere to go stale.
+</div>
+
+<p>End state: the manager keeps <code>m_region</code> plus the three witness fields — nothing
+<code>mutable</code>, no caches, pure policy. Part&nbsp;A moves a cache down to the class that
+should own it; part&nbsp;B deletes a cache outright because the data was never missing, only
+unpublished. They are independent; land them as <b>two separate commits</b>, each green on the
+tagged tests before the next. (Note: <code>cwGridConvergence</code> also builds an uncached
+transform per keystroke at <code>cwGridConvergence.cpp:186</code>; do <b>not</b> port it to
+part&nbsp;A — the whole display path is deleted in P6.)</p>
+
+<h3>Part A — <code>cwCoordinateTransform::transformPoint</code> (memoized static)</h3>
+
+<p><b>A1. API</b> — in <code>cwCoordinateTransform.h</code>, next to the other statics
+(<code>isValidCS</code>/<code>isGeographic</code>). Add <code>#include &lt;optional&gt;</code>
+to the header's Qt/std include block.</p>
+
+<pre><code>/**
+ * Transform a point between two systems, memoizing the built transforms
+ * per thread (same pattern and cap as isValidCS). Empty when either CS is
+ * empty, the systems can't be related, or the result's x/y isn't finite —
+ * an unanswerable question must not read as an answer. z passes through
+ * untouched by the finiteness check.
+ */
+static std::optional&lt;cwGeoPoint&gt; transformPoint(const QString&amp; sourceCS,
+                                                const QString&amp; destCS,
+                                                const cwGeoPoint&amp; point);</code></pre>
+
+<p><b>A2. Implementation</b> — in <code>cwCoordinateTransform.cpp</code>, near
+<code>isValidCS</code>. Constraints that matter:</p>
+<ul>
+  <li><b>The memo must be <code>thread_local std::map&lt;std::pair&lt;QString, QString&gt;,
+      cwCoordinateTransform&gt;</code>, not <code>QHash</code>.</b>
+      <code>cwCoordinateTransform</code> is move-only with no default constructor
+      (<code>cwCoordinateTransform.h:42</code>), which <code>QHash</code> can't hold;
+      <code>std::map::try_emplace(key, src, dst)</code> constructs the value in place.
+      <code>QString</code> already has <code>operator&lt;</code>. Thread-local also honors the
+      class's "one transform, one thread" contract.</li>
+  <li>Trim both CS strings first; if either is empty, return <code>std::nullopt</code> without
+      touching the memo.</li>
+  <li>Reuse the existing <code>kCsCacheLimit</code> (anonymous namespace, same file): when
+      <code>map.size() >= kCsCacheLimit</code>, <code>clear()</code> before inserting. Nothing
+      escapes the memo (the point is returned by value), so a full clear is safe.</li>
+  <li><b>Invalid transforms are cached too</b> — negative caching. A pair that fails to build
+      must not re-pay the build cost on every keystroke. A memo hit whose
+      <code>isValid()</code> is false returns <code>std::nullopt</code>.</li>
+  <li>After transforming, return <code>std::nullopt</code> unless <code>std::isfinite</code>
+      holds for <code>x</code> and <code>y</code> (only those two — matches the behavior being
+      replaced).</li>
+</ul>
+
+<p><b>A3. Caller rewrite</b> — <code>cwLocalProjectionManager::distanceFromOrigin</code>
+collapses to:</p>
+
+<pre><code>std::optional&lt;double&gt; cwLocalProjectionManager::distanceFromOrigin(const Input&amp; input) const
+{
+    const QString localCS = m_region-&gt;geoReference()-&gt;localCoordinateSystem();
+    if (localCS.isEmpty()) {
+        return std::nullopt;
+    }
+    const auto local = cwCoordinateTransform::transformPoint(
+        input.coordinateSystem, localCS, input.point);
+    if (!local.has_value()) {
+        return std::nullopt;
+    }
+    // x_0 = y_0 = 0, so a point's distance from the frame's origin is just its
+    // magnitude once it is in the frame.
+    return std::hypot(local-&gt;x, local-&gt;y);
+}</code></pre>
+
+<p><b>A4. Deletions</b> — from <code>cwLocalProjectionManager.h</code>: the three members
+<code>m_transform</code> / <code>m_transformSourceCS</code> / <code>m_transformLocalCS</code>
+with their doc comment, and the <code>#include "cwCoordinateTransform.h"</code> (the .cpp
+already includes it and keeps it).</p>
+
+<p><b>A5. Tests</b> — new cases in <code>test_cwCoordinateTransform.cpp</code> under the
+existing <code>[cwCoordinateTransform]</code> tag: a known UTM→WGS84 point round-trips through
+<code>transformPoint</code>; empty source or dest → <code>nullopt</code>; garbage CS →
+<code>nullopt</code> (call twice — the second call exercises the negative-cache path);
+identical src/dst returns the point unchanged (identity short-circuit). The existing
+<code>[cwLocalProjectionManager]</code> cases must stay green untouched — behavior is
+unchanged by design.</p>
+
+<h3>Part B — the header's facts ride the load <span class="pill">revised 2026-08-03</span></h3>
+
+<div class="callout bad">
+  <div class="title">Supersedes the probe-cache design</div>
+  Part&nbsp;B was originally specified as a lazily probed, fingerprint-keyed
+  <code>cwLazLoader::ProbeResult</code> cached on <code>cwLazLayer</code>. That was still a
+  cache of something the loader already knows. <code>cwLazLoadResult::sourceCS</code> is
+  already the resolved CS (override&nbsp;&gt;&nbsp;embedded&nbsp;&gt;&nbsp;"",
+  <code>cwLazLoader.cpp:275</code>) — byte-for-byte what the probe recomputed. The only fact
+  the load did <i>not</i> carry was the bounding box in the file's own CRS, because
+  <code>bboxMin</code>/<code>bboxMax</code> are written after <code>transformInPlace</code>
+  into the region frame and narrowed to <code>float</code>. So the fix is to widen the load's
+  result, not to cache a second read of the same header.
+</div>
+
+<p><b>B1. <code>cwLazLoadResult</code> carries the source-CRS bbox.</b> Two
+<code>cwGeoPoint</code>s, <code>sourceBboxMin</code> / <code>sourceBboxMax</code>, filled from
+<code>headerReader-&gt;header.min_x</code>&hellip;<code>max_z</code> during the header pass the
+load already performs (<code>cwLazLoader.cpp:263–278</code>). Doubles, untransformed. Free —
+the header is open at that point either way.</p>
+
+<p><b>B2. <code>cwLazLayer</code> stores them from <code>applyResult</code></b> as
+<code>m_sourceBboxMin</code>/<code>m_sourceBboxMax</code>, exposed as
+<code>sourceBboxMin()</code>/<code>sourceBboxMax()</code>/<code>sourceBboxCenter()</code>. No
+<code>mutable</code>, no lazy probe, no fingerprint key, no invalidation rule — the value is
+written by the one event that can change it.</p>
+
+<p><b>B3. The manager gates on a finished load.</b> A layer is an anchor candidate only when
+<code>loadStatus() == Loaded</code> and its <code>sourceCS()</code> is valid; the point is
+<code>sourceBboxCenter()</code>. <code>cwLocalProjectionManager</code> also connects
+<code>loadStatusChanged</code> — <code>sourceCSChanged</code> alone misses a reload that
+resolves to the same CS it had before.</p>
+
+<table>
+  <tr><th>Layer state</th><th>Feeds the LDP?</th><th>Why that's right</th></tr>
+  <tr><td>Enabled, loaded</td><td>Yes</td><td>Its header has actually been read.</td></tr>
+  <tr><td>Disabled</td><td>No</td><td>A disabled cloud isn't consulted for anything else
+      either. <code>setEnabled(false)</code> drops geometry and returns the layer to
+      <code>Idle</code>.</td></tr>
+  <tr><td>Loading / Error / never loaded</td><td>No</td><td>Nothing has read the file, so
+      nothing should invent a position for it.</td></tr>
+</table>
+
+<div class="callout">
+  <div class="title">This composes with the witness invariant rather than fighting it</div>
+  A disabled or not-yet-loaded layer is <i>absent</i>, and absence is not a witnessed deletion
+  — <code>m_anchorSeen</code> stays false, so a frame restored from disk is left exactly as
+  stored. Opening a project whose anchor layer is disabled therefore preserves the stored
+  frame instead of clearing it. The staleness bug the old design had to fix is <b>dissolved</b>:
+  with nothing derived being stored, there is nothing to go stale.
+</div>
+
+<p><b>B4. Deletions.</b> From <code>cwLocalProjectionManager</code>: the <code>LayerProbe</code>
+struct, <code>m_layerProbes</code>, <code>probe()</code>, the probe-pruning tail of
+<code>syncLayerConnections()</code>, and the <code>QHash</code>/<code>QSet</code>/
+<code>QUuid</code>/<code>&lt;iterator&gt;</code> includes those needed. From
+<code>cwLazLayer</code>: <code>headerProbe()</code>, <code>effectiveSourceCS()</code>, and the
+four probe-cache members. <code>cwLazLoader::probeHeader</code> itself <b>stays</b> — see the
+P2.2 note below, it still has one caller that cannot be removed here.</p>
+
+<p><b>B5. Tests</b> — <code>testcases/test_cwLazLayerSourceBbox.cpp</code>, tag
+<code>[cwLazSourceBbox]</code>: a load reports the bbox in the file's own CRS (doubles, not the
+reprojected floats); a never-loaded layer reports nothing; a region with no fix stations and one
+LAZ layer ends up <code>Anchored</code> on a <code>LazLayer</code> anchor. The last one must
+<code>waitForLazLayerLoaded</code> after <code>addLazAndWait</code> — the frame now follows the
+load, not the insert.</p>
+
+<div class="callout bad">
+  <div class="title">Fixture bug found on the way, fixed in testlib</div>
+  <code>writeSyntheticLazFile</code>/<code>writeAttributedLazFile</code> left the LAS header
+  offsets at 0 with a 0.001 scale, so every coordinate is quantized into an int32 count of
+  millimeters from zero. Anything past ~2.1e6 wraps silently: a UTM northing of 4&nbsp;194&nbsp;010
+  reads back as &minus;100&nbsp;957.296, with no error from LASlib. Every existing fixture used
+  coordinates near the origin, so nothing had ever hit it. Both writers now center the header
+  offsets on the point set (<code>centerHeaderOffsets</code>); decoded coordinates are unchanged
+  for data that already fit, so no existing test's values move. <b>Any new LAZ fixture using
+  real-world coordinates depended on this.</b>
+</div>
+
+<h3>Verification (each part separately)</h3>
+<pre><code>cmake --build build/Qt_6_11_1_for_macOS-Debug --target cavewhere-test
+./build/Qt_6_11_1_for_macOS-Debug/cavewhere-test \
+    "[cwCoordinateTransform],[cwLocalProjectionManager],[cwLazAutoAdoptCS],[cwLazSourceBbox],[cwLazLayer],[cwLazLoader],[cwFixStationValidator]" \
+    -d yes 2>&amp;1 | tee /tmp/cw-cache-refactor.log</code></pre>
+<p class="dim">Under ASAN prefix with <code>ASAN_OPTIONS=detect_container_overflow=0</code>.
+Run the full C++ suite once after both parts land; QML suite unaffected but run it before any
+push.</p>
+
+<h2 id="p22followups">11. Follow-ups from the P2.2 simplify pass (2026-08-04)</h2>
+
+<p>A four-angle review (reuse / simplification / efficiency / altitude) ran over the P2.2
+working tree. Most findings were applied in place — see the list at the end of this section.
+Four were deliberately <b>not</b> applied, because they are behavior or architecture changes
+rather than cleanups. They are recorded here so they aren't lost.</p>
+
+<div class="callout bad">
+  <div class="title">F1 — The LAZ bootstrap anchors from outside <code>cwLocalProjectionManager</code> <span class="pill">probe landed 2026-08-05</span></div>
+  <p><code>cwLazLayerModel::deriveFrameFromLaz</code> calls <code>cwLocalProjection::deriveFrom</code>
+  + <code>cwGeoReference::anchorTo</code> itself, duplicating
+  <code>cwLocalProjectionManager::anchorTo</code> — after this phase those are the only two
+  production callers of <code>anchorTo</code>. The manager documents itself as the single owner of
+  how the frame moves, and this write bypasses it, so the manager's witness bookkeeping
+  (<code>m_lastAnchor</code>, <code>m_anchorSeen</code>) is not updated. Two consequences, both
+  found by reading rather than by a failing test:</p>
+  <ul>
+    <li><code>evaluate()</code> misreads the model's own write as "a load restored this anchor".
+        Self-heals once the layer reaches <code>Loaded</code> and appears in
+        <code>gatherInputs()</code>, so it is latent today.</li>
+    <li><b>The real one:</b> <code>deriveFrameFromLaz</code> runs regardless of the layer's
+        <code>enabled</code> bit, while <code>gatherInputs()</code> only accepts
+        <code>LoadStatus::Loaded</code>. A <i>disabled</i> layer can therefore become the project's
+        anchor but can never be an Input — so <code>m_anchorSeen</code> stays false and
+        <code>clearFrame()</code> is unreachable for it. That violates the
+        "only witnessed deletions count" invariant this plan's §4 rests on.</li>
+  </ul>
+  <p><b>Reachability (re-verified 2026-08-04):</b> narrower than the paragraph above sounds.
+  <code>deriveFrameFromLaz</code> only anchors when the geo-reference has no coordinate system, and
+  a layer that is disabled at insert time means a persisted <code>.cwlaz</code> with
+  <code>enabled=false</code> — so the bad state needs an <i>ungeoreferenced</i> project that already
+  carries a persisted, disabled, CRS-bearing layer (e.g. anchor fix deleted → frame cleared → save
+  → reopen). Re-enabling the layer self-heals it: the load lands, the layer appears in
+  <code>gatherInputs()</code>, and <code>m_anchorSeen</code> flips true. The invariant violation
+  holds only while the layer stays disabled until its deletion.</p>
+  <p><b>Fix (the deeper one):</b> have <code>cwLazLayer::setSourcePath</code> run the header-only
+  <code>probeHeader</code> and publish <code>sourceCS</code> / <code>sourceBboxCenter</code> as soon
+  as it lands, plus a <code>Probed</code> status that <code>gatherInputs()</code> accepts alongside
+  <code>Loaded</code>. The model then does no anchoring at all, one class owns the frame, and the
+  enabled/loaded disagreement disappears. This is the principled way to break the D15 bootstrap
+  cycle — D15's current shape was the expedient one.</p>
+  <p><b>Design revised 2026-08-04, after reading both probe paths.</b> Two corrections to the
+  paragraph above, which originally said "run <code>probeHeader</code> synchronously":</p>
+  <ul>
+    <li><b>Every layer has to be probed, and the reason is deletion detection, not anchoring.</b>
+        Anchoring needs only one usable input, so a first-match probe would do. But
+        <code>evaluate()</code> also asks two questions about the <i>whole</i> set:
+        <code>inputs.isEmpty()</code> → <code>clearFrame()</code>, and the
+        <code>somethingNearby</code> <code>std::any_of</code> that decides between
+        <code>freezeFrame()</code> and re-anchoring. Both are set-membership tests, and a partially
+        probed set makes both answer "no" spuriously — which clears or re-derives a frame that was
+        stored precisely so it would never have to be. Universality is forced by §4's
+        "only witnessed deletions count" invariant.</li>
+    <li><b>So the probe must not be synchronous.</b> Today it is rare: <code>deriveFrameFromLaz</code>
+        returns before probing once <code>hasCoordinateSystem()</code> is true, so N tiles probe once
+        if any of them carries a CRS. Making it universal <i>and</i> synchronous would put N header
+        opens on the GUI thread — turning F2's secondary complaint from a corner case into the
+        normal path. An async probe with a <code>Probed</code> status costs nothing on the GUI
+        thread and reaches layers the current design can't: a layer disabled in its
+        <code>.cwlaz</code> never starts a load at all (<code>cwLazLayerModel.cpp:415</code>), which
+        is the whole mechanism behind F1's invariant violation and V1's.</li>
+  </ul>
+  <p><b>Implemented 2026-08-05 (the probe half).</b> <code>cwLazLayer</code> now runs
+  <code>cwLazLoader::probeHeader</code> off the GUI thread from <code>setSourcePath</code> and
+  <code>setSourceCSOverride</code>, on its own <code>AsyncFuture::Restarter</code> so results
+  arrive in the order they were asked for, and on the global thread pool rather than
+  <code>cwTask</code>'s. <b>That pool choice is scheduled for revert — see <a href="#lazchain">§14</a>.</b>
+  Its stated reason was that a header open queued behind a 100-million-point decode would hold up
+  the frame that decode is waiting on; the decodes turn out not to be waiting, because
+  <code>deriveFrameFromLaz</code> orders them behind the frame with a blocking call. Once
+  <a href="#lazchain">§14</a>'s gate makes that ordering explicit, the probe leaves the critical
+  path and <code>cwConcurrent::run</code> is correct. The result publishes <code>sourceCS</code> (override
+  &gt; embedded, the loader's own precedence) and the source bounding box, sets a new
+  <code>hasReadHeader()</code>, and raises <code>Idle</code> to the new
+  <code>LoadStatus::Probed</code>. <code>setEnabled(false)</code> falls back to
+  <code>Probed</code> rather than <code>Idle</code>, so turning the points off no longer
+  withdraws the layer's position.</p>
+  <p><code>gatherInputs()</code> now tests <code>hasReadHeader()</code> in place of
+  <code>loadStatus() == Loaded</code>. A status enumeration would have left
+  <code>Loading</code> and <code>Error</code> out, and those are exactly the transient
+  absences that read as deletions — so this is V1's and V6's fix as much as F1's. Three tests
+  pin it: a disabled layer reads its header and reports <code>Probed</code>; disabling the
+  only layer leaves the frame anchored while removing it clears the frame; and a reload of the
+  anchor layer leaves the frame untouched for the whole of it. The anchoring half —
+  <code>deriveFrameFromLaz</code>, still in <code>cwLazLayerModel</code> — comes out with
+  F2.</p>
+</div>
+
+<div class="callout warn">
+  <div class="title">F2 — Frame derivation inside the rescan insert loop restarts in-flight decodes</div>
+  <p><code>cwLazLayerModel::rescan()</code> derives the frame per file, inside the loop that
+  inserts layers. Anchoring emits <code>localProjectionChanged</code> → <code>setRegionFrameCS</code>
+  → <code>reload()</code> on <i>every</i> layer already in <code>m_layers</code> — including ones
+  whose decode started earlier in the same rescan. Triggers on a mixed multi-file add where the
+  first file carries no usable CRS and a later one does: a 100M-point tile already being read is
+  cancelled and re-decoded, and for a CRS-less source the second decode is byte-identical.
+  Secondary: the probe guard is per-file rather than per-rescan, so a directory of N CRS-less
+  tiles opens N LAZ headers on the GUI thread.</p>
+  <p><b>Fix:</b> establish the frame once before the insert loop (what the pre-P2.2 code did with
+  <code>maybeAdoptRegionDefaultsFromLaz(entries.first())</code>), or skip the reload when the
+  layer's own <code>sourceCS</code> is empty. Naturally folded into F1.</p>
+  <p><b>Status check 2026-08-04:</b> still entirely live. Introducing
+  <code>cwLocalProjectionManager</code> did not supersede this path —
+  <code>deriveFrameFromLaz</code> (<code>cwLazLayerModel.cpp:526-556</code>) still calls
+  <code>cwGeoReference::anchorTo</code> at <code>:555</code>, from the rescan insert loop at
+  <code>:448</code>, so two classes hold authority over one frame. It is benign only by call
+  ordering: the model anchors before <code>endInsertRows</code>, so the manager's first
+  <code>evaluate()</code> reads an anchor it didn't write, drops <code>m_anchorSeen</code> to false,
+  and returns at the not-seen-yet guard (<code>:228</code>) instead of acting on it. That is the
+  hazard the comment at <code>cwLocalProjectionManager.cpp:168</code> warns about, arriving from
+  outside the class. F1 retires this half. The <b>secondary</b> half — N header opens on the GUI
+  thread — F1 retires only if its probe is async; a synchronous one makes it worse. See F1's
+  revised design.</p>
+  <p><b>Scope revised 2026-08-05 — read <a href="#lazchain">§14</a> before implementing this.</b>
+  F2 is not the tidy-up it reads as. <code>deriveFrameFromLaz</code>'s blocking probe is currently
+  the only thing keeping every decode behind the frame, and the only thing making the anchor
+  deterministic rather than a function of which header read finishes first — a frame that is then
+  persisted into a Git-backed project. Deleting it without the barrier and the settled-frame gate
+  in §14 trades a GUI-thread stall for a nondeterministic stored projection.</p>
+</div>
+
+<div class="callout warn">
+  <div class="title">F3 — <code>*cs CUSTOM "…"</code> is write-only <span class="pill">fixed in 13.1</span></div>
+  <p>P2.2 added <code>toSurvexCS()</code>, which quotes a raw PROJ string behind survex's
+  <code>CUSTOM</code> keyword. There is no inverse: <code>cwSurvexImporter::parseCS</code> stores
+  the <code>*cs</code> argument verbatim, so importing a .svx that CaveWhere itself exported puts
+  the literal string <code>CUSTOM "+proj=…"</code> into <code>cwFixStation::inputCS</code>. PROJ
+  can't parse that — <code>isValidCS</code> is false, <code>gatherInputs()</code> skips the fix,
+  and the picker shows nothing.</p>
+  <p><b>Fix:</b> a <code>fromSurvexCS()</code> in the importer that unwraps
+  <code>CUSTOM "…"</code>, making the pair a real encoding rather than a one-way escape. Small and
+  self-contained; belongs with P5's export work.</p>
+</div>
+
+<div class="callout">
+  <div class="title">F4 — <code>anchorToFirstUsable()</code> has no failure memo</div>
+  <p>Each rejected input re-pays a full <code>cwLocalProjection::deriveFrom</code> (two PROJ
+  contexts, ~6 <code>proj_create*</code> calls). Bounded before D18, unbounded after. Low priority:
+  it runs only on the two re-anchor branches of <code>evaluate()</code>, never the common Anchored
+  path. A <code>QSet&lt;QString&gt;</code> of already-failed CS strings caps it.</p>
+</div>
+
+<h3>Two design questions left for the user</h3>
+<ul>
+  <li><b><code>DataMainPage</code>'s edit-toggle apparatus</b> — <code>EditToggleButton</code> +
+      read-only label + combo, ~20 lines, now guards a single <code>UnitSystemComboBox</code>. Its
+      "rarely changes but can wreck a project" rationale applied mostly to the CS that P2.2 deleted.
+      Does the extra click still earn its keep?</li>
+  <li><b><code>Theme.inlineBannerWidth</code></b> — one consumer left
+      (<code>CoordinateOrderAskBox</code>). Keep the token or inline the number?</li>
+</ul>
+
+<h3>What the pass did apply</h3>
+<p>Recorded so a later reader knows these are already done, not owed: the
+<code>toSurvexCS</code> bare-name test (the old <code>startsWith('+')</code> sniff would have
+emitted <code>cwLocalProjection</code>'s WKT fallback unquoted and failed the solve); a single
+<code>writeCsLine()</code> that all five <code>*cs</code> emitters route through;
+<code>shareableCSForFix</code>'s fallback gated on <code>isValidCS</code> so a geographic CS can no
+longer reach <code>*cs out</code>; <code>cwFixStationValidator</code> switched to the memoized
+<code>cwCoordinateTransform::transformPoint</code> (its <code>inputCS == frameCS</code> fast path
+became dead the moment the frame turned into a derived LDP, so every fix was building an uncached
+PROJ pipeline on every <code>revalidate()</code>); and the dead weight the deletion stranded —
+<code>allowGeographic</code> and the <code>onModelChanged</code> binding-restore hack it forced,
+<code>Mode::Project</code>, <code>cwGeoReference::toGlobal</code>,
+<code>cwCoordinatePicker::m_globalPoint</code>, a superseded <code>setRegionFrameCS</code> in
+<code>createLayer</code>, 8 orphaned includes and 7 stale comments.</p>
+
+<h2 id="p22review">12. Code-review findings on the P2.2 working tree (2026-08-04)</h2>
+
+<p>A correctness-focused review ran over the uncommitted P2.2 tree (three reviewers split by
+area, findings re-verified against the code before recording). The QML tree and the rewritten
+tests came back clean — no dangling references to removed API, no weakened tests. F1–F4 above
+were adversarially re-checked and all four hold; F1 gained the reachability paragraph in its
+callout. Six new findings, none applied yet — V1 and V2 are the ones that bite:</p>
+
+<div class="callout bad">
+  <div class="title">V1 — A witnessed LAZ anchor that transiently leaves <code>Loaded</code> is
+  treated as deleted <span class="pill">fixed 2026-08-05</span></div>
+  <p><code>gatherInputs()</code> only accepts <code>LoadStatus::Loaded</code>, and its comment
+  promises <code>m_anchorSeen</code> protects a disabled/loading layer from being read as deleted —
+  but it only protects a <i>never-witnessed</i> anchor. Once the anchor layer has been seen,
+  any synchronous drop out of <code>Loaded</code> looks like deletion:
+  <code>setSourceCSOverride</code> / <code>setEnabled</code> / <code>setRegionFrameCS</code> call
+  <code>reload()</code>, which emits <code>loadStatusChanged(Loading)</code> before the load
+  starts, and that signal runs <code>evaluate()</code> mid-reload. With fix stations near the
+  origin the Anchored branch hits <code>freezeFrame()</code> — and Frozen never re-anchors, so a
+  CS correction on the anchor layer silently orphans the frame for good. With no other inputs it
+  hits <code>clearFrame()</code> → the region pushes an empty frame → the in-flight load restarts
+  untransformed → re-anchor → third reload: converges, but the project is transiently
+  un-georeferenced and pays two extra full point loads. No test reloads or disables a witnessed
+  LAZ anchor.</p>
+  <p><b>Fix direction:</b> the evaluate triggered by a status change to <code>Loading</code> must
+  not treat the absent anchor as deleted — e.g. gather layers by "has a probed header" rather than
+  "load finished" (the F1 deeper fix covers this too), or have <code>evaluate()</code> ignore an
+  anchor layer whose status is <code>Loading</code>.</p>
+  <p><b>Retired by F1, landed 2026-08-05.</b> Once the header numbers are
+  published on their own — and stay published across a reload, because a reload re-reads points,
+  not the CRS — a layer never leaves the input set for a transient <code>Loading</code>. There is
+  no absence to misread, so V1 needs no separate fix and should be closed by F1 rather than
+  patched ahead of it.</p>
+</div>
+
+<div class="callout bad">
+  <div class="title">V2 — WorkingFrame solve regression for fixes whose CS only survex
+  understands <span class="pill">fixed in 13.1</span></div>
+  <p>A fix entered under a survex-keyword spelling (<code>UTM16N</code>, <code>S-MERC</code> — the
+  exact round-trip the <code>shareableCSForFix</code> fallback exists for, since
+  <code>parseCS</code> stores <code>*cs</code> verbatim) is <code>Valid</code> (its coordinate
+  parses) but PROJ-invalid, so <code>gatherInputs()</code> skips it and no LDP ever derives. The
+  new <code>resolveOutputCS(WorkingFrame)</code> returns the empty frame with no fix fallback —
+  the deleted <code>workingFrameCSForFix</code> used to supply the fix's own CS — yet
+  <code>writeFixStations</code> still emits the per-fix <code>*cs</code>, so cavern hard-errors
+  with "input projection is set but output projection isn't" and the whole line-plot solve fails.
+  The doc comment's premise ("an Ungeoreferenced project has no fixes to place either") is false
+  for exactly this class, and for a PROJ-valid fix whose point <code>deriveFrom</code> can't
+  transform. Import a .svx containing <code>*cs UTM16N</code> + <code>*fix</code>: it solved
+  before P2.2 and errors after. No test covers keyword-CS fixes under WorkingFrame.</p>
+  <p><b>Fix:</b> normalize at the import boundary — <a href="#survexcs">§13.1</a>, which carries the
+  full mapping table, the axis-order and OSGB traps, and the tests.</p>
+</div>
+
+<div class="callout warn">
+  <div class="title">V3 — <code>toSurvexCS</code> cannot represent a CS containing a double
+  quote</div>
+  <p>Survex's quoted-string reader has no escape syntax, so <code>CUSTOM "PROJCS["…"]"</code>
+  truncates at the first embedded quote and cavern parses garbage. WKT always contains quotes,
+  and WKT is reachable both as a fix <code>inputCS</code> (the custom dialog accepts anything
+  PROJ parses) and as the frame itself (<code>cwLocalProjection::derive</code>'s WKT fallback —
+  the very case the bare-name test was built for quotes it, but quoting truncates it). Since
+  survex literally cannot carry the string, the fix is to translate (PROJ → <code>+proj</code>
+  spelling) or refuse with an error, never emit a truncated line.</p>
+</div>
+
+<div class="callout warn">
+  <div class="title">V4 — <code>isBareName</code> is wider than survex's name grammar</div>
+  <p>The charset test admits <code>IGNF:LAMB93</code> and
+  <code>urn:ogc:def:crs:EPSG::32612</code>, but cavern's <code>cs_tab</code> only knows
+  CUSTOM/EPSG/ESRI/EUR79Z30/IJTSK/JTSK/LAT-LONG/LOCAL/LONG-LAT/OSGB/S-MERC/UTM — anything else
+  is a hard "Unknown coordinate system". Both spellings are PROJ-valid, so CUSTOM-quoting them
+  would have worked. The test should be "matches a survex spelling" (keyword grammar plus
+  EPSG:/ESRI: codes), not "contains no exotic characters".</p>
+</div>
+
+<div class="callout warn">
+  <div class="title">V5 — <code>shareableCSForFix</code>'s verbatim fallback lets garbage shadow
+  a good fix <span class="pill">fixed in 13.1</span></div>
+  <p>A PROJ-invalid, non-keyword string (a typo like <code>UTM 16 N</code>, reachable through
+  import or hand-edited data — <code>setInputCS</code> accepts anything and the coordinate still
+  parses) passes the fallback, and first-non-empty-wins makes it <code>*cs out</code> even when a
+  perfectly good <code>EPSG:32616</code> fix sits right behind it. Only the five-entry
+  <code>isUnusableAsSurvexOutputCS</code> list screens it. The old code skipped PROJ-invalid
+  strings, and the test pinning "a bad first fix doesn't stop the search" was deleted with it.</p>
+</div>
+
+<div class="callout">
+  <div class="title">V6 — <code>gatherInputs()</code> anchors on a Valid fix at exactly
+  (0,0) <span class="pill">fixed 2026-08-04</span></div>
+  <p>The filter is <code>state() == Valid</code> + <code>isValidCS</code> only, but a user-typed
+  placeholder <code>0 0</code> is Valid at the CS origin — the Null Island case
+  <code>cwFixStation::hasPlacedCoordinate()</code> exists to exclude, which the validator and
+  exporter honor and this gatherer skips. The LDP then anchors at the CS origin until the
+  coordinate is corrected (self-healing via the &gt;50&nbsp;km branch, but each hop reloads every
+  LAZ layer and re-runs the solve). One-line fix: use <code>hasPlacedCoordinate()</code>.</p>
+  <p><b>Done 2026-08-04</b> exactly as described — the predicate already folds in the
+  <code>Valid</code> test, so the state check was replaced rather than added to. The comment above
+  it had been describing the Gulf of Guinea failure all along, which the code did not actually
+  prevent; it now does. Two sections in <code>test_cwLocalProjectionManager.cpp</code> ("A
+  placeholder 0 0 coordinate never anchors the project"): alone it leaves the project
+  Ungeoreferenced, and a real fix behind it still becomes the anchor. Both assert
+  <code>state() == Valid</code> on the placeholder first, so they cannot pass for the reason the
+  neighboring "nothing readable in it" cases pass. Mutation-verified: reverting to
+  <code>state() != Valid</code> fails 5 assertions across both sections, including the frame
+  coming back centered on the CS origin.</p>
+</div>
+
+<p>Cosmetic, no action needed: <code>CoordinatePickerPopup._gotoCoordinateSystem()</code> is a
+stale name for what is now an add-fix/add-layer link, and <code>DataMainPage</code>'s edit mode
+kept the narrower 200&nbsp;px width, which clips nothing.</p>
+
+<h2 id="importercs">13. Importers normalize the coordinate system (settled 2026-08-04)</h2>
+
+<p><b>Decision:</b> an importer converts its format's coordinate-system spelling into one PROJ can
+parse, or into none at all. <code>cwFixStation::inputCS</code> then carries a single invariant — a
+PROJ string, or empty — instead of the two incompatible contracts it grew: "any survex spelling"
+for the writer, "a PROJ string" for every reader. V2 is where those two met, and V5's verbatim
+fallback exists only to accommodate the un-normalized form.</p>
+
+<p>The premise the survex importer records at <code>cwSurvexImporter.cpp:1055</code> — "the rest of
+the pipeline (export, picker) handles those forms downstream" — is false for both handlers it
+names. <code>cwCoordinateTransform</code>'s <code>parseCS</code> recognizes only
+<code>EPSG:4326</code> and <code>EPSG:326xx/327xx</code>, so the picker shows "Custom…" for what is
+plainly UTM zone 16 North; and P2.2 added a third consumer, the LDP anchor path, which silently
+skips anything PROJ can't read.</p>
+
+<div class="callout good">
+  <div class="title">Walls half — DONE 2026-08-04</div>
+  <p><code>cwWallsImporter</code> wrote <code>EPSG:26900</code> as a deliberate "pick your zone"
+  placeholder. PROJ rejects it ("crs not found") and so does cavern, so it poisoned the solve both
+  before and after P2.2. The datum and zone were available the whole time: dewalls parses the
+  project's <code>.REF</code> line into <code>GeoReference</code> (zone signed positive-north,
+  <code>datumName</code>), and <code>WpjEntry::reference()</code> already inherits it from the
+  parent book — <code>cwWallsImporter::convertEntry</code> was discarding it with a "can't
+  currently be imported" warning.</p>
+  <p>The datum-name-to-CRS mapping is survex's own, reused rather than reinvented:
+  <code>img_parse_compass_datum_string</code> / <code>img_compass_utm_proj_str</code> /
+  <code>img_compass_longlat_epsg_code</code> from <code>img.h</code>, which cavewherelib already
+  links. Walls spells several datums differently from Compass, so the aliases survex's Walls reader
+  carries are repeated (plus a <code>NAD27</code> prefix rule for its regional realizations).</p>
+  <p>A <code>#FIX</code> whose system can't be determined — a bare .srv with no project file, or a
+  datum outside the table — now carries <b>no</b> coordinate system and warns, which reaches
+  <code>state() == NoSystem</code>: the fix drops out of the export cleanly with "declares no
+  coordinate system" instead of emitting a <code>*cs</code> nothing can read. Fixture pair
+  <code>testcases/datasets/walls/georef_cave.wpj</code> + <code>GEOREF.SRV</code> covers both,
+  imported with and without the project file.</p>
+</div>
+
+<h3 id="survexcs">13.1 Survex half — the implementation (this is V2's fix)</h3>
+
+<div class="callout good">
+  <div class="title">DONE 2026-08-04 — all four steps, plus F3 and V5</div>
+  <p>The encoding lives in <code>cwSurvexCS.{h,cpp}</code>, the preferred home:
+  <code>toSurvexCS()</code>/<code>writeCsLine()</code> moved over from
+  <code>cwSurvexExporterUtils</code> and <code>fromSurvexCS()</code> joined them, so F3's
+  "write-only" complaint is answered structurally — the round trip is one unit and has a test.
+  <code>parseCS</code> stores the translation and warns by name on a spelling survex doesn't
+  define; <code>parseFix</code> transposes under LAT-LONG; <code>shareableCSForFix</code>'s
+  verbatim fallback and the <code>isUnusableAsSurvexOutputCS</code> screen it needed are both
+  gone, closing V5 (nothing produces a JTSK-class value any more, so the screen had no caller
+  left).</p>
+  <p>Tests: <code>testcases/test_cwSurvexCS.cpp</code> covers one case per table row, plus the
+  <code>OSGB:SV</code> ≡ EPSG:27700 self-check and the PROJ-string round trip; five cases in
+  <code>test_cwSurvexImporter_fix.cpp</code> cover normalization, LOCAL vs. unmapped, the
+  LONG-LAT/LAT-LONG pair landing on the same coordinate, and the V2 regression asserted on the
+  solve. All five fail when <code>parseCS</code> is mutated back to storing the raw text.</p>
+  <p><b>Plus a scoping fix the transposition forced.</b> <code>*cs</code> was a flat importer
+  member, so it survived the <code>*end</code> of the block that named it and reached the next
+  sibling. That used to mislabel a later fix's system; once <code>parseFix</code> transposes
+  under LAT-LONG it silently swaps a later fix's easting and northing instead, which nothing
+  downstream can detect. Cavern scopes <code>*cs</code> to the block — <code>cmd_begin</code>
+  copies <code>proj_str</code> into the child settings and <code>pop_settings</code> restores the
+  parent's — so the parsed CS moved onto <code>BeginEndState</code>, the frame stack the importer
+  already keeps. One subtlety: <code>*begin</code> must copy the CS <em>outside</em> the
+  <code>lastState.Filename == currentFile()</code> guard, because cavern doesn't push settings for
+  <code>*include</code> and the root frame's filename is empty — otherwise both a top-level
+  <code>*cs</code> and an included file lose the system. The dead <code>CurrentState</code> enum
+  went with it: <code>if(InsideBegin)</code> tested the enum constant, not the member, so the gate
+  was always true and the member was never read.</p>
+
+  <p><b>Not reached by this, and worth its own work:</b> neither importer's
+  <code>capturedFixStations()</code> has a production consumer — the survex and Walls importers
+  both collect fixes that the import UI then drops on the floor, so V2's "import a .svx and the
+  solve fails" is reachable only through a hand-built region today. Normalizing the CS is a
+  precondition for wiring that up; the wiring itself is still owed.</p>
+</div>
+
+<p><code>cwSurvexImporter::parseCS</code> (<code>cwSurvexImporter.cpp:1063</code>) stores the
+<code>*cs</code> argument verbatim into <code>CurrentInputCS</code>, and
+<code>parseFix</code> (:1105) copies it onto every following fix. Everything below replaces that
+one assignment with a translation.</p>
+
+<p>The mapping is not a judgment call: cavern itself turns each spelling into a PROJ string, and
+those strings are the answer. Read straight off <code>survex/src/commands.c</code> — the parse is
+at :2476–2581 and the PROJ construction at :2589–2660.</p>
+
+<table>
+  <tr><th>survex spelling</th><th>PROJ string cavern builds</th><th>Notes</th></tr>
+  <tr><td><code>UTM&lt;zone&gt;[N|S]</code></td><td><code>EPSG:326&lt;zone&gt;</code> north,
+      <code>EPSG:327&lt;zone&gt;</code> south</td><td>Zone 1–60. Bare <code>UTM16</code> (no
+      hemisphere letter) means north. The common case.</td></tr>
+  <tr><td><code>EPSG:&lt;n&gt;</code> / <code>ESRI:&lt;n&gt;</code></td><td>the same string</td>
+      <td>Already PROJ-spellable; pass through. <code>n &lt; 1000000</code>.</td></tr>
+  <tr><td><code>CUSTOM "…"</code></td><td>the quoted string</td><td>Unwrap the quotes — this is
+      F3, and it is what makes <code>toSurvexCS</code>/<code>fromSurvexCS</code> a real encoding
+      instead of a one-way escape.</td></tr>
+  <tr><td><code>S-MERC</code></td><td><code>EPSG:3857</code></td><td></td></tr>
+  <tr><td><code>LONG-LAT</code></td><td><code>EPSG:4326</code></td><td>Longitude first, which is
+      the order <code>cwCoordinateText</code> calls EastingNorthing.</td></tr>
+  <tr><td><code>LAT-LONG</code></td><td>— none —</td><td>Cavern <b>rejects</b> it (the
+      <code>+axis=neu</code> branch at :2622 is <code>#if 0</code>'d out, so it falls through to
+      error 434). CaveWhere can do better: <code>EPSG:4326</code> with the pair swapped.</td></tr>
+  <tr><td><code>OSGB:&lt;square&gt;</code></td><td><code>+proj=tmerc +lat_0=49 +lon_0=-2
+      +k=0.9996012717 +x_0=&lt;X&gt; +y_0=&lt;Y&gt; +ellps=airy +datum=OSGB36 +units=m
+      +no_defs</code></td><td>The two letters shift the false origin — see the trap below.</td></tr>
+  <tr><td><code>EUR79Z30</code></td><td><code>+proj=utm +zone=30 +ellps=intl
+      +towgs84=-86,-98,-119,0,0,0,0 +no_defs</code></td><td></td></tr>
+  <tr><td><code>IJTSK</code> / <code>IJTSK03</code></td><td><code>+proj=krovak +ellps=bessel
+      +towgs84=…</code> (two different 7-parameter sets)</td><td>Copy the constants verbatim from
+      :2607 and :2610.</td></tr>
+  <tr><td><code>JTSK</code> / <code>JTSK03</code></td><td>as above plus <code>+czech</code></td>
+      <td>Cavern marks these input-only. That is an output restriction, so it doesn't constrain
+      the import — but it means they must never become the shareable output CS.</td></tr>
+  <tr><td><code>LOCAL</code></td><td>— none —</td><td>Means deliberately ungeoreferenced. Maps to
+      an <b>empty</b> CS, not to a CRS. Cavern also builds nothing for it.</td></tr>
+</table>
+
+<p><b>Where the code goes.</b> Preferred: a new <code>cwSurvexCS.{h,cpp}</code> owning both
+directions — <code>toSurvexCS()</code>/<code>writeCsLine()</code> move over from
+<code>cwSurvexExporterUtils</code>, <code>fromSurvexCS()</code> joins them — so the encoding is one
+unit and F3's "write-only" complaint is fixed structurally rather than by adding a second
+half somewhere else. Cheaper alternative if that churn isn't wanted: leave the exporter alone and
+put <code>fromSurvexCS()</code> beside <code>parseCS</code> in the importer. Either way the
+signature wants to carry the axis-order answer, not just the string:</p>
+
+<pre><code>struct cwSurvexCS {
+    QString projCS;        //!- empty when the spelling names no CRS (LOCAL) or we can't map it
+    bool latitudeFirst;    //!- LAT-LONG: the *fix pair is northing-first, swap it
+};
+cwSurvexCS fromSurvexCS(const QString&amp; csArgument);</code></pre>
+
+<p><b>Steps.</b></p>
+<ol>
+  <li>Add <code>fromSurvexCS()</code> with the table above, plus its own unit test — it is a pure
+  string function, so test it directly rather than only through an import.</li>
+  <li><code>parseCS</code> stores the translation instead of the raw text, keeping the raw text
+  only for the warning message. An untranslatable spelling stores an empty CS and warns
+  ("CaveWhere doesn't know the coordinate system <i>X</i>; set one on the fix"), which lands the
+  fix on <code>state() == NoSystem</code> — the same honest outcome the Walls half now produces.</li>
+  <li><code>parseFix</code> swaps the first two numbers when <code>latitudeFirst</code> is set,
+  before calling <code>setCoordinate</code>.</li>
+  <li>Delete <code>shareableCSForFix</code>'s verbatim fallback and its
+  <code>isUnusableAsSurvexOutputCS</code> screen for it, closing V5. Keep the screen for
+  <code>JTSK</code>-class values only if something can still produce them.</li>
+</ol>
+
+<div class="callout warn">
+  <div class="title">Traps</div>
+  <p><b>OSGB's letters are a false origin, not a CRS variant.</b> The square shifts
+  <code>x_0</code>/<code>y_0</code> in 100 km steps, so <code>OSGB:SD</code> is <i>not</i>
+  <code>EPSG:27700</code> — coordinates under it are offsets within that square. Decode as cavern
+  does (:2637–2645): from the letter pair build <code>x</code>, <code>y</code>, then
+  <code>x_0 = (14 - x) × 100000</code> and <code>y_0 = (y - 20) × 100000</code>. Checkable: this
+  yields <code>x_0=400000, y_0=-100000</code> for <code>OSGB:SV</code>, which is exactly
+  EPSG:27700 — so <code>OSGB:SV</code> ≡ <code>EPSG:27700</code> makes a good test.</p>
+  <p><b>Axis order rides on the CS string.</b> <code>cwCoordinateText::axisOrderFor</code> is
+  <code>isGeographic(cs) ? LatitudeLongitude : EastingNorthing</code>, and
+  <code>cwFixStation</code> re-reads its stored coordinate text under whatever the current CS
+  implies. So rewriting the CS silently reinterprets the numbers. The swap goes the way the struct
+  comment says, not the way an earlier draft of this paragraph did:
+  <code>cwFixStation::setCoordinate</code> takes easting (longitude) first whatever the system, so
+  <code>LONG-LAT</code> — which survex already writes longitude first — passes straight through,
+  and <code>LAT-LONG</code> is the one whose pair transposes. Getting this backwards puts the cave
+  in the wrong hemisphere, and nothing downstream can detect it.</p>
+  <p><b>A geographic CS can't be <code>*cs out</code>.</b> Cavern calls
+  <code>proj_get_type</code> and rejects <code>PJ_TYPE_GEOGRAPHIC_2D_CRS</code>/<code>_3D_CRS</code>
+  with error 435 (:2700–2707). So normalizing a fix to <code>EPSG:4326</code> makes it a fine
+  <i>input</i> and still an unusable <i>output</i> — which is what
+  <code>shareableCSForFix</code>'s existing "leave it to the next fix" comment is about. Don't
+  let step 4's cleanup weaken that.</p>
+</div>
+
+<div class="callout">
+  <div class="title">Tests</div>
+  <ul>
+    <li><code>fromSurvexCS()</code> directly: one case per table row, including
+    <code>UTM16S</code> → <code>EPSG:32716</code>, bare <code>UTM16</code> → north,
+    <code>OSGB:SV</code> → the EPSG:27700 parameters, <code>CUSTOM "+proj=…"</code> unwrapped,
+    <code>LOCAL</code> → empty, and an unknown spelling → empty.</li>
+    <li>Round trip: <code>fromSurvexCS(toSurvexCS(x)) == x</code> for a PROJ string containing
+    spaces and <code>+</code> signs — the pairing F3 asks for.</li>
+    <li>The V2 regression itself, end to end: import a .svx carrying <code>*cs UTM16N</code> and a
+    <code>*fix</code>, then run the line plot and assert it solves. This is the test whose absence
+    let V2 through, so write it against the solve, not against the exporter's output string.</li>
+    <li>Axis order: a <code>*cs LONG-LAT</code> fix and a <code>*cs LAT-LONG</code> fix at the same
+    physical place must end up at the same coordinate.</li>
+  </ul>
+</div>
+
+<h2 id="lazchain">14. The LAZ load chain — what F2 actually removes (settled 2026-08-05)</h2>
+
+<p>F1's async probe landed (§11). The follow-up question was whether the probe needed to be
+<i>faster</i> — it runs on the global thread pool rather than <code>cwTask</code>'s, which is a
+departure from house style — and answering that turned up a bigger finding: <b>the blocking probe
+F2 deletes is currently the only thing that orders the frame ahead of the decode, and the only
+thing that makes the anchor deterministic.</b> F2 was written as a tidy-up ("one class owns the
+frame"). It is really a scheduling change, and it needs a replacement mechanism, not just a
+deletion. The replacement, settled on review: an epoch future —
+<code>cwLocalProjectionManager::frameFuture()</code> — plus a gate on the manager's own anchor
+path.</p>
+
+<h3>What the synchronous probe is actually doing</h3>
+
+<p><code>cwLazLayerModel::rescan()</code>, at <code>cwLazLayerModel.cpp:447-458</code>:</p>
+
+<pre><code>// The load below has to have somewhere to load into, and on a project
+// with no fix stations this layer is the only thing that can say where
+// that is.
+deriveFrameFromLaz(path, layer);
+layer-&gt;setRegionFrameCS(m_regionFrameCS);
+...
+layer-&gt;setSourcePath(path);   // starts the load</code></pre>
+
+<p><code>deriveFrameFromLaz</code> runs <code>cwLazLoader::probeHeader</code> <b>synchronously on the
+GUI thread</b>, derives the frame and anchors it, and only then does <code>setSourcePath</code>
+start the decode. That comment is the dependency edge, written in prose.</p>
+
+<p><b>Confirmed by measurement, not by reading.</b> Running the <code>[cwLazSourceBbox]</code> tag
+with <code>QT_LOGGING_RULES="cw.laz.layer.debug=true"</code> prints <code>reload()</code>'s
+<code>frameCSSet</code> flag. Every model-managed layer reports <code>frameCSSet= true</code> on its
+<i>first</i> reload. The only <code>false</code> in the run belongs to a bare
+<code>cwLazLayer</code> constructed with no region at all — not a bootstrap. So the earlier
+suspicion that today's code decodes once into an empty frame and again into the real one is
+<b>wrong</b>: there is no wasted decode, precisely because of the blocking call.</p>
+
+<div class="callout bad">
+  <div class="title">The determinism invariant nobody wrote down</div>
+  <p><code>cwLocalProjectionManager::evaluate()</code> is connected to every layer's
+  <code>sourceCSChanged</code> (<code>cwLocalProjectionManager.cpp:316</code>), and on the
+  Ungeoreferenced path it calls <code>anchorToFirstUsable(inputs)</code> — the first usable input in
+  <code>gatherInputs()</code> order <i>among the layers that hold a header at that instant</i>.</p>
+  <p>Today the synchronous probe guarantees exactly one layer has a header when the frame is
+  derived, and it is the first in rescan order. Make the probes async without a barrier and the
+  anchor becomes <b>whichever header read wins the race</b>. The derived projection is then a
+  function of disk timing — and it is <i>persisted</i>, into a Git-backed <code>.cwproj</code>.
+  Two people importing the same directory get different frames, different scene coordinates, and a
+  diff that looks like real work.</p>
+  <p><b>And the gate must live inside <code>evaluate()</code>.</b> An earlier draft had the model
+  "drive one <code>evaluate()</code> per batch" — not enough. <code>evaluate()</code> has other
+  callers that fire mid-batch: the model's <code>rowsInserted</code>/<code>rowsRemoved</code>/<code>modelReset</code>
+  (<code>cwLocalProjectionManager.cpp:51-53</code>), fix-station <code>dataChanged</code>
+  (<code>:293</code>), <code>caveCountChanged</code> (<code>:37</code>), and each layer's
+  <code>loadStatusChanged</code> (<code>:321</code>). Any of them would anchor from the landed
+  subset. So the Ungeoreferenced path defers <code>anchorToFirstUsable</code> while the epoch is
+  open, and every existing connection stays.</p>
+  <p><b>Invariant to add to §4:</b> the anchor may depend on the <i>set</i> of inputs and on their
+  order in the model, never on the order in which their I/O completes. This is the sibling of §4's
+  "only witnessed deletions count" and of the stored-not-computed rule in §3 — same motivation,
+  different axis.</p>
+</div>
+
+<h3>Three header reads, two of which should go</h3>
+
+<table>
+  <tr><th>#</th><th>Where</th><th>Verdict</th></tr>
+  <tr><td>1</td><td><code>deriveFrameFromLaz</code> → <code>probeHeader</code> — synchronous, GUI
+      thread</td>
+      <td><b>Remove (F2).</b> One file on a normal import, but <i>N</i> when the tiles carry no
+      CRS: <code>probe.sourceCS.isEmpty()</code> returns without anchoring, so the
+      <code>hasCoordinateSystem()</code> guard never trips and every file blocks in turn. This is
+      the last synchronous <i>LAZ</i> read on the rescan path — rescan still reads each new layer's
+      tiny <code>.cwlaz</code> synchronously (<code>cwSaveLoad::loadLazLayer</code>,
+      <code>cwLazLayerModel.cpp:420</code>) and stats the directory; those are small and
+      stay.</td></tr>
+  <tr><td>2</td><td><code>cwLazLayer::startHeaderProbe</code> → <code>probeHeader</code> — async,
+      per layer</td>
+      <td><b>Keep.</b> F1 added it; it becomes the single source of a layer's header facts.</td></tr>
+  <tr><td>3</td><td>inside <code>cwLazLoader::load</code></td>
+      <td><b>Keep.</b> The load opens the file to read points regardless, and the header comes with
+      the open. Threading the probe's result in to skip it would trade a free read for a staleness
+      question — the file can be rewritten between probe and load.</td></tr>
+</table>
+
+<p>So "read the header once" means once <i>per purpose</i>: one probe that establishes where the
+cloud is, one open that decodes it. Until F2 lands, F1 leaves the first layer's header read twice.</p>
+
+<h3>The chain</h3>
+
+<figure>
+<svg viewBox="0 0 940 392" width="100%" role="img"
+     aria-label="Today's blocking probe compared with the target future chain">
+  <defs>
+    <marker id="arrC" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--dim)"/>
+    </marker>
+    <marker id="arrCG" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--good)"/>
+    </marker>
+  </defs>
+
+  <text class="lbl" x="16" y="22">Today — ordering by blocking call</text>
+  <rect class="box" x="16" y="34" width="420" height="44"/>
+  <text class="lbl" x="30" y="54">rescan() insert loop — GUI thread</text>
+  <text class="sub" x="30" y="70">cwLazLayerModel.cpp:447-458</text>
+  <path class="edge" d="M226 78 V94" marker-end="url(#arrC)"/>
+
+  <rect class="boxWarn" x="16" y="98" width="420" height="44"/>
+  <text class="lbl" x="30" y="118">deriveFrameFromLaz → probeHeader()</text>
+  <text class="sub" x="30" y="134">blocks the GUI · 1 file, or N when CRS-less</text>
+  <path class="edge" d="M226 142 V158" marker-end="url(#arrC)"/>
+
+  <rect class="boxGood" x="16" y="162" width="420" height="44"/>
+  <text class="lbl" x="30" y="182">anchorTo() — frame exists</text>
+  <text class="sub" x="30" y="198">deterministic: first in rescan order</text>
+  <path class="edge" d="M226 206 V222" marker-end="url(#arrC)"/>
+
+  <rect class="box" x="16" y="226" width="420" height="44"/>
+  <text class="lbl" x="30" y="246">setSourcePath → reload() → decode</text>
+  <text class="sub" x="30" y="262">frame already non-empty · ungated</text>
+  <path class="edge" d="M226 270 V286" marker-end="url(#arrC)"/>
+
+  <rect class="boxWarn" x="16" y="290" width="420" height="44"/>
+  <text class="lbl" x="30" y="310">startHeaderProbe → probeHeader()</text>
+  <text class="sub" x="30" y="326">async · F1 · reads the same header again</text>
+
+  <text class="lbl" x="504" y="22">Target — ordering by future chain</text>
+  <rect class="box" x="504" y="34" width="420" height="44"/>
+  <text class="lbl" x="518" y="54">setSourcePath → probeHeader ×N</text>
+  <text class="sub" x="518" y="70">async, cwConcurrent — the only probe</text>
+  <path class="edgeGood" d="M714 78 V94" marker-end="url(#arrCG)"/>
+
+  <rect class="boxAccent" x="504" y="98" width="420" height="44"/>
+  <text class="lbl" x="518" y="118">epoch open — probes in flight</text>
+  <text class="sub" x="518" y="134">frameFuture() pending · anchoring deferred</text>
+  <path class="edgeGood" d="M714 142 V158" marker-end="url(#arrCG)"/>
+
+  <rect class="boxGood" x="504" y="162" width="420" height="44"/>
+  <text class="lbl" x="518" y="182">last probe lands → evaluate() once</text>
+  <text class="sub" x="518" y="198">anchorToFirstUsable — model row order</text>
+  <path class="edgeGood" d="M714 206 V222" marker-end="url(#arrCG)"/>
+
+  <rect class="boxGood" x="504" y="226" width="420" height="44"/>
+  <text class="lbl" x="518" y="246">frameFuture() completes</text>
+  <text class="sub" x="518" y="262">value: the frameCS, possibly empty</text>
+  <path class="edgeGood" d="M714 270 V286" marker-end="url(#arrCG)"/>
+
+  <rect class="box" x="504" y="290" width="420" height="44"/>
+  <text class="lbl" x="518" y="310">decode ×N — chained on frameFuture()</text>
+  <text class="sub" x="518" y="326">async, cwConcurrent, into the settled frame</text>
+</svg>
+<figcaption>The blocking call on the left is doing two jobs at once — keeping the decode behind the
+frame, and keeping the anchor choice deterministic. The epoch future on the right replaces both:
+completion is the ordering edge, and the single <code>evaluate()</code> behind it is the
+determinism. A per-layer chain (each layer's decode continuing its own probe) would order the
+decode correctly and still lose the determinism, which is why the barrier is not optional. For an
+already-anchored project the future is already finished, so a dropped-in tile decodes with no wait
+at all.</figcaption>
+</figure>
+
+<h3><code>frameFuture()</code> — the epoch future</h3>
+
+<p><code>cwLocalProjectionManager</code> gains one accessor:</p>
+
+<pre><code>QFuture&lt;QString&gt; frameFuture();   // the current epoch's future; value = the settled frameCS</code></pre>
+
+<p>The <b>epoch</b> is open exactly while the frame is Ungeoreferenced <i>and</i> at least one
+layer probe is in flight. <code>frameFuture()</code> returns the open epoch's pending future, or an
+already-finished one otherwise — so "settled" has a one-line definition, <b>settled ⇔ the future is
+finished</b>, and the three cases an earlier draft enumerated collapse into it:</p>
+
+<ul>
+  <li><b>Anchored or Frozen</b> → finished, carrying the current frameCS. A tile dropped into a
+      georeferenced project chains on a finished future and decodes immediately — it does <i>not</i>
+      wait for its own probe; the load reads the header itself (read #3 above, kept for exactly
+      this reason).</li>
+  <li><b>Ungeoreferenced, no probes in flight</b> → finished, carrying an empty string. Empty is a
+      legitimate settled value: the clouds load untransformed, in their own units — exactly what
+      <code>deriveFrameFromLaz</code>'s early return promises today.</li>
+  <li><b>Ungeoreferenced, probes in flight</b> → pending. Decodes chained on it wait.</li>
+</ul>
+
+<p>Getting the second and third cases confused is the failure mode: treat "no frame" as settled and
+a CRS-bearing project decodes every tile untransformed before its own headers arrive; treat it as
+unsettled forever and a CRS-less directory never loads at all. The future makes the distinction
+mechanical, and its completion <i>is</i> the notification — the case a changed-value signal can
+never deliver, because the settled value may be the same empty string the layer started with.</p>
+
+<p>The future also <b>carries</b> the frame, and that is the only way a layer gets one. An earlier
+draft pushed the value down separately (<code>setRegionFrameCS</code>) and used the future purely
+as a "now it's final" bell, which left one fact traveling two channels and an ordering contract
+between them written only in a comment. Taking the value off the future deletes the second channel,
+the duplicate <code>m_regionFrameCS</code> member in both the layer and the model, and the
+contract.</p>
+
+<p><b>The frame is computed at most once per epoch</b>, because the gate defers all layer-driven
+anchoring while the epoch is open. An epoch ends one of two ways, and each completes the
+<code>AsyncFuture::Deferred&lt;QString&gt;</code> behind the future exactly once:</p>
+
+<ul>
+  <li><b>The last probe lands</b> → one <code>evaluate()</code> →
+      <code>anchorToFirstUsable</code> over the full set → complete with the result (or the empty
+      string).</li>
+  <li><b>A fix station anchors mid-epoch</b> → complete early with the fix's frame. Safe because it
+      is order-identical to waiting: <code>gatherInputs()</code> lists fix stations ahead of
+      layers, so the batch-close path would have picked the same fix. A user edit is allowed to
+      decide the anchor; I/O timing is not. So the gate is not "anchor nothing while the epoch is
+      open" but "anchor nothing <i>a header could have decided</i>": the Ungeoreferenced path
+      filters the inputs down to the fix stations and anchors on those, then settles because the
+      frame is no longer Ungeoreferenced.</li>
+</ul>
+
+<p>Epochs <b>extend or complete — they never supersede</b>. A probe starting while the epoch is
+open joins it (the future just completes later); a probe starting after settle opens a fresh epoch
+with a fresh Deferred, and the old future is already finished. That is why this is a Deferred and
+not an <code>AsyncFuture::Restarter</code>: Restarter's machinery is "cancel the superseded run,
+deliver only the latest," and no epoch is ever superseded. The Restarter already sits where
+superseding actually happens — each layer's <code>m_loadRestarter</code>, which handles a frame
+that moves <i>after</i> settle. The split: the Deferred guards when a decode may first start; the
+load Restarter guards replacing one already running.</p>
+
+<p>A frame that moves after settle reaches the layers as
+<code>cwGeoReference::localCoordinateSystemChanged</code> → <code>cwLazLayerModel::reloadAll()</code>
+→ each layer reads the new frame back off its token. The signal is deliberately narrower than
+<code>localProjectionChanged</code>: a freeze or a change of anchor leaves every coordinate in the
+project exactly where it was, and re-decoding a directory of point clouds is the most expensive
+thing the frame can cause. That narrowing is what the deleted <code>setRegionFrameCS</code>
+early-return used to provide, moved to where the change actually happens.</p>
+
+<p>The one abort: project close / <code>clear()</code> mid-epoch <b>cancels</b> the Deferred rather
+than completing it, so waiting continuations never fire and nothing decodes into a dying
+region.</p>
+
+<p>Subscription is three lines, and identical for any future GIS layer type (GeoTIFF, DEM,
+shapefile):</p>
+
+<pre><code>AsyncFuture::observe(m_frameFuture)
+    .context(this, [this](const QString&amp; frameCS) { startDecode(frameCS); });</code></pre>
+
+<p>A layer <b>asks</b> for the future at the moment it needs it, through a
+<code>cwLocalProjectionToken</code> — the same shape as <code>cwFutureManagerToken</code>, a
+<code>QPointer</code> to the manager behind one method. Pushing the future instead reads simpler
+and is wrong in exactly the case that matters: <code>rescan()</code> starts a new layer's probe and
+its <code>reload()</code> <i>before</i> the row is announced (deliberately —
+<code>cwLazLayerModel.cpp:451-457</code>), so any push driven by the epoch opening would arrive
+after the layer had already asked. Asking has no ordering to get right at all. The
+<i>contribute</i> side — telling the manager a probe is in flight — stays cwLazLayer-specific until
+a second GIS type exists; one consumer is too early for an abstraction.</p>
+
+<p>Accounting note: the model keys the probing layers by <b>identity</b>, in a
+<code>QSet&lt;cwLazLayer*&gt;</code> wired up in <code>connectLayer()</code> — which is called at
+<i>creation</i>, so a layer counts from before it is a row, which is when its probe starts. A set
+rather than a counter because the probe Restarter delivers only the latest run: counting starts
+would leak a decrement every time a restart superseded a probe mid-flight, and a layer destroyed
+mid-read would leak one permanently. It drops out on <code>QObject::destroyed</code> instead, where
+the pointer is only ever a key.</p>
+
+<div class="callout bad">
+  <div class="title">Cancel propagates upstream — keep the wait out of the load Restarter</div>
+  <p>The obvious shape for "decode after the frame" is to put the chain <i>inside</i>
+  <code>m_loadRestarter.restart()</code>, so a newer reload supersedes the older wait for free. It
+  is a trap. <code>asyncfuture</code>'s <code>Private::execute</code> watches the derived future and
+  propagates a cancel <i>up</i> to its parent (<code>futurePtr-&gt;cancel()</code>), so the
+  Restarter cancelling one layer's run would cancel the <b>shared epoch future</b> — and every
+  other layer waiting on it would stop dead.</p>
+  <p>So the wait sits outside the Restarter and a monotonic <code>m_frameWaitGeneration</code>
+  drops the superseded continuation. Layer <i>destruction</i> is safe either way: the context
+  object's <code>destroyed</code> handler deletes the watcher before the cancel it triggers can be
+  delivered.</p>
+</div>
+
+<p>Thread-safety: probes and decodes run on the pool, but their results are delivered on the GUI
+thread, and <code>evaluate()</code>, the gate, and the Deferred's completion are all
+GUI-thread-only. The races this section closes are logical ordering races — which input anchors
+first — never data races.</p>
+
+<h3>Revised scope</h3>
+
+<p><b>F1</b> — committed as <code>bae40559</code> (2026-08-05). It carries two debts until F2
+lands, both deliberate and named in its commit message: the duplicate header read on the first
+layer, and the <code>QtConcurrent::run</code> call on the global pool.</p>
+
+<p><b>F2</b> becomes one commit with five parts, in this order:</p>
+<ol>
+  <li><code>cwLocalProjectionManager</code> gains the epoch: the open/settled state, the Deferred,
+      <code>frameFuture()</code>, the gate on <code>evaluate()</code>'s Ungeoreferenced anchor
+      path, and cancel-on-clear. Every existing signal connection stays. (Optional, same commit or
+      later: coalesce <code>evaluate()</code> through a queued single-shot — mid-epoch calls are
+      gated but each still walks every cave and fix station.)</li>
+  <li><code>cwLazLayer</code> reports its probe in-flight flag; <code>cwLazLayerModel</code> keys
+      the probing layers and raises the two edges the manager watches. This is the contribute side
+      of the epoch.</li>
+  <li><code>cwLazLayer::reload()</code> chains the decode on <code>frameFuture()</code>, asked for
+      through the token, instead of starting it directly, and decodes into the frame that future
+      carries. <code>setRegionFrameCS</code> and both <code>m_regionFrameCS</code> members come out;
+      a frame that moves after settle arrives as <code>reloadAll()</code>. Ordering note:
+      <code>startHeaderProbe()</code> raises the in-flight flag synchronously ahead of
+      <code>reload()</code> in both of its callers, so the epoch is already open by the time
+      <code>reload()</code> asks.</li>
+  <li>Delete <code>deriveFrameFromLaz</code>. One class owns the frame, which was F2's original
+      point, and now the guarantee it was silently providing has somewhere to live.</li>
+  <li>Revert <code>startHeaderProbe</code> to <code>cwConcurrent::run</code>. With decodes chained
+      on <code>frameFuture()</code>, nothing user-visible waits on a probe, so it needs neither
+      priority nor a pool of its own.</li>
+</ol>
+
+<div class="callout good">
+  <div class="title">Why not a priority queue or a second pool (researched 2026-08-05)</div>
+  <ul>
+    <li><b>asyncfuture cannot hold priority.</b> <code>asyncfuture.h</code> contains zero references
+        to <code>QtConcurrent</code> or <code>QThreadPool</code>: it composes <i>completion</i> and
+        never schedules anything, and even <code>Restarter</code> takes a lambda returning an
+        already-started future. Priority can only attach where work enters a pool, which is the one
+        line in <code>cwConcurrent::run</code>.</li>
+    <li><b>Adding it there is cheap if ever needed.</b> <code>QTaskBuilder</code> (Qt 6.0+) already
+        has it: <code>QtConcurrent::task(f).onThreadPool(*cwTask::threadPool()).withPriority(p).spawn()</code>
+        returns a <code>QFuture</code>. No custom scheduler.</li>
+    <li><b>But it wouldn't buy the guarantee.</b> Per <code>QThreadPool::start</code>'s docs,
+        priority "can be used to control the run queue's order of execution" — it reorders the
+        <i>queue</i> and never preempts a <i>running</i> thread. With every thread mid-decode on a
+        100M-point tile, a max-priority probe still waits for one to finish.</li>
+    <li><b>The only single-pool mechanism that bounds it</b> is <code>reserveThread()</code> +
+        <code>startOnReservedThread()</code> (6.3+), which runs the probe immediately by exceeding
+        <code>maxThreadCount</code> by one. It returns <code>void</code>, so it would need a
+        hand-rolled <code>QPromise</code> to stay composable.</li>
+    <li><b>The global pool is not free.</b> <code>cwJobSettings::setThreadCountPrivate</code> sets
+        <i>both</i> pools to the user's thread count and <code>threadCount()</code> asserts they are
+        equal — that setting is the app's CPU budget, and riding the global pool quietly spends
+        twice it.</li>
+    <li><b>All of it is moot once the decode can't start early</b>, which is why part 5 above is a
+        revert rather than a redesign.</li>
+  </ul>
+</div>
+
+<h3>What the layer stopped storing (settled 2026-08-06)</h3>
+
+<p>With the frame arriving on the future, <code>cwLazLayer</code> was reviewed for the rest of its
+shadow state. Two more facts turned out to be stored copies of things it could derive, and both
+were costing branches:</p>
+
+<ul>
+  <li><b>The header is one value, not four fields plus a bool.</b> The probe already produces a
+      coherent <code>cwLazLoader::ProbeResult</code>; the layer used to shred it into
+      <code>m_sourceCS</code>, <code>m_sourceBboxMin</code>, <code>m_sourceBboxMax</code> and an
+      <code>m_hasReadHeader</code> flag that only restated "those three mean something". It now
+      holds <code>std::optional&lt;ProbeResult&gt;</code>: <code>hasReadHeader()</code> is
+      <code>has_value()</code>, and the override precedence (override &gt; embedded &gt; empty)
+      moved into <code>sourceCS()</code>. That last move is why
+      <code>setSourceCSOverride</code> no longer re-reads the file — the header did not change,
+      only which CRS it is read as, and precedence is now applied on the way out.</li>
+  <li><b><code>Probed</code> is a name, not a state.</b> Two independent things happen to a layer —
+      the header read and the point decode — and they were interleaved into one stored enum plus
+      two bools. The layer now stores only <code>PointState</code> (Idle / Loading / Loaded /
+      Error) and <code>loadStatus()</code> folds in the header: <code>Probed</code> is what "header
+      in, points out" is called. That deletes <code>applyProbe</code>'s "only ever an upgrade from
+      Idle" guard and both copies of the <code>m_hasReadHeader ? Probed : Idle</code> fallback —
+      all three existed only to hand-maintain a derivable value.</li>
+</ul>
+
+<p><code>m_headerProbeInFlight</code> stays an explicit member: it is the epoch's input, and it is
+genuinely dynamic rather than derived from anything else the layer holds.</p>
+
+<h3>Verification</h3>
+<ul>
+  <li><b>A frame that moves takes its clouds with it:</b> correcting the anchor fix station by
+      100 km re-derives the frame and every loaded tile decodes again into it — the case the
+      value-on-the-future change has to keep working, since nothing pushes a CS any more.</li>
+  <li><b>A frame that only changes hands leaves its clouds alone:</b> deleting the anchor while a
+      tile sits near the origin freezes the frame, and no layer emits
+      <code>loadStatusChanged</code>. This is what pins <code>reloadAll()</code> to
+      <code>localCoordinateSystemChanged</code> rather than <code>localProjectionChanged</code>.</li>
+  <li><b>Determinism:</b> a project with several CRS-bearing layers anchors to the first in model
+      row order, and repeated imports of the same directory produce a byte-identical stored
+      projection. Worth forcing probe completion out of order rather than trusting that a fast
+      local disk happens to finish them in sequence.</li>
+  <li><b>No decode outruns the frame:</b> with any CRS-bearing layer present, no
+      <code>cwLazLoader::load</code> runs with an empty <code>frameCS</code>. Observable without new
+      scaffolding via <code>QT_LOGGING_RULES="cw.laz.layer.debug=true"</code>, which is how the
+      current ordering was confirmed.</li>
+  <li><b>CRS-less directory still loads:</b> N tiles with no embedded CRS all reach
+      <code>Loaded</code>, untransformed; <code>frameFuture()</code> completes with the empty
+      string; rescan performs no synchronous LAZ read.</li>
+  <li><b>No wait for an anchored project:</b> adding one tile to an Anchored project chains on an
+      already-finished future and decodes immediately — before its own probe lands.</li>
+  <li><b>Mid-epoch fix station:</b> adding a valid fix while probes are in flight settles the epoch
+      early to the fix, and the stored frame equals what batch-close would have produced.</li>
+  <li><b>Clear mid-epoch:</b> clearing the project while probes are in flight cancels the epoch;
+      no decode continuation fires afterward.</li>
+  <li>F1's three existing tests keep passing unchanged — they pin the probe's own behavior, which
+      this does not alter.</li>
+</ul>
+
+<div class="callout good">
+  <div class="title">Barrier scope — settled 2026-08-05</div>
+  <p>The earlier open question — per-rescan-batch vs. a global "no probes anywhere in flight" —
+  dissolves: with the join rule (a batch arriving while the epoch is open extends it), batch
+  identity stops mattering, and the two formulations are the same predicate. <b>The epoch is open
+  while the frame is Ungeoreferenced and any layer probe is in flight, whatever started the
+  probe.</b> The global predicate also covers any probe a rescan did not start — whatever restarts
+  one on an Ungeoreferenced project opens an epoch, so the anchor waits for it rather than racing
+  it.</p>
+  <p>One case that used to need this no longer reaches it: <code>setSourceCSOverride</code> stopped
+  re-reading the file (see "What the layer stopped storing"), so it updates <code>sourceCS()</code>
+  synchronously and <code>evaluate()</code> then runs against a complete input set. No I/O means no
+  order to race.</p>
+</div>
+
+<h3>The manager watches only the model (settled 2026-08-06)</h3>
+<p><code>syncLayerConnections()</code> is gone, and with it the three per-layer connections.
+Everything <code>evaluate()</code> reads off a layer arrives through
+<code>cwLazLayerModel</code>, so the manager's whole layer dependency is three model-level
+facts: <b>membership</b> (the row signals), <b>headers</b> (the
+<code>headerProbeInFlightChanged</code> edges — the falling edge is ordered after the header is
+published, so hearing "probing ended" always means the header is readable;
+<code>cwLazLayer::finishProbe()</code> owns both writes so the ordering is a choke point rather
+than two adjacent statements in its caller), and <b>the override</b> (<code>dataChanged</code> filtered on
+<code>SourceCSRole</code> — <code>setSourceCSOverride</code> applies its precedence in memory
+with no probe behind it, so neither of the other two would fire for it).</p>
+<p>The deleted <code>loadStatusChanged</code> connection had gone dead already: since
+<code>gatherInputs()</code> gates on <code>hasReadHeader()</code>, a decode landing changes no
+input, and the connection's comment ("a layer becomes an input when its load lands") described
+the pre-F2 design. <code>sourcePathChanged</code> was likewise indirect — a path change matters
+only through the re-probe it kicks off, which reports through the probe edges.
+<code>m_probingLayers</code> stays a <code>QSet</code>: it counts layers that are not rows yet,
+because <code>rescan()</code> starts the probe (and the <code>reload()</code> that pulls
+<code>frameFuture()</code>) before <code>beginInsertRows</code>, and a linear scan of
+<code>m_layers</code> at that instant would miss the very probe that must open the epoch.</p>
+
+<h2 id="open">15. Open questions</h2>
+<ul>
+  <li><s><b>R's exact value</b> — 50 km proposed. Cheap to change; pick during P2.</s>
+      Settled in P2: 50 km, as <code>cwLocalProjectionManager::kAnchorThresholdMeters</code>.</li>
+  <li><s><b>Recenter's derivation point</b> — oldest input vs. median of all inputs vs. user-picked. Lean: median of readable fixes + cloud centers (robust, no dialog); decide in P4.</s>
+      Settled 2026-08-04 as part of D20: median of readable fix locals + LAZ bbox centers, no dialog — and recentering itself became automatic, so there is no action to put anywhere.</li>
+  <li><b>Anchor identity encoding</b> — <span class="pill">settled in P1</span> kind + UUID. <code>cwFixStation</code> and <code>cwLazLayer</code> both already persist one, so nothing new has to be minted and a rename can't break the reference.</li>
+  <li><b>PROJ grid shipping</b> — proj.db ships already; decide whether to bundle a minimal geoid/datum grid set (cm-level shifts, N₀ recording) or accept meter-level fallback. Not blocking; affects §5's optional N₀ only.</li>
+</ul>
+
+</main>
+</body>
+</html>

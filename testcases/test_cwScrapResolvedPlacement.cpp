@@ -11,6 +11,7 @@
 
 //Cavewhere includes
 #include "cwCave.h"
+#include "cwCavingRegion.h"
 #include "cwTrip.h"
 #include "cwNote.h"
 #include "cwScrap.h"
@@ -37,14 +38,25 @@ namespace {
     // of UTM 13N's central meridian so both resolutions are non-zero. Owns the
     // cave, so the whole tree dies with the fixture.
     struct ScrapFixture {
-        cwCave cave;
+        // The region owns both caves: the frame is a project-level thing, and
+        // convergence is 0 on whichever cave anchors it, so the cave under test
+        // needs an anchor cave in front of it.
+        cwCavingRegion region;
+        cwCave* cave = nullptr;
         cwScrap* scrap = nullptr;
         double convergence = 0.0;
     };
 
     void buildScrapFixture(ScrapFixture& fixture, cwScrap::ScrapType type) {
-        auto* trip = new cwTrip(&fixture.cave);
-        fixture.cave.addTrip(trip);
+        cwGeoreferenceFixture::fixAtAnchorPoint(
+            cwGeoreferenceFixture::addAnchorCave(&fixture.region));
+
+        fixture.region.addCave();
+        fixture.cave = fixture.region.cave(fixture.region.caveCount() - 1);
+        REQUIRE(fixture.cave != nullptr);
+
+        auto* trip = new cwTrip(fixture.cave);
+        fixture.cave->addTrip(trip);
         auto* note = new cwNote();
         trip->notes()->addNotes({note});
         fixture.scrap = new cwScrap();
@@ -56,8 +68,8 @@ namespace {
         trip->calibrations()->setAutoDeclination(false);
         trip->calibrations()->setDeclinationManual(kDeclination);
 
-        fixture.convergence = cwGeoreferenceFixture::georeferenceEastOfUtm13N(
-                    &fixture.cave, QStringLiteral("a1"));
+        fixture.convergence = cwGeoreferenceFixture::fixEastOfAnchor(
+                    fixture.cave, QStringLiteral("a1"));
         REQUIRE(fixture.convergence > 0.1);
     }
 

@@ -118,6 +118,20 @@ are looking at.
 *On a cave page, **Import Survex** brings a `.svx` file in as a new trip in that
 cave, unlike the Data page's Import menu, which brings in whole new caves.*
 
+## Walls: import the .wpj to keep your fixed stations placed
+
+A Walls `#FIX` station gives grid coordinates — an easting and a northing — but
+the survey file never says which UTM zone and datum they belong to. That lives
+in the project's `.REF` line, in the `.wpj`. So importing the **.wpj** brings
+the fixed stations in already placed, while importing a bare **.srv** brings the
+numbers in with no coordinate system: the fix shows up flagged, and you pick the
+system yourself on the [fix station](../georeferencing/georeference-a-cave.md)
+before it can place anything.
+
+A `#FIX` written as a latitude and longitude is placed either way — angles mean
+much the same thing in any datum — though the `.wpj` still gives it the right
+one instead of assuming WGS84.
+
 ## What import can't tell you
 
 Import runs in the background and reports in 3 places only: the progress

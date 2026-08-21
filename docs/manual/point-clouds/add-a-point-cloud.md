@@ -27,10 +27,9 @@ cloud do it (see below).
 ## Where point clouds live
 
 Point-cloud layers belong to the project, not to a cave. Open the **Data** page and
-find the **Project** box, which holds 3 rows: **Units**, **Coordinate system**, and
-**Layers**. The count next to **Layers** is a link (`0` on a project with none);
-click it to open **Geospatial Layers**. Editing the coordinate system needs the
-pencil toggle in that box; the link works either way.
+find the **Project** box, which holds two rows: **Units** and **Layers**. The count
+next to **Layers** is a link (`0` on a project with none); click it to open
+**Geospatial Layers**.
 
 Until a cloud loads, the page below shows a blue help box: "No geospatial
 layers yet. Click **Add LAZ Files** to add a LiDAR point cloud."
@@ -68,25 +67,22 @@ A row you turn off dims and picks up a **Disabled** chip.
 ## Coordinate systems: how the cloud lines up
 
 A LiDAR file normally carries its own coordinate system. CaveWhere hands that and
-the project's system to PROJ 9.3.1 and **reprojects** every point, so the cloud and
-the survey land on one grid. You align nothing by hand.
+the project's frame to PROJ and **reprojects** every point, so the cloud and the
+survey land on one grid. You align nothing by hand.
 
-**The project has no coordinate system yet.** Your first cloud gives the project its
-grid and moves the project origin to that cloud's bounding-box center, ready for you
-to [fix a station](../georeferencing/georeference-a-cave.md#fix-a-station) into it.
-Auto-adopt only fills a gap, so whichever scan you add first decides the grid.
-**I recommend setting the coordinate system yourself** when you know it.
+**The project isn't placed yet.** Your first cloud is enough to place it: CaveWhere
+derives the project's frame from that cloud's own coordinate system and centers it
+on the scan. This is the quick path — drop in an aerial scan and the project has
+somewhere to be, ready for you to
+[fix a station](../georeferencing/georeference-a-cave.md#fix-a-station) into it.
+Whichever scan you add first decides where the frame sits.
 
 **The cloud has no coordinate system of its own.** CaveWhere reads only the OGC WKT
 record that LAS 1.4 writes. Older files store their CRS as GeoTIFF GeoKeys instead,
 which CaveWhere does not decode, so a well-georeferenced old scan looks
-unreferenced. A help box appears while the project has no coordinate system:
-
-> One or more layers don't have an embedded coordinate system.  
-> Set the project's coordinate system on the **Data** page to align them with surveys.
-
-Set the [project coordinate system](../georeferencing/georeference-a-cave.md#choose-the-projects-coordinate-system)
-to the one the cloud's numbers are actually in, and it falls into place.
+unreferenced. Either way nothing says where those points are, so CaveWhere can't
+place them and a help box says so. Re-export the scan from whatever produced it
+with its coordinate system written into the file as OGC WKT.
 
 **PROJ cannot get from the cloud's grid to the project's.** Nothing warns you. The
 points go through untransformed and the cloud lands wherever its raw easting and

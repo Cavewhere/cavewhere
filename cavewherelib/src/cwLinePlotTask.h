@@ -71,6 +71,16 @@ public:
         // (see cwSurvexExporterCaveTask::writeExternalInclude).
         QHash<QUuid, QString> caveAttachmentDirs;
         QHash<QUuid, QString> tripAttachmentDirs;
+
+        // The previous solve's derived state, keyed by cwCave::id(). The worker
+        // diffs its fresh solve against these to decide which stations actually
+        // moved. This is deliberately not part of cwCaveData: it is input to
+        // change detection, not something a cave is, and it is never saved or
+        // loaded. Empty maps mean "assume everything changed", which is both the
+        // correct answer for a first solve and a safe default for synthetic
+        // callers that build an Input by hand (cwTripLinePlotTask).
+        QHash<QUuid, cwStationPositionLookup> previousStationPositions;
+        QHash<QUuid, cwSurveyNetwork> previousNetworks;
     };
 
     class LinePlotCaveData {
@@ -80,12 +90,14 @@ public:
         void setDepth(double depth);
         void setLength(double length);
         void setStationPositions(cwStationPositionLookup positionLookup);
+        void setSplayTips(cwSplayTipsByStation splayTips);
         void setUnconnectedChunkError(QList<cwFindUnconnectedSurveyChunks::Result> results);
         void setNetwork(cwSurveyNetwork network);
 
         double depth() const;
         double length() const;
         cwStationPositionLookup stationPositions() const;
+        cwSplayTipsByStation splayTips() const;
         QList<cwFindUnconnectedSurveyChunks::Result> unconnectedChunkError() const;
         cwSurveyNetwork network() const;
 
@@ -102,6 +114,7 @@ public:
         bool StationPostionsChanged;
         bool NetworkChanged;
         cwStationPositionLookup Lookup;
+        cwSplayTipsByStation SplayTips;
         cwSurveyNetwork Network;
     };
 
@@ -124,16 +137,19 @@ public:
 
         void setPositions(QVector<QVector3D> positions);
         void setTripVertexRanges(QVector<cwLinePlotGeometry::VertexRange> tripVertexRanges);
+        void setTripSplayVertexRanges(QVector<cwLinePlotGeometry::VertexRange> ranges);
         void setTripUuids(QVector<QUuid> tripUuids);
 
         QVector<QVector3D> stationPositions() const;
 
-        // Per-trip vertex span in stationPositions and the running-id -> stable
-        // cwTrip::id mapping (both running-id indexed). Only value-type data
-        // crosses the worker boundary; the manager resolves each UUID to a live
-        // cwTrip* and binds its visibility proxy to the matching vertex range.
-        // See cwLinePlotGeometry for how the ranges are assigned.
+        // Per-trip vertex span in stationPositions (with the splay sub-span at
+        // its tail) and the running-id -> stable cwTrip::id mapping (all
+        // running-id indexed). Only value-type data crosses the worker
+        // boundary; the manager resolves each UUID to a live cwTrip* and binds
+        // its visibility proxy to the matching vertex range. See
+        // cwLinePlotGeometry for how the ranges are assigned.
         QVector<cwLinePlotGeometry::VertexRange> tripVertexRanges() const;
+        QVector<cwLinePlotGeometry::VertexRange> tripSplayVertexRanges() const;
         QVector<QUuid> tripUuids() const;
 
     public:
@@ -146,6 +162,7 @@ public:
         QSet<QUuid> Scraps;
         QVector<QVector3D> StationPositions;
         QVector<cwLinePlotGeometry::VertexRange> TripVertexRanges;
+        QVector<cwLinePlotGeometry::VertexRange> TripSplayVertexRanges;
         QVector<QUuid> TripUuids;
         cwSurveyNetwork RegionNetwork;
         bool RegionNetworkChanged = false;
@@ -265,6 +282,11 @@ inline void cwLinePlotTask::LinePlotResultData::setTripVertexRanges(
     TripVertexRanges = std::move(tripVertexRanges);
 }
 
+inline void cwLinePlotTask::LinePlotResultData::setTripSplayVertexRanges(
+    QVector<cwLinePlotGeometry::VertexRange> ranges) {
+    TripSplayVertexRanges = std::move(ranges);
+}
+
 inline void cwLinePlotTask::LinePlotResultData::setTripUuids(QVector<QUuid> tripUuids) {
     TripUuids = std::move(tripUuids);
 }
@@ -272,6 +294,11 @@ inline void cwLinePlotTask::LinePlotResultData::setTripUuids(QVector<QUuid> trip
 inline QVector<cwLinePlotGeometry::VertexRange>
 cwLinePlotTask::LinePlotResultData::tripVertexRanges() const {
     return TripVertexRanges;
+}
+
+inline QVector<cwLinePlotGeometry::VertexRange>
+cwLinePlotTask::LinePlotResultData::tripSplayVertexRanges() const {
+    return TripSplayVertexRanges;
 }
 
 inline QVector<QUuid> cwLinePlotTask::LinePlotResultData::tripUuids() const {
@@ -330,6 +357,16 @@ inline double cwLinePlotTask::LinePlotCaveData::length() const
 inline cwStationPositionLookup cwLinePlotTask::LinePlotCaveData::stationPositions() const
 {
     return Lookup;
+}
+
+inline void cwLinePlotTask::LinePlotCaveData::setSplayTips(cwSplayTipsByStation splayTips)
+{
+    SplayTips = std::move(splayTips);
+}
+
+inline cwSplayTipsByStation cwLinePlotTask::LinePlotCaveData::splayTips() const
+{
+    return SplayTips;
 }
 
 inline QList<cwFindUnconnectedSurveyChunks::Result> cwLinePlotTask::LinePlotCaveData::unconnectedChunkError() const

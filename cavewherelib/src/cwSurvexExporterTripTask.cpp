@@ -15,6 +15,19 @@
 #include "cwTeam.h"
 #include "cwSurvexExporterUtils.h"
 
+namespace {
+
+//The front-sight reading order. Splays are always front sights, so this is also
+//the order a splay block declares whatever the trip's own *data line says.
+constexpr QLatin1String kFrontSightDataLine("*data normal from to tape compass clino");
+
+//Survex's anonymous wall station: a splay ends against the passage wall, not at
+//a station anybody named. Cavern treats a leg to `..` as a splay on its own, so
+//*flags splay around the block is there to make the file say what it means.
+constexpr QLatin1String kAnonymousWallStation("..");
+
+} // namespace
+
 cwSurvexExporterTripTask::cwSurvexExporterTripTask(QObject *parent) :
     cwExporterTask(parent)
 {
@@ -31,6 +44,14 @@ void cwSurvexExporterTripTask::setData(const cwTripData &trip) {
     }
 }
 
+void cwSurvexExporterTripTask::setCaveFixStations(const QList<cwFixStation> &fixStations) {
+    if(!isRunning()) {
+        CaveFixStations = fixStations;
+    } else {
+        qDebug() << QStringLiteral("Can't set the cave's fix stations while the trip exporter is running");
+    }
+}
+
 /**
   \brief Saves the trip to a survex file
 
@@ -38,11 +59,17 @@ void cwSurvexExporterTripTask::setData(const cwTripData &trip) {
   */
 void cwSurvexExporterTripTask::runTask() {
     auto tripPtr = std::make_unique<cwTrip>();
+    tripPtr->setData(Trip);
 
     setNumberOfSteps(tripPtr->numberOfStations());
 
     openOutputFile();
-    writeTrip(*OutputStream.data(), tripPtr.get());
+    QTextStream& stream = *OutputStream.data();
+
+    const bool autoDeclinationInScope = cwSurvexExporterUtils::writeStandaloneTripHeader(
+        stream, CaveFixStations, Trip.calibrations.autoDeclination());
+
+    writeTrip(stream, tripPtr.get(), autoDeclinationInScope);
     closeOutputFile();
 
     done();
@@ -53,7 +80,8 @@ void cwSurvexExporterTripTask::runTask() {
   */
 void cwSurvexExporterTripTask::writeTrip(QTextStream& stream,
                                          cwTrip* trip,
-                                         const std::optional<cwSurvexExporterUtils::DeclinationContext>& declinationContext) {
+                                         bool autoDeclinationInScope,
+                                         double gridConvergence) {
     //Write header. The `*begin` block is anonymous (the trip name follows as a comment
     //for human readers) and a `*title` directive preserves the name across a round-trip
     //even when it contains characters Survex doesn't allow in block names (e.g. spaces).
@@ -66,7 +94,7 @@ void cwSurvexExporterTripTask::writeTrip(QTextStream& stream,
 
     writeDate(stream, trip->date().date());
     writeTeamData(stream, trip->team());
-    writeCalibrations(stream, trip->calibrations(), declinationContext); stream << Qt::endl;
+    writeCalibrations(stream, trip->calibrations(), autoDeclinationInScope, gridConvergence); stream << Qt::endl;
     writeShotData(stream, trip); stream << Qt::endl;
     writeLRUDData(stream, trip);
 
@@ -80,7 +108,10 @@ void cwSurvexExporterTripTask::writeTrip(QTextStream& stream,
   */
 void cwSurvexExporterTripTask::writeCalibrations(QTextStream& stream,
                                                  cwTripCalibration* calibrations,
-                                                 const std::optional<cwSurvexExporterUtils::DeclinationContext>& declinationContext) {
+                                                 bool autoDeclinationInScope,
+                                                 double gridConvergence) {
+    using namespace cwSurvexExporterUtils;
+
     writeLengthUnits(stream, calibrations->distanceUnit());
 
     writeCalibration(stream, QStringLiteral("TAPE"), calibrations->tapeCalibration());
@@ -97,29 +128,9 @@ void cwSurvexExporterTripTask::writeCalibrations(QTextStream& stream,
     double backClinoScale = calibrations->hasCorrectedClinoBacksight() ? -1.0 : 1.0;
     writeCalibration(stream, QStringLiteral("BACKCLINO"), calibrations->backClinoCalibration(), backClinoScale);
 
-    if (calibrations->autoDeclination() && declinationContext) {
-        cwSurvexExporterUtils::writeDeclinationAuto(stream, *declinationContext);
-    } else {
-        writeCalibration(stream, QStringLiteral("DECLINATION"),
-                         cwSurvexExporterUtils::manualDeclinationForGrid(
-                             stream, calibrations->declination(), declinationContext));
-    }
-}
-
-void cwSurvexExporterTripTask::writeCalibration(QTextStream& stream, QString type, double value, double scale) {
-    if(value == 0.0 && scale == 1.0) { return; }
-    value = -value; //Flip the value be survex is counter intuitive
-
-    QString calibrationString = QStringLiteral("*calibrate %1 %2")
-            .arg(type)
-            .arg(value, 0, 'f', 2);
-
-    if(scale != 1.0) {
-        QString scaleString = QStringLiteral(" %3").arg(scale, 0, 'f', 2);
-        calibrationString += scaleString;
-    }
-
-    stream << calibrationString << Qt::endl;
+    writeDeclinationCalibration(stream, calibrations->autoDeclination(),
+                                calibrations->declination(), autoDeclinationInScope,
+                                gridConvergence);
 }
 
 /**
@@ -159,9 +170,10 @@ void cwSurvexExporterTripTask::writeShotData(QTextStream& stream, const cwTrip* 
     }
 
     QString dataLineComment;
+    QString normalDataLine;
 
     if(hasFrontSights && hasBackSights) {
-        stream << QStringLiteral("*data normal from to tape compass backcompass clino backclino") << Qt::endl;
+        normalDataLine = QStringLiteral("*data normal from to tape compass backcompass clino backclino");
         dataLineComment = QStringLiteral(";%1%2 %3 %4 %5 %6 %7")
                 .arg(QStringLiteral("From"), TextPadding)
                 .arg(QStringLiteral("To"), TextPadding)
@@ -171,7 +183,7 @@ void cwSurvexExporterTripTask::writeShotData(QTextStream& stream, const cwTrip* 
                 .arg(QStringLiteral("Clino"), TextPadding)
                 .arg(QStringLiteral("BackClino"), TextPadding);
     } else if(hasFrontSights) {
-        stream << QStringLiteral("*data normal from to tape compass clino") << Qt::endl;
+        normalDataLine = kFrontSightDataLine;
         dataLineComment = QStringLiteral(";%1%2 %3 %4 %5")
                 .arg(QStringLiteral("From"), TextPadding)
                 .arg(QStringLiteral("To"), TextPadding)
@@ -179,7 +191,7 @@ void cwSurvexExporterTripTask::writeShotData(QTextStream& stream, const cwTrip* 
                 .arg(QStringLiteral("Compass"), TextPadding)
                 .arg(QStringLiteral("Clino"), TextPadding);
     } else if(hasBackSights) {
-        stream << QStringLiteral("*data normal from to tape backcompass backclino") << Qt::endl;
+        normalDataLine = QStringLiteral("*data normal from to tape backcompass backclino");
         dataLineComment = QStringLiteral(";%1%2 %3 %4 %5")
                 .arg(QStringLiteral("From"), TextPadding)
                 .arg(QStringLiteral("To"), TextPadding)
@@ -188,16 +200,114 @@ void cwSurvexExporterTripTask::writeShotData(QTextStream& stream, const cwTrip* 
                 .arg(QStringLiteral("BackClino"), TextPadding);
     }
 
+    stream << normalDataLine << Qt::endl;
+
     //Write out the comment line (this is the column headers)
     stream << dataLineComment << Qt::endl;
 
     QList<cwSurveyChunk*> chunks = trip->chunks();
     for(int i = 0; i < chunks.size(); i++) {
-        cwSurveyChunk* chunk = chunks[i];
+        cwSurveyChunk* chunk = chunks.at(i);
 
         //Write the chunk data
         writeChunk(stream, hasFrontSights, hasBackSights, chunk);
     }
+
+    writeSplayData(stream, trip, normalDataLine, hasBackSights);
+}
+
+/**
+  \brief Writes the trip's splays, as legs to survex's anonymous wall station
+
+  Splays hang off a station rather than sitting in the station/shot chain, so
+  they follow the trip's centerline legs as their own block — the same shape
+  writeLRUDData uses for the other station-attached data. Cavern solves them
+  with the same declination and convergence as everything else in the trip.
+
+  \a tripHasBackSights says whether \a normalDataLine declares backsight
+  columns, which is the one case the splays need a reading order of their own.
+  */
+void cwSurvexExporterTripTask::writeSplayData(QTextStream& stream,
+                                              const cwTrip* trip,
+                                              const QString& normalDataLine,
+                                              bool tripHasBackSights) {
+    const cwTripCalibration* calibration = trip->calibrations();
+
+    QStringList dataLines;
+
+    const QList<cwSurveyChunk*> chunks = trip->chunks();
+    for(const cwSurveyChunk* chunk : chunks) {
+        const QList<cwStation> stations = chunk->stations();
+        for(const cwStation& station : stations) {
+            if(!station.isValid()) { continue; }
+
+            for(int i = 0; i < station.splayCount(); i++) {
+                const QString line = splayLine(calibration, station.name(), station.splayAt(i));
+                if(!line.isEmpty()) {
+                    dataLines.append(line);
+                }
+            }
+        }
+    }
+
+    if(dataLines.isEmpty()) { return; }
+
+    //A trip with backsight columns declares a reading order the splays don't
+    //have, so they get their own *data line and hand the trip's back after.
+    if(tripHasBackSights) {
+        stream << kFrontSightDataLine << Qt::endl;
+    }
+
+    stream << QStringLiteral("*flags splay") << Qt::endl;
+    stream << dataLines.join(QLatin1Char('\n')) << Qt::endl;
+    stream << QStringLiteral("*flags not splay") << Qt::endl;
+
+    if(tripHasBackSights) {
+        stream << normalDataLine << Qt::endl;
+    }
+}
+
+/**
+  \brief One `<station> .. <tape> <compass> <clino>` line, or empty when the
+  splay has no tape
+
+  Cavern rejects a leg with an omitted tape reading, and a splay with no length
+  says nothing about where the wall is, so it is dropped with an error naming
+  the station it came from.
+  */
+QString cwSurvexExporterTripTask::splayLine(const cwTripCalibration* calibration,
+                                            const QString& stationName,
+                                            const cwShotMeasurement& splay) {
+    if(splay.distance.state() != cwDistanceReading::State::Valid) {
+        Errors.append(QStringLiteral("Error: Skipped a splay at %1 that has no distance")
+                          .arg(stationName));
+        return QString();
+    }
+
+    QString clino = clinoToString(splay.clino);
+    const QString verticalClino = cwSurvexExporterUtils::verticalClinoText(splay.clino);
+    if(!verticalClino.isEmpty()) {
+        clino = verticalClino;
+    }
+
+    //A plumbed splay is the one survex takes without a bearing. The text covers
+    //both ways a reading gets there: State::Up/Down, and a Valid reading at ±90
+    //that verticalClinoText rewrote.
+    const bool isPlumbed = clino.compare(QStringLiteral("up"), Qt::CaseInsensitive) == 0
+                           || clino.compare(QStringLiteral("down"), Qt::CaseInsensitive) == 0;
+
+    if(splay.compass.state() == cwCompassReading::State::Empty && !isPlumbed) {
+        Errors.append(QStringLiteral("Error: Skipped a splay at %1 that has no compass reading")
+                          .arg(stationName));
+        return QString();
+    }
+
+    return QStringLiteral("%1 %2 %3 %4 %5")
+        .arg(stationName, TextPadding)
+        .arg(kAnonymousWallStation, TextPadding)
+        .arg(toSupportedLength(calibration, splay.distance), TextPadding)
+        .arg(compassToString(splay.compass), TextPadding)
+        .arg(clino, TextPadding);
 }
 
 /**
@@ -206,12 +316,15 @@ void cwSurvexExporterTripTask::writeShotData(QTextStream& stream, const cwTrip* 
   */
 void cwSurvexExporterTripTask::writeLRUDData(QTextStream& stream, const cwTrip* trip) {
 
-    QString dataLineTemplate(QStringLiteral("%1 %2 %3 %4 %5"));
+    const QString dataLineTemplate(QStringLiteral("%1 %2 %3 %4 %5"));
+    const cwTripCalibration* calibration = trip->calibrations();
 
-    foreach(cwSurveyChunk* chunk, trip->chunks()) {
-        stream << QStringLiteral("*data passage station left right up down ignoreall") << Qt::endl;
+    const QList<cwSurveyChunk*> chunks = trip->chunks();
+    for(const cwSurveyChunk* chunk : chunks) {
+        QStringList dataLines;
 
-        foreach(cwStation station, chunk->stations()) {
+        const QList<cwStation> stations = chunk->stations();
+        for(const cwStation& station : stations) {
             if(!station.isValid()) { continue; }
 
             // Stub "name - - - -" lines make cavern fail with "Cross section
@@ -219,17 +332,19 @@ void cwSurvexExporterTripTask::writeLRUDData(QTextStream& stream, const cwTrip* 
             // any exported shot (e.g. orphans from dropped empty rows).
             if(!cwSurvexExporterUtils::stationHasLrudData(station)) { continue; }
 
-            const cwTripCalibration* calibration = trip->calibrations();
-            QString dataLine = dataLineTemplate
+            dataLines.append(dataLineTemplate
                     .arg(station.name(), TextPadding)
                     .arg(toSupportedLength(calibration, station.left()), TextPadding)
                     .arg(toSupportedLength(calibration, station.right()), TextPadding)
                     .arg(toSupportedLength(calibration, station.up()), TextPadding)
-                    .arg(toSupportedLength(calibration, station.down()), TextPadding);
-
-            stream << dataLine << Qt::endl;
+                    .arg(toSupportedLength(calibration, station.down()), TextPadding));
         }
 
+        //A header with no cross sections under it is noise for the reader
+        if(dataLines.isEmpty()) { continue; }
+
+        stream << cwSurvexExporterUtils::passageDataHeader() << Qt::endl;
+        stream << dataLines.join(QLatin1Char('\n')) << Qt::endl;
         stream << Qt::endl;
     }
 }

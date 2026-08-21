@@ -91,10 +91,10 @@ What carries over:
   classification) all survive. Custom extra-byte attributes survive only when
   every source shares one point format; a mixed merge falls back to the richest
   standard format and drops them, along with any waveform payload.
-- **The project coordinate system**, written into the output as an OGC WKT record.
-  Each source is reprojected into it on the way.
-- **XYZ re-encoded at a scale of 0.001**, millimeter precision when the project
-  CS is metric.
+- **The project's frame**, written into the output as an OGC WKT record. Each
+  source is reprojected into it on the way, so the clip is in the same system
+  CaveWhere draws the cave in rather than whatever grid the scan arrived on.
+- **XYZ re-encoded at a scale of 0.001**, millimeter precision.
 
 Points stream off disk, never as one in-memory copy, so a multi-gigabyte scan
 clips fine on a laptop.

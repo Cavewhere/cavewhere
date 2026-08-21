@@ -22,6 +22,7 @@
 #include "cwSurvexGlobalData.h"
 #include "cwGlobals.h"
 #include "cwFixStation.h"
+#include "cwSurvexCS.h"
 class cwSurveyChunk;
 class cwShot;
 class cwSurvexNodeData;
@@ -57,11 +58,6 @@ protected:
     virtual void runTask();
 
 private:
-
-    enum State {
-        FirstBegin,
-        InsideBegin
-    };
 
     enum DataFormatType {
         To,
@@ -109,6 +105,7 @@ private:
         DataEntryType DataType;
         QString Filename;
         int ColumnCount;
+        cwSurvexCS::Parsed CS;
 
         static QMap<DataFormatType, int> defaultDataFormat();
     };
@@ -135,9 +132,6 @@ private:
 
     QStringList Errors;
 
-    State CurrentState;
-
-    QString CurrentInputCS; // Last seen *cs; empty until first *cs.
     QList<cwFixStation> CapturedFixStations;
 
     //Data map <Type, index>
@@ -186,6 +180,8 @@ private:
     int currentColumnCount() const;
     void setCurrentDataFormat(QMap<DataFormatType, int> format);
     void setCurrentDataEntryType(DataEntryType type);
+    cwSurvexCS::Parsed currentCS() const;
+    void setCurrentCS(const cwSurvexCS::Parsed& cs);
     void setCurrentColumnCount(int count);
 
     QString currentFile() const;
@@ -202,13 +198,16 @@ private:
     void parseEquate(QString line);
     void parseExport(QString line);
     void parseFlags(QString line);
+    void parseAlias(QString line);
     void parseCS(QString line);
     void parseFix(QString line);
 
     void runStats(QString filename);
 
+    void finishBlock();
     void updateLRUDForCurrentBlock();
     void updateStationLRUD(cwStation before, cwStation station, cwStation after);
+    void updateSplaysForCurrentBlock();
 };
 
 /**

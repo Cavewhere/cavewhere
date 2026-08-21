@@ -1,4 +1,6 @@
 //Our includes
+#include "cwCoordinateText.h"
+#include "cwCoordinateTransform.h"
 #include "cwFixStation.h"
 #include "cwFixStationModel.h"
 #include "cwProtoUtils.h"
@@ -6,9 +8,11 @@
 #include "cwCave.h"
 #include "cwCavingRegion.h"
 #include "cwGeoReference.h"
+#include "cwLocalProjection.h"
 #include "cwProject.h"
 #include "cwRootData.h"
 #include "cwGeoPoint.h"
+#include "cwSurveyNetwork.h"
 #include "cwFutureManagerModel.h"
 
 //Test helpers
@@ -70,8 +74,11 @@ TEST_CASE("cwFixStationModel setData edits a cell and emits dataChanged",
 
     const QModelIndex idx = model.index(0);
     REQUIRE(model.setData(idx, QStringLiteral("A1"), cwFixStationModel::StationNameRole));
-    REQUIRE(model.setData(idx, 500000.0, cwFixStationModel::EastingRole));
+    //The CS before the component, as cwFixStation documents: it decides which
+    //axis the coordinate leads with, so writing one first and naming the system
+    //afterwards re-reads the same text the other way round.
     REQUIRE(model.setData(idx, QStringLiteral("EPSG:32612"), cwFixStationModel::InputCSRole));
+    REQUIRE(model.setData(idx, 500000.0, cwFixStationModel::EastingRole));
 
     CHECK(model.data(idx, cwFixStationModel::StationNameRole).toString() == QStringLiteral("A1"));
     CHECK(model.data(idx, cwFixStationModel::EastingRole).toDouble() == 500000.0);
@@ -93,6 +100,12 @@ TEST_CASE("cwFixStationModel exposes role names for QML", "[FixStation][cwFixSta
     CHECK(roles.value(cwFixStationModel::NorthingRole) == "northing");
     CHECK(roles.value(cwFixStationModel::ElevationRole) == "elevation");
     CHECK(roles.value(cwFixStationModel::IdRole) == "id");
+    CHECK(roles.value(cwFixStationModel::CoordinateTextRole) == "coordinateText");
+
+    // Only persisted roles live here. The read-only warnings derived from the
+    // solve are added by cwFixStationDiagnosticsModel, so that dataChanged on
+    // this model keeps meaning "save and re-solve this".
+    CHECK(roles.size() == 9);
 }
 
 TEST_CASE("cwFixStationModel setFixStations replaces contents", "[FixStation][cwFixStationModel]") {
@@ -112,18 +125,153 @@ TEST_CASE("cwFixStationModel setFixStations replaces contents", "[FixStation][cw
     CHECK(model.fixStationAt(1).stationName() == QStringLiteral("Y"));
 }
 
-TEST_CASE("cwFixStations and globalCS survive a project save/load",
+TEST_CASE("cwFixStationModel looks a fix up by station name",
+          "[FixStation][cwFixStationModel]") {
+    cwFixStationModel model;
+
+    cwFixStation fix;
+    fix.setStationName(QStringLiteral("A1"));
+    model.appendFixStation(fix);
+
+    SECTION("An exact name matches") {
+        CHECK(model.indexOf(QStringLiteral("A1")) == 0);
+        CHECK(model.isFixed(QStringLiteral("A1")));
+    }
+
+    SECTION("Matching follows the rule the rest of the app resolves fixes by") {
+        // Trim then case-insensitive, same as cwSurveyNetwork::hasStation — a
+        // fix the survex export anchors fine must not read as a different
+        // station here.
+        CHECK(model.indexOf(QStringLiteral("a1")) == 0);
+        CHECK(model.indexOf(QStringLiteral("  a1  ")) == 0);
+    }
+
+    SECTION("A different station doesn't match") {
+        CHECK(model.indexOf(QStringLiteral("A2")) == -1);
+        CHECK_FALSE(model.isFixed(QStringLiteral("A2")));
+    }
+
+    SECTION("An empty name matches nothing, including a blank row") {
+        model.addFixStation();
+        REQUIRE(model.rowCount() == 2);
+        CHECK(model.indexOf(QString()) == -1);
+        CHECK(model.indexOf(QStringLiteral("   ")) == -1);
+        CHECK_FALSE(model.isFixed(QString()));
+    }
+}
+
+TEST_CASE("cwFixStationModel addFixStation(name) won't double-anchor a station",
+          "[FixStation][cwFixStationModel]") {
+    cwFixStationModel model;
+
+    const int firstRow = model.addFixStation(QStringLiteral("A1"));
+    REQUIRE(firstRow == 0);
+    REQUIRE(model.rowCount() == 1);
+    CHECK(model.fixStationAt(0).stationName() == QStringLiteral("A1"));
+
+    SECTION("Marking the same station again returns the row it already has") {
+        CHECK(model.addFixStation(QStringLiteral("A1")) == 0);
+        CHECK(model.addFixStation(QStringLiteral("a1")) == 0);
+        CHECK(model.rowCount() == 1);
+    }
+
+    SECTION("A different station gets its own row") {
+        CHECK(model.addFixStation(QStringLiteral("A2")) == 1);
+        CHECK(model.rowCount() == 2);
+    }
+
+    SECTION("A blank name anchors nothing") {
+        CHECK(model.addFixStation(QStringLiteral("   ")) == -1);
+        CHECK(model.rowCount() == 1);
+    }
+
+    SECTION("The stored name is trimmed") {
+        CHECK(model.addFixStation(QStringLiteral("  A2  ")) == 1);
+        CHECK(model.fixStationAt(1).stationName() == QStringLiteral("A2"));
+    }
+}
+
+TEST_CASE("cwFixStationModel removeFixStation drops the row for a station",
+          "[FixStation][cwFixStationModel]") {
+    cwFixStationModel model;
+    model.addFixStation(QStringLiteral("A1"));
+    model.addFixStation(QStringLiteral("A2"));
+    REQUIRE(model.rowCount() == 2);
+
+    SECTION("The named station's fix goes away") {
+        model.removeFixStation(QStringLiteral("a1"));
+        REQUIRE(model.rowCount() == 1);
+        CHECK(model.fixStationAt(0).stationName() == QStringLiteral("A2"));
+    }
+
+    SECTION("An unfixed station is a no-op") {
+        model.removeFixStation(QStringLiteral("A3"));
+        CHECK(model.rowCount() == 2);
+    }
+}
+
+TEST_CASE("cwFixStationModel reports every change to the set of fixed stations",
+          "[FixStation][cwFixStationModel]") {
+    cwFixStationModel model;
+    QSignalSpy fixedSpy(&model, &cwFixStationModel::fixedStationsChanged);
+    QSignalSpy countSpy(&model, &cwFixStationModel::countChanged);
+
+    SECTION("Adding a fix") {
+        model.addFixStation(QStringLiteral("A1"));
+        CHECK(fixedSpy.count() == 1);
+    }
+
+    SECTION("Removing a fix") {
+        model.addFixStation(QStringLiteral("A1"));
+        fixedSpy.clear();
+        model.removeFixStation(QStringLiteral("A1"));
+        CHECK(fixedSpy.count() == 1);
+    }
+
+    SECTION("Renaming a fix, which leaves the row count alone") {
+        model.addFixStation(QStringLiteral("A1"));
+        fixedSpy.clear();
+        countSpy.clear();
+
+        model.setData(model.index(0), QStringLiteral("A2"),
+                      cwFixStationModel::StationNameRole);
+
+        // This is why countChanged() can't stand in: a rename changes which
+        // station shows as fixed without changing how many fixes there are.
+        CHECK(fixedSpy.count() == 1);
+        CHECK(countSpy.count() == 0);
+    }
+
+    SECTION("Replacing the rows wholesale, even at the same count") {
+        model.addFixStation(QStringLiteral("A1"));
+        fixedSpy.clear();
+        countSpy.clear();
+
+        cwFixStation replacement;
+        replacement.setStationName(QStringLiteral("A2"));
+        model.setFixStations({replacement});
+
+        CHECK(fixedSpy.count() == 1);
+        CHECK(countSpy.count() == 0);
+    }
+
+    SECTION("Editing a coordinate is not a change to the set") {
+        model.addFixStation(QStringLiteral("A1"));
+        fixedSpy.clear();
+
+        model.setData(model.index(0), 100.0, cwFixStationModel::EastingRole);
+        CHECK(fixedSpy.count() == 0);
+    }
+}
+
+TEST_CASE("cwFixStations and the project frame survive a project save/load",
           "[FixStation][cwSaveLoad]") {
-    // Build a project with two caves: one with two fixes, one with none.
-    // Set globalCS on the region. Save to a temp dir, reload into a fresh
-    // project, and verify everything came back intact. worldOrigin is not
-    // persisted — it's a derived centroid recomputed on the first
-    // line-plot completion of each session.
+    // Build a project with two caves: one with two fixes, one with none. Save
+    // to a temp dir, reload into a fresh project, and verify everything came
+    // back intact — including the local projection the first fix anchored.
     auto creatorRoot = std::make_unique<cwRootData>();
     auto creatorProject = creatorRoot->project();
     auto creatorRegion = creatorProject->cavingRegion();
-
-    creatorRegion->geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32612"));
 
     creatorRegion->addCave();
     auto fixedCave = creatorRegion->cave(0);
@@ -177,7 +325,9 @@ TEST_CASE("cwFixStations and globalCS survive a project save/load",
     auto loadedRegion = loaderProject->cavingRegion();
     REQUIRE(loadedRegion != nullptr);
 
-    CHECK(loadedRegion->geoReference()->globalCoordinateSystem() == QStringLiteral("EPSG:32612"));
+    CHECK(loadedRegion->geoReference()->localCoordinateSystem()
+          == creatorRegion->geoReference()->localCoordinateSystem());
+    CHECK(loadedRegion->geoReference()->anchor() == creatorRegion->geoReference()->anchor());
 
     REQUIRE(loadedRegion->caveCount() == 2);
 
@@ -217,11 +367,154 @@ TEST_CASE("cwFixStations and globalCS survive a project save/load",
     CHECK(loadedUnfixed->fixStations()->count() == 0);
 }
 
-TEST_CASE("Changing globalCS marks the project modified",
+TEST_CASE("A coordinate survives a project save and load, byte for byte",
+          "[FixStation][cwSaveLoad]") {
+    // §4's hand-edit requirement, end to end rather than at the proto boundary:
+    // projects are readable on disk, so someone will edit a coordinate by hand
+    // and get it wrong, and what they wrote has to come back exactly. Never
+    // dropped, never "repaired", and never replaced by the zeros the row reports
+    // — those would turn a coordinate that needs correcting into a fix at the
+    // origin that nobody would think to look at.
+    //
+    // Both unreadable shapes go through together, because they are kept for
+    // different reasons: one has text the parser refuses, the other text no
+    // system will read.
+    const QString unreadableText = QStringLiteral("N 46 07 16 W 115 35 56");
+    const QString systemlessText = QStringLiteral("610016.792, 5615117.075, 304m");
+    // And one the file has to carry for a reason that has nothing to do with
+    // repair: degrees, minutes and seconds are read (#654) and never written, so
+    // the notation lives only in the string. A loader that kept the numbers and
+    // re-rendered them would hand back decimal degrees — the same place, silently
+    // retyped.
+    const QString angleText = QStringLiteral("46°07'16.1\" N, 115°35'56.5\" W, 304m");
+
+    auto creatorRoot = std::make_unique<cwRootData>();
+    auto creatorProject = creatorRoot->project();
+    auto creatorRegion = creatorProject->cavingRegion();
+    creatorRegion->addCave();
+    cwCave* cave = creatorRegion->cave(0);
+    cave->setName(QStringLiteral("Hand Edited"));
+
+    cwFixStation unreadable;
+    unreadable.setStationName(QStringLiteral("A1"));
+    unreadable.setInputCS(QStringLiteral("EPSG:32611"));
+    unreadable.setCoordinate(unreadableText);
+    REQUIRE(unreadable.state() == cwFixStation::Unreadable);
+
+    cwFixStation systemless;
+    systemless.setStationName(QStringLiteral("B2"));
+    systemless.setCoordinate(systemlessText);
+    REQUIRE(systemless.state() == cwFixStation::NoSystem);
+
+    // The row nobody filled in rides along, because it is the one thing that
+    // must *not* come back as text: a loader that wrote out its rendering would
+    // turn "not entered" into "entered at the origin".
+    cwFixStation untouched;
+    untouched.setStationName(QStringLiteral("C3"));
+    untouched.setInputCS(QStringLiteral("EPSG:32611"));
+    REQUIRE(untouched.state() == cwFixStation::Empty);
+
+    // The system goes in first, and here it has to: an angle is refused outright
+    // on a row that isn't geographic, so this text has nowhere to go until
+    // EPSG:4326 is the row's own system.
+    cwFixStation angle;
+    angle.setStationName(QStringLiteral("D4"));
+    angle.setInputCS(QStringLiteral("EPSG:4326"));
+    angle.setCoordinate(angleText);
+    REQUIRE(angle.state() == cwFixStation::Valid);
+
+    cave->fixStations()->setFixStations({unreadable, systemless, untouched, angle});
+
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    const QString projectPath = QDir(tempDir.path())
+                                    .filePath(QStringLiteral("fixstations-handedit-%1.cwproj")
+                                                  .arg(QCoreApplication::applicationPid()));
+    REQUIRE(creatorProject->saveAs(projectPath));
+    creatorRoot->futureManagerModel()->waitForFinished();
+    creatorProject->waitSaveToFinish();
+
+    auto loaderRoot = std::make_unique<cwRootData>();
+    auto loaderProject = loaderRoot->project();
+    addTokenManager(loaderProject);
+    loaderProject->loadOrConvert(creatorProject->filename());
+    loaderRoot->futureManagerModel()->waitForFinished();
+    loaderProject->waitLoadToFinish();
+
+    REQUIRE(loaderProject->cavingRegion()->caveCount() == 1);
+    cwFixStationModel* loaded = loaderProject->cavingRegion()->cave(0)->fixStations();
+    REQUIRE(loaded->count() == 4);
+
+    CHECK(loaded->fixStationAt(0).coordinate() == unreadableText);
+    CHECK(loaded->fixStationAt(0).state() == cwFixStation::Unreadable);
+
+    CHECK(loaded->fixStationAt(1).coordinate() == systemlessText);
+    CHECK(loaded->fixStationAt(1).state() == cwFixStation::NoSystem);
+    // And naming the system it was always in reads the numbers straight back out
+    // of the text that survived — which is the whole reason keeping it matters.
+    cwFixStation named = loaded->fixStationAt(1);
+    named.setInputCS(QStringLiteral("EPSG:32611"));
+    CHECK(named.state() == cwFixStation::Valid);
+    CHECK(named.easting() == 610016.792);
+
+    CHECK(loaded->fixStationAt(2).coordinate().isEmpty());
+    CHECK(loaded->fixStationAt(2).state() == cwFixStation::Empty);
+
+    const cwFixStation loadedAngle = loaded->fixStationAt(3);
+    CHECK(loadedAngle.coordinate() == angleText);
+    // Accumulated the way parse() accumulates it, so the two agree to the last
+    // bit. Reading these back at all takes the row's system surviving with the
+    // text: without EPSG:4326 the angle is refused, and a projected system would
+    // read the latitude as an easting.
+    CHECK(loadedAngle.state() == cwFixStation::Valid);
+    CHECK(loadedAngle.northing() == 46.0 + 7.0 / 60.0 + 16.1 / 3600.0);
+    CHECK(loadedAngle.easting() == -(115.0 + 35.0 / 60.0 + 56.5 / 3600.0));
+    CHECK(loadedAngle.elevation() == 304.0);
+}
+
+TEST_CASE("Re-storing a coordinate the row already held reads it in stored units",
+          "[FixStation]") {
+    // What the axis-order swap relies on. swapHorizontal() exchanges two numbers
+    // in text the row already had and changes nothing else, but the result still
+    // has to be committed, and setCoordinateText() reads a *bare* elevation in
+    // whatever unit system it is handed. A stored coordinate's bare elevation
+    // means meters — cwFixStation reads it that way — so the entry surfaces
+    // commit a swap in metric rather than in the project's display units.
+    //
+    // Only the load path can produce a bare elevation: setCoordinateText()
+    // spells the unit out before storing. So this is exactly the population the
+    // hand-edit requirement exists for, and the mistake is silent — both
+    // readings are plausible elevations.
+    const QString bareElevation = QStringLiteral("610016.792, 5615117.075, 304");
+
+    cwFixStation loaded;
+    loaded.setInputCS(QStringLiteral("EPSG:32611"));
+    loaded.setCoordinate(bareElevation);
+    REQUIRE(loaded.state() == cwFixStation::Valid);
+    REQUIRE(loaded.elevation() == 304.0);
+
+    cwFixStationModel model;
+    model.setFixStations({loaded});
+
+    SECTION("metric leaves the elevation where the fix already read it") {
+        REQUIRE(model.setCoordinateText(0, bareElevation, cwUnits::Metric) == QString());
+        CHECK(model.fixStationAt(0).elevation() == 304.0);
+    }
+
+    SECTION("the project's units would move it, which is the mistake being avoided") {
+        // Asserted rather than assumed: without it the section above could pass
+        // because nothing re-reads the elevation at all.
+        REQUIRE(model.setCoordinateText(0, bareElevation, cwUnits::Imperial) == QString());
+        CHECK(model.fixStationAt(0).elevation()
+              == cwUnits::convert(304.0, cwUnits::Feet, cwUnits::Meters));
+    }
+}
+
+TEST_CASE("Changing the project's frame marks the project modified",
           "[FixStation][cwSaveLoad][globalCS]") {
     // Regression: cwSaveLoad::connectObjects() wires cave / trip / note /
-    // sketch signals but does not listen to cwCavingRegion::globalCSChanged.
-    // Without that, editing the region CS in an open project leaves
+    // sketch signals but did not listen to the geo-reference. Without that,
+    // re-deriving the project's local projection in an open project leaves
     // cwProject::modified() == false, so an autosave / commit pipeline keyed
     // off the dirty bit never runs and the change can be dropped on close.
     //
@@ -252,22 +545,28 @@ TEST_CASE("Changing globalCS marks the project modified",
 
     REQUIRE(isProjectModified(project.get()) == false);
 
-    region->geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32612"));
+    region->geoReference()->anchorTo(
+        {cwGeoReference::Anchor::FixStation, QUuid::createUuid()},
+        cwLocalProjection::deriveFrom(QStringLiteral("EPSG:32612"),
+                                      cwGeoPoint{500000.0, 4194000.0, 2700.0}));
     CHECK(isProjectModified(project.get()));
 }
 
 TEST_CASE("cwFixStation proto round-trip preserves all fields", "[FixStation][proto]") {
     cwFixStation original;
     original.setStationName(QStringLiteral("A1"));
-    original.setInputCS(QStringLiteral("EPSG:32612"));
-    original.setEasting(500123.456789);
-    original.setNorthing(4194567.891234);
-    original.setElevation(2750.5);
+    original.setInputCS(QStringLiteral("EPSG:4326"));
+    original.setCoordinate(QStringLiteral("46.12113, -115.59902, 30ft"));
     original.setHorizontalVariance(0.5);
     original.setVerticalVariance(1.0);
 
     CavewhereProto::FixStation proto;
     cwProtoUtils::saveFixStation(&proto, original);
+
+    //The string is the only thing stored, and it is stored as it was written:
+    //the numbers below all come back out of it.
+    CHECK(QString::fromStdString(proto.coordinate())
+          == QStringLiteral("46.12113, -115.59902, 30ft"));
 
     cwFixStation restored = cwProtoUtils::fromProtoFixStation(proto);
 
@@ -279,6 +578,68 @@ TEST_CASE("cwFixStation proto round-trip preserves all fields", "[FixStation][pr
     CHECK(restored.elevation() == original.elevation());
     CHECK(restored.horizontalVariance() == original.horizontalVariance());
     CHECK(restored.verticalVariance() == original.verticalVariance());
+    CHECK(restored.coordinate() == original.coordinate());
+    CHECK(restored == original);
+}
+
+TEST_CASE("cwFixStation loads a row nobody ever filled in as having no coordinate",
+          "[FixStation][proto]") {
+    //"Mark Station as Fixed" writes a row before the user types anything, so a
+    //message with no coordinate is *not entered* — reading it as "0, 0, 0m"
+    //would make it *entered at the origin*, and the diagnostics defer on
+    //exactly that difference.
+    CavewhereProto::FixStation proto;
+    cwProtoUtils::saveString(proto.mutable_inputcs(), QStringLiteral("EPSG:32611"));
+
+    const cwFixStation restored = cwProtoUtils::fromProtoFixStation(proto);
+    CHECK(restored.coordinate().isEmpty());
+    CHECK(restored.state() == cwFixStation::Empty);
+}
+
+TEST_CASE("cwFixStation round-trips a coordinate that can't be read, byte for byte",
+          "[FixStation][proto]") {
+    //The hand-edited file, and the reason the string is stored rather than the
+    //numbers derived from it: there are no numbers to fall back to, so the text
+    //is all there is. Dropping it would leave the row saying nothing about a
+    //coordinate its owner clearly meant to write, and this is the round trip a
+    //project makes every time it is opened and saved.
+    cwFixStation fix;
+    fix.setInputCS(QStringLiteral("EPSG:32611"));
+    fix.setCoordinate(QStringLiteral("N 46 07 16 W 115 35 56"));
+    REQUIRE(fix.state() == cwFixStation::Unreadable);
+
+    CavewhereProto::FixStation proto;
+    cwProtoUtils::saveFixStation(&proto, fix);
+
+    const cwFixStation restored = cwProtoUtils::fromProtoFixStation(proto);
+    CHECK(restored.coordinate() == QStringLiteral("N 46 07 16 W 115 35 56"));
+    CHECK(restored.state() == cwFixStation::Unreadable);
+}
+
+TEST_CASE("cwFixStation keeps a coordinate it has no system to read",
+          "[FixStation][proto]") {
+    //A row can name a coordinate and no system — the svx importer's `*fix` with
+    //no `*cs` makes one. There is no axis order to read it under, so nothing is
+    //derived, but the text itself must survive or opening and saving a project
+    //would quietly empty the row. Naming the system the row was always in is
+    //all it takes to get the numbers back.
+    cwFixStation fix;
+    fix.setCoordinate(QStringLiteral("610016.792, 5615117.075, 304m"));
+    REQUIRE(fix.state() == cwFixStation::NoSystem);
+
+    CavewhereProto::FixStation proto;
+    cwProtoUtils::saveFixStation(&proto, fix);
+
+    cwFixStation restored = cwProtoUtils::fromProtoFixStation(proto);
+    CHECK(restored.state() == cwFixStation::NoSystem);
+    CHECK(restored.coordinate() == QStringLiteral("610016.792, 5615117.075, 304m"));
+    CHECK(restored.easting() == 0.0);
+
+    restored.setInputCS(QStringLiteral("EPSG:32611"));
+    CHECK(restored.state() == cwFixStation::Valid);
+    CHECK(restored.easting() == 610016.792);
+    CHECK(restored.northing() == 5615117.075);
+    CHECK(restored.elevation() == 304.0);
 }
 
 TEST_CASE("Loading a project does not re-save the cave file",
@@ -350,4 +711,482 @@ TEST_CASE("Loading a project does not re-save the cave file",
 
     const QDateTime mtimeAfterLoad = QFileInfo(caveFilePath).lastModified();
     CHECK(mtimeAfterLoad == mtimeBeforeLoad);
+}
+
+TEST_CASE("cwFixStationModel setCoordinateText writes the whole coordinate at once",
+          "[FixStation][cwFixStationModel]") {
+    cwFixStationModel model;
+    model.addFixStation();
+    REQUIRE(model.rowCount() == 1);
+    //A projected system, so the coordinates below read easting-first. New rows
+    //start on WGS84, where the same text would lead with the latitude.
+    model.setData(model.index(0), QStringLiteral("EPSG:32611"),
+                  cwFixStationModel::InputCSRole);
+
+    QSignalSpy dataChangedSpy(&model, &QAbstractItemModel::dataChanged);
+
+    SECTION("a pasted coordinate lands in all three components") {
+        CHECK(model.setCoordinateText(0, QStringLiteral("46.12113, -115.59902, 304m"),
+                                      cwUnits::Metric) == QString());
+
+        const cwFixStation fix = model.fixStationAt(0);
+        CHECK(fix.easting() == 46.12113);
+        CHECK(fix.northing() == -115.59902);
+        CHECK(fix.elevation() == 304.0);
+    }
+
+    SECTION("a feet suffix is converted, because nothing downstream carries a unit") {
+        CHECK(model.setCoordinateText(0, QStringLiteral("46.12113, -115.59902, 304ft"),
+                                      cwUnits::Metric) == QString());
+        CHECK(model.fixStationAt(0).elevation() == 304.0 * 0.3048);
+    }
+
+    SECTION("a bare elevation follows the unit system it is given") {
+        CHECK(model.setCoordinateText(0, QStringLiteral("46.12113, -115.59902, 304"),
+                                      cwUnits::Imperial) == QString());
+        CHECK(model.fixStationAt(0).elevation() == 304.0 * 0.3048);
+    }
+
+    SECTION("one dataChanged covers all three, so the line plot re-solves once") {
+        //cwLinePlotManager reruns survex on every dataChanged from this model.
+        //Three setData() calls would be three solves for one paste.
+        REQUIRE(model.setCoordinateText(0, QStringLiteral("46.12113, -115.59902, 304m"),
+                                        cwUnits::Metric) == QString());
+
+        REQUIRE(dataChangedSpy.count() == 1);
+        const auto roles = dataChangedSpy.first().at(2).value<QList<int>>();
+        CHECK(roles.size() == 4);
+        CHECK(roles.contains(cwFixStationModel::EastingRole));
+        CHECK(roles.contains(cwFixStationModel::NorthingRole));
+        CHECK(roles.contains(cwFixStationModel::ElevationRole));
+        //The coordinate itself rides along, so an editor bound to it re-reads in
+        //the same pass rather than offering the previous one.
+        CHECK(roles.contains(cwFixStationModel::CoordinateTextRole));
+
+        const auto topLeft = dataChangedSpy.first().at(0).toModelIndex();
+        const auto bottomRight = dataChangedSpy.first().at(1).toModelIndex();
+        CHECK(topLeft.row() == 0);
+        CHECK(bottomRight.row() == 0);
+    }
+
+    SECTION("a rewording moves the coordinate role and nothing else") {
+        //Re-spacing a coordinate changes how it reads, not where the station
+        //is, and the emission has to say so — a consumer that filters on the
+        //components should see nothing here. (cwLinePlotManager doesn't filter
+        //and re-solves regardless; that is its business, not this contract's.)
+        REQUIRE(model.setCoordinateText(0, QStringLiteral("1, 2, 3m"),
+                                        cwUnits::Metric) == QString());
+        dataChangedSpy.clear();
+
+        CHECK(model.setCoordinateText(0, QStringLiteral("1,2,3m"), cwUnits::Metric) == QString());
+        CHECK(model.fixStationAt(0).coordinate() == QStringLiteral("1,2,3m"));
+
+        REQUIRE(dataChangedSpy.count() == 1);
+        const auto roles = dataChangedSpy.first().at(2).value<QList<int>>();
+        CHECK(roles == QList<int>{cwFixStationModel::CoordinateTextRole});
+    }
+
+    SECTION("a coordinate this surface accepts is always one the row can read back") {
+        //The text is stored and the numbers are read back out of it, so anything
+        //stored has to parse. A trailing separator is legal on the way in, and
+        //spelling the elevation's unit out by appending to it would produce
+        //"…304,m" — text that parses on this side of the write and not on the
+        //other, leaving an accepted coordinate sitting on a row at 0, 0, 0.
+        CHECK(model.setCoordinateText(0, QStringLiteral("46.12113, -115.59902, 304,"),
+                                      cwUnits::Metric) == QString());
+
+        const cwFixStation fix = model.fixStationAt(0);
+        CHECK(fix.state() == cwFixStation::Valid);
+        CHECK(fix.easting() == 46.12113);
+        CHECK(fix.elevation() == 304.0);
+    }
+
+    SECTION("text that won't parse is refused with a reason and changes nothing") {
+        REQUIRE(model.setCoordinateText(0, QStringLiteral("46.12113, -115.59902, 304m"),
+                                        cwUnits::Metric) == QString());
+        dataChangedSpy.clear();
+
+        const QString error = model.setCoordinateText(0, QStringLiteral("somewhere over there"),
+                                                      cwUnits::Metric);
+        CHECK_FALSE(error.isEmpty());
+
+        //A rejected paste must not half-write the row. This surface is where a
+        //coordinate is judged: unreadable text only ever arrives from a file
+        //someone edited by hand, and there it is kept.
+        CHECK(model.fixStationAt(0).coordinate()
+              == QStringLiteral("46.12113, -115.59902, 304m"));
+        CHECK(model.fixStationAt(0).easting() == 46.12113);
+        CHECK(dataChangedSpy.count() == 0);
+    }
+
+    SECTION("re-committing the same coordinate emits nothing") {
+        //The one field is both display and input, so pressing Enter without
+        //editing is the common case — it must not dirty the project.
+        REQUIRE(model.setCoordinateText(0, QStringLiteral("46.12113, -115.59902, 304m"),
+                                        cwUnits::Metric) == QString());
+        dataChangedSpy.clear();
+
+        CHECK(model.setCoordinateText(0, QStringLiteral("46.12113, -115.59902, 304m"),
+                                      cwUnits::Metric) == QString());
+        CHECK(dataChangedSpy.count() == 0);
+    }
+
+    SECTION("a coordinate in degrees, minutes and seconds is kept as it was typed") {
+        //#654. The cell renders the parsed numbers in decimal while the editor
+        //opens on the stored string, so the two disagree on purpose — and the
+        //thing that would make that a bug is the editor committing what the cell
+        //rendered. It opens on the coordinate text, so this is a no-op.
+        model.setData(model.index(0), QStringLiteral("EPSG:4326"),
+                      cwFixStationModel::InputCSRole);
+        const QString dms = QStringLiteral("46°07'16.1\" N, 115°35'56.5\" W, 304m");
+        REQUIRE(model.setCoordinateText(0, dms, cwUnits::Metric) == QString());
+
+        //Accumulated the way parse() accumulates it, so the two agree to the last
+        //bit.
+        const double latitude = 46.0 + 7.0 / 60.0 + 16.1 / 3600.0;
+        const double longitude = -(115.0 + 35.0 / 60.0 + 56.5 / 3600.0);
+
+        const cwFixStation fix = model.fixStationAt(0);
+        CHECK(fix.coordinate() == dms);
+        CHECK(fix.northing() == latitude);
+        CHECK(fix.easting() == longitude);
+        CHECK(fix.elevation() == 304.0);
+
+        dataChangedSpy.clear();
+        CHECK(model.setCoordinateText(0, dms, cwUnits::Metric) == QString());
+        CHECK(dataChangedSpy.count() == 0);
+        CHECK(model.fixStationAt(0).coordinate() == dms);
+    }
+
+    SECTION("an angle on a projected row is refused before it can be stored") {
+        //The row here is EPSG:32611. A wrong coordinate system is a far likelier
+        //cause than a wish for degrees in an easting, so the message says which
+        //two things could be changed and the row keeps what it had.
+        const QString error = model.setCoordinateText(0, QStringLiteral("46°07', -115°35'"),
+                                                      cwUnits::Metric);
+        CHECK(error.contains(QStringLiteral("coordinate system")));
+        CHECK(model.fixStationAt(0).state() == cwFixStation::Empty);
+        CHECK(dataChangedSpy.count() == 0);
+
+        SECTION("and a row with no system at all gets the same message") {
+            //There is no telling the two apart from here — a row with no CS has
+            //no axis order, and the fallback is the projected one — so one
+            //wording covers both. Plain numbers still reach the row and still
+            //land as NoSystem; only an angle is turned away.
+            model.setData(model.index(0), QString(), cwFixStationModel::InputCSRole);
+
+            CHECK(model.setCoordinateText(0, QStringLiteral("46°07', -115°35'"), cwUnits::Metric)
+                      .contains(QStringLiteral("coordinate system")));
+            CHECK(model.setCoordinateText(0, QStringLiteral("1, 2, 3m"), cwUnits::Metric)
+                  == QString());
+            CHECK(model.fixStationAt(0).state() == cwFixStation::NoSystem);
+        }
+    }
+
+    SECTION("the axis order comes from the row's own CS") {
+        //Without this the model could read every row easting-first and every
+        //test above would still pass, while a lat/long row put its latitude in
+        //the easting and plotted the cave in the Gulf of Guinea.
+        model.setData(model.index(0), QStringLiteral("EPSG:4326"),
+                      cwFixStationModel::InputCSRole);
+        CHECK(model.setCoordinateText(0, QStringLiteral("46.12113, -115.59902, 304m"),
+                                      cwUnits::Metric) == QString());
+
+        const cwFixStation fix = model.fixStationAt(0);
+        CHECK(fix.northing() == 46.12113);
+        CHECK(fix.easting() == -115.59902);
+    }
+
+    SECTION("a second, different write is not swallowed by the no-op guard") {
+        //Every other successful write here starts from a fresh, empty row, so a
+        //guard that returned early on any *one* matching component would pass
+        //them all. Editing just the elevation is the case that catches it.
+        REQUIRE(model.setCoordinateText(0, QStringLiteral("46.12113, -115.59902, 304m"),
+                                        cwUnits::Metric) == QString());
+        dataChangedSpy.clear();
+
+        CHECK(model.setCoordinateText(0, QStringLiteral("46.12113, -115.59902, 305m"),
+                                      cwUnits::Metric) == QString());
+        CHECK(model.fixStationAt(0).elevation() == 305.0);
+        CHECK(dataChangedSpy.count() == 1);
+    }
+
+    SECTION("opening the editor and leaving without typing writes nothing at all") {
+        //The commonest gesture there is, and it has to stay free even in an
+        //imperial project: the editor opens on the stored coordinate, and
+        //handing that back must not dirty the project or re-solve the line
+        //plot. Round-tripping the *rendered* value would not be free — m→ft→m
+        //lands one ulp out for about an eighth of all doubles — which is why
+        //what the editor offers is the string itself.
+        //Stored in millimeters so that the string is its own answer and not any
+        //rendering of the row: a model that handed back format() instead of the
+        //text would offer "…, 1m" or "…, 3.280839895013123ft" here, and this
+        //section would catch it.
+        REQUIRE(model.setCoordinateText(0, QStringLiteral("46.12113, -115.59902, 1000mm"),
+                                        cwUnits::Metric) == QString());
+        const cwFixStation before = model.fixStationAt(0);
+
+        //The premise, asserted rather than assumed: the rendered round trip
+        //really is lossy here, so this is a trap a numeric guard would miss.
+        const QString rendered = cwCoordinateText::format(before.easting(), before.northing(),
+                                                          before.elevation(), cwUnits::Imperial,
+                                                          cwCoordinateText::EastingNorthing);
+        const auto reparsed = cwCoordinateText::parse(rendered, cwUnits::Imperial,
+                                                      cwCoordinateText::EastingNorthing);
+        REQUIRE_FALSE(reparsed.hasError());
+        REQUIRE(reparsed.value().elevation != before.elevation());
+
+        dataChangedSpy.clear();
+        const QString offered = model.data(model.index(0),
+                                           cwFixStationModel::CoordinateTextRole).toString();
+        //What makes the round trip free is that this is the text, not a render
+        //of the numbers — the premise above is what a render would have cost.
+        REQUIRE(offered == QStringLiteral("46.12113, -115.59902, 1000mm"));
+        REQUIRE(offered != rendered);
+
+        CHECK(model.setCoordinateText(0, offered, cwUnits::Imperial) == QString());
+        CHECK(model.fixStationAt(0).elevation() == before.elevation());
+        CHECK(dataChangedSpy.count() == 0);
+    }
+
+    SECTION("a two-component paste says the elevation was never entered") {
+        //"46.12113, -115.59902" is the shape a coordinate copied from a map
+        //arrives in. It says nothing about elevation — so the row says nothing
+        //about it either, rather than claiming sea level.
+        REQUIRE(model.setCoordinateText(0, QStringLiteral("46.12113, -115.59902, 304m"),
+                                        cwUnits::Metric) == QString());
+        REQUIRE(model.fixStationAt(0).hasElevation());
+
+        CHECK(model.setCoordinateText(0, QStringLiteral("46.2, -115.6"),
+                                      cwUnits::Metric) == QString());
+        CHECK(model.fixStationAt(0).easting() == 46.2);
+        CHECK_FALSE(model.fixStationAt(0).hasElevation());
+        CHECK(model.fixStationAt(0).elevation() == 0.0);
+
+        //And entering one stays a matter of saying so.
+        CHECK(model.setCoordinateText(0, QStringLiteral("46.2, -115.6, 0"),
+                                      cwUnits::Metric) == QString());
+        CHECK(model.fixStationAt(0).hasElevation());
+    }
+
+    SECTION("a row that doesn't exist is a silent no-op") {
+        //Out of range is a programming error, not something to show the user.
+        CHECK(model.setCoordinateText(5, QStringLiteral("1, 2, 3m"),
+                                      cwUnits::Metric) == QString());
+        CHECK(model.setCoordinateText(-1, QStringLiteral("1, 2, 3m"),
+                                      cwUnits::Metric) == QString());
+        CHECK(dataChangedSpy.count() == 0);
+    }
+}
+
+TEST_CASE("cwFixStationModel setCoordinateText writes the row it was given",
+          "[FixStation][cwFixStationModel]") {
+    //With one row in the model, hardcoding index 0 in the body passes every
+    //other case here. Three rows is what makes `row` load-bearing: a user
+    //editing the third fix would otherwise move the first station's anchor,
+    //and with it the whole cave.
+    cwFixStationModel model;
+    REQUIRE(model.addFixStation(QStringLiteral("A1")) == 0);
+    REQUIRE(model.addFixStation(QStringLiteral("A2")) == 1);
+    REQUIRE(model.addFixStation(QStringLiteral("A3")) == 2);
+    model.setData(model.index(2), QStringLiteral("EPSG:32611"),
+                  cwFixStationModel::InputCSRole);
+
+    QSignalSpy dataChangedSpy(&model, &QAbstractItemModel::dataChanged);
+    REQUIRE(model.setCoordinateText(2, QStringLiteral("11, 22, 33m"),
+                                    cwUnits::Metric) == QString());
+
+    CHECK(model.fixStationAt(2).easting() == 11.0);
+    CHECK(model.fixStationAt(0).easting() == 0.0);
+    CHECK(model.fixStationAt(1).easting() == 0.0);
+
+    REQUIRE(dataChangedSpy.count() == 1);
+    CHECK(dataChangedSpy.first().at(0).toModelIndex().row() == 2);
+}
+
+TEST_CASE("cwFixStationModel keeps the coordinate as it was written",
+          "[FixStation][cwFixStationModel]") {
+    //The cell renders every row in the project's units so a column of fixes can
+    //be scanned; the editor re-offers what was written. Asserting only one of
+    //the two lets the split be implemented as a no-op in the other.
+    cwFixStationModel model;
+    model.addFixStation();
+    REQUIRE(model.rowCount() == 1);
+
+    const QModelIndex idx = model.index(0);
+    //A projected system, so the coordinates below read easting-first. New rows
+    //start on WGS84, where the same text would lead with the latitude.
+    model.setData(idx, QStringLiteral("EPSG:32611"), cwFixStationModel::InputCSRole);
+
+    SECTION("the editor gets the user's string, the cell the project's units") {
+        REQUIRE(model.setCoordinateText(0, QStringLiteral("46.12113, -115.59902, 30ft"),
+                                        cwUnits::Metric) == QString());
+
+        const cwFixStation fix = model.fixStationAt(0);
+        CHECK(fix.elevation() == 30.0 * 0.3048);
+        CHECK(fix.coordinate() == QStringLiteral("46.12113, -115.59902, 30ft"));
+        CHECK(model.data(idx, cwFixStationModel::CoordinateTextRole).toString()
+              == QStringLiteral("46.12113, -115.59902, 30ft"));
+        CHECK(cwCoordinateText::format(fix.easting(), fix.northing(), fix.elevation(),
+                                       cwUnits::Metric, cwCoordinateText::EastingNorthing)
+              == QStringLiteral("46.12113, -115.59902, 9.144m"));
+    }
+
+    SECTION("a bare elevation is stored with the unit it was read in") {
+        //"304" means "304 in the project's units" at the moment it is typed.
+        //Kept verbatim it would quietly become 304 ft — a 213 m drop — the first
+        //time the project switched to imperial and the string was read again.
+        REQUIRE(model.setCoordinateText(0, QStringLiteral("46.12113, -115.59902, 304"),
+                                        cwUnits::Metric) == QString());
+        CHECK(model.fixStationAt(0).coordinate()
+              == QStringLiteral("46.12113, -115.59902, 304m"));
+
+        //And re-committing what was typed is still a no-op, because it
+        //normalizes to the string already there.
+        QSignalSpy dataChangedSpy(&model, &QAbstractItemModel::dataChanged);
+        CHECK(model.setCoordinateText(0, QStringLiteral("46.12113, -115.59902, 304"),
+                                      cwUnits::Metric) == QString());
+        CHECK(dataChangedSpy.count() == 0);
+    }
+
+    SECTION("a component written by any other path writes the coordinate back out") {
+        //There is one place a coordinate lives now, so a number set directly —
+        //an import, a single-cell edit — has to land there too.
+        REQUIRE(model.setCoordinateText(0, QStringLiteral("1, 2, 30ft"),
+                                        cwUnits::Metric) == QString());
+
+        QSignalSpy dataChangedSpy(&model, &QAbstractItemModel::dataChanged);
+        model.setData(idx, 500.0, cwFixStationModel::ElevationRole);
+
+        CHECK(model.fixStationAt(0).coordinate() == QStringLiteral("1, 2, 500m"));
+        //A view showing the string has to hear that it changed.
+        REQUIRE(dataChangedSpy.count() == 1);
+        const auto roles = dataChangedSpy.first().at(2).value<QList<int>>();
+        //The whole list, not just what it contains: the easting and northing
+        //didn't move, and an emission that named them anyway would pass a
+        //contains() check while telling every consumer the station did.
+        CHECK(roles.size() == 2);
+        CHECK(roles.contains(cwFixStationModel::ElevationRole));
+        CHECK(roles.contains(cwFixStationModel::CoordinateTextRole));
+    }
+
+    SECTION("a name or variance edit keeps it, because neither is a component") {
+        REQUIRE(model.setCoordinateText(0, QStringLiteral("46.12113, -115.59902, 30ft"),
+                                        cwUnits::Metric) == QString());
+
+        model.setData(idx, QStringLiteral("A1"), cwFixStationModel::StationNameRole);
+        model.setData(idx, 0.5, cwFixStationModel::HorizontalVarianceRole);
+        CHECK(model.fixStationAt(0).coordinate()
+              == QStringLiteral("46.12113, -115.59902, 30ft"));
+    }
+
+    SECTION("changing between two projected systems moves nothing") {
+        //The wrong-UTM-zone case: same axis order, so there is nothing to read
+        //differently, and the string is left exactly as it was written.
+        REQUIRE(model.setCoordinateText(0, QStringLiteral("610016.792, 5615117.075, 304m"),
+                                        cwUnits::Metric) == QString());
+        model.setData(idx, QStringLiteral("EPSG:32611"), cwFixStationModel::InputCSRole);
+        const cwFixStation before = model.fixStationAt(0);
+
+        QSignalSpy dataChangedSpy(&model, &QAbstractItemModel::dataChanged);
+        model.setData(idx, QStringLiteral("EPSG:32613"), cwFixStationModel::InputCSRole);
+
+        CHECK(model.fixStationAt(0).coordinate() == before.coordinate());
+        CHECK(model.fixStationAt(0).easting() == before.easting());
+        CHECK(model.fixStationAt(0).northing() == before.northing());
+        CHECK(model.fixStationAt(0).elevation() == before.elevation());
+
+        REQUIRE(dataChangedSpy.count() == 1);
+        const auto roles = dataChangedSpy.first().at(2).value<QList<int>>();
+        CHECK(roles == QList<int>{cwFixStationModel::InputCSRole});
+    }
+
+    SECTION("changing to a geographic one re-reads the coordinate, and says so") {
+        //A user correcting the system is telling us how to read what they
+        //already typed. The horizontals swap, and the roles that carry them have
+        //to go out or the row would show one coordinate and solve another.
+        REQUIRE(model.setCoordinateText(0, QStringLiteral("46.12113, -115.59902, 304m"),
+                                        cwUnits::Metric) == QString());
+        REQUIRE(model.fixStationAt(0).easting() == 46.12113);
+
+        QSignalSpy dataChangedSpy(&model, &QAbstractItemModel::dataChanged);
+        model.setData(idx, QStringLiteral("EPSG:4326"), cwFixStationModel::InputCSRole);
+
+        CHECK(model.fixStationAt(0).northing() == 46.12113);
+        CHECK(model.fixStationAt(0).easting() == -115.59902);
+        //Untouched: re-reading a string is not rewriting it.
+        CHECK(model.fixStationAt(0).coordinate()
+              == QStringLiteral("46.12113, -115.59902, 304m"));
+
+        REQUIRE(dataChangedSpy.count() == 1);
+        const auto roles = dataChangedSpy.first().at(2).value<QList<int>>();
+        //Sized as well as named: the elevation is the same 304 either way round,
+        //so an emission that swept it in with the rest would still satisfy every
+        //contains() below.
+        CHECK(roles.size() == 3);
+        CHECK(roles.contains(cwFixStationModel::InputCSRole));
+        CHECK(roles.contains(cwFixStationModel::EastingRole));
+        CHECK(roles.contains(cwFixStationModel::NorthingRole));
+        CHECK_FALSE(roles.contains(cwFixStationModel::CoordinateTextRole));
+    }
+
+    SECTION("a row nobody typed into has no coordinate at all") {
+        //"Mark Station as Fixed" creates the row before anything is entered, and
+        //that is a different thing from a coordinate at the origin.
+        CHECK(model.fixStationAt(0).state() == cwFixStation::Empty);
+        CHECK(model.data(idx, cwFixStationModel::CoordinateTextRole).toString().isEmpty());
+
+        //And it stays that way when the editor opens on the zeros the row
+        //renders as and hands them straight back. Taking that would make an
+        //unfilled row a fix at the origin, dirty the project and re-solve.
+        QSignalSpy dataChangedSpy(&model, &QAbstractItemModel::dataChanged);
+        CHECK(model.setCoordinateText(0, QStringLiteral("0, 0, 0m"),
+                                      cwUnits::Metric) == QString());
+        CHECK(model.fixStationAt(0).state() == cwFixStation::Empty);
+        CHECK(dataChangedSpy.count() == 0);
+
+        //Typed rather than offered back, it is a coordinate like any other.
+        CHECK(model.setCoordinateText(0, QStringLiteral("0, 0, 1m"),
+                                      cwUnits::Metric) == QString());
+        CHECK(model.fixStationAt(0).state() == cwFixStation::Valid);
+    }
+}
+
+TEST_CASE("cwFixStationModel setCoordinateText leaves the station name alone",
+          "[FixStation][cwFixStationModel]") {
+    //The coordinate field sits next to the name field; writing one must not
+    //disturb the other, and StationNameRole must stay out of the emission so
+    //fixedStationsChanged() doesn't fire for a coordinate edit.
+    cwFixStationModel model;
+    REQUIRE(model.addFixStation(QStringLiteral("A1")) == 0);
+
+    QSignalSpy fixedStationsSpy(&model, &cwFixStationModel::fixedStationsChanged);
+    REQUIRE(model.setCoordinateText(0, QStringLiteral("1, 2, 3m"), cwUnits::Metric) == QString());
+
+    CHECK(model.fixStationAt(0).stationName() == QStringLiteral("A1"));
+    CHECK(fixedStationsSpy.count() == 0);
+}
+
+TEST_CASE("cwFixStationModel gives a new row a coordinate system to start on",
+          "[FixStation][cwFixStationModel]") {
+    // Without one there is no axis order, so the row could not read a coordinate
+    // back at all (#625). Both entry points have to agree, since "Mark Station as
+    // Fixed" comes in through the named overload and the page's "+" through the
+    // other. Deliberately not cwFixStation's own default: a row that really does
+    // arrive blank, from an old file or a hand edit, must stay blank so it can be
+    // flagged rather than silently reinterpreted.
+    cwFixStationModel model;
+
+    model.addFixStation();
+    REQUIRE(model.count() == 1);
+    CHECK(model.fixStationAt(0).inputCS() == cwCoordinateTransform::Wgs84);
+
+    model.addFixStation(QStringLiteral("A1"));
+    REQUIRE(model.count() == 2);
+    CHECK(model.fixStationAt(1).stationName() == QStringLiteral("A1"));
+    CHECK(model.fixStationAt(1).inputCS() == cwCoordinateTransform::Wgs84);
+
+    // A default-constructed fix is still blank, which is what makes NoSystem a
+    // state that arrives from elsewhere rather than one the app can create.
+    CHECK(cwFixStation().inputCS().isEmpty());
 }

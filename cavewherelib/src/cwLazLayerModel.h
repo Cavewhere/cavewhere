@@ -13,12 +13,12 @@
 #include <QDir>
 #include <QList>
 #include <QQmlEngine>
+#include <QSet>
 #include <QUrl>
 
 //Our includes
 #include "CaveWhereLibExport.h"
 #include "cwFutureManagerToken.h"
-#include "cwGeoPoint.h"
 #include "cwLazLayer.h"
 #include "cwLazLayerData.h"
 
@@ -76,8 +76,22 @@ public:
 
     void setFutureManagerToken(const cwFutureManagerToken& token);
     cwFutureManagerToken futureManagerToken() const { return m_futureManagerToken; }
-    void setRegionGlobalCS(const QString& cs);
-    void setRegionWorldOrigin(const cwGeoPoint& origin);
+
+    //! Hand every layer, and every layer made later, where to get the frame it
+    //! decodes into.
+    void setLocalProjectionToken(const cwLocalProjectionToken& token);
+
+    //! Re-decode every layer. The region calls this when the frame moves: the
+    //! points in memory are in the frame they were loaded into, and each layer
+    //! reads the new one back through its token.
+    void reloadAll();
+
+    //! Whether any layer is still reading its header. The local projection
+    //! derives the frame from what those headers say, so it waits for all of
+    //! them rather than anchoring on whichever landed first. Counted from the
+    //! moment a layer is created, which is before it is announced as a row: the
+    //! read starts there too.
+    bool anyHeaderProbeInFlight() const { return !m_probingLayers.isEmpty(); }
 
     void setGisLayersDir(const QDir& dir);
     QDir gisLayersDir() const { return m_gisLayersDir; }
@@ -88,6 +102,11 @@ public:
 
 signals:
     void countChanged();
+
+    /// Emitted when the model goes from no layer reading a header to one, and
+    /// back again — the two edges the local projection cares about, rather than
+    /// one signal per file of a directory being scanned.
+    void headerProbeInFlightChanged();
 
     /// Emitted only from removeAt() — i.e. when the user explicitly removes
     /// a layer through the UI. cwSaveLoad listens for this to enqueue the
@@ -113,14 +132,18 @@ signals:
 private:
     void connectLayer(cwLazLayer* layer);
     int indexOf(cwLazLayer* layer) const;
-    void maybeAdoptRegionDefaultsFromLaz(const QString& sourcePath);
     cwProject* project() const;
     cwLazLayer* createLayer();
+    //! Track \a layer among the layers still reading a header. Keyed on the
+    //! layer rather than counted, so that a probe restarted before its result
+    //! arrives can't be double-counted and a destroyed layer can't leave one
+    //! behind.
+    void updateHeaderProbeInFlight(cwLazLayer* layer, bool inFlight);
 
     QList<cwLazLayer*> m_layers;
+    QSet<cwLazLayer*> m_probingLayers;
     cwFutureManagerToken m_futureManagerToken;
-    QString m_regionGlobalCS;
-    cwGeoPoint m_regionWorldOrigin;
+    cwLocalProjectionToken m_localProjectionToken;
     QDir m_gisLayersDir;
 };
 

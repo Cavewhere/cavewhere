@@ -7,6 +7,7 @@
 
 //Our includes
 #include "cwSurvexImporter.h"
+#include "cwSurvexCS.h"
 #include "cwShot.h"
 #include "cwStation.h"
 #include "cwSurveyChunk.h"
@@ -36,6 +37,17 @@ namespace {
 QString stripSurvexSentinel(const QString& value) {
     return value.trimmed() == QLatin1String("-") ? QString() : value;
 }
+
+// Survex's anonymous stations. Cavern resolves a leg to one of these as a wall
+// point instead of a named station, which is what makes the leg a splay. "-" is
+// the spelling `*alias station - ..` declares; CaveWhere reads it as anonymous
+// whether or not the alias was declared, because older files rely on that.
+bool isAnonymousStation(const QString& name) {
+    return name == QLatin1String(".")
+           || name == QLatin1String("..")
+           || name == QLatin1String("...")
+           || name == QLatin1String("-");
+}
 }
 
 cwSurvexImporter::cwSurvexImporter(QObject* parent) :
@@ -43,8 +55,7 @@ cwSurvexImporter::cwSurvexImporter(QObject* parent) :
     RootBlock(new cwTreeImportDataNode()),
     CurrentBlock(nullptr),
     GlobalData(nullptr),
-    PreviousGlobalData(new cwSurvexGlobalData()),
-    CurrentState(FirstBegin)
+    PreviousGlobalData(new cwSurvexGlobalData())
 {
     RootBlock->moveToThread(nullptr);
 
@@ -97,13 +108,14 @@ void cwSurvexImporter::importSurvex(QString filename) {
     BeginEndState rootBlock; //Should never be poped off
     BeginEndStateStack.append(rootBlock);
 
-    //The block state
-    CurrentState = FirstBegin;
-
     //Sets the current block to the root block
     CurrentBlock = RootBlock;
 
     loadFile(filename);
+
+    //A file that never opens a *begin keeps its data on the root block, and the
+    //root block never sees an *end
+    finishBlock();
 
     //Add the rootBlocks to GlobalData
     GlobalData->setNodes(RootBlock->childNodes());
@@ -162,7 +174,6 @@ void cwSurvexImporter::clear() {
     IncludeStack.clear();
     IncludeFiles.clear();
     BeginEndStateStack.clear();
-    CurrentInputCS.clear();
     CapturedFixStations.clear();
     TotalNumberOfLines = 0;
     CurrentTotalNumberOfLines = 0;
@@ -267,17 +278,13 @@ void cwSurvexImporter::parseLine(QString line) {
     //Skip empty lines
     if(line.isEmpty()) { return; }
 
-    QRegularExpression exp("^\\s*\\*begin\\s*((?:\\w|-|_)*)", QRegularExpression::CaseInsensitiveOption);
-    QRegularExpressionMatch match = exp.match(line);
+    QRegularExpression beginExp("^\\s*\\*begin\\s*((?:\\w|-|_)*)", QRegularExpression::CaseInsensitiveOption);
+    QRegularExpressionMatch beginMatch = beginExp.match(line);
 
-    if (match.hasMatch()) {
-        // qDebug() << "Has begin" << line;
-        CurrentState = InsideBegin;
-        // BeginNames.append(match.captured(1));
-
+    if (beginMatch.hasMatch()) {
         // Create a new block
         cwTreeImportDataNode* newBlock = new cwTreeImportDataNode();
-        QString blockName = match.captured(1).trimmed();
+        QString blockName = beginMatch.captured(1).trimmed();
         newBlock->setName(blockName);
 
         //Add the block to the structure
@@ -300,85 +307,86 @@ void cwSurvexImporter::parseLine(QString line) {
         if(lastState.Filename == currentFile()) {
             currentState = lastState;
         }
+
+        //The coordinate system crosses an *include boundary where the format
+        //state doesn't: cavern copies proj_str into the child settings whatever
+        //file the *begin is in, and only *end puts the parent's back.
+        currentState.CS = lastState.CS;
+
         BeginEndStateStack.append(currentState);
 
         return;
     }
 
-    if(InsideBegin) {
+    // Parse command
+    QRegularExpression commandExp("^\\s*\\*(\\w+)\\s*(.*)");
+    QRegularExpressionMatch commandMatch = commandExp.match(line);
 
-        // Parse command
-        QRegularExpression exp("^\\s*\\*(\\w+)\\s*(.*)");
-        QRegularExpressionMatch match = exp.match(line);
+    if (commandMatch.hasMatch()) {
+        QString command = commandMatch.captured(1);
+        QString arg = commandMatch.captured(2).trimmed();
 
-        if (match.hasMatch()) {
-            QString command = match.captured(1);
-            QString arg = match.captured(2).trimmed();
+        if(compare(command, "end")) {
 
-            if(compare(command, "end")) {
+            //Drain the block's scratch onto its chunks before getting out of it
+            finishBlock();
 
-                //Update the LRUD before getting out of this block
-                updateLRUDForCurrentBlock();
+            cwTreeImportDataNode* parentBlock = CurrentBlock->parentNode();
+            if(parentBlock != nullptr) {
+                CurrentBlock = parentBlock;
+            }
 
-                cwTreeImportDataNode* parentBlock = CurrentBlock->parentNode();
-                if(parentBlock != nullptr) {
-                    CurrentBlock = parentBlock;
-                }
-
-                //Remove the current state valiable
-                if(BeginEndStateStack.size() > 1) {
-                    BeginEndStateStack.removeLast();
-                } else {
-                    addError("Too many *end");
-                }
-
-            } else if(compare(command, "data")) {
-                parseDataFormat(line);
-            } else if(compare(command, "include")) {
-                loadFile(arg);
-            } else if(compare(command, "date")) {
-                parseDate(arg);
-            } else if(compare(command, "title")) {
-                parseTitle(arg);
-            } else if(compare(command, "team")) {
-                parseTeamMember(arg);
-            } else if(compare(command, "calibrate")) {
-                parseCalibrate(arg);
-            } else if(compare(command, "units")) {
-                parseUnits(arg);
-            } else if(compare(command, "export")) {
-                parseExport(arg);
-            } else if(compare(command, "equate")) {
-                parseEquate(arg);
-            } else if(compare(command, "flags")) {
-                parseFlags(arg);
-            } else if(compare(command, "cs")) {
-                parseCS(arg);
-            } else if(compare(command, "fix")) {
-                parseFix(arg);
+            //Remove the current state valiable
+            if(BeginEndStateStack.size() > 1) {
+                BeginEndStateStack.removeLast();
             } else {
-                addWarning(QString("Unknown survex keyword:") + command);
+                addError("Too many *end");
             }
 
-            if(CurrentBlock == RootBlock) {
-                CurrentState = FirstBegin;
-            }
-
-            return;
+        } else if(compare(command, "data")) {
+            parseDataFormat(line);
+        } else if(compare(command, "include")) {
+            loadFile(arg);
+        } else if(compare(command, "date")) {
+            parseDate(arg);
+        } else if(compare(command, "title")) {
+            parseTitle(arg);
+        } else if(compare(command, "team")) {
+            parseTeamMember(arg);
+        } else if(compare(command, "calibrate")) {
+            parseCalibrate(arg);
+        } else if(compare(command, "units")) {
+            parseUnits(arg);
+        } else if(compare(command, "export")) {
+            parseExport(arg);
+        } else if(compare(command, "equate")) {
+            parseEquate(arg);
+        } else if(compare(command, "flags")) {
+            parseFlags(arg);
+        } else if(compare(command, "alias")) {
+            parseAlias(arg);
+        } else if(compare(command, "cs")) {
+            parseCS(arg);
+        } else if(compare(command, "fix")) {
+            parseFix(arg);
+        } else {
+            addWarning(QString("Unknown survex keyword:") + command);
         }
 
-        //Parse normal survey data
-        switch(currentDataEntryType()) {
-        case Normal:
-            parseNormalData(line);
-            break;
-        case Passage:
-            parsePassageData(line);
-            break;
-        case NoSurvey:
-            //Just ignore!
-            break;
-        }
+        return;
+    }
+
+    //Parse normal survey data
+    switch(currentDataEntryType()) {
+    case Normal:
+        parseNormalData(line);
+        break;
+    case Passage:
+        parsePassageData(line);
+        break;
+    case NoSurvey:
+        //Just ignore!
+        break;
     }
 
 
@@ -552,6 +560,9 @@ QStringList cwSurvexImporter::parseData(QString line) {
 
 /**
   \brief Imports a line of survey data
+
+  A leg with one anonymous end is a splay: it gets buffered on the named end
+  rather than becoming a shot, since it has no destination station to chain to.
   */
 void cwSurvexImporter::parseNormalData(QString line) {
     QStringList data = parseData(line);
@@ -560,15 +571,56 @@ void cwSurvexImporter::parseNormalData(QString line) {
     QString fromStationName = extractData(data, From);
     QString toStationName= extractData(data, To);
 
-    if(fromStationName == QString("-") || toStationName == QString("-")) {
-        addWarning(QString("Skipping splay data at ") + fromStationName + " " + toStationName);
-        return;
-    }
-
     //Make sure the to and from stations exist
     if(fromStationName.isEmpty() || toStationName.isEmpty()) {
         addError("Can't extract shot data. No toStation or from station");
         return;
+    }
+
+    const bool fromIsAnonymous = isAnonymousStation(fromStationName);
+    const bool toIsAnonymous = isAnonymousStation(toStationName);
+
+    if(fromIsAnonymous && toIsAnonymous) {
+        addWarning(QString("Skipping the leg between %1 and %2 because both ends are anonymous, "
+                           "so it has nothing to hang on")
+                       .arg(fromStationName, toStationName));
+        return;
+    }
+
+    const auto isUsableEnd = [](const QString& name) {
+        return isAnonymousStation(name) || cwStation::nameIsValid(name);
+    };
+
+    if(!isUsableEnd(fromStationName) || !isUsableEnd(toStationName)) {
+        addWarning(QString("Skipping the leg between \"%1\" and \"%2\" because those aren't "
+                           "station names CaveWhere can use")
+                       .arg(fromStationName, toStationName));
+        return;
+    }
+
+    const QString distance = stripSurvexSentinel(extractData(data, Distance));
+    const QString compass = stripSurvexSentinel(extractData(data, Compass));
+    const QString clino = stripSurvexSentinel(extractData(data, Clino));
+
+    if(fromIsAnonymous || toIsAnonymous) {
+        //The splay hangs on the named end. A leg written anonymous-end-first
+        //reads toward that station, so the reading has to be turned around
+        //before it points at the wall
+        const cwShotMeasurement asWritten{cwDistanceReading(distance),
+                                          cwCompassReading(compass),
+                                          cwClinoReading(clino)};
+
+        nodeData(CurrentBlock)->Splays.add(fromIsAnonymous ? toStationName : fromStationName,
+                                           fromIsAnonymous ? asWritten.reversed() : asWritten);
+        return;
+    }
+
+    if(CurrentBlock->isSplay()) {
+        //Both ends are named, so keep the leg and its names. Anchoring it as a
+        //splay would throw the to-station's name away
+        addWarning(QString("Keeping the splay between %1 and %2 as a shot, since both ends are "
+                           "named. Its length is excluded from the cave")
+                       .arg(fromStationName, toStationName));
     }
 
     //Create the from and to stations
@@ -576,12 +628,15 @@ void cwSurvexImporter::parseNormalData(QString line) {
     cwStation toStation(toStationName);
 
     cwShot shot;
-    shot.setDistance(stripSurvexSentinel(extractData(data, Distance)));
-    shot.setCompass(stripSurvexSentinel(extractData(data, Compass)));
+    shot.setDistance(distance);
+    shot.setCompass(compass);
     shot.setBackCompass(stripSurvexSentinel(extractData(data, BackCompass)));
-    shot.setClino(stripSurvexSentinel(extractData(data, Clino)));
+    shot.setClino(clino);
     shot.setBackClino(stripSurvexSentinel(extractData(data, BackClino)));
-    shot.setDistanceIncluded(CurrentBlock->isDistanceInclude());
+
+    //A splay is a wall shot, so it never adds to the cave's length whatever the
+    //duplicate and surface flags say
+    shot.setDistanceIncluded(CurrentBlock->isDistanceInclude() && !CurrentBlock->isSplay());
 
     addShotToCurrentChunk(fromStation, toStation, shot);
 }
@@ -748,6 +803,24 @@ void cwSurvexImporter::setCurrentDataFormat(QMap<DataFormatType, int> format) {
 void cwSurvexImporter::setCurrentDataEntryType(DataEntryType type) {
     Q_ASSERT(!BeginEndStateStack.isEmpty());
     BeginEndStateStack.last().DataType = type;
+}
+
+/**
+  \brief The coordinate system the innermost *begin block is under
+
+  Survex scopes *cs to its block: cmd_begin copies the whole settings struct,
+  including proj_str, and *end restores the parent's, so a system named inside
+  a block is the parent's again at the matching *end (survex/src/commands.c,
+  cmd_begin and pop_settings).
+  */
+cwSurvexCS::Parsed cwSurvexImporter::currentCS() const {
+    if(BeginEndStateStack.isEmpty()) { return cwSurvexCS::Parsed(); }
+    return BeginEndStateStack.last().CS;
+}
+
+void cwSurvexImporter::setCurrentCS(const cwSurvexCS::Parsed& cs) {
+    Q_ASSERT(!BeginEndStateStack.isEmpty());
+    BeginEndStateStack.last().CS = cs;
 }
 
 int cwSurvexImporter::currentColumnCount() const {
@@ -954,20 +1027,22 @@ void cwSurvexImporter::parseUnits(QString line) {
             }
 
             calibration->setDistanceUnit(unit);
-        } else if(type == "compass") {
-           addWarning("cavewhere cannot handle 'compass' units");
-        } else if(type == "bearing") {
-           addWarning("cavewhere cannot handle 'bearing' units");
-        } else if(type == "clino") {
-           addWarning("cavewhere cannot handle 'clino' units");
-        } else if(type == "gradient") {
-            addWarning("cavewhere cannot handle 'gradient' units");
+        } else if(type == "compass" || type == "bearing"
+                  || type == "clino" || type == "gradient"
+                  || type == "declination") {
+            //CaveWhere reads every angle in degrees, so a *units line saying so
+            //restates the default — TopoDroid writes one for every export
+            const bool inDegrees = compare(unitString, "degrees")
+                                   || compare(unitString, "degs")
+                                   || compare(unitString, "deg");
+            if(!inDegrees) {
+                addWarning(QString("cavewhere reads '%1' in degrees, ignoring %2")
+                               .arg(type, unitString));
+            }
         } else if(type == "counter") {
             addWarning("cavewhere cannot handle 'counter' units");
         } else if(type == "depth") {
             addWarning("cavewhere cannot handle 'depth' units");
-        } else if(type == "declination") {
-            addWarning("cavewhere cannot handle 'declination' units");
         } else if(type == "x") {
             addWarning("cavewhere cannot handle 'x' units");
         } else if(type == "y") {
@@ -1018,47 +1093,76 @@ void cwSurvexImporter::parseExport(QString line)
  *
  * This parses the flags
  *
+ * `not` applies to the flag that follows it and to nothing else, so each flag
+ * is tracked on its own and `*flags not splay` leaves an active `duplicate`
+ * alone.
+ *
  * Currently, surface isn't support.
  */
 void cwSurvexImporter::parseFlags(QString line)
 {
-    QStringList flags = line.split(QRegularExpression("\\s+"));
+    const QStringList flags = line.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
 
-    bool flagOperator = true;
-    bool excludeLength = false;
-    foreach(QString flag, flags) {
-        if(flag.compare("duplicate", Qt::CaseInsensitive) == 0) {
-            excludeLength = flagOperator;
-            flagOperator = true;
-
-            //Flip, becuause we're including
-            CurrentBlock->setIncludeDistance(!excludeLength);
-        } else if(flag.compare("splay", Qt::CaseInsensitive) == 0) {
-            excludeLength = flagOperator;
-            flagOperator = true;
-
-            //Flip, becuause we're including
-            CurrentBlock->setIncludeDistance(!excludeLength);
-        } else if(flag.compare("surface", Qt::CaseInsensitive) == 0) {
-            Errors.append(QString("Warning: *flags surface isn't support at this time, excluding shot lengths"));
-            excludeLength = flagOperator;
-            flagOperator = true;
-
-            //Flip, becuause we're including
-            CurrentBlock->setIncludeDistance(!excludeLength);
-        } else if(flag.compare("not", Qt::CaseInsensitive) == 0) {
-            flagOperator = false;
+    bool flagIsOn = true;
+    for(const QString& flag : flags) {
+        if(compare(flag, "not")) {
+            flagIsOn = false;
+            continue;
         }
+
+        if(compare(flag, "splay")) {
+            CurrentBlock->setSplay(flagIsOn);
+        } else if(compare(flag, "duplicate")) {
+            CurrentBlock->setIncludeDistance(!flagIsOn);
+        } else if(compare(flag, "surface")) {
+            if(flagIsOn) {
+                addWarning("*flags surface isn't support at this time, excluding shot lengths");
+            }
+            CurrentBlock->setIncludeDistance(!flagIsOn);
+        }
+
+        flagIsOn = true;
     }
 }
 
 /**
- * Capture the most recent `*cs` so following `*fix` directives can carry
- * its CS as inputCS. Survex's *cs accepts EPSG:NNNN, ESRI:NNNN, UTM<zone>N|S,
- * LONG-LAT, etc. We pass the value through verbatim — the cwFixStation
- * inputCS field is plain text and the rest of the pipeline (export, picker)
- * handles those forms downstream. `*cs out ...` (output CS) is ignored on
- * import; that's a region-level concern handled by globalCS.
+ * @brief cwSurvexImporter::parseAlias
+ * @param line
+ *
+ * Survex defines exactly one alias, `*alias station - ..`, which makes `-`
+ * another spelling of the anonymous station `..`; `*alias station -` drops it
+ * again. CaveWhere reads `-` as anonymous either way, so this only has to take
+ * the directive quietly and say something about spellings it doesn't know.
+ */
+void cwSurvexImporter::parseAlias(QString line)
+{
+    const QStringList parts = line.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
+    const QStringList arguments = parts.mid(1);
+
+    const bool stationAlias = !parts.isEmpty()
+                              && compare(parts.at(0), "station")
+                              && (arguments == QStringList{QStringLiteral("-")}
+                                  || arguments == QStringList{QStringLiteral("-"), QStringLiteral("..")});
+
+    if(!stationAlias) {
+        addWarning(QString("Ignoring \"*alias %1\", the only alias survex defines is "
+                           "\"*alias station - ..\"").arg(line));
+    }
+}
+
+/**
+ * Put the `*cs` on the block it appears in, so following `*fix` directives
+ * carry its CS as inputCS until the matching `*end` — see currentCS() for why
+ * the block, and not the file, is the scope. Survex's own spellings — UTM16N,
+ * S-MERC, OSGB:SD, CUSTOM
+ * "+proj=…" — are translated into the PROJ string each stands for, since that
+ * is the one form every reader of inputCS understands: the picker, the export,
+ * and the local projection the scene is drawn in. A spelling survex doesn't
+ * define leaves the following fixes with no coordinate system at all, which
+ * says so on the fix rather than storing text nothing can read.
+ *
+ * `*cs out ...` (output CS) is ignored on import; that's a region-level concern
+ * handled by globalCS.
  */
 void cwSurvexImporter::parseCS(QString line)
 {
@@ -1066,7 +1170,15 @@ void cwSurvexImporter::parseCS(QString line)
     if (trimmed.startsWith(QStringLiteral("out"), Qt::CaseInsensitive)) {
         return;
     }
-    CurrentInputCS = trimmed;
+
+    const std::optional<cwSurvexCS::Parsed> parsed = cwSurvexCS::fromSurvexCS(trimmed);
+    if (!parsed.has_value()) {
+        addWarning(QString("CaveWhere doesn't know the coordinate system \"%1\"; the "
+                           "*fix stations under it carry none until you set one on them")
+                       .arg(trimmed));
+    }
+
+    setCurrentCS(parsed.value_or(cwSurvexCS::Parsed()));
 }
 
 /**
@@ -1077,7 +1189,11 @@ void cwSurvexImporter::parseCS(QString line)
  */
 void cwSurvexImporter::parseFix(QString line)
 {
-    const QStringList parts = line.split(QRegularExpression(QStringLiteral("\\s+")), Qt::SkipEmptyParts);
+    //A local, not a shared static: importers run on the task thread pool, and
+    //QRegularExpression is only documented reentrant, so two imports would be
+    //calling match() on the same instance.
+    const QRegularExpression whitespaceExp(QStringLiteral("\\s+"));
+    const QStringList parts = line.split(whitespaceExp, Qt::SkipEmptyParts);
     if (parts.size() < 4) {
         addWarning(QStringLiteral("*fix needs at least station + 3 coordinates"));
         return;
@@ -1101,12 +1217,21 @@ void cwSurvexImporter::parseFix(QString line)
         return;
     }
 
+    //Under LAT-LONG the file leads with latitude, and a coordinate always
+    //reaches cwFixStation easting first.
+    const double first = parts.at(coordStart).toDouble();
+    const double second = parts.at(coordStart + 1).toDouble();
+    const cwSurvexCS::Parsed cs = currentCS();
+    const double easting = cs.latitudeFirst ? second : first;
+    const double northing = cs.latitudeFirst ? first : second;
+
     cwFixStation fix;
     fix.setStationName(fullStationName(parts.first()));
-    fix.setInputCS(CurrentInputCS);
-    fix.setEasting(parts.at(coordStart).toDouble());
-    fix.setNorthing(parts.at(coordStart + 1).toDouble());
-    fix.setElevation(parts.at(coordStart + 2).toDouble());
+    fix.setInputCS(cs.projCS);
+    //All three at once: a *fix with no *cs before it is the ordinary local-grid
+    //case, and a fix with no CS written a component at a time would keep only
+    //the last (see cwFixStation::setCoordinate).
+    fix.setCoordinate(easting, northing, parts.at(coordStart + 2).toDouble());
     if (coordStart + 4 < parts.size() && isNumber(parts.at(coordStart + 3)) && isNumber(parts.at(coordStart + 4))) {
         fix.setHorizontalVariance(parts.at(coordStart + 3).toDouble());
         fix.setVerticalVariance(parts.at(coordStart + 4).toDouble());
@@ -1179,6 +1304,44 @@ void cwSurvexImporter::updateLRUDForCurrentBlock() {
 }
 
 /**
+ * @brief cwSurvexImporter::finishBlock
+ *
+ * Drains everything the block buffered while it parsed onto its chunks. Both
+ * *end and the end of the file go through here, so a file that never opens a
+ * *begin gets the same treatment on the root block.
+ */
+void cwSurvexImporter::finishBlock()
+{
+    updateLRUDForCurrentBlock();
+    updateSplaysForCurrentBlock();
+}
+
+/**
+ * @brief cwSurvexImporter::updateSplaysForCurrentBlock
+ *
+ * Hangs the splays buffered while the block parsed on the stations they were
+ * shot from.
+ *
+ * This waits until the block's chunks are complete because a station's splays
+ * can show up before the leg that introduces it — TopoDroid writes all of a3's
+ * wall shots ahead of the `a0 a4` centerline leg. A station that occurs more
+ * than once gets its splays on the first occurrence, which is the one the
+ * editor shows.
+ */
+void cwSurvexImporter::updateSplaysForCurrentBlock()
+{
+    const QList<cwStation> skipped =
+            nodeData(CurrentBlock)->Splays.attachTo(CurrentBlock->Chunks);
+
+    for(const cwStation& station : skipped) {
+        addWarning(QString("Skipping %1 splay(s) at %2 because no shot in this block reaches "
+                           "that station")
+                       .arg(station.splayCount())
+                       .arg(station.name()));
+    }
+}
+
+/**
  * @brief cwSurvexImporter::updateStationLRUD
  * @param before - The station before station that occures in *data passage
  * @param station - The station with LRUDs
@@ -1191,8 +1354,18 @@ void cwSurvexImporter::updateStationLRUD(cwStation before, cwStation station, cw
 {
     Q_UNUSED(before);
 
+    //Copies just the four readings onto the chunk's own station, so everything
+    //else it already carries — its splays — survives the *data passage pass
+    auto withLRUD = [](cwStation existing, const cwStation& source) {
+        existing.setLeft(source.left());
+        existing.setRight(source.right());
+        existing.setUp(source.up());
+        existing.setDown(source.down());
+        return existing;
+    };
+
     //Update's the chunk's LRUD from station and after
-    auto setLRUD = [](
+    auto setLRUD = [withLRUD](
             const cwStation& station,
             const cwStation& after,
             cwSurveyChunk* chunk,
@@ -1204,8 +1377,8 @@ void cwSurvexImporter::updateStationLRUD(cwStation before, cwStation station, cw
         if(cwStation::canonicalKey(station.name()) == currentStationName
                 && cwStation::canonicalKey(after.name()) == afterStationName)
         {
-            chunk->setStation(station, stationIndex);
-            chunk->setStation(after, stationIndex + 1);
+            chunk->setStation(withLRUD(chunk->station(stationIndex), station), stationIndex);
+            chunk->setStation(withLRUD(chunk->station(stationIndex + 1), after), stationIndex + 1);
             return true;
         }
         return false;

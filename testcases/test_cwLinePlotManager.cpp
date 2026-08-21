@@ -9,7 +9,12 @@
 #include <catch2/catch_test_macros.hpp>
 #include "LoadProjectHelper.h"
 #include "BoulderFixtureHelper.h"
+#include "FixStationFixtureHelper.h"
+#include "SplayFixtureHelper.h"
 #include <catch2/catch_approx.hpp>
+#include <catch2/matchers/catch_matchers_floating_point.hpp>
+
+using Catch::Matchers::WithinAbs;
 
 //Cavewhere includes
 #include "cwLinePlotManager.h"
@@ -30,18 +35,21 @@
 #include "cwRenderLinePlot.h"
 #include "cwGridConvergence.h"
 #include "cwGeoPoint.h"
+#include "cwCoordinateTransform.h"
 #include "cwStationPositionLookup.h"
 #include "cwKeywordItemModel.h"
 #include "cwKeywordItem.h"
 #include "cwKeywordModel.h"
 #include "cwKeyword.h"
 #include "cwLinePlotTripVisibility.h"
+#include "cwShotMeasurement.h"
 
 //Our includes
 #include "TestHelper.h"
 #include "SpyChecker.h"
 
 //Qt includes
+#include <QElapsedTimer>
 #include <QThread>
 #include <QApplication>
 #include <QtMath>
@@ -909,14 +917,14 @@ TEST_CASE("cwLinePlotManager skips cavern when cave or trip has no shots", "[Lin
     }
 }
 
-TEST_CASE("cwLinePlotManager re-runs cavern when globalCS or fix stations change",
+TEST_CASE("cwLinePlotManager re-runs cavern when the frame or fix stations change",
           "[LinePlotManager][fix]")
 {
-    // The picker writes to cwCavingRegion::globalCS and the fix-station
-    // editor mutates cave->fixStations(). Both feed the *cs out / *fix
-    // lines in the survex export, so the manager must observe both and
-    // re-run cavern when either changes — otherwise cavern keeps emitting
-    // a stale .3d that doesn't carry the user's CS/fix edits.
+    // The fix-station editor mutates cave->fixStations(), which feeds the
+    // *fix lines in the survex export and, through the projection manager,
+    // the *cs out naming the project's frame. The manager must observe both
+    // and re-run cavern when either changes — otherwise cavern keeps emitting
+    // a stale .3d that doesn't carry the user's edits.
     //
     // We verify the connection in two complementary ways:
     //   (a) a signal spy on stationPositionInCavesChanged fires once per
@@ -947,44 +955,15 @@ TEST_CASE("cwLinePlotManager re-runs cavern when globalCS or fix stations change
     plotManager->setRegion(&region);
     plotManager->waitToFinish();
 
-    // Sanity: with no globalCS / fixes, a1 sits at the origin.
+    // Sanity: with no frame and no fixes, a1 sits at the origin.
     REQUIRE(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
 
     cwSignalSpy positionSpy(plotManager.get(), &cwLinePlotManager::stationPositionInCavesChanged);
 
-    SECTION("region.setGlobalCS triggers a re-run") {
-        REQUIRE(positionSpy.count() == 0);
-        region.geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32616"));
-        plotManager->waitToFinish();
-        CHECK(positionSpy.count() >= 1);
-    }
-
     SECTION("appending a fix station triggers a re-run and moves resolved positions") {
-        // Survex rejects *fix-with-*cs unless *cs out is also set, so the
-        // realistic test scenario is "globalCS is set, then a fix is added".
-        // Set globalCS first; the spy after that captures only fix-related
-        // re-runs. We don't reset the spy between this and the parent
-        // setRegion run, so we tally only what happens after this point.
-        region.geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32616"));
-
-        // Pre-set worldOrigin to a non-sentinel value so the first-solve
-        // auto-compute branch in cwLinePlotManager::publishLinePlotResults
-        // is skipped. Otherwise the first run after the fix is added would
-        // auto-compute worldOrigin and queue a second run via
-        // worldOriginChanged → runSurvex; waitToFinish only blocks on the
-        // first run, so the assertions below would race the second run and
-        // intermittently see un-shifted positions. The value is arbitrary:
-        // the auto-compute guard only checks against the default sentinel.
-        const cwGeoPoint kAutoComputeSuppressor{1.0, 1.0, 1.0};
-        region.geoReference()->setWorldOrigin(kAutoComputeSuppressor);
-
-        plotManager->waitToFinish();
-        const int spyAfterGlobalCS = positionSpy.count();
-        REQUIRE(spyAfterGlobalCS >= 1); // setting globalCS itself triggered a run
-
-        // Fix a1 in EPSG:32616. Cavern propagates the fix through the rest
-        // of the cave: a2 (10m magnetic north of a1) should land 10m
-        // further north than a1 in projected coords.
+        // Fix a1 in EPSG:32616, which also anchors the project's frame on it.
+        // Cavern propagates the fix through the rest of the cave: a2 (10 m
+        // magnetic north of a1) lands 10 m further north.
         cwFixStation fix;
         fix.setStationName(QStringLiteral("a1"));
         fix.setInputCS(QStringLiteral("EPSG:32616"));
@@ -995,17 +974,15 @@ TEST_CASE("cwLinePlotManager re-runs cavern when globalCS or fix stations change
 
         plotManager->waitToFinish();
 
-        // Reported positions are shifted by -worldOrigin for shader float
-        // precision (see cwSurvex3DFileReader). Add the current worldOrigin
-        // back to recover absolute projected coords.
-        const auto absolutePosition = [&](const QString& station) {
-            return cwGeoPoint::fromSceneLocal(cave->stationPositionLookup().position(station),
-                                              region.geoReference()->worldOrigin());
+        // Positions come back in the project's frame, which is centered on the
+        // anchor — so a1, the anchor, sits at its own origin.
+        const auto position = [&](const QString& station) {
+            return cave->stationPositionLookup().position(station);
         };
 
-        CHECK(positionSpy.count() > spyAfterGlobalCS);
-        CHECK(absolutePosition("a1") == cwGeoPoint(100.0, 200.0, 50.0));
-        CHECK(absolutePosition("a2") == cwGeoPoint(100.0, 210.0, 50.0));
+        CHECK(positionSpy.count() >= 1);
+        CHECK(position("a1") == QVector3D(0.0f, 0.0f, 50.0f));
+        CHECK(position("a2") == QVector3D(0.0f, 10.0f, 50.0f));
 
         SECTION("setData on the fix-station model triggers a re-run") {
             const int spyBefore = positionSpy.count();
@@ -1018,9 +995,16 @@ TEST_CASE("cwLinePlotManager re-runs cavern when globalCS or fix stations change
 
             plotManager->waitToFinish();
 
+            // 200 m east in the fix's own UTM grid — well inside the threshold
+            // that would re-derive the frame, so the frame stays put and the
+            // station moves within it. The distance is checked loosely on
+            // purpose: the two grids don't share a scale factor, so 200 UTM
+            // meters is not 200 meters in the project's projection.
             CHECK(positionSpy.count() > spyBefore);
-            CHECK(absolutePosition("a1") == cwGeoPoint(300.0, 200.0, 50.0));
-            CHECK(absolutePosition("a2") == cwGeoPoint(300.0, 210.0, 50.0));
+            CHECK_THAT(position("a1").x(), WithinAbs(200.0f, 1.0f));
+            CHECK(position("a1").y() == Catch::Approx(0.0).margin(1e-3));
+            CHECK_THAT(position("a2").x(), WithinAbs(200.0f, 1.0f));
+            CHECK(position("a2").y() == Catch::Approx(10.0).margin(1e-2));
         }
 
         SECTION("removeAt on the fix-station model triggers a re-run") {
@@ -1032,8 +1016,8 @@ TEST_CASE("cwLinePlotManager re-runs cavern when globalCS or fix stations change
             CHECK(positionSpy.count() > spyBefore);
             // Without explicit fixes the legacy fallback (*fix a1 0 0 0)
             // re-anchors the cave at the origin.
-            CHECK(absolutePosition("a1") == cwGeoPoint(0.0, 0.0, 0.0));
-            CHECK(absolutePosition("a2") == cwGeoPoint(0.0, 10.0, 0.0));
+            CHECK(position("a1") == QVector3D(0.0f, 0.0f, 0.0f));
+            CHECK(position("a2") == QVector3D(0.0f, 10.0f, 0.0f));
         }
     }
 }
@@ -1041,59 +1025,63 @@ TEST_CASE("cwLinePlotManager re-runs cavern when globalCS or fix stations change
 TEST_CASE("cwLinePlotManager applies grid convergence to a manual declination (issue #628)",
           "[LinePlotManager][fix]")
 {
-    // A manual declination is a pure magnetic declination. Cavern only folds
-    // grid convergence into `*declination auto`, so CaveWhere subtracts it from
-    // the literal `*calibrate DECLINATION` it exports (see manualDeclinationForGrid).
-    // This proves the end-to-end 3D plot lands in grid north: a magnetic-north
-    // shot with declination 0 must plot at grid bearing -convergence, not 0.
-
+    // A manual declination is a pure magnetic declination. Cavern folds grid
+    // convergence into `*declination auto` only, so the exporter subtracts it
+    // from the literal `*calibrate DECLINATION` instead (see
+    // cwSurvexExporterUtils::writeDeclinationCalibration). This proves the
+    // end-to-end 3D plot lands in grid north: a magnetic-north shot with
+    // declination 0 must plot at grid bearing -convergence, not 0.
+    //
+    // The grid is the project's local projection, whose convergence is 0 at
+    // the anchor — so the anchor goes on a first cave and the cave under test
+    // is offset east of it, where the angle is real.
     const QString cs = QStringLiteral("EPSG:32613"); // UTM 13N, central meridian -105
+    const double anchorEasting = 478000.0;
+    const double offsetEast = 34000.0;               // inside the frame's 50 km reach
+    const double fixNorthing = 4430000.0;            // latitude ~40°
+    const double fixElevation = 1600.0;
+
+    // A shot due magnetic north in each cave. Cavern rejects a *fix naming a
+    // station no survey mentions, so the anchor cave needs one of its own.
+    const auto addNorthShot = [](cwCave* cave, const QString& from, const QString& to) {
+        auto* trip = new cwTrip();
+        cave->addTrip(trip);
+        trip->calibrations()->setAutoDeclination(false);
+        trip->calibrations()->setDeclinationManual(0.0);
+
+        auto* chunk = new cwSurveyChunk();
+        trip->addChunk(chunk);
+        cwShot shot;
+        shot.setDistance(cwDistanceReading(QStringLiteral("100.0")));
+        shot.setCompass(cwCompassReading(QStringLiteral("0.0")));
+        shot.setClino(cwClinoReading(QStringLiteral("0.0")));
+        chunk->appendShot(cwStation(from), cwStation(to), shot);
+    };
 
     cwCavingRegion region;
-    region.geoReference()->setGlobalCoordinateSystem(cs);
+    cwCave* anchorCave = addCaveWithFixes(
+        &region, {makeFix(QStringLiteral("b1"), cs, anchorEasting, fixNorthing, fixElevation)});
+    addNorthShot(anchorCave, QStringLiteral("b1"), QStringLiteral("b2"));
 
-    auto* cave = new cwCave();
-    cave->setName(QStringLiteral("Cave 1"));
-    region.addCave(cave);
-
-    auto* trip = new cwTrip();
-    cave->addTrip(trip);
-    trip->calibrations()->setAutoDeclination(false);
-    trip->calibrations()->setDeclinationManual(0.0);
-
-    auto* chunk = new cwSurveyChunk();
-    trip->addChunk(chunk);
-    cwShot shot;
-    shot.setDistance(cwDistanceReading(QStringLiteral("100.0")));
-    shot.setCompass(cwCompassReading(QStringLiteral("0.0")));
-    shot.setClino(cwClinoReading(QStringLiteral("0.0")));
-    chunk->appendShot(cwStation(QStringLiteral("a1")), cwStation(QStringLiteral("a2")), shot);
-
-    // Fix east of the central meridian at ~40°N so grid convergence is large
-    // (~1.5°). Distance from the meridian keeps easting away from float-lossy
-    // magnitudes, and pinning worldOrigin to the fix keeps the reported
-    // positions local (and skips the auto-compute second-run race).
-    const double fixE = 700000.0;
-    const double fixN = 4430000.0;
-    const double fixZ = 1600.0;
-
-    cwFixStation fix;
-    fix.setStationName(QStringLiteral("a1"));
-    fix.setInputCS(cs);
-    fix.setEasting(fixE);
-    fix.setNorthing(fixN);
-    fix.setElevation(fixZ);
-    cave->fixStations()->appendFixStation(fix);
-
-    region.geoReference()->setWorldOrigin(cwGeoPoint(fixE, fixN, fixZ));
+    cwCave* cave = addCaveWithFixes(&region, {makeFix(QStringLiteral("a1"), cs,
+                                                      anchorEasting + offsetEast,
+                                                      fixNorthing, fixElevation)});
+    addNorthShot(cave, QStringLiteral("a1"), QStringLiteral("a2"));
 
     auto plotManager = std::make_unique<cwLinePlotManager>();
     plotManager->setRegion(&region);
     plotManager->waitToFinish();
 
-    const auto convergence = cwGridConvergence::computeAt(cwGeoPoint(fixE, fixN, fixZ), cs);
+    // The same angle the exporter subtracts: read in the frame, at the cave's
+    // location transformed into it.
+    const QString frameCS = region.geoReference()->localCoordinateSystem();
+    REQUIRE_FALSE(frameCS.isEmpty());
+    const auto framePoint = cwCoordinateTransform::transformPoint(
+        cs, frameCS, cwGeoPoint(anchorEasting + offsetEast, fixNorthing, fixElevation));
+    REQUIRE(framePoint.has_value());
+    const auto convergence = cwGridConvergence::computeAt(*framePoint, frameCS);
     REQUIRE_FALSE(convergence.hasError());
-    REQUIRE(std::abs(convergence.value()) > 0.5); // meaningful convergence here
+    REQUIRE(std::abs(convergence.value()) > 0.1); // meaningful convergence here
 
     const QVector3D a1 = cave->stationPositionLookup().position(QStringLiteral("a1"));
     const QVector3D a2 = cave->stationPositionLookup().position(QStringLiteral("a2"));
@@ -1103,12 +1091,12 @@ TEST_CASE("cwLinePlotManager applies grid convergence to a manual declination (i
     // plots at grid bearing -convergence (bearing measured clockwise from grid
     // north, i.e. atan2(easting, northing)).
     const double bearing = qRadiansToDegrees(std::atan2(delta.x(), delta.y()));
-    CHECK(bearing == Catch::Approx(-convergence.value()).margin(0.1));
+    CHECK(bearing == Catch::Approx(-convergence.value()).margin(0.05));
     CHECK(double(delta.length()) == Catch::Approx(100.0).margin(0.5));
 
     // Regression guard: the old behavior left convergence out, plotting due
     // grid north (bearing 0).
-    CHECK(std::abs(bearing) > 0.5);
+    CHECK(std::abs(bearing) > 0.1);
 }
 
 TEST_CASE("cwLinePlotManager re-solves when a trip's date changes (bug #581)",
@@ -1124,7 +1112,6 @@ TEST_CASE("cwLinePlotManager re-solves when a trip's date changes (bug #581)",
     const QString utmZ13N = QStringLiteral("EPSG:32613");
 
     cwCavingRegion region;
-    region.geoReference()->setGlobalCoordinateSystem(utmZ13N);
 
     auto* cave = new cwCave();
     cave->setName(QStringLiteral("Cave 1"));
@@ -1154,11 +1141,6 @@ TEST_CASE("cwLinePlotManager re-solves when a trip's date changes (bug #581)",
     // Auto-declination must actually resolve, otherwise a date change couldn't
     // move the plot and the test would pass vacuously.
     REQUIRE(trip->calibrations()->autoDeclinationAvailable() == true);
-
-    // Pre-set worldOrigin off the default sentinel so the first-solve
-    // auto-compute branch doesn't queue a second run that races waitToFinish
-    // (see the fix-station test above for the same guard).
-    region.geoReference()->setWorldOrigin(cwGeoPoint(478000.0, 4430000.0, 1655.0));
 
     auto plotManager = std::make_unique<cwLinePlotManager>();
     plotManager->setRegion(&region);
@@ -1431,6 +1413,149 @@ TEST_CASE("cwLinePlotManager registers per-trip centerline keyword visibility",
     }
 }
 
+TEST_CASE("cwLinePlotManager registers a Splays keyword item per trip with splays",
+          "[LinePlotManager][keyword][SplayShot]")
+{
+    // Two trips sharing the tie-in station a2: trip1 a1->a2 (with two splays
+    // at a2), trip2 a2->a3 (no splays). The splays belong to trip1 — the first
+    // trip holding an a2 occurrence with splays.
+    cwCavingRegion region;
+
+    cwCave* cave = new cwCave();
+    cave->setName(QStringLiteral("Cave 1"));
+    region.addCave(cave);
+
+    auto makeShot = [](const QString& dist, const QString& compass, const QString& clino) {
+        cwShot s;
+        s.setDistance(cwDistanceReading(dist));
+        s.setCompass(cwCompassReading(compass));
+        s.setClino(cwClinoReading(clino));
+        return s;
+    };
+    cwTrip* trip1 = new cwTrip();
+    trip1->setName(QStringLiteral("Trip A"));
+    trip1->calibrations()->setAutoDeclination(false);
+    cwSurveyChunk* chunk1 = new cwSurveyChunk();
+    trip1->addChunk(chunk1);
+    chunk1->appendShot(cwStation("a1"), cwStation("a2"), makeShot("10.0", "0.0", "0.0"));
+    chunk1->setStationSplays(1, {makeSplay("5.0", "90.0", "0.0"),
+                                 makeSplay("3.0", "270.0", "0.0")});
+    cave->addTrip(trip1);
+
+    cwTrip* trip2 = new cwTrip();
+    trip2->setName(QStringLiteral("Trip B"));
+    trip2->calibrations()->setAutoDeclination(false);
+    cwSurveyChunk* chunk2 = new cwSurveyChunk();
+    trip2->addChunk(chunk2);
+    chunk2->appendShot(cwStation("a2"), cwStation("a3"), makeShot("10.0", "90.0", "0.0"));
+    cave->addTrip(trip2);
+
+    cwKeywordItemModel keywordModel;
+    cwRenderLinePlot linePlot;
+
+    auto plotManager = std::make_unique<cwLinePlotManager>();
+    plotManager->setKeywordItemModel(&keywordModel);
+    plotManager->setRenderLinePlot(&linePlot);
+    plotManager->setRegion(&region);
+    plotManager->waitToFinish();
+
+    auto hiddenIndexes = [&]() {
+        QList<int> indexes;
+        const QVector<quint8> visibility = linePlot.visibility();
+        for (int i = 0; i < visibility.size(); ++i) {
+            if (visibility.at(i) == 0) { indexes.append(i); }
+        }
+        return indexes;
+    };
+
+    const cwKeyword splaysType(cwKeywordModel::TypeKey, QStringLiteral("Splays"));
+    const cwKeyword linePlotType(cwKeywordModel::TypeKey, QStringLiteral("Line Plot"));
+
+    auto proxyForTrip = [&](cwTrip* trip, const cwKeyword& type) -> cwLinePlotTripVisibility* {
+        for (int i = 0; i < keywordModel.rowCount(); ++i) {
+            auto* item = keywordModel.item(i);
+            auto* proxy = qobject_cast<cwLinePlotTripVisibility*>(item->object());
+            if (proxy && proxy->trip() == trip
+                && item->keywordModel()->keywords().contains(type)) {
+                return proxy;
+            }
+        }
+        return nullptr;
+    };
+
+    // trip1: a1->a2 = 2 centerline vertices + 2 splays * 2 = 4 splay vertices,
+    // then trip2: a2->a3 = 2 centerline vertices.
+    REQUIRE(linePlot.points().size() == 8);
+
+    SECTION("only the trip with splays gets a Splays item") {
+        CHECK(keywordModel.rowCount() == 3);
+        CHECK(proxyForTrip(trip1, linePlotType) != nullptr);
+        CHECK(proxyForTrip(trip2, linePlotType) != nullptr);
+        CHECK(proxyForTrip(trip1, splaysType) != nullptr);
+        CHECK(proxyForTrip(trip2, splaysType) == nullptr);
+    }
+
+    SECTION("the Splays item inherits the trip's keywords") {
+        // Extension of the trip's keyword model, so trip-level filters (Trip /
+        // Year / Date / Cave / Caver) cover the splays too.
+        for (int i = 0; i < keywordModel.rowCount(); ++i) {
+            auto* item = keywordModel.item(i);
+            auto* proxy = qobject_cast<cwLinePlotTripVisibility*>(item->object());
+            if (proxy && proxy->trip() == trip1
+                && item->keywordModel()->keywords().contains(splaysType)) {
+                CHECK(item->keywordModel()->keywords().contains(
+                    cwKeyword(cwKeywordModel::TripNameKey, QStringLiteral("Trip A"))));
+            }
+        }
+    }
+
+    SECTION("splay tips leave length and depth alone") {
+        // A splay is a wall shot, not surveyed passage, so it must never pad
+        // the cave's stats — a straight-down 4 m splay keeps depth at 0.
+        CHECK(cave->length()->value() == Catch::Approx(20.0));
+        CHECK(cave->depth()->value() == Catch::Approx(0.0));
+
+        chunk1->setStationSplays(1, {makeSplay("4.0", "0.0", "-90.0")});
+        plotManager->waitToFinish();
+
+        CHECK(cave->length()->value() == Catch::Approx(20.0));
+        CHECK(cave->depth()->value() == Catch::Approx(0.0));
+    }
+
+    SECTION("hiding the Splays item masks exactly the splay tail") {
+        auto* splaysProxy = proxyForTrip(trip1, splaysType);
+        REQUIRE(splaysProxy != nullptr);
+
+        splaysProxy->setVisible(false);
+        CHECK(hiddenIndexes() == QList<int>({2, 3, 4, 5}));
+
+        SECTION("the hidden splays survive a re-solve") {
+            cave->setName(QStringLiteral("Renamed Cave"));
+            plotManager->waitToFinish();
+
+            CHECK(linePlot.visibility().size() == 8);
+            CHECK(hiddenIndexes() == QList<int>({2, 3, 4, 5}));
+        }
+    }
+
+    SECTION("hiding the centerline item leaves the splays visible") {
+        auto* centerlineProxy = proxyForTrip(trip1, linePlotType);
+        REQUIRE(centerlineProxy != nullptr);
+
+        centerlineProxy->setVisible(false);
+        CHECK(hiddenIndexes() == QList<int>({0, 1}));
+    }
+
+    SECTION("clearing the splays re-solves and drops the Splays item") {
+        chunk1->setStationSplays(1, {});
+        plotManager->waitToFinish();
+
+        CHECK(linePlot.points().size() == 4);
+        CHECK(keywordModel.rowCount() == 2);
+        CHECK(proxyForTrip(trip1, splaysType) == nullptr);
+    }
+}
+
 TEST_CASE("cwLinePlotManager surfaces cavern output to QML",
           "[LinePlotManager][CavernOutput]")
 {
@@ -1613,5 +1738,190 @@ TEST_CASE("cwLinePlotManager surfaces cavern output to QML",
         // netskel's loop report carries at least the traverse identifier and
         // an error-class letter (L = length, B = bearing, G = gradient).
         CHECK_FALSE(plotManager->loopClosureStats().isEmpty());
+    }
+}
+
+// Regression: adding a fix station leaves a blank row until the user types a
+// station name. That empty row must not put cwLinePlotManager into an endless
+// re-solve. The worker rebuilds each cave's survey network every solve and
+// can't see the cave's current one, so it always reports the network as
+// "changed"; before the guard on cwCave::setSurveyNetwork, that fired
+// surveyNetworkChanged on every solve, and the fix-station error-role refresh
+// (surveyNetworkChanged -> dataChanged -> runSurvex) fed straight back into it.
+TEST_CASE("An empty fix station must not trigger endless line-plot re-solves",
+          "[LinePlotManager]")
+{
+    cwCavingRegion region;
+
+    cwCave* cave = new cwCave();
+    cave->setName(QStringLiteral("Cave 1"));
+    region.addCave(cave);
+
+    cwTrip* trip = new cwTrip();
+    trip->setName(QStringLiteral("Trip 1"));
+    cave->addTrip(trip);
+
+    cwSurveyChunk* chunk = new cwSurveyChunk();
+    trip->addChunk(chunk);
+
+    cwShot shot;
+    shot.setDistance(cwDistanceReading(QStringLiteral("10.0")));
+    shot.setCompass(cwCompassReading(QStringLiteral("0.0")));
+    shot.setClino(cwClinoReading(QStringLiteral("0.0")));
+    chunk->appendShot(cwStation(QStringLiteral("A1")),
+                      cwStation(QStringLiteral("A2")),
+                      shot);
+
+    auto plotManager = std::make_unique<cwLinePlotManager>();
+    plotManager->setRegion(&region);
+    plotManager->waitToFinish();
+
+    // The FixStationPage adds a blank row when the user clicks "add".
+    cave->fixStations()->addFixStation();
+
+    // Pump until the solver goes quiet, measured in wall clock so a loaded CI box
+    // (several test processes in parallel) waits longer rather than mistaking a
+    // slow first solve for quiescence. Deliberately NOT waitToFinish(): were the
+    // loop to return it would spin forever and hang CI, so the bounded pump lets
+    // the test fail loudly instead. A healthy manager runs the one legitimate
+    // solve (the row insert) and settles; the bug produced dozens, never settling.
+    constexpr int kSolveTimeoutMs = 30000;
+    constexpr int kQuietWindowMs = 500;
+
+    cwSignalSpy solveSpy(plotManager.get(),
+                         &cwLinePlotManager::stationPositionInCavesChanged);
+
+    // Runs the event loop until nothing has solved for a whole quiet window, and
+    // answers how many solves have landed in total. Used before each measurement
+    // so a solve set off by the previous edit can never be counted as, or
+    // mistaken for, the one being measured next.
+    const auto pumpUntilQuiet = [&]() {
+        QElapsedTimer quietTimer;
+        QElapsedTimer totalTimer;
+        quietTimer.start();
+        totalTimer.start();
+        int solves = solveSpy.count();
+        while (quietTimer.elapsed() < kQuietWindowMs && totalTimer.elapsed() < kSolveTimeoutMs) {
+            QCoreApplication::processEvents();
+            QThread::msleep(2);
+            if (solveSpy.count() > solves) {
+                solves = solveSpy.count();
+                quietTimer.restart();
+            }
+        }
+        CHECK(quietTimer.elapsed() >= kQuietWindowMs);  // settled rather than spinning
+        return solves;
+    };
+
+    // Anchor on the row-insert solve first. Without this the quiet window below
+    // could be satisfied simply because the first solve hadn't landed yet —
+    // passing whether or not the re-solve loop exists.
+    if (solveSpy.count() == 0) {
+        REQUIRE(solveSpy.wait(kSolveTimeoutMs));
+    }
+
+    const int totalSolves = pumpUntilQuiet();
+    INFO("total solves after adding an empty fix: " << totalSolves);
+    CHECK(totalSolves <= 2);    // one legitimate solve, not an endless run
+
+    // Naming the fix is a real edit and must still re-solve — proving the loop
+    // fix didn't over-filter genuine fix-station changes. The CS is set first so
+    // the fix is the ordinary projected case; the solve no longer depends on it,
+    // since the project's own local projection is always a usable output CS.
+    cave->fixStations()->setData(cave->fixStations()->index(0),
+                                 QStringLiteral("EPSG:32612"),
+                                 cwFixStationModel::InputCSRole);
+
+    // Setting the CS is itself an edit worth re-solving for. Let that one land
+    // and settle before the spy opens, or its solve would satisfy the wait below
+    // no matter what the name edit did — which is the assertion this test is.
+    pumpUntilQuiet();
+
+    cwSignalSpy editSpy(plotManager.get(),
+                        &cwLinePlotManager::stationPositionInCavesChanged);
+    cave->fixStations()->setData(cave->fixStations()->index(0),
+                                 QStringLiteral("A1"),
+                                 cwFixStationModel::StationNameRole);
+    CHECK(editSpy.wait(kSolveTimeoutMs));
+}
+
+TEST_CASE("Line plot reports only the stations that actually moved", "[LinePlotManager]")
+{
+    // The worker rebuilds its own cwCavingRegion from a cwCavingRegionData
+    // snapshot, and that snapshot restores neither station positions nor the
+    // survey network. Both baselines therefore have to be carried across on
+    // cwLinePlotTask::Input. This test covers both at once by design: either
+    // one left un-seeded makes an idle re-solve claim every station moved,
+    // which is what re-morphs every scrap in the region.
+    cwCavingRegion region;
+
+    cwCave* cave = new cwCave();
+    cave->setName("Cave 1");
+    region.addCave(cave);
+
+    cwTrip* trip = new cwTrip();
+    trip->setName("Trip 1");
+    cave->addTrip(trip);
+
+    cwSurveyChunk* chunk = new cwSurveyChunk();
+    trip->addChunk(chunk);
+
+    cwShot shot;
+    shot.setDistance(cwDistanceReading("10.0"));
+    shot.setCompass(cwCompassReading("0.0"));
+    shot.setClino(cwClinoReading("0.0"));
+    chunk->appendShot(cwStation("a1"), cwStation("a2"), shot);
+
+    auto plotManager = std::make_unique<cwLinePlotManager>();
+
+    // A re-solve with nothing edited only happens on the "Solve" button's
+    // mark-then-drive path, so the test takes it the same way the button does.
+    cwUpdateCoordinator coordinator;
+    coordinator.add(plotManager.get());
+
+    plotManager->setRegion(&region);
+    plotManager->waitToFinish();
+
+    REQUIRE(cave->stationPositionLookup().position("a2") == QVector3D(0.0, 10.0, 0.0));
+
+    // Captured by lambda rather than QSignalSpy so the payload arrives as a
+    // real QList<cwTrip*> instead of a QVariant needing a registered metatype.
+    int emitCount = 0;
+    QList<cwTrip*> changedTrips;
+    QObject::connect(plotManager.get(), &cwLinePlotManager::stationPositionInTripsChanged,
+                     [&](QList<cwTrip*> trips) {
+                         emitCount++;
+                         changedTrips = trips;
+                     });
+
+    SECTION("A re-solve with no edits moves nothing") {
+        plotManager->markNeedsUpdate();
+        coordinator.updateNow();
+        plotManager->waitToFinish();
+
+        REQUIRE(emitCount == 1);    // the solve really did run
+        CHECK(changedTrips.isEmpty());
+    }
+
+    SECTION("Moving a station reports its trip") {
+        chunk->setData(cwSurveyChunk::ShotDistanceRole, 0, 20.0);
+        plotManager->waitToFinish();
+
+        REQUIRE(cave->stationPositionLookup().position("a2") == QVector3D(0.0, 20.0, 0.0));
+        CHECK(changedTrips == QList<cwTrip*>({trip}));
+    }
+
+    SECTION("Adding a shot reports its trip") {
+        // Growing the survey leaves a1/a2 where they were, so this covers the
+        // added-station path rather than the moved-station one above.
+        cwShot secondShot;
+        secondShot.setDistance(cwDistanceReading("5.0"));
+        secondShot.setCompass(cwCompassReading("0.0"));
+        secondShot.setClino(cwClinoReading("0.0"));
+        chunk->appendShot(cwStation("a2"), cwStation("a3"), secondShot);
+        plotManager->waitToFinish();
+
+        REQUIRE(cave->stationPositionLookup().position("a3") == QVector3D(0.0, 15.0, 0.0));
+        CHECK(changedTrips == QList<cwTrip*>({trip}));
     }
 }

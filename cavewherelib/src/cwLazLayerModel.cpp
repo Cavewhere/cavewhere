@@ -20,7 +20,6 @@
 #include "cwCavingRegion.h"
 #include "cwError.h"
 #include "cwErrorListModel.h"
-#include "cwLazLoader.h"
 #include "cwProject.h"
 #include "cwSaveLoad.h"
 
@@ -114,16 +113,9 @@ void cwLazLayerModel::addFromFiles(QList<QUrl> urls)
         return;
     }
 
-    // Auto-adopt CS / worldOrigin from the first incoming file before the
-    // copy, so the region values are set in time for the post-rescan layers
-    // to inherit them. Probing the source path is cheap (header only).
-    for (const QUrl& url : urls) {
-        if (url.isLocalFile()) {
-            maybeAdoptRegionDefaultsFromLaz(url.toLocalFile());
-            break;
-        }
-    }
-
+    // Nothing to seed from the incoming files here: the copy is followed by a
+    // rescan, and that is where each new layer gets its frame — from its own
+    // header, against the layer that will carry the anchor.
     QPointer<cwLazLayerModel> self(this);
     const QDir destinationDir = m_gisLayersDir;
     p->addFiles(urls, destinationDir,
@@ -291,25 +283,31 @@ void cwLazLayerModel::setFutureManagerToken(const cwFutureManagerToken& token)
     }
 }
 
-void cwLazLayerModel::setRegionGlobalCS(const QString& cs)
+void cwLazLayerModel::setLocalProjectionToken(const cwLocalProjectionToken& token)
 {
-    if (m_regionGlobalCS == cs) {
-        return;
-    }
-    m_regionGlobalCS = cs;
+    m_localProjectionToken = token;
     for (cwLazLayer* layer : std::as_const(m_layers)) {
-        layer->setRegionGlobalCS(cs);
+        layer->setLocalProjectionToken(token);
     }
 }
 
-void cwLazLayerModel::setRegionWorldOrigin(const cwGeoPoint& origin)
+void cwLazLayerModel::reloadAll()
 {
-    if (m_regionWorldOrigin == origin) {
-        return;
-    }
-    m_regionWorldOrigin = origin;
     for (cwLazLayer* layer : std::as_const(m_layers)) {
-        layer->setRegionWorldOrigin(origin);
+        layer->reload();
+    }
+}
+
+void cwLazLayerModel::updateHeaderProbeInFlight(cwLazLayer* layer, bool inFlight)
+{
+    const bool wasProbing = anyHeaderProbeInFlight();
+    if (inFlight) {
+        m_probingLayers.insert(layer);
+    } else {
+        m_probingLayers.remove(layer);
+    }
+    if (wasProbing != anyHeaderProbeInFlight()) {
+        emit headerProbeInFlightChanged();
     }
 }
 
@@ -319,13 +317,12 @@ void cwLazLayerModel::setGisLayersDir(const QDir& dir)
         return;
     }
     m_gisLayersDir = dir;
-    // Defer the rescan to the event loop. During project load, this setter
-    // is called from cwSaveLoad::setFileName which runs *before* cwCavingRegion
-    // ::setData applies the proto's globalCoordinateSystem and worldOrigin.
-    // Running rescan synchronously here makes maybeAutoAdoptCS seed values
-    // that setData then overwrites with proto defaults (worldOrigin isn't
-    // persisted, so it's always {0,0,0} on load). Queuing lets setData run
-    // first; auto-adopt then only fills the gaps the proto left unset.
+    // Defer the rescan to the event loop. During project load, this setter is
+    // called from cwSaveLoad::setFileName, which runs *before* cwCavingRegion
+    // ::setData restores the stored frame. Running rescan synchronously here
+    // would derive a frame from the layers' own headers only for the restore to
+    // replace it — and reload every layer twice on the way. Queuing lets setData
+    // run first, after which the layers load straight into the restored frame.
     QMetaObject::invokeMethod(this, &cwLazLayerModel::rescan, Qt::QueuedConnection);
 }
 
@@ -350,15 +347,6 @@ void cwLazLayerModel::rescan()
                     nameFilters,
                     QDir::Files | QDir::NoDotAndDotDot,
                     QDir::Name);
-    }
-
-    // worldOrigin isn't persisted in the proto, so on every load we'd start
-    // at (0,0,0) and the geometry would sit at raw UTM coords offscreen.
-    // Seeding from the first LAZ's header fills the gap on projects that
-    // have LAZ files but no fix stations. The probe is self-guarded — once
-    // the region has both a CS and an explicit origin it's a no-op.
-    if (!entries.isEmpty()) {
-        maybeAdoptRegionDefaultsFromLaz(entries.first().absoluteFilePath());
     }
 
     // Diff existing layers against the directory listing instead of doing a
@@ -434,20 +422,13 @@ void cwLazLayerModel::rescan()
 
         // New file — create a layer and insert at the current row.
         cwLazLayer* layer = createLayer();
-        // setSourcePath before announcing the row: setSourcePath triggers
-        // updateNameKeyword/updateFileNameKeyword on the layer's keyword
-        // model. Running it after beginInsertRows lets the scene node
-        // register a keyword item carrying only Type+ObjectId, then the
-        // late keyword changes shuttle the same item through both accepted
-        // and rejected filter pipelines, thrashing cwKeywordVisibility
-        // (last-inserted wins).
-        layer->setSourcePath(path);
 
-        // Apply persisted state from the paired <basename>.cwlaz before
-        // announcing the row, so observers wired into rowsInserted (the
-        // scene node, keyword filter pipeline, cwSaveLoad's enabledChanged
-        // hookup) see the final UUID + enabled bit on their first
-        // observation.
+        // Apply persisted state from the paired <basename>.cwlaz first, so the
+        // layer carries its final UUID before anything can anchor to it, and
+        // before observers wired into rowsInserted (the scene node, keyword
+        // filter pipeline, cwSaveLoad's enabledChanged hookup) see it. A layer
+        // the file says is disabled also never starts the load setSourcePath
+        // would otherwise kick off below.
         const QString metadataPath = m_gisLayersDir.absoluteFilePath(
                     QFileInfo(path).completeBaseName() + QStringLiteral(".cwlaz"));
         if (QFileInfo::exists(metadataPath)) {
@@ -475,6 +456,16 @@ void cwLazLayerModel::rescan()
         // a freshly-minted UUID). The next save flush writes the .cwlaz
         // alongside, making the on-disk pair the source of truth from
         // then on.
+
+        // setSourcePath — which starts the load — before announcing the row:
+        // it triggers updateNameKeyword/updateFileNameKeyword on the layer's
+        // keyword model. Running it after beginInsertRows lets the scene node
+        // register a keyword item carrying only Type+ObjectId, then the late
+        // keyword changes shuttle the same item through both accepted and
+        // rejected filter pipelines, thrashing cwKeywordVisibility
+        // (last-inserted wins).
+        layer->setSourcePath(path);
+
         qCDebug(lcLazModel) << "rescan: insert" << shortId(layer)
                             << "file=" << entry.fileName();
         beginInsertRows(QModelIndex(), row, row);
@@ -496,8 +487,13 @@ void cwLazLayerModel::clear()
     }
     qCDebug(lcLazModel) << "clear: destroying" << m_layers.size() << "layers";
     beginResetModel();
-    qDeleteAll(m_layers);
+    // Empty the list before deleting, not after: a layer's destruction reaches
+    // observers — the local projection is told the header it was waiting for is
+    // never coming — and any of them may read the model back while the rest of
+    // the list is still being deleted.
+    const QList<cwLazLayer*> doomed = m_layers;
     m_layers.clear();
+    qDeleteAll(doomed);
     endResetModel();
     emit countChanged();
 }
@@ -521,6 +517,18 @@ void cwLazLayerModel::connectLayer(cwLazLayer* layer)
     connect(layer, &cwLazLayer::loadStatusChanged, this, [emitForRole]() { emitForRole(LoadStatusRole); });
     connect(layer, &cwLazLayer::pointCountChanged, this, [emitForRole]() { emitForRole(PointCountRole); });
     connect(layer, &cwLazLayer::enabledChanged, this, [emitForRole]() { emitForRole(EnabledRole); });
+
+    // Connected at creation, before the layer becomes a row, because the header
+    // read starts there too: setSourcePath asks for it and then asks whether
+    // the frame has settled, both before the insert is announced.
+    connect(layer, &cwLazLayer::headerProbeInFlightChanged, this, [this, layer]() {
+        updateHeaderProbeInFlight(layer, layer->headerProbeInFlight());
+    });
+    // A layer destroyed mid-read never delivers one, so it drops out here
+    // instead. The pointer is only ever a key — nothing dereferences it.
+    connect(layer, &QObject::destroyed, this, [this, layer]() {
+        updateHeaderProbeInFlight(layer, false);
+    });
 }
 
 cwLazLayer* cwLazLayerModel::createLayer()
@@ -528,8 +536,7 @@ cwLazLayer* cwLazLayerModel::createLayer()
     auto* layer = new cwLazLayer(this);
     connectLayer(layer);
     layer->setFutureManagerToken(m_futureManagerToken);
-    layer->setRegionGlobalCS(m_regionGlobalCS);
-    layer->setRegionWorldOrigin(m_regionWorldOrigin);
+    layer->setLocalProjectionToken(m_localProjectionToken);
     return layer;
 }
 
@@ -541,41 +548,6 @@ int cwLazLayerModel::indexOf(cwLazLayer* layer) const
         }
     }
     return -1;
-}
-
-void cwLazLayerModel::maybeAdoptRegionDefaultsFromLaz(const QString& sourcePath)
-{
-    auto* region = qobject_cast<cwCavingRegion*>(parent());
-    if (region == nullptr) {
-        return;
-    }
-
-    const bool needsCS = !region->geoReference()->hasCoordinateSystem();
-    // Use the explicit-set flag, not value-equality with cwGeoPoint{}: a
-    // user (or a test) can deliberately pin the origin to (0, 0, 0), and
-    // that pin is indistinguishable from "never set" by value alone. The
-    // flag tracks intent.
-    const bool needsOrigin = !region->geoReference()->hasExplicitWorldOrigin();
-
-    if (!needsCS && !needsOrigin) {
-        return;
-    }
-
-    const auto probe = cwLazLoader::probeHeader(sourcePath);
-    if (!probe.valid) {
-        return;
-    }
-
-    // setGlobalCoordinateSystem resets worldOrigin to {} internally; the
-    // setWorldOrigin call below restores a meaningful origin from the bbox
-    // center. Order matters — flip these and the origin gets wiped after we
-    // set it.
-    if (needsCS && !probe.sourceCS.isEmpty()) {
-        region->geoReference()->setGlobalCoordinateSystem(probe.sourceCS);
-    }
-    if (needsOrigin) {
-        region->geoReference()->setWorldOrigin(probe.bboxCenter);
-    }
 }
 
 cwProject* cwLazLayerModel::project() const

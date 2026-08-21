@@ -76,7 +76,6 @@ public:
 
     struct Region {
         QVector<Cave> caves;
-        QString globalCoordinateSystem;
 
         Region() = default;
 

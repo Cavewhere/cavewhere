@@ -104,6 +104,52 @@ TEST_CASE("cwCoordinateTransform reprojects WGS84 to UTM 12N", "[cwCoordinateTra
     CHECK_THAT(utm.z, WithinAbs(1500.0, 1e-3));
 }
 
+TEST_CASE("cwCoordinateTransform::transformPoint matches a built transform",
+          "[cwCoordinateTransform][transformPoint]")
+{
+    const cwGeoPoint lonLat(-110.0, 40.0, 1500.0);
+
+    SECTION("agrees with constructing the transform by hand") {
+        cwCoordinateTransform t("EPSG:4326", "EPSG:32612");
+        REQUIRE(t.isValid());
+        const cwGeoPoint expected = t.transform(lonLat);
+
+        const auto point = cwCoordinateTransform::transformPoint("EPSG:4326", "EPSG:32612", lonLat);
+        REQUIRE(point.has_value());
+        CHECK_THAT(point->x, WithinAbs(expected.x, 1e-6));
+        CHECK_THAT(point->y, WithinAbs(expected.y, 1e-6));
+        CHECK_THAT(point->z, WithinAbs(expected.z, 1e-6));
+    }
+
+    SECTION("a memo hit returns the same answer as the first call") {
+        const auto first = cwCoordinateTransform::transformPoint("EPSG:4326", "EPSG:32612", lonLat);
+        const auto second = cwCoordinateTransform::transformPoint("EPSG:4326", "EPSG:32612", lonLat);
+        REQUIRE(first.has_value());
+        REQUIRE(second.has_value());
+        CHECK(first->x == second->x);
+        CHECK(first->y == second->y);
+    }
+
+    SECTION("identical systems pass the point through untouched") {
+        const auto point = cwCoordinateTransform::transformPoint("EPSG:32612", " epsg:32612 ",
+                                                                 cwGeoPoint(500000.0, 4427757.0, 1500.0));
+        REQUIRE(point.has_value());
+        CHECK_THAT(point->x, WithinAbs(500000.0, 1e-9));
+        CHECK_THAT(point->y, WithinAbs(4427757.0, 1e-9));
+        CHECK_THAT(point->z, WithinAbs(1500.0, 1e-9));
+    }
+
+    SECTION("an empty system is unanswerable, not an identity") {
+        CHECK_FALSE(cwCoordinateTransform::transformPoint("", "EPSG:32612", lonLat).has_value());
+        CHECK_FALSE(cwCoordinateTransform::transformPoint("EPSG:4326", "   ", lonLat).has_value());
+    }
+
+    SECTION("an unbuildable pair stays empty on the cached second call") {
+        CHECK_FALSE(cwCoordinateTransform::transformPoint("EPSG:4326", "NOT-A-CS", lonLat).has_value());
+        CHECK_FALSE(cwCoordinateTransform::transformPoint("EPSG:4326", "NOT-A-CS", lonLat).has_value());
+    }
+}
+
 TEST_CASE("cwCoordinateTransform round-trip preserves mm precision", "[cwCoordinateTransform][precision]")
 {
     cwCoordinateTransform forward("EPSG:4326", "EPSG:32612");
@@ -205,6 +251,95 @@ TEST_CASE("cwCoordinateTransform::nameFor returns the human-readable description
     INFO("OSGB name: " << osgbName.toStdString());
     CHECK_FALSE(osgbName.isEmpty());
     CHECK(osgbName.contains("British", Qt::CaseInsensitive));
+}
+
+TEST_CASE("cwCoordinateTransform::deriveProjectedOutputCS suggests a projected CS",
+          "[cwCoordinateTransform][deriveOutputCS]")
+{
+    SECTION("Empty / invalid input yields no suggestion") {
+        CHECK(cwCoordinateTransform::deriveProjectedOutputCS("", cwGeoPoint(0, 0, 0)).isEmpty());
+        CHECK(cwCoordinateTransform::deriveProjectedOutputCS("   ", cwGeoPoint(0, 0, 0)).isEmpty());
+        CHECK(cwCoordinateTransform::deriveProjectedOutputCS("NOT_A_CRS", cwGeoPoint(0, 0, 0)).isEmpty());
+    }
+
+    SECTION("Already-projected input passes through unchanged (trimmed)") {
+        CHECK(cwCoordinateTransform::deriveProjectedOutputCS("EPSG:32612",
+                  cwGeoPoint(585360, 4428236, 1500)) == "EPSG:32612");
+        CHECK(cwCoordinateTransform::deriveProjectedOutputCS("  EPSG:27700  ",
+                  cwGeoPoint(400000, 300000, 100)) == "EPSG:27700");
+    }
+
+    SECTION("Geographic input (WGS84) resolves to the UTM zone at the fix") {
+        // -110 lon, 40 lat is zone 12 north: floor((-110+180)/6)+1 = 12.
+        CHECK(cwCoordinateTransform::deriveProjectedOutputCS(
+                  cwCoordinateTransform::Wgs84, cwGeoPoint(-110.0, 40.0, 1500.0)) == "EPSG:32612");
+        // 0 lon, 51.5 lat (London) is zone 31 north.
+        CHECK(cwCoordinateTransform::deriveProjectedOutputCS(
+                  cwCoordinateTransform::Wgs84, cwGeoPoint(0.0, 51.5, 0.0)) == "EPSG:32631");
+        // Southern hemisphere picks a 327xx code: 151 lon, -33.9 lat (Sydney) → zone 56 south.
+        CHECK(cwCoordinateTransform::deriveProjectedOutputCS(
+                  cwCoordinateTransform::Wgs84, cwGeoPoint(151.2, -33.9, 0.0)) == "EPSG:32756");
+    }
+
+    SECTION("A geographic input reprojects to WGS84 before choosing the zone") {
+        // NAD83 (EPSG:4269) at -87 lon, 38 lat → WGS84 ≈ same → zone 16 north
+        // ((-87+180)/6 = 15.5 → floor 15, +1 = 16). -87 is well inside zone 16,
+        // clear of the 16/17 boundary at -84.
+        const QString cs = cwCoordinateTransform::deriveProjectedOutputCS(
+            "EPSG:4269", cwGeoPoint(-87.0, 38.0, 0.0));
+        CHECK(cs == "EPSG:32616");
+    }
+}
+
+TEST_CASE("cwCoordinateTransform::domainCheck attributes the out-of-domain axis",
+          "[cwCoordinateTransform][domainCheck]")
+{
+    using DomainCheck = cwCoordinateTransform::DomainCheck;
+
+    SECTION("An in-domain UTM coordinate flags neither axis") {
+        // 478000 E, 4430000 N in UTM 13N is a real in-zone Colorado location.
+        const DomainCheck check =
+            cwCoordinateTransform::domainCheck("EPSG:32613", cwGeoPoint(478000.0, 4430000.0, 1655.0));
+        CHECK(check.eastingValid);
+        CHECK(check.northingValid);
+    }
+
+    SECTION("A transposed-digit easting flags only the easting") {
+        // 1478000 E is ~1000 km east of zone 13 — the longitude leaves the
+        // domain while the latitude (from a normal northing) stays inside it.
+        const DomainCheck check =
+            cwCoordinateTransform::domainCheck("EPSG:32613", cwGeoPoint(1478000.0, 4430000.0, 1655.0));
+        CHECK_FALSE(check.eastingValid);
+        CHECK(check.northingValid);
+    }
+
+    SECTION("A wildly wrong northing flags only the northing") {
+        // A large negative northing in a northern zone inverts to a southern
+        // latitude well outside the domain, while the easting stays near the
+        // central meridian and remains valid.
+        const DomainCheck check =
+            cwCoordinateTransform::domainCheck("EPSG:32613", cwGeoPoint(478000.0, -2000000.0, 1655.0));
+        CHECK(check.eastingValid);
+        CHECK_FALSE(check.northingValid);
+    }
+
+    SECTION("A northing past the pole is not blamed on the easting") {
+        // 14430000 N inverts to 50N/75E — the latitude still looks in-domain
+        // while the longitude has wrapped ~180 degrees past the pole. Attributing
+        // by axis here would tint the easting red for a bad northing, so the
+        // check must decline to attribute and flag both instead.
+        const DomainCheck check =
+            cwCoordinateTransform::domainCheck("EPSG:32613", cwGeoPoint(478000.0, 14430000.0, 1655.0));
+        CHECK_FALSE(check.eastingValid);
+        CHECK_FALSE(check.northingValid);
+    }
+
+    SECTION("An empty or unparseable CS defers — both axes valid") {
+        CHECK(cwCoordinateTransform::domainCheck("", cwGeoPoint(0, 0, 0)).eastingValid);
+        CHECK(cwCoordinateTransform::domainCheck("", cwGeoPoint(0, 0, 0)).northingValid);
+        CHECK(cwCoordinateTransform::domainCheck("NOT_A_CRS", cwGeoPoint(9e9, 9e9, 0)).eastingValid);
+        CHECK(cwCoordinateTransform::domainCheck("NOT_A_CRS", cwGeoPoint(9e9, 9e9, 0)).northingValid);
+    }
 }
 
 TEST_CASE("cwCoordinateSystem::modeFor classifies CS strings",
