@@ -56,10 +56,6 @@
 
 namespace {
 
-// Headroom for the scan worker plus the save-job queue on busy CI; the
-// attach itself finishes in milliseconds.
-constexpr int kAttachWaitMs = 10000;
-
 const QString kEntryFile = QStringLiteral("survex_simple.svx");
 
 struct ProjectFixture {

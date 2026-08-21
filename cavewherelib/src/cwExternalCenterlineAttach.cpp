@@ -257,8 +257,13 @@ QFuture<Monad::Result<AttachReport>> attach(cwTrip* trip,
             report.warnings = scan.warnings;
             report.metadata = seedTripMetadata(trip, scan.seededMetadata);
 
-            settingsPtr->setBreadcrumbPath(trip->id(),
-                                           QFileInfo(sourceFile).absoluteFilePath());
+            // Attach, Replace, and Reload all reach this one stamp, so
+            // every copy records the fingerprint of the source's whole
+            // dependency set alongside the breadcrumb.
+            settingsPtr->setBreadcrumb(
+                trip->id(),
+                QFileInfo(sourceFile).absoluteFilePath(),
+                cwExternalSourceSettings::computeFingerprint(scan.dependencies));
 
             deferred.complete(ReportResult(report));
         });

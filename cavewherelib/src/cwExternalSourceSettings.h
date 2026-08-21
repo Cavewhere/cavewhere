@@ -16,8 +16,11 @@
 #include <QObject>
 #include <QQmlEngine>
 #include <QString>
+#include <QStringList>
 #include <QUrl>
 #include <QUuid>
+
+class QSettings;
 
 /**
  * Per-user, per-machine breadcrumbs recording the file an external
@@ -50,6 +53,14 @@
  * instances in a process agree. The change signal fires only on the
  * instance that performed the mutation.
  *
+ * Each entry also carries the fingerprint of the source as it was when
+ * it was copied - one size + last-modified + SHA-256 record per file in
+ * the source's *include dependency set - so a later check can tell
+ * whether the source has moved on since (plans/
+ * EXTERNAL_SOURCE_CHANGE_NOTIFY.html section 2). Entries written before
+ * fingerprints existed simply record none, and read back as an empty
+ * fingerprint.
+ *
  * Owned by cwRootData; the attach orchestrator writes breadcrumbs and
  * the Replace dialog reads them.
  */
@@ -69,6 +80,37 @@ public:
     struct Breadcrumb {
         QUuid ownerId;
         QString path;
+    };
+
+    /**
+     * The state one source file was in when it was last copied into
+     * the project: its absolute path, byte size, last-modified time
+     * (milliseconds since the epoch, UTC), and the SHA-256 of its
+     * contents as lowercase hex. size is -1 and sha256 is empty for a
+     * file that could not be read when the fingerprint was taken.
+     */
+    struct SourceFileFingerprint {
+        QString path;
+        qint64 size = -1;
+        qint64 lastModified = -1;
+        QString sha256;
+
+        bool operator==(const SourceFileFingerprint& other) const = default;
+    };
+
+    /**
+     * One owner's source fingerprint: one record per file in the
+     * source's *include dependency set, entry file first, in the
+     * scanner's order. An empty fingerprint means no fingerprint was
+     * recorded for that owner - the state of every entry written
+     * before fingerprints existed, and the state a caller must read as
+     * "nothing to compare against" rather than as a change.
+     */
+    struct SourceFingerprint {
+        QList<SourceFileFingerprint> files;
+
+        bool isEmpty() const { return files.isEmpty(); }
+        bool operator==(const SourceFingerprint& other) const = default;
     };
 
     explicit cwExternalSourceSettings(QObject* parent = nullptr);
@@ -95,10 +137,36 @@ public:
     QList<Breadcrumb> breadcrumbs() const;
 
     /**
-     * Upserts the breadcrumb for ownerId. To remove the entry entirely
-     * use clearBreadcrumb.
+     * The fingerprint recorded for ownerId, empty when the entry
+     * records none - either because it predates fingerprints or
+     * because it was written by setBreadcrumbPath.
+     */
+    SourceFingerprint fingerprint(const QUuid& ownerId) const;
+
+    /**
+     * Upserts the breadcrumb for ownerId, recording no fingerprint:
+     * any fingerprint previously stored for ownerId is dropped, since
+     * it described a copy this path may no longer name. To remove the
+     * entry entirely use clearBreadcrumb.
      */
     void setBreadcrumbPath(const QUuid& ownerId, const QString& path);
+
+    /**
+     * Upserts the breadcrumb for ownerId together with the fingerprint
+     * of the source that was just copied into the project. Every copy
+     * path (Attach, Replace, Reload) stamps through here.
+     */
+    void setBreadcrumb(const QUuid& ownerId,
+                       const QString& path,
+                       const SourceFingerprint& fingerprint);
+
+    /**
+     * Reads `files` and returns their fingerprint, in the order given.
+     * Sources are small text files, so this reads every one of them;
+     * callers on the quiet path compare size and last-modified first
+     * and only come here to settle a stat-level difference.
+     */
+    static SourceFingerprint computeFingerprint(const QStringList& files);
 
     /** Removes any breadcrumb recorded for ownerId. */
     Q_INVOKABLE void clearBreadcrumb(const QUuid& ownerId);
@@ -114,6 +182,11 @@ signals:
 
 private:
     static QString breadcrumbKey(const QUuid& ownerId);
+    static QString fingerprintKey(const QUuid& ownerId);
+    static SourceFingerprint readFingerprint(QSettings& settings, const QUuid& ownerId);
+    static void writeFingerprint(QSettings& settings,
+                                 const QUuid& ownerId,
+                                 const SourceFingerprint& fingerprint);
 };
 
 #endif // CWEXTERNALSOURCESETTINGS_H

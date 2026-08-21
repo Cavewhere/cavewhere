@@ -35,6 +35,9 @@
 // Test helpers
 #include "LoadProjectHelper.h"
 
+// AsyncFuture
+#include <asyncfuture.h>
+
 // Qt
 #include <QAbstractItemModel>
 #include <QByteArray>
@@ -221,6 +224,36 @@ inline std::unique_ptr<SavedProjectFixture> makeSavedProject(
     fixture->rootData->futureManagerModel()->waitForFinished();
     QCoreApplication::processEvents();
     return fixture;
+}
+
+// Plenty of headroom for the scan worker + save-job queue under
+// valgrind / busy CI; the actual attach finishes in milliseconds.
+inline constexpr int kAttachWaitMs = 10000;
+
+inline cwExternalCenterlineManager* managerOf(SavedProjectFixture* fixture)
+{
+    return fixture->rootData->externalCenterlineManager();
+}
+
+// Drains the scan-then-solve pipeline plus the save queue so the maps,
+// rows, and watch set reflect every queued recompute.
+inline void drainPipelines(SavedProjectFixture* fixture)
+{
+    fixture->project->waitSaveToFinish();
+    fixture->rootData->linePlotManager()->waitToFinish();
+    fixture->rootData->futureManagerModel()->waitForFinished();
+    QCoreApplication::processEvents();
+}
+
+// The "give me an attached trip" prologue for tests about something
+// else. Tests about attach itself drive the future directly so they can
+// observe it mid-flight.
+inline void attachThroughManager(SavedProjectFixture* fixture, cwTrip* trip,
+                                 const QString& sourcePath)
+{
+    auto future = managerOf(fixture)->attachCenterline(trip, sourcePath);
+    REQUIRE(AsyncFuture::waitForFinished(future, kAttachWaitMs));
+    REQUIRE_FALSE(future.result().hasError());
 }
 
 inline cwCave* addEmptyCave(cwCavingRegion& region, const QString& name)

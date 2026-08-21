@@ -47,10 +47,6 @@
 
 namespace {
 
-// Plenty of headroom for the scan worker + save-job queue under
-// valgrind / busy CI; the actual attach finishes in milliseconds.
-constexpr int kAttachWaitMs = 10000;
-
 std::unique_ptr<SavedProjectFixture> makeNewProject()
 {
     return makeNewProject(QStringLiteral("AttachCave"), QStringLiteral("AttachTrip"));
@@ -516,31 +512,6 @@ TEST_CASE("attach refuses null inputs with a clear error",
 
 namespace {
 
-cwExternalCenterlineManager* managerOf(SavedProjectFixture* fixture)
-{
-    return fixture->rootData->externalCenterlineManager();
-}
-
-// Drains the scan-then-solve pipeline plus the save queue so the maps,
-// rows, and watch set reflect every queued recompute.
-void drainPipelines(SavedProjectFixture* fixture)
-{
-    fixture->project->waitSaveToFinish();
-    fixture->rootData->linePlotManager()->waitToFinish();
-    fixture->rootData->futureManagerModel()->waitForFinished();
-    QCoreApplication::processEvents();
-}
-
-// The "give me an attached trip" prologue for tests about something
-// else. Tests about attach itself drive the future directly so they can
-// observe it mid-flight.
-void attachThroughManager(SavedProjectFixture* fixture, const QString& sourcePath)
-{
-    auto future = managerOf(fixture)->attachCenterline(fixture->trip, sourcePath);
-    REQUIRE(AsyncFuture::waitForFinished(future, kAttachWaitMs));
-    REQUIRE_FALSE(future.result().hasError());
-}
-
 // nameTripFromFileAndNavigate's naming step: the entry file's base name,
 // deduped against the cave.
 void nameTripFromEntryFile(SavedProjectFixture* fixture)
@@ -637,7 +608,7 @@ TEST_CASE("manager attach solves a Compass .dat whose station names contain dots
         source = spaced;
     }
 
-    attachThroughManager(fixture.get(), source);
+    attachThroughManager(fixture.get(), fixture->trip, source);
     drainPipelines(fixture.get());
 
     INFO("solve error: "
@@ -662,7 +633,7 @@ TEST_CASE("manager detach drops the settings entry and dir map synchronously",
     const QString source = datasetExternalCenterlinePath(QStringLiteral("survex_simple.svx"));
     const QUuid ownerId = fixture->trip->id();
 
-    attachThroughManager(fixture.get(), source);
+    attachThroughManager(fixture.get(), fixture->trip, source);
     drainPipelines(fixture.get());
     REQUIRE(manager->solveInputs().tripAttachmentDirs.contains(ownerId));
 
@@ -836,7 +807,7 @@ TEST_CASE("cancelAttach is a no-op for idle owners and non-attach operations",
     // Idle owner: nothing to cancel, nothing reported.
     manager->cancelAttach(ownerId);
 
-    attachThroughManager(fixture.get(), source);
+    attachThroughManager(fixture.get(), fixture->trip, source);
 
     // cancelAttach never touches a detach in flight.
     auto detachFuture = manager->detachCenterline(fixture->trip);
@@ -914,7 +885,7 @@ TEST_CASE("replace swaps the closure, GCs the dropped deps, and re-solves",
 
     // Three files deep: survex_nested.svx -> entrance.svx -> passage.svx.
     const QString nested = datasetExternalCenterlinePath(QStringLiteral("survex_nested.svx"));
-    attachThroughManager(fixture.get(), nested);
+    attachThroughManager(fixture.get(), fixture->trip, nested);
     drainPipelines(fixture.get());
 
     const QDir attachmentDir = fixture->saveLoad()->externalCenterlineDir(fixture->trip);
@@ -966,7 +937,7 @@ TEST_CASE("replace overwrites an edit to the project copy that kept its size",
     auto manager = managerOf(fixture.get());
 
     const QString simple = datasetExternalCenterlinePath(QStringLiteral("survex_simple.svx"));
-    attachThroughManager(fixture.get(), simple);
+    attachThroughManager(fixture.get(), fixture->trip, simple);
     drainPipelines(fixture.get());
 
     const QDir attachmentDir = fixture->saveLoad()->externalCenterlineDir(fixture->trip);
@@ -1029,7 +1000,7 @@ TEST_CASE("replace refuses a busy owner without disturbing the attachment",
     const QUuid ownerId = fixture->trip->id();
     const QString simple = datasetExternalCenterlinePath(QStringLiteral("survex_simple.svx"));
 
-    attachThroughManager(fixture.get(), simple);
+    attachThroughManager(fixture.get(), fixture->trip, simple);
     drainPipelines(fixture.get());
 
     cwSignalSpy busySpy(manager, &cwExternalCenterlineManager::ownerBusyChanged);
@@ -1091,7 +1062,7 @@ TEST_CASE("reload re-copies the remembered source over the project copy",
 
     const QString sourcePath =
         externalSourceCopy(fixture.get(), QStringLiteral("survex_simple.svx"));
-    attachThroughManager(fixture.get(), sourcePath);
+    attachThroughManager(fixture.get(), fixture->trip, sourcePath);
     drainPipelines(fixture.get());
 
     const QString copyPath = fixture->saveLoad()
@@ -1141,7 +1112,7 @@ TEST_CASE("reload refuses a busy owner", "[Attach][Reload]")
 
     const QString sourcePath =
         externalSourceCopy(fixture.get(), QStringLiteral("survex_simple.svx"));
-    attachThroughManager(fixture.get(), sourcePath);
+    attachThroughManager(fixture.get(), fixture->trip, sourcePath);
     drainPipelines(fixture.get());
 
     const QString nested = datasetExternalCenterlinePath(QStringLiteral("survex_nested.svx"));
@@ -1173,7 +1144,7 @@ TEST_CASE("reload is offered only for a source this machine has outside the proj
 
     const QString sourcePath =
         externalSourceCopy(fixture.get(), QStringLiteral("survex_simple.svx"));
-    attachThroughManager(fixture.get(), sourcePath);
+    attachThroughManager(fixture.get(), fixture->trip, sourcePath);
     drainPipelines(fixture.get());
     REQUIRE(manager->canReloadFromSource(fixture->trip));
 
@@ -1228,7 +1199,7 @@ TEST_CASE("a deleted in-project copy is reported missing until the file returns"
     const QUuid ownerId = fixture->trip->id();
     const QString source = datasetExternalCenterlinePath(QStringLiteral("survex_simple.svx"));
 
-    attachThroughManager(fixture.get(), source);
+    attachThroughManager(fixture.get(), fixture->trip, source);
     drainPipelines(fixture.get());
     CHECK(manager->missingCopyPath(ownerId).isEmpty());
 
@@ -1278,7 +1249,7 @@ TEST_CASE("replacing an attachment whose copy went missing clears the report",
     const QUuid ownerId = fixture->trip->id();
     const QString simple = datasetExternalCenterlinePath(QStringLiteral("survex_simple.svx"));
 
-    attachThroughManager(fixture.get(), simple);
+    attachThroughManager(fixture.get(), fixture->trip, simple);
     drainPipelines(fixture.get());
 
     const QString copyPath = fixture->saveLoad()
@@ -1321,7 +1292,7 @@ TEST_CASE("a missing copy costs its own survey, not the region's plot",
     cwTrip* survivor = fixture->cave->trip(1);
     survivor->setName(QStringLiteral("SurvivingTrip"));
 
-    attachThroughManager(fixture.get(), simple);
+    attachThroughManager(fixture.get(), fixture->trip, simple);
     auto survivorAttach = manager->attachCenterline(survivor, simple);
     REQUIRE(AsyncFuture::waitForFinished(survivorAttach, kAttachWaitMs));
     REQUIRE_FALSE(survivorAttach.result().hasError());
@@ -1404,7 +1375,7 @@ TEST_CASE("naming a trip from its file after attach keeps the copy the project r
 
     const QString source = datasetExternalCenterlinePath(QStringLiteral("survex_simple.svx"));
 
-    attachThroughManager(fixture.get(), source);
+    attachThroughManager(fixture.get(), fixture->trip, source);
     drainPipelines(fixture.get());
 
     // The copies landed under the placeholder name the dialog attached to.
@@ -1431,7 +1402,7 @@ TEST_CASE("a scan racing the rename's move stops reporting the copy missing",
     auto fixture = makeNewProject();
     const QString source = datasetExternalCenterlinePath(QStringLiteral("survex_simple.svx"));
 
-    attachThroughManager(fixture.get(), source);
+    attachThroughManager(fixture.get(), fixture->trip, source);
     drainPipelines(fixture.get());
 
     auto manager = managerOf(fixture.get());
