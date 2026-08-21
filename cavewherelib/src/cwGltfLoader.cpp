@@ -11,9 +11,100 @@
 #include <QtGlobal>
 #include <QFileInfo>
 #include <QColorSpace>
+#include <QDateTime>
+#include <QList>
+#include <QMutex>
+#include <QMutexLocker>
+#include <QTimeZone>
+
+// Std
+#include <memory>
 
 // Local helpers kept in the same namespace
 namespace cw::gltf {
+
+// ---------- Scene cache ----------
+//
+// Loads run on cwConcurrent worker threads and the same file is loaded by both
+// the note editor and the 3D view, once per declination/station edit. Keeping
+// the most recent scenes avoids re-reading and re-decoding the file every time.
+
+namespace {
+
+constexpr int kSceneCacheCapacity = 4;
+
+struct SceneCacheEntry {
+    QString key;
+    std::shared_ptr<const SceneCPU> scene;
+};
+
+QMutex& sceneCacheMutex()
+{
+    static QMutex mutex;
+    return mutex;
+}
+
+// Most recently used first.
+QList<SceneCacheEntry>& sceneCache()
+{
+    static QList<SceneCacheEntry> cache;
+    return cache;
+}
+
+QString sceneCacheKey(const QString& filePath, const LoadOptions& options)
+{
+    const QFileInfo info(filePath);
+
+    QString key = info.absoluteFilePath();
+    key += QStringLiteral("|")
+           + QString::number(info.lastModified(QTimeZone::UTC).toMSecsSinceEpoch());
+    key += QStringLiteral("|") + QString::number(info.size());
+
+    for (const auto& desc : options.requestedLayout) {
+        key += QStringLiteral("|") + QString::number(static_cast<int>(desc.semantic))
+               + QStringLiteral(":") + QString::number(static_cast<int>(desc.format));
+    }
+
+    return key;
+}
+
+std::shared_ptr<const SceneCPU> cachedScene(const QString& key)
+{
+    QMutexLocker locker(&sceneCacheMutex());
+    auto& cache = sceneCache();
+
+    for (int i = 0; i < cache.size(); ++i) {
+        if (cache.at(i).key == key) {
+            const SceneCacheEntry entry = cache.at(i);
+            cache.removeAt(i);
+            cache.prepend(entry);
+            return entry.scene;
+        }
+    }
+
+    return {};
+}
+
+void insertScene(const QString& key, std::shared_ptr<const SceneCPU> scene)
+{
+    QMutexLocker locker(&sceneCacheMutex());
+    auto& cache = sceneCache();
+
+    for (int i = 0; i < cache.size(); ++i) {
+        if (cache.at(i).key == key) {
+            cache.removeAt(i);
+            break;
+        }
+    }
+
+    cache.prepend({key, std::move(scene)});
+
+    while (cache.size() > kSceneCacheCapacity) {
+        cache.removeLast();
+    }
+}
+
+} // namespace
 
 // ---------- Helpers: attribute/index plumbing ----------
 
@@ -43,18 +134,6 @@ static AttributeView attributeView(const tinygltf::Model& model,
     view.normalized = accessor.normalized;
 
     return view;
-}
-
-static QRhiCommandBuffer::IndexFormat toRhiIndexFormat(int gltfComponentType)
-{
-    if (gltfComponentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT) {
-        return QRhiCommandBuffer::IndexUInt16;
-    }
-    if (gltfComponentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT) {
-        return QRhiCommandBuffer::IndexUInt32;
-    }
-    // UNSIGNED_BYTE not supported by QRhi: convert to 16-bit when encountered.
-    return QRhiCommandBuffer::IndexUInt16;
 }
 
 // ---------- CPU builders ----------
@@ -446,6 +525,13 @@ SceneCPU Loader::loadGltf(const QString &filePath)
 
 SceneCPU Loader::loadGltf(const QString &filePath, const LoadOptions& options)
 {
+    const QString cacheKey = sceneCacheKey(filePath, options);
+    if (const auto cached = cachedScene(cacheKey)) {
+        // SceneCPU's members are implicitly shared, so this copy is a refcount
+        // bump and any later mutation by the caller detaches from the cache.
+        return *cached;
+    }
+
     tinygltf::TinyGLTF loader;
     tinygltf::Model model;
     std::string error;
@@ -487,6 +573,8 @@ SceneCPU Loader::loadGltf(const QString &filePath, const LoadOptions& options)
             }
         }
     }
+
+    insertScene(cacheKey, std::make_shared<const SceneCPU>(scene));
 
     return scene;
 }
@@ -549,22 +637,19 @@ QImage TextureCPU::toImage() const
         return {};
     }
 
-    QImage image(width, height, QImage::Format_RGBA8888);
-    const int dstStride = image.bytesPerLine();
-    const int srcStride = width * 4;
-
-    if (dstStride == srcStride) {
-        std::memcpy(image.bits(), pixels.constData(), size_t(expectedSize));
-    } else {
-        const unsigned char* src = reinterpret_cast<const unsigned char*>(pixels.constData());
-        unsigned char* dst = image.bits();
-        for (int y = 0; y < height; y++) {
-            std::memcpy(dst + y * dstStride, src + y * srcStride, size_t(srcStride));
-        }
-    }
+    // The QImage borrows the QByteArray's payload; the holder below keeps a
+    // reference alive for as long as the image (or any copy of it) exists.
+    // Painting on such an image detaches first, so this stays copy-on-write.
+    auto* holder = new QByteArray(pixels);
+    QImage image(reinterpret_cast<const uchar*>(holder->constData()),
+                 width,
+                 height,
+                 width * 4,
+                 QImage::Format_RGBA8888,
+                 [](void* data) { delete static_cast<QByteArray*>(data); },
+                 holder);
 
     image.setColorSpace(isSRGB ? QColorSpace::SRgb : QColorSpace::SRgbLinear);
-
 
     return image;
 }

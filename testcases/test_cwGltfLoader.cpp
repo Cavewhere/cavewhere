@@ -7,6 +7,8 @@
 #include "LoadProjectHelper.h"
 
 //Qt includes
+#include <QDateTime>
+#include <QFile>
 #include <QFileInfo>
 #include <QImage>
 
@@ -163,5 +165,46 @@ TEST_CASE("baseColorImage handles materials without a baseColor texture", "[cwGl
         cw::gltf::MaterialCPU material;
         material.baseColorTextureIndex = scene.textures.size();
         REQUIRE(cw::gltf::baseColorImage(scene, material).isNull());
+    }
+}
+
+TEST_CASE("GLTF loader caches scenes and shares texture pixels", "[cwGltfLoader]")
+{
+    const QString gltfPath = copyToTempFolder(testcasesDatasetPath("test_cwGltfLoader/test.glb"));
+    REQUIRE_FALSE(gltfPath.isEmpty());
+    REQUIRE(QFileInfo::exists(gltfPath));
+
+    cw::gltf::LoadOptions options;
+    options.requestedLayout = cwRenderTexturedItems::geometryLayout();
+
+    const auto firstScene = cw::gltf::Loader::loadGltf(gltfPath, options);
+    REQUIRE_FALSE(firstScene.textures.isEmpty());
+    const auto& firstTexture = firstScene.textures.at(0);
+    REQUIRE_FALSE(firstTexture.pixels.isEmpty());
+
+    SECTION("a second load of the same file shares the first load's pixels") {
+        const auto secondScene = cw::gltf::Loader::loadGltf(gltfPath, options);
+        REQUIRE_FALSE(secondScene.textures.isEmpty());
+        REQUIRE(secondScene.textures.at(0).pixels.constData() == firstTexture.pixels.constData());
+    }
+
+    SECTION("a modified file loads fresh pixels") {
+        QFile file(gltfPath);
+        REQUIRE(file.open(QIODevice::ReadWrite));
+        REQUIRE(file.setFileTime(QDateTime::currentDateTimeUtc().addSecs(60),
+                                 QFileDevice::FileModificationTime));
+        file.close();
+
+        const auto reloadedScene = cw::gltf::Loader::loadGltf(gltfPath, options);
+        REQUIRE_FALSE(reloadedScene.textures.isEmpty());
+        REQUIRE(reloadedScene.textures.at(0).pixels.constData() != firstTexture.pixels.constData());
+    }
+
+    SECTION("toImage borrows the texture's pixel buffer") {
+        const QImage image = firstTexture.toImage();
+        REQUIRE_FALSE(image.isNull());
+        REQUIRE(image.width() == firstTexture.width);
+        REQUIRE(image.height() == firstTexture.height);
+        REQUIRE(reinterpret_cast<const char*>(image.constBits()) == firstTexture.pixels.constData());
     }
 }
