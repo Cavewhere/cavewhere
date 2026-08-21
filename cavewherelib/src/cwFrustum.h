@@ -49,4 +49,14 @@ private:
     bool m_valid = false;
 };
 
+/**
+ * Returns the axis-aligned box that contains @a box's eight corners after they
+ * pass through @a matrix.
+ *
+ * Rotating or shearing tilts the box, so the result is the AABB of the tilted
+ * corners — larger than the true shape, which keeps culling conservative. A
+ * null or infinite box comes back unchanged.
+ */
+QBox3D transformedBounds(const QBox3D& box, const QMatrix4x4& matrix);
+
 #endif // CWFRUSTUM_H

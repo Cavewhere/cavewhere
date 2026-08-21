@@ -1,5 +1,6 @@
 #include "cwRhiTexturedItems.h"
 
+#include "cwFrustum.h"
 #include "cwRenderTexturedItems.h"
 #include "cwRhiAttributeFormat.h"
 #include "cwRhiItemRenderer.h"
@@ -96,6 +97,7 @@ void cwRhiTexturedItems::synchronize(const SynchronizeData& data)
             item->pipelineNeedsUpdate = true;
             item->modelMatrix = payload.modelMatrix;
             item->modelMatrixNeedsUpdate = true;
+            item->updateBoundsFromGeometry();
 
             // Ids are monotonic, so an Add never targets a live id.
             Q_ASSERT(!m_items.contains(id));
@@ -118,6 +120,7 @@ void cwRhiTexturedItems::synchronize(const SynchronizeData& data)
             if (state.geometryDirty) {
                 item->geometry = payload.geometry;
                 item->geometryNeedsUpdate = true;
+                item->updateBoundsFromGeometry();
             }
             if (state.textureDirty) {
                 item->image = payload.texture;
@@ -136,6 +139,7 @@ void cwRhiTexturedItems::synchronize(const SynchronizeData& data)
                 item->modelMatrix = payload.modelMatrix;
                 item->modelMatrixNeedsUpdate = true;
                 item->uniformNeedsUpdate = true;
+                item->updateWorldBounds();
             }
             break;
         }
@@ -213,6 +217,15 @@ bool cwRhiTexturedItems::gather(const GatherContext& context, QVector<PipelineBa
             continue;
         }
 
+        // Scraps and LiDAR meshes share this one render object, so whole-object
+        // culling can't help them — each item tests its own box here, ahead of
+        // ensurePipeline so a culled item skips the pipeline work too.
+        if (context.frustum
+            && item->boundsValid
+            && !context.frustum->intersects(item->worldBounds)) {
+            continue;
+        }
+
         // Rebuild the pipeline if this pass's target changed since last frame
         // (cloud appeared/disappeared → Opaque routes through the 1x offscreen
         // or back to the swap chain). Self-guards on the key, so a no-op when
@@ -255,6 +268,23 @@ bool cwRhiTexturedItems::gather(const GatherContext& context, QVector<PipelineBa
     return appended;
 }
 
+std::optional<QBox3D> cwRhiTexturedItems::worldBounds() const
+{
+    QBox3D united;
+
+    for (const Item* item : m_items) {
+        if (item && item->boundsValid) {
+            united.unite(item->worldBounds);
+        }
+    }
+
+    if (united.isNull()) {
+        return std::nullopt;
+    }
+
+    return united;
+}
+
 cwRhiTexturedItems::Item::Item() = default;
 
 cwRhiTexturedItems::Item::~Item()
@@ -279,6 +309,47 @@ void cwRhiTexturedItems::Item::initializeResources(const ResourceUpdateData& dat
     indexBuffer->create();
 
     resourcesInitialized = true;
+}
+
+/**
+ * Recomputes localBounds from the geometry payload and refreshes worldBounds.
+ *
+ * Only synchronize can call this — updateGeometryBuffers drops the geometry
+ * once it has been uploaded. Geometry without positions leaves the bounds
+ * invalid, so the item keeps drawing.
+ */
+void cwRhiTexturedItems::Item::updateBoundsFromGeometry()
+{
+    boundsValid = false;
+    localBounds = QBox3D();
+    worldBounds = QBox3D();
+
+    const auto* positionAttribute = geometry.attribute(cwGeometry::Semantic::Position);
+    const qsizetype vertexCount = geometry.vertexCount();
+    if (!positionAttribute || vertexCount == 0) {
+        return;
+    }
+
+    for (qsizetype index = 0; index < vertexCount; index++) {
+        localBounds.unite(geometry.value<QVector3D>(positionAttribute, index));
+    }
+
+    boundsValid = true;
+    updateWorldBounds();
+}
+
+/**
+ * Refreshes worldBounds from localBounds through the current modelMatrix. LiDAR
+ * geometry arrives already morphed to world space with an identity matrix; the
+ * transform is identity-safe, so scraps with real matrices share this path.
+ */
+void cwRhiTexturedItems::Item::updateWorldBounds()
+{
+    if (!boundsValid) {
+        return;
+    }
+
+    worldBounds = transformedBounds(localBounds, modelMatrix);
 }
 
 void cwRhiTexturedItems::Item::updateGeometryBuffers(const ResourceUpdateData& data)

@@ -20,6 +20,7 @@ public:
     void updateResources(const ResourceUpdateData& data) override;
     bool gather(const GatherContext& context, QVector<PipelineBatch>& batches) override;
     void purgePipelinesFor(QRhiRenderPassDescriptor* descriptor) override;
+    std::optional<QBox3D> worldBounds() const override;
 
 private:
     struct SharedItemData {
@@ -51,6 +52,13 @@ private:
         cwRenderMaterialState material;
         QMatrix4x4 modelMatrix;
 
+        // localBounds comes from the Position attribute, worldBounds from
+        // localBounds through modelMatrix. An item with invalid bounds always
+        // draws rather than risking a wrong cull.
+        QBox3D localBounds;
+        QBox3D worldBounds;
+        bool boundsValid = false;
+
         bool resourcesInitialized = false;
         bool geometryNeedsUpdate = false;
         bool textureNeedsUpdate = false;
@@ -73,6 +81,8 @@ private:
         void createShaderResourceBindings(const ResourceUpdateData& data, const SharedItemData &sharedData);
         void purgePipelinesFor(QRhiRenderPassDescriptor* descriptor);
         QByteArray buildPerDrawUniformPayload() const;
+        void updateBoundsFromGeometry();
+        void updateWorldBounds();
     };
 
     QHash<uint32_t, Item*> m_items;

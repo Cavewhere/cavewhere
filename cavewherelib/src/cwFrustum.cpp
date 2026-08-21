@@ -17,6 +17,13 @@ namespace {
 //it came from isn't a usable projection.
 constexpr float kMinPlaneNormalLength = 1e-6f;
 
+//A box has eight corners, each picking either the minimum or the maximum along
+//an axis. The bits of the corner index choose which.
+constexpr int kCornerCount = 8;
+constexpr int kCornerXBit = 1;
+constexpr int kCornerYBit = 2;
+constexpr int kCornerZBit = 4;
+
 }
 
 /**
@@ -97,4 +104,24 @@ bool cwFrustum::intersects(const QBox3D& box) const
     }
 
     return true;
+}
+
+QBox3D transformedBounds(const QBox3D& box, const QMatrix4x4& matrix)
+{
+    if (box.isNull() || box.isInfinite()) {
+        return box;
+    }
+
+    const QVector3D minimum = box.minimum();
+    const QVector3D maximum = box.maximum();
+
+    QBox3D transformed;
+    for (int corner = 0; corner < kCornerCount; corner++) {
+        const QVector3D point((corner & kCornerXBit) ? maximum.x() : minimum.x(),
+                              (corner & kCornerYBit) ? maximum.y() : minimum.y(),
+                              (corner & kCornerZBit) ? maximum.z() : minimum.z());
+        transformed.unite(matrix.map(point));
+    }
+
+    return transformed;
 }

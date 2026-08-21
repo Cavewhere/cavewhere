@@ -58,6 +58,34 @@ QBox3D pointBox(const QVector3D& point)
     return QBox3D(point, point);
 }
 
+constexpr float kQuarterTurnDegrees = 90.0f;
+constexpr float kSkewAngleDegrees = 37.0f;
+constexpr float kBoundsTolerance = 1e-4f;
+
+bool fuzzyEquals(const QVector3D& left, const QVector3D& right)
+{
+    return (left - right).length() <= kBoundsTolerance;
+}
+
+//The reference the helper has to match: the AABB of the eight corners, built
+//the long way around.
+QBox3D boxOfTransformedCorners(const QBox3D& box, const QMatrix4x4& matrix)
+{
+    const QVector3D minimum = box.minimum();
+    const QVector3D maximum = box.maximum();
+
+    QBox3D result;
+    for (const float x : {minimum.x(), maximum.x()}) {
+        for (const float y : {minimum.y(), maximum.y()}) {
+            for (const float z : {minimum.z(), maximum.z()}) {
+                result.unite(matrix.map(QVector3D(x, y, z)));
+            }
+        }
+    }
+
+    return result;
+}
+
 }
 
 TEST_CASE("cwFrustum: a default frustum is invalid and intersects everything", "[Frustum]") {
@@ -213,4 +241,75 @@ TEST_CASE("cwFrustum: an ortho camera handles point boxes", "[Frustum]") {
     CHECK(frustum.intersects(pointBox(QVector3D(0.0f, 0.0f, -50.0f))));
     CHECK_FALSE(frustum.intersects(pointBox(QVector3D(0.0f, 0.0f, 10.0f))));
     CHECK_FALSE(frustum.intersects(pointBox(QVector3D(0.0f, 50.0f, -50.0f))));
+}
+
+TEST_CASE("transformedBounds: contains every transformed corner", "[Frustum]") {
+    const QBox3D box(QVector3D(-1.0f, -2.0f, -3.0f), QVector3D(4.0f, 5.0f, 6.0f));
+
+    QMatrix4x4 matrix;
+
+    SECTION("identity leaves the box alone") {
+        const QBox3D result = transformedBounds(box, matrix);
+
+        CHECK(fuzzyEquals(result.minimum(), box.minimum()));
+        CHECK(fuzzyEquals(result.maximum(), box.maximum()));
+    }
+
+    SECTION("pure translation slides the box") {
+        const QVector3D offset(10.0f, -20.0f, 30.0f);
+        matrix.translate(offset);
+
+        const QBox3D result = transformedBounds(box, matrix);
+
+        CHECK(fuzzyEquals(result.minimum(), box.minimum() + offset));
+        CHECK(fuzzyEquals(result.maximum(), box.maximum() + offset));
+    }
+
+    SECTION("a 90 degree rotation swaps extents") {
+        matrix.rotate(kQuarterTurnDegrees, 0.0f, 0.0f, 1.0f);
+
+        const QBox3D result = transformedBounds(box, matrix);
+
+        //Rotating about z by 90 degrees maps (x, y) to (-y, x).
+        CHECK(fuzzyEquals(result.minimum(), QVector3D(-5.0f, -1.0f, -3.0f)));
+        CHECK(fuzzyEquals(result.maximum(), QVector3D(2.0f, 4.0f, 6.0f)));
+    }
+
+    SECTION("nonuniform scale stretches each axis") {
+        matrix.scale(2.0f, 3.0f, -1.0f);
+
+        const QBox3D result = transformedBounds(box, matrix);
+
+        CHECK(fuzzyEquals(result.minimum(), QVector3D(-2.0f, -6.0f, -6.0f)));
+        CHECK(fuzzyEquals(result.maximum(), QVector3D(8.0f, 15.0f, 3.0f)));
+    }
+
+    SECTION("a full affine transform still contains all eight corners") {
+        matrix.translate(3.0f, -4.0f, 5.0f);
+        matrix.rotate(kSkewAngleDegrees, 1.0f, 2.0f, 3.0f);
+        matrix.scale(1.5f, 0.25f, 2.0f);
+
+        const QBox3D result = transformedBounds(box, matrix);
+        const QBox3D corners = boxOfTransformedCorners(box, matrix);
+
+        CHECK(fuzzyEquals(result.minimum(), corners.minimum()));
+        CHECK(fuzzyEquals(result.maximum(), corners.maximum()));
+    }
+}
+
+TEST_CASE("transformedBounds: passes degenerate boxes through", "[Frustum]") {
+    QMatrix4x4 matrix;
+    matrix.translate(1.0f, 2.0f, 3.0f);
+
+    SECTION("a null box stays null") {
+        CHECK(transformedBounds(QBox3D(), matrix).isNull());
+    }
+
+    SECTION("a point box moves as a point") {
+        const QVector3D point(1.0f, 1.0f, 1.0f);
+        const QBox3D result = transformedBounds(pointBox(point), matrix);
+
+        CHECK(fuzzyEquals(result.minimum(), matrix.map(point)));
+        CHECK(fuzzyEquals(result.maximum(), matrix.map(point)));
+    }
 }
