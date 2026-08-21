@@ -15,6 +15,7 @@
 #include "cwExternalCenterlineAttach.h"
 #include "cwExternalCenterlineManager.h"
 #include "cwExternalSourceSettings.h"
+#include "cwExternalSourceStatusModel.h"
 #include "cwFutureManagerModel.h"
 #include "cwLinePlotManager.h"
 #include "cwProject.h"
@@ -1411,4 +1412,70 @@ TEST_CASE("a scan racing the rename's move stops reporting the copy missing",
     drainPipelines(fixture.get());
 
     checkAttachmentIsReadable(fixture.get());
+}
+
+// ---------------------------------------------------------------------
+// Save As (plans/EXTERNAL_SOURCE_CHANGE_NOTIFY.html §6
+// "fu-save-as-breadcrumb"). The breadcrumb and its fingerprint are keyed
+// by owner UUID, so Save As has to leave the owner reading the same key
+// it was stamped under - otherwise the panel's source line falls back to
+// "an unknown location" and the change detection degrades to
+// NoBreadcrumb.
+// ---------------------------------------------------------------------
+
+TEST_CASE("Save As keeps the attachment's remembered source and fingerprint",
+          "[Attach][SaveAs]")
+{
+    auto fixture = makeNewProject();
+    const QString source = datasetExternalCenterlinePath(QStringLiteral("survex_simple.svx"));
+
+    attachThroughManager(fixture.get(), fixture->trip, source);
+    drainPipelines(fixture.get());
+
+    const QUuid ownerBefore = fixture->trip->id();
+    REQUIRE(fixture->settings()->breadcrumbPath(ownerBefore) == source);
+    REQUIRE_FALSE(fixture->settings()->fingerprint(ownerBefore).isEmpty());
+
+    QTemporaryDir destinationDir;
+    REQUIRE(destinationDir.isValid());
+
+    QString destination;
+    SECTION("bundled .cw") {
+        destination = QDir(destinationDir.path()).filePath(QStringLiteral("saved-as.cw"));
+    }
+    SECTION(".cwproj directory") {
+        destination = QDir(destinationDir.path()).filePath(QStringLiteral("saved-as.cwproj"));
+    }
+
+    REQUIRE(fixture->project->saveAs(destination));
+    fixture->project->waitSaveToFinish();
+    drainPipelines(fixture.get());
+
+    // The panel resolves the owner from the region, as the UI does.
+    cwTrip* trip = fixture->rootData->region()->cave(0)->trip(0);
+    const QUuid ownerAfter = trip->id();
+
+    CHECK(fixture->settings()->breadcrumbPath(ownerAfter) == source);
+    CHECK_FALSE(fixture->settings()->fingerprint(ownerAfter).isEmpty());
+
+    managerOf(fixture.get())->rescanAttachments();
+    drainPipelines(fixture.get());
+    CHECK(managerOf(fixture.get())->sourceStatusModel()->statusFor(ownerAfter)
+          != cwExternalSourceStatusModel::Status::NoBreadcrumb);
+
+    // Re-opening what Save As wrote has to land on the same key too.
+    const QString savedPath = fixture->project->filename();
+    auto freshRoot = std::make_unique<cwRootData>();
+    freshRoot->project()->loadFile(savedPath);
+    freshRoot->project()->waitLoadToFinish();
+    freshRoot->linePlotManager()->waitToFinish();
+    freshRoot->futureManagerModel()->waitForFinished();
+    QCoreApplication::processEvents();
+
+    REQUIRE(freshRoot->region()->caveCount() == 1);
+    cwTrip* reopenedTrip = freshRoot->region()->cave(0)->trip(0);
+    CHECK(freshRoot->externalSourceSettings()->breadcrumbPath(reopenedTrip->id()) == source);
+    CHECK(freshRoot->externalCenterlineManager()->sourceStatusModel()
+              ->statusFor(reopenedTrip->id())
+          != cwExternalSourceStatusModel::Status::NoBreadcrumb);
 }

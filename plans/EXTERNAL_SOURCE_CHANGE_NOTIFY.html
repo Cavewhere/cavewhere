@@ -296,6 +296,24 @@ status               UpToDate | Changed | SourceMissing | NoBreadcrumb</code></p
     NoBreadcrumb. <strong>Test both project formats</strong>: Save As to
     a bundled <code>.cw</code> and to a <code>.cwproj</code> directory
     &mdash; the two take different transfer paths.
+    <p><strong>Diagnosis 2026-08-21 (at a6bd3053): the repro passes.</strong>
+    A C++ gate ("Save As keeps the attachment's remembered source and
+    fingerprint", <code>[Attach][SaveAs]</code>) drives new project &rarr;
+    attach &rarr; Save As to both formats plus a reopen of what Save As
+    wrote, and a real-UI probe read the panel's own
+    <code>sourceModeLabel</code> after Save As &mdash; the trip UUID stays
+    unchanged and the breadcrumb, fingerprint, and status all survive on
+    every path. Code reading confirms neither Save As branch reloads the
+    region or regenerates ids; <code>repairTopLevelIds</code> runs only on
+    load and only for a null or duplicate id; nothing in save/transfer
+    touches the settings entry. The gate test is committed as the guard.
+    Reopening the bug needs the specific project (path + format) and click
+    order that showed "unknown location". Two shapes the tests could not
+    drive: Save As out of a legacy SQLite-converted <code>.cw</code>
+    (the <code>saveAllFromV6</code> path), and a project whose trips carry
+    duplicate or null ids on disk, where the next <em>load</em> legitimately
+    regenerates ids and would strand the entry &mdash; a load-time orphan,
+    fixable by re-keying at repair time.</p>
   </li>
 </ul>
 
