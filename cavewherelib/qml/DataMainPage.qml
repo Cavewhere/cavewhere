@@ -320,7 +320,10 @@ StandardPage {
                             objectName: "projectionAnchorValue"
                             Layout.fillWidth: true
                             Layout.maximumWidth: Math.ceil(implicitWidth)
-                            wrapMode: QQ.Text.WordWrap
+                            // Wrap, not WordWrap: a station name is one token
+                            // with nowhere to break, and WordWrap paints it
+                            // past the frame instead of folding it.
+                            wrapMode: QQ.Text.Wrap
                             text: RootData.region.geoReference.anchorDescription
                         }
 
@@ -348,7 +351,7 @@ StandardPage {
 
                             Layout.fillWidth: true
                             Layout.maximumWidth: Math.ceil(implicitWidth)
-                            wrapMode: QQ.Text.WordWrap
+                            wrapMode: QQ.Text.Wrap
 
                             text: datumValueId.unnamed
                                   ? qsTr("Unknown")

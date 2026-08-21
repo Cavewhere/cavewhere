@@ -278,6 +278,33 @@ MainWindowTest {
             editButton().editMode = false
         }
 
+        // A name can be one long token with nowhere to break — an underscored
+        // survey label, say. Word-by-word wrapping has no seam to use there and
+        // paints the token straight out of the frame, so the label folds
+        // mid-token instead.
+        function test_anUnbreakableNameFoldsInsideTheGroupFrame() {
+            addUtm16NFix()
+            tryVerify(() => label("projectionAnchorValue").visible, 5000)
+
+            RootData.region.cave(0).name =
+                "super_long_label_that_wont_wrap_anywhere_along_its_whole_unbroken_length"
+
+            tryVerify(() => label("projectionAnchorValue").text.indexOf("super_long") >= 0, 3000)
+
+            // The rename re-lays the rows out, so let that pass run before
+            // measuring where the text ended up.
+            waitForRendering(dataPage())
+
+            const group = label("coordinateSystemGroup")
+            const content = group.contentItem
+            const text = paintedTextRect(group, "projectionAnchorValue")
+
+            verify(text.left >= content.x && text.right <= content.x + content.width,
+                   "the unbreakable name stays inside the frame: it spans "
+                   + text.left + " to " + text.right + ", the frame holds " + content.x
+                   + " to " + (content.x + content.width))
+        }
+
         // Where the coordinate's text actually lands, in the group's own
         // coordinates: a wrapped label paints its longest line, which is what
         // runs into the button when the row is too narrow for both.
