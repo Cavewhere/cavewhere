@@ -17,6 +17,7 @@ class cwTrip;
 #include "cwExternalCenterlineAttach.h"
 #include "cwExternalCenterlineReport.h"
 #include "cwExternalSourceSettings.h"
+#include "cwExternalSourceStatusModel.h"
 #include "cwFutureManagerToken.h"
 #include "cwGlobals.h"
 #include "cwLinePlotTask.h"
@@ -60,6 +61,7 @@ class CAVEWHERE_LIB_EXPORT cwExternalCenterlineManager : public QObject
     QML_UNCREATABLE("ExternalCenterlineManager is created by cwLinePlotManager")
 
     Q_PROPERTY(cwAttachedCenterlinesModel* attachedCenterlinesModel READ attachedCenterlinesModel CONSTANT FINAL)
+    Q_PROPERTY(cwExternalSourceStatusModel* sourceStatusModel READ sourceStatusModel CONSTANT FINAL)
 
 public:
     explicit cwExternalCenterlineManager(QObject* parent = nullptr);
@@ -232,6 +234,13 @@ public:
     // recompute. Always non-null; owned by this object.
     cwAttachedCenterlinesModel* attachedCenterlinesModel() const { return m_attachedCenterlinesModel; }
 
+    // How each attachment's remembered source compares with the copy in
+    // the project — the one status source every surface reads
+    // (plans/EXTERNAL_SOURCE_CHANGE_NOTIFY.html §3). Swept whenever the
+    // attachments are re-read from disk, which is what gives a project
+    // its statuses at open. Always non-null; owned by this object.
+    cwExternalSourceStatusModel* sourceStatusModel() const { return m_sourceStatusModel; }
+
     // Stamps every row's lastSolved. Called once from the consumer's
     // solve-success path.
     void markSolved(const QDateTime& when);
@@ -335,6 +344,7 @@ private:
     cwFutureManagerToken m_futureManagerToken;
 
     cwAttachedCenterlinesModel* m_attachedCenterlinesModel;
+    cwExternalSourceStatusModel* m_sourceStatusModel;
 
     // Rename wiring only: cave/trip nameChanged re-sorts the model rows
     // from cached counts. Survey-data connections that drive the solve
@@ -549,6 +559,19 @@ private:
     // trip that was detached (or whose entry file vanished) since the last
     // scan is cleared instead of keeping names it no longer owns.
     void applyHarvestToTrips(const ExternalScanResult& result);
+
+    // Re-reads every owner's remembered source and installs the result in
+    // sourceStatusModel(). Runs behind every scan apply, so a project
+    // open — which re-reads the attachments — sweeps the sources with it.
+    // Quiet-path cost is one stat per fingerprinted file; only a file
+    // whose size or mtime moved is read and hashed.
+    void refreshSourceStatuses();
+
+    // How ownerId's remembered source compares with what was copied from
+    // it. Reads the disk, and silently refreshes the stored stats when a
+    // stat-level difference turns out to be identical content, so the
+    // fast path goes quiet again.
+    cwExternalSourceStatusModel::Row sourceStatusFor(const QUuid& ownerId);
 
     // Re-arms the watcher for `path` (the file that just fired) so we
     // continue to receive change events for it; on macOS the watcher

@@ -217,6 +217,23 @@ void cwExternalSourceSettings::setBreadcrumb(const QUuid& ownerId,
     emit breadcrumbsChanged();
 }
 
+void cwExternalSourceSettings::refreshFingerprintStats(const QUuid& ownerId,
+                                                       const SourceFingerprint& fingerprint)
+{
+    if (ownerId.isNull() || fingerprint.isEmpty()) {
+        return;
+    }
+
+    QSettings settings;
+    // Only an owner that already has a fingerprint has stats to refresh;
+    // writing one for an owner without an entry would invent a record of
+    // a copy that never happened.
+    if (readFingerprint(settings, ownerId).isEmpty()) {
+        return;
+    }
+    writeFingerprint(settings, ownerId, fingerprint);
+}
+
 void cwExternalSourceSettings::clearBreadcrumb(const QUuid& ownerId)
 {
     if (ownerId.isNull()) {

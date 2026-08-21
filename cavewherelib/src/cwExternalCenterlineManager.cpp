@@ -117,6 +117,46 @@ QString withProjectRelativePaths(const QString& message, const QString& boundary
     return rewritten;
 }
 
+// True when every file in `stored` is on disk with the size and
+// last-modified time it had when the fingerprint was taken — the quiet
+// path, which reads no file (plans/EXTERNAL_SOURCE_CHANGE_NOTIFY.html §2).
+bool statsMatchDisk(const cwExternalSourceSettings::SourceFingerprint& stored)
+{
+    for (const auto& record : stored.files) {
+        const QFileInfo info(record.path);
+        if (info.size() != record.size
+            || info.lastModified().toMSecsSinceEpoch() != record.lastModified) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// True when two fingerprints of the same files describe the same
+// contents. Only the hashes are compared: the stats are exactly what a
+// content-preserving rewrite (a git checkout, an editor saving unchanged
+// text) moves, and they are what the caller goes on to refresh.
+bool contentsMatch(const cwExternalSourceSettings::SourceFingerprint& left,
+                   const cwExternalSourceSettings::SourceFingerprint& right)
+{
+    return std::equal(left.files.cbegin(), left.files.cend(),
+                      right.files.cbegin(), right.files.cend(),
+                      [](const cwExternalSourceSettings::SourceFileFingerprint& leftFile,
+                         const cwExternalSourceSettings::SourceFileFingerprint& rightFile) {
+        return leftFile.sha256 == rightFile.sha256;
+    });
+}
+
+QStringList fingerprintedPaths(const cwExternalSourceSettings::SourceFingerprint& fingerprint)
+{
+    QStringList paths;
+    paths.reserve(fingerprint.files.size());
+    for (const auto& record : fingerprint.files) {
+        paths.append(record.path);
+    }
+    return paths;
+}
+
 // Deterministic presentation order: cave display name, then trip
 // display name (cave-level owners sort ahead of their trips via the
 // empty trip key), with ownerId as a stable tiebreak for duplicates.
@@ -141,6 +181,7 @@ cwExternalCenterlineManager::cwExternalCenterlineManager(QObject* parent) :
     m_scanRestarter(this)
 {
     m_attachedCenterlinesModel = new cwAttachedCenterlinesModel(this);
+    m_sourceStatusModel = new cwExternalSourceStatusModel(this);
 
     // Watches the in-project dependencies of every attachment. fileChanged
     // hands the event off to onWatchedFileChanged, which dirties the
@@ -613,6 +654,11 @@ void cwExternalCenterlineManager::applyScanResult(ExternalScanResult result)
     m_lastScanRows = result.rows;
     m_attachedCenterlinesModel->setRows(std::move(result.rows));
 
+    // Every path that re-reads the attachments comes through here —
+    // project open among them — so the source sweep rides along rather
+    // than needing a trigger list of its own.
+    refreshSourceStatuses();
+
     // Both emissions land after every member swap, so a handler — the trip
     // panel re-reading missingCopyPath(), the consumer's buildInput —
     // never sees a half-applied scan.
@@ -643,6 +689,79 @@ void cwExternalCenterlineManager::applyHarvestToTrips(const ExternalScanResult& 
                     : containmentError);
         }
     }
+}
+
+cwExternalSourceStatusModel::Row
+cwExternalCenterlineManager::sourceStatusFor(const QUuid& ownerId)
+{
+    using Status = cwExternalSourceStatusModel::Status;
+
+    cwExternalSourceStatusModel::Row row;
+    row.ownerId = ownerId;
+    row.status = Status::NoBreadcrumb;
+    row.sourcePath = m_externalSourceSettings->breadcrumbPath(ownerId);
+
+    if (row.sourcePath.isEmpty()) {
+        return row;
+    }
+
+    // An entry recorded before fingerprints existed has nothing to
+    // compare against, and stays quiet: the feature never nags about data
+    // older than itself (plans/EXTERNAL_SOURCE_CHANGE_NOTIFY.html §5 N1).
+    const auto stored = m_externalSourceSettings->fingerprint(ownerId);
+    if (stored.isEmpty()) {
+        return row;
+    }
+
+    // Missing is decided from the entry file alone. A fingerprinted
+    // dependency that is gone reads as Changed instead, which is what it
+    // usually is: dropping an *include and deleting the file it named is
+    // an ordinary edit, and re-copying from the entry file picks up the
+    // smaller dependency set. Only a gone entry file leaves nothing to
+    // copy from, which is what Update-all skips
+    // (plans/EXTERNAL_SOURCE_CHANGE_NOTIFY.html §4).
+    if (!QFileInfo::exists(row.sourcePath)) {
+        row.status = Status::SourceMissing;
+        return row;
+    }
+
+    if (statsMatchDisk(stored)) {
+        row.status = Status::UpToDate;
+        return row;
+    }
+
+    // A stat-level difference is only a question; the hash answers it.
+    const auto current =
+        cwExternalSourceSettings::computeFingerprint(fingerprintedPaths(stored));
+    if (contentsMatch(stored, current)) {
+        // Identical contents under fresh stats — record the new stats so
+        // the next check takes the pure-stat path. Nothing about the
+        // project changed, so nothing is emitted and nothing is dirtied.
+        m_externalSourceSettings->refreshFingerprintStats(ownerId, current);
+        row.status = Status::UpToDate;
+        return row;
+    }
+
+    row.status = Status::Changed;
+    return row;
+}
+
+void cwExternalCenterlineManager::refreshSourceStatuses()
+{
+    QVector<cwExternalSourceStatusModel::Row> rows;
+
+    // Without the store nothing remembers where anything came from, so no
+    // attachment has a source to compare against.
+    if (!m_externalSourceSettings.isNull()) {
+        // The owners the last scan published are exactly the attachments,
+        // so the sweep reads them instead of walking the region again.
+        rows.reserve(m_lastScanRows.size());
+        for (const cwAttachedCenterlinesModel::Row& attached : m_lastScanRows) {
+            rows.append(sourceStatusFor(attached.ownerId));
+        }
+    }
+
+    m_sourceStatusModel->setRows(std::move(rows));
 }
 
 void cwExternalCenterlineManager::rebuildAttachedRowsFromNames()

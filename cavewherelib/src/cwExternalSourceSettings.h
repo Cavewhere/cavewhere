@@ -161,6 +161,18 @@ public:
                        const SourceFingerprint& fingerprint);
 
     /**
+     * Rewrites the size and last-modified fields of ownerId's stored
+     * fingerprint from `fingerprint`, which must describe the same files
+     * with the same contents (a checker that read them and found the
+     * hashes unchanged). It records that the files are still what they
+     * were, so the size+mtime fast path recognizes them without reading
+     * them again - bookkeeping about files nobody changed, so it emits
+     * nothing, leaves the breadcrumb path alone, and does nothing at all
+     * for an owner with no entry.
+     */
+    void refreshFingerprintStats(const QUuid& ownerId, const SourceFingerprint& fingerprint);
+
+    /**
      * Reads `files` and returns their fingerprint, in the order given.
      * Sources are small text files, so this reads every one of them;
      * callers on the quiet path compare size and last-modified first
