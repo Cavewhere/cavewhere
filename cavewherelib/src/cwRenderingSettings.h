@@ -25,6 +25,7 @@ class CAVEWHERE_LIB_EXPORT cwRenderingSettings : public QObject
 
     Q_PROPERTY(int sampleCount READ sampleCount WRITE setSampleCount NOTIFY sampleCountChanged)
     Q_PROPERTY(QList<int> supportedSampleCounts READ supportedSampleCounts NOTIFY supportedSampleCountsChanged)
+    Q_PROPERTY(bool showRenderMemoryHud READ showRenderMemoryHud WRITE setShowRenderMemoryHud NOTIFY showRenderMemoryHudChanged)
     Q_PROPERTY(bool isAtDefaults READ isAtDefaults NOTIFY isAtDefaultsChanged)
 
 public:
@@ -33,6 +34,9 @@ public:
 
     QList<int> supportedSampleCounts() const { return m_supportedSampleCounts; }
     void setSupportedSampleCounts(const QList<int>& counts);
+
+    bool showRenderMemoryHud() const { return m_showRenderMemoryHud; }
+    void setShowRenderMemoryHud(bool show);
 
     bool isAtDefaults() const;
     Q_INVOKABLE void resetToDefaults();
@@ -45,6 +49,7 @@ public:
 
 signals:
     void sampleCountChanged();
+    void showRenderMemoryHudChanged();
     void supportedSampleCountsChanged();
     void isAtDefaultsChanged();
 
@@ -58,6 +63,7 @@ private:
     static cwRenderingSettings* Settings;
 
     int m_sampleCount = 4; // overwritten from QSettings in the constructor; see kDefaultSampleCount
+    bool m_showRenderMemoryHud = false; // see kDefaultShowRenderMemoryHud
 
     // Safe baseline until the QRhi backend reports the real set (see cwRhiScene).
     // Always kept sorted ascending and containing 1.

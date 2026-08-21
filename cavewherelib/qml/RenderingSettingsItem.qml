@@ -71,6 +71,34 @@ ColumnLayout {
         }
     }
 
+    QC.GroupBox {
+        title: "Debug"
+        Layout.fillWidth: true
+
+        ColumnLayout {
+            RowLayout {
+                InformationButton {
+                    showItemOnClick: hudHelpId
+                }
+
+                QC.CheckBox {
+                    objectName: "showRenderMemoryHudCheckBox"
+                    text: "Show render memory HUD"
+                    checked: itemId.renderingSettings.showRenderMemoryHud
+                    onToggled: {
+                        itemId.renderingSettings.showRenderMemoryHud = checked
+                    }
+                }
+            }
+
+            HelpArea {
+                id: hudHelpId
+                Layout.fillWidth: true
+                text: "Shows a panel in the 3D view listing how many bytes each kind of render resource holds on the GPU. Useful for tracking down which part of a project is filling video memory."
+            }
+        }
+    }
+
     RestoreDefaultsButton {
         settings: itemId.renderingSettings
     }

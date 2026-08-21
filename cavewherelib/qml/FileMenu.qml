@@ -176,6 +176,15 @@ QC.Menu {
 
 
         QC.MenuItem {
+            text: "Render Memory HUD"
+            checked: RootData.settings.renderingSettings.showRenderMemoryHud
+            checkable: true
+            onTriggered: {
+                RootData.settings.renderingSettings.showRenderMemoryHud = !RootData.settings.renderingSettings.showRenderMemoryHud
+            }
+        }
+
+        QC.MenuItem {
             text: "Station Labels Visible"
             checked: RootData.stationsVisible
             checkable: true

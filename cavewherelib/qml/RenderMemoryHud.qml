@@ -1,0 +1,114 @@
+/**************************************************************************
+**
+**    Copyright (C) 2026 by Philip Schuchardt
+**    www.cavewhere.com
+**
+**************************************************************************/
+
+import QtQuick as QQ
+import QtQuick.Controls as QC
+import QtQuick.Layouts
+import cavewherelib
+
+// Debug overlay listing render-resource bytes per category, driven by
+// cwRenderMemoryModel. Shown only while the render-memory HUD setting is on.
+QQ.Rectangle {
+    id: hudRootId
+    objectName: "renderMemoryHud"
+
+    readonly property real backgroundOpacity: 0.85
+    readonly property int categoryColumnWidth: Math.round(140 * Theme.fontScale)
+    readonly property int byteColumnWidth: Math.round(64 * Theme.fontScale)
+    readonly property int separatorHeight: 1
+
+    visible: RootData.settings.renderingSettings.showRenderMemoryHud
+
+    implicitWidth: layoutId.implicitWidth + Theme.statsPadding * 2
+    implicitHeight: layoutId.implicitHeight + Theme.statsPadding * 2
+
+    color: Qt.alpha(Theme.floatingWidgetColor, hudRootId.backgroundOpacity)
+    radius: Theme.floatingWidgetRadius
+
+    RenderMemoryModel {
+        id: memoryModelId
+        running: hudRootId.visible
+    }
+
+    ColumnLayout {
+        id: layoutId
+        anchors.fill: parent
+        anchors.margins: Theme.statsPadding
+        spacing: Theme.tightSpacing
+
+        QQ.Repeater {
+            model: memoryModelId
+
+            delegate: RowLayout {
+                id: rowId
+
+                required property string name
+                required property string gpuText
+                required property string cpuText
+                required property int cpuBytes
+
+                spacing: Theme.flowSpacing
+
+                QC.Label {
+                    text: rowId.name
+                    color: Theme.text
+                    font.pixelSize: Theme.fontSizeCaption
+                    Layout.preferredWidth: hudRootId.categoryColumnWidth
+                }
+
+                QC.Label {
+                    text: rowId.gpuText
+                    color: Theme.text
+                    font.family: Theme.fontFamilyMono
+                    font.pixelSize: Theme.fontSizeCaption
+                    horizontalAlignment: QQ.Text.AlignRight
+                    Layout.preferredWidth: hudRootId.byteColumnWidth
+                }
+
+                // CPU-resident bytes are the exception, so they only take space
+                // in the row where a category actually holds some.
+                QC.Label {
+                    text: qsTr("(cpu %1)").arg(rowId.cpuText)
+                    color: Theme.text
+                    font.family: Theme.fontFamilyMono
+                    font.pixelSize: Theme.fontSizeCaption
+                    visible: rowId.cpuBytes > 0
+                }
+            }
+        }
+
+        QQ.Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: hudRootId.separatorHeight
+            color: Theme.text
+            opacity: hudRootId.backgroundOpacity
+        }
+
+        // The GPU budget from cwRenderingSettings joins this row later, as
+        // "total / budget" with the value in the warning color when over.
+        RowLayout {
+            spacing: Theme.flowSpacing
+
+            QC.Label {
+                text: qsTr("GPU total")
+                color: Theme.text
+                font.pixelSize: Theme.fontSizeCaption
+                Layout.preferredWidth: hudRootId.categoryColumnWidth
+            }
+
+            QC.Label {
+                objectName: "renderMemoryHudTotal"
+                text: memoryModelId.totalGpuText
+                color: Theme.text
+                font.family: Theme.fontFamilyMono
+                font.pixelSize: Theme.fontSizeCaption
+                horizontalAlignment: QQ.Text.AlignRight
+                Layout.preferredWidth: hudRootId.byteColumnWidth
+            }
+        }
+    }
+}

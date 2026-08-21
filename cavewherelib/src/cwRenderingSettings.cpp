@@ -11,10 +11,14 @@
 
 namespace {
 QString sampleCountKey() { return QStringLiteral("rendering/sampleCount"); }
+QString showRenderMemoryHudKey() { return QStringLiteral("rendering/showRenderMemoryHud"); }
 
 // 4x MSAA is the historical default and a good quality/cost balance. Snapped to
 // the device's supported set if 4 happens to be unavailable.
 constexpr int kDefaultSampleCount = 4;
+
+// The render-memory HUD is a debugging aid, so it stays off until asked for.
+constexpr bool kDefaultShowRenderMemoryHud = false;
 }
 
 cwRenderingSettings* cwRenderingSettings::Settings = nullptr;
@@ -24,6 +28,7 @@ cwRenderingSettings::cwRenderingSettings(QObject* parent) :
 {
     QSettings settings;
     m_sampleCount = clampToSupported(settings.value(sampleCountKey(), kDefaultSampleCount).toInt());
+    m_showRenderMemoryHud = settings.value(showRenderMemoryHudKey(), kDefaultShowRenderMemoryHud).toBool();
 }
 
 int cwRenderingSettings::clampToSupported(int samples) const
@@ -42,11 +47,25 @@ int cwRenderingSettings::clampToSupported(int samples) const
 void cwRenderingSettings::resetToDefaults()
 {
     setSampleCount(kDefaultSampleCount);
+    setShowRenderMemoryHud(kDefaultShowRenderMemoryHud);
 }
 
 bool cwRenderingSettings::isAtDefaults() const
 {
-    return m_sampleCount == clampToSupported(kDefaultSampleCount);
+    return m_sampleCount == clampToSupported(kDefaultSampleCount)
+            && m_showRenderMemoryHud == kDefaultShowRenderMemoryHud;
+}
+
+void cwRenderingSettings::setShowRenderMemoryHud(bool show)
+{
+    if (m_showRenderMemoryHud == show) {
+        return;
+    }
+    m_showRenderMemoryHud = show;
+    QSettings settings;
+    settings.setValue(showRenderMemoryHudKey(), show);
+    emit showRenderMemoryHudChanged();
+    emit isAtDefaultsChanged();
 }
 
 void cwRenderingSettings::setSampleCount(int samples)

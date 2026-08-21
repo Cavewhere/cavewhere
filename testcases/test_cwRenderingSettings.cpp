@@ -105,6 +105,57 @@ TEST_CASE("cwRenderingSettings setter updates, clamps, persists, and emits", "[c
     settings->setSampleCount(4);
 }
 
+TEST_CASE("cwRenderingSettings showRenderMemoryHud round-trips, persists, and emits", "[cwRenderingSettings]")
+{
+    cwRenderingSettings::initialize();
+    auto settings = cwRenderingSettings::instance();
+    REQUIRE(settings);
+    settings->setSupportedSampleCounts({1, 2, 4, 8});
+    settings->setSampleCount(4);
+    settings->setShowRenderMemoryHud(false);
+
+    cwSignalSpy hudSpy(settings, &cwRenderingSettings::showRenderMemoryHudChanged);
+    hudSpy.setObjectName("showRenderMemoryHudSpy");
+
+    SpyChecker checker = {
+        {&hudSpy, 0},
+    };
+
+    QSettings diskSettings;
+
+    SECTION("the HUD is off by default") {
+        CHECK_FALSE(settings->showRenderMemoryHud());
+        CHECK(settings->isAtDefaults());
+    }
+
+    SECTION("enabling round-trips, persists to QSettings, and fires once") {
+        settings->setShowRenderMemoryHud(true);
+        checker[&hudSpy]++;
+        checker.checkSpies();
+
+        CHECK(settings->showRenderMemoryHud());
+        CHECK(diskSettings.value(QStringLiteral("rendering/showRenderMemoryHud")).toBool());
+    }
+
+    SECTION("setting the current value is a no-op and emits nothing") {
+        settings->setShowRenderMemoryHud(false);
+        checker.checkSpies();
+    }
+
+    SECTION("the HUD participates in isAtDefaults and resetToDefaults") {
+        settings->setShowRenderMemoryHud(true);
+        CHECK_FALSE(settings->isAtDefaults());
+
+        settings->resetToDefaults();
+        CHECK_FALSE(settings->showRenderMemoryHud());
+        CHECK(settings->sampleCount() == 4);
+        CHECK(settings->isAtDefaults());
+    }
+
+    settings->setShowRenderMemoryHud(false);
+    settings->setSampleCount(4);
+}
+
 TEST_CASE("cwRenderingSettings honors the backend's supported sample counts", "[cwRenderingSettings]")
 {
     cwRenderingSettings::initialize();
