@@ -130,7 +130,7 @@ QFuture<cwTrackedImagePtr> cwCropImageTask::crop()
             if(!image.isNull()) {
                 QImage croppedImage = image.copy(cropArea);
                 auto key = addCropToDatabase(croppedImage, originalImage.path(), cropArea, hash(image));
-                return Image({key, image.copy(cropArea), originalImage.originalDotsPerMeter()});
+                return Image({key, croppedImage, originalImage.originalDotsPerMeter()});
             }
 
             QImage badImage(cropArea.size(), QImage::Format_ARGB32);
