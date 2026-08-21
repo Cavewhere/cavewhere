@@ -12,7 +12,8 @@ import cavewherelib
 /**
   Where the app-scope source-change banner and its review list are wired to
   the manager (plans/EXTERNAL_SOURCE_CHANGE_NOTIFY.html §4). One per window,
-  held by AppOverlay, so the strip floats over the top of the window's
+  declared with the rest of that window's app-scope wiring and registered
+  into the overlay's banner strip, so it floats over the top of the window's
   content instead of pushing a page around.
 
   The banner and the list stay dumb; everything that knows about the
@@ -29,6 +30,11 @@ QQ.Item {
     objectName: "externalSourceChangeHost"
 
     property ExternalCenterlineManager externalCenterlineManager: RootData.externalCenterlineManager
+
+    // The overlay of whichever window this ended up in — where its banner
+    // goes. Resolved per window, so a host that follows its content into
+    // another window registers itself there instead.
+    readonly property AppOverlay windowOverlay: root.WindowOverlay.overlay as AppOverlay
 
     readonly property ExternalSourceStatusModel statusModel:
         root.externalCenterlineManager.sourceStatusModel
@@ -109,6 +115,10 @@ QQ.Item {
         }
         root.refresh()
     }
+
+    // Registers with whichever overlay this window's binding resolves to,
+    // including the first time it resolves as this host is created.
+    onWindowOverlayChanged: root.windowOverlay?.addBanner(root)
 
     QQ.Component.onCompleted: root.refresh()
 

@@ -11,9 +11,6 @@ import QmlTestRecorder
 MainWindowTest {
     id: rootId
 
-    readonly property ExternalSourceChangeHost sourceChangeHost:
-        (rootId.WindowOverlay.overlay as AppOverlay)?.sourceChangeHost ?? null
-
     ExternalCenterlineTestCase {
         name: "ExternalSourceChangeBanner"
         when: windowShown
@@ -22,6 +19,16 @@ MainWindowTest {
             id: attachCompletedSpyId
             target: RootData.externalCenterlineManager
             signalName: "attachCompleted"
+        }
+
+        // A banner that says nothing at all, for asserting that the overlay
+        // hosts whatever registers rather than this one feature.
+        QQ.Component {
+            id: dummyBannerComponent
+
+            QQ.Item {
+                height: 10
+            }
         }
 
         function init() {
@@ -82,16 +89,53 @@ MainWindowTest {
             return { trips: trips, sources: sources }
         }
 
+        // The banner strip the window's overlay offers every app-scope
+        // banner. Nothing here names the source-change feature.
+        function bannerArea() {
+            verify(rootId.windowOverlay !== null, "the window has an overlay")
+            return rootId.windowOverlay.bannerArea
+        }
+
+        // The source-change host is found where its registration put it —
+        // the same way anything else would find it, with no back door.
+        function sourceChangeHost() {
+            const host = findChild(bannerArea(), "externalSourceChangeHost")
+            verify(host !== null,
+                   "the source-change host registered into the banner strip")
+            return host
+        }
+
         function findInHost(objectName) {
-            const item = findChild(rootId.sourceChangeHost, objectName)
+            const item = findChild(sourceChangeHost(), objectName)
             verify(item !== null, objectName + " must exist")
             return item
         }
 
-        function test_bannerAppearsWithTheChangedCount() {
-            const host = rootId.sourceChangeHost
-            verify(host !== null, "the window's overlay hosts the banner")
+        // §6 "fu-overlay-banner-abstraction": the overlay hosts banners
+        // generically, and the source-change banner is simply the first
+        // feature to register one.
+        function test_bannersAreHostedByTheOverlayStrip() {
+            const strip = bannerArea()
 
+            verify(sourceChangeHost().parent === strip,
+                   "the source-change host registered into the banner strip")
+
+            const first = createTemporaryObject(dummyBannerComponent, rootId)
+            const second = createTemporaryObject(dummyBannerComponent, rootId)
+            rootId.windowOverlay.addBanner(first)
+            rootId.windowOverlay.addBanner(second)
+            waitForRendering(rootId)
+
+            verify(first.parent === strip, "any banner may register")
+            verify(second.parent === strip, "and so may a second one")
+            compare(first.width, strip.width,
+                    "the strip spans its banners across the window")
+            verify(second.y > first.y,
+                   "banners stack in registration order, the first on top")
+        }
+
+        function test_bannerAppearsWithTheChangedCount() {
+            const host = sourceChangeHost()
             const trip = makeSavedTrip("banner-count")
             const source = tempSource()
             attachSourceToTrip(trip, source)
@@ -113,7 +157,7 @@ MainWindowTest {
         }
 
         function test_updateAllUpdatesChangedOwnersAndSkipsAMissingSource() {
-            const host = rootId.sourceChangeHost
+            const host = sourceChangeHost()
             const attached = attachTrips("banner-update-all", 3)
             const changedTrips = [attached.trips[0], attached.trips[1]]
             const missingTrip = attached.trips[2]
@@ -167,7 +211,7 @@ MainWindowTest {
         }
 
         function test_dismissHidesUntilTheSourceChangesAgain() {
-            const host = rootId.sourceChangeHost
+            const host = sourceChangeHost()
             const trip = makeSavedTrip("banner-dismiss")
             const source = tempSource()
             attachSourceToTrip(trip, source)
@@ -195,7 +239,7 @@ MainWindowTest {
         }
 
         function test_showListsEveryOwnerNeedingAttention() {
-            const host = rootId.sourceChangeHost
+            const host = sourceChangeHost()
             const attached = attachTrips("banner-show-list", 2)
 
             rewriteSource(attached.sources[0], "survex_no_metadata.svx")
@@ -234,7 +278,7 @@ MainWindowTest {
         }
 
         function test_rowUpdateUpdatesJustThatOwner() {
-            const host = rootId.sourceChangeHost
+            const host = sourceChangeHost()
             const attached = attachTrips("banner-row-update", 2)
 
             rewriteSource(attached.sources[0], "survex_no_metadata.svx")

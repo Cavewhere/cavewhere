@@ -79,6 +79,10 @@ QQ.Item {
 
     AppOverlay {}
 
+    // App-scope surface rather than part of any page: it registers itself
+    // into the overlay's banner strip and floats over the window's content.
+    ExternalSourceChangeHost {}
+
     QQ.Component {
         id: renderingComponent
         RenderingView {

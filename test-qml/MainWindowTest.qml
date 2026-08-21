@@ -13,9 +13,12 @@ Rectangle {
     // an objectName search can't reach it. Expose it for tests that drive it.
     property alias saveAsDialog: testSaveAsDialogId
 
+    //This window's overlay, for tests that assert on what floats above the
+    //content — the shared editor, popups, or a registered banner
+    readonly property AppOverlay windowOverlay: rootId.WindowOverlay.overlay as AppOverlay
+
     //This window's shared text editor, for tests that drive or assert on it
-    readonly property ShadowEditorHost shadowEditor:
-        (rootId.WindowOverlay.overlay as AppOverlay)?.shadowEditor ?? null
+    readonly property ShadowEditorHost shadowEditor: rootId.windowOverlay?.shadowEditor ?? null
 
     color: Theme.background
 
