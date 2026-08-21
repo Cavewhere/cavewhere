@@ -109,6 +109,18 @@ void cwRHILinePlot::updateResources(const ResourceUpdateData& data)
     m_data.resetChanged();
 
     updateVisibilityBuffer(batch);
+    reportGeometryBytes();
+}
+
+void cwRHILinePlot::reportGeometryBytes()
+{
+    qint64 bytes = 0;
+    for (const QRhiBuffer* buffer : {m_segmentBuffer, m_typeBuffer, m_visibilityBuffer}) {
+        if (buffer) {
+            bytes += buffer->size();
+        }
+    }
+    m_geometryBytes.setBytes(bytes);
 }
 
 // Uploads the per-instance visibility attribute from the frame's snapshot of

@@ -23,6 +23,7 @@
 
 // Std includes
 #include <algorithm>
+#include <utility>
 
 
 cwRHIPointCloud::cwRHIPointCloud()
@@ -154,6 +155,13 @@ void cwRHIPointCloud::updateResources(const ResourceUpdateData& data)
                 batch->uploadStaticBuffer(m_vertexBuffers[i], *bufferData);
             }
         }
+
+        qint64 vertexBufferBytes = 0;
+        for (const qsizetype capacity : std::as_const(m_vertexBufferCapacities)) {
+            vertexBufferBytes += capacity;
+        }
+        m_vertexBufferBytes.setBytes(vertexBufferBytes);
+
         m_uploadedVertexCount = uploadedVertexCount;
     }
 

@@ -17,6 +17,10 @@ namespace {
 constexpr int kFallbackUniformSize = 16; // minimum to satisfy uniform alignment
 // Meshes up to this many vertices index with uint16, halving the index buffer.
 constexpr qsizetype kMaxUInt16VertexCount = 65535;
+// Textured items upload RGBA8 with a full mip chain.
+constexpr qint64 kRgba8BytesPerPixelNumerator = 4;
+constexpr qint64 kRgba8BytesPerPixelDenominator = 1;
+constexpr bool kMipmapped = true;
 }
 
 cwRhiTexturedItems::cwRhiTexturedItems() = default;
@@ -323,6 +327,8 @@ void cwRhiTexturedItems::Item::updateGeometryBuffers(const ResourceUpdateData& d
         batch->uploadStaticBuffer(indexBuffer, 0, indexBytes, indexData.constData());
     }
 
+    geometryBytes.setBytes(qint64(vertexBuffer->size()) + qint64(indexBuffer->size()));
+
     numberOfIndices = indices.size();
     geometry = {};
     geometryNeedsUpdate = false;
@@ -342,6 +348,12 @@ void cwRhiTexturedItems::Item::updateTextureResource(const ResourceUpdateData& d
                                       QRhiTexture::MipMapped | QRhiTexture::UsedWithGenerateMips);
             texture->create();
         }
+
+        textureBytes.setBytes(
+                    cwRenderMemoryLedger::estimatedTextureBytes(size,
+                                                                kRgba8BytesPerPixelNumerator,
+                                                                kRgba8BytesPerPixelDenominator,
+                                                                kMipmapped));
     }
 
     if (texture && !image.isNull()) {

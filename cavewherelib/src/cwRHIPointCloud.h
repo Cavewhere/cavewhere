@@ -11,6 +11,7 @@
 // Our includes
 #include "cwAppearanceSlotted.h"
 #include "cwRHIObject.h"
+#include "cwRenderMemoryLedger.h"
 #include "cwRenderPointCloud.h"
 #include "cwRhiFrameRenderer.h"
 
@@ -72,6 +73,8 @@ private:
     QRhiVertexInputLayout m_inputLayout;
     QVector<QRhiBuffer*> m_vertexBuffers;
     QVector<qsizetype> m_vertexBufferCapacities;
+    cwLedgeredBytes m_vertexBufferBytes {cwRenderMemoryLedger::Category::PointCloudGeometry,
+                                         cwRenderMemoryLedger::Residency::Gpu};
     // Vertices the buffers hold — the geometry's vertex count, or fewer when a
     // buffer was truncated to the quint32 QRhiBuffer size limit.
     qint64 m_uploadedVertexCount = 0;

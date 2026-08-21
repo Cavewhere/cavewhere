@@ -12,6 +12,7 @@
 #include <QHash>
 #include <QMutex>
 #include <QSet>
+#include <QSize>
 #include <QtGlobal>
 
 //Our includes
@@ -43,6 +44,15 @@ public:
     qint64 bytes(Category category, Residency residency) const;
     qint64 totalBytes(Residency residency) const;
     quint64 revision() const;
+
+    // Bytes a texture of `size` occupies at bytesPerPixelNumerator /
+    // bytesPerPixelDenominator bytes per pixel. Mipmapped textures sum the
+    // actual halving levels down to 1x1. The fractional bytes-per-pixel form
+    // keeps block-compressed formats (BC7, ASTC) exact without floats.
+    static qint64 estimatedTextureBytes(QSize size,
+                                        qint64 bytesPerPixelNumerator,
+                                        qint64 bytesPerPixelDenominator,
+                                        bool mipmapped);
 
 private:
     cwRenderMemoryLedger() = default;

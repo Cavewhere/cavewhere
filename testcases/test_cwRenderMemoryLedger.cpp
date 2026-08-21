@@ -16,6 +16,10 @@ namespace {
 constexpr qint64 kSmallBytes = 1024;
 constexpr qint64 kMediumBytes = 4096;
 constexpr qint64 kLargeBytes = 1 << 20;
+constexpr qint64 kRgba8Numerator = 4;
+constexpr qint64 kRgba8Denominator = 1;
+constexpr qint64 kBc1Numerator = 1;
+constexpr qint64 kBc1Denominator = 2;
 constexpr int kThreadCount = 4;
 constexpr int kIterationsPerThread = 10000;
 
@@ -215,4 +219,39 @@ TEST_CASE("cwRenderMemoryLedger: paired adjustments from many threads balance ou
     }
 
     CHECK(textureGpu.delta() == kLargeBytes);
+}
+
+TEST_CASE("cwRenderMemoryLedger: estimatedTextureBytes sums the real mip levels",
+          "[RenderMemoryLedger]") {
+    const auto estimate = &cwRenderMemoryLedger::estimatedTextureBytes;
+
+    SECTION("square RGBA8") {
+        CHECK(estimate(QSize(256, 256), kRgba8Numerator, kRgba8Denominator, false) == 262144);
+        CHECK(estimate(QSize(256, 256), kRgba8Numerator, kRgba8Denominator, true) == 349524);
+    }
+
+    SECTION("non-square and non-power-of-two") {
+        // 8x2 -> 4x1 -> 2x1 -> 1x1 = 23 pixels
+        CHECK(estimate(QSize(8, 2), kRgba8Numerator, kRgba8Denominator, true) == 23 * 4);
+        // 5x3 -> 2x1 -> 1x1 = 18 pixels
+        CHECK(estimate(QSize(5, 3), kRgba8Numerator, kRgba8Denominator, true) == 18 * 4);
+        CHECK(estimate(QSize(5, 3), kRgba8Numerator, kRgba8Denominator, false) == 15 * 4);
+    }
+
+    SECTION("1x1 stops at the base level") {
+        CHECK(estimate(QSize(1, 1), kRgba8Numerator, kRgba8Denominator, true) == 4);
+        CHECK(estimate(QSize(1, 1), kRgba8Numerator, kRgba8Denominator, false) == 4);
+    }
+
+    SECTION("fractional bytes per pixel round up per level") {
+        CHECK(estimate(QSize(256, 256), kBc1Numerator, kBc1Denominator, false) == 32768);
+        CHECK(estimate(QSize(256, 256), kBc1Numerator, kBc1Denominator, true) == 43691);
+    }
+
+    SECTION("empty sizes and invalid rates cost nothing") {
+        CHECK(estimate(QSize(), kRgba8Numerator, kRgba8Denominator, true) == 0);
+        CHECK(estimate(QSize(0, 256), kRgba8Numerator, kRgba8Denominator, true) == 0);
+        CHECK(estimate(QSize(256, 256), 0, kRgba8Denominator, true) == 0);
+        CHECK(estimate(QSize(256, 256), kRgba8Numerator, 0, true) == 0);
+    }
 }

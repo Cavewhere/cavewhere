@@ -3,6 +3,7 @@
 
 //Our includes
 #include "cwRHIObject.h"
+#include "cwRenderMemoryLedger.h"
 #include "cwRenderTexturedItems.h"
 #include "cwRhiPipelineSet.h"
 #include "cwRhiFrameRenderer.h"
@@ -57,7 +58,10 @@ private:
         bool pipelineNeedsUpdate = true;
         bool modelMatrixNeedsUpdate = true;
 
-        double memoryUsageMb = 0.0;
+        cwLedgeredBytes geometryBytes {cwRenderMemoryLedger::Category::TexturedItemGeometry,
+                                       cwRenderMemoryLedger::Residency::Gpu};
+        cwLedgeredBytes textureBytes {cwRenderMemoryLedger::Category::TexturedItemTexture,
+                                      cwRenderMemoryLedger::Residency::Gpu};
 
         cwRhiTexturedItems* owner = nullptr;
 

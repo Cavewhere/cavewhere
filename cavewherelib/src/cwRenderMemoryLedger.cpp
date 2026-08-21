@@ -11,6 +11,10 @@
 //Qt includes
 #include <QMutexLocker>
 
+namespace {
+constexpr qint64 kMipDimensionDivisor = 2;
+}
+
 cwRenderMemoryLedger* cwRenderMemoryLedger::instance()
 {
     static cwRenderMemoryLedger ledger;
@@ -62,6 +66,34 @@ quint64 cwRenderMemoryLedger::revision() const
 {
     QMutexLocker locker(&m_mutex);
     return m_revision;
+}
+
+qint64 cwRenderMemoryLedger::estimatedTextureBytes(QSize size,
+                                                   qint64 bytesPerPixelNumerator,
+                                                   qint64 bytesPerPixelDenominator,
+                                                   bool mipmapped)
+{
+    if (size.isEmpty() || bytesPerPixelNumerator <= 0 || bytesPerPixelDenominator <= 0) {
+        return 0;
+    }
+
+    qint64 width = size.width();
+    qint64 height = size.height();
+    qint64 bytes = 0;
+
+    while (true) {
+        const qint64 levelPixels = width * height;
+        // Round up so sub-block levels of a compressed format still cost a block.
+        bytes += (levelPixels * bytesPerPixelNumerator + bytesPerPixelDenominator - 1)
+                 / bytesPerPixelDenominator;
+
+        if (!mipmapped || (width == 1 && height == 1)) {
+            return bytes;
+        }
+
+        width = qMax<qint64>(1, width / kMipDimensionDivisor);
+        height = qMax<qint64>(1, height / kMipDimensionDivisor);
+    }
 }
 
 cwLedgeredBytes::cwLedgeredBytes(cwRenderMemoryLedger::Category category,
