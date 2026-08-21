@@ -17,6 +17,11 @@ class QQuickRhiItem;
 // the EDL composite path inherits it. supportedSampleCounts is reported by the
 // active QRhi backend (see cwRhiScene) so the UI offers only valid MSAA levels;
 // it is platform dependent (e.g. Metal supports 1/2/4 but not 8).
+//
+// The budget knobs (gpuMemoryBudgetMb, cpuCacheBudgetMb, uploadBudgetMbPerFrame,
+// screenSpaceErrorPx) are advisory in Phase 1: Phase 2's residency manager
+// enforces them. Today the only consumer is the render-memory HUD, which reports
+// the GPU total against gpuMemoryBudgetMb.
 class CAVEWHERE_LIB_EXPORT cwRenderingSettings : public QObject
 {
     Q_OBJECT
@@ -26,6 +31,10 @@ class CAVEWHERE_LIB_EXPORT cwRenderingSettings : public QObject
     Q_PROPERTY(int sampleCount READ sampleCount WRITE setSampleCount NOTIFY sampleCountChanged)
     Q_PROPERTY(QList<int> supportedSampleCounts READ supportedSampleCounts NOTIFY supportedSampleCountsChanged)
     Q_PROPERTY(bool showRenderMemoryHud READ showRenderMemoryHud WRITE setShowRenderMemoryHud NOTIFY showRenderMemoryHudChanged)
+    Q_PROPERTY(int gpuMemoryBudgetMb READ gpuMemoryBudgetMb WRITE setGpuMemoryBudgetMb NOTIFY gpuMemoryBudgetMbChanged)
+    Q_PROPERTY(int cpuCacheBudgetMb READ cpuCacheBudgetMb WRITE setCpuCacheBudgetMb NOTIFY cpuCacheBudgetMbChanged)
+    Q_PROPERTY(int uploadBudgetMbPerFrame READ uploadBudgetMbPerFrame WRITE setUploadBudgetMbPerFrame NOTIFY uploadBudgetMbPerFrameChanged)
+    Q_PROPERTY(double screenSpaceErrorPx READ screenSpaceErrorPx WRITE setScreenSpaceErrorPx NOTIFY screenSpaceErrorPxChanged)
     Q_PROPERTY(bool isAtDefaults READ isAtDefaults NOTIFY isAtDefaultsChanged)
 
 public:
@@ -37,6 +46,18 @@ public:
 
     bool showRenderMemoryHud() const { return m_showRenderMemoryHud; }
     void setShowRenderMemoryHud(bool show);
+
+    int gpuMemoryBudgetMb() const { return m_gpuMemoryBudgetMb; }
+    void setGpuMemoryBudgetMb(int megabytes);
+
+    int cpuCacheBudgetMb() const { return m_cpuCacheBudgetMb; }
+    void setCpuCacheBudgetMb(int megabytes);
+
+    int uploadBudgetMbPerFrame() const { return m_uploadBudgetMbPerFrame; }
+    void setUploadBudgetMbPerFrame(int megabytes);
+
+    double screenSpaceErrorPx() const { return m_screenSpaceErrorPx; }
+    void setScreenSpaceErrorPx(double pixels);
 
     bool isAtDefaults() const;
     Q_INVOKABLE void resetToDefaults();
@@ -50,6 +71,10 @@ public:
 signals:
     void sampleCountChanged();
     void showRenderMemoryHudChanged();
+    void gpuMemoryBudgetMbChanged();
+    void cpuCacheBudgetMbChanged();
+    void uploadBudgetMbPerFrameChanged();
+    void screenSpaceErrorPxChanged();
     void supportedSampleCountsChanged();
     void isAtDefaultsChanged();
 
@@ -64,6 +89,13 @@ private:
 
     int m_sampleCount = 4; // overwritten from QSettings in the constructor; see kDefaultSampleCount
     bool m_showRenderMemoryHud = false; // see kDefaultShowRenderMemoryHud
+
+    // All four are overwritten from QSettings in the constructor; see the
+    // kDefault constants in the .cpp.
+    int m_gpuMemoryBudgetMb = 1536;
+    int m_cpuCacheBudgetMb = 512;
+    int m_uploadBudgetMbPerFrame = 8;
+    double m_screenSpaceErrorPx = 1.5;
 
     // Safe baseline until the QRhi backend reports the real set (see cwRhiScene).
     // Always kept sorted ascending and containing 1.

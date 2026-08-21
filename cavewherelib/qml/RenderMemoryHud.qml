@@ -20,6 +20,9 @@ QQ.Rectangle {
     readonly property int categoryColumnWidth: Math.round(140 * Theme.fontScale)
     readonly property int byteColumnWidth: Math.round(64 * Theme.fontScale)
     readonly property int separatorHeight: 1
+    readonly property int bytesPerMegabyte: 1024 * 1024
+    readonly property int gpuMemoryBudgetMb: RootData.settings.renderingSettings.gpuMemoryBudgetMb
+    readonly property bool overBudget: memoryModelId.totalGpuBytes > hudRootId.gpuMemoryBudgetMb * hudRootId.bytesPerMegabyte
 
     visible: RootData.settings.renderingSettings.showRenderMemoryHud
 
@@ -88,26 +91,34 @@ QQ.Rectangle {
             opacity: hudRootId.backgroundOpacity
         }
 
-        // The GPU budget from cwRenderingSettings joins this row later, as
-        // "total / budget" with the value in the warning color when over.
         RowLayout {
             spacing: Theme.flowSpacing
 
             QC.Label {
-                text: qsTr("GPU total")
+                text: qsTr("GPU total / budget")
                 color: Theme.text
                 font.pixelSize: Theme.fontSizeCaption
                 Layout.preferredWidth: hudRootId.categoryColumnWidth
             }
 
+            // The budget is advisory for now: going over colors the total, and
+            // nothing is evicted.
             QC.Label {
                 objectName: "renderMemoryHudTotal"
                 text: memoryModelId.totalGpuText
-                color: Theme.text
+                color: hudRootId.overBudget ? Theme.warning : Theme.text
                 font.family: Theme.fontFamilyMono
                 font.pixelSize: Theme.fontSizeCaption
                 horizontalAlignment: QQ.Text.AlignRight
                 Layout.preferredWidth: hudRootId.byteColumnWidth
+            }
+
+            QC.Label {
+                objectName: "renderMemoryHudBudget"
+                text: qsTr("/ %1 MB").arg(hudRootId.gpuMemoryBudgetMb)
+                color: Theme.text
+                font.family: Theme.fontFamilyMono
+                font.pixelSize: Theme.fontSizeCaption
             }
         }
     }
