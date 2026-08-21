@@ -4,6 +4,7 @@
 #include "cwRenderTexturedItems.h"
 #include "cwRhiAttributeFormat.h"
 #include "cwRhiItemRenderer.h"
+#include "cwRhiLimits.h"
 
 #include <QByteArray>
 #include <QFont>
@@ -363,7 +364,7 @@ void cwRhiTexturedItems::Item::updateGeometryBuffers(const ResourceUpdateData& d
     // cwRenderTexturedItems::geometryMatchesLayout) — bind 0 only.
     const auto bufferViews = geometry.vertexBuffers();
     Q_ASSERT(bufferViews.size() <= 1);
-    const QByteArray vertexData = bufferViews.isEmpty() ? QByteArray() : *bufferViews[0].data;
+    const QByteArray vertexData = bufferViews.isEmpty() ? QByteArray() : *bufferViews.at(0).data;
     const auto indices = geometry.indices();
 
     const bool narrowIndices = geometry.vertexCount() <= kMaxUInt16VertexCount;
@@ -382,12 +383,25 @@ void cwRhiTexturedItems::Item::updateGeometryBuffers(const ResourceUpdateData& d
     }
     const quint32 indexBytes = quint32(indexData.size());
 
-    if (vertexBuffer->size() != vertexData.size()) {
-        vertexBuffer->setSize(vertexData.size());
+    // A QRhiBuffer size is a quint32, so a mesh past 4 GiB would wrap silently.
+    const int vertexStride = bufferViews.isEmpty() ? 0 : bufferViews.at(0).stride;
+    const quint32 vertexBytes = quint32(cw::clampedVertexBytes(vertexData.size(), vertexStride));
+    const bool vertexBytesClamped = vertexBytes < vertexData.size();
+    if (vertexBytesClamped) {
+        qWarning() << "Textured item vertex buffer of" << vertexData.size()
+                   << "bytes exceeds the" << cw::kMaxRhiBufferBytes
+                   << "byte QRhiBuffer limit; the item is too large to draw";
+    }
+
+    if (vertexBuffer->size() != vertexBytes) {
+        vertexBuffer->setSize(vertexBytes);
         vertexBuffer->create();
     }
-    if (!vertexData.isEmpty()) {
-        batch->uploadStaticBuffer(vertexBuffer, 0, vertexData.size(), vertexData.constData());
+    if (vertexBytesClamped) {
+        batch->uploadStaticBuffer(vertexBuffer, 0, vertexBytes, vertexData.constData());
+    } else if (!vertexData.isEmpty()) {
+        // By-value QByteArray: a refcount bump instead of a deep copy.
+        batch->uploadStaticBuffer(vertexBuffer, vertexData);
     }
 
     if (indexBuffer->size() != indexBytes) {
@@ -395,12 +409,22 @@ void cwRhiTexturedItems::Item::updateGeometryBuffers(const ResourceUpdateData& d
         indexBuffer->create();
     }
     if (indexBytes > 0) {
-        batch->uploadStaticBuffer(indexBuffer, 0, indexBytes, indexData.constData());
+        if (narrowIndices) {
+            batch->uploadStaticBuffer(indexBuffer, indexData);
+        } else {
+            // The wide indexData is a QByteArray::fromRawData view over
+            // geometry.indices(), which `geometry = {}` below frees before the
+            // batch is consumed. The by-value overload would refcount the
+            // wrapper, not the borrowed bytes, so it must deep-copy here.
+            batch->uploadStaticBuffer(indexBuffer, 0, indexBytes, indexData.constData());
+        }
     }
 
     geometryBytes.setBytes(qint64(vertexBuffer->size()) + qint64(indexBuffer->size()));
 
-    numberOfIndices = indices.size();
+    // A half-clamped indexed mesh would reference dropped vertices and render
+    // garbage, so draw nothing instead.
+    numberOfIndices = vertexBytesClamped ? 0 : indices.size();
     geometry = {};
     geometryNeedsUpdate = false;
 }
