@@ -229,7 +229,10 @@ StandardPage {
                     anchors.left: parent.left
                     anchors.right: parent.right
 
-                    spacing: Theme.tightSpacing
+                    // A value that wraps onto a second line needs more air
+                    // between rows than within one, so each row still reads as
+                    // one fact.
+                    spacing: Theme.flowSpacing
 
                     RowLayout {
                         Layout.fillWidth: true
