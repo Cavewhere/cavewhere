@@ -46,6 +46,6 @@ constexpr qint64 clampedVertexCount(qint64 byteSize, int stride)
     return clampedVertexBytes(byteSize, stride) / stride;
 }
 
-}
+} // namespace cw
 
 #endif // CWRHILIMITS_H

@@ -72,10 +72,8 @@ private:
     QRhiVertexInputLayout m_inputLayout;
     QVector<QRhiBuffer*> m_vertexBuffers;
     QVector<qsizetype> m_vertexBufferCapacities;
-    // Vertices actually uploaded. Equals the geometry's vertex count except
-    // when a buffer exceeded the quint32 QRhiBuffer size limit and had to be
-    // truncated to a whole-vertex multiple; gather() draws this many so the
-    // draw stays inside the buffer.
+    // Vertices the buffers hold — the geometry's vertex count, or fewer when a
+    // buffer was truncated to the quint32 QRhiBuffer size limit.
     qint64 m_uploadedVertexCount = 0;
     // Per-cloud uniform block (binding 1): world-space sprite radius in meters,
     // one aligned slot per appearance slot, bound with a dynamic offset so an

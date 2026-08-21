@@ -118,11 +118,8 @@ void cwRHIPointCloud::updateResources(const ResourceUpdateData& data)
 
         // Immutable buffers must be recreated on size change. We're here
         // only because the geometry changed, so the upload is unconditional.
-        //
         // A QRhiBuffer size is a quint32, so anything past 4 GiB (~358 M
-        // interleaved points) has to be truncated to a whole-vertex multiple.
-        // Phase 0 turns that into a warning plus a short draw; chunked buffers
-        // for genuinely huge clouds come with the octree work.
+        // interleaved points) is truncated to a whole-vertex multiple.
         qint64 uploadedVertexCount = geometry.vertexCount();
         for (qsizetype i = 0; i < bufferViews.size(); ++i) {
             const QByteArray* bufferData = bufferViews.at(i).data;
@@ -149,14 +146,11 @@ void cwRHIPointCloud::updateResources(const ResourceUpdateData& data)
                 m_vertexBufferCapacities[i] = qsizetype(uploadBytes);
             }
             if (clamped) {
-                // A partial upload needs the pointer overload with an explicit
-                // size — the whole array no longer fits the buffer.
+                // Only the clamped range fits, so upload it explicitly.
                 batch->uploadStaticBuffer(m_vertexBuffers[i], 0, quint32(uploadBytes),
                                           bufferData->constData());
             } else {
-                // QByteArray by value: the batch holds a refcounted reference
-                // instead of deep-copying the array (1.2 GB of transient copy
-                // at 100 M points).
+                // By-value QByteArray: a refcount bump instead of a deep copy.
                 batch->uploadStaticBuffer(m_vertexBuffers[i], *bufferData);
             }
         }
@@ -267,8 +261,7 @@ bool cwRHIPointCloud::gather(const GatherContext& context, QVector<PipelineBatch
     for (QRhiBuffer* buffer : m_vertexBuffers) {
         drawable.vertexBindings.append(QRhiCommandBuffer::VertexInput(buffer, 0));
     }
-    // Draw only what the vertex buffers actually hold — a cloud past the
-    // QRhiBuffer size limit was truncated at upload.
+    // Draw only what the vertex buffers hold; an oversized cloud was truncated.
     drawable.vertexCount = quint32(m_uploadedVertexCount);
     drawable.bindings = m_srb;
     drawable.globalCameraBinding = 0; // binding 0 = global camera UBO (dynamic offset)
