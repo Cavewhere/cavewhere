@@ -5,6 +5,7 @@
 #include "cwScene.h"
 #include "cwRhiPipelineSet.h"
 #include "cwRenderObjectId.h"
+#include "cwRenderCullingStats.h"
 class QRhiCommandBuffer;
 class QRhiResourceUpdateBatch;
 
@@ -127,6 +128,11 @@ public:
         // whole objects were already culled in gatherScene. Null means cull
         // nothing, mirroring the visibility field's null-means-visible contract.
         const cwFrustum* frustum = nullptr;
+        // The frame's culled-versus-total tally, owned by gatherScene and
+        // published once the frame is gathered. Objects with sub-item
+        // granularity add their own item counts here. Null means don't count,
+        // mirroring the frustum field's null-means-cull-nothing contract.
+        cwRenderCullingStats::Counts* cullingStats = nullptr;
         // Per-object appearance slot this render job selects (0 = the live
         // appearance in slot 0; higher slots = a per-job override the offscreen
         // renderer acquired and uploaded for this object before gathering). The

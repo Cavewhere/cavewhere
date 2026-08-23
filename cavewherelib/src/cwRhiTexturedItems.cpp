@@ -23,6 +23,9 @@ constexpr qsizetype kMaxUInt16VertexCount = 65535;
 constexpr qint64 kRgba8BytesPerPixelNumerator = 4;
 constexpr qint64 kRgba8BytesPerPixelDenominator = 1;
 constexpr bool kMipmapped = true;
+// Items are tallied on this one pass so a frame that gathers every pass counts
+// each item once. It is the first pass of cwRhiFrameRenderer's draw order.
+constexpr cwRHIObject::RenderPass kCullingStatsPass = cwRHIObject::RenderPass::Background;
 }
 
 cwRhiTexturedItems::cwRhiTexturedItems() = default;
@@ -199,6 +202,8 @@ bool cwRhiTexturedItems::gather(const GatherContext& context, QVector<PipelineBa
     const auto desiredPass = context.renderPass;
     bool appended = false;
 
+    tallyCullingStats(context);
+
     // const iteration: the mapped values are Item* (the pointee is non-const, so
     // item->ensurePipeline() below is still callable) — avoids a QHash detach.
     for (auto it = m_items.constBegin(); it != m_items.constEnd(); ++it) {
@@ -267,6 +272,33 @@ bool cwRhiTexturedItems::gather(const GatherContext& context, QVector<PipelineBa
     }
 
     return appended;
+}
+
+void cwRhiTexturedItems::tallyCullingStats(const GatherContext& context) const
+{
+    if (!context.cullingStats || context.renderPass != kCullingStatsPass) {
+        return;
+    }
+
+    for (auto it = m_items.constBegin(); it != m_items.constEnd(); ++it) {
+        const Item* item = it.value();
+        if (!item) {
+            continue;
+        }
+
+        if (context.visibility
+            && !context.visibility->subVisible(renderObjectId(), it.key())) {
+            continue;
+        }
+
+        ++context.cullingStats->itemsTotal;
+
+        if (context.frustum
+            && item->boundsValid
+            && !context.frustum->intersects(item->worldBounds)) {
+            ++context.cullingStats->itemsCulled;
+        }
+    }
 }
 
 std::optional<QBox3D> cwRhiTexturedItems::worldBounds() const

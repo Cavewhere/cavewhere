@@ -4,6 +4,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "cwFrustum.h"
+#include "cwRenderCullingStats.h"
 #include "cwRHIObject.h"
 #include "cwRhiFrameRenderer.h"
 #include "cwSceneVisibility.h"
@@ -41,6 +42,7 @@ public:
         ++gatherCount;
         lastObjectOrder = context.objectOrder;
         lastFrustum = context.frustum;
+        lastCullingStats = context.cullingStats;
         return false;
     }
 
@@ -50,6 +52,7 @@ public:
     int gatherCount = 0;
     quint32 lastObjectOrder = 0;
     const cwFrustum* lastFrustum = nullptr;
+    const cwRenderCullingStats::Counts* lastCullingStats = nullptr;
 };
 
 QMatrix4x4 viewProjectionLookingDownNegativeZ()
@@ -184,4 +187,63 @@ TEST_CASE("gatherScene stamps the frame's frustum into every GatherContext",
     REQUIRE(object->lastFrustum->isValid());
     REQUIRE(object->lastFrustum->intersects(boxAt(QVector3D(0.0f, 0.0f, kInFrustumZ))));
     REQUIRE_FALSE(object->lastFrustum->intersects(boxAt(QVector3D(0.0f, 0.0f, kBehindCameraZ))));
+}
+
+TEST_CASE("gatherScene publishes the frame's culled and total object counts",
+          "[FrustumCulling]")
+{
+    cwRhiFrameRenderer frame;
+
+    auto* inFrustum = new CountingObject;
+    inFrustum->bounds = boxAt(QVector3D(0.0f, 0.0f, kInFrustumZ));
+    frame.registerRenderObject(cwRenderObjectId{1}, inFrustum);
+
+    auto* outOfFrustum = new CountingObject;
+    outOfFrustum->bounds = boxAt(QVector3D(0.0f, 0.0f, kBehindCameraZ));
+    frame.registerRenderObject(cwRenderObjectId{2}, outOfFrustum);
+
+    auto* unbounded = new CountingObject;
+    unbounded->bounds = std::nullopt;
+    frame.registerRenderObject(cwRenderObjectId{3}, unbounded);
+
+    const quint64 startRevision = cwRenderCullingStats::instance()->revision();
+
+    gatherOnce(frame);
+
+    REQUIRE(cwRenderCullingStats::instance()->revision() == startRevision + 1);
+
+    const cwRenderCullingStats::Counts counts = cwRenderCullingStats::instance()->counts();
+    REQUIRE(counts.objectsTotal == 3);
+    REQUIRE(counts.objectsCulled == 1);
+
+    //The stub objects gather no items, so the item tally stays empty
+    REQUIRE(counts.itemsTotal == 0);
+    REQUIRE(counts.itemsCulled == 0);
+
+    REQUIRE(inFrustum->lastCullingStats != nullptr);
+    REQUIRE(unbounded->lastCullingStats == inFrustum->lastCullingStats);
+}
+
+TEST_CASE("gatherScene leaves a hidden object out of the culled and total counts",
+          "[FrustumCulling]")
+{
+    cwRhiFrameRenderer frame;
+
+    auto* hidden = new CountingObject;
+    hidden->bounds = boxAt(QVector3D(0.0f, 0.0f, kInFrustumZ));
+    frame.registerRenderObject(cwRenderObjectId{1}, hidden);
+
+    auto* drawn = new CountingObject;
+    drawn->bounds = boxAt(QVector3D(0.0f, 0.0f, kInFrustumZ));
+    frame.registerRenderObject(cwRenderObjectId{2}, drawn);
+
+    cwSceneVisibility visibility;
+    visibility.setObjectVisible(cwRenderObjectId{1}, false);
+    frame.setVisibilitySnapshot(visibility.snapshot());
+
+    gatherOnce(frame);
+
+    const cwRenderCullingStats::Counts counts = cwRenderCullingStats::instance()->counts();
+    REQUIRE(counts.objectsTotal == 1);
+    REQUIRE(counts.objectsCulled == 0);
 }

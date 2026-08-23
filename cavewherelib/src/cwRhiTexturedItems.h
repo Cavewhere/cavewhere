@@ -85,6 +85,9 @@ private:
         void updateWorldBounds();
     };
 
+    //! Adds this object's item counts to the frame's culled/total tally
+    void tallyCullingStats(const GatherContext& context) const;
+
     QHash<uint32_t, Item*> m_items;
     bool m_resourcesInitialized = false;
     SharedItemData m_sharedData;

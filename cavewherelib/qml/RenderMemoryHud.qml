@@ -121,5 +121,17 @@ QQ.Rectangle {
                 font.pixelSize: Theme.fontSizeCaption
             }
         }
+
+        // Frustum-culling counts for the last gathered frame, informational only.
+        QC.Label {
+            objectName: "renderMemoryHudCulling"
+            text: qsTr("Culled: %1/%2 objects · %3/%4 items")
+                .arg(memoryModelId.culledObjects)
+                .arg(memoryModelId.totalObjects)
+                .arg(memoryModelId.culledItems)
+                .arg(memoryModelId.totalItems)
+            color: Theme.text
+            font.pixelSize: Theme.fontSizeCaption
+        }
     }
 }

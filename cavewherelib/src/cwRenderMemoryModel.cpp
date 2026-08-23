@@ -7,6 +7,7 @@
 
 //Our includes
 #include "cwRenderMemoryModel.h"
+#include "cwRenderCullingStats.h"
 #include "cwRenderMemoryLedger.h"
 
 //Std includes
@@ -109,10 +110,10 @@ void cwRenderMemoryModel::setRunning(bool running)
 
 void cwRenderMemoryModel::poll()
 {
-    if(cwRenderMemoryLedger::instance()->revision() == m_lastRevision) {
-        return;
+    if(cwRenderMemoryLedger::instance()->revision() != m_lastRevision
+       || cwRenderCullingStats::instance()->revision() != m_lastCullingRevision) {
+        refresh();
     }
-    refresh();
 }
 
 void cwRenderMemoryModel::refresh()
@@ -145,6 +146,15 @@ void cwRenderMemoryModel::refresh()
         m_totalGpuBytes = totalGpuBytes;
         m_totalCpuBytes = totalCpuBytes;
         emit totalsChanged();
+    }
+
+    auto* cullingStats = cwRenderCullingStats::instance();
+    const quint64 cullingRevision = cullingStats->revision();
+
+    if(cullingRevision != m_lastCullingRevision) {
+        m_lastCullingRevision = cullingRevision;
+        m_culling = cullingStats->counts();
+        emit cullingChanged();
     }
 }
 

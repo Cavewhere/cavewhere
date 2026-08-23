@@ -17,6 +17,7 @@
 
 //Our includes
 #include "cwGlobals.h"
+#include "cwRenderCullingStats.h"
 
 // Read-only view of cwRenderMemoryLedger for QML. One row per ledger category,
 // refreshed by a timer while running is true.
@@ -29,6 +30,10 @@ class CAVEWHERE_LIB_EXPORT cwRenderMemoryModel : public QAbstractListModel
     Q_PROPERTY(QString totalGpuText READ totalGpuText NOTIFY totalsChanged)
     Q_PROPERTY(QString totalCpuText READ totalCpuText NOTIFY totalsChanged)
     Q_PROPERTY(bool running READ running WRITE setRunning NOTIFY runningChanged)
+    Q_PROPERTY(int totalObjects READ totalObjects NOTIFY cullingChanged)
+    Q_PROPERTY(int culledObjects READ culledObjects NOTIFY cullingChanged)
+    Q_PROPERTY(int totalItems READ totalItems NOTIFY cullingChanged)
+    Q_PROPERTY(int culledItems READ culledItems NOTIFY cullingChanged)
 
 public:
     enum Roles {
@@ -53,6 +58,11 @@ public:
     QString totalGpuText() const { return formattedBytes(m_totalGpuBytes); }
     QString totalCpuText() const { return formattedBytes(m_totalCpuBytes); }
 
+    int totalObjects() const { return m_culling.objectsTotal; }
+    int culledObjects() const { return m_culling.objectsCulled; }
+    int totalItems() const { return m_culling.itemsTotal; }
+    int culledItems() const { return m_culling.itemsCulled; }
+
     //! Re-reads the ledger now, for the HUD's refresh affordance
     Q_INVOKABLE void refresh();
 
@@ -62,6 +72,7 @@ public:
 signals:
     void totalsChanged();
     void runningChanged();
+    void cullingChanged();
 
 private slots:
     void poll();
@@ -77,6 +88,8 @@ private:
     qint64 m_totalGpuBytes = 0;
     qint64 m_totalCpuBytes = 0;
     quint64 m_lastRevision = 0;
+    cwRenderCullingStats::Counts m_culling;
+    quint64 m_lastCullingRevision = 0;
     bool m_running = false;
 };
 

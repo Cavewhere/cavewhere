@@ -3,6 +3,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include "cwRenderCullingStats.h"
 #include "cwRenderMemoryLedger.h"
 #include "cwRenderMemoryModel.h"
 
@@ -24,6 +25,12 @@ constexpr int kCategoryCount = 5;
 constexpr int kPointCloudRow = 0;
 constexpr int kLinePlotRow = 3;
 constexpr int kLongerThanPollInterval = 1200;
+constexpr cwRenderCullingStats::Counts kCounts {
+    .objectsTotal = 9,
+    .objectsCulled = 4,
+    .itemsTotal = 25,
+    .itemsCulled = 20
+};
 
 // The ledger is process-wide, so every test works in deltas from what it finds
 // and puts the value back when it is done.
@@ -126,6 +133,27 @@ TEST_CASE("cwRenderMemoryModel: refresh re-reads roles and totals from the ledge
     model.refresh();
     CHECK(dataChangedSpy.count() == 2);
     CHECK(totalsSpy.count() == 1);
+}
+
+TEST_CASE("cwRenderMemoryModel: refresh reads the published culling counts",
+          "[RenderMemoryModel]") {
+    cwRenderMemoryModel model;
+
+    QSignalSpy cullingSpy(&model, &cwRenderMemoryModel::cullingChanged);
+
+    cwRenderCullingStats::instance()->publish(kCounts);
+
+    model.refresh();
+
+    CHECK(model.totalObjects() == kCounts.objectsTotal);
+    CHECK(model.culledObjects() == kCounts.objectsCulled);
+    CHECK(model.totalItems() == kCounts.itemsTotal);
+    CHECK(model.culledItems() == kCounts.itemsCulled);
+    CHECK(cullingSpy.count() == 1);
+
+    //Without a new published frame the model stays quiet
+    model.refresh();
+    CHECK(cullingSpy.count() == 1);
 }
 
 TEST_CASE("cwRenderMemoryModel: polling runs only while running is true",

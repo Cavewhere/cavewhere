@@ -4,6 +4,7 @@
 #include "cwRhiItemRenderer.h"
 #include "cwEDLEffect.h"
 #include "cwFrustum.h"
+#include "cwRenderCullingStats.h"
 #include "cwRenderingSettings.h"
 
 #include <algorithm>
@@ -547,6 +548,8 @@ void cwRhiFrameRenderer::gatherScene(std::array<QVector<cwRHIObject::PipelineBat
     const cwFrustum frustum = cwFrustum::fromViewProjection(
         perPassRenderData[0].viewProjectionMatrix);
 
+    cwRenderCullingStats::Counts cullingStats;
+
     quint32 objectOrder = 0;
     for (auto object : std::as_const(m_rhiObjects)) {
         // Snapshot gate ANDed with the per-job overlay. Objects carry their own
@@ -558,10 +561,13 @@ void cwRhiFrameRenderer::gatherScene(std::array<QVector<cwRHIObject::PipelineBat
             continue;
         }
 
+        ++cullingStats.objectsTotal;
+
         // objectOrder still advances, as on the visibility path above, so draw
         // order stays stable as the camera moves.
         const std::optional<QBox3D> bounds = object->worldBounds();
         if (bounds.has_value() && !frustum.intersects(bounds.value())) {
+            ++cullingStats.objectsCulled;
             ++objectOrder;
             continue;
         }
@@ -573,6 +579,7 @@ void cwRhiFrameRenderer::gatherScene(std::array<QVector<cwRHIObject::PipelineBat
                 &perPassRenderData[passIndex], pass, objectOrder,
                 &m_visibility,
                 &frustum,
+                &cullingStats,
                 options.appearanceSlotForObject.value(object, 0)
             };
             object->gather(context, batches);
@@ -580,6 +587,8 @@ void cwRhiFrameRenderer::gatherScene(std::array<QVector<cwRHIObject::PipelineBat
 
         ++objectOrder;
     }
+
+    cwRenderCullingStats::instance()->publish(cullingStats);
 }
 
 void cwRhiFrameRenderer::drainBatches(QRhiCommandBuffer* cb,
