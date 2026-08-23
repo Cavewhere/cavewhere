@@ -6,12 +6,16 @@
 
 // Std includes
 #include <algorithm>
+#include <atomic>
 #include <cstdlib>
 #include <cstring>
 #include <memory>
 #include <optional>
 
 namespace {
+
+    //Written by the render thread once it has a QRhi, read from the GUI thread
+    std::atomic<QRhiTexture::Format> supportedFormat { QRhiTexture::UnknownFormat };
 
     constexpr ktx_uint32_t kVkFormatR8G8B8A8Unorm = 37;
 
@@ -232,6 +236,38 @@ QRhiTexture::Format preferredCompressedFormat(QRhi* rhi)
     }
 
     return QRhiTexture::UnknownFormat;
+}
+
+QRhiTexture::Format targetCompressedFormat()
+{
+#if defined(Q_OS_IOS) || defined(Q_OS_ANDROID)
+    return QRhiTexture::ASTC_4x4;
+#else
+    return QRhiTexture::BC7;
+#endif
+}
+
+QRhiTexture::Format supportedCompressedFormat()
+{
+    return supportedFormat.load(std::memory_order_relaxed);
+}
+
+void setSupportedCompressedFormat(QRhiTexture::Format format)
+{
+    supportedFormat.store(format, std::memory_order_relaxed);
+}
+
+Monad::Result<cwCompressedTexture> transcodeFromCache(const cwDiskCacher& cacher,
+                                                      const cwDiskCacher::Key& key,
+                                                      QRhiTexture::Format target)
+{
+    const QByteArray ktx2Bytes = cacher.entry(key);
+    if(ktx2Bytes.isEmpty()) {
+        return Monad::Result<cwCompressedTexture>(
+            QStringLiteral("No KTX2 cache entry at ") + cacher.filePath(key));
+    }
+
+    return transcode(ktx2Bytes, target);
 }
 
 }

@@ -68,10 +68,10 @@ QList<QFuture<cwTriangulatedData>> cwTriangulateTask::triangulate() const
                      {
 
                          cwTextureUploadTask uploadTask;
-                         auto croppedImagePtr = cropFuture.result();
+                         const auto croppedResult = cropFuture.result();
 
-                         if(croppedImagePtr) {
-                             cwImage croppedImage = *(cropFuture.result());
+                         if(croppedResult.image) {
+                             cwImage croppedImage = *(croppedResult.image);
                              uploadTask.setImage(croppedImage);
                              uploadTask.setDataRootDir(dataRootDir);
                              uploadTask.setType(cwTextureUploadTask::OpenGL_RGBA);
@@ -99,9 +99,9 @@ QList<QFuture<cwTriangulatedData>> cwTriangulateTask::triangulate() const
     return cw::transform(Scraps, triangulateScrap);
 }
 
-QFuture<cwTrackedImagePtr> cwTriangulateTask::cropScrap(const cwTriangulateInData &scrap,
-                                                        const QDir& dataRootDir,
-                                                        cwTextureUploadTask::Format format)
+QFuture<cwCropImageTask::Result> cwTriangulateTask::cropScrap(const cwTriangulateInData &scrap,
+                                                              const QDir& dataRootDir,
+                                                              cwTextureUploadTask::Format format)
 {
     cwCropImageTask cropTask;
     cropTask.setDataRootDir(dataRootDir);
@@ -115,7 +115,7 @@ QFuture<cwTrackedImagePtr> cwTriangulateTask::cropScrap(const cwTriangulateInDat
 }
 
 cwTriangulatedData cwTriangulateTask::triangulateGeometry(const cwTriangulateInData &scrap,
-                                                          cwTrackedImagePtr croppedImage,
+                                                          const cwCropImageTask::Result& croppedResult,
                                                           const cwTextureUploadTask::UploadResult& imageData)
 {
     QRectF bounds = scrap.outline().boundingRect();
@@ -170,7 +170,8 @@ cwTriangulatedData cwTriangulateTask::triangulateGeometry(const cwTriangulateInD
 
     cwTriangulatedData outputData;
     outputData.setCroppedImageData(imageData);
-    outputData.setCroppedImage(croppedImage);
+    outputData.setCroppedImage(croppedResult.image);
+    outputData.setCompressedTextureKey(croppedResult.compressedKey);
     outputData.setScrapGeometry(geometry);
     outputData.setLeadPoints(leadPoints);
 

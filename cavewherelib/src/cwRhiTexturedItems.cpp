@@ -1,6 +1,7 @@
 #include "cwRhiTexturedItems.h"
 
 #include "cwFrustum.h"
+#include "cwKtx2Codec.h"
 #include "cwRenderTexturedItems.h"
 #include "cwRhiAttributeFormat.h"
 #include "cwRhiItemRenderer.h"
@@ -50,6 +51,11 @@ void cwRhiTexturedItems::initialize(const ResourceUpdateData& data)
     }
 
     QRhi* rhi = data.renderData.cb->rhi();
+
+    // Tell the GUI side what this backend accepts, so it only ever hands us a
+    // compressed texture we can upload.
+    cw::ktx2::setSupportedCompressedFormat(cw::ktx2::preferredCompressedFormat(rhi));
+
     {
         QImage image(256, 256, QImage::Format_RGBA8888);
         image.fill(Qt::transparent);

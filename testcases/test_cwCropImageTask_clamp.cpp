@@ -51,7 +51,7 @@ TEST_CASE("cwCropImageTask clamps oversized crops", "[CropImageTask]") {
     auto future = task.crop();
     REQUIRE(AsyncFuture::waitForFinished(future, kCropTimeoutMilliseconds));
 
-    cwTrackedImagePtr cropped = future.result();
+    cwTrackedImagePtr cropped = future.result().image;
     REQUIRE(!cropped.isNull());
 
     const QSize croppedSize = cropped->originalSize();
@@ -96,7 +96,7 @@ TEST_CASE("cwCropImageTask keeps crops within the size limit unscaled", "[CropIm
     auto future = task.crop();
     REQUIRE(AsyncFuture::waitForFinished(future, kCropTimeoutMilliseconds));
 
-    cwTrackedImagePtr cropped = future.result();
+    cwTrackedImagePtr cropped = future.result().image;
     REQUIRE(!cropped.isNull());
 
     CHECK(cropped->originalSize() == sourceSize);
