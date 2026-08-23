@@ -177,6 +177,9 @@ find_package(OpenSSL REQUIRED)
 # testlib's LazFixtureHelper can link against it directly without dragging
 # the LASlib include path into cavewherelib's PUBLIC interface.
 find_package(laslib CONFIG REQUIRED)
+# libktx is a private dep of cavewherelib; re-find it here so the tests can
+# call libktx directly without exposing its headers through cavewherelib.
+find_package(Ktx REQUIRED)
 
 find_package(Qt6
     COMPONENTS
@@ -290,6 +293,7 @@ if(BUILD_TESTING)
         cavewherelib
         qquickgit-lfs-test-server
         protobuf::libprotobuf
+        KTX::ktx
         SignalSpyChecker
         QuickQanavaplugin
     )

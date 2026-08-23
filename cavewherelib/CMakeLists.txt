@@ -24,6 +24,7 @@ find_package(Qt6
     REQUIRED)
 find_package(xxHash REQUIRED)
 find_package(TinyGLTF REQUIRED)
+find_package(Ktx REQUIRED)
 find_package(minizip REQUIRED)
 find_package(PROJ CONFIG REQUIRED)
 find_package(laslib CONFIG REQUIRED)
@@ -192,6 +193,7 @@ target_link_libraries(cavewherelib
     qt6keychain
     PRIVATE
     TinyGLTF::TinyGLTF
+    KTX::ktx
     protobuf::libprotobuf
     abseil::abseil
     xxHash::xxhash

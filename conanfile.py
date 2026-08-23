@@ -22,6 +22,7 @@ class CaveWhereConan(ConanFile):
     ("xxhash/[>=0.8.3]"),
     ("tinygltf/[>=2.9.0 <2.10]"),
     ("minizip-ng/[>=4.0.7]"),
+    ("ktx/[>=4.3 <5]"),
     ("laslib/[>=2.0.2]")
     ]
 
@@ -94,6 +95,11 @@ class CaveWhereConan(ConanFile):
             self.options["abseil"].shared = False
 
         self.options["openssl"].shared = True
+
+        # libktx ships the writer and the Basis encoder/transcoder in the
+        # library itself; the command line tools only add an fmt dependency
+        # and a max-C++17 build constraint, so leave them out.
+        self.options["ktx"].tools = False
 
         if self.settings.os == "Android":
             # On Android, Conan-built OpenSSL is only used for the static libs
