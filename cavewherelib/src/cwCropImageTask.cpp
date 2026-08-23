@@ -12,6 +12,7 @@
 #include "cwDiskCacher.h"
 #include "cwDebug.h"
 #include "cwKtx2Codec.h"
+#include "cwOpenGLUtils.h"
 
 //Async future
 #include <asyncfuture.h>
@@ -26,6 +27,13 @@
 namespace {
     //Keeps scrap textures below the smallest common driver texture limit
     constexpr int kMaxCropPixelDimension = 4096;
+
+    /**
+     * Marks the compressed scrap entries in the disk cache. The trailing number
+     * is the encode's generation: bump it whenever the encoded bytes change for
+     * inputs that hash the same, so old entries stop being served.
+     */
+    constexpr QLatin1StringView kCompressedScrapKeySuffix("-uastc1");
 
     /**
      * The shared part of both cache keys for one crop: the crop rect, plus the
@@ -64,7 +72,7 @@ namespace {
     {
         const cwDiskCacher::Key key = cwImageProvider::imageCacheKey(
             pathToImage,
-            keyPrefix + QStringLiteral("-uastc"),
+            keyPrefix + kCompressedScrapKeySuffix,
             parentHash);
 
         cwDiskCacher cacher(dataRootDir);
@@ -72,7 +80,10 @@ namespace {
             return key;
         }
 
-        const auto encoded = cw::ktx2::encodeRgba(croppedImage);
+        //Scrap texcoords use the OpenGL bottom-left origin, so the compressed
+        //texture must carry the same flip cwOpenGLUtils::toGLTexture() gives the
+        //uncompressed path
+        const auto encoded = cw::ktx2::encodeRgba(cwOpenGLUtils::toGLTexture(croppedImage));
         if(encoded.hasError()) {
             qWarning() << "Can't compress scrap texture, using the uncompressed image:"
                        << encoded.errorMessage();
