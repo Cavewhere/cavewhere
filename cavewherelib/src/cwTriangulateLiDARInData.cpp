@@ -23,19 +23,11 @@ class cwTriangulateLiDARPrivateData : public QSharedData {
 public:
     cwTriangulateLiDARPrivateData() = default;
 
-    cwTriangulateLiDARPrivateData(const cwTriangulateLiDARPrivateData& other)
-        : QSharedData(other),
-        m_noteStations(other.m_noteStations),
-        m_stationLookup(other.m_stationLookup),
-        m_surveyNetwork(other.m_surveyNetwork),
-        m_gltfFilename(other.m_gltfFilename)
-    {
-    }
-
     QList<cwNoteLiDARStation> m_noteStations;
     cwStationPositionLookup m_stationLookup;
     cwSurveyNetwork m_surveyNetwork;
     QString m_gltfFilename;
+    QString m_dataRootPath;
     QMatrix4x4 m_modelMatrix;
 };
 
@@ -105,6 +97,16 @@ QString cwTriangulateLiDARInData::gltfFilename() const
 void cwTriangulateLiDARInData::setGltfFilename(const QString& filename)
 {
     data->m_gltfFilename = filename;
+}
+
+QString cwTriangulateLiDARInData::dataRootPath() const
+{
+    return data->m_dataRootPath;
+}
+
+void cwTriangulateLiDARInData::setDataRootPath(const QString& path)
+{
+    data->m_dataRootPath = path;
 }
 
 QMatrix4x4 cwTriangulateLiDARInData::modelMatrix() const

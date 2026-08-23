@@ -88,13 +88,18 @@ namespace cw::ktx2 {
     CAVEWHERE_LIB_EXPORT void setSupportedCompressedFormat(QRhiTexture::Format format);
 
     /**
-     * Reads the .ktx2 bytes stored at key and transcodes them to target.
-     * Returns an error Result when the entry is missing or the bytes fail to
-     * transcode, so callers can fall back to the uncompressed image.
+     * Reads the .ktx2 bytes stored at key and transcodes them to target. When
+     * the entry is missing or damaged, encodes sourceImage, stores it under
+     * key, and transcodes that instead.
+     *
+     * Pass a null sourceImage when the caller cannot afford the encode: a
+     * missing entry is then an error Result and the caller falls back to the
+     * uncompressed image.
      */
-    CAVEWHERE_LIB_EXPORT Monad::Result<cwCompressedTexture> transcodeFromCache(const cwDiskCacher& cacher,
-                                                                              const cwDiskCacher::Key& key,
-                                                                              QRhiTexture::Format target);
+    CAVEWHERE_LIB_EXPORT Monad::Result<cwCompressedTexture> cachedCompressedTexture(cwDiskCacher& cacher,
+                                                                                   const cwDiskCacher::Key& key,
+                                                                                   const QImage& sourceImage,
+                                                                                   QRhiTexture::Format target);
 }
 
 #endif // CWKTX2CODEC_H

@@ -3,6 +3,7 @@
 #include "cwRestarterTracking.h"
 #include "cwRhiTexturedItems.h"
 #include "cwConcurrent.h"
+#include "cwGltfBaseColorTexture.h"
 #include "cwTriangulateLiDARTask.h"
 
 //Async includes
@@ -45,22 +46,23 @@ void cwRenderGLTF::setGLTFFilePath(const QString &filePath)
         auto run = [this, filePath]() {
             auto renderObject = this;
             auto modelMatrix = m_modelMatrix.value();
+            auto dataRootPath = m_dataRootPath;
 
-            auto future = cwConcurrent::run([filePath, renderObject, modelMatrix]()->Monad::Result<Load> {
+            auto future = cwConcurrent::run([filePath, renderObject, modelMatrix, dataRootPath]()->Monad::Result<Load> {
                 cw::gltf::LoadOptions options;
                 options.requestedLayout = cwRenderTexturedItems::geometryLayout();
                 auto data = cw::gltf::Loader::loadGltf(filePath, options);
 
                 Load load;
                 load.items = cwTriangulateLiDARTask::reserveRenderItems(data.meshes);
+                const cwGltfBaseColorTexture baseColorTexture(dataRootPath, filePath);
 
-                //Morph the vertexes
                 for(auto& mesh : data.meshes) {
                     for(auto& geometry : mesh.geometries) {
 
                         //Add the render item
-                        load.items.emplaceBack(std::move(geometry),
-                                               cw::gltf::baseColorImage(data, mesh.material));
+                        auto& item = load.items.emplaceBack(std::move(geometry));
+                        baseColorTexture.setOn(item, data, mesh.material);
                     }
                 }
 
@@ -72,6 +74,15 @@ void cwRenderGLTF::setGLTFFilePath(const QString &filePath)
 
         m_loadRestarter.restart(run);
     }
+}
+
+void cwRenderGLTF::setDataRootPath(const QString &dataRootPath)
+{
+    if(m_dataRootPath == dataRootPath) {
+        return;
+    }
+    m_dataRootPath = dataRootPath;
+    emit dataRootPathChanged();
 }
 
 void cwRenderGLTF::setGLTFUrl(const QUrl &url)

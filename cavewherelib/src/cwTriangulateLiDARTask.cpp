@@ -1,5 +1,6 @@
 #include "cwTriangulateLiDARTask.h"
 #include "cwConcurrent.h"
+#include "cwGltfBaseColorTexture.h"
 #include "cwGltfLoader.h"
 #include "cwTriangulateStation.h"
 #include "cwTriangulateTask.h"
@@ -45,6 +46,7 @@ QFuture<Monad::Result<QVector<cwRenderTexturedItems::Item> > > cwTriangulateLiDA
 
 
         QVector<cwRenderTexturedItems::Item> renderItems = reserveRenderItems(gltf.meshes);
+        const cwGltfBaseColorTexture baseColorTexture(data.dataRootPath(), data.gltfFilename());
 
         //Morph the vertexes
         for(auto& mesh : gltf.meshes) {
@@ -52,8 +54,8 @@ QFuture<Monad::Result<QVector<cwRenderTexturedItems::Item> > > cwTriangulateLiDA
                 morphPositions(geometry);
 
                 //Add the render item
-                renderItems.emplaceBack(std::move(geometry),
-                                        cw::gltf::baseColorImage(gltf, mesh.material));
+                auto& item = renderItems.emplaceBack(std::move(geometry));
+                baseColorTexture.setOn(item, gltf, mesh.material);
             }
         }
 

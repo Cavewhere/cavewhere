@@ -67,7 +67,7 @@ TEST_CASE("Cropping a scrap caches a compressed texture", "[ScrapCompressedTextu
     REQUIRE(!result.image.isNull());
     REQUIRE(!result.compressedKey.id.isEmpty());
 
-    const cwDiskCacher cacher(dataRootDir);
+    cwDiskCacher cacher(dataRootDir);
     REQUIRE(cacher.hasEntry(result.compressedKey));
 
     const QString cachedPath = cacher.filePath(result.compressedKey);
@@ -77,9 +77,10 @@ TEST_CASE("Cropping a scrap caches a compressed texture", "[ScrapCompressedTextu
     //The PNG crop is still the fallback source and must survive alongside it
     CHECK(QFileInfo::exists(result.image->path()));
 
-    const auto transcoded = cw::ktx2::transcodeFromCache(cacher,
-                                                         result.compressedKey,
-                                                         cw::ktx2::targetCompressedFormat());
+    const auto transcoded = cw::ktx2::cachedCompressedTexture(cacher,
+                                                              result.compressedKey,
+                                                              QImage(),
+                                                              cw::ktx2::targetCompressedFormat());
     REQUIRE_FALSE(transcoded.hasError());
 
     const cwCompressedTexture texture = transcoded.value();
@@ -112,9 +113,10 @@ TEST_CASE("Cropping a scrap caches a compressed texture", "[ScrapCompressedTextu
         const cwCropImageTask::Result secondResult = runCrop(dataRootDir, original);
         REQUIRE_FALSE(secondResult.compressedKey.id.isEmpty());
 
-        const auto reencoded = cw::ktx2::transcodeFromCache(cacher,
-                                                            secondResult.compressedKey,
-                                                            cw::ktx2::targetCompressedFormat());
+        const auto reencoded = cw::ktx2::cachedCompressedTexture(cacher,
+                                                                 secondResult.compressedKey,
+                                                                 QImage(),
+                                                                 cw::ktx2::targetCompressedFormat());
         CHECK_FALSE(reencoded.hasError());
     }
 

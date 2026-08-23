@@ -48,6 +48,11 @@ public:
     QString gltfFilename() const;
     void setGltfFilename(const QString& filename);
 
+    //The project's data root, whose .cw_cache holds the scan's compressed
+    //textures. Empty leaves the scan on uncompressed textures.
+    QString dataRootPath() const;
+    void setDataRootPath(const QString& path);
+
     QMatrix4x4 modelMatrix() const;
     void setModelMatrix(const QMatrix4x4& matrix);
 

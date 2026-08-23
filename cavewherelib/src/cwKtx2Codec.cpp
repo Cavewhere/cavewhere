@@ -1,6 +1,9 @@
 // Our includes
 #include "cwKtx2Codec.h"
 
+// Qt includes
+#include <QDebug>
+
 // libktx includes
 #include <ktx.h>
 
@@ -257,17 +260,37 @@ void setSupportedCompressedFormat(QRhiTexture::Format format)
     supportedFormat.store(format, std::memory_order_relaxed);
 }
 
-Monad::Result<cwCompressedTexture> transcodeFromCache(const cwDiskCacher& cacher,
-                                                      const cwDiskCacher::Key& key,
-                                                      QRhiTexture::Format target)
+Monad::Result<cwCompressedTexture> cachedCompressedTexture(cwDiskCacher& cacher,
+                                                           const cwDiskCacher::Key& key,
+                                                           const QImage& sourceImage,
+                                                           QRhiTexture::Format target)
 {
-    const QByteArray ktx2Bytes = cacher.entry(key);
-    if(ktx2Bytes.isEmpty()) {
+    const QByteArray cachedBytes = cacher.entry(key);
+    if(!cachedBytes.isEmpty()) {
+        auto transcoded = transcode(cachedBytes, target);
+        if(!transcoded.hasError()) {
+            return transcoded;
+        }
+
+        //A damaged entry is worth replacing, so fall through to the encode
+        //rather than reporting the read's error.
+        qWarning() << "Re-encoding the damaged KTX2 cache entry at" << cacher.filePath(key)
+                   << ":" << transcoded.errorMessage();
+    }
+
+    if(sourceImage.isNull()) {
         return Monad::Result<cwCompressedTexture>(
             QStringLiteral("No KTX2 cache entry at ") + cacher.filePath(key));
     }
 
-    return transcode(ktx2Bytes, target);
+    const auto encoded = encodeRgba(sourceImage);
+    if(encoded.hasError()) {
+        return Monad::Result<cwCompressedTexture>(encoded.errorMessage());
+    }
+
+    cacher.insert(key, encoded.value());
+
+    return transcode(encoded.value(), target);
 }
 
 }

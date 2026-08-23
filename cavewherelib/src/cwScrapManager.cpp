@@ -87,8 +87,11 @@ cwCompressedTexture compressedScrapTexture(const cwTriangulatedData& triangleDat
         return {};
     }
 
-    const cwDiskCacher cacher(project->dataRootDir());
-    const auto transcoded = cw::ktx2::transcodeFromCache(cacher, key, target);
+    //A null source image: the crop worker owns the encode, so a damaged entry
+    //here falls back to the QImage instead of stalling the GUI thread on a
+    //multi-second re-encode of a 4096 pixel crop.
+    cwDiskCacher cacher(project->dataRootDir());
+    const auto transcoded = cw::ktx2::cachedCompressedTexture(cacher, key, QImage(), target);
     if(transcoded.hasError()) {
         qWarning() << "Can't transcode the scrap texture, using the uncompressed image:"
                    << transcoded.errorMessage();
