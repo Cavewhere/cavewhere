@@ -4,6 +4,7 @@
 #include "cwRenderMaterialState.h"
 #include "cwRenderObject.h"
 #include "cwGeometry.h"
+#include "cwKtx2Codec.h"
 #include "CaveWhereLibExport.h"
 #include <QHash>
 #include <QByteArray>
@@ -23,7 +24,10 @@ public:
 
     struct Item {
         cwGeometry geometry;
+        // A texture travels as either a QImage or a GPU-ready
+        // cwCompressedTexture; the compressed form wins when both are set.
         QImage texture;
+        cwCompressedTexture compressedTexture;
         cwRenderMaterialState material;
         QByteArray uniformBlock;
         QMatrix4x4 modelMatrix;
@@ -40,6 +44,12 @@ public:
     void updateItem(uint32_t id, const Item& item);
     void updateGeometry(uint32_t id, const cwGeometry& geometry);
     void updateTexture(uint32_t id, const QImage& image);
+    // Send only a format the backend can accept — cw::ktx2::preferredCompressedFormat
+    // makes that decision. The render thread warns and drops back to the QImage
+    // path when the format or the texture create is rejected, so an item sent a
+    // compressed texture alone stays on the loading placeholder until a QImage
+    // arrives through updateTexture.
+    void updateCompressedTexture(uint32_t id, const cwCompressedTexture& compressedTexture);
     // Named setItemVisible, not an overload of setVisible: a same-name
     // overload would hide cwRenderObject::setVisible(bool) and make the
     // whole-object toggle unreachable without qualification.
@@ -67,6 +77,7 @@ private:
     struct ItemPayload {
         cwGeometry geometry;
         QImage texture;
+        cwCompressedTexture compressedTexture;
         cwRenderMaterialState material;
         QByteArray uniformBlock;
         QMatrix4x4 modelMatrix;
@@ -79,6 +90,7 @@ private:
         Remove,
         UpdateGeometry,
         UpdateTexture,
+        UpdateCompressedTexture,
         UpdateMaterial,
         UpdateUniformBlock,
         UpdateModelMatrix
@@ -101,6 +113,7 @@ private:
         // Which payload fields an Update touched since the last sync. Ignored for
         // Add (which uses the whole payload) and Remove (which uses none).
         bool geometryDirty = false;
+        // Covers both texture representations — whichever one the payload holds.
         bool textureDirty = false;
         bool materialDirty = false;
         bool uniformBlockDirty = false;

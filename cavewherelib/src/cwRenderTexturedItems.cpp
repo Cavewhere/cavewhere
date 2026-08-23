@@ -126,6 +126,7 @@ void cwRenderTexturedItems::addCommand(CommandType type, uint32_t id, const Item
     if (type == CommandType::Add) {
         // Ids are unique and monotonic, so an Add never collides with pending
         // state for the same id — overwrite outright with the full payload.
+        Q_ASSERT(payload.texture.isNull() || payload.compressedTexture.isNull());
         PendingItemState state;
         state.lifecycle = Lifecycle::Add;
         state.payload = payload;
@@ -161,6 +162,12 @@ void cwRenderTexturedItems::addCommand(CommandType type, uint32_t id, const Item
         break;
     case CommandType::UpdateTexture:
         state.payload.texture = payload.texture;
+        state.payload.compressedTexture = {};
+        state.textureDirty = true;
+        break;
+    case CommandType::UpdateCompressedTexture:
+        state.payload.compressedTexture = payload.compressedTexture;
+        state.payload.texture = QImage();
         state.textureDirty = true;
         break;
     case CommandType::UpdateMaterial:
@@ -180,6 +187,9 @@ void cwRenderTexturedItems::addCommand(CommandType type, uint32_t id, const Item
         break; // handled above
     }
 
+    // Exactly one texture representation is ever pending for an id.
+    Q_ASSERT(state.payload.texture.isNull() || state.payload.compressedTexture.isNull());
+
     update(); // schedule a render sync just like cwRenderScraps
 }
 
@@ -188,7 +198,9 @@ uint32_t cwRenderTexturedItems::addItem(const Item& item)
     const uint32_t id = m_nextId++;
     ItemPayload payload;
     payload.geometry = handleGeometryError(geometryForRender(item.geometry));
-    payload.texture = item.texture;
+    payload.compressedTexture = item.compressedTexture;
+    // One representation travels to the render thread; compressed wins.
+    payload.texture = item.compressedTexture.isNull() ? item.texture : QImage();
     payload.material = item.material;
     payload.uniformBlock = item.uniformBlock;
     payload.modelMatrix = item.modelMatrix;
@@ -199,8 +211,10 @@ uint32_t cwRenderTexturedItems::addItem(const Item& item)
     if (!storedItem.storeGeometry) {
         storedItem.geometry = cwGeometry();
     }
+    storedItem.texture = payload.texture;
     if (!storedItem.storeTexture) {
         storedItem.texture = QImage();
+        storedItem.compressedTexture = {};
     }
     m_frontState.insert(id, storedItem);
 
@@ -231,7 +245,11 @@ void cwRenderTexturedItems::updateItem(uint32_t id, const Item& item)
     // re-registers picking, model matrix updates the intersecter). Coalescing
     // collapses the five commands onto this id's pending entry.
     updateGeometry(id, item.geometry);
-    updateTexture(id, item.texture);
+    if (item.compressedTexture.isNull()) {
+        updateTexture(id, item.texture);
+    } else {
+        updateCompressedTexture(id, item.compressedTexture);
+    }
     setMaterial(id, item.material);
     setUniformBlock(id, item.uniformBlock);
     setModelMatrix(id, item.modelMatrix);
@@ -302,10 +320,30 @@ void cwRenderTexturedItems::updateTexture(uint32_t id, const QImage& image)
     payload.texture = image; // geometry left default
     addCommand(CommandType::UpdateTexture, id, payload);
 
+    entry->compressedTexture = {};
     if (entry->storeTexture) {
         entry->texture = image;
     } else {
         entry->texture = QImage();
+    }
+}
+
+void cwRenderTexturedItems::updateCompressedTexture(uint32_t id, const cwCompressedTexture& compressedTexture)
+{
+    auto entry = m_frontState.find(id);
+    if (entry == m_frontState.end()) {
+        return;
+    }
+
+    ItemPayload payload;
+    payload.compressedTexture = compressedTexture;
+    addCommand(CommandType::UpdateCompressedTexture, id, payload);
+
+    entry->texture = QImage();
+    if (entry->storeTexture) {
+        entry->compressedTexture = compressedTexture;
+    } else {
+        entry->compressedTexture = {};
     }
 }
 

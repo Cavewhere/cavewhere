@@ -47,7 +47,10 @@ private:
         QRhiCommandBuffer::IndexFormat indexFormat = QRhiCommandBuffer::IndexUInt32;
 
         cwGeometry geometry;
+        // Whichever texture representation is waiting to upload; both are
+        // dropped once the upload is recorded.
         QImage image;
+        cwCompressedTexture compressedTexture;
         QByteArray uniformBlock;
         cwRenderMaterialState material;
         QMatrix4x4 modelMatrix;
@@ -77,6 +80,9 @@ private:
         void ensurePipeline(const RenderData& renderData, const SharedItemData &sharedData, const QRhiVertexInputLayout& layout);
         void updateGeometryBuffers(const ResourceUpdateData& data);
         void updateTextureResource(const ResourceUpdateData& data, const SharedItemData &sharedData);
+        //! Uploads compressedTexture; false means the backend rejected the
+        //! format or the texture and the caller must use the QImage path
+        bool uploadCompressedTexture(const ResourceUpdateData& data);
         void updateUniformBuffer(const ResourceUpdateData& data);
         void createShaderResourceBindings(const ResourceUpdateData& data, const SharedItemData &sharedData);
         void purgePipelinesFor(QRhiRenderPassDescriptor* descriptor);

@@ -1073,7 +1073,7 @@ void cwScrapManager::attachScrap(cwScrap* scrap)
     cwRenderMaterialState state;
     state.cullMode = cwRenderMaterialState::CullMode::None;
     m_scrapToRenderId.insert(scrap,
-                             m_renderScraps->addItem({cwGeometry(), QImage(), state}));
+                             m_renderScraps->addItem({.material = state}));
     addKeywordItemForScrap(scrap);
 }
 
