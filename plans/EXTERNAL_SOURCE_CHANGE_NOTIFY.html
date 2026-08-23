@@ -315,6 +315,49 @@ status               UpToDate | Changed | SourceMissing | NoBreadcrumb</code></p
     regenerates ids and would strand the entry &mdash; a load-time orphan,
     fixable by re-keying at repair time.</p>
   </li>
+  <li id="fu-breadcrumb-gc-on-delete">
+    <strong>Clear the breadcrumb when its owner is deleted</strong>
+    <span class="dim">(filed 2026-08-23, from the settings-store audit)</span>.
+    <code>clearBreadcrumb</code> has exactly one caller &mdash; the explicit
+    detach verb &mdash; so deleting a trip, deleting a cave (which takes its
+    trips with it), or abandoning a never-saved project leaves the QSettings
+    entry forever. Philip's real store holds ~40 entries, most of them
+    orphans from repeated test attaches (seven for one source file). Clear
+    the entry when the owning trip or cave is <em>deleted by the user</em>,
+    cascading cave &rarr; trips. The hard part is scoping the trigger: a
+    trip's destruction during project close, project switch, or region
+    teardown is NOT a deletion and must leave the entry alone (the project
+    still owns it and will resolve it on next open) &mdash; the trigger has
+    to be the user-facing remove verb, never <code>~cwTrip</code>. Undo
+    interplay must be decided deliberately: today <code>pushUndo</code> with
+    no undo stack deletes the command immediately, and cave/trip removal is
+    effectively permanent in practice; if removal ever becomes undoable, a
+    restored trip keeps its id, so clearing on the redo-safe boundary (or
+    accepting the re-attach cost) needs a stated choice. Cross-project GC
+    stays out of scope &mdash; an entry can belong to a project that is
+    simply closed.
+  </li>
+  <li id="fu-attach-in-project-source-guard">
+    <strong>Guard attach against a source inside the project's own tree</strong>
+    <span class="dim">(filed 2026-08-23, from the settings-store audit)</span>.
+    The attach dialog accepts any file, including one under the current
+    project's own <code>external-centerline/</code> folder, and the stamp
+    records it faithfully &mdash; Philip's store holds two dead entries
+    whose "source" is the project's own copy. Reload already defends
+    (<code>reloadSourcePath</code> refuses a breadcrumb inside the owner's
+    attachment dir), but the remaining exposure is real: the panel reads
+    "Copied from: <em>the copy itself</em>", and post-N1 a fingerprinted
+    self-referential entry makes the change watcher treat the project's own
+    copy as its source, so the project's own writes could nag "changed
+    since copied". Add an attach-time guard when the picked entry file lies
+    inside the current project's <code>dataRootDir()</code>: decide
+    refuse-vs-warn deliberately (the trip's own attachment dir is
+    nonsensical and should refuse; elsewhere under the data root is
+    almost certainly a mistake too &mdash; the copy is derived data).
+    A file inside a <em>different</em> project's tree is legal and stays
+    untouched. The message must name the picked path and point the user at
+    the original source.
+  </li>
 </ul>
 
 <h2 id="non-goals">7. Non-goals</h2>
