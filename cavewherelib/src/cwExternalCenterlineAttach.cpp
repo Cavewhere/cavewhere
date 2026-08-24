@@ -114,6 +114,20 @@ QFuture<Monad::Result<AttachReport>> attach(cwTrip* trip,
             ReportResult(QStringLiteral("attach: trip is not part of a cave yet")));
     }
 
+    // Everything under the project's data root is data CaveWhere itself
+    // writes, so a "source" there names a copy of itself: the panel would
+    // read "Copied from: <the copy>" and the source watcher would treat the
+    // project's own writes as upstream changes. Refused before the scan
+    // worker starts, so nothing on disk or in the model has moved.
+    if (cwExternalCenterlineSync::isContainedIn(sourceFile,
+                                                saveLoad->dataRootDir().absolutePath())) {
+        return AsyncFuture::completed(ReportResult(
+            QStringLiteral("attach: %1 is inside this project's data folder — it is "
+                           "CaveWhere's own copy, not a source. Pick the original file "
+                           "the data came from instead.")
+                .arg(QFileInfo(sourceFile).absoluteFilePath())));
+    }
+
     // The Deferred is a cancellation firewall, not just a completion
     // handle. AsyncFuture propagates cancel() UPSTREAM through context
     // chains (execute()'s defer-watch and complete(QFuture)'s

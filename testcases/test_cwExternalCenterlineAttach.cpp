@@ -503,6 +503,120 @@ TEST_CASE("attach refuses null inputs with a clear error",
     // "[Attach][Temporary]" in test_cwExternalCenterlineAttachTemporary.
 }
 
+namespace {
+
+// The project's own copy of the trip's entry file - the path a user can
+// pick out of the file dialog by browsing into the project's data folder.
+QString projectCopyPath(SavedProjectFixture* fixture, const cwTrip* trip)
+{
+    const QString copyPath = fixture->saveLoad()
+        ->externalCenterlineDir(trip)
+        .absoluteFilePath(QStringLiteral("survex_simple.svx"));
+    REQUIRE(QFileInfo::exists(copyPath));
+    return copyPath;
+}
+
+void checkInProjectRefusal(const Monad::Result<cwExternalCenterlineAttach::AttachReport>& result,
+                           const QString& pickedPath)
+{
+    REQUIRE(result.hasError());
+    const QString message = result.errorMessage();
+    INFO("refusal message: " << message.toStdString());
+    CHECK(message.contains(QFileInfo(pickedPath).absoluteFilePath()));
+    CHECK(message.contains(QStringLiteral("Pick the original")));
+}
+
+} // namespace
+
+TEST_CASE("attach refuses the trip's own project copy as a source",
+          "[Attach][Orchestrator]")
+{
+    std::unique_ptr<SavedProjectFixture> fixture;
+    SECTION("saved project") {
+        fixture = makeSavedProject(QStringLiteral("attach-in-project"));
+    }
+    SECTION("never-saved project") {
+        fixture = makeNewProject();
+    }
+
+    auto manager = managerOf(fixture.get());
+    const QString source = datasetExternalCenterlinePath(QStringLiteral("survex_simple.svx"));
+    attachThroughManager(fixture.get(), fixture->trip, source);
+    drainPipelines(fixture.get());
+
+    const QUuid ownerId = fixture->trip->id();
+    const QString copyPath = projectCopyPath(fixture.get(), fixture->trip);
+    const auto fingerprintBefore = fixture->settings()->fingerprint(ownerId);
+    REQUIRE_FALSE(fingerprintBefore.isEmpty());
+
+    auto future = manager->replaceCenterline(fixture->trip, copyPath);
+    REQUIRE(AsyncFuture::waitForFinished(future, kAttachWaitMs));
+    checkInProjectRefusal(future.result(), copyPath);
+
+    // The attachment the trip already had is exactly as it was.
+    CHECK(fixture->trip->externalCenterline().entryFile()
+          == QStringLiteral("survex_simple.svx"));
+    CHECK(fixture->settings()->breadcrumbPath(ownerId) == source);
+    CHECK(fixture->settings()->fingerprint(ownerId) == fingerprintBefore);
+    CHECK(manager->canReloadFromSource(fixture->trip));
+
+    drainPipelines(fixture.get());
+
+    // The refusal hands the owner token back, so the trip is operable again.
+    CHECK_FALSE(manager->isOwnerBusy(ownerId));
+}
+
+TEST_CASE("attach refuses another trip's project copy as a source",
+          "[Attach][Orchestrator]")
+{
+    auto fixture = makeSavedProject(QStringLiteral("attach-in-project-sibling"));
+    auto manager = managerOf(fixture.get());
+    const QString source = datasetExternalCenterlinePath(QStringLiteral("survex_simple.svx"));
+    attachThroughManager(fixture.get(), fixture->trip, source);
+    drainPipelines(fixture.get());
+
+    const QString copyPath = projectCopyPath(fixture.get(), fixture->trip);
+
+    fixture->cave->addTrip();
+    cwTrip* secondTrip = fixture->cave->trip(1);
+    secondTrip->setName(QStringLiteral("SecondTrip"));
+
+    auto future = manager->attachCenterline(secondTrip, copyPath);
+    REQUIRE(AsyncFuture::waitForFinished(future, kAttachWaitMs));
+    checkInProjectRefusal(future.result(), copyPath);
+
+    CHECK(secondTrip->externalCenterline().isEmpty());
+    CHECK_FALSE(fixture->settings()->hasBreadcrumb(secondTrip->id()));
+
+    drainPipelines(fixture.get());
+}
+
+TEST_CASE("attach accepts a source inside a different project-shaped tree",
+          "[Attach][Orchestrator]")
+{
+    auto fixture = makeSavedProject(QStringLiteral("attach-other-project"));
+
+    // Another project's data folder, laid out like this one's: only THIS
+    // project's data root is off limits.
+    QTemporaryDir otherProject;
+    REQUIRE(otherProject.isValid());
+    const QString otherDir = tempSubdir(
+        otherProject,
+        QStringLiteral("Other Cave Data/OtherCave/OtherTrip/external-centerline"));
+    const QString otherSource = QDir(otherDir).absoluteFilePath(QStringLiteral("other.svx"));
+    REQUIRE(QFile::copy(datasetExternalCenterlinePath(QStringLiteral("survex_simple.svx")),
+                        otherSource));
+
+    attachThroughManager(fixture.get(), fixture->trip, otherSource);
+    drainPipelines(fixture.get());
+
+    CHECK(fixture->trip->externalCenterline().entryFile() == QStringLiteral("other.svx"));
+    CHECK(fixture->settings()->breadcrumbPath(fixture->trip->id()) == otherSource);
+    CHECK(QFileInfo::exists(fixture->saveLoad()
+                                ->externalCenterlineDir(fixture->trip)
+                                .absoluteFilePath(QStringLiteral("other.svx"))));
+}
+
 // ---------------------------------------------------------------------
 // cwExternalCenterlineManager operation surface (commit 9): the
 // per-owner operation token, the attach/detach wrappers, and the
@@ -1167,6 +1281,19 @@ TEST_CASE("reload is offered only for a source this machine has outside the proj
             ->externalCenterlineDir(fixture->trip)
             .absoluteFilePath(QStringLiteral("survex_simple.svx"));
         fixture->settings()->setBreadcrumbPath(ownerId, copyPath);
+        CHECK_FALSE(manager->canReloadFromSource(fixture->trip));
+    }
+
+    SECTION("the remembered file is elsewhere in the project's data root")
+    {
+        // Outside the owner's own attachment dir, still CaveWhere's own
+        // data: the whole data root is derived, so Reload stays off and
+        // agrees with the attach guard.
+        const QString strayPath = fixture->saveLoad()
+            ->dataRootDir()
+            .absoluteFilePath(QStringLiteral("stray-source.svx"));
+        REQUIRE(QFile::copy(sourcePath, strayPath));
+        fixture->settings()->setBreadcrumbPath(ownerId, strayPath);
         CHECK_FALSE(manager->canReloadFromSource(fixture->trip));
     }
 

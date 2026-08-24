@@ -1079,11 +1079,14 @@ QString cwExternalCenterlineManager::reloadSourcePath(cwTrip* trip) const
         return QString();
     }
 
-    // A breadcrumb pointing inside the attachment dir names the copy
-    // itself, and copying a file over itself is no reload at all.
-    const QString ownerAttachmentDir = attachmentDir(ownerId);
-    if (!ownerAttachmentDir.isEmpty()
-        && cwExternalCenterlineSync::isContainedIn(sourcePath, ownerAttachmentDir)) {
+    // A breadcrumb pointing anywhere inside the project's data root names
+    // one of CaveWhere's own copies — the owner's copy itself in the usual
+    // case — and copying a file over itself is no reload at all. The data
+    // root is also the boundary the attach guard refuses at, so the Reload
+    // button and the guard tell the same story.
+    if (!m_saveLoad.isNull()
+        && cwExternalCenterlineSync::isContainedIn(
+               sourcePath, m_saveLoad->dataRootDir().absolutePath())) {
         return QString();
     }
 
