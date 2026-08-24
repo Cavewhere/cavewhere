@@ -176,6 +176,27 @@ void cwAttachedCenterlinesModel::syncRowData(const QVector<Row>& rows)
     }
 }
 
+const cwAttachedCenterlinesModel::Row* cwAttachedCenterlinesModel::rowFor(const QUuid& ownerId) const
+{
+    const auto row = std::find_if(m_rows.cbegin(), m_rows.cend(),
+                                  [&ownerId](const Row& candidate) {
+        return candidate.ownerId == ownerId;
+    });
+    return row == m_rows.cend() ? nullptr : &(*row);
+}
+
+QString cwAttachedCenterlinesModel::errorFor(const QUuid& ownerId) const
+{
+    const Row* row = rowFor(ownerId);
+    return row == nullptr ? QString() : row->error;
+}
+
+int cwAttachedCenterlinesModel::warningCountFor(const QUuid& ownerId) const
+{
+    const Row* row = rowFor(ownerId);
+    return row == nullptr ? 0 : row->warningCount;
+}
+
 void cwAttachedCenterlinesModel::markSolved(const QDateTime& when)
 {
     if (m_rows.isEmpty()) {

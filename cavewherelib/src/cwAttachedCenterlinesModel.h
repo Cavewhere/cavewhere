@@ -81,10 +81,21 @@ public:
     // call start with a null lastSolved until the next solve completes.
     void markSolved(const QDateTime& when);
 
+    // Row lookups by owner for QML badges, which hold an owner rather
+    // than a row index. An owner with no row reads as clean: empty
+    // error, zero warnings. These have no NOTIFY of their own — the
+    // model's own reset / rowsInserted / rowsRemoved / dataChanged
+    // signals fire on every row change, so QML re-reads on those.
+    Q_INVOKABLE QString errorFor(const QUuid& ownerId) const;
+    Q_INVOKABLE int warningCountFor(const QUuid& ownerId) const;
+
 private:
     QVector<Row> m_rows;
 
     static bool rowDataEqual(const Row& left, const Row& right);
+
+    // The row belonging to `ownerId`, or nullptr when no row does.
+    const Row* rowFor(const QUuid& ownerId) const;
 
     // Copies changed row content from `rows` into m_rows and emits
     // dataChanged per changed row. Precondition: same owners, same order.

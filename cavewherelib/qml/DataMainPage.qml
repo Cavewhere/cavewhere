@@ -327,6 +327,13 @@ StandardPage {
                     errorModel: delegateId.caveObjectRole.errorModel
                 }
 
+                ExternalSolveBadge {
+                    owner: delegateId.caveObjectRole
+                    externallyBacked: delegateId.caveObjectRole
+                                      ? !delegateId.caveObjectRole.externalCenterline.isEmpty
+                                      : false
+                }
+
                 LinkText {
                     objectName: "caveLink"
                     text: delegateId.caveObjectRole.name

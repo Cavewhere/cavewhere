@@ -415,6 +415,16 @@ QString TestHelper::externalCenterlineCopyPath(cwProject* project,
     return project->saveLoad()->externalCenterlineDir(trip).absoluteFilePath(fileName);
 }
 
+QString TestHelper::externalCenterlineCaveCopyPath(cwProject* project,
+                                                   cwCave* cave,
+                                                   const QString& fileName) const
+{
+    if (project == nullptr || project->saveLoad() == nullptr || cave == nullptr) {
+        return QString();
+    }
+    return project->saveLoad()->externalCenterlineDir(cave).absoluteFilePath(fileName);
+}
+
 bool TestHelper::writeTextFile(const QString& path, const QString& contents) const
 {
     QFile file(QDir::cleanPath(path));

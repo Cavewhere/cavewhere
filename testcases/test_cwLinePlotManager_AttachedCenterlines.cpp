@@ -210,3 +210,45 @@ TEST_CASE("Detach removes the owner's row via rowsRemoved with correct indices",
     CHECK(roleAt(model, 0, cwAttachedCenterlinesModel::OwnerNameRole).toString()
           == QStringLiteral("Second"));
 }
+
+TEST_CASE("Attached model answers errorFor and warningCountFor by owner",
+          "[LinePlotManager][AttachedCenterlinesModel]")
+{
+    const QUuid errorOwner = QUuid::createUuid();
+    const QUuid warnOwner = QUuid::createUuid();
+    const QString message = QStringLiteral("reaches outside the project");
+    constexpr int kWarnings = 3;
+
+    cwAttachedCenterlinesModel model;
+
+    QVector<cwAttachedCenterlinesModel::Row> rows;
+    cwAttachedCenterlinesModel::Row errorRow;
+    errorRow.ownerId = errorOwner;
+    errorRow.caveName = QStringLiteral("Alpha");
+    errorRow.ownerName = QStringLiteral("Alpha");
+    errorRow.ownerKind = QStringLiteral("Cave");
+    errorRow.error = message;
+    rows.append(errorRow);
+
+    cwAttachedCenterlinesModel::Row warnRow;
+    warnRow.ownerId = warnOwner;
+    warnRow.caveName = QStringLiteral("Beta");
+    warnRow.ownerName = QStringLiteral("Beta Trip");
+    warnRow.ownerKind = QStringLiteral("Trip");
+    warnRow.warningCount = kWarnings;
+    rows.append(warnRow);
+
+    model.setRows(rows);
+    REQUIRE(model.rowCount() == 2);
+
+    CHECK(model.errorFor(errorOwner) == message);
+    CHECK(model.warningCountFor(errorOwner) == 0);
+
+    CHECK(model.errorFor(warnOwner).isEmpty());
+    CHECK(model.warningCountFor(warnOwner) == kWarnings);
+
+    // An owner with no row reads as clean.
+    const QUuid unknownOwner = QUuid::createUuid();
+    CHECK(model.errorFor(unknownOwner).isEmpty());
+    CHECK(model.warningCountFor(unknownOwner) == 0);
+}

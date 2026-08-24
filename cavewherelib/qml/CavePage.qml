@@ -693,6 +693,14 @@ StandardPage {
                                         errorModel: rowDelegateId.tripObjectRole.errorModel
                                     }
 
+                                    ExternalSolveBadge {
+                                        owner: rowDelegateId.tripObjectRole
+                                        externallyBacked: rowDelegateId.externallyBacked
+                                        fallbackError: rowDelegateId.tripObjectRole
+                                                       ? rowDelegateId.tripObjectRole.externalStationsError
+                                                       : ""
+                                    }
+
                                     LinkText {
                                         objectName: "tripNameLink"
                                         // The paperclip marks an externally
@@ -984,6 +992,14 @@ StandardPage {
 
                     ErrorIconBar {
                         errorModel: flowDelegateId.tripObjectRole.errorModel
+                    }
+
+                    ExternalSolveBadge {
+                        owner: flowDelegateId.tripObjectRole
+                        externallyBacked: flowDelegateId.externallyBacked
+                        fallbackError: flowDelegateId.tripObjectRole
+                                       ? flowDelegateId.tripObjectRole.externalStationsError
+                                       : ""
                     }
 
                     LinkText {

@@ -41,6 +41,8 @@ namespace QQuickGit {
 class GitRepository;
 }
 
+class cwCave;
+
 /**
  * Returns the shared temp root directory for this test process.
  * Created once per process, removed recursively at exit.
@@ -264,6 +266,12 @@ public:
     Q_INVOKABLE QString externalCenterlineCopyPath(cwProject* project,
                                                    cwTrip* trip,
                                                    const QString& fileName) const;
+    // The cave-owner twin of externalCenterlineCopyPath. A distinct name
+    // rather than an overload: QML resolves overloads on QObject-pointer
+    // arguments unreliably.
+    Q_INVOKABLE QString externalCenterlineCaveCopyPath(cwProject* project,
+                                                       cwCave* cave,
+                                                       const QString& fileName) const;
     // Writes `contents` to `path`, so a test can edit an in-project copy the
     // way a user's editor would.
     Q_INVOKABLE bool writeTextFile(const QString& path, const QString& contents) const;
