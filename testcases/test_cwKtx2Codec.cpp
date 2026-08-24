@@ -3,15 +3,20 @@
 
 #include <QByteArray>
 #include <QColor>
+#include <QDir>
 #include <QImage>
 #include <QString>
+#include <QTemporaryDir>
 
 #include <ktx.h>
 
 #include <algorithm>
 #include <cmath>
 
+#include "cwDiskCacher.h"
 #include "cwKtx2Codec.h"
+#include "cwStreamedTexture.h"
+#include "cwTextureResidency.h"
 
 namespace {
     constexpr ktx_uint32_t kSmokeWidth = 4;
@@ -180,5 +185,169 @@ TEST_CASE("cwKtx2Codec preserves a solid color through the mip chain", "[Ktx2]")
         CHECK(std::abs(center.green() - kSolidGreen) <= kChannelTolerance);
         CHECK(std::abs(center.blue() - kSolidBlue) <= kChannelTolerance);
         levelWidth = std::max(1, levelWidth / 2);
+    }
+}
+
+namespace {
+    constexpr int kSliceLevel = 2;
+    constexpr int kSlicedWidth = 16;
+    constexpr int kSlicedHeight = 12;
+    constexpr int kPastTheEndLevel = kGradientMipCount;
+    const QString kDescriptorRootPath = QStringLiteral("/project/data/root");
+
+    cwDiskCacher::Key streamedKey(const QString& checksum) {
+        cwDiskCacher::Key key;
+        key.path = QDir(QStringLiteral("streamed-textures"));
+        key.id = QStringLiteral("gradient-64x48");
+        key.checksum = checksum;
+        return key;
+    }
+
+    cwStreamedTexture streamedTexture(const QString& dataRootPath, const cwDiskCacher::Key& key) {
+        cwStreamedTexture texture;
+        texture.dataRootPath = dataRootPath;
+        texture.key = key;
+        texture.size = QSize(kGradientWidth, kGradientHeight);
+        return texture;
+    }
+}
+
+TEST_CASE("cwStreamedTexture reports null descriptors and compares by value", "[Ktx2Codec]") {
+    const cwStreamedTexture texture = streamedTexture(kDescriptorRootPath,
+                                                      streamedKey(QStringLiteral("checksum")));
+    CHECK_FALSE(texture.isNull());
+    CHECK(texture == streamedTexture(kDescriptorRootPath, streamedKey(QStringLiteral("checksum"))));
+
+    CHECK(cwStreamedTexture().isNull());
+
+    cwStreamedTexture noRoot = texture;
+    noRoot.dataRootPath.clear();
+    CHECK(noRoot.isNull());
+    CHECK_FALSE(noRoot == texture);
+
+    cwStreamedTexture noId = texture;
+    noId.key.id.clear();
+    CHECK(noId.isNull());
+    CHECK_FALSE(noId == texture);
+
+    cwStreamedTexture noSize = texture;
+    noSize.size = QSize();
+    CHECK(noSize.isNull());
+    CHECK_FALSE(noSize == texture);
+
+    CHECK_FALSE(texture == streamedTexture(kDescriptorRootPath, streamedKey(QStringLiteral("other"))));
+}
+
+TEST_CASE("cwKtx2Codec slices a block compressed mip chain from a first level", "[Ktx2Codec]") {
+    const auto encoded = cw::ktx2::encodeRgba(gradientImage(kGradientWidth, kGradientHeight));
+    REQUIRE_FALSE(encoded.hasError());
+
+    const auto sliced = cw::ktx2::transcodeLevels(encoded.value(), QRhiTexture::BC7, kSliceLevel);
+    REQUIRE_FALSE(sliced.hasError());
+
+    const cwCompressedTexture texture = sliced.value();
+    CHECK(texture.format == QRhiTexture::BC7);
+    CHECK(texture.size == QSize(kSlicedWidth, kSlicedHeight));
+    REQUIRE(texture.mipLevels.size() == kGradientMipCount - kSliceLevel);
+
+    for(qsizetype level = 0; level < texture.mipLevels.size(); level++) {
+        const QSize levelSize = cw::residency::mipLevelSize(texture.size, static_cast<int>(level));
+        CHECK(texture.mipLevels.at(level).size()
+              == cw::residency::mipLevelBytes(QRhiTexture::BC7, levelSize));
+    }
+}
+
+TEST_CASE("cwKtx2Codec transcodes the whole chain at first level zero", "[Ktx2Codec]") {
+    const auto encoded = cw::ktx2::encodeRgba(gradientImage(kGradientWidth, kGradientHeight));
+    REQUIRE_FALSE(encoded.hasError());
+
+    const auto whole = cw::ktx2::transcode(encoded.value(), QRhiTexture::BC7);
+    REQUIRE_FALSE(whole.hasError());
+    const auto fromZero = cw::ktx2::transcodeLevels(encoded.value(), QRhiTexture::BC7, 0);
+    REQUIRE_FALSE(fromZero.hasError());
+
+    CHECK(fromZero.value().format == whole.value().format);
+    CHECK(fromZero.value().size == whole.value().size);
+    CHECK(fromZero.value().mipLevels == whole.value().mipLevels);
+}
+
+TEST_CASE("cwKtx2Codec reports an error for a first level past the chain", "[Ktx2Codec]") {
+    const auto encoded = cw::ktx2::encodeRgba(gradientImage(kGradientWidth, kGradientHeight));
+    REQUIRE_FALSE(encoded.hasError());
+
+    const auto pastTheEnd = cw::ktx2::transcodeLevels(encoded.value(), QRhiTexture::BC7, kPastTheEndLevel);
+    CHECK(pastTheEnd.hasError());
+    CHECK_FALSE(pastTheEnd.errorMessage().isEmpty());
+
+    const auto negative = cw::ktx2::transcodeLevels(encoded.value(), QRhiTexture::BC7, -1);
+    CHECK(negative.hasError());
+    CHECK_FALSE(negative.errorMessage().isEmpty());
+}
+
+TEST_CASE("cwKtx2Codec loads streamed levels out of the disk cache", "[Ktx2Codec]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const auto encoded = cw::ktx2::encodeRgba(gradientImage(kGradientWidth, kGradientHeight));
+    REQUIRE_FALSE(encoded.hasError());
+
+    const cwDiskCacher::Key key = streamedKey(QStringLiteral("gradient-checksum"));
+    cwDiskCacher cacher{QDir(tempDir.path())};
+    cacher.insert(key, encoded.value());
+
+    const cwStreamedTexture texture = streamedTexture(tempDir.path(), key);
+
+    SECTION("A stored entry transcodes to the requested levels") {
+        const auto loaded = cw::ktx2::loadStreamedLevels(texture, QRhiTexture::BC7, kSliceLevel);
+        REQUIRE_FALSE(loaded.hasError());
+        CHECK(loaded.value().size == QSize(kSlicedWidth, kSlicedHeight));
+        CHECK(loaded.value().mipLevels.size() == kGradientMipCount - kSliceLevel);
+    }
+
+    SECTION("A missing entry names the file it looked for") {
+        cwStreamedTexture missing = texture;
+        missing.key.id = QStringLiteral("not-cached");
+
+        const auto loaded = cw::ktx2::loadStreamedLevels(missing, QRhiTexture::BC7, 0);
+        CHECK(loaded.hasError());
+        CHECK(loaded.errorMessage().contains(QStringLiteral("not-cached")));
+    }
+
+    SECTION("A mismatched checksum is an error") {
+        cwStreamedTexture wrongChecksum = texture;
+        wrongChecksum.key.checksum = QStringLiteral("stale-checksum");
+
+        const auto loaded = cw::ktx2::loadStreamedLevels(wrongChecksum, QRhiTexture::BC7, 0);
+        CHECK(loaded.hasError());
+        CHECK_FALSE(loaded.errorMessage().isEmpty());
+    }
+}
+
+TEST_CASE("cwKtx2Codec slices an RGBA8 chain for devices without block compression", "[Ktx2Codec]") {
+    QImage image(kGradientWidth, kGradientHeight, QImage::Format_RGBA8888);
+    image.fill(QColor(kSolidRed, kSolidGreen, kSolidBlue));
+
+    const auto encoded = cw::ktx2::encodeRgba(image);
+    REQUIRE_FALSE(encoded.hasError());
+
+    const auto sliced = cw::ktx2::transcodeLevels(encoded.value(), QRhiTexture::RGBA8, kSliceLevel);
+    REQUIRE_FALSE(sliced.hasError());
+
+    const cwCompressedTexture texture = sliced.value();
+    CHECK(texture.format == QRhiTexture::RGBA8);
+    CHECK(texture.size == QSize(kSlicedWidth, kSlicedHeight));
+    REQUIRE(texture.mipLevels.size() == kGradientMipCount - kSliceLevel);
+
+    for(qsizetype level = 0; level < texture.mipLevels.size(); level++) {
+        const QSize levelSize = cw::residency::mipLevelSize(texture.size, static_cast<int>(level));
+        const QByteArray& levelBytes = texture.mipLevels.at(level);
+        REQUIRE(levelBytes.size() == levelSize.width() * levelSize.height() * kBytesPerPixel);
+
+        const QImage decoded(reinterpret_cast<const uchar*>(levelBytes.constData()),
+                             levelSize.width(), levelSize.height(), QImage::Format_RGBA8888);
+        const QColor center = decoded.pixelColor(levelSize.width() / 2, levelSize.height() / 2);
+        CHECK(std::abs(center.red() - kSolidRed) <= kChannelTolerance);
+        CHECK(std::abs(center.green() - kSolidGreen) <= kChannelTolerance);
+        CHECK(std::abs(center.blue() - kSolidBlue) <= kChannelTolerance);
     }
 }

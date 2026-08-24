@@ -13,6 +13,7 @@
 // Our includes
 #include "CaveWhereLibExport.h"
 #include "cwDiskCacher.h"
+#include "cwStreamedTexture.h"
 
 // Monad includes
 #include "Monad/Result.h"
@@ -59,10 +60,33 @@ namespace cw::ktx2 {
 
     /**
      * Transcodes .ktx2 bytes produced by encodeRgba() into target, which must be
-     * QRhiTexture::BC7 or QRhiTexture::ASTC_4x4.
+     * QRhiTexture::BC7, QRhiTexture::ASTC_4x4, or QRhiTexture::RGBA8.
      */
     CAVEWHERE_LIB_EXPORT Monad::Result<cwCompressedTexture> transcode(const QByteArray& ktx2Bytes,
                                                                       QRhiTexture::Format target);
+
+    /**
+     * Transcodes ktx2Bytes and keeps levels firstLevel through the 1x1 tail,
+     * re-indexed so the returned texture's level 0 is firstLevel. Its size is
+     * that level's dimensions. A firstLevel outside the chain is an error.
+     *
+     * The whole chain is transcoded and then sliced: the transcode is fast
+     * block work next to the disk read, and a device-format per-level cache is
+     * a deferred optimization.
+     */
+    CAVEWHERE_LIB_EXPORT Monad::Result<cwCompressedTexture> transcodeLevels(const QByteArray& ktx2Bytes,
+                                                                            QRhiTexture::Format target,
+                                                                            int firstLevel);
+
+    /**
+     * Reads texture's KTX2 bytes out of the cwDiskCacher rooted at its
+     * dataRootPath and transcodeLevels() them. A missing or damaged entry is an
+     * error Result naming the file — producers own the encode, so this never
+     * writes to the cache. Pure and safe to call from a worker thread.
+     */
+    CAVEWHERE_LIB_EXPORT Monad::Result<cwCompressedTexture> loadStreamedLevels(const cwStreamedTexture& texture,
+                                                                               QRhiTexture::Format target,
+                                                                               int firstLevel);
 
     /**
      * Returns BC7 when rhi supports it, otherwise ASTC_4x4, otherwise

@@ -1,8 +1,10 @@
 // Our includes
 #include "cwKtx2Codec.h"
+#include "cwTextureResidency.h"
 
 // Qt includes
 #include <QDebug>
+#include <QDir>
 #include <QThread>
 
 // libktx includes
@@ -182,6 +184,13 @@ Monad::Result<QByteArray> encodeRgba(const QImage& image, int quality)
 
 Monad::Result<cwCompressedTexture> transcode(const QByteArray& ktx2Bytes, QRhiTexture::Format target)
 {
+    return transcodeLevels(ktx2Bytes, target, 0);
+}
+
+Monad::Result<cwCompressedTexture> transcodeLevels(const QByteArray& ktx2Bytes,
+                                                   QRhiTexture::Format target,
+                                                   int firstLevel)
+{
     const std::optional<ktx_transcode_fmt_e> transcodeFormat = transcodeFormatFor(target);
     if(!transcodeFormat.has_value()) {
         return Monad::Result<cwCompressedTexture>(
@@ -190,6 +199,11 @@ Monad::Result<cwCompressedTexture> transcode(const QByteArray& ktx2Bytes, QRhiTe
 
     if(ktx2Bytes.isEmpty()) {
         return Monad::Result<cwCompressedTexture>(QStringLiteral("Cannot transcode empty KTX2 data"));
+    }
+
+    if(firstLevel < 0) {
+        return Monad::Result<cwCompressedTexture>(
+            QStringLiteral("Cannot transcode from the negative mip level %1").arg(firstLevel));
     }
 
     ktxTexture2* rawTexture = nullptr;
@@ -212,12 +226,21 @@ Monad::Result<cwCompressedTexture> transcode(const QByteArray& ktx2Bytes, QRhiTe
             ktxErrorText(QStringLiteral("ktxTexture2_TranscodeBasis failed"), transcodeError));
     }
 
+    if(firstLevel >= static_cast<int>(texture->numLevels)) {
+        return Monad::Result<cwCompressedTexture>(
+            QStringLiteral("Mip level %1 is past the end of a %2 level KTX2 chain")
+                .arg(firstLevel)
+                .arg(texture->numLevels));
+    }
+
+    const QSize baseSize(static_cast<int>(texture->baseWidth), static_cast<int>(texture->baseHeight));
+
     cwCompressedTexture compressed;
     compressed.format = target;
-    compressed.size = QSize(static_cast<int>(texture->baseWidth), static_cast<int>(texture->baseHeight));
-    compressed.mipLevels.reserve(static_cast<qsizetype>(texture->numLevels));
+    compressed.size = cw::residency::mipLevelSize(baseSize, firstLevel);
+    compressed.mipLevels.reserve(static_cast<qsizetype>(texture->numLevels) - firstLevel);
 
-    for(ktx_uint32_t level = 0; level < texture->numLevels; level++) {
+    for(ktx_uint32_t level = static_cast<ktx_uint32_t>(firstLevel); level < texture->numLevels; level++) {
         ktx_size_t offset = 0;
         const KTX_error_code offsetError =
             ktxTexture_GetImageOffset(ktxTexture(texture.get()), level, 0, 0, &offset);
@@ -302,6 +325,21 @@ Monad::Result<cwCompressedTexture> cachedCompressedTexture(cwDiskCacher& cacher,
     cacher.insert(key, encoded.value());
 
     return transcode(encoded.value(), target);
+}
+
+Monad::Result<cwCompressedTexture> loadStreamedLevels(const cwStreamedTexture& texture,
+                                                      QRhiTexture::Format target,
+                                                      int firstLevel)
+{
+    const cwDiskCacher cacher{QDir(texture.dataRootPath)};
+
+    const QByteArray ktx2Bytes = cacher.entry(texture.key);
+    if(ktx2Bytes.isEmpty()) {
+        return Monad::Result<cwCompressedTexture>(
+            QStringLiteral("No KTX2 cache entry at ") + cacher.filePath(texture.key));
+    }
+
+    return transcodeLevels(ktx2Bytes, target, firstLevel);
 }
 
 }
