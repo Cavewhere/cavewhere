@@ -300,6 +300,13 @@ public:
     Q_INVOKABLE QString testcasesDatasetPath(const QString& relativePath) const {
         return ::testcasesDatasetPath(relativePath);
     }
+    //! The in-source dataset path, with no copy. A fixture whose siblings
+    //! matter - a survey file that *includes its neighbors - has to be read
+    //! where its neighbors are; testcasesDatasetPath copies the one file it
+    //! is given.
+    Q_INVOKABLE QString testcasesDatasetSourcePath(const QString& relativePath) const {
+        return ::testcasesDatasetSourcePath(relativePath);
+    }
     Q_INVOKABLE QString qmlTestDatasetPath(const QString& relativePath) const {
         return ::qmlTestDatasetPath(relativePath);
     }

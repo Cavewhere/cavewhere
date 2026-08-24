@@ -25,6 +25,34 @@ StandardPage {
         return "Cave=" + cave.name;
     }
 
+    // Add Cave → Add cave from survey file…: create the cave first (the
+    // dialog targets an existing cave), but don't navigate — the
+    // dialog's outcome decides. attached() names the cave after the
+    // picked file and navigates; dismissed() deletes the orphan, since
+    // the user asked for a cave from a file, not an empty native one.
+    function addCaveFromSurveyFileWithDialog() {
+        RootData.region.addCave()
+        addCaveSurveyFileDialogId.cave = RootData.region.cave(RootData.region.rowCount() - 1)
+        addCaveSurveyFileDialogId.open()
+    }
+
+    // The cave name comes from the entry file (directory and extension
+    // stripped) — which can be a subpath, since the attachment remembers
+    // its entry relative to the copied closure's base. uniqueCaveName()
+    // sanitizes and dedupes; setName silently rejects anything else. The
+    // rename happens before navigation, because the page address embeds
+    // the name.
+    function nameCaveFromFileAndNavigate(newCave: Cave, fileName: string) {
+        let baseName = RootData.fileName(fileName)
+        const dotIndex = baseName.lastIndexOf(".")
+        if (dotIndex > 0) {
+            baseName = baseName.substring(0, dotIndex)
+        }
+        newCave.name = RootData.region.uniqueCaveName(baseName)
+        RootData.pageSelectionModel.gotoPageByName(pageId.PageView.page,
+                                                   pageId.cavePageName(newCave))
+    }
+
     function registerGeospatialPage() {
         if (PageView.page === null) return
         if (PageView.page.childPage("Geospatial Layers") !== null) return
@@ -223,7 +251,10 @@ StandardPage {
         spacing: Theme.actionBarSpacing
 
         AddAndSearchBar {
+            objectName: "addCave"
             addButtonText: "Add Cave"
+            menu: addCaveMenuId
+            menuToolTip: qsTr("More ways to add a cave")
             onAdd: {
                 RootData.region.addCave();
 
@@ -338,6 +369,42 @@ StandardPage {
         }
 
         delegate: CaveDelegate {}
+    }
+
+    QC.Menu {
+        id: addCaveMenuId
+        objectName: "addCaveMenu"
+
+        QC.MenuItem {
+            objectName: "addExternalCaveMenuItem"
+            text: qsTr("Add cave from survey file…")
+            onTriggered: pageId.addCaveFromSurveyFileWithDialog()
+        }
+    }
+
+    AddCaveSurveyFileDialog {
+        id: addCaveSurveyFileDialogId
+
+        onAttached: {
+            const newCave = addCaveSurveyFileDialogId.cave
+            if (newCave === null) {
+                return
+            }
+            pageId.nameCaveFromFileAndNavigate(
+                newCave, newCave.externalCenterline.entryFile)
+        }
+
+        onDismissed: {
+            const orphanCave = addCaveSurveyFileDialogId.cave
+            addCaveSurveyFileDialogId.cave = null
+            if (orphanCave === null) {
+                return
+            }
+            const index = RootData.region.indexOf(orphanCave)
+            if (index >= 0) {
+                RootData.region.removeCave(index)
+            }
+        }
     }
 
     QQ.Component {

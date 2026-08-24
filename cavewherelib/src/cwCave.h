@@ -49,6 +49,7 @@ class CAVEWHERE_LIB_EXPORT cwCave : public QAbstractListModel, public cwUndoer
     QML_NAMED_ELEMENT(Cave)
 
     Q_PROPERTY(QString name READ name WRITE setName NOTIFY nameChanged)
+    Q_PROPERTY(QUuid id READ id NOTIFY idChanged FINAL)
     Q_PROPERTY(cwLength* length READ length CONSTANT)
     Q_PROPERTY(cwLength* depth READ depth CONSTANT)
     Q_PROPERTY(cwErrorModel* errorModel READ errorModel CONSTANT)
@@ -161,6 +162,8 @@ signals:
     void removedTrips(int begin, int end);
 
     void nameChanged();
+
+    void idChanged();
 
     //! Some trip label in this cave may have moved: a trip was added, removed,
     //! or renamed. Chained to each held trip's cwTrip::scopeChanged, so a trip

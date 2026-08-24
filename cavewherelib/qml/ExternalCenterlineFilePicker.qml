@@ -41,10 +41,25 @@ ColumnLayout {
     readonly property alias valid: previewId.valid
     readonly property alias importSupported: previewId.importSupported
 
+    // The scanned block tree and the structural facts the cave dialog's
+    // preview and multi-cave heuristic read. Aliased off the one preview
+    // the picker already owns, so the gate and the disclosure can never
+    // disagree about the file in the field.
+    readonly property alias blocks: previewId.blocks
+    readonly property alias topLevelBlockCount: previewId.topLevelBlockCount
+    readonly property alias entryHasOwnShots: previewId.entryHasOwnShots
+    readonly property alias entryDirectIncludes: previewId.entryDirectIncludes
+
     signal pathEdited()
 
     function clear() {
-        pathFieldId.text = ""
+        root.setPath("")
+    }
+
+    // Re-points the picker the way Browse does — through the path
+    // field, so the edit signals and the scan restarts.
+    function setPath(path: string) {
+        pathFieldId.text = path
     }
 
     spacing: Theme.tightSpacing

@@ -12,18 +12,20 @@ import cavewherelib
 // picks its report out of the manager's shared attachCompleted signal.
 //
 // The owner id is snapshotted at the click rather than read off a live
-// trip binding, so a host that rebinds (or nulls) trip mid-operation
-// can neither wedge busy forever nor let a sibling surface's report end
-// this session. The Trip itself is kept only for cancel(), which needs
-// the QUuid; losing it (trip destroyed mid-operation) costs the ability
-// to cancel and nothing else - the manager's owner-was-deleted failure
-// report still matches the id string and releases the surface.
+// owner binding, so a host that rebinds (or nulls) its owner
+// mid-operation can neither wedge busy forever nor let a sibling
+// surface's report end this session. The owner itself is kept only for
+// cancel(), which needs the QUuid; losing it (owner destroyed
+// mid-operation) costs the ability to cancel and nothing else - the
+// manager's owner-was-deleted failure report still matches the id
+// string and releases the surface.
 QQ.Item {
     id: root
 
-    // Snapshot of the owner this session started with. Held as an
-    // implementation detail of attribution; hosts read busy instead.
-    property Trip owner: null
+    // Snapshot of the owner this session started with — a Trip or a
+    // Cave, both of which expose id. Held as an implementation detail
+    // of attribution; hosts read busy instead.
+    property QQ.QtObject owner: null
     property string ownerId: ""
 
     // The failure text of the last report, for the surface to display.
@@ -38,10 +40,10 @@ QQ.Item {
     signal succeeded()
     signal canceled()
 
-    function start(trip) {
+    function start(owner) {
         root.errorMessage = ""
-        root.owner = trip
-        root.ownerId = String(trip.id)
+        root.owner = owner
+        root.ownerId = String(owner.id)
     }
 
     // Honored only until the operation's internal scan lands; a later

@@ -211,6 +211,21 @@ TEST_CASE("cave attach dedupes blocks that share a leaf name", "[Attach][Cave]")
     CHECK(secondName != firstName);
 }
 
+TEST_CASE("uniqueCaveName sanitizes and dedupes against existing cave names",
+          "[Attach][Cave]")
+{
+    cwCavingRegion region;
+    addEmptyCave(region, QStringLiteral("dusk"));
+
+    //Naming a cave after a file has to survive whatever the filename holds:
+    //cwCave::setName silently rejects both an unsanitized name and a collision.
+    CHECK(region.uniqueCaveName(QStringLiteral("upper:cave"))
+          == QStringLiteral("upper_cave"));
+    CHECK(region.uniqueCaveName(QStringLiteral("dusk")) == QStringLiteral("dusk 2"));
+    CHECK(region.uniqueCaveName(QStringLiteral("DUSK")) == QStringLiteral("DUSK 2"));
+    CHECK(region.uniqueCaveName(QStringLiteral("dawn")) == QStringLiteral("dawn"));
+}
+
 TEST_CASE("cave attach refuses a cave that already has trips", "[Attach][Cave]")
 {
     auto fixture = makeProjectWithFreshCave(QStringLiteral("cave-attach-not-fresh"));

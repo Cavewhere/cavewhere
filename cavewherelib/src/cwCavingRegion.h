@@ -130,7 +130,13 @@ public:
     void removeCaves(int beginIndex, int endIndex);
     void clearCaves();
 
-    int indexOf(cwCave* cave);
+    Q_INVOKABLE int indexOf(cwCave* cave);
+
+    //! A sanitized, region-unique cave name derived from proposedName. Mirrors
+    //! cwCave::uniqueTripName: cwCave::setName silently rejects a collision or
+    //! an unsanitized name, so a name taken from an arbitrary filename has to
+    //! come through here first.
+    Q_INVOKABLE QString uniqueCaveName(const QString& proposedName) const;
 
     cwSanitizedNameSet& caveNameSet() { return m_caveNames; }
     const cwSanitizedNameSet& caveNameSet() const { return m_caveNames; }

@@ -306,6 +306,11 @@ int cwCavingRegion::indexOf(cwCave* cave) {
     return m_caves.indexOf(cave);
 }
 
+QString cwCavingRegion::uniqueCaveName(const QString& proposedName) const
+{
+    return m_caveNames.deduplicateName(cwNameUtils::sanitizeFileName(proposedName));
+}
+
 cwProject *cwCavingRegion::parentProject() const
 {
     return dynamic_cast<cwProject*>(parent());

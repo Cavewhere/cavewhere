@@ -11,19 +11,25 @@ CWTestCase {
     // Returns the trip, still Native - the attach-dialog tests drive
     // the attach through the UI themselves.
     function makeSavedTrip(projectBaseName) {
-        RootData.account.name = "External Test"
-        RootData.account.email = "external.test@example.com"
-
         RootData.region.addCave()
         const cave = RootData.region.cave(0)
         cave.addTrip()
         const trip = cave.trip(0)
 
+        saveProjectAs(projectBaseName)
+        return trip
+    }
+
+    // Gives the project an author and a .cwproj on disk, which is what
+    // the attach orchestrator's temporary-project guard requires.
+    function saveProjectAs(projectBaseName) {
+        RootData.account.name = "External Test"
+        RootData.account.email = "external.test@example.com"
+
         const tmpPath = RootData.urlToLocal(TestHelper.tempDirectoryUrl())
         const projectPath = tmpPath + "/" + projectBaseName + ".cwproj"
         verify(RootData.project.saveAs(projectPath), "saveAs should succeed")
         TestHelper.waitForProjectSaveToFinish(RootData.project)
-        return trip
     }
 
     // Runs `attachVerb` and waits for the attachment it starts to land.
@@ -59,6 +65,18 @@ CWTestCase {
         cave.name = caveName
         attachSourceToCave(cave, source)
         return cave
+    }
+
+    // Saves the fresh project as .cwproj and attaches `fixture` - a path
+    // relative to testcases/datasets - to a new cave via the cwRootData
+    // wrapper. Returns the attached cave. The fixture is copied to a temp
+    // folder on its own, so pass a single self-contained file; a fixture
+    // that *includes its siblings needs testcasesDatasetSourcePath and
+    // attachSourceToCave directly.
+    function makeSavedCaveAttach(projectBaseName, fixture) {
+        saveProjectAs(projectBaseName)
+        return makeAttachedCave("AttachedCave",
+                                TestHelper.testcasesDatasetPath(fixture))
     }
 
     // Saves the fresh project as .cwproj and attaches the
