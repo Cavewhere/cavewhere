@@ -72,5 +72,32 @@ MainWindowTest {
                    "tooltip reason bound; got: " + compassItem.disabledReason)
             compare(tripItem.disabledReason, compassItem.disabledReason)
         }
+
+        function test_stationPrefixDisablesExports() {
+            RootData.region.addCave()
+            const cave = RootData.region.cave(0)
+            cave.addTrip()
+            const trip = cave.trip(0)
+            trip.stationPrefix = "cavea"
+
+            const dataPage = gotoDataMainPage()
+
+            const regionItem = findChild(dataPage, "survexRegionExportMenuItem")
+            verify(regionItem !== null, "region export item must exist")
+            tryVerify(() => !regionItem.enabled, 5000,
+                      "region export disabled once a trip carries a station prefix")
+
+            const compassItem = findChild(dataPage, "compassCaveExportMenuItem")
+            verify(compassItem !== null, "compass export item must exist")
+            verify(!compassItem.exportAllowed, "compass export gate closed")
+            verify(compassItem.disabledReason.indexOf("Cannot export") === 0,
+                   "tooltip reason bound; got: " + compassItem.disabledReason)
+
+            trip.stationPrefix = ""
+            tryVerify(() => regionItem.enabled, 5000,
+                      "region export re-enabled once the prefix is cleared")
+            verify(compassItem.exportAllowed, "compass export gate open again")
+            compare(compassItem.disabledReason, "")
+        }
     }
 }

@@ -332,8 +332,14 @@ void cwSurveyExportManager::rewireExternalCenterlineTracking() {
 
             const QList<cwTrip*> trips = cave->trips();
             for (cwTrip* trip : trips) {
+                // The two inputs to cwTrip::isScoped(), which the gate reads.
+                // Its NOTIFY, scopeChanged(), also pulses on renames and on
+                // sibling churn, so listen to the exact pair instead.
                 m_externalCenterlineConnections.append(connect(
                     trip, &cwTrip::externalCenterlineChanged,
+                    this, &cwSurveyExportManager::recomputeCanExport));
+                m_externalCenterlineConnections.append(connect(
+                    trip, &cwTrip::stationPrefixChanged,
                     this, &cwSurveyExportManager::recomputeCanExport));
             }
         }
@@ -345,10 +351,12 @@ void cwSurveyExportManager::rewireExternalCenterlineTracking() {
 /**
   \brief Walks every cave and trip in the current region looking for an
   attachment. Updates m_canExport / m_exportDisabledReason and emits
-  canExportChanged() only when the gate flips. Scope-state detection
-  (non-empty stationPrefix on cwTrip) lands in Phase 3; until then the
-  externalCenterline check covers every entity that can break round-trip
-  through Survex / Compass exports.
+  canExportChanged() only when the gate flips. The gate closes on a cave's
+  external-centerline attachment and on any scoped trip (cwTrip::isScoped():
+  the trip's own attachment or a station prefix — Scope trips and native
+  equates prefixes alike), since neither the *include topology an attached
+  entry brings in nor a station prefix can round-trip through a Compass
+  export.
   */
 void cwSurveyExportManager::recomputeCanExport() {
     const auto anyAttachment = [this]() {
@@ -362,7 +370,7 @@ void cwSurveyExportManager::recomputeCanExport() {
             }
             const QList<cwTrip*> trips = cave->trips();
             for (cwTrip* trip : trips) {
-                if (!trip->externalCenterline().isEmpty()) {
+                if (trip->isScoped()) {
                     return true;
                 }
             }

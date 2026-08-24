@@ -210,3 +210,55 @@ TEST_CASE("Attaching a cave added after region setup is still tracked",
     lateCave->setExternalCenterline(cwExternalCenterline(QStringLiteral("late.svx")));
     CHECK(manager.canExport() == false);
 }
+
+TEST_CASE("Trip with a stationPrefix refuses export; clearing it re-enables",
+          "[Export][Disable]")
+{
+    // A station prefix — set by a Scope trip or by native equates scoping —
+    // cannot round-trip through a Compass export, so it closes the same gate
+    // an external-centerline attachment does.
+    cwCavingRegion region;
+    cwCave* cave = addCaveWithOneShot(region, QStringLiteral("PrefixedTrip"));
+
+    cwSurveyExportManager manager;
+    manager.setCavingRegion(&region);
+    REQUIRE(manager.canExport() == true);
+
+    cwSignalSpy gateSpy(&manager, &cwSurveyExportManager::canExportChanged);
+
+    cwTrip* trip = cave->trips().first();
+    trip->setStationPrefix(QStringLiteral("cavea"));
+
+    CHECK(manager.canExport() == false);
+    CHECK(gateSpy.size() == 1);
+    CHECK_FALSE(manager.exportDisabledReason().isEmpty());
+    CHECK(manager.exportDisabledReason().contains(QStringLiteral("external"),
+                                                  Qt::CaseInsensitive));
+
+    trip->setStationPrefix(QString());
+
+    CHECK(manager.canExport() == true);
+    CHECK(gateSpy.size() == 2);
+    CHECK(manager.exportDisabledReason().isEmpty());
+}
+
+TEST_CASE("A prefix set on a trip added after region setup is still tracked",
+          "[Export][Disable]")
+{
+    // Pins the stationPrefixChanged connection made by the rewire that runs
+    // on insertedTrips — the predicate alone can't see a late trip's prefix.
+    cwCavingRegion region;
+    cwCave* cave = addCaveWithOneShot(region, QStringLiteral("GrowingPrefixCave"));
+
+    cwSurveyExportManager manager;
+    manager.setCavingRegion(&region);
+    REQUIRE(manager.canExport() == true);
+
+    cwTrip* lateTrip = new cwTrip();
+    lateTrip->setName(QStringLiteral("Late"));
+    cave->addTrip(lateTrip);
+    REQUIRE(manager.canExport() == true);
+
+    lateTrip->setStationPrefix(QStringLiteral("caveb"));
+    CHECK(manager.canExport() == false);
+}

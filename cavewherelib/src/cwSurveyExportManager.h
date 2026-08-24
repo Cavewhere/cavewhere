@@ -38,11 +38,12 @@ class cwSurveyExportManager : public QObject
     Q_PROPERTY(cwCave* cave READ cave WRITE setCave NOTIFY caveChanged)
     Q_PROPERTY(cwTrip* trip READ trip WRITE setTrip NOTIFY tripChanged)
 
-    // True when nothing in the region has an external-centerline attachment
-    // (or a Scope sub-entity once Phase 3 introduces stationPrefix).
-    // The Survex and Compass exports refuse to run when this is false because
-    // those output formats cannot round-trip the *include topology the
-    // attached entry brought in. See master plan §7.5.
+    // True when every cave and trip in the region is free of an
+    // external-centerline attachment and of a station prefix (Scope trips and
+    // native equates prefixes alike). The Survex and Compass exports refuse to
+    // run when this is false because those output formats cannot round-trip the
+    // *include topology the attached entry brought in, nor a station prefix.
+    // See master plan §7.5.
     Q_PROPERTY(bool canExport READ canExport NOTIFY canExportChanged FINAL)
 
     // Human-readable explanation for the disabled state, or empty when
@@ -94,8 +95,9 @@ private:
     QPointer<cwCavingRegion> CavingRegion; //!<
 
     // Cached gate state. Recomputed by recomputeCanExport() whenever the
-    // region's cave/trip set changes or any cave/trip's externalCenterline
-    // changes. Defaults to true (pure-Native projects export normally).
+    // region's cave/trip set changes, any cave/trip's externalCenterline
+    // changes, or a trip's stationPrefix changes. Defaults to true
+    // (pure-Native projects export normally).
     bool m_canExport = true;
     QString m_exportDisabledReason;
 
@@ -114,7 +116,8 @@ private:
 
     // Tears down and re-establishes every signal connection used to drive
     // recomputeCanExport(): region cave-insert/remove, per-cave
-    // trip-insert/remove, and per-cave / per-trip externalCenterlineChanged.
+    // trip-insert/remove, per-cave / per-trip externalCenterlineChanged, and
+    // per-trip stationPrefixChanged.
     // Cheap (a handful of caves and trips in normal projects) and run only
     // on structural changes.
     void rewireExternalCenterlineTracking();
