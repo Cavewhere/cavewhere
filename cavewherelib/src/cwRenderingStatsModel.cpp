@@ -6,7 +6,7 @@
 **************************************************************************/
 
 //Our includes
-#include "cwRenderMemoryModel.h"
+#include "cwRenderingStatsModel.h"
 #include "cwRenderCullingStats.h"
 #include "cwRenderMemoryLedger.h"
 
@@ -28,26 +28,26 @@ struct CategoryDescription {
 };
 
 constexpr CategoryDescription kCategories[] = {
-    {Category::PointCloudGeometry, QT_TRANSLATE_NOOP("cwRenderMemoryModel", "Point cloud geometry")},
-    {Category::TexturedItemGeometry, QT_TRANSLATE_NOOP("cwRenderMemoryModel", "Textured item geometry")},
-    {Category::TexturedItemTexture, QT_TRANSLATE_NOOP("cwRenderMemoryModel", "Textured item textures")},
-    {Category::LinePlotGeometry, QT_TRANSLATE_NOOP("cwRenderMemoryModel", "Line plot geometry")},
-    {Category::Other, QT_TRANSLATE_NOOP("cwRenderMemoryModel", "Other")}
+    {Category::PointCloudGeometry, QT_TRANSLATE_NOOP("cwRenderingStatsModel", "Point cloud geometry")},
+    {Category::TexturedItemGeometry, QT_TRANSLATE_NOOP("cwRenderingStatsModel", "Textured item geometry")},
+    {Category::TexturedItemTexture, QT_TRANSLATE_NOOP("cwRenderingStatsModel", "Textured item textures")},
+    {Category::LinePlotGeometry, QT_TRANSLATE_NOOP("cwRenderingStatsModel", "Line plot geometry")},
+    {Category::Other, QT_TRANSLATE_NOOP("cwRenderingStatsModel", "Other")}
 };
 
 } // namespace
 
-cwRenderMemoryModel::cwRenderMemoryModel(QObject* parent) :
+cwRenderingStatsModel::cwRenderingStatsModel(QObject* parent) :
     QAbstractListModel(parent),
     m_rows(static_cast<int>(std::size(kCategories)))
 {
     m_timer.setInterval(kPollIntervalMilliseconds);
-    connect(&m_timer, &QTimer::timeout, this, &cwRenderMemoryModel::poll);
+    connect(&m_timer, &QTimer::timeout, this, &cwRenderingStatsModel::poll);
 
     refresh();
 }
 
-int cwRenderMemoryModel::rowCount(const QModelIndex& parent) const
+int cwRenderingStatsModel::rowCount(const QModelIndex& parent) const
 {
     if(parent.isValid()) {
         return 0;
@@ -55,7 +55,7 @@ int cwRenderMemoryModel::rowCount(const QModelIndex& parent) const
     return m_rows.size();
 }
 
-QVariant cwRenderMemoryModel::data(const QModelIndex& index, int role) const
+QVariant cwRenderingStatsModel::data(const QModelIndex& index, int role) const
 {
     if(index.row() < 0 || index.row() >= m_rows.size()) {
         return QVariant();
@@ -79,7 +79,7 @@ QVariant cwRenderMemoryModel::data(const QModelIndex& index, int role) const
     }
 }
 
-QHash<int, QByteArray> cwRenderMemoryModel::roleNames() const
+QHash<int, QByteArray> cwRenderingStatsModel::roleNames() const
 {
     return {
         {NameRole, "name"},
@@ -90,7 +90,7 @@ QHash<int, QByteArray> cwRenderMemoryModel::roleNames() const
     };
 }
 
-void cwRenderMemoryModel::setRunning(bool running)
+void cwRenderingStatsModel::setRunning(bool running)
 {
     if(m_running == running) {
         return;
@@ -108,7 +108,7 @@ void cwRenderMemoryModel::setRunning(bool running)
     emit runningChanged();
 }
 
-void cwRenderMemoryModel::poll()
+void cwRenderingStatsModel::poll()
 {
     if(cwRenderMemoryLedger::instance()->revision() != m_lastRevision
        || cwRenderCullingStats::instance()->revision() != m_lastCullingRevision) {
@@ -116,7 +116,7 @@ void cwRenderMemoryModel::poll()
     }
 }
 
-void cwRenderMemoryModel::refresh()
+void cwRenderingStatsModel::refresh()
 {
     auto* ledger = cwRenderMemoryLedger::instance();
     m_lastRevision = ledger->revision();
@@ -158,16 +158,16 @@ void cwRenderMemoryModel::refresh()
     }
 }
 
-QString cwRenderMemoryModel::formattedBytes(qint64 bytes)
+QString cwRenderingStatsModel::formattedBytes(qint64 bytes)
 {
     if(bytes < kBytesPerKilobyte) {
         return tr("%1 B").arg(bytes);
     }
 
     constexpr const char* suffixes[] = {
-        QT_TRANSLATE_NOOP("cwRenderMemoryModel", "%1 KB"),
-        QT_TRANSLATE_NOOP("cwRenderMemoryModel", "%1 MB"),
-        QT_TRANSLATE_NOOP("cwRenderMemoryModel", "%1 GB")
+        QT_TRANSLATE_NOOP("cwRenderingStatsModel", "%1 KB"),
+        QT_TRANSLATE_NOOP("cwRenderingStatsModel", "%1 MB"),
+        QT_TRANSLATE_NOOP("cwRenderingStatsModel", "%1 GB")
     };
 
     double scaled = static_cast<double>(bytes) / static_cast<double>(kBytesPerKilobyte);

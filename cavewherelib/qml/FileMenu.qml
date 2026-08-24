@@ -177,10 +177,10 @@ QC.Menu {
 
         QC.MenuItem {
             text: "Render Memory HUD"
-            checked: RootData.settings.renderingSettings.showRenderMemoryHud
+            checked: RootData.settings.renderingSettings.showRenderStatsHud
             checkable: true
             onTriggered: {
-                RootData.settings.renderingSettings.showRenderMemoryHud = !RootData.settings.renderingSettings.showRenderMemoryHud
+                RootData.settings.renderingSettings.showRenderStatsHud = !RootData.settings.renderingSettings.showRenderStatsHud
             }
         }
 

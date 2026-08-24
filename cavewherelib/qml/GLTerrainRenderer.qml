@@ -294,14 +294,14 @@ Item {
     // Built only while the setting is on, so a hidden HUD costs nothing — not
     // even the model's polling timer.
     Loader {
-        objectName: "renderMemoryHudLoader"
-        active: RootData.settings.renderingSettings.showRenderMemoryHud
+        objectName: "renderStatsHudLoader"
+        active: RootData.settings.renderingSettings.showRenderStatsHud
         anchors.top: parent.top
         anchors.right: parent.right
         anchors.margins: Theme.pageMargin
         z: rootId.zOverlay
 
-        sourceComponent: RenderMemoryHud { }
+        sourceComponent: RenderStatsHud { }
     }
 
     // The tools are armed from the main sidebar's tool rail (see MainSideBar),

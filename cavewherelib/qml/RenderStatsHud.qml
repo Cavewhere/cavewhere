@@ -11,10 +11,10 @@ import QtQuick.Layouts
 import cavewherelib
 
 // Debug overlay listing render-resource bytes per category, driven by
-// cwRenderMemoryModel. Shown only while the render-memory HUD setting is on.
+// cwRenderingStatsModel. Shown only while the render-stats HUD setting is on.
 QQ.Rectangle {
     id: hudRootId
-    objectName: "renderMemoryHud"
+    objectName: "renderStatsHud"
 
     readonly property real backgroundOpacity: 0.85
     readonly property int categoryColumnWidth: Math.round(140 * Theme.fontScale)
@@ -24,7 +24,7 @@ QQ.Rectangle {
     readonly property int gpuMemoryBudgetMb: RootData.settings.renderingSettings.gpuMemoryBudgetMb
     readonly property bool overBudget: memoryModelId.totalGpuBytes > hudRootId.gpuMemoryBudgetMb * hudRootId.bytesPerMegabyte
 
-    visible: RootData.settings.renderingSettings.showRenderMemoryHud
+    visible: RootData.settings.renderingSettings.showRenderStatsHud
 
     implicitWidth: layoutId.implicitWidth + Theme.statsPadding * 2
     implicitHeight: layoutId.implicitHeight + Theme.statsPadding * 2
@@ -32,7 +32,7 @@ QQ.Rectangle {
     color: Qt.alpha(Theme.floatingWidgetColor, hudRootId.backgroundOpacity)
     radius: Theme.floatingWidgetRadius
 
-    RenderMemoryModel {
+    RenderingStatsModel {
         id: memoryModelId
         running: hudRootId.visible
     }
@@ -104,7 +104,7 @@ QQ.Rectangle {
             // The budget is advisory for now: going over colors the total, and
             // nothing is evicted.
             QC.Label {
-                objectName: "renderMemoryHudTotal"
+                objectName: "renderStatsHudTotal"
                 text: memoryModelId.totalGpuText
                 color: hudRootId.overBudget ? Theme.warning : Theme.text
                 font.family: Theme.fontFamilyMono
@@ -114,7 +114,7 @@ QQ.Rectangle {
             }
 
             QC.Label {
-                objectName: "renderMemoryHudBudget"
+                objectName: "renderStatsHudBudget"
                 text: qsTr("/ %1 MB").arg(hudRootId.gpuMemoryBudgetMb)
                 color: Theme.text
                 font.family: Theme.fontFamilyMono
@@ -124,7 +124,7 @@ QQ.Rectangle {
 
         // Frustum-culling counts for the last gathered frame, informational only.
         QC.Label {
-            objectName: "renderMemoryHudCulling"
+            objectName: "renderStatsHudCulling"
             text: qsTr("Culled: %1/%2 objects · %3/%4 items")
                 .arg(memoryModelId.culledObjects)
                 .arg(memoryModelId.totalObjects)

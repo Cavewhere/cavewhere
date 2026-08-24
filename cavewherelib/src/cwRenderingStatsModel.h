@@ -5,8 +5,8 @@
 **
 **************************************************************************/
 
-#ifndef CWRENDERMEMORYMODEL_H
-#define CWRENDERMEMORYMODEL_H
+#ifndef CWRENDERINGSTATSMODEL_H
+#define CWRENDERINGSTATSMODEL_H
 
 //Qt includes
 #include <QAbstractListModel>
@@ -21,10 +21,10 @@
 
 // Read-only view of cwRenderMemoryLedger for QML. One row per ledger category,
 // refreshed by a timer while running is true.
-class CAVEWHERE_LIB_EXPORT cwRenderMemoryModel : public QAbstractListModel
+class CAVEWHERE_LIB_EXPORT cwRenderingStatsModel : public QAbstractListModel
 {
     Q_OBJECT
-    QML_NAMED_ELEMENT(RenderMemoryModel)
+    QML_NAMED_ELEMENT(RenderingStatsModel)
     Q_PROPERTY(qint64 totalGpuBytes READ totalGpuBytes NOTIFY totalsChanged)
     Q_PROPERTY(qint64 totalCpuBytes READ totalCpuBytes NOTIFY totalsChanged)
     Q_PROPERTY(QString totalGpuText READ totalGpuText NOTIFY totalsChanged)
@@ -44,7 +44,7 @@ public:
         CpuTextRole
     };
 
-    explicit cwRenderMemoryModel(QObject* parent = nullptr);
+    explicit cwRenderingStatsModel(QObject* parent = nullptr);
 
     int rowCount(const QModelIndex& parent = QModelIndex()) const override;
     QVariant data(const QModelIndex& index, int role) const override;
@@ -93,4 +93,4 @@ private:
     bool m_running = false;
 };
 
-#endif // CWRENDERMEMORYMODEL_H
+#endif // CWRENDERINGSTATSMODEL_H

@@ -106,17 +106,17 @@ TEST_CASE("cwRenderingSettings setter updates, clamps, persists, and emits", "[c
     settings->setSampleCount(4);
 }
 
-TEST_CASE("cwRenderingSettings showRenderMemoryHud round-trips, persists, and emits", "[cwRenderingSettings]")
+TEST_CASE("cwRenderingSettings showRenderStatsHud round-trips, persists, and emits", "[cwRenderingSettings]")
 {
     cwRenderingSettings::initialize();
     auto settings = cwRenderingSettings::instance();
     REQUIRE(settings);
     settings->setSupportedSampleCounts({1, 2, 4, 8});
     settings->setSampleCount(4);
-    settings->setShowRenderMemoryHud(false);
+    settings->setShowRenderStatsHud(false);
 
-    cwSignalSpy hudSpy(settings, &cwRenderingSettings::showRenderMemoryHudChanged);
-    hudSpy.setObjectName("showRenderMemoryHudSpy");
+    cwSignalSpy hudSpy(settings, &cwRenderingSettings::showRenderStatsHudChanged);
+    hudSpy.setObjectName("showRenderStatsHudSpy");
 
     SpyChecker checker = {
         {&hudSpy, 0},
@@ -125,35 +125,35 @@ TEST_CASE("cwRenderingSettings showRenderMemoryHud round-trips, persists, and em
     QSettings diskSettings;
 
     SECTION("the HUD is off by default") {
-        CHECK_FALSE(settings->showRenderMemoryHud());
+        CHECK_FALSE(settings->showRenderStatsHud());
         CHECK(settings->isAtDefaults());
     }
 
     SECTION("enabling round-trips, persists to QSettings, and fires once") {
-        settings->setShowRenderMemoryHud(true);
+        settings->setShowRenderStatsHud(true);
         checker[&hudSpy]++;
         checker.checkSpies();
 
-        CHECK(settings->showRenderMemoryHud());
-        CHECK(diskSettings.value(QStringLiteral("rendering/showRenderMemoryHud")).toBool());
+        CHECK(settings->showRenderStatsHud());
+        CHECK(diskSettings.value(QStringLiteral("rendering/showRenderStatsHud")).toBool());
     }
 
     SECTION("setting the current value is a no-op and emits nothing") {
-        settings->setShowRenderMemoryHud(false);
+        settings->setShowRenderStatsHud(false);
         checker.checkSpies();
     }
 
     SECTION("the HUD participates in isAtDefaults and resetToDefaults") {
-        settings->setShowRenderMemoryHud(true);
+        settings->setShowRenderStatsHud(true);
         CHECK_FALSE(settings->isAtDefaults());
 
         settings->resetToDefaults();
-        CHECK_FALSE(settings->showRenderMemoryHud());
+        CHECK_FALSE(settings->showRenderStatsHud());
         CHECK(settings->sampleCount() == 4);
         CHECK(settings->isAtDefaults());
     }
 
-    settings->setShowRenderMemoryHud(false);
+    settings->setShowRenderStatsHud(false);
     settings->setSampleCount(4);
 }
 

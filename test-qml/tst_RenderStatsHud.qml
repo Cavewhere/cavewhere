@@ -13,7 +13,7 @@ QQ.Item {
     width: 600
     height: 400
 
-    RenderMemoryHud {
+    RenderStatsHud {
         id: hudId
         objectName: "hud"
         anchors.top: parent.top
@@ -29,24 +29,24 @@ QQ.Item {
             id: hudMenuItemId
             objectName: "hudMenuItem"
             text: "Render Memory HUD"
-            checked: rootId.renderingSettings.showRenderMemoryHud
+            checked: rootId.renderingSettings.showRenderStatsHud
             checkable: true
             onTriggered: {
-                rootId.renderingSettings.showRenderMemoryHud = !rootId.renderingSettings.showRenderMemoryHud
+                rootId.renderingSettings.showRenderStatsHud = !rootId.renderingSettings.showRenderStatsHud
             }
         }
     }
 
     TestCase {
-        name: "RenderMemoryHud"
+        name: "RenderStatsHud"
         when: windowShown
 
         function init() {
-            rootId.renderingSettings.showRenderMemoryHud = false
+            rootId.renderingSettings.showRenderStatsHud = false
         }
 
         function cleanup() {
-            rootId.renderingSettings.showRenderMemoryHud = false
+            rootId.renderingSettings.showRenderStatsHud = false
         }
 
         function test_hiddenByDefault() {
@@ -54,12 +54,12 @@ QQ.Item {
         }
 
         function test_visibleWhenSettingEnabled() {
-            rootId.renderingSettings.showRenderMemoryHud = true
+            rootId.renderingSettings.showRenderStatsHud = true
             tryCompare(hudId, "visible", true)
         }
 
         function test_hiddenAgainAfterResetToDefaults() {
-            rootId.renderingSettings.showRenderMemoryHud = true
+            rootId.renderingSettings.showRenderStatsHud = true
             tryCompare(hudId, "visible", true)
 
             rootId.renderingSettings.resetToDefaults()
@@ -67,24 +67,24 @@ QQ.Item {
         }
 
         function test_totalIsShown() {
-            rootId.renderingSettings.showRenderMemoryHud = true
-            let total = ObjectFinder.findObjectByChain(rootId, "rootId->hud->renderMemoryHudTotal")
-            verify(total !== null, "renderMemoryHudTotal not found")
+            rootId.renderingSettings.showRenderStatsHud = true
+            let total = ObjectFinder.findObjectByChain(rootId, "rootId->hud->renderStatsHudTotal")
+            verify(total !== null, "renderStatsHudTotal not found")
             verify(total.text.length > 0)
         }
 
         function test_menuItemChecksAndWritesTheSetting() {
             compare(hudMenuItemId.checked, false)
 
-            rootId.renderingSettings.showRenderMemoryHud = true
+            rootId.renderingSettings.showRenderStatsHud = true
             tryCompare(hudMenuItemId, "checked", true)
 
             hudMenuItemId.triggered()
-            tryCompare(rootId.renderingSettings, "showRenderMemoryHud", false)
+            tryCompare(rootId.renderingSettings, "showRenderStatsHud", false)
             tryCompare(hudMenuItemId, "checked", false)
 
             hudMenuItemId.triggered()
-            tryCompare(rootId.renderingSettings, "showRenderMemoryHud", true)
+            tryCompare(rootId.renderingSettings, "showRenderStatsHud", true)
             tryCompare(hudMenuItemId, "checked", true)
         }
     }

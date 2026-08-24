@@ -30,7 +30,7 @@ class CAVEWHERE_LIB_EXPORT cwRenderingSettings : public QObject
 
     Q_PROPERTY(int sampleCount READ sampleCount WRITE setSampleCount NOTIFY sampleCountChanged)
     Q_PROPERTY(QList<int> supportedSampleCounts READ supportedSampleCounts NOTIFY supportedSampleCountsChanged)
-    Q_PROPERTY(bool showRenderMemoryHud READ showRenderMemoryHud WRITE setShowRenderMemoryHud NOTIFY showRenderMemoryHudChanged)
+    Q_PROPERTY(bool showRenderStatsHud READ showRenderStatsHud WRITE setShowRenderStatsHud NOTIFY showRenderStatsHudChanged)
     Q_PROPERTY(int gpuMemoryBudgetMb READ gpuMemoryBudgetMb WRITE setGpuMemoryBudgetMb NOTIFY gpuMemoryBudgetMbChanged)
     Q_PROPERTY(int cpuCacheBudgetMb READ cpuCacheBudgetMb WRITE setCpuCacheBudgetMb NOTIFY cpuCacheBudgetMbChanged)
     Q_PROPERTY(int uploadBudgetMbPerFrame READ uploadBudgetMbPerFrame WRITE setUploadBudgetMbPerFrame NOTIFY uploadBudgetMbPerFrameChanged)
@@ -44,8 +44,8 @@ public:
     QList<int> supportedSampleCounts() const { return m_supportedSampleCounts; }
     void setSupportedSampleCounts(const QList<int>& counts);
 
-    bool showRenderMemoryHud() const { return m_showRenderMemoryHud; }
-    void setShowRenderMemoryHud(bool show);
+    bool showRenderStatsHud() const { return m_showRenderStatsHud; }
+    void setShowRenderStatsHud(bool show);
 
     int gpuMemoryBudgetMb() const { return m_gpuMemoryBudgetMb; }
     void setGpuMemoryBudgetMb(int megabytes);
@@ -70,7 +70,7 @@ public:
 
 signals:
     void sampleCountChanged();
-    void showRenderMemoryHudChanged();
+    void showRenderStatsHudChanged();
     void gpuMemoryBudgetMbChanged();
     void cpuCacheBudgetMbChanged();
     void uploadBudgetMbPerFrameChanged();
@@ -88,7 +88,7 @@ private:
     static cwRenderingSettings* Settings;
 
     int m_sampleCount = 4; // overwritten from QSettings in the constructor; see kDefaultSampleCount
-    bool m_showRenderMemoryHud = false; // see kDefaultShowRenderMemoryHud
+    bool m_showRenderStatsHud = false; // see kDefaultShowRenderStatsHud
 
     // All four are overwritten from QSettings in the constructor; see the
     // kDefault constants in the .cpp.

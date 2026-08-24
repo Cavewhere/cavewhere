@@ -11,7 +11,7 @@
 
 namespace {
 QString sampleCountKey() { return QStringLiteral("rendering/sampleCount"); }
-QString showRenderMemoryHudKey() { return QStringLiteral("rendering/showRenderMemoryHud"); }
+QString showRenderStatsHudKey() { return QStringLiteral("rendering/showRenderStatsHud"); }
 QString gpuMemoryBudgetMbKey() { return QStringLiteral("rendering/gpuMemoryBudgetMb"); }
 QString cpuCacheBudgetMbKey() { return QStringLiteral("rendering/cpuCacheBudgetMb"); }
 QString uploadBudgetMbPerFrameKey() { return QStringLiteral("rendering/uploadBudgetMbPerFrame"); }
@@ -22,7 +22,7 @@ QString screenSpaceErrorPxKey() { return QStringLiteral("rendering/screenSpaceEr
 constexpr int kDefaultSampleCount = 4;
 
 // The render-memory HUD is a debugging aid, so it stays off until asked for.
-constexpr bool kDefaultShowRenderMemoryHud = false;
+constexpr bool kDefaultShowRenderStatsHud = false;
 
 // Budget knobs, advisory in Phase 1 (see the header). The minimums keep a
 // hand-edited QSettings file from asking for a budget too small to hold a
@@ -48,7 +48,7 @@ cwRenderingSettings::cwRenderingSettings(QObject* parent) :
 {
     QSettings settings;
     m_sampleCount = clampToSupported(settings.value(sampleCountKey(), kDefaultSampleCount).toInt());
-    m_showRenderMemoryHud = settings.value(showRenderMemoryHudKey(), kDefaultShowRenderMemoryHud).toBool();
+    m_showRenderStatsHud = settings.value(showRenderStatsHudKey(), kDefaultShowRenderStatsHud).toBool();
     m_gpuMemoryBudgetMb = std::max(kMinGpuMemoryBudgetMb,
                                    settings.value(gpuMemoryBudgetMbKey(), kDefaultGpuMemoryBudgetMb).toInt());
     m_cpuCacheBudgetMb = std::max(kMinCpuCacheBudgetMb,
@@ -76,7 +76,7 @@ int cwRenderingSettings::clampToSupported(int samples) const
 void cwRenderingSettings::resetToDefaults()
 {
     setSampleCount(kDefaultSampleCount);
-    setShowRenderMemoryHud(kDefaultShowRenderMemoryHud);
+    setShowRenderStatsHud(kDefaultShowRenderStatsHud);
     setGpuMemoryBudgetMb(kDefaultGpuMemoryBudgetMb);
     setCpuCacheBudgetMb(kDefaultCpuCacheBudgetMb);
     setUploadBudgetMbPerFrame(kDefaultUploadBudgetMbPerFrame);
@@ -86,7 +86,7 @@ void cwRenderingSettings::resetToDefaults()
 bool cwRenderingSettings::isAtDefaults() const
 {
     return m_sampleCount == clampToSupported(kDefaultSampleCount)
-            && m_showRenderMemoryHud == kDefaultShowRenderMemoryHud
+            && m_showRenderStatsHud == kDefaultShowRenderStatsHud
             && m_gpuMemoryBudgetMb == kDefaultGpuMemoryBudgetMb
             && m_cpuCacheBudgetMb == kDefaultCpuCacheBudgetMb
             && m_uploadBudgetMbPerFrame == kDefaultUploadBudgetMbPerFrame
@@ -145,15 +145,15 @@ void cwRenderingSettings::setScreenSpaceErrorPx(double pixels)
     emit isAtDefaultsChanged();
 }
 
-void cwRenderingSettings::setShowRenderMemoryHud(bool show)
+void cwRenderingSettings::setShowRenderStatsHud(bool show)
 {
-    if (m_showRenderMemoryHud == show) {
+    if (m_showRenderStatsHud == show) {
         return;
     }
-    m_showRenderMemoryHud = show;
+    m_showRenderStatsHud = show;
     QSettings settings;
-    settings.setValue(showRenderMemoryHudKey(), show);
-    emit showRenderMemoryHudChanged();
+    settings.setValue(showRenderStatsHudKey(), show);
+    emit showRenderStatsHudChanged();
     emit isAtDefaultsChanged();
 }
 

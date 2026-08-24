@@ -136,11 +136,11 @@ ColumnLayout {
                 }
 
                 QC.CheckBox {
-                    objectName: "showRenderMemoryHudCheckBox"
+                    objectName: "showRenderStatsHudCheckBox"
                     text: "Show render memory HUD"
-                    checked: itemId.renderingSettings.showRenderMemoryHud
+                    checked: itemId.renderingSettings.showRenderStatsHud
                     onToggled: {
-                        itemId.renderingSettings.showRenderMemoryHud = checked
+                        itemId.renderingSettings.showRenderStatsHud = checked
                     }
                 }
             }
