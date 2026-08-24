@@ -24,6 +24,13 @@ namespace {
 constexpr const char* kParentDir = "..";
 constexpr const char* kParentDirPrefix = "../";
 
+// How far above the entry file's own directory the mirror base may sit.
+// The measured Survex corpus climbs exactly one level (a shared error
+// model beside the cave master); a deeper climb means the entry's
+// includes are scattered across the project, and mirroring from their
+// ancestor would drag half the disk into the attachment.
+constexpr int kMaxRebaseClimb = 2;
+
 bool relativeEscapesAttachmentDir(const QString& rel)
 {
     // QDir::cleanPath collapses redundant separators and "./" segments
@@ -37,6 +44,61 @@ bool relativeEscapesAttachmentDir(const QString& rel)
         return true;
     }
     return false;
+}
+
+// Longest common directory prefix of the files in `canonicalPaths`,
+// compared component by component.
+//
+// Precondition: every input is a QFileInfo::canonicalFilePath() result
+// (which is what the scanner records). Canonical paths carry the case
+// the filesystem itself stores, so the same directory always spells
+// itself the same way, and a case-sensitive comparison implements each
+// platform's case rules by construction — while a case-insensitive one
+// would merge two genuinely distinct directories on a case-sensitive
+// volume.
+//
+// Returns "/" when the paths share only the root, and an empty string
+// when even their first components differ (different Windows volumes).
+QString commonAncestorDir(const QStringList& canonicalPaths)
+{
+    if (canonicalPaths.isEmpty()) {
+        return QString();
+    }
+
+    QStringList prefix = QFileInfo(canonicalPaths.first()).path().split(QLatin1Char('/'));
+    for (const QString& path : canonicalPaths) {
+        const QStringList components = QFileInfo(path).path().split(QLatin1Char('/'));
+        int shared = 0;
+        while (shared < prefix.size()
+               && shared < components.size()
+               && prefix.at(shared) == components.at(shared)) {
+            ++shared;
+        }
+        prefix = prefix.mid(0, shared);
+        if (prefix.isEmpty()) {
+            return QString();
+        }
+    }
+
+    if (prefix.size() == 1) {
+        // A single component is a root: the empty component of a Unix
+        // path, or a Windows drive stub. Both need the trailing slash -
+        // QDir reads a bare "C:" as relative to that drive's current
+        // directory rather than its root.
+        return prefix.first() + QLatin1Char('/');
+    }
+    return prefix.join(QLatin1Char('/'));
+}
+
+// Number of directory levels `dir` sits below `base`, which must be an
+// ancestor of (or equal to) `dir`.
+int climbFrom(const QString& base, const QString& dir)
+{
+    const QString relative = QDir(base).relativeFilePath(dir);
+    if (relative == QLatin1String(".")) {
+        return 0;
+    }
+    return static_cast<int>(relative.split(QLatin1Char('/'), Qt::SkipEmptyParts).size());
 }
 
 bool destinationMatchesSource(const QFileInfo& srcInfo, const QFileInfo& dstInfo)
@@ -136,9 +198,29 @@ ReconcilePlan computePlan(
         return plan;
     }
 
-    const QString entryFile = scan.dependencies.first();
-    const QFileInfo entryInfo(entryFile);
-    const QDir entryDir = entryInfo.absoluteDir();
+    // Mirror from the dependencies' common ancestor rather than the
+    // entry's own directory, so an ordinary *include "../shared.svx"
+    // still lands inside the attachment.
+    const QString basePath = commonAncestorDir(scan.dependencies);
+    if (basePath.isEmpty()) {
+        plan.warnings.append(QStringLiteral("dependencies share no common folder"));
+        return plan;
+    }
+
+    const QString entryDirPath = QFileInfo(scan.dependencies.first()).absolutePath();
+    if (climbFrom(basePath, entryDirPath) > kMaxRebaseClimb) {
+        plan.warnings.append(
+            QStringLiteral("the files this entry includes are spread more than %1 folders "
+                           "above it — attach the file that owns them instead")
+                .arg(kMaxRebaseClimb));
+        return plan;
+    }
+
+    // commonAncestorDir joins canonical components, so the base is
+    // already absolute and clean.
+    const QDir base(basePath);
+    plan.baseDir = basePath;
+
     const QDir attachmentDirObj(attachmentDir);
     const QString attachmentAbs = attachmentDirObj.absolutePath();
 
@@ -146,7 +228,9 @@ ReconcilePlan computePlan(
     expectedSet.reserve(scan.dependencies.size());
 
     for (const QString& source : scan.dependencies) {
-        const QString rel = entryDir.relativeFilePath(source);
+        const QString rel = base.relativeFilePath(source);
+        // Defensive only: the base is an ancestor of every dependency by
+        // construction, so no relative path can climb out of it.
         if (rel.isEmpty() || relativeEscapesAttachmentDir(rel)) {
             plan.warnings.append(
                 QStringLiteral("dependency %1 is not reachable under attachment dir %2 - omitted")

@@ -84,22 +84,32 @@ enum class CopyPolicy {
  *   reconcile completes (the union of copies' destinations plus
  *   destinations whose source matches and was skipped). Phase 2's
  *   QFileSystemWatcher wiring uses this as its watch set.
- * - warnings: dependency entries that could not be planned (e.g.
- *   a dep whose relative path escapes attachmentDir via ../). The
- *   scan itself was not failed; the dep is simply omitted.
+ * - baseDir: the directory the mirror layout is taken relative to —
+ *   the dependencies' common ancestor. The entry's own path relative
+ *   to it is what attach persists as cwExternalCenterline::entryFile.
+ *   Empty when the scan carried no dependencies or a guard refused
+ *   the layout.
+ * - warnings: why the layout was refused — the dependencies share no
+ *   common folder, or their ancestor sits too far above the entry.
+ *   A plan refused by either guard carries the warning alone - no
+ *   copies, removes or expectedFiles - and since B7 the attach fails
+ *   on any warning, so a refused layout leaves both the disk and the
+ *   model untouched.
  */
 struct ReconcilePlan {
     QList<std::pair<QString, QString>> copies;
     QStringList removes;
     QStringList expectedFiles;
     QStringList warnings;
+    QString baseDir;
 
     bool operator==(const ReconcilePlan& other) const
     {
         return copies == other.copies
             && removes == other.removes
             && expectedFiles == other.expectedFiles
-            && warnings == other.warnings;
+            && warnings == other.warnings
+            && baseDir == other.baseDir;
     }
     bool operator!=(const ReconcilePlan& other) const { return !(*this == other); }
 };
@@ -108,11 +118,19 @@ struct ReconcilePlan {
  * Builds the reconcile plan for `scan` against `attachmentDir`.
  *
  * The plan layout under attachmentDir mirrors the source layout
- * relative to the entry file's directory (scan.dependencies[0]),
- * so the entry's *include paths still resolve after the copy
- * lands in the project. Dependencies whose relative path escapes
- * attachmentDir (cross-format includes pointing at siblings of
- * the entry's dir) are dropped from the plan with a warning.
+ * relative to the dependencies' common ancestor directory (the
+ * plan's baseDir), so a relative *include still resolves after the
+ * copy lands in the project — including the ordinary
+ * *include "../shared.svx" that reaches above the entry file.
+ * Every dependency sits at or below its own ancestor, so every one
+ * of them lands inside attachmentDir.
+ *
+ * Two layouts are refused, each with a warning and an otherwise
+ * empty plan (so the attach fails before anything is written): the
+ * dependencies share no common folder (different Windows volumes),
+ * or their ancestor sits more than kMaxRebaseClimb levels above the
+ * entry's own directory, which means the entry is a scattered
+ * project's driver rather than the file that owns its includes.
  *
  * Under CopyPolicy::SkipUpToDate, existing files inside
  * attachmentDir that match a source by size and have a

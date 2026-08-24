@@ -260,8 +260,13 @@ QFuture<Monad::Result<AttachReport>> attach(cwTrip* trip,
             // copies are verified on disk, so a crash mid-attach can
             // never persist an attachment whose files were still in
             // flight.
+            // The copy mirrors the source layout from the plan's base, so
+            // the entry is named by its path relative to that same base -
+            // a bare filename for the common flat case, a subpath when the
+            // closure reached above the entry's own directory. Reusing
+            // verifyPlan's base keeps attach and the planner on one answer.
             trip->setExternalCenterline(cwExternalCenterline(
-                QFileInfo(scan.dependencies.first()).fileName()));
+                QDir(verifyPlan.baseDir).relativeFilePath(scan.dependencies.first())));
 
             AttachReport report;
             report.scan = scan;

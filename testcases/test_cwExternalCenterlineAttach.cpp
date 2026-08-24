@@ -326,23 +326,25 @@ TEST_CASE("attach fails cleanly when the source file does not exist",
     CHECK_FALSE(fixture->project->modified());
 }
 
-TEST_CASE("attach refuses a source whose *include cannot be mirrored under the attachment",
+TEST_CASE("attach refuses a source whose includes are scattered far above it",
           "[Attach][Orchestrator]")
 {
-    auto fixture = makeSavedProject(QStringLiteral("attach-omitted-dep"));
+    auto fixture = makeSavedProject(QStringLiteral("attach-deep-climb"));
 
-    // The entry sits one level down from the file it includes, so the
-    // dependency's path relative to the entry's directory climbs out of it
-    // — computePlan cannot place it under the attachment dir and omits it.
-    const QString innerDir = QDir(fixture->tempDir.path()).filePath(QStringLiteral("src/inner"));
-    REQUIRE(QDir().mkpath(innerDir));
+    // The entry sits three levels below the file it includes, so mirroring
+    // from their common ancestor would drag the whole project tree into the
+    // attachment. The climb cap refuses instead.
+    const QString deepDir =
+        QDir(fixture->tempDir.path()).filePath(QStringLiteral("src/a/b/c"));
+    REQUIRE(QDir().mkpath(deepDir));
     const QString sharedPath =
         QDir(fixture->tempDir.path()).filePath(QStringLiteral("src/shared.svx"));
     overwriteFile(sharedPath, QByteArrayLiteral("*begin Shared\n*end Shared\n"));
 
-    const QString entryPath = QDir(innerDir).filePath(QStringLiteral("entry.svx"));
+    const QString entryPath = QDir(deepDir).filePath(QStringLiteral("entry.svx"));
     overwriteFile(entryPath,
-                  QByteArrayLiteral("*begin Entry\n*include \"../shared.svx\"\n*end Entry\n"));
+                  QByteArrayLiteral("*begin Entry\n*include \"../../../shared.svx\"\n"
+                                    "*end Entry\n"));
 
     const auto result = runAttach(fixture.get(), entryPath);
 
@@ -350,11 +352,60 @@ TEST_CASE("attach refuses a source whose *include cannot be mirrored under the a
     // entry file *includes a file nothing brought into the project — broken
     // the moment it is made. Refusing is the whole point of the promotion.
     REQUIRE(result.hasError());
-    CHECK(result.errorMessage().contains(QStringLiteral("shared.svx")));
+    CHECK(result.errorMessage().contains(QStringLiteral("spread more than")));
 
     // The model is untouched, so the trip is exactly as it was.
     CHECK(fixture->trip->externalCenterline().isEmpty());
     CHECK(fixture->settings()->breadcrumbPath(fixture->trip->id()).isEmpty());
+}
+
+TEST_CASE("attach mirrors an entry that includes a file one directory up",
+          "[Attach][Orchestrator]")
+{
+    // The measured Survex idiom: a cave master in caves/ pulling in a
+    // shared conventions file beside that folder. The mirror base is the
+    // closure's common ancestor, so both files land inside the attachment
+    // and the entry is remembered by its subpath under it.
+    auto fixture = makeSavedProject(QStringLiteral("attach-updir"));
+    const QString source =
+        datasetExternalCenterlinePath(QStringLiteral("updir_project/caves/dusk.svx"));
+
+    const auto result = runAttach(fixture.get(), source);
+
+    REQUIRE_FALSE(result.hasError());
+    const auto report = result.value();
+    CHECK(report.persisted.entryFile() == QStringLiteral("caves/dusk.svx"));
+    CHECK(fixture->trip->externalCenterline().entryFile()
+          == QStringLiteral("caves/dusk.svx"));
+
+    const QDir attachmentDir = fixture->saveLoad()->externalCenterlineDir(fixture->trip);
+    CHECK(QFileInfo::exists(
+        attachmentDir.absoluteFilePath(QStringLiteral("conventions.svx"))));
+    CHECK(QFileInfo::exists(
+        attachmentDir.absoluteFilePath(QStringLiteral("caves/dusk.svx"))));
+}
+
+TEST_CASE("a mirrored up-directory include still solves from the project copy",
+          "[Attach][Manager]")
+{
+    // End-to-end proof that the rebase preserved the tree shape: cavern
+    // reads the copy, resolves ../conventions.svx from it, and the trip
+    // harvests stations.
+    auto fixture = makeSavedProject(QStringLiteral("attach-updir-solve"));
+    const QString source =
+        datasetExternalCenterlinePath(QStringLiteral("updir_project/caves/dusk.svx"));
+
+    attachThroughManager(fixture.get(), fixture->trip, source);
+    drainPipelines(fixture.get());
+
+    INFO("solve error: "
+         << fixture->rootData->linePlotManager()->solveErrorMessage().toStdString());
+    CHECK_FALSE(fixture->rootData->linePlotManager()->hasSolveError());
+
+    const cwStationPositionLookup lookup = fixture->cave->stationPositionLookup();
+    const QString scope = tripScopeLabel(fixture->trip);
+    CHECK(lookup.hasPosition(scope + QStringLiteral(".dusk.d1")));
+    CHECK(lookup.hasPosition(scope + QStringLiteral(".dusk.d3")));
 }
 
 TEST_CASE("attach never sets the trip centerline when reconcile cannot write",

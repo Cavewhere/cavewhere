@@ -117,6 +117,10 @@ TEST_CASE("computePlan copies every dep into an empty attachment dir",
     CHECK(plan.expectedFiles.size() == 3);
     CHECK(plan.removes.isEmpty());
     CHECK(plan.warnings.isEmpty());
+    // Every dep sits at or below the entry's own directory, so the
+    // common ancestor is that directory and the layout is the flat one
+    // trip-level attach has always produced.
+    CHECK(plan.baseDir == QFileInfo(srcRoot).canonicalFilePath());
 
     const QDir attachDirObj(attachmentDir);
     CHECK(plan.copies.at(0).second == attachDirObj.absoluteFilePath(QStringLiteral("entry.svx")));
@@ -302,36 +306,97 @@ TEST_CASE("computePlan garbage-collects files not in the new closure",
     CHECK(plan.warnings.isEmpty());
 }
 
-TEST_CASE("computePlan warns when a dep escapes the attachment dir",
+TEST_CASE("computePlan rebases onto the common ancestor when a dep sits above the entry",
           "[Sync][Reconcile]")
 {
     QTemporaryDir tempDir;
     REQUIRE(tempDir.isValid());
 
-    const QString srcRoot = QDir(tempDir.path()).filePath(QStringLiteral("src/inner"));
-    REQUIRE(QDir().mkpath(srcRoot));
-    const QString outsideRoot = QDir(tempDir.path()).filePath(QStringLiteral("src"));
-    REQUIRE(QDir().mkpath(outsideRoot));
-
+    // The entry sits one level down from the sibling it includes, so its
+    // *include reads "../escaped.svx".
+    const QString srcRoot = QDir(tempDir.path()).filePath(QStringLiteral("src"));
     const QDateTime mtime = QDateTime::currentDateTimeUtc().addSecs(-kOneHourSeconds);
-    cwExternalCenterlineScanner::ScanResult scan;
-    const QString entryAbs = QDir(srcRoot).filePath(QStringLiteral("entry.svx"));
-    writeFileWithMtime(entryAbs, QByteArrayLiteral("; entry\n"), mtime);
-    scan.dependencies.append(QFileInfo(entryAbs).canonicalFilePath());
-
-    // Sibling lives in the parent dir of entry's parent: ../escaped.svx
-    const QString escapedAbs = QDir(outsideRoot).filePath(QStringLiteral("escaped.svx"));
-    writeFileWithMtime(escapedAbs, QByteArrayLiteral("; escaped\n"), mtime);
-    scan.dependencies.append(QFileInfo(escapedAbs).canonicalFilePath());
+    const auto scan = makeScan(srcRoot,
+                               QStringLiteral("inner/entry.svx"),
+                               { QStringLiteral("escaped.svx") },
+                               mtime);
 
     const QString attachmentDir = QDir(tempDir.path()).filePath(QStringLiteral("external"));
     const auto plan = cwExternalCenterlineSync::computePlan(scan, attachmentDir);
 
-    REQUIRE(plan.copies.size() == 1);
-    CHECK(plan.copies.first().first == scan.dependencies.first());
+    // The ancestor of both deps is src/, so the whole closure lands
+    // inside the attachment with the shape the *include relies on.
+    CHECK(plan.baseDir == QFileInfo(srcRoot).canonicalFilePath());
+    CHECK(plan.warnings.isEmpty());
+
+    const QDir attachDirObj(attachmentDir);
+    REQUIRE(plan.copies.size() == 2);
+    CHECK(plan.copies.at(0).second
+          == attachDirObj.absoluteFilePath(QStringLiteral("inner/entry.svx")));
+    CHECK(plan.copies.at(1).second
+          == attachDirObj.absoluteFilePath(QStringLiteral("escaped.svx")));
+    CHECK(plan.expectedFiles.size() == 2);
+}
+
+TEST_CASE("computePlan refuses a closure whose ancestor climbs past the cap",
+          "[Sync][Reconcile]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    // The shared file sits three levels above the entry - past
+    // kMaxRebaseClimb, so mirroring from their ancestor would drag the
+    // whole project tree into the attachment.
+    const QString srcRoot = QDir(tempDir.path()).filePath(QStringLiteral("src"));
+    const QDateTime mtime = QDateTime::currentDateTimeUtc().addSecs(-kOneHourSeconds);
+    const auto scan = makeScan(srcRoot,
+                               QStringLiteral("a/b/c/entry.svx"),
+                               { QStringLiteral("shared.svx") },
+                               mtime);
+
+    const QString attachmentDir = QDir(tempDir.path()).filePath(QStringLiteral("external"));
+    const auto plan = cwExternalCenterlineSync::computePlan(scan, attachmentDir);
+
     REQUIRE(plan.warnings.size() == 1);
-    CHECK(plan.warnings.first().contains(QStringLiteral("escaped.svx")));
-    CHECK(plan.expectedFiles.size() == 1);
+    CHECK(plan.warnings.first().contains(QStringLiteral("spread more than 2 folders")));
+    // A refused plan carries nothing else, so the reconcile that runs it
+    // leaves the disk exactly as it found it.
+    CHECK(plan.copies.isEmpty());
+    CHECK(plan.expectedFiles.isEmpty());
+    CHECK(plan.removes.isEmpty());
+    CHECK(plan.baseDir.isEmpty());
+}
+
+TEST_CASE("computePlan mirrors a fixture whose entry includes a file one level up",
+          "[Sync][Reconcile]")
+{
+    const QString entry = fixturePath(QStringLiteral("updir_project/caves/dusk.svx"));
+    REQUIRE(QFileInfo::exists(entry));
+
+    const auto scanResult = cwExternalCenterlineScanner::scan(entry);
+    REQUIRE_FALSE(scanResult.hasError());
+    const auto scan = scanResult.value();
+    CHECK(scan.dependencies.size() == 2);
+
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    const QString attachmentDir = QDir(tempDir.path()).filePath(QStringLiteral("external"));
+
+    const auto plan = cwExternalCenterlineSync::computePlan(scan, attachmentDir);
+
+    const QString projectRoot =
+        QFileInfo(fixturePath(QStringLiteral("updir_project"))).canonicalFilePath();
+    CHECK(plan.baseDir == projectRoot);
+    CHECK(plan.warnings.isEmpty());
+
+    // Copies follow the scan's dependency order: the entry, then what it
+    // includes.
+    const QDir attachDirObj(attachmentDir);
+    REQUIRE(plan.copies.size() == 2);
+    CHECK(plan.copies.at(0).second
+          == attachDirObj.absoluteFilePath(QStringLiteral("caves/dusk.svx")));
+    CHECK(plan.copies.at(1).second
+          == attachDirObj.absoluteFilePath(QStringLiteral("conventions.svx")));
 }
 
 TEST_CASE("computePlan returns empty plan when scan has no dependencies",

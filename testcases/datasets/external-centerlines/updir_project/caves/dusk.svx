@@ -1,0 +1,9 @@
+; Cave master one directory below the conventions file it includes -
+; the up-directory dependency the common-ancestor rebase exists for.
+; Solvable standalone: *fix at the origin plus two shots.
+*begin Dusk
+*include "../conventions.svx"
+*fix D1 0 0 0
+D1 D2 15.0 0 0
+D2 D3 7.5 90 0
+*end Dusk
