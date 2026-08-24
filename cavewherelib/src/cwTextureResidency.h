@@ -110,6 +110,8 @@ namespace cw::residency {
         QSize textureSize;
         QRhiTexture::Format format = QRhiTexture::UnknownFormat;
         int residentTopLevel = -1;    //-1 when nothing is resident
+        //The level selection last asked the camera for; -1 when unknown
+        int desiredTopLevel = -1;
         quint64 lastVisibleFrame = 0;
         bool visibleThisFrame = false;
         bool demotionInFlight = false;
@@ -129,8 +131,10 @@ namespace cw::residency {
      * Picks items to demote to their pinned base until overshootBytes is
      * covered. Invisible items go first, oldest lastVisibleFrame first, then
      * visible items in the same order. Items already at or below their base and
-     * items with a demotion in flight are left alone. Returns the plan it has
-     * even when it cannot cover the whole overshoot.
+     * items with a demotion in flight are left alone, as is a visible item
+     * whose desiredTopLevel is finer than its base — selection would ask for
+     * the detail straight back, so demoting it only churns. Returns the plan it
+     * has even when it cannot cover the whole overshoot.
      */
     CAVEWHERE_LIB_EXPORT QVector<Demotion> planEvictions(const QVector<ResidencyStats>& items,
                                                          qint64 overshootBytes);

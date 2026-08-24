@@ -20,6 +20,15 @@ public:
     void initialize(const ResourceUpdateData& data) override;
     void synchronize(const SynchronizeData& data) override;
     void updateResources(const ResourceUpdateData& data) override;
+    /**
+     * Drains finished loads, uploads what this frame's budget allows, and then
+     * enforces the GPU budget by demoting streamed items back to their pinned
+     * base.
+     *
+     * Enforcement reads the process-wide ledger, which every 3D view reports
+     * into, so convergence is joint: each view demotes its own items against the
+     * shared total and every demotion shrinks what the other views measure.
+     */
     bool streamResources(ResourceUpdateData& data, qint64& remainingUploadBytes) override;
     bool gather(const GatherContext& context, QVector<PipelineBatch>& batches) override;
     void purgePipelinesFor(QRhiRenderPassDescriptor* descriptor) override;
@@ -66,8 +75,17 @@ private:
         cwStreamedTexture streamSource;
         int residentTopLevel = kNoResidentLevel;
         int requestedTopLevel = kNoResidentLevel;
+        // The level the camera asked for the last time the item was gathered,
+        // so the planner can tell a demotion that would stick from one
+        // selection undoes on the next frame.
+        int desiredTopLevel = kNoResidentLevel;
         double uvPerMeter = 0.0;
         quint64 lastVisibleFrame = 0;
+        // True while the open request is a budget demotion rather than a
+        // refinement, so the next frame's planner leaves the item alone. A
+        // finer request from selection clears it — the streamer's generation
+        // drops the demotion that is already running.
+        bool demotionInFlight = false;
 
         // Levels that have landed on the render thread and are being uploaded
         // into stagingTexture, one budgeted level per frame. Nothing samples
@@ -143,6 +161,10 @@ private:
     //! for it. Arithmetic only in the common no-change case.
     void selectStreamLevel(uint32_t id, Item* item, const GatherContext& context);
 
+    //! Demotes streamed items back to their pinned base until the ledger's GPU
+    //! total fits @a budgets.gpuBudgetBytes. A no-op while under budget.
+    void enforceGpuBudget(const cwRenderBudgets& budgets);
+
     //! The compressed format streamed levels transcode to, or RGBA8 when the
     //! backend accepts no compressed format
     static QRhiTexture::Format streamTargetFormat();
@@ -153,6 +175,10 @@ private:
     QHash<uint32_t, Item*> m_items;
     cwTextureStreamer m_streamer;
     bool m_resourcesInitialized = false;
+    // True while the budget is over and no streamed item has detail it can give
+    // back. Warning on the transition into that state keeps a budget set below
+    // the floor from warning every frame.
+    bool m_atResidencyFloor = false;
     SharedItemData m_sharedData;
     QRhiVertexInputLayout m_inputLayout;
 

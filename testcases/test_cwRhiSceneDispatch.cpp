@@ -21,7 +21,10 @@
 #include "CwRhiTexturedItemsTestAccess.h"
 
 #include <QElapsedTimer>
+#include <QMatrix4x4>
 #include <QSize>
+#include <QString>
+#include <QtGlobal>
 #include <QThread>
 #include <QVector2D>
 #include <QVector3D>
@@ -130,6 +133,63 @@ qint64 ledgerStreamedCpuBytes()
     return cwRenderMemoryLedger::instance()->bytes(
         cwRenderMemoryLedger::Category::TexturedItemTexture,
         cwRenderMemoryLedger::Residency::Cpu);
+}
+
+qint64 ledgerGpuBytes()
+{
+    return cwRenderMemoryLedger::instance()->totalBytes(cwRenderMemoryLedger::Residency::Gpu);
+}
+
+// Selection reads the camera, the viewport, and the budgets — never the command
+// buffer — so hand-built render data is enough to drive it.
+cwRHIObject::RenderData cameraRenderData(float eyeDistance)
+{
+    cwRHIObject::RenderData renderData{nullptr, nullptr, cwSceneUpdate::Flag::None, nullptr, 1};
+    renderData.viewportSize = QSize(1920, 1080);
+
+    QMatrix4x4 projection;
+    projection.perspective(45.0f, 16.0f / 9.0f, 1.0f, 1000.0f);
+    QMatrix4x4 view;
+    view.lookAt(QVector3D(0.0f, 0.0f, eyeDistance), QVector3D(), QVector3D(0.0f, 1.0f, 0.0f));
+    renderData.projectionMatrix = projection;
+    renderData.viewProjectionMatrix = projection * view;
+    return renderData;
+}
+
+// Stands in for the point clouds and line plots that share the budget: textures
+// are the only category enforcement can give back.
+constexpr qint64 kSyntheticGpuBytes = 64 * 1024 * 1024;
+
+int streamedBaseLevel()
+{
+    return cw::residency::pinnedBaseLevel(
+        QSize(kStreamedTextureDimension, kStreamedTextureDimension));
+}
+
+// The bytes one streamed item gives back by dropping to its pinned base.
+qint64 demotionReclaim()
+{
+    const QSize size(kStreamedTextureDimension, kStreamedTextureDimension);
+    const QRhiTexture::Format format = CwRhiTexturedItemsTestAccess::streamTargetFormat();
+    return cw::residency::chainBytes(format, size, 0)
+           - cw::residency::chainBytes(format, size, streamedBaseLevel());
+}
+
+// Counts the warnings the residency floor logs, so a test can tell one
+// transition apart from one per frame.
+int gResidencyFloorWarnings = 0;
+QtMessageHandler gPreviousMessageHandler = nullptr;
+
+void countResidencyFloorWarnings(QtMsgType type, const QMessageLogContext& context,
+                                 const QString& message)
+{
+    if (type == QtWarningMsg && message.contains(QStringLiteral("over the GPU budget"))) {
+        gResidencyFloorWarnings++;
+        return;
+    }
+    if (gPreviousMessageHandler) {
+        gPreviousMessageHandler(type, context, message);
+    }
 }
 
 cwRhiTexturedItems* syncedBackend(cwRhiScene& rhiScene, cwScene& scene, cwRenderTexturedItems& render)
@@ -448,6 +508,313 @@ TEST_CASE("a load for a replaced descriptor never lands on the item",
     CHECK(remainingUploadBytes == renderData.budgets.uploadBudgetBytesPerFrame);
     CHECK(CwRhiTexturedItemsTestAccess::residentTopLevel(*backend, id)
           == CwRhiTexturedItemsTestAccess::noResidentLevel());
+
+    render.removeItem(id);
+    CwRhiSceneTestAccess::synchroize(rhiScene, &scene);
+}
+
+TEST_CASE("the GPU budget demotes the least recently gathered items first",
+          "[TexturedItemsStreaming]")
+{
+    cwScene scene;
+    cwRhiScene rhiScene;
+
+    cwRenderTexturedItems render;
+    render.setScene(&scene);
+    render.setParent(nullptr);
+
+    cwRenderTexturedItems::Item item;
+    item.geometry = unitQuad();
+
+    item.streamedTexture = streamedSource(QStringLiteral("oldest"));
+    const uint32_t oldest = render.addItem(item);
+    item.streamedTexture = streamedSource(QStringLiteral("middle"));
+    const uint32_t middle = render.addItem(item);
+    item.streamedTexture = streamedSource(QStringLiteral("newest"));
+    const uint32_t newest = render.addItem(item);
+
+    cwRhiTexturedItems* backend = syncedBackend(rhiScene, scene, render);
+    REQUIRE(backend != nullptr);
+
+    // Every item holds the full chain, and each was gathered in a different frame.
+    constexpr quint64 kOldestFrame = 7;
+    constexpr quint64 kMiddleFrame = 11;
+    constexpr quint64 kNewestFrame = 19;
+    const QVector<QPair<uint32_t, quint64>> fleet {
+        {oldest, kOldestFrame}, {middle, kMiddleFrame}, {newest, kNewestFrame}
+    };
+    for (const auto& entry : fleet) {
+        CwRhiTexturedItemsTestAccess::setResidentTopLevel(*backend, entry.first, 0);
+        CwRhiTexturedItemsTestAccess::setLastVisibleFrame(*backend, entry.first, entry.second);
+    }
+
+    cwLedgeredBytes synthetic(cwRenderMemoryLedger::Category::Other,
+                              cwRenderMemoryLedger::Residency::Gpu);
+    synthetic.setBytes(kSyntheticGpuBytes);
+
+    // Overshoot by one item's worth plus a byte, so two items must go.
+    const qint64 overshoot = demotionReclaim() + 1;
+    cwRHIObject::RenderData renderData = cameraRenderData(5.0f);
+    renderData.budgets.gpuBudgetBytes = ledgerGpuBytes() - overshoot;
+    REQUIRE(renderData.budgets.gpuBudgetBytes > 0);
+
+    cwRHIObject::ResourceUpdateData resourceData{nullptr, renderData, nullptr};
+    qint64 remainingUploadBytes = renderData.budgets.uploadBudgetBytesPerFrame;
+    CHECK(backend->streamResources(resourceData, remainingUploadBytes));
+
+    const int base = streamedBaseLevel();
+    for (uint32_t demoted : {oldest, middle}) {
+        CHECK(CwRhiTexturedItemsTestAccess::requestedTopLevel(*backend, demoted) == base);
+        CHECK(CwRhiTexturedItemsTestAccess::demotionInFlight(*backend, demoted));
+        // The fine texture is still what draws until the coarse chain lands.
+        CHECK(CwRhiTexturedItemsTestAccess::residentTopLevel(*backend, demoted) == 0);
+    }
+
+    // The most recently gathered item covers no more overshoot, so it keeps its detail.
+    CHECK(CwRhiTexturedItemsTestAccess::requestedTopLevel(*backend, newest)
+          == CwRhiTexturedItemsTestAccess::noResidentLevel());
+    CHECK_FALSE(CwRhiTexturedItemsTestAccess::demotionInFlight(*backend, newest));
+
+    // The next frame is still over budget — nothing has landed yet — but the
+    // bytes the demotions in flight will give back already cover it, so the
+    // fleet is left alone instead of unraveling one item per frame.
+    backend->streamResources(resourceData, remainingUploadBytes);
+    CHECK(CwRhiTexturedItemsTestAccess::requestedTopLevel(*backend, newest)
+          == CwRhiTexturedItemsTestAccess::noResidentLevel());
+
+    for (const auto& entry : fleet) {
+        render.removeItem(entry.first);
+    }
+    CwRhiSceneTestAccess::synchroize(rhiScene, &scene);
+}
+
+TEST_CASE("a promotion supersedes a demotion in flight", "[TexturedItemsStreaming]")
+{
+    cwScene scene;
+    cwRhiScene rhiScene;
+
+    cwRenderTexturedItems render;
+    render.setScene(&scene);
+    render.setParent(nullptr);
+
+    cwRenderTexturedItems::Item item;
+    item.geometry = unitQuad();
+    item.streamedTexture = streamedSource(QStringLiteral("scrap-1"));
+    const uint32_t id = render.addItem(item);
+
+    cwRhiTexturedItems* backend = syncedBackend(rhiScene, scene, render);
+    REQUIRE(backend != nullptr);
+
+    constexpr quint64 kLastGatheredFrame = 3;
+    // One level finer than the pinned base, so the demotion has something to
+    // give back and the promotion has something to load.
+    const int residentLevel = streamedBaseLevel() - 1;
+    CwRhiTexturedItemsTestAccess::setResidentTopLevel(*backend, id, residentLevel);
+    CwRhiTexturedItemsTestAccess::setLastVisibleFrame(*backend, id, kLastGatheredFrame);
+
+    cwLedgeredBytes synthetic(cwRenderMemoryLedger::Category::Other,
+                              cwRenderMemoryLedger::Residency::Gpu);
+    synthetic.setBytes(kSyntheticGpuBytes);
+
+    // A camera close enough that the quad wants every texel it has.
+    constexpr float kCloseEyeDistance = 1.25f;
+    constexpr qint64 kOvershootBytes = 1024;
+    cwRHIObject::RenderData renderData = cameraRenderData(kCloseEyeDistance);
+    renderData.budgets.gpuBudgetBytes = ledgerGpuBytes() - kOvershootBytes;
+
+    cwRHIObject::ResourceUpdateData resourceData{nullptr, renderData, nullptr};
+    qint64 remainingUploadBytes = renderData.budgets.uploadBudgetBytesPerFrame;
+    backend->streamResources(resourceData, remainingUploadBytes);
+
+    const int base = streamedBaseLevel();
+    REQUIRE(CwRhiTexturedItemsTestAccess::requestedTopLevel(*backend, id) == base);
+    REQUIRE(CwRhiTexturedItemsTestAccess::demotionInFlight(*backend, id));
+
+    // The camera comes back: selection asks for detail again, and the streamer's
+    // generation makes the coarse chain stale wherever it is.
+    cwRHIObject::GatherContext context;
+    context.renderData = &renderData;
+    context.renderPass = cwRHIObject::RenderPass::Opaque;
+    CwRhiTexturedItemsTestAccess::selectStreamLevel(*backend, id, context);
+
+    CHECK(CwRhiTexturedItemsTestAccess::requestedTopLevel(*backend, id) == 0);
+    CHECK_FALSE(CwRhiTexturedItemsTestAccess::demotionInFlight(*backend, id));
+
+    render.removeItem(id);
+    CwRhiSceneTestAccess::synchroize(rhiScene, &scene);
+}
+
+TEST_CASE("a camera back on the resident level cancels the demotion instead of reloading",
+          "[TexturedItemsStreaming]")
+{
+    cwScene scene;
+    cwRhiScene rhiScene;
+
+    cwRenderTexturedItems render;
+    render.setScene(&scene);
+    render.setParent(nullptr);
+
+    cwRenderTexturedItems::Item item;
+    item.geometry = unitQuad();
+    item.streamedTexture = streamedSource(QStringLiteral("scrap-1"));
+    const uint32_t id = render.addItem(item);
+
+    cwRhiTexturedItems* backend = syncedBackend(rhiScene, scene, render);
+    REQUIRE(backend != nullptr);
+
+    constexpr quint64 kLastGatheredFrame = 3;
+    CwRhiTexturedItemsTestAccess::setResidentTopLevel(*backend, id, 0);
+    CwRhiTexturedItemsTestAccess::setLastVisibleFrame(*backend, id, kLastGatheredFrame);
+
+    cwLedgeredBytes synthetic(cwRenderMemoryLedger::Category::Other,
+                              cwRenderMemoryLedger::Residency::Gpu);
+    synthetic.setBytes(kSyntheticGpuBytes);
+
+    constexpr float kCloseEyeDistance = 1.25f;
+    cwRHIObject::RenderData renderData = cameraRenderData(kCloseEyeDistance);
+    renderData.budgets.gpuBudgetBytes = ledgerGpuBytes() - demotionReclaim();
+
+    cwRHIObject::ResourceUpdateData resourceData{nullptr, renderData, nullptr};
+    qint64 remainingUploadBytes = renderData.budgets.uploadBudgetBytesPerFrame;
+    backend->streamResources(resourceData, remainingUploadBytes);
+
+    REQUIRE(CwRhiTexturedItemsTestAccess::requestedTopLevel(*backend, id) == streamedBaseLevel());
+    REQUIRE(CwRhiTexturedItemsTestAccess::demotionInFlight(*backend, id));
+
+    // The camera wants exactly what the item already holds, so the demotion is
+    // dropped outright rather than reloading a chain byte for byte.
+    cwRHIObject::GatherContext context;
+    context.renderData = &renderData;
+    context.renderPass = cwRHIObject::RenderPass::Opaque;
+    CwRhiTexturedItemsTestAccess::selectStreamLevel(*backend, id, context);
+
+    CHECK(CwRhiTexturedItemsTestAccess::requestedTopLevel(*backend, id)
+          == CwRhiTexturedItemsTestAccess::noResidentLevel());
+    CHECK_FALSE(CwRhiTexturedItemsTestAccess::demotionInFlight(*backend, id));
+    CHECK(CwRhiTexturedItemsTestAccess::residentTopLevel(*backend, id) == 0);
+    CHECK(waitFor([&]() {
+        return !CwRhiTexturedItemsTestAccess::hasStreamingWork(*backend);
+    }));
+
+    render.removeItem(id);
+    CwRhiSceneTestAccess::synchroize(rhiScene, &scene);
+}
+
+TEST_CASE("an item the camera keeps wanting finer is left alone frame after frame",
+          "[TexturedItemsStreaming]")
+{
+    cwScene scene;
+    cwRhiScene rhiScene;
+
+    cwRenderTexturedItems render;
+    render.setScene(&scene);
+    render.setParent(nullptr);
+
+    cwRenderTexturedItems::Item item;
+    item.geometry = unitQuad();
+    item.streamedTexture = streamedSource(QStringLiteral("scrap-1"));
+    const uint32_t id = render.addItem(item);
+
+    cwRhiTexturedItems* backend = syncedBackend(rhiScene, scene, render);
+    REQUIRE(backend != nullptr);
+
+    CwRhiTexturedItemsTestAccess::setResidentTopLevel(*backend, id, 0);
+
+    cwLedgeredBytes synthetic(cwRenderMemoryLedger::Category::Other,
+                              cwRenderMemoryLedger::Residency::Gpu);
+    synthetic.setBytes(kSyntheticGpuBytes);
+
+    constexpr float kCloseEyeDistance = 1.25f;
+    cwRHIObject::RenderData renderData = cameraRenderData(kCloseEyeDistance);
+    renderData.budgets.gpuBudgetBytes = ledgerGpuBytes() - demotionReclaim();
+
+    cwRHIObject::GatherContext context;
+    context.renderData = &renderData;
+    context.renderPass = cwRHIObject::RenderPass::Opaque;
+
+    cwRHIObject::ResourceUpdateData resourceData{nullptr, renderData, nullptr};
+    qint64 remainingUploadBytes = renderData.budgets.uploadBudgetBytesPerFrame;
+
+    gResidencyFloorWarnings = 0;
+    gPreviousMessageHandler = qInstallMessageHandler(countResidencyFloorWarnings);
+
+    // Gather then enforce, the order a real frame runs them in. Demoting the
+    // item would only hand the detail straight back next frame, so enforcement
+    // reports the floor once and leaves it drawing what it has.
+    constexpr int kFrameCount = 3;
+    for (int frame = 0; frame < kFrameCount; frame++) {
+        CwRhiTexturedItemsTestAccess::selectStreamLevel(*backend, id, context);
+        backend->streamResources(resourceData, remainingUploadBytes);
+
+        CHECK(CwRhiTexturedItemsTestAccess::requestedTopLevel(*backend, id)
+              == CwRhiTexturedItemsTestAccess::noResidentLevel());
+        CHECK_FALSE(CwRhiTexturedItemsTestAccess::demotionInFlight(*backend, id));
+        CHECK(CwRhiTexturedItemsTestAccess::residentTopLevel(*backend, id) == 0);
+    }
+
+    CHECK(gResidencyFloorWarnings == 1);
+    CHECK_FALSE(CwRhiTexturedItemsTestAccess::hasStreamingWork(*backend));
+
+    qInstallMessageHandler(gPreviousMessageHandler);
+    gPreviousMessageHandler = nullptr;
+
+    render.removeItem(id);
+    CwRhiSceneTestAccess::synchroize(rhiScene, &scene);
+}
+
+TEST_CASE("a fleet already at its pinned base warns once, not every frame",
+          "[TexturedItemsStreaming]")
+{
+    cwScene scene;
+    cwRhiScene rhiScene;
+
+    cwRenderTexturedItems render;
+    render.setScene(&scene);
+    render.setParent(nullptr);
+
+    cwRenderTexturedItems::Item item;
+    item.geometry = unitQuad();
+    item.streamedTexture = streamedSource(QStringLiteral("scrap-1"));
+    const uint32_t id = render.addItem(item);
+
+    cwRhiTexturedItems* backend = syncedBackend(rhiScene, scene, render);
+    REQUIRE(backend != nullptr);
+
+    CwRhiTexturedItemsTestAccess::setResidentTopLevel(*backend, id, streamedBaseLevel());
+
+    cwLedgeredBytes synthetic(cwRenderMemoryLedger::Category::Other,
+                              cwRenderMemoryLedger::Residency::Gpu);
+    synthetic.setBytes(kSyntheticGpuBytes);
+
+    constexpr qint64 kOvershootBytes = 1024;
+    cwRHIObject::RenderData renderData = cameraRenderData(5.0f);
+    renderData.budgets.gpuBudgetBytes = ledgerGpuBytes() - kOvershootBytes;
+
+    cwRHIObject::ResourceUpdateData resourceData{nullptr, renderData, nullptr};
+    qint64 remainingUploadBytes = renderData.budgets.uploadBudgetBytesPerFrame;
+
+    gResidencyFloorWarnings = 0;
+    gPreviousMessageHandler = qInstallMessageHandler(countResidencyFloorWarnings);
+
+    constexpr int kFrameCount = 3;
+    for (int frame = 0; frame < kFrameCount; frame++) {
+        backend->streamResources(resourceData, remainingUploadBytes);
+    }
+    CHECK(gResidencyFloorWarnings == 1);
+    CHECK(CwRhiTexturedItemsTestAccess::requestedTopLevel(*backend, id)
+          == CwRhiTexturedItemsTestAccess::noResidentLevel());
+
+    // Back under budget and over again is a new transition, so it warns again.
+    resourceData.renderData.budgets.gpuBudgetBytes = ledgerGpuBytes() + kOvershootBytes;
+    backend->streamResources(resourceData, remainingUploadBytes);
+    CHECK(gResidencyFloorWarnings == 1);
+
+    resourceData.renderData.budgets.gpuBudgetBytes = ledgerGpuBytes() - kOvershootBytes;
+    backend->streamResources(resourceData, remainingUploadBytes);
+    CHECK(gResidencyFloorWarnings == 2);
+
+    qInstallMessageHandler(gPreviousMessageHandler);
+    gPreviousMessageHandler = nullptr;
 
     render.removeItem(id);
     CwRhiSceneTestAccess::synchroize(rhiScene, &scene);

@@ -321,6 +321,70 @@ TEST_CASE("planEvictions returns a partial plan when it cannot cover the oversho
     CHECK(reclaimed < kUnreachableOvershoot);
 }
 
+TEST_CASE("planEvictions walks a mixed fleet invisible-first and stops at the overshoot",
+          "[TextureResidency]") {
+    //Two views' worth of items: some on screen this frame, some left behind
+    const QVector<ResidencyStats> items = {
+        residentItem(0, 40, true),    //0: visible, newest
+        residentItem(0, 12, false),   //1: invisible, seen a while back
+        residentItem(0, 40, true),    //2: visible, newest
+        residentItem(0, 7, false),    //3: invisible, oldest
+        residentItem(0, 31, true)     //4: visible, older than 0 and 2
+    };
+
+    const qint64 perItem = chainBytes(QRhiTexture::BC7, QSize(2048, 2048), 0)
+                           - chainBytes(QRhiTexture::BC7, QSize(2048, 2048), 2);
+
+    const QVector<Demotion> plan = planEvictions(items, perItem * 3);
+    REQUIRE(plan.size() == 3);
+
+    //Both invisible items go before any visible one, oldest first
+    CHECK(plan.at(0).itemIndex == 3);
+    CHECK(plan.at(1).itemIndex == 1);
+    CHECK(plan.at(2).itemIndex == 4);
+
+    qint64 reclaimed = 0;
+    for(const Demotion& demotion : plan) {
+        CHECK(demotion.newTopLevel == pinnedBaseLevel(QSize(2048, 2048)));
+        reclaimed += demotion.reclaimedBytes;
+    }
+    CHECK(reclaimed == perItem * 3);
+}
+
+TEST_CASE("planEvictions has nothing to give back when the fleet is at base",
+          "[TextureResidency]") {
+    const int base = pinnedBaseLevel(QSize(2048, 2048));
+    const QVector<ResidencyStats> items = {
+        residentItem(base, 1, false),
+        residentItem(base, 2, true),
+        residentItem(base + 1, 3, false)
+    };
+
+    //The budget is simply set below what the pinned bases cost
+    CHECK(planEvictions(items, 1024LL * 1024 * 1024).isEmpty());
+}
+
+TEST_CASE("planEvictions leaves a visible item the camera wants finer than its base alone",
+          "[TextureResidency]") {
+    const int base = pinnedBaseLevel(QSize(2048, 2048));
+
+    QVector<ResidencyStats> items = {
+        residentItem(0, 10, true),    //0: visible and wanting full detail
+        residentItem(0, 4, false),    //1: invisible, so its desire is stale
+        residentItem(0, 10, true)     //2: visible but happy at its base
+    };
+    items[0].desiredTopLevel = 0;
+    items[1].desiredTopLevel = 0;
+    items[2].desiredTopLevel = base;
+
+    constexpr qint64 kHugeOvershoot = 1024LL * 1024 * 1024;
+    const QVector<Demotion> plan = planEvictions(items, kHugeOvershoot);
+
+    REQUIRE(plan.size() == 2);
+    CHECK(plan.at(0).itemIndex == 1);
+    CHECK(plan.at(1).itemIndex == 2);
+}
+
 TEST_CASE("takeFromBudget meters uploads and guarantees progress", "[TextureResidency]") {
     constexpr qint64 kBudget = 100;
 

@@ -60,6 +60,23 @@ struct CwRhiTexturedItemsTestAccess {
         }
     }
 
+    static bool demotionInFlight(const cwRhiTexturedItems& items, uint32_t id) {
+        auto* found = items.m_items.value(id, nullptr);
+        return found && found->demotionInFlight;
+    }
+
+    // Pretends the item was last gathered in @a frame, so a test can order a
+    // fleet for the eviction planner without running frames.
+    static void setLastVisibleFrame(cwRhiTexturedItems& items, uint32_t id, quint64 frame) {
+        if (auto* found = items.m_items.value(id, nullptr)) {
+            found->lastVisibleFrame = frame;
+        }
+    }
+
+    static QRhiTexture::Format streamTargetFormat() {
+        return cwRhiTexturedItems::streamTargetFormat();
+    }
+
     static constexpr int noResidentLevel() { return cwRhiTexturedItems::kNoResidentLevel; }
 
     // Runs one item's selection pass without a gather — selection reads the

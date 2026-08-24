@@ -264,7 +264,14 @@ QVector<Demotion> planEvictions(const QVector<ResidencyStats>& items, qint64 ove
         if(item.demotionInFlight || item.residentTopLevel < 0) {
             continue;
         }
-        if(item.residentTopLevel >= pinnedBaseLevel(item.textureSize)) {
+        const int baseLevel = pinnedBaseLevel(item.textureSize);
+        if(item.residentTopLevel >= baseLevel) {
+            continue;
+        }
+        //Demoting an item the camera still wants finer than its base is undone
+        //by the next selection pass, so leave it holding what it has.
+        if(item.visibleThisFrame && item.desiredTopLevel >= 0
+           && item.desiredTopLevel < baseLevel) {
             continue;
         }
         candidates.append(i);

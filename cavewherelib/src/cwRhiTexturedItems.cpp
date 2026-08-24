@@ -37,6 +37,9 @@ constexpr cwRHIObject::RenderPass kCullingStatsPass = cwRHIObject::RenderPass::B
 // The pinned base level is loaded ahead of every detail level: an item without a
 // texture has nothing to draw, and everything else is a refinement.
 constexpr quint64 kPinnedBasePriority = std::numeric_limits<quint64>::max();
+// A demotion outranks every refinement — it is what brings the scene back under
+// budget — but still yields to an item that has nothing to draw at all.
+constexpr quint64 kDemotionPriority = kPinnedBasePriority - 1;
 }
 
 cwRhiTexturedItems::cwRhiTexturedItems() = default;
@@ -345,13 +348,113 @@ void cwRhiTexturedItems::selectStreamLevel(uint32_t id, Item* item, const Gather
     input.screenSpaceErrorPx = renderData.budgets.screenSpaceErrorPx;
 
     const int desired = cw::residency::desiredTopLevel(input);
+    item->desiredTopLevel = desired;
 
-    // Only refinements are asked for here; giving detail back is D5's eviction
-    // planner, which sees the whole scene's budget rather than one item.
-    if (desired < item->residentTopLevel && desired != item->requestedTopLevel) {
+    // The level the item is heading for: what a load is running for, or what it
+    // holds when nothing is open. Only refinements are asked for here; giving
+    // detail back is the budget's job, in enforceGpuBudget.
+    const int target = item->requestedTopLevel == kNoResidentLevel
+                           ? item->residentTopLevel
+                           : item->requestedTopLevel;
+
+    if (desired < target) {
+        if (desired == item->residentTopLevel) {
+            // The open request is a demotion the camera has changed its mind
+            // about, and what is resident is already the wanted level: drop the
+            // request rather than reloading bytes the item holds.
+            item->requestedTopLevel = kNoResidentLevel;
+            item->demotionInFlight = false;
+            m_streamer.cancel(id);
+            return;
+        }
+
+        // A demotion in flight is superseded by this: the streamer bumps the
+        // item's generation, so the coarse chain is dropped when it lands.
         item->requestedTopLevel = desired;
+        item->demotionInFlight = false;
         m_streamer.request(id, item->streamSource, streamTargetFormat(), desired,
-                           quint64(item->residentTopLevel - desired));
+                           quint64(target - desired));
+    }
+}
+
+void cwRhiTexturedItems::enforceGpuBudget(const cwRenderBudgets& budgets)
+{
+    const qint64 overshoot =
+        cwRenderMemoryLedger::instance()->totalBytes(cwRenderMemoryLedger::Residency::Gpu)
+        - budgets.gpuBudgetBytes;
+    if (overshoot <= 0) {
+        m_atResidencyFloor = false;
+        return;
+    }
+
+    const QRhiTexture::Format format = streamTargetFormat();
+    const quint64 frame = m_frame->frameCounter();
+
+    // Parallel to stats, so a plan's itemIndex names the item it was built from.
+    QVector<QPair<uint32_t, Item*>> streamedItems;
+    QVector<cw::residency::ResidencyStats> stats;
+    streamedItems.reserve(m_items.size());
+    stats.reserve(m_items.size());
+
+    // What the demotions already running will give back. Crediting it keeps the
+    // frames they take to land from unraveling the whole fleet.
+    qint64 promisedBytes = 0;
+    for (auto it = m_items.constBegin(); it != m_items.constEnd(); ++it) {
+        Item* item = it.value();
+        if (!item || item->streamSource.isNull()) {
+            continue;
+        }
+
+        cw::residency::ResidencyStats itemStats;
+        itemStats.textureSize = item->streamSource.size;
+        itemStats.format = format;
+        itemStats.residentTopLevel = item->residentTopLevel;
+        itemStats.desiredTopLevel = item->desiredTopLevel;
+        itemStats.lastVisibleFrame = item->lastVisibleFrame;
+        // gather() runs after streamResources, so the newest frame an item was
+        // seen in is the one the counter still sits on. An item that has never
+        // been gathered holds nothing for the planner to take anyway.
+        itemStats.visibleThisFrame = item->lastVisibleFrame == frame;
+        itemStats.demotionInFlight = item->demotionInFlight;
+
+        if (itemStats.demotionInFlight && itemStats.residentTopLevel >= 0) {
+            const int itemBase = cw::residency::pinnedBaseLevel(itemStats.textureSize);
+            promisedBytes +=
+                cw::residency::chainBytes(format, itemStats.textureSize,
+                                          itemStats.residentTopLevel)
+                - cw::residency::chainBytes(format, itemStats.textureSize, itemBase);
+        }
+
+        streamedItems.append({it.key(), item});
+        stats.append(itemStats);
+    }
+
+    const QVector<cw::residency::Demotion> plan =
+        cw::residency::planEvictions(stats, overshoot - promisedBytes);
+    if (plan.isEmpty()) {
+        // Nothing planned and nothing in flight: what is resident is what the
+        // views need, and the budget is simply set below that floor.
+        if (promisedBytes == 0 && !m_atResidencyFloor) {
+            m_atResidencyFloor = true;
+            qWarning() << "Render memory is" << overshoot
+                       << "bytes over the GPU budget of" << budgets.gpuBudgetBytes
+                       << "and no streamed texture can give any back";
+        }
+        return;
+    }
+    m_atResidencyFloor = false;
+
+    for (const cw::residency::Demotion& demotion : plan) {
+        const uint32_t id = streamedItems.at(demotion.itemIndex).first;
+        Item* item = streamedItems.at(demotion.itemIndex).second;
+
+        // The coarse chain lands through the same drain and swap a promotion
+        // uses, so the fine texture keeps drawing until it is complete and the
+        // ledger drops at the swap.
+        item->requestedTopLevel = demotion.newTopLevel;
+        item->demotionInFlight = true;
+        m_streamer.request(id, item->streamSource, format, demotion.newTopLevel,
+                           kDemotionPriority);
     }
 }
 
@@ -377,6 +480,7 @@ bool cwRhiTexturedItems::streamResources(ResourceUpdateData& data, qint64& remai
             qWarning() << "Streaming level" << result.topLevel << "for item" << result.itemId
                        << "failed:" << result.error;
             item->requestedTopLevel = kNoResidentLevel;
+            item->demotionInFlight = false;
             continue;
         }
 
@@ -398,6 +502,10 @@ bool cwRhiTexturedItems::streamResources(ResourceUpdateData& data, qint64& remai
                                                  anythingUploadedThisFrame)
                        || levelsRemain;
     }
+
+    // Last, so this frame's swaps are already off the ledger when the total is
+    // read and the plan is built from what is actually resident.
+    enforceGpuBudget(data.renderData.budgets);
 
     // hasWork() covers the loads still queued or in flight — the frame renderer
     // has no other window onto this object's streamer.
@@ -471,6 +579,7 @@ void cwRhiTexturedItems::Item::failPendingUpload()
 {
     clearPendingUpload();
     requestedTopLevel = kNoResidentLevel;
+    demotionInFlight = false;
 }
 
 void cwRhiTexturedItems::Item::resetResidency()
@@ -478,6 +587,7 @@ void cwRhiTexturedItems::Item::resetResidency()
     clearPendingUpload();
     residentTopLevel = kNoResidentLevel;
     requestedTopLevel = kNoResidentLevel;
+    demotionInFlight = false;
 }
 
 bool cwRhiTexturedItems::Item::uploadPendingLevels(const ResourceUpdateData& data,
@@ -552,6 +662,7 @@ bool cwRhiTexturedItems::Item::uploadPendingLevels(const ResourceUpdateData& dat
     delete texture;
     texture = pendingUpload.stagingTexture;
     residentTopLevel = pendingUpload.readyTopLevel;
+    demotionInFlight = false;
     textureBytes.setBytes(cw::residency::chainBytes(format, streamSource.size,
                                                     residentTopLevel));
 
