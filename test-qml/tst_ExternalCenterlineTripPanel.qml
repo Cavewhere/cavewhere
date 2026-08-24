@@ -754,17 +754,13 @@ MainWindowTest {
                       "the tied attachment is no longer floating")
         }
 
-        // A Scope trip is externally backed by its cave's file and owns none
-        // of its own, so every manager lookup the panel makes misses. P3.9
-        // branches the panel's header for it; until then this pins that the
-        // misses render as empty rather than tearing the panel down.
-        function test_aScopeTripRendersThePanelWithNoFileOfItsOwn() {
-            makeSavedTrip("trip-panel-scope")
-
-            const cave = makeAttachedCave(
-                            "BlocksCave",
-                            TestHelper.testcasesDatasetPath(
-                                "external-centerlines/survex_blocks.svx"))
+        // Binds the panel to a Scope trip: one created by a cave-level
+        // attach, which windows a block of the cave's file and owns no
+        // file of its own. Returns the cave.
+        function bindScopeTrip(projectBaseName) {
+            const cave = makeSavedCaveAttach(
+                           projectBaseName,
+                           "external-centerlines/survex_blocks.svx")
 
             compare(cave.rowCount(), 3, "the attach created one Scope trip per block")
             const scopeTrip = cave.trip(2)
@@ -775,11 +771,25 @@ MainWindowTest {
 
             rootId.trip = scopeTrip
             waitForRendering(panelId)
+            return cave
+        }
 
-            const header = findChild(panelId, "attachedHeader")
+        // A Scope trip is externally backed by its cave's file and owns none
+        // of its own, so every manager lookup the panel makes misses: they
+        // render as empty rather than tearing the panel down, and the header
+        // Loader carries the scope header instead of the attached one.
+        function test_aScopeTripRendersThePanelWithNoFileOfItsOwn() {
+            bindScopeTrip("trip-panel-scope")
+
+            verify(!panelId.isAttached, "a Scope trip owns no file to be attached to")
+            verify(panelId.isScope, "its prefix is what makes it a Scope trip")
+
+            const scopeHeader = findChild(panelId, "scopeHeader")
             const solveStatus = findChild(panelId, "solveStatus")
             const stationsList = findChild(panelId, "stationsList")
-            verify(header !== null && header.visible, "the header still renders")
+            verify(scopeHeader !== null && scopeHeader.visible, "the scope header renders")
+            compare(findChild(panelId, "attachedHeader"), null,
+                    "the attached header belongs to a trip with a file of its own")
             verify(solveStatus !== null && solveStatus.visible, "solve status renders")
             verify(stationsList !== null && stationsList.visible, "stations list renders")
 
@@ -790,6 +800,91 @@ MainWindowTest {
             verify(!panelId.ownerBusy, "an untracked owner is never busy")
             verify(!panelId.sourceChangedSinceCopy,
                    "an untracked owner has no source to have changed")
+        }
+
+        // The trip has no file, so the whole attached-only surface is gone:
+        // no Replace, no provenance line, and neither banner about a file of
+        // the trip's own. Declination comes from the cave's file (§5 Q6).
+        function test_aScopeTripHidesTheAttachedOnlySurface() {
+            bindScopeTrip("trip-panel-scope-surface")
+
+            compare(findChild(panelId, "replaceButton"), null,
+                    "there is nothing of the trip's own to replace")
+            compare(findChild(panelId, "sourceModeLabel"), null,
+                    "the trip's copy has no provenance of its own")
+
+            const missingBanner = findChild(panelId, "missingCenterlineCopyBanner")
+            verify(missingBanner !== null, "missingCenterlineCopyBanner must exist")
+            verify(!missingBanner.visible, "no copy of its own can be missing")
+
+            const fileErrorBanner = findChild(panelId, "externalCenterlineFileErrorBanner")
+            verify(fileErrorBanner !== null, "externalCenterlineFileErrorBanner must exist")
+            verify(!fileErrorBanner.visible, "no file of its own can have failed")
+
+            const metadata = findChild(panelId, "tripMetadata")
+            const declEditor = findChild(metadata, "tripMetadataDeclination")
+            verify(declEditor !== null, "tripMetadataDeclination must exist")
+            verify(!declEditor.visible, "cavern owns a Scope trip's declination")
+
+            const caveHint = findChild(metadata, "caveOwnsDeclinationHint")
+            verify(caveHint !== null, "caveOwnsDeclinationHint must exist")
+            verify(caveHint.visible, "the hint names where declination comes from")
+            compare(caveHint.text, "Declination comes from the cave's survey file.")
+
+            const fileHint = findChild(metadata, "fileOwnsDeclinationHint")
+            verify(fileHint !== null, "fileOwnsDeclinationHint must exist")
+            verify(!fileHint.visible, "the trip's own file is not the source here")
+        }
+
+        // The station list is the one block the two modes share: it filters
+        // the cave's solved network by the trip's prefix.
+        function test_aScopeTripListsItsOwnBlocksStations() {
+            bindScopeTrip("trip-panel-scope-stations")
+
+            const stationsList = findChild(panelId, "stationsList")
+            verify(stationsList !== null, "stationsList must exist")
+            tryVerify(() => RootData.linePlotManager.lastSolveStationCount > 0,
+                      10000, "the cave attach's chained solve publishes stations")
+            tryVerify(() => stationsList.count > 0, 10000,
+                      "the block's stations reach the Scope trip's list")
+        }
+
+        // Both verbs the scope header adds act on the real trip through the
+        // panel: the prefix it windows the block with, and its removal.
+        function test_theScopeHeadersVerbsReachTheTrip() {
+            bindScopeTrip("trip-panel-scope-verbs")
+            const trip = rootId.trip
+            const cave = trip.parentCave
+            const rowsBefore = cave.rowCount()
+
+            const scopeHeader = findChild(panelId, "scopeHeader")
+            const prefixInput = findChild(scopeHeader, "prefixInput")
+            verify(prefixInput !== null, "prefixInput must exist")
+            prefixInput.finishedEditting("panelprefix")
+            tryCompare(trip, "stationPrefix", "panelprefix",
+                       5000, "the header's prefix edit lands on the trip")
+
+            const removeButton = findChild(scopeHeader, "removeTripButton")
+            verify(removeButton !== null, "removeTripButton must exist")
+            mouseClick(removeButton)
+
+            const challenge = findChild(scopeHeader, "removeTripChallenge")
+            verify(challenge !== null, "removeTripChallenge must exist")
+            tryVerify(() => challenge.visible, 5000, "the prompt opens")
+
+            const confirm = findChild(challenge, "removeButton")
+            verify(confirm !== null, "the prompt's confirm button must exist")
+            // The header makes room for the prompt, so the panel's column
+            // has to settle before the prompt's buttons stand where the
+            // click is aimed.
+            waitForRendering(panelId)
+
+            // Nothing may touch the trip after this click: removeTrip with
+            // no undo stack destroys it on the spot.
+            mouseClick(confirm)
+            tryVerify(() => cave.rowCount() === rowsBefore - 1,
+                      10000, "confirming removes the trip from the cave")
+            rootId.trip = null
         }
     }
 }
