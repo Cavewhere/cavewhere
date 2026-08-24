@@ -3,6 +3,7 @@
 
 // Qt includes
 #include <QDebug>
+#include <QThread>
 
 // libktx includes
 #include <ktx.h>
@@ -24,6 +25,10 @@ namespace {
 
     constexpr int kBytesPerRgbaPixel = 4;
     constexpr int kSmallestMipSize = 1;
+    constexpr int kSmallestThreadCount = 1;
+
+    static_assert(cw::ktx2::kDefaultUastcQuality == KTX_PACK_UASTC_LEVEL_FASTEST,
+                  "kDefaultUastcQuality must match libktx's fastest UASTC level");
 
     QString ktxErrorText(const QString& context, KTX_error_code error)
     {
@@ -146,6 +151,12 @@ Monad::Result<QByteArray> encodeRgba(const QImage& image, int quality)
     params.structSize = sizeof(params);
     params.uastc = KTX_TRUE;
     params.uastcFlags = static_cast<ktx_pack_uastc_flags>(quality);
+
+    //libktx encodes on one thread unless told otherwise. Encodes are bursty and
+    //rare, so letting each one use every core is worth the brief
+    //oversubscription when a few cwConcurrent workers encode at once.
+    params.threadCount = static_cast<ktx_uint32_t>(std::max(kSmallestThreadCount,
+                                                            QThread::idealThreadCount()));
 
     const KTX_error_code compressError = ktxTexture2_CompressBasisEx(texture.get(), &params);
     if(compressError != KTX_SUCCESS) {

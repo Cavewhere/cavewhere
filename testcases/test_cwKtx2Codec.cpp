@@ -129,6 +129,27 @@ TEST_CASE("cwKtx2Codec handles a size that isn't a multiple of the block size", 
           == blocksFor(kOddWidth) * blocksFor(kOddHeight) * kBytesPerBlock);
 }
 
+TEST_CASE("cwKtx2Codec encodes the same image at the fastest and default UASTC levels", "[Ktx2]") {
+    const QImage image = gradientImage(kGradientWidth, kGradientHeight);
+
+    const auto fastest = cw::ktx2::encodeRgba(image, KTX_PACK_UASTC_LEVEL_FASTEST);
+    REQUIRE_FALSE(fastest.hasError());
+    const auto slower = cw::ktx2::encodeRgba(image, KTX_PACK_UASTC_LEVEL_DEFAULT);
+    REQUIRE_FALSE(slower.hasError());
+
+    const auto fastestTexture = cw::ktx2::transcode(fastest.value(), QRhiTexture::BC7);
+    REQUIRE_FALSE(fastestTexture.hasError());
+    const auto slowerTexture = cw::ktx2::transcode(slower.value(), QRhiTexture::BC7);
+    REQUIRE_FALSE(slowerTexture.hasError());
+
+    CHECK(fastestTexture.value().format == QRhiTexture::BC7);
+    CHECK(slowerTexture.value().format == QRhiTexture::BC7);
+    CHECK(fastestTexture.value().size == QSize(kGradientWidth, kGradientHeight));
+    CHECK(fastestTexture.value().size == slowerTexture.value().size);
+    CHECK(fastestTexture.value().mipLevels.size() == kGradientMipCount);
+    CHECK(fastestTexture.value().mipLevels.size() == slowerTexture.value().mipLevels.size());
+}
+
 TEST_CASE("cwKtx2Codec reports an error for garbage input", "[Ktx2]") {
     const QByteArray garbage(kGarbageByteCount, kGarbageByte);
     const auto transcoded = cw::ktx2::transcode(garbage, QRhiTexture::BC7);

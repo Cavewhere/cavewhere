@@ -40,10 +40,15 @@ struct CAVEWHERE_LIB_EXPORT cwCompressedTexture
 namespace cw::ktx2 {
 
     /**
-     * The default UASTC encoder quality level, matching libktx's
-     * KTX_PACK_UASTC_LEVEL_DEFAULT.
+     * The default UASTC encoder quality level, libktx's
+     * KTX_PACK_UASTC_LEVEL_FASTEST. Level 0 reaches 43.45 dB against level 2's
+     * 47.47 dB — a difference invisible on scanned notes and LiDAR photos, and
+     * several times faster to encode.
+     *
+     * Spelled as a plain int because libktx is a private dependency of
+     * cavewherelib; cwKtx2Codec.cpp static_asserts it against the enum.
      */
-    constexpr int kDefaultUastcQuality = 2;
+    constexpr int kDefaultUastcQuality = 0;
 
     /**
      * Encodes image as a UASTC supercompressed .ktx2 file with a full mip chain
