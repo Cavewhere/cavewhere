@@ -37,7 +37,7 @@ MainWindowTest {
         ExternalCenterlineAttachedHeader {
             id: attachedHeaderId
             width: parent.width
-            trip: rootId.trip
+            owner: rootId.trip
             externalSourceSettings: RootData.externalSourceSettings
         }
 
@@ -98,7 +98,7 @@ MainWindowTest {
 
     ReplaceCenterlineDialog {
         id: replaceDialogId
-        trip: rootId.trip
+        owner: rootId.trip
     }
 
     ExternalCenterlineTestCase {

@@ -67,6 +67,11 @@ ShadowRectangle {
 
         QC.Label {
             anchors.verticalCenter: parent.verticalCenter
+
+            // A sentence-long prompt wraps instead of stretching the row
+            // wide enough to push the buttons off the edge of the window.
+            width: Math.min(implicitWidth, Theme.helpBoxMaxWidth)
+            wrapMode: QQ.Text.Wrap
             text: removeChallenge.message
             visible: removeChallenge.message.length !== 0
         }

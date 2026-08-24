@@ -132,6 +132,13 @@ StandardPage {
     readonly property bool hasNoTrips: cavePageArea.currentCave !== null
                                        && tripProxyModel.count === 0
 
+    // True while this cave's centerline comes from an attached survey
+    // file. The trips such a cave holds are windows into that file, so
+    // the page shows the attachment's own state and stops inviting
+    // native trips.
+    readonly property bool caveAttached: cavePageArea.currentCave !== null
+                                         && cavePageArea.currentCave.externalCenterline.entryFile.length > 0
+
     // --- Standalone items (defined once, proxied into wide/narrow layouts) ---
 
     DoubleClickTextInput {
@@ -239,6 +246,12 @@ StandardPage {
         }
     }
 
+    ExternalCenterlineCaveSummary {
+        id: caveSummaryId
+        Layout.fillWidth: true
+        cave: cavePageArea.currentCave
+    }
+
     QQ.Flow {
         id: actionBar
         spacing: Theme.actionBarSpacing
@@ -291,7 +304,8 @@ StandardPage {
         // stroked chevron, not the solid triangle a "▾" renders, and a bare
         // symbol inside qsTr has no font-coverage or translator guarantee.
         text: qsTr("No trips yet — add one here, or use the menu beside this button to add one from a survey file.")
-        visible: cavePageArea.hasNoTrips && noTripsHintId.targetBar !== null
+        visible: cavePageArea.hasNoTrips && !cavePageArea.caveAttached
+                 && noTripsHintId.targetBar !== null
         pointAtObject: noTripsHintId.targetBar
         pointAtObjectPosition: noTripsHintId.targetBar !== null
                                ? Qt.point(noTripsHintId.targetBar.width / 2.0,
@@ -426,6 +440,12 @@ StandardPage {
                 spacing: Theme.sectionSpacing
 
                 LayoutItemProxy { target: actionBar }
+
+                LayoutItemProxy {
+                    target: caveSummaryId
+                    visible: cavePageArea.caveAttached && !cavePageArea.isNarrow
+                }
+
                 LayoutItemProxy { target: wideLoaderId }
             }
         }
@@ -620,6 +640,14 @@ StandardPage {
                         required property bool autoDeclinationRole
                         required property int index
 
+                        // The trip's survey data comes from the cave's
+                        // attached file rather than from chunks typed into
+                        // this project. Falsy while the delegate is being
+                        // torn down and its trip is already gone.
+                        readonly property bool externallyBacked:
+                            rowDelegateId.tripObjectRole
+                                ? rowDelegateId.tripObjectRole.externallyBacked : false
+
                         implicitWidth: layoutId.width
                         implicitHeight: layoutId.height
 
@@ -666,7 +694,11 @@ StandardPage {
                                     }
 
                                     LinkText {
-                                        text: rowDelegateId.tripNameRole
+                                        objectName: "tripNameLink"
+                                        // The paperclip marks an externally
+                                        // backed trip.
+                                        text: (rowDelegateId.externallyBacked ? "📎 " : "")
+                                              + rowDelegateId.tripNameRole
                                         elide: QQ.Text.ElideRight
 
                                         onClicked: {
@@ -735,14 +767,27 @@ StandardPage {
 
                                     QC.Label {
                                         elide: QQ.Text.ElideRight
+                                        visible: !rowDelegateId.externallyBacked
                                         text: Utils.fixed(rowDelegateId.declinationRole, 2) + "°"
                                     }
 
                                     QC.Label {
                                         elide: QQ.Text.ElideRight
+                                        visible: !rowDelegateId.externallyBacked
                                         color: Theme.textSubtle
                                         font.pixelSize: Theme.fontSizeCaption
                                         text: rowDelegateId.autoDeclinationRole ? "auto" : "manual"
+                                    }
+
+                                    // The file carries the declination for an
+                                    // externally-backed trip, and each block
+                                    // can set its own, so the row has no one
+                                    // number to show.
+                                    QC.Label {
+                                        objectName: "declinationEmDash"
+                                        visible: rowDelegateId.externallyBacked
+                                        color: Theme.textSubtle
+                                        text: "—"
                                     }
                                 }
                             }
@@ -890,6 +935,11 @@ StandardPage {
                         }
                     }
                 }
+
+                LayoutItemProxy {
+                    target: caveSummaryId
+                    visible: cavePageArea.caveAttached && cavePageArea.isNarrow
+                }
             }
 
             delegate: QQ.Item {
@@ -902,6 +952,11 @@ StandardPage {
                 required property real declinationRole
                 required property bool autoDeclinationRole
                 required property int index
+
+                // Matches RowDelegate.externallyBacked, for the same rows.
+                readonly property bool externallyBacked:
+                    flowDelegateId.tripObjectRole
+                        ? flowDelegateId.tripObjectRole.externallyBacked : false
 
                 implicitHeight: flowId.implicitHeight + Theme.delegatePadding
                 width: QQ.ListView.view ? QQ.ListView.view.width : 0
@@ -932,7 +987,9 @@ StandardPage {
                     }
 
                     LinkText {
-                        text: flowDelegateId.tripNameRole
+                        objectName: "narrowTripNameLink"
+                        text: (flowDelegateId.externallyBacked ? "📎 " : "")
+                              + flowDelegateId.tripNameRole
                         onClicked: {
                             RootData.pageSelectionModel.gotoPageByName(
                                         cavePageArea.PageView.page,
@@ -963,8 +1020,11 @@ StandardPage {
                     QC.Label { text: "·"; color: Theme.textSubtle }
 
                     QC.Label {
-                        text: Utils.fixed(flowDelegateId.declinationRole, 2) + "° "
-                              + (flowDelegateId.autoDeclinationRole ? "auto" : "manual")
+                        objectName: "narrowDeclinationLabel"
+                        text: flowDelegateId.externallyBacked
+                              ? "—"
+                              : Utils.fixed(flowDelegateId.declinationRole, 2) + "° "
+                                + (flowDelegateId.autoDeclinationRole ? "auto" : "manual")
                         color: Theme.textSubtle
                     }
                 }

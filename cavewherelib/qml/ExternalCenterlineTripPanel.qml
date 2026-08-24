@@ -25,103 +25,26 @@ QQ.Item {
     property ExternalCenterlineManager externalCenterlineManager: RootData.externalCenterlineManager
     property ExternalSourceSettings externalSourceSettings: RootData.externalSourceSettings
 
-    // isOwnerBusy has no property NOTIFY — ownerBusyChanged drives the
-    // imperative refresh below.
-    property bool ownerBusy: false
-
-    // Defaults to true (file-owned) until the manager's scan says
-    // otherwise; refreshed on solveNeeded, which the scan apply emits
-    // whenever the declination flags change.
-    property bool fileOwnsDeclination: true
-
-    // Project-relative path of this trip's in-project copy while that file
-    // is gone from disk; empty otherwise. missingCopiesChanged drives the
-    // refresh, the same imperative shape as ownerBusy.
-    property string missingCopyPath: ""
-
-    // Absolute on-disk path of the trip's entry file — the attachment
-    // directory the manager holds, joined with the project-relative
-    // entryFile. Refreshed imperatively: attachmentDir has no NOTIFY, and
-    // an attach that fills it lands with solveNeeded.
-    property string entryFilePath: ""
-
-    // Whether the file this trip's copy came from has moved on since the
-    // copy. Read from the manager's status model, whose statusFor has no
-    // NOTIFY — statusesChanged drives the refresh, the same imperative
-    // shape as ownerBusy.
-    property bool sourceChangedSinceCopy: false
+    // What the manager knows about this trip, all of it read
+    // imperatively; see ExternalCenterlineOwnerState.
+    readonly property bool ownerBusy: ownerStateId.ownerBusy
+    readonly property bool fileOwnsDeclination: ownerStateId.fileOwnsDeclination
+    readonly property string missingCopyPath: ownerStateId.missingCopyPath
+    readonly property string entryFilePath: ownerStateId.entryFilePath
+    readonly property bool sourceChangedSinceCopy: ownerStateId.sourceChangedSinceCopy
 
     signal stationClicked(cwStationHandle stationHandle)
-
-    function updateSourceChangedSinceCopy() {
-        sourceChangedSinceCopy = trip !== null
-                && externalCenterlineManager.sourceStatusModel.statusFor(trip.id)
-                   === ExternalSourceStatusModel.Changed
-    }
-
-    function updateOwnerBusy() {
-        ownerBusy = trip !== null && externalCenterlineManager.isOwnerBusy(trip.id)
-    }
-
-    function updateMissingCopyPath() {
-        missingCopyPath = trip === null
-                ? "" : externalCenterlineManager.missingCopyPath(trip.id)
-    }
-
-    function updateEntryFilePath() {
-        entryFilePath = trip === null
-                ? "" : FileRevealer.resolvedPath(
-                           externalCenterlineManager.attachmentDir(trip.id),
-                           trip.externalCenterline.entryFile)
-    }
 
     function openReplaceDialog() {
         replaceDialogLoaderId.active = true
         replaceDialogLoaderId.item.open()
     }
 
-    function updateFileOwnsDeclination() {
-        fileOwnsDeclination = trip === null
-                || externalCenterlineManager.fileOwnsDeclination(trip.id)
-    }
+    ExternalCenterlineOwnerState {
+        id: ownerStateId
 
-    // Everything the manager answers imperatively, read in one go — for a
-    // trip that just arrived, and for this panel's own first frame.
-    function refreshFromManager() {
-        updateOwnerBusy()
-        updateFileOwnsDeclination()
-        updateMissingCopyPath()
-        updateEntryFilePath()
-        updateSourceChangedSinceCopy()
-    }
-
-    onTripChanged: refreshFromManager()
-
-    QQ.Component.onCompleted: refreshFromManager()
-
-    QQ.Connections {
-        target: root.externalCenterlineManager.sourceStatusModel
-
-        function onStatusesChanged() {
-            root.updateSourceChangedSinceCopy()
-        }
-    }
-
-    QQ.Connections {
-        target: root.externalCenterlineManager
-
-        function onOwnerBusyChanged(ownerId) {
-            root.updateOwnerBusy()
-        }
-
-        function onSolveNeeded() {
-            root.updateFileOwnsDeclination()
-            root.updateEntryFilePath()
-        }
-
-        function onMissingCopiesChanged() {
-            root.updateMissingCopyPath()
-        }
+        owner: root.trip
+        manager: root.externalCenterlineManager
     }
 
     // The floating answer for this trip, as bindings. stationHandles is the
@@ -232,7 +155,7 @@ QQ.Item {
         active: false
         sourceComponent: QQ.Component {
             ReplaceCenterlineDialog {
-                trip: root.trip
+                owner: root.trip
 
                 // Freed once it is off the screen, for the same reason it is
                 // built late. Deferred out of the close handler so the popup
@@ -247,7 +170,7 @@ QQ.Item {
         ExternalCenterlineAttachedHeader {
             id: attachedHeaderItemId
 
-            trip: root.trip
+            owner: root.trip
             externalSourceSettings: root.externalSourceSettings
             actionsEnabled: !root.ownerBusy
             entryFilePath: root.entryFilePath

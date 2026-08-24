@@ -10,11 +10,11 @@ import QtQuick.Controls as QC
 import QtQuick.Layouts
 import cavewherelib
 
-// Replace dialog for an already-attached trip
+// Replace dialog for an already-attached owner — a trip or a cave
 // (plans/EXTERNAL_FILE_LIVE_LINK_RETIREMENT.html commit 1). Pick a new
 // entry file, preview the scan, and swap the whole closure in one
 // operation: the manager reconciles the new file's dependencies into
-// the trip's existing attachment dir and garbage-collects whatever the
+// the owner's existing attachment dir and garbage-collects whatever the
 // new file stops referencing.
 //
 // The dialog itself is the confirmation the plan calls for (§7): a
@@ -24,7 +24,7 @@ QQ.Item {
     id: root
     objectName: "replaceCenterlineDialog"
 
-    property Trip trip: null
+    property QQ.QtObject owner: null
 
     // The dialog is off the screen again — succeeded, canceled, or dismissed.
     // Whoever built it can drop it here.
@@ -33,9 +33,9 @@ QQ.Item {
     function open() {
         // The breadcrumb only chooses where Browse starts. The field
         // stays empty: the replacement is a different file than the one
-        // the trip was attached from.
-        pickerId.initialFolder = trip !== null
-                ? RootData.externalSourceSettings.breadcrumbFolder(trip.id)
+        // the owner was attached from.
+        pickerId.initialFolder = owner !== null
+                ? RootData.externalSourceSettings.breadcrumbFolder(owner.id)
                 : ""
         pickerId.clear()
         sessionId.reset()
@@ -72,7 +72,7 @@ QQ.Item {
                 Layout.fillWidth: true
                 elide: QC.Label.ElideMiddle
                 text: qsTr("Currently attached: %1").arg(
-                          root.trip !== null ? root.trip.externalCenterline.entryFile : "")
+                          root.owner !== null ? root.owner.externalCenterline.entryFile : "")
             }
 
             ExternalCenterlineFilePicker {
@@ -138,10 +138,14 @@ QQ.Item {
                 QC.Button {
                     objectName: "replaceConfirmButton"
                     text: qsTr("Replace")
-                    enabled: root.trip !== null && pickerId.valid && !sessionId.busy
+                    enabled: root.owner !== null && pickerId.valid && !sessionId.busy
                     onClicked: {
-                        sessionId.start(root.trip)
-                        RootData.replaceTripCenterline(root.trip, pickerId.sourcePath)
+                        sessionId.start(root.owner)
+                        if (root.owner instanceof Cave) {
+                            RootData.replaceCaveCenterline(root.owner, pickerId.sourcePath)
+                        } else {
+                            RootData.replaceTripCenterline(root.owner, pickerId.sourcePath)
+                        }
                     }
                 }
             }

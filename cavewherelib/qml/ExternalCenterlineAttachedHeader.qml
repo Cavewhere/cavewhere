@@ -10,7 +10,8 @@ import QtQuick.Controls as QC
 import QtQuick.Layouts
 import cavewherelib
 
-// Attached-mode header for the external-centerline trip panel: entry
+// Attached-mode header for an external-centerline owner — a trip or a
+// cave, both of which expose externalCenterline and id: entry
 // filename + format + the Replace… action, and the provenance line
 // ("Copied from: <path>" or "Copied from an unknown location (this
 // machine)"), which names where the copy came from — every action on
@@ -20,12 +21,12 @@ ColumnLayout {
     id: root
     objectName: "attachedHeader"
 
-    property Trip trip: null
+    property QQ.QtObject owner: null
     property ExternalSourceSettings externalSourceSettings: null
     property bool actionsEnabled: true
 
-    // Absolute on-disk path of entryFile, resolved by the panel against
-    // the trip's attachment directory. Empty when there is nothing to
+    // Absolute on-disk path of entryFile, resolved by the host against
+    // the owner's attachment directory. Empty when there is nothing to
     // resolve, which leaves the file-name context menu disabled.
     property string entryFilePath: ""
 
@@ -62,9 +63,9 @@ ColumnLayout {
     // plain line.
     readonly property bool showChangedSuffix: sourceKnown && sourceChangedSinceCopy
 
-    readonly property string entryFile: trip !== null ? trip.externalCenterline.entryFile : ""
+    readonly property string entryFile: owner !== null ? owner.externalCenterline.entryFile : ""
     readonly property string fileName: entryFile.substring(entryFile.lastIndexOf("/") + 1)
-    readonly property string formatName: trip !== null ? trip.externalCenterline.format : ""
+    readonly property string formatName: owner !== null ? owner.externalCenterline.format : ""
     readonly property bool attached: entryFile.length > 0
 
     spacing: Theme.tightSpacing
@@ -83,14 +84,14 @@ ColumnLayout {
     }
 
     function updateRememberedSource() {
-        if (trip === null || externalSourceSettings === null) {
+        if (owner === null || externalSourceSettings === null) {
             rememberedSourcePath = ""
             return
         }
-        rememberedSourcePath = externalSourceSettings.breadcrumbPath(trip.id)
+        rememberedSourcePath = externalSourceSettings.breadcrumbPath(owner.id)
     }
 
-    onTripChanged: updateRememberedSource()
+    onOwnerChanged: updateRememberedSource()
     onExternalSourceSettingsChanged: updateRememberedSource()
     QQ.Component.onCompleted: updateRememberedSource()
 
@@ -115,7 +116,7 @@ ColumnLayout {
 
             // The row shows a bare file name and elides it; hovering names
             // the whole path of the copy inside the project, which is the
-            // file every verb on this panel acts on.
+            // file every verb on this header acts on.
             QC.ToolTip.visible: fileHoverId.hovered && root.entryFilePath.length > 0
             QC.ToolTip.text: root.entryFilePath
             QC.ToolTip.delay: Theme.toolTipDelay
