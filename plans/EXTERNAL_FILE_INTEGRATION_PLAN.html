@@ -2193,6 +2193,15 @@ QQ.Item {
   (detach to restore)"</em> hints at their presence.
 </p>
 
+<p class="meta">
+  <strong>Superseded (2026-08-24, Phase 3 planning pass):</strong> the paragraph
+  above predates the Scope-trip resolution. As planned in
+  <a href="EXTERNAL_FILE_PHASE3.html">EXTERNAL_FILE_PHASE3.html</a>, the trip table
+  stays and shows the auto-created 📎 Scope trips; the cave-level CavePage is a
+  summary card plus the normal trip table, and a cave-level attach only happens on
+  a fresh cave (no native trips exist to hide).
+</p>
+
 <h4>Mixed mode</h4>
 <pre><code>┌─ CavePage  "Main Cave System" ──────────────────────────────────┐
 │  Length: 1.2km · Depth: 89m                                     │
@@ -2583,35 +2592,22 @@ QQ.Item {
 
 <div class="phase" id="p3">
   <h3>Phase 3 &mdash; Cave-level attach + nav badging</h3>
-  <p class="meta">Goal: same as Phase 2 but at the cave level, plus badges in the nav tree to make errors discoverable from anywhere.</p>
+  <p class="meta">Goal: same as Phase 2 but at the cave level, plus solve badges on the cave and trip rows the user navigates by.</p>
 
-  <h4>UI (per &sect;8.6 wireframes)</h4>
-  <ul>
-    <li>Three CavePage states &mdash; native-only (today), cave-level external, mixed &mdash; selected by the presence of cave-level <code>externalCenterline</code> and/or any trip-level attachments. State transitions per &sect;8.7.</li>
-    <li>Single entry point to cave-level attach: DataMainPage &mdash; "Add Cave &#x25BE; &rarr; External cave&hellip;" creates the cave and opens the attach dialog in one step. (No CavePage affordance in v1 to convert an existing Native cave.)</li>
-    <li>"Add Trip" button becomes a split button with "Native trip" / "External centerline&hellip;" options.</li>
-    <li>After cave-level attach, auto-create one cwTrip (Scope state, <code>stationPrefix</code> set) per resolved <code>*begin</code> block with &ge; 1 station. No dialog &mdash; trips just appear, named after their block. User renames/deletes any they don't want.</li>
-    <li>External trips (Attached and Scope alike) get a 📎 prefix in the trip table and em-dash declination. Same badge for both &mdash; from the user's perspective, both are "trips whose data isn't owned by CaveWhere."</li>
-    <li>Badge on cave/trip nodes in the nav tree: red dot on cavern errors, yellow on warnings, none when clean. Click navigates to CavernOutputPage with that section anchored.</li>
-    <li><strong>Station-validator predicate must extend to the parent
-      cave</strong> <em>(commit-13 review, 2026-07-20)</em>. &sect;7.2
-      requires the relaxed station grammar for an externally backed
-      <em>cave or trip</em>, but the Phase-2 validator bindings
-      (<code>NoteStation.qml</code>, <code>NoteLiDARStationItem.qml</code>)
-      check only <code>trip.externalCenterline</code> &mdash; Scope
-      trips under a cave-level attach carry <code>stationPrefix</code>,
-      not <code>externalCenterline</code>, so their note inputs would
-      stay strict. Fix via the shared <code>externallyBacked</code>
-      predicate on <code>cwTrip</code> (Phase-2 plan &sect;15, commit-13
-      review R2) ORing in the parent cave, rather than patching each
-      QML site.</li>
-  </ul>
-
-  <h4>Acceptance criteria</h4>
-  <ul>
-    <li>QML test: attach a fixture <code>.svx</code> at cave level, verify the trip list reflects the resolved trips from the file (or a stand-in indicator) and is read-only.</li>
-    <li>QML test: introduce a cavern error, verify the badge appears on the affected cave node and clicking it navigates to the right section of CavernOutputPage.</li>
-  </ul>
+  <div class="note">
+    <strong>Phase 3's full plan lives in
+    <a href="EXTERNAL_FILE_PHASE3.html">plans/EXTERNAL_FILE_PHASE3.html</a></strong>
+    (planning pass 2026-08-24). That file is the source of truth for Phase 3's
+    current-state audit, the common-ancestor rebase of the attachment copy layout,
+    the Scope-trip auto-creation design, the settled UX (see the
+    <a href="EXTERNAL_CENTERLINE_UX_INTERACTIVE.html">interactive prototype</a>,
+    Phase 3 lane), the 11-commit sequence (P3.1&ndash;P3.11), per-commit test gates,
+    and fixture files. Two restatements against this section's original text: the
+    "nav tree" badging became row badging on DataMainPage cave rows and CavePage trip
+    rows (no nav tree exists), and the <code>externallyBacked</code> validator
+    predicate ships as plan commit P3.6. The cross-cutting test rules in
+    &sect;10.1 apply unchanged.
+  </div>
 </div>
 
 <div class="phase" id="p4">
