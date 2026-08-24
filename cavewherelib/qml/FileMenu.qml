@@ -176,7 +176,7 @@ QC.Menu {
 
 
         QC.MenuItem {
-            text: "Render Memory HUD"
+            text: "Render Stats HUD"
             checked: RootData.settings.renderingSettings.showRenderStatsHud
             checkable: true
             onTriggered: {

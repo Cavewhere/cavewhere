@@ -21,7 +21,7 @@ QString screenSpaceErrorPxKey() { return QStringLiteral("rendering/screenSpaceEr
 // the device's supported set if 4 happens to be unavailable.
 constexpr int kDefaultSampleCount = 4;
 
-// The render-memory HUD is a debugging aid, so it stays off until asked for.
+// The render-stats HUD is a debugging aid, so it stays off until asked for.
 constexpr bool kDefaultShowRenderStatsHud = false;
 
 // Budget knobs, advisory in Phase 1 (see the header). The minimums keep a

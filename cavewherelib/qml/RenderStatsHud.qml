@@ -22,7 +22,7 @@ QQ.Rectangle {
     readonly property int separatorHeight: 1
     readonly property int bytesPerMegabyte: 1024 * 1024
     readonly property int gpuMemoryBudgetMb: RootData.settings.renderingSettings.gpuMemoryBudgetMb
-    readonly property bool overBudget: memoryModelId.totalGpuBytes > hudRootId.gpuMemoryBudgetMb * hudRootId.bytesPerMegabyte
+    readonly property bool overBudget: statsModelId.totalGpuBytes > hudRootId.gpuMemoryBudgetMb * hudRootId.bytesPerMegabyte
 
     visible: RootData.settings.renderingSettings.showRenderStatsHud
 
@@ -33,7 +33,7 @@ QQ.Rectangle {
     radius: Theme.floatingWidgetRadius
 
     RenderingStatsModel {
-        id: memoryModelId
+        id: statsModelId
         running: hudRootId.visible
     }
 
@@ -44,7 +44,7 @@ QQ.Rectangle {
         spacing: Theme.tightSpacing
 
         QQ.Repeater {
-            model: memoryModelId
+            model: statsModelId
 
             delegate: RowLayout {
                 id: rowId
@@ -105,7 +105,7 @@ QQ.Rectangle {
             // nothing is evicted.
             QC.Label {
                 objectName: "renderStatsHudTotal"
-                text: memoryModelId.totalGpuText
+                text: statsModelId.totalGpuText
                 color: hudRootId.overBudget ? Theme.warning : Theme.text
                 font.family: Theme.fontFamilyMono
                 font.pixelSize: Theme.fontSizeCaption
@@ -126,10 +126,10 @@ QQ.Rectangle {
         QC.Label {
             objectName: "renderStatsHudCulling"
             text: qsTr("Culled: %1/%2 objects · %3/%4 items")
-                .arg(memoryModelId.culledObjects)
-                .arg(memoryModelId.totalObjects)
-                .arg(memoryModelId.culledItems)
-                .arg(memoryModelId.totalItems)
+                .arg(statsModelId.culledObjects)
+                .arg(statsModelId.totalObjects)
+                .arg(statsModelId.culledItems)
+                .arg(statsModelId.totalItems)
             color: Theme.text
             font.pixelSize: Theme.fontSizeCaption
         }

@@ -28,7 +28,7 @@ QQ.Item {
         QC.MenuItem {
             id: hudMenuItemId
             objectName: "hudMenuItem"
-            text: "Render Memory HUD"
+            text: "Render Stats HUD"
             checked: rootId.renderingSettings.showRenderStatsHud
             checkable: true
             onTriggered: {

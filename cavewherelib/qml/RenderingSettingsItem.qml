@@ -120,7 +120,7 @@ ColumnLayout {
             HelpArea {
                 id: gpuBudgetHelpId
                 Layout.fillWidth: true
-                text: "How much video memory CaveWhere aims to keep its render resources under. The render memory HUD colors its total when the project goes over. Nothing is unloaded yet — for now the budget only reports."
+                text: "How much video memory CaveWhere aims to keep its render resources under. The render stats HUD colors its total when the project goes over. Nothing is unloaded yet — for now the budget only reports."
             }
         }
     }
@@ -137,7 +137,7 @@ ColumnLayout {
 
                 QC.CheckBox {
                     objectName: "showRenderStatsHudCheckBox"
-                    text: "Show render memory HUD"
+                    text: "Show render stats HUD"
                     checked: itemId.renderingSettings.showRenderStatsHud
                     onToggled: {
                         itemId.renderingSettings.showRenderStatsHud = checked

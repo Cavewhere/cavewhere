@@ -20,7 +20,7 @@ class QQuickRhiItem;
 //
 // The budget knobs (gpuMemoryBudgetMb, cpuCacheBudgetMb, uploadBudgetMbPerFrame,
 // screenSpaceErrorPx) are advisory in Phase 1: Phase 2's residency manager
-// enforces them. Today the only consumer is the render-memory HUD, which reports
+// enforces them. Today the only consumer is the render-stats HUD, which reports
 // the GPU total against gpuMemoryBudgetMb.
 class CAVEWHERE_LIB_EXPORT cwRenderingSettings : public QObject
 {
