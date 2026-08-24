@@ -14,10 +14,83 @@
 
 //Qt includes
 #include <QDate>
+#include <QList>
+#include <QMetaType>
+#include <QString>
 #include <QStringList>
+#include <QtQml/qqmlregistration.h>
 
 //Std includes
 #include <optional>
+
+/**
+ * One survey block found while scanning an entry file's dependency
+ * closure: a named region of the survey whose stations share a
+ * prefix. Phase 3 turns each block into a Scope trip.
+ *
+ * path is the dotted name relative to the file root, spelled exactly
+ * as the file writes it - "big-passage.east" for an *end-nested
+ * Survex block. stationCount counts the distinct station names
+ * appearing in the block's OWN shot lines; stations belonging to a
+ * child block are counted against that child, so the counts of a
+ * whole tree sum to the file's stations. depth is the number of
+ * ancestors (0 for a top-level block).
+ *
+ * Per-format mapping:
+ *   Survex  - the *begin / *end tree. An anonymous *begin folds
+ *             into its parent: it makes no block and its shots
+ *             count toward the enclosing named block.
+ *   Compass - one block per survey header in each .dat, flat
+ *             (depth 0), path = the "SURVEY NAME:" value.
+ *   Walls   - one block per referenced .srv, flat (depth 0),
+ *             path = the .SURVEY entry's display title, or the
+ *             file's stem when the project gives no title. This is
+ *             an approximation: Walls has no *begin tree, so a .srv
+ *             is the closest thing it has to a named block.
+ */
+class CAVEWHERE_LIB_EXPORT cwScanBlock
+{
+    Q_GADGET
+    QML_VALUE_TYPE(cwScanBlock)
+
+    Q_PROPERTY(QString path MEMBER path FINAL)
+    Q_PROPERTY(QString name READ name FINAL)
+    Q_PROPERTY(int stationCount MEMBER stationCount FINAL)
+    Q_PROPERTY(int depth MEMBER depth FINAL)
+
+public:
+    QString path;
+    int stationCount = 0;
+    int depth = 0;
+
+    /**
+     * The block's own segment - the last dotted segment of path.
+     * Approximation for Compass and Walls, whose survey names may
+     * themselves contain a dot: such a name splits at its last dot.
+     */
+    QString name() const { return path.section(QLatin1Char('.'), -1); }
+
+    bool operator==(const cwScanBlock& other) const
+    {
+        return path == other.path
+            && stationCount == other.stationCount
+            && depth == other.depth;
+    }
+    bool operator!=(const cwScanBlock& other) const { return !(*this == other); }
+};
+
+//The dialog's tree preview walks the whole list in qml, so the list
+//itself has to be a qml sequence. See
+//cwExternalSourceAttentionRowListRegistration for the same pattern.
+class cwScanBlockListRegistration
+{
+    Q_GADGET
+    QML_FOREIGN(QList<cwScanBlock>)
+    QML_ANONYMOUS
+    QML_SEQUENTIAL_CONTAINER(cwScanBlock)
+};
+
+Q_DECLARE_METATYPE(cwScanBlock)
 
 /**
  * Free-function scanner that walks the dependency closure of an
@@ -126,6 +199,22 @@ struct ScanResult {
     QStringList entryDirectIncludes;
 
     /**
+     * Every named survey block in the closure, in document order -
+     * a parent always precedes its children. Feeds Scope-trip
+     * creation and the attach dialog's structure preview. See
+     * cwScanBlock for the per-format mapping.
+     */
+    QList<cwScanBlock> blocks;
+
+    /**
+     * True when the entry file itself carries shot data outside any
+     * included file. False for a pure driver - a Survex master that
+     * only writes *include lines, a Compass .mak, a Walls .wpj -
+     * which is half of the multi-cave heuristic's trigger.
+     */
+    bool entryHasOwnShots = false;
+
+    /**
      * Trip metadata seeded from the entry file. Participates in
      * equality so a metadata-only edit (e.g. adding *calibrate
      * declination) reads as a changed scan.
@@ -137,6 +226,8 @@ struct ScanResult {
         return dependencies == other.dependencies
             && warnings == other.warnings
             && entryDirectIncludes == other.entryDirectIncludes
+            && blocks == other.blocks
+            && entryHasOwnShots == other.entryHasOwnShots
             && seededMetadata == other.seededMetadata;
     }
     bool operator!=(const ScanResult& other) const { return !(*this == other); }

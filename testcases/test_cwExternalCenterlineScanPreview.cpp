@@ -107,3 +107,40 @@ TEST_CASE("scan preview supersedes in-flight scans on rapid path changes",
     CHECK(preview.errorMessage().isEmpty());
     CHECK(preview.warnings().isEmpty());
 }
+
+TEST_CASE("scan preview exposes the block tree and the multi-cave signals",
+          "[ScanPreview]")
+{
+    cwExternalCenterlineScanPreview preview;
+    CHECK(preview.blocks().isEmpty());
+    CHECK(preview.topLevelBlockCount() == 0);
+    CHECK_FALSE(preview.entryHasOwnShots());
+    CHECK(preview.entryDirectIncludes().isEmpty());
+
+    // A single cave with a nested block tree.
+    preview.setSourcePath(fixturePath(QStringLiteral("survex_blocks.svx")));
+    REQUIRE(tryWait(kWatcherWaitMs, [&] { return !preview.scanning(); }));
+    REQUIRE(preview.valid());
+    CHECK(preview.blocks().size() == 4);
+    CHECK(preview.blocks().first().path == QStringLiteral("doghill"));
+    CHECK(preview.topLevelBlockCount() == 1);
+    CHECK(preview.entryHasOwnShots());
+    CHECK(preview.entryDirectIncludes().isEmpty());
+
+    // A region master: several top-level blocks, no shots of its own -
+    // the multi-cave heuristic's trigger.
+    preview.setSourcePath(fixturePath(QStringLiteral("survex_master/master.svx")));
+    REQUIRE(tryWait(kWatcherWaitMs, [&] { return !preview.scanning(); }));
+    REQUIRE(preview.valid());
+    CHECK(preview.blocks().size() == 3);
+    CHECK(preview.topLevelBlockCount() == 3);
+    CHECK_FALSE(preview.entryHasOwnShots());
+    CHECK(preview.entryDirectIncludes().size() == 3);
+
+    // Clearing the path wipes the block tree with everything else.
+    preview.setSourcePath(QString());
+    CHECK(preview.blocks().isEmpty());
+    CHECK(preview.topLevelBlockCount() == 0);
+    CHECK_FALSE(preview.entryHasOwnShots());
+    CHECK(preview.entryDirectIncludes().isEmpty());
+}

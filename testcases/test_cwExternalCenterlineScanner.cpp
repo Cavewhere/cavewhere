@@ -1028,3 +1028,185 @@ TEST_CASE("entryDirectIncludes leaves out a file that includes itself",
     CHECK(anyWarningContains(scan, QStringLiteral("circular include")));
     CHECK(scan.entryDirectIncludes.isEmpty());
 }
+
+TEST_CASE("blocks map a Survex *begin tree with per-block station counts",
+          "[Scanner][Blocks]")
+{
+    const QString path = datasetExternalCenterlinePath(QStringLiteral("survex_blocks.svx"));
+    REQUIRE(QFileInfo::exists(path));
+
+    auto result = cwExternalCenterlineScanner::scanSurvex(path);
+    REQUIRE_FALSE(result.hasError());
+    const ScanResult scan = result.value();
+
+    // Block extraction must leave the walk's own outcome alone.
+    CHECK(scan.dependencies.size() == 1);
+    CHECK(scan.warnings.isEmpty());
+
+    REQUIRE(scan.blocks.size() == 4);
+    // Document order: a parent always precedes its children.
+    CHECK(scan.blocks.at(0).path == QStringLiteral("doghill"));
+    CHECK(scan.blocks.at(0).name() == QStringLiteral("doghill"));
+    CHECK(scan.blocks.at(0).depth == 0);
+    CHECK(scan.blocks.at(0).stationCount == 3);
+
+    CHECK(scan.blocks.at(1).path == QStringLiteral("doghill.big-passage"));
+    CHECK(scan.blocks.at(1).name() == QStringLiteral("big-passage"));
+    CHECK(scan.blocks.at(1).depth == 1);
+    CHECK(scan.blocks.at(1).stationCount == 4);
+
+    CHECK(scan.blocks.at(2).path == QStringLiteral("doghill.big-passage.east"));
+    CHECK(scan.blocks.at(2).name() == QStringLiteral("east"));
+    CHECK(scan.blocks.at(2).depth == 2);
+    CHECK(scan.blocks.at(2).stationCount == 5);
+
+    // A block with no shots of its own is still reported, at 0.
+    CHECK(scan.blocks.at(3).path == QStringLiteral("doghill.big-passage.sump"));
+    CHECK(scan.blocks.at(3).depth == 2);
+    CHECK(scan.blocks.at(3).stationCount == 0);
+
+    CHECK(scan.entryHasOwnShots);
+}
+
+TEST_CASE("blocks nest across an *include boundary", "[Scanner][Blocks]")
+{
+    const QString path = datasetExternalCenterlinePath(QStringLiteral("survex_nested.svx"));
+    REQUIRE(QFileInfo::exists(path));
+
+    auto result = cwExternalCenterlineScanner::scanSurvex(path);
+    REQUIRE_FALSE(result.hasError());
+    const ScanResult scan = result.value();
+
+    // Entrance lives in entrance.svx and Passage in passage.svx, yet
+    // both nest under the Nested block opened by the entry file.
+    REQUIRE(scan.blocks.size() == 3);
+    CHECK(scan.blocks.at(0).path == QStringLiteral("Nested"));
+    CHECK(scan.blocks.at(0).depth == 0);
+    CHECK(scan.blocks.at(0).stationCount == 0);
+    CHECK(scan.blocks.at(1).path == QStringLiteral("Nested.Entrance"));
+    CHECK(scan.blocks.at(1).depth == 1);
+    CHECK(scan.blocks.at(1).stationCount == 3);  // E1, E2, Passage.P1
+    CHECK(scan.blocks.at(2).path == QStringLiteral("Nested.Entrance.Passage"));
+    CHECK(scan.blocks.at(2).depth == 2);
+    CHECK(scan.blocks.at(2).stationCount == 3);  // P1, P2, P3
+
+    // The entry writes only *begin / *include / *end.
+    CHECK_FALSE(scan.entryHasOwnShots);
+}
+
+TEST_CASE("an anonymous *begin folds its shots into the parent block",
+          "[Scanner][Blocks]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString path = tempPath(tempDir, QStringLiteral("anonymous.svx"));
+    writeUtf8File(path,
+                  QByteArrayLiteral("*begin Named\n"
+                                    "*data normal from to tape compass clino\n"
+                                    "N1 N2 5.0 0 0\n"
+                                    "*begin\n"
+                                    "N2 N3 5.0 0 0\n"
+                                    "*end\n"
+                                    "N3 N4 5.0 0 0\n"
+                                    "*end Named\n"));
+
+    auto result = cwExternalCenterlineScanner::scanSurvex(path);
+    REQUIRE_FALSE(result.hasError());
+    const ScanResult scan = result.value();
+
+    REQUIRE(scan.blocks.size() == 1);
+    CHECK(scan.blocks.first().path == QStringLiteral("Named"));
+    CHECK(scan.blocks.first().depth == 0);
+    CHECK(scan.blocks.first().stationCount == 4);  // N1 .. N4
+    CHECK(scan.entryHasOwnShots);
+}
+
+TEST_CASE("a Survex master of *include lines has no shots of its own",
+          "[Scanner][Blocks]")
+{
+    const QString path =
+        datasetExternalCenterlinePath(QStringLiteral("survex_master/master.svx"));
+    REQUIRE(QFileInfo::exists(path));
+
+    auto result = cwExternalCenterlineScanner::scanSurvex(path);
+    REQUIRE_FALSE(result.hasError());
+    const ScanResult scan = result.value();
+
+    CHECK_FALSE(scan.entryHasOwnShots);
+    CHECK(scan.entryDirectIncludes.size() == 3);
+
+    REQUIRE(scan.blocks.size() == 3);
+    for (const cwScanBlock& block : scan.blocks) {
+        CHECK(block.depth == 0);
+    }
+    CHECK(scan.blocks.at(0).path == QStringLiteral("alpha"));
+    CHECK(scan.blocks.at(0).stationCount == 2);
+    CHECK(scan.blocks.at(1).path == QStringLiteral("bravo"));
+    CHECK(scan.blocks.at(1).stationCount == 3);
+    CHECK(scan.blocks.at(2).path == QStringLiteral("charlie"));
+    CHECK(scan.blocks.at(2).stationCount == 4);
+}
+
+TEST_CASE("blocks name each Compass survey, flat", "[Scanner][Blocks]")
+{
+    {
+        const QString path =
+            datasetExternalCenterlinePath(QStringLiteral("compass_multi.mak"));
+        auto result = cwExternalCenterlineScanner::scanCompass(path);
+        REQUIRE_FALSE(result.hasError());
+        const ScanResult scan = result.value();
+
+        REQUIRE(scan.blocks.size() == 2);
+        CHECK(scan.blocks.at(0).path == QStringLiteral("A"));
+        CHECK(scan.blocks.at(0).depth == 0);
+        CHECK(scan.blocks.at(0).stationCount == 2);
+        CHECK(scan.blocks.at(1).path == QStringLiteral("B"));
+        CHECK(scan.blocks.at(1).depth == 0);
+        CHECK(scan.blocks.at(1).stationCount == 2);
+        // The .mak holds no shots itself.
+        CHECK_FALSE(scan.entryHasOwnShots);
+    }
+    {
+        const QString path =
+            datasetExternalCenterlinePath(QStringLiteral("compass_simple.dat"));
+        auto result = cwExternalCenterlineScanner::scanCompass(path);
+        REQUIRE_FALSE(result.hasError());
+        const ScanResult scan = result.value();
+
+        REQUIRE(scan.blocks.size() == 1);
+        CHECK(scan.blocks.first().path == QStringLiteral("A"));
+        CHECK(scan.blocks.first().stationCount == 2);
+        CHECK(scan.entryHasOwnShots);
+    }
+}
+
+TEST_CASE("blocks stand in for each Walls .srv", "[Scanner][Blocks]")
+{
+    {
+        const QString path =
+            datasetExternalCenterlinePath(QStringLiteral("walls_simple.wpj"));
+        auto result = cwExternalCenterlineScanner::scanWalls(path);
+        REQUIRE_FALSE(result.hasError());
+        const ScanResult scan = result.value();
+
+        REQUIRE(scan.blocks.size() == 1);
+        // The .SURVEY display title, not the MAIN file stem.
+        CHECK(scan.blocks.first().path == QStringLiteral("Main Passage"));
+        CHECK(scan.blocks.first().depth == 0);
+        CHECK(scan.blocks.first().stationCount == 4);  // A1 .. A4
+        CHECK_FALSE(scan.entryHasOwnShots);
+    }
+    {
+        const QString path = datasetExternalCenterlinePath(QStringLiteral("MAIN.SRV"));
+        auto result = cwExternalCenterlineScanner::scanWalls(path);
+        REQUIRE_FALSE(result.hasError());
+        const ScanResult scan = result.value();
+
+        REQUIRE(scan.blocks.size() == 1);
+        // No project to title it, so the file's stem names the block.
+        CHECK(scan.blocks.first().path == QStringLiteral("MAIN"));
+        CHECK(scan.blocks.first().stationCount == 4);
+        CHECK(scan.entryHasOwnShots);
+    }
+}

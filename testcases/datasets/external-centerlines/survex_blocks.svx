@@ -1,0 +1,32 @@
+; Nested block tree used by the Phase 3 scanner / Scope-trip tests.
+; One top-level cave block (doghill) with two levels of children, one
+; empty block (sump), and a distinct station count per block so a test
+; can tell them apart:
+;   doghill                    3 stations (d1, d2, big-passage.p1)
+;   doghill.big-passage        4 stations (p1, p2, p3, east.e1)
+;   doghill.big-passage.east   5 stations (e1 .. e5)
+;   doghill.big-passage.sump   0 stations
+; *fix d1 plus the cross-scope shots keep the whole file one connected
+; component, so cavern solves it.
+*begin doghill
+*fix d1 0 0 0
+*data normal from to tape compass clino
+d1 d2 10.0 0 0
+d2 big-passage.p1 2.0 0 0
+
+*begin big-passage
+p1 p2 5.0 90 0
+p2 p3 4.0 90 0
+p3 east.e1 1.0 0 0
+
+*begin east
+e1 e2 3.0 45 0
+e2 e3 3.0 45 0
+e3 e4 3.0 45 0
+e4 e5 3.0 45 0
+*end east
+
+*begin sump
+*end sump
+*end big-passage
+*end doghill

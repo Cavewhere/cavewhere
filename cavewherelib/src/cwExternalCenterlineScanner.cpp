@@ -140,6 +140,30 @@ const QRegularExpression& survexIncludeRegex()
     return regex;
 }
 
+const QRegularExpression& survexBeginRegex()
+{
+    static const QRegularExpression regex(
+        QStringLiteral(R"RX(^\*begin\b(?:\s+(\S+))?)RX"),
+        QRegularExpression::CaseInsensitiveOption);
+    return regex;
+}
+
+const QRegularExpression& survexEndRegex()
+{
+    static const QRegularExpression regex(
+        QStringLiteral(R"RX(^\*end\b)RX"),
+        QRegularExpression::CaseInsensitiveOption);
+    return regex;
+}
+
+const QRegularExpression& survexDataRegex()
+{
+    static const QRegularExpression regex(
+        QStringLiteral(R"RX(^\*data\s+(\S+))RX"),
+        QRegularExpression::CaseInsensitiveOption);
+    return regex;
+}
+
 /**
  * Strips a trailing Survex comment ("; ...") and any leading /
  * trailing whitespace. Used as a pre-step before regex matching so
@@ -160,6 +184,63 @@ QString includeTargetWithExtension(const QString& target)
     return target;
 }
 
+// Marks an open *begin that named no block: it makes no cwScanBlock
+// and its stations fold into the nearest named ancestor.
+constexpr int kNoBlock = -1;
+
+// The one Survex data style whose lines carry a single station
+// instead of a from/to pair.
+const QString kSurvexPassageDataStyle = QStringLiteral("passage");
+
+// How many leading tokens of a data line name stations: a from/to
+// pair for every format and style but Survex's passage style.
+constexpr qsizetype kStationsPerShotLine = 2;
+constexpr qsizetype kStationsPerPassageLine = 1;
+
+// Reads a whole file and splits it into decoded lines. Emits no
+// encoding warning: the callers that care (the .svx / .mak walk)
+// decode and warn themselves, while metadata seeding and block
+// extraction are best-effort.
+QStringList readDecodedLines(const QString& filePath)
+{
+    QFile file(filePath);
+    if (!file.open(QFile::ReadOnly)) {
+        return QStringList();
+    }
+    const QByteArray bytes = file.readAll();
+    file.close();
+
+    const DecodedFile decoded = decodeBytes(bytes);
+    return decoded.text.split(QLatin1Char('\n'));
+}
+
+/**
+ * The station names a survey-data line carries: its first count
+ * whitespace-separated tokens, or all of them when the line is
+ * shorter. Every format names its stations in the leading columns.
+ */
+QStringList leadingStationTokens(const QString& line, qsizetype count)
+{
+    static const QRegularExpression whitespace(QStringLiteral(R"RX(\s+)RX"));
+    const QStringList tokens = line.split(whitespace, Qt::SkipEmptyParts);
+    return tokens.size() > count ? tokens.mid(0, count) : tokens;
+}
+
+// Survex spells an unnamed station "-", and "." / ".." name the
+// current and parent survey rather than a station.
+bool isAnonymousStation(const QString& token)
+{
+    return token == QLatin1String("-")
+        || token == QLatin1String(".")
+        || token == QLatin1String("..");
+}
+
+// One *begin currently on the block stack.
+struct OpenBlock {
+    int blockIndex = kNoBlock;
+    QSet<QString> stations;
+};
+
 struct ScanState {
     // canonical paths fully processed; re-includes are silently
     // deduplicated when the file is here but NOT in inProgress
@@ -174,7 +255,111 @@ struct ScanState {
     QStringList entryDirectIncludes;
     // first absolute-include failure; aborts the walk once set
     QString error;
+    // every named block found, in document order (parents first)
+    QList<cwScanBlock> blocks;
+    // the *begin stack, outermost first. It lives on ScanState rather
+    // than per file because Survex block nesting spans *include
+    // boundaries: an included file's *begin nests inside whatever
+    // block was open at the include site.
+    QList<OpenBlock> openBlocks;
+    // the named segments of the open blocks, joined for the dotted path
+    QStringList blockSegments;
+    // per open scope, whether the *data style in force is passage;
+    // index 0 is the file root, which starts in Survex's default
+    // normal style
+    QList<bool> passageStyles = QList<bool>{false};
+    // set when the entry file itself carries shot data
+    bool entryHasOwnShots = false;
+    // the .SURVEY display title of the Walls entry about to be
+    // scanned, handed from the .wpj walk to the .srv block
+    QString pendingWallsTitle;
 };
+
+// inProgress is exactly the recursion stack, so a depth of one means
+// the file being read is the entry file itself.
+bool scanningEntryFile(const ScanState& state)
+{
+    return state.inProgress.size() == 1;
+}
+
+/**
+ * Records a station name against the innermost open named block.
+ * Counts stay current as they are recorded, so an unclosed *begin
+ * still reports the stations it saw. A station outside every block
+ * belongs to the file root, which owns no block.
+ */
+void recordStation(ScanState& state, const QString& station)
+{
+    for (qsizetype i = state.openBlocks.size() - 1; i >= 0; --i) {
+        OpenBlock& open = state.openBlocks[i];
+        if (open.blockIndex == kNoBlock) {
+            continue;
+        }
+        open.stations.insert(station);
+        state.blocks[open.blockIndex].stationCount =
+            static_cast<int>(open.stations.size());
+        return;
+    }
+}
+
+void pushSurvexBlock(ScanState& state, const QString& name)
+{
+    // A *data directive inside a block reverts at its *end, so each
+    // scope starts from the enclosing scope's style.
+    state.passageStyles.append(state.passageStyles.constLast());
+
+    OpenBlock open;
+    if (!name.isEmpty()) {
+        state.blockSegments.append(name);
+
+        cwScanBlock block;
+        block.path = state.blockSegments.join(QLatin1Char('.'));
+        block.depth = static_cast<int>(state.blockSegments.size()) - 1;
+
+        open.blockIndex = static_cast<int>(state.blocks.size());
+        state.blocks.append(block);
+    }
+    state.openBlocks.append(open);
+}
+
+void popSurvexBlock(ScanState& state)
+{
+    if (state.openBlocks.isEmpty()) {
+        // Unbalanced *end. cavern is the authority on that error, so
+        // the scanner just keeps its stack sane.
+        return;
+    }
+    if (state.openBlocks.constLast().blockIndex != kNoBlock) {
+        state.blockSegments.removeLast();
+    }
+    state.openBlocks.removeLast();
+    if (state.passageStyles.size() > 1) {
+        state.passageStyles.removeLast();
+    }
+}
+
+/**
+ * Handles one Survex survey-data line: every style but passage names
+ * a from/to pair in its first two tokens, passage names one station.
+ */
+void recordSurvexDataLine(ScanState& state, const QString& line)
+{
+    const QStringList stations = leadingStationTokens(
+        line, state.passageStyles.constLast() ? kStationsPerPassageLine
+                                              : kStationsPerShotLine);
+    if (stations.isEmpty()) {
+        return;
+    }
+    if (scanningEntryFile(state)) {
+        state.entryHasOwnShots = true;
+    }
+
+    for (const QString& station : stations) {
+        if (!isAnonymousStation(station)) {
+            recordStation(state, station);
+        }
+    }
+}
 
 void scanSurvexFile(const QString& filePath, ScanState& state);
 void scanCompassFile(const QString& filePath, ScanState& state);
@@ -216,11 +401,9 @@ bool rejectAbsolutePath(ScanState& state,
 
 void recordEntryDirectInclude(ScanState& state, const QString& resolvedPath)
 {
-    // inProgress is exactly the recursion stack, so a depth of one
-    // means the file being parsed is the entry file itself. A file
-    // that includes itself resolves back onto the stack; the entry is
-    // not one of its own includes, so leave it out.
-    if (state.inProgress.size() != 1 || resolvedPath.isEmpty()
+    // A file that includes itself resolves back onto the stack; the
+    // entry is not one of its own includes, so leave it out.
+    if (!scanningEntryFile(state) || resolvedPath.isEmpty()
         || state.inProgress.contains(resolvedPath)) {
         return;
     }
@@ -279,10 +462,27 @@ void scanSurvexFile(const QString& filePath, ScanState& state)
         if (line.isEmpty()) {
             continue;
         }
-        // Quick rejection: commands must start with '*'. Cuts the
-        // regex out of the hot path for the common no-directive
-        // line.
+        // A line that is not a command is survey data - the only
+        // place station names come from.
         if (!line.startsWith(QLatin1Char('*'))) {
+            recordSurvexDataLine(state, line);
+            continue;
+        }
+
+        if (const auto beginMatch = survexBeginRegex().match(line);
+            beginMatch.hasMatch()) {
+            pushSurvexBlock(state, beginMatch.captured(1));
+            continue;
+        }
+        if (survexEndRegex().match(line).hasMatch()) {
+            popSurvexBlock(state);
+            continue;
+        }
+        if (const auto dataMatch = survexDataRegex().match(line);
+            dataMatch.hasMatch()) {
+            state.passageStyles.last() =
+                dataMatch.captured(1).compare(kSurvexPassageDataStyle,
+                                              Qt::CaseInsensitive) == 0;
             continue;
         }
 
@@ -348,6 +548,64 @@ const QRegularExpression& compassMakReferenceRegex()
     return regex;
 }
 
+const QRegularExpression& compassSurveyNameRegex()
+{
+    static const QRegularExpression regex(
+        QStringLiteral(R"RX(^SURVEY\s+NAME:\s*(\S+))RX"),
+        QRegularExpression::CaseInsensitiveOption);
+    return regex;
+}
+
+/**
+ * Extracts one flat block per survey in a Compass .dat. Surveys are
+ * separated by form feeds (the same rule parseCompassMetadata uses);
+ * inside a survey the header runs until the column-title line
+ * starting with "FROM", and every line after it is a shot naming its
+ * from/to stations in the first two columns.
+ */
+void collectCompassBlocks(const QString& text, ScanState& state)
+{
+    const QStringList sections = text.split(QLatin1Char('\f'));
+    for (const QString& section : sections) {
+        QString surveyName;
+        QSet<QString> stations;
+        bool inShots = false;
+
+        const QStringList lines = section.split(QLatin1Char('\n'));
+        for (const QString& rawLine : lines) {
+            const QString line = rawLine.trimmed();
+            if (line.isEmpty()) {
+                continue;
+            }
+            if (!inShots) {
+                if (const auto match = compassSurveyNameRegex().match(line);
+                    match.hasMatch()) {
+                    surveyName = match.captured(1);
+                } else if (line.startsWith(QLatin1String("FROM"), Qt::CaseInsensitive)) {
+                    inShots = true;
+                }
+                continue;
+            }
+            for (const QString& station :
+                 leadingStationTokens(line, kStationsPerShotLine)) {
+                stations.insert(station);
+            }
+        }
+
+        if (!stations.isEmpty() && scanningEntryFile(state)) {
+            state.entryHasOwnShots = true;
+        }
+        if (surveyName.isEmpty()) {
+            continue;
+        }
+
+        cwScanBlock block;
+        block.path = surveyName;
+        block.stationCount = static_cast<int>(stations.size());
+        state.blocks.append(block);
+    }
+}
+
 void scanCompassFile(const QString& filePath, ScanState& state)
 {
     const QString canonical = canonicalize(filePath);
@@ -371,23 +629,23 @@ void scanCompassFile(const QString& filePath, ScanState& state)
     state.inProgress.insert(canonical);
     state.dependencies.append(canonical);
 
-    if (isMak) {
-        QFile file(canonical);
-        if (!file.open(QFile::ReadOnly)) {
+    QFile file(canonical);
+    if (!file.open(QFile::ReadOnly)) {
+        recordWarning(state,
+                      QStringLiteral("cannot read %1: %2")
+                          .arg(canonical, file.errorString()));
+    } else {
+        const QByteArray bytes = file.readAll();
+        file.close();
+
+        const DecodedFile decoded = decodeBytes(bytes);
+        if (decoded.usedLatin1Fallback) {
             recordWarning(state,
-                          QStringLiteral("cannot read %1: %2")
-                              .arg(canonical, file.errorString()));
-        } else {
-            const QByteArray bytes = file.readAll();
-            file.close();
+                          QStringLiteral("encoding fallback (UTF-8 invalid, decoded as Latin-1): %1")
+                              .arg(canonical));
+        }
 
-            const DecodedFile decoded = decodeBytes(bytes);
-            if (decoded.usedLatin1Fallback) {
-                recordWarning(state,
-                              QStringLiteral("encoding fallback (UTF-8 invalid, decoded as Latin-1): %1")
-                                  .arg(canonical));
-            }
-
+        if (isMak) {
             const QDir baseDir = QFileInfo(canonical).absoluteDir();
             const QRegularExpression& regex = compassMakReferenceRegex();
             const QStringList lines = decoded.text.split(QLatin1Char('\n'));
@@ -439,11 +697,55 @@ void scanCompassFile(const QString& filePath, ScanState& state)
                     break;
                 }
             }
+        } else {
+            // A .dat holds the surveys themselves; a .mak only points
+            // at them, so it contributes no blocks of its own.
+            collectCompassBlocks(decoded.text, state);
         }
     }
 
     state.inProgress.remove(canonical);
     state.visited.insert(canonical);
+}
+
+/**
+ * Appends the block standing in for one Walls .srv. Walls has no
+ * *begin tree, so the file itself is the closest thing to a named
+ * block: it takes the .SURVEY entry's display title when the project
+ * gave one, and the file's stem otherwise. Station names come from
+ * the first two columns of every line that is neither a #directive
+ * nor a ';' comment.
+ */
+void appendWallsBlock(const QString& canonical, ScanState& state)
+{
+    cwScanBlock block;
+    block.path = state.pendingWallsTitle.isEmpty()
+        ? QFileInfo(canonical).completeBaseName()
+        : state.pendingWallsTitle;
+    // Consume the title so an untitled .srv scanned later keeps its
+    // own name instead of inheriting this one.
+    state.pendingWallsTitle.clear();
+
+    QSet<QString> stations;
+    const QStringList lines = readDecodedLines(canonical);
+    for (const QString& rawLine : lines) {
+        const QString line = rawLine.trimmed();
+        if (line.isEmpty()
+            || line.startsWith(QLatin1Char('#'))
+            || line.startsWith(QLatin1Char(';'))) {
+            continue;
+        }
+        for (const QString& station :
+             leadingStationTokens(line, kStationsPerShotLine)) {
+            stations.insert(station);
+        }
+    }
+
+    block.stationCount = static_cast<int>(stations.size());
+    if (!stations.isEmpty() && scanningEntryFile(state)) {
+        state.entryHasOwnShots = true;
+    }
+    state.blocks.append(block);
 }
 
 void collectWallsSurveys(const dewalls::WpjBookPtr& book,
@@ -496,6 +798,9 @@ void collectWallsSurveys(const dewalls::WpjBookPtr& book,
             continue;
         }
         recordEntryDirectInclude(state, canonicalize(absolutePath));
+        // The display title lives on the project entry, not in the
+        // .srv, so hand it to the scan about to read that file.
+        state.pendingWallsTitle = child->Title;
         scanByFormat(absolutePath, state);
     }
 }
@@ -542,6 +847,7 @@ void scanWallsFile(const QString& filePath, ScanState& state)
         // Bare .srv: trust the file as-is, no parsing needed.
         state.inProgress.insert(canonical);
         state.dependencies.append(canonical);
+        appendWallsBlock(canonical, state);
     }
 
     state.inProgress.remove(canonical);
@@ -629,23 +935,6 @@ Monad::Result<ScanResult> scan(const QString& entryFile)
 }
 
 namespace {
-
-QStringList readDecodedLines(const QString& filePath)
-{
-    QFile file(filePath);
-    if (!file.open(QFile::ReadOnly)) {
-        return QStringList();
-    }
-    const QByteArray bytes = file.readAll();
-    file.close();
-
-    // The metadata pass never emits encoding warnings: the walk
-    // already warned for files it decoded (.svx / .mak), and the
-    // formats first decoded here (.dat / .srv) stay silent by
-    // design - metadata seeding is best-effort.
-    const DecodedFile decoded = decodeBytes(bytes);
-    return decoded.text.split(QLatin1Char('\n'));
-}
 
 std::optional<QDate> parseIsoOrDottedDate(const QString& token)
 {
@@ -993,6 +1282,8 @@ Monad::Result<ScanResult> scanWithEntry(const QString& entryFile,
     result.dependencies = state.dependencies;
     result.warnings = state.warnings;
     result.entryDirectIncludes = state.entryDirectIncludes;
+    result.blocks = state.blocks;
+    result.entryHasOwnShots = state.entryHasOwnShots;
     parseSeededMetadata(result);
     return Monad::Result<ScanResult>(result);
 }

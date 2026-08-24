@@ -32,7 +32,7 @@ void cwExternalCenterlineScanPreview::setSourcePath(const QString& sourcePath)
 
     // The old path's result is stale the instant the path changes -
     // never show one path's summary against another path's field.
-    applyResult(false, QString(), QStringList(), 0);
+    applyResult(false, QString(), cwExternalCenterlineScanner::ScanResult());
 
     if (m_sourcePath.isEmpty()) {
         // Deliberately no restarter cancel here: cancelling the outer
@@ -63,10 +63,10 @@ void cwExternalCenterlineScanPreview::setSourcePath(const QString& sourcePath)
             }
             setScanning(false);
             if (result.hasError()) {
-                applyResult(false, result.errorMessage(), QStringList(), 0);
+                applyResult(false, result.errorMessage(),
+                            cwExternalCenterlineScanner::ScanResult());
             } else {
-                applyResult(true, QString(), result.value().warnings,
-                            static_cast<int>(result.value().dependencies.size()));
+                applyResult(true, QString(), result.value());
             }
         });
         return future;
@@ -94,16 +94,34 @@ void cwExternalCenterlineScanPreview::setScanning(bool scanning)
     emit scanningChanged();
 }
 
-void cwExternalCenterlineScanPreview::applyResult(bool valid, const QString& errorMessage,
-                                                  const QStringList& warnings, int fileCount)
+int cwExternalCenterlineScanPreview::topLevelBlockCount() const
 {
+    int count = 0;
+    for (const cwScanBlock& block : m_blocks) {
+        if (block.depth == 0) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+void cwExternalCenterlineScanPreview::applyResult(
+        bool valid, const QString& errorMessage,
+        const cwExternalCenterlineScanner::ScanResult& scan)
+{
+    const int fileCount = static_cast<int>(scan.dependencies.size());
     if (m_valid == valid && m_errorMessage == errorMessage
-        && m_warnings == warnings && m_fileCount == fileCount) {
+        && m_warnings == scan.warnings && m_fileCount == fileCount
+        && m_blocks == scan.blocks && m_entryHasOwnShots == scan.entryHasOwnShots
+        && m_entryDirectIncludes == scan.entryDirectIncludes) {
         return;
     }
     m_valid = valid;
     m_errorMessage = errorMessage;
-    m_warnings = warnings;
+    m_warnings = scan.warnings;
     m_fileCount = fileCount;
+    m_blocks = scan.blocks;
+    m_entryHasOwnShots = scan.entryHasOwnShots;
+    m_entryDirectIncludes = scan.entryDirectIncludes;
     emit scanChanged();
 }

@@ -13,6 +13,7 @@
 #include "cwGlobals.h"
 
 //Qt includes
+#include <QList>
 #include <QObject>
 #include <QQmlEngine>
 #include <QString>
@@ -46,6 +47,10 @@ class CAVEWHERE_LIB_EXPORT cwExternalCenterlineScanPreview : public QObject
     Q_PROPERTY(QString errorMessage READ errorMessage NOTIFY scanChanged FINAL)
     Q_PROPERTY(QStringList warnings READ warnings NOTIFY scanChanged FINAL)
     Q_PROPERTY(int fileCount READ fileCount NOTIFY scanChanged FINAL)
+    Q_PROPERTY(QList<cwScanBlock> blocks READ blocks NOTIFY scanChanged FINAL)
+    Q_PROPERTY(int topLevelBlockCount READ topLevelBlockCount NOTIFY scanChanged FINAL)
+    Q_PROPERTY(bool entryHasOwnShots READ entryHasOwnShots NOTIFY scanChanged FINAL)
+    Q_PROPERTY(QStringList entryDirectIncludes READ entryDirectIncludes NOTIFY scanChanged FINAL)
 
 public:
     explicit cwExternalCenterlineScanPreview(QObject* parent = nullptr);
@@ -70,18 +75,38 @@ public:
     QStringList warnings() const { return m_warnings; }
     int fileCount() const { return m_fileCount; }
 
+    // Every named survey block in the closure, parents before
+    // children. The dialog's structure preview walks it directly.
+    QList<cwScanBlock> blocks() const { return m_blocks; }
+
+    // Counted from blocks() rather than stored, so the two can never
+    // disagree. With entryHasOwnShots it drives the multi-cave
+    // heuristic: several top-level blocks and no shots of the entry's
+    // own means the file looks like a region master.
+    int topLevelBlockCount() const;
+
+    bool entryHasOwnShots() const { return m_entryHasOwnShots; }
+
+    // The entry file's first-level includes, offered as alternate
+    // attach targets when the heuristic fires.
+    QStringList entryDirectIncludes() const { return m_entryDirectIncludes; }
+
 signals:
     void sourcePathChanged();
     void scanningChanged();
 
     // One signal for the whole result payload (valid / errorMessage /
-    // warnings / fileCount) - they only ever change together.
+    // warnings / fileCount / blocks / entryHasOwnShots /
+    // entryDirectIncludes) - they only ever change together.
     void scanChanged();
 
 private:
     void setScanning(bool scanning);
+    // Takes the whole scan so a cleared or failed path applies a
+    // default-constructed ScanResult and wipes every derived field at
+    // once - a stale block tree must never show against a new path.
     void applyResult(bool valid, const QString& errorMessage,
-                     const QStringList& warnings, int fileCount);
+                     const cwExternalCenterlineScanner::ScanResult& scan);
 
     QString m_sourcePath;
     bool m_scanning = false;
@@ -89,6 +114,9 @@ private:
     QString m_errorMessage;
     QStringList m_warnings;
     int m_fileCount = 0;
+    QList<cwScanBlock> m_blocks;
+    bool m_entryHasOwnShots = false;
+    QStringList m_entryDirectIncludes;
 
     AsyncFuture::Restarter<Monad::Result<cwExternalCenterlineScanner::ScanResult>> m_restarter;
 };

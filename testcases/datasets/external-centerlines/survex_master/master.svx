@@ -1,0 +1,8 @@
+; Region master: only *include lines, no shots of its own. Three
+; top-level blocks come from the three included files, so the
+; multi-cave heuristic (topLevelBlockCount >= 2 and no own shots)
+; fires on it. Each child fixes its own origin, so cavern solves the
+; project as three independent caves.
+*include "alpha.svx"
+*include "bravo.svx"
+*include "charlie.svx"

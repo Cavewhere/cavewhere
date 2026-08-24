@@ -1,0 +1,7 @@
+; Bravo cave - 3 stations.
+*begin bravo
+*fix b1 100 0 0
+*data normal from to tape compass clino
+b1 b2 8.0 90 0
+b2 b3 6.0 90 0
+*end bravo
