@@ -23,6 +23,7 @@
 #include <atomic>
 #include <memory>
 
+class cwCave;
 class cwTrip;
 class cwSaveLoad;
 class cwExternalSourceSettings;
@@ -48,6 +49,16 @@ class cwExternalSourceSettings;
  */
 namespace cwExternalCenterlineAttach {
 
+/**
+ * One Scope trip the cave-level attach created: a trip that owns no
+ * chunks and no file, and whose stations come from filtering the
+ * cave's solved network by its stationPrefix.
+ */
+struct ScopeTripDescription {
+    QString name;          //!< The trip's name after uniqueTripName dedup
+    QString stationPrefix; //!< Dotted path of the block the trip windows into
+};
+
 struct AttachReport {
     cwExternalCenterlineScanner::ScanResult scan; //!< Copy of the scanner result
     cwExternalCenterline persisted;               //!< Entry file that landed on the trip
@@ -62,6 +73,14 @@ struct AttachReport {
      * carries them.
      */
     cwExternalCenterlineScanner::SeededTripMetadata metadata;
+
+    /**
+     * The Scope trips a cave-level attach created, in the scan's
+     * document order. Empty for a trip attach, and empty for the blocks
+     * a replace kept - a trip that already windows a block is left
+     * exactly as it is.
+     */
+    QList<ScopeTripDescription> createdScopeTrips;
 };
 
 /**
@@ -105,6 +124,52 @@ CAVEWHERE_LIB_EXPORT QFuture<Monad::Result<AttachReport>> attach(
  */
 CAVEWHERE_LIB_EXPORT QFuture<Monad::ResultBase> detach(
     cwTrip* trip,
+    cwSaveLoad* saveLoad,
+    cwExternalSourceSettings* externalSourceSettings);
+
+/**
+ * Cave-level attach: the same scan -> reconcile -> verify -> set model
+ * pipeline as the trip overload, run against
+ * saveLoad->externalCenterlineDir(cave), plus Scope-trip
+ * auto-creation - one trip per scanned block that has at least one
+ * station of its own, named from the block and carrying the block's
+ * dotted path as its stationPrefix
+ * (plans/EXTERNAL_FILE_PHASE3.html section 3.4). The created trips are
+ * listed in AttachReport::createdScopeTrips.
+ *
+ * Refuses a cave that already holds trips while owning no attachment:
+ * the cave-level verb is for a cave created for this file, and an
+ * attached cave's exporter skips the trip loop, so native trips would
+ * silently stop reaching the driver. Attaching over a cave that is
+ * already attached is a replace - its trips are the Scope trips the
+ * previous attach created - and reconciles against the new block set:
+ * blocks that still have a trip keep it, new blocks get new trips, and
+ * a trip whose block is gone stays in place with an empty station list
+ * (section 5 q5).
+ *
+ * Metadata seeding stays trip-only; a cave has no date, team, or
+ * calibration to seed.
+ */
+CAVEWHERE_LIB_EXPORT QFuture<Monad::Result<AttachReport>> attach(
+    cwCave* cave,
+    const QString& sourceFile,
+    cwSaveLoad* saveLoad,
+    cwExternalSourceSettings* externalSourceSettings,
+    std::shared_ptr<std::atomic_bool> cancelFlag = nullptr);
+
+/**
+ * Cave-level detach: remove every Scope trip the attach created that
+ * the user never put chunks in, then clear the cave's
+ * externalCenterline, remove the attachment dir, and drop the
+ * breadcrumb - the trip detach's tail, with the cascade in front. A
+ * Scope trip the user gave chunks to survives, carrying its data into
+ * the now-Native cave.
+ *
+ * The cave itself survives as an empty Native cave with its name
+ * (section 5 q7); removing the cave is the separate remove-cave flow.
+ */
+CAVEWHERE_LIB_EXPORT QFuture<Monad::ResultBase> detach(
+    cwCave* cave,
     cwSaveLoad* saveLoad,
     cwExternalSourceSettings* externalSourceSettings);
 

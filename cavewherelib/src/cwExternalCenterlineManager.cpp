@@ -999,21 +999,25 @@ void cwExternalCenterlineManager::onWatchedFileChanged(const QString& path)
     recomputeWatchSet();
 }
 
+template<typename OwnerT>
 QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
-cwExternalCenterlineManager::attachCenterline(cwTrip* trip, const QString& sourcePath)
+cwExternalCenterlineManager::attachCenterlineForOwner(OwnerT* owner,
+                                                      const QString& sourcePath,
+                                                      const QString& ownerNoun)
 {
     using ReportResult = Monad::Result<cwExternalCenterlineAttach::AttachReport>;
 
-    if (trip == nullptr) {
+    if (owner == nullptr) {
         return refuseOperation<ReportResult>(
             &cwExternalCenterlineManager::attachCompleted, QUuid(),
-            QStringLiteral("attach: trip is null"));
+            QStringLiteral("attach: %1 is null").arg(ownerNoun));
     }
-    const QUuid ownerId = trip->id();
+    const QUuid ownerId = owner->id();
     if (isOwnerBusy(ownerId)) {
         return refuseOperation<ReportResult>(
             &cwExternalCenterlineManager::attachCompleted, ownerId,
-            QStringLiteral("attach: another operation for this trip is still in progress"));
+            QStringLiteral("attach: another operation for this %1 is still in progress")
+                .arg(ownerNoun));
     }
 
     auto cancelFlag = std::make_shared<std::atomic_bool>(false);
@@ -1021,7 +1025,7 @@ cwExternalCenterlineManager::attachCenterline(cwTrip* trip, const QString& sourc
         this, ownerId, OperationKind::Attach, cancelFlag,
         &cwExternalCenterlineManager::attachCompleted);
     auto future = cwExternalCenterlineAttach::attach(
-        trip, sourcePath, m_saveLoad.data(), m_externalSourceSettings.data(),
+        owner, sourcePath, m_saveLoad.data(), m_externalSourceSettings.data(),
         std::move(cancelFlag));
     // The canceled path (project retired mid-attach, or cancelAttach
     // landing before the scan) must still release the token.
@@ -1047,23 +1051,110 @@ cwExternalCenterlineManager::attachCenterline(cwTrip* trip, const QString& sourc
     return future;
 }
 
+template<typename OwnerT>
 QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
-cwExternalCenterlineManager::replaceCenterline(cwTrip* trip, const QString& sourcePath)
+cwExternalCenterlineManager::replaceCenterlineForOwner(OwnerT* owner,
+                                                       const QString& sourcePath,
+                                                       const QString& ownerNoun)
 {
     using ReportResult = Monad::Result<cwExternalCenterlineAttach::AttachReport>;
 
-    if (trip != nullptr && trip->externalCenterline().isEmpty()) {
+    if (owner != nullptr && owner->externalCenterline().isEmpty()) {
         return refuseOperation<ReportResult>(
-            &cwExternalCenterlineManager::attachCompleted, trip->id(),
-            QStringLiteral("replace: this trip has no attached centerline to replace"));
+            &cwExternalCenterlineManager::attachCompleted, owner->id(),
+            QStringLiteral("replace: this %1 has no attached centerline to replace")
+                .arg(ownerNoun));
     }
 
     // Attach already is replace: its reconcile copies the new closure
     // into the owner's existing attachment dir and GCs whatever the new
-    // entry file stops referencing. It also owns the null-trip and
-    // busy-owner refusals, so the nothing-attached guard above is the
-    // only one replace adds.
-    return attachCenterline(trip, sourcePath);
+    // entry file stops referencing, and for a cave its Scope-trip
+    // reconcile keeps the trips whose blocks survive. It also owns the
+    // null-owner and busy-owner refusals, so the nothing-attached guard
+    // above is the only one replace adds.
+    return attachCenterlineForOwner(owner, sourcePath, ownerNoun);
+}
+
+template<typename OwnerT>
+QFuture<Monad::ResultBase>
+cwExternalCenterlineManager::detachCenterlineForOwner(OwnerT* owner,
+                                                      const QString& ownerNoun,
+                                                      QHash<QUuid, QString>& attachmentDirs)
+{
+    using Monad::ResultBase;
+
+    if (owner == nullptr) {
+        return refuseOperation<ResultBase>(
+            &cwExternalCenterlineManager::detachCompleted, QUuid(),
+            QStringLiteral("detach: %1 is null").arg(ownerNoun));
+    }
+    const QUuid ownerId = owner->id();
+    if (isOwnerBusy(ownerId)) {
+        return refuseOperation<ResultBase>(
+            &cwExternalCenterlineManager::detachCompleted, ownerId,
+            QStringLiteral("detach: another operation for this %1 is still in progress")
+                .arg(ownerNoun));
+    }
+
+    auto guard = std::make_shared<OperationGuard>(
+        this, ownerId, OperationKind::Detach, nullptr,
+        &cwExternalCenterlineManager::detachCompleted);
+
+    // Queued-invoke hole (commit-7 review): anything already queued behind
+    // this call would otherwise still see the owner's attachment dir and
+    // could write into it. Drop the map entry in the same synchronous block
+    // as detach()'s settings and model clears, so a late caller finds the
+    // owner unattached rather than half-detached.
+    attachmentDirs.remove(ownerId);
+
+    auto future = cwExternalCenterlineAttach::detach(
+        owner, m_saveLoad.data(), m_externalSourceSettings.data());
+    AsyncFuture::observe(future).context(this,
+            [this, guard, ownerId](const ResultBase& result) {
+        // Recompute once the remove-tree has drained, so the scan sees the
+        // dir gone, and request the solve that drops the owner's *include.
+        m_solveOnScanApply = true;
+        recomputeWatchSet();
+        if (!result.hasError()) {
+            guard->finish(cwExternalCenterlineReport::succeeded(ownerId));
+        } else {
+            guard->finish(cwExternalCenterlineReport::failed(
+                ownerId, result.errorMessage()));
+        }
+    },
+            [guard, ownerId]() {
+        guard->finish(cwExternalCenterlineReport::wasCanceled(ownerId));
+    });
+    return future;
+}
+
+QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
+cwExternalCenterlineManager::attachCenterline(cwTrip* trip, const QString& sourcePath)
+{
+    return attachCenterlineForOwner(trip, sourcePath, QStringLiteral("trip"));
+}
+
+QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
+cwExternalCenterlineManager::replaceCenterline(cwTrip* trip, const QString& sourcePath)
+{
+    return replaceCenterlineForOwner(trip, sourcePath, QStringLiteral("trip"));
+}
+
+QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
+cwExternalCenterlineManager::attachCenterline(cwCave* cave, const QString& sourcePath)
+{
+    return attachCenterlineForOwner(cave, sourcePath, QStringLiteral("cave"));
+}
+
+QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
+cwExternalCenterlineManager::replaceCenterline(cwCave* cave, const QString& sourcePath)
+{
+    return replaceCenterlineForOwner(cave, sourcePath, QStringLiteral("cave"));
+}
+
+QFuture<Monad::ResultBase> cwExternalCenterlineManager::detachCenterline(cwCave* cave)
+{
+    return detachCenterlineForOwner(cave, QStringLiteral("cave"), m_caveAttachmentDirs);
 }
 
 QString cwExternalCenterlineManager::reloadSourcePath(cwTrip* trip) const
@@ -1197,49 +1288,6 @@ void cwExternalCenterlineManager::cancelAttach(const QUuid& ownerId)
 
 QFuture<Monad::ResultBase> cwExternalCenterlineManager::detachCenterline(cwTrip* trip)
 {
-    using Monad::ResultBase;
-
-    if (trip == nullptr) {
-        return refuseOperation<ResultBase>(
-            &cwExternalCenterlineManager::detachCompleted, QUuid(),
-            QStringLiteral("detach: trip is null"));
-    }
-    const QUuid ownerId = trip->id();
-    if (isOwnerBusy(ownerId)) {
-        return refuseOperation<ResultBase>(
-            &cwExternalCenterlineManager::detachCompleted, ownerId,
-            QStringLiteral("detach: another operation for this trip is still in progress"));
-    }
-
-    auto guard = std::make_shared<OperationGuard>(
-        this, ownerId, OperationKind::Detach, nullptr,
-        &cwExternalCenterlineManager::detachCompleted);
-
-    // Queued-invoke hole (commit-7 review): anything already queued behind
-    // this call would otherwise still see the owner's attachment dir and
-    // could write into it. Drop the map entry in the same synchronous block
-    // as detach()'s settings and model clears, so a late caller finds the
-    // owner unattached rather than half-detached.
-    m_tripAttachmentDirs.remove(ownerId);
-
-    auto future = cwExternalCenterlineAttach::detach(
-        trip, m_saveLoad.data(), m_externalSourceSettings.data());
-    AsyncFuture::observe(future).context(this,
-            [this, guard, ownerId](const ResultBase& result) {
-        // Recompute once the remove-tree has drained, so the scan sees the
-        // dir gone, and request the solve that drops the owner's *include.
-        m_solveOnScanApply = true;
-        recomputeWatchSet();
-        if (!result.hasError()) {
-            guard->finish(cwExternalCenterlineReport::succeeded(ownerId));
-        } else {
-            guard->finish(cwExternalCenterlineReport::failed(
-                ownerId, result.errorMessage()));
-        }
-    },
-            [guard, ownerId]() {
-        guard->finish(cwExternalCenterlineReport::wasCanceled(ownerId));
-    });
-    return future;
+    return detachCenterlineForOwner(trip, QStringLiteral("trip"), m_tripAttachmentDirs);
 }
 

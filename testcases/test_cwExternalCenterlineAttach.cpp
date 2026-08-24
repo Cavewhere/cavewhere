@@ -532,7 +532,8 @@ TEST_CASE("attach refuses null inputs with a clear error",
 
     {
         auto future = cwExternalCenterlineAttach::attach(
-            nullptr, source, fixture->saveLoad(), fixture->settings());
+            static_cast<cwTrip*>(nullptr), source,
+            fixture->saveLoad(), fixture->settings());
         REQUIRE(future.isFinished());
         CHECK(future.result().hasError());
     }

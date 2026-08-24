@@ -9,6 +9,7 @@
 #define CWEXTERNALCENTERLINEMANAGER_H
 
 //Our includes
+class cwCave;
 class cwCavingRegion;
 class cwSaveLoad;
 class cwSurveyChunkSignaler;
@@ -151,6 +152,22 @@ public:
     // attach over an occupied owner.
     QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
     replaceCenterline(cwTrip* trip, const QString& sourcePath);
+
+    // Cave-level attach / replace / detach, the same three verbs run
+    // against a cave owner: one busy token per cave id, one scan →
+    // reconcile → verify pass into the cave's attachment dir, and the
+    // Scope-trip auto-creation the orchestrator does on the way
+    // (plans/EXTERNAL_FILE_PHASE3.html §3.4). Attach refuses a cave that
+    // already holds trips while owning no attachment — the cave-level
+    // verb is for a cave created for this file — while replace runs on a
+    // cave whose trips are the Scope trips a previous attach created and
+    // reconciles them against the new block set. Detach cascades the
+    // chunk-less Scope trips away and leaves an empty Native cave.
+    QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
+    attachCenterline(cwCave* cave, const QString& sourcePath);
+    QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
+    replaceCenterline(cwCave* cave, const QString& sourcePath);
+    QFuture<Monad::ResultBase> detachCenterline(cwCave* cave);
 
     // Re-copies the file this owner was last attached (or replaced) from
     // into the project, through replaceCenterline — one scan → reconcile →
@@ -572,6 +589,28 @@ private:
         emitReportDeferred(signal, cwExternalCenterlineReport::failed(ownerId, error));
         return AsyncFuture::completed(ResultT(error));
     }
+
+    // The attach, replace, and detach verbs, written once for both owner
+    // kinds: a cave and a trip differ only in the noun their refusal
+    // messages use, which attachment-dir map a detach drops the owner
+    // from, and which cwExternalCenterlineAttach overload the owner
+    // resolves to. Everything else — the busy token, the cancel seam, the
+    // recompute-and-solve continuation, and the completion report — is one
+    // body, so the two owner kinds cannot drift apart.
+    template<typename OwnerT>
+    QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
+    attachCenterlineForOwner(OwnerT* owner, const QString& sourcePath,
+                             const QString& ownerNoun);
+
+    template<typename OwnerT>
+    QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
+    replaceCenterlineForOwner(OwnerT* owner, const QString& sourcePath,
+                              const QString& ownerNoun);
+
+    template<typename OwnerT>
+    QFuture<Monad::ResultBase>
+    detachCenterlineForOwner(OwnerT* owner, const QString& ownerNoun,
+                             QHash<QUuid, QString>& attachmentDirs);
 
     // The file reloadFromSource would copy for `trip`, or an empty string
     // when this machine has none — the one place the eligibility rules

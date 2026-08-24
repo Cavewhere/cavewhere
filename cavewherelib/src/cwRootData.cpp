@@ -423,6 +423,23 @@ QFuture<Monad::ResultBase> cwRootData::detachTripCenterline(cwTrip* trip)
     return externalCenterlineManager()->detachCenterline(trip);
 }
 
+QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
+cwRootData::attachCaveCenterline(cwCave* cave, const QString& sourcePath)
+{
+    return externalCenterlineManager()->attachCenterline(cave, sourcePath);
+}
+
+QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
+cwRootData::replaceCaveCenterline(cwCave* cave, const QString& sourcePath)
+{
+    return externalCenterlineManager()->replaceCenterline(cave, sourcePath);
+}
+
+QFuture<Monad::ResultBase> cwRootData::detachCaveCenterline(cwCave* cave)
+{
+    return externalCenterlineManager()->detachCenterline(cave);
+}
+
 void cwRootData::showInFolder(const QString &path) const
 {
     cwFileRevealer::showInFileManager(path);

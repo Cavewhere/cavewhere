@@ -9,6 +9,7 @@
 
 //Our includes
 #include "cwCave.h"
+#include "cwCavingRegion.h"
 #include "cwExternalCenterlineSync.h"
 #include "cwExternalSourceSettings.h"
 #include "cwSaveLoad.h"
@@ -16,6 +17,7 @@
 #include "cwTeamMember.h"
 #include "cwTrip.h"
 #include "cwTripCalibration.h"
+#include "cwUnits.h"
 
 //AsyncFuture
 #include <asyncfuture.h>
@@ -26,6 +28,7 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QPointer>
+#include <QSet>
 #include <QtConcurrent>
 
 namespace {
@@ -85,34 +88,214 @@ SeededTripMetadata seedTripMetadata(cwTrip* trip, const SeededTripMetadata& meta
     return applied;
 }
 
-} // namespace
 
-namespace cwExternalCenterlineAttach {
-
-QFuture<Monad::Result<AttachReport>> attach(cwTrip* trip,
-                                            const QString& sourceFile,
-                                            cwSaveLoad* saveLoad,
-                                            cwExternalSourceSettings* externalSourceSettings,
-                                            std::shared_ptr<std::atomic_bool> cancelFlag)
+/**
+ * The owner an attach or detach is running for - exactly one of a cave
+ * or a trip. Everything the pipeline needs from its owner goes through
+ * here, so the scan -> reconcile -> verify -> set-model body is written
+ * once and the two owner kinds differ only where they genuinely do:
+ * the guards in front, and what the success continuation seeds.
+ */
+class OwnerTarget
 {
-    using ReportResult = Monad::Result<AttachReport>;
-
-    if (trip == nullptr) {
-        return AsyncFuture::completed(
-            ReportResult(QStringLiteral("attach: trip is null")));
+public:
+    static OwnerTarget forTrip(cwTrip* trip)
+    {
+        OwnerTarget owner;
+        owner.m_kind = Kind::Trip;
+        owner.m_trip = trip;
+        return owner;
     }
+
+    static OwnerTarget forCave(cwCave* cave)
+    {
+        OwnerTarget owner;
+        owner.m_kind = Kind::Cave;
+        owner.m_cave = cave;
+        return owner;
+    }
+
+    bool isCave() const { return m_kind == Kind::Cave; }
+
+    cwTrip* trip() const { return m_trip.data(); }
+    cwCave* cave() const { return m_cave.data(); }
+
+    bool isAlive() const
+    {
+        return isCave() ? !m_cave.isNull() : !m_trip.isNull();
+    }
+
+    QUuid id() const
+    {
+        return isCave() ? m_cave->id() : m_trip->id();
+    }
+
+    cwExternalCenterline externalCenterline() const
+    {
+        return isCave() ? m_cave->externalCenterline() : m_trip->externalCenterline();
+    }
+
+    void setExternalCenterline(const cwExternalCenterline& centerline) const
+    {
+        if (isCave()) {
+            m_cave->setExternalCenterline(centerline);
+        } else {
+            m_trip->setExternalCenterline(centerline);
+        }
+    }
+
+    /**
+     * True while the owner is still in the data model. A trip removed
+     * while the scan ran is kept alive by the undo stack with its
+     * parentCave still set (see the deliberately-commented
+     * setParentCave(nullptr) in cwCave's remove command), so QPointer
+     * liveness alone is not enough; a cave answers the same question
+     * against its region.
+     */
+    bool membershipIntact() const
+    {
+        if (isCave()) {
+            const cwCavingRegion* region = m_cave->parentRegion();
+            return region != nullptr && region->caves().contains(m_cave.data());
+        }
+        const cwCave* parentCave = m_trip->parentCave();
+        return parentCave != nullptr && parentCave->trips().contains(m_trip.data());
+    }
+
+    QString membershipLostError() const
+    {
+        return isCave()
+            ? QStringLiteral("attach: cave was removed from its region mid-attach")
+            : QStringLiteral("attach: trip was removed from its cave mid-attach");
+    }
+
+    /**
+     * True when the owner sits where an attachment dir can be derived -
+     * a trip in a cave, a cave in a region. A detach of an owner that
+     * has already left the model clears the data model alone.
+     */
+    bool hasResolvableAttachmentDir() const
+    {
+        return isCave() ? m_cave->parentRegion() != nullptr
+                        : m_trip->parentCave() != nullptr;
+    }
+
+    //! Where the closure is mirrored - pure path math, no disk I/O.
+    QString attachmentDir(cwSaveLoad* saveLoad) const
+    {
+        return isCave() ? saveLoad->externalCenterlineDir(m_cave.data()).absolutePath()
+                        : saveLoad->externalCenterlineDir(m_trip.data()).absolutePath();
+    }
+
+private:
+    enum class Kind { Trip, Cave };
+
+    Kind m_kind = Kind::Trip;
+    QPointer<cwTrip> m_trip;
+    QPointer<cwCave> m_cave;
+};
+
+/**
+ * Brings the cave's Scope trips in line with the blocks the scan found:
+ * a block that already has a trip windowing it keeps that trip, a block
+ * with no trip gets one, and a trip whose block is gone is left alone
+ * (its station list simply goes empty). Fresh attach is the degenerate
+ * case where no Scope trip exists yet, so attach and replace run the
+ * same reconcile. Returns the trips it created, in block order.
+ */
+QList<cwExternalCenterlineAttach::ScopeTripDescription> reconcileScopeTrips(
+    cwCave* cave,
+    const QList<cwScanBlock>& blocks)
+{
+    QSet<QString> windowedPrefixes;
+    const QList<cwTrip*> existingTrips = cave->trips();
+    for (const cwTrip* trip : existingTrips) {
+        if (!trip->stationPrefix().isEmpty()) {
+            windowedPrefixes.insert(trip->stationPrefix());
+        }
+    }
+
+    QList<cwExternalCenterlineAttach::ScopeTripDescription> created;
+    for (const cwScanBlock& block : blocks) {
+        // A block with no stations of its own has nothing for a trip to
+        // window (section 5 q3); the dialog still shows it in the tree.
+        if (block.stationCount < 1 || windowedPrefixes.contains(block.path)) {
+            continue;
+        }
+
+        cwTrip* trip = new cwTrip();
+        // Seed the survey-entry unit the way cwCave does for a UI-created
+        // trip, so chunks the user later adds to this Scope trip read in
+        // the project's unit.
+        trip->calibrations()->setDistanceUnit(cwUnits::surveyUnit(cave->unitSystem()));
+        // uniqueTripName is consulted per block: blocks that share a leaf
+        // name dedupe against the trips this same loop already added.
+        trip->setName(cave->uniqueTripName(block.name()));
+        trip->setStationPrefix(block.path);
+        cave->addTrip(trip);
+
+        windowedPrefixes.insert(block.path);
+        created.append({trip->name(), block.path});
+    }
+    return created;
+}
+
+/**
+ * Removes the Scope trips a cave-level detach leaves nothing behind
+ * for: a trip that windows a block and holds no chunks of its own. A
+ * Scope trip the user put chunks in is real survey data and stays.
+ *
+ * removeTrip() is the boundary on purpose - it emits tripsDeleted(),
+ * which is what clears each trip's breadcrumb and wakes the manager.
+ * With no undo stack it also destroys the trip outright, so nothing
+ * here reads the pointer afterward.
+ */
+void removeEmptyScopeTrips(cwCave* cave)
+{
+    for (int i = cave->tripCount() - 1; i >= 0; --i) {
+        const cwTrip* trip = cave->trip(i);
+        if (!trip->stationPrefix().isEmpty() && trip->chunkCount() == 0) {
+            cave->removeTrip(i);
+        }
+    }
+}
+
+
+/**
+ * The dependency guards every verb shares, prefixed with the verb's own
+ * name, as an error message or an empty string. Owner-specific guards
+ * bracket this one: the null-owner check runs before it, the owner's
+ * placement and freshness checks after, so every overload refuses in the
+ * same order.
+ */
+QString dependencyError(const QString& verb,
+                        cwSaveLoad* saveLoad,
+                        cwExternalSourceSettings* externalSourceSettings)
+{
     if (saveLoad == nullptr) {
-        return AsyncFuture::completed(
-            ReportResult(QStringLiteral("attach: saveLoad is null")));
+        return QStringLiteral("%1: saveLoad is null").arg(verb);
     }
     if (externalSourceSettings == nullptr) {
-        return AsyncFuture::completed(
-            ReportResult(QStringLiteral("attach: externalSourceSettings is null")));
+        return QStringLiteral("%1: externalSourceSettings is null").arg(verb);
     }
-    if (trip->parentCave() == nullptr) {
-        return AsyncFuture::completed(
-            ReportResult(QStringLiteral("attach: trip is not part of a cave yet")));
-    }
+    return QString();
+}
+
+/**
+ * The whole attach pipeline, owner-generic: scan on a worker, then on
+ * the main thread reconcile the closure into the owner's attachment
+ * dir, verify it, and only then set the model, seed what the owner kind
+ * asks for, and stamp the breadcrumb. The public overloads run their
+ * owner-specific guards and hand the owner in here.
+ */
+QFuture<Monad::Result<AttachReport>> attachOwner(
+    const OwnerTarget& owner,
+    const QString& sourceFile,
+    cwSaveLoad* saveLoad,
+    cwExternalSourceSettings* externalSourceSettings,
+    std::shared_ptr<std::atomic_bool> cancelFlag)
+{
+    using ReportResult = Monad::Result<AttachReport>;
 
     // Everything under the project's data root is data CaveWhere itself
     // writes, so a "source" there names a copy of itself: the panel would
@@ -143,7 +326,6 @@ QFuture<Monad::Result<AttachReport>> attach(cwTrip* trip,
     AsyncFuture::Deferred<ReportResult> deferred;
     QFuture<ReportResult> resultFuture = deferred.future();
 
-    const QPointer<cwTrip> tripPtr(trip);
     const QPointer<cwSaveLoad> saveLoadPtr(saveLoad);
     const QPointer<cwExternalSourceSettings> settingsPtr(externalSourceSettings);
 
@@ -152,7 +334,7 @@ QFuture<Monad::Result<AttachReport>> attach(cwTrip* trip,
     });
 
     AsyncFuture::observe(scanFuture).context(saveLoad,
-            [deferred, resultFuture, tripPtr, saveLoadPtr, settingsPtr, sourceFile,
+            [deferred, resultFuture, owner, saveLoadPtr, settingsPtr, sourceFile,
              cancelFlag = std::move(cancelFlag)]
             (const Monad::Result<ScanResult>& scanResult) mutable {
         if (resultFuture.isCanceled()) {
@@ -167,7 +349,7 @@ QFuture<Monad::Result<AttachReport>> attach(cwTrip* trip,
             deferred.cancel();
             return;
         }
-        if (tripPtr.isNull() || settingsPtr.isNull() || saveLoadPtr.isNull()) {
+        if (!owner.isAlive() || settingsPtr.isNull() || saveLoadPtr.isNull()) {
             deferred.complete(ReportResult(QStringLiteral("attach: owner was deleted mid-attach")));
             return;
         }
@@ -183,21 +365,14 @@ QFuture<Monad::Result<AttachReport>> attach(cwTrip* trip,
             return;
         }
 
-        cwTrip* trip = tripPtr.data();
         cwSaveLoad* saveLoad = saveLoadPtr.data();
 
-        // Re-check membership: a trip removed while the scan ran is kept
-        // alive by the undo stack with its parentCave still set (see the
-        // deliberately-commented setParentCave(nullptr) in cwCave's
-        // remove command), so QPointer liveness alone is not enough.
-        if (trip->parentCave() == nullptr
-            || !trip->parentCave()->trips().contains(trip)) {
-            deferred.complete(ReportResult(
-                QStringLiteral("attach: trip was removed from its cave mid-attach")));
+        if (!owner.membershipIntact()) {
+            deferred.complete(ReportResult(owner.membershipLostError()));
             return;
         }
 
-        const QString attachmentDir = saveLoad->externalCenterlineDir(trip).absolutePath();
+        const QString attachmentDir = owner.attachmentDir(saveLoad);
 
         // Overwrite: the user picked this file, so its bytes are the ones
         // that belong in the project. Replace runs through here too, where
@@ -212,14 +387,13 @@ QFuture<Monad::Result<AttachReport>> attach(cwTrip* trip,
         // the filesystem mutation has started, so the attach runs to
         // completion (success or failure).
         AsyncFuture::observe(reconcileFuture).context(saveLoad,
-                [deferred, tripPtr, settingsPtr, scan, attachmentDir, sourceFile]
+                [deferred, owner, settingsPtr, scan, attachmentDir, sourceFile]
                 (const Monad::ResultBase& reconcileResult) mutable {
-            if (tripPtr.isNull() || settingsPtr.isNull()) {
+            if (!owner.isAlive() || settingsPtr.isNull()) {
                 deferred.complete(ReportResult(
                     QStringLiteral("attach: owner was deleted mid-attach")));
                 return;
             }
-            cwTrip* trip = tripPtr.data();
 
             // Verify with a fresh plan rather than bare existence: the
             // reconcile future completes Ok even when individual copy
@@ -246,7 +420,7 @@ QFuture<Monad::Result<AttachReport>> attach(cwTrip* trip,
 
             if (!failures.isEmpty()) {
                 // The model was never touched, so a failed attach leaves
-                // the trip exactly as it was. Partial files may remain
+                // the owner exactly as it was. Partial files may remain
                 // on disk (the next reconcile's GC problem) and the
                 // project stays modified - the copy jobs already flipped
                 // the bit at enqueue.
@@ -265,22 +439,28 @@ QFuture<Monad::Result<AttachReport>> attach(cwTrip* trip,
             // a bare filename for the common flat case, a subpath when the
             // closure reached above the entry's own directory. Reusing
             // verifyPlan's base keeps attach and the planner on one answer.
-            trip->setExternalCenterline(cwExternalCenterline(
+            owner.setExternalCenterline(cwExternalCenterline(
                 QDir(verifyPlan.baseDir).relativeFilePath(scan.dependencies.first())));
 
             AttachReport report;
             report.scan = scan;
-            report.persisted = trip->externalCenterline();
+            report.persisted = owner.externalCenterline();
             // verifyPlan.warnings are all omissions, and any of those failed
             // the attach above, so only the scan's advisories reach here.
             report.warnings = scan.warnings;
-            report.metadata = seedTripMetadata(trip, scan.seededMetadata);
+            if (owner.isCave()) {
+                // Before the future completes, so the manager's recompute
+                // and the solve it chains already see the Scope trips.
+                report.createdScopeTrips = reconcileScopeTrips(owner.cave(), scan.blocks);
+            } else {
+                report.metadata = seedTripMetadata(owner.trip(), scan.seededMetadata);
+            }
 
             // Attach, Replace, and Reload all reach this one stamp, so
             // every copy records the fingerprint of the source's whole
             // dependency set alongside the breadcrumb.
             settingsPtr->setBreadcrumb(
-                trip->id(),
+                owner.id(),
                 QFileInfo(sourceFile).absoluteFilePath(),
                 cwExternalSourceSettings::computeFingerprint(scan.dependencies));
 
@@ -291,39 +471,37 @@ QFuture<Monad::Result<AttachReport>> attach(cwTrip* trip,
     return resultFuture;
 }
 
-QFuture<Monad::ResultBase> detach(cwTrip* trip,
-                                  cwSaveLoad* saveLoad,
-                                  cwExternalSourceSettings* externalSourceSettings)
+/**
+ * The whole detach, owner-generic: drop the breadcrumb, cascade away a
+ * cave's chunk-less Scope trips, clear the model, and remove the
+ * attachment dir through the job queue.
+ */
+QFuture<Monad::ResultBase> detachOwner(const OwnerTarget& owner,
+                                       cwSaveLoad* saveLoad,
+                                       cwExternalSourceSettings* externalSourceSettings)
 {
     using Monad::ResultBase;
 
-    if (trip == nullptr) {
-        return AsyncFuture::completed(ResultBase(QStringLiteral("detach: trip is null")));
-    }
-    if (saveLoad == nullptr) {
-        return AsyncFuture::completed(ResultBase(QStringLiteral("detach: saveLoad is null")));
-    }
-    if (externalSourceSettings == nullptr) {
-        return AsyncFuture::completed(
-            ResultBase(QStringLiteral("detach: externalSourceSettings is null")));
-    }
+    externalSourceSettings->clearBreadcrumb(owner.id());
 
-    externalSourceSettings->clearBreadcrumb(trip->id());
-
-    if (trip->externalCenterline().isEmpty()) {
-        // Native trip: nothing to remove and no mutation to report, so
+    if (owner.externalCenterline().isEmpty()) {
+        // Native owner: nothing to remove and no mutation to report, so
         // the modified bit stays untouched.
         return AsyncFuture::completed(ResultBase());
     }
 
-    if (trip->parentCave() == nullptr) {
+    if (owner.isCave()) {
+        removeEmptyScopeTrips(owner.cave());
+    }
+
+    if (!owner.hasResolvableAttachmentDir()) {
         // No attachment dir can be resolved; just clear the model.
-        trip->setExternalCenterline(cwExternalCenterline());
+        owner.setExternalCenterline(cwExternalCenterline());
         return AsyncFuture::completed(ResultBase());
     }
 
-    const QString attachmentDir = saveLoad->externalCenterlineDir(trip).absolutePath();
-    trip->setExternalCenterline(cwExternalCenterline());
+    const QString attachmentDir = owner.attachmentDir(saveLoad);
+    owner.setExternalCenterline(cwExternalCenterline());
     saveLoad->enqueueExternalCenterlineRemoveTree(attachmentDir);
 
     // The job queue reports Ok on drain even when the RemoveTree job
@@ -340,6 +518,109 @@ QFuture<Monad::ResultBase> detach(cwTrip* trip,
             return Monad::ResultBase();
         })
         .future();
+}
+
+} // namespace
+
+namespace cwExternalCenterlineAttach {
+
+QFuture<Monad::Result<AttachReport>> attach(cwTrip* trip,
+                                            const QString& sourceFile,
+                                            cwSaveLoad* saveLoad,
+                                            cwExternalSourceSettings* externalSourceSettings,
+                                            std::shared_ptr<std::atomic_bool> cancelFlag)
+{
+    using ReportResult = Monad::Result<AttachReport>;
+
+    if (trip == nullptr) {
+        return AsyncFuture::completed(
+            ReportResult(QStringLiteral("attach: trip is null")));
+    }
+    const QString dependencyFailure =
+        dependencyError(QStringLiteral("attach"), saveLoad, externalSourceSettings);
+    if (!dependencyFailure.isEmpty()) {
+        return AsyncFuture::completed(ReportResult(dependencyFailure));
+    }
+    if (trip->parentCave() == nullptr) {
+        return AsyncFuture::completed(
+            ReportResult(QStringLiteral("attach: trip is not part of a cave yet")));
+    }
+
+    return attachOwner(OwnerTarget::forTrip(trip), sourceFile, saveLoad,
+                       externalSourceSettings, std::move(cancelFlag));
+}
+
+QFuture<Monad::Result<AttachReport>> attach(cwCave* cave,
+                                            const QString& sourceFile,
+                                            cwSaveLoad* saveLoad,
+                                            cwExternalSourceSettings* externalSourceSettings,
+                                            std::shared_ptr<std::atomic_bool> cancelFlag)
+{
+    using ReportResult = Monad::Result<AttachReport>;
+
+    if (cave == nullptr) {
+        return AsyncFuture::completed(
+            ReportResult(QStringLiteral("attach: cave is null")));
+    }
+    const QString dependencyFailure =
+        dependencyError(QStringLiteral("attach"), saveLoad, externalSourceSettings);
+    if (!dependencyFailure.isEmpty()) {
+        return AsyncFuture::completed(ReportResult(dependencyFailure));
+    }
+    if (cave->parentRegion() == nullptr) {
+        return AsyncFuture::completed(
+            ReportResult(QStringLiteral("attach: cave is not part of a region yet")));
+    }
+
+    // Fresh-cave guard (section 3.3): the exporter skips the trip loop for
+    // an attached cave, so native trips under one would silently stop
+    // reaching the driver. A cave that is already attached passes - its
+    // trips are the Scope trips the previous attach created, and this call
+    // is the replace that reconciles them.
+    if (cave->hasTrips() && cave->externalCenterline().isEmpty()) {
+        return AsyncFuture::completed(ReportResult(
+            QStringLiteral("attach: cave already has trips — cave-level attach is "
+                           "for a new cave")));
+    }
+
+    return attachOwner(OwnerTarget::forCave(cave), sourceFile, saveLoad,
+                       externalSourceSettings, std::move(cancelFlag));
+}
+
+QFuture<Monad::ResultBase> detach(cwTrip* trip,
+                                  cwSaveLoad* saveLoad,
+                                  cwExternalSourceSettings* externalSourceSettings)
+{
+    using Monad::ResultBase;
+
+    if (trip == nullptr) {
+        return AsyncFuture::completed(ResultBase(QStringLiteral("detach: trip is null")));
+    }
+    const QString dependencyFailure =
+        dependencyError(QStringLiteral("detach"), saveLoad, externalSourceSettings);
+    if (!dependencyFailure.isEmpty()) {
+        return AsyncFuture::completed(ResultBase(dependencyFailure));
+    }
+
+    return detachOwner(OwnerTarget::forTrip(trip), saveLoad, externalSourceSettings);
+}
+
+QFuture<Monad::ResultBase> detach(cwCave* cave,
+                                  cwSaveLoad* saveLoad,
+                                  cwExternalSourceSettings* externalSourceSettings)
+{
+    using Monad::ResultBase;
+
+    if (cave == nullptr) {
+        return AsyncFuture::completed(ResultBase(QStringLiteral("detach: cave is null")));
+    }
+    const QString dependencyFailure =
+        dependencyError(QStringLiteral("detach"), saveLoad, externalSourceSettings);
+    if (!dependencyFailure.isEmpty()) {
+        return AsyncFuture::completed(ResultBase(dependencyFailure));
+    }
+
+    return detachOwner(OwnerTarget::forCave(cave), saveLoad, externalSourceSettings);
 }
 
 } // namespace cwExternalCenterlineAttach

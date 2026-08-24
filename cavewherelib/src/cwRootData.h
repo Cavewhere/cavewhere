@@ -42,6 +42,7 @@
 #include "cwSettings.h"
 #include "cwPageView.h"
 #include "cwRecentProjectModel.h"
+class cwCave;
 class cwKeywordItemModel;
 class cwKeywordFilterPipelineModel;
 class cwRemoteServices;
@@ -168,6 +169,15 @@ public:
     Q_INVOKABLE QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
     replaceTripCenterline(cwTrip* trip, const QString& sourcePath);
     Q_INVOKABLE QFuture<Monad::ResultBase> detachTripCenterline(cwTrip* trip);
+
+    // The same three verbs for a cave owner — attach is for a cave
+    // created for the file, and detach cascades away the Scope trips
+    // the attach made (plans/EXTERNAL_FILE_PHASE3.html §3.3, §3.4).
+    Q_INVOKABLE QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
+    attachCaveCenterline(cwCave* cave, const QString& sourcePath);
+    Q_INVOKABLE QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
+    replaceCaveCenterline(cwCave* cave, const QString& sourcePath);
+    Q_INVOKABLE QFuture<Monad::ResultBase> detachCaveCenterline(cwCave* cave);
 
     //Helper functions for creating things
     Q_INVOKABLE cwImage emptyImage() const  { return cwImage(); }
