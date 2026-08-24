@@ -884,3 +884,147 @@ TEST_CASE("scanSurvex's cycle detection spans format boundaries",
     CHECK(hasFileNameInDeps(scan, QStringLiteral("cycle.mak")));
     CHECK(anyWarningContains(scan, QStringLiteral("circular include")));
 }
+
+TEST_CASE("scanSurvex fails on an absolute *include path", "[Scanner][Survex]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    // The child exists on disk, so this proves the absolute path is
+    // refused before resolution rather than riding the missing-target
+    // warning path.
+    const QString childPath = tempPath(tempDir, QStringLiteral("abs_child.svx"));
+    writeUtf8File(childPath,
+                  QByteArrayLiteral("*begin AbsChild\n*end AbsChild\n"));
+
+    const QString driverPath = tempPath(tempDir, QStringLiteral("abs_driver.svx"));
+    const QString includeLine =
+        QStringLiteral("*include \"%1\"\n").arg(childPath);
+    writeUtf8File(driverPath, includeLine.toUtf8());
+
+    auto result = cwExternalCenterlineScanner::scanSurvex(driverPath);
+    REQUIRE(result.hasError());
+    const QString error = result.errorMessage();
+    CHECK(error.contains(QStringLiteral("absolute include path")));
+    CHECK(error.contains(QFileInfo(driverPath).canonicalFilePath()));
+    CHECK(error.contains(childPath));
+}
+
+TEST_CASE("scanCompass fails on an absolute .mak reference", "[Scanner][Compass]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString datPath = tempPath(tempDir, QStringLiteral("abs_cave.dat"));
+    writeUtf8File(datPath, QByteArrayLiteral("ABS CAVE\n"));
+
+    const QString makPath = tempPath(tempDir, QStringLiteral("abs_project.mak"));
+    const QString referenceLine = QStringLiteral("#%1,A;\n").arg(datPath);
+    writeUtf8File(makPath, referenceLine.toUtf8());
+
+    auto result = cwExternalCenterlineScanner::scanCompass(makPath);
+    REQUIRE(result.hasError());
+    const QString error = result.errorMessage();
+    CHECK(error.contains(QStringLiteral("absolute include path")));
+    CHECK(error.contains(QFileInfo(makPath).canonicalFilePath()));
+    CHECK(error.contains(datPath));
+}
+
+TEST_CASE("scanWalls fails on an absolute reference", "[Scanner][Walls]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString srvPath = tempPath(tempDir, QStringLiteral("MAIN.SRV"));
+    writeUtf8File(srvPath, QByteArrayLiteral("#UNITS DECL=0\n"));
+
+    SECTION("absolute .NAME on a survey entry") {
+        const QString wpjPath = tempPath(tempDir, QStringLiteral("abs_name.wpj"));
+        const QString absoluteName =
+            QDir(tempDir.path()).absoluteFilePath(QStringLiteral("MAIN"));
+        const QString contents =
+            QStringLiteral(";WALLS Project file\n"
+                           ".BOOK\tTest Cave\n"
+                           ".NAME\tTEST-CAVE\n"
+                           ".STATUS\t8\n"
+                           ".SURVEY\tMain Passage\n"
+                           ".NAME\t%1\n"
+                           ".STATUS\t8\n"
+                           ".ENDBOOK\n")
+                .arg(absoluteName);
+        writeUtf8File(wpjPath, contents.toUtf8());
+
+        auto result = cwExternalCenterlineScanner::scanWalls(wpjPath);
+        REQUIRE(result.hasError());
+        CHECK(result.errorMessage().contains(QStringLiteral("absolute include path")));
+        CHECK(result.errorMessage().contains(absoluteName));
+    }
+
+    SECTION("absolute .PATH on a nested book") {
+        const QString wpjPath = tempPath(tempDir, QStringLiteral("abs_path.wpj"));
+        const QString absoluteDir = QDir(tempDir.path()).absolutePath();
+        const QString contents =
+            QStringLiteral(";WALLS Project file\n"
+                           ".BOOK\tTest Cave\n"
+                           ".NAME\tTEST-CAVE\n"
+                           ".STATUS\t8\n"
+                           ".BOOK\tSub Book\n"
+                           ".NAME\tSUB\n"
+                           ".PATH\t%1\n"
+                           ".STATUS\t8\n"
+                           ".SURVEY\tMain Passage\n"
+                           ".NAME\tMAIN\n"
+                           ".STATUS\t8\n"
+                           ".ENDBOOK\n"
+                           ".ENDBOOK\n")
+                .arg(absoluteDir);
+        writeUtf8File(wpjPath, contents.toUtf8());
+
+        auto result = cwExternalCenterlineScanner::scanWalls(wpjPath);
+        REQUIRE(result.hasError());
+        CHECK(result.errorMessage().contains(QStringLiteral("absolute include path")));
+        CHECK(result.errorMessage().contains(absoluteDir));
+    }
+}
+
+TEST_CASE("entryDirectIncludes lists only the entry file's first-level includes",
+          "[Scanner][Survex]")
+{
+    const QString nestedPath =
+        datasetExternalCenterlinePath(QStringLiteral("survex_nested.svx"));
+    REQUIRE(QFileInfo::exists(nestedPath));
+
+    auto nested = cwExternalCenterlineScanner::scanSurvex(nestedPath);
+    REQUIRE_FALSE(nested.hasError());
+    const ScanResult nestedScan = nested.value();
+    // entrance.svx is included by the entry; passage.svx is one level
+    // deeper and stays out.
+    REQUIRE(nestedScan.entryDirectIncludes.size() == 1);
+    CHECK(QFileInfo(nestedScan.entryDirectIncludes.first()).fileName()
+          == QStringLiteral("entrance.svx"));
+
+    const QString barePath =
+        datasetExternalCenterlinePath(QStringLiteral("survex_simple.svx"));
+    REQUIRE(QFileInfo::exists(barePath));
+
+    auto bare = cwExternalCenterlineScanner::scanSurvex(barePath);
+    REQUIRE_FALSE(bare.hasError());
+    CHECK(bare.value().entryDirectIncludes.isEmpty());
+}
+
+TEST_CASE("entryDirectIncludes leaves out a file that includes itself",
+          "[Scanner][Survex]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString selfPath = tempPath(tempDir, QStringLiteral("self.svx"));
+    writeUtf8File(selfPath,
+                  QByteArrayLiteral("*begin Self\n*include self.svx\n*end Self\n"));
+
+    auto result = cwExternalCenterlineScanner::scanSurvex(selfPath);
+    REQUIRE_FALSE(result.hasError());
+    const ScanResult scan = result.value();
+    CHECK(anyWarningContains(scan, QStringLiteral("circular include")));
+    CHECK(scan.entryDirectIncludes.isEmpty());
+}

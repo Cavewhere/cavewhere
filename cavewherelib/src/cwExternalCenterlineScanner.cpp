@@ -169,6 +169,11 @@ struct ScanState {
     QSet<QString> inProgress;
     QStringList dependencies;  // in walk order, deduplicated
     QStringList warnings;
+    // resolved targets referenced by the entry file itself, in walk
+    // order, deduplicated
+    QStringList entryDirectIncludes;
+    // first absolute-include failure; aborts the walk once set
+    QString error;
 };
 
 void scanSurvexFile(const QString& filePath, ScanState& state);
@@ -179,6 +184,49 @@ void scanByFormat(const QString& filePath, ScanState& state);
 void recordWarning(ScanState& state, const QString& message)
 {
     state.warnings.append(message);
+}
+
+/**
+ * True when a survey file names an include with an absolute path,
+ * which hard-fails the walk. Such a project only solves on the
+ * machine that wrote it, so the attached copy would be broken
+ * everywhere else. The first failure wins - later directives are
+ * never reached because the walk aborts.
+ *
+ * referencingFile is the file holding the directive; asWritten is
+ * the directive's path exactly as the author typed it, with quotes
+ * already stripped and before any extension is appended.
+ */
+bool rejectAbsolutePath(ScanState& state,
+                        const QString& referencingFile,
+                        const QString& asWritten)
+{
+    if (!QDir::isAbsolutePath(asWritten)) {
+        return false;
+    }
+    if (state.error.isEmpty()) {
+        state.error =
+            QStringLiteral("absolute include path in %1: %2 \u2014 survey files must "
+                           "reference their includes relatively so the attached copy "
+                           "works on other machines")
+                .arg(referencingFile, asWritten);
+    }
+    return true;
+}
+
+void recordEntryDirectInclude(ScanState& state, const QString& resolvedPath)
+{
+    // inProgress is exactly the recursion stack, so a depth of one
+    // means the file being parsed is the entry file itself. A file
+    // that includes itself resolves back onto the stack; the entry is
+    // not one of its own includes, so leave it out.
+    if (state.inProgress.size() != 1 || resolvedPath.isEmpty()
+        || state.inProgress.contains(resolvedPath)) {
+        return;
+    }
+    if (!state.entryDirectIncludes.contains(resolvedPath)) {
+        state.entryDirectIncludes.append(resolvedPath);
+    }
 }
 
 void scanSurvexFile(const QString& filePath, ScanState& state)
@@ -251,6 +299,10 @@ void scanSurvexFile(const QString& filePath, ScanState& state)
             continue;
         }
 
+        if (rejectAbsolutePath(state, canonical, target)) {
+            break;
+        }
+
         target = includeTargetWithExtension(target);
 
         const IncludeResolveResult resolution = resolveIncludeTarget(target, baseDir);
@@ -266,10 +318,15 @@ void scanSurvexFile(const QString& filePath, ScanState& state)
                               .arg(QFileInfo(target).fileName(), resolution.matchedAs));
         }
 
+        recordEntryDirectInclude(state, resolution.resolved);
+
         // Cross-format dispatch: Survex's *include can pull in .dat /
         // .mak / .wpj / .srv files. Per the plan, cavern auto-detects
         // format at solve time, so the scanner mirrors that.
         scanByFormat(resolution.resolved, state);
+        if (!state.error.isEmpty()) {
+            break;
+        }
     }
 
     state.inProgress.remove(canonical);
@@ -289,15 +346,6 @@ const QRegularExpression& compassMakReferenceRegex()
         QString::fromLatin1(R"RX(^\s*#\s*(?:"([^"]+)"|([^,;\s]+)))RX"),
         QRegularExpression::CaseInsensitiveOption);
     return regex;
-}
-
-QString stripCompassComment(const QString& line)
-{
-    const int slashStart = line.indexOf(QLatin1Char('/'));
-    if (slashStart < 0) {
-        return line;
-    }
-    return line.left(slashStart);
 }
 
 void scanCompassFile(const QString& filePath, ScanState& state)
@@ -344,8 +392,14 @@ void scanCompassFile(const QString& filePath, ScanState& state)
             const QRegularExpression& regex = compassMakReferenceRegex();
             const QStringList lines = decoded.text.split(QLatin1Char('\n'));
             for (const QString& rawLine : lines) {
-                const QString line = stripCompassComment(rawLine).trimmed();
-                if (line.isEmpty() || !line.startsWith(QLatin1Char('#'))) {
+                const QString line = rawLine.trimmed();
+                // A Compass comment is a whole line starting with '/';
+                // a '/' inside a '#' reference is a path separator and
+                // must survive so absolute and subdirectory targets
+                // stay readable.
+                if (line.isEmpty()
+                    || line.startsWith(QLatin1Char('/'))
+                    || !line.startsWith(QLatin1Char('#'))) {
                     continue;
                 }
                 const auto match = regex.match(line);
@@ -358,6 +412,9 @@ void scanCompassFile(const QString& filePath, ScanState& state)
                 }
                 if (target.isEmpty()) {
                     continue;
+                }
+                if (rejectAbsolutePath(state, canonical, target)) {
+                    break;
                 }
                 const IncludeResolveResult resolution =
                     resolveIncludeTarget(target, baseDir);
@@ -372,10 +429,15 @@ void scanCompassFile(const QString& filePath, ScanState& state)
                                   QStringLiteral("case-fallback match: include '%1' resolved to '%2'")
                                       .arg(QFileInfo(target).fileName(), resolution.matchedAs));
                 }
+                recordEntryDirectInclude(state, resolution.resolved);
+
                 // .mak entries point at .dat files, which never include
                 // anything else - but go through scanByFormat anyway so
                 // a .mak that nests another .mak still walks correctly.
                 scanByFormat(resolution.resolved, state);
+                if (!state.error.isEmpty()) {
+                    break;
+                }
             }
         }
     }
@@ -386,26 +448,41 @@ void scanCompassFile(const QString& filePath, ScanState& state)
 
 void collectWallsSurveys(const dewalls::WpjBookPtr& book,
                         const QDir& baseDir,
+                        const QString& wpjPath,
                         ScanState& state)
 {
     if (book.isNull()) {
         return;
     }
     for (const auto& child : book->Children) {
+        if (!state.error.isEmpty()) {
+            return;
+        }
         if (child.isNull()) {
             continue;
         }
+        // Only children are checked: the parser stamps the root book's
+        // Path with the .wpj's own absolute directory, so checking it
+        // would reject every project file.
+        if (rejectAbsolutePath(state, wpjPath, child->Path)) {
+            return;
+        }
         if (child->isBook()) {
-            collectWallsSurveys(child.dynamicCast<dewalls::WpjBook>(), baseDir, state);
+            collectWallsSurveys(child.dynamicCast<dewalls::WpjBook>(), baseDir,
+                                wpjPath, state);
             continue;
         }
         // .SURVEY / .OTHER both reference an external file by Name.
         if (child->Name.isEmpty()) {
             continue;
         }
+        const QString name = child->Name.value();
+        if (rejectAbsolutePath(state, wpjPath, name)) {
+            return;
+        }
         QString absolutePath = child->absolutePath();
         if (absolutePath.isEmpty()) {
-            absolutePath = baseDir.absoluteFilePath(child->Name.value());
+            absolutePath = baseDir.absoluteFilePath(name);
         }
         // dewalls' absolutePath() returns just the file stem if the
         // entry doesn't carry an extension; .SURVEY entries default
@@ -418,6 +495,7 @@ void collectWallsSurveys(const dewalls::WpjBookPtr& book,
                           QStringLiteral("missing Walls reference: %1").arg(absolutePath));
             continue;
         }
+        recordEntryDirectInclude(state, canonicalize(absolutePath));
         scanByFormat(absolutePath, state);
     }
 }
@@ -459,7 +537,7 @@ void scanWallsFile(const QString& filePath, ScanState& state)
         state.dependencies.append(canonical);
 
         const QDir baseDir = QFileInfo(canonical).absoluteDir();
-        collectWallsSurveys(root, baseDir, state);
+        collectWallsSurveys(root, baseDir, canonical, state);
     } else {
         // Bare .srv: trust the file as-is, no parsing needed.
         state.inProgress.insert(canonical);
@@ -472,6 +550,11 @@ void scanWallsFile(const QString& filePath, ScanState& state)
 
 void scanByFormat(const QString& filePath, ScanState& state)
 {
+    // An absolute include aborts the whole walk, so descend no further.
+    if (!state.error.isEmpty()) {
+        return;
+    }
+
     using namespace cwExternalCenterlineScanner;
     const Format fmt = formatFor(filePath);
     switch (fmt) {
@@ -896,6 +979,10 @@ Monad::Result<ScanResult> scanWithEntry(const QString& entryFile,
     ScanState state;
     scanFn(entryFile, state);
 
+    if (!state.error.isEmpty()) {
+        return Monad::Result<ScanResult>(state.error);
+    }
+
     if (state.dependencies.isEmpty()) {
         return Monad::Result<ScanResult>(
             QStringLiteral("%1: entry file could not be read: %2")
@@ -905,6 +992,7 @@ Monad::Result<ScanResult> scanWithEntry(const QString& entryFile,
     ScanResult result;
     result.dependencies = state.dependencies;
     result.warnings = state.warnings;
+    result.entryDirectIncludes = state.entryDirectIncludes;
     parseSeededMetadata(result);
     return Monad::Result<ScanResult>(result);
 }

@@ -111,9 +111,19 @@ struct ScanResult {
      * targets, case-fallback matches, encoding fallback, circular
      * include chains. The presence of warnings does NOT fail the
      * scan; only a hard failure (missing entry file, unreadable
-     * directory) returns Monad::Result with an error.
+     * directory, an include written as an absolute path) returns
+     * Monad::Result with an error.
      */
     QStringList warnings;
+
+    /**
+     * The files the entry file references directly - first level
+     * only, so a file pulled in by an included file stays out.
+     * Stored as canonical absolute paths, de-duplicated, in walk
+     * order. Feeds the multi-cave heuristic that offers alternate
+     * attach targets when the entry looks like a project driver.
+     */
+    QStringList entryDirectIncludes;
 
     /**
      * Trip metadata seeded from the entry file. Participates in
@@ -126,6 +136,7 @@ struct ScanResult {
     {
         return dependencies == other.dependencies
             && warnings == other.warnings
+            && entryDirectIncludes == other.entryDirectIncludes
             && seededMetadata == other.seededMetadata;
     }
     bool operator!=(const ScanResult& other) const { return !(*this == other); }
@@ -167,10 +178,12 @@ CAVEWHERE_LIB_EXPORT Monad::Result<ScanResult> scan(const QString& entryFile);
  * fallback decodes as UTF-8 first; on decode failure retries as
  * Latin-1 and emits a warning naming the encoding.
  *
- * Returns Monad::Result error only when the entry file itself
- * cannot be opened or canonicalised. Missing or unreadable
- * *included files emit warnings; the rest of the closure
- * continues to resolve.
+ * Returns Monad::Result error when the entry file itself cannot be
+ * opened or canonicalised, and when any *include names its target
+ * with an absolute path - a project written that way only solves on
+ * the machine that authored it, so the attached copy would be
+ * broken everywhere else. Missing or unreadable *included files
+ * emit warnings; the rest of the closure continues to resolve.
  */
 CAVEWHERE_LIB_EXPORT Monad::Result<ScanResult> scanSurvex(const QString& entryFile);
 
@@ -178,8 +191,9 @@ CAVEWHERE_LIB_EXPORT Monad::Result<ScanResult> scanSurvex(const QString& entryFi
  * Walks a Compass entry file's dependency closure.
  *  - .dat -> just the file itself (data files don't include others)
  *  - .mak -> the .mak plus every '#'-line .dat referenced in it
- * Missing referenced .dat files emit warnings; only an unreadable
- * entry file returns Monad::Result error.
+ * Missing referenced .dat files emit warnings; an unreadable entry
+ * file, or a '#' reference written as an absolute path, returns
+ * Monad::Result error.
  */
 CAVEWHERE_LIB_EXPORT Monad::Result<ScanResult> scanCompass(const QString& entryFile);
 
@@ -189,8 +203,9 @@ CAVEWHERE_LIB_EXPORT Monad::Result<ScanResult> scanCompass(const QString& entryF
  *  - .wpj -> the .wpj plus every leaf .srv reachable through the
  *           WpjBook tree (dewalls' WallsProjectParser is the
  *           authoritative parser here)
- * Missing referenced .srv files emit warnings; only an unreadable
- * entry file or a parser failure returns Monad::Result error.
+ * Missing referenced .srv files emit warnings; an unreadable entry
+ * file, a parser failure, or a .PATH / .NAME written as an absolute
+ * path returns Monad::Result error.
  */
 CAVEWHERE_LIB_EXPORT Monad::Result<ScanResult> scanWalls(const QString& entryFile);
 
