@@ -245,7 +245,9 @@ void cwCave::insertTrip(int i, cwTrip* trip) {
     cwCave* parentCave = dynamic_cast<cwCave*>(((QObject*)trip)->parent());
     if(parentCave != nullptr) {
         int index = parentCave->Trips.indexOf(trip);
-        parentCave->removeTrip(index);
+        //The trip is moving, not being deleted — its id lives on in this cave,
+        //so the old cave must stay quiet about it.
+        parentCave->removeTripInternal(index);
     }
 
     // Auto-rename to avoid filesystem path collisions in .cwproj layout.
@@ -265,6 +267,17 @@ void cwCave::insertTrip(int i, cwTrip* trip) {
   the caller to delete it
   */
 void cwCave::removeTrip(int i) {
+    if(i < 0 || i >= Trips.size()) { return; }
+
+    //Read the id before the removal, which can destroy the trip outright: with
+    //no undo stack pushUndo executes the command and then deletes it, taking
+    //the trip with it.
+    const QUuid removedId = Trips.at(i)->id();
+    removeTripInternal(i);
+    emit tripsDeleted({removedId});
+}
+
+void cwCave::removeTripInternal(int i) {
     if(i < 0 || i >= Trips.size()) { return; }
     pushUndo(new RemoveTripCommand(this, i, i));
 }

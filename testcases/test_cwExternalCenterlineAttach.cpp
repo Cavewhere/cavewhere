@@ -1479,3 +1479,112 @@ TEST_CASE("Save As keeps the attachment's remembered source and fingerprint",
               ->statusFor(reopenedTrip->id())
           != cwExternalSourceStatusModel::Status::NoBreadcrumb);
 }
+
+TEST_CASE("deleting a trip forgets its remembered source",
+          "[Attach][Manager][Breadcrumb]")
+{
+    auto fixture = makeSavedProject(QStringLiteral("delete-trip-breadcrumb"));
+    const QString source = datasetExternalCenterlinePath(QStringLiteral("survex_simple.svx"));
+    const QUuid ownerId = fixture->trip->id();
+
+    attachThroughManager(fixture.get(), fixture->trip, source);
+    drainPipelines(fixture.get());
+    REQUIRE(fixture->settings()->breadcrumbPath(ownerId) == source);
+    REQUIRE_FALSE(fixture->settings()->fingerprint(ownerId).isEmpty());
+
+    //The verb the trip's delete UI calls (CavePage's RemoveAskBox).
+    fixture->cave->removeTrip(0);
+    QCoreApplication::processEvents();
+
+    CHECK(fixture->settings()->breadcrumbPath(ownerId).isEmpty());
+    CHECK(fixture->settings()->fingerprint(ownerId).isEmpty());
+    CHECK_FALSE(fixture->settings()->hasBreadcrumb(ownerId));
+}
+
+TEST_CASE("deleting a cave forgets every remembered source it held",
+          "[Attach][Manager][Breadcrumb]")
+{
+    auto fixture = makeSavedProject(QStringLiteral("delete-cave-breadcrumb"));
+    const QString source = datasetExternalCenterlinePath(QStringLiteral("survex_simple.svx"));
+    const QUuid ownerId = fixture->trip->id();
+
+    attachThroughManager(fixture.get(), fixture->trip, source);
+    drainPipelines(fixture.get());
+    REQUIRE(fixture->settings()->breadcrumbPath(ownerId) == source);
+    REQUIRE_FALSE(fixture->settings()->fingerprint(ownerId).isEmpty());
+
+    //The verb the cave's delete UI calls (DataMainPage).
+    fixture->rootData->region()->removeCave(0);
+    QCoreApplication::processEvents();
+
+    CHECK(fixture->settings()->breadcrumbPath(ownerId).isEmpty());
+    CHECK(fixture->settings()->fingerprint(ownerId).isEmpty());
+}
+
+TEST_CASE("closing the project keeps every remembered source",
+          "[Attach][Manager][Breadcrumb]")
+{
+    auto fixture = makeSavedProject(QStringLiteral("close-keeps-breadcrumb"));
+    const QString source = datasetExternalCenterlinePath(QStringLiteral("survex_simple.svx"));
+    const QUuid ownerId = fixture->trip->id();
+
+    attachThroughManager(fixture.get(), fixture->trip, source);
+    drainPipelines(fixture.get());
+    REQUIRE(fixture->settings()->breadcrumbPath(ownerId) == source);
+    const auto storedFingerprint = fixture->settings()->fingerprint(ownerId);
+    REQUIRE_FALSE(storedFingerprint.isEmpty());
+
+    //The primitive project close/new and load-replacing-the-region both run.
+    //The closed project still owns its sources, so they must survive - keyed on
+    //a destructor or on removeCaves(range), the clear would take them.
+    fixture->rootData->region()->clearCaves();
+    QCoreApplication::processEvents();
+
+    CHECK(fixture->settings()->breadcrumbPath(ownerId) == source);
+    CHECK(fixture->settings()->fingerprint(ownerId) == storedFingerprint);
+}
+
+TEST_CASE("deleting a never-attached trip touches nothing",
+          "[Attach][Manager][Breadcrumb]")
+{
+    auto fixture = makeSavedProject(QStringLiteral("delete-native-trip"));
+    const QString source = datasetExternalCenterlinePath(QStringLiteral("survex_simple.svx"));
+    const QUuid attachedId = fixture->trip->id();
+
+    attachThroughManager(fixture.get(), fixture->trip, source);
+    drainPipelines(fixture.get());
+    REQUIRE(fixture->settings()->breadcrumbPath(attachedId) == source);
+
+    cwTrip* nativeTrip = addEmptyTrip(fixture->cave, QStringLiteral("NativeTrip"));
+    REQUIRE(fixture->cave->indexOf(nativeTrip) == 1);
+
+    cwSignalSpy breadcrumbSpy(fixture->settings(),
+                              &cwExternalSourceSettings::breadcrumbsChanged);
+    fixture->cave->removeTrip(1);
+    QCoreApplication::processEvents();
+
+    CHECK(breadcrumbSpy.count() == 0);
+    CHECK(fixture->settings()->breadcrumbPath(attachedId) == source);
+}
+
+TEST_CASE("moving a trip to another cave keeps its remembered source",
+          "[Attach][Manager][Breadcrumb]")
+{
+    auto fixture = makeSavedProject(QStringLiteral("move-trip-breadcrumb"));
+    const QString source = datasetExternalCenterlinePath(QStringLiteral("survex_simple.svx"));
+    const QUuid ownerId = fixture->trip->id();
+
+    attachThroughManager(fixture.get(), fixture->trip, source);
+    drainPipelines(fixture.get());
+    REQUIRE(fixture->settings()->breadcrumbPath(ownerId) == source);
+
+    cwCave* secondCave = addEmptyCave(*fixture->rootData->region(),
+                                      QStringLiteral("SecondCave"));
+    //The attachment travels with the trip, so the move must stay silent.
+    secondCave->insertTrip(0, fixture->trip);
+    QCoreApplication::processEvents();
+
+    CHECK(secondCave->indexOf(fixture->trip) == 0);
+    CHECK(fixture->settings()->breadcrumbPath(ownerId) == source);
+    CHECK_FALSE(fixture->settings()->fingerprint(ownerId).isEmpty());
+}

@@ -166,6 +166,12 @@ signals:
     //! must invalidate on this.
     void scopeLabelsChanged();
 
+    //! The user deleted trips somewhere in this region: on their own, through
+    //! cwCave::removeTrip (relayed from the cave), or with the cave that held
+    //! them, through removeCave(). See cwCave::tripsDeleted for the contract,
+    //! including the paths that stay silent.
+    void tripsDeleted(const QList<QUuid>& tripIds);
+
 public slots:
 
 protected:

@@ -319,6 +319,8 @@ void cwExternalCenterlineManager::setRegion(cwCavingRegion* region)
                    this, &cwExternalCenterlineManager::recomputeWatchSet);
         disconnect(m_region.data(), &cwCavingRegion::removedCaves,
                    this, &cwExternalCenterlineManager::recomputeWatchSet);
+        disconnect(m_region.data(), &cwCavingRegion::tripsDeleted,
+                   this, &cwExternalCenterlineManager::clearBreadcrumbsForDeletedTrips);
     }
     m_region = region;
     m_signaler->setRegion(region);
@@ -331,6 +333,10 @@ void cwExternalCenterlineManager::setRegion(cwCavingRegion* region)
                 this, &cwExternalCenterlineManager::recomputeWatchSet);
         connect(m_region.data(), &cwCavingRegion::removedCaves,
                 this, &cwExternalCenterlineManager::recomputeWatchSet);
+        // removedCaves also fires on close, load, and moves; tripsDeleted
+        // fires only on the delete verbs, which is what the store needs.
+        connect(m_region.data(), &cwCavingRegion::tripsDeleted,
+                this, &cwExternalCenterlineManager::clearBreadcrumbsForDeletedTrips);
     }
 
     if (m_region.isNull()) {
@@ -903,6 +909,19 @@ void cwExternalCenterlineManager::sweepSources()
     armPaths(sortedList(files), m_sourceWatcher->files(), m_watchedSourceFiles);
     armPaths(sortedList(directories), m_sourceWatcher->directories(),
              m_watchedSourceDirectories);
+}
+
+void cwExternalCenterlineManager::clearBreadcrumbsForDeletedTrips(const QList<QUuid>& tripIds)
+{
+    if (m_externalSourceSettings.isNull()) {
+        return;
+    }
+
+    for (const QUuid& tripId : tripIds) {
+        // Silent for a trip that never had one: clearBreadcrumb returns
+        // before it emits when the store holds neither key.
+        m_externalSourceSettings->clearBreadcrumb(tripId);
+    }
 }
 
 void cwExternalCenterlineManager::rebuildAttachedRowsFromNames()

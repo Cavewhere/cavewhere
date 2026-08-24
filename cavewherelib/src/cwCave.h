@@ -188,6 +188,14 @@ signals:
 
     void externalCenterlineChanged();
 
+    //! The user deleted trips from this cave through removeTrip(), the verb the
+    //! deletion UI calls. Carries their ids, so a consumer holding per-trip
+    //! state outside the project (the external-source breadcrumb store) can
+    //! forget them. Silent on every path that takes a trip off the list while
+    //! its id lives on: project close, load replacing the region, and a move to
+    //! another cave.
+    void tripsDeleted(const QList<QUuid>& tripIds);
+
 public slots:
     /// Feed the cave's current fix stations and region coordinate system into
     /// the gridConvergence() readout, which caches the PROJ result and only
@@ -229,6 +237,10 @@ private:
     //! passes through.
     void connectTrip(cwTrip* trip);
     void disconnectTrip(cwTrip* trip);
+
+    //! removeTrip()'s body without the tripsDeleted() notification, for the
+    //! paths that take a trip off this cave's list without deleting it.
+    void removeTripInternal(int i);
 
     cwCave& Copy(const cwCave& object);
     void addTripNullHelper();

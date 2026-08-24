@@ -252,7 +252,22 @@ void cwCavingRegion::insertCave(int index, cwCave* cave) {
   \brief Removes the cave at index
   */
 void cwCavingRegion::removeCave(int index) {
+    if(index < 0 || index >= m_caves.size()) { return; }
+
+    //Deleting a cave deletes every trip in it, so the cascade is read off the
+    //cave before the removal, which can destroy it outright.
+    const QList<cwTrip*> trips = m_caves.at(index)->trips();
+    QList<QUuid> removedTripIds;
+    removedTripIds.reserve(trips.size());
+    for(const cwTrip* trip : trips) {
+        removedTripIds.append(trip->id());
+    }
+
     removeCaves(index, index);
+
+    if(!removedTripIds.isEmpty()) {
+        emit tripsDeleted(removedTripIds);
+    }
 }
 
 /**
@@ -499,6 +514,10 @@ void cwCavingRegion::connectCave(cwCave* cave)
     //qualified station name this region publishes, so it rides the same pulse.
     connect(cave, &cwCave::tripScopeLabelsChanged,
             this, &cwCavingRegion::scopeLabelsChanged, Qt::UniqueConnection);
+    //A trip deleted in one cave is news for consumers that watch the whole
+    //region, so it rides out through here.
+    connect(cave, &cwCave::tripsDeleted,
+            this, &cwCavingRegion::tripsDeleted, Qt::UniqueConnection);
 }
 
 void cwCavingRegion::disconnectCave(cwCave* cave)
@@ -512,6 +531,8 @@ void cwCavingRegion::disconnectCave(cwCave* cave)
                this, &cwCavingRegion::invalidateCaveScopeLabels);
     disconnect(cave, &cwCave::tripScopeLabelsChanged,
                this, &cwCavingRegion::scopeLabelsChanged);
+    disconnect(cave, &cwCave::tripsDeleted,
+               this, &cwCavingRegion::tripsDeleted);
 }
 
 /**
@@ -522,7 +543,9 @@ void cwCavingRegion::unparentCave(cwCave* cave) {
     cwCavingRegion* parentRegion = dynamic_cast<cwCavingRegion*>(((QObject*)cave)->parent());
     if(parentRegion != nullptr) {
         int index = parentRegion->m_caves.indexOf(cave);
-        parentRegion->removeCave(index);
+        //The cave is moving between regions, so its trips keep their ids and
+        //their attachments — the old region must stay quiet about them.
+        parentRegion->removeCaves(index, index);
     }
 }
 
