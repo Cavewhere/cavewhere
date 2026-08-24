@@ -25,7 +25,6 @@
 #include "cwNoteTranformation.h"
 #include "cwRegionTreeModel.h"
 #include "cwTriangulateLiDARTask.h"
-#include "cwTextureCompressionJob.h"
 #include "cwCavingRegion.h"
 #include "cwCave.h"
 #include "cwGridConvergence.h"
@@ -639,11 +638,7 @@ QFuture<void> cwNoteLiDARManager::runBatch()
 
     // Wrap in restarter so subsequent calls coalesce
     m_restarter.restart([this, notes, inputs]() {
-        //One "Compressing textures" job for this batch. The triangulation
-        //workers keep it alive while they encode, so a batch served from the
-        //disk cache shows no job.
-        auto future = cwTriangulateLiDARTask::triangulate(
-            inputs, cwTextureCompressionJob::create(m_futureManagerToken));
+        auto future = cwTriangulateLiDARTask::triangulate(inputs);
 
         return AsyncFuture::observe(future)
             .context(this,

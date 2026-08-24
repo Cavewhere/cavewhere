@@ -48,11 +48,6 @@ void cwTriangulateTask::setFormatType(cwTextureUploadTask::Format format)
     Format = format;
 }
 
-void cwTriangulateTask::setCompressionJob(const cwTextureCompressionJob::Ptr& job)
-{
-    m_compressionJob = job;
-}
-
 QList<QFuture<cwTriangulatedData>> cwTriangulateTask::triangulate() const
 {
     Q_ASSERT(!Scraps.isEmpty());
@@ -63,7 +58,7 @@ QList<QFuture<cwTriangulatedData>> cwTriangulateTask::triangulate() const
         = [this, format](const cwTriangulateInData& scrap)->QFuture<cwTriangulatedData>
     {
 
-        auto cropFuture = cropScrap(scrap, DataRootDir, format, m_compressionJob);
+        auto cropFuture = cropScrap(scrap, DataRootDir, format);
         auto dataRootDir = DataRootDir;
 
         return AsyncFuture::observe(cropFuture)
@@ -106,12 +101,10 @@ QList<QFuture<cwTriangulatedData>> cwTriangulateTask::triangulate() const
 
 QFuture<cwCropImageTask::Result> cwTriangulateTask::cropScrap(const cwTriangulateInData &scrap,
                                                               const QDir& dataRootDir,
-                                                              cwTextureUploadTask::Format format,
-                                                              const cwTextureCompressionJob::Ptr& compressionJob)
+                                                              cwTextureUploadTask::Format format)
 {
     cwCropImageTask cropTask;
     cropTask.setDataRootDir(dataRootDir);
-    cropTask.setCompressionJob(compressionJob);
     cropTask.setFormatType(format);
     cropTask.setOriginal(scrap.noteImage());
 

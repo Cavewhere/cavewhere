@@ -68,8 +68,7 @@ namespace {
                                                const QImage& croppedImage,
                                                const QString& pathToImage,
                                                const QString& keyPrefix,
-                                               quint64 parentHash,
-                                               const cwTextureCompressionJob::Ptr& compressionJob)
+                                               quint64 parentHash)
     {
         const cwDiskCacher::Key key = cwImageProvider::imageCacheKey(
             pathToImage,
@@ -80,10 +79,6 @@ namespace {
         if(!cacher.entry(key).isEmpty()) {
             return key;
         }
-
-        //Only the encode is tracked: it is the multi-second step, and counting
-        //the cache hit above would put a job on screen for work that never ran
-        const cwTextureCompressionJob::Encode encode(compressionJob);
 
         //Scrap texcoords use the OpenGL bottom-left origin, so the compressed
         //texture must carry the same flip cwOpenGLUtils::toGLTexture() gives the
@@ -130,17 +125,11 @@ void cwCropImageTask::setDataRootDir(const QDir& dataRootDir)
     DataRootDir = dataRootDir;
 }
 
-void cwCropImageTask::setCompressionJob(const cwTextureCompressionJob::Ptr& job)
-{
-    m_compressionJob = job;
-}
-
 QFuture<cwCropImageTask::Result> cwCropImageTask::crop()
 {
     auto originalImage = Original;
     auto cropRect = CropRect;
     auto dataRootDir = DataRootDir;
-    auto compressionJob = m_compressionJob;
 
     struct Image {
         cwDiskCacher::Key key;
@@ -149,7 +138,7 @@ QFuture<cwCropImageTask::Result> cwCropImageTask::crop()
         int dotsPerMeter;
     };
 
-    auto cropImage = [dataRootDir, originalImage, cropRect, compressionJob]()->Image {
+    auto cropImage = [dataRootDir, originalImage, cropRect]()->Image {
             const QString originalPath = originalImage.path();
             cwImageProvider provider;
             provider.setDataRootDir(dataRootDir);
@@ -190,8 +179,7 @@ QFuture<cwCropImageTask::Result> cwCropImageTask::crop()
                                                                     croppedImage,
                                                                     originalPath,
                                                                     keyPrefix,
-                                                                    parentHash,
-                                                                    compressionJob);
+                                                                    parentHash);
                 return Image({key, compressedKey, croppedImage, dotsPerMeter});
             }
 

@@ -12,13 +12,12 @@
 using namespace Monad;
 
 
-QFuture<Monad::Result<QVector<cwRenderTexturedItems::Item> > > cwTriangulateLiDARTask::triangulate(const QList<cwTriangulateLiDARInData> &liDARs,
-                                                                                                   const cwTextureCompressionJob::Ptr& compressionJob)
+QFuture<Monad::Result<QVector<cwRenderTexturedItems::Item> > > cwTriangulateLiDARTask::triangulate(const QList<cwTriangulateLiDARInData> &liDARs)
 {
 
     // qDebug() << "I get here!";
 
-    return cwConcurrent::mapped(liDARs, [compressionJob](const cwTriangulateLiDARInData& data) {
+    return cwConcurrent::mapped(liDARs, [](const cwTriangulateLiDARInData& data) {
         if(data.stationLookup().positions().size() == 0) {
             return Monad::Result<QVector<cwRenderTexturedItems::Item> >("Station Lookup not set");
         }
@@ -48,8 +47,7 @@ QFuture<Monad::Result<QVector<cwRenderTexturedItems::Item> > > cwTriangulateLiDA
 
         QVector<cwRenderTexturedItems::Item> renderItems = reserveRenderItems(gltf.meshes);
         const cwGltfBaseColorTexture baseColorTexture(data.dataRootPath(),
-                                                     data.gltfFilename(),
-                                                     compressionJob);
+                                                     data.gltfFilename());
 
         //Morph the vertexes
         for(auto& mesh : gltf.meshes) {

@@ -16,7 +16,6 @@
 #include "cwNote.h"
 #include "cwScrap.h"
 #include "cwTriangulateTask.h"
-#include "cwTextureCompressionJob.h"
 #include "cwProject.h"
 #include "cwTriangulateInData.h"
 #include "cwDebug.h"
@@ -118,7 +117,7 @@ cwScrapManager::cwScrapManager(QObject *parent) :
     m_renderScraps(nullptr),
     m_warpingSettings(new cwTriangulateWarping(this))
 {
-    cwTrackRestarter(FutureManagerToken, TriangulateRestarter, QStringLiteral("Updating Scaps"));
+    cwTrackRestarter(FutureManagerToken, TriangulateRestarter, QStringLiteral("Updating Scraps"));
 
     //Warping changes mark every scrap dirty; the auto-update policy (via
     //cwUpdateCoordinator) decides whether to run. Uncoordinated managers
@@ -1168,10 +1167,6 @@ QList<cwScrapManager::TriangulatedScrapResult> cwScrapManager::triangulateScraps
     task.setDataRootDir(Project->dataRootDir());
     task.setScrapData(scrapData);
     task.setFormatType(cwTextureUploadTask::format());
-
-    //One "Compressing textures" job for this batch. The crop workers keep it
-    //alive while they encode, so a batch served from the disk cache shows no job.
-    task.setCompressionJob(cwTextureCompressionJob::create(FutureManagerToken));
 
     auto triangulatedFutures = task.triangulate();
 
