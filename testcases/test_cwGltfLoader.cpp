@@ -204,6 +204,7 @@ TEST_CASE("GLTF loader shares texture pixels with the images it hands out", "[cw
 namespace {
 
 constexpr int kCompressedTextureSize = 32;
+constexpr int kSecondCompressedTextureSize = 16;
 constexpr int kColorChannelMax = 255;
 
 //Restores the format the render backend published, so a test that turns the
@@ -226,9 +227,9 @@ private:
     QRhiTexture::Format m_previous;
 };
 
-QImage compressibleImage()
+QImage compressibleImage(int size = kCompressedTextureSize)
 {
-    QImage image(kCompressedTextureSize, kCompressedTextureSize, QImage::Format_RGBA8888);
+    QImage image(size, size, QImage::Format_RGBA8888);
     for(int y = 0; y < image.height(); y++) {
         for(int x = 0; x < image.width(); x++) {
             const int red = x * kColorChannelMax / image.width();
@@ -268,7 +269,7 @@ QString writeGltfFile(const QDir& dataRootDir, const QByteArray& bytes)
     return path;
 }
 
-cw::gltf::SceneCPU sceneWithBaseColor(const QImage& image)
+void appendBaseColor(cw::gltf::SceneCPU& scene, const QImage& image)
 {
     const QImage rgbaImage = image.convertToFormat(QImage::Format_RGBA8888);
 
@@ -279,9 +280,44 @@ cw::gltf::SceneCPU sceneWithBaseColor(const QImage& image)
     texture.pixels = QByteArray(reinterpret_cast<const char*>(rgbaImage.constBits()),
                                 rgbaImage.sizeInBytes());
 
-    cw::gltf::SceneCPU scene;
     scene.textures.append(texture);
+}
+
+cw::gltf::SceneCPU sceneWithBaseColor(const QImage& image)
+{
+    cw::gltf::SceneCPU scene;
+    appendBaseColor(scene, image);
     return scene;
+}
+
+//Leaves a damaged cache entry behind, so a rewrite of the file is easy to spot.
+bool truncateInHalf(const QString& path)
+{
+    QFile file(path);
+    if(!file.open(QIODevice::ReadOnly)) {
+        return false;
+    }
+    const QByteArray bytes = file.readAll();
+    file.close();
+
+    if(!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        return false;
+    }
+    file.write(bytes.left(bytes.size() / 2));
+    return true;
+}
+
+cwDiskCacher::Key textureKey(const QString& gltfPath, int textureIndex)
+{
+    const QFileInfo gltfInfo(gltfPath);
+    return cwDiskCacher::Key {
+        gltfInfo.fileName()
+            + QStringLiteral("-texture")
+            + QString::number(textureIndex)
+            + QStringLiteral("-uastc.ktx2"),
+        gltfInfo.dir(),
+        QString()
+    };
 }
 
 }
@@ -375,11 +411,7 @@ TEST_CASE("glTF base color textures come from the KTX2 disk cache", "[Gltf][cwGl
         CHECK(first.texture.isNull());
 
         const cwDiskCacher cacher(dataRootDir);
-        const cwDiskCacher::Key key {
-            QStringLiteral("scan.glb-texture0-uastc.ktx2"),
-            QFileInfo(gltfPath).dir(),
-            QString()
-        };
+        const cwDiskCacher::Key key = textureKey(gltfPath, 0);
         const QFileInfo cacheFile(cacher.filePath(key));
         REQUIRE(cacheFile.exists());
         CHECK(cacheFile.absoluteFilePath().contains(QStringLiteral("/.cw_cache/")));
@@ -405,5 +437,57 @@ TEST_CASE("glTF base color textures come from the KTX2 disk cache", "[Gltf][cwGl
         cwRenderTexturedItems::Item second;
         edited.setOn(second, scene, material);
         CHECK_FALSE(second.compressedTexture.isNull());
+    }
+}
+
+TEST_CASE("glTF base color textures transcode once per task run", "[Gltf][cwGltfLoader]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QDir dataRootDir(tempDir.path());
+    const QString gltfPath = writeGltfFile(dataRootDir, QByteArray("glb-bytes"));
+    REQUIRE_FALSE(gltfPath.isEmpty());
+
+    cw::gltf::SceneCPU scene = sceneWithBaseColor(compressibleImage());
+    appendBaseColor(scene, compressibleImage(kSecondCompressedTextureSize));
+
+    cw::gltf::MaterialCPU firstMaterial;
+    firstMaterial.baseColorTextureIndex = 0;
+
+    cw::gltf::MaterialCPU secondMaterial;
+    secondMaterial.baseColorTextureIndex = 1;
+
+    const SupportedFormatOverride formatOverride(cw::ktx2::targetCompressedFormat());
+    const cwDiskCacher cacher(dataRootDir);
+    const cwGltfBaseColorTexture baseColorTexture(dataRootDir.path(), gltfPath);
+
+    cwRenderTexturedItems::Item first;
+    baseColorTexture.setOn(first, scene, firstMaterial);
+    REQUIRE_FALSE(first.compressedTexture.isNull());
+
+    SECTION("a second mesh on the same texture skips the cache file entirely") {
+        const QString cachePath = cacher.filePath(textureKey(gltfPath, 0));
+        REQUIRE(truncateInHalf(cachePath));
+        const qint64 damagedSize = QFileInfo(cachePath).size();
+
+        cwRenderTexturedItems::Item second;
+        baseColorTexture.setOn(second, scene, firstMaterial);
+
+        CHECK(sameTexture(first.compressedTexture, second.compressedTexture));
+        CHECK(second.texture.isNull());
+
+        //A re-read would have found the damaged entry and rewritten it.
+        CHECK(QFileInfo(cachePath).size() == damagedSize);
+    }
+
+    SECTION("a mesh on another texture reads its own entry") {
+        cwRenderTexturedItems::Item second;
+        baseColorTexture.setOn(second, scene, secondMaterial);
+
+        REQUIRE_FALSE(second.compressedTexture.isNull());
+        CHECK(second.compressedTexture.size
+              == QSize(kSecondCompressedTextureSize, kSecondCompressedTextureSize));
+        CHECK(QFileInfo(cacher.filePath(textureKey(gltfPath, 1))).exists());
     }
 }

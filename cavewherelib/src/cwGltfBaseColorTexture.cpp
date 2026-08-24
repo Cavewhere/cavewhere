@@ -72,6 +72,14 @@ void cwGltfBaseColorTexture::setOn(cwRenderTexturedItems::Item& item,
 
 cwCompressedTexture cwGltfBaseColorTexture::compressedTexture(const QImage& image, int textureIndex) const
 {
+    //Meshes of one scan share baseColor textures, so the first geometry's
+    //transcode answers every later one in this run instead of re-reading and
+    //re-transcoding the .ktx2 per item.
+    const auto memoized = m_transcodedByIndex.constFind(textureIndex);
+    if(memoized != m_transcodedByIndex.constEnd()) {
+        return memoized.value();
+    }
+
     //An item handed a texture the render backend rejects would have no texture
     //at all, so the compressed path waits until the first frame publishes what
     //the device accepts.
@@ -97,8 +105,10 @@ cwCompressedTexture cwGltfBaseColorTexture::compressedTexture(const QImage& imag
     if(compressed.hasError()) {
         qWarning() << "Can't compress the glTF texture, using the uncompressed image:"
                    << compressed.errorMessage();
+        m_transcodedByIndex.insert(textureIndex, cwCompressedTexture());
         return {};
     }
 
+    m_transcodedByIndex.insert(textureIndex, compressed.value());
     return compressed.value();
 }

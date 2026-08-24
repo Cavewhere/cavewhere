@@ -2,6 +2,7 @@
 #define CWGLTFBASECOLORTEXTURE_H
 
 // Qt includes
+#include <QHash>
 #include <QString>
 
 // Our includes
@@ -37,6 +38,12 @@ private:
     QString m_dataRootPath;
     QString m_gltfFilename;
     QString m_fileChecksum;
+
+    //A transient hand-off within a single task run, not a persistent in-memory
+    //cache — commit 335671ba removed the process-lifetime scene cache and that
+    //decision stands. This instance is stack-local to one run on one worker
+    //thread, so it dies with the run and needs no locking.
+    mutable QHash<int, cwCompressedTexture> m_transcodedByIndex;
 };
 
 #endif // CWGLTFBASECOLORTEXTURE_H
