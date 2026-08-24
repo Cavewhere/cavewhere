@@ -8,6 +8,7 @@
 
 #include "cwRenderTexturedItems.h"
 #include "cwGeometry.h"
+#include "cwStreamedTexture.h"
 
 namespace {
 
@@ -51,6 +52,17 @@ cwCompressedTexture makeCompressedTexture(const QSize& size, char fill)
     compressed.size = size;
     compressed.mipLevels = { QByteArray(16, fill), QByteArray(16, char(fill + 1)) };
     return compressed;
+}
+
+cwStreamedTexture makeStreamedTexture(const QString& id, const QSize& size)
+{
+    cwStreamedTexture streamed;
+    streamed.dataRootPath = QStringLiteral("/data/root");
+    streamed.key.id = id;
+    streamed.key.path = QStringLiteral("textures");
+    streamed.key.checksum = QStringLiteral("checksum-") + id;
+    streamed.size = size;
+    return streamed;
 }
 
 } // namespace
@@ -223,5 +235,103 @@ TEST_CASE("cwRenderTexturedItems carries one texture representation at a time",
         const auto stored = render.item(id);
         REQUIRE(stored.texture.isNull());
         REQUIRE(stored.compressedTexture.mipLevels == secondCompressed.mipLevels);
+    }
+}
+
+TEST_CASE("cwRenderTexturedItems carries a streamed source instead of pixels",
+          "[TexturedItemsStreaming]")
+{
+    cwRenderTexturedItems render;
+    const QImage image = makeImage(Qt::green);
+    const cwCompressedTexture compressed = makeCompressedTexture(QSize(8, 8), 'a');
+    const cwStreamedTexture firstStreamed =
+        makeStreamedTexture(QStringLiteral("scrap-1"), QSize(2048, 2048));
+    const cwStreamedTexture secondStreamed =
+        makeStreamedTexture(QStringLiteral("scrap-2"), QSize(1024, 1024));
+
+    SECTION("an item added with only a streamed source keeps its descriptor")
+    {
+        cwRenderTexturedItems::Item item;
+        item.geometry = makeGeometry(3, 0.0f);
+        item.streamedTexture = firstStreamed;
+
+        const uint32_t id = render.addItem(item);
+        const auto stored = render.item(id);
+        // The descriptor is kept whatever storeTexture says — it is a handful of
+        // strings, and updateStreamedTexture compares against it.
+        REQUIRE_FALSE(stored.storeTexture);
+        CHECK(stored.streamedTexture == firstStreamed);
+        CHECK(stored.texture.isNull());
+        CHECK(stored.compressedTexture.isNull());
+    }
+
+    SECTION("a streamed source wins when an item is added with all three")
+    {
+        cwRenderTexturedItems::Item item;
+        item.geometry = makeGeometry(3, 0.0f);
+        item.texture = image;
+        item.compressedTexture = compressed;
+        item.streamedTexture = firstStreamed;
+        item.storeTexture = true;
+
+        const uint32_t id = render.addItem(item);
+        const auto stored = render.item(id);
+        CHECK(stored.streamedTexture == firstStreamed);
+        CHECK(stored.texture.isNull());
+        CHECK(stored.compressedTexture.isNull());
+    }
+
+    SECTION("each representation clears the other two")
+    {
+        cwRenderTexturedItems::Item item;
+        item.geometry = makeGeometry(3, 0.0f);
+        item.texture = image;
+        item.storeTexture = true;
+
+        const uint32_t id = render.addItem(item);
+        REQUIRE_FALSE(render.item(id).texture.isNull());
+
+        render.updateStreamedTexture(id, firstStreamed);
+        auto stored = render.item(id);
+        CHECK(stored.streamedTexture == firstStreamed);
+        CHECK(stored.texture.isNull());
+        CHECK(stored.compressedTexture.isNull());
+
+        render.updateCompressedTexture(id, compressed);
+        stored = render.item(id);
+        CHECK(stored.streamedTexture.isNull());
+        CHECK_FALSE(stored.compressedTexture.isNull());
+        CHECK(stored.texture.isNull());
+
+        render.updateStreamedTexture(id, secondStreamed);
+        stored = render.item(id);
+        CHECK(stored.streamedTexture == secondStreamed);
+        CHECK(stored.compressedTexture.isNull());
+
+        render.updateTexture(id, image);
+        stored = render.item(id);
+        CHECK(stored.streamedTexture.isNull());
+        CHECK_FALSE(stored.texture.isNull());
+    }
+
+    SECTION("updateItem routes the streamed representation")
+    {
+        cwRenderTexturedItems::Item item;
+        item.geometry = makeGeometry(3, 0.0f);
+        item.texture = image;
+        item.storeTexture = true;
+
+        const uint32_t id = render.addItem(item);
+
+        cwRenderTexturedItems::Item updated = item;
+        updated.texture = image;
+        updated.compressedTexture = compressed;
+        updated.streamedTexture = firstStreamed;
+        render.updateItem(id, updated);
+
+        const auto stored = render.item(id);
+        CHECK(stored.streamedTexture == firstStreamed);
+        CHECK(stored.texture.isNull());
+        CHECK(stored.compressedTexture.isNull());
     }
 }

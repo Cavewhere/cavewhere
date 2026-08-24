@@ -5,6 +5,7 @@
 #include "cwRenderObject.h"
 #include "cwGeometry.h"
 #include "cwKtx2Codec.h"
+#include "cwStreamedTexture.h"
 #include "CaveWhereLibExport.h"
 #include <QHash>
 #include <QByteArray>
@@ -24,10 +25,13 @@ public:
 
     struct Item {
         cwGeometry geometry;
-        // A texture travels as either a QImage or a GPU-ready
-        // cwCompressedTexture; the compressed form wins when both are set.
+        // A texture travels in exactly one of three representations: a QImage,
+        // a GPU-ready cwCompressedTexture, or a cwStreamedTexture descriptor the
+        // render thread streams mip levels from. When more than one is set the
+        // streamed descriptor wins, then the compressed texture, then the image.
         QImage texture;
         cwCompressedTexture compressedTexture;
+        cwStreamedTexture streamedTexture;
         cwRenderMaterialState material;
         QByteArray uniformBlock;
         QMatrix4x4 modelMatrix;
@@ -50,6 +54,10 @@ public:
     // compressed texture alone stays on the loading placeholder until a QImage
     // arrives through updateTexture.
     void updateCompressedTexture(uint32_t id, const cwCompressedTexture& compressedTexture);
+    // Hand the render thread a KTX2 source to stream mip levels from instead of
+    // whole-texture pixels. Sending the descriptor the item already carries is a
+    // no-op, so a re-run of the producer never restarts a load.
+    void updateStreamedTexture(uint32_t id, const cwStreamedTexture& streamedTexture);
     // Named setItemVisible, not an overload of setVisible: a same-name
     // overload would hide cwRenderObject::setVisible(bool) and make the
     // whole-object toggle unreachable without qualification.
@@ -78,6 +86,7 @@ private:
         cwGeometry geometry;
         QImage texture;
         cwCompressedTexture compressedTexture;
+        cwStreamedTexture streamedTexture;
         cwRenderMaterialState material;
         QByteArray uniformBlock;
         QMatrix4x4 modelMatrix;
@@ -91,6 +100,7 @@ private:
         UpdateGeometry,
         UpdateTexture,
         UpdateCompressedTexture,
+        UpdateStreamedTexture,
         UpdateMaterial,
         UpdateUniformBlock,
         UpdateModelMatrix
@@ -113,7 +123,7 @@ private:
         // Which payload fields an Update touched since the last sync. Ignored for
         // Add (which uses the whole payload) and Remove (which uses none).
         bool geometryDirty = false;
-        // Covers both texture representations — whichever one the payload holds.
+        // Covers all three texture representations — whichever one the payload holds.
         bool textureDirty = false;
         bool materialDirty = false;
         bool uniformBlockDirty = false;
@@ -129,6 +139,10 @@ private:
     QHash<uint32_t, Item> m_frontState;
 
     void addCommand(CommandType type, uint32_t id, const ItemPayload& payload);
+
+    // The payload invariant every command must keep: at most one of the three
+    // texture representations is set.
+    static bool hasOneTextureRepresentation(const ItemPayload& payload);
 
     // Publish one item's effective sub-item visibility: authored visibility
     // ANDed with its pick-ready gate, so an item stays hidden until its

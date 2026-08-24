@@ -26,6 +26,29 @@ class cwAppearanceSlotted;
 class cwVisibilitySnapshot;
 class cwFrustum;
 
+namespace cw::budgets {
+    constexpr qint64 kBytesPerMegabyte = 1024 * 1024;
+
+    // Mirrors the cwRenderingSettings defaults so a frame renderer running
+    // without that singleton (tests, tools) still streams sensibly.
+    constexpr qint64 kDefaultGpuBudgetBytes = 1536 * kBytesPerMegabyte;
+    constexpr qint64 kDefaultCpuBudgetBytes = 512 * kBytesPerMegabyte;
+    constexpr qint64 kDefaultUploadBudgetBytesPerFrame = 8 * kBytesPerMegabyte;
+    constexpr double kDefaultScreenSpaceErrorPx = 1.5;
+}
+
+/**
+ * The streaming budget knobs, read from cwRenderingSettings at the sync barrier
+ * and stamped onto every RenderData alongside the camera, so the render thread
+ * never reaches back across the barrier for them.
+ */
+struct cwRenderBudgets {
+    qint64 gpuBudgetBytes = cw::budgets::kDefaultGpuBudgetBytes;
+    qint64 cpuBudgetBytes = cw::budgets::kDefaultCpuBudgetBytes;
+    qint64 uploadBudgetBytesPerFrame = cw::budgets::kDefaultUploadBudgetBytesPerFrame;
+    double screenSpaceErrorPx = cw::budgets::kDefaultScreenSpaceErrorPx;
+};
+
 class cwRHIObject {
 
 public:
@@ -61,6 +84,12 @@ public:
         QMatrix4x4 projectionMatrix;       //!< clip-space corrected
         QMatrix4x4 viewProjectionMatrix;   //!< clip-space corrected
         float devicePixelRatio = 1.0f;
+        // Physical pixel size of the target this job draws into — the live
+        // viewport for the live frame, the job's output size offscreen. Mip
+        // selection needs the physical height, which no other field carries.
+        QSize viewportSize;
+        // This frame's streaming budgets, stamped with the camera.
+        cwRenderBudgets budgets;
     };
 
     //For rendering
@@ -206,6 +235,14 @@ public:
     virtual void initialize(const ResourceUpdateData& data) = 0;
     virtual void synchronize(const SynchronizeData& data) = 0;
     virtual void updateResources(const ResourceUpdateData& data) = 0;
+
+    // Spend up to @a remainingUploadBytes of this frame's upload budget draining
+    // whatever this object has streaming in, decrementing it by what was taken.
+    // Called once per live frame, right after updateResources, so streamed
+    // uploads ride the frame's shared resource batch. Returns true while work
+    // remains — loads in flight or levels still to upload — which makes the
+    // scene re-arm another frame.
+    virtual bool streamResources(ResourceUpdateData&, qint64&) { return false; }
 
     //Gather render objects
     virtual bool gather(const GatherContext& context,

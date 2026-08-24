@@ -126,7 +126,7 @@ void cwRenderTexturedItems::addCommand(CommandType type, uint32_t id, const Item
     if (type == CommandType::Add) {
         // Ids are unique and monotonic, so an Add never collides with pending
         // state for the same id — overwrite outright with the full payload.
-        Q_ASSERT(payload.texture.isNull() || payload.compressedTexture.isNull());
+        Q_ASSERT(hasOneTextureRepresentation(payload));
         PendingItemState state;
         state.lifecycle = Lifecycle::Add;
         state.payload = payload;
@@ -163,11 +163,19 @@ void cwRenderTexturedItems::addCommand(CommandType type, uint32_t id, const Item
     case CommandType::UpdateTexture:
         state.payload.texture = payload.texture;
         state.payload.compressedTexture = {};
+        state.payload.streamedTexture = {};
         state.textureDirty = true;
         break;
     case CommandType::UpdateCompressedTexture:
         state.payload.compressedTexture = payload.compressedTexture;
         state.payload.texture = QImage();
+        state.payload.streamedTexture = {};
+        state.textureDirty = true;
+        break;
+    case CommandType::UpdateStreamedTexture:
+        state.payload.streamedTexture = payload.streamedTexture;
+        state.payload.texture = QImage();
+        state.payload.compressedTexture = {};
         state.textureDirty = true;
         break;
     case CommandType::UpdateMaterial:
@@ -188,9 +196,17 @@ void cwRenderTexturedItems::addCommand(CommandType type, uint32_t id, const Item
     }
 
     // Exactly one texture representation is ever pending for an id.
-    Q_ASSERT(state.payload.texture.isNull() || state.payload.compressedTexture.isNull());
+    Q_ASSERT(hasOneTextureRepresentation(state.payload));
 
     update(); // schedule a render sync just like cwRenderScraps
+}
+
+bool cwRenderTexturedItems::hasOneTextureRepresentation(const ItemPayload& payload)
+{
+    const int set = (payload.texture.isNull() ? 0 : 1)
+                    + (payload.compressedTexture.isNull() ? 0 : 1)
+                    + (payload.streamedTexture.isNull() ? 0 : 1);
+    return set <= 1;
 }
 
 uint32_t cwRenderTexturedItems::addItem(const Item& item)
@@ -198,9 +214,15 @@ uint32_t cwRenderTexturedItems::addItem(const Item& item)
     const uint32_t id = m_nextId++;
     ItemPayload payload;
     payload.geometry = handleGeometryError(geometryForRender(item.geometry));
-    payload.compressedTexture = item.compressedTexture;
-    // One representation travels to the render thread; compressed wins.
-    payload.texture = item.compressedTexture.isNull() ? item.texture : QImage();
+    // One representation travels to the render thread; the streamed descriptor
+    // wins over the compressed texture, which wins over the image.
+    payload.streamedTexture = item.streamedTexture;
+    if (payload.streamedTexture.isNull()) {
+        payload.compressedTexture = item.compressedTexture;
+        if (payload.compressedTexture.isNull()) {
+            payload.texture = item.texture;
+        }
+    }
     payload.material = item.material;
     payload.uniformBlock = item.uniformBlock;
     payload.modelMatrix = item.modelMatrix;
@@ -212,10 +234,14 @@ uint32_t cwRenderTexturedItems::addItem(const Item& item)
         storedItem.geometry = cwGeometry();
     }
     storedItem.texture = payload.texture;
+    storedItem.compressedTexture = payload.compressedTexture;
     if (!storedItem.storeTexture) {
         storedItem.texture = QImage();
         storedItem.compressedTexture = {};
     }
+    // The streamed source is a descriptor, not pixels, so it is always kept:
+    // updateStreamedTexture compares against it to drop a repeated ask.
+    storedItem.streamedTexture = payload.streamedTexture;
     m_frontState.insert(id, storedItem);
 
     if (!payload.geometry.isEmpty()) {
@@ -245,10 +271,12 @@ void cwRenderTexturedItems::updateItem(uint32_t id, const Item& item)
     // re-registers picking, model matrix updates the intersecter). Coalescing
     // collapses the five commands onto this id's pending entry.
     updateGeometry(id, item.geometry);
-    if (item.compressedTexture.isNull()) {
-        updateTexture(id, item.texture);
-    } else {
+    if (!item.streamedTexture.isNull()) {
+        updateStreamedTexture(id, item.streamedTexture);
+    } else if (!item.compressedTexture.isNull()) {
         updateCompressedTexture(id, item.compressedTexture);
+    } else {
+        updateTexture(id, item.texture);
     }
     setMaterial(id, item.material);
     setUniformBlock(id, item.uniformBlock);
@@ -321,6 +349,7 @@ void cwRenderTexturedItems::updateTexture(uint32_t id, const QImage& image)
     addCommand(CommandType::UpdateTexture, id, payload);
 
     entry->compressedTexture = {};
+    entry->streamedTexture = {};
     if (entry->storeTexture) {
         entry->texture = image;
     } else {
@@ -340,11 +369,35 @@ void cwRenderTexturedItems::updateCompressedTexture(uint32_t id, const cwCompres
     addCommand(CommandType::UpdateCompressedTexture, id, payload);
 
     entry->texture = QImage();
+    entry->streamedTexture = {};
     if (entry->storeTexture) {
         entry->compressedTexture = compressedTexture;
     } else {
         entry->compressedTexture = {};
     }
+}
+
+void cwRenderTexturedItems::updateStreamedTexture(uint32_t id, const cwStreamedTexture& streamedTexture)
+{
+    auto entry = m_frontState.find(id);
+    if (entry == m_frontState.end()) {
+        return;
+    }
+
+    // The producer re-publishes the same descriptor whenever it re-runs. Sending
+    // it again would cancel the item's residency and restart the load from the
+    // pinned base, so an unchanged descriptor stops here.
+    if (entry->streamedTexture == streamedTexture) {
+        return;
+    }
+
+    ItemPayload payload;
+    payload.streamedTexture = streamedTexture;
+    addCommand(CommandType::UpdateStreamedTexture, id, payload);
+
+    entry->texture = QImage();
+    entry->compressedTexture = {};
+    entry->streamedTexture = streamedTexture;
 }
 
 void cwRenderTexturedItems::setItemVisible(uint32_t id, bool visible)

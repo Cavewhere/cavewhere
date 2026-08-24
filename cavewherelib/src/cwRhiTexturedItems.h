@@ -7,6 +7,8 @@
 #include "cwRenderTexturedItems.h"
 #include "cwRhiPipelineSet.h"
 #include "cwRhiFrameRenderer.h"
+#include "cwStreamedTexture.h"
+#include "cwTextureStreamer.h"
 #include <QMatrix4x4>
 
 class cwRhiTexturedItems : public cwRHIObject
@@ -18,11 +20,15 @@ public:
     void initialize(const ResourceUpdateData& data) override;
     void synchronize(const SynchronizeData& data) override;
     void updateResources(const ResourceUpdateData& data) override;
+    bool streamResources(ResourceUpdateData& data, qint64& remainingUploadBytes) override;
     bool gather(const GatherContext& context, QVector<PipelineBatch>& batches) override;
     void purgePipelinesFor(QRhiRenderPassDescriptor* descriptor) override;
     std::optional<QBox3D> worldBounds() const override;
 
 private:
+    //! residentTopLevel / requestedTopLevel when the item holds neither
+    static constexpr int kNoResidentLevel = -1;
+
     struct SharedItemData {
         QRhiTexture* loadingTexture = nullptr;
     };
@@ -47,10 +53,37 @@ private:
         QRhiCommandBuffer::IndexFormat indexFormat = QRhiCommandBuffer::IndexUInt32;
 
         cwGeometry geometry;
-        // Whichever texture representation is waiting to upload; both are
+        // Whichever whole-texture representation is waiting to upload; both are
         // dropped once the upload is recorded.
         QImage image;
         cwCompressedTexture compressedTexture;
+
+        // The streamed alternative: a descriptor the render thread pulls mip
+        // levels from, one budgeted upload at a time. residentTopLevel is the
+        // most detailed level `texture` holds, requestedTopLevel the level a
+        // load is running for, and uvPerMeter the geometry's texel density,
+        // measured while the geometry is still on hand (updateBoundsFromGeometry).
+        cwStreamedTexture streamSource;
+        int residentTopLevel = kNoResidentLevel;
+        int requestedTopLevel = kNoResidentLevel;
+        double uvPerMeter = 0.0;
+        quint64 lastVisibleFrame = 0;
+
+        // Levels that have landed on the render thread and are being uploaded
+        // into stagingTexture, one budgeted level per frame. Nothing samples
+        // stagingTexture until the last level lands, so a half-built chain can
+        // straddle frames; the swap onto `texture` is what makes it visible.
+        struct PendingUpload {
+            cwCompressedTexture readyLevels;
+            int readyTopLevel = kNoResidentLevel;
+            int nextLevelToUpload = 0;
+            QRhiTexture* stagingTexture = nullptr;
+        };
+        PendingUpload pendingUpload;
+
+        // The newest stream generation this item has accepted, so a load that
+        // finishes after a newer one is dropped instead of overwriting it.
+        quint64 acceptedGeneration = 0;
         QByteArray uniformBlock;
         cwRenderMaterialState material;
         QMatrix4x4 modelMatrix;
@@ -89,12 +122,36 @@ private:
         QByteArray buildPerDrawUniformPayload() const;
         void updateBoundsFromGeometry();
         void updateWorldBounds();
+
+        //! Drops the half-built chain and its staging texture, keeping `texture`
+        void clearPendingUpload();
+        //! Drops the half-built chain and reopens the request slot, so selection
+        //! can ask for the level again instead of the item stalling forever
+        void failPendingUpload();
+        //! Forgets what is resident without touching `texture` — a replacement
+        //! must land before the item stops drawing what it has
+        void resetResidency();
+        //! Uploads pending levels while the frame's budget allows; true while
+        //! levels remain
+        bool uploadPendingLevels(const ResourceUpdateData& data,
+                                 const SharedItemData& sharedData,
+                                 qint64& remainingUploadBytes,
+                                 bool& anythingUploadedThisFrame);
     };
+
+    //! Picks the mip level @a item should hold this frame and asks the streamer
+    //! for it. Arithmetic only in the common no-change case.
+    void selectStreamLevel(uint32_t id, Item* item, const GatherContext& context);
+
+    //! The compressed format streamed levels transcode to, or RGBA8 when the
+    //! backend accepts no compressed format
+    static QRhiTexture::Format streamTargetFormat();
 
     //! Adds this object's item counts to the frame's culled/total tally
     void tallyCullingStats(const GatherContext& context) const;
 
     QHash<uint32_t, Item*> m_items;
+    cwTextureStreamer m_streamer;
     bool m_resourcesInitialized = false;
     SharedItemData m_sharedData;
     QRhiVertexInputLayout m_inputLayout;
@@ -115,6 +172,11 @@ private:
                                                 const SharedItemData& sharedData);
     QRhiSampler* sharedSampler(QRhi* rhi);
     static cwRHIObject::RenderPass toRenderPass(cwRenderMaterialState::RenderPass pass);
+
+    // Per-item render state is private and needs no production accessor; the
+    // sync-time streaming tests read it through this friend, the same seam
+    // CwRhiSceneTestAccess uses for cwRhiScene.
+    friend struct CwRhiTexturedItemsTestAccess;
 };
 
 

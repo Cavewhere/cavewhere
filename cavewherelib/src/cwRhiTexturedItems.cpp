@@ -6,6 +6,7 @@
 #include "cwRhiAttributeFormat.h"
 #include "cwRhiItemRenderer.h"
 #include "cwRhiLimits.h"
+#include "cwTextureResidency.h"
 
 #include <QByteArray>
 #include <QDebug>
@@ -15,7 +16,9 @@
 #include <QVarLengthArray>
 #include <QtGlobal>
 #include <algorithm>
+#include <cmath>
 #include <cstring>
+#include <limits>
 #include <utility>
 
 namespace {
@@ -31,12 +34,19 @@ constexpr int kTypicalMipLevelCount = 13;
 // Items are tallied on this one pass so a frame that gathers every pass counts
 // each item once. It is the first pass of cwRhiFrameRenderer's draw order.
 constexpr cwRHIObject::RenderPass kCullingStatsPass = cwRHIObject::RenderPass::Background;
+// The pinned base level is loaded ahead of every detail level: an item without a
+// texture has nothing to draw, and everything else is a refinement.
+constexpr quint64 kPinnedBasePriority = std::numeric_limits<quint64>::max();
 }
 
 cwRhiTexturedItems::cwRhiTexturedItems() = default;
 
 cwRhiTexturedItems::~cwRhiTexturedItems()
 {
+    // Loads in flight hand their results to items, so they must be finished
+    // before the items they name are freed.
+    m_streamer.cancelAll();
+
     for (auto item : std::as_const(m_items)) {
         delete item;
     }
@@ -106,6 +116,7 @@ void cwRhiTexturedItems::synchronize(const SynchronizeData& data)
             item->geometryNeedsUpdate = !item->geometry.indices().isEmpty();
             item->image = payload.texture;
             item->compressedTexture = payload.compressedTexture;
+            item->streamSource = payload.streamedTexture;
             item->textureNeedsUpdate = !item->image.isNull() || !item->compressedTexture.isNull();
             item->uniformBlock = payload.uniformBlock;
             item->uniformNeedsUpdate = true;
@@ -122,6 +133,7 @@ void cwRhiTexturedItems::synchronize(const SynchronizeData& data)
         case PendingItemState::Lifecycle::Remove: {
             auto found = m_items.find(id);
             if (found != m_items.end()) {
+                m_streamer.cancel(id);
                 delete found.value();
                 m_items.erase(found);
             }
@@ -140,7 +152,14 @@ void cwRhiTexturedItems::synchronize(const SynchronizeData& data)
             if (state.textureDirty) {
                 item->image = payload.texture;
                 item->compressedTexture = payload.compressedTexture;
-                item->textureNeedsUpdate = true;
+                // A streamed source uploads through streamResources instead, and
+                // the item keeps drawing what it has until the first level lands.
+                item->textureNeedsUpdate = payload.streamedTexture.isNull();
+                if (!(item->streamSource == payload.streamedTexture)) {
+                    item->streamSource = payload.streamedTexture;
+                    m_streamer.cancel(id);
+                    item->resetResidency();
+                }
             }
             if (state.materialDirty && !(item->material == payload.material)) {
                 item->material = payload.material;
@@ -244,6 +263,10 @@ bool cwRhiTexturedItems::gather(const GatherContext& context, QVector<PipelineBa
             continue;
         }
 
+        // The item is visible and in view, so this is the one moment per frame
+        // its mip level can be chosen from a camera that actually sees it.
+        selectStreamLevel(it.key(), item, context);
+
         // Rebuild the pipeline if this pass's target changed since last frame
         // (cloud appeared/disappeared → Opaque routes through the 1x offscreen
         // or back to the swap chain). Self-guards on the key, so a no-op when
@@ -284,6 +307,101 @@ bool cwRhiTexturedItems::gather(const GatherContext& context, QVector<PipelineBa
     }
 
     return appended;
+}
+
+QRhiTexture::Format cwRhiTexturedItems::streamTargetFormat()
+{
+    const QRhiTexture::Format compressed = cw::ktx2::supportedCompressedFormat();
+    return compressed == QRhiTexture::UnknownFormat ? QRhiTexture::RGBA8 : compressed;
+}
+
+void cwRhiTexturedItems::selectStreamLevel(uint32_t id, Item* item, const GatherContext& context)
+{
+    if (item->streamSource.isNull()) {
+        return;
+    }
+
+    item->lastVisibleFrame = m_frame->frameCounter();
+
+    if (item->residentTopLevel == kNoResidentLevel
+        && item->requestedTopLevel == kNoResidentLevel) {
+        // Nothing to draw yet: the pinned base outranks every refinement.
+        const int base = cw::residency::pinnedBaseLevel(item->streamSource.size);
+        item->requestedTopLevel = base;
+        m_streamer.request(id, item->streamSource, streamTargetFormat(), base,
+                           kPinnedBasePriority);
+        return;
+    }
+
+    const RenderData& renderData = *context.renderData;
+
+    cw::residency::SelectionInput input;
+    input.textureSize = item->streamSource.size;
+    input.uvPerMeter = item->uvPerMeter;
+    input.worldBounds = item->worldBounds;
+    input.viewProjection = renderData.viewProjectionMatrix;
+    input.absP11 = std::abs(double(renderData.projectionMatrix(1, 1)));
+    input.viewportHeightPx = renderData.viewportSize.height();
+    input.screenSpaceErrorPx = renderData.budgets.screenSpaceErrorPx;
+
+    const int desired = cw::residency::desiredTopLevel(input);
+
+    // Only refinements are asked for here; giving detail back is D5's eviction
+    // planner, which sees the whole scene's budget rather than one item.
+    if (desired < item->residentTopLevel && desired != item->requestedTopLevel) {
+        item->requestedTopLevel = desired;
+        m_streamer.request(id, item->streamSource, streamTargetFormat(), desired,
+                           quint64(item->residentTopLevel - desired));
+    }
+}
+
+bool cwRhiTexturedItems::streamResources(ResourceUpdateData& data, qint64& remainingUploadBytes)
+{
+    m_streamer.setMaxPendingCpuBytes(data.renderData.budgets.cpuBudgetBytes);
+
+    // Results the streamer hands over are transient: what an item still wants is
+    // stashed on it, and everything else dies with the local vector.
+    const QVector<cwTextureStreamer::Result> ready = m_streamer.takeReady();
+    for (const cwTextureStreamer::Result& result : ready) {
+        Item* item = m_items.value(result.itemId, nullptr);
+        if (!item
+            || item->streamSource.isNull()
+            || result.topLevel != item->requestedTopLevel
+            || result.generation < item->acceptedGeneration) {
+            continue;
+        }
+
+        if (result.texture.isNull()) {
+            // A load that failed reopens the request slot: selection asks again
+            // next frame rather than leaving the item stuck at this level.
+            qWarning() << "Streaming level" << result.topLevel << "for item" << result.itemId
+                       << "failed:" << result.error;
+            item->requestedTopLevel = kNoResidentLevel;
+            continue;
+        }
+
+        item->clearPendingUpload();
+        item->acceptedGeneration = result.generation;
+        item->pendingUpload.readyLevels = result.texture;
+        item->pendingUpload.readyTopLevel = result.topLevel;
+        item->pendingUpload.nextLevelToUpload = 0;
+    }
+
+    bool anythingUploadedThisFrame = false;
+    bool levelsRemain = false;
+    for (auto item : std::as_const(m_items)) {
+        if (item->pendingUpload.readyTopLevel == kNoResidentLevel) {
+            continue;
+        }
+
+        levelsRemain = item->uploadPendingLevels(data, m_sharedData, remainingUploadBytes,
+                                                 anythingUploadedThisFrame)
+                       || levelsRemain;
+    }
+
+    // hasWork() covers the loads still queued or in flight — the frame renderer
+    // has no other window onto this object's streamer.
+    return levelsRemain || m_streamer.hasWork();
 }
 
 void cwRhiTexturedItems::tallyCullingStats(const GatherContext& context) const
@@ -339,7 +457,109 @@ cwRhiTexturedItems::Item::~Item()
     delete indexBuffer;
     delete uniformBuffer;
     delete texture;
+    delete pendingUpload.stagingTexture;
     delete srb;
+}
+
+void cwRhiTexturedItems::Item::clearPendingUpload()
+{
+    delete pendingUpload.stagingTexture;
+    pendingUpload = {};
+}
+
+void cwRhiTexturedItems::Item::failPendingUpload()
+{
+    clearPendingUpload();
+    requestedTopLevel = kNoResidentLevel;
+}
+
+void cwRhiTexturedItems::Item::resetResidency()
+{
+    clearPendingUpload();
+    residentTopLevel = kNoResidentLevel;
+    requestedTopLevel = kNoResidentLevel;
+}
+
+bool cwRhiTexturedItems::Item::uploadPendingLevels(const ResourceUpdateData& data,
+                                                   const SharedItemData& sharedData,
+                                                   qint64& remainingUploadBytes,
+                                                   bool& anythingUploadedThisFrame)
+{
+    const QVector<QByteArray>& levels = pendingUpload.readyLevels.mipLevels;
+    const QSize topLevelSize = pendingUpload.readyLevels.size;
+    const QRhiTexture::Format format = pendingUpload.readyLevels.format;
+
+    if (!pendingUpload.stagingTexture) {
+        QRhi* rhi = data.renderData.cb->rhi();
+        // Built alongside the resident texture rather than over it: the item
+        // keeps drawing what it has until the whole chain has landed.
+        pendingUpload.stagingTexture = rhi->newTexture(format, topLevelSize, 1,
+                                                       QRhiTexture::MipMapped);
+        if (!pendingUpload.stagingTexture->create()) {
+            qWarning() << "Creating a streamed texture of format" << int(format)
+                       << "at size" << topLevelSize << "failed, keeping the resident texture";
+            failPendingUpload();
+            return false;
+        }
+    }
+
+    while (pendingUpload.nextLevelToUpload < levels.size()) {
+        const int level = pendingUpload.nextLevelToUpload;
+        const QByteArray& levelBytes = levels.at(level);
+        const QSize levelSize = cw::residency::mipLevelSize(topLevelSize, level);
+
+        if (levelBytes.size() != cw::residency::mipLevelBytes(format, levelSize)) {
+            // The levels come off disk, so a short one is corruption rather than
+            // a programming error — upload it and the backend reads past its end.
+            qWarning() << "Streamed level" << level << "of format" << int(format)
+                       << "at size" << levelSize << "holds" << levelBytes.size()
+                       << "bytes, keeping the resident texture";
+            failPendingUpload();
+            return false;
+        }
+
+        if (!cw::residency::takeFromBudget(remainingUploadBytes, levelBytes.size(),
+                                           anythingUploadedThisFrame)) {
+            return true;
+        }
+        anythingUploadedThisFrame = true;
+
+        if (format == QRhiTexture::RGBA8) {
+            // The uncompressed fallback path uploads pixels, so the level's
+            // bytes are wrapped in an image of its size. copy() owns them: the
+            // level payload is dropped before the batch is submitted.
+            const QImage levelImage(reinterpret_cast<const uchar*>(levelBytes.constData()),
+                                    levelSize.width(), levelSize.height(),
+                                    QImage::Format_RGBA8888);
+            data.resourceUpdateBatch->uploadTexture(
+                pendingUpload.stagingTexture,
+                QRhiTextureUploadDescription(
+                    QRhiTextureUploadEntry(0, level,
+                                           QRhiTextureSubresourceUploadDescription(levelImage.copy()))));
+        } else {
+            data.resourceUpdateBatch->uploadTexture(
+                pendingUpload.stagingTexture,
+                QRhiTextureUploadDescription(
+                    QRhiTextureUploadEntry(0, level,
+                                           QRhiTextureSubresourceUploadDescription(levelBytes))));
+        }
+
+        pendingUpload.nextLevelToUpload++;
+    }
+
+    // The last level landed: swap the finished chain in atomically (render thread
+    // only), so the item never goes a frame without a texture.
+    delete texture;
+    texture = pendingUpload.stagingTexture;
+    residentTopLevel = pendingUpload.readyTopLevel;
+    textureBytes.setBytes(cw::residency::chainBytes(format, streamSource.size,
+                                                    residentTopLevel));
+
+    pendingUpload.stagingTexture = nullptr;   // ownership moved to `texture`
+    clearPendingUpload();
+
+    createShaderResourceBindings(data, sharedData);
+    return false;
 }
 
 void cwRhiTexturedItems::Item::initializeResources(const ResourceUpdateData& data, const SharedItemData&)
@@ -368,6 +588,7 @@ void cwRhiTexturedItems::Item::updateBoundsFromGeometry()
     boundsValid = false;
     localBounds = QBox3D();
     worldBounds = QBox3D();
+    uvPerMeter = 0.0;
 
     const auto* positionAttribute = geometry.attribute(cwGeometry::Semantic::Position);
     const qsizetype vertexCount = geometry.vertexCount();
@@ -381,6 +602,12 @@ void cwRhiTexturedItems::Item::updateBoundsFromGeometry()
 
     boundsValid = true;
     updateWorldBounds();
+
+    // Selection needs the geometry's texel density, and this is the one moment
+    // the geometry is on the render thread — updateGeometryBuffers drops it once
+    // uploaded. The sampling is bounded to a fixed triangle count, so it costs
+    // the same whatever the mesh size.
+    uvPerMeter = cw::residency::uvPerMeter(geometry, modelMatrix);
 }
 
 /**

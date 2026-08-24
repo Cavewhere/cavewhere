@@ -277,6 +277,15 @@ void cwRhiFrameRenderer::renderLiveFrame(QRhiCommandBuffer *cb, cwRhiItemRendere
         m_rhiNeedResourceUpdate.clear();
     }
 
+    // Streamed uploads ride this frame's batch, sharing one budget across every
+    // object so a frame's upload cost is bounded whatever the scene holds.
+    qint64 remainingUploadBytes = m_budgets.uploadBudgetBytesPerFrame;
+    m_hasPendingStreamingWork = false;
+    for(auto object : std::as_const(m_rhiObjects)) {
+        m_hasPendingStreamingWork = object->streamResources(resourceUpdateData, remainingUploadBytes)
+                                    || m_hasPendingStreamingWork;
+    }
+
     std::array<QVector<cwRHIObject::PipelineBatch>, kPassCount> passBatches;
 
     gatherScene(passBatches, perPassRenderData);
@@ -309,6 +318,8 @@ cwRhiFrameRenderer::ClipSpaceCamera cwRhiFrameRenderer::stampCamera(
     renderData.projectionMatrix = clip.projectionCorrected;
     renderData.viewProjectionMatrix = clip.viewProjection;
     renderData.devicePixelRatio = devicePixelRatio;
+    renderData.viewportSize = viewportSize;
+    renderData.budgets = m_budgets;
 
     // The same camera into the global-UBO slot geometry binds on the GPU. One full
     // struct write per slot (the UBO is tiny); the per-field dirty-flag gating the
@@ -542,6 +553,8 @@ void cwRhiFrameRenderer::gatherScene(std::array<QVector<cwRHIObject::PipelineBat
                             const cwRHIObject::PerPassRenderData& perPassRenderData,
                             const cwSceneGatherOptions& options)
 {
+    m_frameCounter++;
+
     // All per-pass copies share one camera (buildPerPassRenderData copies a
     // single base and only re-stamps the target), so one frustum covers every
     // pass this job gathers.
