@@ -17,6 +17,7 @@
 #include "cwCave.h"
 #include "cwCavingRegion.h"
 #include "cwExternalCenterline.h"
+#include "cwExternalCenterlineAttach.h"
 #include "cwExternalCenterlineManager.h"
 #include "cwExternalSourceSettings.h"
 #include "cwExternalSourceStatusModel.h"
@@ -24,8 +25,12 @@
 #include "cwLinePlotManager.h"
 #include "cwProject.h"
 #include "cwRootData.h"
+#include "cwSaveLoad.h"
 #include "cwTrip.h"
 #include "ExternalCenterlineTestHelpers.h"
+
+// AsyncFuture
+#include <asyncfuture.h>
 
 // Qt
 #include <QByteArray>
@@ -323,4 +328,102 @@ TEST_CASE("an owner with no attachment has no status row",
     auto* statuses = statusModelOf(fixture.get());
     CHECK(statuses->rowCount() == 0);
     CHECK(statuses->statusFor(fixture->trip->id()) == Status::NoBreadcrumb);
+}
+
+namespace {
+
+// A cave with no trips: what the Add Cave flow hands the cave-level
+// attach verb, which refuses a cave that already holds trips.
+cwCave* attachFreshCave(SavedProjectFixture* fixture, const QString& caveName,
+                        const QString& sourcePath)
+{
+    cwCave* cave = addEmptyCave(*fixture->project->cavingRegion(), caveName);
+    auto future = fixture->rootData->externalCenterlineManager()
+                      ->attachCenterline(cave, sourcePath);
+    REQUIRE(AsyncFuture::waitForFinished(future, kAttachWaitMs));
+    REQUIRE_FALSE(future.result().hasError());
+    return cave;
+}
+
+// The update verbs are void, so the test waits for the operations' own
+// reports rather than assuming the copies already landed.
+void waitForAttachReports(SavedProjectFixture* fixture, QSignalSpy& attachSpy,
+                          int expectedCount)
+{
+    while (attachSpy.count() < expectedCount && attachSpy.wait(kAttachWaitMs)) {
+    }
+    REQUIRE(attachSpy.count() == expectedCount);
+    drainPipelines(fixture);
+}
+
+} // namespace
+
+TEST_CASE("updateFromSource re-copies a cave owner's changed source",
+          "[ExternalSourceStatus]")
+{
+    auto fixture = makeStatusProject(QStringLiteral("status-cave-update"));
+    const QString caveSource =
+        writeSource(sourcePathIn(sourceDirOf(fixture.get()), QStringLiteral("cave.svx")),
+                    kOneShot);
+
+    cwCave* cave = attachFreshCave(fixture.get(), QStringLiteral("UpdateCave"), caveSource);
+    drainPipelines(fixture.get());
+
+    auto* statuses = statusModelOf(fixture.get());
+    REQUIRE(statuses->statusFor(cave->id()) == Status::UpToDate);
+
+    writeSource(caveSource, kTwoShots,
+                QDateTime::currentDateTimeUtc().addSecs(kEditIsNewerSeconds));
+    sweep(fixture.get());
+    REQUIRE(statuses->statusFor(cave->id()) == Status::Changed);
+
+    QSignalSpy attachSpy(fixture->rootData->externalCenterlineManager(),
+                         &cwExternalCenterlineManager::attachCompleted);
+    fixture->rootData->externalCenterlineManager()->updateFromSource(cave->id());
+    waitForAttachReports(fixture.get(), attachSpy, 1);
+
+    sweep(fixture.get());
+    CHECK(statuses->statusFor(cave->id()) == Status::UpToDate);
+
+    const QString copyPath = fixture->saveLoad()
+        ->externalCenterlineDir(cave)
+        .absoluteFilePath(QStringLiteral("cave.svx"));
+    CHECK(fileContents(copyPath).contains(kTwoShots));
+}
+
+TEST_CASE("update all covers cave rows alongside trip rows",
+          "[ExternalSourceStatus]")
+{
+    auto fixture = makeStatusProject(QStringLiteral("status-update-all-mixed"));
+    const QString sourceDir = sourceDirOf(fixture.get());
+
+    const QString tripSource =
+        writeSource(sourcePathIn(sourceDir, QStringLiteral("trip.svx")), kOneShot);
+    attachThroughManager(fixture.get(), fixture->trip, tripSource);
+    drainPipelines(fixture.get());
+
+    const QString caveSource =
+        writeSource(sourcePathIn(sourceDir, QStringLiteral("cave.svx")), kOneShot);
+    cwCave* cave = attachFreshCave(fixture.get(), QStringLiteral("BatchCave"), caveSource);
+    drainPipelines(fixture.get());
+
+    auto* statuses = statusModelOf(fixture.get());
+    REQUIRE(statuses->statusFor(fixture->trip->id()) == Status::UpToDate);
+    REQUIRE(statuses->statusFor(cave->id()) == Status::UpToDate);
+
+    const QDateTime edited = QDateTime::currentDateTimeUtc().addSecs(kEditIsNewerSeconds);
+    writeSource(tripSource, kTwoShots, edited);
+    writeSource(caveSource, kTwoShots, edited);
+    sweep(fixture.get());
+    REQUIRE(statuses->statusFor(fixture->trip->id()) == Status::Changed);
+    REQUIRE(statuses->statusFor(cave->id()) == Status::Changed);
+
+    QSignalSpy attachSpy(fixture->rootData->externalCenterlineManager(),
+                         &cwExternalCenterlineManager::attachCompleted);
+    fixture->rootData->externalCenterlineManager()->updateAllChangedSources();
+    waitForAttachReports(fixture.get(), attachSpy, 2);
+
+    sweep(fixture.get());
+    CHECK(statuses->statusFor(fixture->trip->id()) == Status::UpToDate);
+    CHECK(statuses->statusFor(cave->id()) == Status::UpToDate);
 }

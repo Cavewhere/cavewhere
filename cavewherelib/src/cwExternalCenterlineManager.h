@@ -174,10 +174,14 @@ public:
     // GC → re-solve pass that brings the in-project copy back in line with
     // its origin. The source is the breadcrumb this manager looks up
     // itself, so QML asks for the verb rather than naming a path. Refuses a
-    // null trip, a busy owner, and an owner with no reloadable source, each
-    // through the attach bridge like every other refusal.
+    // null owner, a busy owner, and an owner with no reloadable source, each
+    // through the attach bridge like every other refusal. For a cave the
+    // reload runs the cave replace, so the Scope trips are reconciled
+    // against the fresh block set on the way through.
     Q_INVOKABLE QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
     reloadFromSource(cwTrip* trip);
+    Q_INVOKABLE QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
+    reloadFromSource(cwCave* cave);
 
     // True when reloadFromSource has a file to copy: this machine
     // remembers where the copy came from, that file is on disk here, and it
@@ -187,13 +191,14 @@ public:
     // the UI's own refresh points — the answer follows the disk, so it has
     // no change signal.
     Q_INVOKABLE bool canReloadFromSource(cwTrip* trip) const;
+    Q_INVOKABLE bool canReloadFromSource(cwCave* cave) const;
 
     // Re-copies ownerId's remembered source into the project, the same
     // overwrite path the trip panel's Reload runs — the verb the app
     // banner's per-row Update calls, which knows owners by id rather than
-    // by object. Does nothing for an owner this region has no trip for
-    // (a cave-level attachment among them: nothing copies into a cave
-    // owner yet). Reports through attachCompleted like every other
+    // by object. Resolves either owner kind, trip first, and routes to that
+    // kind's reloadFromSource. Does nothing for an id this region carries
+    // no owner for. Reports through attachCompleted like every other
     // operation.
     Q_INVOKABLE void updateFromSource(const QUuid& ownerId);
 
@@ -612,14 +617,25 @@ private:
     detachCenterlineForOwner(OwnerT* owner, const QString& ownerNoun,
                              QHash<QUuid, QString>& attachmentDirs);
 
-    // The file reloadFromSource would copy for `trip`, or an empty string
+    // The file reloadFromSource would copy for `owner`, or an empty string
     // when this machine has none — the one place the eligibility rules
-    // live, shared by the verb and canReloadFromSource.
-    QString reloadSourcePath(cwTrip* trip) const;
+    // live, shared by the verb and canReloadFromSource, and written once
+    // for both owner kinds so a cave and a trip answer the same rules.
+    template<typename OwnerT>
+    QString reloadSourcePathForOwner(const OwnerT* owner) const;
 
-    // The live trip carrying ownerId, or null when this region has none —
-    // the lookup the id-keyed verbs need to reach the trip-shaped API.
+    // The reload verb for both owner kinds: the three refusals (null owner,
+    // busy owner, no reloadable source) with the noun the message names,
+    // ending in the owner's replace.
+    template<typename OwnerT>
+    QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
+    reloadFromSourceForOwner(OwnerT* owner, const QString& ownerNoun);
+
+    // The live trip or cave carrying ownerId, or null when this region has
+    // none — the lookup the id-keyed verbs need to reach the object-shaped
+    // API.
     cwTrip* tripForOwner(const QUuid& ownerId) const;
+    cwCave* caveForOwner(const QUuid& ownerId) const;
 
     // Rebuilds both attachment-dir maps wholesale from the region walk
     // via cwSaveLoad::externalCenterlineDir (pure path math, no disk

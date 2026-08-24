@@ -26,17 +26,28 @@ CWTestCase {
         return trip
     }
 
-    // Attaches source to trip through the cwRootData wrapper and waits
-    // for this attachment to land. Counts rows from where the model
-    // already stood, so a project that holds earlier attachments still
-    // waits for the new one.
-    function attachSourceToTrip(trip, source) {
+    // Runs `attachVerb` and waits for the attachment it starts to land.
+    // Counts rows from where the model already stood, so a project that
+    // holds earlier attachments still waits for the new one.
+    function attachAndWaitForRow(attachVerb) {
         const model = RootData.externalCenterlineManager.attachedCenterlinesModel
         const rowsBefore = model.rowCount()
-        RootData.attachTripCenterline(trip, source)
+        attachVerb()
         tryVerify(() => model.rowCount() > rowsBefore,
                   10000, "attach should land a row in the attached model")
         RootData.futureManagerModel.waitForFinished()
+    }
+
+    // Attaches source to trip through the cwRootData wrapper and waits
+    // for this attachment to land.
+    function attachSourceToTrip(trip, source) {
+        attachAndWaitForRow(() => RootData.attachTripCenterline(trip, source))
+    }
+
+    // The cave-level twin: a cave attachment lands a row of its own, so
+    // the wait is the same one.
+    function attachSourceToCave(cave, source) {
+        attachAndWaitForRow(() => RootData.attachCaveCenterline(cave, source))
     }
 
     // Saves the fresh project as .cwproj and attaches the

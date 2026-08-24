@@ -75,10 +75,8 @@ public:
      * the same way an all-empty region already fails today.
      *
      * A trip owner is told why through the file-error banner (containment)
-     * or the missing-copy banner. A cave owner has no equivalent surface
-     * yet, so a cave-level exclusion is currently silent outside the
-     * attached-centerlines model (see B7's follow-up in
-     * plans/EXTERNAL_FILE_PHASE2.html).
+     * or the missing-copy banner; a cave owner reads the reason from its
+     * attached-centerlines row.
      *
      * \c scopeLabels carries the survey label every \c *begin block in the file
      * opens with. Filled by \c exportRegion itself rather than by the caller: a

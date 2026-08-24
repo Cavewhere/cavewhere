@@ -277,6 +277,68 @@ MainWindowTest {
             compare(missingRows, 1, "one missing-source row")
         }
 
+        // A cave attached through the cave-level verb: it needs no trips
+        // of its own, and the banner knows it by id like any other owner.
+        function attachCave(caveName, source) {
+            RootData.region.addCave()
+            const cave = RootData.region.cave(RootData.region.rowCount() - 1)
+            cave.name = caveName
+            attachSourceToCave(cave, source)
+            return cave
+        }
+
+        // The owner a status row is about. A cave is reached by id like
+        // every other owner, and the status model is where QML reads it.
+        function statusRowOwnerId(rowIndex) {
+            const model = statusModel()
+            return model.data(model.index(rowIndex, 0),
+                              ExternalSourceStatusModel.OwnerIdRole)
+        }
+
+        function test_caveRowUpdatesTheCave() {
+            const host = sourceChangeHost()
+            makeSavedTrip("banner-cave-row")
+
+            const source = tempSource()
+            attachCave("BannerCave", source)
+            attachCompletedSpyId.clear()
+
+            tryVerify(() => statusModel().rowCount() === 1, 15000,
+                      "the cave is the only attached owner")
+            const caveId = statusRowOwnerId(0)
+
+            rewriteSource(source, "survex_no_metadata.svx")
+            tryVerify(() => statusModel().statusFor(caveId)
+                            === ExternalSourceStatusModel.Changed, 15000,
+                      "the edited cave source reads Changed")
+            tryVerify(() => host.hasUndismissedChange, 15000, "the banner is up")
+            waitForRendering(rootId)
+
+            mouseClick(findInHost("externalSourceShowButton"))
+            waitForRendering(rootId)
+
+            const rows = findInHost("externalSourceChangeRows")
+            tryCompare(rows, "count", 1, 15000, "the cave is the only owner listed")
+            const caveRow = rows.itemAtIndex(0)
+            verify(caveRow !== null, "the cave row must be realized")
+            compare(findChild(caveRow, "externalSourceChangeRowOwner").text,
+                    "BannerCave", "a cave row is named by the cave alone")
+            const updateButton = findChild(caveRow, "externalSourceChangeRowUpdateButton")
+            verify(updateButton.enabled, "a changed cave source can be updated")
+
+            mouseClick(updateButton)
+            tryVerify(() => attachCompletedSpyId.count === 1, 30000,
+                      "the row's Update runs the cave's copy")
+            const report = attachCompletedSpyId.signalArguments[0][0]
+            verify(report.success, "the cave update succeeds; got: " + report.errorMessage)
+            compare(report.ownerId.toString(), caveId.toString(),
+                    "the cave is the owner that was updated")
+
+            tryVerify(() => statusModel().statusFor(caveId)
+                            === ExternalSourceStatusModel.UpToDate, 15000,
+                      "the cave's copy matches its source again")
+        }
+
         function test_rowUpdateUpdatesJustThatOwner() {
             const host = sourceChangeHost()
             const attached = attachTrips("banner-row-update", 2)

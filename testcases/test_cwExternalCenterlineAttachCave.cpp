@@ -20,6 +20,7 @@
 #include "cwProject.h"
 #include "cwRootData.h"
 #include "cwSaveLoad.h"
+#include "cwSignalSpy.h"
 #include "cwSurveyChunk.h"
 #include "cwTrip.h"
 #include "ExternalCenterlineTestHelpers.h"
@@ -29,6 +30,7 @@
 
 // Qt
 #include <QCoreApplication>
+#include <QDateTime>
 #include <QDir>
 #include <QFileInfo>
 #include <QTemporaryDir>
@@ -107,6 +109,22 @@ AttachReport attachCaveThroughManager(SavedProjectFixture* fixture, cwCave* cave
     REQUIRE(AsyncFuture::waitForFinished(future, kAttachWaitMs));
     REQUIRE_FALSE(future.result().hasError());
     return future.result().value();
+}
+
+// Wide margin so a planted edit's mtime is unambiguous whatever the
+// filesystem's granularity, which can be a full second.
+constexpr int kEditIsOlderSeconds = 3600;
+
+// A one-block source the cave verbs can attach and re-copy. Only the
+// tape length varies across an edit, so two equally long lengths keep
+// the byte count and only an unconditional overwrite lands the edit.
+QByteArray doghillSource(const QByteArray& tapeLength)
+{
+    const QByteArray header(
+        "*begin doghill\n"
+        "*fix d1 0 0 0\n"
+        "*data normal from to tape compass clino\n");
+    return header + "d1 d2 " + tapeLength + " 0 0\n" + "*end doghill\n";
 }
 
 //! Writes `content` into `dir` and hands back the absolute path.
@@ -369,4 +387,105 @@ TEST_CASE("cancelAttach before the scan lands leaves the cave untouched",
     CHECK(cave->tripCount() == 0);
     CHECK(cave->externalCenterline().isEmpty());
     CHECK(fixture->settings()->breadcrumbPath(ownerId).isEmpty());
+}
+
+TEST_CASE("cave reload re-copies the remembered source and re-solves",
+          "[Attach][Cave]")
+{
+    auto fixture = makeProjectWithFreshCave(QStringLiteral("cave-reload"));
+    cwCave* cave = freshCaveOf(fixture.get());
+    auto manager = managerOf(fixture.get());
+
+    QTemporaryDir sourceDir;
+    REQUIRE(sourceDir.isValid());
+    const QByteArray sourceBytes = doghillSource("10.0");
+    const QByteArray editedBytes = doghillSource("11.0");
+    const QString source =
+        writeSurvey(sourceDir, QStringLiteral("doghill.svx"), sourceBytes);
+
+    attachCaveThroughManager(fixture.get(), cave, source);
+    drainPipelines(fixture.get());
+
+    const QString copyPath = fixture->saveLoad()
+        ->externalCenterlineDir(cave)
+        .absoluteFilePath(QStringLiteral("doghill.svx"));
+    REQUIRE(fileContents(copyPath) == sourceBytes);
+
+    // The source moves on after the copy was taken. Same byte count and an
+    // mtime the copy already beats, so only an unconditional overwrite
+    // lands the edit.
+    REQUIRE(editedBytes.size() == sourceBytes.size());
+    writeFileWithMtime(source, editedBytes,
+                       QDateTime::currentDateTimeUtc().addSecs(-kEditIsOlderSeconds));
+
+    CHECK(manager->canReloadFromSource(cave));
+
+    cwSignalSpy solveSpy(manager, &cwExternalCenterlineManager::solveNeeded);
+    cwSignalSpy attachSpy(manager, &cwExternalCenterlineManager::attachCompleted);
+
+    auto reloadFuture = manager->reloadFromSource(cave);
+    REQUIRE(AsyncFuture::waitForFinished(reloadFuture, kAttachWaitMs));
+    REQUIRE_FALSE(reloadFuture.result().hasError());
+    drainPipelines(fixture.get());
+
+    CHECK(fileContents(copyPath) == editedBytes);
+    CHECK(cave->externalCenterline().entryFile() == QStringLiteral("doghill.svx"));
+    CHECK(solveSpy.count() > 0);
+
+    // The Scope trip the attach created is reconciled rather than
+    // duplicated: the block set did not change.
+    CHECK(cave->tripCount() == 1);
+    CHECK(tripForPrefix(cave, kDoghill) != nullptr);
+
+    REQUIRE(attachSpy.count() == 1);
+    const auto report = attachSpy.at(0).at(0).value<cwExternalCenterlineReport>();
+    CHECK(report.success());
+    CHECK(report.ownerId() == cave->id());
+}
+
+TEST_CASE("cave reload is refused when this machine has no source to copy",
+          "[Attach][Cave]")
+{
+    auto fixture = makeProjectWithFreshCave(QStringLiteral("cave-reload-refusals"));
+    cwCave* cave = freshCaveOf(fixture.get());
+    auto manager = managerOf(fixture.get());
+
+    // A cave that was never attached has nothing to reload.
+    CHECK_FALSE(manager->canReloadFromSource(cave));
+    CHECK_FALSE(manager->canReloadFromSource(static_cast<cwCave*>(nullptr)));
+
+    cwSignalSpy attachSpy(manager, &cwExternalCenterlineManager::attachCompleted);
+
+    auto refused = manager->reloadFromSource(cave);
+    REQUIRE(refused.isFinished());
+    CHECK(refused.result().hasError());
+    CHECK(refused.result().errorMessage().contains(QStringLiteral("no source file")));
+    CHECK_FALSE(manager->isOwnerBusy(cave->id()));
+
+    auto refusedNull = manager->reloadFromSource(static_cast<cwCave*>(nullptr));
+    REQUIRE(refusedNull.isFinished());
+    CHECK(refusedNull.result().hasError());
+    CHECK(refusedNull.result().errorMessage()
+              .contains(QStringLiteral("reload: cave is null")));
+
+    // Both refusals report through the attach bridge, deferred.
+    constexpr int kRefusalReportCount = 2;
+    while (attachSpy.count() < kRefusalReportCount && attachSpy.wait(kAttachWaitMs)) {
+    }
+    REQUIRE(attachSpy.count() == kRefusalReportCount);
+
+    const auto noSourceReport = attachSpy.at(0).at(0).value<cwExternalCenterlineReport>();
+    CHECK_FALSE(noSourceReport.success());
+    CHECK(noSourceReport.ownerId() == cave->id());
+    CHECK(noSourceReport.errorMessage().contains(QStringLiteral("no source file")));
+
+    const auto nullReport = attachSpy.at(1).at(0).value<cwExternalCenterlineReport>();
+    CHECK_FALSE(nullReport.success());
+    CHECK(nullReport.ownerId().isNull());
+    CHECK(nullReport.errorMessage().contains(QStringLiteral("reload: cave is null")));
+
+    CHECK(cave->externalCenterline().isEmpty());
+    CHECK(cave->tripCount() == 0);
+
+    drainPipelines(fixture.get());
 }

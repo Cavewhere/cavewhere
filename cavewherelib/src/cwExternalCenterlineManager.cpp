@@ -37,10 +37,10 @@
 namespace {
 
 // The ownerKind an OwnerScanInput carries for a trip-level attachment. Only
-// those are harvested: a cave-level attachment has no trip to hold the names,
-// and nothing consumes them yet. Compare-side spelling only — comparing a
-// QString against this allocates nothing, whereas passing it to appendOwner's
-// QString parameter would convert on every call.
+// those are harvested: a cave-level attachment's Scope trips read their
+// station names from the solved network instead. Compare-side spelling
+// only — comparing a QString against this allocates nothing, whereas passing
+// it to appendOwner's QString parameter would convert on every call.
 constexpr QLatin1StringView kTripOwnerKind("Trip");
 
 // How many offending paths the containment message names before it
@@ -664,7 +664,9 @@ void cwExternalCenterlineManager::scanOwners(QPromise<ExternalScanResult>& promi
                     // Station names, from cavern reading this one attachment on its
                     // own — the region solve can't supply them for exactly the
                     // attachments that need tying in, since it drops a survey
-                    // nothing fixes.
+                    // nothing fixes. A cave attachment stays out of the harvest:
+                    // its Scope trips read their station names from the solved
+                    // network, which does carry a solved cave.
                     const auto harvest = cwExternalStationHarvest::harvest(projectEntry);
                     if (harvest.hasError()) {
                         result.tripHarvestErrors.insert(
@@ -1157,14 +1159,15 @@ QFuture<Monad::ResultBase> cwExternalCenterlineManager::detachCenterline(cwCave*
     return detachCenterlineForOwner(cave, QStringLiteral("cave"), m_caveAttachmentDirs);
 }
 
-QString cwExternalCenterlineManager::reloadSourcePath(cwTrip* trip) const
+template<typename OwnerT>
+QString cwExternalCenterlineManager::reloadSourcePathForOwner(const OwnerT* owner) const
 {
-    if (trip == nullptr || m_externalSourceSettings.isNull()
-        || trip->externalCenterline().isEmpty()) {
+    if (owner == nullptr || m_externalSourceSettings.isNull()
+        || owner->externalCenterline().isEmpty()) {
         return QString();
     }
 
-    const QUuid ownerId = trip->id();
+    const QUuid ownerId = owner->id();
     const QString sourcePath = m_externalSourceSettings->breadcrumbPath(ownerId);
     if (sourcePath.isEmpty() || !QFileInfo::exists(sourcePath)) {
         return QString();
@@ -1186,35 +1189,54 @@ QString cwExternalCenterlineManager::reloadSourcePath(cwTrip* trip) const
 
 bool cwExternalCenterlineManager::canReloadFromSource(cwTrip* trip) const
 {
-    return !reloadSourcePath(trip).isEmpty();
+    return !reloadSourcePathForOwner(trip).isEmpty();
 }
 
+bool cwExternalCenterlineManager::canReloadFromSource(cwCave* cave) const
+{
+    return !reloadSourcePathForOwner(cave).isEmpty();
+}
+
+template<typename OwnerT>
 QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
-cwExternalCenterlineManager::reloadFromSource(cwTrip* trip)
+cwExternalCenterlineManager::reloadFromSourceForOwner(OwnerT* owner, const QString& ownerNoun)
 {
     using ReportResult = Monad::Result<cwExternalCenterlineAttach::AttachReport>;
 
-    if (trip == nullptr) {
+    if (owner == nullptr) {
         return refuseOperation<ReportResult>(
             &cwExternalCenterlineManager::attachCompleted, QUuid(),
-            QStringLiteral("reload: trip is null"));
+            QStringLiteral("reload: %1 is null").arg(ownerNoun));
     }
 
-    const QUuid ownerId = trip->id();
+    const QUuid ownerId = owner->id();
     if (isOwnerBusy(ownerId)) {
         return refuseOperation<ReportResult>(
             &cwExternalCenterlineManager::attachCompleted, ownerId,
-            QStringLiteral("reload: another operation for this trip is still in progress"));
+            QStringLiteral("reload: another operation for this %1 is still in progress")
+                .arg(ownerNoun));
     }
 
-    const QString sourcePath = reloadSourcePath(trip);
+    const QString sourcePath = reloadSourcePathForOwner(owner);
     if (sourcePath.isEmpty()) {
         return refuseOperation<ReportResult>(
             &cwExternalCenterlineManager::attachCompleted, ownerId,
             QStringLiteral("reload: this machine has no source file to copy from"));
     }
 
-    return replaceCenterline(trip, sourcePath);
+    return replaceCenterlineForOwner(owner, sourcePath, ownerNoun);
+}
+
+QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
+cwExternalCenterlineManager::reloadFromSource(cwTrip* trip)
+{
+    return reloadFromSourceForOwner(trip, QStringLiteral("trip"));
+}
+
+QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
+cwExternalCenterlineManager::reloadFromSource(cwCave* cave)
+{
+    return reloadFromSourceForOwner(cave, QStringLiteral("cave"));
 }
 
 cwTrip* cwExternalCenterlineManager::tripForOwner(const QUuid& ownerId) const
@@ -1233,13 +1255,29 @@ cwTrip* cwExternalCenterlineManager::tripForOwner(const QUuid& ownerId) const
     return nullptr;
 }
 
+cwCave* cwExternalCenterlineManager::caveForOwner(const QUuid& ownerId) const
+{
+    if (m_region.isNull()) {
+        return nullptr;
+    }
+
+    for (cwCave* cave : m_region->caves()) {
+        if (cave->id() == ownerId) {
+            return cave;
+        }
+    }
+    return nullptr;
+}
+
 void cwExternalCenterlineManager::updateFromSource(const QUuid& ownerId)
 {
-    cwTrip* trip = tripForOwner(ownerId);
-    if (trip == nullptr) {
+    if (cwTrip* trip = tripForOwner(ownerId)) {
+        reloadFromSource(trip);
         return;
     }
-    reloadFromSource(trip);
+    if (cwCave* cave = caveForOwner(ownerId)) {
+        reloadFromSource(cave);
+    }
 }
 
 void cwExternalCenterlineManager::updateAllChangedSources()
