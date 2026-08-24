@@ -27,6 +27,7 @@
 #include "cwEquateModel.h"
 #include "cwFindFloatingSurveys.h"
 #include "cwLinePlotManager.h"
+#include "cwProject.h"
 #include "cwScopeLabels.h"
 #include "cwStationHandle.h"
 #include "cwSurveyNetwork.h"
@@ -308,4 +309,29 @@ TEST_CASE("The floating-survey signal stays quiet when the answer is unchanged",
     manager.rerunSurvex();
     manager.waitToFinish();
     CHECK(spy.size() == 1);
+}
+
+TEST_CASE("The Scope trips of an attached cave never float", "[FloatingSurveys]")
+{
+    // A Scope trip owns no attachment and no chunks: its stations are a window
+    // onto the cave's own solved network, so neither pass has anything to
+    // report about it. TripPage's panel swap and the note-station validator now
+    // hang off that, and a banner claiming every block of a healthy cave is
+    // adrift would be the loudest way to break it.
+    auto fixture = makeSavedProject(QStringLiteral("scope-floating"),
+                                    QStringLiteral("NativeCave"),
+                                    QStringLiteral("NativeTrip"));
+    cwCave* cave = addEmptyCave(*fixture->project->cavingRegion(),
+                                QStringLiteral("BlocksCave"));
+
+    attachThroughManager(fixture.get(), cave,
+                         fixturePath(QStringLiteral("survex_blocks.svx")));
+    drainPipelines(fixture.get());
+
+    cwLinePlotManager* linePlot = fixture->rootData->linePlotManager();
+    INFO("solve error: " << linePlot->solveErrorMessage().toStdString());
+    REQUIRE_FALSE(linePlot->hasSolveError());
+    REQUIRE(cave->tripCount() == 3);
+
+    CHECK(linePlot->floatingSurveys().isEmpty());
 }

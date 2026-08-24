@@ -277,16 +277,6 @@ MainWindowTest {
             compare(missingRows, 1, "one missing-source row")
         }
 
-        // A cave attached through the cave-level verb: it needs no trips
-        // of its own, and the banner knows it by id like any other owner.
-        function attachCave(caveName, source) {
-            RootData.region.addCave()
-            const cave = RootData.region.cave(RootData.region.rowCount() - 1)
-            cave.name = caveName
-            attachSourceToCave(cave, source)
-            return cave
-        }
-
         // The owner a status row is about. A cave is reached by id like
         // every other owner, and the status model is where QML reads it.
         function statusRowOwnerId(rowIndex) {
@@ -300,7 +290,7 @@ MainWindowTest {
             makeSavedTrip("banner-cave-row")
 
             const source = tempSource()
-            attachCave("BannerCave", source)
+            makeAttachedCave("BannerCave", source)
             attachCompletedSpyId.clear()
 
             tryVerify(() => statusModel().rowCount() === 1, 15000,

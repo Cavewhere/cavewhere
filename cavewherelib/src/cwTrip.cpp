@@ -221,6 +221,7 @@ void cwTrip::setExternalCenterline(const cwExternalCenterline& value)
     m_externalCenterline = value;
     emit externalCenterlineChanged();
     emit scopeChanged();
+    emit externallyBackedChanged();
 }
 
 void cwTrip::setStationPrefix(const QString& stationPrefix)
@@ -231,6 +232,7 @@ void cwTrip::setStationPrefix(const QString& stationPrefix)
     m_stationPrefix = stationPrefix;
     emit stationPrefixChanged();
     emit scopeChanged();
+    emit externallyBackedChanged();
 }
 
 void cwTrip::setExternalStations(const QStringList& stations)
@@ -289,6 +291,12 @@ bool cwTrip::isScoped() const
     //the same two fields scopePrefix() branches on, and this is read from QML
     //bindings often enough that walking the cave's trips for it would be waste.
     return !m_externalCenterline.isEmpty() || !m_stationPrefix.isEmpty();
+}
+
+bool cwTrip::externallyBacked() const
+{
+    const cwCave* cave = parentCave();
+    return isScoped() || (cave != nullptr && !cave->externalCenterline().isEmpty());
 }
 
 void cwTrip::setId(const QUuid& id)
@@ -818,6 +826,10 @@ void cwTrip::setParentCave(cwCave* parentCave) {
 
         // Notes->setParentCave(ParentCave);
         emit parentCaveChanged();
+
+        //A cave-level attachment is a fact only the cave holds, so reparenting
+        //can flip this trip's answer without any of its own fields moving.
+        emit externallyBackedChanged();
     }
 }
 

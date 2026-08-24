@@ -625,3 +625,91 @@ TEST_CASE("cwTrip::linePlotKeywordModel carries Type=Line Plot and extends the t
     }
 }
 
+
+TEST_CASE("cwTrip::externallyBacked covers the trip's own attachment and its cave's",
+          "[cwTrip][scope]")
+{
+    // The predicate the note-station validator and TripPage's panel swap both
+    // ask. It has to answer for a Scope trip — no attachment, no chunks, all its
+    // stations coming from the cave's file — as well as for an attached trip.
+    cwCavingRegion region;
+    cwCave* cave = new cwCave();
+    cave->setName(QStringLiteral("Fisher Ridge"));
+    region.addCave(cave);
+
+    cwTrip* trip = new cwTrip();
+    trip->setName(QStringLiteral("Topo 1"));
+    cave->addTrip(trip);
+
+    cwSignalSpy backedSpy(trip, &cwTrip::externallyBackedChanged);
+
+    // A native trip in a native cave owns nothing external.
+    CHECK_FALSE(trip->externallyBacked());
+
+    // Its own station prefix backs it (a Scope trip's only own field).
+    trip->setStationPrefix(QStringLiteral("doghill.big-passage"));
+    CHECK(trip->externallyBacked());
+    CHECK(backedSpy.count() == 1);
+
+    trip->setStationPrefix(QString());
+    CHECK_FALSE(trip->externallyBacked());
+    CHECK(backedSpy.count() == 2);
+
+    // Its own attachment backs it.
+    trip->setExternalCenterline(cwExternalCenterline(QStringLiteral("/tmp/cave.svx")));
+    CHECK(trip->externallyBacked());
+    CHECK(backedSpy.count() == 3);
+
+    trip->setExternalCenterline(cwExternalCenterline());
+    CHECK_FALSE(trip->externallyBacked());
+    CHECK(backedSpy.count() == 4);
+
+    // The cave's attachment backs every trip in it, both directions, and the
+    // trip hears about it through the cave's relay.
+    cave->setExternalCenterline(cwExternalCenterline(QStringLiteral("blocks.svx")));
+    CHECK(trip->externallyBacked());
+    CHECK(backedSpy.count() == 5);
+
+    cave->setExternalCenterline(cwExternalCenterline());
+    CHECK_FALSE(trip->externallyBacked());
+    CHECK(backedSpy.count() == 6);
+
+    // A trip with no cave answers from its own fields alone.
+    cwTrip orphan;
+    CHECK_FALSE(orphan.externallyBacked());
+    orphan.setStationPrefix(QStringLiteral("east"));
+    CHECK(orphan.externallyBacked());
+}
+
+TEST_CASE("A trip the cave no longer lists stops hearing its attachment",
+          "[cwTrip][scope]")
+{
+    // The disconnect half of the relay. The undo stack keeps the removed trip
+    // alive; without one cwUndoer::pushUndo deletes the command and the trip
+    // with it.
+    cwCavingRegion region;
+    cwCave* cave = new cwCave();
+    cave->setName(QStringLiteral("Fisher Ridge"));
+    region.addCave(cave);
+
+    cwTrip* staying = new cwTrip();
+    staying->setName(QStringLiteral("Topo 1"));
+    cave->addTrip(staying);
+
+    cwTrip* removed = new cwTrip();
+    removed->setName(QStringLiteral("Topo 2"));
+    cave->addTrip(removed);
+
+    QUndoStack undoStack;
+    region.setUndoStack(&undoStack);
+
+    cave->removeTrip(cave->indexOf(removed));
+
+    cwSignalSpy stayingSpy(staying, &cwTrip::externallyBackedChanged);
+    cwSignalSpy removedSpy(removed, &cwTrip::externallyBackedChanged);
+
+    cave->setExternalCenterline(cwExternalCenterline(QStringLiteral("blocks.svx")));
+
+    CHECK(stayingSpy.count() == 1);
+    CHECK(removedSpy.count() == 0);
+}

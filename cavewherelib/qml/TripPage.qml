@@ -24,10 +24,11 @@ StandardPage {
     readonly property bool isWide: width >= Theme.breakpointFullGallery
 
     // Externally-backed trips replace the shot editor with the
-    // external-centerline panel (master plan §8.5); the swap follows
-    // attach/detach through externalCenterlineChanged.
+    // external-centerline panel (master plan §8.5) — an attached trip and a
+    // Scope trip under an attached cave alike; the swap follows attach/detach
+    // through externallyBackedChanged.
     readonly property bool isExternal: currentTrip !== null
-                                       && currentTrip.externalCenterline.entryFile.length > 0
+                                       && currentTrip.externallyBacked
 
     // Left-pane width for the external panel; SurveyEditor's editor
     // column uses the same width internally.

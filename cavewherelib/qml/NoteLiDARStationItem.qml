@@ -69,9 +69,10 @@ PointItem {
         id: stationValidatorId
         objectName: "stationValidator"
         // Same scope-grammar relaxation as NoteStation (master plan §7.2):
-        // scoped trips reference upstream/prefixed station names.
+        // an externally backed trip — by its own file or its cave's —
+        // references upstream/prefixed station names.
         external: noteStationId.parentTrip !== null
-                  && noteStationId.parentTrip.isScoped
+                  && noteStationId.parentTrip.externallyBacked
     }
 
     StationDoubleClickTextInput {

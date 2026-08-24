@@ -10,11 +10,16 @@
 //Our includes
 #include "cwScopeStationListModel.h"
 #include "cwCave.h"
+#include "cwCavingRegion.h"
+#include "cwProject.h"
 #include "cwExternalCenterline.h"
 #include "cwTrip.h"
 #include "cwStation.h"
 #include "cwShot.h"
 #include "cwSurveyChunk.h"
+
+//Test helpers
+#include "ExternalCenterlineTestHelpers.h"
 
 namespace {
 
@@ -373,4 +378,58 @@ TEST_CASE("A cave pulses solvedStationsChanged only on the trips it lists",
 
     advanceSolve(QStringLiteral("A.s3"));
     CHECK(pulseSpy.count() == 1);
+}
+
+TEST_CASE("A Scope trip windows its block of the cave's attached network",
+          "[Model][ScopeStations]")
+{
+    // The whole cave-level path, end to end: attach a nested survey to a fresh
+    // cave, let the real solve run, and read a Scope trip's stations back out
+    // of the cave network through the model the station fields bind to.
+    auto fixture = makeSavedProject(QStringLiteral("scope-window"),
+                                    QStringLiteral("NativeCave"),
+                                    QStringLiteral("NativeTrip"));
+    cwCave* cave = addEmptyCave(*fixture->project->cavingRegion(),
+                                QStringLiteral("BlocksCave"));
+
+    attachThroughManager(fixture.get(), cave,
+                         fixturePath(QStringLiteral("survex_blocks.svx")));
+    drainPipelines(fixture.get());
+
+    cwTrip* east = tripForPrefix(cave, QStringLiteral("doghill.big-passage.east"));
+    REQUIRE(east != nullptr);
+    REQUIRE(east->externallyBacked());
+
+    cwScopeStationListModel eastModel;
+    eastModel.setTrip(east);
+
+    // The solve lands through the line-plot pipeline, so give it the same
+    // budget the attach itself gets.
+    REQUIRE(tryWait(kAttachWaitMs, [&eastModel]() { return eastModel.rowCount() > 0; }));
+
+    // The leaf block's own five stations, prefix-stripped.
+    CHECK(roleValues(eastModel, cwScopeStationListModel::StationNameRole)
+          == QStringList({ QStringLiteral("e1"), QStringLiteral("e2"),
+                           QStringLiteral("e3"), QStringLiteral("e4"),
+                           QStringLiteral("e5") }));
+    CHECK(handles(eastModel).first()
+          == cwStationHandle(cwStationHandle::Trip, east->id(), QStringLiteral("e1")));
+
+    // A mid-tree block windows everything under it, so the nested leaf's
+    // stations show up with their own tails still attached.
+    cwTrip* bigPassage = tripForPrefix(cave, QStringLiteral("doghill.big-passage"));
+    REQUIRE(bigPassage != nullptr);
+
+    cwScopeStationListModel bigPassageModel;
+    bigPassageModel.setTrip(bigPassage);
+    REQUIRE(tryWait(kAttachWaitMs, [&bigPassageModel]() { return bigPassageModel.rowCount() > 0; }));
+
+    const QStringList bigPassageStations =
+        roleValues(bigPassageModel, cwScopeStationListModel::StationNameRole);
+    CHECK(bigPassageStations.contains(QStringLiteral("p1")));
+    CHECK(bigPassageStations.contains(QStringLiteral("p3")));
+    CHECK(bigPassageStations.contains(QStringLiteral("east.e1")));
+    CHECK(bigPassageStations.contains(QStringLiteral("east.e5")));
+    // Its parent's stations are outside the window.
+    CHECK_FALSE(bigPassageStations.contains(QStringLiteral("d1")));
 }

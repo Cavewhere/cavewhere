@@ -72,6 +72,7 @@ class CAVEWHERE_LIB_EXPORT cwTrip : public QObject, public cwUndoer
     Q_PROPERTY(QString stationPrefix READ stationPrefix WRITE setStationPrefix NOTIFY stationPrefixChanged)
     Q_PROPERTY(QString scopePrefix READ scopePrefix NOTIFY scopeChanged)
     Q_PROPERTY(bool isScoped READ isScoped NOTIFY scopeChanged)
+    Q_PROPERTY(bool externallyBacked READ externallyBacked NOTIFY externallyBackedChanged)
     Q_PROPERTY(QStringList externalStations READ externalStations NOTIFY externalStationsChanged FINAL)
     Q_PROPERTY(QString externalStationsError READ externalStationsError NOTIFY externalStationsErrorChanged FINAL)
 
@@ -143,6 +144,16 @@ public:
 
     //! True when this trip's stations carry a scope prefix (external or prefixed).
     bool isScoped() const;
+
+    //! True when an external survey file — this trip's own attachment, or the
+    //! one its cave attached — is what places this trip's stations. Both kinds
+    //! of externally backed trip take dotted station names, show the external
+    //! panel instead of the shot editor, and carry the 📎 marker; this is the
+    //! one predicate all three surfaces ask.
+    //!
+    //! Derived from isScoped() and the parent cave's externalCenterline, so it
+    //! can never disagree with either.
+    bool externallyBacked() const;
 
     QDateTime date() const;
     void setDate(QDateTime date);
@@ -298,6 +309,13 @@ signals:
     //! sibling's rename pulses every trip in the cave), so consumers must be
     //! idempotent. A trip its cave no longer lists gets only the first half.
     void scopeChanged();
+
+    //! The NOTIFY for externallyBacked(). Fired when this trip's own
+    //! externalCenterline, stationPrefix or parent cave changed, and — chained
+    //! from cwCave::externalCenterlineChanged in cwCave::connectTrip — when the
+    //! cave that backs it attached or detached a source. May fire when the
+    //! answer did not move, as scopeChanged() notes.
+    void externallyBackedChanged();
 
     //! The NOTIFY solvedStations() never had. Chained from the owning cave's
     //! stationPositionPositionChanged in cwCave::connectTrip, because a trip's

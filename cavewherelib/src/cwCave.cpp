@@ -326,6 +326,11 @@ void cwCave::connectTrip(cwTrip* trip)
     //so this cave is the only object that can say some trip in it learned names.
     connect(trip, &cwTrip::externalStationsChanged,
             this, &cwCave::tripExternalStationsChanged, Qt::UniqueConnection);
+
+    //externallyBacked() reads this cave's attachment, so a cave-level attach or
+    //detach moves every trip's answer and only this cave can say so.
+    connect(this, &cwCave::externalCenterlineChanged,
+            trip, &cwTrip::externallyBackedChanged, Qt::UniqueConnection);
 }
 
 void cwCave::disconnectTrip(cwTrip* trip)
@@ -342,6 +347,8 @@ void cwCave::disconnectTrip(cwTrip* trip)
                trip, &cwTrip::solvedStationsChanged);
     disconnect(trip, &cwTrip::externalStationsChanged,
                this, &cwCave::tripExternalStationsChanged);
+    disconnect(this, &cwCave::externalCenterlineChanged,
+               trip, &cwTrip::externallyBackedChanged);
 }
 
 cwCavingRegion *cwCave::parentRegion() const

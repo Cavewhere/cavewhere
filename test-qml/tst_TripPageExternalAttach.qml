@@ -434,6 +434,36 @@ MainWindowTest {
                       "the validator relaxes when the trip attaches")
             compare(validator.validate("A.1"), 2, "dotted name accepted on an Attached trip")
             RootData.futureManagerModel.waitForFinished()
+
+            // The cave-level branch: hand the same file to the cave and take
+            // the trip's own attachment away. The trip is Native again by its
+            // own fields, and still externally backed — which is the whole
+            // point of the predicate the validator now asks.
+            const cave = currentCave()
+            cave.externalCenterline = trip.externalCenterline
+            RootData.detachTripCenterline(trip)
+            tryVerify(() => trip.externalCenterline.entryFile.length === 0, 10000,
+                      "the trip owns no file of its own again")
+
+            verify(trip.externallyBacked,
+                   "a trip under an attached cave is backed by the cave's file")
+            verify(validator.external,
+                   "the validator stays relaxed under an attached cave")
+            compare(validator.validate("A.1"), 2,
+                    "dotted name accepted under an attached cave")
+
+            // The same predicate drives the left pane, so the page stays on
+            // the external panel through the swap of who owns the file. The
+            // page's own flag is what to assert: the Loader tears the old
+            // panel down with deleteLater, so findChild would still find it
+            // for a frame either way.
+            verify(tripPage.isExternal,
+                   "the trip page reads a cave-backed trip as external")
+            tryVerify(() => findChild(tripPage, "externalCenterlineTripPanel") !== null,
+                      10000, "the trip page keeps the panel under an attached cave")
+            verify(findChild(tripPage, "surveyEditor") === null,
+                   "no SurveyEditor while the cave backs the trip")
+            RootData.futureManagerModel.waitForFinished()
         }
 
         function test_carpetSubPageListsScopeStations() {

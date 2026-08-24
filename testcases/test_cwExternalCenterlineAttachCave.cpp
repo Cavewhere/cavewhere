@@ -73,17 +73,6 @@ QString blocksFixture()
     return fixturePath(QStringLiteral("survex_blocks.svx"));
 }
 
-//! The trip windowing `stationPrefix`, or null when the cave has none.
-cwTrip* tripForPrefix(const cwCave* cave, const QString& stationPrefix)
-{
-    for (cwTrip* trip : cave->trips()) {
-        if (trip->stationPrefix() == stationPrefix) {
-            return trip;
-        }
-    }
-    return nullptr;
-}
-
 QStringList tripNames(const cwCave* cave)
 {
     QStringList names;

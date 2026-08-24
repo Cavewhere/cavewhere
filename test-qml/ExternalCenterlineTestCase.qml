@@ -50,6 +50,17 @@ CWTestCase {
         attachAndWaitForRow(() => RootData.attachCaveCenterline(cave, source))
     }
 
+    // Creates the cave the Add Cave flow creates — holding no trips of
+    // its own, which is what the cave-level verb accepts — and attaches
+    // `source` to it. Returns the cave.
+    function makeAttachedCave(caveName, source) {
+        RootData.region.addCave()
+        const cave = RootData.region.cave(RootData.region.rowCount() - 1)
+        cave.name = caveName
+        attachSourceToCave(cave, source)
+        return cave
+    }
+
     // Saves the fresh project as .cwproj and attaches the
     // survex_simple.svx fixture to a new trip via the cwRootData
     // wrapper. Returns { trip, source }.

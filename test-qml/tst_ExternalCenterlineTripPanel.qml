@@ -753,5 +753,43 @@ MainWindowTest {
             tryVerify(() => !banner.visible, 15000,
                       "the tied attachment is no longer floating")
         }
+
+        // A Scope trip is externally backed by its cave's file and owns none
+        // of its own, so every manager lookup the panel makes misses. P3.9
+        // branches the panel's header for it; until then this pins that the
+        // misses render as empty rather than tearing the panel down.
+        function test_aScopeTripRendersThePanelWithNoFileOfItsOwn() {
+            makeSavedTrip("trip-panel-scope")
+
+            const cave = makeAttachedCave(
+                            "BlocksCave",
+                            TestHelper.testcasesDatasetPath(
+                                "external-centerlines/survex_blocks.svx"))
+
+            compare(cave.rowCount(), 3, "the attach created one Scope trip per block")
+            const scopeTrip = cave.trip(2)
+            verify(scopeTrip.externallyBacked,
+                   "a Scope trip is backed by the file its cave attached")
+            compare(scopeTrip.externalCenterline.entryFile, "",
+                    "a Scope trip owns no file of its own")
+
+            rootId.trip = scopeTrip
+            waitForRendering(panelId)
+
+            const header = findChild(panelId, "attachedHeader")
+            const solveStatus = findChild(panelId, "solveStatus")
+            const stationsList = findChild(panelId, "stationsList")
+            verify(header !== null && header.visible, "the header still renders")
+            verify(solveStatus !== null && solveStatus.visible, "solve status renders")
+            verify(stationsList !== null && stationsList.visible, "stations list renders")
+
+            // Every imperative lookup misses, and each answers with its
+            // nothing rather than throwing.
+            compare(panelId.entryFilePath, "", "no file of its own means no path")
+            compare(panelId.missingCopyPath, "", "no copy of its own can be missing")
+            verify(!panelId.ownerBusy, "an untracked owner is never busy")
+            verify(!panelId.sourceChangedSinceCopy,
+                   "an untracked owner has no source to have changed")
+        }
     }
 }

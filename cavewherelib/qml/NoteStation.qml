@@ -84,7 +84,7 @@ ScrapPointItem {
         id: stationValidatorId
         objectName: "stationValidator"
         external: noteStationId.parentTrip !== null
-                  && noteStationId.parentTrip.isScoped
+                  && noteStationId.parentTrip.externallyBacked
     }
 
     StationDoubleClickTextInput {

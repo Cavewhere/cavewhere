@@ -256,6 +256,27 @@ inline void attachThroughManager(SavedProjectFixture* fixture, cwTrip* trip,
     REQUIRE_FALSE(future.result().hasError());
 }
 
+// The cave-level twin of the prologue above: a cave attach also creates
+// the cave's Scope trips, so tests about those start here.
+inline void attachThroughManager(SavedProjectFixture* fixture, cwCave* cave,
+                                 const QString& sourcePath)
+{
+    auto future = managerOf(fixture)->attachCenterline(cave, sourcePath);
+    REQUIRE(AsyncFuture::waitForFinished(future, kAttachWaitMs));
+    REQUIRE_FALSE(future.result().hasError());
+}
+
+//! The trip windowing `stationPrefix`, or null when the cave has none.
+inline cwTrip* tripForPrefix(const cwCave* cave, const QString& stationPrefix)
+{
+    for (cwTrip* trip : cave->trips()) {
+        if (trip->stationPrefix() == stationPrefix) {
+            return trip;
+        }
+    }
+    return nullptr;
+}
+
 inline cwCave* addEmptyCave(cwCavingRegion& region, const QString& name)
 {
     cwCave* cave = new cwCave();
