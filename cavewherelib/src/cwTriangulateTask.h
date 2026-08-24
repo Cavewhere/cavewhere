@@ -19,6 +19,7 @@
 #include "cwTriangulateLiDARInData.h"
 #include "cwTriangulateWarpingData.h"
 #include "cwCropImageTask.h"
+#include "cwTextureCompressionJob.h"
 
 //Qt include
 #include <QPolygonF>
@@ -57,6 +58,12 @@ public:
     void setScrapData(QList<cwTriangulateInData> scraps);
     void setDataRootDir(const QDir& dataRootDir);
     void setFormatType(cwTextureUploadTask::Format format);
+
+    /**
+     * The job that surfaces every scrap crop's KTX2 encode in the job list.
+     * Leaving it unset still encodes, it just goes untracked.
+     */
+    void setCompressionJob(const cwTextureCompressionJob::Ptr& job);
 
     //Outputs of the task
     QList<QFuture<cwTriangulatedData> > triangulate() const;
@@ -257,6 +264,7 @@ private:
     //Inputs
     QList<cwTriangulateInData> Scraps;
     cwTextureUploadTask::Format Format;
+    cwTextureCompressionJob::Ptr m_compressionJob;
 
     //Outputs
     QList<cwTriangulatedData> TriangulatedScraps;
@@ -264,7 +272,8 @@ private:
 
     static QFuture<cwCropImageTask::Result> cropScrap(const cwTriangulateInData& scrap,
                                                       const QDir& dataRootDir,
-                                                      cwTextureUploadTask::Format format);
+                                                      cwTextureUploadTask::Format format,
+                                                      const cwTextureCompressionJob::Ptr& compressionJob);
 
     static cwTriangulatedData triangulateGeometry(const cwTriangulateInData& scrap,
                                                   const cwCropImageTask::Result& croppedResult,

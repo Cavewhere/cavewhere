@@ -2,21 +2,25 @@
 
 #include <QByteArray>
 #include <QColor>
+#include <QCoreApplication>
 #include <QDir>
 #include <QFileInfo>
 #include <QImage>
 #include <QRectF>
 #include <QSize>
+#include <QStringList>
 #include <QTemporaryDir>
 
 #include <asyncfuture.h>
 
 #include "cwCropImageTask.h"
 #include "cwDiskCacher.h"
+#include "cwFutureManagerModel.h"
 #include "cwImage.h"
 #include "cwKtx2Codec.h"
 #include "cwOpenGLUtils.h"
 #include "cwRenderTexturedItems.h"
+#include "cwTextureCompressionJob.h"
 
 namespace {
     constexpr int kSourceWidth = 128;
@@ -68,12 +72,15 @@ namespace {
         return QColor(pixel[0], pixel[1], pixel[2], pixel[3]);
     }
 
-    cwCropImageTask::Result runCrop(const QDir& dataRootDir, const cwImage& original)
+    cwCropImageTask::Result runCrop(const QDir& dataRootDir,
+                                    const cwImage& original,
+                                    const cwTextureCompressionJob::Ptr& compressionJob = {})
     {
         cwCropImageTask task;
         task.setDataRootDir(dataRootDir);
         task.setOriginal(original);
         task.setRectF(QRectF(0.0, 0.0, 1.0, 1.0));
+        task.setCompressionJob(compressionJob);
 
         auto future = task.crop();
         REQUIRE(AsyncFuture::waitForFinished(future, kCropTimeoutMilliseconds));
@@ -231,5 +238,75 @@ TEST_CASE("Cropping a scrap caches a compressed texture", "[ScrapCompressedTextu
         CHECK(stored.size == texture.size);
         CHECK(stored.format == texture.format);
         CHECK(items.item(id).texture.isNull());
+    }
+}
+
+TEST_CASE("Compressing a scrap texture shows a job while it encodes", "[ScrapCompressedTexture]") {
+    QTemporaryDir rootDir;
+    REQUIRE(rootDir.isValid());
+
+    const QDir dataRootDir(rootDir.path());
+    const QDir notesDir(dataRootDir.filePath(QStringLiteral("notes")));
+    REQUIRE(QDir().mkpath(notesDir.absolutePath()));
+
+    const QString imagePath = notesDir.filePath(QStringLiteral("job-note.png"));
+    REQUIRE(gradientImage().save(imagePath));
+
+    cwImage original;
+    original.setPath(imagePath);
+    original.setOriginalSize(QSize(kSourceWidth, kSourceHeight));
+    original.setOriginalDotsPerMeter(kSourceDotsPerMeter);
+
+    cwFutureManagerModel model;
+
+    QStringList jobNames;
+    QObject::connect(&model, &QAbstractItemModel::rowsInserted, &model,
+                     [&model, &jobNames](const QModelIndex&, int first, int last) {
+                         for(int row = first; row <= last; row++) {
+                             jobNames.append(model.data(model.index(row),
+                                                        cwFutureManagerModel::NameRole).toString());
+                         }
+                     });
+
+    auto compressionJob = cwTextureCompressionJob::create(model.token());
+    const cwCropImageTask::Result result = runCrop(dataRootDir, original, compressionJob);
+    REQUIRE_FALSE(result.compressedKey.id.isEmpty());
+
+    //The worker adds the job through the event loop
+    QCoreApplication::processEvents();
+
+    CHECK(jobNames == QStringList{QStringLiteral("Compressing textures")});
+    CHECK(model.count() == 1);
+
+    //The job runs until the last handle is gone, so dropping this one finishes it
+    compressionJob.reset();
+    model.waitForFinished();
+    CHECK(model.isEmpty());
+
+    SECTION("the crop is unchanged by the job") {
+        cwDiskCacher cacher(dataRootDir);
+        CHECK(cacher.hasEntry(result.compressedKey));
+        CHECK(QFileInfo::exists(result.image->path()));
+
+        const auto transcoded = cw::ktx2::cachedCompressedTexture(cacher,
+                                                                  result.compressedKey,
+                                                                  QImage(),
+                                                                  cw::ktx2::targetCompressedFormat());
+        REQUIRE_FALSE(transcoded.hasError());
+        CHECK(transcoded.value().size == result.image->originalSize());
+    }
+
+    SECTION("a crop served from the cache shows no job at all") {
+        jobNames.clear();
+
+        auto cachedRunJob = cwTextureCompressionJob::create(model.token());
+        const cwCropImageTask::Result cachedResult = runCrop(dataRootDir, original, cachedRunJob);
+        CHECK(cachedResult.compressedKey.id == result.compressedKey.id);
+
+        cachedRunJob.reset();
+        QCoreApplication::processEvents();
+
+        CHECK(jobNames.isEmpty());
+        CHECK(model.isEmpty());
     }
 }

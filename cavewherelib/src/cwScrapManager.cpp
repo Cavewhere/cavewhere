@@ -16,6 +16,7 @@
 #include "cwNote.h"
 #include "cwScrap.h"
 #include "cwTriangulateTask.h"
+#include "cwTextureCompressionJob.h"
 #include "cwProject.h"
 #include "cwTriangulateInData.h"
 #include "cwDebug.h"
@@ -1167,6 +1168,11 @@ QList<cwScrapManager::TriangulatedScrapResult> cwScrapManager::triangulateScraps
     task.setDataRootDir(Project->dataRootDir());
     task.setScrapData(scrapData);
     task.setFormatType(cwTextureUploadTask::format());
+
+    //One "Compressing textures" job for this batch. The crop workers keep it
+    //alive while they encode, so a batch served from the disk cache shows no job.
+    task.setCompressionJob(cwTextureCompressionJob::create(FutureManagerToken));
+
     auto triangulatedFutures = task.triangulate();
 
     if(triangulatedFutures.isEmpty()) {

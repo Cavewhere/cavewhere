@@ -8,6 +8,7 @@
 // Our includes
 #include "cwGltfLoader.h"
 #include "cwRenderTexturedItems.h"
+#include "cwTextureCompressionJob.h"
 #include "CaveWhereLibExport.h"
 
 /**
@@ -26,7 +27,13 @@
 class CAVEWHERE_LIB_EXPORT cwGltfBaseColorTexture
 {
 public:
-    cwGltfBaseColorTexture(const QString& dataRootPath, const QString& gltfFilename);
+    /**
+     * compressionJob surfaces this file's KTX2 encodes in the job list.
+     * Leaving it unset still encodes, it just goes untracked.
+     */
+    cwGltfBaseColorTexture(const QString& dataRootPath,
+                           const QString& gltfFilename,
+                           const cwTextureCompressionJob::Ptr& compressionJob = {});
 
     void setOn(cwRenderTexturedItems::Item& item,
                const cw::gltf::SceneCPU& scene,
@@ -38,6 +45,7 @@ private:
     QString m_dataRootPath;
     QString m_gltfFilename;
     QString m_fileChecksum;
+    cwTextureCompressionJob::Ptr m_compressionJob;
 
     //A transient hand-off within a single task run, not a persistent in-memory
     //cache — commit 335671ba removed the process-lifetime scene cache and that

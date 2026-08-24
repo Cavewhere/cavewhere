@@ -15,6 +15,7 @@
 #include "cwImageProvider.h"
 #include "cwGlobals.h"
 #include "cwTextureUploadTask.h"
+#include "cwTextureCompressionJob.h"
 #include "cwTrackedImage.h"
 
 //Qt includes
@@ -49,6 +50,12 @@ public:
     void setFormatType(cwTextureUploadTask::Format format);
     void setDataRootDir(const QDir& dataRootDir);
 
+    /**
+     * The job that surfaces this crop's KTX2 encode in the job list. Leaving it
+     * unset still encodes, it just goes untracked.
+     */
+    void setCompressionJob(const cwTextureCompressionJob::Ptr& job);
+
     QFuture<Result> crop();
 
 protected:
@@ -60,6 +67,7 @@ private:
     QRectF CropRect;
     cwTextureUploadTask::Format Format = cwTextureUploadTask::Unknown;
     QDir DataRootDir;
+    cwTextureCompressionJob::Ptr m_compressionJob;
 
     //Output
     cwImage CroppedImage;

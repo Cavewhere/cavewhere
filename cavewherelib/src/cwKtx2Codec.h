@@ -13,6 +13,7 @@
 // Our includes
 #include "CaveWhereLibExport.h"
 #include "cwDiskCacher.h"
+#include "cwTextureCompressionJob.h"
 
 // Monad includes
 #include "Monad/Result.h"
@@ -100,11 +101,15 @@ namespace cw::ktx2 {
      * Pass a null sourceImage when the caller cannot afford the encode: a
      * missing entry is then an error Result and the caller falls back to the
      * uncompressed image.
+     *
+     * compressionJob surfaces the encode in the job list, and only the encode:
+     * a cache hit is a read and a transcode, so it stays invisible.
      */
     CAVEWHERE_LIB_EXPORT Monad::Result<cwCompressedTexture> cachedCompressedTexture(cwDiskCacher& cacher,
                                                                                    const cwDiskCacher::Key& key,
                                                                                    const QImage& sourceImage,
-                                                                                   QRhiTexture::Format target);
+                                                                                   QRhiTexture::Format target,
+                                                                                   const cwTextureCompressionJob::Ptr& compressionJob = {});
 }
 
 #endif // CWKTX2CODEC_H

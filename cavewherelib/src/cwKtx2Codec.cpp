@@ -274,7 +274,8 @@ void setSupportedCompressedFormat(QRhiTexture::Format format)
 Monad::Result<cwCompressedTexture> cachedCompressedTexture(cwDiskCacher& cacher,
                                                            const cwDiskCacher::Key& key,
                                                            const QImage& sourceImage,
-                                                           QRhiTexture::Format target)
+                                                           QRhiTexture::Format target,
+                                                           const cwTextureCompressionJob::Ptr& compressionJob)
 {
     const QByteArray cachedBytes = cacher.entry(key);
     if(!cachedBytes.isEmpty()) {
@@ -293,6 +294,8 @@ Monad::Result<cwCompressedTexture> cachedCompressedTexture(cwDiskCacher& cacher,
         return Monad::Result<cwCompressedTexture>(
             QStringLiteral("No KTX2 cache entry at ") + cacher.filePath(key));
     }
+
+    const cwTextureCompressionJob::Encode encode(compressionJob);
 
     const auto encoded = encodeRgba(sourceImage);
     if(encoded.hasError()) {

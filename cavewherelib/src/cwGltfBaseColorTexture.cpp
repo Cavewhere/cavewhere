@@ -50,10 +50,13 @@ namespace {
     }
 }
 
-cwGltfBaseColorTexture::cwGltfBaseColorTexture(const QString& dataRootPath, const QString& gltfFilename) :
+cwGltfBaseColorTexture::cwGltfBaseColorTexture(const QString& dataRootPath,
+                                               const QString& gltfFilename,
+                                               const cwTextureCompressionJob::Ptr& compressionJob) :
     m_dataRootPath(dataRootPath),
     m_gltfFilename(gltfFilename),
-    m_fileChecksum(dataRootPath.isEmpty() ? QString() : fileChecksum(gltfFilename))
+    m_fileChecksum(dataRootPath.isEmpty() ? QString() : fileChecksum(gltfFilename)),
+    m_compressionJob(compressionJob)
 {
 }
 
@@ -101,7 +104,7 @@ cwCompressedTexture cwGltfBaseColorTexture::compressedTexture(const QImage& imag
     };
 
     cwDiskCacher cacher{QDir(m_dataRootPath)};
-    const auto compressed = cw::ktx2::cachedCompressedTexture(cacher, key, image, target);
+    const auto compressed = cw::ktx2::cachedCompressedTexture(cacher, key, image, target, m_compressionJob);
     if(compressed.hasError()) {
         qWarning() << "Can't compress the glTF texture, using the uncompressed image:"
                    << compressed.errorMessage();
