@@ -172,6 +172,7 @@ cwTriangulatedData cwTriangulateTask::triangulateGeometry(const cwTriangulateInD
     outputData.setCroppedImageData(imageData);
     outputData.setCroppedImage(croppedResult.image);
     outputData.setCompressedTextureKey(croppedResult.compressedKey);
+    outputData.setCroppedImageSize(croppedResult.croppedSize);
     outputData.setScrapGeometry(geometry);
     outputData.setLeadPoints(leadPoints);
 

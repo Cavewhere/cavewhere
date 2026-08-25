@@ -19,6 +19,7 @@
 
 //Qt includes
 #include <QRectF>
+#include <QSize>
 #include <QString>
 #include <QDir>
 
@@ -31,14 +32,15 @@ class CAVEWHERE_LIB_EXPORT cwCropImageTask : public QObject
 
 public:
     /**
-     * What one crop produces: the PNG crop written to the image cache, plus the
-     * key of the UASTC .ktx2 entry encoded from the same pixels. compressedKey's
-     * id is empty when the encode failed, and callers then stay on the
-     * uncompressed image.
+     * What one crop produces: the PNG crop written to the image cache, the key
+     * of the UASTC .ktx2 entry encoded from the same pixels, and the crop's
+     * size after the oversized-crop clamp. compressedKey's id is empty when the
+     * encode failed, and callers then stay on the uncompressed image.
      */
     struct Result {
         cwTrackedImagePtr image;
         cwDiskCacher::Key compressedKey;
+        QSize croppedSize;
     };
 
     cwCropImageTask(QObject* parent = nullptr);

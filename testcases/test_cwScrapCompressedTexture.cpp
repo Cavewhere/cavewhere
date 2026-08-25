@@ -1,5 +1,8 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include "LoadProjectHelper.h"
+#include "TestHelper.h"
+
 #include <QByteArray>
 #include <QColor>
 #include <QDir>
@@ -14,9 +17,16 @@
 #include "cwCropImageTask.h"
 #include "cwDiskCacher.h"
 #include "cwImage.h"
+#include "cwJobSettings.h"
 #include "cwKtx2Codec.h"
 #include "cwOpenGLUtils.h"
+#include "cwProject.h"
+#include "cwRegionSceneManager.h"
 #include "cwRenderTexturedItems.h"
+#include "cwRootData.h"
+#include "cwScrapManager.h"
+#include "cwStreamedTexture.h"
+#include "cwTriangulatedData.h"
 
 namespace {
     constexpr int kSourceWidth = 128;
@@ -231,5 +241,119 @@ TEST_CASE("Cropping a scrap caches a compressed texture", "[ScrapCompressedTextu
         CHECK(stored.size == texture.size);
         CHECK(stored.format == texture.format);
         CHECK(items.item(id).texture.isNull());
+    }
+}
+
+namespace {
+    //cwRenderTexturedItems has no id enumeration, so a scrap's render item is
+    //found by walking the ids it hands out, starting at 1
+    constexpr uint32_t kMaxScannedRenderItemId = 64;
+
+    QList<cwStreamedTexture> streamedTextures(const cwRenderTexturedItems* items)
+    {
+        QList<cwStreamedTexture> textures;
+        for(uint32_t id = 1; id <= kMaxScannedRenderItemId; id++) {
+            if(items->hasItem(id) && !items->item(id).streamedTexture.isNull()) {
+                textures.append(items->item(id).streamedTexture);
+            }
+        }
+        return textures;
+    }
+}
+
+TEST_CASE("Triangulated scraps reach the renderer as streamed descriptors",
+          "[cwScrapManager][ScrapCompressedTexture]") {
+    cwJobSettings::initialize();
+    REQUIRE(cwJobSettings::instance()->automaticUpdate());
+
+    auto rootData = std::make_unique<cwRootData>();
+    auto* project = rootData->project();
+    fileToProject(project, testcasesDatasetPath("test_cwScrapManager/scrapGuessNeigborPlan.cw"));
+
+    rootData->scrapManager()->markAllScrapsDirty();
+    rootData->scrapManager()->runIfNeeded();
+    rootData->scrapManager()->waitForFinish();
+    rootData->futureManagerModel()->waitForFinished();
+
+    const auto* items = rootData->regionSceneManager()->items();
+    REQUIRE(items != nullptr);
+
+    const QList<cwStreamedTexture> textures = streamedTextures(items);
+    REQUIRE_FALSE(textures.isEmpty());
+
+    const QString dataRootPath = project->dataRootDir().absolutePath();
+    cwDiskCacher cacher(project->dataRootDir());
+
+    for(const cwStreamedTexture& texture : textures) {
+        INFO("Streamed key: " << texture.key.id.toStdString());
+        CHECK(texture.dataRootPath == dataRootPath);
+        CHECK(texture.key.id.contains(QStringLiteral("-uastc1")));
+        REQUIRE(cacher.hasEntry(texture.key));
+
+        //The descriptor's size is the crop's, built without decoding: it must
+        //agree with the level 0 the render side will actually load
+        const auto transcoded = cw::ktx2::cachedCompressedTexture(cacher,
+                                                                  texture.key,
+                                                                  QImage(),
+                                                                  QRhiTexture::RGBA8);
+        REQUIRE_FALSE(transcoded.hasError());
+        CHECK(transcoded.value().size == texture.size);
+    }
+}
+
+TEST_CASE("A crop's descriptor streams and a failed encode keeps the image",
+          "[cwScrapManager][ScrapCompressedTexture]") {
+    QTemporaryDir rootDir;
+    REQUIRE(rootDir.isValid());
+
+    const QDir dataRootDir(rootDir.path());
+    const QDir notesDir(dataRootDir.filePath(QStringLiteral("notes")));
+    REQUIRE(QDir().mkpath(notesDir.absolutePath()));
+
+    const QString imagePath = notesDir.filePath(QStringLiteral("streamed-note.png"));
+    REQUIRE(gradientImage().save(imagePath));
+
+    cwImage original;
+    original.setPath(imagePath);
+    original.setOriginalSize(QSize(kSourceWidth, kSourceHeight));
+    original.setOriginalDotsPerMeter(kSourceDotsPerMeter);
+
+    const cwCropImageTask::Result result = runCrop(dataRootDir, original);
+    REQUIRE_FALSE(result.compressedKey.id.isEmpty());
+    CHECK(result.croppedSize == QSize(kSourceWidth, kSourceHeight));
+
+    cwTriangulatedData data;
+    data.setCompressedTextureKey(result.compressedKey);
+    data.setCroppedImageSize(result.croppedSize);
+
+    //The descriptor cwScrapManager builds from the triangulated data
+    const auto descriptor = [&dataRootDir](const cwTriangulatedData& data) {
+        return cwStreamedTexture {
+            dataRootDir.absolutePath(),
+            data.compressedTextureKey(),
+            data.croppedImageSize()
+        };
+    };
+
+    const cwStreamedTexture streamed = descriptor(data);
+    REQUIRE_FALSE(streamed.isNull());
+    CHECK(streamed.key.id == result.compressedKey.id);
+    CHECK(streamed.size == result.croppedSize);
+
+    SECTION("a failed encode leaves a null descriptor, so the image is sent") {
+        cwTriangulatedData failedEncode;
+        failedEncode.setCroppedImageSize(result.croppedSize);
+        REQUIRE(descriptor(failedEncode).isNull());
+
+        cwRenderTexturedItems items;
+
+        cwRenderTexturedItems::Item item;
+        item.storeTexture = true;
+        const uint32_t id = items.addItem(item);
+
+        items.updateTexture(id, gradientImage());
+
+        CHECK(items.item(id).streamedTexture.isNull());
+        CHECK(items.item(id).texture.size() == QSize(kSourceWidth, kSourceHeight));
     }
 }

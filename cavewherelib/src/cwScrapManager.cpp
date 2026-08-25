@@ -22,7 +22,7 @@
 #include "cwImageResolution.h"
 #include "cwImageProvider.h"
 #include "cwDiskCacher.h"
-#include "cwKtx2Codec.h"
+#include "cwStreamedTexture.h"
 #include "cwLinePlotManager.h"
 #include "cwRegionTreeModel.h"
 #include "cwKeywordItemModel.h"
@@ -65,41 +65,6 @@ namespace {
 // namespace within cwDiskCacher; identical rasters collide harmlessly.
 inline const QString kSketchTextureCacheKeyPrefix =
     QStringLiteral("sketch-texture");
-
-// Reads the scrap's cached UASTC texture and transcodes it to the format this
-// build targets. Returns a null texture when the scrap has no compressed entry,
-// when the render backend accepts something other than the targeted format, or
-// when the transcode fails; the caller then uploads the QImage instead.
-//
-// The backend check matters because an item that receives a compressed texture
-// the backend rejects has no texture at all — the render thread drops the
-// compressed payload and the item sits on the loading placeholder. Until the
-// first frame publishes the backend's capabilities every scrap takes the QImage
-// path.
-cwCompressedTexture compressedScrapTexture(const cwTriangulatedData& triangleData,
-                                           const cwProject* project)
-{
-    const cwDiskCacher::Key key = triangleData.compressedTextureKey();
-    const QRhiTexture::Format target = cw::ktx2::targetCompressedFormat();
-    if(project == nullptr
-        || key.id.isEmpty()
-        || cw::ktx2::supportedCompressedFormat() != target) {
-        return {};
-    }
-
-    //A null source image: the crop worker owns the encode, so a damaged entry
-    //here falls back to the QImage instead of stalling the GUI thread on a
-    //multi-second re-encode of a 4096 pixel crop.
-    cwDiskCacher cacher(project->dataRootDir());
-    const auto transcoded = cw::ktx2::cachedCompressedTexture(cacher, key, QImage(), target);
-    if(transcoded.hasError()) {
-        qWarning() << "Can't transcode the scrap texture, using the uncompressed image:"
-                   << transcoded.errorMessage();
-        return {};
-    }
-
-    return transcoded.value();
-}
 
 } // namespace
 
@@ -1767,11 +1732,18 @@ void cwScrapManager::taskFinished(const QList<cwScrap*>& scrapsToUpdate,
             << " isEmpty=" << g.isEmpty();
         m_renderScraps->updateGeometry(id, triangleData.scrapGeometry());
 
-        const cwCompressedTexture compressed = compressedScrapTexture(triangleData, Project);
-        if(compressed.isNull()) {
+        //The render thread streams the levels it needs off the cached KTX2, so
+        //nothing is decoded here. A null descriptor means the encode failed,
+        //and the QImage crop is the only texture the scrap has.
+        const cwStreamedTexture streamed {
+            Project != nullptr ? Project->dataRootDir().absolutePath() : QString(),
+            triangleData.compressedTextureKey(),
+            triangleData.croppedImageSize()
+        };
+        if(streamed.isNull()) {
             m_renderScraps->updateTexture(id, triangleData.croppedImageData().image);
         } else {
-            m_renderScraps->updateCompressedTexture(id, compressed);
+            m_renderScraps->updateStreamedTexture(id, streamed);
         }
     }
 }

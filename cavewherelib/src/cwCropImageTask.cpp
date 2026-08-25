@@ -210,7 +210,8 @@ QFuture<cwCropImageTask::Result> cwCropImageTask::crop()
                     cwTrackedImage::createShared(image,
                                                  image.path(),
                                                  cwTrackedImage::NoOwnership),
-                    cropRGBImage.compressedKey
+                    cropRGBImage.compressedKey,
+                    cropRGBImage.croppedImage.size()
                 };
             }).future();
 

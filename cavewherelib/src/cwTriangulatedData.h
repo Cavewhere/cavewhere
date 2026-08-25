@@ -17,6 +17,7 @@
 
 //Qt includes
 #include <QSharedData>
+#include <QSize>
 #include <QVector>
 #include <QVector3D>
 #include <QVector2D>
@@ -35,6 +36,9 @@ public:
 
     cwDiskCacher::Key compressedTextureKey() const;
     void setCompressedTextureKey(const cwDiskCacher::Key& key);
+
+    QSize croppedImageSize() const;
+    void setCroppedImageSize(QSize size);
 
     void setScrapGeometry(cwGeometry scrapGeometry) { Data->scrapGeometry = scrapGeometry; }
     const cwGeometry& scrapGeometry() const { return Data->scrapGeometry; }
@@ -68,6 +72,9 @@ private:
         //Where the cropped image's UASTC .ktx2 lives in the disk cache. Empty
         //when the crop wasn't compressed and the QImage is the only texture.
         cwDiskCacher::Key compressedTextureKey;
+        //The crop's pixel size, so a streamed descriptor can be built without
+        //decoding anything.
+        QSize croppedImageSize;
         cwGeometry scrapGeometry;
 
         // QVector<QVector3D> points;
@@ -117,6 +124,16 @@ inline cwDiskCacher::Key cwTriangulatedData::compressedTextureKey() const
 inline void cwTriangulatedData::setCompressedTextureKey(const cwDiskCacher::Key &key)
 {
     Data->compressedTextureKey = key;
+}
+
+inline QSize cwTriangulatedData::croppedImageSize() const
+{
+    return Data->croppedImageSize;
+}
+
+inline void cwTriangulatedData::setCroppedImageSize(QSize size)
+{
+    Data->croppedImageSize = size;
 }
 
 // /**
