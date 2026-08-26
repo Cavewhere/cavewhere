@@ -49,6 +49,9 @@ struct ScopeExtent {
 // network (e.g. "fisher_ridge.topo1."); coordinates are resolved through the
 // cave-local position lookup — network keys carry the "fisher_ridge." cave
 // prefix that the lookup strips, so `cavePrefix` bridges the two.
+// Both prefix comparisons are case-insensitive: a Scope trip windows by its
+// `stationPrefix` as authored (which may carry uppercase), while cavern
+// lowercases every label it writes to the .3d, so network keys are lowercase.
 ScopeExtent emitNetworkScopeGeometry(const cwSurveyNetwork& network,
                                      const QString& cavePrefix,
                                      const QString& scopePrefix,
@@ -59,7 +62,7 @@ ScopeExtent emitNetworkScopeGeometry(const cwSurveyNetwork& network,
 
     const auto resolveNetworkStation = [&](const QString& networkKey, QVector3D* out) -> bool {
         QString local = networkKey;
-        if (local.startsWith(cavePrefix)) {
+        if (local.startsWith(cavePrefix, Qt::CaseInsensitive)) {
             local = local.sliced(cavePrefix.size());
         }
         const auto it = stationPositions.constFind(cwStation::canonicalKey(local));
@@ -79,7 +82,7 @@ ScopeExtent emitNetworkScopeGeometry(const cwSurveyNetwork& network,
     QStringList stations = network.stations();
     std::sort(stations.begin(), stations.end());
     for (const QString& station : stations) {
-        if (!station.startsWith(scopePrefix)) {
+        if (!station.startsWith(scopePrefix, Qt::CaseInsensitive)) {
             continue;
         }
         QVector3D from;

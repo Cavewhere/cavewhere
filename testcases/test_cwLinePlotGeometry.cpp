@@ -17,6 +17,7 @@
 #include "cwStation.h"
 #include "cwShot.h"
 #include "cwStationPositionLookup.h"
+#include "cwSurveyNetwork.h"
 
 //Qt includes
 #include <QVector3D>
@@ -172,4 +173,67 @@ TEST_CASE("cwLinePlotGeometry duplicates a station shared by consecutive shots",
     REQUIRE(geometry.tripVertexRanges.size() == 1);
     CHECK(geometry.tripVertexRanges.at(0).start == 0);
     CHECK(geometry.tripVertexRanges.at(0).count == 4);
+}
+
+TEST_CASE("cwLinePlotGeometry windows a Scope trip whose prefix carries authored case",
+          "[cwLinePlotGeometry]")
+{
+    // A Scope trip stores its stationPrefix exactly as the survey file authored
+    // the *begin block ("48H-Feng"), while cavern lowercases every label it
+    // writes to the .3d — so the solved network keys are lowercase. The
+    // scope-membership filter has to bridge the two, or the trip emits no line
+    // geometry at all (stations still get labels, which is what made this look
+    // like a rendering bug rather than a matching one).
+    cwCavingRegion region;
+
+    cwCave* cave = new cwCave();
+    cave->setName(QStringLiteral("cave1")); //sanitizes to itself: cavePrefix is "cave1."
+    region.addCave(cave);
+
+    cwTrip* scopeTrip = new cwTrip();
+    scopeTrip->setName(QStringLiteral("48H-Feng"));
+    scopeTrip->setStationPrefix(QStringLiteral("48H-Feng")); //what reconcileScopeTrips stores
+    cave->addTrip(scopeTrip);
+
+    const QVector3D f1Position(0.0f, 0.0f, 0.0f);
+    const QVector3D f2Position(0.0f, 10.0f, 0.0f);
+    const QVector3D l1Position(5.0f, 10.0f, 0.0f);
+
+    // Cave-local lookup keys — the network's cave prefix is stripped before the
+    // position lookup.
+    cwStationPositionLookup lookup;
+    lookup.setPosition(QStringLiteral("48h-feng.f1"), f1Position);
+    lookup.setPosition(QStringLiteral("48h-feng.f2"), f2Position);
+    lookup.setPosition(QStringLiteral("48h-feng.lower.l1"), l1Position);
+    cave->setStationPositionLookup(lookup);
+
+    // Cavern-shaped network keys: region-wide and lowercase.
+    cwSurveyNetwork network;
+    network.addShot(QStringLiteral("cave1.48h-feng.f1"), QStringLiteral("cave1.48h-feng.f2"));
+    network.addShot(QStringLiteral("cave1.48h-feng.f2"), QStringLiteral("cave1.48h-feng.lower.l1"));
+
+    const auto result = cwLinePlotGeometry::generate(region.data(), network);
+    REQUIRE_FALSE(result.hasError());
+    const cwLinePlotGeometry::Result geometry = result.value();
+
+    // Find the range by trip identity rather than list position.
+    REQUIRE(geometry.tripUuids.size() == geometry.tripVertexRanges.size());
+    const qsizetype tripIndex = geometry.tripUuids.indexOf(scopeTrip->id());
+    REQUIRE(tripIndex >= 0);
+
+    const cwLinePlotGeometry::VertexRange range = geometry.tripVertexRanges.at(tripIndex);
+    CHECK(range.count > 0);
+    CHECK(range.count % 2 == 0);
+
+    // Every emitted vertex resolved through the cave lookup.
+    for (int i = range.start; i < range.start + range.count; ++i) {
+        const QVector3D point = geometry.points.at(i);
+        INFO("vertex index: " << i);
+        CHECK((point == f1Position || point == f2Position || point == l1Position));
+    }
+
+    // Both legs are drawn, each with its own endpoints.
+    CHECK(countPositions(geometry.points, f1Position) == 1);
+    CHECK(countPositions(geometry.points, l1Position) == 1);
+    CHECK(countPositions(geometry.points, f2Position) == 2);
 }

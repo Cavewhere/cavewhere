@@ -16,11 +16,13 @@
 #include "cwExternalCenterlineManager.h"
 #include "cwExternalSourceSettings.h"
 #include "cwFutureManagerModel.h"
+#include "cwLinePlotGeometry.h"
 #include "cwLinePlotManager.h"
 #include "cwProject.h"
 #include "cwRootData.h"
 #include "cwSaveLoad.h"
 #include "cwSignalSpy.h"
+#include "cwStationPositionLookup.h"
 #include "cwSurveyChunk.h"
 #include "cwTrip.h"
 #include "ExternalCenterlineTestHelpers.h"
@@ -34,8 +36,10 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QTemporaryDir>
+#include <QVector3D>
 
 // Std
+#include <algorithm>
 #include <memory>
 
 namespace {
@@ -103,6 +107,10 @@ AttachReport attachCaveThroughManager(SavedProjectFixture* fixture, cwCave* cave
 // Wide margin so a planted edit's mtime is unambiguous whatever the
 // filesystem's granularity, which can be a full second.
 constexpr int kEditIsOlderSeconds = 3600;
+
+// Squared distance under which two solved positions count as the same
+// point, absorbing the float rounding a solve and a geometry pass add.
+constexpr float kSamePositionToleranceSquared = 1e-6f;
 
 // A one-block source the cave verbs can attach and re-copy. Only the
 // tape length varies across an edit, so two equally long lengths keep
@@ -492,4 +500,64 @@ TEST_CASE("cave reload is refused when this machine has no source to copy",
     CHECK(cave->tripCount() == 0);
 
     drainPipelines(fixture.get());
+}
+
+TEST_CASE("Cave attach emits line geometry for Scope trips whose prefix carries authored case",
+          "[Attach][Cave][Geometry]")
+{
+    // The whole cave-level chain against a survey file that names its blocks
+    // with uppercase (48H-Feng): the Scope trips keep that authored spelling in
+    // stationPrefix, while cavern lowercases every label it writes to the .3d.
+    // The line-plot geometry pass has to window across that difference, or the
+    // cave renders station labels with no centerline between them.
+    auto fixture = makeProjectWithFreshCave(QStringLiteral("cave-attach-mixed-case"));
+    cwCave* cave = freshCaveOf(fixture.get());
+
+    attachCaveThroughManager(fixture.get(), cave,
+                             fixturePath(QStringLiteral("survex_mixed_case.svx")));
+    drainPipelines(fixture.get());
+
+    cwTrip* feng = tripForPrefix(cave, QStringLiteral("48H-Feng"));
+    cwTrip* lower = tripForPrefix(cave, QStringLiteral("48H-Feng.Lower"));
+    REQUIRE(feng != nullptr);
+    REQUIRE(lower != nullptr);
+
+    // The solve lands through the line-plot pipeline, so give it the attach
+    // budget before reading the solved state back.
+    REQUIRE(tryWait(kAttachWaitMs, [cave]() {
+        return !cave->stationPositionLookup().positions().isEmpty();
+    }));
+
+    const auto result =
+        cwLinePlotGeometry::generate(fixture->project->cavingRegion()->data(),
+                                     fixture->rootData->linePlotManager()->regionNetwork());
+    REQUIRE_FALSE(result.hasError());
+    const cwLinePlotGeometry::Result geometry = result.value();
+    REQUIRE(geometry.tripUuids.size() == geometry.tripVertexRanges.size());
+
+    const QList<QVector3D> solvedPositions =
+        cave->stationPositionLookup().positions().values();
+    const auto isSolvedPosition = [&solvedPositions](const QVector3D& point) {
+        return std::any_of(solvedPositions.cbegin(), solvedPositions.cend(),
+                           [&point](const QVector3D& solved) {
+                               return (solved - point).lengthSquared()
+                                      < kSamePositionToleranceSquared;
+                           });
+    };
+
+    // Both Scope trips draw something, and every vertex they draw resolves
+    // through the cave's solved lookup. Vertex totals are deliberately left
+    // unasserted: the parent scope also matches its nested child's stations.
+    for (const cwTrip* trip : {feng, lower}) {
+        INFO("scope trip: " << trip->stationPrefix().toStdString());
+        const qsizetype tripIndex = geometry.tripUuids.indexOf(trip->id());
+        REQUIRE(tripIndex >= 0);
+
+        const cwLinePlotGeometry::VertexRange range = geometry.tripVertexRanges.at(tripIndex);
+        CHECK(range.count > 0);
+        CHECK(range.count % 2 == 0);
+        for (int i = range.start; i < range.start + range.count; ++i) {
+            CHECK(isSolvedPosition(geometry.points.at(i)));
+        }
+    }
 }
