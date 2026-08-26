@@ -322,9 +322,12 @@ basename for display (ripple audit in P3.2).</p>
 
 <h2 id="commits">6. Commit sequence</h2>
 
-<p class="meta">Eleven commits. Test gate = what the workflow's implement/fix stages run
-(foreground, narrow tags); the full suites run once at the end, outside the workflow.
-See §7 for build/test invocations and §8 for fixtures.</p>
+<p class="meta">Eleven commits (P3.1&ndash;P3.11, <strong>landed 2026-08-24</strong>,
+<code>5794bd6c..8204b7f4</code>) plus three manual-test follow-up commits
+(P3.12&ndash;P3.14, filed 2026-08-25 from Philip's first manual pass &mdash; see each
+commit's "Root cause" for the investigation results). Test gate = what the workflow's
+implement/fix stages run (foreground, narrow tags); the full suites run once at the end,
+outside the workflow. See §7 for build/test invocations and §8 for fixtures.</p>
 
 <!-- ================================================================ -->
 <div class="commit">
@@ -699,6 +702,193 @@ QML <code>tst_ExternalCenterlineTripPanel.qml</code>.</div>
 suites</strong> (§7).</div>
 </div>
 
+<!-- ================================================================ -->
+<div class="commit">
+<h3>P3.12 &mdash; Case-insensitive scope matching in line-plot geometry</h3>
+<p><strong>Symptom (manual test, 2026-08-25):</strong> cave-level attach of
+<code>48H-H12-330-feng.svx</code> solves, station labels render in the correct places,
+but <em>no centerline lines appear</em> and length/depth stay uncalculated.</p>
+<p><strong>Root cause (traced, confirmed):</strong> a Scope trip's
+<code>stationPrefix</code> is the block path <em>as authored</em>
+(<code>cwExternalCenterlineAttach.cpp</code>, <code>trip-&gt;setStationPrefix(block.path)</code>),
+which may carry uppercase (<code>48H-H12-330-feng</code>). Cavern lowercases every label
+in the <code>.3d</code>, so solved network keys are lowercase. The scope-membership
+filter in <code>cwLinePlotGeometry::emitNetworkScopeGeometry</code> is the codebase's one
+<em>case-sensitive</em> outlier &mdash; <code>station.startsWith(scopePrefix)</code> at
+<code>cwLinePlotGeometry.cpp:82</code> (and the cavePrefix strip at <code>:62</code>) &mdash;
+so an uppercase prefix matches zero network stations: zero line vertices, and
+<code>hasDepth</code> stays false (feeding P3.13). Labels still render because
+<code>cwTrip::solvedStations()</code> (<code>cwTrip.cpp:~574-578</code>) matches
+case-<em>insensitively</em>, as do <code>cwFindFloatingSurveys.cpp:243</code>
+(via <code>cwStation::canonicalKey</code>) and the position resolution inside
+<code>emitNetworkScopeGeometry</code> itself (<code>cwLinePlotGeometry.cpp:65,160</code>).
+Only the membership filter is wrong. Trip-level (Phase 2) attach never hits this because
+its prefix is the <em>sanitized lowercase</em> trip label.</p>
+<ul class="filelist">
+  <li><code>cavewherelib/src/cwLinePlotGeometry.cpp</code> &mdash; make the membership
+      test and the cavePrefix strip case-insensitive: compare via
+      <code>cwStation::canonicalKey</code> (or
+      <code>startsWith(scopePrefix, Qt::CaseInsensitive)</code>; <code>sliced(size)</code>
+      stays correct because a case-insensitive match has the same length). This is the
+      whole production change.</li>
+  <li><strong>Do NOT</strong> "fix" this by lowercasing <code>stationPrefix</code> at
+      attach time: <code>block.path</code>'s authored spelling is also the
+      reconcile/replace matching key (<code>windowedPrefixes</code>,
+      <code>cwExternalCenterlineAttach.cpp</code>) against future scans that preserve
+      authored case, and Survex station names are case-preserving for display.</li>
+  <li>Tests: cave-level analogue of "Trip-attached centerline emits renderable line
+      geometry" (<code>test_cwLinePlotTask_AttachInclude.cpp:393-455</code>) using a
+      <strong>mixed-case</strong> fixture &mdash; NEW <code>survex_mixed_case.svx</code>
+      per §8 (uppercase-bearing block names, e.g. <code>*begin 48H-Feng</code> with a
+      nested mixed-case child; solvable). Assert: attach at cave level, solve, the Scope
+      trips' <code>tripVertexRanges</code> are non-empty and segment endpoints resolve.
+      <code>survex_blocks.svx</code> is all-lowercase and would falsely pass &mdash; do not
+      gate on it alone; keep it as the lowercase regression.</li>
+  <li>Trap (leave untouched): <code>.3d</code> legs name endpoints by coordinate and the
+      reader fuses coincident stations ("first label wins"), so a cross-scope tie leg may
+      attribute to whichever side is in scope &mdash; correct for rendering; do not tighten
+      the neighbor side to in-scope-only.</li>
+</ul>
+<div class="gate"><strong>Gate:</strong> <code>cavewhere-test</code>
+<code>"[LinePlotTask]"</code>-family tags covering
+<code>test_cwLinePlotTask_AttachInclude.cpp</code> and
+<code>test_cwLinePlotGeometry.cpp</code> (use the tags those files declare), then
+<code>"[Attach][Cave]"</code>.</div>
+</div>
+
+<!-- ================================================================ -->
+<div class="commit">
+<h3>P3.13 &mdash; Length/depth robustness for external owners</h3>
+<p><strong>Symptom:</strong> cave Length and Depth read zero / never calculated after a
+cave-level attach. P3.12's case fix is the primary cause; this commit hardens the rest of
+the chain, which today writes a <code>(-1,-1)</code> sentinel to the live cave and
+double-counts nested scopes.</p>
+<p><strong>Root cause (traced):</strong> <code>cwLinePlotGeometry</code>'s per-cave
+result defaults to <code>(-1,-1)</code> (<code>cwLinePlotGeometry.h:56</code>) and is
+only set under <code>if (hasDepth)</code> (<code>cwLinePlotGeometry.cpp:245-249</code>);
+<code>updateDepthLength</code> (<code>cwLinePlotTask.cpp:573-585</code>) copies it
+unconditionally and <code>cwLinePlotManager::updateLinePlot</code>
+(<code>cwLinePlotManager.cpp:698-705</code>) writes it to
+<code>cave-&gt;length()/depth()</code> &mdash; the UI then renders <code>-1.00</code>
+(<code>SelectableCaveStat.qml</code> has no clamp). Separately: on any solve error
+<code>updateLinePlot</code> is skipped entirely (<code>cwLinePlotManager.cpp:544-548</code>)
+so values silently go stale; and nested Scope trips double-emit &mdash; a parent block's
+prefix (<code>doghill.</code>) string-matches every descendant station and the
+<code>emitted</code> de-dup set is local per <code>emitNetworkScopeGeometry</code> call
+(<code>cwLinePlotGeometry.cpp:75-78</code>), so parent and child trips each emit the
+child's legs: duplicate render segments, per-trip visibility toggles disagreeing over the
+same leg, and cave length counting nested legs twice.</p>
+<ul class="filelist">
+  <li><code>cavewherelib/src/cwLinePlotGeometry.cpp/.h</code> &mdash; nested-scope
+      de-dup: when emitting a trip's scope, skip a station whose canonical key also
+      matches a <em>longer</em> scope prefix belonging to another trip of the same cave
+      (compute the sibling-prefix list once per cave, before the trip loop). Each leg then
+      belongs to exactly one Scope trip &mdash; the innermost. Cave totals stop double
+      counting and per-trip visibility owns each leg exactly once.</li>
+  <li><code>cavewherelib/src/cwLinePlotGeometry.h/.cpp</code> +
+      <code>cavewherelib/src/cwLinePlotTask.cpp</code> &mdash; retire the
+      <code>(-1,-1)</code> sentinel reaching the UI: keep "unset" internal (the
+      <code>hasDepth</code> flag already exists) and have <code>updateDepthLength</code>
+      write <code>0/0</code> for a cave that resolved nothing (an empty cave IS length 0)
+      &mdash; the plan chooses 0-on-no-data over keep-last-good so a broken attach reads
+      as "no centerline" instead of a stale number.</li>
+  <li>Solve-error staleness (<code>cwLinePlotManager.cpp:544-548</code>): leave the
+      keep-on-error behavior (matches native trips' long-standing contract) but note it in
+      a comment where <code>updateLinePlot</code> is gated, so the next reader stops
+      rediscovering it.</li>
+  <li>Tests: extend <code>test_cwLinePlotManager_AttachedCenterlines.cpp</code> /
+      <code>test_cwLinePlotGeometry.cpp</code> (today they assert <em>nothing</em> about
+      external length/depth): cave-level attach of <code>survex_mixed_case.svx</code>
+      yields positive length and depth matching hand-computed fixture values; nested
+      fixture (<code>survex_blocks.svx</code>) cave length counts each leg once
+      (regression for the double-count); a scope matching nothing yields 0/0, never
+      -1.</li>
+</ul>
+<div class="gate"><strong>Gate:</strong> the line-plot manager/geometry C++ tags
+(as declared in the two test files) + <code>"[Attach][Cave]"</code>;
+QML <code>tst_CavePageExternalCave.qml</code> (stat cells show numbers, not
+<code>-1.00</code>).</div>
+</div>
+
+<!-- ================================================================ -->
+<div class="commit">
+<h3>P3.14 &mdash; Per-block dates: capture in the scanner, seed Scope trips, editable date</h3>
+<p><strong>Symptom:</strong> auto-created Scope trips show the import date (today)
+instead of the survey's real date &mdash; and the external panel presents the date
+read-only, so it cannot even be corrected by hand (contradicting §5 Q6, "date stays
+editable").</p>
+<p><strong>Root cause (traced):</strong> <code>reconcileScopeTrips</code>
+(<code>cwExternalCenterlineAttach.cpp:206-241</code>) sets only name / stationPrefix /
+distance unit, so the fresh trip keeps <code>cwTrip</code>'s constructor default
+<code>QDateTime(QDate::currentDate(), QTime())</code> (<code>cwTrip.cpp:104</code>).
+The scanner's metadata parse (<code>parseSeededMetadata</code>,
+<code>cwExternalCenterlineScanner.cpp:1188-1256</code>) is entry-file-only and its result
+is discarded for cave owners by design (§6 P3.4 "cave metadata seeding: none in v1");
+the block walk never matches <code>*date</code> at all.</p>
+<ul class="filelist">
+  <li><code>cavewherelib/src/cwExternalCenterlineScanner.h</code> &mdash;
+      <code>cwScanBlock</code> gains <code>QDate date</code> (invalid = none;
+      <code>&lt;QDate&gt;</code> already included) exposed as a
+      <code>Q_PROPERTY</code>, and joins <code>operator==</code> (desirable ripple: a
+      <code>*date</code>-only edit now reads as a changed scan &mdash; update any scanner
+      equality tests).</li>
+  <li><code>cavewherelib/src/cwExternalCenterlineScanner.cpp</code> &mdash; per-format
+      capture in the existing walks, first match per block wins (matching
+      <code>parseSeededMetadata</code>'s convention):
+      Survex &mdash; in <code>scanSurvexFile</code>'s directive branch, match
+      <code>*date</code> (reuse <code>parseIsoOrDottedDate</code>, <code>:939-949</code>)
+      and stamp the innermost open named block with an unset date, mirroring
+      <code>recordStation</code>'s walk (<code>:288-303</code>); a date range
+      (<code>2024.01.05-2024.01.07</code>) takes its <em>start</em> date (split the token
+      after a full leading date parse; a dotted range must not be mis-split on
+      '<code>-</code>' alone); an unparseable date leaves the block date unset (no
+      warning &mdash; cavern validates dates itself).
+      Compass &mdash; in <code>collectCompassBlocks</code>'s header section
+      (<code>:580-586</code>), match <code>SURVEY DATE:</code> reusing the metadata
+      parser's regex and 2-digit-year pivot (hoist <code>kCompassYearPivot</code> +
+      regex rather than duplicating).
+      Walls &mdash; in <code>appendWallsBlock</code>, match <code>#DATE</code>
+      (regex at <code>:1129-1131</code>) before the <code>#</code>-line skip
+      (<code>:729-733</code>).</li>
+  <li><code>cavewherelib/src/cwExternalCenterlineAttach.cpp</code> &mdash; in
+      <code>reconcileScopeTrips</code>, after <code>setStationPrefix</code>: resolve the
+      block's effective date as its own date or, when unset, the nearest ancestor
+      block's (walk <code>block.path</code> prefixes against the scanned block list &mdash;
+      Survex date scoping inherits downward); if valid,
+      <code>trip-&gt;setDate(QDateTime(date, QTime()))</code> (same convention as
+      <code>seedTripMetadata:63</code>); if no date anywhere, leave the default (which
+      <code>isDefaultTripDate</code> still treats as unset for later seeding). Replace
+      keeps existing trips untouched (<code>:222</code>) &mdash; dates seed only on
+      creation, deliberately.</li>
+  <li><code>cavewherelib/qml/ExternalCenterlineTripMetadata.qml</code> &mdash; make the
+      date row editable per §5 Q6 (reuse the same click-to-edit component the native
+      trip page uses for its date; team stays read-only), updating the header comment
+      that currently says both are file-owned. This is also the only recovery path for
+      Scope trips created before this fix.</li>
+  <li>Fixtures (§8): add <code>*date</code> lines to <code>survex_blocks.svx</code>
+      (distinct dates per block, one block dateless to prove inheritance + one top block
+      dateless to prove the leave-default path) and a date to
+      <code>compass_multi.mak</code>'s second survey + <code>walls_simple.wpj</code>'s
+      <code>#DATE</code> if absent.</li>
+</ul>
+<div class="gate"><strong>Gate:</strong> <code>cavewhere-test "[Scanner]"</code>,
+<code>"[Attach][Cave]"</code>; QML <code>tst_ExternalCenterlineTripPanel.qml</code>
+(editable date row in scope mode) and <code>tst_CavePageExternalCave.qml</code>
+(date cells show the fixture dates, not today).</div>
+</div>
+
+<p class="meta"><strong>Filed, not scheduled (found during the same investigation):</strong>
+Compass/Walls cave-level Scope windows are structurally broken independent of case:
+cavern emits Compass stations <em>flat</em> (<code>cave0.AB1</code>, not
+<code>cave0.AB.AB1</code> &mdash; see <code>plans/EXTERNAL_FILE_PREFIXING_RESEARCH.md:369-373</code>)
+while the scanner's <code>block.path</code> is the survey name, so those Scope prefixes
+name a level that does not exist in the solved keys (labels and geometry both miss).
+Needs its own design (per-format prefix mapping); do not judge P3.12 against a
+<code>.dat</code> repro. Also still open from P3.1's review: an existing-but-unreadable
+child can appear in <code>entryDirectIncludes</code> while <code>dependencies</code>
+omits it &mdash; the P3.7 heuristic should filter suggestions against
+<code>dependencies</code>.</p>
+
 <h2 id="testing">7. Build and test invocations (for every pipeline stage)</h2>
 
 <pre><code># Build (this exact binary + preset; binaries land in ./build/Qt_6_11_1_for_macOS-Debug/)
@@ -746,10 +936,20 @@ Commits: short imperative subjects, body = what/why + commands run, no Claude me
   <td>Absolute paths are machine-local, so these cannot be checked in — tests write them
       into a <code>QTemporaryDir</code>.</td>
   <td>P3.1, P3.2</td></tr>
+<tr><td><code>survex_mixed_case.svx</code></td>
+  <td>Uppercase-bearing block names (e.g. <code>*begin 48H-Feng</code>) with a nested
+      mixed-case child; hand-computable length/depth; solvable. Repro of the
+      case-sensitive scope-filter defect (lowercase fixtures falsely pass).</td>
+  <td>P3.12, P3.13</td></tr>
+<tr><td><code>survex_blocks.svx</code> <em>(extended)</em></td>
+  <td>Gains distinct <code>*date</code> lines per block, one dateless child (inherits)
+      and a dateless top block (keeps default).</td>
+  <td>P3.14 (P3.13 nested de-dup regression)</td></tr>
 <tr><td>Existing: <code>compass_multi.mak</code>, <code>walls_simple.wpj</code>,
         <code>survex_nested.svx</code>, <code>survex_simple.svx</code></td>
-  <td>Reused for block extraction, direct-includes, and regression gates.</td>
-  <td>P3.1, P3.3</td></tr>
+  <td>Reused for block extraction, direct-includes, and regression gates; P3.14 adds
+      dates where absent.</td>
+  <td>P3.1, P3.3, P3.14</td></tr>
 </table>
 
 <h2 id="qml-tests">9. New QML test files</h2>
@@ -783,7 +983,12 @@ repeating the setup per file.</p>
       an empty Native cave, the copies are gone, and the project solves cleanly.</li>
   <li>Export menu is disabled while any Attached or Scope entity exists, with the §7.5
       tooltip.</li>
-  <li>Both full suites green at P3.11.</li>
+  <li><strong>(P3.12&ndash;P3.14)</strong> Attach
+      <code>48H-H12-330-feng.svx</code> (or any mixed-case-block source) at cave level:
+      the lineplot shows the centerline lines, cave Length and Depth read positive
+      values (never <code>-1.00</code>), and each Scope trip's date matches its block's
+      <code>*date</code> &mdash; editable from the trip panel.</li>
+  <li>Both full suites green at the final commit of the sequence.</li>
 </ul>
 
 </body>
