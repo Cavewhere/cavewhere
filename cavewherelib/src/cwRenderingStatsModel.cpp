@@ -9,6 +9,7 @@
 #include "cwRenderingStatsModel.h"
 #include "cwRenderCullingStats.h"
 #include "cwRenderMemoryLedger.h"
+#include "cwTextureStreamingStats.h"
 
 //Std includes
 #include <iterator>
@@ -111,7 +112,8 @@ void cwRenderingStatsModel::setRunning(bool running)
 void cwRenderingStatsModel::poll()
 {
     if(cwRenderMemoryLedger::instance()->revision() != m_lastRevision
-       || cwRenderCullingStats::instance()->revision() != m_lastCullingRevision) {
+       || cwRenderCullingStats::instance()->revision() != m_lastCullingRevision
+       || cwTextureStreamingStats::instance()->revision() != m_lastStreamingRevision) {
         refresh();
     }
 }
@@ -155,6 +157,15 @@ void cwRenderingStatsModel::refresh()
         m_lastCullingRevision = cullingRevision;
         m_culling = cullingStats->counts();
         emit cullingChanged();
+    }
+
+    auto* streamingStats = cwTextureStreamingStats::instance();
+    const quint64 streamingRevision = streamingStats->revision();
+
+    if(streamingRevision != m_lastStreamingRevision) {
+        m_lastStreamingRevision = streamingRevision;
+        m_streaming = streamingStats->counts();
+        emit streamingChanged();
     }
 }
 

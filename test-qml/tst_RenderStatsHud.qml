@@ -73,6 +73,14 @@ QQ.Item {
             verify(total.text.length > 0)
         }
 
+        function test_streamingRowIsShown() {
+            rootId.renderingSettings.showRenderStatsHud = true
+            let streaming = ObjectFinder.findObjectByChain(rootId, "rootId->hud->renderStatsHudStreaming")
+            verify(streaming !== null, "renderStatsHudStreaming not found")
+            verify(streaming.text.indexOf("Streaming:") === 0,
+                   "unexpected streaming row text: " + streaming.text)
+        }
+
         function test_menuItemChecksAndWritesTheSetting() {
             compare(hudMenuItemId.checked, false)
 

@@ -182,6 +182,9 @@ private:
     //! Adds this object's item counts to the frame's culled/total tally
     void tallyCullingStats(const GatherContext& context) const;
 
+    //! Publishes this frame's streamed-texture residency counts for the HUD
+    void publishStreamingStats() const;
+
     QHash<uint32_t, Item*> m_items;
     cwTextureStreamer m_streamer;
     bool m_resourcesInitialized = false;

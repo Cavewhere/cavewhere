@@ -132,6 +132,13 @@ bool cwTextureStreamer::hasWork() const
     return !m_pending.isEmpty() || !m_inFlight.isEmpty() || !m_ready.isEmpty();
 }
 
+cwTextureStreamer::Pending cwTextureStreamer::pending() const
+{
+    QMutexLocker locker(&m_mutex);
+    return {static_cast<int>(m_pending.size() + m_inFlight.size() + m_ready.size()),
+            m_inFlightBytes + m_readyBytes};
+}
+
 void cwTextureStreamer::setMaxPendingCpuBytes(qint64 maxBytes)
 {
     QMutexLocker locker(&m_mutex);

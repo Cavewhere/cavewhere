@@ -19,9 +19,10 @@ class QQuickRhiItem;
 // it is platform dependent (e.g. Metal supports 1/2/4 but not 8).
 //
 // The budget knobs (gpuMemoryBudgetMb, cpuCacheBudgetMb, uploadBudgetMbPerFrame,
-// screenSpaceErrorPx) are advisory in Phase 1: Phase 2's residency manager
-// enforces them. Today the only consumer is the render-stats HUD, which reports
-// the GPU total against gpuMemoryBudgetMb.
+// screenSpaceErrorPx) drive streamed-texture residency: the render thread reads
+// them through cwRenderBudgets each frame to pick mip levels, pace uploads, and
+// demote back under the GPU budget. The render-stats HUD reports the GPU total
+// against gpuMemoryBudgetMb.
 class CAVEWHERE_LIB_EXPORT cwRenderingSettings : public QObject
 {
     Q_OBJECT

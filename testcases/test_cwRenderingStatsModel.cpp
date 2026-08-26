@@ -6,6 +6,7 @@
 #include "cwRenderCullingStats.h"
 #include "cwRenderMemoryLedger.h"
 #include "cwRenderingStatsModel.h"
+#include "cwTextureStreamingStats.h"
 
 //Qt includes
 #include <QSignalSpy>
@@ -30,6 +31,13 @@ constexpr cwRenderCullingStats::Counts kCounts {
     .objectsCulled = 4,
     .itemsTotal = 25,
     .itemsCulled = 20
+};
+constexpr cwTextureStreamingStats::Counts kStreamingCounts {
+    .streamedItems = 12,
+    .loadsInFlight = 3,
+    .itemsBelowDesired = 5,
+    .readyCpuBytes = kOneAndAHalfMegabytes,
+    .demotionsInFlight = 2
 };
 
 // The ledger is process-wide, so every test works in deltas from what it finds
@@ -154,6 +162,58 @@ TEST_CASE("cwRenderingStatsModel: refresh reads the published culling counts",
     //Without a new published frame the model stays quiet
     model.refresh();
     CHECK(cullingSpy.count() == 1);
+}
+
+TEST_CASE("cwRenderingStatsModel: refresh reads the published streaming counts",
+          "[RenderingStatsModel]") {
+    cwRenderingStatsModel model;
+
+    QSignalSpy streamingSpy(&model, &cwRenderingStatsModel::streamingChanged);
+
+    cwTextureStreamingStats::instance()->publish(kStreamingCounts);
+
+    model.refresh();
+
+    CHECK(model.streamedItems() == kStreamingCounts.streamedItems);
+    CHECK(model.loadsInFlight() == kStreamingCounts.loadsInFlight);
+    CHECK(model.itemsBelowDesired() == kStreamingCounts.itemsBelowDesired);
+    CHECK(model.readyCpuBytes() == kStreamingCounts.readyCpuBytes);
+    CHECK(model.readyCpuText()
+          == cwRenderingStatsModel::formattedBytes(kStreamingCounts.readyCpuBytes));
+    CHECK(model.demotionsInFlight() == kStreamingCounts.demotionsInFlight);
+    CHECK(streamingSpy.count() == 1);
+
+    //Without a new published frame the model stays quiet
+    model.refresh();
+    CHECK(streamingSpy.count() == 1);
+
+    //A frame with nothing streaming reads back as zeros
+    cwTextureStreamingStats::instance()->publish({});
+    model.refresh();
+
+    CHECK(model.streamedItems() == 0);
+    CHECK(model.loadsInFlight() == 0);
+    CHECK(model.itemsBelowDesired() == 0);
+    CHECK(model.readyCpuBytes() == 0);
+    CHECK(model.demotionsInFlight() == 0);
+    CHECK(streamingSpy.count() == 2);
+}
+
+TEST_CASE("cwRenderingStatsModel: polling picks up a published streaming frame",
+          "[RenderingStatsModel]") {
+    cwRenderingStatsModel model;
+    model.setRunning(true);
+
+    QSignalSpy streamingSpy(&model, &cwRenderingStatsModel::streamingChanged);
+
+    cwTextureStreamingStats::Counts counts = kStreamingCounts;
+    counts.loadsInFlight = kStreamingCounts.loadsInFlight + 1;
+    cwTextureStreamingStats::instance()->publish(counts);
+
+    QTest::qWait(kLongerThanPollInterval);
+
+    CHECK(model.loadsInFlight() == counts.loadsInFlight);
+    CHECK(streamingSpy.count() == 1);
 }
 
 TEST_CASE("cwRenderingStatsModel: polling runs only while running is true",

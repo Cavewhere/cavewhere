@@ -18,6 +18,7 @@
 //Our includes
 #include "cwGlobals.h"
 #include "cwRenderCullingStats.h"
+#include "cwTextureStreamingStats.h"
 
 // Read-only view of cwRenderMemoryLedger for QML. One row per ledger category,
 // refreshed by a timer while running is true.
@@ -34,6 +35,12 @@ class CAVEWHERE_LIB_EXPORT cwRenderingStatsModel : public QAbstractListModel
     Q_PROPERTY(int culledObjects READ culledObjects NOTIFY cullingChanged)
     Q_PROPERTY(int totalItems READ totalItems NOTIFY cullingChanged)
     Q_PROPERTY(int culledItems READ culledItems NOTIFY cullingChanged)
+    Q_PROPERTY(int streamedItems READ streamedItems NOTIFY streamingChanged)
+    Q_PROPERTY(int loadsInFlight READ loadsInFlight NOTIFY streamingChanged)
+    Q_PROPERTY(int itemsBelowDesired READ itemsBelowDesired NOTIFY streamingChanged)
+    Q_PROPERTY(qint64 readyCpuBytes READ readyCpuBytes NOTIFY streamingChanged)
+    Q_PROPERTY(QString readyCpuText READ readyCpuText NOTIFY streamingChanged)
+    Q_PROPERTY(int demotionsInFlight READ demotionsInFlight NOTIFY streamingChanged)
 
 public:
     enum Roles {
@@ -63,6 +70,13 @@ public:
     int totalItems() const { return m_culling.itemsTotal; }
     int culledItems() const { return m_culling.itemsCulled; }
 
+    int streamedItems() const { return m_streaming.streamedItems; }
+    int loadsInFlight() const { return m_streaming.loadsInFlight; }
+    int itemsBelowDesired() const { return m_streaming.itemsBelowDesired; }
+    qint64 readyCpuBytes() const { return m_streaming.readyCpuBytes; }
+    QString readyCpuText() const { return formattedBytes(m_streaming.readyCpuBytes); }
+    int demotionsInFlight() const { return m_streaming.demotionsInFlight; }
+
     //! Re-reads the ledger now, for the HUD's refresh affordance
     Q_INVOKABLE void refresh();
 
@@ -73,6 +87,7 @@ signals:
     void totalsChanged();
     void runningChanged();
     void cullingChanged();
+    void streamingChanged();
 
 private slots:
     void poll();
@@ -90,6 +105,8 @@ private:
     quint64 m_lastRevision = 0;
     cwRenderCullingStats::Counts m_culling;
     quint64 m_lastCullingRevision = 0;
+    cwTextureStreamingStats::Counts m_streaming;
+    quint64 m_lastStreamingRevision = 0;
     bool m_running = false;
 };
 

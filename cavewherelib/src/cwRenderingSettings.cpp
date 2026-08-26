@@ -24,9 +24,9 @@ constexpr int kDefaultSampleCount = 4;
 // The render-stats HUD is a debugging aid, so it stays off until asked for.
 constexpr bool kDefaultShowRenderStatsHud = false;
 
-// Budget knobs, advisory in Phase 1 (see the header). The minimums keep a
-// hand-edited QSettings file from asking for a budget too small to hold a
-// single frame's working set.
+// Budget knobs, read by streamed-texture residency (see the header). The
+// minimums keep a hand-edited QSettings file from asking for a budget too small
+// to hold a single frame's working set.
 constexpr int kDefaultGpuMemoryBudgetMb = 1536;
 constexpr int kMinGpuMemoryBudgetMb = 256;
 

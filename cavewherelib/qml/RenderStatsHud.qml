@@ -101,8 +101,9 @@ QQ.Rectangle {
                 Layout.preferredWidth: hudRootId.categoryColumnWidth
             }
 
-            // The budget is advisory for now: going over colors the total, and
-            // nothing is evicted.
+            // Going over the budget colors the total. It is a transitional
+            // state: demotion gives detail back over the next frames until the
+            // total comes back under.
             QC.Label {
                 objectName: "renderStatsHudTotal"
                 text: statsModelId.totalGpuText
@@ -130,6 +131,18 @@ QQ.Rectangle {
                 .arg(statsModelId.totalObjects)
                 .arg(statsModelId.culledItems)
                 .arg(statsModelId.totalItems)
+            color: Theme.text
+            font.pixelSize: Theme.fontSizeCaption
+        }
+
+        // Streamed-texture residency for the last frame that streamed:
+        // "refining" counts the items still coarser than the camera asked for.
+        QC.Label {
+            objectName: "renderStatsHudStreaming"
+            text: qsTr("Streaming: %1 in flight · %2 refining · %3 CPU")
+                .arg(statsModelId.loadsInFlight)
+                .arg(statsModelId.itemsBelowDesired)
+                .arg(statsModelId.readyCpuText)
             color: Theme.text
             font.pixelSize: Theme.fontSizeCaption
         }

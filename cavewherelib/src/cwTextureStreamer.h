@@ -114,6 +114,17 @@ public:
     bool hasWork() const;
 
     /**
+     * What the streamer is holding alive right now, for the render stats HUD.
+     */
+    struct Pending
+    {
+        int loads = 0;       //!< queued, in flight, or waiting to be drained
+        qint64 cpuBytes = 0; //!< payload bytes those loads hold
+    };
+
+    Pending pending() const;
+
+    /**
      * The most payload bytes to keep alive at once, counting loads in flight and
      * results waiting to be drained. Loads stay queued while the cap is met.
      * Unlimited by default.

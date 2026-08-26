@@ -7,6 +7,7 @@
 #include "cwRhiItemRenderer.h"
 #include "cwRhiLimits.h"
 #include "cwTextureResidency.h"
+#include "cwTextureStreamingStats.h"
 
 #include <QByteArray>
 #include <QDebug>
@@ -553,9 +554,41 @@ bool cwRhiTexturedItems::streamResources(ResourceUpdateData& data, qint64& remai
     // read and the plan is built from what is actually resident.
     enforceGpuBudget(data.renderData.budgets);
 
+    publishStreamingStats();
+
     // hasWork() covers the loads still queued or in flight — the frame renderer
     // has no other window onto this object's streamer.
     return levelsRemain || m_streamer.hasWork();
+}
+
+void cwRhiTexturedItems::publishStreamingStats() const
+{
+    const cwTextureStreamer::Pending pending = m_streamer.pending();
+
+    cwTextureStreamingStats::Counts counts;
+    counts.loadsInFlight = pending.loads;
+    counts.readyCpuBytes = pending.cpuBytes;
+
+    for (const Item* item : std::as_const(m_items)) {
+        if (!item || item->streamSource.isNull()) {
+            continue;
+        }
+
+        ++counts.streamedItems;
+
+        if (item->demotionInFlight) {
+            ++counts.demotionsInFlight;
+        }
+
+        // Coarser than the camera asked for, counting an item that holds nothing
+        // yet — its pinned base is still on the way.
+        if (item->residentTopLevel == kNoResidentLevel
+            || item->residentTopLevel > item->desiredTopLevel) {
+            ++counts.itemsBelowDesired;
+        }
+    }
+
+    cwTextureStreamingStats::instance()->publish(counts);
 }
 
 void cwRhiTexturedItems::tallyCullingStats(const GatherContext& context) const
