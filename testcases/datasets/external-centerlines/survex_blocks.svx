@@ -8,6 +8,10 @@
 ;   doghill.big-passage.sump   0 stations
 ; *fix d1 plus the cross-scope shots keep the whole file one connected
 ; component, so cavern solves it.
+; Dates are deliberately uneven so the Scope-trip seeding tests can tell
+; the three cases apart: big-passage writes a range (its start date is
+; what a trip takes), east writes none and inherits big-passage's,
+; doghill writes none at all and keeps CaveWhere's default.
 *begin doghill
 *fix d1 0 0 0
 *data normal from to tape compass clino
@@ -15,6 +19,7 @@ d1 d2 10.0 0 0
 d2 big-passage.p1 2.0 0 0
 
 *begin big-passage
+*date 2024.01.05-2024.01.07
 p1 p2 5.0 90 0
 p2 p3 4.0 90 0
 p3 east.e1 1.0 0 0
@@ -27,6 +32,7 @@ e4 e5 3.0 45 0
 *end east
 
 *begin sump
+*date 2025.03.15
 *end sump
 *end big-passage
 *end doghill

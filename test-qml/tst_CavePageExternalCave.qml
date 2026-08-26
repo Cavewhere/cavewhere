@@ -161,6 +161,34 @@ MainWindowTest {
             compare(cave.name, "AttachedCave", "and keeps its name")
         }
 
+        // Each Scope trip's row shows the date its block wrote, not the day
+        // of the import: big-passage and the east block that inherits its
+        // date read the fixture's date, doghill writes none and reads today.
+        function test_tripRowsShowTheirBlockDates() {
+            const dayOfAttach = Qt.formatDate(new Date(), "yyyy-MM-dd")
+            const cave = attachedCave("cavepage-external-dates")
+            const cavePage = gotoCavePage(cave)
+
+            const dateCells = collectByName(cavePage, "tripDateLabel", [])
+            compare(dateCells.length, 3, "every trip has a date cell")
+
+            let seeded = 0
+            let today = 0
+            // A run that crosses midnight between the attach and this check
+            // sees either side of the boundary, so both days count as today.
+            const todayText = Qt.formatDate(new Date(), "yyyy-MM-dd")
+            for (let i = 0; i < dateCells.length; i++) {
+                if (dateCells[i].text === "2024-01-05") {
+                    seeded++
+                } else if (dateCells[i].text === todayText
+                           || dateCells[i].text === dayOfAttach) {
+                    today++
+                }
+            }
+            compare(seeded, 2, "the dated block and the block inheriting it")
+            compare(today, 1, "the block that writes no date keeps today")
+        }
+
         // The cave's Length and Depth come from the solved external centerline
         // (P3.13). A cave that resolved nothing measures 0, never a sentinel.
         function test_statsShowSolvedNumbers() {

@@ -1065,7 +1065,116 @@ TEST_CASE("blocks map a Survex *begin tree with per-block station counts",
     CHECK(scan.blocks.at(3).depth == 2);
     CHECK(scan.blocks.at(3).stationCount == 0);
 
+    // Each block carries only the date it writes itself: doghill and east
+    // write none, big-passage writes a range whose start is the date, and
+    // sump's date is visible even though it holds no stations.
+    CHECK_FALSE(scan.blocks.at(0).date.isValid());
+    CHECK(scan.blocks.at(1).date == QDate(2024, 1, 5));
+    CHECK_FALSE(scan.blocks.at(2).date.isValid());
+    CHECK(scan.blocks.at(3).date == QDate(2025, 3, 15));
+
     CHECK(scan.entryHasOwnShots);
+}
+
+TEST_CASE("a block keeps the first *date it writes", "[Scanner][Blocks]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString path = tempPath(tempDir, QStringLiteral("dates.svx"));
+    writeUtf8File(path,
+                  QByteArrayLiteral("*begin Outer\n"
+                                    "*date 2024-06-01\n"
+                                    "*date 2024-07-01\n"
+                                    "a1 a2 1.0 0 0\n"
+                                    "*end Outer\n"));
+
+    auto result = cwExternalCenterlineScanner::scanSurvex(path);
+    REQUIRE_FALSE(result.hasError());
+    const ScanResult scan = result.value();
+    REQUIRE(scan.blocks.size() == 1);
+    CHECK(scan.blocks.first().date == QDate(2024, 6, 1));
+}
+
+TEST_CASE("an unparseable *date leaves the block dateless and silent",
+          "[Scanner][Blocks]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    // The block walk says nothing about a bad date - cavern validates
+    // date syntax itself. The bad date lives in an included file, which
+    // the entry-file-only metadata pass never reads, so a warning here
+    // could only have come from the block walk.
+    const QString childPath = tempPath(tempDir, QStringLiteral("baddate-child.svx"));
+    writeUtf8File(childPath,
+                  QByteArrayLiteral("*begin Outer\n"
+                                    "*date yesterday\n"
+                                    "a1 a2 1.0 0 0\n"
+                                    "*end Outer\n"));
+    const QString path = tempPath(tempDir, QStringLiteral("baddate.svx"));
+    writeUtf8File(path, QByteArrayLiteral("*include baddate-child.svx\n"));
+
+    auto result = cwExternalCenterlineScanner::scanSurvex(path);
+    REQUIRE_FALSE(result.hasError());
+    const ScanResult scan = result.value();
+    REQUIRE(scan.blocks.size() == 1);
+    CHECK_FALSE(scan.blocks.first().date.isValid());
+    CHECK_FALSE(anyWarningContains(scan, QStringLiteral("*date")));
+}
+
+TEST_CASE("a *date inside an anonymous *begin stamps the enclosing block",
+          "[Scanner][Blocks]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    // An anonymous *begin makes no block of its own, so its date belongs
+    // to the named block around it - the same fold recordStation makes.
+    const QString path = tempPath(tempDir, QStringLiteral("anon.svx"));
+    writeUtf8File(path,
+                  QByteArrayLiteral("*begin Outer\n"
+                                    "*begin\n"
+                                    "*date 2024.02.03\n"
+                                    "a1 a2 1.0 0 0\n"
+                                    "*end\n"
+                                    "*end Outer\n"));
+
+    auto result = cwExternalCenterlineScanner::scanSurvex(path);
+    REQUIRE_FALSE(result.hasError());
+    const ScanResult scan = result.value();
+    REQUIRE(scan.blocks.size() == 1);
+    CHECK(scan.blocks.first().path == QStringLiteral("Outer"));
+    CHECK(scan.blocks.first().date == QDate(2024, 2, 3));
+}
+
+TEST_CASE("blocks carry each Compass survey's SURVEY DATE", "[Scanner][Blocks]")
+{
+    const QString path = datasetExternalCenterlinePath(QStringLiteral("compass_multi.mak"));
+    REQUIRE(QFileInfo::exists(path));
+
+    auto result = cwExternalCenterlineScanner::scanCompass(path);
+    REQUIRE_FALSE(result.hasError());
+    const ScanResult scan = result.value();
+
+    REQUIRE(scan.blocks.size() == 2);
+    CHECK(scan.blocks.at(0).path == QStringLiteral("A"));
+    CHECK(scan.blocks.at(0).date == QDate(2025, 1, 1));
+    CHECK(scan.blocks.at(1).path == QStringLiteral("B"));
+    CHECK(scan.blocks.at(1).date == QDate(2025, 2, 2));
+}
+
+TEST_CASE("a Walls block carries its .srv's #DATE", "[Scanner][Blocks]")
+{
+    const QString path = datasetExternalCenterlinePath(QStringLiteral("walls_simple.wpj"));
+    REQUIRE(QFileInfo::exists(path));
+
+    auto result = cwExternalCenterlineScanner::scanWalls(path);
+    REQUIRE_FALSE(result.hasError());
+    const ScanResult scan = result.value();
+
+    REQUIRE(scan.blocks.size() == 1);
+    CHECK(scan.blocks.first().date == QDate(2023, 5, 10));
 }
 
 TEST_CASE("blocks nest across an *include boundary", "[Scanner][Blocks]")

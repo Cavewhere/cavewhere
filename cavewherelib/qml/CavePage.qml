@@ -723,6 +723,7 @@ StandardPage {
                                 clip: true
                                 QC.Label {
                                     id: dateId
+                                    objectName: "tripDateLabel"
                                     elide: QQ.Text.ElideRight
                                     text: Qt.formatDateTime(rowDelegateId.tripDateRole, "yyyy-MM-dd")
                                 }
@@ -1014,7 +1015,10 @@ StandardPage {
                     }
 
                     QC.Label { text: "·"; color: Theme.textSubtle }
-                    QC.Label { text: Qt.formatDateTime(flowDelegateId.tripDateRole, "yyyy-MM-dd") }
+                    QC.Label {
+                        objectName: "tripDateLabel"
+                        text: Qt.formatDateTime(flowDelegateId.tripDateRole, "yyyy-MM-dd")
+                    }
                     QC.Label { text: "·"; color: Theme.textSubtle }
                     QC.Label { text: flowDelegateId.usedStationsRole; color: Theme.textSubtle }
                     QC.Label {

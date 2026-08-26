@@ -47,6 +47,12 @@
  *             file's stem when the project gives no title. This is
  *             an approximation: Walls has no *begin tree, so a .srv
  *             is the closest thing it has to a named block.
+ *
+ * date is the block's own survey date - Survex *date (a range takes
+ * its start), Compass "SURVEY DATE:", Walls #DATE - and stays
+ * invalid when the block writes none. Survex dates scope downward,
+ * so a dateless nested block inherits its nearest dated ancestor's
+ * date at the point a Scope trip is seeded, not here.
  */
 class CAVEWHERE_LIB_EXPORT cwScanBlock
 {
@@ -57,11 +63,13 @@ class CAVEWHERE_LIB_EXPORT cwScanBlock
     Q_PROPERTY(QString name READ name FINAL)
     Q_PROPERTY(int stationCount MEMBER stationCount FINAL)
     Q_PROPERTY(int depth MEMBER depth FINAL)
+    Q_PROPERTY(QDate date MEMBER date FINAL)
 
 public:
     QString path;
     int stationCount = 0;
     int depth = 0;
+    QDate date;
 
     /**
      * The block's own segment - the last dotted segment of path.
@@ -74,7 +82,8 @@ public:
     {
         return path == other.path
             && stationCount == other.stationCount
-            && depth == other.depth;
+            && depth == other.depth
+            && date == other.date;
     }
     bool operator!=(const cwScanBlock& other) const { return !(*this == other); }
 };

@@ -319,6 +319,35 @@ TEST_CASE("cave detach removes the Scope trips, the copies, and the breadcrumb",
     drainPipelines(fixture.get());
 }
 
+TEST_CASE("cave attach seeds Scope-trip dates from their blocks", "[Attach][Cave]")
+{
+    auto fixture = makeProjectWithFreshCave(QStringLiteral("cave-block-dates"));
+    cwCave* cave = freshCaveOf(fixture.get());
+    const QDate dayOfAttach = QDate::currentDate();
+    attachCaveThroughManager(fixture.get(), cave, blocksFixture());
+    drainPipelines(fixture.get());
+
+    // big-passage writes "*date 2024.01.05-2024.01.07": a range seeds its
+    // start day.
+    cwTrip* bigPassage = tripForPrefix(cave, kBigPassage);
+    REQUIRE(bigPassage != nullptr);
+    CHECK(bigPassage->date() == QDateTime(QDate(2024, 1, 5), QTime()));
+
+    // east writes no date of its own, so it takes its nearest dated
+    // ancestor's - Survex dates scope downward.
+    cwTrip* east = tripForPrefix(cave, kEast);
+    REQUIRE(east != nullptr);
+    CHECK(east->date() == QDateTime(QDate(2024, 1, 5), QTime()));
+
+    // Nothing above doghill writes a date, so its trip keeps cwTrip's
+    // default of the day it was constructed. A run that crosses midnight
+    // between the attach and this check sees either side of the boundary.
+    cwTrip* doghill = tripForPrefix(cave, kDoghill);
+    REQUIRE(doghill != nullptr);
+    CHECK((doghill->date() == QDateTime(dayOfAttach, QTime())
+           || doghill->date() == QDateTime(QDate::currentDate(), QTime())));
+}
+
 TEST_CASE("cave replace keeps matching Scope trips, adds new ones, and keeps orphans",
           "[Attach][Cave]")
 {
@@ -326,6 +355,11 @@ TEST_CASE("cave replace keeps matching Scope trips, adds new ones, and keeps orp
     cwCave* cave = freshCaveOf(fixture.get());
     attachCaveThroughManager(fixture.get(), cave, blocksFixture());
     drainPipelines(fixture.get());
+
+    // A date the user set is theirs: seeding runs only when a trip is
+    // created, so a replace has to leave this alone.
+    const QDateTime handSetDate(QDate(1999, 9, 9), QTime());
+    tripForPrefix(cave, kDoghill)->setDate(handSetDate);
 
     const QUuid doghillId = tripForPrefix(cave, kDoghill)->id();
     const QUuid bigPassageId = tripForPrefix(cave, kBigPassage)->id();
@@ -358,6 +392,7 @@ TEST_CASE("cave replace keeps matching Scope trips, adds new ones, and keeps orp
     REQUIRE(tripForPrefix(cave, kDoghill) != nullptr);
     REQUIRE(tripForPrefix(cave, kBigPassage) != nullptr);
     CHECK(tripForPrefix(cave, kDoghill)->id() == doghillId);
+    CHECK(tripForPrefix(cave, kDoghill)->date() == handSetDate);
     CHECK(tripForPrefix(cave, kBigPassage)->id() == bigPassageId);
 
     // New: the block the replacement added got a trip of its own.

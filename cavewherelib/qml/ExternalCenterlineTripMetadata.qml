@@ -12,8 +12,11 @@ import cavewherelib
 
 // Trip metadata block for the external-centerline trip panel: date
 // (drives auto-declination), declination, and team. The survey file
-// owns the date and the team, so both are presented read-only; the
-// declination is the one value CaveWhere may still supply. When the
+// seeds the date, and the user owns it from there: it stays editable so a
+// trip whose file writes no date, or writes the wrong one, can be
+// corrected by hand (§5 Q6). The team stays the file's, so it is
+// presented read-only; the declination is the one value CaveWhere may
+// still supply. When the
 // survey file carries its own declination directive (fileOwnsDeclination,
 // from cwExternalCenterlineManager) the declination editor is
 // replaced with a read-only hint — the file's value governs and
@@ -45,9 +48,19 @@ ColumnLayout {
             text: qsTr("Date")
         }
 
-        QC.Label {
+        DoubleClickTextInput {
             objectName: "tripMetadataDate"
+
             text: root.trip !== null ? Qt.formatDate(root.trip.date, "yyyy-MM-dd") : ""
+
+            onFinishedEditting: function(newText) {
+                if(root.trip === null) {
+                    return
+                }
+                root.trip.date = Date.fromLocaleString(Qt.locale(),
+                                                       newText + " 00:00:00",
+                                                       "yyyy-MM-dd HH:mm:ss")
+            }
         }
     }
 

@@ -30,6 +30,8 @@ constexpr const char* kCompassMakExtension = ".mak";
 constexpr const char* kWallsWpjExtension = ".wpj";
 constexpr const char* kWallsSrvExtension = ".srv";
 constexpr int kCompassYearPivot = 1900;
+// Both Survex date spellings - yyyy.mm.dd and yyyy-mm-dd - are this long.
+constexpr int kSurvexDateLength = 10;
 
 // UTF-8 byte-order mark (0xEF 0xBB 0xBF).
 const QByteArray kUtf8Bom = QByteArray::fromHex("EFBBBF");
@@ -37,6 +39,78 @@ const QByteArray kUtf8Bom = QByteArray::fromHex("EFBBBF");
 bool hasExtension(const QString& path, const char* extension)
 {
     return path.endsWith(QLatin1String(extension), Qt::CaseInsensitive);
+}
+
+std::optional<QDate> parseIsoOrDottedDate(const QString& token)
+{
+    QDate date = QDate::fromString(token, QStringLiteral("yyyy.MM.dd"));
+    if (!date.isValid()) {
+        date = QDate::fromString(token, QStringLiteral("yyyy-MM-dd"));
+    }
+    if (!date.isValid()) {
+        return std::nullopt;
+    }
+    return date;
+}
+
+/**
+ * Reads a Survex *date operand. A range ("2024.01.05-2024.01.07")
+ * takes its start date: both accepted spellings are exactly
+ * kSurvexDateLength characters, so the token splits only where a full
+ * leading date is followed by '-'. That keeps a dotted date from
+ * being mis-split on a '-' it uses as its own separator.
+ */
+std::optional<QDate> parseSurvexDateToken(const QString& token)
+{
+    if (const auto whole = parseIsoOrDottedDate(token); whole.has_value()) {
+        return whole;
+    }
+    if (token.size() > kSurvexDateLength
+        && token.at(kSurvexDateLength) == QLatin1Char('-')) {
+        return parseIsoOrDottedDate(token.left(kSurvexDateLength));
+    }
+    return std::nullopt;
+}
+
+// "SURVEY DATE: 6 1 2025" optionally followed by "COMMENT: ..."
+const QRegularExpression& compassSurveyDateRegex()
+{
+    static const QRegularExpression regex(
+        QStringLiteral(R"RX(^SURVEY\s+DATE:\s*(\d+)\s+(\d+)\s+(\d+))RX"),
+        QRegularExpression::CaseInsensitiveOption);
+    return regex;
+}
+
+/**
+ * Builds the date a Compass "SURVEY DATE:" match names, applying the
+ * same 2-digit-year pivot as cwCompassImporter so a .dat reads the
+ * date the importer would produce. Returns an invalid QDate when the
+ * fields name no real day.
+ */
+QDate compassSurveyDate(const QRegularExpressionMatch& match)
+{
+    const int month = match.captured(1).toInt();
+    const int day = match.captured(2).toInt();
+    int year = match.captured(3).toInt();
+    if (year < kCompassYearPivot) {
+        year += kCompassYearPivot;
+    }
+    return QDate(year, month, day);
+}
+
+const QRegularExpression& wallsDateRegex()
+{
+    static const QRegularExpression regex(
+        QStringLiteral(R"RX(^#date\s+(\S+))RX"),
+        QRegularExpression::CaseInsensitiveOption);
+    return regex;
+}
+
+// Walls writes one date spelling, so the block walk and the metadata
+// pass read it through the same parse.
+QDate parseWallsDate(const QString& token)
+{
+    return QDate::fromString(token, QStringLiteral("yyyy-MM-dd"));
 }
 
 QString canonicalize(const QString& path)
@@ -164,6 +238,14 @@ const QRegularExpression& survexDataRegex()
     return regex;
 }
 
+const QRegularExpression& survexDateRegex()
+{
+    static const QRegularExpression regex(
+        QStringLiteral(R"RX(^\*date\s+(\S+))RX"),
+        QRegularExpression::CaseInsensitiveOption);
+    return regex;
+}
+
 /**
  * Strips a trailing Survex comment ("; ...") and any leading /
  * trailing whitespace. Used as a pre-step before regex matching so
@@ -283,22 +365,52 @@ bool scanningEntryFile(const ScanState& state)
 }
 
 /**
- * Records a station name against the innermost open named block.
- * Counts stay current as they are recorded, so an unclosed *begin
- * still reports the stations it saw. A station outside every block
- * belongs to the file root, which owns no block.
+ * The innermost open block that owns a cwScanBlock, or nullptr when
+ * every open scope is anonymous - an anonymous *begin makes no block
+ * of its own, so what it holds belongs to the named block around it.
+ * The file root owns no block either, so a directive outside every
+ * *begin lands nowhere.
  */
-void recordStation(ScanState& state, const QString& station)
+OpenBlock* innermostNamedBlock(ScanState& state)
 {
     for (qsizetype i = state.openBlocks.size() - 1; i >= 0; --i) {
         OpenBlock& open = state.openBlocks[i];
-        if (open.blockIndex == kNoBlock) {
-            continue;
+        if (open.blockIndex != kNoBlock) {
+            return &open;
         }
-        open.stations.insert(station);
-        state.blocks[open.blockIndex].stationCount =
-            static_cast<int>(open.stations.size());
+    }
+    return nullptr;
+}
+
+/**
+ * Records a station name against the innermost open named block.
+ * Counts stay current as they are recorded, so an unclosed *begin
+ * still reports the stations it saw.
+ */
+void recordStation(ScanState& state, const QString& station)
+{
+    OpenBlock* open = innermostNamedBlock(state);
+    if (open == nullptr) {
         return;
+    }
+    open->stations.insert(station);
+    state.blocks[open->blockIndex].stationCount =
+        static_cast<int>(open->stations.size());
+}
+
+/**
+ * Stamps a *date onto the innermost open named block that has none
+ * yet, so the first *date a block writes is the one it keeps.
+ */
+void recordSurvexDate(ScanState& state, const QDate& date)
+{
+    const OpenBlock* open = innermostNamedBlock(state);
+    if (open == nullptr) {
+        return;
+    }
+    cwScanBlock& block = state.blocks[open->blockIndex];
+    if (!block.date.isValid()) {
+        block.date = date;
     }
 }
 
@@ -486,6 +598,17 @@ void scanSurvexFile(const QString& filePath, ScanState& state)
             continue;
         }
 
+        if (const auto dateMatch = survexDateRegex().match(line);
+            dateMatch.hasMatch()) {
+            // An unparseable date stamps nothing and says nothing -
+            // cavern is the validator for date syntax.
+            if (const auto date = parseSurvexDateToken(dateMatch.captured(1));
+                date.has_value()) {
+                recordSurvexDate(state, date.value());
+            }
+            continue;
+        }
+
         const auto match = regex.match(line);
         if (!match.hasMatch()) {
             continue;
@@ -568,6 +691,7 @@ void collectCompassBlocks(const QString& text, ScanState& state)
     const QStringList sections = text.split(QLatin1Char('\f'));
     for (const QString& section : sections) {
         QString surveyName;
+        QDate surveyDate;
         QSet<QString> stations;
         bool inShots = false;
 
@@ -581,6 +705,11 @@ void collectCompassBlocks(const QString& text, ScanState& state)
                 if (const auto match = compassSurveyNameRegex().match(line);
                     match.hasMatch()) {
                     surveyName = match.captured(1);
+                } else if (const auto dateMatch = compassSurveyDateRegex().match(line);
+                           dateMatch.hasMatch()) {
+                    if (!surveyDate.isValid()) {
+                        surveyDate = compassSurveyDate(dateMatch);
+                    }
                 } else if (line.startsWith(QLatin1String("FROM"), Qt::CaseInsensitive)) {
                     inShots = true;
                 }
@@ -602,6 +731,7 @@ void collectCompassBlocks(const QString& text, ScanState& state)
         cwScanBlock block;
         block.path = surveyName;
         block.stationCount = static_cast<int>(stations.size());
+        block.date = surveyDate;
         state.blocks.append(block);
     }
 }
@@ -730,6 +860,13 @@ void appendWallsBlock(const QString& canonical, ScanState& state)
     const QStringList lines = readDecodedLines(canonical);
     for (const QString& rawLine : lines) {
         const QString line = rawLine.trimmed();
+        if (const auto dateMatch = wallsDateRegex().match(line);
+            dateMatch.hasMatch()) {
+            if (!block.date.isValid()) {
+                block.date = parseWallsDate(dateMatch.captured(1));
+            }
+            continue;
+        }
         if (line.isEmpty()
             || line.startsWith(QLatin1Char('#'))
             || line.startsWith(QLatin1Char(';'))) {
@@ -936,25 +1073,10 @@ Monad::Result<ScanResult> scan(const QString& entryFile)
 
 namespace {
 
-std::optional<QDate> parseIsoOrDottedDate(const QString& token)
-{
-    QDate date = QDate::fromString(token, QStringLiteral("yyyy.MM.dd"));
-    if (!date.isValid()) {
-        date = QDate::fromString(token, QStringLiteral("yyyy-MM-dd"));
-    }
-    if (!date.isValid()) {
-        return std::nullopt;
-    }
-    return date;
-}
-
 void parseSurvexMetadata(const QStringList& lines,
                          SeededTripMetadata& metadata,
                          QStringList& warnings)
 {
-    static const QRegularExpression dateRegex(
-        QStringLiteral(R"RX(^\*date\s+(\S+))RX"),
-        QRegularExpression::CaseInsensitiveOption);
     static const QRegularExpression teamRegex(
         QStringLiteral(R"RX(^\*team\s+(?:"([^"]+)"|(\S+)))RX"),
         QRegularExpression::CaseInsensitiveOption);
@@ -986,9 +1108,9 @@ void parseSurvexMetadata(const QStringList& lines,
             continue;
         }
 
-        if (const auto match = dateRegex.match(line); match.hasMatch()) {
+        if (const auto match = survexDateRegex().match(line); match.hasMatch()) {
             const QString token = match.captured(1);
-            const auto date = parseIsoOrDottedDate(token);
+            const auto date = parseSurvexDateToken(token);
             if (!date.has_value()) {
                 warnings.append(
                     QStringLiteral("could not parse *date: %1").arg(token));
@@ -1037,10 +1159,6 @@ void parseCompassMetadata(const QStringList& lines,
                           SeededTripMetadata& metadata,
                           QStringList& warnings)
 {
-    // "SURVEY DATE: 6 1 2025" optionally followed by "COMMENT: ..."
-    static const QRegularExpression dateRegex(
-        QStringLiteral(R"RX(^SURVEY\s+DATE:\s*(\d+)\s+(\d+)\s+(\d+))RX"),
-        QRegularExpression::CaseInsensitiveOption);
     // "DECLINATION: 7.20  FORMAT: ...  CORRECTIONS: ..." - the
     // DECLINATION field is the magnetic declination cavern applies;
     // CORRECTIONS are instrument corrections (compass clino tape),
@@ -1063,17 +1181,8 @@ void parseCompassMetadata(const QStringList& lines,
         }
         const QString line = lines.at(i).trimmed();
 
-        if (const auto match = dateRegex.match(line); match.hasMatch()) {
-            const int month = match.captured(1).toInt();
-            const int day = match.captured(2).toInt();
-            int year = match.captured(3).toInt();
-            if (year < kCompassYearPivot) {
-                // Compass writes 2-digit years pre-2000; same pivot
-                // rule as cwCompassImporter so a .dat seeds the same
-                // date the importer would produce.
-                year += kCompassYearPivot;
-            }
-            const QDate date(year, month, day);
+        if (const auto match = compassSurveyDateRegex().match(line); match.hasMatch()) {
+            const QDate date = compassSurveyDate(match);
             if (!date.isValid()) {
                 warnings.append(
                     QStringLiteral("could not parse SURVEY DATE: %1")
@@ -1126,9 +1235,6 @@ void parseWallsMetadata(const QStringList& lines,
                         SeededTripMetadata& metadata,
                         QStringList& warnings)
 {
-    static const QRegularExpression dateRegex(
-        QStringLiteral(R"RX(^#date\s+(\S+))RX"),
-        QRegularExpression::CaseInsensitiveOption);
     // Captures any token so a non-numeric DECL= value (e.g. the
     // degree:minute form "7:30") warns instead of silently reading
     // as "no declination".
@@ -1148,9 +1254,9 @@ void parseWallsMetadata(const QStringList& lines,
             continue;
         }
 
-        if (const auto match = dateRegex.match(line); match.hasMatch()) {
+        if (const auto match = wallsDateRegex().match(line); match.hasMatch()) {
             const QString token = match.captured(1);
-            const QDate date = QDate::fromString(token, QStringLiteral("yyyy-MM-dd"));
+            const QDate date = parseWallsDate(token);
             if (!date.isValid()) {
                 warnings.append(
                     QStringLiteral("could not parse #DATE: %1").arg(token));

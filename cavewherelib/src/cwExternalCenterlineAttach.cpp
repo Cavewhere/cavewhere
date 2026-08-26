@@ -27,6 +27,7 @@
 #include <QDateTime>
 #include <QDir>
 #include <QFileInfo>
+#include <QHash>
 #include <QPointer>
 #include <QSet>
 #include <QtConcurrent>
@@ -215,6 +216,39 @@ QList<cwExternalCenterlineAttach::ScopeTripDescription> reconcileScopeTrips(
         }
     }
 
+    QHash<QString, QDate> datesByPath;
+    for (const cwScanBlock& block : blocks) {
+        if (block.date.isValid()) {
+            datesByPath.insert(block.path, block.date);
+        }
+    }
+
+    // Survex dates scope downward, so a dateless nested block takes its
+    // nearest dated ancestor's date. Only a nested block inherits: a flat
+    // Compass survey may spell a dot inside its own name, and that dot
+    // names no parent to inherit from.
+    const auto effectiveDate = [&datesByPath](const cwScanBlock& block) {
+        if (block.date.isValid()) {
+            return block.date;
+        }
+        if (block.depth < 1) {
+            return QDate();
+        }
+        QString path = block.path;
+        // A block name may spell a dot of its own, so every dot prefix is a
+        // candidate rather than one prefix per level of nesting.
+        for (int lastDot = path.lastIndexOf(QLatin1Char('.'));
+             lastDot >= 0;
+             lastDot = path.lastIndexOf(QLatin1Char('.'))) {
+            path.truncate(lastDot);
+            const auto found = datesByPath.constFind(path);
+            if (found != datesByPath.constEnd()) {
+                return found.value();
+            }
+        }
+        return QDate();
+    };
+
     QList<cwExternalCenterlineAttach::ScopeTripDescription> created;
     for (const cwScanBlock& block : blocks) {
         // A block with no stations of its own has nothing for a trip to
@@ -232,6 +266,11 @@ QList<cwExternalCenterlineAttach::ScopeTripDescription> reconcileScopeTrips(
         // name dedupe against the trips this same loop already added.
         trip->setName(cave->uniqueTripName(block.name()));
         trip->setStationPrefix(block.path);
+        // Seeding is create-only: a trip that already windows this block was
+        // skipped above, so a replace never writes over a date the user set.
+        if (const QDate date = effectiveDate(block); date.isValid()) {
+            trip->setDate(QDateTime(date, QTime()));
+        }
         cave->addTrip(trip);
 
         windowedPrefixes.insert(block.path);

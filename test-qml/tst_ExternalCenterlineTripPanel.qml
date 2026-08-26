@@ -51,6 +51,7 @@ MainWindowTest {
         }
 
         function cleanup() {
+            rootId.closeAnyOpenEditor()
             RootData.newProject()
         }
 
@@ -834,6 +835,25 @@ MainWindowTest {
             const fileHint = findChild(metadata, "fileOwnsDeclinationHint")
             verify(fileHint !== null, "fileOwnsDeclinationHint must exist")
             verify(!fileHint.visible, "the trip's own file is not the source here")
+        }
+
+        // The file seeds the date and the user owns it from there: east
+        // inherits its ancestor block's *date, and an edit lands on the trip
+        // (§5 Q6).
+        function test_aScopeTripDateShowsTheSeedAndStaysEditable() {
+            bindScopeTrip("trip-panel-scope-date")
+            const trip = rootId.trip
+
+            const metadata = findChild(panelId, "tripMetadata")
+            const dateField = findChild(metadata, "tripMetadataDate")
+            verify(dateField !== null, "tripMetadataDate must exist")
+            tryCompare(dateField, "text", "2024-01-05", 5000,
+                       "the block's date seeded the Scope trip")
+            verify(!dateField.readOnly, "the date is the user's to correct")
+
+            dateField.finishedEditting("2020-02-02")
+            tryVerify(() => Qt.formatDate(trip.date, "yyyy-MM-dd") === "2020-02-02",
+                      5000, "the edit lands on the trip")
         }
 
         // The station list is the one block the two modes share: it filters
