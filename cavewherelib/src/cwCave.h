@@ -196,7 +196,9 @@ signals:
     //! state outside the project (the external-source breadcrumb store) can
     //! forget them. Silent on every path that takes a trip off the list while
     //! its id lives on: project close, load replacing the region, and a move to
-    //! another cave.
+    //! another cave. The region relays this out as
+    //! cwCavingRegion::ownersDeleted, which also carries a deleted cave's own
+    //! id.
     void tripsDeleted(const QList<QUuid>& tripIds);
 
 public slots:

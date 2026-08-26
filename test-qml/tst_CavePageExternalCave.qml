@@ -122,45 +122,6 @@ MainWindowTest {
             verify(emDashes[0].visible, "the file owns its declination")
         }
 
-        function test_detachFlowRemovesRowsAndKeepsCave() {
-            const cave = attachedCave("cavepage-external-detach")
-            const caveCount = RootData.region.rowCount()
-            const cavePage = gotoCavePage(cave)
-
-            const card = findChild(cavePage, "externalCaveSummary")
-            verify(card !== null, "the card must exist")
-            tryVerify(() => card.visible, 5000)
-
-            const detachButton = findChild(card, "detachButton")
-            verify(detachButton !== null, "detachButton must exist")
-            mouseClick(detachButton)
-
-            const detachBox = findChild(card, "detachChallenge")
-            verify(detachBox !== null, "the Detach… prompt must exist")
-            tryVerify(() => detachBox.visible, 5000, "the prompt asks first")
-            verify(detachBox.message.indexOf("AttachedCave") >= 0,
-                   "the prompt names the cave: " + detachBox.message)
-            verify(detachBox.message.indexOf("3") >= 0,
-                   "the prompt counts the auto-created trips: " + detachBox.message)
-
-            const confirmButton = findChild(detachBox, "removeButton")
-            verify(confirmButton !== null, "removeButton must exist")
-            mouseClick(confirmButton)
-
-            tryVerify(() => cave.rowCount() === 0
-                      && cave.externalCenterline.entryFile === "",
-                      10000, "detaching drops the file and the trips it created")
-            RootData.futureManagerModel.waitForFinished()
-
-            tryVerify(() => !card.visible, 5000, "the card leaves with the attachment")
-            compare(collectByName(cavePage, "tripNameLink", []).length, 0,
-                    "the trip rows leave with it")
-
-            // The cave itself survives — empty and native.
-            compare(RootData.region.rowCount(), caveCount, "the cave stays in the region")
-            compare(cave.name, "AttachedCave", "and keeps its name")
-        }
-
         // Each Scope trip's row shows the date its block wrote, not the day
         // of the import: big-passage and the east block that inherits its
         // date read the fixture's date, doghill writes none and reads today.

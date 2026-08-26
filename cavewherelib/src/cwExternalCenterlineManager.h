@@ -734,10 +734,11 @@ private slots:
     // copy missing.
     void onOwnerPathReady(QObject* object);
 
-    // The user deleted trips, so the breadcrumb this machine remembers for
-    // each of them names a source nothing can Replace or Reload from any
-    // more. Forgetting them here keeps the store clear of orphans.
-    void clearBreadcrumbsForDeletedTrips(const QList<QUuid>& tripIds);
+    // The user deleted attachment owners - trips, or a cave together with
+    // the trips it held - so the breadcrumb this machine remembers for each
+    // of them names a source nothing can Replace or Reload from any more.
+    // Forgetting them here keeps the store clear of orphans.
+    void clearBreadcrumbsForDeletedOwners(const QList<QUuid>& ownerIds);
 
     // Cave/trip rename: rebuild the model rows from fresh names plus the
     // cached per-owner scan counts (m_lastScanRows) — zero disk I/O and

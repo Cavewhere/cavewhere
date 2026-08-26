@@ -254,20 +254,21 @@ void cwCavingRegion::insertCave(int index, cwCave* cave) {
 void cwCavingRegion::removeCave(int index) {
     if(index < 0 || index >= m_caves.size()) { return; }
 
-    //Deleting a cave deletes every trip in it, so the cascade is read off the
-    //cave before the removal, which can destroy it outright.
-    const QList<cwTrip*> trips = m_caves.at(index)->trips();
-    QList<QUuid> removedTripIds;
-    removedTripIds.reserve(trips.size());
+    //Deleting a cave deletes the cave itself and every trip in it, so the whole
+    //cascade of owner ids is read off the cave before the removal, which can
+    //destroy it outright.
+    const cwCave* cave = m_caves.at(index);
+    const QList<cwTrip*> trips = cave->trips();
+    QList<QUuid> removedOwnerIds;
+    removedOwnerIds.reserve(trips.size() + 1);
+    removedOwnerIds.append(cave->id());
     for(const cwTrip* trip : trips) {
-        removedTripIds.append(trip->id());
+        removedOwnerIds.append(trip->id());
     }
 
     removeCaves(index, index);
 
-    if(!removedTripIds.isEmpty()) {
-        emit tripsDeleted(removedTripIds);
-    }
+    emit ownersDeleted(removedOwnerIds);
 }
 
 /**
@@ -520,9 +521,9 @@ void cwCavingRegion::connectCave(cwCave* cave)
     connect(cave, &cwCave::tripScopeLabelsChanged,
             this, &cwCavingRegion::scopeLabelsChanged, Qt::UniqueConnection);
     //A trip deleted in one cave is news for consumers that watch the whole
-    //region, so it rides out through here.
+    //region, so it rides out through here as a deleted owner.
     connect(cave, &cwCave::tripsDeleted,
-            this, &cwCavingRegion::tripsDeleted, Qt::UniqueConnection);
+            this, &cwCavingRegion::ownersDeleted, Qt::UniqueConnection);
 }
 
 void cwCavingRegion::disconnectCave(cwCave* cave)
@@ -537,7 +538,7 @@ void cwCavingRegion::disconnectCave(cwCave* cave)
     disconnect(cave, &cwCave::tripScopeLabelsChanged,
                this, &cwCavingRegion::scopeLabelsChanged);
     disconnect(cave, &cwCave::tripsDeleted,
-               this, &cwCavingRegion::tripsDeleted);
+               this, &cwCavingRegion::ownersDeleted);
 }
 
 /**

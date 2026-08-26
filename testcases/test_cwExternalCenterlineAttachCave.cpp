@@ -597,3 +597,80 @@ TEST_CASE("Cave attach emits line geometry for Scope trips whose prefix carries 
         }
     }
 }
+
+// A cave-level attachment's breadcrumb is keyed on the cave's own id, so
+// removing the cave has to forget it the way removing a trip forgets a
+// trip-level one (the trip-level siblings live in
+// test_cwExternalCenterlineAttach.cpp, tagged [Breadcrumb]). Removing the
+// cave on the data page is the only way to drop a cave-level attachment.
+TEST_CASE("deleting a cave forgets its own remembered source",
+          "[Attach][Cave][Breadcrumb]")
+{
+    auto fixture = makeProjectWithFreshCave(QStringLiteral("cave-delete-breadcrumb"));
+    cwCave* cave = freshCaveOf(fixture.get());
+    attachCaveThroughManager(fixture.get(), cave, blocksFixture());
+    drainPipelines(fixture.get());
+
+    const QUuid caveId = cave->id();
+    QList<QUuid> ownerIds({caveId});
+    for (const cwTrip* trip : cave->trips()) {
+        ownerIds.append(trip->id());
+    }
+    REQUIRE(ownerIds.size() == 4);
+
+    // What the store actually holds going in: the cave's own breadcrumb, and
+    // whatever the Scope trips picked up (they have none of their own unless a
+    // source was set on them).
+    QList<QUuid> ownersWithBreadcrumb;
+    for (const QUuid& ownerId : ownerIds) {
+        if (fixture->settings()->hasBreadcrumb(ownerId)) {
+            ownersWithBreadcrumb.append(ownerId);
+        }
+    }
+    REQUIRE(ownersWithBreadcrumb.contains(caveId));
+    REQUIRE(fixture->settings()->breadcrumbPath(caveId)
+            == QFileInfo(blocksFixture()).absoluteFilePath());
+    REQUIRE_FALSE(fixture->settings()->fingerprint(caveId).isEmpty());
+
+    //The verb the cave's delete UI calls (DataMainPage). The cave and its trips
+    //can be destroyed on the spot, so nothing may touch them after this.
+    const int caveIndex = fixture->project->cavingRegion()->indexOf(cave);
+    REQUIRE(caveIndex >= 0);
+    fixture->project->cavingRegion()->removeCave(caveIndex);
+    QCoreApplication::processEvents();
+
+    for (const QUuid& ownerId : ownerIds) {
+        INFO("owner: " << ownerId.toString().toStdString());
+        CHECK_FALSE(fixture->settings()->hasBreadcrumb(ownerId));
+        CHECK(fixture->settings()->breadcrumbPath(ownerId).isEmpty());
+        CHECK(fixture->settings()->fingerprint(ownerId).isEmpty());
+    }
+
+    drainPipelines(fixture.get());
+}
+
+TEST_CASE("closing the project keeps the cave's remembered source",
+          "[Attach][Cave][Breadcrumb]")
+{
+    auto fixture = makeProjectWithFreshCave(QStringLiteral("cave-close-breadcrumb"));
+    cwCave* cave = freshCaveOf(fixture.get());
+    attachCaveThroughManager(fixture.get(), cave, blocksFixture());
+    drainPipelines(fixture.get());
+
+    const QUuid caveId = cave->id();
+    const QString storedPath = fixture->settings()->breadcrumbPath(caveId);
+    const auto storedFingerprint = fixture->settings()->fingerprint(caveId);
+    REQUIRE_FALSE(storedPath.isEmpty());
+    REQUIRE_FALSE(storedFingerprint.isEmpty());
+
+    //Project close and load-replacing-the-region both run this. The closed
+    //project still owns its source, so the breadcrumb must survive.
+    fixture->project->cavingRegion()->clearCaves();
+    QCoreApplication::processEvents();
+
+    CHECK(fixture->settings()->hasBreadcrumb(caveId));
+    CHECK(fixture->settings()->breadcrumbPath(caveId) == storedPath);
+    CHECK(fixture->settings()->fingerprint(caveId) == storedFingerprint);
+
+    drainPipelines(fixture.get());
+}

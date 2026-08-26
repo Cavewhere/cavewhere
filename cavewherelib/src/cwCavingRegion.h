@@ -172,11 +172,18 @@ signals:
     //! must invalidate on this.
     void scopeLabelsChanged();
 
-    //! The user deleted trips somewhere in this region: on their own, through
-    //! cwCave::removeTrip (relayed from the cave), or with the cave that held
-    //! them, through removeCave(). See cwCave::tripsDeleted for the contract,
-    //! including the paths that stay silent.
-    void tripsDeleted(const QList<QUuid>& tripIds);
+    //! The user deleted external-centerline owners somewhere in this region.
+    //! Carries their ids: a trip deleted on its own through cwCave::removeTrip
+    //! (relayed from the cave), or a cave deleted through removeCave(), which
+    //! carries the cave's own id together with every trip it held. An owner is
+    //! whatever an external centerline can be attached to, so a consumer
+    //! holding per-owner state outside the project (the external-source
+    //! breadcrumb store) can forget all of them from this one pulse.
+    //!
+    //! Silent on every path that takes a cave or a trip off a list while its id
+    //! lives on: project close, load replacing the region, clearCaves(),
+    //! removeCaves(range), and a move to another cave or region.
+    void ownersDeleted(const QList<QUuid>& ownerIds);
 
 public slots:
 
