@@ -546,8 +546,9 @@ TEST_CASE("Cave attach emits line geometry for Scope trips whose prefix carries 
     };
 
     // Both Scope trips draw something, and every vertex they draw resolves
-    // through the cave's solved lookup. Vertex totals are deliberately left
-    // unasserted: the parent scope also matches its nested child's stations.
+    // through the cave's solved lookup. Vertex totals are covered by the
+    // nested-scope ownership and cave length/depth tests in
+    // test_cwLinePlotGeometry.cpp and test_cwLinePlotManager_AttachedCenterlines.cpp.
     for (const cwTrip* trip : {feng, lower}) {
         INFO("scope trip: " << trip->stationPrefix().toStdString());
         const qsizetype tripIndex = geometry.tripUuids.indexOf(trip->id());

@@ -537,7 +537,10 @@ void cwLinePlotManager::runSurvex() {
             // ping-pong. publishResults updates CavernOutputPage state
             // (log/stats/error + per-chunk markers) on every path; updateLinePlot
             // only runs on the success path so an error doesn't wipe the last
-            // good line plot.
+            // good line plot. Station positions and cave length/depth therefore
+            // keep their last good values while a solve error stands — the
+            // long-standing contract for native trips, which external owners
+            // share.
             AsyncFuture::observe(future)
                 .context(this, [this](cwLinePlotTask::LinePlotResultData result) {
                     publishResults(result);

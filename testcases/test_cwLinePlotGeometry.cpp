@@ -7,6 +7,7 @@
 
 //Catch includes
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
 
 //Cavewhere includes
 #include "cwLinePlotGeometry.h"
@@ -236,4 +237,109 @@ TEST_CASE("cwLinePlotGeometry windows a Scope trip whose prefix carries authored
     CHECK(countPositions(geometry.points, f1Position) == 1);
     CHECK(countPositions(geometry.points, l1Position) == 1);
     CHECK(countPositions(geometry.points, f2Position) == 2);
+}
+
+TEST_CASE("cwLinePlotGeometry gives each leg of nested Scope trips one owner",
+          "[cwLinePlotGeometry]")
+{
+    // A nested *begin block's stations carry their parent's prefix too, so a
+    // parent Scope trip string-matches every station of its children. Left
+    // alone, parent and child each draw the child's legs: doubled render
+    // segments, two trips toggling the same leg, and a cave length that counts
+    // nested passage twice.
+    cwCavingRegion region;
+
+    cwCave* cave = new cwCave();
+    cave->setName(QStringLiteral("cave1")); //sanitizes to itself: cavePrefix is "cave1."
+    region.addCave(cave);
+
+    cwTrip* parentTrip = new cwTrip();
+    parentTrip->setName(QStringLiteral("doghill"));
+    parentTrip->setStationPrefix(QStringLiteral("doghill"));
+    cave->addTrip(parentTrip);
+
+    cwTrip* childTrip = new cwTrip();
+    childTrip->setName(QStringLiteral("big-passage"));
+    childTrip->setStationPrefix(QStringLiteral("doghill.big-passage"));
+    cave->addTrip(childTrip);
+
+    const QVector3D d1Position(0.0f, 0.0f, 0.0f);
+    const QVector3D d2Position(0.0f, 10.0f, 0.0f);
+    const QVector3D p1Position(0.0f, 12.0f, 0.0f);
+    const QVector3D p2Position(5.0f, 12.0f, 0.0f);
+
+    cwStationPositionLookup lookup;
+    lookup.setPosition(QStringLiteral("doghill.d1"), d1Position);
+    lookup.setPosition(QStringLiteral("doghill.d2"), d2Position);
+    lookup.setPosition(QStringLiteral("doghill.big-passage.p1"), p1Position);
+    lookup.setPosition(QStringLiteral("doghill.big-passage.p2"), p2Position);
+    cave->setStationPositionLookup(lookup);
+
+    // 10 m inside the parent, a 2 m tie into the child block, 5 m inside the
+    // child: 17 m of passage in all.
+    cwSurveyNetwork network;
+    network.addShot(QStringLiteral("cave1.doghill.d1"), QStringLiteral("cave1.doghill.d2"));
+    network.addShot(QStringLiteral("cave1.doghill.d2"),
+                    QStringLiteral("cave1.doghill.big-passage.p1"));
+    network.addShot(QStringLiteral("cave1.doghill.big-passage.p1"),
+                    QStringLiteral("cave1.doghill.big-passage.p2"));
+
+    const auto result = cwLinePlotGeometry::generate(region.data(), network);
+    REQUIRE_FALSE(result.hasError());
+    const cwLinePlotGeometry::Result geometry = result.value();
+
+    REQUIRE(geometry.tripUuids.size() == geometry.tripVertexRanges.size());
+    const qsizetype parentIndex = geometry.tripUuids.indexOf(parentTrip->id());
+    const qsizetype childIndex = geometry.tripUuids.indexOf(childTrip->id());
+    REQUIRE(parentIndex >= 0);
+    REQUIRE(childIndex >= 0);
+
+    SECTION("the innermost scope owns a nested block's legs") {
+        // Parent draws d1-d2 and the d2-p1 tie; the child draws p1-p2 alone.
+        CHECK(geometry.tripVertexRanges.at(parentIndex).count == 4);
+        CHECK(geometry.tripVertexRanges.at(childIndex).count == 2);
+    }
+
+    SECTION("three legs are drawn, the tie among them exactly once") {
+        CHECK(geometry.points.size() == 6);
+        // p1 is an endpoint of the tie and of the child's own leg — twice, and
+        // four times if the tie were drawn from both sides of the boundary.
+        CHECK(countPositions(geometry.points, p1Position) == 2);
+        CHECK(countPositions(geometry.points, d1Position) == 1);
+        CHECK(countPositions(geometry.points, p2Position) == 1);
+    }
+
+    SECTION("cave length counts each leg once") {
+        REQUIRE(geometry.cavesLengthAndDepths.size() == 1);
+        CHECK(geometry.cavesLengthAndDepths.at(0).length() == Catch::Approx(17.0));
+        CHECK(geometry.cavesLengthAndDepths.at(0).depth() == Catch::Approx(0.0));
+    }
+}
+
+TEST_CASE("cwLinePlotGeometry measures a cave that resolved nothing as zero",
+          "[cwLinePlotGeometry]")
+{
+    // A Scope trip whose prefix selects no network station (a broken attach, a
+    // renamed block) leaves the cave with no geometry at all. Length and depth
+    // still have to be real numbers: they travel straight to cave->length() and
+    // cave->depth(), which the cave page renders.
+    cwCavingRegion region;
+
+    cwCave* cave = new cwCave();
+    cave->setName(QStringLiteral("cave1"));
+    region.addCave(cave);
+
+    cwTrip* scopeTrip = new cwTrip();
+    scopeTrip->setName(QStringLiteral("missing"));
+    scopeTrip->setStationPrefix(QStringLiteral("missing"));
+    cave->addTrip(scopeTrip);
+
+    const auto result = cwLinePlotGeometry::generate(region.data(), cwSurveyNetwork());
+    REQUIRE_FALSE(result.hasError());
+    const cwLinePlotGeometry::Result geometry = result.value();
+
+    CHECK(geometry.points.isEmpty());
+    REQUIRE(geometry.cavesLengthAndDepths.size() == 1);
+    CHECK(geometry.cavesLengthAndDepths.at(0).length() == 0.0);
+    CHECK(geometry.cavesLengthAndDepths.at(0).depth() == 0.0);
 }

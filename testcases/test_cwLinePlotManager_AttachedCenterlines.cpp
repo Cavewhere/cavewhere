@@ -7,6 +7,7 @@
 
 // Catch
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
 
 // Cavewhere
 #include "cwAttachedCenterlinesModel.h"
@@ -14,6 +15,7 @@
 #include "cwCavingRegion.h"
 #include "cwExternalCenterline.h"
 #include "cwExternalCenterlineManager.h"
+#include "cwLength.h"
 #include "cwLinePlotManager.h"
 #include "cwCavernNaming.h"
 #include "cwShot.h"
@@ -33,10 +35,15 @@
 #include <QHash>
 #include <QSignalSpy>
 #include <QString>
+#include <QStringList>
 #include <QTemporaryDir>
 #include <QUuid>
 
 namespace {
+
+// Solved station positions are floats, so a total assembled from them drifts
+// by fractions of a centimeter off the hand-computed tape lengths.
+constexpr double kSolvedLengthMarginMeters = 0.05;
 
 cwTrip* addTripWithShot(cwCave* cave, const QString& name)
 {
@@ -49,6 +56,30 @@ cwTrip* addTripWithShot(cwCave* cave, const QString& name)
     shot.setClino(cwClinoReading(QStringLiteral("0.0")));
     chunk->appendShot(cwStation(QStringLiteral("N1")), cwStation(QStringLiteral("N2")), shot);
     return trip;
+}
+
+// A cave attached to an external file at cave level: the file supplies the whole
+// cave body, and each of its *begin blocks is windowed by a Scope trip. Mirrors
+// what reconcileScopeTrips builds after a real cave attach.
+cwCave* addCaveAttachedTo(cwCavingRegion& region,
+                          const QString& name,
+                          const QString& fixture,
+                          const QStringList& blockPaths,
+                          const QTemporaryDir& tempRoot,
+                          QHash<QUuid, QString>& caveDirs)
+{
+    cwCave* cave = addEmptyCave(region, name);
+    cave->setExternalCenterline(cwExternalCenterline(fixture));
+
+    for (const QString& blockPath : blockPaths) {
+        cwTrip* trip = addEmptyTrip(cave, blockPath);
+        trip->setStationPrefix(blockPath);
+    }
+
+    const QString attachDir = tempSubdir(tempRoot, name);
+    seedAttachment(attachDir, fixturePath(fixture));
+    caveDirs.insert(cave->id(), attachDir);
+    return cave;
 }
 
 } // namespace
@@ -251,4 +282,60 @@ TEST_CASE("Attached model answers errorFor and warningCountFor by owner",
     const QUuid unknownOwner = QUuid::createUuid();
     CHECK(model.errorFor(unknownOwner).isEmpty());
     CHECK(model.warningCountFor(unknownOwner) == 0);
+}
+
+TEST_CASE("A cave-level attach measures its length and depth from the solved centerline",
+          "[LinePlotManager][AttachedCenterlinesModel]")
+{
+    // survex_mixed_case.svx is 19 m of passage — 10 m and a 5 m tie in the
+    // parent block, a 4 m drop in the nested one — and 4 m deep. Its blocks are
+    // named with authored uppercase, so this also holds the case-matching fix
+    // (P3.12) to a number rather than to "something was drawn".
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    cwCavingRegion region;
+    QHash<QUuid, QString> caveDirs;
+    cwCave* cave = addCaveAttachedTo(region, QStringLiteral("Feng"),
+                                     QStringLiteral("survex_mixed_case.svx"),
+                                     {QStringLiteral("48H-Feng"),
+                                      QStringLiteral("48H-Feng.Lower")},
+                                     tempRoot, caveDirs);
+
+    cwLinePlotManager manager;
+    manager.externalCenterlineManager()->setCaveAttachmentDirs(caveDirs);
+    manager.setRegion(&region);
+    manager.waitToFinish();
+
+    REQUIRE_FALSE(manager.hasSolveError());
+    CHECK(cave->length()->value() == Catch::Approx(19.0).margin(kSolvedLengthMarginMeters));
+    CHECK(cave->depth()->value() == Catch::Approx(4.0).margin(kSolvedLengthMarginMeters));
+}
+
+TEST_CASE("Nested Scope trips count each leg once in the cave's length",
+          "[LinePlotManager][AttachedCenterlinesModel]")
+{
+    // survex_blocks.svx nests three levels deep and totals 34 m. A parent scope
+    // matches every station of its children by prefix, so a cave whose blocks
+    // each get a Scope trip would otherwise measure the deep passage two and
+    // three times over.
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    cwCavingRegion region;
+    QHash<QUuid, QString> caveDirs;
+    cwCave* cave = addCaveAttachedTo(region, QStringLiteral("Doghill"),
+                                     QStringLiteral("survex_blocks.svx"),
+                                     {QStringLiteral("doghill"),
+                                      QStringLiteral("doghill.big-passage"),
+                                      QStringLiteral("doghill.big-passage.east")},
+                                     tempRoot, caveDirs);
+
+    cwLinePlotManager manager;
+    manager.externalCenterlineManager()->setCaveAttachmentDirs(caveDirs);
+    manager.setRegion(&region);
+    manager.waitToFinish();
+
+    REQUIRE_FALSE(manager.hasSolveError());
+    CHECK(cave->length()->value() == Catch::Approx(34.0).margin(kSolvedLengthMarginMeters));
 }

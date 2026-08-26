@@ -15,9 +15,11 @@
 #include <QMap>
 #include <QSet>
 #include <QString>
+#include <QStringList>
 
 #include <algorithm>
 #include <limits>
+#include <utility>
 
 namespace {
 
@@ -52,11 +54,20 @@ struct ScopeExtent {
 // Both prefix comparisons are case-insensitive: a Scope trip windows by its
 // `stationPrefix` as authored (which may carry uppercase), while cavern
 // lowercases every label it writes to the .3d, so network keys are lowercase.
+// `caveScopePrefixes` holds every scope prefix of the same cave (empty entries
+// for its native trips): a nested block's stations also carry the parent's
+// prefix, so a scope hands a station claimed by a longer sibling prefix to that
+// deeper scope, and each leg gets exactly one owner.
+// `emitted` is the cave's undirected leg set, shared across the cave's scopes so
+// a tie leg reachable from both sides of a scope boundary is drawn once, by the
+// first trip that reaches it.
 ScopeExtent emitNetworkScopeGeometry(const cwSurveyNetwork& network,
                                      const QString& cavePrefix,
                                      const QString& scopePrefix,
+                                     const QStringList& caveScopePrefixes,
                                      const QHash<QString, QVector3D>& stationPositions,
-                                     QVector<QVector3D>& points)
+                                     QVector<QVector3D>& points,
+                                     QSet<QString>& emitted)
 {
     ScopeExtent extent;
 
@@ -73,9 +84,17 @@ ScopeExtent emitNetworkScopeGeometry(const cwSurveyNetwork& network,
         return true;
     };
 
-    // Undirected de-dup: each in-scope station lists its neighbours, so every
-    // internal leg would otherwise be emitted twice (once from each endpoint).
-    QSet<QString> emitted;
+    // Owned by a deeper scope of this cave, which emits it instead. Strictly
+    // longer: two scopes sharing a prefix would otherwise hand every station to
+    // each other and draw nothing.
+    const auto ownedByInnerScope = [&caveScopePrefixes, &scopePrefix](const QString& station) {
+        return std::any_of(caveScopePrefixes.cbegin(), caveScopePrefixes.cend(),
+                           [&](const QString& inner) {
+                               return inner.size() > scopePrefix.size()
+                                   && station.startsWith(inner, Qt::CaseInsensitive);
+                           });
+    };
+
     // network.stations() comes from a QHash (per-process-randomised order);
     // sort so the emitted vertex buffer is reproducible run to run, matching
     // the deterministic native chunk path.
@@ -83,6 +102,9 @@ ScopeExtent emitNetworkScopeGeometry(const cwSurveyNetwork& network,
     std::sort(stations.begin(), stations.end());
     for (const QString& station : stations) {
         if (!station.startsWith(scopePrefix, Qt::CaseInsensitive)) {
+            continue;
+        }
+        if (ownedByInnerScope(station)) {
             continue;
         }
         QVector3D from;
@@ -150,6 +172,23 @@ cwLinePlotGeometry::generate(const cwCavingRegionData& region,
         double length = 0.0;
         bool hasDepth = false;
 
+        // Each trip's network-wide scope prefix, empty for a native trip.
+        // Gathered before the trip loop so every scope also sees its siblings'
+        // and can hand its nested blocks' stations to the deeper scope that
+        // owns them.
+        QStringList tripScopePrefixes;
+        tripScopePrefixes.reserve(cave.trips.size());
+        for (const cwTripData& trip : cave.trips) {
+            const QString tripScope = cwTrip::scopePrefix(trip, tripLabels);
+            tripScopePrefixes.append(tripScope.isEmpty() ? QString() : cavePrefix + tripScope);
+        }
+
+        // Undirected de-dup: each in-scope station lists its neighbors, so every
+        // leg would otherwise be emitted twice (once from each endpoint) — and a
+        // tie leg across a scope boundary once more from the neighboring scope.
+        // Shared by the cave's scopes, keyed by scope-agnostic network keys.
+        QSet<QString> emittedCaveLegs;
+
         for (int tripIndex = 0; tripIndex < cave.trips.size(); tripIndex++) {
             const cwTripData& trip = cave.trips.at(tripIndex);
 
@@ -171,11 +210,11 @@ cwLinePlotGeometry::generate(const cwCavingRegionData& region,
             // A scoped trip (externally-attached) has no chunk topology of its
             // own; its shots live only in the solved network. Emit those segments
             // and skip the chunk walk entirely.
-            const QString tripScope = cwTrip::scopePrefix(trip, tripLabels);
-            if (!tripScope.isEmpty()) {
-                const QString scopePrefix = cavePrefix + tripScope;
+            const QString& scopePrefix = tripScopePrefixes.at(tripIndex);
+            if (!scopePrefix.isEmpty()) {
                 const ScopeExtent extent = emitNetworkScopeGeometry(
-                    network, cavePrefix, scopePrefix, stationPositions, result.points);
+                    network, cavePrefix, scopePrefix, tripScopePrefixes,
+                    stationPositions, result.points, emittedCaveLegs);
                 if (extent.hasDepth) {
                     minDepth = qMin(minDepth, extent.minDepth);
                     maxDepth = qMax(maxDepth, extent.maxDepth);
@@ -246,11 +285,13 @@ cwLinePlotGeometry::generate(const cwCavingRegionData& region,
             result.tripVertexRanges.append(VertexRange{vertexStart, vertexCount});
         }
 
-        if (hasDepth) {
-            const double depth = maxDepth - minDepth;
-            result.cavesLengthAndDepths[caveIndex] =
-                cwLinePlotGeometry::CaveLengthAndDepth(length, depth);
-        }
+        // Always a real measurement: a cave that resolved no centerline is
+        // length 0 and depth 0, which is what an empty cave measures. The
+        // value travels straight to cave->length()/depth(), so an "unset"
+        // marker would render as one.
+        result.cavesLengthAndDepths[caveIndex] = hasDepth
+            ? cwLinePlotGeometry::CaveLengthAndDepth(length, maxDepth - minDepth)
+            : cwLinePlotGeometry::CaveLengthAndDepth(0.0, 0.0);
     }
 
     result.points.squeeze();

@@ -36,6 +36,12 @@
  * per shot. Collapsing a shot's two vertices therefore affects exactly that
  * shot, with no shared-vertex bookkeeping.
  *
+ * Each leg has exactly one owner. A nested external scope's stations also
+ * carry its parent scope's prefix, so a station claimed by a longer scope
+ * prefix in the same cave belongs to that innermost scope; a leg tying two
+ * scopes together is drawn by whichever of them the cave reaches first. Per-cave
+ * length and depth therefore count each leg once, as does per-trip visibility.
+ *
  * Each trip's vertices are emitted contiguously; tripVertexRanges[i] gives the
  * [start, count) span of running trip i, and tripUuids[i] maps that running id
  * back to a stable cwTripData::id so callers can re-attach it to a live trip
@@ -53,7 +59,7 @@ public:
 
     class CaveLengthAndDepth {
     public:
-        CaveLengthAndDepth() : Depth(-1), Length(-1) {}
+        CaveLengthAndDepth() : Depth(0.0), Length(0.0) {}
         CaveLengthAndDepth(double length, double depth) : Depth(depth), Length(length) {}
 
         double length() const { return Length; }

@@ -161,6 +161,23 @@ MainWindowTest {
             compare(cave.name, "AttachedCave", "and keeps its name")
         }
 
+        // The cave's Length and Depth come from the solved external centerline
+        // (P3.13). A cave that resolved nothing measures 0, never a sentinel.
+        function test_statsShowSolvedNumbers() {
+            const cave = attachedCave("cavepage-external-stats")
+            const cavePage = gotoCavePage(cave)
+
+            tryVerify(() => cave.length.value > 0, 20000,
+                      "the attached centerline gives the cave a length")
+
+            const valueCells = collectByName(cavePage, "value", [])
+            verify(valueCells.length >= 2, "the page shows the Length and Depth stats")
+            for (let i = 0; i < valueCells.length; i++) {
+                verify(!valueCells[i].text.startsWith("-1"),
+                       "a stat cell reads a measurement: " + valueCells[i].text)
+            }
+        }
+
         function test_replaceReachableFromCard() {
             const cave = attachedCave("cavepage-external-replace")
             const cavePage = gotoCavePage(cave)

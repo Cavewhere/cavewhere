@@ -578,6 +578,8 @@ private:
         for (int i = 0; i < Region.caveCount(); i++) {
             cwCave* cave = Region.cave(i);
             cwLinePlotTask::LinePlotCaveData& caveData = createLinePlotCaveDataFor(cave->id(), result);
+            //Always a real measurement — 0/0 means the cave resolved no
+            //centerline, so it copies through to the live cave as-is.
             caveData.setLength(lengths.at(i).length());
             caveData.setDepth(lengths.at(i).depth());
         }
