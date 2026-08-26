@@ -80,7 +80,7 @@ public:
     static QFuture<cwLazLoadResult> load(const Request& request);
 
     /**
-     * Header-only probe. Opens the LAZ, reads the embedded CS (OGC WKT) and
+     * Header-only probe. Opens the LAZ, reads the embedded CS and
      * raw bounding box, then closes — no point iteration, microseconds.
      *
      * This is how a project whose only georeferenced input is a point cloud
@@ -93,7 +93,7 @@ public:
      */
     struct ProbeResult {
         bool valid = false;        //!< false if the file could not be opened
-        QString sourceCS;          //!< empty for older GeoTIFF-only LAZs
+        QString sourceCS;          //!< empty when the LAZ names no CRS
         cwGeoPoint bboxMin;        //!< raw LAZ source-CS coordinates
         cwGeoPoint bboxMax;        //!< raw LAZ source-CS coordinates
     };
@@ -103,7 +103,8 @@ public:
     /**
      * Resolves the source CRS for a LAZ file using the same precedence the
      * loader applies: explicit @a override wins; otherwise the LAZ's
-     * embedded OGC WKT VLR (if present); otherwise empty (identity).
+     * embedded OGC WKT VLR (if present); otherwise the GeoTIFF GeoKeys as
+     * "EPSG:<code>"; otherwise empty (identity).
      */
     static QString resolveSourceCS(const QString& override, const LASheader& header);
 };

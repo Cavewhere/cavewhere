@@ -292,6 +292,7 @@ if(BUILD_TESTING)
         protobuf::libprotobuf
         SignalSpyChecker
         QuickQanavaplugin
+        laslib::laslib
     )
 
     target_include_directories(cavewhere-test PRIVATE
