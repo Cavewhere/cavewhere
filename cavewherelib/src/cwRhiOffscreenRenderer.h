@@ -32,6 +32,30 @@ struct cwOffscreenRenderJob;
  */
 class cwRhiOffscreenRenderer {
 public:
+    /**
+     * @brief Counts how long the leading job has waited for texture residency.
+     *
+     * Frames only tick while the scene re-arms, so the give-up cap bounds work
+     * rather than wall clock: an export against an empty or broken .cw_cache
+     * degrades to the detail already loaded instead of wedging the queue.
+     */
+    class ResidencyGate {
+    public:
+        // The most frames one job may be held back before it renders with
+        // whatever detail is resident.
+        static constexpr int kMaxResidencyDeferralFrames = 600;
+
+        // @a ready is what the scene's render objects reported for @a job this
+        // frame. True when the job should be dispatched now — either it is ready,
+        // or it has waited out the cap, which sets @a gaveUp so the caller warns
+        // once. A different leading job (by address) restarts the count.
+        bool shouldDispatch(const cwOffscreenRenderJob* job, bool ready, bool& gaveUp);
+
+    private:
+        const cwOffscreenRenderJob* m_job = nullptr;
+        int m_deferrals = 0;
+    };
+
     explicit cwRhiOffscreenRenderer(cwRhiFrameRenderer& frame);
     ~cwRhiOffscreenRenderer();
 
@@ -145,6 +169,12 @@ private:
     // it to skip past dead jobs without consuming frame budget.
     bool dropLeadingNonRenderable();
 
+    // Ask every render object the leading job draws whether it holds the detail
+    // that job's camera and output size call for, issuing the missing loads as a
+    // side effect (cwRHIObject::residencyReady). True when the job may be
+    // dispatched this frame — ready, or past the gate's deferral cap, which warns.
+    bool shouldDispatchLeadingJob(QRhi* rhi);
+
     // Draw one job's scene into the reused scratch (m_target) exactly as a standalone
     // render would — ensureTarget, EDL composite when a cloud is visible, pass routing,
     // gather, camera UBO, drawScene. @a size / @a sampleCount are the resolved
@@ -213,6 +243,7 @@ private:
     // m_target; its own EdlOffscreen::effectOutputRpDesc tracks the rpDesc that
     // effect was last initialized against so a target rebuild re-inits it.
     cwRhiFrameRenderer::EdlOffscreen m_edl;
+    ResidencyGate m_residencyGate;
     QList<InflightOffscreenReadback> m_inflightReadbacks;
     // Render-thread counter held by shared_ptr so a read-back completion lambda can
     // decrement it without capturing `this` (the renderer may be torn down before

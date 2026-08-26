@@ -7,12 +7,15 @@
 #include <cstdint>
 
 #include "cwRHIObject.h"
+#include "cwOffscreenRenderJob.h"
 #include "cwRhiFrameRenderer.h"
+#include "cwRhiOffscreenRenderer.h"
 #include "cwRhiScene.h"
 #include "cwRhiTexturedItems.h"
 #include "cwRenderTexturedItems.h"
 #include "cwScene.h"
 #include "cwSceneUpdate.h"
+#include "cwSceneVisibility.h"
 #include "cwRenderMemoryLedger.h"
 #include "cwStreamedTexture.h"
 #include "cwTextureResidency.h"
@@ -20,6 +23,7 @@
 #include "CwRhiSceneTestAccess.h"
 #include "CwRhiTexturedItemsTestAccess.h"
 
+#include <QCoreApplication>
 #include <QElapsedTimer>
 #include <QMatrix4x4>
 #include <QSize>
@@ -190,6 +194,17 @@ void countResidencyFloorWarnings(QtMsgType type, const QMessageLogContext& conte
     if (gPreviousMessageHandler) {
         gPreviousMessageHandler(type, context, message);
     }
+}
+
+// A freshly added item is gated hidden until its pick registration lands, and
+// the gate is released through a queued callback — so the visibility every
+// render-side gate reads only opens once events have run.
+bool waitForItemVisible(cwScene& scene, cwRenderObjectId ownerId, uint32_t id)
+{
+    return waitFor([&]() {
+        QCoreApplication::processEvents();
+        return scene.visibility()->snapshot().subVisible(ownerId, id);
+    });
 }
 
 cwRhiTexturedItems* syncedBackend(cwRhiScene& rhiScene, cwScene& scene, cwRenderTexturedItems& render)
@@ -818,4 +833,178 @@ TEST_CASE("a fleet already at its pinned base warns once, not every frame",
 
     render.removeItem(id);
     CwRhiSceneTestAccess::synchroize(rhiScene, &scene);
+}
+
+TEST_CASE("an offscreen job waits while its camera wants more detail than is resident",
+          "[TexturedItemsStreaming]")
+{
+    cwScene scene;
+    cwRhiScene rhiScene;
+
+    cwRenderTexturedItems render;
+    render.setScene(&scene);
+    render.setParent(nullptr);
+
+    cwRenderTexturedItems::Item item;
+    item.geometry = unitQuad();
+    item.streamedTexture = streamedSource(QStringLiteral("scrap-1"));
+    const uint32_t id = render.addItem(item);
+    REQUIRE(waitForItemVisible(scene, render.renderObjectId(), id));
+
+    cwRhiTexturedItems* backend = syncedBackend(rhiScene, scene, render);
+    REQUIRE(backend != nullptr);
+
+    // A hi-res export: the same camera as the live view, rendered at 8K, so it
+    // wants finer levels than the live 1080p viewport would settle for.
+    cwRHIObject::RenderData jobRenderData = cameraRenderData(5.0f);
+    jobRenderData.viewportSize = QSize(7680, 4320);
+
+    // Nothing resident yet: the job is held back, and the pinned base is asked for.
+    CHECK_FALSE(backend->residencyReady(jobRenderData));
+    CHECK(CwRhiTexturedItemsTestAccess::requestedTopLevel(*backend, id) == streamedBaseLevel());
+
+    // Still coarser than the camera wants once the base lands.
+    CwRhiTexturedItemsTestAccess::setResidentTopLevel(*backend, id, streamedBaseLevel());
+    CHECK_FALSE(backend->residencyReady(jobRenderData));
+
+    // The finest level satisfies every camera.
+    constexpr int kFinestLevel = 0;
+    CwRhiTexturedItemsTestAccess::setResidentTopLevel(*backend, id, kFinestLevel);
+    CHECK(backend->residencyReady(jobRenderData));
+
+    render.removeItem(id);
+    CwRhiSceneTestAccess::synchroize(rhiScene, &scene);
+}
+
+TEST_CASE("an item outside the job's frustum never holds the job back",
+          "[TexturedItemsStreaming]")
+{
+    cwScene scene;
+    cwRhiScene rhiScene;
+
+    cwRenderTexturedItems render;
+    render.setScene(&scene);
+    render.setParent(nullptr);
+
+    // Parked far behind the camera, so the job's frustum rejects it.
+    constexpr float kBehindTheCamera = 500.0f;
+    QMatrix4x4 offscreenPose;
+    offscreenPose.translate(0.0f, 0.0f, kBehindTheCamera);
+
+    cwRenderTexturedItems::Item item;
+    item.geometry = unitQuad();
+    item.streamedTexture = streamedSource(QStringLiteral("scrap-1"));
+    item.modelMatrix = offscreenPose;
+    const uint32_t id = render.addItem(item);
+    REQUIRE(waitForItemVisible(scene, render.renderObjectId(), id));
+
+    cwRhiTexturedItems* backend = syncedBackend(rhiScene, scene, render);
+    REQUIRE(backend != nullptr);
+    REQUIRE(CwRhiTexturedItemsTestAccess::boundsValid(*backend, id));
+
+    CHECK(backend->residencyReady(cameraRenderData(5.0f)));
+    CHECK(CwRhiTexturedItemsTestAccess::requestedTopLevel(*backend, id)
+          == CwRhiTexturedItemsTestAccess::noResidentLevel());
+
+    render.removeItem(id);
+    CwRhiSceneTestAccess::synchroize(rhiScene, &scene);
+}
+
+TEST_CASE("a bigger export asks for a finer level than a small one",
+          "[TexturedItemsStreaming]")
+{
+    // One scene per output size: residencyReady walks every item, so the two
+    // sizes need items of their own to compare.
+    const auto desiredLevelFor = [](QSize outputSize) {
+        cwScene scene;
+        cwRhiScene rhiScene;
+
+        cwRenderTexturedItems render;
+        render.setScene(&scene);
+        render.setParent(nullptr);
+
+        cwRenderTexturedItems::Item item;
+        item.geometry = unitQuad();
+        item.streamedTexture = streamedSource(QStringLiteral("scrap-1"));
+        const uint32_t id = render.addItem(item);
+        REQUIRE(waitForItemVisible(scene, render.renderObjectId(), id));
+
+        cwRhiTexturedItems* backend = syncedBackend(rhiScene, scene, render);
+        REQUIRE(backend != nullptr);
+
+        // Pretend the pinned base already landed, so selection is free to refine.
+        CwRhiTexturedItemsTestAccess::setResidentTopLevel(*backend, id, streamedBaseLevel());
+
+        cwRHIObject::RenderData jobRenderData = cameraRenderData(5.0f);
+        jobRenderData.viewportSize = outputSize;
+        backend->residencyReady(jobRenderData);
+
+        const int desired = CwRhiTexturedItemsTestAccess::desiredTopLevel(*backend, id);
+        render.removeItem(id);
+        CwRhiSceneTestAccess::synchroize(rhiScene, &scene);
+        return desired;
+    };
+
+    const int smallExport = desiredLevelFor(QSize(320, 180));
+    const int largeExport = desiredLevelFor(QSize(7680, 4320));
+    CHECK(largeExport < smallExport);
+}
+
+TEST_CASE("the residency gate gives up rather than deferring an export forever",
+          "[TexturedItemsStreaming]")
+{
+    cwRhiOffscreenRenderer::ResidencyGate gate;
+    cwOffscreenRenderJob job;
+    bool gaveUp = false;
+
+    SECTION("a ready job dispatches at once, without warning")
+    {
+        CHECK(gate.shouldDispatch(&job, true, gaveUp));
+        CHECK_FALSE(gaveUp);
+    }
+
+    SECTION("an unready job is deferred up to the cap, then rendered with a warning")
+    {
+        constexpr int kCap = cwRhiOffscreenRenderer::ResidencyGate::kMaxResidencyDeferralFrames;
+        for (int frame = 1; frame < kCap; frame++) {
+            REQUIRE_FALSE(gate.shouldDispatch(&job, false, gaveUp));
+            REQUIRE_FALSE(gaveUp);
+        }
+
+        CHECK(gate.shouldDispatch(&job, false, gaveUp));
+        CHECK(gaveUp);
+
+        // The count restarts, so the next job gets the full allowance.
+        CHECK_FALSE(gate.shouldDispatch(&job, false, gaveUp));
+        CHECK_FALSE(gaveUp);
+    }
+
+    SECTION("a different leading job restarts the count")
+    {
+        constexpr int kDeferrals = 5;
+        for (int frame = 0; frame < kDeferrals; frame++) {
+            REQUIRE_FALSE(gate.shouldDispatch(&job, false, gaveUp));
+        }
+
+        cwOffscreenRenderJob laterJob;
+        CHECK_FALSE(gate.shouldDispatch(&laterJob, false, gaveUp));
+        CHECK_FALSE(gaveUp);
+
+        // Back to the first job: it starts over too, rather than resuming.
+        CHECK_FALSE(gate.shouldDispatch(&job, false, gaveUp));
+        CHECK_FALSE(gaveUp);
+    }
+
+    SECTION("a job that becomes ready mid-wait clears the count")
+    {
+        constexpr int kDeferrals = 5;
+        for (int frame = 0; frame < kDeferrals; frame++) {
+            REQUIRE_FALSE(gate.shouldDispatch(&job, false, gaveUp));
+        }
+
+        CHECK(gate.shouldDispatch(&job, true, gaveUp));
+        CHECK_FALSE(gaveUp);
+        CHECK_FALSE(gate.shouldDispatch(&job, false, gaveUp));
+        CHECK_FALSE(gaveUp);
+    }
 }

@@ -206,6 +206,7 @@ public:
     // This frame's streaming budgets, staged at the sync barrier and stamped
     // onto every RenderData by stampCamera.
     void setBudgets(const cwRenderBudgets& budgets) { m_budgets = budgets; }
+    const cwRenderBudgets& budgets() const { return m_budgets; }
 
     // Counts gathers, not frames drawn: one gatherScene is one selection pass,
     // so streamed items stamp it as the frame they were last seen in.

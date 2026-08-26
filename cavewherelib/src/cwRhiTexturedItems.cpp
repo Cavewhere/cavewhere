@@ -38,6 +38,10 @@ constexpr quint64 kPinnedBasePriority = std::numeric_limits<quint64>::max();
 // A demotion outranks every refinement — it is what brings the scene back under
 // budget — but still yields to an item that has nothing to draw at all.
 constexpr quint64 kDemotionPriority = kPinnedBasePriority - 1;
+// An offscreen job is blocked until its levels land, so its refinements outrank
+// every live one — but an item with nothing to draw, and the demotion that brings
+// the scene back under budget, still go first.
+constexpr quint64 kExportPriority = kDemotionPriority - 1;
 }
 
 cwRhiTexturedItems::cwRhiTexturedItems() = default;
@@ -314,7 +318,8 @@ QRhiTexture::Format cwRhiTexturedItems::streamTargetFormat()
     return compressed == QRhiTexture::UnknownFormat ? QRhiTexture::RGBA8 : compressed;
 }
 
-void cwRhiTexturedItems::selectStreamLevel(uint32_t id, Item* item, const GatherContext& context)
+void cwRhiTexturedItems::selectStreamLevel(uint32_t id, Item* item, const GatherContext& context,
+                                           StreamPriority priority)
 {
     if (item->streamSource.isNull()) {
         return;
@@ -369,8 +374,53 @@ void cwRhiTexturedItems::selectStreamLevel(uint32_t id, Item* item, const Gather
         item->requestedTopLevel = desired;
         item->demotionInFlight = false;
         m_streamer.request(id, item->streamSource, streamTargetFormat(), desired,
-                           quint64(target - desired));
+                           priority == StreamPriority::Export
+                               ? kExportPriority
+                               : quint64(target - desired));
     }
+}
+
+bool cwRhiTexturedItems::residencyReady(const RenderData& jobRenderData)
+{
+    const cwFrustum frustum =
+        cwFrustum::fromViewProjection(jobRenderData.viewProjectionMatrix);
+
+    // The job draws the scene the live frame's snapshot describes, so the same
+    // per-item gate applies here (an offscreen job's own suppressions are
+    // whole-object, and the offscreen renderer skips those objects before asking).
+    const cwVisibilitySnapshot& visibility = m_frame->visibilitySnapshot();
+
+    GatherContext context;
+    context.renderData = &jobRenderData;
+
+    bool ready = true;
+    for (auto it = m_items.constBegin(); it != m_items.constEnd(); ++it) {
+        Item* item = it.value();
+        if (!item || item->streamSource.isNull()) {
+            continue;
+        }
+
+        if (!visibility.subVisible(renderObjectId(), it.key())) {
+            continue;
+        }
+
+        if (frustum.isValid()
+            && item->boundsValid
+            && !frustum.intersects(item->worldBounds)) {
+            continue;
+        }
+
+        // Every visible item is asked for, even once one has reported the job
+        // unready, so the whole scene's loads are in flight by the next frame.
+        selectStreamLevel(it.key(), item, context, StreamPriority::Export);
+
+        if (item->residentTopLevel == kNoResidentLevel
+            || item->residentTopLevel > item->desiredTopLevel) {
+            ready = false;
+        }
+    }
+
+    return ready;
 }
 
 void cwRhiTexturedItems::enforceGpuBudget(const cwRenderBudgets& budgets)

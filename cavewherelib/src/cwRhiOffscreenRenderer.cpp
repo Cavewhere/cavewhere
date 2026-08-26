@@ -10,6 +10,7 @@
 
 //Qt includes
 #include <rhi/qrhi.h>
+#include <QDebug>
 #include <QThread>
 
 //Std includes
@@ -263,6 +264,72 @@ bool cwRhiOffscreenRenderer::dropLeadingNonRenderable()
     return false; // front is a real render job
 }
 
+bool cwRhiOffscreenRenderer::ResidencyGate::shouldDispatch(const cwOffscreenRenderJob* job,
+                                                           bool ready, bool& gaveUp)
+{
+    gaveUp = false;
+
+    if (ready) {
+        m_job = nullptr;
+        m_deferrals = 0;
+        return true;
+    }
+
+    if (job != m_job) {
+        m_job = job;
+        m_deferrals = 0;
+    }
+
+    m_deferrals++;
+    if (m_deferrals < kMaxResidencyDeferralFrames) {
+        return false;
+    }
+
+    gaveUp = true;
+    m_job = nullptr;
+    m_deferrals = 0;
+    return true;
+}
+
+bool cwRhiOffscreenRenderer::shouldDispatchLeadingJob(QRhi* rhi)
+{
+    const std::shared_ptr<cwOffscreenRenderJob>& job = m_queue.first();
+    const cwOffscreenRenderParameters& p = job->parameters;
+
+    // The job's camera in the same clip-space form the render itself will stamp,
+    // so mip selection here matches what the render draws with.
+    const cwRhiFrameRenderer::ClipSpaceCamera clip =
+        cwRhiFrameRenderer::clipSpaceCorrectedCamera(rhi, p.projectionMatrix, p.viewMatrix);
+
+    cwRHIObject::RenderData jobRenderData{nullptr, nullptr, cwSceneUpdate::Flag::None};
+    jobRenderData.viewMatrix = p.viewMatrix;
+    jobRenderData.projectionMatrix = clip.projectionCorrected;
+    jobRenderData.viewProjectionMatrix = clip.viewProjection;
+    jobRenderData.devicePixelRatio = p.devicePixelRatio;
+    jobRenderData.viewportSize = p.outputSize;
+    jobRenderData.budgets = m_frame.budgets();
+
+    bool ready = true;
+    for (cwRHIObject* object : std::as_const(m_frame.renderObjects())) {
+        if (p.hiddenObjectIds.contains(object->renderObjectId())) {
+            continue;
+        }
+        // Every object is asked even once one has reported unready, so the whole
+        // scene's loads are in flight by the next frame.
+        ready = object->residencyReady(jobRenderData) && ready;
+    }
+
+    bool gaveUp = false;
+    const bool dispatch = m_residencyGate.shouldDispatch(job.get(), ready, gaveUp);
+    if (gaveUp) {
+        qWarning() << "Offscreen render job of size" << p.outputSize
+                   << "waited" << ResidencyGate::kMaxResidencyDeferralFrames
+                   << "frames for texture residency; rendering with the detail"
+                      " already loaded.";
+    }
+    return dispatch;
+}
+
 void cwRhiOffscreenRenderer::drainPending(QRhiCommandBuffer* cb, cwRhiItemRenderer* renderer)
 {
     assertRenderThread();
@@ -284,6 +351,12 @@ void cwRhiOffscreenRenderer::drainPending(QRhiCommandBuffer* cb, cwRhiItemRender
     // is read from a real render job.
     while (dropLeadingNonRenderable()) { }
     if (m_queue.isEmpty()) {
+        return;
+    }
+
+    // Not ready: leave the job queued and return — hasPendingWork() still holds, so
+    // render() re-arms another frame and the streaming drain runs in it.
+    if (!shouldDispatchLeadingJob(rhi)) {
         return;
     }
 

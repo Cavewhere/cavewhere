@@ -30,6 +30,12 @@ public:
      * shared total and every demotion shrinks what the other views measure.
      */
     bool streamResources(ResourceUpdateData& data, qint64& remainingUploadBytes) override;
+    /**
+     * Runs selection for every item the offscreen job's camera can see, at the
+     * job's output size, asking for whatever detail is missing at export priority.
+     * False while any of those items is coarser than the job wants.
+     */
+    bool residencyReady(const RenderData& jobRenderData) override;
     bool gather(const GatherContext& context, QVector<PipelineBatch>& batches) override;
     void purgePipelinesFor(QRhiRenderPassDescriptor* descriptor) override;
     std::optional<QBox3D> worldBounds() const override;
@@ -37,6 +43,12 @@ public:
 private:
     //! residentTopLevel / requestedTopLevel when the item holds neither
     static constexpr int kNoResidentLevel = -1;
+
+    //! Which queue a selection's refinement request joins
+    enum class StreamPriority {
+        Live,   //!< ranked by the live camera's screen-space-error deficit
+        Export  //!< ahead of every live refinement, behind a pinned-base first load
+    };
 
     struct SharedItemData {
         QRhiTexture* loadingTexture = nullptr;
@@ -156,7 +168,8 @@ private:
 
     //! Picks the mip level @a item should hold this frame and asks the streamer
     //! for it. Arithmetic only in the common no-change case.
-    void selectStreamLevel(uint32_t id, Item* item, const GatherContext& context);
+    void selectStreamLevel(uint32_t id, Item* item, const GatherContext& context,
+                           StreamPriority priority = StreamPriority::Live);
 
     //! Demotes streamed items back to their pinned base until the ledger's GPU
     //! total fits @a budgets.gpuBudgetBytes. A no-op while under budget.

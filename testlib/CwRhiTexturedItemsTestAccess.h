@@ -47,6 +47,11 @@ struct CwRhiTexturedItemsTestAccess {
         return found ? found->requestedTopLevel : cwRhiTexturedItems::kNoResidentLevel;
     }
 
+    static int desiredTopLevel(const cwRhiTexturedItems& items, uint32_t id) {
+        auto* found = items.m_items.value(id, nullptr);
+        return found ? found->desiredTopLevel : cwRhiTexturedItems::kNoResidentLevel;
+    }
+
     static bool textureNeedsUpdate(const cwRhiTexturedItems& items, uint32_t id) {
         auto* found = items.m_items.value(id, nullptr);
         return found && found->textureNeedsUpdate;

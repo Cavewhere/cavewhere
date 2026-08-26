@@ -244,6 +244,20 @@ public:
     // scene re-arm another frame.
     virtual bool streamResources(ResourceUpdateData&, qint64&) { return false; }
 
+    // True when this object holds the detail @a jobRenderData's camera and output
+    // size call for. Offscreen jobs (map/plot exports, captures) ask before
+    // dispatching, so an export renders at its own quality instead of baking in
+    // whatever mips the live camera left resident. An object that streams detail
+    // issues the loads it is missing here and reports false until they land; the
+    // offscreen renderer leaves the job queued and asks again on a later frame.
+    //
+    // An export's desired levels may push residency past
+    // cwRenderBudgets::gpuBudgetBytes while the job waits. That overshoot is
+    // accepted for the job's duration: the eviction planner already gives back
+    // detail the live camera cannot see, and the excess unwinds once the live
+    // camera's coarser selection demotes what the export pulled in.
+    virtual bool residencyReady(const RenderData&) { return true; }
+
     //Gather render objects
     virtual bool gather(const GatherContext& context,
                         QVector<PipelineBatch>& batches) {
