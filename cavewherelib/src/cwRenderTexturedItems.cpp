@@ -162,20 +162,12 @@ void cwRenderTexturedItems::addCommand(CommandType type, uint32_t id, const Item
         break;
     case CommandType::UpdateTexture:
         state.payload.texture = payload.texture;
-        state.payload.compressedTexture = {};
-        state.payload.streamedTexture = {};
-        state.textureDirty = true;
-        break;
-    case CommandType::UpdateCompressedTexture:
-        state.payload.compressedTexture = payload.compressedTexture;
-        state.payload.texture = QImage();
         state.payload.streamedTexture = {};
         state.textureDirty = true;
         break;
     case CommandType::UpdateStreamedTexture:
         state.payload.streamedTexture = payload.streamedTexture;
         state.payload.texture = QImage();
-        state.payload.compressedTexture = {};
         state.textureDirty = true;
         break;
     case CommandType::UpdateMaterial:
@@ -204,7 +196,6 @@ void cwRenderTexturedItems::addCommand(CommandType type, uint32_t id, const Item
 bool cwRenderTexturedItems::hasOneTextureRepresentation(const ItemPayload& payload)
 {
     const int set = (payload.texture.isNull() ? 0 : 1)
-                    + (payload.compressedTexture.isNull() ? 0 : 1)
                     + (payload.streamedTexture.isNull() ? 0 : 1);
     return set <= 1;
 }
@@ -215,13 +206,10 @@ uint32_t cwRenderTexturedItems::addItem(const Item& item)
     ItemPayload payload;
     payload.geometry = handleGeometryError(geometryForRender(item.geometry));
     // One representation travels to the render thread; the streamed descriptor
-    // wins over the compressed texture, which wins over the image.
+    // wins over the image.
     payload.streamedTexture = item.streamedTexture;
     if (payload.streamedTexture.isNull()) {
-        payload.compressedTexture = item.compressedTexture;
-        if (payload.compressedTexture.isNull()) {
-            payload.texture = item.texture;
-        }
+        payload.texture = item.texture;
     }
     payload.material = item.material;
     payload.uniformBlock = item.uniformBlock;
@@ -234,10 +222,8 @@ uint32_t cwRenderTexturedItems::addItem(const Item& item)
         storedItem.geometry = cwGeometry();
     }
     storedItem.texture = payload.texture;
-    storedItem.compressedTexture = payload.compressedTexture;
     if (!storedItem.storeTexture) {
         storedItem.texture = QImage();
-        storedItem.compressedTexture = {};
     }
     // The streamed source is a descriptor, not pixels, so it is always kept:
     // updateStreamedTexture compares against it to drop a repeated ask.
@@ -273,8 +259,6 @@ void cwRenderTexturedItems::updateItem(uint32_t id, const Item& item)
     updateGeometry(id, item.geometry);
     if (!item.streamedTexture.isNull()) {
         updateStreamedTexture(id, item.streamedTexture);
-    } else if (!item.compressedTexture.isNull()) {
-        updateCompressedTexture(id, item.compressedTexture);
     } else {
         updateTexture(id, item.texture);
     }
@@ -348,32 +332,11 @@ void cwRenderTexturedItems::updateTexture(uint32_t id, const QImage& image)
     payload.texture = image; // geometry left default
     addCommand(CommandType::UpdateTexture, id, payload);
 
-    entry->compressedTexture = {};
     entry->streamedTexture = {};
     if (entry->storeTexture) {
         entry->texture = image;
     } else {
         entry->texture = QImage();
-    }
-}
-
-void cwRenderTexturedItems::updateCompressedTexture(uint32_t id, const cwCompressedTexture& compressedTexture)
-{
-    auto entry = m_frontState.find(id);
-    if (entry == m_frontState.end()) {
-        return;
-    }
-
-    ItemPayload payload;
-    payload.compressedTexture = compressedTexture;
-    addCommand(CommandType::UpdateCompressedTexture, id, payload);
-
-    entry->texture = QImage();
-    entry->streamedTexture = {};
-    if (entry->storeTexture) {
-        entry->compressedTexture = compressedTexture;
-    } else {
-        entry->compressedTexture = {};
     }
 }
 
@@ -396,7 +359,6 @@ void cwRenderTexturedItems::updateStreamedTexture(uint32_t id, const cwStreamedT
     addCommand(CommandType::UpdateStreamedTexture, id, payload);
 
     entry->texture = QImage();
-    entry->compressedTexture = {};
     entry->streamedTexture = streamedTexture;
 }
 

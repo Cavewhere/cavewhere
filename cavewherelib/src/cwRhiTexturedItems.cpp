@@ -29,8 +29,6 @@ constexpr qsizetype kMaxUInt16VertexCount = 65535;
 constexpr qint64 kRgba8BytesPerPixelNumerator = 4;
 constexpr qint64 kRgba8BytesPerPixelDenominator = 1;
 constexpr bool kMipmapped = true;
-// A 4096-pixel texture — the crop pipeline's maximum — has 13 mip levels.
-constexpr int kTypicalMipLevelCount = 13;
 // Items are tallied on this one pass so a frame that gathers every pass counts
 // each item once. It is the first pass of cwRhiFrameRenderer's draw order.
 constexpr cwRHIObject::RenderPass kCullingStatsPass = cwRHIObject::RenderPass::Background;
@@ -118,9 +116,8 @@ void cwRhiTexturedItems::synchronize(const SynchronizeData& data)
             item->geometry = payload.geometry;
             item->geometryNeedsUpdate = !item->geometry.indices().isEmpty();
             item->image = payload.texture;
-            item->compressedTexture = payload.compressedTexture;
             item->streamSource = payload.streamedTexture;
-            item->textureNeedsUpdate = !item->image.isNull() || !item->compressedTexture.isNull();
+            item->textureNeedsUpdate = !item->image.isNull();
             item->uniformBlock = payload.uniformBlock;
             item->uniformNeedsUpdate = true;
             item->pipelineNeedsUpdate = true;
@@ -154,7 +151,6 @@ void cwRhiTexturedItems::synchronize(const SynchronizeData& data)
             }
             if (state.textureDirty) {
                 item->image = payload.texture;
-                item->compressedTexture = payload.compressedTexture;
                 // A streamed source uploads through streamResources instead, and
                 // the item keeps drawing what it has until the first level lands.
                 item->textureNeedsUpdate = payload.streamedTexture.isNull();
@@ -813,12 +809,6 @@ void cwRhiTexturedItems::Item::updateGeometryBuffers(const ResourceUpdateData& d
 
 void cwRhiTexturedItems::Item::updateTextureResource(const ResourceUpdateData& data, const SharedItemData& sharedData)
 {
-    // A compressed upload that the backend rejects clears the compressed
-    // payload and falls through to the RGBA8 path below.
-    if (!compressedTexture.isNull() && uploadCompressedTexture(data)) {
-        return;
-    }
-
     auto* rhi = data.renderData.cb->rhi();
     const QSize size = image.size();
 
@@ -847,56 +837,6 @@ void cwRhiTexturedItems::Item::updateTextureResource(const ResourceUpdateData& d
     image = {};
     textureNeedsUpdate = false;
     Q_UNUSED(sharedData);
-}
-
-bool cwRhiTexturedItems::Item::uploadCompressedTexture(const ResourceUpdateData& data)
-{
-    auto* rhi = data.renderData.cb->rhi();
-    const QSize size = compressedTexture.size;
-    const QRhiTexture::Format format = compressedTexture.format;
-
-    if (!rhi->isTextureFormatSupported(format)) {
-        qWarning() << "Compressed texture format" << int(format) << "at size" << size
-                   << "is unsupported by this RHI backend, using the uncompressed texture instead";
-        compressedTexture = {};
-        return false;
-    }
-
-    if (!texture || texture->format() != format || texture->pixelSize() != size) {
-        delete texture;
-        // The levels come from the transcoder, so the texture is MipMapped
-        // without UsedWithGenerateMips.
-        texture = rhi->newTexture(format, size, 1, QRhiTexture::MipMapped);
-        if (!texture->create()) {
-            qWarning() << "Creating a compressed texture of format" << int(format) << "at size" << size
-                       << "failed, using the uncompressed texture instead";
-            delete texture;
-            texture = nullptr;
-            compressedTexture = {};
-            textureBytes.setBytes(0);
-            return false;
-        }
-    }
-
-    QVarLengthArray<QRhiTextureUploadEntry, kTypicalMipLevelCount> entries;
-    qint64 uploadedBytes = 0;
-    for (qsizetype level = 0; level < compressedTexture.mipLevels.size(); ++level) {
-        const QByteArray& levelBytes = compressedTexture.mipLevels.at(level);
-        entries.append(QRhiTextureUploadEntry(0, int(level),
-                                              QRhiTextureSubresourceUploadDescription(levelBytes)));
-        uploadedBytes += levelBytes.size();
-    }
-
-    QRhiTextureUploadDescription description;
-    description.setEntries(entries.cbegin(), entries.cend());
-    data.resourceUpdateBatch->uploadTexture(texture, description);
-
-    textureBytes.setBytes(uploadedBytes);
-
-    compressedTexture = {};
-    image = {};
-    textureNeedsUpdate = false;
-    return true;
 }
 
 void cwRhiTexturedItems::Item::updateUniformBuffer(const ResourceUpdateData& data)

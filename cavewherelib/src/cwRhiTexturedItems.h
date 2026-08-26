@@ -62,10 +62,10 @@ private:
         QRhiCommandBuffer::IndexFormat indexFormat = QRhiCommandBuffer::IndexUInt32;
 
         cwGeometry geometry;
-        // Whichever whole-texture representation is waiting to upload; both are
-        // dropped once the upload is recorded.
+        // The whole-texture fallback, waiting to upload; dropped once the
+        // upload is recorded. Only a producer with no cache entry to stream
+        // sends one.
         QImage image;
-        cwCompressedTexture compressedTexture;
 
         // The streamed alternative: a descriptor the render thread pulls mip
         // levels from, one budgeted upload at a time. residentTopLevel is the
@@ -131,9 +131,6 @@ private:
         void ensurePipeline(const RenderData& renderData, const SharedItemData &sharedData, const QRhiVertexInputLayout& layout);
         void updateGeometryBuffers(const ResourceUpdateData& data);
         void updateTextureResource(const ResourceUpdateData& data, const SharedItemData &sharedData);
-        //! Uploads compressedTexture; false means the backend rejected the
-        //! format or the texture and the caller must use the QImage path
-        bool uploadCompressedTexture(const ResourceUpdateData& data);
         void updateUniformBuffer(const ResourceUpdateData& data);
         void createShaderResourceBindings(const ResourceUpdateData& data, const SharedItemData &sharedData);
         void purgePipelinesFor(QRhiRenderPassDescriptor* descriptor);

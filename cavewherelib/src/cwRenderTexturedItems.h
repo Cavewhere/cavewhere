@@ -4,7 +4,6 @@
 #include "cwRenderMaterialState.h"
 #include "cwRenderObject.h"
 #include "cwGeometry.h"
-#include "cwKtx2Codec.h"
 #include "cwStreamedTexture.h"
 #include "CaveWhereLibExport.h"
 #include <QHash>
@@ -25,12 +24,10 @@ public:
 
     struct Item {
         cwGeometry geometry;
-        // A texture travels in exactly one of three representations: a QImage,
-        // a GPU-ready cwCompressedTexture, or a cwStreamedTexture descriptor the
-        // render thread streams mip levels from. When more than one is set the
-        // streamed descriptor wins, then the compressed texture, then the image.
+        // A texture travels in exactly one of two representations: a QImage, or
+        // a cwStreamedTexture descriptor the render thread streams mip levels
+        // from. When both are set the streamed descriptor wins.
         QImage texture;
-        cwCompressedTexture compressedTexture;
         cwStreamedTexture streamedTexture;
         cwRenderMaterialState material;
         QByteArray uniformBlock;
@@ -48,12 +45,6 @@ public:
     void updateItem(uint32_t id, const Item& item);
     void updateGeometry(uint32_t id, const cwGeometry& geometry);
     void updateTexture(uint32_t id, const QImage& image);
-    // Send only a format the backend can accept — cw::ktx2::preferredCompressedFormat
-    // makes that decision. The render thread warns and drops back to the QImage
-    // path when the format or the texture create is rejected, so an item sent a
-    // compressed texture alone stays on the loading placeholder until a QImage
-    // arrives through updateTexture.
-    void updateCompressedTexture(uint32_t id, const cwCompressedTexture& compressedTexture);
     // Hand the render thread a KTX2 source to stream mip levels from instead of
     // whole-texture pixels. Sending the descriptor the item already carries is a
     // no-op, so a re-run of the producer never restarts a load.
@@ -85,7 +76,6 @@ private:
     struct ItemPayload {
         cwGeometry geometry;
         QImage texture;
-        cwCompressedTexture compressedTexture;
         cwStreamedTexture streamedTexture;
         cwRenderMaterialState material;
         QByteArray uniformBlock;
@@ -99,7 +89,6 @@ private:
         Remove,
         UpdateGeometry,
         UpdateTexture,
-        UpdateCompressedTexture,
         UpdateStreamedTexture,
         UpdateMaterial,
         UpdateUniformBlock,
@@ -123,7 +112,7 @@ private:
         // Which payload fields an Update touched since the last sync. Ignored for
         // Add (which uses the whole payload) and Remove (which uses none).
         bool geometryDirty = false;
-        // Covers all three texture representations — whichever one the payload holds.
+        // Covers both texture representations — whichever one the payload holds.
         bool textureDirty = false;
         bool materialDirty = false;
         bool uniformBlockDirty = false;
@@ -140,7 +129,7 @@ private:
 
     void addCommand(CommandType type, uint32_t id, const ItemPayload& payload);
 
-    // The payload invariant every command must keep: at most one of the three
+    // The payload invariant every command must keep: at most one of the two
     // texture representations is set.
     static bool hasOneTextureRepresentation(const ItemPayload& payload);
 

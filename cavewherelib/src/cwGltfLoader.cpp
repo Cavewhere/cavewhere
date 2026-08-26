@@ -2,15 +2,20 @@
 #include "cwGeometry.h"
 
 // tinygltf
+// stb_image is compiled out: every image goes through storeEncodedImageData()
+// below, which keeps the encoded bytes instead of decoding them, so a build with
+// stb linked in could only hide an accidental eager decode.
+#define TINYGLTF_NO_STB_IMAGE
 #define TINYGLTF_NO_STB_IMAGE_WRITE
 #define TINYGLTF_IMPLEMENTATION
-#define STB_IMAGE_IMPLEMENTATION
 #include <tiny_gltf.h>
 
 // Qt
 #include <QtGlobal>
-#include <QFileInfo>
+#include <QBuffer>
 #include <QColorSpace>
+#include <QFileInfo>
+#include <QImageReader>
 
 // Local helpers kept in the same namespace
 namespace cw::gltf {
@@ -305,6 +310,51 @@ static cwGeometry buildGeometryFromPrimitive(const tinygltf::Model& model,
     return geometry;
 }
 
+/**
+ * tinygltf's image loader, replacing the stb default. It keeps the encoded PNG
+ * or JPEG bytes and reads only the header for the dimensions, so loading a .glb
+ * costs no full-resolution RGBA copy. Callers that want pixels ask
+ * TextureCPU::toImage() for them.
+ */
+static bool storeEncodedImageData(tinygltf::Image* image,
+                                  const int imageIndex,
+                                  std::string* error,
+                                  std::string* warning,
+                                  int requestedWidth,
+                                  int requestedHeight,
+                                  const unsigned char* bytes,
+                                  int size,
+                                  void* userData)
+{
+    Q_UNUSED(error)
+    Q_UNUSED(requestedWidth)
+    Q_UNUSED(requestedHeight)
+    Q_UNUSED(userData)
+
+    image->as_is = true;
+    image->image.assign(bytes, bytes + size);
+
+    QByteArray encoded = QByteArray::fromRawData(reinterpret_cast<const char*>(bytes), size);
+    QBuffer buffer(&encoded);
+    QImageReader reader(&buffer);
+    const QSize headerSize = reader.size();
+
+    if (!headerSize.isValid()) {
+        if (warning != nullptr) {
+            *warning += "Can't read the header of image[" + std::to_string(imageIndex)
+                        + "]; its size stays unknown\n";
+        }
+        // The bytes are kept anyway: a decode may still succeed where the header
+        // read failed.
+        return true;
+    }
+
+    image->width = headerSize.width();
+    image->height = headerSize.height();
+
+    return true;
+}
+
 static TextureCPU loadTextureCPU(const tinygltf::Model& model,
                                  int textureIndex,
                                  bool isSRGB)
@@ -325,18 +375,8 @@ static TextureCPU loadTextureCPU(const tinygltf::Model& model,
     tex.width = img.width;
     tex.height = img.height;
     tex.isSRGB = isSRGB;
-
-    // Ensure RGBA8
-    if (img.pixel_type == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE) {
-        // tinygltf ensures 4 components by default for most loaders; if not, convert here
-        const size_t expected = static_cast<size_t>(img.width) * static_cast<size_t>(img.height) * 4;
-        if (img.image.size() == expected) {
-            tex.pixels = QByteArray(reinterpret_cast<const char*>(img.image.data()),
-                                    static_cast<int>(img.image.size()));
-        } else {
-            // Fallback conversion could be placed here.
-        }
-    }
+    tex.encodedPixels = QByteArray(reinterpret_cast<const char*>(img.image.data()),
+                                   static_cast<qsizetype>(img.image.size()));
 
     return tex;
 }
@@ -435,6 +475,8 @@ SceneCPU Loader::loadGltf(const QString &filePath)
 SceneCPU Loader::loadGltf(const QString &filePath, const LoadOptions& options)
 {
     tinygltf::TinyGLTF loader;
+    loader.SetImageLoader(&storeEncodedImageData, nullptr);
+
     tinygltf::Model model;
     std::string error;
     std::string warning;
@@ -470,7 +512,7 @@ SceneCPU Loader::loadGltf(const QString &filePath, const LoadOptions& options)
     for (const MeshCPU& mesh : std::as_const(scene.meshes)) {
         if (mesh.material.baseColorTextureIndex >= 0) {
             const int ti = mesh.material.baseColorTextureIndex;
-            if (scene.textures[ti].width == 0) {
+            if (scene.textures.at(ti).encodedPixels.isEmpty()) {
                 scene.textures[ti] = loadTextureCPU(model, ti, /*isSRGB*/ true);
             }
         }
@@ -511,7 +553,7 @@ void SceneCPU::dump() const
         const TextureCPU& tex = textures[ti];
         qDebug() << "  Texture" << ti
                  << " size=" << tex.width << "x" << tex.height
-                 << " bytes=" << tex.pixels.size()
+                 << " encodedBytes=" << tex.encodedPixels.size()
                  << " isSRGB=" << tex.isSRGB;
     }
 }
@@ -528,25 +570,20 @@ QImage baseColorImage(const SceneCPU& scene, const MaterialCPU& material)
 
 QImage TextureCPU::toImage() const
 {
-    if (width <= 0 || height <= 0) {
+    if (encodedPixels.isEmpty()) {
         return {};
     }
 
-    const qsizetype expectedSize = qsizetype(width) * qsizetype(height) * 4;
-    if (pixels.size() < expectedSize) {
+    // A fresh decode per call, retaining nothing: a caller that wants the pixels
+    // twice holds on to the QImage.
+    QImage image = QImage::fromData(encodedPixels);
+    if (image.isNull()) {
         return {};
     }
 
-    // The QImage borrows the pixel payload; the holder keeps a reference alive
-    // for as long as the image, or any copy of it, exists.
-    auto* holder = new QByteArray(pixels);
-    QImage image(reinterpret_cast<const uchar*>(holder->constData()),
-                 width,
-                 height,
-                 width * 4,
-                 QImage::Format_RGBA8888,
-                 [](void* data) { delete static_cast<QByteArray*>(data); },
-                 holder);
+    if (image.format() != QImage::Format_RGBA8888) {
+        image = image.convertToFormat(QImage::Format_RGBA8888);
+    }
 
     image.setColorSpace(isSRGB ? QColorSpace::SRgb : QColorSpace::SRgbLinear);
 

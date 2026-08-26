@@ -228,19 +228,23 @@ TEST_CASE("Cropping a scrap caches a compressed texture", "[ScrapCompressedTextu
         CHECK_FALSE(reencoded.hasError());
     }
 
-    SECTION("the front end item carries the compressed texture") {
+    SECTION("the front end item carries the cache entry as a descriptor") {
         cwRenderTexturedItems items;
 
         cwRenderTexturedItems::Item item;
         item.storeTexture = true;
         const uint32_t id = items.addItem(item);
 
-        items.updateCompressedTexture(id, texture);
+        const cwStreamedTexture streamed {
+            dataRootDir.absolutePath(),
+            result.compressedKey,
+            texture.size
+        };
+        items.updateStreamedTexture(id, streamed);
 
-        const cwCompressedTexture stored = items.item(id).compressedTexture;
+        const cwStreamedTexture stored = items.item(id).streamedTexture;
         CHECK_FALSE(stored.isNull());
-        CHECK(stored.size == texture.size);
-        CHECK(stored.format == texture.format);
+        CHECK(stored == streamed);
         CHECK(items.item(id).texture.isNull());
     }
 }
