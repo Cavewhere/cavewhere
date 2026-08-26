@@ -67,7 +67,10 @@ private:
             Stale(false)
         {}
 
+        //Keeps the PNG crop's cache entry alive. It carries no pixels.
         cwTrackedImagePtr croppedImage = cwTrackedImagePtr::create();
+        //The decoded RGBA8 crop, populated only when the UASTC encode failed
+        //and the QImage is the scrap's only texture
         cwTextureUploadTask::UploadResult croppedImageData;
         //Where the cropped image's UASTC .ktx2 lives in the disk cache. Empty
         //when the crop wasn't compressed and the QImage is the only texture.

@@ -26,6 +26,7 @@
 #include "cwRootData.h"
 #include "cwScrapManager.h"
 #include "cwStreamedTexture.h"
+#include "cwTextureUploadTask.h"
 #include "cwTriangulatedData.h"
 
 namespace {
@@ -341,9 +342,16 @@ TEST_CASE("A crop's descriptor streams and a failed encode keeps the image",
     CHECK(streamed.size == result.croppedSize);
 
     SECTION("a failed encode leaves a null descriptor, so the image is sent") {
+        //Without a compressed key the triangulation keeps the decoded crop,
+        //and that image is what the renderer gets
+        cwTextureUploadTask::UploadResult uploaded;
+        uploaded.image = gradientImage();
+
         cwTriangulatedData failedEncode;
         failedEncode.setCroppedImageSize(result.croppedSize);
+        failedEncode.setCroppedImageData(uploaded);
         REQUIRE(descriptor(failedEncode).isNull());
+        REQUIRE_FALSE(failedEncode.croppedImageData().isNull());
 
         cwRenderTexturedItems items;
 
@@ -351,7 +359,7 @@ TEST_CASE("A crop's descriptor streams and a failed encode keeps the image",
         item.storeTexture = true;
         const uint32_t id = items.addItem(item);
 
-        items.updateTexture(id, gradientImage());
+        items.updateTexture(id, failedEncode.croppedImageData().image);
 
         CHECK(items.item(id).streamedTexture.isNull());
         CHECK(items.item(id).texture.size() == QSize(kSourceWidth, kSourceHeight));
