@@ -203,6 +203,20 @@ public:
                           const QMatrix4x4& projectionMatrix);
     void setEdlParameters(const EdlParametersData& parameters);
 
+    // This frame's streaming budgets, staged at the sync barrier and stamped
+    // onto every RenderData by stampCamera.
+    void setBudgets(const cwRenderBudgets& budgets) { m_budgets = budgets; }
+    const cwRenderBudgets& budgets() const { return m_budgets; }
+
+    // Counts gathers, not frames drawn: one gatherScene is one selection pass,
+    // so streamed items stamp it as the frame they were last seen in.
+    quint64 frameCounter() const { return m_frameCounter; }
+
+    // True when the last live frame left streaming work behind — levels waiting
+    // on the next frame's upload budget, or loads still running. cwRhiScene
+    // re-arms another frame while it holds.
+    bool hasPendingStreamingWork() const { return m_hasPendingStreamingWork; }
+
     // The frame's visibility truth: one immutable snapshot of the scene's
     // visibility store, captured per sync at the barrier (the GUI thread is
     // blocked, so the read is race-free) and read by every render-side gate —
@@ -381,6 +395,9 @@ private:
     QMatrix4x4 m_viewMatrix;
     float m_devicePixelRatio = 1.0f;
     QSize m_viewportSize;
+    cwRenderBudgets m_budgets;
+    quint64 m_frameCounter = 0;
+    bool m_hasPendingStreamingWork = false;
 
     QRhiBuffer* m_globalUniformBuffer = nullptr;
     quint32 m_globalUniformStride = 0;

@@ -4,6 +4,7 @@
 //Our includes
 #include "cwRHIObject.h"
 #include "cwRenderLinePlot.h"
+#include "cwRenderMemoryLedger.h"
 #include "cwRhiFrameRenderer.h"
 
 //Qt includes
@@ -49,6 +50,9 @@ private:
     QRhiBuffer* m_visibilityBuffer = nullptr;
     QRhiShaderResourceBindings* m_srb = nullptr;
 
+    cwLedgeredBytes m_geometryBytes {cwRenderMemoryLedger::Category::LinePlotGeometry,
+                                     cwRenderMemoryLedger::Residency::Gpu};
+
     //The front end data that will be rendered
     cwTracked<cwRenderLinePlot::Data> m_data;
 
@@ -60,6 +64,7 @@ private:
     qsizetype m_uploadedMaskSegmentCount = -1;
 
     void updateVisibilityBuffer(QRhiResourceUpdateBatch* batch);
+    void reportGeometryBytes();
 
     bool ensurePipeline(const RenderData& data);
     bool ensureShaderResources(QRhi* rhi, cwRhiItemRenderer* renderer);

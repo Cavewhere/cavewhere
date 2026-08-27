@@ -122,7 +122,7 @@ TEST_CASE("cwCropImageTask writes cache under dataRoot", "[cwCropImageTask][cach
     auto future = task.crop();
     REQUIRE(AsyncFuture::waitForFinished(future, 2000));
 
-    cwTrackedImagePtr cropped = future.result();
+    cwTrackedImagePtr cropped = future.result().image;
     REQUIRE(!cropped.isNull());
 
     const QString cachedPath = QFileInfo(cropped->path()).absoluteFilePath();

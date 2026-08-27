@@ -301,6 +301,19 @@ Item {
         }
     }
 
+    // Built only while the setting is on, so a hidden HUD costs nothing — not
+    // even the model's polling timer.
+    Loader {
+        objectName: "renderStatsHudLoader"
+        active: RootData.settings.renderingSettings.showRenderStatsHud
+        anchors.top: parent.top
+        anchors.right: parent.right
+        anchors.margins: Theme.pageMargin
+        z: rootId.zOverlay
+
+        sourceComponent: RenderStatsHud { }
+    }
+
     // The tools are armed from the main sidebar's tool rail (see MainSideBar),
     // which renders the `tools` model above. The picked/measured readout popups
     // stay in the view, keyed off the InteractionManager's active tool.

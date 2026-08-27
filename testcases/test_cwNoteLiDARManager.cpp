@@ -9,6 +9,8 @@
 #include <QVector3D>
 #include <QUrl>
 #include <QHash>
+#include <QElapsedTimer>
+#include <QEventLoop>
 
 #include <algorithm>
 
@@ -486,6 +488,325 @@ TEST_CASE("cwNoteLiDARManager reuses render ids when re-triangulating a note", "
     for (uint32_t id : idsAfter) {
         CHECK(renderItems->hasItem(id));
     }
+}
+
+TEST_CASE("Each LiDAR note reaches the render items as it finishes", "[cwNoteLiDARManager]")
+{
+    // Notes are handed to the renderer one at a time, as each note's own
+    // triangulation finishes, so the 3d view fills in note by note. Delivering
+    // the whole batch at the end left the view empty for the length of the run
+    // and then synchronized everything in one frame.
+    cwJobSettings::initialize();
+
+    auto root = std::make_unique<cwRootData>();
+    REQUIRE(root != nullptr);
+
+    TestHelper helper;
+    helper.loadProjectFromZip(root->project(), testcasesDatasetPath("lidarProjects/jaws of the beast.zip"));
+    root->project()->waitLoadToFinish();
+    root->futureManagerModel()->waitForFinished();
+    root->linePlotManager()->waitToFinish();
+
+    auto* cave = root->region()->cave(0);
+    REQUIRE(cave != nullptr);
+    auto* trip = cave->trip(0);
+    REQUIRE(trip != nullptr);
+    auto* lidarModel = trip->notesLiDAR();
+    REQUIRE(lidarModel != nullptr);
+
+    // Two notes off the same scan: one note can't show the difference between
+    // per-note and end-of-batch delivery.
+    constexpr int kNoteCount = 2;
+    QList<QUrl> lidarFiles;
+    for (int i = 0; i < kNoteCount; i++) {
+        const QString lidarFile = helper.copyToTempDir(testcasesDatasetPath("lidarProjects/9_15_2025 3.glb"));
+        REQUIRE_FALSE(lidarFile.isEmpty());
+        lidarFiles.append(QUrl::fromLocalFile(lidarFile));
+    }
+
+    QSignalSpy rowsInsertedSpy(lidarModel, &QAbstractItemModel::rowsInserted);
+    lidarModel->addFromFiles(lidarFiles);
+    root->futureManagerModel()->waitForFinished();
+    if (rowsInsertedSpy.isEmpty()) {
+        rowsInsertedSpy.wait(1000);
+    }
+    REQUIRE(lidarModel->rowCount() == kNoteCount);
+
+    auto* manager = root->noteLiDARManager();
+    REQUIRE(manager != nullptr);
+
+    QList<cwNoteLiDAR*> notes;
+    for (int row = 0; row < lidarModel->rowCount(); row++) {
+        auto* note = qobject_cast<cwNoteLiDAR*>(
+            lidarModel->data(lidarModel->index(row, 0), cwSurveyNoteModelBase::NoteObjectRole).value<QObject*>());
+        REQUIRE(note != nullptr);
+        CHECK(manager->renderItemIds(note).isEmpty());
+        notes.append(note);
+    }
+
+    const struct { const char* name; QVector3D pos; } stationInputs[] = {
+        {"6", QVector3D(0.19147f, -0.720703f, -2.15723f)},
+        {"7", QVector3D(3.51028f, -0.0917969f, 5.39945f)},
+        {"5", QVector3D(-3.48475f, -1.92188f, -3.38263f)}
+    };
+
+    // Station every note before the event loop runs again, so the restarter's
+    // queued start covers them all in one batch.
+    for (cwNoteLiDAR* note : std::as_const(notes)) {
+        for (const auto& stationInput : stationInputs) {
+            cwNoteLiDARStation station;
+            station.setName(QString::fromUtf8(stationInput.name));
+            station.setPositionOnNote(stationInput.pos);
+            note->addStation(station);
+        }
+    }
+
+    const auto deliveredNoteCount = [&]() {
+        int count = 0;
+        for (cwNoteLiDAR* note : std::as_const(notes)) {
+            if (!manager->renderItemIds(note).isEmpty()) {
+                count++;
+            }
+        }
+        return count;
+    };
+
+    // liDARNotesUpdated fires once the batch's completion handler has run, so
+    // everything observed before it is mid-batch.
+    QSignalSpy batchFinishedSpy(manager, &cwNoteLiDARManager::liDARNotesUpdated);
+
+    constexpr int kBatchTimeoutMs = 120000;
+    constexpr int kPollWaitMs = 2;
+    bool sawPartialDelivery = false;
+    QElapsedTimer batchTimer;
+    batchTimer.start();
+    while (batchFinishedSpy.isEmpty() && batchTimer.elapsed() < kBatchTimeoutMs) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents | QEventLoop::WaitForMoreEvents,
+                                        kPollWaitMs);
+
+        const int delivered = deliveredNoteCount();
+        if (delivered > 0 && delivered < notes.size()) {
+            sawPartialDelivery = true;
+        }
+    }
+
+    root->linePlotManager()->waitToFinish();
+    manager->waitForFinish();
+    root->futureManagerModel()->waitForFinished();
+    QCoreApplication::processEvents();
+
+    // Every note ended up delivered, exactly one set of render items each.
+    CHECK(deliveredNoteCount() == notes.size());
+    CHECK(sawPartialDelivery);
+}
+
+TEST_CASE("A LiDAR note deleted mid-run never reaches the render items", "[cwNoteLiDARManager]")
+{
+    // Per-note delivery hands each result to the renderer while the batch is
+    // still running, so a note removed after the batch started can have its
+    // result arrive after the note is gone. deliverNote drops it.
+    cwJobSettings::initialize();
+
+    auto root = std::make_unique<cwRootData>();
+    REQUIRE(root != nullptr);
+
+    TestHelper helper;
+    helper.loadProjectFromZip(root->project(), testcasesDatasetPath("lidarProjects/jaws of the beast.zip"));
+    root->project()->waitLoadToFinish();
+    root->futureManagerModel()->waitForFinished();
+    root->linePlotManager()->waitToFinish();
+
+    auto* cave = root->region()->cave(0);
+    REQUIRE(cave != nullptr);
+    auto* trip = cave->trip(0);
+    REQUIRE(trip != nullptr);
+    auto* lidarModel = trip->notesLiDAR();
+    REQUIRE(lidarModel != nullptr);
+
+    constexpr int kNoteCount = 2;
+    QList<QUrl> lidarFiles;
+    for (int i = 0; i < kNoteCount; i++) {
+        const QString lidarFile = helper.copyToTempDir(testcasesDatasetPath("lidarProjects/9_15_2025 3.glb"));
+        REQUIRE_FALSE(lidarFile.isEmpty());
+        lidarFiles.append(QUrl::fromLocalFile(lidarFile));
+    }
+
+    QSignalSpy rowsInsertedSpy(lidarModel, &QAbstractItemModel::rowsInserted);
+    lidarModel->addFromFiles(lidarFiles);
+    root->futureManagerModel()->waitForFinished();
+    if (rowsInsertedSpy.isEmpty()) {
+        rowsInsertedSpy.wait(1000);
+    }
+    REQUIRE(lidarModel->rowCount() == kNoteCount);
+
+    auto* manager = root->noteLiDARManager();
+    REQUIRE(manager != nullptr);
+
+    QList<cwNoteLiDAR*> notes;
+    for (int row = 0; row < lidarModel->rowCount(); row++) {
+        auto* note = qobject_cast<cwNoteLiDAR*>(
+            lidarModel->data(lidarModel->index(row, 0), cwSurveyNoteModelBase::NoteObjectRole).value<QObject*>());
+        REQUIRE(note != nullptr);
+        notes.append(note);
+    }
+
+    const struct { const char* name; QVector3D pos; } stationInputs[] = {
+        {"6", QVector3D(0.19147f, -0.720703f, -2.15723f)},
+        {"7", QVector3D(3.51028f, -0.0917969f, 5.39945f)},
+        {"5", QVector3D(-3.48475f, -1.92188f, -3.38263f)}
+    };
+
+    for (cwNoteLiDAR* note : std::as_const(notes)) {
+        for (const auto& stationInput : stationInputs) {
+            cwNoteLiDARStation station;
+            station.setName(QString::fromUtf8(stationInput.name));
+            station.setPositionOnNote(stationInput.pos);
+            note->addStation(station);
+        }
+    }
+
+    // Let the queued start dispatch, so the removal below lands while the
+    // triangulation of both notes is in flight.
+    constexpr int kRunStartTimeoutMs = 30000;
+    constexpr int kPollWaitMs = 2;
+    QElapsedTimer startTimer;
+    startTimer.start();
+    while (manager->updateState() != cwUpdatable::State::Working
+           && startTimer.elapsed() < kRunStartTimeoutMs) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents | QEventLoop::WaitForMoreEvents,
+                                        kPollWaitMs);
+    }
+    REQUIRE(manager->updateState() == cwUpdatable::State::Working);
+
+    // The pointer outlives the row: removeNote() defers the delete, and the
+    // manager only ever uses it as a hash key.
+    cwNoteLiDAR* removedNote = notes.at(1);
+    lidarModel->removeNote(1);
+
+    root->linePlotManager()->waitToFinish();
+    manager->waitForFinish();
+    root->futureManagerModel()->waitForFinished();
+    QCoreApplication::processEvents();
+
+    CHECK(lidarModel->rowCount() == kNoteCount - 1);
+    CHECK_FALSE(manager->renderItemIds(notes.at(0)).isEmpty());
+    // The removal cleared the note's render ids; a delivery after it would put
+    // them back — and leave items in the scene for a note that no longer exists.
+    CHECK(manager->renderItemIds(removedNote).isEmpty());
+
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+}
+
+TEST_CASE("A restarted LiDAR batch delivers only the new run's results", "[cwNoteLiDARManager]")
+{
+    // Restarting swaps in a fresh watcher, so the abandoned run's per-note
+    // deliveries never fire. If a stale result landed after the new run's, the
+    // note would be left showing geometry built from the superseded transform.
+    cwJobSettings::initialize();
+
+    auto root = std::make_unique<cwRootData>();
+    REQUIRE(root != nullptr);
+
+    TestHelper helper;
+    helper.loadProjectFromZip(root->project(), testcasesDatasetPath("lidarProjects/jaws of the beast.zip"));
+    root->project()->waitLoadToFinish();
+    root->futureManagerModel()->waitForFinished();
+    root->linePlotManager()->waitToFinish();
+
+    auto* cave = root->region()->cave(0);
+    REQUIRE(cave != nullptr);
+    auto* trip = cave->trip(0);
+    REQUIRE(trip != nullptr);
+    auto* lidarModel = trip->notesLiDAR();
+    REQUIRE(lidarModel != nullptr);
+
+    const QString lidarFile = helper.copyToTempDir(testcasesDatasetPath("lidarProjects/9_15_2025 3.glb"));
+    REQUIRE_FALSE(lidarFile.isEmpty());
+
+    QSignalSpy rowsInsertedSpy(lidarModel, &QAbstractItemModel::rowsInserted);
+    lidarModel->addFromFiles({ QUrl::fromLocalFile(lidarFile) });
+    root->futureManagerModel()->waitForFinished();
+    if (rowsInsertedSpy.isEmpty()) {
+        rowsInsertedSpy.wait(1000);
+    }
+    REQUIRE(lidarModel->rowCount() == 1);
+
+    auto* note = qobject_cast<cwNoteLiDAR*>(
+        lidarModel->data(lidarModel->index(0, 0), cwSurveyNoteModelBase::NoteObjectRole).value<QObject*>());
+    REQUIRE(note != nullptr);
+
+    auto* manager = root->noteLiDARManager();
+    REQUIRE(manager != nullptr);
+    manager->setKeepRenderGeometry(true);
+
+    const struct { const char* name; QVector3D pos; } stationInputs[] = {
+        {"6", QVector3D(0.19147f, -0.720703f, -2.15723f)},
+        {"7", QVector3D(3.51028f, -0.0917969f, 5.39945f)},
+        {"5", QVector3D(-3.48475f, -1.92188f, -3.38263f)}
+    };
+    for (const auto& stationInput : stationInputs) {
+        cwNoteLiDARStation station;
+        station.setName(QString::fromUtf8(stationInput.name));
+        station.setPositionOnNote(stationInput.pos);
+        note->addStation(station);
+    }
+
+    auto settle = [&]() {
+        root->linePlotManager()->waitToFinish();
+        manager->waitForFinish();
+        root->futureManagerModel()->waitForFinished();
+        QCoreApplication::processEvents();
+    };
+
+    settle();
+
+    auto* renderItems = root->regionSceneManager()->items();
+    REQUIRE(renderItems != nullptr);
+
+    // The first vertex of every item is enough to tell one run's morphed
+    // geometry from another's.
+    const auto geometrySignature = [&]() {
+        QList<QVector3D> signature;
+        for (uint32_t id : manager->renderItemIds(note)) {
+            REQUIRE(renderItems->hasItem(id));
+            const auto item = renderItems->item(id);
+            const auto* positionAttribute = item.geometry.attribute(cwGeometry::Semantic::Position);
+            REQUIRE(positionAttribute != nullptr);
+            REQUIRE(item.geometry.vertexCount() > 0);
+            signature.append(item.geometry.value<QVector3D>(positionAttribute, 0));
+        }
+        return signature;
+    };
+
+    const QList<QVector3D> zeroDeclinationSignature = geometrySignature();
+    REQUIRE_FALSE(zeroDeclinationSignature.isEmpty());
+
+    // Start a run at one declination and restart it at another while the first
+    // is still triangulating.
+    constexpr double kSupersededDeclination = 30.0;
+    trip->calibrations()->setDeclinationManual(kSupersededDeclination);
+
+    constexpr int kRunStartTimeoutMs = 30000;
+    constexpr int kPollWaitMs = 2;
+    QElapsedTimer startTimer;
+    startTimer.start();
+    while (manager->updateState() != cwUpdatable::State::Working
+           && startTimer.elapsed() < kRunStartTimeoutMs) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents | QEventLoop::WaitForMoreEvents,
+                                        kPollWaitMs);
+    }
+    REQUIRE(manager->updateState() == cwUpdatable::State::Working);
+
+    trip->calibrations()->setDeclinationManual(0.0);
+    settle();
+
+    // Back where it started: the abandoned 30° run contributed nothing.
+    CHECK(geometrySignature() == zeroDeclinationSignature);
+
+    // And the check has teeth — that declination really does move the geometry.
+    trip->calibrations()->setDeclinationManual(kSupersededDeclination);
+    settle();
+    CHECK(geometrySignature() != zeroDeclinationSignature);
 }
 
 TEST_CASE("Deleting the last dirty LiDAR note announces the pipeline is clean",

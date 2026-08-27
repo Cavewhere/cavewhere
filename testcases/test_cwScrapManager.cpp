@@ -22,10 +22,13 @@
 #include "cwKeywordItemModel.h"
 #include "cwKeywordItem.h"
 #include "cwRenderTexturedItemVisibility.h"
+#include "cwRenderTexturedItems.h"
+#include "cwRegionSceneManager.h"
 #include "cwRunningProfileScrapViewMatrix.h"
 #include "cwImageUtils.h"
 #include "cwCavingRegion.h"
 #include "cwScrap.h"
+#include "cwLead.h"
 
 //Qt includes
 #include <QFile>
@@ -51,6 +54,24 @@ namespace {
     {
         scrapManager->markAllScrapsDirty();
         scrapManager->runIfNeeded();
+    }
+
+    //Render ids are handed out from 1 and every dataset here has a handful of
+    //items, so scanning this far covers them all.
+    constexpr uint32_t kMaxScannedRenderId = 64;
+
+    //How many render items carry a streamed-texture descriptor. cwScrapManager
+    //sets one when it delivers a scrap, so this counts the scraps the renderer
+    //has been given.
+    int deliveredScrapCount(const cwRenderTexturedItems* renderItems)
+    {
+        int count = 0;
+        for(uint32_t id = 1; id <= kMaxScannedRenderId; id++) {
+            if(renderItems->hasItem(id) && !renderItems->item(id).streamedTexture.isNull()) {
+                count++;
+            }
+        }
+        return count;
     }
 }
 
@@ -293,6 +314,96 @@ TEST_CASE("Scrap pipeline reports Working while a triangulation task is in fligh
     CHECK(scrapManager->updateState() == cwUpdatable::State::Clean);
 }
 
+
+TEST_CASE("Each scrap reaches the render items as it finishes", "[cwScrapManager]") {
+    // Scraps are handed to the renderer one at a time, as each triangulation
+    // finishes, so the 3d view fills in scrap by scrap. Delivering the whole
+    // batch at the end left the view empty for the length of the run and then
+    // synchronized everything in one frame.
+    requireAutomaticUpdatesEnabled();
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    auto scrapManager = rootData->scrapManager();
+    REQUIRE(scrapManager != nullptr);
+    auto renderItems = rootData->regionSceneManager()->items();
+    REQUIRE(renderItems != nullptr);
+
+    fileToProject(project, testcasesDatasetPath("test_cwScrapManager/scrapGuessNeigborPlan.cw"));
+    rootData->futureManagerModel()->waitForFinished();
+    scrapManager->waitForFinish();
+    QCoreApplication::processEvents();
+
+    auto note = project->cavingRegion()->cave(0)->trip(0)->notes()->notes().first();
+    REQUIRE(note->scraps().size() == 1);
+    auto firstScrap = note->scraps().first();
+
+    // The dataset carries a single scrap, and one scrap can't show the
+    // difference between per-scrap and end-of-batch delivery. Copy it, nudged
+    // off the original, so the batch below has several scraps to triangulate.
+    constexpr int kExtraScrapCount = 2;
+    constexpr double kScrapOffset = 0.02;
+    QList<cwScrap*> extraScraps;
+    for(int i = 1; i <= kExtraScrapCount; i++) {
+        auto* scrap = new cwScrap();
+        const QPointF offset(kScrapOffset * i, 0.0);
+
+        const QList<QPointF> points = firstScrap->points();
+        for(int pointIndex = 0; pointIndex < points.size(); pointIndex++) {
+            scrap->insertPoint(pointIndex, points.at(pointIndex) + offset);
+        }
+
+        const QList<cwNoteStation> stations = firstScrap->stations();
+        for(const cwNoteStation& station : stations) {
+            cwNoteStation copy = station;
+            copy.setPositionOnNote(station.positionOnNote() + offset);
+            scrap->addStation(copy);
+        }
+
+        // Delivering a scrap writes its lead positions, so a lead makes each
+        // delivery observable at the instant it happens.
+        cwLead lead;
+        lead.setDescription(QStringLiteral("Lead %1").arg(i));
+        lead.setPositionOnNote(stations.first().positionOnNote() + offset);
+        scrap->addLead(lead);
+
+        note->addScrap(scrap);
+        extraScraps.append(scrap);
+    }
+
+    const int totalScraps = scrapManager->renderScrapCount();
+    REQUIRE(totalScraps == kExtraScrapCount + 1);
+
+    // Count the deliveries, and the pipeline state each one landed in. A scrap
+    // delivered while the pipeline is still Working got there ahead of the
+    // batch's completion handler, which is what per-scrap delivery buys; the
+    // end-of-batch push ran after that handler had left Working.
+    QHash<cwScrap*, int> deliveryCount;
+    int deliveriesWhileWorking = 0;
+    for(cwScrap* scrap : std::as_const(extraScraps)) {
+        QObject::connect(scrap, &cwScrap::leadsDataChanged, scrapManager,
+                         [&, scrap](int, int, QList<int>)
+        {
+            deliveryCount[scrap]++;
+            if(scrapManager->updateState() == cwUpdatable::State::Working) {
+                deliveriesWhileWorking++;
+            }
+        });
+    }
+
+    scrapManager->waitForFinish();
+    rootData->futureManagerModel()->waitForFinished();
+    QCoreApplication::processEvents();
+
+    // Every scrap ended up delivered, exactly one texture descriptor each.
+    CHECK(deliveredScrapCount(renderItems) == totalScraps);
+
+    // Each scrap was delivered exactly once, mid-run.
+    for(cwScrap* scrap : std::as_const(extraScraps)) {
+        CHECK(deliveryCount.value(scrap) == 1);
+    }
+    CHECK(deliveriesWhileWorking == extraScraps.size());
+}
 
 TEST_CASE("cwScrapManager shouldn't update scraps that are invalid", "[cwScrapManager]") {
     requireAutomaticUpdatesEnabled();

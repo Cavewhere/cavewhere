@@ -176,6 +176,15 @@ QC.Menu {
 
 
         QC.MenuItem {
+            text: "Render Stats HUD"
+            checked: RootData.settings.renderingSettings.showRenderStatsHud
+            checkable: true
+            onTriggered: {
+                RootData.settings.renderingSettings.showRenderStatsHud = !RootData.settings.renderingSettings.showRenderStatsHud
+            }
+        }
+
+        QC.MenuItem {
             text: "Station Labels Visible"
             checked: RootData.stationsVisible
             checkable: true

@@ -26,6 +26,8 @@
 #include "cwPlanScrapViewMatrix.h"
 #include "cwUnits.h"
 #include "cwTextureUploadTask.h"
+#include "cwDiskCacher.h"
+#include "cwStreamedTexture.h"
 #include "asyncfuture.h"
 
 //Qt includes
@@ -116,6 +118,14 @@ static QSize rawPixelSize(const QString& imagePath)
     return reader.size();
 }
 
+//Shared by every triangulation in this file. The pid keeps concurrent test
+//processes out of each other's cache.
+static QDir triangulateTaskDataRootDir()
+{
+    return QDir(QDir::temp().filePath(
+        QStringLiteral("cwTriangulateTask-%1").arg(QCoreApplication::applicationPid())));
+}
+
 static cwTriangulatedData triangulateImageAtPath(const QString& imagePath,
                                                   QSize overrideOriginalSize = QSize())
 {
@@ -172,8 +182,7 @@ static cwTriangulatedData triangulateImageAtPath(const QString& imagePath,
     inData.setViewMatrix(new cwPlanScrapViewMatrix::Data());
     inData.setNoteImageResolution(qRound(300.0 / 0.0254));
 
-    const QDir tempDir(QDir::temp().filePath(
-        QStringLiteral("cwTriangulateTask-%1").arg(QCoreApplication::applicationPid())));
+    const QDir tempDir = triangulateTaskDataRootDir();
     tempDir.mkpath(".");
 
     cwTriangulateTask task;
@@ -186,6 +195,36 @@ static cwTriangulatedData triangulateImageAtPath(const QString& imagePath,
     REQUIRE(futures.first().resultCount() == 1);
 
     return futures.first().result();
+}
+
+TEST_CASE("A compressed crop skips the decode and still reaches the renderer",
+          "[cwTriangulateTask][ScrapCompressedTexture]") {
+    const QString imagePath = QDir(testDatasetDir())
+                                  .filePath(QStringLiteral("scrap-image-no-rotation.jpg"));
+    REQUIRE(QFileInfo::exists(imagePath));
+
+    const cwTriangulatedData data = triangulateImageAtPath(imagePath);
+    REQUIRE_FALSE(data.isNull());
+    REQUIRE_FALSE(data.compressedTextureKey().id.isEmpty());
+
+    //The gate: the render thread streams the KTX2 entry, so the PNG crop is
+    //never decoded and no RGBA8 pixels ride along
+    CHECK(data.croppedImageData().image.isNull());
+
+    //The tracked image still holds the PNG cache entry open
+    REQUIRE_FALSE(data.croppedImagePtr().isNull());
+    CHECK(QFileInfo::exists(data.croppedImage().path()));
+
+    const QDir dataRootDir = triangulateTaskDataRootDir();
+    const cwStreamedTexture streamed {
+        dataRootDir.absolutePath(),
+        data.compressedTextureKey(),
+        data.croppedImageSize()
+    };
+    REQUIRE_FALSE(streamed.isNull());
+
+    cwDiskCacher cacher(dataRootDir);
+    CHECK(cacher.hasEntry(streamed.key));
 }
 
 TEST_CASE("cwTriangulateTask produces consistent geometry for EXIF-rotated images", "[cwTriangulateTask]") {

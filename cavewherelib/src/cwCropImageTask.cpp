@@ -11,6 +11,8 @@
 #include "cwConcurrent.h"
 #include "cwDiskCacher.h"
 #include "cwDebug.h"
+#include "cwKtx2Codec.h"
+#include "cwOpenGLUtils.h"
 
 //Async future
 #include <asyncfuture.h>
@@ -21,6 +23,77 @@
 
 //Std includes
 #include <algorithm>
+
+namespace {
+    //Keeps scrap textures below the smallest common driver texture limit
+    constexpr int kMaxCropPixelDimension = 4096;
+
+    /**
+     * Marks the compressed scrap entries in the disk cache. The trailing number
+     * is the encode's generation: bump it whenever the encoded bytes change for
+     * inputs that hash the same, so old entries stop being served.
+     */
+    constexpr QLatin1StringView kCompressedScrapKeySuffix("-uastc1");
+
+    /**
+     * The shared part of both cache keys for one crop: the crop rect, plus the
+     * suffix that marks a downscaled crop.
+     */
+    QString cropKeyPrefix(const QRectF& crop, const QString& keySuffix)
+    {
+        return QString::number(crop.x())
+               + QStringLiteral("-")
+               + QString::number(crop.y())
+               + QStringLiteral("_")
+               + QString::number(crop.width())
+               + QStringLiteral("x")
+               + QString::number(crop.height())
+               + QStringLiteral("crop")
+               + keySuffix;
+    }
+
+    /**
+     * Encodes croppedImage as UASTC .ktx2 and stores it beside the PNG crop in
+     * the disk cache, keyed off the same content hash so an edited note
+     * invalidates both entries together. Returns an empty key when the encode
+     * failed and the caller should stay on the PNG crop.
+     *
+     * The cache lookup comes first: encoding a 4096 pixel crop costs seconds of
+     * CPU, and rewarping a note re-crops pixels that are usually unchanged. The
+     * lookup reads the entry rather than testing the file's existence, because
+     * an edited note lands on the same cache file path with a new checksum and
+     * only a read notices that the stored bytes are stale.
+     */
+    cwDiskCacher::Key addCompressedCropToCache(const QDir& dataRootDir,
+                                               const QImage& croppedImage,
+                                               const QString& pathToImage,
+                                               const QString& keyPrefix,
+                                               quint64 parentHash)
+    {
+        const cwDiskCacher::Key key = cwImageProvider::imageCacheKey(
+            pathToImage,
+            keyPrefix + kCompressedScrapKeySuffix,
+            parentHash);
+
+        cwDiskCacher cacher(dataRootDir);
+        if(!cacher.entry(key).isEmpty()) {
+            return key;
+        }
+
+        //Scrap texcoords use the OpenGL bottom-left origin, so the compressed
+        //texture must carry the same flip cwOpenGLUtils::toGLTexture() gives the
+        //uncompressed path
+        const auto encoded = cw::ktx2::encodeRgba(cwOpenGLUtils::toGLTexture(croppedImage));
+        if(encoded.hasError()) {
+            qWarning() << "Can't compress scrap texture, using the uncompressed image:"
+                       << encoded.errorMessage();
+            return {};
+        }
+
+        cacher.insert(key, encoded.value());
+        return key;
+    }
+}
 
 cwCropImageTask::cwCropImageTask(QObject* parent) :
     QObject(parent) {
@@ -52,70 +125,20 @@ void cwCropImageTask::setDataRootDir(const QDir& dataRootDir)
     DataRootDir = dataRootDir;
 }
 
-QFuture<cwTrackedImagePtr> cwCropImageTask::crop()
+QFuture<cwCropImageTask::Result> cwCropImageTask::crop()
 {
     auto originalImage = Original;
     auto cropRect = CropRect;
-    auto format = Format;
     auto dataRootDir = DataRootDir;
 
     struct Image {
         cwDiskCacher::Key key;
+        cwDiskCacher::Key compressedKey;
         QImage croppedImage;
         int dotsPerMeter;
     };
 
-    auto hash = [](const QImage& image)->quint64 {
-        return cwImageProvider::imageHash(image);
-    };
-
-
-
-    auto addCropToDatabase = [dataRootDir](
-                                 QImage image,
-                                 QString pathToImage,
-                                 const QRectF& crop,
-                                 quint64 parentHash) {
-        // QFileInfo info(pathToImage);
-
-        auto toString = [](const QRectF crop) {
-            return
-                QString::number(crop.x())
-                + "-" +
-                QString::number(crop.y())
-                + "_" +
-                QString::number(crop.width())
-                + "x" +
-                QString::number(crop.height());
-        };
-
-        // cwDiskCacher::Key key {
-        //                       toString(crop) + QStringLiteral("crop-") + info.fileName() + QStringLiteral(".") + cwImageProvider::imageCacheExtension(),
-        //                       info.dir(),
-        //                       QString::number(parentHash, 16)
-        // };
-
-        // QByteArray imageData;
-        // QBuffer buffer(&imageData);
-        // buffer.open(QIODevice::WriteOnly);
-        // image.save(&buffer, "PNG");
-        // buffer.close();
-
-        // //Save image data into the disk cacher
-        // cwDiskCacher cacher(dir);
-        // cacher.insert(key, imageData);
-        // return key;
-
-        return cwImageProvider::addToImageCache(dataRootDir.path(),
-                                                image,
-                                                cwImageProvider::imageCacheKey(
-                                                    pathToImage,
-                                                    toString(crop) + QStringLiteral("crop"),
-                                                    parentHash)
-                                                );
-    };
-
-    auto cropImage = [dataRootDir, originalImage, cropRect, addCropToDatabase, hash]()->Image {
+    auto cropImage = [dataRootDir, originalImage, cropRect]()->Image {
             const QString originalPath = originalImage.path();
             cwImageProvider provider;
             provider.setDataRootDir(dataRootDir);
@@ -129,14 +152,41 @@ QFuture<cwTrackedImagePtr> cwCropImageTask::crop()
 
             if(!image.isNull()) {
                 QImage croppedImage = image.copy(cropArea);
-                auto key = addCropToDatabase(croppedImage, originalImage.path(), cropArea, hash(image));
-                return Image({key, image.copy(cropArea), originalImage.originalDotsPerMeter()});
+                int dotsPerMeter = originalImage.originalDotsPerMeter();
+                QString keySuffix;
+
+                if(std::max(croppedImage.width(), croppedImage.height()) > kMaxCropPixelDimension) {
+                    croppedImage = croppedImage.scaled(kMaxCropPixelDimension,
+                                                       kMaxCropPixelDimension,
+                                                       Qt::KeepAspectRatio,
+                                                       Qt::SmoothTransformation);
+
+                    const double scale = static_cast<double>(croppedImage.width())
+                                         / static_cast<double>(cropArea.width());
+                    dotsPerMeter = static_cast<int>(std::round(dotsPerMeter * scale));
+                    keySuffix = QStringLiteral("-max")
+                                + QString::number(kMaxCropPixelDimension);
+                }
+
+                const quint64 parentHash = cwImageProvider::imageHash(image);
+                const QString keyPrefix = cropKeyPrefix(cropArea, keySuffix);
+
+                const auto key = cwImageProvider::addToImageCache(
+                    dataRootDir.path(),
+                    croppedImage,
+                    cwImageProvider::imageCacheKey(originalPath, keyPrefix, parentHash));
+                const auto compressedKey = addCompressedCropToCache(dataRootDir,
+                                                                    croppedImage,
+                                                                    originalPath,
+                                                                    keyPrefix,
+                                                                    parentHash);
+                return Image({key, compressedKey, croppedImage, dotsPerMeter});
             }
 
             QImage badImage(cropArea.size(), QImage::Format_ARGB32);
             badImage.fill(QColor("red"));
             // qDebug() << "Original image is bad id:" << originalImage.original() << imageData.data().size() << imageData.size() << imageData.format() << LOCATION;
-            return Image({{}, badImage, 0});
+            return Image({{}, {}, badImage, 0});
     };
 
     auto cropFuture = cwConcurrent::run(cropImage);
@@ -144,22 +194,25 @@ QFuture<cwTrackedImagePtr> cwCropImageTask::crop()
     auto finishedFuture =
         AsyncFuture::observe(cropFuture)
             .subscribe([cropFuture, dataRootDir]() {
-            auto dir = dataRootDir;
-            auto cropRGBImage = cropFuture.result();
+                const auto cropRGBImage = cropFuture.result();
 
-            if(!cropRGBImage.key.id.isEmpty()) {
-                cwDiskCacher cacher(dir);
-                    auto filePath = cacher.filePath(cropRGBImage.key);
-                    cwImage image;
-                    image.setOriginalSize(cropRGBImage.croppedImage.size());
-                    image.setPath(filePath);
-
-                    return cwTrackedImage::createShared(image,
-                                                        image.path(),
-                                                        cwTrackedImage::NoOwnership);
+                if(cropRGBImage.key.id.isEmpty()) {
+                    return Result();
                 }
 
-                return cwTrackedImagePtr();
+                const cwDiskCacher cacher(dataRootDir);
+                cwImage image;
+                image.setOriginalSize(cropRGBImage.croppedImage.size());
+                image.setOriginalDotsPerMeter(cropRGBImage.dotsPerMeter);
+                image.setPath(cacher.filePath(cropRGBImage.key));
+
+                return Result {
+                    cwTrackedImage::createShared(image,
+                                                 image.path(),
+                                                 cwTrackedImage::NoOwnership),
+                    cropRGBImage.compressedKey,
+                    cropRGBImage.croppedImage.size()
+                };
             }).future();
 
     return finishedFuture;

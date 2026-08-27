@@ -38,8 +38,13 @@ struct AttributeView {
     bool normalized = false;
 };
 
+/**
+ * A texture as the glTF stored it: the PNG or JPEG bytes, undecoded. width and
+ * height come from the encoded header, so the dimensions are known without
+ * touching a pixel, and toImage() decodes on demand and keeps nothing.
+ */
 struct TextureCPU {
-    QByteArray pixels; // RGBA8
+    QByteArray encodedPixels; // PNG/JPEG bytes, exactly as the glTF holds them
     int width = 0;
     int height = 0;
     bool isSRGB = false;
@@ -72,6 +77,9 @@ struct SceneCPU {
 struct LoadOptions {
     QVector<cwGeometry::AttributeDesc> requestedLayout;
 };
+
+// Returns a null QImage for materials without a baseColor texture.
+CAVEWHERE_LIB_EXPORT QImage baseColorImage(const SceneCPU& scene, const MaterialCPU& material);
 
 class CAVEWHERE_LIB_EXPORT Loader
 {

@@ -6,6 +6,7 @@
 #include "cwScene.h"
 #include "cwSceneVisibility.h"
 #include "cwEDLSettings.h"
+#include "cwRenderingSettings.h"
 #include "cwCamera.h"
 #include "cwOffscreenRenderJob.h"
 #include "cwRhiOffscreenRenderer.h"
@@ -59,6 +60,20 @@ void cwRhiScene::synchroize(cwScene *scene, cwRhiItemRenderer* renderer)
     }
 
     m_frame.setEdlParameters(scene->edl()->parameters());
+
+    // The budget knobs live on a GUI-thread singleton, and this barrier is the
+    // one point the render thread may read it — the same reason the visibility
+    // snapshot is taken here. Without the singleton (tests, tools) the frame
+    // keeps cwRenderBudgets' defaults.
+    if(auto* settings = cwRenderingSettings::instance()) {
+        cwRenderBudgets budgets;
+        budgets.gpuBudgetBytes = qint64(settings->gpuMemoryBudgetMb()) * cw::budgets::kBytesPerMegabyte;
+        budgets.cpuBudgetBytes = qint64(settings->cpuCacheBudgetMb()) * cw::budgets::kBytesPerMegabyte;
+        budgets.uploadBudgetBytesPerFrame =
+            qint64(settings->uploadBudgetMbPerFrame()) * cw::budgets::kBytesPerMegabyte;
+        budgets.screenSpaceErrorPx = settings->screenSpaceErrorPx();
+        m_frame.setBudgets(budgets);
+    }
 
     // One visibility snapshot per sync: the GUI thread is blocked at this
     // barrier, so reading the store here is race-free, and everything the frame
@@ -135,5 +150,11 @@ void cwRhiScene::render(QRhiCommandBuffer *cb, cwRhiItemRenderer *renderer)
         if (renderer) {
             renderer->requestUpdate();
         }
+    }
+
+    // Streaming spends a bounded slice of each frame, so the levels it still
+    // owes need another frame to land in — exactly like the offscreen drain.
+    if (m_frame.hasPendingStreamingWork() && renderer) {
+        renderer->requestUpdate();
     }
 }

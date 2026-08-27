@@ -1,5 +1,6 @@
 //Catch includes
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
 
 //Our includes
 #include "cwRenderingSettings.h"
@@ -103,6 +104,170 @@ TEST_CASE("cwRenderingSettings setter updates, clamps, persists, and emits", "[c
 
     settings->setSupportedSampleCounts({1, 2, 4, 8});
     settings->setSampleCount(4);
+}
+
+TEST_CASE("cwRenderingSettings showRenderStatsHud round-trips, persists, and emits", "[cwRenderingSettings]")
+{
+    cwRenderingSettings::initialize();
+    auto settings = cwRenderingSettings::instance();
+    REQUIRE(settings);
+    settings->setSupportedSampleCounts({1, 2, 4, 8});
+    settings->setSampleCount(4);
+    settings->setShowRenderStatsHud(false);
+
+    cwSignalSpy hudSpy(settings, &cwRenderingSettings::showRenderStatsHudChanged);
+    hudSpy.setObjectName("showRenderStatsHudSpy");
+
+    SpyChecker checker = {
+        {&hudSpy, 0},
+    };
+
+    QSettings diskSettings;
+
+    SECTION("the HUD is off by default") {
+        CHECK_FALSE(settings->showRenderStatsHud());
+        CHECK(settings->isAtDefaults());
+    }
+
+    SECTION("enabling round-trips, persists to QSettings, and fires once") {
+        settings->setShowRenderStatsHud(true);
+        checker[&hudSpy]++;
+        checker.checkSpies();
+
+        CHECK(settings->showRenderStatsHud());
+        CHECK(diskSettings.value(QStringLiteral("rendering/showRenderStatsHud")).toBool());
+    }
+
+    SECTION("setting the current value is a no-op and emits nothing") {
+        settings->setShowRenderStatsHud(false);
+        checker.checkSpies();
+    }
+
+    SECTION("the HUD participates in isAtDefaults and resetToDefaults") {
+        settings->setShowRenderStatsHud(true);
+        CHECK_FALSE(settings->isAtDefaults());
+
+        settings->resetToDefaults();
+        CHECK_FALSE(settings->showRenderStatsHud());
+        CHECK(settings->sampleCount() == 4);
+        CHECK(settings->isAtDefaults());
+    }
+
+    settings->setShowRenderStatsHud(false);
+    settings->setSampleCount(4);
+}
+
+TEST_CASE("cwRenderingSettings budget knobs round-trip, clamp, persist, and emit", "[cwRenderingSettings]")
+{
+    cwRenderingSettings::initialize();
+    auto settings = cwRenderingSettings::instance();
+    REQUIRE(settings);
+    settings->resetToDefaults();
+
+    cwSignalSpy gpuSpy(settings, &cwRenderingSettings::gpuMemoryBudgetMbChanged);
+    gpuSpy.setObjectName("gpuMemoryBudgetMbSpy");
+    cwSignalSpy cpuSpy(settings, &cwRenderingSettings::cpuCacheBudgetMbChanged);
+    cpuSpy.setObjectName("cpuCacheBudgetMbSpy");
+    cwSignalSpy uploadSpy(settings, &cwRenderingSettings::uploadBudgetMbPerFrameChanged);
+    uploadSpy.setObjectName("uploadBudgetMbPerFrameSpy");
+    cwSignalSpy errorSpy(settings, &cwRenderingSettings::screenSpaceErrorPxChanged);
+    errorSpy.setObjectName("screenSpaceErrorPxSpy");
+
+    SpyChecker checker = {
+        {&gpuSpy, 0},
+        {&cpuSpy, 0},
+        {&uploadSpy, 0},
+        {&errorSpy, 0},
+    };
+
+    QSettings diskSettings;
+
+    SECTION("the budgets start at their defaults") {
+        CHECK(settings->gpuMemoryBudgetMb() == 1536);
+        CHECK(settings->cpuCacheBudgetMb() == 512);
+        CHECK(settings->uploadBudgetMbPerFrame() == 8);
+        CHECK(settings->screenSpaceErrorPx() == Catch::Approx(1.5));
+        CHECK(settings->isAtDefaults());
+    }
+
+    SECTION("each setter round-trips, persists to QSettings, and fires once") {
+        settings->setGpuMemoryBudgetMb(2048);
+        checker[&gpuSpy]++;
+        settings->setCpuCacheBudgetMb(1024);
+        checker[&cpuSpy]++;
+        settings->setUploadBudgetMbPerFrame(16);
+        checker[&uploadSpy]++;
+        settings->setScreenSpaceErrorPx(2.5);
+        checker[&errorSpy]++;
+        checker.checkSpies();
+
+        CHECK(settings->gpuMemoryBudgetMb() == 2048);
+        CHECK(settings->cpuCacheBudgetMb() == 1024);
+        CHECK(settings->uploadBudgetMbPerFrame() == 16);
+        CHECK(settings->screenSpaceErrorPx() == Catch::Approx(2.5));
+
+        CHECK(diskSettings.value(QStringLiteral("rendering/gpuMemoryBudgetMb")).toInt() == 2048);
+        CHECK(diskSettings.value(QStringLiteral("rendering/cpuCacheBudgetMb")).toInt() == 1024);
+        CHECK(diskSettings.value(QStringLiteral("rendering/uploadBudgetMbPerFrame")).toInt() == 16);
+        CHECK(diskSettings.value(QStringLiteral("rendering/screenSpaceErrorPx")).toDouble() == Catch::Approx(2.5));
+
+        CHECK_FALSE(settings->isAtDefaults());
+    }
+
+    SECTION("values below the minimum clamp up") {
+        settings->setGpuMemoryBudgetMb(1);
+        CHECK(settings->gpuMemoryBudgetMb() == 256);
+
+        settings->setCpuCacheBudgetMb(-100);
+        CHECK(settings->cpuCacheBudgetMb() == 64);
+
+        settings->setUploadBudgetMbPerFrame(0);
+        CHECK(settings->uploadBudgetMbPerFrame() == 1);
+
+        settings->setScreenSpaceErrorPx(0.0);
+        CHECK(settings->screenSpaceErrorPx() == Catch::Approx(0.5));
+    }
+
+    SECTION("the screen-space error clamps at its upper edge") {
+        settings->setScreenSpaceErrorPx(100.0);
+        CHECK(settings->screenSpaceErrorPx() == Catch::Approx(8.0));
+    }
+
+    SECTION("setting the current value is a no-op and emits nothing") {
+        settings->setGpuMemoryBudgetMb(settings->gpuMemoryBudgetMb());
+        settings->setCpuCacheBudgetMb(settings->cpuCacheBudgetMb());
+        settings->setUploadBudgetMbPerFrame(settings->uploadBudgetMbPerFrame());
+        settings->setScreenSpaceErrorPx(settings->screenSpaceErrorPx());
+        checker.checkSpies();
+    }
+
+    SECTION("resetToDefaults restores all four and notifies") {
+        settings->setGpuMemoryBudgetMb(4096);
+        settings->setCpuCacheBudgetMb(2048);
+        settings->setUploadBudgetMbPerFrame(32);
+        settings->setScreenSpaceErrorPx(4.0);
+        CHECK_FALSE(settings->isAtDefaults());
+
+        gpuSpy.clear();
+        cpuSpy.clear();
+        uploadSpy.clear();
+        errorSpy.clear();
+
+        settings->resetToDefaults();
+        checker[&gpuSpy]++;
+        checker[&cpuSpy]++;
+        checker[&uploadSpy]++;
+        checker[&errorSpy]++;
+        checker.checkSpies();
+
+        CHECK(settings->gpuMemoryBudgetMb() == 1536);
+        CHECK(settings->cpuCacheBudgetMb() == 512);
+        CHECK(settings->uploadBudgetMbPerFrame() == 8);
+        CHECK(settings->screenSpaceErrorPx() == Catch::Approx(1.5));
+        CHECK(settings->isAtDefaults());
+    }
+
+    settings->resetToDefaults();
 }
 
 TEST_CASE("cwRenderingSettings honors the backend's supported sample counts", "[cwRenderingSettings]")

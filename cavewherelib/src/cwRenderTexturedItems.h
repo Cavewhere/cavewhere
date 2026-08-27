@@ -4,6 +4,7 @@
 #include "cwRenderMaterialState.h"
 #include "cwRenderObject.h"
 #include "cwGeometry.h"
+#include "cwStreamedTexture.h"
 #include "CaveWhereLibExport.h"
 #include <QHash>
 #include <QByteArray>
@@ -23,7 +24,11 @@ public:
 
     struct Item {
         cwGeometry geometry;
+        // A texture travels in exactly one of two representations: a QImage, or
+        // a cwStreamedTexture descriptor the render thread streams mip levels
+        // from. When both are set the streamed descriptor wins.
         QImage texture;
+        cwStreamedTexture streamedTexture;
         cwRenderMaterialState material;
         QByteArray uniformBlock;
         QMatrix4x4 modelMatrix;
@@ -40,6 +45,10 @@ public:
     void updateItem(uint32_t id, const Item& item);
     void updateGeometry(uint32_t id, const cwGeometry& geometry);
     void updateTexture(uint32_t id, const QImage& image);
+    // Hand the render thread a KTX2 source to stream mip levels from instead of
+    // whole-texture pixels. Sending the descriptor the item already carries is a
+    // no-op, so a re-run of the producer never restarts a load.
+    void updateStreamedTexture(uint32_t id, const cwStreamedTexture& streamedTexture);
     // Named setItemVisible, not an overload of setVisible: a same-name
     // overload would hide cwRenderObject::setVisible(bool) and make the
     // whole-object toggle unreachable without qualification.
@@ -67,6 +76,7 @@ private:
     struct ItemPayload {
         cwGeometry geometry;
         QImage texture;
+        cwStreamedTexture streamedTexture;
         cwRenderMaterialState material;
         QByteArray uniformBlock;
         QMatrix4x4 modelMatrix;
@@ -79,6 +89,7 @@ private:
         Remove,
         UpdateGeometry,
         UpdateTexture,
+        UpdateStreamedTexture,
         UpdateMaterial,
         UpdateUniformBlock,
         UpdateModelMatrix
@@ -101,6 +112,7 @@ private:
         // Which payload fields an Update touched since the last sync. Ignored for
         // Add (which uses the whole payload) and Remove (which uses none).
         bool geometryDirty = false;
+        // Covers both texture representations — whichever one the payload holds.
         bool textureDirty = false;
         bool materialDirty = false;
         bool uniformBlockDirty = false;
@@ -116,6 +128,10 @@ private:
     QHash<uint32_t, Item> m_frontState;
 
     void addCommand(CommandType type, uint32_t id, const ItemPayload& payload);
+
+    // The payload invariant every command must keep: at most one of the two
+    // texture representations is set.
+    static bool hasOneTextureRepresentation(const ItemPayload& payload);
 
     // Publish one item's effective sub-item visibility: authored visibility
     // ANDed with its pick-ready gate, so an item stays hidden until its

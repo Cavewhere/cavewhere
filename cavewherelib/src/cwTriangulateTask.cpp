@@ -66,32 +66,41 @@ QList<QFuture<cwTriangulatedData>> cwTriangulateTask::triangulate() const
             //USING this will cause UB!
             .subscribe([dataRootDir, cropFuture, scrap]()
                      {
+                         const auto croppedResult = cropFuture.result();
 
-                         cwTextureUploadTask uploadTask;
-                         auto croppedImagePtr = cropFuture.result();
-
-                         if(croppedImagePtr) {
-                             cwImage croppedImage = *(cropFuture.result());
-                             uploadTask.setImage(croppedImage);
-                             uploadTask.setDataRootDir(dataRootDir);
-                             uploadTask.setType(cwTextureUploadTask::OpenGL_RGBA);
-                             auto uploadFuture = uploadTask.mipmaps();
-
-                             return AsyncFuture::observe(uploadFuture)
-                                 .subscribe(
-                                     [scrap, cropFuture, uploadFuture]() {
-
-                                         return cwConcurrent::run([scrap, cropFuture, uploadFuture]()
-                                                                  {
-                                                                      return triangulateGeometry(scrap,
-                                                                                                 cropFuture.result(),
-                                                                                                 uploadFuture.result());
-                                                                  });
-                                     }).future();
+                         if(!croppedResult.image) {
+                             qDebug() << "Problem cropping image, does it not exist";
+                             return QtFuture::makeReadyValueFuture(cwTriangulatedData());
                          }
 
-                         qDebug() << "Problem cropping image, does it not exist";
-                         return QtFuture::makeReadyValueFuture(cwTriangulatedData());
+                         //The render thread streams the KTX2 entry, so decoding
+                         //the PNG crop here would only throw the pixels away
+                         if(!croppedResult.compressedKey.id.isEmpty()) {
+                             return cwConcurrent::run([scrap, cropFuture]()
+                                                      {
+                                                          return triangulateGeometry(scrap,
+                                                                                     cropFuture.result(),
+                                                                                     cwTextureUploadTask::UploadResult());
+                                                      });
+                         }
+
+                         cwTextureUploadTask uploadTask;
+                         uploadTask.setImage(*(croppedResult.image));
+                         uploadTask.setDataRootDir(dataRootDir);
+                         uploadTask.setType(cwTextureUploadTask::OpenGL_RGBA);
+                         auto uploadFuture = uploadTask.mipmaps();
+
+                         return AsyncFuture::observe(uploadFuture)
+                             .subscribe(
+                                 [scrap, cropFuture, uploadFuture]() {
+
+                                     return cwConcurrent::run([scrap, cropFuture, uploadFuture]()
+                                                              {
+                                                                  return triangulateGeometry(scrap,
+                                                                                             cropFuture.result(),
+                                                                                             uploadFuture.result());
+                                                              });
+                                 }).future();
 
                      }).future();
     };
@@ -99,9 +108,9 @@ QList<QFuture<cwTriangulatedData>> cwTriangulateTask::triangulate() const
     return cw::transform(Scraps, triangulateScrap);
 }
 
-QFuture<cwTrackedImagePtr> cwTriangulateTask::cropScrap(const cwTriangulateInData &scrap,
-                                                        const QDir& dataRootDir,
-                                                        cwTextureUploadTask::Format format)
+QFuture<cwCropImageTask::Result> cwTriangulateTask::cropScrap(const cwTriangulateInData &scrap,
+                                                              const QDir& dataRootDir,
+                                                              cwTextureUploadTask::Format format)
 {
     cwCropImageTask cropTask;
     cropTask.setDataRootDir(dataRootDir);
@@ -115,7 +124,7 @@ QFuture<cwTrackedImagePtr> cwTriangulateTask::cropScrap(const cwTriangulateInDat
 }
 
 cwTriangulatedData cwTriangulateTask::triangulateGeometry(const cwTriangulateInData &scrap,
-                                                          cwTrackedImagePtr croppedImage,
+                                                          const cwCropImageTask::Result& croppedResult,
                                                           const cwTextureUploadTask::UploadResult& imageData)
 {
     QRectF bounds = scrap.outline().boundingRect();
@@ -170,7 +179,9 @@ cwTriangulatedData cwTriangulateTask::triangulateGeometry(const cwTriangulateInD
 
     cwTriangulatedData outputData;
     outputData.setCroppedImageData(imageData);
-    outputData.setCroppedImage(croppedImage);
+    outputData.setCroppedImage(croppedResult.image);
+    outputData.setCompressedTextureKey(croppedResult.compressedKey);
+    outputData.setCroppedImageSize(croppedResult.croppedSize);
     outputData.setScrapGeometry(geometry);
     outputData.setLeadPoints(leadPoints);
 

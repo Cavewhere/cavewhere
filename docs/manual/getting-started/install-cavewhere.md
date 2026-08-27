@@ -23,11 +23,14 @@ CaveWhere costs nothing and ships as open source, so you buy nothing and enter n
 license key. It asks for your name and email first, purely for
 [signing your own work](set-up-your-identity.md), not to register an account.
 
+Free doesn't mean the work is free to make. If CaveWhere is useful to you, you
+can support its development at **<https://www.patreon.com/cavewhere>**.
+
 ## What you get on each platform
 
 | Platform | What you download | How you install it |
 |----------|-------------------|--------------------|
-| **macOS** | A `.dmg` disk image | Open it and drag CaveWhere to Applications. The release script codesigns the app and runs it through Apple's `notarytool`, so it opens with no security warning. |
+| **macOS** | A `.dmg` disk image | Open it and drag CaveWhere to Applications. |
 | **Windows** | An installer | Run it and follow the prompts. |
 | **Linux** | An AppImage, built for x86_64 and arm64 | Mark it executable and run it. Nothing installs, nothing needs root, and uninstalling means deleting the file. |
 

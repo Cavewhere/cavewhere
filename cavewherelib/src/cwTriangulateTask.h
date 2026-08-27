@@ -18,7 +18,7 @@
 #include "cwTextureUploadTask.h"
 #include "cwTriangulateLiDARInData.h"
 #include "cwTriangulateWarpingData.h"
-class cwCropImageTask;
+#include "cwCropImageTask.h"
 
 //Qt include
 #include <QPolygonF>
@@ -262,12 +262,12 @@ private:
     QList<cwTriangulatedData> TriangulatedScraps;
 
 
-    static QFuture<cwTrackedImagePtr> cropScrap(const cwTriangulateInData& scrap,
-                                                const QDir& dataRootDir,
-                                                cwTextureUploadTask::Format format);
+    static QFuture<cwCropImageTask::Result> cropScrap(const cwTriangulateInData& scrap,
+                                                      const QDir& dataRootDir,
+                                                      cwTextureUploadTask::Format format);
 
     static cwTriangulatedData triangulateGeometry(const cwTriangulateInData& scrap,
-                                                  cwTrackedImagePtr croppedImage,
+                                                  const cwCropImageTask::Result& croppedResult,
                                                   const cwTextureUploadTask::UploadResult &imageData);
 
     static PointGrid createPointGrid(QRectF bounds, const cwTriangulateInData& scrapData);
