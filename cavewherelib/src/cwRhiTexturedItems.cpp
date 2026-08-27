@@ -692,31 +692,47 @@ bool cwRhiTexturedItems::Item::uploadPendingLevels(const ResourceUpdateData& dat
         }
     }
 
-    while (pendingUpload.nextLevelToUpload < levels.size()) {
-        const int level = pendingUpload.nextLevelToUpload;
-        const QByteArray& levelBytes = levels.at(level);
-        const QSize levelSize = cw::residency::mipLevelSize(topLevelSize, level);
+    // The chain comes off disk, so a missing level or a short one is corruption
+    // rather than a programming error — upload it and the backend reads past
+    // the end of what it was given.
+    const int expectedLevelCount = data.renderData.cb->rhi()->mipLevelsForSize(topLevelSize);
+    if (levels.size() != expectedLevelCount) {
+        qWarning() << "Streamed chain of format" << int(format)
+                   << "at size" << topLevelSize << "holds" << levels.size()
+                   << "levels, expected" << expectedLevelCount
+                   << "levels, keeping the resident texture";
+        failPendingUpload();
+        return false;
+    }
 
-        if (levelBytes.size() != cw::residency::mipLevelBytes(format, levelSize)) {
-            // The levels come off disk, so a short one is corruption rather than
-            // a programming error — upload it and the backend reads past its end.
+    for (int level = pendingUpload.nextLevelToUpload; level < levels.size(); level++) {
+        const QSize levelSize = cw::residency::mipLevelSize(topLevelSize, level);
+        if (levels.at(level).size() != cw::residency::mipLevelBytes(format, levelSize)) {
             qWarning() << "Streamed level" << level << "of format" << int(format)
-                       << "at size" << levelSize << "holds" << levelBytes.size()
+                       << "at size" << levelSize << "holds" << levels.at(level).size()
                        << "bytes, keeping the resident texture";
             failPendingUpload();
             return false;
         }
+    }
 
-        if (!cw::residency::takeFromBudget(remainingUploadBytes, levelBytes.size(),
-                                           anythingUploadedThisFrame)) {
-            return true;
-        }
-        anythingUploadedThisFrame = true;
+    if (format == QRhiTexture::RGBA8) {
+        // create() allocated every level of an uncompressed texture, so the
+        // chain can land one level per frame under the budget.
+        while (pendingUpload.nextLevelToUpload < levels.size()) {
+            const int level = pendingUpload.nextLevelToUpload;
+            const QByteArray& levelBytes = levels.at(level);
+            const QSize levelSize = cw::residency::mipLevelSize(topLevelSize, level);
 
-        if (format == QRhiTexture::RGBA8) {
-            // The uncompressed fallback path uploads pixels, so the level's
-            // bytes are wrapped in an image of its size. copy() owns them: the
-            // level payload is dropped before the batch is submitted.
+            if (!cw::residency::takeFromBudget(remainingUploadBytes, levelBytes.size(),
+                                               anythingUploadedThisFrame)) {
+                return true;
+            }
+            anythingUploadedThisFrame = true;
+
+            // The level's bytes are wrapped in an image of its size. copy()
+            // owns them: the level payload is dropped before the batch is
+            // submitted.
             const QImage levelImage(reinterpret_cast<const uchar*>(levelBytes.constData()),
                                     levelSize.width(), levelSize.height(),
                                     QImage::Format_RGBA8888);
@@ -725,15 +741,39 @@ bool cwRhiTexturedItems::Item::uploadPendingLevels(const ResourceUpdateData& dat
                 QRhiTextureUploadDescription(
                     QRhiTextureUploadEntry(0, level,
                                            QRhiTextureSubresourceUploadDescription(levelImage.copy()))));
-        } else {
-            data.resourceUpdateBatch->uploadTexture(
-                pendingUpload.stagingTexture,
-                QRhiTextureUploadDescription(
-                    QRhiTextureUploadEntry(0, level,
-                                           QRhiTextureSubresourceUploadDescription(levelBytes))));
+
+            pendingUpload.nextLevelToUpload++;
+        }
+    } else {
+        // QRhiGles2 allocates compressed storage only from the first
+        // uploadTexture() call that names a level, and treats every later call
+        // as a sub-image update of storage it assumes exists. Levels sent in
+        // separate calls therefore land in unallocated storage, the chain is
+        // mip-incomplete, and the sampler returns opaque black. The whole chain
+        // goes up in one call, charged to the budget as a whole; it costs about
+        // 4/3 of level 0.
+        qint64 chainBytes = 0;
+        for (const QByteArray& levelBytes : levels) {
+            chainBytes += levelBytes.size();
         }
 
-        pendingUpload.nextLevelToUpload++;
+        if (!cw::residency::takeFromBudget(remainingUploadBytes, chainBytes,
+                                           anythingUploadedThisFrame)) {
+            return true;
+        }
+        anythingUploadedThisFrame = true;
+
+        QVector<QRhiTextureUploadEntry> entries;
+        entries.reserve(levels.size());
+        for (int level = 0; level < levels.size(); level++) {
+            entries.append(QRhiTextureUploadEntry(
+                0, level, QRhiTextureSubresourceUploadDescription(levels.at(level))));
+        }
+
+        QRhiTextureUploadDescription description;
+        description.setEntries(entries.cbegin(), entries.cend());
+        data.resourceUpdateBatch->uploadTexture(pendingUpload.stagingTexture, description);
+        pendingUpload.nextLevelToUpload = levels.size();
     }
 
     // The last level landed: swap the finished chain in atomically (render thread
