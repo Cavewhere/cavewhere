@@ -18,6 +18,10 @@
 #include <QQmlEngine>
 #include <QImage>
 #include <QMetaObject>
+#include <QFutureWatcher>
+
+//Std includes
+#include <memory>
 
 // Fwd decls
 class cwProject;
@@ -33,6 +37,7 @@ class cwNoteLiDAR;
 #include "cwFutureManagerToken.h"
 #include "asyncfuture.h"
 #include "cwTriangulateLiDARInData.h"
+#include "cwTriangulateLiDARTask.h"
 #include "cwRenderTexturedItems.h"
 #include "cwConnectionRegistry.h"
 #include "cwKeywordItemRegistry.h"
@@ -112,6 +117,12 @@ private:
     void notifyDirty();
     QFuture<void> runBatch();
 
+    using LiDARNoteResult = Monad::Result<QVector<cwRenderTexturedItems::Item>>;
+
+    // Pushes one triangulated note's items to the render items as soon as that
+    // note's own result is ready, so a long batch fills the 3d view note by note.
+    void deliverNote(cwNoteLiDAR* note, const LiDARNoteResult& result, int index);
+
     // Announces a state change, if there was one, after a note left the dirty set.
     // Removing the last runnable dirty note takes the pipeline Dirty -> Clean, and
     // the coordinator's staleness aggregate has to hear about that like any other
@@ -177,6 +188,12 @@ private:
     // future, held by cwUpdatableBase.
     bool m_workPending = false;
     QHash<cwNoteLiDAR*, QVector<uint32_t>> m_noteToRender;
+
+    // Watches the running batch so each note's result is delivered the moment
+    // it's ready. m_deliveredNotes holds the indices already pushed, so the
+    // completion handler delivers the rest exactly once.
+    std::unique_ptr<QFutureWatcher<LiDARNoteResult>> m_batchWatcher;
+    QSet<int> m_deliveredNotes;
     cwKeywordItemRegistry<cwNoteLiDAR*> m_keywordRegistry;
 
     QPointer<cwRenderTexturedItems> m_render;

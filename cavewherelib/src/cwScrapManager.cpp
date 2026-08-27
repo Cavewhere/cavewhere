@@ -1206,39 +1206,44 @@ QFuture<void> cwScrapManager::updateScrapGeometryHelper(QList<cwScrap *> scraps)
             return AsyncFuture::completed();
         }
 
+        m_runGeneration++;
+        const quint64 generation = m_runGeneration;
+
         QList<QFuture<cwTriangulatedData>> futures;
+        QList<cwScrap*> scrapsToUpdate;
         futures.reserve(triangulationResults.size());
+        scrapsToUpdate.reserve(triangulationResults.size());
+
         for(const auto& result : std::as_const(triangulationResults)) {
             futures.append(result.data);
+
+            if(result.scrap == nullptr) {
+                continue;
+            }
+
+            scrapsToUpdate.append(result.scrap);
+
+            //Deliver this scrap the moment it's triangulated, rather than
+            //waiting on the whole batch. A restart cancels the combine, leaving
+            //these futures running, so the generation check drops their results.
+            cwScrap* scrap = result.scrap;
+            AsyncFuture::observe(result.data).context(this, [this, scrap, generation, future = result.data]()
+            {
+                if(generation != m_runGeneration) {
+                    return;
+                }
+
+                if(future.resultCount() == 1) {
+                    deliverScrap(scrap, future.result());
+                }
+            });
         }
 
         auto combine = AsyncFuture::combine() << futures;
 
-        auto finalFuture = combine.context(this, [this, triangulationResults]()
+        auto finalFuture = combine.context(this, [this, scrapsToUpdate]()
         {
-            QList<cwScrap*> scrapsToUpdate;
-            QList<cwTriangulatedData> scrapDataset;
-
-            scrapsToUpdate.reserve(triangulationResults.size());
-            scrapDataset.reserve(triangulationResults.size());
-
-            for(const auto& result : triangulationResults) {
-                if(result.scrap == nullptr) {
-                    continue;
-                }
-
-                cwTriangulatedData data;
-                const auto& future = result.data;
-
-                if(future.isFinished() && future.resultCount() == 1) {
-                    data = future.result();
-                }
-
-                scrapsToUpdate.append(result.scrap);
-                scrapDataset.append(data);
-            }
-
-            taskFinished(scrapsToUpdate, scrapDataset);
+            taskFinished(scrapsToUpdate);
         }).future();
 
         return finalFuture;
@@ -1637,18 +1642,16 @@ void cwScrapManager::finishScrapTask()
 /**
   \brief Triangulation task has finished
   */
-void cwScrapManager::taskFinished(const QList<cwScrap*>& scrapsToUpdate,
-                                  const QList<cwTriangulatedData>& scrapDataset) {
+void cwScrapManager::taskFinished(const QList<cwScrap*>& scrapsToUpdate) {
     qCDebug(lcPick).nospace()
-        << "ScrapManager::taskFinished scraps=" << scrapsToUpdate.size()
-        << " dataset=" << scrapDataset.size();
+        << "ScrapManager::taskFinished scraps=" << scrapsToUpdate.size();
 
     // Task done: leave Working. finishScrapTask emits so the coordinator
     // re-checks its forced-cascade settle state on both the empty and normal
     // paths below.
     finishScrapTask();
 
-    if(scrapDataset.isEmpty()) {
+    if(scrapsToUpdate.isEmpty()) {
         //No scrap data udpated...
         qCDebug(lcPick) << "ScrapManager::taskFinished EARLY RETURN: empty dataset";
         return;
@@ -1662,89 +1665,53 @@ void cwScrapManager::taskFinished(const QList<cwScrap*>& scrapsToUpdate,
     m_workPending = false;
     emit updateStateChanged();
 
-    //Make sure there's the same amount of data
-    if(scrapsToUpdate.size() != scrapDataset.size()) {
-        qDebug() << "Scrap size mismatch" << LOCATION;
+    DeletedScraps.clear();
+}
+
+void cwScrapManager::deliverScrap(cwScrap* scrap, const cwTriangulatedData& data)
+{
+    //The scrap was deleted while its triangulation was in flight
+    if(DeletedScraps.contains(scrap)) {
         return;
     }
 
-    //All the images to remove (replacing the previously calculated or invalid images)
-    QList<cwImage> imagesToRemove;
-
-    //Get all the valid scraps
-    QList<cwScrap*> validScraps;
-    QList<cwTriangulatedData> validScrapTriangleDataset;
-    for(int i = 0; i < scrapsToUpdate.size(); i++) {
-        cwScrap* scrap = scrapsToUpdate.at(i);
-        cwTriangulatedData triangleData = scrapDataset.at(i);
-        if(!DeletedScraps.contains(scrap)) {
-            validScraps.append(scrap);
-            validScrapTriangleDataset.append(triangleData);
-        } else {
-            //Scrap has been delete
-            imagesToRemove.append(triangleData.croppedImage());
-            continue;
-        }
+    if(!m_scrapToRenderId.contains(scrap) || m_renderScraps.isNull()) {
+        return;
     }
 
-    DeletedScraps.clear();
+    cwTriangulatedData triangleData = data;
 
-    // //Removed all cropped image data
-    // foreach(cwScrap* scrap, validScraps) {
-    //     cwImage image = scrap->triangulationData().croppedImage();
-    //     imagesToRemove.append(image);
-    // }
+    //Remove the ownership requirements, so it doesn't get delete from database
+    triangleData.croppedImagePtr()->take();
 
-    // auto filename = Project->filename();
-    // auto removeFuture = cwConcurrent::run([filename, imagesToRemove](){
-    //     cwImageDatabase imageDatabase(filename);
-    //     for(const auto& image : imagesToRemove) {
-    //         imageDatabase.removeImages(image.ids());
-    //     }
-    // });
+    scrap->setLeadPositions(triangleData.leadPoints());
 
-    // FutureManagerToken.addJob(cwFuture(removeFuture, "Removing Old Images"));
+    const auto id = m_scrapToRenderId.value(scrap);
+    const cwGeometry& g = triangleData.scrapGeometry();
+    qCDebug(lcPick).nospace()
+        << "ScrapManager::deliverScrap pushing scrap=" << scrap
+        << " renderId=" << id
+        << " geometry: vertexCount=" << g.vertexCount()
+        << " indexCount=" << g.indices().size()
+        << " type=" << cwGeometry::typeName(g.type())
+        << " layoutMode=" << static_cast<int>(g.layoutMode())
+        << " attributes=" << g.attributes().size()
+        << " vertexBuffers=" << g.vertexBuffers().size()
+        << " isEmpty=" << g.isEmpty();
+    m_renderScraps->updateGeometry(id, triangleData.scrapGeometry());
 
-    for(int i = 0; i < validScraps.size(); i++) {
-        cwScrap* scrap = validScraps.at(i);
-
-        cwTriangulatedData triangleData = validScrapTriangleDataset.at(i);
-        // Q_ASSERT(!triangleData.isStale());
-
-        //Remove the ownership requirements, so it doesn't get delete from database
-        triangleData.croppedImagePtr()->take();
-
-        // scrap->setTriangulationData(triangleData);
-        scrap->setLeadPositions(triangleData.leadPoints());
-
-        Q_ASSERT(m_scrapToRenderId.contains(scrap));
-        auto id = m_scrapToRenderId.value(scrap);
-        const cwGeometry& g = triangleData.scrapGeometry();
-        qCDebug(lcPick).nospace()
-            << "ScrapManager::taskFinished pushing scrap=" << scrap
-            << " renderId=" << id
-            << " geometry: vertexCount=" << g.vertexCount()
-            << " indexCount=" << g.indices().size()
-            << " type=" << cwGeometry::typeName(g.type())
-            << " layoutMode=" << static_cast<int>(g.layoutMode())
-            << " attributes=" << g.attributes().size()
-            << " vertexBuffers=" << g.vertexBuffers().size()
-            << " isEmpty=" << g.isEmpty();
-        m_renderScraps->updateGeometry(id, triangleData.scrapGeometry());
-
-        //The render thread streams the levels it needs off the cached KTX2, so
-        //nothing is decoded here. A null descriptor means the encode failed,
-        //and the QImage crop is the only texture the scrap has.
-        const cwStreamedTexture streamed {
-            Project != nullptr ? Project->dataRootDir().absolutePath() : QString(),
-            triangleData.compressedTextureKey(),
-            triangleData.croppedImageSize()
-        };
-        if(streamed.isNull()) {
-            m_renderScraps->updateTexture(id, triangleData.croppedImageData().image);
-        } else {
-            m_renderScraps->updateStreamedTexture(id, streamed);
-        }
+    //The render thread streams the levels it needs off the cached KTX2, so
+    //nothing is decoded here. A null descriptor means the encode failed,
+    //and the QImage crop is the only texture the scrap has.
+    const cwStreamedTexture streamed {
+        Project != nullptr ? Project->dataRootDir().absolutePath() : QString(),
+        triangleData.compressedTextureKey(),
+        triangleData.croppedImageSize()
+    };
+    if(streamed.isNull()) {
+        m_renderScraps->updateTexture(id, triangleData.croppedImageData().image);
+    } else {
+        m_renderScraps->updateStreamedTexture(id, streamed);
     }
 }
 

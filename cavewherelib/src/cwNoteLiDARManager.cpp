@@ -640,62 +640,35 @@ QFuture<void> cwNoteLiDARManager::runBatch()
     m_restarter.restart([this, notes, inputs]() {
         auto future = cwTriangulateLiDARTask::triangulate(inputs);
 
+        // Replacing the watcher destroys the previous run's, so a restarted
+        // batch delivers only its own results.
+        m_deliveredNotes.clear();
+        m_batchWatcher = std::make_unique<QFutureWatcher<LiDARNoteResult>>();
+
+        QFutureWatcher<LiDARNoteResult>* watcher = m_batchWatcher.get();
+        connect(watcher, &QFutureWatcher<LiDARNoteResult>::resultReadyAt,
+                this, [this, notes, watcher](int index) {
+                    m_deliveredNotes.insert(index);
+                    deliverNote(notes.at(index), watcher->resultAt(index), index);
+                });
+        watcher->setFuture(future);
+
         return AsyncFuture::observe(future)
             .context(this,
-                     [this, notes, future]() {
+                     [this, notes, future, watcher]() {
                          Q_ASSERT(notes.size() == future.resultCount());
 
-                         //Update the rendering scene
-                         for(int i = 0; i < future.resultCount(); i++) {
-                             auto note = notes.at(i);
-                             if(m_deletedNotes.contains(note)) {
-                                 //Note deleted, just skip the result
-                                 continue;
-                             }
-
-                             auto result = future.resultAt(i);
-                             if(result.hasError()) {
-                                 qWarning() << "Warning: Note triangle at i:" << i << result.errorMessage();
-                                 continue;
-                             }
-
-                             QVector<cwRenderTexturedItems::Item> items = future.resultAt(i).value();
-
-                             if (m_keepRenderGeometry) {
-                                 for (auto& item : items) {
-                                     item.storeGeometry = true;
+                         //Deliver whatever resultReadyAt hasn't reported yet. A
+                         //superseded run has already had its watcher replaced,
+                         //and its results are stale.
+                         if(m_batchWatcher.get() == watcher) {
+                             for(int i = 0; i < future.resultCount(); i++) {
+                                 if(!m_deliveredNotes.contains(i)) {
+                                     deliverNote(notes.at(i), future.resultAt(i), i);
                                  }
                              }
-
-                             const QVector<uint32_t> oldIds = m_noteToRender.value(note);
-
-                             if (oldIds.size() == items.size() && !items.isEmpty()) {
-                                 // Re-triangulation from a declination or transform edit
-                                 // produces the same number of items with new geometry.
-                                 // Update them in place: reusing the render ids lets
-                                 // cwRenderTexturedItems coalesce repeated edits onto a
-                                 // stable id and skips the picker/visibility churn of
-                                 // tearing every item down and re-adding it. The ids are
-                                 // unchanged, so the note's keyword/visibility binding
-                                 // still holds and needs no rebind.
-                                 for (int itemIndex = 0; itemIndex < items.size(); ++itemIndex) {
-                                     m_render->updateItem(oldIds.at(itemIndex), items.at(itemIndex));
-                                 }
-                             } else {
-                                 // First build, or the item count changed (e.g. the note's
-                                 // GLB was replaced): tear down the old items and add fresh
-                                 // ones, then rebind the keyword item to the new ids.
-                                 for (uint32_t id : oldIds) {
-                                     m_render->removeItem(id);
-                                 }
-
-                                 const QVector<uint32_t> newIds = cw::transform(items, [this](const cwRenderTexturedItems::Item& item) {
-                                     return m_render->addItem(item);
-                                 });
-                                 m_noteToRender[note] = newIds;
-
-                                 addKeywordItemForNote(note);
-                             }
+                             m_deliveredNotes.clear();
+                             m_batchWatcher.reset();
                          }
 
                          // Remove processed from dirty, clear deleted set entries
@@ -716,6 +689,59 @@ QFuture<void> cwNoteLiDARManager::runBatch()
     });
 
     return batch;
+}
+
+void cwNoteLiDARManager::deliverNote(cwNoteLiDAR* note,
+                                     const LiDARNoteResult& result,
+                                     int index)
+{
+    if (m_deletedNotes.contains(note)) {
+        //Note deleted, just skip the result
+        return;
+    }
+
+    if (result.hasError()) {
+        qWarning() << "Warning: Note triangle at i:" << index << result.errorMessage();
+        return;
+    }
+
+    QVector<cwRenderTexturedItems::Item> items = result.value();
+
+    if (m_keepRenderGeometry) {
+        for (auto& item : items) {
+            item.storeGeometry = true;
+        }
+    }
+
+    const QVector<uint32_t> oldIds = m_noteToRender.value(note);
+
+    if (oldIds.size() == items.size() && !items.isEmpty()) {
+        // Re-triangulation from a declination or transform edit
+        // produces the same number of items with new geometry.
+        // Update them in place: reusing the render ids lets
+        // cwRenderTexturedItems coalesce repeated edits onto a
+        // stable id and skips the picker/visibility churn of
+        // tearing every item down and re-adding it. The ids are
+        // unchanged, so the note's keyword/visibility binding
+        // still holds and needs no rebind.
+        for (int itemIndex = 0; itemIndex < items.size(); ++itemIndex) {
+            m_render->updateItem(oldIds.at(itemIndex), items.at(itemIndex));
+        }
+    } else {
+        // First build, or the item count changed (e.g. the note's
+        // GLB was replaced): tear down the old items and add fresh
+        // ones, then rebind the keyword item to the new ids.
+        for (uint32_t id : oldIds) {
+            m_render->removeItem(id);
+        }
+
+        const QVector<uint32_t> newIds = cw::transform(items, [this](const cwRenderTexturedItems::Item& item) {
+            return m_render->addItem(item);
+        });
+        m_noteToRender[note] = newIds;
+
+        addKeywordItemForNote(note);
+    }
 }
 
 void cwNoteLiDARManager::announceStateChange(cwUpdatable::State previousState)

@@ -178,6 +178,11 @@ private:
 //    QFuture<void> TriangulateFuture;
     cwFutureManagerToken FutureManagerToken;
 
+    // Bumped each time a triangulation task is dispatched. Each scrap's
+    // completion handler carries the generation it started with, so a
+    // superseded run's results are dropped instead of delivered.
+    quint64 m_runGeneration = 0;
+
     //The render scraps that need updating
     QPointer<cwRenderTexturedItems> m_renderScraps;
 
@@ -252,6 +257,10 @@ private:
 
     bool isScrapGeometryValid(const cwScrap* scrap) const;
 
+    // Pushes one finished scrap to the render items as soon as its own
+    // triangulation completes, so the 3d view fills in scrap by scrap.
+    void deliverScrap(cwScrap* scrap, const cwTriangulatedData& data);
+
 private slots:
     void handleRegionReset();
 
@@ -281,8 +290,7 @@ private slots:
 
     void scrapDeleted(QObject* scrap);
 
-    void taskFinished(const QList<cwScrap *> &scrapsToUpdate,
-                      const QList<cwTriangulatedData>& scrapDataset);
+    void taskFinished(const QList<cwScrap *> &scrapsToUpdate);
 
     // Leaves Working: finishes the run's future and emits updateStateChanged.
     // Called on every task-completion path (taskFinished plus the task lambda's
