@@ -45,6 +45,17 @@
 
 namespace {
 
+const char* solveErrorStepName(cwLinePlotTask::SolveError::Step step)
+{
+    switch(step) {
+    case cwLinePlotTask::SolveError::Step::Export: return "Export";
+    case cwLinePlotTask::SolveError::Step::Cavern: return "Cavern";
+    case cwLinePlotTask::SolveError::Step::Parse: return "Parse";
+    case cwLinePlotTask::SolveError::Step::Validation: return "Validation";
+    }
+    return "Unknown";
+}
+
 // The worker identifies changed caves/trips/scraps by UUID. Resolve those
 // UUIDs back to the live objects in `region`, dropping any that were deleted
 // while the solve was running. Walking the live hierarchy (rather than a flat
@@ -577,7 +588,12 @@ QFuture<void> cwLinePlotManager::doRun() {
             AsyncFuture::observe(future)
                 .context(this, [this](cwLinePlotTask::LinePlotResultData result) {
                     publishResults(result);
-                    if (!result.hasSolveError()) {
+                    if (result.hasSolveError()) {
+                        const auto& error = result.solveError();
+                        qWarning() << "Line plot solve failed at step"
+                                   << solveErrorStepName(error.step)
+                                   << "exit code" << error.exitCode << ":" << error.message;
+                    } else {
                         updateLinePlot(std::move(result));
                     }
                     finishSolving();

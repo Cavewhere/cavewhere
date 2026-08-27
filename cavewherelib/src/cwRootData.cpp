@@ -523,11 +523,17 @@ void cwRootData::initCavewherelib()
 {
     QQuickGit::GitRepository::initGitEngine();
 
+    // On Android these live in the Qt resource bundle and have to be on disk
+    // before survexPath() and projDataPath() can find them.
+    cwGlobals::extractBundledRuntimeData();
+
     // Set SURVEXLIB so cavern_run() can find message files (en.msg).
     // This must be set before any cavern_run() call.
+    bool survexLibFound = false;
     for (const QDir& dir : cwGlobals::survexPath()) {
         if (QFileInfo(dir.filePath("en.msg")).exists()) {
             qputenv("SURVEXLIB", dir.absolutePath().toUtf8());
+            survexLibFound = true;
             break;
         }
     }
@@ -538,6 +544,12 @@ void cwRootData::initCavewherelib()
     // do not — so we resolve the bundled location explicitly and apply it
     // to every PJ_CONTEXT cwCoordinateTransform creates.
     cwCoordinateTransform::setProjSearchPaths(cwGlobals::projDataPath());
+
+    //A missing en.msg makes cavern's first run in the process fail outright
+    if (!survexLibFound) {
+        qWarning() << "Can't find survex's en.msg, the first line plot solve will fail. App dir:"
+                   << QCoreApplication::applicationDirPath();
+    }
 }
 
 cwRemoteServices* cwRootData::remote() const

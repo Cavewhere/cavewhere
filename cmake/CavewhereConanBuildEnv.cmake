@@ -56,8 +56,12 @@ function(cw_prepend_conan_buildenv_path)
             foreach(_cw_line IN LISTS _cw_path_lines)
                 # Extract the path value between quotes: export PATH="dirs:$PATH"
                 string(REGEX REPLACE "^export PATH=\"([^\"]+)\".*" "\\1" _cw_path_value "${_cw_line}")
-                # Remove the trailing :$PATH
+                # Remove the trailing reference to the inherited PATH. Conan
+                # writes either `:$PATH` or `${PATH:+:$PATH}` depending on
+                # version.
+                string(REGEX REPLACE "\\$\\{PATH:\\+:\\$PATH\\}$" "" _cw_path_value "${_cw_path_value}")
                 string(REGEX REPLACE ":\\$PATH$" "" _cw_path_value "${_cw_path_value}")
+                string(REGEX REPLACE ":$" "" _cw_path_value "${_cw_path_value}")
                 # Split on colons
                 string(REPLACE ":" ";" _cw_path_dirs "${_cw_path_value}")
                 foreach(_cw_dir IN LISTS _cw_path_dirs)

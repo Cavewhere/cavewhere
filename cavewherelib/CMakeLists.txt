@@ -241,6 +241,46 @@ qt_add_resources(cavewherelib "cavewhere_manual"
     FILES ${cavewhere_manual_files}
 )
 
+# Android has no place next to the executable to drop data files, so survex's
+# message file and PROJ's database ride along as Qt resources and are extracted
+# to the app's data dir at startup (cwGlobals::extractBundledRuntimeData).
+# Grid-shift files are left out — they're far too big for an APK.
+if(ANDROID)
+    # survex/ is added after this directory, so SURVEX_OUTPUT_DIR may not be
+    # set yet on a fresh configure. It defaults to <build>/survex.
+    set(cavewhere_survex_output_dir "${SURVEX_OUTPUT_DIR}")
+    if(NOT cavewhere_survex_output_dir)
+        set(cavewhere_survex_output_dir "${CMAKE_BINARY_DIR}/survex")
+    endif()
+
+    set(cavewhere_mobile_runtime_dir "${CMAKE_BINARY_DIR}/cavewhere_mobile_runtime")
+    set(cavewhere_mobile_runtime_msg "${cavewhere_mobile_runtime_dir}/survex/en.msg")
+
+    add_custom_command(OUTPUT ${cavewhere_mobile_runtime_msg}
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${cavewhere_survex_output_dir}/en.msg" ${cavewhere_mobile_runtime_msg}
+        DEPENDS messageFiles
+        COMMENT "Staging survex en.msg for the Android runtime resource"
+        VERBATIM)
+    set_source_files_properties(${cavewhere_mobile_runtime_msg} PROPERTIES GENERATED TRUE)
+
+    set(cavewhere_mobile_runtime_files ${cavewhere_mobile_runtime_msg})
+    foreach(cavewhere_proj_file proj.db proj.ini)
+        if(EXISTS "${CW_PROJ_DATA_DIR}/${cavewhere_proj_file}")
+            configure_file("${CW_PROJ_DATA_DIR}/${cavewhere_proj_file}"
+                "${cavewhere_mobile_runtime_dir}/proj/${cavewhere_proj_file}" COPYONLY)
+            list(APPEND cavewhere_mobile_runtime_files
+                "${cavewhere_mobile_runtime_dir}/proj/${cavewhere_proj_file}")
+        endif()
+    endforeach()
+
+    qt_add_resources(cavewherelib "cavewhere_mobile_runtime"
+        PREFIX "/runtime"
+        BASE "${cavewhere_mobile_runtime_dir}"
+        FILES ${cavewhere_mobile_runtime_files}
+    )
+endif()
+
 # Generate the export header
 generate_export_header(cavewherelib
     BASE_NAME CAVEWHERE_LIB
@@ -432,7 +472,29 @@ get_target_property(CURRENT_PROTOC_EXECUTABLE protobuf::protoc IMPORTED_LOCATION
 
 # Check if the path contains ".conan2"
 message(STATUS "CMAKE_PROGRAM_PATH:" ${CMAKE_PROGRAM_PATH} )
-if (CURRENT_PROTOC_EXECUTABLE MATCHES "\\.conan2")
+if (CMAKE_CROSSCOMPILING)
+    # Cross-compiling (Android/iOS): the host-context protobuf package ships a
+    # protoc built for the target, which the build machine cannot execute.
+    # Conan's build-context protobuf (tool_requires) provides a native protoc,
+    # whose bin directory cw_prepend_conan_buildenv_path() put on
+    # CMAKE_PROGRAM_PATH.
+    find_program(NATIVE_PROTOC
+        NAMES protoc
+        PATHS ${CMAKE_PROGRAM_PATH}
+        NO_DEFAULT_PATH
+        NO_CMAKE_FIND_ROOT_PATH
+        NO_CACHE)
+
+    if (NOT NATIVE_PROTOC)
+        message(FATAL_ERROR
+            "No native protoc found on CMAKE_PROGRAM_PATH. Run conan install with "
+            "a build profile (-pr:b default) so the build-context protobuf is installed.")
+    endif()
+
+    set(Protobuf_PROTOC_EXECUTABLE ${NATIVE_PROTOC} CACHE FILEPATH "The protoc compiler" FORCE)
+    set_property(TARGET protobuf::protoc PROPERTY IMPORTED_LOCATION ${NATIVE_PROTOC})
+    message(STATUS "Using Conan's build-context protoc: ${NATIVE_PROTOC}")
+elseif (CURRENT_PROTOC_EXECUTABLE MATCHES "\\.conan2")
     message(STATUS "Using Conan's protoc: ${CURRENT_PROTOC_EXECUTABLE}")
 else()
     message(STATUS "System protoc detected. Applying Conan protoc hack.")
