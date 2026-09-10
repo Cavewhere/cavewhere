@@ -136,6 +136,11 @@ void cwRhiScene::syncRenderObject(cwRenderObject* object, cwRhiItemRenderer* ren
     }
 }
 
+void cwRhiScene::releaseStreamedTextures()
+{
+    m_frame.releaseStreamedTextures();
+}
+
 void cwRhiScene::render(QRhiCommandBuffer *cb, cwRhiItemRenderer *renderer)
 {
     m_frame.renderLiveFrame(cb, renderer);

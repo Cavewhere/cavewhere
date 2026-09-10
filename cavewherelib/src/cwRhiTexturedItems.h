@@ -36,6 +36,13 @@ public:
      * False while any of those items is coarser than the job wants.
      */
     bool residencyReady(const RenderData& jobRenderData) override;
+    /**
+     * Cancels every streamed load and frees every resident streamed chain, so
+     * the ledger gets the whole scene's texture bytes back. Only for a view that
+     * has stopped drawing; the next frame after it is shown again rebinds the
+     * loading texture and re-requests the pinned base.
+     */
+    void releaseStreamedTextures() override;
     bool gather(const GatherContext& context, QVector<PipelineBatch>& batches) override;
     void purgePipelinesFor(QRhiRenderPassDescriptor* descriptor) override;
     std::optional<QBox3D> worldBounds() const override;

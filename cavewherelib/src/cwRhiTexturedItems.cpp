@@ -505,9 +505,52 @@ void cwRhiTexturedItems::enforceGpuBudget(const cwRenderBudgets& budgets)
     }
 }
 
+void cwRhiTexturedItems::releaseStreamedTextures()
+{
+    for (auto it = m_items.constBegin(); it != m_items.constEnd(); ++it) {
+        Item* item = it.value();
+        if (!item || item->streamSource.isNull()) {
+            continue;
+        }
+
+        // Cancel first: the streamer bumps the item's generation, so a load
+        // already in flight finishes into the void instead of landing on an item
+        // that has given everything back.
+        m_streamer.cancel(it.key());
+
+        item->resetResidency();
+        // Forgotten too, so the item asks again from whatever camera brings the
+        // view back rather than from the one that left.
+        item->desiredTopLevel = kNoResidentLevel;
+
+        delete item->texture;
+        item->texture = nullptr;
+        item->textureBytes.setBytes(0);
+
+        // The bindings sampled the texture just freed. streamResources rebuilds
+        // them against the loading texture before anything gathers the item again.
+        delete item->srb;
+        item->srb = nullptr;
+    }
+
+    // Nothing is resident, so the next over-budget frame gets a fresh warning
+    // rather than being silenced by the state this one left.
+    m_atResidencyFloor = false;
+}
+
 bool cwRhiTexturedItems::streamResources(ResourceUpdateData& data, qint64& remainingUploadBytes)
 {
     m_streamer.setMaxPendingCpuBytes(data.renderData.budgets.cpuBudgetBytes);
+
+    // An item whose streamed texture was released — the view drawing it was
+    // hidden — holds no bindings at all. Rebuild them here, against the loading
+    // texture the first load also draws behind, so the item is drawable from
+    // this frame on rather than waiting on a synchronize that may never come.
+    for (auto item : std::as_const(m_items)) {
+        if (item->resourcesInitialized && !item->srb) {
+            item->createShaderResourceBindings(data, m_sharedData);
+        }
+    }
 
     // Results the streamer hands over are transient: what an item still wants is
     // stashed on it, and everything else dies with the local vector.

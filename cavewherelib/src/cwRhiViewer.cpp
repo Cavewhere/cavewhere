@@ -16,12 +16,13 @@
 #include <QPainter>
 #include <QRect>
 #include <QDebug>
+#include <QRunnable>
 #include <QTimer>
 #include <QSGRenderNode>
 #include <QQuickWindow>
 
-
-cwRhiViewer::cwRhiViewer(QQuickItem *parent)
+cwRhiViewer::cwRhiViewer(QQuickItem *parent) :
+    m_rendererHandle(std::make_shared<cwRhiRendererHandle>())
 {
     Camera = new cwCamera(this);
 
@@ -52,6 +53,43 @@ void cwRhiViewer::privateResize() {
 QQuickRhiItemRenderer *cwRhiViewer::createRenderer()
 {
     return new cwRhiItemRenderer();
+}
+
+/**
+ * @brief cwRhiViewer::itemChange
+ *
+ * A hidden QQuickRhiItem keeps its renderer, its scene, and every streamed
+ * texture resident in it, while getting no synchronize or render callbacks at
+ * all. GPU-budget enforcement runs inside the frame, so a hidden view can never
+ * give detail back and its residency counts against every view still drawing.
+ * A render job is the only way to reach its scene; showing again re-streams the
+ * levels from the warm disk cache through the normal selection path.
+ */
+void cwRhiViewer::itemChange(ItemChange change, const ItemChangeData& value)
+{
+    QQuickRhiItem::itemChange(change, value);
+
+    if(change != ItemVisibleHasChanged) {
+        return;
+    }
+
+    m_rendererHandle->setViewVisible(value.boolValue);
+
+    auto* renderWindow = window();
+    if(value.boolValue) {
+        update();
+    } else if(renderWindow) {
+        // The handle keeps the job safe: the renderer it names may be gone by
+        // the time the job runs, and then the job does nothing.
+        auto handle = m_rendererHandle;
+        renderWindow->scheduleRenderJob(QRunnable::create([handle]() {
+                                            handle->releaseStreamedTextures();
+                                        }),
+                                        QQuickWindow::BeforeSynchronizingStage);
+        // Nothing else is going to draw the frame that runs the job — this item
+        // just stopped being visible.
+        renderWindow->update();
+    }
 }
 
 

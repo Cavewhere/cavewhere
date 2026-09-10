@@ -6,7 +6,44 @@
 #include "cwRhiFrameRenderer.h"
 
 //Qt includes
+#include <QMutex>
 #include <QQuickRhiItemRenderer>
+#include <memory>
+
+class cwRhiItemRenderer;
+
+/**
+ * @brief The cwRhiRendererHandle class
+ *
+ * The GUI thread's handle on a render thread's cwRhiItemRenderer.
+ *
+ * Qt creates and destroys the renderer on the render thread whenever the scene
+ * graph decides to, so a cwRhiViewer can't hold a raw pointer to it. The viewer
+ * owns one of these by shared_ptr and hands copies to the render jobs it
+ * schedules; the renderer attaches itself at its first synchronize and detaches
+ * as it is destroyed, so a job that runs after the renderer is gone does nothing.
+ */
+class cwRhiRendererHandle
+{
+public:
+    void attach(cwRhiItemRenderer* renderer);
+    //! Clears the handle only when @a renderer is still the attached one, so a
+    //! replaced renderer's teardown can't unhook its successor
+    void detach(const cwRhiItemRenderer* renderer);
+
+    //! Tracks whether the viewer is drawing, so a hide immediately followed by a
+    //! show leaves the already scheduled release job with nothing to do
+    void setViewVisible(bool visible);
+
+    //! Runs cwRhiItemRenderer::releaseStreamedTextures on the attached renderer,
+    //! or nothing when the viewer is visible again or no renderer is attached
+    void releaseStreamedTextures();
+
+private:
+    QMutex m_mutex;
+    cwRhiItemRenderer* m_renderer = nullptr;
+    bool m_viewVisible = true;
+};
 
 class cwRhiItemRenderer : public QQuickRhiItemRenderer
 {
@@ -59,6 +96,11 @@ public:
     // cwRhiScene so it isn't called unconditionally (that would loop forever).
     void requestUpdate() { update(); }
 
+    // Release every streamed texture in this renderer's scene from the GPU.
+    // Render thread only, from the job the viewer schedules when it is hidden —
+    // see cwRhiViewer::itemChange.
+    void releaseStreamedTextures() { m_sceneRenderer->releaseStreamedTextures(); }
+
 protected:
     void initialize(QRhiCommandBuffer *cb) override;
     void synchronize(QQuickRhiItem *item) override;
@@ -66,6 +108,9 @@ protected:
 
 private:
     cwRhiScene* m_sceneRenderer;
+    //! The viewer's handle this renderer attached itself to, kept so the
+    //! destructor can detach without knowing the viewer
+    std::shared_ptr<cwRhiRendererHandle> m_handle;
 };
 
 #endif // CWRHIITEMRENDERER_H

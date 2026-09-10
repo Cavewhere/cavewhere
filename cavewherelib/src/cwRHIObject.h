@@ -258,6 +258,16 @@ public:
     // camera's coarser selection demotes what the export pulled in.
     virtual bool residencyReady(const RenderData&) { return true; }
 
+    // Release every streamed texture this object holds from the GPU: cancel the
+    // loads in flight, drop the resident chains, and return the bytes to the
+    // ledger. The scene calls this on the render thread when its view stops
+    // drawing (the QQuickRhiItem was hidden), because a hidden view gets no
+    // frames and so can never demote its own residency against the process-wide
+    // budget. The presence invariant that keeps a resident texture alive across
+    // a demotion applies only to an item being drawn, so a view drawing nothing
+    // may drop everything.
+    virtual void releaseStreamedTextures() {}
+
     //Gather render objects
     virtual bool gather(const GatherContext& context,
                         QVector<PipelineBatch>& batches) {

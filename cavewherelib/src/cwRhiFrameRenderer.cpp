@@ -304,6 +304,15 @@ void cwRhiFrameRenderer::renderLiveFrame(QRhiCommandBuffer *cb, cwRhiItemRendere
               kLiveCameraOffset, clearColor);
 }
 
+void cwRhiFrameRenderer::releaseStreamedTextures()
+{
+    for(auto object : std::as_const(m_rhiObjects)) {
+        object->releaseStreamedTextures();
+    }
+
+    m_hasPendingStreamingWork = false;
+}
+
 cwRhiFrameRenderer::ClipSpaceCamera cwRhiFrameRenderer::stampCamera(
     QRhiResourceUpdateBatch* batch, QRhi* rhi, cwRHIObject::RenderData& renderData,
     int cameraSlot, QRhiRenderTarget* renderTarget,

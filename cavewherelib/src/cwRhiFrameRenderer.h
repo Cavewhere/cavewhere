@@ -360,6 +360,10 @@ public:
     // Driven by cwRhiScene::render, which sequences the offscreen drain after it.
     void renderLiveFrame(QRhiCommandBuffer* cb, cwRhiItemRenderer* renderer);
 
+    // Ask every render object to release its streamed textures (see
+    // cwRHIObject::releaseStreamedTextures). Render thread only, outside a frame.
+    void releaseStreamedTextures();
+
 private:
     // Delete an RHI object and purge it from every tracking list, so neither the
     // delete loop nor the issue #512 address-reuse cleanup can leave a dangling
