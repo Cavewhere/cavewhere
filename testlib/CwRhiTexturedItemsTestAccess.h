@@ -98,6 +98,18 @@ struct CwRhiTexturedItemsTestAccess {
     static bool hasStreamingWork(const cwRhiTexturedItems& items) {
         return items.m_streamer.hasWork();
     }
+
+    // Raw GPU-resource identities, so a lifetime test can watch the streamed
+    // texture swap and tell whether the SRB was rebuilt to match it.
+    static const void* texturePointer(const cwRhiTexturedItems& items, uint32_t id) {
+        auto* found = items.m_items.value(id, nullptr);
+        return found ? found->texture : nullptr;
+    }
+
+    static const void* srbPointer(const cwRhiTexturedItems& items, uint32_t id) {
+        auto* found = items.m_items.value(id, nullptr);
+        return found ? found->srb : nullptr;
+    }
 };
 
 #endif // CWRHITEXTUREDITEMSTESTACCESS_H

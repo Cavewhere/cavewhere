@@ -1046,10 +1046,9 @@ void cwRhiTexturedItems::Item::purgePipelinesFor(QRhiRenderPassDescriptor* descr
 void cwRhiTexturedItems::Item::createShaderResourceBindings(const ResourceUpdateData& data,
                                                              const SharedItemData& sharedData)
 {
-    if (!pipelineRecord || !pipelineRecord->pipeline) {
-        return;
-    }
-
+    // The bindings are rebuilt even while pipelineRecord is null (purged by
+    // evictPipelinesFor). Skipping would leave the old srb bound to a texture
+    // that a streamed mip swap just deleted.
     QRhi* rhi = data.renderData.cb->rhi();
     auto* renderer = data.renderData.renderer;
 
@@ -1091,7 +1090,8 @@ void cwRhiTexturedItems::Item::createShaderResourceBindings(const ResourceUpdate
     srb = rhi->newShaderResourceBindings();
     srb->setBindings(bindings.cbegin(), bindings.cend());
     srb->create();
-    Q_ASSERT(!pipelineRecord->layout || pipelineRecord->layout->isLayoutCompatible(srb));
+    Q_ASSERT(!pipelineRecord || !pipelineRecord->layout
+             || pipelineRecord->layout->isLayoutCompatible(srb));
 }
 
 QByteArray cwRhiTexturedItems::Item::buildPerDrawUniformPayload() const

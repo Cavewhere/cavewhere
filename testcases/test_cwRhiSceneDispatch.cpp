@@ -22,6 +22,7 @@
 
 #include "CwRhiSceneTestAccess.h"
 #include "CwRhiTexturedItemsTestAccess.h"
+#include "TestGeometryBuilders.h"
 
 #include <QCoreApplication>
 #include <QElapsedTimer>
@@ -73,33 +74,7 @@ constexpr int kStreamedTextureDimension = 2048;
 
 cwGeometry unitQuad()
 {
-    cwGeometry geometry({
-        { cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3 },
-        { cwGeometry::Semantic::TexCoord0, cwGeometry::AttributeFormat::Vec2 }
-    });
-
-    geometry.resizeVertices(4);
-    const auto* position = geometry.attribute(cwGeometry::Semantic::Position);
-    const auto* texCoord = geometry.attribute(cwGeometry::Semantic::TexCoord0);
-
-    const QVector<QVector3D> positions = {
-        QVector3D(-kQuadHalfExtent, -kQuadHalfExtent, 0.0f),
-        QVector3D( kQuadHalfExtent, -kQuadHalfExtent, 0.0f),
-        QVector3D( kQuadHalfExtent,  kQuadHalfExtent, 0.0f),
-        QVector3D(-kQuadHalfExtent,  kQuadHalfExtent, 0.0f),
-    };
-    const QVector<QVector2D> uvs = {
-        QVector2D(0.0f, 0.0f), QVector2D(1.0f, 0.0f),
-        QVector2D(1.0f, 1.0f), QVector2D(0.0f, 1.0f),
-    };
-    for (int i = 0; i < positions.size(); ++i) {
-        geometry.set(position, i, positions.at(i));
-        geometry.set(texCoord, i, uvs.at(i));
-    }
-
-    geometry.setIndices({0u, 1u, 2u, 0u, 2u, 3u});
-    geometry.setType(cwGeometry::Type::Triangles);
-    return geometry;
+    return cwTestGeometry::texturedQuad(kQuadHalfExtent);
 }
 
 cwStreamedTexture streamedSource(const QString& id)
