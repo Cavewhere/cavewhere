@@ -3,7 +3,10 @@
 
 #include <QByteArray>
 #include <QColor>
+#include <QDateTime>
 #include <QDir>
+#include <QFile>
+#include <QFileInfo>
 #include <QImage>
 #include <QString>
 #include <QTemporaryDir>
@@ -364,5 +367,100 @@ TEST_CASE("cwKtx2Codec slices an RGBA8 chain for devices without block compressi
         CHECK(std::abs(center.red() - kSolidRed) <= kChannelTolerance);
         CHECK(std::abs(center.green() - kSolidGreen) <= kChannelTolerance);
         CHECK(std::abs(center.blue() - kSolidBlue) <= kChannelTolerance);
+    }
+}
+
+TEST_CASE("cwKtx2Codec keys every encode with the generation", "[Ktx2Codec]") {
+    const QString suffix = QStringLiteral("-uastc") + QString::number(cw::ktx2::kEncodeGeneration);
+    CHECK(cw::ktx2::cacheKeyId(QStringLiteral("note-crop"))
+          == QStringLiteral("note-crop") + suffix);
+    CHECK(cw::ktx2::cacheKeyId(QString()) == suffix);
+}
+
+TEST_CASE("cwKtx2Codec ensures one readable encode per cache key", "[Ktx2Codec]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const cwDiskCacher::Key key = streamedKey(QStringLiteral("gradient-checksum"));
+    cwDiskCacher cacher{QDir(tempDir.path())};
+
+    int sourceCalls = 0;
+    const auto source = [&sourceCalls]() {
+        sourceCalls++;
+        return gradientImage(kGradientWidth, kGradientHeight);
+    };
+
+    REQUIRE_FALSE(cw::ktx2::ensureEncodedEntry(cacher, key, source).hasError());
+    CHECK(sourceCalls == 1);
+
+    const QString cachePath = cacher.filePath(key);
+    REQUIRE(QFileInfo::exists(cachePath));
+    const QByteArray firstBytes = cacher.entry(key);
+    REQUIRE_FALSE(firstBytes.isEmpty());
+
+    SECTION("a readable entry is left alone and the source stays unread") {
+        const QDateTime firstWrite = QFileInfo(cachePath).lastModified();
+
+        REQUIRE_FALSE(cw::ktx2::ensureEncodedEntry(cacher, key, source).hasError());
+        CHECK(sourceCalls == 1);
+        CHECK(cacher.entry(key) == firstBytes);
+        CHECK(QFileInfo(cachePath).lastModified() == firstWrite);
+    }
+
+    SECTION("a damaged entry is repaired") {
+        QFile file(cachePath);
+        REQUIRE(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        file.write(firstBytes.left(firstBytes.size() / 2));
+        file.close();
+
+        REQUIRE_FALSE(cw::ktx2::ensureEncodedEntry(cacher, key, source).hasError());
+        CHECK(sourceCalls == 2);
+        CHECK(cacher.entry(key) == firstBytes);
+
+        const auto transcoded = cw::ktx2::transcode(cacher.entry(key), QRhiTexture::RGBA8);
+        REQUIRE_FALSE(transcoded.hasError());
+        CHECK(transcoded.value().size == QSize(kGradientWidth, kGradientHeight));
+    }
+
+    SECTION("an entry that is no KTX2 file at all is replaced") {
+        cacher.insert(key, QByteArray("never a valid ktx2 file"));
+
+        REQUIRE_FALSE(cw::ktx2::ensureEncodedEntry(cacher, key, source).hasError());
+        CHECK(sourceCalls == 2);
+        CHECK(cacher.entry(key) == firstBytes);
+    }
+
+    SECTION("an entry the cache can't write is an error") {
+        QTemporaryDir readOnlyDir;
+        REQUIRE(readOnlyDir.isValid());
+
+        const QFile::Permissions writable = QFile::permissions(readOnlyDir.path());
+        REQUIRE(QFile::setPermissions(readOnlyDir.path(), QFile::ReadOwner | QFile::ExeOwner));
+
+        //A process that can write anyway (root) has nothing to prove here
+        if(QFile(QDir(readOnlyDir.path()).filePath(QStringLiteral("probe"))).open(QIODevice::WriteOnly)) {
+            QFile::setPermissions(readOnlyDir.path(), writable);
+        } else {
+            cwDiskCacher readOnlyCacher{QDir(readOnlyDir.path())};
+            const auto ensured = cw::ktx2::ensureEncodedEntry(readOnlyCacher, key, source);
+
+            CHECK(ensured.hasError());
+            CHECK_FALSE(ensured.errorMessage().isEmpty());
+            CHECK(readOnlyCacher.entry(key).isEmpty());
+
+            REQUIRE(QFile::setPermissions(readOnlyDir.path(), writable));
+        }
+    }
+
+    SECTION("an encode that fails is an error and writes nothing") {
+        cwDiskCacher::Key nullImageKey = streamedKey(QStringLiteral("null-image-checksum"));
+        nullImageKey.id = QStringLiteral("null-image");
+        const auto ensured = cw::ktx2::ensureEncodedEntry(cacher, nullImageKey, []() {
+            return QImage();
+        });
+
+        CHECK(ensured.hasError());
+        CHECK_FALSE(ensured.errorMessage().isEmpty());
+        CHECK_FALSE(QFileInfo::exists(cacher.filePath(nullImageKey)));
     }
 }

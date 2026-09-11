@@ -29,13 +29,6 @@ namespace {
     constexpr int kMaxCropPixelDimension = 4096;
 
     /**
-     * Marks the compressed scrap entries in the disk cache. The trailing number
-     * is the encode's generation: bump it whenever the encoded bytes change for
-     * inputs that hash the same, so old entries stop being served.
-     */
-    constexpr QLatin1StringView kCompressedScrapKeySuffix("-uastc1");
-
-    /**
      * The shared part of both cache keys for one crop: the crop rect, plus the
      * suffix that marks a downscaled crop.
      */
@@ -57,12 +50,6 @@ namespace {
      * the disk cache, keyed off the same content hash so an edited note
      * invalidates both entries together. Returns an empty key when the encode
      * failed and the caller should stay on the PNG crop.
-     *
-     * The cache lookup comes first: encoding a 4096 pixel crop costs seconds of
-     * CPU, and rewarping a note re-crops pixels that are usually unchanged. The
-     * lookup reads the entry rather than testing the file's existence, because
-     * an edited note lands on the same cache file path with a new checksum and
-     * only a read notices that the stored bytes are stale.
      */
     cwDiskCacher::Key addCompressedCropToCache(const QDir& dataRootDir,
                                                const QImage& croppedImage,
@@ -72,25 +59,21 @@ namespace {
     {
         const cwDiskCacher::Key key = cwImageProvider::imageCacheKey(
             pathToImage,
-            keyPrefix + kCompressedScrapKeySuffix,
+            cw::ktx2::cacheKeyId(keyPrefix),
             parentHash);
 
         cwDiskCacher cacher(dataRootDir);
-        if(!cacher.entry(key).isEmpty()) {
-            return key;
-        }
+        const auto ensured = cw::ktx2::ensureEncodedEntry(cacher, key, [&croppedImage]() {
+            //Scrap texcoords use the OpenGL bottom-left origin, so the
+            //compressed texture must carry the same flip
+            //cwOpenGLUtils::toGLTexture() gives the uncompressed path
+            return cwOpenGLUtils::toGLTexture(croppedImage);
+        });
 
-        //Scrap texcoords use the OpenGL bottom-left origin, so the compressed
-        //texture must carry the same flip cwOpenGLUtils::toGLTexture() gives the
-        //uncompressed path
-        const auto encoded = cw::ktx2::encodeRgba(cwOpenGLUtils::toGLTexture(croppedImage));
-        if(encoded.hasError()) {
-            qWarning() << "Can't compress scrap texture, using the uncompressed image:"
-                       << encoded.errorMessage();
+        if(ensured.hasError()) {
             return {};
         }
 
-        cacher.insert(key, encoded.value());
         return key;
     }
 }
