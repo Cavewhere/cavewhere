@@ -8,7 +8,7 @@
 // Our includes
 #include "cwTextureStreamer.h"
 #include "cwConcurrent.h"
-#include "cwTextureResidency.h"
+#include "cwMipMath.h"
 
 // Qt includes
 #include <QMutexLocker>
@@ -67,7 +67,7 @@ void cwTextureStreamer::request(quint32 itemId,
     request.topLevel = topLevel;
     request.priority = priority;
     request.sequence = ++m_sequence;
-    request.estimatedBytes = cw::residency::chainBytes(target, source.size, topLevel);
+    request.estimatedBytes = cw::mip::chainBytes(target, source.size, topLevel);
 
     enqueue(request);
     launchReadyJobs();

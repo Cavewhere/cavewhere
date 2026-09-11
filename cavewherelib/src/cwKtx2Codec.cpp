@@ -1,6 +1,6 @@
 // Our includes
 #include "cwKtx2Codec.h"
-#include "cwTextureResidency.h"
+#include "cwMipMath.h"
 
 // Qt includes
 #include <QDebug>
@@ -26,7 +26,6 @@ namespace {
     constexpr ktx_uint32_t kVkFormatR8G8B8A8Unorm = 37;
 
     constexpr int kBytesPerRgbaPixel = 4;
-    constexpr int kSmallestMipSize = 1;
     constexpr int kSmallestThreadCount = 1;
 
     static_assert(cw::ktx2::kDefaultUastcQuality == KTX_PACK_UASTC_LEVEL_FASTEST,
@@ -43,13 +42,14 @@ namespace {
      */
     QVector<QImage> buildMipChain(const QImage& image)
     {
+        const int levelCount = cw::mip::mipLevelCount(image.size());
+
         QVector<QImage> levels;
+        levels.reserve(levelCount);
         levels.append(image);
 
-        QSize size = image.size();
-        while(size.width() > kSmallestMipSize || size.height() > kSmallestMipSize) {
-            size = QSize(std::max(kSmallestMipSize, size.width() / 2),
-                         std::max(kSmallestMipSize, size.height() / 2));
+        for(int level = 1; level < levelCount; level++) {
+            const QSize size = cw::mip::mipLevelSize(image.size(), level);
             levels.append(levels.last().scaled(size, Qt::IgnoreAspectRatio, Qt::SmoothTransformation));
         }
 
@@ -237,7 +237,7 @@ Monad::Result<cwCompressedTexture> transcodeLevels(const QByteArray& ktx2Bytes,
 
     cwCompressedTexture compressed;
     compressed.format = target;
-    compressed.size = cw::residency::mipLevelSize(baseSize, firstLevel);
+    compressed.size = cw::mip::mipLevelSize(baseSize, firstLevel);
     compressed.mipLevels.reserve(static_cast<qsizetype>(texture->numLevels) - firstLevel);
 
     for(ktx_uint32_t level = static_cast<ktx_uint32_t>(firstLevel); level < texture->numLevels; level++) {

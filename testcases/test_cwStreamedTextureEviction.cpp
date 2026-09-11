@@ -33,6 +33,7 @@
 #include "cwDiskCacher.h"
 #include "cwGeometry.h"
 #include "cwKtx2Codec.h"
+#include "cwMipMath.h"
 #include "cwRHIObject.h"
 #include "cwRenderMemoryLedger.h"
 #include "cwRenderTexturedItems.h"
@@ -300,8 +301,8 @@ TEST_CASE("Hiding a view releases its streamed textures and showing it re-stream
 
     const qint64 residentBytes = streamedTextureLedgerBytes();
     const qint64 chainBytes =
-        cw::residency::chainBytes(CwRhiTexturedItemsTestAccess::streamTargetFormat(),
-                                  fixture.source().size, baseLevel);
+        cw::mip::chainBytes(CwRhiTexturedItemsTestAccess::streamTargetFormat(),
+                            fixture.source().size, baseLevel);
     REQUIRE(chainBytes > 0);
     REQUIRE(residentBytes >= chainBytes);
 

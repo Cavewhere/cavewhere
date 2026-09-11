@@ -21,7 +21,7 @@
 //Our includes
 #include "cwRenderMemoryLedger.h"
 #include "cwStreamedTexture.h"
-#include "cwTextureResidency.h"
+#include "cwMipMath.h"
 #include "cwTextureStreamer.h"
 
 namespace {
@@ -102,9 +102,9 @@ namespace {
 
             cwCompressedTexture texture;
             texture.format = target;
-            texture.size = cw::residency::mipLevelSize(source.size, firstLevel);
+            texture.size = cw::mip::mipLevelSize(source.size, firstLevel);
 
-            const int levelCount = cw::residency::mipLevelCount(source.size) - firstLevel;
+            const int levelCount = cw::mip::mipLevelCount(source.size) - firstLevel;
             for (int i = 0; i < levelCount; i++) {
                 texture.mipLevels.append(QByteArray(kLevelBytes, '\0'));
             }
@@ -191,7 +191,7 @@ TEST_CASE("cwTextureStreamer loads a request and hands it back", "[TextureStream
     CHECK(results.at(0).topLevel == kTopLevel);
     CHECK(results.at(0).error.isEmpty());
     CHECK_FALSE(results.at(0).texture.isNull());
-    CHECK(results.at(0).texture.size == cw::residency::mipLevelSize(source.size, kTopLevel));
+    CHECK(results.at(0).texture.size == cw::mip::mipLevelSize(source.size, kTopLevel));
 
     CHECK_FALSE(streamer.hasWork());
     CHECK(ledgerCpuBytes() == 0);

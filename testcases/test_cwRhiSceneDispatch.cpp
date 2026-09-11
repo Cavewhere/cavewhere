@@ -18,6 +18,7 @@
 #include "cwSceneVisibility.h"
 #include "cwRenderMemoryLedger.h"
 #include "cwStreamedTexture.h"
+#include "cwMipMath.h"
 #include "cwTextureResidency.h"
 
 #include "CwRhiSceneTestAccess.h"
@@ -150,8 +151,8 @@ qint64 demotionReclaim()
 {
     const QSize size(kStreamedTextureDimension, kStreamedTextureDimension);
     const QRhiTexture::Format format = CwRhiTexturedItemsTestAccess::streamTargetFormat();
-    return cw::residency::chainBytes(format, size, 0)
-           - cw::residency::chainBytes(format, size, streamedBaseLevel());
+    return cw::mip::chainBytes(format, size, 0)
+           - cw::mip::chainBytes(format, size, streamedBaseLevel());
 }
 
 // Counts the warnings the residency floor logs, so a test can tell one

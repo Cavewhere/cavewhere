@@ -16,7 +16,7 @@
 #include "cwDiskCacher.h"
 #include "cwKtx2Codec.h"
 #include "cwStreamedTexture.h"
-#include "cwTextureResidency.h"
+#include "cwMipMath.h"
 
 namespace {
     constexpr ktx_uint32_t kSmokeWidth = 4;
@@ -117,8 +117,14 @@ TEST_CASE("cwKtx2Codec round trips a gradient to a block compressed format", "[K
     CHECK(texture.format == target);
     CHECK(texture.size == QSize(kGradientWidth, kGradientHeight));
     CHECK(texture.mipLevels.size() == kGradientMipCount);
+    CHECK(texture.mipLevels.size() == cw::mip::mipLevelCount(texture.size));
     CHECK(texture.mipLevels.at(0).size()
           == blocksFor(kGradientWidth) * blocksFor(kGradientHeight) * kBytesPerBlock);
+
+    for(int level = 0; level < texture.mipLevels.size(); level++) {
+        CHECK(texture.mipLevels.at(level).size()
+              == cw::mip::mipLevelBytes(target, cw::mip::mipLevelSize(texture.size, level)));
+    }
 }
 
 TEST_CASE("cwKtx2Codec handles a size that isn't a multiple of the block size", "[Ktx2]") {
@@ -132,6 +138,15 @@ TEST_CASE("cwKtx2Codec handles a size that isn't a multiple of the block size", 
     CHECK(texture.size == QSize(kOddWidth, kOddHeight));
     CHECK(texture.mipLevels.at(0).size()
           == blocksFor(kOddWidth) * blocksFor(kOddHeight) * kBytesPerBlock);
+
+    // The encoded chain and cw::mip must agree on shape, level for level, or
+    // residency and the ledger will budget for a chain the codec never wrote.
+    CHECK(texture.mipLevels.size() == cw::mip::mipLevelCount(texture.size));
+    for(int level = 0; level < texture.mipLevels.size(); level++) {
+        CHECK(texture.mipLevels.at(level).size()
+              == cw::mip::mipLevelBytes(QRhiTexture::BC7,
+                                        cw::mip::mipLevelSize(texture.size, level)));
+    }
 }
 
 TEST_CASE("cwKtx2Codec encodes the same image at the fastest and default UASTC levels", "[Ktx2]") {
@@ -251,9 +266,9 @@ TEST_CASE("cwKtx2Codec slices a block compressed mip chain from a first level", 
     REQUIRE(texture.mipLevels.size() == kGradientMipCount - kSliceLevel);
 
     for(qsizetype level = 0; level < texture.mipLevels.size(); level++) {
-        const QSize levelSize = cw::residency::mipLevelSize(texture.size, static_cast<int>(level));
+        const QSize levelSize = cw::mip::mipLevelSize(texture.size, static_cast<int>(level));
         CHECK(texture.mipLevels.at(level).size()
-              == cw::residency::mipLevelBytes(QRhiTexture::BC7, levelSize));
+              == cw::mip::mipLevelBytes(QRhiTexture::BC7, levelSize));
     }
 }
 
@@ -339,7 +354,7 @@ TEST_CASE("cwKtx2Codec slices an RGBA8 chain for devices without block compressi
     REQUIRE(texture.mipLevels.size() == kGradientMipCount - kSliceLevel);
 
     for(qsizetype level = 0; level < texture.mipLevels.size(); level++) {
-        const QSize levelSize = cw::residency::mipLevelSize(texture.size, static_cast<int>(level));
+        const QSize levelSize = cw::mip::mipLevelSize(texture.size, static_cast<int>(level));
         const QByteArray& levelBytes = texture.mipLevels.at(level);
         REQUIRE(levelBytes.size() == levelSize.width() * levelSize.height() * kBytesPerPixel);
 

@@ -2,6 +2,7 @@
 
 #include "cwFrustum.h"
 #include "cwKtx2Codec.h"
+#include "cwMipMath.h"
 #include "cwRenderTexturedItems.h"
 #include "cwRhiAttributeFormat.h"
 #include "cwRhiItemRenderer.h"
@@ -26,10 +27,8 @@ namespace {
 constexpr int kFallbackUniformSize = 16; // minimum to satisfy uniform alignment
 // Meshes up to this many vertices index with uint16, halving the index buffer.
 constexpr qsizetype kMaxUInt16VertexCount = 65535;
-// Textured items upload RGBA8 with a full mip chain.
-constexpr qint64 kRgba8BytesPerPixelNumerator = 4;
-constexpr qint64 kRgba8BytesPerPixelDenominator = 1;
-constexpr bool kMipmapped = true;
+// Textured items upload RGBA8 with a full mip chain starting at level 0.
+constexpr int kWholeImageTopLevel = 0;
 // Items are tallied on this one pass so a frame that gathers every pass counts
 // each item once. It is the first pass of cwRhiFrameRenderer's draw order.
 constexpr cwRHIObject::RenderPass kCullingStatsPass = cwRHIObject::RenderPass::Background;
@@ -467,9 +466,8 @@ void cwRhiTexturedItems::enforceGpuBudget(const cwRenderBudgets& budgets)
         if (itemStats.demotionInFlight && itemStats.residentTopLevel >= 0) {
             const int itemBase = cw::residency::pinnedBaseLevel(itemStats.textureSize);
             promisedBytes +=
-                cw::residency::chainBytes(format, itemStats.textureSize,
-                                          itemStats.residentTopLevel)
-                - cw::residency::chainBytes(format, itemStats.textureSize, itemBase);
+                cw::mip::chainBytes(format, itemStats.textureSize, itemStats.residentTopLevel)
+                - cw::mip::chainBytes(format, itemStats.textureSize, itemBase);
         }
 
         streamedItems.append({it.key(), item});
@@ -749,8 +747,8 @@ bool cwRhiTexturedItems::Item::uploadPendingLevels(const ResourceUpdateData& dat
     }
 
     for (int level = pendingUpload.nextLevelToUpload; level < levels.size(); level++) {
-        const QSize levelSize = cw::residency::mipLevelSize(topLevelSize, level);
-        if (levels.at(level).size() != cw::residency::mipLevelBytes(format, levelSize)) {
+        const QSize levelSize = cw::mip::mipLevelSize(topLevelSize, level);
+        if (levels.at(level).size() != cw::mip::mipLevelBytes(format, levelSize)) {
             qWarning() << "Streamed level" << level << "of format" << int(format)
                        << "at size" << levelSize << "holds" << levels.at(level).size()
                        << "bytes, keeping the resident texture";
@@ -765,7 +763,7 @@ bool cwRhiTexturedItems::Item::uploadPendingLevels(const ResourceUpdateData& dat
         while (pendingUpload.nextLevelToUpload < levels.size()) {
             const int level = pendingUpload.nextLevelToUpload;
             const QByteArray& levelBytes = levels.at(level);
-            const QSize levelSize = cw::residency::mipLevelSize(topLevelSize, level);
+            const QSize levelSize = cw::mip::mipLevelSize(topLevelSize, level);
 
             if (!cw::residency::takeFromBudget(remainingUploadBytes, levelBytes.size(),
                                                anythingUploadedThisFrame)) {
@@ -825,8 +823,7 @@ bool cwRhiTexturedItems::Item::uploadPendingLevels(const ResourceUpdateData& dat
     texture = pendingUpload.stagingTexture;
     residentTopLevel = pendingUpload.readyTopLevel;
     demotionInFlight = false;
-    textureBytes.setBytes(cw::residency::chainBytes(format, streamSource.size,
-                                                    residentTopLevel));
+    textureBytes.setBytes(cw::mip::chainBytes(format, streamSource.size, residentTopLevel));
 
     pendingUpload.stagingTexture = nullptr;   // ownership moved to `texture`
     clearPendingUpload();
@@ -988,11 +985,7 @@ void cwRhiTexturedItems::Item::updateTextureResource(const ResourceUpdateData& d
             texture->create();
         }
 
-        textureBytes.setBytes(
-                    cwRenderMemoryLedger::estimatedTextureBytes(size,
-                                                                kRgba8BytesPerPixelNumerator,
-                                                                kRgba8BytesPerPixelDenominator,
-                                                                kMipmapped));
+        textureBytes.setBytes(cw::mip::chainBytes(QRhiTexture::RGBA8, size, kWholeImageTopLevel));
     }
 
     if (texture && !image.isNull()) {
