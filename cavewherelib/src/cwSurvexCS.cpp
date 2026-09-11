@@ -41,14 +41,14 @@ bool isBareSurvexName(const QString& text)
 }
 
 //! `*cs` argument reading the system from \a fileName. Survex takes the name
-//! after an @; a name with a space needs the whole token quoted, which it
-//! accepts as "@name.prj".
+//! following the FILE keyword, read as one token, so a name with a space needs
+//! quoting.
 QString sidecarReference(const QString& fileName)
 {
     const bool hasSpace = std::any_of(fileName.cbegin(), fileName.cend(),
                                       [](QChar c) { return c.isSpace(); });
-    return hasSpace ? QStringLiteral("CUSTOM \"@%1\"").arg(fileName)
-                    : QStringLiteral("CUSTOM @%1").arg(fileName);
+    return hasSpace ? QStringLiteral("FILE \"%1\"").arg(fileName)
+                    : QStringLiteral("FILE %1").arg(fileName);
 }
 
 //An OSGB square is 100 km on a side, and the national grid's origin sits 14
@@ -136,10 +136,10 @@ QString sidecarFileReference(const QString& csArgument)
 {
     const QString text = csArgument.trimmed();
 
-    //Quoted first: a name with a space arrives as CUSTOM "@name with space",
-    //and read_string keeps everything up to the closing quote.
+    //Quoted first: a name with a space arrives as FILE "name with space", and
+    //read_string keeps everything up to the closing quote.
     static const QRegularExpression quotedExp(
-        QStringLiteral("^CUSTOM\\s+\"@([^\"]*)\"$"),
+        QStringLiteral("^FILE\\s+\"([^\"]*)\"$"),
         QRegularExpression::CaseInsensitiveOption);
     const QRegularExpressionMatch quoted = quotedExp.match(text);
     if (quoted.hasMatch()) {
@@ -147,7 +147,7 @@ QString sidecarFileReference(const QString& csArgument)
     }
 
     static const QRegularExpression bareExp(
-        QStringLiteral("^CUSTOM\\s+@(\\S+)$"),
+        QStringLiteral("^FILE\\s+(\\S+)$"),
         QRegularExpression::CaseInsensitiveOption);
     const QRegularExpressionMatch bare = bareExp.match(text);
     if (bare.hasMatch()) {
@@ -172,15 +172,7 @@ std::optional<Parsed> fromSurvexCS(const QString& csArgument)
         QRegularExpression::CaseInsensitiveOption);
     const QRegularExpressionMatch custom = customExp.match(text);
     if (custom.hasMatch()) {
-        const QString payload = custom.captured(1).trimmed();
-        //An @ names a file that holds the system, so the system is in there
-        //rather than on this line; taking the name for one would georeference
-        //the cave on a string spelled like a file name. A caller that can open
-        //the file asks sidecarFileReference() before coming here.
-        if (payload.startsWith(QLatin1Char('@'))) {
-            return {};
-        }
-        return Parsed{ payload };
+        return Parsed{ custom.captured(1).trimmed() };
     }
 
     const QString upper = text.toUpper();

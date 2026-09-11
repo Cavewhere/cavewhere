@@ -195,7 +195,7 @@ TEST_CASE("A WKT frame is exported as a .prj sidecar cavern can read",
 
     //The frame goes to a file named after the .svx, and the *cs out points at
     //it by bare name — cavern resolves it relative to the .svx it is reading.
-    CHECK(lines.contains(QStringLiteral("*cs out CUSTOM @region.prj")));
+    CHECK(lines.contains(QStringLiteral("*cs out FILE region.prj")));
     CHECK(sidecarText(dir, QStringLiteral("region.prj")) == kFrameWkt);
 
     //The fix's own system has an inline spelling, so it takes no file.
@@ -217,8 +217,8 @@ TEST_CASE("Two systems with no inline spelling take a sidecar each",
     REQUIRE(dir.isValid());
     const QStringList lines = exportToDir(snapshotWithFrame(region.get(), kFrameWkt), dir);
 
-    CHECK(lines.contains(QStringLiteral("*cs out CUSTOM @region.prj")));
-    CHECK(lines.contains(QStringLiteral("*cs CUSTOM @region-2.prj")));
+    CHECK(lines.contains(QStringLiteral("*cs out FILE region.prj")));
+    CHECK(lines.contains(QStringLiteral("*cs FILE region-2.prj")));
 
     CHECK(sidecarText(dir, QStringLiteral("region.prj")) == kFrameWkt);
     CHECK(sidecarText(dir, QStringLiteral("region-2.prj")) == kFixWkt);
@@ -248,7 +248,7 @@ TEST_CASE("A pretty-printed sidecar solves too",
     REQUIRE(dir.isValid());
     const QStringList lines = exportToDir(snapshotWithFrame(region.get(), pretty), dir);
 
-    CHECK(lines.contains(QStringLiteral("*cs out CUSTOM @region.prj")));
+    CHECK(lines.contains(QStringLiteral("*cs out FILE region.prj")));
     CHECK(sidecarText(dir, QStringLiteral("region.prj")) == pretty);
 
     solves(dir);
@@ -265,8 +265,8 @@ TEST_CASE("One system named twice keeps one sidecar",
     REQUIRE(dir.isValid());
     const QStringList lines = exportToDir(snapshotWithFrame(region.get(), kFrameWkt), dir);
 
-    CHECK(lines.contains(QStringLiteral("*cs out CUSTOM @region.prj")));
-    CHECK(lines.contains(QStringLiteral("*cs CUSTOM @region.prj")));
+    CHECK(lines.contains(QStringLiteral("*cs out FILE region.prj")));
+    CHECK(lines.contains(QStringLiteral("*cs FILE region.prj")));
     CHECK_FALSE(QFile::exists(dir.filePath(QStringLiteral("region-2.prj"))));
 
     solves(dir);
@@ -275,7 +275,7 @@ TEST_CASE("One system named twice keeps one sidecar",
 TEST_CASE("A shared export spells every system out in official survex syntax",
           "[cwSurvexExporterRegion_Sidecar]")
 {
-    //The @ reference is CaveWhere's own extension, so a file somebody else
+    //The file reference is CaveWhere's own extension, so a file somebody else
     //reads carries none of them — every system is spelled on the *cs line
     //itself, however it was typed.
     SECTION("a catalogued system comes back as its authority code") {
@@ -290,7 +290,8 @@ TEST_CASE("A shared export spells every system out in official survex syntax",
         const QStringList arguments = csArguments(lines);
         REQUIRE_FALSE(arguments.isEmpty());
         for (const QString& argument : arguments) {
-            CHECK_FALSE(argument.contains(QLatin1Char('@')));
+            CHECK_FALSE(argument.startsWith(QStringLiteral("FILE "),
+                                          Qt::CaseInsensitive));
             CHECK(argument == kUtmZone16N);
         }
 
@@ -312,7 +313,8 @@ TEST_CASE("A shared export spells every system out in official survex syntax",
         const QStringList arguments = csArguments(lines);
         REQUIRE_FALSE(arguments.isEmpty());
         for (const QString& argument : arguments) {
-            CHECK_FALSE(argument.contains(QLatin1Char('@')));
+            CHECK_FALSE(argument.startsWith(QStringLiteral("FILE "),
+                                          Qt::CaseInsensitive));
             CHECK(argument.startsWith(QStringLiteral("CUSTOM \"+proj=tmerc")));
 
             //Official grammar: the CUSTOM payload is one quoted run, so the
@@ -335,7 +337,7 @@ TEST_CASE("A sidecar written for the solve reads back through the importer",
     QTemporaryDir dir;
     REQUIRE(dir.isValid());
     const QStringList lines = exportToDir(snapshotWithFrame(region.get(), kFrameWkt), dir);
-    REQUIRE(lines.contains(QStringLiteral("*cs CUSTOM @region-2.prj")));
+    REQUIRE(lines.contains(QStringLiteral("*cs FILE region-2.prj")));
 
     cwSurvexImporter importer;
     const QList<cwFixStation> fixes = importFrom(dir, importer);
@@ -347,7 +349,7 @@ TEST_CASE("A sidecar written for the solve reads back through the importer",
     CHECK(fixes.first().inputCS() == kFixWkt);
 }
 
-TEST_CASE("A quoted @reference with a space resolves against the .svx's directory",
+TEST_CASE("A quoted file reference with a space resolves against the .svx's directory",
           "[cwSurvexExporterRegion_Sidecar][SurvexImport]")
 {
     QTemporaryDir dir;
@@ -356,7 +358,7 @@ TEST_CASE("A quoted @reference with a space resolves against the .svx's director
     //Named without its extension, which cavern assumes, and with a space, which
     //puts the whole argument in quotes.
     writeSidecar(dir, QStringLiteral("my frame.prj"), kFrameWkt);
-    writeSvxNaming(dir, QStringLiteral("CUSTOM \"@my frame\""));
+    writeSvxNaming(dir, QStringLiteral("FILE \"my frame\""));
 
     cwSurvexImporter importer;
     const QList<cwFixStation> fixes = importFrom(dir, importer);
@@ -367,12 +369,12 @@ TEST_CASE("A quoted @reference with a space resolves against the .svx's director
     CHECK(fixes.first().inputCS() == kFrameWkt);
 }
 
-TEST_CASE("An @reference to a missing file warns and leaves the fixes without a system",
+TEST_CASE("A file reference to a missing file warns and leaves the fixes without a system",
           "[cwSurvexExporterRegion_Sidecar][SurvexImport]")
 {
     QTemporaryDir dir;
     REQUIRE(dir.isValid());
-    writeSvxNaming(dir, QStringLiteral("CUSTOM @gone.prj"));
+    writeSvxNaming(dir, QStringLiteral("FILE gone.prj"));
 
     cwSurvexImporter importer;
     const QList<cwFixStation> fixes = importFrom(dir, importer);

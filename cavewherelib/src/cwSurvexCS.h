@@ -54,7 +54,7 @@ std::optional<Parsed> fromSurvexCS(const QString& csArgument);
 inline constexpr auto sidecarSuffix = QLatin1String(".prj");
 
 /**
- * The file name a `CUSTOM @name` argument reads its system from — as written,
+ * The file name a `FILE name` argument reads its system from — as written,
  * so the reader applies cavern's own `.prj` rule — or empty when \a csArgument
  * carries the system itself.
  *
@@ -69,7 +69,7 @@ QString sidecarFileReference(const QString& csArgument);
  * Whether a `*cs` may point at a `.prj` beside the file rather than spell its
  * system out.
  *
- * The `@` reference is CaveWhere's own extension to its bundled survex, and
+ * The `file` keyword is CaveWhere's own extension to its bundled survex, and
  * official releases reject it, so the default is to keep to the syntax every
  * survex reads. Only the solve driver — whose `.svx` the bundled cavern reads
  * and nobody else ever sees — asks for the other one.
@@ -86,7 +86,7 @@ enum class SidecarPolicy {
  * WKT has no inline spelling: survex reads a quoted argument with read_string(),
  * which has no escape syntax, so the first `"` in the payload ends the string
  * and cavern takes `PROJCRS[` for the whole system. It reads the system from its
- * own file instead — `*cs out CUSTOM @<stem>.prj`, resolved relative to the
+ * own file instead — `*cs out FILE <stem>.prj`, resolved relative to the
  * `.svx` (survex/src/commands.c, read_cs_from_file), which is why a bare file
  * name is enough. Survex 1.4.23 and newer.
  *
