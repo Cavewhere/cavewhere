@@ -24,6 +24,8 @@
 #include "cwRenderTexturedItemVisibility.h"
 #include "cwRenderTexturedItems.h"
 #include "cwRegionSceneManager.h"
+#include "cwScene.h"
+#include "cwSceneVisibility.h"
 #include "cwRunningProfileScrapViewMatrix.h"
 #include "cwImageUtils.h"
 #include "cwCavingRegion.h"
@@ -38,6 +40,7 @@
 #include <QCoreApplication>
 #include <QEvent>
 #include <QThreadPool>
+#include <QEventLoop>
 #include "cwSignalSpy.h"
 
 //Std includes
@@ -391,12 +394,52 @@ TEST_CASE("Each scrap reaches the render items as it finishes", "[cwScrapManager
         });
     }
 
+    // A delivered scrap stays hidden until the intersecter publishes a BVH that
+    // contains it, so per-scrap delivery only fills the 3d view in if the pick
+    // gate opens mid-run too (issue #671). attachScrap mints a render id that
+    // reads visible before the scrap's geometry arrives, so a scrap counts as
+    // drawable only once it has been delivered.
+    auto* scene = rootData->regionSceneManager()->scene();
+    REQUIRE(scene != nullptr);
+    const auto renderObjectId = renderItems->renderObjectId();
+
+    constexpr int kRunTimeoutMs = 120000;
+    constexpr int kPollWaitMs = 2;
+    bool sawVisibleWhileWorking = false;
+    QElapsedTimer runTimer;
+    runTimer.start();
+    while(scrapManager->updateState() == cwUpdatable::State::Working
+          && runTimer.elapsed() < kRunTimeoutMs) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents | QEventLoop::WaitForMoreEvents,
+                                        kPollWaitMs);
+
+        const auto snapshot = scene->visibility()->snapshot();
+        bool anyDeliveredVisible = false;
+        bool anyPending = false;
+        for(cwScrap* scrap : std::as_const(extraScraps)) {
+            if(deliveryCount.value(scrap) > 0) {
+                if(snapshot.subVisible(renderObjectId, scrapManager->renderId(scrap))) {
+                    anyDeliveredVisible = true;
+                }
+            } else {
+                anyPending = true;
+            }
+        }
+
+        if(anyDeliveredVisible && anyPending) {
+            sawVisibleWhileWorking = true;
+        }
+    }
+
     scrapManager->waitForFinish();
     rootData->futureManagerModel()->waitForFinished();
     QCoreApplication::processEvents();
 
     // Every scrap ended up delivered, exactly one texture descriptor each.
     CHECK(deliveredScrapCount(renderItems) == totalScraps);
+
+    // A scrap was drawable while the rest of the batch was still running.
+    CHECK(sawVisibleWhileWorking);
 
     // Each scrap was delivered exactly once, mid-run.
     for(cwScrap* scrap : std::as_const(extraScraps)) {

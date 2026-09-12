@@ -23,6 +23,8 @@
 #include "cwNoteLiDARTransformation.h"
 #include "cwNoteTranformation.h"
 #include "cwRegionSceneManager.h"
+#include "cwScene.h"
+#include "cwSceneVisibility.h"
 #include "cwRenderTexturedItems.h"
 #include "cwCavingRegion.h"
 #include "GeoreferenceFixtureHelper.h"
@@ -575,9 +577,19 @@ TEST_CASE("Each LiDAR note reaches the render items as it finishes", "[cwNoteLiD
     // everything observed before it is mid-batch.
     QSignalSpy batchFinishedSpy(manager, &cwNoteLiDARManager::liDARNotesUpdated);
 
+    // A delivered note stays hidden until the intersecter publishes a BVH that
+    // contains it, so "delivered mid-batch" only fills the 3d view in if the
+    // gate opens mid-batch too (issue #671).
+    auto* scene = root->regionSceneManager()->scene();
+    REQUIRE(scene != nullptr);
+    auto* renderItems = root->regionSceneManager()->items();
+    REQUIRE(renderItems != nullptr);
+    const auto renderObjectId = renderItems->renderObjectId();
+
     constexpr int kBatchTimeoutMs = 120000;
     constexpr int kPollWaitMs = 2;
     bool sawPartialDelivery = false;
+    bool sawVisibleMidBatch = false;
     QElapsedTimer batchTimer;
     batchTimer.start();
     while (batchFinishedSpy.isEmpty() && batchTimer.elapsed() < kBatchTimeoutMs) {
@@ -587,6 +599,21 @@ TEST_CASE("Each LiDAR note reaches the render items as it finishes", "[cwNoteLiD
         const int delivered = deliveredNoteCount();
         if (delivered > 0 && delivered < notes.size()) {
             sawPartialDelivery = true;
+        }
+
+        // Only count a gate that opened while notes were still undelivered in
+        // this same pass, so a gate opening alongside the batch's completion
+        // handler stays out of the mid-batch tally.
+        if (delivered < notes.size()) {
+            const auto snapshot = scene->visibility()->snapshot();
+            for (cwNoteLiDAR* note : std::as_const(notes)) {
+                const QVector<uint32_t> ids = manager->renderItemIds(note);
+                for (uint32_t id : ids) {
+                    if (snapshot.subVisible(renderObjectId, id)) {
+                        sawVisibleMidBatch = true;
+                    }
+                }
+            }
         }
     }
 
@@ -598,6 +625,9 @@ TEST_CASE("Each LiDAR note reaches the render items as it finishes", "[cwNoteLiD
     // Every note ended up delivered, exactly one set of render items each.
     CHECK(deliveredNoteCount() == notes.size());
     CHECK(sawPartialDelivery);
+
+    // The gate opened for at least one note while the batch was still running.
+    CHECK(sawVisibleMidBatch);
 }
 
 TEST_CASE("A LiDAR note deleted mid-run never reaches the render items", "[cwNoteLiDARManager]")

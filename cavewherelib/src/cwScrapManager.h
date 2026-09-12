@@ -126,6 +126,9 @@ public:
     Q_INVOKABLE int derivedScrapCount(cwSketch* sketch) const { return m_sketchDerivedScraps.value(sketch).size(); }
     Q_INVOKABLE int renderScrapCount() const { return m_scrapToRenderId.size(); }
 
+    //! The render item id delivered for scrap, or 0 when the scrap has none
+    uint32_t renderId(cwScrap* scrap) const { return m_scrapToRenderId.value(scrap, 0); }
+
 signals:
     void updateStateChanged();
 
