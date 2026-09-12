@@ -10,8 +10,9 @@ import QtQuick.Controls as QC
 import QtQuick.Layouts
 import cavewherelib
 
-// Scope-mode header for a trip that windows one block of its cave's
-// survey file (plans/EXTERNAL_FILE_PHASE3.html P3.9, master §8.5.1). The
+// Scope-mode header for a trip that windows its cave's survey file —
+// one block of it, or the whole file when the trip carries no prefix
+// (plans/EXTERNAL_FILE_PHASE3.html P3.9 and P3.16, master §8.5.1). The
 // trip owns no file — the cave does — so this header names the cave it
 // belongs to, the station prefix that selects the block, and the one
 // destructive verb the trip still answers to: Remove trip.
@@ -86,6 +87,17 @@ QQ.Item {
             QC.Label {
                 objectName: "prefixInFileLabel"
                 text: qsTr("Prefix in file:")
+            }
+
+            // The whole-cave window carries no prefix: it owns every station
+            // of the cave no block window claims. Naming a block path here
+            // turns it into an ordinary window.
+            QC.Label {
+                objectName: "wholeFilePlaceholder"
+
+                visible: root.trip !== null && root.trip.stationPrefix.length === 0
+                color: Theme.textSecondary
+                text: qsTr("whole file")
             }
 
             ClickTextInput {

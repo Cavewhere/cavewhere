@@ -52,7 +52,9 @@ namespace cwExternalCenterlineAttach {
 /**
  * One Scope trip the cave-level attach created: a trip that owns no
  * chunks and no file, and whose stations come from filtering the
- * cave's solved network by its stationPrefix.
+ * cave's solved network by its stationPrefix. An empty stationPrefix
+ * names the whole-cave window, which owns every station of the cave no
+ * sibling prefix claims (cwTrip::windowsWholeCave).
  */
 struct ScopeTripDescription {
     QString name;          //!< The trip's name after uniqueTripName dedup
@@ -76,9 +78,9 @@ struct AttachReport {
 
     /**
      * The Scope trips a cave-level attach created, in the scan's
-     * document order. Empty for a trip attach, and empty for the blocks
-     * a replace kept - a trip that already windows a block is left
-     * exactly as it is.
+     * document order with the whole-cave window last. Empty for a trip
+     * attach, and empty for the blocks a replace kept - a trip that
+     * already windows a block is left exactly as it is.
      */
     QList<ScopeTripDescription> createdScopeTrips;
 };

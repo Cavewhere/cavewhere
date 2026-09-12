@@ -50,6 +50,47 @@ namespace {
         return cwCavernNaming::scopePrefix(stationPrefix);
     }
 
+    // The single whole-cave-window policy, shared by the instance accessor and
+    // the snapshot overload: an attached cave has no native trips, so one of its
+    // trips that owns neither a file nor a prefix windows the cave itself.
+    bool computeWindowsWholeCave(bool hasExternalCenterline,
+                                 const QString& stationPrefix,
+                                 bool caveIsAttached)
+    {
+        return caveIsAttached && !hasExternalCenterline && stationPrefix.isEmpty();
+    }
+
+    // The prefixes of every Scope trip beside \a trip in the same cave, each
+    // already "<stationPrefix>." — what a whole-cave window has to leave to the
+    // deeper windows that own it.
+    QStringList siblingScopePrefixesOf(const cwTrip* trip)
+    {
+        const cwCave* cave = trip->parentCave();
+        if (cave == nullptr) {
+            return QStringList();
+        }
+
+        QStringList prefixes;
+        const QList<cwTrip*> siblings = cave->trips();
+        for (const cwTrip* sibling : siblings) {
+            if (sibling == trip || sibling->stationPrefix().isEmpty()) {
+                continue;
+            }
+            prefixes.append(cwCavernNaming::scopePrefix(sibling->stationPrefix()));
+        }
+        return prefixes;
+    }
+
+    // Case-insensitive, because a station key is canonical (lowercased) while a
+    // stationPrefix is authored and may carry any case.
+    bool claimedBySibling(const QString& stationKey, const QStringList& siblingPrefixes)
+    {
+        return std::any_of(siblingPrefixes.cbegin(), siblingPrefixes.cend(),
+                           [&stationKey](const QString& prefix) {
+                               return stationKey.startsWith(prefix, Qt::CaseInsensitive);
+                           });
+    }
+
     // The single "what stations does this trip have?" policy, shared by
     // knownStations() and its cwTripData overload — which sources answer, and
     // which one's spelling wins when they disagree.
@@ -297,6 +338,21 @@ bool cwTrip::externallyBacked() const
 {
     const cwCave* cave = parentCave();
     return isScoped() || (cave != nullptr && !cave->externalCenterline().isEmpty());
+}
+
+bool cwTrip::windowsWholeCave() const
+{
+    const cwCave* cave = parentCave();
+    return computeWindowsWholeCave(!m_externalCenterline.isEmpty(),
+                                   m_stationPrefix,
+                                   cave != nullptr && !cave->externalCenterline().isEmpty());
+}
+
+bool cwTrip::windowsWholeCave(const cwTripData& trip, const cwCaveData& cave)
+{
+    return computeWindowsWholeCave(!trip.externalCenterline.isEmpty(),
+                                   trip.stationPrefix,
+                                   !cave.externalCenterline.isEmpty());
 }
 
 void cwTrip::setId(const QUuid& id)
@@ -632,8 +688,9 @@ QList<QPair<QString, QVector3D>> cwTrip::solvedStations() const {
 
     const cwStationPositionLookup lookup = cave->stationPositionLookup();
     const QString prefix = scopePrefix();
+    const bool wholeCaveWindow = windowsWholeCave();
 
-    if(prefix.isEmpty()) {
+    if(prefix.isEmpty() && !wholeCaveWindow) {
         //Native trip: its own stations are its chunk stations that have a
         //solved position.
         const QList<cwStation> unique = uniqueStations();
@@ -650,9 +707,16 @@ QList<QPair<QString, QVector3D>> cwTrip::solvedStations() const {
     //("<tripLabel>.<tail>" or "<stationPrefix>.<tail>"); yield each as the
     //scope-relative tail, the same local name the note/scrap/lead sites and
     //cwScopeStationListModel speak.
+    //
+    //The whole-cave window is the same walk with an empty prefix — the cave's
+    //own namespace is this trip's namespace, so every key matches and none has
+    //a tail to strip — minus the keys a sibling window's prefix claims.
+    const QStringList siblingPrefixes = wholeCaveWindow ? siblingScopePrefixesOf(this)
+                                                        : QStringList();
     const QMap<QString, QVector3D> positions = lookup.positions();
     for(auto it = positions.constBegin(); it != positions.constEnd(); ++it) {
-        if(it.key().startsWith(prefix, Qt::CaseInsensitive)) {
+        if(it.key().startsWith(prefix, Qt::CaseInsensitive)
+           && !claimedBySibling(it.key(), siblingPrefixes)) {
             solved.append({it.key().mid(prefix.size()), it.value()});
         }
     }

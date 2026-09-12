@@ -52,8 +52,10 @@ struct ScopeExtent {
 // cave-local position lookup — network keys carry the "fisher_ridge." cave
 // prefix that the lookup strips, so `cavePrefix` bridges the two.
 // Both prefix comparisons are case-insensitive: a Scope trip windows by its
-// `stationPrefix` as authored (which may carry uppercase), while cavern
-// lowercases every label it writes to the .3d, so network keys are lowercase.
+// `stationPrefix` as authored (which may carry uppercase), while cavern's
+// labels agree with that case only by luck — it lowercases the Survex names it
+// reads and preserves the case of Compass and Walls ones (measured:
+// `cave0.AB1`, `cave0:XY:P1`).
 // `caveScopePrefixes` holds every scope prefix of the same cave (empty entries
 // for its native trips): a nested block's stations also carry the parent's
 // prefix, so a scope hands a station claimed by a longer sibling prefix to that
@@ -179,6 +181,14 @@ cwLinePlotGeometry::generate(const cwCavingRegionData& region,
         QStringList tripScopePrefixes;
         tripScopePrefixes.reserve(cave.trips.size());
         for (const cwTripData& trip : cave.trips) {
+            if (cwTrip::windowsWholeCave(trip, cave)) {
+                // The whole-cave window's scope is the cave itself, so it
+                // windows on the cave prefix alone. ownedByInnerScope then hands
+                // each of the cave's blocks to its own window: every sibling
+                // prefix is strictly longer than this one.
+                tripScopePrefixes.append(cavePrefix);
+                continue;
+            }
             const QString tripScope = cwTrip::scopePrefix(trip, tripLabels);
             tripScopePrefixes.append(tripScope.isEmpty() ? QString() : cavePrefix + tripScope);
         }

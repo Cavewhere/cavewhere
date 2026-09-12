@@ -335,3 +335,29 @@ TEST_CASE("The Scope trips of an attached cave never float", "[FloatingSurveys]"
 
     CHECK(linePlot->floatingSurveys().isEmpty());
 }
+
+TEST_CASE("The whole-cave window of an attached cave never floats", "[FloatingSurveys]")
+{
+    // Same reason as the block windows above, for the window that carries no
+    // prefix at all (cwTrip::windowsWholeCave): a Compass file gives cavern no
+    // level below the cave, so this one trip is the view onto every station the
+    // cave solved. Reporting the whole of a healthy cave as adrift would be the
+    // loudest possible banner.
+    auto fixture = makeSavedProject(QStringLiteral("whole-cave-floating"),
+                                    QStringLiteral("NativeCave"),
+                                    QStringLiteral("NativeTrip"));
+    cwCave* cave = addEmptyCave(*fixture->project->cavingRegion(),
+                                QStringLiteral("CompassCave"));
+
+    attachThroughManager(fixture.get(), cave,
+                         fixturePath(QStringLiteral("compass_multi.mak")));
+    drainPipelines(fixture.get());
+
+    cwLinePlotManager* linePlot = fixture->rootData->linePlotManager();
+    INFO("solve error: " << linePlot->solveErrorMessage().toStdString());
+    REQUIRE_FALSE(linePlot->hasSolveError());
+    REQUIRE(cave->tripCount() == 1);
+    REQUIRE(cave->trip(0)->windowsWholeCave());
+
+    CHECK(linePlot->floatingSurveys().isEmpty());
+}

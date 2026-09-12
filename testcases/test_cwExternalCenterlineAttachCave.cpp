@@ -7,6 +7,7 @@
 
 // Catch
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
 
 // Our
 #include "cwAttachedCenterlinesModel.h"
@@ -143,6 +144,52 @@ QString ownerKindOf(const cwAttachedCenterlinesModel* model, const QString& owne
     FAIL("The attached-centerlines model holds no row named " << ownerName.toStdString());
     return QString();
 }
+
+//! The cave's whole-cave window: the one chunk-less trip that carries no
+//! prefix, which owns every station no block window claims (P3.16).
+cwTrip* wholeCaveTripOf(const cwCave* cave)
+{
+    for (cwTrip* trip : cave->trips()) {
+        if (trip->windowsWholeCave()) {
+            return trip;
+        }
+    }
+    return nullptr;
+}
+
+//! Attaches \a fixture at cave level and waits for the solve it chains, so the
+//! cave's solved lookup and the geometry pass below have something to read.
+void attachAndSolve(SavedProjectFixture* fixture, cwCave* cave, const QString& source)
+{
+    attachCaveThroughManager(fixture, cave, source);
+    drainPipelines(fixture);
+    REQUIRE(tryWait(kAttachWaitMs, [cave]() {
+        return !cave->stationPositionLookup().positions().isEmpty();
+    }));
+}
+
+//! The geometry the line plot would draw for \a cave, generated from the same
+//! region snapshot and solved network the renderer's worker pass reads.
+cwLinePlotGeometry::Result geometryOf(SavedProjectFixture* fixture)
+{
+    const auto result =
+        cwLinePlotGeometry::generate(fixture->project->cavingRegion()->data(),
+                                     fixture->rootData->linePlotManager()->regionNetwork());
+    REQUIRE_FALSE(result.hasError());
+    return result.value();
+}
+
+//! How many vertices the geometry pass gave \a trip.
+int vertexCountOf(const cwLinePlotGeometry::Result& geometry, const cwTrip* trip)
+{
+    const qsizetype tripIndex = geometry.tripUuids.indexOf(trip->id());
+    REQUIRE(tripIndex >= 0);
+    return geometry.tripVertexRanges.at(tripIndex).count;
+}
+
+// Solved positions are floats, so a length assembled from them drifts by
+// fractions of a centimeter off the tape totals cavern reports.
+constexpr double kSolvedLengthMarginMeters = 0.05;
 
 } // namespace
 
@@ -348,7 +395,7 @@ TEST_CASE("cave attach seeds Scope-trip dates from their blocks", "[Attach][Cave
            || doghill->date() == QDateTime(QDate::currentDate(), QTime())));
 }
 
-TEST_CASE("cave replace keeps matching Scope trips, adds new ones, and keeps orphans",
+TEST_CASE("cave replace keeps matching Scope trips, adds new ones, and drops empty orphans",
           "[Attach][Cave]")
 {
     auto fixture = makeProjectWithFreshCave(QStringLiteral("cave-replace"));
@@ -363,7 +410,6 @@ TEST_CASE("cave replace keeps matching Scope trips, adds new ones, and keeps orp
 
     const QUuid doghillId = tripForPrefix(cave, kDoghill)->id();
     const QUuid bigPassageId = tripForPrefix(cave, kBigPassage)->id();
-    const QUuid eastId = tripForPrefix(cave, kEast)->id();
 
     QTemporaryDir sourceDir;
     REQUIRE(sourceDir.isValid());
@@ -403,11 +449,10 @@ TEST_CASE("cave replace keeps matching Scope trips, adds new ones, and keeps orp
           == QStringLiteral("doghill.big-passage.west"));
     CHECK(report.createdScopeTrips.at(0).name == west->name());
 
-    // Orphaned: the trip whose block is gone stays, silently (§5 q5).
-    cwTrip* east = tripForPrefix(cave, kEast);
-    REQUIRE(east != nullptr);
-    CHECK(east->id() == eastId);
-    CHECK(cave->tripCount() == 4);
+    // Orphaned: the trip whose block is gone held no chunks, so the reconcile
+    // removed it — a window is derived from the file (§3.4, amended by P3.16).
+    CHECK(tripForPrefix(cave, kEast) == nullptr);
+    CHECK(cave->tripCount() == 3);
 
     CHECK(cave->externalCenterline().entryFile() == QStringLiteral("blocks-west.svx"));
     drainPipelines(fixture.get());
@@ -542,9 +587,10 @@ TEST_CASE("Cave attach emits line geometry for Scope trips whose prefix carries 
 {
     // The whole cave-level chain against a survey file that names its blocks
     // with uppercase (48H-Feng): the Scope trips keep that authored spelling in
-    // stationPrefix, while cavern lowercases every label it writes to the .3d.
-    // The line-plot geometry pass has to window across that difference, or the
-    // cave renders station labels with no centerline between them.
+    // stationPrefix, while cavern lowercases every Survex label it writes to
+    // the .3d (it preserves the case of Compass and Walls ones). The line-plot
+    // geometry pass has to window across that difference, or the cave renders
+    // station labels with no centerline between them.
     auto fixture = makeProjectWithFreshCave(QStringLiteral("cave-attach-mixed-case"));
     cwCave* cave = freshCaveOf(fixture.get());
 
@@ -671,6 +717,265 @@ TEST_CASE("closing the project keeps the cave's remembered source",
     CHECK(fixture->settings()->hasBreadcrumb(caveId));
     CHECK(fixture->settings()->breadcrumbPath(caveId) == storedPath);
     CHECK(fixture->settings()->fingerprint(caveId) == storedFingerprint);
+
+    drainPipelines(fixture.get());
+}
+
+TEST_CASE("A Compass cave draws through its one whole-cave window",
+          "[Attach][Cave][Geometry]")
+{
+    // cavern throws a Compass "SURVEY NAME:" away, so every station of a .mak
+    // lands flat in the cave's own namespace with no level below it. The cave
+    // gets exactly one window, carrying no prefix, and it owns all five
+    // stations: before P3.16 the attach made one prefixed trip per survey, each
+    // listing nothing, and the lineplot stayed blank.
+    auto fixture = makeProjectWithFreshCave(QStringLiteral("cave-compass-window"));
+    cwCave* cave = freshCaveOf(fixture.get());
+
+    attachAndSolve(fixture.get(), cave, fixturePath(QStringLiteral("compass_multi.mak")));
+
+    REQUIRE(cave->tripCount() == 1);
+    cwTrip* window = wholeCaveTripOf(cave);
+    REQUIRE(window != nullptr);
+    CHECK(window->stationPrefix().isEmpty());
+    CHECK(window->scopePrefix().isEmpty());
+    CHECK(window->name() == QStringLiteral("compass_multi"));
+    CHECK(window->knownStations().size() == 5);
+
+    const cwLinePlotGeometry::Result geometry = geometryOf(fixture.get());
+    // Four shots, each its own pair of vertices.
+    CHECK(vertexCountOf(geometry, window) == 8);
+
+    // 31 ft of tape: a Compass .dat spells distances in decimal feet.
+    const int caveIndex = fixture->project->cavingRegion()->indexOf(cave);
+    REQUIRE(caveIndex >= 0);
+    REQUIRE(geometry.cavesLengthAndDepths.size() > caveIndex);
+    CHECK(geometry.cavesLengthAndDepths.at(caveIndex).length()
+          == Catch::Approx(9.45).margin(kSolvedLengthMarginMeters));
+    CHECK(geometry.cavesLengthAndDepths.at(caveIndex).depth()
+          == Catch::Approx(1.07).margin(kSolvedLengthMarginMeters));
+
+    drainPipelines(fixture.get());
+}
+
+TEST_CASE("A Walls cave splits between its whole-cave window and its prefix windows",
+          "[Attach][Cave][Geometry]")
+{
+    // walls_prefixed.wpj ties a prefix-less survey (A1..A3) to a "#PREFIX XY"
+    // one (P1, P2) through the qualified station XY:P1. Only the prefix is a
+    // naming level, so the root's three stations belong to the whole-cave
+    // window and the XY block's two to its own.
+    auto fixture = makeProjectWithFreshCave(QStringLiteral("cave-walls-window"));
+    cwCave* cave = freshCaveOf(fixture.get());
+
+    attachAndSolve(fixture.get(), cave,
+                   fixturePath(QStringLiteral("walls_prefixed/walls_prefixed.wpj")));
+
+    REQUIRE(cave->tripCount() == 2);
+    cwTrip* window = wholeCaveTripOf(cave);
+    cwTrip* xy = tripForPrefix(cave, QStringLiteral("XY"));
+    REQUIRE(window != nullptr);
+    REQUIRE(xy != nullptr);
+    CHECK(window->name() == QStringLiteral("walls_prefixed"));
+    CHECK(window->knownStations().size() == 3);
+    CHECK(xy->knownStations().size() == 2);
+
+    const cwLinePlotGeometry::Result geometry = geometryOf(fixture.get());
+    // Four legs in all, eight vertices: the root's two, the XY survey's one,
+    // and the tie between them, drawn once by whichever window reaches it
+    // first — here XY, which the reconcile created before the whole-cave
+    // window. The cave length below is what holds "once" to a number.
+    CHECK(vertexCountOf(geometry, window) == 4);
+    CHECK(vertexCountOf(geometry, xy) == 4);
+
+    const int caveIndex = fixture->project->cavingRegion()->indexOf(cave);
+    REQUIRE(caveIndex >= 0);
+    CHECK(geometry.cavesLengthAndDepths.at(caveIndex).length()
+          == Catch::Approx(32.0).margin(kSolvedLengthMarginMeters));
+    CHECK(geometry.cavesLengthAndDepths.at(caveIndex).depth()
+          == Catch::Approx(3.0).margin(kSolvedLengthMarginMeters));
+
+    drainPipelines(fixture.get());
+}
+
+TEST_CASE("A Survex file with shots outside every block windows the root too",
+          "[Attach][Cave][Geometry]")
+{
+    // survex_root_and_block.svx fixes r1 at file root and ties r3 into
+    // "*begin side". The root stations sit in the cave's own namespace, so the
+    // whole-cave window owns them while side gets its ordinary Scope trip.
+    auto fixture = makeProjectWithFreshCave(QStringLiteral("cave-root-window"));
+    cwCave* cave = freshCaveOf(fixture.get());
+
+    attachAndSolve(fixture.get(), cave,
+                   fixturePath(QStringLiteral("survex_root_and_block.svx")));
+
+    REQUIRE(cave->tripCount() == 2);
+    cwTrip* window = wholeCaveTripOf(cave);
+    cwTrip* side = tripForPrefix(cave, QStringLiteral("side"));
+    REQUIRE(window != nullptr);
+    REQUIRE(side != nullptr);
+    CHECK(window->name() == QStringLiteral("survex_root_and_block"));
+    CHECK(window->knownStations().size() == 3);
+    CHECK(side->knownStations().size() == 2);
+
+    const cwLinePlotGeometry::Result geometry = geometryOf(fixture.get());
+    // The root's two legs, side's one, and the tie — drawn once, by side,
+    // which the reconcile created before the whole-cave window.
+    CHECK(vertexCountOf(geometry, window) == 4);
+    CHECK(vertexCountOf(geometry, side) == 4);
+
+    const int caveIndex = fixture->project->cavingRegion()->indexOf(cave);
+    REQUIRE(caveIndex >= 0);
+    CHECK(geometry.cavesLengthAndDepths.at(caveIndex).length()
+          == Catch::Approx(25.0).margin(kSolvedLengthMarginMeters));
+    CHECK(geometry.cavesLengthAndDepths.at(caveIndex).depth()
+          == Catch::Approx(2.0).margin(kSolvedLengthMarginMeters));
+
+    drainPipelines(fixture.get());
+}
+
+TEST_CASE("A cave whose every station sits under a prefix gets no whole-cave window",
+          "[Attach][Cave][Geometry]")
+{
+    // walls_book_prefix.wpj carries ".OPTIONS prefix=BK" over its only survey,
+    // so every station is inside the BK level and the file root holds none. A
+    // window with nothing to own would be an empty trip in the table forever.
+    auto fixture = makeProjectWithFreshCave(QStringLiteral("cave-book-prefix"));
+    cwCave* cave = freshCaveOf(fixture.get());
+
+    attachAndSolve(fixture.get(), cave,
+                   fixturePath(QStringLiteral("walls_book_prefix/walls_book_prefix.wpj")));
+
+    REQUIRE(cave->tripCount() == 1);
+    CHECK(wholeCaveTripOf(cave) == nullptr);
+    cwTrip* book = tripForPrefix(cave, QStringLiteral("BK"));
+    REQUIRE(book != nullptr);
+    CHECK(book->knownStations().size() == 2);
+
+    const cwLinePlotGeometry::Result geometry = geometryOf(fixture.get());
+    CHECK(vertexCountOf(geometry, book) == 2);
+
+    drainPipelines(fixture.get());
+}
+
+TEST_CASE("cave replace repairs the windows an older attach left behind",
+          "[Attach][Cave]")
+{
+    // The shape an attachment made before P3.16 is in: one chunk-less trip per
+    // Compass survey, prefixed "A", listing nothing. A reconcile removes every
+    // chunk-less window the file no longer accounts for and creates the
+    // whole-cave one, so Reload or Replace is the repair.
+    auto fixture = makeProjectWithFreshCave(QStringLiteral("cave-window-repair"));
+    cwCave* cave = freshCaveOf(fixture.get());
+
+    // Attach something else first: the cave-level attach guard refuses a cave
+    // that already has trips, so the stale window is planted afterward.
+    attachCaveThroughManager(fixture.get(), cave, blocksFixture());
+    drainPipelines(fixture.get());
+    for (int i = cave->tripCount() - 1; i >= 0; --i) {
+        cave->removeTrip(i);
+    }
+    cwTrip* stale = new cwTrip();
+    stale->setName(QStringLiteral("A"));
+    stale->setStationPrefix(QStringLiteral("A"));
+    cave->addTrip(stale);
+
+    const QUuid staleId = stale->id();
+
+    // The replace, and what it must report whatever the stale window held: the
+    // whole-cave window exists, and the report names it with an empty prefix.
+    const auto replaceAndCheckWindow = [&]() {
+        auto future = managerOf(fixture.get())
+                          ->replaceCenterline(cave,
+                                              fixturePath(QStringLiteral("compass_multi.mak")));
+        REQUIRE(AsyncFuture::waitForFinished(future, kAttachWaitMs));
+        REQUIRE_FALSE(future.result().hasError());
+        drainPipelines(fixture.get());
+
+        cwTrip* window = wholeCaveTripOf(cave);
+        REQUIRE(window != nullptr);
+        const AttachReport report = future.result().value();
+        REQUIRE(report.createdScopeTrips.size() == 1);
+        CHECK(report.createdScopeTrips.at(0).stationPrefix.isEmpty());
+        CHECK(report.createdScopeTrips.at(0).name == window->name());
+    };
+
+    SECTION("a chunk-less window the file no longer accounts for is removed") {
+        replaceAndCheckWindow();
+
+        CHECK(cave->tripCount() == 1);
+        CHECK(tripForPrefix(cave, QStringLiteral("A")) == nullptr);
+    }
+
+    SECTION("a window holding chunks survives the reconcile") {
+        stale->addChunk(new cwSurveyChunk());
+        replaceAndCheckWindow();
+
+        // Survey data the user authored, orphaned prefix and all.
+        CHECK(cave->tripCount() == 2);
+        cwTrip* survivor = tripForPrefix(cave, QStringLiteral("A"));
+        REQUIRE(survivor != nullptr);
+        CHECK(survivor->id() == staleId);
+    }
+
+    drainPipelines(fixture.get());
+}
+
+TEST_CASE("cave replace keeps a window whose prefix the user re-cased",
+          "[Attach][Cave]")
+{
+    // A prefix selects its stations case-insensitively everywhere else — in
+    // cwTrip::solvedStations and in the line-plot's scope ownership — so the
+    // reconcile has to read "xy" as the window over the scan's "XY" block and
+    // keep the user's renamed trip rather than replacing it with a default one.
+    auto fixture = makeProjectWithFreshCave(QStringLiteral("cave-window-case"));
+    cwCave* cave = freshCaveOf(fixture.get());
+
+    const QString source = fixturePath(QStringLiteral("walls_prefixed/walls_prefixed.wpj"));
+    attachAndSolve(fixture.get(), cave, source);
+
+    cwTrip* xy = tripForPrefix(cave, QStringLiteral("XY"));
+    REQUIRE(xy != nullptr);
+    xy->setName(QStringLiteral("Pit series"));
+    xy->setStationPrefix(QStringLiteral("xy"));
+    const QUuid xyId = xy->id();
+    const int tripCount = cave->tripCount();
+
+    auto future = managerOf(fixture.get())->replaceCenterline(cave, source);
+    REQUIRE(AsyncFuture::waitForFinished(future, kAttachWaitMs));
+    REQUIRE_FALSE(future.result().hasError());
+    drainPipelines(fixture.get());
+
+    CHECK(cave->tripCount() == tripCount);
+    CHECK(future.result().value().createdScopeTrips.isEmpty());
+    cwTrip* survivor = tripForPrefix(cave, QStringLiteral("xy"));
+    REQUIRE(survivor != nullptr);
+    CHECK(survivor->id() == xyId);
+    CHECK(survivor->name() == QStringLiteral("Pit series"));
+    CHECK(survivor->knownStations().size() == 2);
+
+    drainPipelines(fixture.get());
+}
+
+TEST_CASE("cave detach removes the whole-cave window too", "[Attach][Cave]")
+{
+    // Under an attached cave every chunk-less trip is a window, the whole-cave
+    // one included: detaching leaves nothing for it to window.
+    auto fixture = makeProjectWithFreshCave(QStringLiteral("cave-detach-window"));
+    cwCave* cave = freshCaveOf(fixture.get());
+    attachCaveThroughManager(fixture.get(), cave,
+                             fixturePath(QStringLiteral("compass_multi.mak")));
+    drainPipelines(fixture.get());
+    REQUIRE(wholeCaveTripOf(cave) != nullptr);
+
+    auto future = managerOf(fixture.get())->detachCenterline(cave);
+    REQUIRE(AsyncFuture::waitForFinished(future, kAttachWaitMs));
+    CHECK_FALSE(future.result().hasError());
+
+    CHECK(cave->tripCount() == 0);
+    CHECK(cave->externalCenterline().isEmpty());
+    CHECK(fixture->project->cavingRegion()->caves().contains(cave));
 
     drainPipelines(fixture.get());
 }

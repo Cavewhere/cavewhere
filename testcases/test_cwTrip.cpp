@@ -713,3 +713,116 @@ TEST_CASE("A trip the cave no longer lists stops hearing its attachment",
     CHECK(stayingSpy.count() == 1);
     CHECK(removedSpy.count() == 0);
 }
+
+TEST_CASE("cwTrip::windowsWholeCave names the one window of an attached cave",
+          "[cwTrip][scope]")
+{
+    // An attached cave has no native trips, so a trip under one that owns
+    // neither a file nor a prefix is the whole-cave window by construction —
+    // the trip that owns every station no block window claims. The truth table
+    // is what the geometry pass, the trip panel and reconcile all branch on.
+    cwCavingRegion region;
+    cwCave* cave = new cwCave();
+    cave->setName(QStringLiteral("Fisher Ridge"));
+    region.addCave(cave);
+
+    cwTrip* trip = new cwTrip();
+    trip->setName(QStringLiteral("blocks"));
+    cave->addTrip(trip);
+
+    const auto snapshotSaysWindow = [&]() {
+        const cwCaveData caveData = cave->data();
+        REQUIRE(caveData.trips.size() == 1);
+        return cwTrip::windowsWholeCave(caveData.trips.first(), caveData);
+    };
+
+    SECTION("a trip in a native cave is no window") {
+        CHECK_FALSE(trip->windowsWholeCave());
+        CHECK_FALSE(snapshotSaysWindow());
+    }
+
+    SECTION("a prefix-less trip under an attached cave is the window") {
+        cave->setExternalCenterline(cwExternalCenterline(QStringLiteral("blocks.svx")));
+        CHECK(trip->windowsWholeCave());
+        CHECK(snapshotSaysWindow());
+        //Its scope, relative to the cave, is the cave itself.
+        CHECK(trip->scopePrefix().isEmpty());
+    }
+
+    SECTION("a Scope trip windows its block, not the cave") {
+        cave->setExternalCenterline(cwExternalCenterline(QStringLiteral("blocks.svx")));
+        trip->setStationPrefix(QStringLiteral("doghill"));
+        CHECK_FALSE(trip->windowsWholeCave());
+        CHECK_FALSE(snapshotSaysWindow());
+    }
+
+    SECTION("a trip with its own attachment windows that file") {
+        cave->setExternalCenterline(cwExternalCenterline(QStringLiteral("blocks.svx")));
+        trip->setExternalCenterline(cwExternalCenterline(QStringLiteral("/tmp/topo1.svx")));
+        CHECK_FALSE(trip->windowsWholeCave());
+        CHECK_FALSE(snapshotSaysWindow());
+    }
+
+    SECTION("detaching the cave leaves no window behind") {
+        cave->setExternalCenterline(cwExternalCenterline(QStringLiteral("blocks.svx")));
+        REQUIRE(trip->windowsWholeCave());
+        cave->setExternalCenterline(cwExternalCenterline());
+        CHECK_FALSE(trip->windowsWholeCave());
+        CHECK_FALSE(snapshotSaysWindow());
+    }
+
+    SECTION("a trip with no cave at all answers no") {
+        cwTrip orphan;
+        CHECK_FALSE(orphan.windowsWholeCave());
+    }
+}
+
+TEST_CASE("The whole-cave window owns every station no sibling prefix claims",
+          "[cwTrip][scope]")
+{
+    // The window's namespace is the cave's, so its stations come back keyed
+    // exactly as the cave keys them — no tail to strip. What it must not do is
+    // list the stations a block window already owns, or parent and child would
+    // both claim the same passage.
+    cwCavingRegion region;
+    cwCave* cave = new cwCave();
+    cave->setName(QStringLiteral("Fisher Ridge"));
+    cave->setExternalCenterline(cwExternalCenterline(QStringLiteral("root_and_block.svx")));
+    region.addCave(cave);
+
+    cwTrip* window = new cwTrip();
+    window->setName(QStringLiteral("root_and_block"));
+    cave->addTrip(window);
+
+    cwTrip* block = new cwTrip();
+    block->setName(QStringLiteral("Side"));
+    //Authored case, while the cave lookup keys canonically.
+    block->setStationPrefix(QStringLiteral("Side"));
+    cave->addTrip(block);
+
+    cwStationPositionLookup lookup;
+    lookup.setPosition(QStringLiteral("r1"), QVector3D(1, 2, 3));
+    lookup.setPosition(QStringLiteral("r2"), QVector3D(4, 5, 6));
+    lookup.setPosition(QStringLiteral("side.s1"), QVector3D(7, 8, 9));
+    cave->setStationPositionLookup(lookup);
+
+    QMap<QString, QVector3D> byName;
+    for (const auto& station : window->solvedStations()) {
+        byName.insert(station.first, station.second);
+    }
+
+    REQUIRE(byName.size() == 2);
+    CHECK(byName.value(QStringLiteral("r1")) == QVector3D(1, 2, 3));
+    CHECK(byName.value(QStringLiteral("r2")) == QVector3D(4, 5, 6));
+    CHECK_FALSE(byName.contains(QStringLiteral("side.s1")));
+
+    //The block window still owns its own, by the tail it opened.
+    const QList<QPair<QString, QVector3D>> blockStations = block->solvedStations();
+    REQUIRE(blockStations.size() == 1);
+    CHECK(blockStations.first().first == QStringLiteral("s1"));
+
+    //And the window's stations are named in the cave's namespace, so the handle
+    //they travel as names the cave.
+    CHECK(window->stationHandle(QStringLiteral("r1")).containerId() == cave->id());
+    CHECK(window->stationHandle(QStringLiteral("r1")).scope() == cwStationHandle::NativeCave);
+}

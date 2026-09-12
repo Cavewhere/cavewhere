@@ -73,6 +73,7 @@ class CAVEWHERE_LIB_EXPORT cwTrip : public QObject, public cwUndoer
     Q_PROPERTY(QString scopePrefix READ scopePrefix NOTIFY scopeChanged)
     Q_PROPERTY(bool isScoped READ isScoped NOTIFY scopeChanged)
     Q_PROPERTY(bool externallyBacked READ externallyBacked NOTIFY externallyBackedChanged)
+    Q_PROPERTY(bool windowsWholeCave READ windowsWholeCave NOTIFY externallyBackedChanged)
     Q_PROPERTY(QStringList externalStations READ externalStations NOTIFY externalStationsChanged FINAL)
     Q_PROPERTY(QString externalStationsError READ externalStationsError NOTIFY externalStationsErrorChanged FINAL)
 
@@ -155,6 +156,27 @@ public:
     //! can never disagree with either.
     bool externallyBacked() const;
 
+    //! True when this trip is its cave's whole-cave window: the one trip that
+    //! owns every station of an attached cave that no sibling Scope prefix
+    //! claims — a Compass station, a Walls station with no prefix in force, a
+    //! Survex station outside every named "*begin".
+    //!
+    //! An attached cave has no native trips, so a trip under one with no
+    //! external centerline of its own and an empty stationPrefix is that window
+    //! by construction. Derived state: nothing persists it, and an attachment
+    //! made before it existed grows one on the next Reload or Replace.
+    //!
+    //! Its scope, relative to its cave, is the cave itself, so scopePrefix()
+    //! stays empty and everything reading "empty prefix = the cave's own
+    //! namespace" is already right for it. What the predicate changes is who
+    //! lists and draws those stations.
+    bool windowsWholeCave() const;
+
+    //! Snapshot overload: the same policy over a cwTripData and the cwCaveData
+    //! that holds it, so the worker-thread geometry pass and the UI decide
+    //! alike.
+    static bool windowsWholeCave(const cwTripData& trip, const cwCaveData& cave);
+
     QDateTime date() const;
     void setDate(QDateTime date);
 
@@ -217,7 +239,9 @@ public:
     //! solvedStationPositions() — a resolution lookup that carries the full cave
     //! as a superset — this enumerates only the stations this trip owns, in the
     //! trip's local namespace: a native trip's chunk stations that have a solved
-    //! position, or an externally-attached trip's scope-relative tails. The
+    //! position, a scoped trip's scope-relative tails, or — for the whole-cave
+    //! window (windowsWholeCave()) — every solved cave station no sibling's
+    //! prefix claims, named as the cave keys it. The
     //! authoritative answer to "what are my stations, and where are they?" for
     //! the line-plot geometry and label views, native or external alike.
     QList<QPair<QString, QVector3D>> solvedStations() const;

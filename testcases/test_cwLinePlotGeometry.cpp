@@ -13,6 +13,7 @@
 #include "cwLinePlotGeometry.h"
 #include "cwCavingRegion.h"
 #include "cwCave.h"
+#include "cwExternalCenterline.h"
 #include "cwTrip.h"
 #include "cwSurveyChunk.h"
 #include "cwStation.h"
@@ -342,4 +343,127 @@ TEST_CASE("cwLinePlotGeometry measures a cave that resolved nothing as zero",
     REQUIRE(geometry.cavesLengthAndDepths.size() == 1);
     CHECK(geometry.cavesLengthAndDepths.at(0).length() == 0.0);
     CHECK(geometry.cavesLengthAndDepths.at(0).depth() == 0.0);
+}
+
+TEST_CASE("cwLinePlotGeometry draws an attached cave through its whole-cave window",
+          "[cwLinePlotGeometry]")
+{
+    // A Compass file, a prefix-less Walls project, or a Survex file with shots
+    // outside every *begin gives cavern no naming level below the cave, so the
+    // cave's one window carries no prefix at all. Left as an unscoped native
+    // trip it walks its (nonexistent) chunks and the cave draws nothing, which
+    // is exactly the blank lineplot P3.16 fixes.
+    cwCavingRegion region;
+
+    cwCave* cave = new cwCave();
+    cave->setName(QStringLiteral("cave1")); //sanitizes to itself: cavePrefix is "cave1."
+    cave->setExternalCenterline(cwExternalCenterline(QStringLiteral("compass_multi.mak")));
+    region.addCave(cave);
+
+    cwTrip* window = new cwTrip();
+    window->setName(QStringLiteral("compass_multi"));
+    cave->addTrip(window);
+
+    const QVector3D a1Position(0.0f, 0.0f, 0.0f);
+    const QVector3D a2Position(0.0f, 10.0f, 0.0f);
+    const QVector3D a3Position(8.0f, 10.0f, 0.0f);
+
+    cwStationPositionLookup lookup;
+    lookup.setPosition(QStringLiteral("a1"), a1Position);
+    lookup.setPosition(QStringLiteral("a2"), a2Position);
+    lookup.setPosition(QStringLiteral("a3"), a3Position);
+    cave->setStationPositionLookup(lookup);
+
+    // Flat under the cave: cavern gives a Compass station no level of its own.
+    cwSurveyNetwork network;
+    network.addShot(QStringLiteral("cave1.a1"), QStringLiteral("cave1.a2"));
+    network.addShot(QStringLiteral("cave1.a2"), QStringLiteral("cave1.a3"));
+
+    const auto result = cwLinePlotGeometry::generate(region.data(), network);
+    REQUIRE_FALSE(result.hasError());
+    const cwLinePlotGeometry::Result geometry = result.value();
+
+    REQUIRE(geometry.tripUuids.size() == geometry.tripVertexRanges.size());
+    const qsizetype windowIndex = geometry.tripUuids.indexOf(window->id());
+    REQUIRE(windowIndex >= 0);
+
+    // Both legs, one owner.
+    CHECK(geometry.tripVertexRanges.at(windowIndex).count == 4);
+    CHECK(geometry.points.size() == 4);
+    CHECK(countPositions(geometry.points, a1Position) == 1);
+    CHECK(countPositions(geometry.points, a2Position) == 2);
+    CHECK(countPositions(geometry.points, a3Position) == 1);
+
+    REQUIRE(geometry.cavesLengthAndDepths.size() == 1);
+    CHECK(geometry.cavesLengthAndDepths.at(0).length() == Catch::Approx(18.0));
+    CHECK(geometry.cavesLengthAndDepths.at(0).depth() == Catch::Approx(0.0));
+}
+
+TEST_CASE("cwLinePlotGeometry splits a cave between its whole-cave and block windows",
+          "[cwLinePlotGeometry]")
+{
+    // The Walls and root-plus-block shape: the file root owns some stations and
+    // a prefix block owns the rest, tied to each other by one leg. The
+    // whole-cave window's scope is the cave itself, so it string-matches the
+    // block's stations too — every sibling prefix is strictly longer, which is
+    // what hands those stations to the block's own window and draws the tie leg
+    // exactly once.
+    cwCavingRegion region;
+
+    cwCave* cave = new cwCave();
+    cave->setName(QStringLiteral("cave1"));
+    cave->setExternalCenterline(cwExternalCenterline(QStringLiteral("walls_prefixed.wpj")));
+    region.addCave(cave);
+
+    cwTrip* window = new cwTrip();
+    window->setName(QStringLiteral("walls_prefixed"));
+    cave->addTrip(window);
+
+    cwTrip* blockTrip = new cwTrip();
+    blockTrip->setName(QStringLiteral("XY"));
+    blockTrip->setStationPrefix(QStringLiteral("XY")); //authored case, as Walls spells it
+    cave->addTrip(blockTrip);
+
+    const QVector3D a1Position(0.0f, 0.0f, 0.0f);
+    const QVector3D a2Position(0.0f, 10.0f, 0.0f);
+    const QVector3D p1Position(0.0f, 14.0f, 0.0f);
+    const QVector3D p2Position(12.0f, 14.0f, 0.0f);
+
+    cwStationPositionLookup lookup;
+    lookup.setPosition(QStringLiteral("a1"), a1Position);
+    lookup.setPosition(QStringLiteral("a2"), a2Position);
+    lookup.setPosition(QStringLiteral("xy.p1"), p1Position);
+    lookup.setPosition(QStringLiteral("xy.p2"), p2Position);
+    cave->setStationPositionLookup(lookup);
+
+    // 10 m at the root, a 4 m tie into the prefixed survey, 12 m inside it.
+    cwSurveyNetwork network;
+    network.addShot(QStringLiteral("cave1.a1"), QStringLiteral("cave1.a2"));
+    network.addShot(QStringLiteral("cave1.a2"), QStringLiteral("cave1.xy.p1"));
+    network.addShot(QStringLiteral("cave1.xy.p1"), QStringLiteral("cave1.xy.p2"));
+
+    const auto result = cwLinePlotGeometry::generate(region.data(), network);
+    REQUIRE_FALSE(result.hasError());
+    const cwLinePlotGeometry::Result geometry = result.value();
+
+    REQUIRE(geometry.tripUuids.size() == geometry.tripVertexRanges.size());
+    const qsizetype windowIndex = geometry.tripUuids.indexOf(window->id());
+    const qsizetype blockIndex = geometry.tripUuids.indexOf(blockTrip->id());
+    REQUIRE(windowIndex >= 0);
+    REQUIRE(blockIndex >= 0);
+
+    // The root window draws a1-a2 and the a2-p1 tie; the block draws p1-p2.
+    CHECK(geometry.tripVertexRanges.at(windowIndex).count == 4);
+    CHECK(geometry.tripVertexRanges.at(blockIndex).count == 2);
+
+    // The tie leg is drawn once: three legs, six vertices, p1 shared.
+    CHECK(geometry.points.size() == 6);
+    CHECK(countPositions(geometry.points, p1Position) == 2);
+    CHECK(countPositions(geometry.points, a1Position) == 1);
+    CHECK(countPositions(geometry.points, p2Position) == 1);
+
+    // And the cave length counts each leg once.
+    REQUIRE(geometry.cavesLengthAndDepths.size() == 1);
+    CHECK(geometry.cavesLengthAndDepths.at(0).length() == Catch::Approx(26.0));
+    CHECK(geometry.cavesLengthAndDepths.at(0).depth() == Catch::Approx(0.0));
 }

@@ -103,6 +103,44 @@ MainWindowTest {
             }
         }
 
+        // A file whose shots sit outside every *begin gets a whole-cave window
+        // alongside its block windows (P3.16), and that row is externally
+        // backed like any other: same paperclip, same em-dash declination.
+        function test_wholeCaveWindowRowIsMarkedLikeAnyScopeRow() {
+            const cave = makeSavedCaveAttach(
+                           "cavepage-whole-cave-row",
+                           "external-centerlines/survex_root_and_block.svx")
+            compare(cave.rowCount(), 2,
+                    "the root got a window of its own beside the side block")
+
+            let windows = 0
+            for (let row = 0; row < cave.rowCount(); row++) {
+                if (cave.trip(row).windowsWholeCave) {
+                    windows++
+                    compare(cave.trip(row).stationPrefix, "",
+                            "the whole-cave window carries no prefix")
+                }
+            }
+            compare(windows, 1, "exactly one trip windows the whole cave")
+
+            const cavePage = gotoCavePage(cave)
+
+            const nameLinks = collectByName(cavePage, "tripNameLink", [])
+            compare(nameLinks.length, 2, "every trip has a name cell")
+            for (let i = 0; i < nameLinks.length; i++) {
+                verify(nameLinks[i].text.indexOf("📎 ") === 0,
+                       "a window row is marked as externally backed: "
+                       + nameLinks[i].text)
+            }
+
+            const emDashes = collectByName(cavePage, "declinationEmDash", [])
+            compare(emDashes.length, 2, "every trip has a declination cell")
+            for (let j = 0; j < emDashes.length; j++) {
+                verify(emDashes[j].visible,
+                       "the file owns the declination, so the row shows an em dash")
+            }
+        }
+
         // externallyBacked covers a Phase-2 trip-level attachment too, so
         // its row on the cave page is marked the same way.
         function test_phase2AttachedTripRowShowsPaperclipToo() {

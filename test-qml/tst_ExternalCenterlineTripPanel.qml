@@ -906,5 +906,52 @@ MainWindowTest {
                       10000, "confirming removes the trip from the cave")
             rootId.trip = null
         }
+
+        // The whole-cave window (P3.16): a trip under an attached cave that
+        // carries no prefix at all, because the stations it owns get no naming
+        // level below the cave. The panel has to read it as scope mode even so
+        // — an empty prefix is what names the cave itself.
+        function test_aWholeCaveWindowRendersInScopeMode() {
+            const cave = makeSavedCaveAttach(
+                           "trip-panel-whole-cave",
+                           "external-centerlines/survex_root_and_block.svx")
+            compare(cave.rowCount(), 2, "the root and the side block each got a window")
+
+            let window = null
+            for (let row = 0; row < cave.rowCount(); row++) {
+                if (cave.trip(row).windowsWholeCave) {
+                    window = cave.trip(row)
+                }
+            }
+            verify(window !== null, "the attach created the whole-cave window")
+
+            rootId.trip = window
+            waitForRendering(panelId)
+
+            verify(!panelId.isAttached, "the window owns no file of its own")
+            verify(panelId.isScope, "an empty prefix still windows the cave")
+
+            const scopeHeader = findChild(panelId, "scopeHeader")
+            verify(scopeHeader !== null && scopeHeader.visible,
+                   "the scope header renders for the whole-cave window")
+
+            const prefixInput = findChild(scopeHeader, "prefixInput")
+            verify(prefixInput !== null, "prefixInput must exist")
+            compare(prefixInput.text, "", "the window carries no prefix")
+
+            const placeholder = findChild(scopeHeader, "wholeFilePlaceholder")
+            verify(placeholder !== null, "wholeFilePlaceholder must exist")
+            verify(placeholder.visible, "the empty prefix reads as the whole file")
+            compare(placeholder.text, "whole file")
+
+            // Naming a block path turns it into an ordinary window, and the
+            // placeholder goes away with the emptiness it stood for.
+            prefixInput.finishedEditting("side")
+            tryCompare(window, "stationPrefix", "side",
+                       5000, "the header's prefix edit lands on the trip")
+            tryVerify(() => !placeholder.visible, 5000,
+                      "a named prefix needs no placeholder")
+            verify(!window.windowsWholeCave, "the trip now windows one block")
+        }
     }
 }

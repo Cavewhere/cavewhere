@@ -79,10 +79,16 @@ cwSurvex3DFileReader::NetworkAndLookup cwSurvex3DFileReader::readNetworkAndLooku
     // data in the run — which a region solve may include alongside native
     // survex caves — marks '.' as a name character and ':' as a separator, so
     // cavern emits ':'-joined labels like "fisher_ridge:topo1:1".
-    // cwCavernNaming and every decode consumer assume '.', so normalise the
-    // actual separator to '.' at the one point labels enter CaveWhere. The
-    // chosen separator is guaranteed never to occur inside a name, so this
-    // replacement is unambiguous.
+    // cwCavernNaming and every decode consumer assume '.', so normalize the
+    // actual separator to '.' at the one point labels enter CaveWhere.
+    //
+    // The choice is made once, before any Compass station is read, so a
+    // Compass-only run keeps '.' even where a station name spells one
+    // (measured on compass_dotted.dat: "cave0.SA1.1" is the wrapper plus the
+    // one station "SA1.1"). The replacement stays unambiguous only because a
+    // cave-level or trip-level wrapper is the sole level above such a name —
+    // see "Separator ambiguity" filed in plans/EXTERNAL_FILE_PHASE3.html for
+    // the level that would break it.
     const QChar separator = QLatin1Char(pimg->separator);
 
     // Pass 1: collect station labels (name + position). Build a coord -> name

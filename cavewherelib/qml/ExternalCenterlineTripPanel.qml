@@ -42,11 +42,13 @@ QQ.Item {
     // The two modes, discriminated on the fields that hold them apart:
     // scopePrefix() answers non-empty for both, so it cannot tell them
     // apart. Attached wins when a trip somehow carries both, matching
-    // cwTrip::isScoped's own field pair.
+    // cwTrip::isScoped's own field pair. A whole-cave window carries no
+    // prefix at all, so the trip answers for that one.
     readonly property bool isAttached: trip !== null
                                        && trip.externalCenterline.entryFile.length > 0
     readonly property bool isScope: !isAttached && trip !== null
-                                    && trip.stationPrefix.length > 0
+                                    && (trip.stationPrefix.length > 0
+                                        || trip.windowsWholeCave)
 
     signal stationClicked(cwStationHandle stationHandle)
 

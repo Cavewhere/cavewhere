@@ -13,6 +13,7 @@
 #include "cwExternalCenterlineSync.h"
 #include "cwExternalSourceSettings.h"
 #include "cwSaveLoad.h"
+#include "cwStation.h"
 #include "cwTeam.h"
 #include "cwTeamMember.h"
 #include "cwTrip.h"
@@ -197,23 +198,60 @@ private:
 };
 
 /**
- * Brings the cave's Scope trips in line with the blocks the scan found:
- * a block that already has a trip windowing it keeps that trip, a block
- * with no trip gets one, and a trip whose block is gone is left alone
- * (its station list simply goes empty). Fresh attach is the degenerate
- * case where no Scope trip exists yet, so attach and replace run the
- * same reconcile. Returns the trips it created, in block order.
+ * Brings the cave's windows in line with what the scan found: a block
+ * that already has a trip windowing it keeps that trip, a block with no
+ * trip gets one, a station-bearing file root gets the one whole-cave
+ * window (empty stationPrefix), and a chunk-less window the file no
+ * longer accounts for is removed. A window the user put chunks in is
+ * survey data and stays, orphaned prefix and all. Fresh attach is the
+ * degenerate case where no window exists yet, so attach and replace run
+ * the same reconcile. Returns the trips it created, in block order, the
+ * whole-cave window last.
+ *
+ * Removing first is what lets an attachment made before the whole-cave
+ * window existed repair itself on Reload or Replace: its stale
+ * survey-named windows go, and one whole-cave window takes their place.
  */
 QList<cwExternalCenterlineAttach::ScopeTripDescription> reconcileScopeTrips(
     cwCave* cave,
-    const QList<cwScanBlock>& blocks)
+    const cwExternalCenterlineScanner::ScanResult& scan)
 {
+    const QList<cwScanBlock>& blocks = scan.blocks;
+
+    // Keyed the way every consumer of a prefix matches it — case-insensitively
+    // (cwTrip::solvedStations, cwLinePlotGeometry's scope ownership) — so a
+    // window whose prefix the user re-cased still names its block and is kept.
+    QSet<QString> stationBearingPaths;
+    for (const cwScanBlock& block : blocks) {
+        if (block.stationCount >= 1) {
+            stationBearingPaths.insert(cwStation::canonicalKey(block.path));
+        }
+    }
+
+    // removeTrip() is the G1 boundary: it emits tripsDeleted(), and with no
+    // undo stack it destroys the trip outright, so nothing below reads the
+    // pointer afterward. An empty prefix names the file root, which the scan
+    // accounts for only while the root bears stations.
+    for (int i = cave->tripCount() - 1; i >= 0; --i) {
+        const cwTrip* trip = cave->trip(i);
+        if (trip->chunkCount() > 0) {
+            continue;
+        }
+        const QString prefix = trip->stationPrefix();
+        const bool accountedFor =
+            prefix.isEmpty() ? scan.rootStationCount > 0
+                             : stationBearingPaths.contains(cwStation::canonicalKey(prefix));
+        if (!accountedFor) {
+            cave->removeTrip(i);
+        }
+    }
+
+    // Every prefix already windowed, the empty one — the whole-cave window —
+    // included, so both creation sites below ask the same question.
     QSet<QString> windowedPrefixes;
     const QList<cwTrip*> existingTrips = cave->trips();
     for (const cwTrip* trip : existingTrips) {
-        if (!trip->stationPrefix().isEmpty()) {
-            windowedPrefixes.insert(trip->stationPrefix());
-        }
+        windowedPrefixes.insert(cwStation::canonicalKey(trip->stationPrefix()));
     }
 
     QHash<QString, QDate> datesByPath;
@@ -250,39 +288,59 @@ QList<cwExternalCenterlineAttach::ScopeTripDescription> reconcileScopeTrips(
     };
 
     QList<cwExternalCenterlineAttach::ScopeTripDescription> created;
-    for (const cwScanBlock& block : blocks) {
-        // A block with no stations of its own has nothing for a trip to
-        // window (section 5 q3); the dialog still shows it in the tree.
-        if (block.stationCount < 1 || windowedPrefixes.contains(block.path)) {
-            continue;
-        }
 
+    // One window: a trip that owns no chunks and no file, named after what it
+    // windows and carrying the prefix that selects it — empty for the
+    // whole-cave window.
+    const auto addWindow = [&](const QString& baseName,
+                               const QString& prefix,
+                               const QDate& date) {
         cwTrip* trip = new cwTrip();
         // Seed the survey-entry unit the way cwCave does for a UI-created
         // trip, so chunks the user later adds to this Scope trip read in
         // the project's unit.
         trip->calibrations()->setDistanceUnit(cwUnits::surveyUnit(cave->unitSystem()));
-        // uniqueTripName is consulted per block: blocks that share a leaf
-        // name dedupe against the trips this same loop already added.
-        trip->setName(cave->uniqueTripName(block.name()));
-        trip->setStationPrefix(block.path);
-        // Seeding is create-only: a trip that already windows this block was
-        // skipped above, so a replace never writes over a date the user set.
-        if (const QDate date = effectiveDate(block); date.isValid()) {
+        // uniqueTripName is consulted per window: windows that share a leaf
+        // name dedupe against the trips this same pass already added.
+        trip->setName(cave->uniqueTripName(baseName));
+        trip->setStationPrefix(prefix);
+        // Seeding is create-only: a window that already exists was skipped, so
+        // a replace never writes over a date the user set.
+        if (date.isValid()) {
             trip->setDate(QDateTime(date, QTime()));
         }
         cave->addTrip(trip);
 
-        windowedPrefixes.insert(block.path);
-        created.append({trip->name(), block.path});
+        windowedPrefixes.insert(cwStation::canonicalKey(prefix));
+        created.append({trip->name(), prefix});
+    };
+
+    for (const cwScanBlock& block : blocks) {
+        // A block with no stations of its own has nothing for a trip to
+        // window (section 5 q3); the dialog still shows it in the tree.
+        if (block.stationCount < 1
+            || windowedPrefixes.contains(cwStation::canonicalKey(block.path))) {
+            continue;
+        }
+        addWindow(block.name(), block.path, effectiveDate(block));
+    }
+
+    // The root's stations get no naming level of their own, so the window that
+    // owns them carries no prefix - it windows the cave itself (P3.16). Named
+    // after the entry file, which is dependencies' documented first element.
+    if (scan.rootStationCount > 0 && !windowedPrefixes.contains(QString())) {
+        addWindow(QFileInfo(scan.dependencies.value(0)).completeBaseName(),
+                  QString(),
+                  scan.rootDate);
     }
     return created;
 }
 
 /**
- * Removes the Scope trips a cave-level detach leaves nothing behind
- * for: a trip that windows a block and holds no chunks of its own. A
- * Scope trip the user put chunks in is real survey data and stays.
+ * Removes the windows a cave-level detach leaves nothing behind for:
+ * every chunk-less trip of the cave, which under an attached cave is
+ * exactly its windows - the blocks' and the whole cave's alike. A
+ * window the user put chunks in is real survey data and stays.
  *
  * removeTrip() is the boundary on purpose - it emits tripsDeleted(),
  * which is what clears each trip's breadcrumb and wakes the manager.
@@ -292,8 +350,7 @@ QList<cwExternalCenterlineAttach::ScopeTripDescription> reconcileScopeTrips(
 void removeEmptyScopeTrips(cwCave* cave)
 {
     for (int i = cave->tripCount() - 1; i >= 0; --i) {
-        const cwTrip* trip = cave->trip(i);
-        if (!trip->stationPrefix().isEmpty() && trip->chunkCount() == 0) {
+        if (cave->trip(i)->chunkCount() == 0) {
             cave->removeTrip(i);
         }
     }
@@ -490,7 +547,7 @@ QFuture<Monad::Result<AttachReport>> attachOwner(
             if (owner.isCave()) {
                 // Before the future completes, so the manager's recompute
                 // and the solve it chains already see the Scope trips.
-                report.createdScopeTrips = reconcileScopeTrips(owner.cave(), scan.blocks);
+                report.createdScopeTrips = reconcileScopeTrips(owner.cave(), scan);
             } else {
                 report.metadata = seedTripMetadata(owner.trip(), scan.seededMetadata);
             }

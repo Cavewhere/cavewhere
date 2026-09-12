@@ -231,6 +231,12 @@ ScopeKey anchorScopeOf(const cwCaveData& cave, const SolvedScopes& solved)
 //! that reach here speak the trip's own namespace, so the trip's scope — the
 //! one the exporter wraps around the same "*include" — goes back on.
 //!
+//! Only an attachment's own trip reaches here: the pass below skips every trip
+//! with no external centerline, which is what keeps a cave's windows — the
+//! blocks' and the whole cave's (cwTrip::windowsWholeCave) — out of the banner
+//! entirely. A window is a view onto stations the cave already solved, so
+//! neither pass has anything to report about one.
+//!
 //! Canonicalized, because Result::stations promises a spelling a caller can
 //! look up. The accessor keeps the authored spelling instead, which is right for
 //! the surfaces that show a station to a person but not for a record; the
