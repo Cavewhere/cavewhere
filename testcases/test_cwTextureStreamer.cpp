@@ -4,6 +4,7 @@
 //Qt includes
 #include <QByteArray>
 #include <QCoreApplication>
+#include <QDir>
 #include <QElapsedTimer>
 #include <QMutex>
 #include <QMutexLocker>
@@ -33,6 +34,7 @@ namespace {
     constexpr int kQuietPeriodMs = 30;
     constexpr int kLevelBytes = 16;
     constexpr qint64 kTinyCpuCap = 1;
+    const QString kRelativeRootName = QStringLiteral("streamed-root");
 
     // Shared state for the fake loader. The loader itself is copied into a
     // std::function and runs on cwConcurrent threads, so everything it touches
@@ -130,7 +132,7 @@ namespace {
     cwStreamedTexture makeSource(const QString& id)
     {
         cwStreamedTexture source;
-        source.dataRootPath = QStringLiteral("/not/read/by/the/fake/loader");
+        source.setDataRootPath(QStringLiteral("/not/read/by/the/fake/loader"));
         source.key.id = id;
         source.key.path = QStringLiteral("textures");
         source.key.checksum = QStringLiteral("checksum-") + id;
@@ -222,6 +224,81 @@ TEST_CASE("cwTextureStreamer ignores a repeat of what it is already doing", "[Te
     streamer.request(kItemId, source, kTargetFormat, kTopLevel, kPriority);
     CHECK(state->callCount() == 1);
 
+    const auto results = drain(streamer, 1);
+    REQUIRE(results.size() == 1);
+    CHECK(results.at(0).generation == 1);
+    CHECK_FALSE(streamer.hasWork());
+}
+
+TEST_CASE("cwStreamedTexture treats every spelling of one data root as one root",
+          "[TextureStreamer]") {
+    // A root under the working directory, so the relative spelling names it too
+    const QString absoluteRoot = QDir::current().absoluteFilePath(kRelativeRootName);
+
+    cwStreamedTexture canonical = makeSource(QStringLiteral("item-root"));
+    canonical.setDataRootPath(absoluteRoot);
+
+    SECTION("a trailing slash is the same root") {
+        cwStreamedTexture other = canonical;
+        other.setDataRootPath(absoluteRoot + QStringLiteral("/"));
+        CHECK(other.dataRootPath() == absoluteRoot);
+        CHECK(other == canonical);
+    }
+
+    SECTION("dot segments are the same root") {
+        cwStreamedTexture other = canonical;
+        other.setDataRootPath(absoluteRoot + QStringLiteral("/./sub/.."));
+        CHECK(other.dataRootPath() == absoluteRoot);
+        CHECK(other == canonical);
+    }
+
+    SECTION("the relative spelling is the same root") {
+        cwStreamedTexture other = canonical;
+        other.setDataRootPath(kRelativeRootName);
+        CHECK(other.dataRootPath() == absoluteRoot);
+        CHECK(other == canonical);
+    }
+
+    SECTION("the constructor normalizes as the setter does") {
+        const cwStreamedTexture constructed(absoluteRoot + QStringLiteral("/"),
+                                            canonical.key,
+                                            canonical.size);
+        CHECK(constructed.dataRootPath() == absoluteRoot);
+        CHECK(constructed == canonical);
+    }
+
+    SECTION("an empty root stays empty instead of becoming the working directory") {
+        cwStreamedTexture other = canonical;
+        other.setDataRootPath(QString());
+        CHECK(other.dataRootPath().isEmpty());
+        CHECK(other.isNull());
+    }
+}
+
+TEST_CASE("cwTextureStreamer dedups a repeat whose data root is spelled differently",
+          "[TextureStreamer]") {
+    auto state = std::make_shared<LoaderState>();
+    state->gated = true;
+    cwTextureStreamer streamer(makeLoader(state));
+    GateOpener gateOpener {state};
+
+    constexpr quint32 kItemId = 21;
+    constexpr int kTopLevel = 1;
+    constexpr quint64 kPriority = 5;
+
+    const QString absoluteRoot = QDir::current().absoluteFilePath(kRelativeRootName);
+
+    cwStreamedTexture source = makeSource(QStringLiteral("item-21"));
+    source.setDataRootPath(absoluteRoot);
+    streamer.request(kItemId, source, kTargetFormat, kTopLevel, kPriority);
+    REQUIRE(waitFor([&]() { return state->callCount() == 1; }));
+
+    cwStreamedTexture respelled = source;
+    respelled.setDataRootPath(kRelativeRootName);
+    streamer.request(kItemId, respelled, kTargetFormat, kTopLevel, kPriority);
+    CHECK(state->callCount() == 1);
+
+    state->gate.release();
     const auto results = drain(streamer, 1);
     REQUIRE(results.size() == 1);
     CHECK(results.at(0).generation == 1);

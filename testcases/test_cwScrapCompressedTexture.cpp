@@ -293,7 +293,7 @@ TEST_CASE("Triangulated scraps reach the renderer as streamed descriptors",
 
     for(const cwStreamedTexture& texture : textures) {
         INFO("Streamed key: " << texture.key.id.toStdString());
-        CHECK(texture.dataRootPath == dataRootPath);
+        CHECK(texture.dataRootPath() == dataRootPath);
         CHECK(texture.key.id.contains(kGenerationSuffix));
         REQUIRE(cacher.hasEntry(texture.key));
 

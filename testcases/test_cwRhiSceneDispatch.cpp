@@ -26,6 +26,7 @@
 #include "TestGeometryBuilders.h"
 
 #include <QCoreApplication>
+#include <QDir>
 #include <QElapsedTimer>
 #include <QMatrix4x4>
 #include <QSize>
@@ -81,7 +82,7 @@ cwGeometry unitQuad()
 cwStreamedTexture streamedSource(const QString& id)
 {
     cwStreamedTexture source;
-    source.dataRootPath = QStringLiteral("/not/read/without/a/drain");
+    source.setDataRootPath(QStringLiteral("/not/read/without/a/drain"));
     source.key.id = id;
     source.key.path = QStringLiteral("textures");
     source.key.checksum = QStringLiteral("checksum-") + id;
@@ -352,6 +353,52 @@ TEST_CASE("re-sending a streamed descriptor keeps residency, changing it resets 
           == CwRhiTexturedItemsTestAccess::noResidentLevel());
     CHECK(CwRhiTexturedItemsTestAccess::requestedTopLevel(*backend, id)
           == CwRhiTexturedItemsTestAccess::noResidentLevel());
+
+    render.removeItem(id);
+    CwRhiSceneTestAccess::synchroize(rhiScene, &scene);
+}
+
+TEST_CASE("a re-publish spelling the data root differently keeps residency",
+          "[TexturedItemsStreaming]")
+{
+    cwScene scene;
+    cwRhiScene rhiScene;
+
+    cwRenderTexturedItems render;
+    render.setScene(&scene);
+    render.setParent(nullptr);
+
+    // A root under the working directory, so the relative spelling names it too
+    const QString relativeRoot = QStringLiteral("streamed-root");
+    const QString absoluteRoot = QDir::current().absoluteFilePath(relativeRoot);
+
+    cwStreamedTexture first = streamedSource(QStringLiteral("scrap-1"));
+    first.setDataRootPath(absoluteRoot);
+
+    cwRenderTexturedItems::Item item;
+    item.geometry = unitQuad();
+    item.streamedTexture = first;
+    const uint32_t id = render.addItem(item);
+
+    cwRhiTexturedItems* backend = syncedBackend(rhiScene, scene, render);
+    REQUIRE(backend != nullptr);
+
+    constexpr int kResidentLevel = 3;
+    CwRhiTexturedItemsTestAccess::setResidentTopLevel(*backend, id, kResidentLevel);
+
+    // One producer re-running can spell the same directory two ways. Both name
+    // the same KTX2 bytes, so residency holds.
+    cwStreamedTexture respelled = first;
+    respelled.setDataRootPath(relativeRoot);
+    render.updateStreamedTexture(id, respelled);
+    CwRhiSceneTestAccess::synchroize(rhiScene, &scene);
+    CHECK(CwRhiTexturedItemsTestAccess::residentTopLevel(*backend, id) == kResidentLevel);
+
+    respelled.setDataRootPath(absoluteRoot + QStringLiteral("/"));
+    render.updateStreamedTexture(id, respelled);
+    CwRhiSceneTestAccess::synchroize(rhiScene, &scene);
+    CHECK(CwRhiTexturedItemsTestAccess::residentTopLevel(*backend, id) == kResidentLevel);
+    CHECK(CwRhiTexturedItemsTestAccess::streamSource(*backend, id) == first);
 
     render.removeItem(id);
     CwRhiSceneTestAccess::synchroize(rhiScene, &scene);

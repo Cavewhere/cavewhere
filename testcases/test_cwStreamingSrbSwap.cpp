@@ -179,7 +179,7 @@ TEST_CASE("A streamed texture swap rebuilds the shader resource bindings when th
     cacher.insert(cacheKey, encoded.value());
 
     cwStreamedTexture source;
-    source.dataRootPath = cacheDirectory.path();
+    source.setDataRootPath(cacheDirectory.path());
     source.key = cacheKey;
     source.size = QSize(kTextureDimension, kTextureDimension);
 

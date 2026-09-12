@@ -149,7 +149,7 @@ namespace {
             cwDiskCacher cacher{QDir(m_cacheDirectory.path())};
             cacher.insert(cacheKey, encoded.value());
 
-            m_source.dataRootPath = m_cacheDirectory.path();
+            m_source.setDataRootPath(m_cacheDirectory.path());
             m_source.key = cacheKey;
             m_source.size = QSize(kTextureDimension, kTextureDimension);
 

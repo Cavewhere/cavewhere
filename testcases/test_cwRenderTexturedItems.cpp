@@ -48,7 +48,7 @@ QImage makeImage(const QColor& color)
 cwStreamedTexture makeStreamedTexture(const QString& id, const QSize& size)
 {
     cwStreamedTexture streamed;
-    streamed.dataRootPath = QStringLiteral("/data/root");
+    streamed.setDataRootPath(QStringLiteral("/data/root"));
     streamed.key.id = id;
     streamed.key.path = QStringLiteral("textures");
     streamed.key.checksum = QStringLiteral("checksum-") + id;

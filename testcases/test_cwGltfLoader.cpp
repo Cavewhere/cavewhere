@@ -355,7 +355,7 @@ TEST_CASE("glTF base color textures reach the renderer as streamed descriptors",
         cwRenderTexturedItems::Item first;
         baseColorTexture.setOn(first, scene, material);
         REQUIRE_FALSE(first.streamedTexture.isNull());
-        CHECK(first.streamedTexture.dataRootPath == dataRootDir.path());
+        CHECK(first.streamedTexture.dataRootPath() == dataRootDir.absolutePath());
         CHECK(first.streamedTexture.size == QSize(kCompressedTextureSize, kCompressedTextureSize));
         CHECK(first.texture.isNull());
 

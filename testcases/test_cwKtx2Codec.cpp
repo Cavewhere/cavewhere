@@ -223,7 +223,7 @@ namespace {
 
     cwStreamedTexture streamedTexture(const QString& dataRootPath, const cwDiskCacher::Key& key) {
         cwStreamedTexture texture;
-        texture.dataRootPath = dataRootPath;
+        texture.setDataRootPath(dataRootPath);
         texture.key = key;
         texture.size = QSize(kGradientWidth, kGradientHeight);
         return texture;
@@ -239,7 +239,7 @@ TEST_CASE("cwStreamedTexture reports null descriptors and compares by value", "[
     CHECK(cwStreamedTexture().isNull());
 
     cwStreamedTexture noRoot = texture;
-    noRoot.dataRootPath.clear();
+    noRoot.setDataRootPath(QString());
     CHECK(noRoot.isNull());
     CHECK_FALSE(noRoot == texture);
 

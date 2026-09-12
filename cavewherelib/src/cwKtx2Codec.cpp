@@ -355,7 +355,7 @@ Monad::Result<cwCompressedTexture> loadStreamedLevels(const cwStreamedTexture& t
                                                       QRhiTexture::Format target,
                                                       int firstLevel)
 {
-    const cwDiskCacher cacher{QDir(texture.dataRootPath)};
+    const cwDiskCacher cacher{QDir(texture.dataRootPath())};
 
     const QByteArray ktx2Bytes = cacher.entry(texture.key);
     if(ktx2Bytes.isEmpty()) {

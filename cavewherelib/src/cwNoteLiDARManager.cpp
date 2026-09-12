@@ -582,7 +582,7 @@ cwTriangulateLiDARInData cwNoteLiDARManager::mapNoteToInData(const cwNoteLiDAR* 
     // GLTF path (if the note exposes one via filename())
     const QString path = (project && note) ? project->absolutePath(note, note->filename()) : QString();
     in.setGltfFilename(path);
-    in.setDataRootPath(project ? project->dataRootDir().path() : QString());
+    in.setDataRootPath(project ? project->dataRootDir().absolutePath() : QString());
 
     return in;
 }
