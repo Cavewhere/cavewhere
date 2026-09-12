@@ -4,7 +4,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "cwFrustum.h"
-#include "cwRenderCullingStats.h"
+#include "cwRenderFrameStats.h"
 #include "cwRHIObject.h"
 #include "cwRhiFrameRenderer.h"
 #include "cwSceneVisibility.h"
@@ -52,7 +52,7 @@ public:
     int gatherCount = 0;
     quint32 lastObjectOrder = 0;
     const cwFrustum* lastFrustum = nullptr;
-    const cwRenderCullingStats::Counts* lastCullingStats = nullptr;
+    const cwRenderFrameStats::Culling* lastCullingStats = nullptr;
 };
 
 QMatrix4x4 viewProjectionLookingDownNegativeZ()
@@ -206,13 +206,13 @@ TEST_CASE("gatherScene publishes the frame's culled and total object counts",
     unbounded->bounds = std::nullopt;
     frame.registerRenderObject(cwRenderObjectId{3}, unbounded);
 
-    const quint64 startRevision = cwRenderCullingStats::instance()->revision();
+    const quint64 startRevision = cwRenderFrameStats::instance()->revision();
 
     gatherOnce(frame);
 
-    REQUIRE(cwRenderCullingStats::instance()->revision() == startRevision + 1);
+    REQUIRE(cwRenderFrameStats::instance()->revision() == startRevision + 1);
 
-    const cwRenderCullingStats::Counts counts = cwRenderCullingStats::instance()->counts();
+    const cwRenderFrameStats::Culling counts = cwRenderFrameStats::instance()->culling();
     REQUIRE(counts.objectsTotal == 3);
     REQUIRE(counts.objectsCulled == 1);
 
@@ -243,7 +243,30 @@ TEST_CASE("gatherScene leaves a hidden object out of the culled and total counts
 
     gatherOnce(frame);
 
-    const cwRenderCullingStats::Counts counts = cwRenderCullingStats::instance()->counts();
+    const cwRenderFrameStats::Culling counts = cwRenderFrameStats::instance()->culling();
     REQUIRE(counts.objectsTotal == 1);
     REQUIRE(counts.objectsCulled == 0);
+}
+
+TEST_CASE("gatherScene leaves the published counts alone for an offscreen job",
+          "[FrustumCulling][RenderCullingStats]")
+{
+    cwRhiFrameRenderer frame;
+
+    auto* object = new CountingObject;
+    object->bounds = boxAt(QVector3D(0.0f, 0.0f, kInFrustumZ));
+    frame.registerRenderObject(cwRenderObjectId{1}, object);
+
+    //A live frame first, so the published counts belong to a known frame
+    gatherOnce(frame);
+
+    const quint64 liveRevision = cwRenderFrameStats::instance()->revision();
+    const cwRenderFrameStats::Culling liveCounts = cwRenderFrameStats::instance()->culling();
+
+    std::array<QVector<cwRHIObject::PipelineBatch>, cwRhiFrameRenderer::kPassCount> passBatches;
+    frame.gatherScene(passBatches, perPassDataWithCamera(), {.liveFrame = false});
+
+    REQUIRE(object->gatherCount > 1);
+    REQUIRE(cwRenderFrameStats::instance()->revision() == liveRevision);
+    REQUIRE(cwRenderFrameStats::instance()->culling() == liveCounts);
 }

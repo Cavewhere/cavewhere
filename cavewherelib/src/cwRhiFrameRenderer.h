@@ -37,6 +37,10 @@ struct cwSceneGatherOptions {
     // (the renderer needed the cwAppearanceSlotted to acquire), so the gather loop
     // does a cheap pointer lookup rather than re-hashing ids.
     QHash<const cwRHIObject*, int> appearanceSlotForObject;
+    // True for the live frame, which publishes its culled-versus-total tally
+    // into cwRenderFrameStats. Offscreen export jobs pass false so their
+    // momentary counts leave the HUD's live frame alone.
+    bool liveFrame = true;
 };
 
 /**

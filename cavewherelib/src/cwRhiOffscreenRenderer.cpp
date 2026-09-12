@@ -500,7 +500,9 @@ bool cwRhiOffscreenRenderer::renderJobIntoScratch(QRhiCommandBuffer* cb,
 
     std::array<QVector<cwRHIObject::PipelineBatch>, cwRhiFrameRenderer::kPassCount> passBatches;
     m_frame.gatherScene(passBatches, perPassRenderData,
-                         {p.hiddenObjectIds, appearanceSlotForObject});
+                         {.hiddenObjectIds = p.hiddenObjectIds,
+                          .appearanceSlotForObject = appearanceSlotForObject,
+                          .liveFrame = false});
 
     const cwRhiPostProcessEffect::FrameUniformContext offscreenFrameContext{
         clipCamera.projectionCorrected, size, p.devicePixelRatio

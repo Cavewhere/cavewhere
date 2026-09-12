@@ -3,12 +3,12 @@
 #include "cwFrustum.h"
 #include "cwKtx2Codec.h"
 #include "cwMipMath.h"
+#include "cwRenderFrameStats.h"
 #include "cwRenderTexturedItems.h"
 #include "cwRhiAttributeFormat.h"
 #include "cwRhiItemRenderer.h"
 #include "cwRhiLimits.h"
 #include "cwTextureResidency.h"
-#include "cwTextureStreamingStats.h"
 
 #include <QByteArray>
 #include <QDebug>
@@ -575,7 +575,7 @@ void cwRhiTexturedItems::publishStreamingStats() const
 {
     const cwTextureStreamer::Pending pending = m_streamer.pending();
 
-    cwTextureStreamingStats::Counts counts;
+    cwRenderFrameStats::Streaming counts;
     counts.loadsInFlight = pending.loads;
     counts.readyCpuBytes = pending.cpuBytes;
 
@@ -597,7 +597,7 @@ void cwRhiTexturedItems::publishStreamingStats() const
         }
     }
 
-    cwTextureStreamingStats::instance()->publish(counts);
+    cwRenderFrameStats::instance()->publishStreaming(counts);
 }
 
 std::optional<QBox3D> cwRhiTexturedItems::worldBounds() const

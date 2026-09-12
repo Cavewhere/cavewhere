@@ -17,8 +17,7 @@
 
 //Our includes
 #include "cwGlobals.h"
-#include "cwRenderCullingStats.h"
-#include "cwTextureStreamingStats.h"
+#include "cwRenderFrameStats.h"
 
 // Read-only view of cwRenderMemoryLedger for QML. One row per ledger category,
 // refreshed by a timer while running is true.
@@ -57,7 +56,7 @@ public:
     QVariant data(const QModelIndex& index, int role) const override;
     QHash<int, QByteArray> roleNames() const override;
 
-    bool running() const { return m_running; }
+    bool running() const { return m_timer.isActive(); }
     void setRunning(bool running);
 
     qint64 totalGpuBytes() const { return m_totalGpuBytes; }
@@ -102,12 +101,10 @@ private:
     QList<Row> m_rows;
     qint64 m_totalGpuBytes = 0;
     qint64 m_totalCpuBytes = 0;
-    quint64 m_lastRevision = 0;
-    cwRenderCullingStats::Counts m_culling;
-    quint64 m_lastCullingRevision = 0;
-    cwTextureStreamingStats::Counts m_streaming;
-    quint64 m_lastStreamingRevision = 0;
-    bool m_running = false;
+    quint64 m_lastLedgerRevision = 0;
+    cwRenderFrameStats::Culling m_culling;
+    cwRenderFrameStats::Streaming m_streaming;
+    quint64 m_lastFrameStatsRevision = 0;
 };
 
 #endif // CWRENDERINGSTATSMODEL_H

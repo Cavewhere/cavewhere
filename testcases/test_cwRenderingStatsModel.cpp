@@ -3,10 +3,9 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include "cwRenderCullingStats.h"
+#include "cwRenderFrameStats.h"
 #include "cwRenderMemoryLedger.h"
 #include "cwRenderingStatsModel.h"
-#include "cwTextureStreamingStats.h"
 
 //Qt includes
 #include <QSignalSpy>
@@ -26,13 +25,13 @@ constexpr int kCategoryCount = 5;
 constexpr int kPointCloudRow = 0;
 constexpr int kLinePlotRow = 3;
 constexpr int kLongerThanPollInterval = 1200;
-constexpr cwRenderCullingStats::Counts kCounts {
+constexpr cwRenderFrameStats::Culling kCounts {
     .objectsTotal = 9,
     .objectsCulled = 4,
     .itemsTotal = 25,
     .itemsCulled = 20
 };
-constexpr cwTextureStreamingStats::Counts kStreamingCounts {
+constexpr cwRenderFrameStats::Streaming kStreamingCounts {
     .streamedItems = 12,
     .loadsInFlight = 3,
     .itemsBelowDesired = 5,
@@ -145,11 +144,15 @@ TEST_CASE("cwRenderingStatsModel: refresh re-reads roles and totals from the led
 
 TEST_CASE("cwRenderingStatsModel: refresh reads the published culling counts",
           "[RenderingStatsModel]") {
+    //A known baseline so the model's construction-time snapshot differs from kCounts
+    cwRenderFrameStats::instance()->publishCulling({});
+
     cwRenderingStatsModel model;
 
     QSignalSpy cullingSpy(&model, &cwRenderingStatsModel::cullingChanged);
+    QSignalSpy streamingSpy(&model, &cwRenderingStatsModel::streamingChanged);
 
-    cwRenderCullingStats::instance()->publish(kCounts);
+    cwRenderFrameStats::instance()->publishCulling(kCounts);
 
     model.refresh();
 
@@ -159,18 +162,26 @@ TEST_CASE("cwRenderingStatsModel: refresh reads the published culling counts",
     CHECK(model.culledItems() == kCounts.itemsCulled);
     CHECK(cullingSpy.count() == 1);
 
+    //Publishing culling alone leaves the streaming half quiet
+    CHECK(streamingSpy.count() == 0);
+
     //Without a new published frame the model stays quiet
     model.refresh();
     CHECK(cullingSpy.count() == 1);
+    CHECK(streamingSpy.count() == 0);
 }
 
 TEST_CASE("cwRenderingStatsModel: refresh reads the published streaming counts",
           "[RenderingStatsModel]") {
+    //A known baseline so the model's construction-time snapshot differs from kStreamingCounts
+    cwRenderFrameStats::instance()->publishStreaming({});
+
     cwRenderingStatsModel model;
 
     QSignalSpy streamingSpy(&model, &cwRenderingStatsModel::streamingChanged);
+    QSignalSpy cullingSpy(&model, &cwRenderingStatsModel::cullingChanged);
 
-    cwTextureStreamingStats::instance()->publish(kStreamingCounts);
+    cwRenderFrameStats::instance()->publishStreaming(kStreamingCounts);
 
     model.refresh();
 
@@ -183,12 +194,16 @@ TEST_CASE("cwRenderingStatsModel: refresh reads the published streaming counts",
     CHECK(model.demotionsInFlight() == kStreamingCounts.demotionsInFlight);
     CHECK(streamingSpy.count() == 1);
 
+    //Publishing streaming alone leaves the culling half quiet
+    CHECK(cullingSpy.count() == 0);
+
     //Without a new published frame the model stays quiet
     model.refresh();
     CHECK(streamingSpy.count() == 1);
+    CHECK(cullingSpy.count() == 0);
 
     //A frame with nothing streaming reads back as zeros
-    cwTextureStreamingStats::instance()->publish({});
+    cwRenderFrameStats::instance()->publishStreaming({});
     model.refresh();
 
     CHECK(model.streamedItems() == 0);
@@ -197,6 +212,7 @@ TEST_CASE("cwRenderingStatsModel: refresh reads the published streaming counts",
     CHECK(model.readyCpuBytes() == 0);
     CHECK(model.demotionsInFlight() == 0);
     CHECK(streamingSpy.count() == 2);
+    CHECK(cullingSpy.count() == 0);
 }
 
 TEST_CASE("cwRenderingStatsModel: polling picks up a published streaming frame",
@@ -206,9 +222,9 @@ TEST_CASE("cwRenderingStatsModel: polling picks up a published streaming frame",
 
     QSignalSpy streamingSpy(&model, &cwRenderingStatsModel::streamingChanged);
 
-    cwTextureStreamingStats::Counts counts = kStreamingCounts;
+    cwRenderFrameStats::Streaming counts = kStreamingCounts;
     counts.loadsInFlight = kStreamingCounts.loadsInFlight + 1;
-    cwTextureStreamingStats::instance()->publish(counts);
+    cwRenderFrameStats::instance()->publishStreaming(counts);
 
     QTest::qWait(kLongerThanPollInterval);
 
@@ -222,12 +238,12 @@ TEST_CASE("cwRenderingStatsModel: polling runs only while running is true",
     LedgerScope linePlotCpu(Category::LinePlotGeometry, Residency::Cpu);
 
     cwRenderingStatsModel model;
+    CHECK_FALSE(model.running());
+
     const qint64 startGpuBytes = rowGpuBytes(model, kLinePlotRow);
     const qint64 startCpuBytes = rowCpuBytes(model, kLinePlotRow);
 
     QSignalSpy runningSpy(&model, &cwRenderingStatsModel::runningChanged);
-
-    CHECK_FALSE(model.running());
 
     cwRenderMemoryLedger::instance()->adjust(Category::LinePlotGeometry,
                                              Residency::Gpu,

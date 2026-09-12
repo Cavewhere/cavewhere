@@ -7,9 +7,8 @@
 
 //Our includes
 #include "cwRenderingStatsModel.h"
-#include "cwRenderCullingStats.h"
+#include "cwRenderFrameStats.h"
 #include "cwRenderMemoryLedger.h"
-#include "cwTextureStreamingStats.h"
 
 //Std includes
 #include <iterator>
@@ -93,13 +92,11 @@ QHash<int, QByteArray> cwRenderingStatsModel::roleNames() const
 
 void cwRenderingStatsModel::setRunning(bool running)
 {
-    if(m_running == running) {
+    if(running == m_timer.isActive()) {
         return;
     }
 
-    m_running = running;
-
-    if(m_running) {
+    if(running) {
         m_timer.start();
         refresh();
     } else {
@@ -111,9 +108,8 @@ void cwRenderingStatsModel::setRunning(bool running)
 
 void cwRenderingStatsModel::poll()
 {
-    if(cwRenderMemoryLedger::instance()->revision() != m_lastRevision
-       || cwRenderCullingStats::instance()->revision() != m_lastCullingRevision
-       || cwTextureStreamingStats::instance()->revision() != m_lastStreamingRevision) {
+    if(cwRenderMemoryLedger::instance()->revision() != m_lastLedgerRevision
+       || cwRenderFrameStats::instance()->revision() != m_lastFrameStatsRevision) {
         refresh();
     }
 }
@@ -121,7 +117,7 @@ void cwRenderingStatsModel::poll()
 void cwRenderingStatsModel::refresh()
 {
     auto* ledger = cwRenderMemoryLedger::instance();
-    m_lastRevision = ledger->revision();
+    m_lastLedgerRevision = ledger->revision();
 
     for(int i = 0; i < m_rows.size(); i++) {
         const Category category = kCategories[i].category;
@@ -150,22 +146,24 @@ void cwRenderingStatsModel::refresh()
         emit totalsChanged();
     }
 
-    auto* cullingStats = cwRenderCullingStats::instance();
-    const quint64 cullingRevision = cullingStats->revision();
+    auto* frameStats = cwRenderFrameStats::instance();
+    const quint64 frameStatsRevision = frameStats->revision();
 
-    if(cullingRevision != m_lastCullingRevision) {
-        m_lastCullingRevision = cullingRevision;
-        m_culling = cullingStats->counts();
-        emit cullingChanged();
-    }
+    if(frameStatsRevision != m_lastFrameStatsRevision) {
+        m_lastFrameStatsRevision = frameStatsRevision;
 
-    auto* streamingStats = cwTextureStreamingStats::instance();
-    const quint64 streamingRevision = streamingStats->revision();
+        //One revision covers both halves, so each half reports only its own change
+        const cwRenderFrameStats::Culling culling = frameStats->culling();
+        if(m_culling != culling) {
+            m_culling = culling;
+            emit cullingChanged();
+        }
 
-    if(streamingRevision != m_lastStreamingRevision) {
-        m_lastStreamingRevision = streamingRevision;
-        m_streaming = streamingStats->counts();
-        emit streamingChanged();
+        const cwRenderFrameStats::Streaming streaming = frameStats->streaming();
+        if(m_streaming != streaming) {
+            m_streaming = streaming;
+            emit streamingChanged();
+        }
     }
 }
 

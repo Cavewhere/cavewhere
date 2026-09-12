@@ -4,7 +4,7 @@
 #include "cwRhiItemRenderer.h"
 #include "cwEDLEffect.h"
 #include "cwFrustum.h"
-#include "cwRenderCullingStats.h"
+#include "cwRenderFrameStats.h"
 #include "cwRenderingSettings.h"
 
 #include <algorithm>
@@ -570,7 +570,7 @@ void cwRhiFrameRenderer::gatherScene(std::array<QVector<cwRHIObject::PipelineBat
     const cwFrustum frustum = cwFrustum::fromViewProjection(
         perPassRenderData[0].viewProjectionMatrix);
 
-    cwRenderCullingStats::Counts cullingStats;
+    cwRenderFrameStats::Culling cullingStats;
 
     quint32 objectOrder = 0;
     for (auto object : std::as_const(m_rhiObjects)) {
@@ -610,7 +610,9 @@ void cwRhiFrameRenderer::gatherScene(std::array<QVector<cwRHIObject::PipelineBat
         ++objectOrder;
     }
 
-    cwRenderCullingStats::instance()->publish(cullingStats);
+    if (options.liveFrame) {
+        cwRenderFrameStats::instance()->publishCulling(cullingStats);
+    }
 }
 
 void cwRhiFrameRenderer::drainBatches(QRhiCommandBuffer* cb,
