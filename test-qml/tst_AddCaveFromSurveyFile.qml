@@ -134,6 +134,35 @@ MainWindowTest {
             RootData.futureManagerModel.waitForFinished()
         }
 
+        // P3.15: the stations no block claims get one whole-file trip,
+        // so a Compass project explains its single trip before Attach.
+        function test_wholeFileRowShowsForRootStationsOnly() {
+            saveProjectAs("add-cave-whole-file")
+            const dataPage = gotoDataMainPage()
+            const dialog = openDialog(dataPage)
+
+            pickFixture(dialog, "compass_multi.mak")
+            const wholeFileRow = findChild(dialog, "wholeFileRow")
+            verify(wholeFileRow !== null, "the whole-file row must exist")
+            tryVerify(() => wholeFileRow.visible, 10000,
+                      "a Compass project's stations all sit in the file root")
+            verify(wholeFileRow.text.indexOf("5") >= 0,
+                   "the row names the root station count; got: " + wholeFileRow.text)
+            const list = findChild(dialog, "blockPreviewList")
+            tryCompare(list, "count", 0, 5000)
+
+            // Every station of a *begin tree belongs to a block, so
+            // there is nothing left for a whole-file trip to own.
+            pickFixture(dialog, "survex_blocks.svx")
+            tryVerify(() => !wholeFileRow.visible, 10000,
+                      "a blocks-only file shows no whole-file row")
+
+            const cancelButton = findChild(dialog, "cancelButton")
+            waitForRendering(rootId)
+            mouseClick(cancelButton)
+            RootData.futureManagerModel.waitForFinished()
+        }
+
         function test_dismissRemovesTheJustCreatedCave() {
             saveProjectAs("add-cave-dismiss")
             const dataPage = gotoDataMainPage()

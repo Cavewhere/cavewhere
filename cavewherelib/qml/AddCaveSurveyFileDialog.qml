@@ -120,11 +120,26 @@ QQ.Item {
                 Layout.fillWidth: true
                 Layout.topMargin: Theme.sectionSpacing
                 spacing: Theme.tightSpacing
-                visible: pickerId.valid && pickerId.blocks.length > 0
+                visible: pickerId.valid
+                         && (pickerId.blocks.length > 0
+                             || pickerId.rootStationCount > 0)
 
                 QC.Label {
                     text: qsTr("Trips CaveWhere will create")
                     font.bold: true
+                }
+
+                // The stations no block claims - every station of a
+                // Compass or prefix-less Walls file - get one
+                // whole-file trip, listed first because it stands
+                // above the block tree.
+                QC.Label {
+                    objectName: "wholeFileRow"
+                    Layout.fillWidth: true
+                    visible: pickerId.rootStationCount > 0
+                    elide: QC.Label.ElideRight
+                    text: qsTr("Whole file — %n station(s)", "",
+                               pickerId.rootStationCount)
                 }
 
                 // The tree scrolls once it outgrows the shared list cap,
@@ -164,7 +179,8 @@ QQ.Item {
                     wrapMode: QC.Label.WordWrap
                     color: Theme.textSubtle
                     font.pixelSize: Theme.fontSizeSmall
-                    text: qsTr("One trip per *begin block with stations. "
+                    text: qsTr("One trip per survey block with stations, plus "
+                             + "one for the stations no block claims. "
                              + "Rename or delete any of them afterward.")
                 }
             }

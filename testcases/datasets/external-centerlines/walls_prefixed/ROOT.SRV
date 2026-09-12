@@ -1,0 +1,6 @@
+; prefix-less survey tied to the XY survey through a qualified station
+#DATE 2025-01-01
+#UNITS D=Meters A=Degrees V=Degrees DECL=0
+A1	A2	10.0	0	0
+A2	A3	4.0	90	0
+A3	XY:P1	6.0	0	-30

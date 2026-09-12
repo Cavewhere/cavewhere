@@ -211,6 +211,9 @@ DataMainPage's Add Cave bar has no menu (<code>DataMainPage.qml:225-237</code>);
   Replace reconciles instead of recreating: keep trips whose prefix still names a block,
   create trips for new blocks, leave orphaned trips in place (their station list just
   goes empty). No diff dialog in v1.
+  <strong>Amended by P3.16:</strong> a station-bearing file root gets one whole-cave
+  window (empty <code>stationPrefix</code>, derived state), and an orphaned window that
+  holds no chunks is removed on reconcile instead of left in place.
 </div>
 
 <h3>3.5 "Nav badging" is row badging</h3>
@@ -325,7 +328,9 @@ basename for display (ripple audit in P3.2).</p>
 <p class="meta">Eleven commits (P3.1&ndash;P3.11, <strong>landed 2026-08-24</strong>,
 <code>5794bd6c..8204b7f4</code>) plus three manual-test follow-up commits
 (P3.12&ndash;P3.14, filed 2026-08-25 from Philip's first manual pass &mdash; see each
-commit's "Root cause" for the investigation results). Test gate = what the workflow's
+commit's "Root cause" for the investigation results) plus two commits for the
+Compass/Walls cave-level windows (P3.15&ndash;P3.16, filed 2026-09-12 from a cavern
+naming spike; root causes measured, see P3.15). Test gate = what the workflow's
 implement/fix stages run (foreground, narrow tags); the full suites run once at the end,
 outside the workflow. See §7 for build/test invocations and §8 for fixtures.</p>
 
@@ -877,17 +882,283 @@ the block walk never matches <code>*date</code> at all.</p>
 (date cells show the fixture dates, not today).</div>
 </div>
 
-<p class="meta"><strong>Filed, not scheduled (found during the same investigation):</strong>
-Compass/Walls cave-level Scope windows are structurally broken independent of case:
-cavern emits Compass stations <em>flat</em> (<code>cave0.AB1</code>, not
-<code>cave0.AB.AB1</code> &mdash; see <code>plans/EXTERNAL_FILE_PREFIXING_RESEARCH.md:369-373</code>)
-while the scanner's <code>block.path</code> is the survey name, so those Scope prefixes
-name a level that does not exist in the solved keys (labels and geometry both miss).
-Needs its own design (per-format prefix mapping); do not judge P3.12 against a
-<code>.dat</code> repro. Also still open from P3.1's review: an existing-but-unreadable
-child can appear in <code>entryDirectIncludes</code> while <code>dependencies</code>
-omits it &mdash; the P3.7 heuristic should filter suggestions against
-<code>dependencies</code>.</p>
+<!-- ================================================================ -->
+<div class="commit">
+<h3>P3.15 &mdash; Scanner: root stations, Walls prefix levels, Compass surveys stop being blocks; cavern-valid Compass fixtures</h3>
+<p><strong>Symptom:</strong> attach a Compass <code>.dat</code>/<code>.mak</code> or a Walls
+<code>.wpj</code> at cave level: the trip table shows one Scope trip per Compass survey (or
+per <code>.srv</code>), every one of them lists zero stations, the lineplot draws nothing,
+and Length/Depth read 0. The same happens to a Survex file whose shots sit outside every
+<code>*begin</code> (<code>survex_bare.svx</code>): no Scope trip is created at all, so
+nothing draws.</p>
+<p><strong>Root cause (measured 2026-09-12 by running the built <code>cavern</code> +
+<code>dump3d</code> on drivers wrapped exactly as <code>cwSurvexExporterCaveTask.cpp:138</code>
+wraps a cave-level include; drivers and outputs under the session scratchpad
+<code>spike/</code>):</strong></p>
+<ul>
+  <li><strong>Compass <code>.dat</code>:</strong> cavern discards the <code>SURVEY NAME:</code>
+      value (<code>survex/src/datain.c:817-821</code>, "Survey short name currently
+      ignored"; <code>survex/doc/compass.rst:166-169</code>). Every station lands flat under
+      the wrapper: <code>cave0.AB1</code>, never <code>cave0.AB.AB1</code>. Case is preserved.
+      A '.' inside a Compass station name is a name character
+      (<code>datain.c:649-652</code>), so <code>SA1.1</code> is one station.</li>
+  <li><strong>Compass <code>.mak</code>:</strong> each referenced <code>.dat</code> is read with
+      no surrounding level (<code>datain.c:1020</code>); link stations are ignored
+      (<code>compass.rst:53-56</code>). All <code>.dat</code>s merge into one flat namespace.</li>
+  <li><strong>Walls <code>.wpj</code> <code>.BOOK</code>/<code>.SURVEY</code> titles and
+      <code>.NAME</code>s:</strong> pure metadata (<code>datain.c:3438-3455</code> only tracks
+      a depth counter; <code>.NAME</code> locates the file on disk). <code>walls_simple.wpj</code>
+      solved to <code>cave0:A1 &hellip; cave0:A4</code>: no level at all.</li>
+  <li><strong>Walls <code>#PREFIX</code> / <code>#PREFIX2</code> / <code>#PREFIX3</code> and
+      <code>prefix=</code> / <code>prefix2=</code> / <code>prefix3=</code> in a
+      <code>.wpj</code> <code>.OPTIONS</code> line or a <code>#UNITS</code> line:</strong> these
+      ARE levels, up to three deep (<code>datain.c:3070-3080</code>, <code>2429-2443</code>;
+      <code>readval.c:495-512</code> walks <code>prefix[0..2]</code> as survey levels below the
+      enclosing scope; <code>walls.rst:250-259</code>). <code>#PREFIX XY</code> gave
+      <code>cave0:XY:P1</code>; a book-level <code>.OPTIONS prefix=BK</code> gave
+      <code>cave0:BK:O1</code>. Slot order outermost&rarr;innermost is
+      <code>PREFIX3.PREFIX2.PREFIX1</code> (<code>#PREFIX</code>/<code>#P</code> is
+      <code>PREFIX1</code>, the innermost). The scanner reads none of these directives.</li>
+  <li><strong>The membership test needs a real level:</strong>
+      <code>cwCavernNaming::scopePrefix</code> appends '.', so a Scope trip with
+      <code>stationPrefix == "AB"</code> filters on <code>cave0.AB.</code>, which never matches
+      <code>cave0.AB1</code>. Even as a bare string prefix the survey-name convention held on
+      only 3 of the 6 Compass surveys in the fixture set.</li>
+  <li><strong>Three repo Compass fixtures are unprocessable by cavern</strong>
+      (<code>compass_simple.dat</code>, <code>compass_other.dat</code> &rarr;
+      <code>compass_multi.mak</code>; <code>compass_with_metadata.dat</code> &rarr;
+      <code>compass_with_metadata.mak</code>): <code>Expecting "SURVEY"</code> and
+      <code>End of line not blank</code>. Their headers say so ("don't need to be valid
+      Compass shot data"). Every current test on them stops at the scanner, so nothing has
+      ever solved a Compass cave-level attach end to end.</li>
+</ul>
+<p><strong>Design:</strong> the scanner emits a block only for something cavern turns into a
+naming level, and separately reports how many stations live at the file root (no level at
+all). P3.16 windows the root with one whole-cave Scope trip. Per format:
+Survex &mdash; blocks unchanged; root = stations outside every named <code>*begin</code>,
+anywhere in the closure. Compass &mdash; no blocks; every station is root. Walls &mdash;
+one block per distinct prefix path, merged across files; root = stations with no prefix in
+force. Compass survey-level windows are out of scope for good: cavern throws the survey
+name away, and the only alternative (the exporter rewriting a <code>.mak</code> into
+per-<code>.dat</code> <code>*begin</code> wrappers, <code>compass.rst:58-88</code>) drops the
+<code>.mak</code>'s own datum/UTM lines and still gives nothing for a multi-survey
+<code>.dat</code>.</p>
+<ul class="filelist">
+  <li><code>cavewherelib/src/cwExternalCenterlineScanner.h</code> &mdash;
+      <code>ScanResult</code> gains <code>int rootStationCount</code> (unique station names
+      the closure spells outside every block; joins <code>operator==</code>) and
+      <code>QDate rootDate</code> (the first date directive seen while no block is open:
+      Survex <code>*date</code> at file root, Compass first <code>SURVEY DATE:</code>,
+      Walls first <code>#DATE</code> with no prefix in force; invalid when none).
+      Rewrite the <code>cwScanBlock</code> class comment's per-format paragraph to the
+      Design above (Compass: none; Walls: prefix path, <code>#PREFIX3.#PREFIX2.#PREFIX1</code>
+      joined by '.', <code>depth</code> = non-empty slots &minus; 1). Keep
+      <code>entryHasOwnShots</code> as is (the P3.7 heuristic reads it).</li>
+  <li><code>cavewherelib/src/cwExternalCenterlineScanner.cpp</code> &mdash;
+      <em>Survex:</em> <code>recordStation</code> (<code>:288-303</code>) currently drops a
+      station that lands in no named block; count it in a <code>ScanState</code> root set
+      instead. <em>Compass:</em> <code>collectCompassBlocks</code> stops appending blocks;
+      its station set feeds the root set and its first <code>SURVEY DATE:</code> feeds
+      <code>rootDate</code> (the P3.14 per-survey date capture moves to the root date).
+      <em>Walls:</em> replace <code>appendWallsBlock</code>'s title/stem block with a prefix
+      walk: three slots initialized from the entry's inherited options
+      (<code>dewalls::WpjEntry::allOptions()</code>, tokens matching
+      <code>prefix([123])?=(value)</code>, case-insensitive, per Walls also accepted on a
+      <code>#UNITS</code> line), updated by <code>#PREFIX</code>/<code>#P</code>
+      (slot 1), <code>#PREFIX2</code>, <code>#PREFIX3</code> with an empty value clearing the
+      slot. Each shot line's stations are counted under the path of the slots in force;
+      a <code>:</code>-qualified station token (<code>XY:P1</code>, or
+      <code>A:B:C:name</code>) overlays its explicit segments onto the innermost prefix
+      levels and keeps the outer levels in force (<code>readval.c:495-512</code> fills
+      levels below <code>3 - explicit</code> from the prefix in force), so with
+      <code>#PREFIX3 top</code> in force <code>XY:P1</code> counts under
+      <code>top.XY</code> and <code>:P1</code> under <code>top</code>. Blocks are keyed
+      by path and merged across files (first appearance sets document order); a path's
+      ancestors are materialized before it with <code>stationCount</code> 0 when nothing
+      sits directly in them, keeping "parents before children". Block date = first
+      <code>#DATE</code> seen while that path is in force. Delete
+      <code>ScanState::pendingWallsTitle</code> and the title hand-off in
+      <code>collectWallsSurveys</code> (<code>:940</code>).</li>
+  <li><code>cavewherelib/src/cwExternalCenterlineScanPreview.h/.cpp</code> &mdash; expose
+      <code>rootStationCount</code> and <code>rootDate</code>.</li>
+  <li><code>cavewherelib/qml/AddCaveSurveyFileDialog.qml</code> &mdash; the block preview
+      grows a first row "Whole file &mdash; %n station(s)" when
+      <code>rootStationCount &gt; 0</code>, so a Compass or prefix-less Walls file explains
+      its single trip before the user attaches it.</li>
+  <li>Fixtures (§8): rewrite <code>compass_simple.dat</code> and <code>compass_other.dat</code>
+      as cavern-valid Compass (copy the header/column layout of
+      <code>compass_solvable.dat</code>; keep survey names <code>A</code>/<code>B</code>,
+      keep the <code>SURVEY DATE:</code> lines P3.14 asserts, drop the ';' comment lines
+      Compass rejects). Make <code>compass_other.dat</code> tie into
+      <code>compass_simple.dat</code> so <code>compass_multi.mak</code> solves as one
+      component: <code>A1&rarr;A2 10.00 @ 0/0</code>, <code>A2&rarr;A3 8.00 @ 90/0</code> in
+      A; <code>A2&rarr;B1 7.00 @ 180/-30</code>, <code>B1&rarr;B2 6.00 @ 270/0</code> in B
+      (5 root stations; a Compass <code>.dat</code> spells distances in decimal feet,
+      so the 31 ft of tape solves to 9.45 m of cave length and 1.07 m of depth -
+      measured 2026-09-12 with the cavern CLI). Fix
+      <code>compass_with_metadata.dat</code>'s trailing-column error the same way, keeping
+      the header values <code>[Scanner][Metadata]</code> asserts. Verify every
+      <code>.dat</code>/<code>.mak</code> with the CLI before running tests:
+      <code>cd build/Qt_6_11_1_for_macOS-Debug &amp;&amp; ./survex/cavern -o /tmp/x-$$.3d
+      driver.svx</code> (run from the build directory: cavern looks up its message files
+      relative to the current directory) where <code>driver.svx</code> is the three-line
+      cave wrapper with an absolute <code>*include</code>, then
+      <code>./survex/dump3d /tmp/x-$$.3d</code> to read the labels. New Walls fixtures
+      <code>walls_prefixed/</code>: <code>walls_prefixed.wpj</code> (one book, two
+      <code>.SURVEY</code> entries), <code>ROOT.SRV</code> (no prefix:
+      <code>A1&rarr;A2 10 @ 0/0</code>, <code>A2&rarr;A3 4 @ 90/0</code>,
+      <code>A3&rarr;XY:P1 6 @ 0/-30</code>), <code>PREFIXED.SRV</code> (<code>#DATE 2025-01-02</code>,
+      <code>#PREFIX XY</code>, <code>P1&rarr;P2 12 @ 90/0</code>): root 3 stations, block
+      <code>XY</code> 2 stations, length 32 m, depth 3 m; and
+      <code>walls_book_prefix/</code>: <code>walls_book_prefix.wpj</code> whose book carries
+      <code>.OPTIONS prefix=BK</code> over <code>OPTSRV.SRV</code>
+      (<code>O1&rarr;O2 10 @ 0/0</code>): block <code>BK</code>, 2 stations, root 0.
+      All three shapes solved in the spike, the tie shot included (labels
+      <code>cave0:A1&hellip;A3</code>, <code>cave0:XY:P1</code>, <code>cave0:XY:P2</code>,
+      <code>cave0:BK:O1</code>; cavern reports vertical range 3.00 m). New Survex fixture
+      <code>survex_root_and_block.svx</code>: root shots <code>r1&rarr;r2 10 @ 0/0</code>,
+      <code>r2&rarr;r3 5 @ 90/0</code>, <code>r3&rarr;side.s1 4 @ 0/-30</code>, then
+      <code>*begin side</code> / <code>*export s1</code> / <code>s1&rarr;s2 6 @ 180/0</code>
+      / <code>*end side</code> (root 3, block <code>side</code> 2, length 25 m, depth 2 m).</li>
+  <li><code>testcases/test_cwExternalCenterlineScanner.cpp</code> &mdash; retarget
+      "blocks name each Compass survey, flat" (<code>:1260</code>) to "Compass surveys make
+      no blocks; rootStationCount counts every station" and "blocks carry each Compass
+      survey's SURVEY DATE" (<code>:1151</code>) to <code>rootDate</code> = first survey's
+      date; retarget "blocks stand in for each Walls .srv" (<code>:1293</code>) and "a Walls
+      block carries its .srv's #DATE" (<code>:1167</code>) to the prefix fixtures (paths
+      <code>XY</code> / <code>BK</code>, counts, dates, root count, a qualified token counted
+      under the overlay of its explicit segments on the prefix in force); Survex root count on <code>survex_root_and_block.svx</code>
+      and on <code>survex_bare.svx</code> (2, no blocks); <code>survex_blocks.svx</code> root
+      count 0 (regression: nothing changes for the existing fixtures).</li>
+</ul>
+<div class="gate"><strong>Gate:</strong> <code>cavewhere-test "[Scanner]"</code>,
+<code>"[Attach]"</code> (fixture rewrites must keep every existing attach test green);
+QML <code>tst_AddCaveFromSurveyFile.qml</code> (whole-file row present for
+<code>compass_multi.mak</code>, absent for <code>survex_blocks.svx</code>).</div>
+</div>
+
+<!-- ================================================================ -->
+<div class="commit">
+<h3>P3.16 &mdash; Whole-cave Scope trip: window the root, own what no block claims</h3>
+<p><strong>Symptom:</strong> after P3.15 a Compass, prefix-less Walls, or bare Survex
+cave-level attach creates no Scope trip, so the lineplot still draws nothing:
+<code>cwLinePlotGeometry::generate</code> draws an attached cave only through its trips'
+scope prefixes (<code>cwLinePlotGeometry.cpp:214-246</code>), and a native-looking trip with
+no chunks walks zero chunks.</p>
+<p><strong>Design (§3.2 and §3.4 amended):</strong> an attached cave has no native trips
+(§3.3 invariant), so a trip under an attached cave with no external centerline of its own
+and an empty <code>stationPrefix</code> is, by construction, the <em>whole-cave window</em>:
+it owns every cave station no sibling Scope prefix claims. This is derived state &mdash;
+no proto field, no migration of saved files. Its scope, relative to the cave, is the cave
+itself, so <code>scopePrefix()</code> stays empty and everything that reads "empty prefix =
+the cave's own namespace" (<code>solvedStationPositions</code>, <code>solvedNetwork</code>,
+<code>stationHandle</code> &rarr; <code>NativeCave</code>) is already right for it. What
+changes is who lists and draws its stations. Reconcile creates the whole-cave trip when
+<code>rootStationCount &gt; 0</code>, and from now on removes an orphaned window (its
+prefix names no block, or the root emptied) when it holds no chunks &mdash; a window is
+derived from the file, and this is also how an attachment made before this fix repairs
+itself on Reload/Replace (its survey-named Compass trips go, one whole-cave trip
+appears). A window the user put chunks in stays, as before.</p>
+<ul class="filelist">
+  <li><code>cavewherelib/src/cwTrip.h/.cpp</code> &mdash; <code>bool windowsWholeCave() const</code>
+      = <code>m_externalCenterline.isEmpty() &amp;&amp; m_stationPrefix.isEmpty() &amp;&amp;
+      parentCave() != nullptr &amp;&amp; !parentCave()-&gt;externalCenterline().isEmpty()</code>,
+      exposed as <code>Q_PROPERTY(... NOTIFY externallyBackedChanged)</code> (same
+      sources), plus the snapshot overload
+      <code>static bool windowsWholeCave(const cwTripData&amp;, const cwCaveData&amp;)</code>
+      next to the <code>scopePrefix</code> overload so the worker and UI decisions share
+      one policy. <code>solvedStations()</code> gains a third branch before the native one:
+      whole-cave &rarr; every cave lookup station whose key starts with no sibling's
+      <code>stationPrefix + "."</code> (case-insensitive; siblings from
+      <code>parentCave()-&gt;trips()</code>), yielded unstripped (the tail is the cave key).
+      <code>knownStationNames(const cwTripData&amp;, scopeLocalSolved)</code> is unchanged; its
+      caller in <code>cwFindFloatingSurveys.cpp:244</code> must hand it the same
+      sibling-filtered list for a whole-cave trip. Add <code>[Trip]</code> truth-table cases
+      for the predicate (native cave, attached-trip, Scope trip, whole-cave, cave detached
+      &rarr; false).</li>
+  <li><code>cavewherelib/src/cwLinePlotGeometry.cpp</code> &mdash; in <code>generate</code>'s
+      prefix gathering (<code>:196-201</code>) a whole-cave trip's entry becomes
+      <code>cavePrefix</code> itself, so the scope path runs for it and the existing
+      <code>ownedByInnerScope</code> hands nested blocks to their deeper windows (every
+      sibling prefix is strictly longer). Fix the header comment at <code>:55-57</code>:
+      cavern preserves case for Compass and Walls labels (measured:
+      <code>cave0.AB1</code>, <code>cave0:XY:P1</code>) and lowercases Survex ones, which is
+      why both comparisons are case-insensitive. Tests in
+      <code>test_cwLinePlotGeometry.cpp</code>: whole-cave alone draws every leg; whole-cave +
+      nested window split the legs with the tie leg drawn once; cave length/depth = the
+      fixture sums.</li>
+  <li><code>cavewherelib/src/cwFindFloatingSurveys.cpp</code>,
+      <code>cwFloatingSurveyModel.cpp</code> &mdash; wherever a Scope trip under an attached
+      cave is excluded from floating (P3.6), the whole-cave trip is excluded by the same
+      test; add the case to the existing floating-exclusion test.</li>
+  <li><code>cavewherelib/src/cwExternalCenterlineAttach.cpp</code> &mdash;
+      <code>reconcileScopeTrips</code> takes the <code>ScanResult</code> (or
+      <code>blocks</code> + <code>rootStationCount</code> + <code>rootDate</code>): after the
+      block loop, when <code>rootStationCount &gt; 0</code> and no chunk-less trip with an
+      empty prefix exists, create one named
+      <code>cave-&gt;uniqueTripName(QFileInfo(entry).completeBaseName())</code>, empty
+      prefix, date seeded from <code>rootDate</code> when valid; report it with
+      <code>stationPrefix = ""</code>. Before the block loop, remove every existing trip with
+      <code>chunkCount() == 0</code> whose prefix names no station-bearing block (empty
+      prefix counts as "names the root", kept only while <code>rootStationCount &gt; 0</code>)
+      via <code>cave-&gt;removeTrip()</code> (the G1 boundary; no undo stack, so read
+      nothing afterward). Update the function comment and §3.4's "leave orphans" sentence
+      (edit the plan text in the same commit). <code>removeEmptyScopeTrips</code> (detach
+      cascade, <code>:284-296</code>) drops the prefix test: under an attached cave every
+      chunk-less trip is a window.</li>
+  <li><code>cavewherelib/qml/ExternalCenterlineTripPanel.qml:49</code> &mdash; the scope
+      branch condition becomes <code>trip.stationPrefix.length &gt; 0 ||
+      trip.windowsWholeCave</code>. <code>ExternalCenterlineScopeHeader.qml:95</code> shows
+      <code>qsTr("whole file")</code> as placeholder text for an empty prefix (editing it to a
+      block path still works and turns the trip into an ordinary window).</li>
+  <li><code>cavewherelib/src/cwSurvex3DFileReader.cpp:84-85</code> &mdash; correct the comment:
+      the separator is chosen once before Compass data is read, so a Compass-only run keeps
+      '.' even when a station name contains '.' (measured on
+      <code>compass_dotted.dat</code>: <code>cave0.SA1.1</code>); the replacement is
+      unambiguous only because a cave-level or trip-level wrapper is the sole level above
+      such names. Reference the filed item below.</li>
+  <li><code>testcases/test_cwExternalCenterlineAttachCave.cpp</code> &mdash; new
+      <code>[Attach][Cave][Geometry]</code> cases modeled on the mixed-case one
+      (<code>:540</code>; fix its comment's "cavern lowercases every label" the same way):
+      attach <code>compass_multi.mak</code> &rarr; exactly one trip, whole-cave, 5 known
+      stations, its vertex range non-empty, cave length 9.45 / depth 1.07 (Compass feet; tolerance as in
+      <code>test_cwLinePlotManager_AttachedCenterlines.cpp</code>); attach
+      <code>walls_prefixed/walls_prefixed.wpj</code> &rarr; two trips (whole-cave with 3
+      stations, <code>XY</code> with 2), both draw, length 32 / depth 3; attach
+      <code>survex_root_and_block.svx</code> &rarr; whole-cave + <code>side</code>, length
+      25 / depth 2; attach <code>walls_book_prefix</code> &rarr; one <code>BK</code> trip and
+      no whole-cave trip. Reconcile: pre-seed a cave with a stale chunk-less trip whose
+      prefix is <code>A</code> (the old Compass shape), Replace with
+      <code>compass_multi.mak</code>, assert the stale trip is gone and the whole-cave trip
+      exists; the same with a chunk added to the stale trip asserts it survives. Detach
+      cascade removes the whole-cave trip.</li>
+  <li><code>test-qml/tst_CavePageExternalCave.qml</code> &mdash; the whole-cave trip row
+      shows the 📎 and the em-dash declination like any Scope row;
+      <code>tst_ExternalCenterlineTripPanel.qml</code> &mdash; scope mode for a whole-cave
+      trip, header placeholder text.</li>
+</ul>
+<div class="gate"><strong>Gate:</strong> <code>cavewhere-test "[Trip]"</code>,
+<code>"[Attach][Cave]"</code>, <code>"[LinePlotGeometry]"</code>, the floating-survey tags,
+<code>"[LinePlotManager][AttachedCenterlinesModel]"</code>; QML
+<code>tst_CavePageExternalCave.qml</code>, <code>tst_ExternalCenterlineTripPanel.qml</code>.</div>
+</div>
+
+<p class="meta"><strong>Filed, not scheduled:</strong>
+(1) <em>Separator ambiguity.</em> cavern picks the .3d label separator once, before any
+Compass station is read (<code>find_output_separator</code> fast path,
+<code>survex/src/commands.c:826-829</code>; <code>update_output_separator()</code> runs at
+<code>datain.c:674</code> and the later <code>update_separator_map_for_foreign_name</code>
+calls never re-evaluate), so a Compass-only run emits '.' even when a station name spells
+'.'. Today only the cave/trip wrapper sits above such names, so stripping the wrapper
+prefix still resolves them; a future level between wrapper and name (a Compass
+<code>.mak</code> rewritten into per-file <code>*begin</code>s, or a region solve that
+mixes such names with Walls prefixes) would make <code>cave0.SA1.1</code> undecodable.
+Fix belongs in the vendored survex (re-run the separator choice after foreign names
+accumulate) with a <code>[Survex3DFileReader]</code> regression on
+<code>compass_dotted.dat</code> under a nested wrapper.
+(2) Still open from P3.1's review: an existing-but-unreadable child can appear in
+<code>entryDirectIncludes</code> while <code>dependencies</code> omits it &mdash; the P3.7
+heuristic should filter suggestions against <code>dependencies</code>.</p>
 
 <h2 id="testing">7. Build and test invocations (for every pipeline stage)</h2>
 
@@ -945,6 +1216,25 @@ Commits: short imperative subjects, body = what/why + commands run, no Claude me
   <td>Gains distinct <code>*date</code> lines per block, one dateless child (inherits)
       and a dateless top block (keeps default).</td>
   <td>P3.14 (P3.13 nested de-dup regression)</td></tr>
+<tr><td><code>compass_simple.dat</code> + <code>compass_other.dat</code>
+        <em>(rewritten cavern-valid)</em>, <code>compass_with_metadata.dat</code>
+        <em>(repaired)</em></td>
+  <td>Surveys A and B tied through A2, one component; 31 ft of tape solving to
+      9.45 m length and 1.07 m depth (Compass distances are decimal feet), 5 root
+      stations. Same survey names, dates, and header values the scanner tests assert.</td>
+  <td>P3.15, P3.16</td></tr>
+<tr><td><code>walls_prefixed/walls_prefixed.wpj</code> + <code>ROOT.SRV</code> +
+        <code>PREFIXED.SRV</code></td>
+  <td>Prefix-less survey (3 root stations) tied to a <code>#PREFIX XY</code> survey (2
+      stations) through a <code>XY:P1</code> qualified shot; length 32 m, depth 3 m.</td>
+  <td>P3.15, P3.16</td></tr>
+<tr><td><code>walls_book_prefix/walls_book_prefix.wpj</code> + <code>OPTSRV.SRV</code></td>
+  <td>Book-level <code>.OPTIONS prefix=BK</code>; one block <code>BK</code>, root 0.</td>
+  <td>P3.15, P3.16</td></tr>
+<tr><td><code>survex_root_and_block.svx</code></td>
+  <td>Root shots plus one <code>*begin side</code> reached through <code>*export</code>;
+      root 3, block 2, length 25 m, depth 2 m.</td>
+  <td>P3.15, P3.16</td></tr>
 <tr><td>Existing: <code>compass_multi.mak</code>, <code>walls_simple.wpj</code>,
         <code>survex_nested.svx</code>, <code>survex_simple.svx</code></td>
   <td>Reused for block extraction, direct-includes, and regression gates; P3.14 adds
@@ -988,6 +1278,12 @@ repeating the setup per file.</p>
       the lineplot shows the centerline lines, cave Length and Depth read positive
       values (never <code>-1.00</code>), and each Scope trip's date matches its block's
       <code>*date</code> &mdash; editable from the trip panel.</li>
+  <li><strong>(P3.15&ndash;P3.16)</strong> Attach a Compass <code>.mak</code> and a Walls
+      <code>.wpj</code> at cave level: each shows one 📎 whole-file trip (plus one trip per
+      Walls prefix), the lineplot draws the centerline, Length/Depth read positive values,
+      and the Add Cave dialog's preview lists the whole-file row. Reload a Compass cave
+      attached before this fix: its survey-named empty trips are gone and one whole-file
+      trip remains.</li>
   <li>Both full suites green at the final commit of the sequence.</li>
 </ul>
 

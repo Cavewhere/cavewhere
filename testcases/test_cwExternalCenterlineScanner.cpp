@@ -22,6 +22,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QHash>
 #include <QString>
 #include <QTemporaryDir>
 
@@ -1148,8 +1149,12 @@ TEST_CASE("a *date inside an anonymous *begin stamps the enclosing block",
     CHECK(scan.blocks.first().date == QDate(2024, 2, 3));
 }
 
-TEST_CASE("blocks carry each Compass survey's SURVEY DATE", "[Scanner][Blocks]")
+TEST_CASE("rootDate takes the first Compass survey's SURVEY DATE",
+          "[Scanner][Blocks]")
 {
+    // Every Compass station is a root station, so the date the root
+    // window seeds from is the first survey's - B's 2025-02-02 is
+    // read past, not kept.
     const QString path = datasetExternalCenterlinePath(QStringLiteral("compass_multi.mak"));
     REQUIRE(QFileInfo::exists(path));
 
@@ -1157,24 +1162,46 @@ TEST_CASE("blocks carry each Compass survey's SURVEY DATE", "[Scanner][Blocks]")
     REQUIRE_FALSE(result.hasError());
     const ScanResult scan = result.value();
 
-    REQUIRE(scan.blocks.size() == 2);
-    CHECK(scan.blocks.at(0).path == QStringLiteral("A"));
-    CHECK(scan.blocks.at(0).date == QDate(2025, 1, 1));
-    CHECK(scan.blocks.at(1).path == QStringLiteral("B"));
-    CHECK(scan.blocks.at(1).date == QDate(2025, 2, 2));
+    CHECK(scan.blocks.isEmpty());
+    CHECK(scan.rootDate == QDate(2025, 1, 1));
 }
 
-TEST_CASE("a Walls block carries its .srv's #DATE", "[Scanner][Blocks]")
+TEST_CASE("a Walls prefix block carries the #DATE written under it",
+          "[Scanner][Blocks]")
 {
-    const QString path = datasetExternalCenterlinePath(QStringLiteral("walls_simple.wpj"));
-    REQUIRE(QFileInfo::exists(path));
+    {
+        const QString path = datasetExternalCenterlinePath(
+            QStringLiteral("walls_prefixed/walls_prefixed.wpj"));
+        REQUIRE(QFileInfo::exists(path));
 
-    auto result = cwExternalCenterlineScanner::scanWalls(path);
-    REQUIRE_FALSE(result.hasError());
-    const ScanResult scan = result.value();
+        auto result = cwExternalCenterlineScanner::scanWalls(path);
+        REQUIRE_FALSE(result.hasError());
+        const ScanResult scan = result.value();
 
-    REQUIRE(scan.blocks.size() == 1);
-    CHECK(scan.blocks.first().date == QDate(2023, 5, 10));
+        // ROOT.SRV writes its #DATE with no prefix in force, so it
+        // dates the root; PREFIXED.SRV writes its own under XY.
+        CHECK(scan.rootDate == QDate(2025, 1, 1));
+        REQUIRE(scan.blocks.size() == 1);
+        CHECK(scan.blocks.first().path == QStringLiteral("XY"));
+        CHECK(scan.blocks.first().date == QDate(2025, 1, 2));
+    }
+    {
+        // The book's .OPTIONS prefix puts BK in force before the
+        // .srv's first line, so its #DATE dates the block and the
+        // root stays dateless.
+        const QString path = datasetExternalCenterlinePath(
+            QStringLiteral("walls_book_prefix/walls_book_prefix.wpj"));
+        REQUIRE(QFileInfo::exists(path));
+
+        auto result = cwExternalCenterlineScanner::scanWalls(path);
+        REQUIRE_FALSE(result.hasError());
+        const ScanResult scan = result.value();
+
+        CHECK_FALSE(scan.rootDate.isValid());
+        REQUIRE(scan.blocks.size() == 1);
+        CHECK(scan.blocks.first().path == QStringLiteral("BK"));
+        CHECK(scan.blocks.first().date == QDate(2025, 1, 3));
+    }
 }
 
 TEST_CASE("blocks nest across an *include boundary", "[Scanner][Blocks]")
@@ -1257,8 +1284,12 @@ TEST_CASE("a Survex master of *include lines has no shots of its own",
     CHECK(scan.blocks.at(2).stationCount == 4);
 }
 
-TEST_CASE("blocks name each Compass survey, flat", "[Scanner][Blocks]")
+TEST_CASE("Compass surveys make no blocks; rootStationCount counts every station",
+          "[Scanner][Blocks]")
 {
+    // cavern discards "SURVEY NAME:" and reads each .dat with no
+    // surrounding level, so a Compass survey is no naming level:
+    // every station of every survey lands in the file root.
     {
         const QString path =
             datasetExternalCenterlinePath(QStringLiteral("compass_multi.mak"));
@@ -1266,13 +1297,10 @@ TEST_CASE("blocks name each Compass survey, flat", "[Scanner][Blocks]")
         REQUIRE_FALSE(result.hasError());
         const ScanResult scan = result.value();
 
-        REQUIRE(scan.blocks.size() == 2);
-        CHECK(scan.blocks.at(0).path == QStringLiteral("A"));
-        CHECK(scan.blocks.at(0).depth == 0);
-        CHECK(scan.blocks.at(0).stationCount == 2);
-        CHECK(scan.blocks.at(1).path == QStringLiteral("B"));
-        CHECK(scan.blocks.at(1).depth == 0);
-        CHECK(scan.blocks.at(1).stationCount == 2);
+        CHECK(scan.blocks.isEmpty());
+        // A1, A2, A3 from survey A and B1, B2 from survey B, which
+        // ties to A2 - the shared station counts once.
+        CHECK(scan.rootStationCount == 5);
         // The .mak holds no shots itself.
         CHECK_FALSE(scan.entryHasOwnShots);
     }
@@ -1283,27 +1311,27 @@ TEST_CASE("blocks name each Compass survey, flat", "[Scanner][Blocks]")
         REQUIRE_FALSE(result.hasError());
         const ScanResult scan = result.value();
 
-        REQUIRE(scan.blocks.size() == 1);
-        CHECK(scan.blocks.first().path == QStringLiteral("A"));
-        CHECK(scan.blocks.first().stationCount == 2);
+        CHECK(scan.blocks.isEmpty());
+        CHECK(scan.rootStationCount == 3);
         CHECK(scan.entryHasOwnShots);
     }
 }
 
-TEST_CASE("blocks stand in for each Walls .srv", "[Scanner][Blocks]")
+TEST_CASE("Walls blocks name the prefix levels, and nothing else",
+          "[Scanner][Blocks]")
 {
     {
+        // A .BOOK / .SURVEY title is metadata to cavern, so a
+        // prefix-less project makes no block at all and every
+        // station is a root station.
         const QString path =
             datasetExternalCenterlinePath(QStringLiteral("walls_simple.wpj"));
         auto result = cwExternalCenterlineScanner::scanWalls(path);
         REQUIRE_FALSE(result.hasError());
         const ScanResult scan = result.value();
 
-        REQUIRE(scan.blocks.size() == 1);
-        // The .SURVEY display title, not the MAIN file stem.
-        CHECK(scan.blocks.first().path == QStringLiteral("Main Passage"));
-        CHECK(scan.blocks.first().depth == 0);
-        CHECK(scan.blocks.first().stationCount == 4);  // A1 .. A4
+        CHECK(scan.blocks.isEmpty());
+        CHECK(scan.rootStationCount == 4);  // A1 .. A4
         CHECK_FALSE(scan.entryHasOwnShots);
     }
     {
@@ -1312,10 +1340,174 @@ TEST_CASE("blocks stand in for each Walls .srv", "[Scanner][Blocks]")
         REQUIRE_FALSE(result.hasError());
         const ScanResult scan = result.value();
 
-        REQUIRE(scan.blocks.size() == 1);
-        // No project to title it, so the file's stem names the block.
-        CHECK(scan.blocks.first().path == QStringLiteral("MAIN"));
-        CHECK(scan.blocks.first().stationCount == 4);
+        CHECK(scan.blocks.isEmpty());
+        CHECK(scan.rootStationCount == 4);
         CHECK(scan.entryHasOwnShots);
+    }
+    {
+        // #PREFIX XY is a level: its two stations belong to the XY
+        // block, the prefix-less survey's three to the root, and the
+        // qualified token XY:P1 overlays XY on the empty prefix in
+        // force, so it lands in the same XY block.
+        const QString path = datasetExternalCenterlinePath(
+            QStringLiteral("walls_prefixed/walls_prefixed.wpj"));
+        auto result = cwExternalCenterlineScanner::scanWalls(path);
+        REQUIRE_FALSE(result.hasError());
+        const ScanResult scan = result.value();
+
+        REQUIRE(scan.blocks.size() == 1);
+        CHECK(scan.blocks.first().path == QStringLiteral("XY"));
+        CHECK(scan.blocks.first().name() == QStringLiteral("XY"));
+        CHECK(scan.blocks.first().depth == 0);
+        CHECK(scan.blocks.first().stationCount == 2);  // P1, P2
+        CHECK(scan.rootStationCount == 3);             // A1, A2, A3
+        CHECK_FALSE(scan.entryHasOwnShots);
+    }
+    {
+        // The prefix comes from the book's .OPTIONS line, so the
+        // whole .srv sits under BK and the root stays empty.
+        const QString path = datasetExternalCenterlinePath(
+            QStringLiteral("walls_book_prefix/walls_book_prefix.wpj"));
+        auto result = cwExternalCenterlineScanner::scanWalls(path);
+        REQUIRE_FALSE(result.hasError());
+        const ScanResult scan = result.value();
+
+        REQUIRE(scan.blocks.size() == 1);
+        CHECK(scan.blocks.first().path == QStringLiteral("BK"));
+        CHECK(scan.blocks.first().stationCount == 2);  // O1, O2
+        CHECK(scan.rootStationCount == 0);
+    }
+}
+
+TEST_CASE("Walls prefix slots nest outermost first and clear on an empty value",
+          "[Scanner][Blocks]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    // #PREFIX is the innermost slot, #PREFIX3 the outermost, so the
+    // path reads slot 3 first. A prefix= token on a #UNITS line sets
+    // the same slots, and an empty value clears one.
+    const QString path = tempPath(tempDir, QStringLiteral("slots.srv"));
+    writeUtf8File(path,
+                  QByteArrayLiteral("#PREFIX3 top\n"
+                                    "#PREFIX2 mid\n"
+                                    "#PREFIX deep\n"
+                                    "d1 d2 10.0 0 0\n"
+                                    "#UNITS prefix=other\n"
+                                    "o1 o2 10.0 0 0\n"
+                                    "#PREFIX\n"
+                                    "m1 m2 10.0 0 0\n"
+                                    "#PREFIX2\n"
+                                    "#PREFIX3\n"
+                                    "r1 r2 10.0 0 0\n"));
+
+    auto result = cwExternalCenterlineScanner::scanWalls(path);
+    REQUIRE_FALSE(result.hasError());
+    const ScanResult scan = result.value();
+
+    // Ancestors are materialized before the paths that need them,
+    // so parents precede children even though no station sits
+    // directly in top or top.mid.
+    REQUIRE(scan.blocks.size() == 4);
+    CHECK(scan.blocks.at(0).path == QStringLiteral("top"));
+    CHECK(scan.blocks.at(0).depth == 0);
+    CHECK(scan.blocks.at(0).stationCount == 0);
+    CHECK(scan.blocks.at(1).path == QStringLiteral("top.mid"));
+    CHECK(scan.blocks.at(1).depth == 1);
+    CHECK(scan.blocks.at(1).stationCount == 2);  // m1, m2
+    CHECK(scan.blocks.at(2).path == QStringLiteral("top.mid.deep"));
+    CHECK(scan.blocks.at(2).depth == 2);
+    CHECK(scan.blocks.at(2).stationCount == 2);  // d1, d2
+    CHECK(scan.blocks.at(3).path == QStringLiteral("top.mid.other"));
+    CHECK(scan.blocks.at(3).depth == 2);
+    CHECK(scan.blocks.at(3).stationCount == 2);  // o1, o2
+    CHECK(scan.rootStationCount == 2);           // r1, r2
+}
+
+TEST_CASE("A qualified Walls token overlays the innermost prefix levels",
+          "[Scanner][Blocks]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    // Measured with the cavern CLI: under "#PREFIX3 top / #PREFIX2 mid
+    // / #PREFIX deep", "XY:P1" solves to cave0:top:mid:XY:P1, ":P9" to
+    // cave0:top:mid:P9 and "Q:R:S1" to cave0:top:Q:R:S1 - the explicit
+    // segments replace the innermost levels and the outer levels stay
+    // in force.
+    const QString path = tempPath(tempDir, QStringLiteral("overlay.srv"));
+    writeUtf8File(path,
+                  QByteArrayLiteral("#PREFIX3 top\n"
+                                    "#PREFIX2 mid\n"
+                                    "#PREFIX deep\n"
+                                    "d1 d2 10.0 0 0\n"
+                                    "d2 XY:P1 10.0 0 0\n"
+                                    "XY:P1 :P9 10.0 0 0\n"
+                                    ":P9 Q:R:S1 10.0 0 0\n"));
+
+    auto result = cwExternalCenterlineScanner::scanWalls(path);
+    REQUIRE_FALSE(result.hasError());
+    const ScanResult scan = result.value();
+
+    QHash<QString, int> countByPath;
+    for (const cwScanBlock& block : scan.blocks) {
+        countByPath.insert(block.path, block.stationCount);
+    }
+
+    CHECK(countByPath.value(QStringLiteral("top.mid.deep")) == 2);  // d1, d2
+    CHECK(countByPath.value(QStringLiteral("top.mid.XY")) == 1);    // P1
+    CHECK(countByPath.value(QStringLiteral("top.mid")) == 1);       // P9
+    CHECK(countByPath.value(QStringLiteral("top.Q.R")) == 1);       // S1
+    CHECK(scan.rootStationCount == 0);
+}
+
+TEST_CASE("rootStationCount counts the stations outside every Survex block",
+          "[Scanner][Blocks]")
+{
+    {
+        const QString path =
+            datasetExternalCenterlinePath(QStringLiteral("survex_root_and_block.svx"));
+        REQUIRE(QFileInfo::exists(path));
+
+        auto result = cwExternalCenterlineScanner::scanSurvex(path);
+        REQUIRE_FALSE(result.hasError());
+        const ScanResult scan = result.value();
+
+        REQUIRE(scan.blocks.size() == 1);
+        CHECK(scan.blocks.first().path == QStringLiteral("side"));
+        CHECK(scan.blocks.first().stationCount == 2);  // s1, s2
+        // r1, r2, r3 - the tie shot's "side.s1" names a station
+        // inside the block, so the root leaves it out.
+        CHECK(scan.rootStationCount == 3);
+    }
+    {
+        // No *begin at all: the whole file is root.
+        const QString path =
+            datasetExternalCenterlinePath(QStringLiteral("survex_bare.svx"));
+        auto result = cwExternalCenterlineScanner::scanSurvex(path);
+        REQUIRE_FALSE(result.hasError());
+        const ScanResult scan = result.value();
+
+        CHECK(scan.blocks.isEmpty());
+        CHECK(scan.rootStationCount == 2);  // a1, a2
+    }
+    {
+        // Regression: every station of the nested-block fixture sits
+        // inside a block, so its blocks and a root count of 0 are
+        // exactly what they were before the root set existed.
+        const QString path =
+            datasetExternalCenterlinePath(QStringLiteral("survex_blocks.svx"));
+        auto result = cwExternalCenterlineScanner::scanSurvex(path);
+        REQUIRE_FALSE(result.hasError());
+        const ScanResult scan = result.value();
+
+        REQUIRE(scan.blocks.size() == 4);
+        CHECK(scan.blocks.at(0).stationCount == 3);
+        CHECK(scan.blocks.at(1).stationCount == 4);
+        CHECK(scan.blocks.at(2).stationCount == 5);
+        CHECK(scan.blocks.at(3).stationCount == 0);
+        CHECK(scan.rootStationCount == 0);
+        CHECK_FALSE(scan.rootDate.isValid());
     }
 }

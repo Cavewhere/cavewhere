@@ -15,11 +15,15 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QHash>
 #include <QRegularExpression>
 #include <QSet>
 #include <QSharedPointer>
 #include <QStringConverter>
 #include <QStringDecoder>
+
+//Std includes
+#include <array>
 
 namespace {
 
@@ -96,6 +100,104 @@ QDate compassSurveyDate(const QRegularExpressionMatch& match)
         year += kCompassYearPivot;
     }
     return QDate(year, month, day);
+}
+
+// Walls builds naming levels from its three prefix levels and from
+// nothing else, so the scanner tracks exactly those. Level 0 is
+// #PREFIX / #P / #PREFIX1 (the innermost), level 2 is #PREFIX3.
+constexpr int kWallsPrefixLevelCount = 3;
+
+struct WallsPrefixLevels
+{
+    std::array<QString, kWallsPrefixLevelCount> levels;
+
+    // The dotted path cavern spells for these levels: outermost
+    // first, skipping the levels that carry no value.
+    QString path() const
+    {
+        QStringList segments;
+        for (int level = kWallsPrefixLevelCount - 1; level >= 0; --level) {
+            if (!levels.at(level).isEmpty()) {
+                segments.append(levels.at(level));
+            }
+        }
+        return segments.join(QLatin1Char('.'));
+    }
+
+    // The levels cavern spells for a station token that carries its own
+    // ':' qualifiers, outermost segment first. readval.c:495-512 fills
+    // the outer levels from the prefix in force and only the innermost
+    // ones from the token, so N explicit segments replace levels
+    // [N-1 .. 0] and the levels above them stay as they are. An empty
+    // segment clears its level.
+    WallsPrefixLevels overlaidWith(const QStringList& segments) const
+    {
+        WallsPrefixLevels overlay = *this;
+        const int explicitCount = qMin(static_cast<int>(segments.size()),
+                                       kWallsPrefixLevelCount);
+        for (int level = 0; level < explicitCount; ++level) {
+            overlay.levels[level] =
+                segments.at(segments.size() - 1 - level);
+        }
+        return overlay;
+    }
+};
+
+// What one Walls prefix path has accumulated: the block it appended
+// to the result and the distinct station names counted under it.
+struct WallsBlockCount
+{
+    int blockIndex = 0;
+    QSet<QString> stations;
+};
+
+// "#PREFIX XY", "#P XY", "#PREFIX2 AB". The value is optional - an
+// empty one clears the level.
+const QRegularExpression& wallsPrefixDirectiveRegex()
+{
+    static const QRegularExpression regex(
+        QStringLiteral(R"RX(^#(?:prefix([123])?|p)\b\s*(\S*))RX"),
+        QRegularExpression::CaseInsensitiveOption);
+    return regex;
+}
+
+// "#UNITS ...", "#U ..." - the only directive whose options set the
+// prefix levels.
+const QRegularExpression& wallsUnitsDirectiveRegex()
+{
+    static const QRegularExpression regex(
+        QStringLiteral(R"RX(^#u(?:nits)?\b)RX"),
+        QRegularExpression::CaseInsensitiveOption);
+    return regex;
+}
+
+// "prefix=XY", "prefix2 = AB" - the same three levels written as
+// options, which Walls accepts on a #UNITS line and in a .wpj
+// .OPTIONS line.
+const QRegularExpression& wallsPrefixOptionRegex()
+{
+    static const QRegularExpression regex(
+        QStringLiteral(R"RX(\bprefix([123])?\s*=\s*(\S*))RX"),
+        QRegularExpression::CaseInsensitiveOption);
+    return regex;
+}
+
+// #PREFIX1 is level 0, and so is a bare #PREFIX / #P.
+int wallsPrefixLevelFor(const QString& digit)
+{
+    if (digit.isEmpty()) {
+        return 0;
+    }
+    return qBound(0, digit.toInt() - 1, kWallsPrefixLevelCount - 1);
+}
+
+void applyWallsPrefixOptions(const QString& text, WallsPrefixLevels& prefix)
+{
+    auto matches = wallsPrefixOptionRegex().globalMatch(text);
+    while (matches.hasNext()) {
+        const QRegularExpressionMatch match = matches.next();
+        prefix.levels[wallsPrefixLevelFor(match.captured(1))] = match.captured(2);
+    }
 }
 
 const QRegularExpression& wallsDateRegex()
@@ -352,9 +454,20 @@ struct ScanState {
     QList<bool> passageStyles = QList<bool>{false};
     // set when the entry file itself carries shot data
     bool entryHasOwnShots = false;
-    // the .SURVEY display title of the Walls entry about to be
-    // scanned, handed from the .wpj walk to the .srv block
-    QString pendingWallsTitle;
+    // distinct station names written where no block is open - the
+    // file's own root namespace
+    QSet<QString> rootStations;
+    // first date directive seen while no block was open
+    QDate rootDate;
+    // per Walls prefix path, the block it made and the station
+    // names counted under it. Walls blocks merge across the
+    // project's files, so an entry outlives the file that first
+    // wrote its path.
+    QHash<QString, WallsBlockCount> wallsBlocks;
+    // the prefix levels the .wpj entry's inherited options put in
+    // force, handed from the project walk to the .srv about to be
+    // scanned
+    WallsPrefixLevels pendingWallsPrefix;
 };
 
 // inProgress is exactly the recursion stack, so a depth of one means
@@ -383,14 +496,22 @@ OpenBlock* innermostNamedBlock(ScanState& state)
 }
 
 /**
- * Records a station name against the innermost open named block.
- * Counts stay current as they are recorded, so an unclosed *begin
- * still reports the stations it saw.
+ * Records a station name against the innermost open named block, or
+ * against the file root when no named block is open. Counts stay
+ * current as they are recorded, so an unclosed *begin still reports
+ * the stations it saw.
+ *
+ * A dotted token written at the root ("side.s1") names a station
+ * inside the block it points at, so the block's window owns it and
+ * the root count leaves it out.
  */
 void recordStation(ScanState& state, const QString& station)
 {
     OpenBlock* open = innermostNamedBlock(state);
     if (open == nullptr) {
+        if (!station.contains(QLatin1Char('.'))) {
+            state.rootStations.insert(station);
+        }
         return;
     }
     open->stations.insert(station);
@@ -400,12 +521,16 @@ void recordStation(ScanState& state, const QString& station)
 
 /**
  * Stamps a *date onto the innermost open named block that has none
- * yet, so the first *date a block writes is the one it keeps.
+ * yet, so the first *date a block writes is the one it keeps. A
+ * *date at the file root stamps the root date the same way.
  */
 void recordSurvexDate(ScanState& state, const QDate& date)
 {
     const OpenBlock* open = innermostNamedBlock(state);
     if (open == nullptr) {
+        if (!state.rootDate.isValid()) {
+            state.rootDate = date;
+        }
         return;
     }
     cwScanBlock& block = state.blocks[open->blockIndex];
@@ -671,28 +796,24 @@ const QRegularExpression& compassMakReferenceRegex()
     return regex;
 }
 
-const QRegularExpression& compassSurveyNameRegex()
-{
-    static const QRegularExpression regex(
-        QStringLiteral(R"RX(^SURVEY\s+NAME:\s*(\S+))RX"),
-        QRegularExpression::CaseInsensitiveOption);
-    return regex;
-}
-
 /**
- * Extracts one flat block per survey in a Compass .dat. Surveys are
- * separated by form feeds (the same rule parseCompassMetadata uses);
- * inside a survey the header runs until the column-title line
+ * Counts every station a Compass .dat spells as a root station, and
+ * takes the first survey's "SURVEY DATE:" as the root date. Surveys
+ * are separated by form feeds (the same rule parseCompassMetadata
+ * uses); inside a survey the header runs until the column-title line
  * starting with "FROM", and every line after it is a shot naming its
  * from/to stations in the first two columns.
+ *
+ * No blocks: cavern discards a .dat's "SURVEY NAME:" and reads each
+ * referenced .dat with no surrounding level, so a Compass survey is
+ * no naming level and every station lands flat under whatever scope
+ * the driver wraps the file in.
  */
-void collectCompassBlocks(const QString& text, ScanState& state)
+void collectCompassStations(const QString& text, ScanState& state)
 {
     const QStringList sections = text.split(QLatin1Char('\f'));
     for (const QString& section : sections) {
-        QString surveyName;
-        QDate surveyDate;
-        QSet<QString> stations;
+        bool sawStation = false;
         bool inShots = false;
 
         const QStringList lines = section.split(QLatin1Char('\n'));
@@ -702,13 +823,10 @@ void collectCompassBlocks(const QString& text, ScanState& state)
                 continue;
             }
             if (!inShots) {
-                if (const auto match = compassSurveyNameRegex().match(line);
-                    match.hasMatch()) {
-                    surveyName = match.captured(1);
-                } else if (const auto dateMatch = compassSurveyDateRegex().match(line);
-                           dateMatch.hasMatch()) {
-                    if (!surveyDate.isValid()) {
-                        surveyDate = compassSurveyDate(dateMatch);
+                if (const auto dateMatch = compassSurveyDateRegex().match(line);
+                    dateMatch.hasMatch()) {
+                    if (!state.rootDate.isValid()) {
+                        state.rootDate = compassSurveyDate(dateMatch);
                     }
                 } else if (line.startsWith(QLatin1String("FROM"), Qt::CaseInsensitive)) {
                     inShots = true;
@@ -717,22 +835,14 @@ void collectCompassBlocks(const QString& text, ScanState& state)
             }
             for (const QString& station :
                  leadingStationTokens(line, kStationsPerShotLine)) {
-                stations.insert(station);
+                state.rootStations.insert(station);
+                sawStation = true;
             }
         }
 
-        if (!stations.isEmpty() && scanningEntryFile(state)) {
+        if (sawStation && scanningEntryFile(state)) {
             state.entryHasOwnShots = true;
         }
-        if (surveyName.isEmpty()) {
-            continue;
-        }
-
-        cwScanBlock block;
-        block.path = surveyName;
-        block.stationCount = static_cast<int>(stations.size());
-        block.date = surveyDate;
-        state.blocks.append(block);
     }
 }
 
@@ -829,8 +939,8 @@ void scanCompassFile(const QString& filePath, ScanState& state)
             }
         } else {
             // A .dat holds the surveys themselves; a .mak only points
-            // at them, so it contributes no blocks of its own.
-            collectCompassBlocks(decoded.text, state);
+            // at them, so it contributes no stations of its own.
+            collectCompassStations(decoded.text, state);
         }
     }
 
@@ -839,50 +949,148 @@ void scanCompassFile(const QString& filePath, ScanState& state)
 }
 
 /**
- * Appends the block standing in for one Walls .srv. Walls has no
- * *begin tree, so the file itself is the closest thing to a named
- * block: it takes the .SURVEY entry's display title when the project
- * gave one, and the file's stem otherwise. Station names come from
- * the first two columns of every line that is neither a #directive
- * nor a ';' comment.
+ * The scan state of the block naming path, materialized when the
+ * scan has not seen the path before. Ancestors are materialized
+ * first (at stationCount 0 when nothing sits directly in them), so
+ * the block list keeps "parents before children" for Walls the way
+ * the *begin stack keeps it for Survex.
  */
-void appendWallsBlock(const QString& canonical, ScanState& state)
+WallsBlockCount& wallsBlockCount(ScanState& state, const QString& path)
 {
-    cwScanBlock block;
-    block.path = state.pendingWallsTitle.isEmpty()
-        ? QFileInfo(canonical).completeBaseName()
-        : state.pendingWallsTitle;
-    // Consume the title so an untitled .srv scanned later keeps its
-    // own name instead of inheriting this one.
-    state.pendingWallsTitle.clear();
+    const auto existing = state.wallsBlocks.find(path);
+    if (existing != state.wallsBlocks.end()) {
+        return existing.value();
+    }
 
-    QSet<QString> stations;
+    const qsizetype lastSeparator = path.lastIndexOf(QLatin1Char('.'));
+    if (lastSeparator > 0) {
+        wallsBlockCount(state, path.left(lastSeparator));
+    }
+
+    cwScanBlock block;
+    block.path = path;
+    block.depth = static_cast<int>(path.count(QLatin1Char('.')));
+    state.blocks.append(block);
+
+    WallsBlockCount& created = state.wallsBlocks[path];
+    created.blockIndex = static_cast<int>(state.blocks.size()) - 1;
+    return created;
+}
+
+// Records one Walls station under the prefix path in force, or under
+// the file root when no prefix is. Paths merge across the project's
+// files, so a station set is keyed by path rather than by file.
+void recordWallsStation(ScanState& state, const QString& path, const QString& station)
+{
+    if (path.isEmpty()) {
+        state.rootStations.insert(station);
+        return;
+    }
+    WallsBlockCount& count = wallsBlockCount(state, path);
+    count.stations.insert(station);
+    state.blocks[count.blockIndex].stationCount =
+        static_cast<int>(count.stations.size());
+}
+
+// Stamps a #DATE onto whatever the prefix path in force names, so a
+// path keeps the first date written while it was in force.
+void recordWallsDate(ScanState& state, const QString& path, const QDate& date)
+{
+    if (!date.isValid()) {
+        return;
+    }
+    if (path.isEmpty()) {
+        if (!state.rootDate.isValid()) {
+            state.rootDate = date;
+        }
+        return;
+    }
+    cwScanBlock& block = state.blocks[wallsBlockCount(state, path).blockIndex];
+    if (!block.date.isValid()) {
+        block.date = date;
+    }
+}
+
+/**
+ * Walks one Walls .srv, counting its stations under the prefix
+ * levels in force. They start from the levels the project entry's
+ * inherited options put in force and change as the file writes
+ * #PREFIX / #PREFIX2 / #PREFIX3 (or prefix= options on a #UNITS
+ * line); an empty value clears its level.
+ *
+ * Station names come from the first two columns of every line that
+ * is neither a #directive nor a ';' comment. A ':'-qualified token
+ * ("XY:P1", "A:B:C:name") names its own path, so it counts there
+ * instead of under the prefix in force.
+ */
+void collectWallsStations(const QString& canonical,
+                          WallsPrefixLevels prefix,
+                          ScanState& state)
+{
+    bool sawStation = false;
     const QStringList lines = readDecodedLines(canonical);
     for (const QString& rawLine : lines) {
         const QString line = rawLine.trimmed();
-        if (const auto dateMatch = wallsDateRegex().match(line);
-            dateMatch.hasMatch()) {
-            if (!block.date.isValid()) {
-                block.date = parseWallsDate(dateMatch.captured(1));
+        if (line.isEmpty() || line.startsWith(QLatin1Char(';'))) {
+            continue;
+        }
+        if (line.startsWith(QLatin1Char('#'))) {
+            if (const auto dateMatch = wallsDateRegex().match(line);
+                dateMatch.hasMatch()) {
+                recordWallsDate(state, prefix.path(),
+                                parseWallsDate(dateMatch.captured(1)));
+                continue;
+            }
+            if (const auto prefixMatch = wallsPrefixDirectiveRegex().match(line);
+                prefixMatch.hasMatch()) {
+                prefix.levels[wallsPrefixLevelFor(prefixMatch.captured(1))] =
+                    prefixMatch.captured(2);
+                continue;
+            }
+            // #UNITS carries the same three levels written as options.
+            // Only #UNITS does: prefix= text inside a #NOTE, #FLAG or
+            // #SEGMENT is just text. #UNITS SAVE / RESTORE / RESET also
+            // stack and clear these levels in cavern; a .srv that
+            // brackets a prefix change with save/restore keeps the
+            // changed prefix here.
+            if (wallsUnitsDirectiveRegex().match(line).hasMatch()) {
+                applyWallsPrefixOptions(line, prefix);
             }
             continue;
         }
-        if (line.isEmpty()
-            || line.startsWith(QLatin1Char('#'))
-            || line.startsWith(QLatin1Char(';'))) {
-            continue;
-        }
-        for (const QString& station :
+
+        const QString pathInForce = prefix.path();
+        for (const QString& token :
              leadingStationTokens(line, kStationsPerShotLine)) {
-            stations.insert(station);
+            const qsizetype lastQualifier = token.lastIndexOf(QLatin1Char(':'));
+            if (lastQualifier >= 0) {
+                const QStringList explicitSegments =
+                    token.left(lastQualifier).split(QLatin1Char(':'));
+                recordWallsStation(state,
+                                   prefix.overlaidWith(explicitSegments).path(),
+                                   token.mid(lastQualifier + 1));
+            } else {
+                recordWallsStation(state, pathInForce, token);
+            }
+            sawStation = true;
         }
     }
 
-    block.stationCount = static_cast<int>(stations.size());
-    if (!stations.isEmpty() && scanningEntryFile(state)) {
+    if (sawStation && scanningEntryFile(state)) {
         state.entryHasOwnShots = true;
     }
-    state.blocks.append(block);
+}
+
+// The prefix levels a .wpj entry inherits from its books and sets
+// itself. allOptions() returns the inherited options first, so a
+// child's own prefix= overrides its book's.
+WallsPrefixLevels wallsPrefixFromOptions(const QList<dewalls::Segment>& options)
+{
+    WallsPrefixLevels prefix;
+    for (const dewalls::Segment& option : options) {
+        applyWallsPrefixOptions(option.value(), prefix);
+    }
+    return prefix;
 }
 
 void collectWallsSurveys(const dewalls::WpjBookPtr& book,
@@ -935,9 +1143,10 @@ void collectWallsSurveys(const dewalls::WpjBookPtr& book,
             continue;
         }
         recordEntryDirectInclude(state, canonicalize(absolutePath));
-        // The display title lives on the project entry, not in the
-        // .srv, so hand it to the scan about to read that file.
-        state.pendingWallsTitle = child->Title;
+        // The prefix levels come from the entry's inherited options,
+        // not from the .srv, so hand them to the scan about to read
+        // that file.
+        state.pendingWallsPrefix = wallsPrefixFromOptions(child->allOptions());
         scanByFormat(absolutePath, state);
     }
 }
@@ -981,10 +1190,14 @@ void scanWallsFile(const QString& filePath, ScanState& state)
         const QDir baseDir = QFileInfo(canonical).absoluteDir();
         collectWallsSurveys(root, baseDir, canonical, state);
     } else {
-        // Bare .srv: trust the file as-is, no parsing needed.
+        // Bare .srv: trust the file as-is, no parsing needed. A .srv
+        // reached through a project starts from that entry's prefix
+        // levels; one attached on its own starts from none.
         state.inProgress.insert(canonical);
         state.dependencies.append(canonical);
-        appendWallsBlock(canonical, state);
+        const WallsPrefixLevels prefix = state.pendingWallsPrefix;
+        state.pendingWallsPrefix = WallsPrefixLevels();
+        collectWallsStations(canonical, prefix, state);
     }
 
     state.inProgress.remove(canonical);
@@ -1389,6 +1602,8 @@ Monad::Result<ScanResult> scanWithEntry(const QString& entryFile,
     result.warnings = state.warnings;
     result.entryDirectIncludes = state.entryDirectIncludes;
     result.blocks = state.blocks;
+    result.rootStationCount = static_cast<int>(state.rootStations.size());
+    result.rootDate = state.rootDate;
     result.entryHasOwnShots = state.entryHasOwnShots;
     parseSeededMetadata(result);
     return Monad::Result<ScanResult>(result);

@@ -112,7 +112,10 @@ void cwExternalCenterlineScanPreview::applyResult(
     const int fileCount = static_cast<int>(scan.dependencies.size());
     if (m_valid == valid && m_errorMessage == errorMessage
         && m_warnings == scan.warnings && m_fileCount == fileCount
-        && m_blocks == scan.blocks && m_entryHasOwnShots == scan.entryHasOwnShots
+        && m_blocks == scan.blocks
+        && m_rootStationCount == scan.rootStationCount
+        && m_rootDate == scan.rootDate
+        && m_entryHasOwnShots == scan.entryHasOwnShots
         && m_entryDirectIncludes == scan.entryDirectIncludes) {
         return;
     }
@@ -121,6 +124,8 @@ void cwExternalCenterlineScanPreview::applyResult(
     m_warnings = scan.warnings;
     m_fileCount = fileCount;
     m_blocks = scan.blocks;
+    m_rootStationCount = scan.rootStationCount;
+    m_rootDate = scan.rootDate;
     m_entryHasOwnShots = scan.entryHasOwnShots;
     m_entryDirectIncludes = scan.entryDirectIncludes;
     emit scanChanged();

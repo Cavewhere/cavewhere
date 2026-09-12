@@ -1,10 +1,11 @@
 MetaCave
 SURVEY NAME: META
 SURVEY DATE: 6 1 2025  COMMENT:Metadata fixture
-SURVEY TEAM:
+SURVEY TEAM: 
 Alice, Bob
-DECLINATION: 7.20  FORMAT: DDDDLRUDLADN  CORRECTIONS: 0.00 0.00 0.00
+DECLINATION:    7.20  FORMAT: DDDDLRUDLAaDdCT  CORRECTIONS:  0.00 0.00 0.00  CORRECTIONS2:  0.00 0.00  DISCOVERY: 6 1 2025  PREFIX:
 
-FROM         TO        LENGTH  BEARING     INC     LEFT    UP    DOWN   RIGHT
-M1           M2        10.00   0.00        0.00    1.0     1.0   1.0    1.0
+                FROM                   TO   LENGTH  BEARING      INC     LEFT       UP     DOWN    RIGHT     AZM2     INC2   FLAGS  COMMENTS
 
+                  M1                   M2    10.00     0.00     0.00     1.00     1.00     1.00     1.00  -999.00  -999.00
+

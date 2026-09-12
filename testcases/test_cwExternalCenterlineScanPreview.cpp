@@ -13,6 +13,7 @@
 #include "ExternalCenterlineTestHelpers.h"
 
 // Qt
+#include <QDate>
 #include <QDir>
 #include <QTemporaryDir>
 
@@ -124,6 +125,7 @@ TEST_CASE("scan preview exposes the block tree and the multi-cave signals",
     CHECK(preview.blocks().size() == 4);
     CHECK(preview.blocks().first().path == QStringLiteral("doghill"));
     CHECK(preview.topLevelBlockCount() == 1);
+    CHECK(preview.rootStationCount() == 0);
     CHECK(preview.entryHasOwnShots());
     CHECK(preview.entryDirectIncludes().isEmpty());
 
@@ -137,10 +139,21 @@ TEST_CASE("scan preview exposes the block tree and the multi-cave signals",
     CHECK_FALSE(preview.entryHasOwnShots());
     CHECK(preview.entryDirectIncludes().size() == 3);
 
+    // A Compass project: no blocks, every station in the root, so
+    // the dialog's whole-file row is the only thing to show.
+    preview.setSourcePath(fixturePath(QStringLiteral("compass_multi.mak")));
+    REQUIRE(tryWait(kWatcherWaitMs, [&] { return !preview.scanning(); }));
+    REQUIRE(preview.valid());
+    CHECK(preview.blocks().isEmpty());
+    CHECK(preview.rootStationCount() == 5);
+    CHECK(preview.rootDate() == QDate(2025, 1, 1));
+
     // Clearing the path wipes the block tree with everything else.
     preview.setSourcePath(QString());
     CHECK(preview.blocks().isEmpty());
     CHECK(preview.topLevelBlockCount() == 0);
+    CHECK(preview.rootStationCount() == 0);
+    CHECK_FALSE(preview.rootDate().isValid());
     CHECK_FALSE(preview.entryHasOwnShots());
     CHECK(preview.entryDirectIncludes().isEmpty());
 }

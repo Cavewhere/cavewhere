@@ -47,6 +47,8 @@ ColumnLayout {
     // disagree about the file in the field.
     readonly property alias blocks: previewId.blocks
     readonly property alias topLevelBlockCount: previewId.topLevelBlockCount
+    readonly property alias rootStationCount: previewId.rootStationCount
+    readonly property alias rootDate: previewId.rootDate
     readonly property alias entryHasOwnShots: previewId.entryHasOwnShots
     readonly property alias entryDirectIncludes: previewId.entryDirectIncludes
 

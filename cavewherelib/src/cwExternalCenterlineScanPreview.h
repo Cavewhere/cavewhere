@@ -13,6 +13,7 @@
 #include "cwGlobals.h"
 
 //Qt includes
+#include <QDate>
 #include <QList>
 #include <QObject>
 #include <QQmlEngine>
@@ -49,6 +50,8 @@ class CAVEWHERE_LIB_EXPORT cwExternalCenterlineScanPreview : public QObject
     Q_PROPERTY(int fileCount READ fileCount NOTIFY scanChanged FINAL)
     Q_PROPERTY(QList<cwScanBlock> blocks READ blocks NOTIFY scanChanged FINAL)
     Q_PROPERTY(int topLevelBlockCount READ topLevelBlockCount NOTIFY scanChanged FINAL)
+    Q_PROPERTY(int rootStationCount READ rootStationCount NOTIFY scanChanged FINAL)
+    Q_PROPERTY(QDate rootDate READ rootDate NOTIFY scanChanged FINAL)
     Q_PROPERTY(bool entryHasOwnShots READ entryHasOwnShots NOTIFY scanChanged FINAL)
     Q_PROPERTY(QStringList entryDirectIncludes READ entryDirectIncludes NOTIFY scanChanged FINAL)
 
@@ -85,6 +88,16 @@ public:
     // own means the file looks like a region master.
     int topLevelBlockCount() const;
 
+    // The stations that live outside every block, which one
+    // whole-cave trip windows. The dialog previews them as a
+    // whole-file row above the block tree, so a Compass or
+    // prefix-less Walls file explains its single trip up front.
+    int rootStationCount() const { return m_rootStationCount; }
+
+    // The date that whole-cave trip is seeded from; invalid when the
+    // file writes none outside its blocks.
+    QDate rootDate() const { return m_rootDate; }
+
     bool entryHasOwnShots() const { return m_entryHasOwnShots; }
 
     // The entry file's first-level includes, offered as alternate
@@ -96,8 +109,9 @@ signals:
     void scanningChanged();
 
     // One signal for the whole result payload (valid / errorMessage /
-    // warnings / fileCount / blocks / entryHasOwnShots /
-    // entryDirectIncludes) - they only ever change together.
+    // warnings / fileCount / blocks / rootStationCount / rootDate /
+    // entryHasOwnShots / entryDirectIncludes) - they only ever change
+    // together.
     void scanChanged();
 
 private:
@@ -115,6 +129,8 @@ private:
     QStringList m_warnings;
     int m_fileCount = 0;
     QList<cwScanBlock> m_blocks;
+    int m_rootStationCount = 0;
+    QDate m_rootDate;
     bool m_entryHasOwnShots = false;
     QStringList m_entryDirectIncludes;
 
