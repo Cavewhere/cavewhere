@@ -8,6 +8,7 @@
 
 //Std includes
 #include <algorithm>
+#include <type_traits>
 
 namespace {
 QString sampleCountKey() { return QStringLiteral("rendering/sampleCount"); }
@@ -24,21 +25,52 @@ constexpr int kDefaultSampleCount = 4;
 // The render-stats HUD is a debugging aid, so it stays off until asked for.
 constexpr bool kDefaultShowRenderStatsHud = false;
 
-// Budget knobs, read by streamed-texture residency (see the header). The
-// minimums keep a hand-edited QSettings file from asking for a budget too small
-// to hold a single frame's working set.
-constexpr int kDefaultGpuMemoryBudgetMb = 1536;
-constexpr int kMinGpuMemoryBudgetMb = 256;
+// The budget limits live in cw::budgets so the render thread, the settings UI,
+// and these clamps all count from the same numbers.
+int clampGpuMemoryBudgetMb(int megabytes)
+{
+    return std::clamp(megabytes, cw::budgets::kMinGpuBudgetMb, cw::budgets::kMaxGpuBudgetMb);
+}
 
-constexpr int kDefaultCpuCacheBudgetMb = 512;
-constexpr int kMinCpuCacheBudgetMb = 64;
+int clampCpuCacheBudgetMb(int megabytes)
+{
+    return std::clamp(megabytes, cw::budgets::kMinCpuBudgetMb, cw::budgets::kMaxCpuBudgetMb);
+}
 
-constexpr int kDefaultUploadBudgetMbPerFrame = 8;
-constexpr int kMinUploadBudgetMbPerFrame = 1;
+int clampUploadBudgetMbPerFrame(int megabytes)
+{
+    return std::clamp(megabytes,
+                      cw::budgets::kMinUploadBudgetMbPerFrame,
+                      cw::budgets::kMaxUploadBudgetMbPerFrame);
+}
 
-constexpr double kDefaultScreenSpaceErrorPx = 1.5;
-constexpr double kMinScreenSpaceErrorPx = 0.5;
-constexpr double kMaxScreenSpaceErrorPx = 8.0;
+double clampScreenSpaceErrorPx(double pixels)
+{
+    return std::clamp(pixels,
+                      cw::budgets::kMinScreenSpaceErrorPx,
+                      cw::budgets::kMaxScreenSpaceErrorPx);
+}
+
+// The persisted setters differ only in their member, key, and notify signal, so
+// the store-and-persist half funnels through here. Returns true when the member
+// changed and the caller should emit.
+template <typename T>
+bool setPersisted(T& member, const T& value, const QString& key)
+{
+    if constexpr (std::is_floating_point_v<T>) {
+        if (qFuzzyCompare(member, value)) {
+            return false;
+        }
+    } else {
+        if (member == value) {
+            return false;
+        }
+    }
+    member = value;
+    QSettings settings;
+    settings.setValue(key, value);
+    return true;
+}
 }
 
 cwRenderingSettings* cwRenderingSettings::Settings = nullptr;
@@ -49,15 +81,14 @@ cwRenderingSettings::cwRenderingSettings(QObject* parent) :
     QSettings settings;
     m_sampleCount = clampToSupported(settings.value(sampleCountKey(), kDefaultSampleCount).toInt());
     m_showRenderStatsHud = settings.value(showRenderStatsHudKey(), kDefaultShowRenderStatsHud).toBool();
-    m_gpuMemoryBudgetMb = std::max(kMinGpuMemoryBudgetMb,
-                                   settings.value(gpuMemoryBudgetMbKey(), kDefaultGpuMemoryBudgetMb).toInt());
-    m_cpuCacheBudgetMb = std::max(kMinCpuCacheBudgetMb,
-                                  settings.value(cpuCacheBudgetMbKey(), kDefaultCpuCacheBudgetMb).toInt());
-    m_uploadBudgetMbPerFrame = std::max(kMinUploadBudgetMbPerFrame,
-                                        settings.value(uploadBudgetMbPerFrameKey(), kDefaultUploadBudgetMbPerFrame).toInt());
-    m_screenSpaceErrorPx = std::clamp(settings.value(screenSpaceErrorPxKey(), kDefaultScreenSpaceErrorPx).toDouble(),
-                                      kMinScreenSpaceErrorPx,
-                                      kMaxScreenSpaceErrorPx);
+    m_gpuMemoryBudgetMb = clampGpuMemoryBudgetMb(
+                settings.value(gpuMemoryBudgetMbKey(), cw::budgets::kDefaultGpuBudgetMb).toInt());
+    m_cpuCacheBudgetMb = clampCpuCacheBudgetMb(
+                settings.value(cpuCacheBudgetMbKey(), cw::budgets::kDefaultCpuBudgetMb).toInt());
+    m_uploadBudgetMbPerFrame = clampUploadBudgetMbPerFrame(
+                settings.value(uploadBudgetMbPerFrameKey(), cw::budgets::kDefaultUploadBudgetMbPerFrame).toInt());
+    m_screenSpaceErrorPx = clampScreenSpaceErrorPx(
+                settings.value(screenSpaceErrorPxKey(), cw::budgets::kDefaultScreenSpaceErrorPx).toDouble());
 }
 
 int cwRenderingSettings::clampToSupported(int samples) const
@@ -77,97 +108,80 @@ void cwRenderingSettings::resetToDefaults()
 {
     setSampleCount(kDefaultSampleCount);
     setShowRenderStatsHud(kDefaultShowRenderStatsHud);
-    setGpuMemoryBudgetMb(kDefaultGpuMemoryBudgetMb);
-    setCpuCacheBudgetMb(kDefaultCpuCacheBudgetMb);
-    setUploadBudgetMbPerFrame(kDefaultUploadBudgetMbPerFrame);
-    setScreenSpaceErrorPx(kDefaultScreenSpaceErrorPx);
+    setGpuMemoryBudgetMb(cw::budgets::kDefaultGpuBudgetMb);
+    setCpuCacheBudgetMb(cw::budgets::kDefaultCpuBudgetMb);
+    setUploadBudgetMbPerFrame(cw::budgets::kDefaultUploadBudgetMbPerFrame);
+    setScreenSpaceErrorPx(cw::budgets::kDefaultScreenSpaceErrorPx);
 }
 
 bool cwRenderingSettings::isAtDefaults() const
 {
     return m_sampleCount == clampToSupported(kDefaultSampleCount)
             && m_showRenderStatsHud == kDefaultShowRenderStatsHud
-            && m_gpuMemoryBudgetMb == kDefaultGpuMemoryBudgetMb
-            && m_cpuCacheBudgetMb == kDefaultCpuCacheBudgetMb
-            && m_uploadBudgetMbPerFrame == kDefaultUploadBudgetMbPerFrame
-            && qFuzzyCompare(m_screenSpaceErrorPx, kDefaultScreenSpaceErrorPx);
+            && m_gpuMemoryBudgetMb == cw::budgets::kDefaultGpuBudgetMb
+            && m_cpuCacheBudgetMb == cw::budgets::kDefaultCpuBudgetMb
+            && m_uploadBudgetMbPerFrame == cw::budgets::kDefaultUploadBudgetMbPerFrame
+            && qFuzzyCompare(m_screenSpaceErrorPx, cw::budgets::kDefaultScreenSpaceErrorPx);
+}
+
+cwRenderBudgets cwRenderingSettings::budgets() const
+{
+    cwRenderBudgets budgets;
+    budgets.gpuBudgetBytes = gpuBudgetBytes();
+    budgets.cpuBudgetBytes = qint64(m_cpuCacheBudgetMb) * cw::budgets::kBytesPerMegabyte;
+    budgets.uploadBudgetBytesPerFrame = qint64(m_uploadBudgetMbPerFrame) * cw::budgets::kBytesPerMegabyte;
+    budgets.screenSpaceErrorPx = m_screenSpaceErrorPx;
+    return budgets;
 }
 
 void cwRenderingSettings::setGpuMemoryBudgetMb(int megabytes)
 {
-    const int clamped = std::max(kMinGpuMemoryBudgetMb, megabytes);
-    if (m_gpuMemoryBudgetMb == clamped) {
-        return;
+    if (setPersisted(m_gpuMemoryBudgetMb, clampGpuMemoryBudgetMb(megabytes), gpuMemoryBudgetMbKey())) {
+        emit gpuMemoryBudgetMbChanged();
+        emit isAtDefaultsChanged();
     }
-    m_gpuMemoryBudgetMb = clamped;
-    QSettings settings;
-    settings.setValue(gpuMemoryBudgetMbKey(), clamped);
-    emit gpuMemoryBudgetMbChanged();
-    emit isAtDefaultsChanged();
 }
 
 void cwRenderingSettings::setCpuCacheBudgetMb(int megabytes)
 {
-    const int clamped = std::max(kMinCpuCacheBudgetMb, megabytes);
-    if (m_cpuCacheBudgetMb == clamped) {
-        return;
+    if (setPersisted(m_cpuCacheBudgetMb, clampCpuCacheBudgetMb(megabytes), cpuCacheBudgetMbKey())) {
+        emit cpuCacheBudgetMbChanged();
+        emit isAtDefaultsChanged();
     }
-    m_cpuCacheBudgetMb = clamped;
-    QSettings settings;
-    settings.setValue(cpuCacheBudgetMbKey(), clamped);
-    emit cpuCacheBudgetMbChanged();
-    emit isAtDefaultsChanged();
 }
 
 void cwRenderingSettings::setUploadBudgetMbPerFrame(int megabytes)
 {
-    const int clamped = std::max(kMinUploadBudgetMbPerFrame, megabytes);
-    if (m_uploadBudgetMbPerFrame == clamped) {
-        return;
+    if (setPersisted(m_uploadBudgetMbPerFrame,
+                     clampUploadBudgetMbPerFrame(megabytes),
+                     uploadBudgetMbPerFrameKey())) {
+        emit uploadBudgetMbPerFrameChanged();
+        emit isAtDefaultsChanged();
     }
-    m_uploadBudgetMbPerFrame = clamped;
-    QSettings settings;
-    settings.setValue(uploadBudgetMbPerFrameKey(), clamped);
-    emit uploadBudgetMbPerFrameChanged();
-    emit isAtDefaultsChanged();
 }
 
 void cwRenderingSettings::setScreenSpaceErrorPx(double pixels)
 {
-    const double clamped = std::clamp(pixels, kMinScreenSpaceErrorPx, kMaxScreenSpaceErrorPx);
-    if (qFuzzyCompare(m_screenSpaceErrorPx, clamped)) {
-        return;
+    if (setPersisted(m_screenSpaceErrorPx, clampScreenSpaceErrorPx(pixels), screenSpaceErrorPxKey())) {
+        emit screenSpaceErrorPxChanged();
+        emit isAtDefaultsChanged();
     }
-    m_screenSpaceErrorPx = clamped;
-    QSettings settings;
-    settings.setValue(screenSpaceErrorPxKey(), clamped);
-    emit screenSpaceErrorPxChanged();
-    emit isAtDefaultsChanged();
 }
 
 void cwRenderingSettings::setShowRenderStatsHud(bool show)
 {
-    if (m_showRenderStatsHud == show) {
-        return;
+    if (setPersisted(m_showRenderStatsHud, show, showRenderStatsHudKey())) {
+        emit showRenderStatsHudChanged();
+        emit isAtDefaultsChanged();
     }
-    m_showRenderStatsHud = show;
-    QSettings settings;
-    settings.setValue(showRenderStatsHudKey(), show);
-    emit showRenderStatsHudChanged();
-    emit isAtDefaultsChanged();
 }
 
 void cwRenderingSettings::setSampleCount(int samples)
 {
-    const int clamped = clampToSupported(samples);
-    if (m_sampleCount == clamped) {
-        return;
+    if (setPersisted(m_sampleCount, clampToSupported(samples), sampleCountKey())) {
+        emit sampleCountChanged();
+        emit isAtDefaultsChanged();
     }
-    m_sampleCount = clamped;
-    QSettings settings;
-    settings.setValue(sampleCountKey(), clamped);
-    emit sampleCountChanged();
-    emit isAtDefaultsChanged();
 }
 
 void cwRenderingSettings::setSupportedSampleCounts(const QList<int>& counts)

@@ -8,23 +8,15 @@ ColumnLayout {
 
     property RenderingSettings renderingSettings: RootData.settings.renderingSettings
 
-    readonly property int minimumGpuMemoryBudgetMb: 256
-    readonly property int maximumGpuMemoryBudgetMb: 65536
+    // The spin box ranges come from renderingSettings, the same limits its
+    // setters clamp to; only the step sizes are a UI choice.
     readonly property int gpuMemoryBudgetStepMb: 256
-
-    readonly property int minimumCpuCacheBudgetMb: 64
-    readonly property int maximumCpuCacheBudgetMb: 16384
     readonly property int cpuCacheBudgetStepMb: 64
-
-    readonly property int minimumUploadBudgetMbPerFrame: 1
-    readonly property int maximumUploadBudgetMbPerFrame: 256
 
     // QC.SpinBox counts in integers, so the screen-space error is held scaled by
     // this factor and shown with screenSpaceErrorDecimals places.
     readonly property int screenSpaceErrorScale: 10
     readonly property int screenSpaceErrorDecimals: 1
-    readonly property real minimumScreenSpaceErrorPx: 0.5
-    readonly property real maximumScreenSpaceErrorPx: 8.0
     readonly property real screenSpaceErrorStepPx: 0.1
 
     QC.GroupBox {
@@ -108,8 +100,8 @@ ColumnLayout {
                     id: gpuMemoryBudgetSpinBoxId
                     objectName: "gpuMemoryBudgetSpinBox"
 
-                    from: itemId.minimumGpuMemoryBudgetMb
-                    to: itemId.maximumGpuMemoryBudgetMb
+                    from: itemId.renderingSettings.minimumGpuMemoryBudgetMb
+                    to: itemId.renderingSettings.maximumGpuMemoryBudgetMb
                     stepSize: itemId.gpuMemoryBudgetStepMb
                     editable: true
 
@@ -151,8 +143,8 @@ ColumnLayout {
                     id: cpuCacheBudgetSpinBoxId
                     objectName: "cpuCacheBudgetSpinBox"
 
-                    from: itemId.minimumCpuCacheBudgetMb
-                    to: itemId.maximumCpuCacheBudgetMb
+                    from: itemId.renderingSettings.minimumCpuCacheBudgetMb
+                    to: itemId.renderingSettings.maximumCpuCacheBudgetMb
                     stepSize: itemId.cpuCacheBudgetStepMb
                     editable: true
 
@@ -191,8 +183,8 @@ ColumnLayout {
                     id: uploadBudgetSpinBoxId
                     objectName: "uploadBudgetSpinBox"
 
-                    from: itemId.minimumUploadBudgetMbPerFrame
-                    to: itemId.maximumUploadBudgetMbPerFrame
+                    from: itemId.renderingSettings.minimumUploadBudgetMbPerFrame
+                    to: itemId.renderingSettings.maximumUploadBudgetMbPerFrame
                     editable: true
 
                     function syncToSettings() {
@@ -237,14 +229,14 @@ ColumnLayout {
                     id: screenSpaceErrorSpinBoxId
                     objectName: "screenSpaceErrorSpinBox"
 
-                    from: Math.round(itemId.minimumScreenSpaceErrorPx * itemId.screenSpaceErrorScale)
-                    to: Math.round(itemId.maximumScreenSpaceErrorPx * itemId.screenSpaceErrorScale)
+                    from: Math.round(itemId.renderingSettings.minimumScreenSpaceErrorPx * itemId.screenSpaceErrorScale)
+                    to: Math.round(itemId.renderingSettings.maximumScreenSpaceErrorPx * itemId.screenSpaceErrorScale)
                     stepSize: Math.round(itemId.screenSpaceErrorStepPx * itemId.screenSpaceErrorScale)
                     editable: true
 
                     validator: QQ.DoubleValidator {
-                        bottom: itemId.minimumScreenSpaceErrorPx
-                        top: itemId.maximumScreenSpaceErrorPx
+                        bottom: itemId.renderingSettings.minimumScreenSpaceErrorPx
+                        top: itemId.renderingSettings.maximumScreenSpaceErrorPx
                         decimals: itemId.screenSpaceErrorDecimals
                         notation: QQ.DoubleValidator.StandardNotation
                     }

@@ -228,9 +228,55 @@ TEST_CASE("cwRenderingSettings budget knobs round-trip, clamp, persist, and emit
         CHECK(settings->screenSpaceErrorPx() == Catch::Approx(0.5));
     }
 
-    SECTION("the screen-space error clamps at its upper edge") {
+    SECTION("values above the maximum clamp down") {
+        settings->setGpuMemoryBudgetMb(1000000);
+        CHECK(settings->gpuMemoryBudgetMb() == 65536);
+
+        settings->setCpuCacheBudgetMb(1000000);
+        CHECK(settings->cpuCacheBudgetMb() == 16384);
+
+        settings->setUploadBudgetMbPerFrame(1000);
+        CHECK(settings->uploadBudgetMbPerFrame() == 256);
+
         settings->setScreenSpaceErrorPx(100.0);
         CHECK(settings->screenSpaceErrorPx() == Catch::Approx(8.0));
+    }
+
+    SECTION("the exposed limits match the values the setters clamp to") {
+        CHECK(cwRenderingSettings::minimumGpuMemoryBudgetMb() == 256);
+        CHECK(cwRenderingSettings::maximumGpuMemoryBudgetMb() == 65536);
+        CHECK(cwRenderingSettings::minimumCpuCacheBudgetMb() == 64);
+        CHECK(cwRenderingSettings::maximumCpuCacheBudgetMb() == 16384);
+        CHECK(cwRenderingSettings::minimumUploadBudgetMbPerFrame() == 1);
+        CHECK(cwRenderingSettings::maximumUploadBudgetMbPerFrame() == 256);
+        CHECK(cwRenderingSettings::minimumScreenSpaceErrorPx() == Catch::Approx(0.5));
+        CHECK(cwRenderingSettings::maximumScreenSpaceErrorPx() == Catch::Approx(8.0));
+    }
+
+    SECTION("budgets() converts the megabyte knobs to bytes") {
+        settings->setGpuMemoryBudgetMb(2048);
+        settings->setCpuCacheBudgetMb(1024);
+        settings->setUploadBudgetMbPerFrame(16);
+        settings->setScreenSpaceErrorPx(2.5);
+
+        CHECK(settings->gpuBudgetBytes() == qint64(2048) * cw::budgets::kBytesPerMegabyte);
+
+        const cwRenderBudgets budgets = settings->budgets();
+        CHECK(budgets.gpuBudgetBytes == qint64(2048) * cw::budgets::kBytesPerMegabyte);
+        CHECK(budgets.cpuBudgetBytes == qint64(1024) * cw::budgets::kBytesPerMegabyte);
+        CHECK(budgets.uploadBudgetBytesPerFrame == qint64(16) * cw::budgets::kBytesPerMegabyte);
+        CHECK(budgets.screenSpaceErrorPx == Catch::Approx(2.5));
+    }
+
+    SECTION("the default budgets match a default-constructed cwRenderBudgets") {
+        settings->resetToDefaults();
+
+        const cwRenderBudgets defaults;
+        const cwRenderBudgets budgets = settings->budgets();
+        CHECK(budgets.gpuBudgetBytes == defaults.gpuBudgetBytes);
+        CHECK(budgets.cpuBudgetBytes == defaults.cpuBudgetBytes);
+        CHECK(budgets.uploadBudgetBytesPerFrame == defaults.uploadBudgetBytesPerFrame);
+        CHECK(budgets.screenSpaceErrorPx == Catch::Approx(defaults.screenSpaceErrorPx));
     }
 
     SECTION("setting the current value is a no-op and emits nothing") {

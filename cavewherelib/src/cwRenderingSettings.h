@@ -8,6 +8,7 @@
 
 //Our includes
 #include "cwGlobals.h"
+#include "cwRenderBudgets.h"
 
 class QQuickRhiItem;
 
@@ -36,7 +37,19 @@ class CAVEWHERE_LIB_EXPORT cwRenderingSettings : public QObject
     Q_PROPERTY(int cpuCacheBudgetMb READ cpuCacheBudgetMb WRITE setCpuCacheBudgetMb NOTIFY cpuCacheBudgetMbChanged)
     Q_PROPERTY(int uploadBudgetMbPerFrame READ uploadBudgetMbPerFrame WRITE setUploadBudgetMbPerFrame NOTIFY uploadBudgetMbPerFrameChanged)
     Q_PROPERTY(double screenSpaceErrorPx READ screenSpaceErrorPx WRITE setScreenSpaceErrorPx NOTIFY screenSpaceErrorPxChanged)
+    Q_PROPERTY(qint64 gpuBudgetBytes READ gpuBudgetBytes NOTIFY gpuMemoryBudgetMbChanged)
     Q_PROPERTY(bool isAtDefaults READ isAtDefaults NOTIFY isAtDefaultsChanged)
+
+    // The shared budget limits, exposed so the settings UI spin boxes range over
+    // the same numbers the setters clamp to.
+    Q_PROPERTY(int minimumGpuMemoryBudgetMb READ minimumGpuMemoryBudgetMb CONSTANT)
+    Q_PROPERTY(int maximumGpuMemoryBudgetMb READ maximumGpuMemoryBudgetMb CONSTANT)
+    Q_PROPERTY(int minimumCpuCacheBudgetMb READ minimumCpuCacheBudgetMb CONSTANT)
+    Q_PROPERTY(int maximumCpuCacheBudgetMb READ maximumCpuCacheBudgetMb CONSTANT)
+    Q_PROPERTY(int minimumUploadBudgetMbPerFrame READ minimumUploadBudgetMbPerFrame CONSTANT)
+    Q_PROPERTY(int maximumUploadBudgetMbPerFrame READ maximumUploadBudgetMbPerFrame CONSTANT)
+    Q_PROPERTY(double minimumScreenSpaceErrorPx READ minimumScreenSpaceErrorPx CONSTANT)
+    Q_PROPERTY(double maximumScreenSpaceErrorPx READ maximumScreenSpaceErrorPx CONSTANT)
 
 public:
     int sampleCount() const { return m_sampleCount; }
@@ -59,6 +72,20 @@ public:
 
     double screenSpaceErrorPx() const { return m_screenSpaceErrorPx; }
     void setScreenSpaceErrorPx(double pixels);
+
+    qint64 gpuBudgetBytes() const { return qint64(m_gpuMemoryBudgetMb) * cw::budgets::kBytesPerMegabyte; }
+
+    //! The budget knobs in bytes, the form the render thread consumes
+    cwRenderBudgets budgets() const;
+
+    static int minimumGpuMemoryBudgetMb() { return cw::budgets::kMinGpuBudgetMb; }
+    static int maximumGpuMemoryBudgetMb() { return cw::budgets::kMaxGpuBudgetMb; }
+    static int minimumCpuCacheBudgetMb() { return cw::budgets::kMinCpuBudgetMb; }
+    static int maximumCpuCacheBudgetMb() { return cw::budgets::kMaxCpuBudgetMb; }
+    static int minimumUploadBudgetMbPerFrame() { return cw::budgets::kMinUploadBudgetMbPerFrame; }
+    static int maximumUploadBudgetMbPerFrame() { return cw::budgets::kMaxUploadBudgetMbPerFrame; }
+    static double minimumScreenSpaceErrorPx() { return cw::budgets::kMinScreenSpaceErrorPx; }
+    static double maximumScreenSpaceErrorPx() { return cw::budgets::kMaxScreenSpaceErrorPx; }
 
     bool isAtDefaults() const;
     Q_INVOKABLE void resetToDefaults();
@@ -91,12 +118,11 @@ private:
     int m_sampleCount = 4; // overwritten from QSettings in the constructor; see kDefaultSampleCount
     bool m_showRenderStatsHud = false; // see kDefaultShowRenderStatsHud
 
-    // All four are overwritten from QSettings in the constructor; see the
-    // kDefault constants in the .cpp.
-    int m_gpuMemoryBudgetMb = 1536;
-    int m_cpuCacheBudgetMb = 512;
-    int m_uploadBudgetMbPerFrame = 8;
-    double m_screenSpaceErrorPx = 1.5;
+    // All four are overwritten from QSettings in the constructor.
+    int m_gpuMemoryBudgetMb = cw::budgets::kDefaultGpuBudgetMb;
+    int m_cpuCacheBudgetMb = cw::budgets::kDefaultCpuBudgetMb;
+    int m_uploadBudgetMbPerFrame = cw::budgets::kDefaultUploadBudgetMbPerFrame;
+    double m_screenSpaceErrorPx = cw::budgets::kDefaultScreenSpaceErrorPx;
 
     // Safe baseline until the QRhi backend reports the real set (see cwRhiScene).
     // Always kept sorted ascending and containing 1.

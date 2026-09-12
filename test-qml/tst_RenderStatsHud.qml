@@ -20,6 +20,13 @@ QQ.Item {
         anchors.right: parent.right
     }
 
+    // The same ledger the HUD's own model reads, so the test can state the
+    // over-budget comparison in terms of real totals.
+    RenderingStatsModel {
+        id: statsModelId
+        running: true
+    }
+
     // The File → Debug toggle, written the way FileMenu.qml writes it: checked
     // reads the setting, triggering writes the inverse.
     QC.Menu {
@@ -79,6 +86,32 @@ QQ.Item {
             verify(streaming !== null, "renderStatsHudStreaming not found")
             verify(streaming.text.indexOf("Streaming:") === 0,
                    "unexpected streaming row text: " + streaming.text)
+        }
+
+        // The HUD reads the byte budget off the settings object instead of doing
+        // its own megabyte math, so overBudget follows the same comparison the
+        // render thread makes.
+        function test_overBudgetFollowsTheSettingsByteBudget() {
+            rootId.renderingSettings.showRenderStatsHud = true
+            tryCompare(hudId, "visible", true)
+
+            const bytesPerMegabyte = 1024 * 1024
+
+            rootId.renderingSettings.gpuMemoryBudgetMb =
+                    rootId.renderingSettings.maximumGpuMemoryBudgetMb
+            compare(rootId.renderingSettings.gpuBudgetBytes,
+                    rootId.renderingSettings.maximumGpuMemoryBudgetMb * bytesPerMegabyte)
+            tryCompare(hudId, "overBudget",
+                       statsModelId.totalGpuBytes > rootId.renderingSettings.gpuBudgetBytes)
+
+            rootId.renderingSettings.gpuMemoryBudgetMb =
+                    rootId.renderingSettings.minimumGpuMemoryBudgetMb
+            compare(rootId.renderingSettings.gpuBudgetBytes,
+                    rootId.renderingSettings.minimumGpuMemoryBudgetMb * bytesPerMegabyte)
+            tryCompare(hudId, "overBudget",
+                       statsModelId.totalGpuBytes > rootId.renderingSettings.gpuBudgetBytes)
+
+            rootId.renderingSettings.resetToDefaults()
         }
 
         function test_menuItemChecksAndWritesTheSetting() {

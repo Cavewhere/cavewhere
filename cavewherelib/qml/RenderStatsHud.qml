@@ -20,9 +20,8 @@ QQ.Rectangle {
     readonly property int categoryColumnWidth: Math.round(140 * Theme.fontScale)
     readonly property int byteColumnWidth: Math.round(64 * Theme.fontScale)
     readonly property int separatorHeight: 1
-    readonly property int bytesPerMegabyte: 1024 * 1024
     readonly property int gpuMemoryBudgetMb: RootData.settings.renderingSettings.gpuMemoryBudgetMb
-    readonly property bool overBudget: statsModelId.totalGpuBytes > hudRootId.gpuMemoryBudgetMb * hudRootId.bytesPerMegabyte
+    readonly property bool overBudget: statsModelId.totalGpuBytes > RootData.settings.renderingSettings.gpuBudgetBytes
 
     visible: RootData.settings.renderingSettings.showRenderStatsHud
 

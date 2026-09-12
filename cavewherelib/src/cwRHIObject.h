@@ -6,6 +6,7 @@
 #include "cwRhiPipelineSet.h"
 #include "cwRenderObjectId.h"
 #include "cwRenderFrameStats.h"
+#include "cwRenderBudgets.h"
 class QRhiCommandBuffer;
 class QRhiResourceUpdateBatch;
 
@@ -25,29 +26,6 @@ class cwRenderObject;
 class cwAppearanceSlotted;
 class cwVisibilitySnapshot;
 class cwFrustum;
-
-namespace cw::budgets {
-    constexpr qint64 kBytesPerMegabyte = 1024 * 1024;
-
-    // Mirrors the cwRenderingSettings defaults so a frame renderer running
-    // without that singleton (tests, tools) still streams sensibly.
-    constexpr qint64 kDefaultGpuBudgetBytes = 1536 * kBytesPerMegabyte;
-    constexpr qint64 kDefaultCpuBudgetBytes = 512 * kBytesPerMegabyte;
-    constexpr qint64 kDefaultUploadBudgetBytesPerFrame = 8 * kBytesPerMegabyte;
-    constexpr double kDefaultScreenSpaceErrorPx = 1.5;
-}
-
-/**
- * The streaming budget knobs, read from cwRenderingSettings at the sync barrier
- * and stamped onto every RenderData alongside the camera, so the render thread
- * never reaches back across the barrier for them.
- */
-struct cwRenderBudgets {
-    qint64 gpuBudgetBytes = cw::budgets::kDefaultGpuBudgetBytes;
-    qint64 cpuBudgetBytes = cw::budgets::kDefaultCpuBudgetBytes;
-    qint64 uploadBudgetBytesPerFrame = cw::budgets::kDefaultUploadBudgetBytesPerFrame;
-    double screenSpaceErrorPx = cw::budgets::kDefaultScreenSpaceErrorPx;
-};
 
 class cwRHIObject {
 

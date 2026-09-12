@@ -75,6 +75,28 @@ MainWindowTest {
                     Math.round(settings.screenSpaceErrorPx * screenSpaceErrorScale))
         }
 
+        // The ranges belong to the settings object, so the spin boxes can only
+        // offer values the setters accept.
+        function test_spinBoxRangesComeFromSettings() {
+            let gpu = findSpinBox("gpuMemoryBudgetSpinBox")
+            compare(gpu.from, settings.minimumGpuMemoryBudgetMb)
+            compare(gpu.to, settings.maximumGpuMemoryBudgetMb)
+
+            let cpu = findSpinBox("cpuCacheBudgetSpinBox")
+            compare(cpu.from, settings.minimumCpuCacheBudgetMb)
+            compare(cpu.to, settings.maximumCpuCacheBudgetMb)
+
+            let upload = findSpinBox("uploadBudgetSpinBox")
+            compare(upload.from, settings.minimumUploadBudgetMbPerFrame)
+            compare(upload.to, settings.maximumUploadBudgetMbPerFrame)
+
+            let error = findSpinBox("screenSpaceErrorSpinBox")
+            compare(error.from,
+                    Math.round(settings.minimumScreenSpaceErrorPx * screenSpaceErrorScale))
+            compare(error.to,
+                    Math.round(settings.maximumScreenSpaceErrorPx * screenSpaceErrorScale))
+        }
+
         function test_budgetSpinBoxesTrackExternalChanges() {
             let cpu = findSpinBox("cpuCacheBudgetSpinBox")
             let upload = findSpinBox("uploadBudgetSpinBox")
