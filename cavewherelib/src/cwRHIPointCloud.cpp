@@ -11,6 +11,7 @@
 #include "cwFrustum.h"
 #include "cwPointCloudAppearance.h"
 #include "cwPointOctree.h"
+#include "cwRenderFrameStats.h"
 #include "cwRenderMaterialState.h"
 #include "cwRenderPointCloud.h"
 #include "cwRhiItemRenderer.h"
@@ -365,8 +366,27 @@ bool cwRHIPointCloud::streamResources(ResourceUpdateData& data, qint64& remainin
     enforceGpuBudget(data.renderData.budgets);
 
     publishPickSet();
+    publishPointCloudStats();
 
     return !m_readyQueue.isEmpty() || m_streamer.hasWork();
+}
+
+void cwRHIPointCloud::publishPointCloudStats() const
+{
+    cwRenderFrameStats::PointCloud counts;
+
+    for (const NodeRecord& node : m_nodes) {
+        if (node.state == NodeState::Resident) {
+            ++counts.residentNodes;
+        }
+    }
+
+    // streamResources runs before gather, so this is the cut the last frame drew.
+    counts.selectedNodes = int(m_selected.size());
+    counts.nodeLoadsInFlight = m_streamer.pending().loads + int(m_readyQueue.size());
+    counts.sseInflation = m_sseInflation;
+
+    cwRenderFrameStats::instance()->publishPointCloud(counts);
 }
 
 bool cwRHIPointCloud::uploadNode(QRhi* rhi, QRhiResourceUpdateBatch* batch, int index,
@@ -586,7 +606,10 @@ void cwRHIPointCloud::releaseStreamedResources()
     publishPickSet();
 
     // The view that left is gone; whatever brings it back starts from the root.
+    m_selected.clear();
     m_sseInflation = 1.0;
+
+    publishPointCloudStats();
 }
 
 bool cwRHIPointCloud::gather(const GatherContext& context, QVector<PipelineBatch>& batches)

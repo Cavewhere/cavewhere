@@ -38,6 +38,12 @@ constexpr cwRenderFrameStats::Streaming kStreamingCounts {
     .readyCpuBytes = kOneAndAHalfMegabytes,
     .demotionsInFlight = 2
 };
+constexpr cwRenderFrameStats::PointCloud kPointCloudCounts {
+    .residentNodes = 41,
+    .selectedNodes = 57,
+    .nodeLoadsInFlight = 6,
+    .sseInflation = 1.25
+};
 
 // The ledger is process-wide, so every test works in deltas from what it finds
 // and puts the value back when it is done.
@@ -213,6 +219,46 @@ TEST_CASE("cwRenderingStatsModel: refresh reads the published streaming counts",
     CHECK(model.demotionsInFlight() == 0);
     CHECK(streamingSpy.count() == 2);
     CHECK(cullingSpy.count() == 0);
+}
+
+TEST_CASE("cwRenderingStatsModel: refresh reads the published point cloud counts",
+          "[RenderingStatsModel]") {
+    //A known baseline so the model's construction-time snapshot differs from kPointCloudCounts
+    cwRenderFrameStats::instance()->publishPointCloud({});
+
+    cwRenderingStatsModel model;
+
+    QSignalSpy pointCloudSpy(&model, &cwRenderingStatsModel::pointCloudChanged);
+    QSignalSpy streamingSpy(&model, &cwRenderingStatsModel::streamingChanged);
+    QSignalSpy cullingSpy(&model, &cwRenderingStatsModel::cullingChanged);
+
+    cwRenderFrameStats::instance()->publishPointCloud(kPointCloudCounts);
+
+    model.refresh();
+
+    CHECK(model.residentNodes() == kPointCloudCounts.residentNodes);
+    CHECK(model.selectedNodes() == kPointCloudCounts.selectedNodes);
+    CHECK(model.nodeLoadsInFlight() == kPointCloudCounts.nodeLoadsInFlight);
+    CHECK(model.sseInflation() == kPointCloudCounts.sseInflation);
+    CHECK(pointCloudSpy.count() == 1);
+
+    //Publishing the point cloud alone leaves the other parts quiet
+    CHECK(streamingSpy.count() == 0);
+    CHECK(cullingSpy.count() == 0);
+
+    //Without a new published frame the model stays quiet
+    model.refresh();
+    CHECK(pointCloudSpy.count() == 1);
+
+    //A frame with no octree reads back as the resting values
+    cwRenderFrameStats::instance()->publishPointCloud({});
+    model.refresh();
+
+    CHECK(model.residentNodes() == 0);
+    CHECK(model.selectedNodes() == 0);
+    CHECK(model.nodeLoadsInFlight() == 0);
+    CHECK(model.sseInflation() == 1.0);
+    CHECK(pointCloudSpy.count() == 2);
 }
 
 TEST_CASE("cwRenderingStatsModel: polling picks up a published streaming frame",

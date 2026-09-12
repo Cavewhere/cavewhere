@@ -31,6 +31,13 @@ void cwRenderFrameStats::publishStreaming(const Streaming& streaming)
     ++m_revision;
 }
 
+void cwRenderFrameStats::publishPointCloud(const PointCloud& pointCloud)
+{
+    QMutexLocker locker(&m_mutex);
+    m_pointCloud = pointCloud;
+    ++m_revision;
+}
+
 cwRenderFrameStats::Culling cwRenderFrameStats::culling() const
 {
     QMutexLocker locker(&m_mutex);
@@ -41,6 +48,12 @@ cwRenderFrameStats::Streaming cwRenderFrameStats::streaming() const
 {
     QMutexLocker locker(&m_mutex);
     return m_streaming;
+}
+
+cwRenderFrameStats::PointCloud cwRenderFrameStats::pointCloud() const
+{
+    QMutexLocker locker(&m_mutex);
+    return m_pointCloud;
 }
 
 quint64 cwRenderFrameStats::revision() const

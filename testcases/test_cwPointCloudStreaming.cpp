@@ -43,6 +43,7 @@
 #include "cwRHIObject.h"
 #include "cwRHIPointCloud.h"
 #include "cwRenderBudgets.h"
+#include "cwRenderFrameStats.h"
 #include "cwRenderMemoryLedger.h"
 #include "cwRenderPointCloud.h"
 #include "cwRhiFrameRenderer.h"
@@ -820,6 +821,74 @@ TEST_CASE("A budget nothing can satisfy coarsens the cut, and room to spare rela
     CHECK(Access::sseInflation(fixture.backend()) < coarsened);
 }
 
+TEST_CASE("A streamed frame publishes the cut and its residency to the render stats",
+          "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    PointCloudFixture fixture(rhi.get(), QStringLiteral("frame-stats"));
+    fixture.setOrthoHeight(kCloseOrthoHeight);
+
+    // A known baseline, so every count below came from a frame of this cloud.
+    cwRenderFrameStats* frameStats = cwRenderFrameStats::instance();
+    frameStats->publishPointCloud({});
+    REQUIRE(frameStats->pointCloud() == cwRenderFrameStats::PointCloud{});
+
+    // An upload budget well under one node's payload, so nodes finish loading
+    // faster than the frames can take them and the wait is visible in the
+    // counts rather than over between two frames.
+    constexpr qint64 kUploadBudgetBytes = 1;
+    const cwRenderBudgets defaultBudgets = fixture.budgets();
+    cwRenderBudgets streamingBudgets = defaultBudgets;
+    streamingBudgets.uploadBudgetBytesPerFrame = kUploadBudgetBytes;
+    fixture.setBudgets(streamingBudgets);
+
+    int mostLoadsInFlight = 0;
+    int mostQueued = 0;
+    QElapsedTimer timer;
+    timer.start();
+    fixture.renderFrame();
+    while (Access::hasStreamingWork(fixture.backend()) && timer.elapsed() < kWaitTimeoutMs) {
+        const cwRenderFrameStats::PointCloud streaming = frameStats->pointCloud();
+        CHECK(streaming.residentNodes == Access::residentCount(fixture.backend()));
+        // Payloads the upload budget held back are still on their way.
+        CHECK(streaming.nodeLoadsInFlight >= Access::readyQueueCount(fixture.backend()));
+        mostLoadsInFlight = std::max(mostLoadsInFlight, streaming.nodeLoadsInFlight);
+        mostQueued = std::max(mostQueued, Access::readyQueueCount(fixture.backend()));
+        fixture.renderFrame();
+    }
+
+    CHECK(mostQueued > 0);
+    CHECK(mostLoadsInFlight > 0);
+
+    fixture.setBudgets(defaultBudgets);
+    fixture.renderUntilQuiet();
+
+    const cwRenderFrameStats::PointCloud quiet = frameStats->pointCloud();
+    CHECK(quiet.residentNodes == Access::residentCount(fixture.backend()));
+    CHECK(quiet.residentNodes > 1);
+    // Everything the cut wants is resident, so the cut and the draw list agree.
+    CHECK(quiet.selectedNodes == fixture.drawableCount());
+    CHECK(quiet.nodeLoadsInFlight == 0);
+    CHECK(quiet.sseInflation == 1.0);
+
+    // A budget the cloud cannot fit: the coarser cut the view falls back to is
+    // what the HUD's multiplier reports.
+    cwRenderBudgets budgets = fixture.budgets();
+    budgets.gpuBudgetBytes = 1;
+    fixture.setBudgets(budgets);
+    fixture.setOrthoHeight(kFarOrthoHeight);
+
+    fixture.renderFrame();
+    fixture.renderFrame();
+
+    const cwRenderFrameStats::PointCloud coarsened = frameStats->pointCloud();
+    CHECK(coarsened.sseInflation == Access::sseInflation(fixture.backend()));
+    CHECK(coarsened.sseInflation > 1.0);
+    CHECK(coarsened.residentNodes == Access::residentCount(fixture.backend()));
+    CHECK(coarsened.residentNodes == 1);
+}
+
 TEST_CASE("A node whose payload does not match the manifest fails and the rest still draw",
           "[PointCloudStreaming]")
 {
@@ -838,6 +907,12 @@ TEST_CASE("A node whose payload does not match the manifest fails and the rest s
     CHECK(Access::bufferPointer(fixture.backend(), 1) == nullptr);
     CHECK(Access::nodeState(fixture.backend(), kRootIndex) == NodeState::Resident);
     CHECK(fixture.drawableCount() > 1);
+
+    // A failed node holds no buffer, so the stats count it with the absent
+    // ones rather than the resident ones.
+    const cwRenderFrameStats::PointCloud stats = cwRenderFrameStats::instance()->pointCloud();
+    CHECK(stats.residentNodes == Access::residentCount(fixture.backend()));
+    CHECK(stats.nodeLoadsInFlight == 0);
 
     // A failed node is never asked for again, however many frames go by.
     fixture.renderFrame();
@@ -882,6 +957,9 @@ TEST_CASE("Hiding a view releases every node and the next frame starts from the 
     CHECK(fixture.gpuBytes() == 0);
     CHECK(Access::bufferPointer(fixture.backend(), kRootIndex) == nullptr);
     CHECK(Access::sseInflation(fixture.backend()) == 1.0);
+
+    // The HUD would otherwise keep showing the cut of a view that is gone.
+    CHECK(cwRenderFrameStats::instance()->pointCloud() == cwRenderFrameStats::PointCloud{});
 
     // Shown again: the very first frame asks for the root, and the results the
     // release left in flight land on a table that has forgotten them.

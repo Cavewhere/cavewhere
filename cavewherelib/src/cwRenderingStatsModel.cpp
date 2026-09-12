@@ -152,7 +152,7 @@ void cwRenderingStatsModel::refresh()
     if(frameStatsRevision != m_lastFrameStatsRevision) {
         m_lastFrameStatsRevision = frameStatsRevision;
 
-        //One revision covers both halves, so each half reports only its own change
+        //One revision covers every part, so each part reports only its own change
         const cwRenderFrameStats::Culling culling = frameStats->culling();
         if(m_culling != culling) {
             m_culling = culling;
@@ -163,6 +163,12 @@ void cwRenderingStatsModel::refresh()
         if(m_streaming != streaming) {
             m_streaming = streaming;
             emit streamingChanged();
+        }
+
+        const cwRenderFrameStats::PointCloud pointCloud = frameStats->pointCloud();
+        if(m_pointCloud != pointCloud) {
+            m_pointCloud = pointCloud;
+            emit pointCloudChanged();
         }
     }
 }

@@ -163,6 +163,9 @@ private:
     // at most, from the places residency changes.
     void publishPickSet();
 
+    //! Publishes this frame's node residency, cut size, and SSE inflation for the HUD
+    void publishPointCloudStats() const;
+
     QVector<cw::octree::NodeResidency> residencyStats() const;
     void enforceGpuBudget(const cwRenderBudgets& budgets);
 

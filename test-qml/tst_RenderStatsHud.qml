@@ -88,6 +88,28 @@ QQ.Item {
                    "unexpected streaming row text: " + streaming.text)
         }
 
+        function test_pointCloudRowIsShown() {
+            rootId.renderingSettings.showRenderStatsHud = true
+            tryCompare(hudId, "visible", true)
+
+            let pointCloud = ObjectFinder.findObjectByChain(rootId, "rootId->hud->renderStatsHudPointCloud")
+            verify(pointCloud !== null, "renderStatsHudPointCloud not found")
+            compare(pointCloud.text,
+                    "Point cloud: " + statsModelId.residentNodes
+                    + " / " + statsModelId.selectedNodes
+                    + " nodes · " + statsModelId.nodeLoadsInFlight + " loading")
+
+            // The multiplier is a budget-pressure signal, so it stays off the
+            // row until a view actually coarsens its cut. Nothing in QML can
+            // raise the inflation — the C++ [PointCloudStreaming] stats case
+            // covers the frame that does.
+            let sse = ObjectFinder.findObjectByChain(rootId, "rootId->hud->renderStatsHudPointCloudSse")
+            verify(sse !== null, "renderStatsHudPointCloudSse not found")
+            compare(sse.visible, statsModelId.sseInflation > 1)
+            compare(sse.text,
+                    " · SSE ×" + statsModelId.sseInflation.toFixed(hudId.inflationDecimals))
+        }
+
         // The HUD reads the byte budget off the settings object instead of doing
         // its own megabyte math, so overBudget follows the same comparison the
         // render thread makes.

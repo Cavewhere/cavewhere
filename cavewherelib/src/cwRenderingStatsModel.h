@@ -40,6 +40,10 @@ class CAVEWHERE_LIB_EXPORT cwRenderingStatsModel : public QAbstractListModel
     Q_PROPERTY(qint64 readyCpuBytes READ readyCpuBytes NOTIFY streamingChanged)
     Q_PROPERTY(QString readyCpuText READ readyCpuText NOTIFY streamingChanged)
     Q_PROPERTY(int demotionsInFlight READ demotionsInFlight NOTIFY streamingChanged)
+    Q_PROPERTY(int residentNodes READ residentNodes NOTIFY pointCloudChanged)
+    Q_PROPERTY(int selectedNodes READ selectedNodes NOTIFY pointCloudChanged)
+    Q_PROPERTY(int nodeLoadsInFlight READ nodeLoadsInFlight NOTIFY pointCloudChanged)
+    Q_PROPERTY(double sseInflation READ sseInflation NOTIFY pointCloudChanged)
 
 public:
     enum Roles {
@@ -76,6 +80,11 @@ public:
     QString readyCpuText() const { return formattedBytes(m_streaming.readyCpuBytes); }
     int demotionsInFlight() const { return m_streaming.demotionsInFlight; }
 
+    int residentNodes() const { return m_pointCloud.residentNodes; }
+    int selectedNodes() const { return m_pointCloud.selectedNodes; }
+    int nodeLoadsInFlight() const { return m_pointCloud.nodeLoadsInFlight; }
+    double sseInflation() const { return m_pointCloud.sseInflation; }
+
     //! Re-reads the ledger now, for the HUD's refresh affordance
     Q_INVOKABLE void refresh();
 
@@ -87,6 +96,7 @@ signals:
     void runningChanged();
     void cullingChanged();
     void streamingChanged();
+    void pointCloudChanged();
 
 private slots:
     void poll();
@@ -104,6 +114,7 @@ private:
     quint64 m_lastLedgerRevision = 0;
     cwRenderFrameStats::Culling m_culling;
     cwRenderFrameStats::Streaming m_streaming;
+    cwRenderFrameStats::PointCloud m_pointCloud;
     quint64 m_lastFrameStatsRevision = 0;
 };
 

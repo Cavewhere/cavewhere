@@ -69,6 +69,10 @@ struct CwRhiPointCloudTestAccess {
         return bytes;
     }
 
+    static int readyQueueCount(const cwRHIPointCloud& cloud) {
+        return int(cloud.m_readyQueue.size());
+    }
+
     static bool exportRequested(const cwRHIPointCloud& cloud, int index) {
         if (index < 0 || index >= cloud.m_nodes.size()) {
             return false;
