@@ -25,6 +25,7 @@
 
 //Qt includes
 #include <QtNumeric>
+#include <QCoreApplication>
 #include <QFutureWatcher>
 #include <QPlane3D>
 #include <QPromise>
@@ -536,7 +537,12 @@ cwGeometryItersecter::DebugStatistics cwGeometryItersecter::debugStatistics() co
 
 void cwGeometryItersecter::waitForFinish()
 {
-    AsyncFuture::waitForFinished(m_bvhRestarter.future());
+    // A mutation during a build queues one more build, launched from the
+    // install callback, so keep waiting until nothing is in flight or pending.
+    while (m_buildInFlight || m_buildPending) {
+        AsyncFuture::waitForFinished(m_bvhRestarter.future());
+        QCoreApplication::processEvents();
+    }
 }
 
 /**
@@ -658,9 +664,8 @@ void cwGeometryItersecter::clear(cwRenderObjectId parentId)
         << "clear(parent=" << parentId << ") — erased "
         << erased << " Nodes; remaining=" << Nodes.size();
     // Most render objects leaving the scene registered no pick geometry at
-    // all — and a rebuild that would find nothing changed still cancels and
-    // relaunches the in-flight one through the restarter. Same guard
-    // removeObject() applies.
+    // all — and a rebuild that would find nothing changed still costs a full
+    // pass through the restarter. Same guard removeObject() applies.
     if (erased > 0) {
         scheduleTopLevelRebuild();
     }
@@ -709,11 +714,11 @@ void cwGeometryItersecter::setModelMatrix(const Key &objectKey, const QMatrix4x4
     // by modelMatrix changes. Only the top-level needs refreshing.
     //
     // Refresh the published top-level synchronously first so picks reflect the
-    // move immediately (issue #505). The async rebuild still runs: it keeps the
-    // build coalesced, cancels any competing in-flight build, and remains the
-    // eventual source of truth (a stale install from an older competing build
-    // can't leave the matrix wrong because the restarted build re-snapshots the
-    // now-updated Nodes).
+    // move immediately (issue #505). The async rebuild still runs and remains
+    // the eventual source of truth: a build already in flight snapshotted the
+    // old matrix, but installBuildResult refreshes every published matrix from
+    // the live Nodes, and the follow-up build queued by this mutation
+    // re-snapshots them.
     applyPublishedDelta(objectKey, PublishedDelta::SetMatrix, modelMatrix);
     scheduleTopLevelRebuild();
 }
@@ -1966,10 +1971,9 @@ void cwGeometryItersecter::scheduleObjectRebuild(const Key& key)
     // m_dirtyKeys makes the next launched build rebuild this Key even if its
     // QHash entry happened to survive; it is consumed and cleared per launch.
     m_dirtyKeys.insert(key);
-    // Stamp the invalidation so a build already in flight — including one
-    // about to be cancelled by this same rebuild — recognizes its finished
-    // sub-BVH for this Key as stale even after the replacement build clears
-    // m_dirtyKeys (see installBuildResult).
+    // Stamp the invalidation so a build already in flight recognizes its
+    // finished sub-BVH for this Key as stale even after the follow-up build
+    // clears m_dirtyKeys (see installBuildResult).
     m_keyDirtySeq[key] = ++m_mutationSeq;
     applyPublishedDelta(key, PublishedDelta::RemoveSlot);
     qCDebug(lcPick).nospace()
@@ -1978,7 +1982,7 @@ void cwGeometryItersecter::scheduleObjectRebuild(const Key& key)
         << m_subBvhs.size() << " other sub-BVH(s) still cached, "
         << m_dirtyKeys.size() << " dirty";
 
-    m_bvhRestarter.restart([this]() { return launchBuildJob(); });
+    requestBuild();
 }
 
 void cwGeometryItersecter::scheduleTopLevelRebuild()
@@ -1993,7 +1997,28 @@ void cwGeometryItersecter::scheduleTopLevelRebuild()
     // unaffected Keys remain correct and the rebuild is fast (top-
     // level only). Callers that need a Key gone from picks instantly
     // (removeObject, clear) apply a RemoveSlot delta first.
+    requestBuild();
+}
+
+void cwGeometryItersecter::requestBuild()
+{
+    if (m_buildInFlight) {
+        m_buildPending = true;
+        qCDebug(lcPick) << "rebuild queued behind the build in flight";
+        return;
+    }
+    m_buildInFlight = true;
     m_bvhRestarter.restart([this]() { return launchBuildJob(); });
+}
+
+void cwGeometryItersecter::finishBuildCycle()
+{
+    m_buildInFlight = false;
+    if (m_buildPending) {
+        m_buildPending = false;
+        qCDebug(lcPick) << "launching the queued rebuild";
+        requestBuild();
+    }
 }
 
 void cwGeometryItersecter::applyPublishedDelta(const Key& key,
@@ -2400,6 +2425,10 @@ QFuture<void> cwGeometryItersecter::launchBuildJob()
     auto dirtyKeysSnapshot = m_dirtyKeys;
     m_dirtyKeys.clear();
 
+    // A mutation that arrived between requestBuild() and this queued start is
+    // already in the snapshot above, so it needs no follow-up build.
+    m_buildPending = false;
+
     // The invalidation frontier as of this launch. installBuildResult uses it
     // to reject any Key re-dirtied after the build started, independent of the
     // event-loop ordering between this build's install and the next build's
@@ -2555,7 +2584,7 @@ QFuture<void> cwGeometryItersecter::launchBuildJob()
         }
 
         // Bank every completed sub-BVH before the cancel check so a build cut
-        // short by interaction churn still contributes its finished work
+        // short at destruction still contributes its finished work
         // (Phase 4a). The map above has already joined (waitOnPool), so this
         // runs single-threaded and builtSlot is read only after the worker
         // returns (the finished-tied install watcher), never concurrently.
@@ -2570,8 +2599,8 @@ QFuture<void> cwGeometryItersecter::launchBuildJob()
         }
 
         // Fold the same sub-BVHs into subBvhSnapshot (a COW copy of m_subBvhs)
-        // only past the cancel check: the first write detaches it, and a
-        // churn-cancelled build has no use for the assembled result anyway.
+        // only past the cancel check: the first write detaches it, and a build
+        // canceled at destruction has no use for the assembled result anyway.
         for (qsizetype i = 0; i < tasks.size(); ++i) {
             if (built[i]) {
                 subBvhSnapshot[tasks[i].key] = built[i];
@@ -2656,36 +2685,47 @@ void cwGeometryItersecter::installBuildResult(
         const QHash<Key, std::shared_ptr<const SubBvh>>& banked,
         quint64 launchSeq)
 {
+    applyBuildResult(std::move(built), banked, launchSeq);
+    // After bvhReady(): a listener that mutates the intersecter from inside
+    // the signal sees a build still in flight and queues rather than racing.
+    finishBuildCycle();
+}
+
+void cwGeometryItersecter::applyBuildResult(
+        std::shared_ptr<BvhData> built,
+        const QHash<Key, std::shared_ptr<const SubBvh>>& banked,
+        quint64 launchSeq)
+{
     // Runs on the UI thread once the worker has returned, so reading the
     // worker-written `built`/`banked` here is free of the worker-still-running
-    // race. `built` is null for a cancelled or zero-primitive run.
+    // race. `built` is null for a zero-primitive run.
     //
     // Two filters gate everything below. The staleness filter catches Keys
     // re-dirtied since this build launched: scheduleObjectRebuild stamps
     // m_keyDirtySeq, so a stamp > launchSeq means the geometry this build
-    // produced for that Key is superseded. This must not read m_dirtyKeys: on
-    // the cancel path the replacement build's launch clears m_dirtyKeys before
-    // this callback runs, so a re-dirtied Key would look clean and its stale
-    // sub-BVH would be banked (issue #505). The live-Nodes filter catches Keys
+    // produced for that Key is superseded. This must not read m_dirtyKeys: the
+    // follow-up build's launch can clear m_dirtyKeys before this callback runs,
+    // so a re-dirtied Key would look clean and its stale sub-BVH would be
+    // banked (issue #505). The live-Nodes filter catches Keys
     // *removed* mid-build — removal is not a re-dirty, so the staleness filter
     // alone would republish a freed slot (picks hitting freed geometry) and
     // cache its sub-BVH forever (ids are never recycled). Nodes is ground truth
     // on this thread. One predicate for both uses — a slot that publishes must
     // also be cacheable, and vice versa, so they can't drift.
-    QSet<Key> liveKeys;
-    liveKeys.reserve(Nodes.size());
+    QHash<Key, QMatrix4x4> liveMatrices;
+    liveMatrices.reserve(Nodes.size());
     for (const Node& node : std::as_const(Nodes)) {
-        liveKeys.insert(node.Object.key());
+        liveMatrices.insert(node.Object.key(), node.Object.modelMatrix());
     }
-    const auto shouldPublish = [this, &liveKeys, launchSeq](const Key& key) {
-        return m_keyDirtySeq.value(key, 0) <= launchSeq && liveKeys.contains(key);
+    const auto shouldPublish = [this, &liveMatrices, launchSeq](const Key& key) {
+        return m_keyDirtySeq.value(key, 0) <= launchSeq && liveMatrices.contains(key);
     };
 
     // Bank completed sub-BVHs into the cache whether or not the full BvhData
-    // survived. A build cancelled by churn still contributes its finished
-    // sub-BVHs, so the eventual uncancelled build starts from a warm cache and,
-    // for multi-object scenes, readiness converges in a bounded number of
-    // restarts (Phase 4a). Banking is per-object: a single object rebuilds from
+    // survived. A build that produced no BvhData still contributes its finished
+    // sub-BVHs, so the follow-up build starts from a warm cache and, for
+    // multi-object scenes, readiness converges in a bounded number of builds
+    // (Phase 4a). Banking is per-object: a single object rebuilds from
     // scratch (buildSubBvh doesn't checkpoint mid-build), so one cloud rotated
     // during its first build can't bank. Skip any Key re-dirtied since the
     // build started (the next job rebuilds it) or no longer registered.
@@ -2697,7 +2737,7 @@ void cwGeometryItersecter::installBuildResult(
 
     if (!built) {
         qCDebug(lcPick).nospace()
-            << "build worker finished without a BvhData (canceled or zero"
+            << "build worker finished without a BvhData (zero"
             << " prims); banked=" << banked.size()
             << " cached=" << m_subBvhs.size();
         return;
@@ -2710,11 +2750,34 @@ void cwGeometryItersecter::installBuildResult(
     // The built BvhData isn't published yet, so nulling slots in place here
     // doesn't violate the immutable-once-published rule on m_bvh — and avoids
     // applyPublishedDelta's per-Key copy-on-write.
+    //
+    // A slot that publishes also gets its matrix refreshed from the live Node:
+    // a build that launched before setModelMatrix snapshotted the old matrix,
+    // and now that it publishes instead of being canceled, the old matrix would
+    // reach picks.
+    bool matrixMoved = false;
     for (auto it = built->keyToSlot.cbegin(); it != built->keyToSlot.cend(); ++it) {
-        if (!shouldPublish(it.key())) {
+        if (shouldPublish(it.key())) {
+            const QMatrix4x4 live = liveMatrices.value(it.key());
+            if (built->modelMatrices.at(it.value()) != live) {
+                matrixMoved = true;
+            }
+            built->modelMatrices[it.value()] = live;
+            built->inverseModelMatrices[it.value()] = live.inverted();
+        } else {
             built->subBvhs[it.value()].reset();
         }
     }
+
+    if (matrixMoved) {
+        // The worker's top level holds world boxes from the launch-time
+        // matrices, so a refreshed matrix needs the same top-level pass
+        // applyPublishedDelta(SetMatrix) runs; otherwise the first install
+        // would publish the moved Object's old world bounds and picks at its
+        // new position would miss it.
+        built->topLevel = built->rebuildTopLevel();
+    }
+
     m_bvh = std::move(built);
     qCDebug(lcPick).nospace()
         << "bvhReady installed: topLevel=" << m_bvh->topLevel.size()
