@@ -15,6 +15,7 @@
 #include <QMetaType>
 
 //Our includes
+#include "cwGeoPoint.h"
 #include "cwGlobals.h"
 
 class cwFixStationData;
@@ -153,6 +154,11 @@ public:
 
     double elevation() const;
     void setElevation(double v);
+
+    //! The three components as one point, in inputCS()'s own system and axis
+    //! order — easting in x, northing in y, elevation in z. All zeros unless
+    //! state() is Valid, same as the components it reads.
+    cwGeoPoint position() const;
 
     //! Whether the coordinate spelled an elevation out at all. A two-component
     //! coordinate — the shape one copied off a map arrives in — says nothing

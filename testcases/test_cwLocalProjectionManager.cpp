@@ -973,3 +973,63 @@ TEST_CASE("Recentering renames what the frame is centered on",
         CHECK(geoReference->anchorDescription() == QStringLiteral("A1 — Roppel Cave"));
     }
 }
+
+TEST_CASE("The region walk reaches past the first cave",
+          "[cwLocalProjectionManager][cwRecenter][cwAnchorDescription]")
+{
+    // Everything that resolves a fix station — the picker's rows, recentering,
+    // the description — shares one walk of the region. A walk that stopped at
+    // the first cave, or at the first cave holding no fixes, would lose every
+    // project surveyed as more than one cave.
+    cwCavingRegion region;
+
+    const cwFixStation entrance = makeFix(QStringLiteral("A1"), kUtm12N,
+                                          kAnchorEasting, kAnchorNorthing, kElevation);
+    cwCave* first = addCaveWithFixes(&region, {entrance});
+    first->setName(QStringLiteral("Roppel Cave"));
+
+    // A cave nobody has fixed yet sits between the two, so the walk has to carry
+    // on through a cave that contributes nothing.
+    addCaveWithFixes(&region, {})->setName(QStringLiteral("Unfixed Cave"));
+
+    const cwFixStation nearby = makeFix(QStringLiteral("B1"), kUtm12N,
+                                        kNearbyEasting, kNearbyNorthing, kElevation);
+    cwCave* second = addCaveWithFixes(&region, {nearby});
+    second->setName(QStringLiteral("Hidden River Cave"));
+
+    auto* geoReference = region.geoReference();
+    REQUIRE(geoReference->anchorDescription() == QStringLiteral("A1 — Roppel Cave"));
+
+    SECTION("the picker offers the stations of every cave") {
+        auto* candidates = openedCandidates(&region);
+
+        REQUIRE(candidates->count() == 2);
+        CHECK(candidateRole(candidates, 1, cwRecenterCandidateModel::StationNameRole).toString()
+              == QStringLiteral("B1"));
+        CHECK(candidateRole(candidates, 1, cwRecenterCandidateModel::CaveNameRole).toString()
+              == QStringLiteral("Hidden River Cave"));
+        CHECK(candidateRole(candidates, 1, cwRecenterCandidateModel::EligibleRole).toBool());
+    }
+
+    SECTION("a station in the last cave is the one recentered on and named") {
+        REQUIRE(region.localProjection()->recenterOnStation(nearby.id()));
+
+        CHECK(geoReference->anchorDescription() == QStringLiteral("B1 — Hidden River Cave"));
+        checkCenteredOn(geoReference->localCoordinateSystem(), kUtm12N,
+                        kNearbyEasting, kNearbyNorthing);
+    }
+
+    SECTION("both caves' fixes place the project") {
+        // gatherInputs() walks the same hierarchy: the middle of the project is
+        // between the two entrances, not on the first one.
+        const auto center = region.localProjection()->dataCenter();
+        REQUIRE(center.has_value());
+        constexpr double kHalfway = 50.0;
+        // Loose enough for the frame's own scale factor: the two entrances are
+        // 100 m apart in UTM, and UTM at this easting runs a few hundred ppm
+        // long against the tmerc the frame is.
+        constexpr double kToleranceMeters = 0.1;
+        CHECK_THAT(center->x, WithinAbs(kHalfway, kToleranceMeters));
+        CHECK_THAT(center->y, WithinAbs(kHalfway, kToleranceMeters));
+    }
+}

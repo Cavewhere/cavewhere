@@ -197,6 +197,11 @@ void cwFixStation::setNorthing(double v) { data->Northing = v; data->reformat();
 double cwFixStation::elevation() const { return data->Elevation; }
 void cwFixStation::setElevation(double v) { data->Elevation = v; data->reformat(); }
 
+cwGeoPoint cwFixStation::position() const
+{
+    return cwGeoPoint(easting(), northing(), elevation());
+}
+
 bool cwFixStation::hasElevation() const { return data->HasElevation; }
 
 double cwFixStation::horizontalVariance() const { return data->HorizontalVariance; }

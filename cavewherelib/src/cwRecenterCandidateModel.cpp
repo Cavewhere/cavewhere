@@ -8,21 +8,16 @@
 //Our includes
 #include "cwRecenterCandidateModel.h"
 #include "cwCave.h"
-#include "cwCavingRegion.h"
 #include "cwCoordinateTransform.h"
 #include "cwFixStation.h"
-#include "cwFixStationModel.h"
 #include "cwGeoReference.h"
 #include "cwLocalProjectionManager.h"
 
-cwRecenterCandidateModel::cwRecenterCandidateModel(cwLocalProjectionManager* manager,
-                                                   cwCavingRegion* region) :
+cwRecenterCandidateModel::cwRecenterCandidateModel(cwLocalProjectionManager* manager) :
     QAbstractListModel(manager),
-    m_manager(manager),
-    m_region(region)
+    m_manager(manager)
 {
     Q_ASSERT(m_manager != nullptr);
-    Q_ASSERT(m_region != nullptr);
 }
 
 int cwRecenterCandidateModel::rowCount(const QModelIndex& parent) const
@@ -88,22 +83,16 @@ void cwRecenterCandidateModel::refresh()
         return;
     }
 
-    const cwGeoReference* geoReference = m_region->geoReference();
+    const cwGeoReference* geoReference = m_manager->geoReference();
     setDataCenter(toWgs84(geoReference->localCoordinateSystem(), *center),
                   m_manager->isCenteredOnDataCenter(center));
 
     const cwGeoReference::Anchor anchor = geoReference->anchor();
 
     QList<cwRecenterCandidate> candidates;
-    for (cwCave* cave : m_region->caves()) {
-        if (cave == nullptr) {
-            continue;
-        }
-        for (const cwFixStation& fix : cave->fixStations()->fixStations()) {
-            const auto local = m_manager->localPointOfFix(fix);
-            if (!local.has_value()) {
-                continue;
-            }
+    m_manager->forEachFixStation([&](cwCave* cave, const cwFixStation& fix) {
+        const auto local = m_manager->localPointOfFix(fix);
+        if (local.has_value()) {
             // Centering moves the origin onto the station, so the distance from
             // the station to the middle of the data is where the data would end
             // up relative to the new origin. Deriving the candidate frame and
@@ -114,13 +103,12 @@ void cwRecenterCandidateModel::refresh()
                 fix.id(),
                 fix.stationName(),
                 cave->name(),
-                toWgs84(fix.inputCS(),
-                        cwGeoPoint(fix.easting(), fix.northing(), fix.elevation())),
+                toWgs84(fix.inputCS(), fix.position()),
                 cwLocalProjectionManager::isWithinReach(*center, *local),
                 anchor.kind == cwGeoReference::Anchor::FixStation && anchor.id == fix.id()
             });
         }
-    }
+    });
 
     setCandidates(candidates);
 }

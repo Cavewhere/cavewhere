@@ -188,19 +188,37 @@ QList<cwLocalProjectionManager::Input> cwLocalProjectionManager::gatherFixInputs
 {
     QList<Input> inputs;
 
+    forEachFixStation([&inputs](cwCave*, const cwFixStation& fix) {
+        if (usableFixStation(fix)) {
+            inputs.append(inputOf(fix));
+        }
+    });
+
+    return inputs;
+}
+
+void cwLocalProjectionManager::forEachCave(
+        const std::function<bool(cwCave*)>& callback) const
+{
     for (cwCave* cave : m_region->caves()) {
         if (cave == nullptr) {
             continue;
         }
-        for (const cwFixStation& fix : cave->fixStations()->fixStations()) {
-            if (!usableFixStation(fix)) {
-                continue;
-            }
-            inputs.append(inputOf(fix));
+        if (!callback(cave)) {
+            return;
         }
     }
+}
 
-    return inputs;
+void cwLocalProjectionManager::forEachFixStation(
+        const std::function<void(cwCave*, const cwFixStation&)>& callback) const
+{
+    forEachCave([&callback](cwCave* cave) {
+        for (const cwFixStation& fix : cave->fixStations()->fixStations()) {
+            callback(cave, fix);
+        }
+        return true;
+    });
 }
 
 cwLocalProjectionManager::Input cwLocalProjectionManager::inputOf(const cwFixStation& fix)
@@ -208,7 +226,7 @@ cwLocalProjectionManager::Input cwLocalProjectionManager::inputOf(const cwFixSta
     return Input{
         cwGeoReference::Anchor{cwGeoReference::Anchor::FixStation, fix.id()},
         fix.inputCS().trimmed(),
-        cwGeoPoint(fix.easting(), fix.northing(), fix.elevation())
+        fix.position()
     };
 }
 
@@ -311,37 +329,46 @@ std::optional<cwGeoPoint> cwLocalProjectionManager::localPointOfFix(const cwFixS
     return localPointOf(inputOf(fix));
 }
 
+cwGeoReference* cwLocalProjectionManager::geoReference() const
+{
+    return m_region->geoReference();
+}
+
 cwRecenterCandidateModel* cwLocalProjectionManager::recenterCandidates()
 {
     if (m_recenterCandidates == nullptr) {
-        m_recenterCandidates = new cwRecenterCandidateModel(this, m_region);
+        m_recenterCandidates = new cwRecenterCandidateModel(this);
     }
     return m_recenterCandidates;
 }
 
-std::optional<cwFixStation> cwLocalProjectionManager::fixStationWithId(const QUuid& stationId) const
+std::optional<cwLocalProjectionManager::FoundFix>
+cwLocalProjectionManager::findFixStation(const QUuid& stationId) const
 {
-    for (cwCave* cave : m_region->caves()) {
-        if (cave == nullptr) {
-            continue;
+    std::optional<FoundFix> found;
+
+    forEachCave([&](cwCave* cave) {
+        cwFixStationModel* fixes = cave->fixStations();
+        const int row = fixes->indexOf(stationId);
+        if (row < 0) {
+            return true;
         }
-        for (const cwFixStation& fix : cave->fixStations()->fixStations()) {
-            if (fix.id() == stationId) {
-                return fix;
-            }
-        }
-    }
-    return std::nullopt;
+        found = FoundFix{cave, fixes->fixStationAt(row)};
+        return false;
+    });
+
+    return found;
 }
 
 bool cwLocalProjectionManager::recenterOnStation(const QUuid& stationId)
 {
-    const auto fix = fixStationWithId(stationId);
-    if (!fix.has_value()) {
+    const auto found = findFixStation(stationId);
+    if (!found.has_value()) {
         return false;
     }
+    const cwFixStation& fix = found->fix;
 
-    const auto local = localPointOfFix(*fix);
+    const auto local = localPointOfFix(fix);
     const auto center = dataCenter();
     if (!local.has_value() || !center.has_value()
             || !isWithinReach(*center, *local)) {
@@ -351,7 +378,7 @@ bool cwLocalProjectionManager::recenterOnStation(const QUuid& stationId)
         return false;
     }
 
-    return anchorTo(inputOf(*fix));
+    return anchorTo(inputOf(fix));
 }
 
 bool cwLocalProjectionManager::isCenteredOnDataCenter() const
@@ -529,19 +556,14 @@ QString cwLocalProjectionManager::resolveAnchorDescription() const
     switch (anchor.kind) {
     case cwGeoReference::Anchor::None:
         break;
-    case cwGeoReference::Anchor::FixStation:
-        for (cwCave* cave : m_region->caves()) {
-            if (cave == nullptr) {
-                continue;
-            }
-            const QList<cwFixStation>& fixes = cave->fixStations()->fixStations();
-            for (const cwFixStation& fix : fixes) {
-                if (fix.id() == anchor.id) {
-                    return QStringLiteral("%1 — %2").arg(fix.stationName(), cave->name());
-                }
-            }
+    case cwGeoReference::Anchor::FixStation: {
+        const auto found = findFixStation(anchor.id);
+        if (found.has_value()) {
+            return QStringLiteral("%1 — %2").arg(found->fix.stationName(),
+                                                 found->cave->name());
         }
         break;
+    }
     case cwGeoReference::Anchor::LazLayer:
         for (cwLazLayer* layer : m_region->lazLayers()->layers()) {
             if (layer != nullptr && layer->id() == anchor.id) {

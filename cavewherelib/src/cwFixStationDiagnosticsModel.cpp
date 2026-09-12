@@ -85,9 +85,7 @@ QStringList availableDatums(const cwFixStation& fix)
         const std::optional<cwGeoPoint> geographic =
             cwCoordinateTransform::transformPoint(fix.inputCS(),
                                                   cwCoordinateTransform::Wgs84,
-                                                  cwGeoPoint(fix.easting(),
-                                                             fix.northing(),
-                                                             fix.elevation()));
+                                                  fix.position());
         if (geographic.has_value()) {
             const QStringList plateFixed =
                 cwLocalProjection::plateFixedDatumsFor(geographic->y, geographic->x);

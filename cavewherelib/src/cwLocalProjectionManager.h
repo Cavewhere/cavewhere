@@ -15,12 +15,14 @@
 #include <QUuid>
 
 //Std includes
+#include <functional>
 #include <optional>
 
 //AsyncFuture
 #include <asyncfuture.h>
 
 //Our includes
+#include "cwFixStation.h"
 #include "cwGeoPoint.h"
 #include "cwGeoReference.h"
 #include "cwGlobals.h"
@@ -28,7 +30,6 @@
 
 class cwCave;
 class cwCavingRegion;
-class cwFixStation;
 class cwLazLayer;
 
 /**
@@ -123,6 +124,18 @@ public:
     //! PROJ transform a second time.
     bool isCenteredOnDataCenter(const std::optional<cwGeoPoint>& center) const;
 
+    //! The frame this class derives and the anchor it followed from, so a
+    //! reader asks the manager about the project's projection instead of
+    //! reaching past it to the region.
+    cwGeoReference* geoReference() const;
+
+    //! Every fix station the region holds, paired with the cave holding it, in
+    //! region order. The one walk of the hierarchy, so nothing that needs the
+    //! pair has to know how caves store their fixes or that a region's cave list
+    //! can carry empty entries.
+    void forEachFixStation(
+            const std::function<void(cwCave*, const cwFixStation&)>& callback) const;
+
     //! Where \a fix sits in the project's frame, or an empty result when the fix
     //! has no coordinate the frame can read. A station the frame can't place is
     //! not one the project can be centered on, so the two refusals are the same
@@ -203,9 +216,21 @@ private:
     //! doesn't transform every one of them a second time.
     std::optional<cwGeoPoint> centerOf(const QList<Input>& inputs) const;
 
-    //! The region's fix station carrying \a stationId, or an empty result when
-    //! the project no longer has it.
-    std::optional<cwFixStation> fixStationWithId(const QUuid& stationId) const;
+    //! A fix station found in the region, and the cave holding it — which is
+    //! half of what the anchor is called.
+    struct FoundFix {
+        cwCave* cave = nullptr;
+        cwFixStation fix;
+    };
+
+    //! Every cave the region holds, in region order, skipping the empty entries
+    //! the list can carry. \a callback returns whether to keep walking.
+    void forEachCave(const std::function<bool(cwCave*)>& callback) const;
+
+    //! The region's fix station carrying \a stationId, with its cave, or an
+    //! empty result when the project no longer has it. Each cave answers for
+    //! its own rows, so the id lookup is the model's.
+    std::optional<FoundFix> findFixStation(const QUuid& stationId) const;
 
     //! The two halves of gatherInputs(), in the order it concatenates them.
     //! The fix half stands on its own while headers are still arriving: it is

@@ -173,7 +173,7 @@ inline QString shareableCSForFix(const cwFixStation& fix)
     // could use either — and a geographic CS as *cs out fails the solve
     // outright, whatever it is spelled like.
     return cwCoordinateTransform::deriveProjectedOutputCS(
-        fix.inputCS(), cwGeoPoint(fix.easting(), fix.northing(), fix.elevation()));
+        fix.inputCS(), fix.position());
 }
 
 //! The first fix in \a fixes that yields a shareable CS, or empty when none

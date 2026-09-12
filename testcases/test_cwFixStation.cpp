@@ -496,3 +496,34 @@ TEST_CASE("cwFixStation equality compares all fields", "[FixStation][cwFixStatio
         CHECK(c != d);
     }
 }
+
+TEST_CASE("cwFixStation hands its three components out as one point",
+          "[FixStation][cwFixStation]") {
+    SECTION("a readable coordinate gives all three, in its own axis order") {
+        cwFixStation fix;
+        fix.setInputCS(kUtmZ11N);
+        fix.setCoordinate(QStringLiteral("610016.792, 5615117.075, 304m"));
+        REQUIRE(fix.state() == cwFixStation::Valid);
+
+        const cwGeoPoint position = fix.position();
+        CHECK(position.x == 610016.792);
+        CHECK(position.y == 5615117.075);
+        CHECK(position.z == 304.0);
+    }
+
+    SECTION("a geographic coordinate keeps longitude in x") {
+        cwFixStation fix;
+        fix.setInputCS(kWgs84);
+        fix.setCoordinate(QStringLiteral("46.12113, -115.59902, 304m"));
+
+        const cwGeoPoint position = fix.position();
+        CHECK(position.x == -115.59902);
+        CHECK(position.y == 46.12113);
+    }
+
+    SECTION("a fix with no coordinate is all zeros, like the components it reads") {
+        const cwFixStation fix;
+        REQUIRE(fix.state() == cwFixStation::Empty);
+        CHECK(fix.position() == cwGeoPoint(0.0, 0.0, 0.0));
+    }
+}
