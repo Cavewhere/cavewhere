@@ -6,87 +6,93 @@
 
 //Our includes
 #include "LoadProjectHelper.h"
-#include "cwSurvexExporterRule.h"
-#include "cwSurveyDataArtifact.h"
-#include "cwTemporaryFileNameArtifact.h"
-#include "asyncfuture.h"
+#include "cwSurvexExporter.h"
+#include "cwSurvexExporterRegion.h"
+#include "cwCavingRegion.h"
 #include "cwDistanceReading.h"
 #include "cwCompassReading.h"
 #include "cwClinoReading.h"
 
 //Qt includes
 #include <QBuffer>
+#include <QCoreApplication>
+#include <QDir>
 #include <QTextStream>
 
-TEST_CASE("cwSurvexExportRule should export a caving region correctly", "[cwSurvexExportRule]") {
+namespace {
+
+//! The trip written to a string, with the writer's errors checked as empty
+QString writeTripToString(const cwTripData& trip) {
+    QByteArray outputData;
+    QBuffer buffer(&outputData);
+    REQUIRE(buffer.open(QIODevice::WriteOnly));
+    QStringList errors;
+    {
+        QTextStream stream(&buffer);
+        cwSurvexExporter::writeTrip(stream, trip, errors);
+    }
+    buffer.close();
+    INFO(errors.join('\n').toStdString());
+    REQUIRE(errors.isEmpty());
+    return QString::fromUtf8(outputData);
+}
+
+} // namespace
+
+TEST_CASE("cwSurvexExporter should export a caving region correctly", "[cwSurvexExporter]") {
     // Load project and get the caving region
     auto project = fileToProject(testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
     auto cavingRegion = project->cavingRegion();
 
-    // Create a survey data artifact and set the region
-    cwSurveyDataArtifact surveyData;
-    surveyData.setRegion(cavingRegion);
+    //Concurrent test processes each need their own output file
+    const QString exportedPath = QDir::temp().filePath(
+        QStringLiteral("cwSurvexExporter-%1.svx").arg(QCoreApplication::applicationPid()));
 
-    // Use cwTemporaryFileNameArtifact to generate a temporary filename
-    cwTemporaryFileNameArtifact tempFileArtifact;
-    tempFileArtifact.setSuffix("cwSurvexExportRule.svx");
+    cwSurvexExporterRegion::Options options;
+    options.outputCSPolicy = cwSurvexExporterRegion::OutputCSPolicy::Shareable;
+    const auto result = cwSurvexExporterRegion::exportRegion(cavingRegion->data(), exportedPath, options);
+    INFO(result.errorMessage().toStdString());
+    REQUIRE_FALSE(result.hasError());
 
-    // Create the exporter and set the necessary inputs
-    cwSurvexExporterRule exporter;
-    exporter.setSurveyData(&surveyData);
-    exporter.setSurvexFileName(&tempFileArtifact);
+    INFO("Exported file:" << exportedPath.toStdString());
 
-    // Wait for the asynchronous export to complete (2000ms timeout)
-    auto future = exporter.survexFileArtifact()->filename();
-    CHECK(AsyncFuture::waitForFinished(future, 2000));
+    QFile exportedFile(exportedPath);
+    REQUIRE(exportedFile.open(QIODevice::ReadOnly));
+    const QByteArray exportedContent = exportedFile.readAll();
+    exportedFile.close();
+    QFile::remove(exportedPath);
 
-    INFO("TempFileArtifact:" << tempFileArtifact.filename().toStdString());
+    // Load expected content from the known expected file
+    QFile expectedFile(testcasesDatasetPath("test_cwSurvexExporter/PhakeCave3000_expected.svx"));
+    REQUIRE(expectedFile.exists());
+    REQUIRE(expectedFile.open(QIODevice::ReadOnly));
+    const QByteArray expectedContent = expectedFile.readAll();
+    expectedFile.close();
 
-    // Verify the exported file exists and has data
-    QFile exportedFile(tempFileArtifact.filename());
-    bool fileExists = exportedFile.exists();
-    REQUIRE(fileExists == true);
+    auto normalizedLines = [](const QByteArray& bytes) {
+        QString text = QString::fromUtf8(bytes);
+        text.replace("\r\n", "\n");
+        text.replace('\r', '\n');
+        return text.split('\n', Qt::KeepEmptyParts);
+    };
 
-    if (fileExists) {
-        bool openOk = exportedFile.open(QIODevice::ReadOnly);
-        REQUIRE(openOk == true);
-        QByteArray exportedContent = exportedFile.readAll();
-        exportedFile.close();
+    const auto exportedLines = normalizedLines(exportedContent);
+    const auto expectedLines = normalizedLines(expectedContent);
+    REQUIRE(exportedLines.size() == expectedLines.size());
 
-        // Load expected content from the known expected file
-        QFile expectedFile(testcasesDatasetPath("test_cwSurvexExporterRule/PhakeCave3000_expected.svx"));
-        bool expectedExists = expectedFile.exists();
-        REQUIRE(expectedExists == true);
-        bool expectedOpenOk = expectedFile.open(QIODevice::ReadOnly);
-        REQUIRE(expectedOpenOk == true);
-        QByteArray expectedContent = expectedFile.readAll();
-        expectedFile.close();
-
-        auto normalizedLines = [](const QByteArray& bytes) {
-            QString text = QString::fromUtf8(bytes);
-            text.replace("\r\n", "\n");
-            text.replace('\r', '\n');
-            return text.split('\n', Qt::KeepEmptyParts);
-        };
-
-        const auto exportedLines = normalizedLines(exportedContent);
-        const auto expectedLines = normalizedLines(expectedContent);
-        REQUIRE(exportedLines.size() == expectedLines.size());
-
-        for (int lineIndex = 0; lineIndex < exportedLines.size(); ++lineIndex) {
-            INFO("line " << (lineIndex + 1) << ": exported '" << exportedLines.at(lineIndex).toStdString()
-                 << "' vs expected '" << expectedLines.at(lineIndex).toStdString() << "'");
-            REQUIRE(exportedLines.at(lineIndex) == expectedLines.at(lineIndex));
-        }
+    for (int lineIndex = 0; lineIndex < exportedLines.size(); ++lineIndex) {
+        INFO("line " << (lineIndex + 1) << ": exported '" << exportedLines.at(lineIndex).toStdString()
+             << "' vs expected '" << expectedLines.at(lineIndex).toStdString() << "'");
+        REQUIRE(exportedLines.at(lineIndex) == expectedLines.at(lineIndex));
     }
 }
 
-TEST_CASE("cwSurvexExportRule writes UP/DOWN for vertical shots without azimuth", "[cwSurvexExportRule]") {
-    cwSurveyDataArtifact::Trip trip;
+TEST_CASE("cwSurvexExporter writes UP/DOWN for vertical shots without azimuth", "[cwSurvexExporter]") {
+    cwTripData trip;
     trip.name = QStringLiteral("VerticalTrip");
-    trip.calibration.setBackSights(false);
+    trip.calibrations.setBackSights(false);
 
-    cwSurveyDataArtifact::SurveyChunk chunk;
+    cwSurveyChunkData chunk;
     cwStation stationA;
     cwStation stationB;
     stationA.setName(QStringLiteral("a1"));
@@ -109,16 +115,8 @@ TEST_CASE("cwSurvexExportRule writes UP/DOWN for vertical shots without azimuth"
 
     trip.chunks.append(chunk);
 
-    QByteArray outputData;
-    QBuffer buffer(&outputData);
-    REQUIRE(buffer.open(QIODevice::WriteOnly));
-    QTextStream stream(&buffer);
-    auto result = cwSurvexExporterRule::writeTrip(stream, trip);
-    buffer.close();
+    const QString output = writeTripToString(trip);
 
-    REQUIRE(!result.hasError());
-
-    const QString output = QString::fromUtf8(outputData);
     QStringList dataLines;
     const QStringList lines = output.split('\n');
     for(const QString& line : lines) {
@@ -136,12 +134,12 @@ TEST_CASE("cwSurvexExportRule writes UP/DOWN for vertical shots without azimuth"
     CHECK(dataLines.at(1).contains("DOWN"));
 }
 
-TEST_CASE("cwSurvexExportRule writes UP/DOWN for vertical shots with azimuth", "[cwSurvexExportRule]") {
-    cwSurveyDataArtifact::Trip trip;
+TEST_CASE("cwSurvexExporter writes UP/DOWN for vertical shots with azimuth", "[cwSurvexExporter]") {
+    cwTripData trip;
     trip.name = QStringLiteral("VerticalTripWithAzimuth");
-    trip.calibration.setBackSights(false);
+    trip.calibrations.setBackSights(false);
 
-    cwSurveyDataArtifact::SurveyChunk chunk;
+    cwSurveyChunkData chunk;
     cwStation stationA;
     cwStation stationB;
     stationA.setName(QStringLiteral("a1"));
@@ -164,16 +162,8 @@ TEST_CASE("cwSurvexExportRule writes UP/DOWN for vertical shots with azimuth", "
 
     trip.chunks.append(chunk);
 
-    QByteArray outputData;
-    QBuffer buffer(&outputData);
-    REQUIRE(buffer.open(QIODevice::WriteOnly));
-    QTextStream stream(&buffer);
-    auto result = cwSurvexExporterRule::writeTrip(stream, trip);
-    buffer.close();
+    const QString output = writeTripToString(trip);
 
-    REQUIRE(!result.hasError());
-
-    const QString output = QString::fromUtf8(outputData);
     QStringList dataLines;
     const QStringList lines = output.split('\n');
     for(const QString& line : lines) {
@@ -195,15 +185,15 @@ TEST_CASE("cwSurvexExportRule writes UP/DOWN for vertical shots with azimuth", "
     CHECK(!dataLines.at(1).contains(" -90"));
 }
 
-TEST_CASE("cwSurvexExportRule equates LRUD-only carrier shots", "[cwSurvexExportRule]") {
+TEST_CASE("cwSurvexExporter equates LRUD-only carrier shots", "[cwSurvexExporter]") {
     // Compass records passage dimensions on a synthetic zero-length shot with
     // no compass/clino (e.g. "a1lrud a1 0 - - - -"). Survex can't parse that as
     // a leg, so it must be exported as "*equate a1lrud a1".
-    cwSurveyDataArtifact::Trip trip;
+    cwTripData trip;
     trip.name = QStringLiteral("LrudCarrierTrip");
-    trip.calibration.setBackSights(false);
+    trip.calibrations.setBackSights(false);
 
-    cwSurveyDataArtifact::SurveyChunk chunk;
+    cwSurveyChunkData chunk;
     cwStation carrier;
     cwStation real;
     carrier.setName(QStringLiteral("a1lrud"));
@@ -221,16 +211,7 @@ TEST_CASE("cwSurvexExportRule equates LRUD-only carrier shots", "[cwSurvexExport
 
     trip.chunks.append(chunk);
 
-    QByteArray outputData;
-    QBuffer buffer(&outputData);
-    REQUIRE(buffer.open(QIODevice::WriteOnly));
-    QTextStream stream(&buffer);
-    auto result = cwSurvexExporterRule::writeTrip(stream, trip);
-    buffer.close();
-
-    REQUIRE(!result.hasError());
-
-    const QString output = QString::fromUtf8(outputData);
+    const QString output = writeTripToString(trip);
     CHECK(output.contains(QStringLiteral("*equate a1lrud a1")));
 
     // The carrier must not appear as a normal data leg. It still legitimately
@@ -255,15 +236,15 @@ TEST_CASE("cwSurvexExportRule equates LRUD-only carrier shots", "[cwSurvexExport
     }
 }
 
-TEST_CASE("cwSurvexExportRule rewrites scientific-notation distances", "[cwSurvexExportRule]") {
+TEST_CASE("cwSurvexExporter rewrites scientific-notation distances", "[cwSurvexExporter]") {
     // Older imports could store a distance/LRUD string in scientific notation
     // (e.g. "1.1e+02"). Survex's parser rejects it, so the exporter must emit a
     // plain decimal.
-    cwSurveyDataArtifact::Trip trip;
+    cwTripData trip;
     trip.name = QStringLiteral("ScientificTrip");
-    trip.calibration.setBackSights(false);
+    trip.calibrations.setBackSights(false);
 
-    cwSurveyDataArtifact::SurveyChunk chunk;
+    cwSurveyChunkData chunk;
     cwStation stationA;
     cwStation stationB;
     stationA.setName(QStringLiteral("a1"));
@@ -280,16 +261,7 @@ TEST_CASE("cwSurvexExportRule rewrites scientific-notation distances", "[cwSurve
 
     trip.chunks.append(chunk);
 
-    QByteArray outputData;
-    QBuffer buffer(&outputData);
-    REQUIRE(buffer.open(QIODevice::WriteOnly));
-    QTextStream stream(&buffer);
-    auto result = cwSurvexExporterRule::writeTrip(stream, trip);
-    buffer.close();
-
-    REQUIRE(!result.hasError());
-
-    const QString output = QString::fromUtf8(outputData);
+    const QString output = writeTripToString(trip);
     CHECK_FALSE(output.contains(QStringLiteral("e+02")));
 
     // The distance must be rewritten as a plain decimal on the actual data leg,

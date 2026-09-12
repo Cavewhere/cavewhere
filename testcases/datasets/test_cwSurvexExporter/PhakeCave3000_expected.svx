@@ -3,6 +3,7 @@
 
 *fix a1 0 0 0
 *begin ; Release 0.08
+*title "Release 0.08"
 *date 2020.02.26
 
 *team "Philip Schuchardt"
@@ -49,6 +50,6 @@ a14         0           2           2           1.9
 
 *end
 
-*end ; End of Phake Cave 3000
+*end PhakeCave3000 ; End of Phake Cave 3000
 
 *end

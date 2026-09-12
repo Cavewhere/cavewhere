@@ -19,10 +19,9 @@
 #include "cwSurveyChunk.h"
 #include "cwExporterTask.h"
 #include "cwSurvexExporterCaveTask.h"
-#include "cwSurvexExporterRule.h"
+#include "cwSurvexExporterRegion.h"
 #include "cwSurvexExporterTripTask.h"
 #include "cwSurvexExporterUtils.h"
-#include "cwSurveyDataArtifact.h"
 #include "cwTrip.h"
 #include "cwTripCalibration.h"
 #include "cwGridConvergence.h"
@@ -30,7 +29,9 @@
 
 //Qt includes
 #include <QBuffer>
+#include <QCoreApplication>
 #include <QDateTime>
+#include <QDir>
 #include <QFile>
 #include <QTemporaryDir>
 #include <QTextStream>
@@ -102,30 +103,37 @@ BoulderFixture buildBoulderUtmFixture()
 // stay tied to what PROJ says rather than to a snapshot of it.
 double expectedConvergence(const cwCavingRegion& region)
 {
-    const cwSurveyDataArtifact::Region snapshot(&region);
+    const cwCavingRegionData regionData = region.data();
     const QString outputCS = cwSurvexExporterUtils::resolveOutputCS(
-        snapshot, QString(), cwSurvexExporterUtils::OutputCSPolicy::Shareable);
+        regionData, QString(), cwSurvexExporterUtils::OutputCSPolicy::Shareable);
     return cwSurvexExporterUtils::gridConvergenceForBlock(
-        cwSurvexExporterUtils::makeDeclinationContext(snapshot.caves.first().fixStations),
+        cwSurvexExporterUtils::makeDeclinationContext(regionData.caves.first().fixStations),
         outputCS);
 }
 
+//! The region exported the way the export menu does it, read back as text.
+//! Concurrent test processes each need their own output file.
 QString exportRegion(const cwCavingRegion* region)
 {
-    cwSurveyDataArtifact::Region snapshot(region);
-    QByteArray output;
-    QBuffer buffer(&output);
-    REQUIRE(buffer.open(QIODevice::WriteOnly));
-    {
-        QTextStream stream(&buffer);
-        cwSurvexCS::SidecarWriter sidecars;
-        cwSurvexExporterRule::writeRegion(stream, sidecars, snapshot);
-    }
-    return QString::fromUtf8(output);
+    const QString path = QDir::temp().filePath(
+        QStringLiteral("cwSurvexExporterAuto-%1.svx").arg(QCoreApplication::applicationPid()));
+
+    cwSurvexExporterRegion::Options options;
+    options.outputCSPolicy = cwSurvexExporterRegion::OutputCSPolicy::Shareable;
+    const auto result = cwSurvexExporterRegion::exportRegion(region->data(), path, options);
+    INFO(result.errorMessage().toStdString());
+    REQUIRE_FALSE(result.hasError());
+
+    QFile file(path);
+    REQUIRE(file.open(QIODevice::ReadOnly));
+    const QString text = QString::fromUtf8(file.readAll());
+    file.close();
+    QFile::remove(path);
+    return text;
 }
 
-// The other export stack: cwSurvexExporterCaveTask, which the line-plot driver
-// and the region exporter both run. Its output has to match the rule path's.
+// One cave on its own, through cwSurvexExporterCaveTask — the same task the
+// line-plot driver and the region exporter run.
 QString exportCaveViaTask(const cwCave* cave, const QString& globalCS)
 {
     cwSurvexExporterCaveTask task;
@@ -155,7 +163,7 @@ QString runExportTask(cwExporterTask* task, const QTemporaryDir& dir, const QStr
 
 } // namespace
 
-TEST_CASE("cwSurvexExporterRule: the cave block carries one *declination auto for every trip under it",
+TEST_CASE("Survex region export: the cave block carries one *declination auto for every trip under it",
           "[cwSurvexExporter_Auto]")
 {
     auto fixture = buildBoulderUtmFixture();
@@ -188,7 +196,7 @@ TEST_CASE("cwSurvexExporterRule: the cave block carries one *declination auto fo
     CHECK_FALSE(output.contains(QStringLiteral("99.00")));
 }
 
-TEST_CASE("cwSurvexExporterRule: *declination auto re-declares its *cs when a later fix changed the one in scope",
+TEST_CASE("Survex region export: *declination auto re-declares its *cs when a later fix changed the one in scope",
           "[cwSurvexExporter_Auto]")
 {
     auto fixture = buildBoulderUtmFixture();
@@ -216,7 +224,7 @@ TEST_CASE("cwSurvexExporterRule: *declination auto re-declares its *cs when a la
     CHECK(output.contains(QStringLiteral("*declination auto 478000.000000000 4430000.000000000 1655.000000000")));
 }
 
-TEST_CASE("cwSurvexExporterRule: autoDeclination off emits literal *calibrate DECLINATION and no auto command",
+TEST_CASE("Survex region export: autoDeclination off emits literal *calibrate DECLINATION and no auto command",
           "[cwSurvexExporter_Auto]")
 {
     auto fixture = buildBoulderUtmFixture();
@@ -245,7 +253,7 @@ TEST_CASE("cwSurvexExporterRule: autoDeclination off emits literal *calibrate DE
     CHECK(output.contains(QStringLiteral("grid convergence")));
 }
 
-TEST_CASE("cwSurvexExporterRule: a manual zero is spelled out when it has to override an inherited *declination auto",
+TEST_CASE("Survex region export: a manual zero is spelled out when it has to override an inherited *declination auto",
           "[cwSurvexExporter_Auto]")
 {
     auto fixture = buildBoulderUtmFixture();
@@ -273,7 +281,7 @@ TEST_CASE("cwSurvexExporterRule: a manual zero is spelled out when it has to ove
     CHECK(output.indexOf(expected) > output.indexOf(QStringLiteral("*declination auto")));
 }
 
-TEST_CASE("cwSurvexExporterRule: a manual zero stays implicit when there is no grid and nothing to override",
+TEST_CASE("Survex region export: a manual zero stays implicit when there is no grid and nothing to override",
           "[cwSurvexExporter_Auto]")
 {
     // Un-georeferenced, so there is no *cs out and no grid to converge to. Zero
@@ -291,7 +299,7 @@ TEST_CASE("cwSurvexExporterRule: a manual zero stays implicit when there is no g
     CHECK_FALSE(output.contains(QStringLiteral("*calibrate DECLINATION")));
 }
 
-TEST_CASE("cwSurvexExporterRule: a manual zero on a grid is written as the convergence",
+TEST_CASE("Survex region export: a manual zero on a grid is written as the convergence",
           "[cwSurvexExporter_Auto]")
 {
     // A manual zero says "my compass reads true north", not "leave my bearings
@@ -312,7 +320,7 @@ TEST_CASE("cwSurvexExporterRule: a manual zero on a grid is written as the conve
     CHECK(output.contains(QStringLiteral("grid convergence")));
 }
 
-TEST_CASE("cwSurvexExporterRule: each cave gets its own *declination auto",
+TEST_CASE("Survex region export: each cave gets its own *declination auto",
           "[cwSurvexExporter_Auto]")
 {
     auto fixture = buildBoulderUtmFixture();
@@ -349,7 +357,7 @@ TEST_CASE("cwSurvexExporterCaveTask: the cave block carries one *declination aut
     CHECK_FALSE(output.contains(QStringLiteral("*calibrate DECLINATION")));
 }
 
-TEST_CASE("cwSurvexExporterRule: autoDeclination on but no fix station falls back to literal",
+TEST_CASE("Survex region export: autoDeclination on but no fix station falls back to literal",
           "[cwSurvexExporter_Auto]")
 {
     BoulderFixture fixture = buildUnfixedFixture(QStringLiteral("UnfixedCave"),
@@ -378,7 +386,7 @@ TEST_CASE("cwSurvexExporterTripTask: writeTrip under an enclosing *declination a
     REQUIRE(buffer.open(QIODevice::WriteOnly));
     {
         QTextStream stream(&buffer);
-        exporter.writeTrip(stream, fixture.trip, /*autoDeclinationInScope*/ true);
+        exporter.writeTrip(stream, fixture.trip->data(), /*autoDeclinationInScope*/ true);
     }
 
     const QString output = QString::fromUtf8(outputData);
@@ -402,7 +410,7 @@ TEST_CASE("cwSurvexExporterTripTask: writeTrip with nothing in scope falls back 
         REQUIRE(buffer.open(QIODevice::WriteOnly));
         {
             QTextStream stream(&buffer);
-            exporter.writeTrip(stream, fixture.trip, /*autoDeclinationInScope*/ false);
+            exporter.writeTrip(stream, fixture.trip->data(), /*autoDeclinationInScope*/ false);
         }
         return QString::fromUtf8(outputData);
     };
@@ -420,12 +428,17 @@ TEST_CASE("cwSurvexExporterTripTask: writeTrip with nothing in scope falls back 
     SECTION("auto on still writes a literal, because nothing above it carries the location") {
         REQUIRE(fixture.calibration->autoDeclination() == true);
         REQUIRE(fixture.calibration->autoDeclinationAvailable() == true);
+        fixture.calibration->setDeclinationManual(4.0);
 
         const QString output = exportTrip();
         CHECK_FALSE(output.contains(QStringLiteral("*declination auto")));
-        // The resolved IGRF value, written out rather than left to survex —
-        // survex can't compute it without a location it was never given.
-        CHECK(output.contains(QStringLiteral("*calibrate DECLINATION")));
+        // The writer reads the trip snapshot, which carries the stored manual
+        // value and no location — so the literal is the manual one. Both
+        // exporters always fed it a snapshot detached from its cave, where the
+        // resolved declination falls back to the manual value anyway. The
+        // resolved IGRF value belongs to the *declination auto the enclosing
+        // block writes, which is the path a trip with a fix actually takes.
+        CHECK(output.contains(QStringLiteral("*calibrate DECLINATION -4.00")));
     }
 }
 

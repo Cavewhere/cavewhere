@@ -9,8 +9,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 //Cavewhere includes
-#include "cwSurvexExporterRule.h"
-#include "cwSurveyDataArtifact.h"
+#include "cwSurvexExporter.h"
 #include "cwSurvexImporter.h"
 #include "cwCave.h"
 #include "cwTrip.h"
@@ -44,11 +43,11 @@ TEST_CASE("Survex export/import round-trips an empty shot reading as Empty, not 
     //  - a1 -> a2: a normal, fully-populated shot (baseline)
     //  - a2 -> a3: a vertical shot with no compass. The exporter emits
     //    "a2 a3 5 - UP", i.e. a "-" placeholder for the empty compass.
-    cwSurveyDataArtifact::Trip trip;
+    cwTripData trip;
     trip.name = QStringLiteral("RoundTripDash");
-    trip.calibration.setBackSights(false);
+    trip.calibrations.setBackSights(false);
 
-    cwSurveyDataArtifact::SurveyChunk chunk;
+    cwSurveyChunkData chunk;
 
     cwStation stationA(QStringLiteral("a1"));
     cwStation stationB(QStringLiteral("a2"));
@@ -79,8 +78,9 @@ TEST_CASE("Survex export/import round-trips an empty shot reading as Empty, not 
         QFile file(path);
         REQUIRE(file.open(QIODevice::WriteOnly | QIODevice::Text));
         QTextStream stream(&file);
-        auto result = cwSurvexExporterRule::writeTrip(stream, trip);
-        REQUIRE_FALSE(result.hasError());
+        QStringList errors;
+        cwSurvexExporter::writeTrip(stream, trip, errors);
+        REQUIRE(errors.isEmpty());
     }
 
     QString exported;

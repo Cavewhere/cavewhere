@@ -78,7 +78,7 @@ QString exportTrip(cwTrip* trip, QStringList* errors = nullptr)
 
     QString output;
     QTextStream stream(&output);
-    exporter.writeTrip(stream, trip);
+    exporter.writeTrip(stream, trip->data());
     stream.flush();
 
     if(errors != nullptr) {

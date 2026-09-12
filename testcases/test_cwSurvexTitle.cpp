@@ -114,7 +114,7 @@ TEST_CASE("Survex exporter emits a *title line carrying the trip name", "[Survex
     QTextStream stream(&output);
 
     cwSurvexExporterTripTask exporter;
-    exporter.writeTrip(stream, &trip);
+    exporter.writeTrip(stream, trip.data());
 
     INFO("Exporter output:\n" << output.toStdString());
     CHECK(output.contains(QStringLiteral("*title \"Big Room Survey\"")));
@@ -139,7 +139,7 @@ TEST_CASE("Trip names with spaces survive a Survex export -> import round-trip",
     {
         QTextStream stream(&svxBody);
         cwSurvexExporterTripTask exporter;
-        exporter.writeTrip(stream, &trip);
+        exporter.writeTrip(stream, trip.data());
     }
 
     QTemporaryDir dir;
