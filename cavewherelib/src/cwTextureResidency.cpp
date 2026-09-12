@@ -1,6 +1,7 @@
 // Our includes
 #include "cwTextureResidency.h"
 #include "cwMipMath.h"
+#include "cwScreenSpace.h"
 
 // Qt includes
 #include <QVector2D>
@@ -9,22 +10,12 @@
 // Std includes
 #include <algorithm>
 #include <cmath>
-#include <limits>
 
 namespace {
 
     constexpr int kIndicesPerTriangle = 3;
 
-    //Keeps pixelsPerMeter finite for geometry that straddles or sits behind the eye
-    constexpr double kMinimumClipW = 1e-4;
-
     constexpr double kHalf = 0.5;
-
-    //Clip space spans [-1, 1] vertically, so a projected meter covers
-    //absP11 / kClipHeight of the viewport per unit w
-    constexpr double kClipHeight = 2.0;
-
-    constexpr int kBoxCornerCount = 8;
 
     double triangleArea2D(const QVector2D& a, const QVector2D& b, const QVector2D& c)
     {
@@ -37,35 +28,6 @@ namespace {
     double triangleArea3D(const QVector3D& a, const QVector3D& b, const QVector3D& c)
     {
         return kHalf * double(QVector3D::crossProduct(b - a, c - a).length());
-    }
-
-    /**
-     * The smallest positive clip-space w over the box's 8 corners, floored at
-     * kMinimumClipW.
-     */
-    double nearestClipW(const QBox3D& bounds, const QMatrix4x4& viewProjection)
-    {
-        const QVector3D minimum = bounds.minimum();
-        const QVector3D maximum = bounds.maximum();
-
-        double nearest = std::numeric_limits<double>::max();
-        for(int corner = 0; corner < kBoxCornerCount; corner++) {
-            const QVector3D point((corner & 1) != 0 ? maximum.x() : minimum.x(),
-                                  (corner & 2) != 0 ? maximum.y() : minimum.y(),
-                                  (corner & 4) != 0 ? maximum.z() : minimum.z());
-            const double w = double(viewProjection(3, 0)) * double(point.x())
-                             + double(viewProjection(3, 1)) * double(point.y())
-                             + double(viewProjection(3, 2)) * double(point.z())
-                             + double(viewProjection(3, 3));
-            if(w > 0.0) {
-                nearest = std::min(nearest, w);
-            }
-        }
-
-        if(nearest == std::numeric_limits<double>::max()) {
-            return kMinimumClipW;
-        }
-        return std::max(nearest, kMinimumClipW);
     }
 }
 
@@ -157,9 +119,9 @@ int desiredTopLevel(const SelectionInput& input)
         * std::sqrt(double(input.textureSize.width()) * double(input.textureSize.height()))
         / input.modelScale;
 
-    const double clipW = nearestClipW(input.worldBounds, input.viewProjection);
+    const double clipW = cw::sse::nearestClipW(input.worldBounds, input.viewProjection);
     const double pixelsPerMeter =
-        input.absP11 * double(input.viewportHeightPx) / (kClipHeight * clipW);
+        cw::sse::pixelsPerMeter(input.absP11, input.viewportHeightPx, clipW);
 
     const double texelsPerPixel = texelsPerMeter / pixelsPerMeter;
     const double levels =
