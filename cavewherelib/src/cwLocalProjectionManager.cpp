@@ -546,10 +546,15 @@ void cwLocalProjectionManager::evaluate()
 
 void cwLocalProjectionManager::updateAnchorDescription()
 {
-    m_region->geoReference()->setAnchorDescription(resolveAnchorDescription());
+    const QString description = anchorDescription();
+    if (m_lastAnchorDescription == description) {
+        return;
+    }
+    m_lastAnchorDescription = description;
+    emit anchorDescriptionChanged();
 }
 
-QString cwLocalProjectionManager::resolveAnchorDescription() const
+QString cwLocalProjectionManager::anchorDescription() const
 {
     const cwGeoReference::Anchor anchor = m_region->geoReference()->anchor();
 

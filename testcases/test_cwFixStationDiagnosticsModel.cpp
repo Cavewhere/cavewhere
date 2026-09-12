@@ -71,6 +71,10 @@ struct FixFixture {
     {
         return read(cwFixStationDiagnosticsModel::CoordinateOrderUnknownRole).toBool();
     }
+    bool datumEnabled() const
+    {
+        return read(cwFixStationDiagnosticsModel::DatumEnabledRole).toBool();
+    }
 
     //! Put text on the row that cwFixStationModel::setCoordinateText() would
     //! refuse. Only the load path produces such a row — a hand-edited project —
@@ -127,10 +131,11 @@ TEST_CASE("cwFixStationDiagnosticsModel merges the source's role names with its 
     CHECK(roles.value(cwFixStationDiagnosticsModel::CoordinateOrderUnknownRole)
           == "coordinateOrderUnknown");
     CHECK(roles.value(cwFixStationDiagnosticsModel::AvailableDatumsRole) == "availableDatums");
+    CHECK(roles.value(cwFixStationDiagnosticsModel::DatumEnabledRole) == "datumEnabled");
 
     // The two role blocks must not collide, or the merge would silently drop one
     // side: every name in the merged hash is still reachable by its own value.
-    CHECK(roles.size() == fixture.source->roleNames().size() + 7);
+    CHECK(roles.size() == fixture.source->roleNames().size() + 8);
 }
 
 TEST_CASE("cwFixStationDiagnosticsModel passes persisted rows through untouched",
@@ -415,6 +420,65 @@ TEST_CASE("cwFixStationDiagnosticsModel says why a coordinate can't be read",
 
         CHECK(fixture.coordinateError().contains(QStringLiteral("latitude and a longitude")));
         CHECK_FALSE(fixture.coordinateError().contains(QStringLiteral("easting")));
+    }
+}
+
+TEST_CASE("cwFixStationDiagnosticsModel says whether the row's datum may be changed",
+          "[FixStation][cwFixStationDiagnosticsModel]") {
+    // A datum says what a position is measured against, so the picker only lets
+    // the user choose one for a row that has a position. The three view sites
+    // that draw that picker used to work the rule out for themselves; the model
+    // owns it now, next to the roles it is made of.
+    FixFixture fixture;
+
+    SECTION("a row with no coordinate has nothing for a datum to describe") {
+        REQUIRE(fixture.source->fixStationAt(0).state() == cwFixStation::Empty);
+        CHECK_FALSE(fixture.datumEnabled());
+    }
+
+    SECTION("a row of whitespace is just as empty") {
+        fixture.edit(cwFixStationModel::InputCSRole, QStringLiteral("EPSG:32613"));
+        fixture.setStoredCoordinate(QStringLiteral("   "));
+
+        CHECK_FALSE(fixture.datumEnabled());
+    }
+
+    SECTION("a coordinate that can't be read is no position either") {
+        fixture.edit(cwFixStationModel::InputCSRole, QStringLiteral("EPSG:32613"));
+        fixture.setStoredCoordinate(QStringLiteral("1, 2, 3, 4"));
+        REQUIRE(fixture.source->fixStationAt(0).state() == cwFixStation::Unreadable);
+        REQUIRE_FALSE(fixture.coordinateError().isEmpty());
+
+        CHECK_FALSE(fixture.datumEnabled());
+    }
+
+    SECTION("nor is one with no system to read it under") {
+        fixture.edit(cwFixStationModel::InputCSRole, QString());
+        fixture.setStoredCoordinate(QStringLiteral("610016.792, 5615117.075, 304m"));
+        REQUIRE(fixture.source->fixStationAt(0).state() == cwFixStation::NoSystem);
+
+        CHECK_FALSE(fixture.datumEnabled());
+    }
+
+    SECTION("a readable coordinate unlocks the datum") {
+        fixture.edit(cwFixStationModel::InputCSRole, QStringLiteral("EPSG:32613"));
+        REQUIRE(fixture.source->setCoordinateText(0, QStringLiteral("478000, 4430000, 1655m"),
+                                                  cwUnits::Metric) == QString());
+        REQUIRE(fixture.source->fixStationAt(0).state() == cwFixStation::Valid);
+
+        CHECK(fixture.datumEnabled());
+    }
+
+    SECTION("the delegates are woken when a coordinate edit moves it") {
+        fixture.edit(cwFixStationModel::InputCSRole, QStringLiteral("EPSG:32613"));
+
+        QSignalSpy proxySpy(fixture.diagnostics, &QAbstractItemModel::dataChanged);
+
+        REQUIRE(fixture.source->setCoordinateText(0, QStringLiteral("478000, 4430000, 1655m"),
+                                                  cwUnits::Metric) == QString());
+
+        CHECK(rolesSeen(proxySpy).contains(cwFixStationDiagnosticsModel::DatumEnabledRole));
+        CHECK(fixture.datumEnabled());
     }
 }
 

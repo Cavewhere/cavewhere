@@ -70,6 +70,10 @@ class CAVEWHERE_LIB_EXPORT cwLocalProjectionManager : public QObject
     //! reads is the number isWithinReach() applies.
     Q_PROPERTY(double anchorThresholdMeters READ anchorThresholdMeters CONSTANT FINAL)
 
+    //! Who the frame is centered on, for the projection group box to print —
+    //! see anchorDescription().
+    Q_PROPERTY(QString anchorDescription READ anchorDescription NOTIFY anchorDescriptionChanged FINAL)
+
 public:
     //! How far an input may sit from the origin before the origin counts as
     //! meaningfully wrong. Scale error out here is ~30 ppm — still negligible —
@@ -81,6 +85,17 @@ public:
     ~cwLocalProjectionManager() override;
 
     double anchorThresholdMeters() const { return kAnchorThresholdMeters; }
+
+    //! What the frame is centered on, for a reader: "A42 — Roppel Cave" when the
+    //! anchor is a fix station, the layer's name when it is a GIS layer, and ""
+    //! when no anchor is answerable for the frame (Ungeoreferenced or Frozen).
+    //!
+    //! Resolved on every read rather than stored: the anchor is an id, and only
+    //! the caves and layers know what carries it, so this class is the only one
+    //! that can answer and there is nothing to gain by keeping a copy of the
+    //! answer anywhere else. It follows renames, which is why the signal fires
+    //! on a rename as well as on a move of the frame.
+    QString anchorDescription() const;
 
     //! The project's frame, as a future that finishes once the frame has
     //! stopped moving — settled is exactly "this future is finished", and its
@@ -161,6 +176,11 @@ public:
     //! evaluate() against the restored frame.
     void setLoading(bool loading);
 
+signals:
+    //! Who the frame is centered on now reads differently — either the frame
+    //! moved, or whatever carries the anchor was renamed or went away.
+    void anchorDescriptionChanged();
+
 private:
     //! One candidate to anchor on: what would identify it, where it is, and the
     //! system that says so.
@@ -192,6 +212,11 @@ private:
 
     //! Whether a project load is replacing the region's data — see setLoading().
     bool m_loading = false;
+
+    //! anchorDescription() as it last read, so the signal reports a change
+    //! rather than an opportunity for one. Bookkeeping for the notification
+    //! only: every read still resolves against the region.
+    QString m_lastAnchorDescription;
 
     //! The epoch currently being settled, if the frame is still being derived.
     //! Held only while frameFuture() has been asked for during an open epoch,
@@ -242,17 +267,12 @@ private:
     //! if the last thing it was waiting on has landed.
     void evaluate();
 
-    //! Re-resolve who the frame is centered on and publish it on the
-    //! cwGeoReference. Separate from evaluate() because a rename changes the
-    //! answer without changing a single thing the state machine reads — running
-    //! the machine for one would be work at best and a re-derive at worst.
+    //! Announce that anchorDescription() may read differently, emitting only
+    //! when it actually does. Separate from evaluate() because a rename changes
+    //! the answer without changing a single thing the state machine reads —
+    //! running the machine for one would be work at best and a re-derive at
+    //! worst.
     void updateAnchorDescription();
-
-    //! The anchor's id spelled back out as a name, by finding whatever currently
-    //! carries it. Empty when nothing does, which covers both "no anchor" and
-    //! "the input holding it has just gone" — the evaluate that settles the
-    //! second case runs this again.
-    QString resolveAnchorDescription() const;
 
     //! The state machine itself. Split from evaluate() so that every path out
     //! of it — including the early returns — goes through the settle.

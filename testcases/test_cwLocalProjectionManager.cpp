@@ -883,7 +883,8 @@ TEST_CASE("The manager names what the frame is centered on",
           "[cwLocalProjectionManager][cwAnchorDescription]")
 {
     cwCavingRegion region;
-    CHECK(region.geoReference()->anchorDescription().isEmpty());
+    auto* localProjection = region.localProjection();
+    CHECK(localProjection->anchorDescription().isEmpty());
 
     const cwFixStation fix = makeFix(QStringLiteral("A42"), kUtm12N,
                                      kAnchorEasting, kAnchorNorthing, kElevation);
@@ -891,30 +892,30 @@ TEST_CASE("The manager names what the frame is centered on",
     cave->setName(QStringLiteral("Roppel Cave"));
 
     REQUIRE(region.geoReference()->state() == cwGeoReference::Anchored);
-    CHECK(region.geoReference()->anchorDescription() == QStringLiteral("A42 — Roppel Cave"));
+    CHECK(localProjection->anchorDescription() == QStringLiteral("A42 — Roppel Cave"));
 
     SECTION("renaming the cave moves the description") {
-        QSignalSpy spy(region.geoReference(), &cwGeoReference::anchorDescriptionChanged);
+        QSignalSpy spy(localProjection, &cwLocalProjectionManager::anchorDescriptionChanged);
 
         cave->setName(QStringLiteral("Hidden River Cave"));
 
         CHECK(spy.count() == 1);
-        CHECK(region.geoReference()->anchorDescription() == QStringLiteral("A42 — Hidden River Cave"));
+        CHECK(localProjection->anchorDescription() == QStringLiteral("A42 — Hidden River Cave"));
     }
 
     SECTION("renaming the station moves the description") {
-        QSignalSpy spy(region.geoReference(), &cwGeoReference::anchorDescriptionChanged);
+        QSignalSpy spy(localProjection, &cwLocalProjectionManager::anchorDescriptionChanged);
 
         cwFixStation renamed = fix;
         renamed.setStationName(QStringLiteral("A43"));
         cave->fixStations()->setFixStations({renamed});
 
         CHECK(spy.count() == 1);
-        CHECK(region.geoReference()->anchorDescription() == QStringLiteral("A43 — Roppel Cave"));
+        CHECK(localProjection->anchorDescription() == QStringLiteral("A43 — Roppel Cave"));
     }
 
     SECTION("a frame with no anchor left names nothing") {
-        QSignalSpy spy(region.geoReference(), &cwGeoReference::anchorDescriptionChanged);
+        QSignalSpy spy(localProjection, &cwLocalProjectionManager::anchorDescriptionChanged);
 
         // The anchor was the only georeferenced input, so deleting it takes the
         // frame with it — and there is nothing left the description could name.
@@ -922,7 +923,7 @@ TEST_CASE("The manager names what the frame is centered on",
 
         REQUIRE(region.geoReference()->state() == cwGeoReference::Ungeoreferenced);
         CHECK(spy.count() >= 1);
-        CHECK(region.geoReference()->anchorDescription().isEmpty());
+        CHECK(localProjection->anchorDescription().isEmpty());
     }
 }
 
@@ -943,34 +944,35 @@ TEST_CASE("Recentering renames what the frame is centered on",
     cave->setName(QStringLiteral("Roppel Cave"));
 
     auto* geoReference = region.geoReference();
-    REQUIRE(geoReference->anchorDescription() == QStringLiteral("A1 — Roppel Cave"));
+    auto* localProjection = region.localProjection();
+    REQUIRE(localProjection->anchorDescription() == QStringLiteral("A1 — Roppel Cave"));
 
     SECTION("a picked station is the one named") {
-        QSignalSpy spy(geoReference, &cwGeoReference::anchorDescriptionChanged);
+        QSignalSpy spy(localProjection, &cwLocalProjectionManager::anchorDescriptionChanged);
 
-        REQUIRE(region.localProjection()->recenterOnStation(surveyed.id()));
+        REQUIRE(localProjection->recenterOnStation(surveyed.id()));
 
         CHECK(spy.count() == 1);
-        CHECK(geoReference->anchorDescription() == QStringLiteral("B1 — Roppel Cave"));
+        CHECK(localProjection->anchorDescription() == QStringLiteral("B1 — Roppel Cave"));
     }
 
     SECTION("the data's middle is no station, so it names nothing") {
-        QSignalSpy spy(geoReference, &cwGeoReference::anchorDescriptionChanged);
+        QSignalSpy spy(localProjection, &cwLocalProjectionManager::anchorDescriptionChanged);
 
-        REQUIRE(region.localProjection()->recenterOnDataCenter());
+        REQUIRE(localProjection->recenterOnDataCenter());
 
         REQUIRE(geoReference->state() == cwGeoReference::Frozen);
         CHECK(spy.count() == 1);
-        CHECK(geoReference->anchorDescription().isEmpty());
+        CHECK(localProjection->anchorDescription().isEmpty());
     }
 
     SECTION("a refused recentering leaves the description alone") {
-        QSignalSpy spy(geoReference, &cwGeoReference::anchorDescriptionChanged);
+        QSignalSpy spy(localProjection, &cwLocalProjectionManager::anchorDescriptionChanged);
 
-        CHECK_FALSE(region.localProjection()->recenterOnStation(QUuid::createUuid()));
+        CHECK_FALSE(localProjection->recenterOnStation(QUuid::createUuid()));
 
         CHECK(spy.count() == 0);
-        CHECK(geoReference->anchorDescription() == QStringLiteral("A1 — Roppel Cave"));
+        CHECK(localProjection->anchorDescription() == QStringLiteral("A1 — Roppel Cave"));
     }
 }
 
@@ -998,7 +1000,8 @@ TEST_CASE("The region walk reaches past the first cave",
     second->setName(QStringLiteral("Hidden River Cave"));
 
     auto* geoReference = region.geoReference();
-    REQUIRE(geoReference->anchorDescription() == QStringLiteral("A1 — Roppel Cave"));
+    auto* localProjection = region.localProjection();
+    REQUIRE(localProjection->anchorDescription() == QStringLiteral("A1 — Roppel Cave"));
 
     SECTION("the picker offers the stations of every cave") {
         auto* candidates = openedCandidates(&region);
@@ -1012,9 +1015,9 @@ TEST_CASE("The region walk reaches past the first cave",
     }
 
     SECTION("a station in the last cave is the one recentered on and named") {
-        REQUIRE(region.localProjection()->recenterOnStation(nearby.id()));
+        REQUIRE(localProjection->recenterOnStation(nearby.id()));
 
-        CHECK(geoReference->anchorDescription() == QStringLiteral("B1 — Hidden River Cave"));
+        CHECK(localProjection->anchorDescription() == QStringLiteral("B1 — Hidden River Cave"));
         checkCenteredOn(geoReference->localCoordinateSystem(), kUtm12N,
                         kNearbyEasting, kNearbyNorthing);
     }
@@ -1022,7 +1025,7 @@ TEST_CASE("The region walk reaches past the first cave",
     SECTION("both caves' fixes place the project") {
         // gatherInputs() walks the same hierarchy: the middle of the project is
         // between the two entrances, not on the first one.
-        const auto center = region.localProjection()->dataCenter();
+        const auto center = localProjection->dataCenter();
         REQUIRE(center.has_value());
         constexpr double kHalfway = 50.0;
         // Loose enough for the frame's own scale factor: the two entrances are

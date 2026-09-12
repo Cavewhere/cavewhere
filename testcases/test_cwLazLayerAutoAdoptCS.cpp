@@ -17,6 +17,7 @@
 #include "cwLazLayer.h"
 #include "cwLazLayerModel.h"
 #include "cwLocalProjection.h"
+#include "cwLocalProjectionManager.h"
 #include "cwProject.h"
 #include "cwRootData.h"
 
@@ -165,22 +166,24 @@ TEST_CASE("The region names the GIS layer the frame is centered on",
     cwLazLayer* layer = region->lazLayers()->layerAt(0);
     REQUIRE(layer != nullptr);
 
+    auto* localProjection = region->localProjection();
+
     // The layer's own name, with no cave to qualify it.
-    CHECK(region->geoReference()->anchorDescription() == layer->name());
+    CHECK(localProjection->anchorDescription() == layer->name());
 
     SECTION("the description follows a layer rename") {
-        QSignalSpy spy(region->geoReference(), &cwGeoReference::anchorDescriptionChanged);
+        QSignalSpy spy(localProjection, &cwLocalProjectionManager::anchorDescriptionChanged);
 
         REQUIRE(region->lazLayers()->rename(0, QStringLiteral("blue-spring-entrance")));
 
         CHECK(spy.size() == 1);
-        CHECK(region->geoReference()->anchorDescription() == QStringLiteral("blue-spring-entrance"));
-        CHECK(region->geoReference()->anchorDescription() == layer->name());
+        CHECK(localProjection->anchorDescription() == QStringLiteral("blue-spring-entrance"));
+        CHECK(localProjection->anchorDescription() == layer->name());
     }
 
     SECTION("removing the layer leaves nothing to name") {
         region->lazLayers()->removeAt(0);
 
-        CHECK(region->geoReference()->anchorDescription().isEmpty());
+        CHECK(localProjection->anchorDescription().isEmpty());
     }
 }

@@ -127,6 +127,27 @@ public:
                               DatumSource datumSource = DatumSource::DataInput);
 
     /**
+     * What a frame says about itself: the datum it is on and where it is
+     * centered, read out of one PROJ resolution rather than two.
+     *
+     * Both members carry exactly what datumName() and origin() answer for the
+     * same string, including their empty answers — a CS PROJ can't read
+     * describes as an empty name and no origin.
+     */
+    struct Description {
+        QString datumName;
+        std::optional<cwGeoPoint> origin;
+    };
+
+    /**
+     * \a cs resolved once and asked both questions. datumName() and origin()
+     * each build a PROJ context, a CRS and its geodetic base to answer one of
+     * them; whoever wants both — every frame move does — should pay for that
+     * once.
+     */
+    static Description describe(const QString& cs);
+
+    /**
      * The name of the datum \a cs is on, as PROJ spells it for a reader —
      * "North American Datum 1983", not "+datum=NAD83". A compound CRS answers
      * for its horizontal half, and a datum ensemble answers with the datum it

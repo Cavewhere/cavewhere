@@ -378,12 +378,7 @@ StandardPage {
             required property bool coordinateOrderUnknown
             required property string stationError
             required property list<string> availableDatums
-
-            //! Whether the datum may be changed: there has to be a coordinate
-            //! for a datum to say anything about, and it has to read as one.
-            readonly property bool hasReadableCoordinate:
-                wideDelegateId.coordinateText.trim() !== ""
-                && wideDelegateId.coordinateError === ""
+            required property bool datumEnabled
 
             // The two coordinate complaints can't both speak: the domain check
             // judges a coordinate the row has, and this one says there isn't one
@@ -436,7 +431,7 @@ StandardPage {
                     coordinateText: wideDelegateId.coordinateText
                     orderUnknown: wideDelegateId.coordinateOrderUnknown
                     availableDatums: wideDelegateId.availableDatums
-                    datumEnabled: wideDelegateId.hasReadableCoordinate
+                    datumEnabled: wideDelegateId.datumEnabled
                 }
 
                 WideCell {
@@ -519,11 +514,7 @@ StandardPage {
             required property bool coordinateOrderUnknown
             required property string stationError
             required property list<string> availableDatums
-
-            //! See the wide delegate.
-            readonly property bool hasReadableCoordinate:
-                narrowDelegateId.coordinateText.trim() !== ""
-                && narrowDelegateId.coordinateError === ""
+            required property bool datumEnabled
 
             //! Mutually exclusive with the domain error — see the wide delegate.
             readonly property string coordinateWarning: narrowDelegateId.coordinateError !== ""
@@ -587,7 +578,7 @@ StandardPage {
                     objectName: "inputCSComboBox." + narrowDelegateId.index
                     value: narrowDelegateId.inputCS
                     availableDatums: narrowDelegateId.availableDatums
-                    datumEnabled: narrowDelegateId.hasReadableCoordinate
+                    datumEnabled: narrowDelegateId.datumEnabled
                     onCommitted: (newCS) => fixStationPage.commitCS(
                         narrowDelegateId.index, newCS,
                         narrowDelegateId.coordinateOrderUnknown,

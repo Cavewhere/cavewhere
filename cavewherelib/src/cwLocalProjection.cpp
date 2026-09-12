@@ -236,6 +236,27 @@ namespace {
         return GeodeticFrame{std::move(context), std::move(horizontal), std::move(base)};
     }
 
+    //! Where \a frame's own (0, 0) lands, in degrees and x-first — see
+    //! origin(), whose whole promise this is.
+    std::optional<cwGeoPoint> originOf(const GeodeticFrame& frame)
+    {
+        PjPtr toGeographic = toGeographicTransform(frame.context.get(), frame.horizontal.get(),
+                                                   frame.base.get());
+        if (!toGeographic) {
+            return std::nullopt;
+        }
+
+        const PJ_COORD center = proj_coord(kFalseOrigin, kFalseOrigin, 0.0, 0.0);
+        const PJ_COORD geographic = proj_trans(toGeographic.get(), PJ_FWD, center);
+
+        // proj_trans reports failure as HUGE_VAL.
+        if (!std::isfinite(geographic.xy.x) || !std::isfinite(geographic.xy.y)) {
+            return std::nullopt;
+        }
+
+        return cwGeoPoint(geographic.xy.x, geographic.xy.y, 0.0);
+    }
+
     /**
      * How PROJ names the datum \a base is on, for a reader.
      *
@@ -435,6 +456,17 @@ QString cwLocalProjection::deriveFrom(const QString& anchorCS, const cwGeoPoint&
     return derive(geographic.xy.y, geographic.xy.x, cs, datumSource);
 }
 
+cwLocalProjection::Description cwLocalProjection::describe(const QString& cs)
+{
+    std::optional<GeodeticFrame> frame = resolveGeodeticFrame(cs);
+    if (!frame) {
+        return {};
+    }
+
+    return Description{forcedDatumName(frame->context.get(), frame->base.get()),
+                       originOf(*frame)};
+}
+
 QString cwLocalProjection::datumName(const QString& cs)
 {
     std::optional<GeodeticFrame> frame = resolveGeodeticFrame(cs);
@@ -452,21 +484,7 @@ std::optional<cwGeoPoint> cwLocalProjection::origin(const QString& localCS)
         return std::nullopt;
     }
 
-    PjPtr toGeographic = toGeographicTransform(frame->context.get(), frame->horizontal.get(),
-                                               frame->base.get());
-    if (!toGeographic) {
-        return std::nullopt;
-    }
-
-    const PJ_COORD center = proj_coord(kFalseOrigin, kFalseOrigin, 0.0, 0.0);
-    const PJ_COORD geographic = proj_trans(toGeographic.get(), PJ_FWD, center);
-
-    // proj_trans reports failure as HUGE_VAL.
-    if (!std::isfinite(geographic.xy.x) || !std::isfinite(geographic.xy.y)) {
-        return std::nullopt;
-    }
-
-    return cwGeoPoint(geographic.xy.x, geographic.xy.y, 0.0);
+    return originOf(*frame);
 }
 
 QStringList cwLocalProjection::plateFixedDatumsFor(double latitude, double longitude)
