@@ -152,7 +152,7 @@ TEST_CASE("A steep leg out at the frame's edge keeps its bearing and foreshorten
 TEST_CASE("The survey network shares the lookup's frame",
           "[cwSurvex3DFileReaderPrecision]") {
     // cwLinePlotTask publishes the reader's network region-wide (it drives
-    // cwSurvey2DGeometryRule and cwCaptureCenterline) while the lookup drives
+    // cwSurvey2DGeometryBuilder and cwCaptureCenterline) while the lookup drives
     // the scraps and the centerline geometry. One pass over the .3d fills both,
     // so they can never disagree about where a station is.
 

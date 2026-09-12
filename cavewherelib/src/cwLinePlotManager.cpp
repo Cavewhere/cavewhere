@@ -29,7 +29,7 @@
 #include "cwSurveyChunkSignaler.h"
 #include "cwErrorModel.h"
 #include "cwErrorListModel.h"
-#include "cwSurveyNetworkArtifact.h"
+#include "cwSurveyNetworkSource.h"
 #include "cwFixStationModel.h"
 #include "cwKeywordItem.h"
 #include "cwKeywordItemModel.h"
@@ -106,8 +106,7 @@ cwLinePlotManager::cwLinePlotManager(QObject *parent) :
     Region = nullptr;
     m_linePlot = nullptr;
 
-    m_surveyNetworkArtifact = new cwSurveyNetworkArtifact(this);
-    m_surveyNetworkArtifact->setName(QStringLiteral("LinePlotManager Survey Network"));
+    m_surveyNetworkSource = new cwSurveyNetworkSource(this);
 
     // Single watcher for both in-project attachment-dir dependencies and
     // live-link source-side dependencies. fileChanged hands the event off
@@ -737,7 +736,7 @@ void cwLinePlotManager::updateLinePlot(cwLinePlotTask::LinePlotResultData result
     const cwSurveyNetwork newNetwork = results.regionNetwork();
     if (newNetwork != m_lastPublishedNetwork) {
         m_lastPublishedNetwork = newNetwork;
-        m_surveyNetworkArtifact->setSurveyNetwork(
+        m_surveyNetworkSource->setSurveyNetwork(
             QtFuture::makeReadyValueFuture(Monad::Result<cwSurveyNetwork>(newNetwork)));
     }
 

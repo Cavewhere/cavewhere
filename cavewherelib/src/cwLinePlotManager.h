@@ -26,7 +26,7 @@ class cwLinePlotTripVisibility;
 #include "cwLinePlotTask.h"
 #include "cwLocalSettings.h"
 #include "cwSurveyNetwork.h"
-#include "cwSurveyNetworkArtifact.h"
+#include "cwSurveyNetworkSource.h"
 #include "cwGlobals.h"
 #include "cwFutureManagerToken.h"
 #include "cwUpdatable.h"
@@ -53,7 +53,7 @@ class CAVEWHERE_LIB_EXPORT cwLinePlotManager : public QObject, public cwUpdatabl
     Q_OBJECT
     QML_NAMED_ELEMENT(LinePlotManager)
 
-    Q_PROPERTY(cwSurveyNetworkArtifact* surveyNetworkArtifact READ surveyNetworkArtifact CONSTANT)
+    Q_PROPERTY(cwSurveyNetworkSource* surveyNetworkSource READ surveyNetworkSource CONSTANT)
     Q_PROPERTY(bool hasSolveError READ hasSolveError NOTIFY cavernOutputChanged FINAL)
     Q_PROPERTY(QString solveErrorMessage READ solveErrorMessage NOTIFY cavernOutputChanged FINAL)
     Q_PROPERTY(QString cavernLog READ cavernLog NOTIFY cavernOutputChanged FINAL)
@@ -117,11 +117,11 @@ public:
     // plan. Empty when no live-link attachment is configured.
     QList<QUuid> missingSourceOwners() const { return m_missingSourceOwners; }
 
-    // Region-wide survey network artifact, updated whenever the line-plot
+    // Region-wide survey network source, updated whenever the line-plot
     // pipeline completes. Shared across every consumer (sketches today; future
     // 2D views). Always non-null after construction; its future may be
     // unstarted until the first line plot finishes.
-    cwSurveyNetworkArtifact* surveyNetworkArtifact() const { return m_surveyNetworkArtifact; }
+    cwSurveyNetworkSource* surveyNetworkSource() const { return m_surveyNetworkSource; }
 
     void waitToFinish();
 
@@ -160,7 +160,7 @@ private:
 
     cwSurveyChunkSignaler* SurveySignaler;
 
-    cwSurveyNetworkArtifact* m_surveyNetworkArtifact;
+    cwSurveyNetworkSource* m_surveyNetworkSource;
     cwSurveyNetwork m_lastPublishedNetwork;
 
     std::optional<cwLinePlotTask::SolveError> m_lastSolveError;

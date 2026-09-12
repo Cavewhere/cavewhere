@@ -13,10 +13,9 @@
 #include <QQuaternion>
 
 //Our includes
-#include "cwSurvey2DGeometryRule.h"
-#include "cwSurveyNetworkArtifact.h"
-#include "cwMatrix4x4Artifact.h"
-#include "cwSurvey2DGeometryArtifact.h"
+#include "cwSurvey2DGeometryBuilder.h"
+#include "cwSurveyNetworkSource.h"
+#include "cwSurvey2DGeometrySource.h"
 #include "Monad/Result.h"
 #include "cwSurveyNetwork.h"
 #include "asyncfuture.h"
@@ -25,15 +24,13 @@
 #include "LoadProjectHelper.h"
 #include "cwLinePlotManager.h"
 #include "cwFutureManagerModel.h"
-#include "asyncfuture.h"
 
 
-TEST_CASE("cwSurvey2DGeometryRule: simple network yields non-empty 2D geometry", "[Survey2DGeometryRule]")
+TEST_CASE("cwSurvey2DGeometryBuilder: simple network yields non-empty 2D geometry", "[Survey2DGeometryBuilder]")
 {
-    // 1) Instantiate rule + artifacts
-    cwSurvey2DGeometryRule rule;
-    auto surveyNetworkArtifact = new cwSurveyNetworkArtifact(&rule);
-    auto matrixArtifact        = new cwMatrix4x4Artifact(&rule);
+    // 1) Instantiate the builder and its network source
+    cwSurvey2DGeometryBuilder builder;
+    auto surveyNetworkSource = new cwSurveyNetworkSource(&builder);
 
     // 2) Build a minimal network: one shot A→B, with positions
     cwSurveyNetwork surveyNetwork;
@@ -41,27 +38,24 @@ TEST_CASE("cwSurvey2DGeometryRule: simple network yields non-empty 2D geometry",
     surveyNetwork.setPosition("A", QVector3D(0.0f, 0.5f, 0.0f));
     surveyNetwork.setPosition("B", QVector3D(1.0f, 2.0f, 0.0f));
 
-    surveyNetworkArtifact->setSurveyNetwork(QtFuture::makeReadyValueFuture(Monad::Result(surveyNetwork)));
+    surveyNetworkSource->setSurveyNetwork(QtFuture::makeReadyValueFuture(Monad::Result(surveyNetwork)));
 
-    // 3) Use identity view matrix
-    matrixArtifact->setMatrix4x4(QMatrix4x4());
-
-    // 5) Spy on the geometry‐changed signal
-    auto survey2DGeometryArtifact = rule.survey2DGeometry();
+    // 3) Spy on the geometry-changed signal. The builder's default view matrix
+    // is the identity, which is what this case wants.
+    auto survey2DGeometrySource = builder.survey2DGeometry();
     QSignalSpy geometryChangedSpy(
-        survey2DGeometryArtifact,
-        &cwSurvey2DGeometryArtifact::geometryResultChanged
+        survey2DGeometrySource,
+        &cwSurvey2DGeometrySource::geometryResultChanged
         );
 
-    // 4) Wire them into the rule
-    rule.setSurveyNetwork(surveyNetworkArtifact);
-    rule.setViewMatrix(matrixArtifact);
+    // 4) Wire the network into the builder
+    builder.setSurveyNetwork(surveyNetworkSource);
 
-    // 7) Expect exactly one notification
+    // 5) Expect exactly one notification
     REQUIRE(geometryChangedSpy.count() == 1);
 
-    // 8) Retrieve and verify the computed geometry
-    auto geometryFuture = survey2DGeometryArtifact->geometryResult();
+    // 6) Retrieve and verify the computed geometry
+    auto geometryFuture = survey2DGeometrySource->geometryResult();
     REQUIRE(AsyncFuture::waitForFinished(geometryFuture, 2000));
 
     auto geometryResult = geometryFuture.result();
@@ -71,14 +65,14 @@ TEST_CASE("cwSurvey2DGeometryRule: simple network yields non-empty 2D geometry",
     CHECK(!geometryValue.shotLines.isEmpty());
     CHECK(!geometryValue.stations.isEmpty());
 
-    // 8) There should be exactly one shot line
+    // 7) There should be exactly one shot line
     REQUIRE(geometryValue.shotLines.size() == 1);
     auto line = geometryValue.shotLines.first();
     bool forward  = (line.p1() == QPointF(0.0, 0.5) && line.p2() == QPointF(1.0, 2.0));
     bool backward = (line.p1() == QPointF(1.0, 2.0) && line.p2() == QPointF(0.0, 0.5));
     REQUIRE((forward || backward) == true);
 
-    // 9) Stations vector must contain exactly two entries: A @ (0,0) and B @ (1,0)
+    // 8) Stations vector must contain exactly two entries: A @ (0,0) and B @ (1,0)
     REQUIRE(geometryValue.stations.size() == 2);
 
     auto itA = std::find_if(
@@ -98,22 +92,20 @@ TEST_CASE("cwSurvey2DGeometryRule: simple network yields non-empty 2D geometry",
     CHECK(itB->position == QPointF(1.0, 2.0));
 }
 
-TEST_CASE("SVG export test", "[Survey2DGeometryRule]") {
+TEST_CASE("SVG export test", "[Survey2DGeometryBuilder]") {
     auto project = fileToProject(testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
     auto cavingRegion = project->cavingRegion();
 
     // Source the survey network from the line-plot pipeline (which reads the
     // .3d file produced by cavern and hands us a complete region-wide
-    // cwSurveyNetwork). This replaces the old cwSurveyNetworkBuilderRule
-    // path — see commit 5 of the sketch feature plan.
+    // cwSurveyNetwork).
     cwFutureManagerModel futureManager;
     cwLinePlotManager linePlotManager;
     linePlotManager.setFutureManagerToken(futureManager.token());
     linePlotManager.setRegion(cavingRegion);
     linePlotManager.waitToFinish();
 
-    cwSurvey2DGeometryRule rule;
-    auto matrixArtifact = new cwMatrix4x4Artifact(&rule);
+    cwSurvey2DGeometryBuilder builder;
 
     double pitch = 0.0;
     double azimuth = 90.0;
@@ -130,12 +122,11 @@ TEST_CASE("SVG export test", "[Survey2DGeometryRule]") {
 
     QMatrix4x4 matrix;
     matrix.rotate(rotationDifferance);
-    matrixArtifact->setMatrix4x4(matrix);
+    builder.setViewMatrix(matrix);
 
-    rule.setSurveyNetwork(linePlotManager.surveyNetworkArtifact());
-    rule.setViewMatrix(matrixArtifact);
+    builder.setSurveyNetwork(linePlotManager.surveyNetworkSource());
 
-    auto geometryFuture = rule.survey2DGeometry()->geometryResult();
+    auto geometryFuture = builder.survey2DGeometry()->geometryResult();
     REQUIRE(AsyncFuture::waitForFinished(geometryFuture, 2000));
 
     REQUIRE(!geometryFuture.result().hasError());
@@ -161,7 +152,7 @@ TEST_CASE("SVG export test", "[Survey2DGeometryRule]") {
     double height = maxY - minY;
 
     // 4) Set up an SVG generator that writes to ~/Desktop/test.svg
-    auto svgPath = QDir::tempPath() + QStringLiteral("/Survey2DGeometryRule-test-%1.svg").arg(QCoreApplication::applicationPid());
+    auto svgPath = QDir::tempPath() + QStringLiteral("/Survey2DGeometryBuilder-test-%1.svg").arg(QCoreApplication::applicationPid());
     QSvgGenerator generator;
     generator.setFileName(svgPath);
     generator.setSize(QSize(width, height));
@@ -173,7 +164,7 @@ TEST_CASE("SVG export test", "[Survey2DGeometryRule]") {
     QRectF viewBox(QPointF(0.0, 0.0), QPointF(maxX, maxY));
     generator.setViewBox(viewBox);
     generator.setTitle("Cave Survey 2D Geometry");
-    generator.setDescription("Auto‑generated SVG from cwSurvey2DGeometryRule");
+    generator.setDescription("Auto‑generated SVG from cwSurvey2DGeometryBuilder");
 
     // 5) Paint the lines and station markers into the SVG
     QPainter painter(&generator);

@@ -18,7 +18,7 @@
 #include "cwAbstractSketchPainterPathModel.h"
 #include "cwGridTextModel.h"
 #include "cwScale.h"
-#include "cwSurvey2DGeometryArtifact.h"
+#include "cwSurvey2DGeometrySource.h"
 #include "CaveWhereLibExport.h"
 
 class CAVEWHERE_LIB_EXPORT cwCenterlineSketchPainterModel : public cwAbstractSketchPainterPathModel
@@ -26,7 +26,7 @@ class CAVEWHERE_LIB_EXPORT cwCenterlineSketchPainterModel : public cwAbstractSke
     Q_OBJECT
     QML_NAMED_ELEMENT(CenterlineSketchPainterModel)
 
-    Q_PROPERTY(cwSurvey2DGeometryArtifact* survey2DGeometry READ survey2DGeometry WRITE setSurvey2DGeometry NOTIFY survey2DGeometryChanged)
+    Q_PROPERTY(cwSurvey2DGeometrySource* survey2DGeometry READ survey2DGeometry WRITE setSurvey2DGeometry NOTIFY survey2DGeometryChanged)
     // Map scale (e.g. 1:250) used to size station markers + labels in
     // paper-millimetres. Symbols stay the same size on paper across
     // different map scales. Positions and shot-line widths are in world
@@ -40,8 +40,8 @@ class CAVEWHERE_LIB_EXPORT cwCenterlineSketchPainterModel : public cwAbstractSke
 public:
     explicit cwCenterlineSketchPainterModel(QObject *parent = nullptr);
 
-    cwSurvey2DGeometryArtifact *survey2DGeometry() const { return m_geometryArtifact; }
-    void setSurvey2DGeometry(cwSurvey2DGeometryArtifact *geometry);
+    cwSurvey2DGeometrySource *survey2DGeometry() const { return m_geometrySource; }
+    void setSurvey2DGeometry(cwSurvey2DGeometrySource *geometry);
 
     cwScale *mapScale() const { return m_mapScale; }
     void setMapScale(cwScale *scale);
@@ -76,7 +76,7 @@ private slots:
 private:
     void scheduleColorUpdate();
 
-    QPointer<cwSurvey2DGeometryArtifact> m_geometryArtifact;
+    QPointer<cwSurvey2DGeometrySource> m_geometrySource;
     QPointer<cwScale> m_mapScale;
     QVector<Path> m_paths;
     QVector<cwGridTextModel::TextRow> m_textRows;
