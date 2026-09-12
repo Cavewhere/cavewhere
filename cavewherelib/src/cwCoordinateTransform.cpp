@@ -7,6 +7,7 @@
 
 #include "cwCoordinateTransform.h"
 #include "cwCoordinateTransformPrivate.h"
+#include "cwDatumCatalog.h"
 
 //Qt includes
 #include <QHash>
@@ -31,67 +32,20 @@ namespace {
     //! each and needs no eviction order.
     constexpr int kCsCacheLimit = 256;
 
+    using cwDatumCatalog::Datum;
+    using cwDatumCatalog::kDatums;
+    using cwDatumCatalog::kNoUtmSeries;
+
     bool sameCS(const QString& a, const QString& b)
     {
         return a.trimmed().compare(b.trimmed(), Qt::CaseInsensitive) == 0;
     }
 
-    /**
-     * A geodetic datum CaveWhere can spell a coordinate on, with the UTM series
-     * belonging to it. `regionName` is the part of the world the datum serves,
-     * which is how the picker sorts one short acronym from another.
-     * `utmNorthBase`/`utmSouthBase` are the EPSG code a zone
-     * number is added to; kNoUtmSeries means the datum has no series on that
-     * hemisphere. `utmZoneMin`/`utmZoneMax` bound the zones the series covers,
-     * because most series run only across the datum's own part of the world and
-     * the codes past the end belong to something else entirely.
-     */
-    struct GeographicDatum {
-        const char* geographicCode;
-        const char* displayName;
-        const char* regionName;
-        int utmNorthBase;
-        int utmSouthBase;
-        int utmZoneMin;
-        int utmZoneMax;
-    };
-
-    constexpr int kNoUtmSeries = 0;
-
-    /**
-     * WGS84 first, then the eight datums cwLocalProjection's kPlateFixedRegions
-     * can adopt, so a fix can be typed on the same datum the frame and the lidar
-     * tiles hold still against.
-     *
-     * A static table rather than a proj.db query, for two reasons. Curation:
-     * proj.db knows thousands of datums, and this table states which ones
-     * CaveWhere offers, what to call them, and which UTM series the picker
-     * exposes — a product decision proj.db can't answer. Cost: parseCS runs in
-     * QML binding paths per fix-station row, and the table keeps it at pure
-     * string and integer matching. Every code here is checked against the
-     * bundled proj.db by test_cwCoordinateTransform's datum table cases — that
-     * test is what makes the numbers trustworthy, so a row that disagrees with
-     * proj.db is a wrong row, never a wrong test.
-     *
-     * NAD83(CSRS) ships lat/long only: its UTM zones are scattered across three
-     * unrelated EPSG blocks, so no base plus zone reaches them.
-     */
-    constexpr GeographicDatum kGeographicDatums[] = {
-        { "EPSG:4326", "WGS84",           "World (GPS)",          32600,        32700,  1, 60 },
-        { "EPSG:6318", "NAD83(2011)",     "North America (USA)",   6329, kNoUtmSeries,  1, 19 },
-        { "EPSG:4617", "NAD83(CSRS)",     "Canada",         kNoUtmSeries, kNoUtmSeries,  0,  0 },
-        { "EPSG:6365", "Mexico ITRF2008", "Mexico",                6355, kNoUtmSeries, 11, 16 },
-        { "EPSG:4258", "ETRS89",          "Europe",               25800, kNoUtmSeries, 28, 38 },
-        { "EPSG:6668", "JGD2011",         "Japan",                 6637, kNoUtmSeries, 51, 55 },
-        { "EPSG:7844", "GDA2020",         "Australia",      kNoUtmSeries,         7800, 46, 59 },
-        { "EPSG:4167", "NZGD2000",        "New Zealand",    kNoUtmSeries,         2075, 58, 60 },
-    };
-
     //! The row \a datumCode names, or nullptr.
-    const GeographicDatum* datumRow(const QString& datumCode)
+    const Datum* datumRow(const QString& datumCode)
     {
         const QString key = datumCode.trimmed();
-        for (const GeographicDatum& datum : kGeographicDatums) {
+        for (const Datum& datum : kDatums) {
             if (key.compare(QLatin1StringView(datum.geographicCode), Qt::CaseInsensitive) == 0) {
                 return &datum;
             }
@@ -100,13 +54,13 @@ namespace {
     }
 
     //! The base \a datum adds a zone to on the given hemisphere, or kNoUtmSeries.
-    int utmSeriesBase(const GeographicDatum& datum, bool north)
+    int utmSeriesBase(const Datum& datum, bool north)
     {
         return north ? datum.utmNorthBase : datum.utmSouthBase;
     }
 
     //! Whether \a datum's series reaches \a zone on the given hemisphere.
-    bool hasUtmZone(const GeographicDatum& datum, int zone, bool north)
+    bool hasUtmZone(const Datum& datum, int zone, bool north)
     {
         return utmSeriesBase(datum, north) != kNoUtmSeries
             && zone >= datum.utmZoneMin
@@ -702,7 +656,7 @@ namespace {
             return r;
         }
 
-        if (const GeographicDatum* datum = datumRow(trimmed)) {
+        if (const Datum* datum = datumRow(trimmed)) {
             r.mode = cwCoordinateSystem::LatLon;
             r.datumCode = QString::fromLatin1(datum->geographicCode);
             return r;
@@ -712,7 +666,7 @@ namespace {
             bool ok = false;
             const int code = trimmed.mid(kEpsgPrefix.size()).toInt(&ok);
             if (ok) {
-                for (const GeographicDatum& datum : kGeographicDatums) {
+                for (const Datum& datum : kDatums) {
                     for (const bool north : {true, false}) {
                         const int zone = code - utmSeriesBase(datum, north);
                         if (hasUtmZone(datum, zone, north)) {
@@ -839,7 +793,7 @@ QString cwCoordinateSystem::utmZoneToEpsg(int zone, bool north)
 
 QString cwCoordinateSystem::utmZoneToEpsg(int zone, bool north, const QString& datumCode)
 {
-    const GeographicDatum* datum = datumRow(datumCode);
+    const Datum* datum = datumRow(datumCode);
     if (!datum || !hasUtmZone(*datum, zone, north)) {
         return QString();
     }
@@ -848,15 +802,15 @@ QString cwCoordinateSystem::utmZoneToEpsg(int zone, bool north, const QString& d
 
 QString cwCoordinateSystem::latLonCS(const QString& datumCode)
 {
-    const GeographicDatum* datum = datumRow(datumCode);
+    const Datum* datum = datumRow(datumCode);
     return datum ? QString::fromLatin1(datum->geographicCode) : QString();
 }
 
 QStringList cwCoordinateSystem::datumList()
 {
     QStringList codes;
-    codes.reserve(std::size(kGeographicDatums));
-    for (const GeographicDatum& datum : kGeographicDatums) {
+    codes.reserve(std::size(kDatums));
+    for (const Datum& datum : kDatums) {
         codes.append(QString::fromLatin1(datum.geographicCode));
     }
     return codes;
@@ -865,7 +819,7 @@ QStringList cwCoordinateSystem::datumList()
 QStringList cwCoordinateSystem::utmDatumList(int zone, bool north)
 {
     QStringList codes;
-    for (const GeographicDatum& datum : kGeographicDatums) {
+    for (const Datum& datum : kDatums) {
         if (hasUtmZone(datum, zone, north)) {
             codes.append(QString::fromLatin1(datum.geographicCode));
         }
@@ -931,13 +885,13 @@ QString cwCoordinateSystem::recommendedDatum(const QStringList& available, const
 
 QString cwCoordinateSystem::datumDisplayName(const QString& datumCode)
 {
-    const GeographicDatum* datum = datumRow(datumCode);
+    const Datum* datum = datumRow(datumCode);
     return datum ? QString::fromLatin1(datum->displayName) : QString();
 }
 
 QString cwCoordinateSystem::datumRegionName(const QString& datumCode)
 {
-    const GeographicDatum* datum = datumRow(datumCode);
+    const Datum* datum = datumRow(datumCode);
     return datum ? QString::fromLatin1(datum->regionName) : QString();
 }
 

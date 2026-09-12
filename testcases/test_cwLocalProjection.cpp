@@ -12,10 +12,12 @@
 
 //Our includes
 #include "cwCoordinateTransform.h"
+#include "cwDatumCatalog.h"
 #include "cwGeoPoint.h"
 #include "cwLocalProjection.h"
 
 //Qt includes
+#include <QSet>
 #include <QString>
 #include <QStringList>
 
@@ -626,5 +628,35 @@ TEST_CASE("cwLocalProjection::plateFixedDatumsFor answers with every frame that 
         REQUIRE_FALSE(ldp.isEmpty());
         CHECK_THAT(datumNameOf(ldp), ContainsSubstring(kNad83_2011DatumName));
         CHECK(datums.first() == QStringLiteral("EPSG:6318"));
+    }
+}
+
+TEST_CASE("Every plate-fixed datum is one the coordinate system picker can name",
+          "[cwLocalProjection]")
+{
+    const QStringList datumList = cwCoordinateSystem::datumList();
+    QSet<QString> offeredAnywhere;
+
+    for (const cwDatumCatalog::Datum& datum : cwDatumCatalog::kDatums) {
+        for (const cwDatumCatalog::Region& region : datum.regions) {
+            const double latitude = (region.minLatitude + region.maxLatitude) / 2.0;
+            const double longitude = (region.minLongitude + region.maxLongitude) / 2.0;
+            const QStringList offered =
+                cwLocalProjection::plateFixedDatumsFor(latitude, longitude);
+            REQUIRE_FALSE(offered.isEmpty());
+            for (const QString& code : offered) {
+                INFO(code.toStdString());
+                CHECK_FALSE(cwCoordinateSystem::datumDisplayName(code).isEmpty());
+                CHECK(datumList.contains(code));
+            }
+            offeredAnywhere.unite(QSet<QString>(offered.begin(), offered.end()));
+        }
+    }
+
+    for (const QString& code : datumList) {
+        if (code != cwCoordinateTransform::Wgs84) {
+            INFO(code.toStdString());
+            CHECK(offeredAnywhere.contains(code));
+        }
     }
 }

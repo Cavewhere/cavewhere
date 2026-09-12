@@ -7,12 +7,14 @@
 
 #include "cwLocalProjection.h"
 #include "cwCoordinateTransformPrivate.h"
+#include "cwDatumCatalog.h"
 
 //PROJ includes — building a CRS rather than transforming through one is still
 //in PROJ's experimental C API, which lives in its own header.
 #include <proj_experimental.h>
 
 //Std includes
+#include <algorithm>
 #include <cmath>
 #include <memory>
 #include <optional>
@@ -37,62 +39,6 @@ namespace {
 
     constexpr double kMaxLatitude = 90.0;
     constexpr double kMaxLongitude = 180.0;
-
-    //! One part of the world and the plate-fixed geodetic CRS customary there.
-    //! The box is coarse on purpose: it decides a datum, and neighboring national
-    //! frames agree to within centimeters along the borders they share.
-    struct PlateFixedRegion {
-        double minLatitude;
-        double maxLatitude;
-        double minLongitude;
-        double maxLongitude;
-        const char* coordinateSystem;
-    };
-
-    /**
-     * Where each national plate-fixed frame applies, first match winning.
-     *
-     * These frames are tied to their own plate, so a cave keeps the coordinates
-     * it was surveyed on; WGS84 is tied to the whole Earth and slides under North
-     * America by about 2 cm a year.
-     *
-     * The United States comes first, so the strips it shares with Canada and
-     * Mexico resolve to NAD83(2011) — the two answers there differ by a few
-     * centimeters, and a box drawn along the real border would still be a guess
-     * about which side of it a cave is on. Alaska takes two rows so that its
-     * main box stops at the 141st meridian, the border it shares with the
-     * Yukon, and the panhandle is the strip east of it: one box out to -129
-     * would reach Whitehorse and most of the Yukon, which is inland Canada
-     * rather than a shared border.
-     *
-     * Europe takes four rows because ETRS89 is tied to the stable part of the
-     * Eurasian plate and stops where Europe does: the boxes are drawn to leave
-     * out North Africa (Morocco reaches 35.9N, Algeria 37.1N and Tunisia 37.4N)
-     * and Anatolia, which are on plates of their own and have national frames
-     * of their own. The southern Spanish coast and the Aegean islands fall
-     * outside them and keep WGS84, which is the modest answer rather than a
-     * wrong one.
-     *
-     * These frames get replaced on decade scales (NAD83 → NATRF2022 is coming).
-     * A changed entry only reaches frames derived after it changed, because a
-     * stored frame is never re-derived.
-     */
-    constexpr PlateFixedRegion kPlateFixedRegions[] = {
-        {  24.5,  49.5, -125.0,  -66.5, "EPSG:6318" },  // Conterminous US, NAD83(2011)
-        {  51.0,  72.0, -173.0, -141.0, "EPSG:6318" },  // Alaska west of the Yukon border
-        {  54.5,  60.5, -141.0, -129.5, "EPSG:6318" },  // The Alaskan panhandle
-        {  18.0,  23.0, -161.0, -154.0, "EPSG:6318" },  // Hawaii
-        {  17.5,  18.6,  -68.0,  -64.5, "EPSG:6318" },  // Puerto Rico and the Virgin Islands
-        {  41.5,  84.0, -141.0,  -52.0, "EPSG:4617" },  // Canada, NAD83(CSRS)
-        {  14.0,  33.0, -118.0,  -86.0, "EPSG:6365" },  // Mexico ITRF2008
-        {  36.0,  72.0,  -12.0,   -1.0, "EPSG:4258" },  // Iberia and the British Isles, ETRS89
-        {  37.5,  72.0,   -1.0,   12.0, "EPSG:4258" },  // France to western Italy and Scandinavia
-        {  34.0,  42.0,   12.0,   26.0, "EPSG:4258" },  // Sicily, the Adriatic and Greece
-        {  42.0,  72.0,   12.0,   40.0, "EPSG:4258" },  // Central and eastern Europe
-        {  24.0,  46.0,  122.0,  154.0, "EPSG:6668" },  // Japan, JGD2011
-        { -44.0,  -9.0,  112.0,  154.0, "EPSG:7844" },  // Australia, GDA2020
-        { -48.0, -33.0,  166.0,  179.0, "EPSG:4167" },  // New Zealand, NZGD2000
-    };
 
     //! The plate-fixed geodetic CRS customary where (\a latitude, \a longitude)
     //! is, or "" where no entry covers it — the caller then keeps WGS84. A frame
@@ -489,18 +435,17 @@ std::optional<cwGeoPoint> cwLocalProjection::origin(const QString& localCS)
 
 QStringList cwLocalProjection::plateFixedDatumsFor(double latitude, double longitude)
 {
-    QStringList datums;
-    for (const PlateFixedRegion& region : kPlateFixedRegions) {
-        const bool contains = latitude >= region.minLatitude && latitude <= region.maxLatitude
+    const auto contains = [latitude, longitude](const cwDatumCatalog::Region& region) {
+        return latitude >= region.minLatitude && latitude <= region.maxLatitude
             && longitude >= region.minLongitude && longitude <= region.maxLongitude;
-        if (!contains) {
-            continue;
-        }
-        const QString datum = QString::fromLatin1(region.coordinateSystem);
-        // One datum spans several boxes (the US takes five), and a point can
-        // fall in two of them, so the same answer must reach the caller once.
-        if (!datums.contains(datum)) {
-            datums.append(datum);
+    };
+
+    // One datum spans several boxes (the US takes five), and a point can fall in
+    // two of them; one append per datum row keeps each answer to once.
+    QStringList datums;
+    for (const cwDatumCatalog::Datum& datum : cwDatumCatalog::kDatums) {
+        if (std::ranges::any_of(datum.regions, contains)) {
+            datums.append(QString::fromLatin1(datum.geographicCode));
         }
     }
     return datums;
