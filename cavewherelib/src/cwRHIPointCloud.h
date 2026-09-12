@@ -11,6 +11,7 @@
 // Our includes
 #include "cwAppearanceSlotted.h"
 #include "cwDiskCacher.h"
+#include "cwPointOctreePickSet.h"
 #include "cwPointOctreeSelection.h"
 #include "cwPointOctreeSource.h"
 #include "cwRHIObject.h"
@@ -18,6 +19,9 @@
 #include "cwRenderPointCloud.h"
 #include "cwRhiFrameRenderer.h"
 #include "cwTileStreamer.h"
+
+// Std includes
+#include <memory>
 
 // Qt includes
 #include <QByteArray>
@@ -41,7 +45,10 @@ class cwRHIPointCloud : public cwRHIObject, public cwAppearanceSlotted
     friend struct CwRhiPointCloudTestAccess;
 
 public:
-    cwRHIPointCloud();
+    //! @a pickSet is the cloud's pick provider, shared with the
+    //! cwRenderPointCloud that registered it. Publishing into it after that
+    //! object is gone is harmless — the set simply has no reader left.
+    explicit cwRHIPointCloud(std::shared_ptr<cwPointOctreePickSet> pickSet);
     ~cwRHIPointCloud() override;
 
     void initialize(const ResourceUpdateData& data) override;
@@ -125,7 +132,7 @@ private:
 
     // Throws away the whole node table and everything it holds, for a source
     // that no longer describes the same octree.
-    void resetNodes();
+    void resetNodes(const cwPointOctreeSource& source);
 
     // Frees one resident node: its buffer, its constants slot, and its mirror.
     void releaseNode(int index);
@@ -151,6 +158,10 @@ private:
     // A free constants slot, evicting resident nodes worth @a incomingBytes to
     // make one when the stack is empty. -1 when nothing could be freed.
     int takeConstantSlot(qint64 incomingBytes);
+
+    // Hands the pick set the nodes that are resident now. Called once per frame
+    // at most, from the places residency changes.
+    void publishPickSet();
 
     QVector<cw::octree::NodeResidency> residencyStats() const;
     void enforceGpuBudget(const cwRenderBudgets& budgets);
@@ -192,6 +203,12 @@ private:
     QRhiShaderResourceBindings* m_srb = nullptr;
 
     cwPointOctreeSource m_source;
+
+    // What picking reads. Set from the render object at construction; the
+    // render thread republishes it whenever residency moves, which
+    // m_residencyChanged coalesces to one publish per frame.
+    std::shared_ptr<cwPointOctreePickSet> m_pickSet;
+    bool m_residencyChanged = false;
 
     // Parallel to m_source.manifest->nodes.
     QVector<NodeRecord> m_nodes;

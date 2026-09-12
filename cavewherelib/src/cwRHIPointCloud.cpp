@@ -51,10 +51,11 @@ namespace {
     constexpr int kRootIndex = 0;
 }
 
-cwRHIPointCloud::cwRHIPointCloud() :
+cwRHIPointCloud::cwRHIPointCloud(std::shared_ptr<cwPointOctreePickSet> pickSet) :
     m_streamer(&cwRHIPointCloud::loadNode,
                [](const cwPointOctreeNodeSource& source, int) { return source.byteSize; },
-               cwRenderMemoryLedger::Category::PointCloudGeometry)
+               cwRenderMemoryLedger::Category::PointCloudGeometry),
+    m_pickSet(std::move(pickSet))
 {
 }
 
@@ -63,6 +64,10 @@ cwRHIPointCloud::~cwRHIPointCloud()
     // The only place cancelAll() is allowed: it blocks until the loads in
     // flight finish, and nothing may land on a table that is going away.
     m_streamer.cancelAll();
+
+    // Nothing draws once this object is gone, so nothing may be picked either
+    // — and the set would otherwise keep an implicit share of every mirror.
+    m_pickSet->publish({}, QBox3D(), 0.0f);
 
     for (const NodeRecord& node : std::as_const(m_nodes)) {
         delete node.buffer;
@@ -128,18 +133,27 @@ void cwRHIPointCloud::synchronize(const SynchronizeData& data)
         return;
     }
 
-    m_source = source;
-    resetNodes();
+    resetNodes(source);
 }
 
-void cwRHIPointCloud::resetNodes()
+void cwRHIPointCloud::resetNodes(const cwPointOctreeSource& source)
 {
+    // Release under the outgoing source: m_nodes is parallel to its manifest,
+    // and the empty pick set that release publishes has to describe the cloud
+    // being dropped, not the one arriving.
     releaseStreamedResources();
+
+    m_source = source;
 
     m_nodes.clear();
     if (m_source.manifest) {
         m_nodes.resize(m_source.manifest->nodes.size());
     }
+
+    // The new octree's root bounds are what frames a reset view, so they are
+    // published before a single node has landed.
+    m_residencyChanged = true;
+    publishPickSet();
 }
 
 void cwRHIPointCloud::releaseNode(int index)
@@ -163,6 +177,7 @@ void cwRHIPointCloud::releaseNode(int index)
 
     node.state = NodeState::Absent;
     node.exportRequested = false;
+    m_residencyChanged = true;
 }
 
 bool cwRHIPointCloud::isRequested(int index) const
@@ -349,6 +364,8 @@ bool cwRHIPointCloud::streamResources(ResourceUpdateData& data, qint64& remainin
 
     enforceGpuBudget(data.renderData.budgets);
 
+    publishPickSet();
+
     return !m_readyQueue.isEmpty() || m_streamer.hasWork();
 }
 
@@ -391,6 +408,7 @@ bool cwRHIPointCloud::uploadNode(QRhi* rhi, QRhiResourceUpdateBatch* batch, int 
     m_gpuBytes.setBytes(m_gpuBytes.bytes() + bytes.size());
     m_mirrorBytes.setBytes(m_mirrorBytes.bytes() + bytes.size());
 
+    m_residencyChanged = true;
     return true;
 }
 
@@ -411,6 +429,35 @@ int cwRHIPointCloud::takeConstantSlot(qint64 incomingBytes)
     const int slot = m_freeSlots.last();
     m_freeSlots.removeLast();
     return slot;
+}
+
+void cwRHIPointCloud::publishPickSet()
+{
+    if (!m_residencyChanged) {
+        return;
+    }
+    m_residencyChanged = false;
+
+    QVector<cwPointOctreePickSet::Node> nodes;
+    QBox3D rootBounds;
+    float pickRadius = 0.0f;
+
+    if (m_source.manifest) {
+        rootBounds = m_source.manifest->nodeBounds(kRootIndex);
+        pickRadius = m_source.manifest->meanSpacingXY
+                     * cwRenderPointCloud::PointPickRadiusScale;
+
+        for (int i = 0; i < m_nodes.size(); i++) {
+            if (m_nodes.at(i).state != NodeState::Resident) {
+                continue;
+            }
+
+            // The very bytes the node uploaded — an implicit share, not a copy.
+            nodes.append({m_source.manifest->nodeBounds(i), m_nodes.at(i).bytes});
+        }
+    }
+
+    m_pickSet->publish(std::move(nodes), rootBounds, pickRadius);
 }
 
 QVector<cw::octree::NodeResidency> cwRHIPointCloud::residencyStats() const
@@ -533,6 +580,10 @@ void cwRHIPointCloud::releaseStreamedResources()
             releaseNode(i);
         }
     }
+
+    // The set holds an implicit share of every mirror it was published, so it
+    // has to let go here too, or a hidden view's bytes would outlive the nodes.
+    publishPickSet();
 
     // The view that left is gone; whatever brings it back starts from the root.
     m_sseInflation = 1.0;

@@ -14,18 +14,27 @@
 // Qt includes
 #include <QDebug>
 
+namespace {
+    //! One cloud, one pickable — the pick set covers every node it has.
+    constexpr uint64_t kPickSubId = 0;
+}
+
 cwRenderPointCloud::cwRenderPointCloud(QObject* parent) :
     cwRenderObject(parent)
 {
-    // A streamed cloud has no whole-cloud geometry to register, so nothing
-    // arms the pick gate and the cloud must not hide behind it. Q4 brings
-    // picking back through a pick provider and removes this line.
-    setPickGateHidesObject(false);
+    setPickGateHidesObject(true);
 }
 
 void cwRenderPointCloud::setOctree(const cwPointOctreeSource& source)
 {
     m_source.setValue(source);
+
+    // The set is pickable the moment it is registered, so the gate resolves at
+    // once and the cloud draws its root without waiting for a build. It starts
+    // empty and fills as nodes land, which is the same thing the renderer
+    // draws.
+    registerPickable(kPickSubId, m_pickSet);
+
     update();
 }
 
@@ -34,6 +43,11 @@ void cwRenderPointCloud::clear()
     // Render knobs (pointSize / worldRadius) live in m_renderState and are
     // intentionally left untouched — clearing only drops the octree.
     m_source.setValue(cwPointOctreeSource());
+
+    // Empty the pick set here rather than waiting for the render thread's own
+    // empty publish, so nothing picks points of a cloud the layer has dropped.
+    m_pickSet->publish({}, QBox3D(), 0.0f);
+
     update();
 }
 
@@ -85,5 +99,5 @@ void cwRenderPointCloud::setWorldRadius(float worldRadius)
 
 cwRHIObject* cwRenderPointCloud::createRHIObject()
 {
-    return new cwRHIPointCloud();
+    return new cwRHIPointCloud(m_pickSet);
 }

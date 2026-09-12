@@ -9,6 +9,8 @@
 
 //Qt includes
 #include <QColor>
+#include <QRay3D>
+#include <QtEndian>
 #include <QCoreApplication>
 #include <QDir>
 #include <QElapsedTimer>
@@ -24,8 +26,10 @@
 #include <rhi/qrhi_platform.h>
 
 //Std includes
+#include <algorithm>
 #include <array>
 #include <cmath>
+#include <limits>
 #include <memory>
 #include <random>
 
@@ -43,7 +47,11 @@
 #include "cwRenderPointCloud.h"
 #include "cwRhiFrameRenderer.h"
 #include "cwRhiItemRenderer.h"
+#include "cwCamera.h"
+#include "cwGeometryItersecter.h"
+#include "cwProjection.h"
 #include "cwScene.h"
+#include "cwScenePick.h"
 #include "cwSceneUpdate.h"
 
 #include "CwRhiPointCloudTestAccess.h"
@@ -278,6 +286,32 @@ namespace {
             cwRenderMemoryLedger::Residency::Gpu);
     }
 
+    //! A ray straight down onto @a point from well above everything, so a pick
+    //! along it is a pure horizontal-distance question.
+    QRay3D rayThrough(const QVector3D& point)
+    {
+        constexpr float kRayHeight = 10000.0f;
+        return QRay3D(QVector3D(point.x(), point.y(), point.z() + kRayHeight),
+                      QVector3D(0.0f, 0.0f, -1.0f));
+    }
+
+    //! The distance from @a ray to the closest of @a points.
+    float nearestDistanceToRay(const QVector<QVector3D>& points, const QRay3D& ray)
+    {
+        float nearest = std::numeric_limits<float>::max();
+        for (const QVector3D& point : points) {
+            const QVector3D onRay = ray.point(ray.projectedDistance(point));
+            nearest = std::min(nearest, (point - onRay).length());
+        }
+        return nearest;
+    }
+
+    // cwScene hands the back-end its pick set through createRHIObject, so the
+    // fixture builds the back-end the same way rather than newing one itself.
+    struct RenderCloud : cwRenderPointCloud {
+        using cwRenderPointCloud::createRHIObject;
+    };
+
     // One streamed point cloud drawn into an offscreen target, driven through
     // the same call order cwRhiFrameRenderer::renderLiveFrame uses.
     class PointCloudFixture {
@@ -297,7 +331,7 @@ namespace {
             m_render.setScene(&m_scene);
             m_render.setOctree(m_cache.source);
 
-            m_backend = new cwRHIPointCloud;
+            m_backend = static_cast<cwRHIPointCloud*>(m_render.createRHIObject());
             frameRenderer()->registerRenderObject(m_render.renderObjectId(), m_backend);
             synchronize();
         }
@@ -313,6 +347,22 @@ namespace {
         const cwRHIPointCloud& backend() const { return *m_backend; }
         cwRHIPointCloud& mutableBackend() { return *m_backend; }
         cwRenderPointCloud& render() { return m_render; }
+        cwScene& scene() { return m_scene; }
+        const QVector3D& center() const { return m_cache.center; }
+
+        //! A cwCamera on the same ortho view renderFrame() draws with, for the
+        //! pick paths — which work off the plain projection, with no RHI clip
+        //! correction.
+        void configurePickCamera(cwCamera& camera, float orthoHeight) const
+        {
+            camera.setViewport(QRect(QPoint(0, 0), m_live.target->pixelSize()));
+
+            const float half = orthoHeight * 0.5f;
+            cwProjection projection;
+            projection.setOrtho(-half, half, -half, half, kOrthoNear, kOrthoFar);
+            camera.setProjection(projection);
+            camera.setViewMatrix(viewAt(m_cache.center));
+        }
         const OctreeCache& cache() const { return m_cache; }
         const cwPointOctreeManifest& manifest() const { return *m_cache.source.manifest; }
 
@@ -517,7 +567,7 @@ namespace {
         RenderTarget m_live;
         OctreeCache m_cache;
         cwScene m_scene;
-        cwRenderPointCloud m_render;
+        RenderCloud m_render;
         mutable cwRhiItemRenderer m_renderer;
         cwRHIPointCloud* m_backend = nullptr;
         bool m_backendInitialized = false;
@@ -529,6 +579,33 @@ namespace {
         qint64 m_gpuBaseline = 0;
         qint64 m_cpuBaseline = 0;
     };
+
+    //! Every point the cloud has resident, dequantized out of the very mirrors
+    //! the pick set was published — the points a pick can reach.
+    QVector<QVector3D> residentPoints(const PointCloudFixture& fixture)
+    {
+        QVector<QVector3D> points;
+        for (int i = 0; i < Access::nodeCount(fixture.backend()); i++) {
+            if (Access::nodeState(fixture.backend(), i) != NodeState::Resident) {
+                continue;
+            }
+
+            const QByteArray bytes = Access::nodeBytes(fixture.backend(), i);
+            const QBox3D bounds = fixture.manifest().nodeBounds(i);
+            for (qsizetype offset = 0; offset + cw::octree::kBytesPerPoint <= bytes.size();
+                 offset += cw::octree::kBytesPerPoint) {
+                const char* axes = bytes.constData() + offset;
+                constexpr int kAxisBytes = int(sizeof(quint16));
+                const cw::octree::QuantizedPoint quantized{
+                    qFromLittleEndian<quint16>(axes),
+                    qFromLittleEndian<quint16>(axes + kAxisBytes),
+                    qFromLittleEndian<quint16>(axes + 2 * kAxisBytes),
+                    0};
+                points.append(cw::octree::dequantize(quantized, bounds));
+            }
+        }
+        return points;
+    }
 
     // Skips the calling test when the platform has no backend to run it on.
     std::unique_ptr<QRhi> makeRhiOrSkip()
@@ -1077,4 +1154,162 @@ TEST_CASE("The cloud's world bounds are the root cube padded by the sprite radiu
     CHECK_FALSE(fixture.backend().worldBounds().has_value());
     CHECK_FALSE(fixture.backend().usesPointCloudPass());
     CHECK(Access::residentCount(fixture.backend()) == 0);
+}
+
+TEST_CASE("A streamed point cloud is picked through the nodes it has resident",
+          "[PointCloudStreaming][PointOctreePick]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    PointCloudFixture fixture(rhi.get(), QStringLiteral("pick"));
+    fixture.setOrthoHeight(kFarOrthoHeight);
+    fixture.renderUntilResident(kRootIndex);
+
+    cwGeometryItersecter* intersecter = fixture.scene().geometryItersecter();
+
+    // The cloud registers a pick provider, so it is pickable with no BVH built
+    // and no pick gate to wait on.
+    const cwGeometryItersecter::Key key{fixture.render().renderObjectId(), 0};
+    REQUIRE(intersecter->isObjectPickReady(key));
+    REQUIRE_FALSE(intersecter->visibleBoundingBox().isNull());
+
+    // Aim at a point of the source cloud (the generator is deterministic, so
+    // this is one of the points the octree was built from). The root's own
+    // sampling keeps one point per grid cell, and the pick radius is that cell
+    // size — watertight — so the ray lands on whatever the root kept nearby.
+    cwCamera farCamera;
+    fixture.configurePickCamera(farCamera, kFarOrthoHeight);
+    const QVector3D aimedAt = passagePoints(kPassagePointCount, kPassageSeed).constFirst();
+    const QPointF screenPoint = farCamera.project(aimedAt);
+
+    constexpr double kLinePixelRadius = 6.0;
+    const cwScenePick::Result rootOnly = cwScenePick::snappedPoint(
+        screenPoint, farCamera, *intersecter, kLinePixelRadius);
+    REQUIRE(rootOnly.hit);
+    CHECK_FALSE(rootOnly.snappedToStation);
+
+    const QBox3D bounds = intersecter->boundingBox(key);
+    CHECK(bounds.contains(rootOnly.world));
+
+    // Refine: the children stream in and the pick now lands on the finer
+    // sampling, still inside the cloud.
+    fixture.setOrthoHeight(kCloseOrthoHeight);
+    fixture.renderUntilQuiet();
+    const int refinedCount = Access::residentCount(fixture.backend());
+    REQUIRE(refinedCount > 1);
+
+    cwCamera closeCamera;
+    fixture.configurePickCamera(closeCamera, kCloseOrthoHeight);
+    const cwScenePick::Result refined = cwScenePick::snappedPoint(
+        closeCamera.project(aimedAt), closeCamera, *intersecter, kLinePixelRadius);
+    CHECK(refined.hit);
+
+    // Evict the children: a GPU budget of nothing takes every node the current
+    // cut does not want, and the root is pinned so it survives. The pick has to
+    // keep resolving against it — that is the presence invariant.
+    fixture.setOrthoHeight(kFarOrthoHeight);
+    cwRenderBudgets starved;
+    starved.gpuBudgetBytes = 0;
+    fixture.setBudgets(starved);
+    fixture.renderFrame();
+    fixture.renderFrame();
+
+    CHECK(Access::residentCount(fixture.backend()) < refinedCount);
+    REQUIRE(Access::nodeState(fixture.backend(), kRootIndex) == NodeState::Resident);
+
+    const cwScenePick::Result afterEviction = cwScenePick::snappedPoint(
+        screenPoint, farCamera, *intersecter, kLinePixelRadius);
+    CHECK(afterEviction.hit);
+    CHECK(bounds.contains(afterEviction.world));
+}
+
+TEST_CASE("The intersecter frames a streamed cloud before a node has landed",
+          "[PointCloudStreaming][PointOctreePick]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    // No frame has run, so nothing is resident — but the root bounds published
+    // by the source change are what a reset view frames.
+    PointCloudFixture fixture(rhi.get(), QStringLiteral("framing"));
+    REQUIRE(Access::residentCount(fixture.backend()) == 0);
+
+    cwGeometryItersecter* intersecter = fixture.scene().geometryItersecter();
+    const cwGeometryItersecter::Key key{fixture.render().renderObjectId(), 0};
+
+    const QBox3D rootBounds = fixture.manifest().nodeBounds(kRootIndex);
+    CHECK(intersecter->boundingBox(key) == rootBounds);
+    CHECK(intersecter->visibleBoundingBox() == rootBounds);
+
+    // Framing it is not the same as picking it: there are no points yet.
+    CHECK_FALSE(intersecter->intersectsDetailed(rayThrough(rootBounds.center())).hit());
+}
+
+TEST_CASE("A pick reaches exactly the cloud's mean point spacing",
+          "[PointCloudStreaming][PointOctreePick]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    PointCloudFixture fixture(rhi.get(), QStringLiteral("radius"));
+    fixture.setOrthoHeight(kFarOrthoHeight);
+    fixture.renderUntilResident(kRootIndex);
+
+    cwGeometryItersecter* intersecter = fixture.scene().geometryItersecter();
+    const QVector<QVector3D> resident = residentPoints(fixture);
+    REQUIRE_FALSE(resident.isEmpty());
+
+    const float radius = fixture.manifest().meanSpacingXY
+                         * cwRenderPointCloud::PointPickRadiusScale;
+    REQUIRE(radius > 0.0f);
+
+    // Dead on a resident point: zero off the ray, so it is a hit at any radius.
+    const QVector3D target = resident.constFirst();
+    REQUIRE(intersecter->intersectsDetailed(rayThrough(target)).hit());
+
+    // Now step sideways until no resident point is within the radius of the
+    // ray any more. That ray must miss, and the step it took to get there
+    // pins the radius: a wider one would still reach the point just left
+    // behind.
+    constexpr float kStepFraction = 0.1f;
+    const float step = radius * kStepFraction;
+    const float limit = fixture.manifest().nodeBounds(kRootIndex).size().x();
+    float offset = 0.0f;
+    while (offset < limit
+           && nearestDistanceToRay(resident, rayThrough(target + QVector3D(offset, 0.0f, 0.0f)))
+              <= radius) {
+        offset += step;
+    }
+    REQUIRE(offset < limit);
+    REQUIRE(offset > 0.0f);
+
+    CHECK(intersecter->intersectsDetailed(
+              rayThrough(target + QVector3D(offset - step, 0.0f, 0.0f))).hit());
+    CHECK_FALSE(intersecter->intersectsDetailed(
+                    rayThrough(target + QVector3D(offset, 0.0f, 0.0f))).hit());
+}
+
+TEST_CASE("Releasing a view's streamed resources empties what picks see",
+          "[PointCloudStreaming][PointOctreePick]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    PointCloudFixture fixture(rhi.get(), QStringLiteral("release"));
+    fixture.setOrthoHeight(kFarOrthoHeight);
+    fixture.renderUntilResident(kRootIndex);
+
+    cwGeometryItersecter* intersecter = fixture.scene().geometryItersecter();
+    const QVector<QVector3D> resident = residentPoints(fixture);
+    REQUIRE_FALSE(resident.isEmpty());
+
+    const QRay3D ray = rayThrough(resident.constFirst());
+    REQUIRE(intersecter->intersectsDetailed(ray).hit());
+
+    // A hidden view drops its nodes, and with them the mirrors the pick set
+    // was holding a share of — so nothing is left to pick.
+    fixture.mutableBackend().releaseStreamedResources();
+    REQUIRE(Access::residentCount(fixture.backend()) == 0);
+    CHECK(Access::mirrorBytes(fixture.backend(), kRootIndex) == 0);
+    CHECK_FALSE(intersecter->intersectsDetailed(ray).hit());
+
+    // The cloud is still there to frame, it just has nothing resident.
+    CHECK(intersecter->visibleBoundingBox() == fixture.manifest().nodeBounds(kRootIndex));
 }

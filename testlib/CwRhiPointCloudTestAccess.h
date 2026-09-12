@@ -89,6 +89,15 @@ struct CwRhiPointCloudTestAccess {
         return cloud.m_nodes.at(index).buffer;
     }
 
+    // The pick mirror itself, so a test can dequantize the very points a pick
+    // can reach and reason about the pick radius against them.
+    static QByteArray nodeBytes(const cwRHIPointCloud& cloud, int index) {
+        if (index < 0 || index >= cloud.m_nodes.size()) {
+            return QByteArray();
+        }
+        return cloud.m_nodes.at(index).bytes;
+    }
+
     // The pick mirror the node kept of what it uploaded (Q4 reads it for
     // picking), so a test can check the ledger against what is actually held.
     static qint64 mirrorBytes(const cwRHIPointCloud& cloud, int index) {

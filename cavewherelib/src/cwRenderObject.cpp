@@ -150,6 +150,25 @@ void cwRenderObject::registerPickable(uint64_t subId, cwGeometry geometry,
     });
 }
 
+void cwRenderObject::registerPickable(uint64_t subId,
+                                      std::shared_ptr<const cwPickProvider> provider)
+{
+    auto* intersecter = geometryItersecter();
+    if (intersecter == nullptr) {
+        qCDebug(lcPick).nospace()
+            << "registerPickable id=" << subId
+            << " skipped: no geometryItersecter (scene wiring not ready)";
+        return;
+    }
+
+    // addProvider hands back a finished future — a provider needs no build — so
+    // the gate opens right here. It has to open through onPickReady: a gate an
+    // earlier geometry registration armed left this object hidden, and only
+    // that path publishes the visibility again.
+    intersecter->addProvider(this, subId, std::move(provider));
+    onPickReady(subId);
+}
+
 void cwRenderObject::unregisterPickable(uint64_t subId)
 {
     if (auto* intersecter = geometryItersecter()) {

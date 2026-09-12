@@ -10,6 +10,7 @@
 #include "cwGeometryItersecter.h"
 #include "cwRestarterTracking.h"
 #include "cwPickingLog.h"
+#include "cwRaySphere.h"
 #include "cwRenderObject.h"
 #include "cwSceneVisibility.h"
 #include "cwConcurrent.h"
@@ -165,6 +166,11 @@ namespace {
     // BVH build is running.
     constexpr auto kAcceleratingPickingJobName = QLatin1StringView("Accelerating picking");
 
+    // A provider names no primitive: it reports a point, not an index into a
+    // buffer the intersecter can see. Same unset sentinel a missed cwRayHit
+    // carries, so cwScenePick's station snap reads it as "not a line vertex".
+    constexpr int kProviderFirstIndex = -1;
+
     // An axis-aligned box has 8 corners; bit i of the corner index selects
     // the maximum along axis i.
     constexpr int kBoxCornerCount = 8;
@@ -224,55 +230,8 @@ namespace {
         }
     };
 
-    struct RaySphereHit {
-        bool hit;
-        double tNear;    // sphere-entry depth (valid only when hit)
-        // Squared perpendicular ray-to-centre distance. Filled on both the hit
-        // and the miss path — nearestGeometryPoint leans on the miss value,
-        // probing with radius 0 purely to read it. Zero on the degenerate-ray
-        // early-out below, where it is a sentinel rather than a distance.
-        double dSq;
-    };
-
-    // QSphere3D::intersection is float32; at world-magnitude coordinates
-    // (~10^4) (V·D)^2 - V·V cancels into r^2 noise and returns garbage.
-    // Build the perpendicular vector by subtraction in double instead,
-    // so the small (~r) result keeps full precision.
-    RaySphereHit raySphereIntersectDouble(const QRay3D& ray,
-                                          const QVector3D& center,
-                                          float radius)
-    {
-        const double ox = ray.origin().x();
-        const double oy = ray.origin().y();
-        const double oz = ray.origin().z();
-        const double dx = ray.direction().x();
-        const double dy = ray.direction().y();
-        const double dz = ray.direction().z();
-        const double cx = center.x();
-        const double cy = center.y();
-        const double cz = center.z();
-
-        const double dDotD = dx*dx + dy*dy + dz*dz;
-        // Reject zero-length, negative (impossible for sum-of-squares
-        // but cheap), and NaN-direction rays before they poison
-        // tNear/dSq with inf/NaN.
-        if (!(dDotD > 0.0)) {
-            return {false, 0.0, 0.0};
-        }
-        const double invDDotD = 1.0 / dDotD;
-        const double tCenter =
-            ((cx - ox)*dx + (cy - oy)*dy + (cz - oz)*dz) * invDDotD;
-        const double perpX = cx - (ox + tCenter * dx);
-        const double perpY = cy - (oy + tCenter * dy);
-        const double perpZ = cz - (oz + tCenter * dz);
-        const double dSq = perpX*perpX + perpY*perpY + perpZ*perpZ;
-        const double rSq = double(radius) * double(radius);
-
-        if (dSq > rSq) {
-            return {false, 0.0, dSq};
-        }
-        return {true, tCenter - std::sqrt((rSq - dSq) * invDDotD), dSq};
-    }
+    using cw::RaySphereHit;
+    using cw::raySphereIntersectDouble;
 
     struct RaySegmentHit {
         double dSq;          // squared closest distance between ray and segment
@@ -512,6 +471,7 @@ cwGeometryItersecter::DebugStatistics cwGeometryItersecter::debugStatistics() co
     stats.hasBvh = static_cast<bool>(m_bvh);
     stats.sourceNodeCount = source.size();
     stats.cachedSubBvhCount = m_subBvhs.size();
+    stats.providerCount = m_providers.size();
     for (const Node& n : source) {
         stats.totalPrimitives += countNodePrimitives(n.Object);
         switch (n.Object.geometry().type()) {
@@ -577,6 +537,29 @@ QFuture<void> cwGeometryItersecter::addObject(const cwGeometryItersecter::Object
     return AsyncFuture::completed();
 }
 
+/**
+ * Registers a pick provider; see the header for how it differs from addObject.
+ */
+QFuture<void> cwGeometryItersecter::addProvider(cwRenderObject* parent, uint64_t id,
+                                                std::shared_ptr<const cwPickProvider> provider)
+{
+    const Key key{parent != nullptr ? parent->renderObjectId() : cwRenderObjectId{0}, id};
+
+    // Whatever held this Key goes first, geometry or provider alike. A pending
+    // readiness promise from an earlier geometry registration is cancelled: the
+    // provider resolves the caller's gate immediately instead.
+    cancelReadyPromise(key);
+    if (eraseNodeIfPresent(key)) {
+        scheduleTopLevelRebuild();
+    }
+
+    if (provider) {
+        m_providers.insert(key, ProviderEntry{parent, std::move(provider)});
+    }
+
+    return AsyncFuture::completed();
+}
+
 bool cwGeometryItersecter::eraseNodeIfPresent(const Key& key)
 {
     // A geometry replacement reuses the Key with vertices the memoized walk
@@ -585,6 +568,10 @@ bool cwGeometryItersecter::eraseNodeIfPresent(const Key& key)
     // Before the early return so a Key with no Node right now (a prior
     // update went empty) is dropped too.
     m_maskedBoxCache.remove(key);
+
+    // A Key holds geometry or a provider, never both, so a registration of
+    // either kind drops the other.
+    m_providers.remove(key);
 
     auto iter = findNode(key);
     if (iter == Nodes.end()) {
@@ -612,6 +599,7 @@ void cwGeometryItersecter::clear()
         << "clear(all) — dropping " << Nodes.size() << " Nodes, "
         << m_subBvhs.size() << " cached sub-BVHs";
     Nodes.clear();
+    m_providers.clear();
     m_subBvhs.clear();
     m_dirtyKeys.clear();
     m_keyDirtySeq.clear();
@@ -635,6 +623,10 @@ void cwGeometryItersecter::clear(cwRenderObjectId parentId)
 {
     erase_if(m_maskedBoxCache,
              [parentId](const QHash<Key, MaskedBoxEntry>::iterator& it) {
+        return it.key().parentId == parentId;
+    });
+
+    erase_if(m_providers, [parentId](const QHash<Key, ProviderEntry>::iterator& it) {
         return it.key().parentId == parentId;
     });
 
@@ -720,6 +712,11 @@ void cwGeometryItersecter::setModelMatrix(const Key &objectKey, const QMatrix4x4
 
 QBox3D cwGeometryItersecter::boundingBox(const Key &objectKey) const
 {
+    const auto provider = m_providers.constFind(objectKey);
+    if (provider != m_providers.constEnd()) {
+        return provider->provider->bounds();
+    }
+
     auto iter = findNode(objectKey);
     if (iter != Nodes.end()) {
         return iter->BoundingBox.transformed(iter->Object.modelMatrix());
@@ -743,6 +740,9 @@ QBox3D cwGeometryItersecter::boundingBox() const
     for (const Node& node : Nodes) {
         box.unite(node.BoundingBox.transformed(node.Object.modelMatrix()));
     }
+    for (const ProviderEntry& entry : m_providers) {
+        box.unite(entry.provider->bounds());
+    }
     return box;
 }
 
@@ -762,6 +762,14 @@ QBox3D cwGeometryItersecter::visibleBoundingBox() const
             continue;
         }
         box.unite(visibleNodeBox(node, visibility));
+    }
+    // A provider is its own snapshot, so its bounds are already the box a
+    // camera should frame — cwScene::visibleFramingBounds feeds the reset view.
+    for (auto it = m_providers.constBegin(); it != m_providers.constEnd(); it++) {
+        if (!visibility.subVisible(it.key().parentId, it.key().id)) {
+            continue;
+        }
+        box.unite(it.value().provider->bounds());
     }
     return box;
 }
@@ -872,6 +880,11 @@ bool cwGeometryItersecter::isPickableEmpty() const
 
 bool cwGeometryItersecter::isObjectPickReady(const Key& objectKey) const
 {
+    // A provider answers from the moment it is registered — there is no build.
+    if (m_providers.contains(objectKey)) {
+        return true;
+    }
+
     if (!m_bvh) {
         return false;
     }
@@ -1594,6 +1607,8 @@ cwRayHit cwGeometryItersecter::intersectsDetailed(const QRay3D &ray, const cwPic
     pick.debug = lcPick().isDebugEnabled();
     const bool debug = pick.debug;
 
+    const cwVisibilitySnapshot visibility = currentVisibility();
+
     if (!m_bvh || m_bvh->topLevel.isEmpty()) {
         if (debug) {
             qCDebug(lcPick).nospace()
@@ -1603,15 +1618,16 @@ cwRayHit cwGeometryItersecter::intersectsDetailed(const QRay3D &ray, const cwPic
                 << ", ray.origin=" << ray.origin()
                 << ", ray.dir=" << ray.direction() << ")";
         }
-        return {};
+        // Providers stand on their own snapshots, so a scene whose only
+        // pickable geometry is a streamed cloud picks with no BVH at all.
+        return pickProviders(ray, query, visibility, cwRayHit());
     }
 
     const QVector<std::shared_ptr<const SubBvh>>& subBvhs = m_bvh->subBvhs;
 
-    const cwVisibilitySnapshot visibility = currentVisibility();
     traverseBvh(*m_bvh, visibility, ray, query, pick);
 
-    const cwRayHit& best = pick.best;
+    const cwRayHit best = pickProviders(ray, query, visibility, pick.best);
     const PickStats& stats = pick.counters;
 
     if (debug) {
@@ -1660,17 +1676,94 @@ std::optional<QVector3D> cwGeometryItersecter::nearestGeometryPoint(const QRay3D
 {
     // Every kind here consults the tolerance (AnchorPick::ToleranceKinds), so
     // without one there is no reach and nothing can be a candidate.
-    if (!m_bvh || m_bvh->topLevel.isEmpty() || !query.tolerance.enabled()) {
+    if (!query.tolerance.enabled()) {
         return std::nullopt;
     }
 
+    const cwVisibilitySnapshot visibility = currentVisibility();
+
     AnchorPick pick;
-    traverseBvh(*m_bvh, currentVisibility(), ray, query, pick);
+    if (m_bvh && !m_bvh->topLevel.isEmpty()) {
+        traverseBvh(*m_bvh, visibility, ray, query, pick);
+    }
+
+    const double bestDepth = pick.found ? pick.bestDepth
+                                        : (std::numeric_limits<double>::max)();
+    const std::optional<QVector3D> fromProvider =
+        nearestProviderPoint(ray, query, visibility, bestDepth);
+    if (fromProvider.has_value()) {
+        return fromProvider;
+    }
 
     if (!pick.found) {
         return std::nullopt;
     }
     return pick.bestPoint;
+}
+
+cwRayHit cwGeometryItersecter::pickProviders(const QRay3D& ray,
+                                             const cwPickQuery& query,
+                                             const cwVisibilitySnapshot& visibility,
+                                             cwRayHit best) const
+{
+    if (m_providers.isEmpty() || !(query.kinds & cwPickQuery::Kind::Points)) {
+        return best;
+    }
+
+    for (auto it = m_providers.constBegin(); it != m_providers.constEnd(); it++) {
+        const Key& key = it.key();
+        if (!visibility.subVisible(key.parentId, key.id)) {
+            continue;
+        }
+
+        const std::optional<cwPickProvider::PointHit> hit =
+            it.value().provider->exactHit(ray);
+        if (!hit.has_value()) {
+            continue;
+        }
+        if (best.hit() && hit->rayDepth >= best.tWorld()) {
+            continue;
+        }
+
+        // One Sample serves both spaces: a provider reports world space and the
+        // geometry behind it draws with an identity model matrix, so the model
+        // hit is the same point at the same depth.
+        const cwRayHit::Sample sample{hit->world, cameraFacingNormal(ray), hit->rayDepth};
+        best = cwRayHit::pointLikeHit(it.value().parent, key.id, kProviderFirstIndex,
+                                      sample, sample);
+    }
+
+    return best;
+}
+
+std::optional<QVector3D>
+cwGeometryItersecter::nearestProviderPoint(const QRay3D& ray,
+                                           const cwPickQuery& query,
+                                           const cwVisibilitySnapshot& visibility,
+                                           double bestDepth) const
+{
+    if (m_providers.isEmpty() || !(query.kinds & cwPickQuery::Kind::Points)) {
+        return std::nullopt;
+    }
+
+    std::optional<QVector3D> best;
+    for (auto it = m_providers.constBegin(); it != m_providers.constEnd(); it++) {
+        const Key& key = it.key();
+        if (!visibility.subVisible(key.parentId, key.id)) {
+            continue;
+        }
+
+        const std::optional<cwPickProvider::PointHit> hit =
+            it.value().provider->nearestPoint(ray, query.tolerance);
+        if (!hit.has_value() || hit->rayDepth >= bestDepth) {
+            continue;
+        }
+
+        bestDepth = hit->rayDepth;
+        best = hit->world;
+    }
+
+    return best;
 }
 
 void cwGeometryItersecter::dumpLeafPrimitive(const Object& object,

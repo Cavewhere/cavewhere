@@ -9,6 +9,7 @@
 #define CWRENDERPOINTCLOUD_H
 
 // Our includes
+#include "cwPointOctreePickSet.h"
 #include "cwPointOctreeSource.h"
 #include "cwRenderObject.h"
 #include "cwTracked.h"
@@ -17,6 +18,9 @@
 #include <QHash>
 #include <QQmlEngine>
 #include <QVector3D>
+
+// Std includes
+#include <memory>
 
 class cwRenderPointCloud : public cwRenderObject
 {
@@ -107,6 +111,12 @@ private:
 
     cwTracked<cwPointOctreeSource> m_source;
     cwTracked<RenderState> m_renderState;
+
+    // What the cloud is picked against: the nodes the render thread has
+    // resident. Shared with the cwRHIPointCloud that publishes into it, so a
+    // publish after this object is gone lands on a set nothing reads.
+    std::shared_ptr<cwPointOctreePickSet> m_pickSet =
+        std::make_shared<cwPointOctreePickSet>();
 };
 
 inline const cwPointOctreeSource& cwRenderPointCloud::octree() const

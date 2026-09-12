@@ -22,6 +22,7 @@
 
 //Our includes
 #include "cwRayHit.h"
+#include "cwPickProvider.h"
 #include "cwPickQuery.h"
 #include "cwGeometry.h"
 #include "cwFutureManagerToken.h"
@@ -128,6 +129,26 @@ public:
     //! Callers that must keep geometry render-hidden until it is pickable watch
     //! this future (cwRenderObject::registerPickable, issue #505 Phase 4).
     QFuture<void> addObject(const cwGeometryItersecter::Object& object);
+
+    //! Registers a pick provider under {parent, id}, replacing whatever object
+    //! or provider held that Key, and returns an already-finished readiness
+    //! future: a provider answers from its own snapshot, so there is no BVH to
+    //! wait for and a watching gate opens at once.
+    /*!
+        This is the seam a streamed point cloud registers through. Its resident
+        set changes every few frames, which no BVH could be rebuilt to follow,
+        so the provider is queried after the BVH in intersectsDetailed() and
+        nearestGeometryPoint(), under the same visibility snapshot, and its
+        bounds() joins the boundingBox() family. Only a query whose kinds
+        include cwPickQuery::Kind::Points consults one.
+
+        A null provider just removes the Key. The provider must stay alive for
+        as long as it is registered; callers hold it by shared_ptr, and
+        removeObject() / clear() drop this reference.
+    */
+    QFuture<void> addProvider(cwRenderObject* parent, uint64_t id,
+                              std::shared_ptr<const cwPickProvider> provider);
+
     void clear();
     void clear(cwRenderObjectId parentId);
     void removeObject(cwRenderObjectId parentId, uint64_t id);
@@ -231,6 +252,7 @@ public:
         qsizetype totalPrimitives = 0;   // sum of countNodePrimitives across source nodes
         qsizetype bvhNodeCount = 0;      // BvhNode count if bvh built, else 0
         qsizetype cachedSubBvhCount = 0; // entries in the cross-rebuild sub-BVH cache
+        qsizetype providerCount = 0;     // registered pick providers (outside the BVH)
     };
     DebugStatistics debugStatistics() const;
 
@@ -312,6 +334,17 @@ private:
     };
 
     QList<Node> Nodes;
+
+    // Geometry that answers for itself (see addProvider). Parallel to Nodes in
+    // the Key address space — a Key is in one or the other, never both — and
+    // deliberately outside the BVH: a provider needs no build, so it is picked
+    // straight after the traversal. The parent is attribution only, exactly as
+    // on Object.
+    struct ProviderEntry {
+        cwRenderObject* parent = nullptr;
+        std::shared_ptr<const cwPickProvider> provider;
+    };
+    QHash<Key, ProviderEntry> m_providers;
 
     // Per-Object acceleration structure built once in **model space** and
     // cached across rebuilds. Defined in the .cpp because callers only need
@@ -638,6 +671,23 @@ private:
                             const QRay3D& ray,
                             const cwPickQuery& query,
                             Policy& policy);
+
+    // @a best improved by every visible provider the query may consult, or
+    // @a best unchanged when none is. Providers carry their own snapshots, so
+    // this runs after the BVH traversal with the visibility view that
+    // traversal used.
+    cwRayHit pickProviders(const QRay3D& ray,
+                           const cwPickQuery& query,
+                           const cwVisibilitySnapshot& visibility,
+                           cwRayHit best) const;
+
+    // The anchor half of pickProviders: the nearest provider point within the
+    // query's tolerance that is also nearer than @a bestDepth, the best the BVH
+    // found.
+    std::optional<QVector3D> nearestProviderPoint(const QRay3D& ray,
+                                                  const cwPickQuery& query,
+                                                  const cwVisibilitySnapshot& visibility,
+                                                  double bestDepth) const;
 
     // Debug-only per-primitive diagnostic; gated on lcPick debug.
     static void dumpLeafPrimitive(const Object& object,
