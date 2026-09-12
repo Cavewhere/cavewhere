@@ -373,6 +373,38 @@ TEST_CASE("cwTextureStreamer keeps the superseding load while the stale one fini
     CHECK(ledgerCpuBytes() == 0);
 }
 
+TEST_CASE("cwTextureStreamer hands back only the newest result for an item",
+          "[TextureStreamer]") {
+    //One slot per item id: asking for a new level forgets the result the old
+    //load already published, so a drain never sees a stale chain for an item.
+    //That is what lets cwStreamedItemState match a landing chain on its level
+    //alone, with no generation guard of its own.
+    auto state = std::make_shared<LoaderState>();
+    cwTextureStreamer streamer(makeLoader(state));
+
+    constexpr quint32 kItemId = 19;
+    constexpr int kStaleLevel = 4;
+    constexpr int kFinalLevel = 1;
+    constexpr quint64 kPriority = 1;
+
+    const cwStreamedTexture source = makeSource(QStringLiteral("item-19"));
+    streamer.request(kItemId, source, kTargetFormat, kStaleLevel, kPriority);
+    REQUIRE(waitFor([&]() { return state->finishedCount() == 1; }));
+
+    //The first chain is sitting in the ready queue, undrained, when the camera
+    //asks for a finer one
+    streamer.request(kItemId, source, kTargetFormat, kFinalLevel, kPriority);
+
+    const auto results = drain(streamer, 1);
+    REQUIRE(waitFor([&]() { return !streamer.hasWork(); }));
+
+    REQUIRE(results.size() == 1);
+    CHECK(results.at(0).itemId == kItemId);
+    CHECK(results.at(0).topLevel == kFinalLevel);
+    CHECK(streamer.takeReady().isEmpty());
+    CHECK(ledgerCpuBytes() == 0);
+}
+
 TEST_CASE("cwTextureStreamer reloads a canceled item asked for again", "[TextureStreamer]") {
     auto state = std::make_shared<LoaderState>();
     state->gated = true;

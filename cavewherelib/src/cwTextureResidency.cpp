@@ -171,7 +171,23 @@ int desiredTopLevel(const SelectionInput& input)
 QVector<Demotion> planEvictions(const QVector<ResidencyStats>& items, qint64 overshootBytes)
 {
     QVector<Demotion> plan;
-    if(overshootBytes <= 0) {
+
+    //What the demotions already running will give back. Crediting it here keeps
+    //the frames they take to land from unraveling the whole fleet, and keeps the
+    //caller from having to repeat this arithmetic.
+    qint64 promisedBytes = 0;
+    for(const ResidencyStats& item : items) {
+        if(!item.demotionInFlight || item.residentTopLevel < 0) {
+            continue;
+        }
+
+        const int baseLevel = pinnedBaseLevel(item.textureSize);
+        promisedBytes += cw::mip::chainBytes(item.format, item.textureSize, item.residentTopLevel)
+                         - cw::mip::chainBytes(item.format, item.textureSize, baseLevel);
+    }
+
+    const qint64 remainingOvershoot = overshootBytes - promisedBytes;
+    if(remainingOvershoot <= 0) {
         return plan;
     }
 
@@ -220,7 +236,7 @@ QVector<Demotion> planEvictions(const QVector<ResidencyStats>& items, qint64 ove
 
         plan.append({index, baseLevel, bytes});
         reclaimed += bytes;
-        if(reclaimed >= overshootBytes) {
+        if(reclaimed >= remainingOvershoot) {
             break;
         }
     }

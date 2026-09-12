@@ -10,6 +10,7 @@
 
 //Our includes
 #include "cwRhiTexturedItems.h"
+#include "cwStreamedItemState.h"
 
 // Friend accessor (declared `friend struct CwRhiTexturedItemsTestAccess` in
 // cwRhiTexturedItems.h) for the per-item streaming state synchronize() derives
@@ -37,19 +38,26 @@ struct CwRhiTexturedItemsTestAccess {
         return found ? found->streamSource : cwStreamedTexture();
     }
 
-    static int residentTopLevel(const cwRhiTexturedItems& items, uint32_t id) {
+    // The per-item streaming state machine, which owns everything below. A test
+    // that only drives transitions builds one of these directly instead.
+    static const cwStreamedItemState* streaming(const cwRhiTexturedItems& items, uint32_t id) {
         auto* found = items.m_items.value(id, nullptr);
-        return found ? found->residentTopLevel : cwRhiTexturedItems::kNoResidentLevel;
+        return found ? &found->streaming : nullptr;
+    }
+
+    static int residentTopLevel(const cwRhiTexturedItems& items, uint32_t id) {
+        const auto* state = streaming(items, id);
+        return state ? state->residentTopLevel() : cwStreamedItemState::kNoLevel;
     }
 
     static int requestedTopLevel(const cwRhiTexturedItems& items, uint32_t id) {
-        auto* found = items.m_items.value(id, nullptr);
-        return found ? found->requestedTopLevel : cwRhiTexturedItems::kNoResidentLevel;
+        const auto* state = streaming(items, id);
+        return state ? state->requestedTopLevel() : cwStreamedItemState::kNoLevel;
     }
 
     static int desiredTopLevel(const cwRhiTexturedItems& items, uint32_t id) {
-        auto* found = items.m_items.value(id, nullptr);
-        return found ? found->desiredTopLevel : cwRhiTexturedItems::kNoResidentLevel;
+        const auto* state = streaming(items, id);
+        return state ? state->desiredTopLevel() : cwStreamedItemState::kNoLevel;
     }
 
     static bool textureNeedsUpdate(const cwRhiTexturedItems& items, uint32_t id) {
@@ -61,13 +69,15 @@ struct CwRhiTexturedItemsTestAccess {
     // survive a repeated descriptor and reset on a changed one without a GPU.
     static void setResidentTopLevel(cwRhiTexturedItems& items, uint32_t id, int topLevel) {
         if (auto* found = items.m_items.value(id, nullptr)) {
-            found->residentTopLevel = topLevel;
+            found->streaming.requestPinnedBase(topLevel);
+            found->streaming.beginUpload(cwCompressedTexture(), topLevel);
+            found->streaming.takeUploadedTexture();
         }
     }
 
     static bool demotionInFlight(const cwRhiTexturedItems& items, uint32_t id) {
-        auto* found = items.m_items.value(id, nullptr);
-        return found && found->demotionInFlight;
+        const auto* state = streaming(items, id);
+        return state && state->isDemotionInFlight();
     }
 
     // Pretends the item was last gathered in @a frame, so a test can order a
@@ -82,7 +92,7 @@ struct CwRhiTexturedItemsTestAccess {
         return cwRhiTexturedItems::streamTargetFormat();
     }
 
-    static constexpr int noResidentLevel() { return cwRhiTexturedItems::kNoResidentLevel; }
+    static constexpr int noResidentLevel() { return cwStreamedItemState::kNoLevel; }
 
     // Runs one item's selection pass without a gather — selection reads the
     // camera and budgets out of @a context and never touches the command buffer,

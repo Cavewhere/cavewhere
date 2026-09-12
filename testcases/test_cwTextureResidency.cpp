@@ -261,6 +261,30 @@ TEST_CASE("planEvictions skips base-level and in-flight items", "[TextureResiden
     CHECK(plan.at(0).itemIndex == 3);
 }
 
+TEST_CASE("planEvictions credits what the demotions in flight will give back",
+          "[TextureResidency]") {
+    const qint64 perItem = cw::mip::chainBytes(QRhiTexture::BC7, QSize(2048, 2048), 0)
+                           - cw::mip::chainBytes(QRhiTexture::BC7, QSize(2048, 2048), 2);
+
+    ResidencyStats inFlight = residentItem(0, 1, false);
+    inFlight.demotionInFlight = true;
+
+    const QVector<ResidencyStats> items = {
+        inFlight,
+        residentItem(0, 2, false),
+        residentItem(0, 3, false)
+    };
+
+    //The demotion already running covers the whole overshoot, so the fleet is
+    //left to converge rather than losing two more items' detail
+    CHECK(planEvictions(items, perItem).isEmpty());
+
+    //Two items' worth over, one of them already promised: one more demotion
+    const QVector<Demotion> plan = planEvictions(items, perItem * 2);
+    REQUIRE(plan.size() == 1);
+    CHECK(plan.at(0).itemIndex == 1);
+}
+
 TEST_CASE("planEvictions returns a partial plan when it cannot cover the overshoot",
           "[TextureResidency]") {
     const QVector<ResidencyStats> items = {

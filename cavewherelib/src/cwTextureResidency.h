@@ -104,7 +104,11 @@ namespace cw::residency {
 
     /**
      * Picks items to demote to their pinned base until overshootBytes is
-     * covered. Invisible items go first, oldest lastVisibleFrame first, then
+     * covered. The bytes the demotions already in flight will give back are
+     * credited against overshootBytes first, so a caller passes the raw
+     * overshoot and a fleet still converging is left to converge.
+     *
+     * Invisible items go first, oldest lastVisibleFrame first, then
      * visible items in the same order. Items already at or below their base and
      * items with a demotion in flight are left alone, as is a visible item
      * whose desiredTopLevel is finer than its base — selection would ask for
