@@ -93,7 +93,7 @@ TEST_CASE("cwLazLayer save/load round-trip preserves layer files",
     REQUIRE(QFile::exists(reloaded0->sourcePath()));
     REQUIRE(QFile::exists(reloaded1->sourcePath()));
 
-    // Geometry rebuilt by re-running cwLazLoader against the saved path.
+    // Points rebuilt from the saved path on load.
     REQUIRE(waitForLazLayerLoaded(reloaded0));
     REQUIRE(waitForLazLayerLoaded(reloaded1));
     REQUIRE(reloaded0->pointCount() > 0);

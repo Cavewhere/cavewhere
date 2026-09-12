@@ -279,7 +279,7 @@ Monad::Result<qint64> clipOneSource(const cwLazClipSource& src,
 
     if (hasTransform) {
         // Batch a chunk through transformInPlace to amortize PROJ's per-call
-        // overhead (same pattern as cwLazLoader). Each point's full record is
+        // overhead. Each point's full record is
         // serialized into recordBytes so its attributes can be paired with the
         // transformed coordinate after the batch — reader->point is clobbered
         // on the next read.
@@ -362,7 +362,7 @@ Monad::Result<qint64> clipOneSource(const cwLazClipSource& src,
 
 // Opens each source header to sum point counts (for the progress range) and
 // collect point formats (to choose the output format). Reopening for the data
-// pass is intentional — the same independent-reader pattern cwLazLoader uses.
+// pass is intentional — each pass opens its own independent reader.
 struct SourceProbe {
     qint64 totalPoints = 0;
     QList<U8> formats;

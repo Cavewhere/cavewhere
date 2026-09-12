@@ -211,6 +211,7 @@ LazFileContents readLazFile(const QString& path)
     }
 
     contents.pointDataFormat = reader->header.point_data_format;
+    contents.headerPointCount = qint64(reader->npoints);
     contents.headerBboxMin = QVector3D(float(reader->header.min_x),
                                        float(reader->header.min_y),
                                        float(reader->header.min_z));

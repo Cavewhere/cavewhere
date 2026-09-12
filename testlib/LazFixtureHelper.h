@@ -52,6 +52,9 @@ bool writeAttributedLazFile(const QString& outPath,
  */
 struct LazFileContents {
     quint8 pointDataFormat = 0;
+    //! The count the header declares. The points below come from iterating,
+    //! so a header that declares the wrong count shows up only here.
+    qint64 headerPointCount = 0;
     QVector<LazAttributePoint> points;
     QVector3D headerBboxMin;
     QVector3D headerBboxMax;

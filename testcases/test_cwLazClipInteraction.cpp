@@ -316,7 +316,7 @@ TEST_CASE("cwLazClipInteraction: successful clip disables every contributing sou
     // clip operation succeeds, every cwLazLayer that participated must have
     // enabled flipped to false. The negative case (cancel/failure leaves the
     // sources enabled) is covered by the early-return branches of commit()
-    // and the worker's own cancel test in [cwLazLoader][cancel].
+    // and the builder's own cancel test in [PointOctreeBuilder].
     QTemporaryDir tempDir;
     REQUIRE(tempDir.isValid());
 

@@ -46,7 +46,7 @@ namespace {
 
     constexpr int kBoxCornerCount = 8;
 
-    //Points transformed and written per batch, matching cwLazLoader's batching
+    //Points transformed and written per batch, so transformInPlace amortizes PROJ's per-call overhead
     constexpr qsizetype kPointChunkSize = 64 * 1024;
 
     //Native float32 x, y, z per point in a temp chunk file
