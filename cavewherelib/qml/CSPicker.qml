@@ -49,22 +49,12 @@ QQ.Item {
         return own !== "" ? own : CoordinateSystem.wgs84()
     }
 
-    //! The plate-fixed datum worth recommending for this row: the first entry
-    //! availableDatums offers past WGS84, which is the bounds check's own answer
-    //! for where the coordinate lands. Empty where no plate-fixed frame reaches.
-    //!
-    //! Only a row still on WGS84 gets one. Past that, the row names a datum of
-    //! its own, and availableDatums carries that datum whether the bounds check
-    //! chose it or not — recommending from the list would read a mid-ocean row's
-    //! own ETRS89 back to it as the frame for where it sits. A row whose datum
-    //! stopped fitting its coordinate hears that from the warning beside it.
-    readonly property string recommendedDatum: {
-        const wgs84 = CoordinateSystem.wgs84()
-        if (rootId.currentDatum !== wgs84) {
-            return ""
-        }
-        return rootId.availableDatums.find((code) => code !== wgs84) ?? ""
-    }
+    //! The plate-fixed datum worth recommending for this row, which
+    //! cwCoordinateSystem decides from the list the bounds check narrowed and
+    //! the datum the controls show. A row whose datum stopped fitting its
+    //! coordinate hears that from the warning beside it instead.
+    readonly property string recommendedDatum:
+        CoordinateSystem.recommendedDatum(rootId.availableDatums, rootId.currentDatum)
 
     //! What the datum combo explains about itself. Locked, it says what to do
     //! first; unlocked, it says what a datum is, and names the frame this part
@@ -106,23 +96,12 @@ QQ.Item {
     implicitHeight: flowId.implicitHeight
 
     // Commits the system \a mode names on \a datumCode, built from the zone and
-    // hemisphere on screen. A datum whose series stops short of that zone falls
-    // back to WGS84, the one series covering all sixty — the same fallback the
-    // datum combo shows, so the two agree on what a zone edit did.
+    // hemisphere on screen. cwCoordinateSystem::csFor decides it, fallback
+    // included, and answers "" for a mode that names no system of its own.
     function commitCS(mode: int, datumCode: string): void {
-        switch (mode) {
-        case CoordinateSystem.LatLon: {
-            const cs = CoordinateSystem.latLonCS(datumCode)
-            rootId.committed(cs === "" ? CoordinateSystem.wgs84() : cs)
-            return
-        }
-        case CoordinateSystem.UTM: {
-            const zone = zoneSpinId.value
-            const north = hemiComboId.currentIndex === 0
-            const cs = CoordinateSystem.utmZoneToEpsg(zone, north, datumCode)
-            rootId.committed(cs === "" ? CoordinateSystem.utmZoneToEpsg(zone, north) : cs)
-            return
-        }
+        const cs = CoordinateSystem.csFor(mode, zoneSpinId.value, hemiComboId.north, datumCode)
+        if (cs !== "") {
+            rootId.committed(cs)
         }
     }
 
@@ -208,6 +187,11 @@ QQ.Item {
         QC.ComboBox {
             id: hemiComboId
             objectName: "csUtmHemisphere"
+
+            // Index 0 is "N", so the model's order is the hemisphere. The one
+            // place that mapping is spelled out.
+            readonly property bool north: hemiComboId.currentIndex === 0
+
             visible: rootId.showsUtm
             width: Theme.csHemisphereFieldWidth
             model: ["N", "S"]
@@ -251,17 +235,14 @@ QQ.Item {
                 id: datumComboId
                 objectName: "csDatum"
 
-                // UTM offers only the datums whose series reaches the zone and
-                // hemisphere on screen, so every entry names a system this picker
-                // can build.
-                readonly property list<string> datumCodes: {
-                    if (!rootId.showsUtm) {
-                        return rootId.availableDatums
-                    }
-                    const series = CoordinateSystem.utmDatumList(zoneSpinId.value,
-                                                                 hemiComboId.currentIndex === 0)
-                    return rootId.availableDatums.filter((code) => series.indexOf(code) >= 0)
-                }
+                // Every entry names a system the current mode, zone and
+                // hemisphere can build on that datum — the same policy commitCS
+                // commits through, so the two agree on what a zone edit did.
+                readonly property list<string> datumCodes:
+                    CoordinateSystem.datumChoices(rootId.currentMode,
+                                                  zoneSpinId.value,
+                                                  hemiComboId.north,
+                                                  rootId.availableDatums)
 
                 //! What one popup row needs: the widest label as the style lays it
                 //! out, and at least the closed control's own width.
@@ -278,9 +259,8 @@ QQ.Item {
                 model: datumComboId.datumCodes.map(
                            (code) => CoordinateSystem.datumRegionName(code) + " · "
                                      + CoordinateSystem.datumDisplayName(code))
-                // WGS84 leads the table, so index 0 is the fallback a datum outside
-                // this list commits to — which is what a zone edit past the end of
-                // a series does.
+                // WGS84 leads the table, so index 0 is what a datum outside this
+                // list commits to.
                 currentIndex: Math.max(0, datumComboId.datumCodes.indexOf(rootId.currentDatum))
                 displayText: CoordinateSystem.datumDisplayName(
                                  datumComboId.datumCodes[datumComboId.currentIndex] ?? "")

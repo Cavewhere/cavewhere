@@ -246,6 +246,50 @@ public:
     Q_INVOKABLE static QStringList utmDatumList(int zone, bool north);
 
     /**
+     * The system \a mode names on \a datumCode, built from \a zone and the
+     * hemisphere the picker shows. This is the one place that decides what a
+     * datum outside the mode's reach commits to, and the fallback is per mode:
+     * UTM falls back to the WGS84 zone — the one series covering all sixty —
+     * whenever the datum's series stops short of the zone or the table doesn't
+     * name the datum at all, while Lat/Lon falls back to plain WGS84.
+     *
+     * Empty for Local and Custom, which carry no datum of their own — Custom's
+     * datum lives inside the CRS its dialog picked — and for a UTM zone outside
+     * 1..60, where not even WGS84 builds anything.
+     *
+     * Pairs with datumChoices: the codes that list offers are exactly the ones
+     * this builds without falling back.
+     */
+    Q_INVOKABLE static QString csFor(Mode mode, int zone, bool north, const QString& datumCode);
+
+    /**
+     * The datums \a mode can build from, narrowed out of \a available — every
+     * code in it that csFor answers with a system of that datum's own. UTM keeps
+     * the datums whose series reaches \a zone on the given hemisphere; Lat/Lon
+     * keeps the ones the table names; Local and Custom keep none, having no
+     * datum to pick.
+     *
+     * Order follows \a available, so a caller's WGS84-first list stays
+     * WGS84-first.
+     */
+    Q_INVOKABLE static QStringList datumChoices(Mode mode, int zone, bool north,
+                                                const QStringList& available);
+
+    /**
+     * The plate-fixed datum worth recommending over \a current, out of the
+     * \a available list a bounds check narrowed to where the coordinate lands:
+     * the first entry past WGS84, and "" when no plate-fixed frame reaches.
+     *
+     * Only a row still on WGS84 gets one, so \a current naming any other datum
+     * answers "". Past WGS84 the row names a datum of its own, and \a available
+     * carries that datum whether the bounds check chose it or not — recommending
+     * from the list would read a mid-ocean row's own ETRS89 back to it as the
+     * frame for where it sits.
+     */
+    Q_INVOKABLE static QString recommendedDatum(const QStringList& available,
+                                                const QString& current);
+
+    /**
      * The short label for a datum code ("NAD83(2011)" for "EPSG:6318"), or ""
      * for a code the table doesn't name. Shipped with the binary rather than
      * read from proj.db, so every machine shows the same words.

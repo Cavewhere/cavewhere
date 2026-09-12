@@ -873,6 +873,62 @@ QStringList cwCoordinateSystem::utmDatumList(int zone, bool north)
     return codes;
 }
 
+namespace {
+    //! The system \a mode builds on \a datumCode's own datum, and empty where
+    //! that datum doesn't reach — csFor before its fallback.
+    QString csOnDatum(cwCoordinateSystem::Mode mode, int zone, bool north,
+                      const QString& datumCode)
+    {
+        switch (mode) {
+        case cwCoordinateSystem::LatLon:
+            return cwCoordinateSystem::latLonCS(datumCode);
+        case cwCoordinateSystem::UTM:
+            return cwCoordinateSystem::utmZoneToEpsg(zone, north, datumCode);
+        case cwCoordinateSystem::Local:
+        case cwCoordinateSystem::Custom:
+            break;
+        }
+        return QString();
+    }
+}
+
+QString cwCoordinateSystem::csFor(Mode mode, int zone, bool north, const QString& datumCode)
+{
+    const QString own = csOnDatum(mode, zone, north, datumCode);
+    if (!own.isEmpty()) {
+        return own;
+    }
+    // WGS84 is the fallback in every mode that builds anything: it leads the
+    // datum table, and its UTM series is the one covering all sixty zones.
+    return csOnDatum(mode, zone, north, cwCoordinateTransform::Wgs84);
+}
+
+QStringList cwCoordinateSystem::datumChoices(Mode mode, int zone, bool north,
+                                             const QStringList& available)
+{
+    QStringList codes;
+    codes.reserve(available.size());
+    for (const QString& code : available) {
+        if (!csOnDatum(mode, zone, north, code).isEmpty()) {
+            codes.append(code);
+        }
+    }
+    return codes;
+}
+
+QString cwCoordinateSystem::recommendedDatum(const QStringList& available, const QString& current)
+{
+    if (!sameCS(current, cwCoordinateTransform::Wgs84)) {
+        return QString();
+    }
+    for (const QString& code : available) {
+        if (!sameCS(code, cwCoordinateTransform::Wgs84)) {
+            return code;
+        }
+    }
+    return QString();
+}
+
 QString cwCoordinateSystem::datumDisplayName(const QString& datumCode)
 {
     const GeographicDatum* datum = datumRow(datumCode);
