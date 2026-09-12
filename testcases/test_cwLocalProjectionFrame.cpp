@@ -459,3 +459,46 @@ TEST_CASE("Clearing the layers while the headers are still arriving leaves nothi
     CHECK(region.lazLayers()->count() == 0);
     CHECK(region.geoReference()->state() == cwGeoReference::Ungeoreferenced);
 }
+
+TEST_CASE("A tile whose center its own system can't hold never anchors (#660)",
+          "[cwLocalProjectionFrame][issue660]")
+{
+    // EPSG:32612 declares an area of use, which is what makes a center out of
+    // domain; the synthetic zone WKTs above declare none, so the CS here is
+    // named by its EPSG code rather than built by utmZoneWkt().
+    const QString utm12N = QStringLiteral("EPSG:32612");
+    constexpr double kInZoneEasting = 500000.0;
+    constexpr double kOutOfZoneEasting = 1478000.0;
+    constexpr double kNorthing = 4194000.0;
+
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    const QDir gisLayers = makeGisLayersDir(tempDir);
+
+    cwCavingRegion region;
+    bindEmptyFolder(&region, gisLayers);
+
+    SECTION("a center outside the zone leaves the project ungeoreferenced") {
+        writeTile(gisLayers, QStringLiteral("a-tile"),
+                  cloudAt(kOutOfZoneEasting, kNorthing), utm12N);
+
+        readFolder(&region);
+        REQUIRE(region.lazLayers()->count() == 1);
+        REQUIRE(waitForFrame(&region));
+
+        CHECK(region.geoReference()->state() == cwGeoReference::Ungeoreferenced);
+    }
+
+    SECTION("a center inside the zone anchors on the tile") {
+        writeTile(gisLayers, QStringLiteral("a-tile"),
+                  cloudAt(kInZoneEasting, kNorthing), utm12N);
+
+        readFolder(&region);
+        REQUIRE(region.lazLayers()->count() == 1);
+        REQUIRE(waitForFrame(&region));
+
+        auto* geoReference = region.geoReference();
+        CHECK(geoReference->state() == cwGeoReference::Anchored);
+        CHECK(geoReference->anchor().id == region.lazLayers()->layerAt(0)->id());
+    }
+}

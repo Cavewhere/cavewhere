@@ -103,6 +103,9 @@ public:
     struct DomainCheck {
         bool eastingValid = true;
         bool northingValid = true;
+
+        //! Whether the point is plausible on both axes.
+        bool isValid() const { return eastingValid && northingValid; }
     };
     static DomainCheck domainCheck(const QString& cs, const cwGeoPoint& point);
 

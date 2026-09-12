@@ -15,6 +15,7 @@
 #include "cwCavingRegion.h"
 #include "cwCoordinateTransform.h"
 #include "cwFixStation.h"
+#include "cwFixStationDiagnostics.h"
 #include "cwFixStationModel.h"
 #include "cwGeoReference.h"
 #include "cwLocalProjection.h"
@@ -35,6 +36,10 @@ namespace {
 const QString kUtm12N = QStringLiteral("EPSG:32612");
 
 constexpr double kAnchorEasting = 500000.0;
+
+//! A million meters past the zone's edge: a real coordinate system, and a
+//! number nowhere inside it — a transposed digit, or the wrong zone.
+constexpr double kOutOfZoneEasting = 1478000.0;
 constexpr double kAnchorNorthing = 4194000.0;
 constexpr double kElevation = 2700.0;
 
@@ -1034,5 +1039,110 @@ TEST_CASE("The region walk reaches past the first cave",
         constexpr double kToleranceMeters = 0.1;
         CHECK_THAT(center->x, WithinAbs(kHalfway, kToleranceMeters));
         CHECK_THAT(center->y, WithinAbs(kHalfway, kToleranceMeters));
+    }
+}
+
+TEST_CASE("A domain-invalid fix never anchors the project (#660)",
+          "[cwLocalProjectionManager][issue660]")
+{
+    // The typo parses and its CS is real, but the coordinate is nowhere the
+    // zone covers. Anchoring on it centers the frame on the typo and puts every
+    // good fix hundreds of kilometers from the origin.
+    const cwFixStation typo = makeFix(QStringLiteral("A1"), kUtm12N,
+                                      kOutOfZoneEasting, kAnchorNorthing, kElevation);
+    REQUIRE_FALSE(cwFixStationDiagnostics::isDomainValid(typo));
+    const cwFixStation good = makeFix(QStringLiteral("A2"), kUtm12N,
+                                      kAnchorEasting, kAnchorNorthing, kElevation);
+
+    SECTION("the typo entered first hands the anchor to the good fix") {
+        cwCavingRegion region;
+        addCaveWithFixes(&region, {typo, good});
+        auto* geoReference = region.geoReference();
+        REQUIRE(geoReference->state() == cwGeoReference::Anchored);
+        CHECK(geoReference->anchor()
+              == cwGeoReference::Anchor{cwGeoReference::Anchor::FixStation, good.id()});
+        checkCenteredOn(geoReference->localCoordinateSystem(), kUtm12N,
+                        kAnchorEasting, kAnchorNorthing);
+    }
+
+    SECTION("a project whose only fix is a typo stays ungeoreferenced") {
+        cwCavingRegion region;
+        addCaveWithFixes(&region, {typo});
+        CHECK(region.geoReference()->state() == cwGeoReference::Ungeoreferenced);
+    }
+}
+
+TEST_CASE("A stored anchor the domain gate refuses can still be deleted (#660)",
+          "[cwLocalProjectionManager][issue660]")
+{
+    // A project saved before the gate existed can open anchored on a typo. That
+    // anchor can never appear among the inputs again, so deleting it — the
+    // user's own repair — is the one way out, and reading that as an anchor
+    // that hasn't loaded yet would strand the project on the typo forever.
+    const cwFixStation typo = makeFix(QStringLiteral("A1"), kUtm12N,
+                                      kOutOfZoneEasting, kAnchorNorthing, kElevation);
+    const cwFixStation good = makeFix(QStringLiteral("A2"), kUtm12N,
+                                      kAnchorEasting, kAnchorNorthing, kElevation);
+
+    cwCavingRegion source;
+    addCaveWithFixes(&source, {typo, good});
+    cwCavingRegionData data = source.data();
+    data.geoReference.state = cwGeoReference::Anchored;
+    data.geoReference.localCoordinateSystem = kElsewhereCS;
+    data.geoReference.anchor = cwGeoReference::Anchor{cwGeoReference::Anchor::FixStation,
+                                                      typo.id()};
+
+    cwCavingRegion region;
+    region.setData(data);
+    auto* geoReference = region.geoReference();
+    REQUIRE(geoReference->state() == cwGeoReference::Anchored);
+    REQUIRE(geoReference->anchor().id == typo.id());
+    REQUIRE(geoReference->localCoordinateSystem() == kElsewhereCS);
+
+    REQUIRE(region.caveCount() == 1);
+    region.cave(0)->fixStations()->removeAt(0);
+
+    CHECK(geoReference->state() == cwGeoReference::Anchored);
+    CHECK(geoReference->anchor()
+          == cwGeoReference::Anchor{cwGeoReference::Anchor::FixStation, good.id()});
+    checkCenteredOn(geoReference->localCoordinateSystem(), kUtm12N,
+                    kAnchorEasting, kAnchorNorthing);
+}
+
+TEST_CASE("An anchor edited into a typo stops holding the frame (#660)",
+          "[cwLocalProjectionManager][issue660]")
+{
+    // Typing the wrong easting into the anchor itself reads exactly like
+    // deleting it: the fix is still there, but nothing the frame can follow.
+    cwCavingRegion region;
+    const cwFixStation anchor = makeFix(QStringLiteral("A1"), kUtm12N,
+                                        kAnchorEasting, kAnchorNorthing, kElevation);
+    cwCave* cave = addCaveWithFixes(&region, {anchor});
+    auto* geoReference = region.geoReference();
+    const QString before = geoReference->localCoordinateSystem();
+
+    cwFixStation typo = anchor;
+    typo.setCoordinate(kOutOfZoneEasting, kAnchorNorthing, kElevation);
+
+    SECTION("the only fix gives the project back its ungeoreferenced state") {
+        cave->fixStations()->setFixStations({typo});
+
+        CHECK(geoReference->state() == cwGeoReference::Ungeoreferenced);
+
+        // Correcting the typo anchors the project again.
+        cave->fixStations()->setFixStations({anchor});
+        CHECK(geoReference->state() == cwGeoReference::Anchored);
+        checkCenteredOn(geoReference->localCoordinateSystem(), kUtm12N,
+                        kAnchorEasting, kAnchorNorthing);
+    }
+
+    SECTION("a neighbor still near the origin keeps the frame, frozen") {
+        const cwFixStation neighbor = makeFix(QStringLiteral("B1"), kUtm12N,
+                                              kNearbyEasting, kNearbyNorthing, kElevation);
+        cave->fixStations()->appendFixStation(neighbor);
+        cave->fixStations()->setFixStations({typo, neighbor});
+
+        CHECK(geoReference->state() == cwGeoReference::Frozen);
+        CHECK(geoReference->localCoordinateSystem() == before);
     }
 }

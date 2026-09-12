@@ -11,6 +11,7 @@
 #include "cwCavingRegion.h"
 #include "cwCoordinateTransform.h"
 #include "cwFixStation.h"
+#include "cwFixStationDiagnostics.h"
 #include "cwFixStationModel.h"
 #include "cwLazLayer.h"
 #include "cwLazLayerModel.h"
@@ -46,11 +47,15 @@ namespace {
     //! Whether \a fix can place anything. Only a Valid fix has components at
     //! all — every other state reads zeros, and a frame centered on a coordinate
     //! system's own origin is exactly the "cave in the Gulf of Guinea" failure
-    //! the LDP exists to make impossible.
+    //! the LDP exists to make impossible. The domain check is the other half: a
+    //! coordinate its own system can't hold — a transposed digit, the wrong UTM
+    //! zone — would center the frame on the typo, leaving every good fix
+    //! hundreds of kilometers out for the outlier validator to blame.
     bool usableFixStation(const cwFixStation& fix)
     {
         return fix.state() == cwFixStation::Valid
-                && cwCoordinateTransform::isValidCS(fix.inputCS().trimmed());
+                && cwCoordinateTransform::isValidCS(fix.inputCS().trimmed())
+                && cwFixStationDiagnostics::isDomainValid(fix);
     }
 }
 
@@ -254,10 +259,17 @@ QList<cwLocalProjectionManager::Input> cwLocalProjectionManager::gatherLayerInpu
         if (!cwCoordinateTransform::isValidCS(layerCS)) {
             continue;
         }
+        // Same domain rule as a fix station: a header, or a source-CS override,
+        // can put the cloud somewhere its own system doesn't reach, and a frame
+        // centered there is centered on the mistake.
+        const cwGeoPoint center = layer->sourceBboxCenter();
+        if (!cwCoordinateTransform::domainCheck(layerCS, center).isValid()) {
+            continue;
+        }
         inputs.append(Input{
             cwGeoReference::Anchor{cwGeoReference::Anchor::LazLayer, layer->id()},
             layerCS,
-            layer->sourceBboxCenter()
+            center
         });
     }
 
@@ -628,7 +640,18 @@ void cwLocalProjectionManager::evaluateFrame()
             return;
         }
 
-        if (!m_anchorSeen) {
+        // "Hasn't loaded yet" only describes a layer: layers are rescanned off
+        // disk, while a fix station arrives with the cave that holds it. A fix
+        // anchor the region can't find at all is a deleted one, and the frame
+        // has to move off it even if it was never usable — that is the only way
+        // out for a project stored anchored on a fix whose coordinate its own
+        // system can't hold.
+        const cwGeoReference::Anchor anchor = geoReference->anchor();
+        const bool anchorFixDeleted =
+            anchor.kind == cwGeoReference::Anchor::FixStation
+            && !findFixStation(anchor.id).has_value();
+
+        if (!m_anchorSeen && !anchorFixDeleted) {
             // The anchor has never been among the inputs, so this is a project
             // whose layers haven't been rescanned yet, not one whose anchor was
             // deleted.
