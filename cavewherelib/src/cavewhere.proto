@@ -600,3 +600,25 @@ message DiskCacheEntry {
     optional string checksum = 1;
     optional bytes entry = 2;
 }
+
+message PointOctreeNode {
+    uint32 level = 1;
+    uint32 x = 2;
+    uint32 y = 3;
+    uint32 z = 4;
+    uint32 point_count = 5;
+    int64 byte_size = 6;
+    repeated int32 children = 7;    // exactly 8 entries, -1 = no child
+}
+
+message PointOctreeManifest {
+    uint32 format_generation = 1;
+    string fingerprint = 2;
+    int64 point_count = 3;
+    repeated double root_min = 4;   // exactly 3 entries
+    double root_size = 5;
+    repeated double bbox_min = 6;   // exactly 3 entries
+    repeated double bbox_max = 7;   // exactly 3 entries
+    float mean_spacing_xy = 8;
+    repeated PointOctreeNode nodes = 9;
+}
