@@ -3,19 +3,26 @@
 
 #include <QByteArray>
 #include <QColor>
+#include <QCoreApplication>
 #include <QDir>
+#include <QElapsedTimer>
+#include <QFuture>
 #include <QImage>
+#include <QSemaphore>
 #include <QString>
 #include <QTemporaryDir>
+#include <QThreadPool>
 
 #include <ktx.h>
 
 #include <algorithm>
 #include <cmath>
 
+#include "cwConcurrent.h"
 #include "cwDiskCacher.h"
 #include "cwKtx2Codec.h"
 #include "cwStreamedTexture.h"
+#include "cwTask.h"
 #include "cwTextureResidency.h"
 
 namespace {
@@ -350,4 +357,140 @@ TEST_CASE("cwKtx2Codec slices an RGBA8 chain for devices without block compressi
         CHECK(std::abs(center.green() - kSolidGreen) <= kChannelTolerance);
         CHECK(std::abs(center.blue() - kSolidBlue) <= kChannelTolerance);
     }
+}
+
+namespace {
+    constexpr int kBlockedProbeMs = 250;
+    constexpr int kEncodeTimeoutMs = 30000;
+    constexpr int kFreeSlotTimeoutMs = 2000;
+    constexpr int kLaneOccupiedTimeoutMs = 5000;
+    constexpr int kPollSliceMs = 5;
+    constexpr int kSingleThread = 1;
+
+    //! Restores the shared worker pool's thread count on every path out of a test
+    struct ThreadCountRestorer {
+        explicit ThreadCountRestorer(int threadCount) :
+            m_previous(cwTask::threadPool()->maxThreadCount())
+        {
+            cwTask::threadPool()->setMaxThreadCount(threadCount);
+        }
+
+        ~ThreadCountRestorer()
+        {
+            cwTask::threadPool()->setMaxThreadCount(m_previous);
+        }
+
+        ThreadCountRestorer(const ThreadCountRestorer&) = delete;
+        ThreadCountRestorer& operator=(const ThreadCountRestorer&) = delete;
+
+    private:
+        int m_previous;
+    };
+
+    //! Spins the event loop until predicate() is true or timeoutMs elapses
+    template <typename Predicate>
+    bool spinUntil(Predicate predicate, int timeoutMs)
+    {
+        QElapsedTimer timer;
+        timer.start();
+        while(!predicate() && timer.elapsed() < timeoutMs) {
+            QCoreApplication::processEvents(QEventLoop::AllEvents, kPollSliceMs);
+        }
+        return predicate();
+    }
+
+    //! Holds the encode lane's only thread until release() is called
+    class LaneBlocker {
+    public:
+        LaneBlocker()
+        {
+            cw::ktx2::encodeLane()->start([this]() {
+                m_gate.acquire();
+                m_left.release();
+            });
+        }
+
+        ~LaneBlocker()
+        {
+            release();
+        }
+
+        bool waitUntilOccupied()
+        {
+            return spinUntil([]() {
+                return cw::ktx2::encodeLane()->activeThreadCount() >= kSingleThread;
+            }, kLaneOccupiedTimeoutMs);
+        }
+
+        //! Opens the gate and returns once the runnable has left this object
+        void release()
+        {
+            if(!m_released) {
+                m_released = true;
+                m_gate.release();
+                m_left.acquire();
+            }
+        }
+
+        LaneBlocker(const LaneBlocker&) = delete;
+        LaneBlocker& operator=(const LaneBlocker&) = delete;
+
+    private:
+        QSemaphore m_gate;
+        QSemaphore m_left;
+        bool m_released = false;
+    };
+
+    using EncodeFuture = QFuture<Monad::Result<QByteArray>>;
+
+    //! Encodes a gradient image on the shared worker pool
+    EncodeFuture startEncode()
+    {
+        const QImage image = gradientImage(kGradientWidth, kGradientHeight);
+        return cwConcurrent::run([image]() {
+            return cw::ktx2::encodeRgba(image);
+        });
+    }
+
+    bool encodeFinished(const EncodeFuture& encode, int timeoutMs)
+    {
+        return spinUntil([&encode]() { return encode.isFinished(); }, timeoutMs);
+    }
+}
+
+TEST_CASE("The encode lane runs one compress at a time", "[Ktx2][EncodeLane]") {
+    CHECK(cw::ktx2::encodeLane()->maxThreadCount() == kSingleThread);
+}
+
+TEST_CASE("encodeRgba compresses on the encode lane", "[Ktx2][EncodeLane]") {
+    LaneBlocker blocker;
+    REQUIRE(blocker.waitUntilOccupied());
+
+    const EncodeFuture encode = startEncode();
+    CHECK_FALSE(encodeFinished(encode, kBlockedProbeMs));
+
+    blocker.release();
+
+    REQUIRE(encodeFinished(encode, kEncodeTimeoutMs));
+    const Monad::Result<QByteArray> encoded = encode.result();
+    REQUIRE_FALSE(encoded.hasError());
+    CHECK_FALSE(encoded.value().isEmpty());
+}
+
+TEST_CASE("A worker waiting on the encode lane frees its pool slot", "[Ktx2][EncodeLane]") {
+    ThreadCountRestorer threadCount(kSingleThread);
+
+    LaneBlocker blocker;
+    REQUIRE(blocker.waitUntilOccupied());
+
+    const EncodeFuture encode = startEncode();
+    const QFuture<int> trivial = cwConcurrent::run([]() { return 1; });
+
+    CHECK(spinUntil([&trivial]() { return trivial.isFinished(); }, kFreeSlotTimeoutMs));
+    CHECK_FALSE(encode.isFinished());
+
+    blocker.release();
+
+    REQUIRE(encodeFinished(encode, kEncodeTimeoutMs));
+    CHECK_FALSE(encode.result().hasError());
 }

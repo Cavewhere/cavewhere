@@ -5,6 +5,7 @@
 #include <QByteArray>
 #include <QImage>
 #include <QSize>
+#include <QThreadPool>
 #include <QVector>
 
 // Qt RHI
@@ -50,6 +51,14 @@ namespace cw::ktx2 {
      * cavewherelib; cwKtx2Codec.cpp static_asserts it against the enum.
      */
     constexpr int kDefaultUastcQuality = 0;
+
+    /**
+     * The pool every UASTC compress runs on. It has one thread, so encodes run
+     * one at a time and each one is free to use every core through libktx.
+     * Exposed so callers can see whether an encode is active
+     * (activeThreadCount) or queued.
+     */
+    CAVEWHERE_LIB_EXPORT QThreadPool* encodeLane();
 
     /**
      * Encodes image as a UASTC supercompressed .ktx2 file with a full mip chain
