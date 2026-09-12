@@ -188,7 +188,6 @@ target_link_libraries(cavewherelib
     QMath3d
     MarkScope
     monad
-    QuickQanava
     qquickgit
     qt6keychain
     PRIVATE
@@ -398,7 +397,6 @@ qt_add_qml_module(cavewherelib
     DEPENDENCIES
         QtQuick
         QQuickGit
-        QuickQanava
     SOURCES
         ${cavewhere_RELATIVE_CPP_FILES}
         ${cavewhere_RELATIVE_H_FILES}

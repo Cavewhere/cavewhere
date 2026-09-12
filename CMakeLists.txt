@@ -159,7 +159,6 @@ add_subdirectory(QQuickGit)
 set(SURVEX_CONAN OFF CACHE BOOL "Use survex Conan to manage dependencies" FORCE)
 
 add_subdirectory(MarkScope)
-add_subdirectory(QuickQanava)
 # add_subdirectory(SignalSpyChecker)
 
 add_subdirectory(survex)
@@ -295,7 +294,6 @@ if(BUILD_TESTING)
         protobuf::libprotobuf
         KTX::ktx
         SignalSpyChecker
-        QuickQanavaplugin
         laslib::laslib
     )
 
@@ -350,10 +348,10 @@ if(BUILD_TESTING)
         Qt6::Widgets
         Qt6::Qml
         Qt6::QuickTest
+        Qt6::QuickControls2
         cavewhere_simplemodule
         cavewhere-testlib
         cavewherelib
-        QuickQanavaplugin
     )
 
     # Ensure QML modules are imported without relying on QML2_IMPORT_PATH.
@@ -390,10 +388,10 @@ target_link_libraries(CaveWhere
     Qt6::Gui
     Qt6::Widgets
     Qt6::Quick
+    Qt6::QuickControls2
     Qt6::Sql
     Qt6::Test
     cavewherelib
-    QuickQanavaplugin
     MarkScope
 )
 

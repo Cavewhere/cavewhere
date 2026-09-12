@@ -36,9 +36,6 @@
 #include "cwSettings.h"
 #include "cwFontSettings.h"
 
-//QuickQanave includes
-#include <QuickQanava>
-
 //std includes
 #include <memory>
 
@@ -221,10 +218,6 @@ int main(int argc, char *argv[])
     // Add the macOS Resources directory to the QML import search path
     QString resourcePath = QCoreApplication::applicationDirPath() + "/../Resources/qml";
     applicationEngine->addImportPath(resourcePath);
-    applicationEngine->addImportPath(":/"); //This enable QuickQanava to load in qml correctly
-
-    //Initilize QuickQanava
-    QuickQanava::initialize(applicationEngine);
 
     QQmlContext* context = applicationEngine->rootContext();
 

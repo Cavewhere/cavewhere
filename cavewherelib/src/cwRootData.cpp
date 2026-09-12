@@ -56,9 +56,6 @@
 #include "GitRepository.h"
 #include "LfsBatchClient.h"
 
-//QuickQanave includes
-#include <QuickQanava>
-
 cwRootData::cwRootData(QObject *parent) :
     QObject(parent),
     m_account(new QQuickGit::Account(this)),
