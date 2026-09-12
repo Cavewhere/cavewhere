@@ -145,6 +145,9 @@ private:
     cwFutureManagerToken m_futureManagerToken;
     cwLocalProjectionToken m_localProjectionToken;
     QDir m_gisLayersDir;
+    //! Where every layer's octree is cached: the parent of m_gisLayersDir,
+    //! which is the project root. Empty until the project names its folder.
+    QString m_cacheRootPath;
 };
 
 #endif // CWLAZLAYERMODEL_H

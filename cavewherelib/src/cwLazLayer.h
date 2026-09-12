@@ -23,11 +23,12 @@
 //Our includes
 #include "CaveWhereLibExport.h"
 #include "cwFutureManagerToken.h"
-#include "cwGeometry.h"
 #include "cwGeoPoint.h"
 #include "cwLazLayerData.h"
 #include "cwLazLoader.h"
 #include "cwLocalProjectionToken.h"
+#include "cwPointOctreeBuilder.h"
+#include "cwPointOctreeSource.h"
 
 //Std includes
 #include <optional>
@@ -37,9 +38,11 @@ class cwKeywordModel;
 /**
  * Single LAZ point-cloud layer.
  *
- * Owns the loaded cwGeometry plus async load state. sourcePath is the only
- * persisted field; everything else (bbox, source CS, point count, geometry)
- * is rebuilt by re-running cwLazLoader against the file.
+ * Owns the published cwPointOctreeSource plus async build state. sourcePath is
+ * the only persisted field; everything else (bbox, source CS, point count, the
+ * octree itself) is rebuilt by re-running cwPointOctreeBuilder against the
+ * file — and the build is skipped entirely when the project's cache already
+ * holds the octree of these bytes.
  *
  * Visibility is not a property here — it lives in the render system via
  * cwKeywordItemModel + a per-layer render-side shim, the same architecture
@@ -88,7 +91,7 @@ public:
     /// Update the source path WITHOUT re-running the async loader. Used by
     /// cwLazLayerModel::rename when the file is being moved on disk to a
     /// sibling basename inside the same directory — the bytes are unchanged,
-    /// so the already-loaded geometry stays valid. setSourcePath would
+    /// so the already-published octree stays valid. setSourcePath would
     /// trigger a reload that races against the queued Move job (the new path
     /// doesn't exist on disk yet when the rename is enqueued). Updates
     /// m_sourcePath, the cached fingerprint (size/mtime), m_name, and fires
@@ -144,14 +147,22 @@ public:
     /// header is in, the points are not" is called.
     LoadStatus loadStatus() const;
     QString errorMessage() const { return m_errorMessage; }
-    qint64 pointCount() const { return m_geometry.vertexCount(); }
+    qint64 pointCount() const { return m_pointCount; }
     QVector3D bboxMin() const { return m_bboxMin; }
     QVector3D bboxMax() const { return m_bboxMax; }
     float meanSpacingXY() const { return m_meanSpacingXY; }
 
     QUuid id() const { return m_id; }
 
-    const cwGeometry& geometry() const { return m_geometry; }
+    /// What the renderer streams from: where the octree's cache lives, which
+    /// file it was built from, and its manifest. Null until the build lands.
+    const cwPointOctreeSource& octree() const { return m_octree; }
+
+    /// Where the octree's cwDiskCacher root is — the project root. Empty on a
+    /// standalone layer, which then caches beside the LAZ file itself.
+    QString cacheRootPath() const { return m_cacheRootPath; }
+    void setCacheRootPath(const QString& path);
+
     cwKeywordModel* keywordModel() const { return m_keywordModel; }
 
     void setFutureManagerToken(const cwFutureManagerToken& token);
@@ -161,7 +172,7 @@ public:
     void setLocalProjectionToken(const cwLocalProjectionToken& token);
 
     /// Kicks off an async load into the frame the token names. Call it after
-    /// the frame moves: the geometry in memory is in the old one.
+    /// the frame moves: the octree in memory is in the old one.
     /// Re-entrant: rapid restarts coalesce into a single in-flight run.
     void reload();
 
@@ -186,6 +197,7 @@ signals:
     void bboxChanged();
     void meanSpacingXYChanged();
     void headerProbeInFlightChanged();
+    void octreeChanged();
 
 private:
     //! How far the points have got, which is all this layer actually runs.
@@ -203,13 +215,16 @@ private:
     void updateFileNameKeyword();
     void updateIdKeyword();
     void updateTypeKeyword();
-    void applyResult(cwLazLoadResult&& result);
+    void applyResult(const cwPointOctreeBuilder::Result& result);
+    void publishOctree(cwPointOctreeManifest&& manifest);
+    //! Drop the published octree and everything read off its manifest.
+    void clearOctree();
     void startHeaderProbe();
     //! Publish what @a probe read, then report the probe finished — in that
     //! order, which is the whole reason this is one function.
     void finishProbe(const cwLazLoader::ProbeResult& probe);
     void setHeaderProbeInFlight(bool inFlight);
-    void startDecode(const QString& frameCS);
+    void startBuild(const QString& frameCS);
 
     QString m_sourcePath;
     qint64 m_sourceSize = -1;
@@ -219,6 +234,7 @@ private:
 
     QString m_name;
     QString m_sourceCSOverride;
+    QString m_cacheRootPath;
     QString m_errorMessage;
     QVector3D m_bboxMin;
     QVector3D m_bboxMax;
@@ -231,22 +247,32 @@ private:
     PointState m_pointState = PointState::Idle;
     bool m_headerProbeInFlight = false;
     float m_meanSpacingXY = 0.0f;
+    qint64 m_pointCount = 0;
     QUuid m_id;
 
-    cwGeometry m_geometry;
+    cwPointOctreeSource m_octree;
 
     cwKeywordModel* m_keywordModel = nullptr;
     cwFutureManagerToken m_futureManagerToken;
     cwLocalProjectionToken m_localProjectionToken;
 
-    // Which wait for the frame is the current one. A reload() that starts while
-    // an earlier one is still waiting supersedes it: the newer one carries the
-    // newer frame, and both would otherwise decode the same file.
-    quint64 m_frameWaitGeneration = 0;
+    // Which reload() run is the current one: a newer one supersedes the frame
+    // wait and the cache probe of an older one, which carry an older frame and
+    // would otherwise build the same file twice.
+    quint64 m_reloadGeneration = 0;
+
+    // Which reload() generation the in-flight build belongs to. A result whose
+    // generation has been superseded was built against an older frame or CS,
+    // so it is dropped rather than published.
+    quint64 m_buildGeneration = 0;
+
+    // The cache root the in-flight build was asked for — its result carries
+    // the manifest, not the request.
+    QString m_buildCacheRootPath;
 
     // Coalesces rapid reload() calls and serializes cancel-then-restart so a
     // new load only begins once the previous one has actually stopped.
-    AsyncFuture::Restarter<cwLazLoadResult> m_loadRestarter;
+    AsyncFuture::Restarter<cwPointOctreeBuilder::Result> m_loadRestarter;
 
     // Its own restarter so probe results arrive in the order they were asked
     // for: two probes racing on a file rewritten twice could otherwise publish

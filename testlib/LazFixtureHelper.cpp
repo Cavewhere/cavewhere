@@ -1,5 +1,6 @@
 #include "LazFixtureHelper.h"
 
+#include <QAbstractItemModel>
 #include <QByteArray>
 #include <QCoreApplication>
 #include <QElapsedTimer>
@@ -326,6 +327,36 @@ bool waitForLazLayerModelSettled(cwLazLayerModel* layers, int timeoutMs)
         spinEventLoopSlice();
     }
     return !settling();
+}
+
+LazJobRecorder::LazJobRecorder(cwFutureManagerModel* manager)
+{
+    m_connection = QObject::connect(manager, &QAbstractItemModel::rowsInserted, manager,
+        [this, manager](const QModelIndex&, int first, int last) {
+            for (int row = first; row <= last; ++row) {
+                m_names.append(manager->index(row, 0)
+                                   .data(cwFutureManagerModel::NameRole)
+                                   .toString());
+            }
+        });
+}
+
+LazJobRecorder::~LazJobRecorder()
+{
+    QObject::disconnect(m_connection);
+}
+
+bool LazJobRecorder::waitForName(const QString& name, int timeoutMs)
+{
+    QElapsedTimer elapsed;
+    elapsed.start();
+    while (elapsed.elapsed() < timeoutMs) {
+        if (m_names.contains(name)) {
+            return true;
+        }
+        spinEventLoopSlice();
+    }
+    return m_names.contains(name);
 }
 
 bool addLazAndWait(cwRootData* root, const QStringList& externalPaths)

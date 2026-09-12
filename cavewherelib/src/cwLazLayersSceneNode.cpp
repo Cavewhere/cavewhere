@@ -269,13 +269,13 @@ void cwLazLayersSceneNode::materialize(cwLazLayer* layer)
                                   << "layer=" << QFileInfo(layer->sourcePath()).fileName();
     }
 
-    // bboxChanged also fires during applyResult, immediately before
-    // loadStatusChanged(Loaded). Connecting both would push the geometry
-    // twice and rebuild the immutable vertex buffer twice per load.
+    // octreeChanged also fires during publishOctree, immediately before
+    // loadStatusChanged(Loaded). Connecting both would push the same source
+    // twice and reset the render side's node table twice per load.
     connect(layer, &cwLazLayer::loadStatusChanged,
-            this, [this, layer]() { syncLayerGeometry(layer); });
+            this, [this, layer]() { syncLayerOctree(layer); });
 
-    syncLayerGeometry(layer);
+    syncLayerOctree(layer);
     addKeywordItemForLayer(layer);
 }
 
@@ -293,7 +293,7 @@ void cwLazLayersSceneNode::dematerialize(cwLazLayer* layer)
     // Drop the loadStatusChanged hook-up before tearing down the render object
     // so a late-arriving signal can't look up a destroyed pointer. The
     // enabledChanged hook-up must survive — disconnecting per-signal preserves
-    // it while clearing the geometry sync.
+    // it while clearing the octree sync.
     disconnect(layer, &cwLazLayer::loadStatusChanged, this, nullptr);
     cwRenderPointCloud* renderObject = it.value();
     renderObject->setScene(nullptr);
@@ -316,14 +316,14 @@ void cwLazLayersSceneNode::onEnabledChanged()
     }
 }
 
-void cwLazLayersSceneNode::syncLayerGeometry(cwLazLayer* layer)
+void cwLazLayersSceneNode::syncLayerOctree(cwLazLayer* layer)
 {
     if (!layer) {
         return;
     }
     auto it = m_pointClouds.find(layer->id());
     if (it == m_pointClouds.end()) {
-        qCWarning(lcLazSceneNode) << "syncLayerGeometry: no render object for layer"
+        qCWarning(lcLazSceneNode) << "syncLayerOctree: no render object for layer"
                                   << QFileInfo(layer->sourcePath()).fileName()
                                   << "— addLayer was never called for this layer.";
         return;
@@ -333,10 +333,11 @@ void cwLazLayersSceneNode::syncLayerGeometry(cwLazLayer* layer)
         return;
     }
 
-    // The layer still decodes a whole cwGeometry, which the renderer no longer
-    // takes. Q3 replaces that decode with the octree build and publishes the
-    // cwPointOctreeSource here; until then a loaded layer draws nothing.
-    renderObject->clear();
+    if (layer->loadStatus() == cwLazLayer::LoadStatus::Loaded) {
+        renderObject->setOctree(layer->octree());
+    } else {
+        renderObject->clear();
+    }
 }
 
 void cwLazLayersSceneNode::addKeywordItemForLayer(cwLazLayer* layer)

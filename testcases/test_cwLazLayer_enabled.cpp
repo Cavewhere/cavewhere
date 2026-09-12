@@ -6,6 +6,7 @@
 #include <QTemporaryDir>
 
 #include "cwLazLayer.h"
+#include "cwPointOctreeManifest.h"
 
 #include "LazFixtureHelper.h"
 
@@ -39,7 +40,7 @@ TEST_CASE("cwLazLayer::setEnabled emits enabledChanged on change; nothing on no-
     REQUIRE(layer.enabled() == true);
 }
 
-TEST_CASE("cwLazLayer::setEnabled(false) on a loaded layer drops geometry and falls back to Probed",
+TEST_CASE("cwLazLayer::setEnabled(false) on a loaded layer drops the octree and falls back to Probed",
           "[cwLazLayer][cwLazLayerEnabled]") {
     QTemporaryDir tempDir;
     REQUIRE(tempDir.isValid());
@@ -56,9 +57,11 @@ TEST_CASE("cwLazLayer::setEnabled(false) on a loaded layer drops geometry and fa
     REQUIRE(waitForLazLayerLoaded(&layer));
     REQUIRE(layer.loadStatus() == cwLazLayer::LoadStatus::Loaded);
     REQUIRE(layer.pointCount() == points.size());
+    REQUIRE(layer.octree().manifest->pointCount == points.size());
 
     QSignalSpy statusSpy(&layer, &cwLazLayer::loadStatusChanged);
     QSignalSpy pointCountSpy(&layer, &cwLazLayer::pointCountChanged);
+    QSignalSpy octreeSpy(&layer, &cwLazLayer::octreeChanged);
 
     layer.setEnabled(false);
 
@@ -67,9 +70,11 @@ TEST_CASE("cwLazLayer::setEnabled(false) on a loaded layer drops geometry and fa
     REQUIRE(layer.loadStatus() == cwLazLayer::LoadStatus::Probed);
     REQUIRE(layer.hasReadHeader());
     REQUIRE(layer.pointCount() == 0);
+    REQUIRE(layer.octree().isNull());
     REQUIRE(layer.errorMessage().isEmpty());
     REQUIRE(statusSpy.size() >= 1); // Loaded → Probed
     REQUIRE(pointCountSpy.size() >= 1); // points dropped
+    REQUIRE(octreeSpy.size() >= 1); // the renderer is told to stop drawing
 }
 
 TEST_CASE("cwLazLayer::setEnabled(true) on a disabled layer with a sourcePath reloads",
@@ -96,6 +101,7 @@ TEST_CASE("cwLazLayer::setEnabled(true) on a disabled layer with a sourcePath re
     REQUIRE(waitForLazLayerLoaded(&layer));
     REQUIRE(layer.loadStatus() == cwLazLayer::LoadStatus::Loaded);
     REQUIRE(layer.pointCount() > 0);
+    REQUIRE_FALSE(layer.octree().isNull());
 }
 
 TEST_CASE("cwLazLayer: setSourcePath on a disabled layer captures fingerprint, decodes nothing",
@@ -123,6 +129,7 @@ TEST_CASE("cwLazLayer: setSourcePath on a disabled layer captures fingerprint, d
     REQUIRE(waitForLazLayerHeader(&layer));
     REQUIRE(layer.loadStatus() == cwLazLayer::LoadStatus::Probed);
     REQUIRE(layer.pointCount() == 0);
+    REQUIRE(layer.octree().isNull());
 
     QCoreApplication::processEvents();
     REQUIRE(layer.loadStatus() == cwLazLayer::LoadStatus::Probed);

@@ -87,7 +87,7 @@ private:
     void removeLayer(cwLazLayer* layer);
     void materialize(cwLazLayer* layer);
     void dematerialize(cwLazLayer* layer);
-    void syncLayerGeometry(cwLazLayer* layer);
+    void syncLayerOctree(cwLazLayer* layer);
     void addKeywordItemForLayer(cwLazLayer* layer);
     void removeKeywordItemForLayer(cwLazLayer* layer);
 

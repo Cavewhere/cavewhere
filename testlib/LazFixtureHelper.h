@@ -1,6 +1,7 @@
 #ifndef LAZFIXTUREHELPER_H
 #define LAZFIXTUREHELPER_H
 
+#include <QMetaObject>
 #include <QString>
 #include <QStringList>
 #include <QTemporaryDir>
@@ -8,6 +9,7 @@
 #include <QVector3D>
 #include <QtTypes>
 
+class cwFutureManagerModel;
 class cwLazLayer;
 class cwLazLayerModel;
 class cwRootData;
@@ -116,6 +118,34 @@ void spinEventLoopSlice();
  * have every row mid-decode.
  */
 bool waitForLazLayerModelSettled(cwLazLayerModel* layers, int timeoutMs = 10000);
+
+/**
+ * Records the name of every job announced by @a manager while it lives.
+ *
+ * A job that finishes between two event-loop slices is gone before any poll
+ * could see it, so the names are collected as the rows arrive rather than read
+ * back off the model. An empty list is therefore proof that no job ran — which
+ * is what a cache hit must look like.
+ */
+class LazJobRecorder
+{
+public:
+    explicit LazJobRecorder(cwFutureManagerModel* manager);
+    ~LazJobRecorder();
+
+    LazJobRecorder(const LazJobRecorder&) = delete;
+    LazJobRecorder& operator=(const LazJobRecorder&) = delete;
+
+    QStringList names() const { return m_names; }
+
+    /// Spin until a job called @a name has been announced, or @a timeoutMs
+    /// elapses. Returns whether it was seen.
+    bool waitForName(const QString& name, int timeoutMs = 10000);
+
+private:
+    QStringList m_names;
+    QMetaObject::Connection m_connection;
+};
 
 /**
  * Hand @a externalPaths to @a root's region.lazLayers via addFromFiles and

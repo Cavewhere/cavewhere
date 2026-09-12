@@ -8,14 +8,19 @@
 
 #include <QCoreApplication>
 #include <QDir>
+#include <QFile>
+#include <QFileInfo>
 #include <QPointer>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 
+#include "cwFutureManagerModel.h"
+#include "cwFutureManagerToken.h"
 #include "cwKeywordItemModel.h"
 #include "cwLazLayer.h"
 #include "cwLazLayerModel.h"
 #include "cwLazLayersSceneNode.h"
+#include "cwPointOctreeManifest.h"
 #include "cwRenderPointCloud.h"
 #include "cwScene.h"
 
@@ -130,8 +135,8 @@ TEST_CASE("scene node materializes on re-enable and survives subsequent loadStat
 
     // Re-enable: materialize must run before the layer fires its first
     // loadStatusChanged of the new load. After waiting for Loaded the render
-    // object should have geometry pushed into it without any "no render object
-    // for layer" warning.
+    // object should have the octree pushed into it without any "no render
+    // object for layer" warning.
     layer->setEnabled(true);
     REQUIRE(node.pointCloudForLayer(layer) != nullptr);
     REQUIRE(waitForLazLayerLoaded(layer));
@@ -330,4 +335,110 @@ TEST_CASE("scene node survives rapid enable/disable toggling without leaks",
     // Final state: enabled. The render object exists and the scene has no
     // stale pending items beyond the single live one.
     REQUIRE(node.pointCloudForLayer(layer) != nullptr);
+}
+
+TEST_CASE("scene node hands the layer's octree to the render cloud and clears it on error",
+          "[cwLazLayersSceneNode]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    cwScene scene;
+    cwKeywordItemModel keywordItems;
+    cwLazLayerModel model;
+
+    cwLazLayersSceneNode node;
+    node.setScene(&scene);
+    node.setKeywordItemModel(&keywordItems);
+    node.setLazLayerModel(&model);
+
+    const QDir gisLayersDir = prepareGisLayersDir(tempDir);
+    cwLazLayer* layer = addLazViaRescan(model, gisLayersDir, QStringLiteral("octree-handoff"));
+    REQUIRE(layer != nullptr);
+
+    REQUIRE(waitForLazLayerLoaded(layer));
+    REQUIRE(layer->loadStatus() == cwLazLayer::LoadStatus::Loaded);
+
+    cwRenderPointCloud* renderCloud = node.pointCloudForLayer(layer);
+    REQUIRE(renderCloud != nullptr);
+    REQUIRE(renderCloud->octree() == layer->octree());
+    REQUIRE(renderCloud->pointCount() == layer->pointCount());
+    REQUIRE(renderCloud->bboxMin() == layer->bboxMin());
+    REQUIRE(renderCloud->bboxMax() == layer->bboxMax());
+
+    // The file goes away under the layer, so the rebuild fails and the render
+    // cloud must stop pointing at an octree the cache no longer answers for.
+    REQUIRE(QFile::remove(layer->sourcePath()));
+    layer->reload();
+    REQUIRE(waitForLazLayerLoaded(layer));
+    REQUIRE(layer->loadStatus() == cwLazLayer::LoadStatus::Error);
+    REQUIRE_FALSE(layer->errorMessage().isEmpty());
+
+    REQUIRE(node.pointCloudForLayer(layer) == renderCloud);
+    REQUIRE(renderCloud->octree().isNull());
+    REQUIRE(renderCloud->pointCount() == 0);
+}
+
+TEST_CASE("scene node keeps the render cloud in step with a restarted build",
+          "[cwLazLayersSceneNode]")
+{
+    QTemporaryDir tempDir;
+    QTemporaryDir movedRoot;
+    REQUIRE(tempDir.isValid());
+    REQUIRE(movedRoot.isValid());
+
+    cwScene scene;
+    cwKeywordItemModel keywordItems;
+    cwLazLayerModel model;
+
+    cwLazLayersSceneNode node;
+    node.setScene(&scene);
+    node.setKeywordItemModel(&keywordItems);
+    node.setLazLayerModel(&model);
+
+    // Big enough that the first build is still running when the cache root
+    // moves under it.
+    QVector<QVector3D> points;
+    constexpr int kPointCount = 200000;
+    points.reserve(kPointCount);
+    for (int i = 0; i < kPointCount; ++i) {
+        points.append(QVector3D(float(i % 997), float(i % 991), float(i % 983)));
+    }
+
+    const QDir gisLayersDir = prepareGisLayersDir(tempDir);
+    const QString lazPath = gisLayersDir.filePath(QStringLiteral("superseded.laz"));
+    REQUIRE(writeSyntheticLazFile(lazPath, points));
+
+    cwFutureManagerModel manager;
+    cwFutureManagerToken futureToken(&manager);
+    model.setFutureManagerToken(futureToken);
+
+    LazJobRecorder jobs(&manager);
+    model.setGisLayersDir(gisLayersDir);
+    model.rescan();
+    REQUIRE(model.count() == 1);
+
+    cwLazLayer* layer = model.layerAt(0);
+    REQUIRE(layer != nullptr);
+    REQUIRE(layer->loadStatus() == cwLazLayer::LoadStatus::Loading);
+
+    // Wait for the job so the root really does move under a running build,
+    // rather than under a probe that has not asked for one yet.
+    REQUIRE(jobs.waitForName(
+        QStringLiteral("Building point cloud octree: %1").arg(QFileInfo(lazPath).baseName())));
+
+    // Supersede the in-flight build. The superseded one must never publish:
+    // the scene node only hears loadStatusChanged, and a second Loaded is no
+    // change at all, so a stale publish would leave the render cloud drawing
+    // an octree the layer has already replaced.
+    layer->setCacheRootPath(movedRoot.path());
+
+    constexpr int kBuildTimeoutMs = 30000;
+    REQUIRE(waitForLazLayerLoaded(layer, kBuildTimeoutMs));
+    REQUIRE(layer->loadStatus() == cwLazLayer::LoadStatus::Loaded);
+    REQUIRE(layer->octree().cacheRootPath() == QDir(movedRoot.path()).absolutePath());
+
+    cwRenderPointCloud* renderCloud = node.pointCloudForLayer(layer);
+    REQUIRE(renderCloud != nullptr);
+    REQUIRE(renderCloud->octree() == layer->octree());
 }

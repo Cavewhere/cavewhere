@@ -14,6 +14,8 @@
 #include "cwFutureManagerToken.h"
 #include "cwLazLayer.h"
 #include "cwLazLayerModel.h"
+#include "cwPointOctreeBuilder.h"
+#include "cwPointOctreeManifest.h"
 
 #include "LazFixtureHelper.h"
 
@@ -37,6 +39,76 @@ QString dropLazIntoDir(const QDir& dir, const QString& tag)
 }
 
 } // namespace
+
+TEST_CASE("cwLazLayerModel: layers cache their octree in the project root",
+          "[cwLazLayerModel]") {
+    QTemporaryDir firstRoot;
+    REQUIRE(firstRoot.isValid());
+
+    const QDir firstGisLayers = makeGisLayersDir(firstRoot);
+    REQUIRE(!dropLazIntoDir(firstGisLayers, QStringLiteral("cache-root")).isEmpty());
+
+    cwLazLayerModel model;
+    model.setGisLayersDir(firstGisLayers);
+    model.rescan();
+    REQUIRE(model.count() == 1);
+
+    cwLazLayer* layer = model.layerAt(0);
+    REQUIRE(layer != nullptr);
+
+    // The octree is cached in the project root's .cw_cache, so the root is the
+    // parent of the GIS Layers folder, never the folder itself.
+    const QString firstProjectRoot = QDir(firstRoot.path()).absolutePath();
+    REQUIRE(layer->cacheRootPath() == firstProjectRoot);
+    REQUIRE(layer->cacheRootPath() != firstGisLayers.absolutePath());
+
+    REQUIRE(waitForLazLayerLoaded(layer));
+    REQUIRE(layer->loadStatus() == cwLazLayer::LoadStatus::Loaded);
+    REQUIRE(layer->octree().cacheRootPath() == firstProjectRoot);
+    REQUIRE(QDir(firstProjectRoot).exists(QStringLiteral(".cw_cache")));
+
+    const cwPointOctreeBuilder::Request firstRequest {
+        .path = layer->sourcePath(),
+        .sourceCSOverride = QString(),
+        .frameCS = QString(),
+        .cacheRootPath = firstProjectRoot
+    };
+    REQUIRE(cwPointOctreeBuilder::cachedManifest(firstRequest).has_value());
+
+    // Naming a new folder moves every layer already in the model, not only the
+    // ones made after the move.
+    QTemporaryDir secondRoot;
+    REQUIRE(secondRoot.isValid());
+    const QDir secondGisLayers = makeGisLayersDir(secondRoot);
+    const QString secondProjectRoot = QDir(secondRoot.path()).absolutePath();
+
+    REQUIRE(!dropLazIntoDir(secondGisLayers, QStringLiteral("cache-root")).isEmpty());
+
+    // The push is synchronous; the rescan setGisLayersDir queues is not, and it
+    // replaces this layer with one scanned out of the new folder.
+    QPointer<cwLazLayer> moved(layer);
+    model.setGisLayersDir(secondGisLayers);
+    REQUIRE(!moved.isNull());
+    REQUIRE(moved->cacheRootPath() == secondProjectRoot);
+
+    REQUIRE(waitForLazLayerModelSettled(&model));
+    REQUIRE(model.count() == 1);
+
+    cwLazLayer* rescanned = model.layerAt(0);
+    REQUIRE(rescanned != nullptr);
+    REQUIRE(rescanned->cacheRootPath() == secondProjectRoot);
+    REQUIRE(waitForLazLayerLoaded(rescanned));
+    REQUIRE(rescanned->loadStatus() == cwLazLayer::LoadStatus::Loaded);
+    REQUIRE(rescanned->octree().cacheRootPath() == secondProjectRoot);
+
+    const cwPointOctreeBuilder::Request secondRequest {
+        .path = rescanned->sourcePath(),
+        .sourceCSOverride = QString(),
+        .frameCS = QString(),
+        .cacheRootPath = secondProjectRoot
+    };
+    REQUIRE(cwPointOctreeBuilder::cachedManifest(secondRequest).has_value());
+}
 
 TEST_CASE("cwLazLayerModel: rescan / removeAt / count", "[cwLazLayerModel]") {
     QTemporaryDir tempDir;

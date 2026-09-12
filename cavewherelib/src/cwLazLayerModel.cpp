@@ -317,6 +317,14 @@ void cwLazLayerModel::setGisLayersDir(const QDir& dir)
         return;
     }
     m_gisLayersDir = dir;
+
+    // The octree cache lives in the project root's .cw_cache, and this
+    // directory is the project root's "GIS Layers" folder.
+    m_cacheRootPath = QFileInfo(m_gisLayersDir.absolutePath()).absolutePath();
+    for (cwLazLayer* layer : std::as_const(m_layers)) {
+        layer->setCacheRootPath(m_cacheRootPath);
+    }
+
     // Defer the rescan to the event loop. During project load, this setter is
     // called from cwSaveLoad::setFileName, which runs *before* cwCavingRegion
     // ::setData restores the stored frame. Running rescan synchronously here
@@ -537,6 +545,7 @@ cwLazLayer* cwLazLayerModel::createLayer()
     connectLayer(layer);
     layer->setFutureManagerToken(m_futureManagerToken);
     layer->setLocalProjectionToken(m_localProjectionToken);
+    layer->setCacheRootPath(m_cacheRootPath);
     return layer;
 }
 
