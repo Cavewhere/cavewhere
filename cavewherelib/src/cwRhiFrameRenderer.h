@@ -364,9 +364,9 @@ public:
     // Driven by cwRhiScene::render, which sequences the offscreen drain after it.
     void renderLiveFrame(QRhiCommandBuffer* cb, cwRhiItemRenderer* renderer);
 
-    // Ask every render object to release its streamed textures (see
-    // cwRHIObject::releaseStreamedTextures). Render thread only, outside a frame.
-    void releaseStreamedTextures();
+    // Ask every render object to release what it streamed onto the GPU (see
+    // cwRHIObject::releaseStreamedResources). Render thread only, outside a frame.
+    void releaseStreamedResources();
 
 private:
     // Delete an RHI object and purge it from every tracking list, so neither the

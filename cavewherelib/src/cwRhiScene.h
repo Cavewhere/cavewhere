@@ -40,9 +40,9 @@ private:
     void synchroize(cwScene* scene, cwRhiItemRenderer* renderer);
     void render(QRhiCommandBuffer *cb, cwRhiItemRenderer* renderer);
 
-    // Release every streamed texture in this scene from the GPU, driven by
+    // Release everything this scene streamed onto the GPU, driven by
     // cwRhiItemRenderer when the QQuickRhiItem that owns this scene is hidden.
-    void releaseStreamedTextures();
+    void releaseStreamedResources();
 
     // Push a render object's live state into its registered cwRHIObject
     // (synchronize + queue a resource update; visibility travels separately via

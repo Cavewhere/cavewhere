@@ -333,16 +333,10 @@ void cwLazLayersSceneNode::syncLayerGeometry(cwLazLayer* layer)
         return;
     }
 
-    if (layer->loadStatus() == cwLazLayer::LoadStatus::Loaded) {
-        renderObject->setGeometry({
-            .geometry = layer->geometry(),
-            .bboxMin = layer->bboxMin(),
-            .bboxMax = layer->bboxMax(),
-            .meanSpacingXY = layer->meanSpacingXY(),
-        });
-    } else {
-        renderObject->clear();
-    }
+    // The layer still decodes a whole cwGeometry, which the renderer no longer
+    // takes. Q3 replaces that decode with the octree build and publishes the
+    // cwPointOctreeSource here; until then a loaded layer draws nothing.
+    renderObject->clear();
 }
 
 void cwLazLayersSceneNode::addKeywordItemForLayer(cwLazLayer* layer)

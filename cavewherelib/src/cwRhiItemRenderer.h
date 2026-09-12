@@ -35,9 +35,9 @@ public:
     //! show leaves the already scheduled release job with nothing to do
     void setViewVisible(bool visible);
 
-    //! Runs cwRhiItemRenderer::releaseStreamedTextures on the attached renderer,
+    //! Runs cwRhiItemRenderer::releaseStreamedResources on the attached renderer,
     //! or nothing when the viewer is visible again or no renderer is attached
-    void releaseStreamedTextures();
+    void releaseStreamedResources();
 
 private:
     QMutex m_mutex;
@@ -96,10 +96,10 @@ public:
     // cwRhiScene so it isn't called unconditionally (that would loop forever).
     void requestUpdate() { update(); }
 
-    // Release every streamed texture in this renderer's scene from the GPU.
-    // Render thread only, from the job the viewer schedules when it is hidden —
-    // see cwRhiViewer::itemChange.
-    void releaseStreamedTextures() { m_sceneRenderer->releaseStreamedTextures(); }
+    // Release everything this renderer's scene streamed onto the GPU. Render
+    // thread only, from the job the viewer schedules when it is hidden — see
+    // cwRhiViewer::itemChange.
+    void releaseStreamedResources() { m_sceneRenderer->releaseStreamedResources(); }
 
 protected:
     void initialize(QRhiCommandBuffer *cb) override;

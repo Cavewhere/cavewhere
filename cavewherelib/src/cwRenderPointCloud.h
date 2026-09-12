@@ -9,7 +9,7 @@
 #define CWRENDERPOINTCLOUD_H
 
 // Our includes
-#include "cwGeometry.h"
+#include "cwPointOctreeSource.h"
 #include "cwRenderObject.h"
 #include "cwTracked.h"
 
@@ -27,16 +27,6 @@ class cwRenderPointCloud : public cwRenderObject
     friend struct CwRenderPointCloudTestAccess;
 
 public:
-    // Bundle of fields handed across the model→render boundary in one shot.
-    // Mirrors cwLazLoadResult / cwLazLayer's load-time outputs that the
-    // renderer consumes together.
-    struct GeometryData {
-        cwGeometry geometry;
-        QVector3D bboxMin;
-        QVector3D bboxMax;
-        float meanSpacingXY = 0.0f;
-    };
-
     //! Pick sphere radius, as a multiple of meanSpacingXY.
     //!
     //! Must stay above 1/sqrt(2) ~= 0.707: on a grid of spacing s the worst
@@ -76,11 +66,14 @@ public:
 
     explicit cwRenderPointCloud(QObject* parent = nullptr);
 
-    void setGeometry(GeometryData data);
+    // The octree the renderer streams nodes out of. Re-publishing an equal
+    // source is a no-op, so the render side keeps every resident node.
+    void setOctree(const cwPointOctreeSource& source);
 
     void clear();
 
-    qsizetype pointCount() const;
+    const cwPointOctreeSource& octree() const;
+    qint64 pointCount() const;
     QVector3D bboxMin() const;
     QVector3D bboxMax() const;
     float pointSize() const;
@@ -93,28 +86,8 @@ protected:
     cwRHIObject* createRHIObject() override;
 
 private:
-    // Geometry and its derived bounds, tracked separately from the cheap
-    // render knobs below. Re-staging the (potentially multi-GB) vertex
-    // buffer is gated on THIS tracker changing, so tuning a uniform —
-    // world radius, point size — never re-uploads geometry. setGeometry() and
-    // clear() are the only callers that touch it.
-    struct GeometryState {
-        cwGeometry geometry;
-        QVector3D bboxMin;
-        QVector3D bboxMax;
-        // Mean planar inter-point spacing in meters (sqrt(area / N)). Drives
-        // per-cloud point radius in PointCloud.vert. 0 until first load.
-        float meanSpacingXY = 0.0f;
-
-        // Coarse "always changed": setGeometry runs per LAZ load (rare), so
-        // a real compare would be a pointless multi-GB memcmp. cwTracked
-        // re-stages only when this tracker is setValue'd, which is exactly
-        // the geometry-changed edge.
-        bool operator!=(const GeometryState& /*other*/) const { return true; }
-    };
-
     // Cheap per-cloud knobs uploaded as a small uniform, never as vertex
-    // data. A change here re-uploads the UBO but leaves the vertex buffer
+    // data. A change here re-uploads the UBO but leaves the node buffers
     // untouched. Real field compare so a no-op set is a no-op.
     struct RenderState {
         float pointSize = 2.0f;
@@ -132,33 +105,18 @@ private:
         }
     };
 
-    cwTracked<GeometryState> m_geometry;
+    cwTracked<cwPointOctreeSource> m_source;
     cwTracked<RenderState> m_renderState;
 };
 
-inline qsizetype cwRenderPointCloud::pointCount() const
+inline const cwPointOctreeSource& cwRenderPointCloud::octree() const
 {
-    return m_geometry.value().geometry.vertexCount();
-}
-
-inline QVector3D cwRenderPointCloud::bboxMin() const
-{
-    return m_geometry.value().bboxMin;
-}
-
-inline QVector3D cwRenderPointCloud::bboxMax() const
-{
-    return m_geometry.value().bboxMax;
+    return m_source.value();
 }
 
 inline float cwRenderPointCloud::pointSize() const
 {
     return m_renderState.value().pointSize;
-}
-
-inline float cwRenderPointCloud::meanSpacingXY() const
-{
-    return m_geometry.value().meanSpacingXY;
 }
 
 inline float cwRenderPointCloud::worldRadius() const

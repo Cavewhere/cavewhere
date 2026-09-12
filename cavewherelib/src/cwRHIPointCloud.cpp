@@ -8,33 +8,66 @@
 // Our includes
 #include "cwRHIPointCloud.h"
 #include "cwAppearanceOverride.h"
+#include "cwFrustum.h"
 #include "cwPointCloudAppearance.h"
+#include "cwPointOctree.h"
 #include "cwRenderMaterialState.h"
 #include "cwRenderPointCloud.h"
-#include "cwRhiAttributeFormat.h"
 #include "cwRhiItemRenderer.h"
 #include "cwRhiFrameRenderer.h"
-#include "cwRhiLimits.h"
 #include "cwScene.h"
+#include "cwTextureResidency.h"
 
 // Qt includes
 #include <QDebug>
-#include <QFile>
+#include <QDir>
 
 // Std includes
 #include <algorithm>
+#include <array>
+#include <cmath>
 #include <utility>
 
+namespace {
 
-cwRHIPointCloud::cwRHIPointCloud()
+    // {nodeMin.x, nodeMin.y, nodeMin.z, nodeSize / kQuantMax} as four floats
+    constexpr int kNodeConstantsFloats = 4;
+    constexpr quint32 kNodeConstantsBytes = kNodeConstantsFloats * sizeof(float);
+
+    // Slots in the shared per-instance constants buffer, at 16 bytes each. A
+    // view selects at most cw::octree::kMaxDesiredNodes nodes per frame, so at
+    // least half the slots are unselected in any frame and an incoming node can
+    // always find one to take.
+    constexpr int kMaxResidentNodes = 8192;
+    static_assert(kMaxResidentNodes >= 2 * cw::octree::kMaxDesiredNodes,
+                  "An upload must be able to evict an unselected node for its "
+                  "constants slot, which needs more slots than one frame's cut.");
+
+    constexpr int kPointsBinding = 0;
+    constexpr int kNodeConstantsBinding = 1;
+
+    //One instance per node, so the constants advance once per draw
+    constexpr quint32 kInstanceStepRate = 1;
+    constexpr int kRootIndex = 0;
+}
+
+cwRHIPointCloud::cwRHIPointCloud() :
+    m_streamer(&cwRHIPointCloud::loadNode,
+               [](const cwPointOctreeNodeSource& source, int) { return source.byteSize; },
+               cwRenderMemoryLedger::Category::PointCloudGeometry)
 {
 }
 
 cwRHIPointCloud::~cwRHIPointCloud()
 {
-    for (QRhiBuffer* buffer : m_vertexBuffers) {
-        delete buffer;
+    // The only place cancelAll() is allowed: it blocks until the loads in
+    // flight finish, and nothing may land on a table that is going away.
+    m_streamer.cancelAll();
+
+    for (const NodeRecord& node : std::as_const(m_nodes)) {
+        delete node.buffer;
     }
+    delete m_nodeConstants;
     delete m_perCloudUBO;
     delete m_srb;
     // Resources orphaned by a pool growth are owned by the cwAppearanceSlotted
@@ -52,11 +85,31 @@ void cwRHIPointCloud::initialize(const ResourceUpdateData& data)
     m_resourcesInitialized = true;
 }
 
-void cwRHIPointCloud::initializeResources(const ResourceUpdateData& /*data*/)
+void cwRHIPointCloud::initializeResources(const ResourceUpdateData& data)
 {
-    // The input layout is built from the geometry on the first non-empty
-    // updateResources call (we don't know the attribute set yet). UBOs and
-    // SRBs that don't depend on geometry are created on demand below.
+    auto* rhi = data.renderData.cb->rhi();
+
+    m_nodeConstants = rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::VertexBuffer,
+                                     kNodeConstantsBytes * quint32(kMaxResidentNodes));
+    m_nodeConstants->create();
+
+    // Popped from the back, so the first node takes slot 0.
+    m_freeSlots.reserve(kMaxResidentNodes);
+    for (int slot = kMaxResidentNodes - 1; slot >= 0; slot--) {
+        m_freeSlots.append(slot);
+    }
+
+    // One layout for every point cloud: a node's quantized points step per
+    // vertex, its dequantization constants per instance, and the whole node
+    // draws as a single instance.
+    m_inputLayout.setBindings({
+        { cw::octree::kBytesPerPoint, QRhiVertexInputBinding::PerVertex },
+        { kNodeConstantsBytes, QRhiVertexInputBinding::PerInstance, kInstanceStepRate }
+    });
+    m_inputLayout.setAttributes({
+        { kPointsBinding, 0, QRhiVertexInputAttribute::UShort4, 0 },        // qpos
+        { kNodeConstantsBinding, 1, QRhiVertexInputAttribute::Float4, 0 }   // nodeOriginScale
+    });
 }
 
 void cwRHIPointCloud::synchronize(const SynchronizeData& data)
@@ -64,106 +117,103 @@ void cwRHIPointCloud::synchronize(const SynchronizeData& data)
     Q_ASSERT(dynamic_cast<cwRenderPointCloud*>(data.object) != nullptr);
     auto* pointCloud = static_cast<cwRenderPointCloud*>(data.object);
 
-    m_geometry = pointCloud->m_geometry;
+    const bool sourceChanged = pointCloud->m_source.isChanged();
+    const cwPointOctreeSource source = pointCloud->m_source.value();
+
     m_renderState = pointCloud->m_renderState;
-    pointCloud->m_geometry.resetChanged();
+    pointCloud->m_source.resetChanged();
     pointCloud->m_renderState.resetChanged();
+
+    if (!sourceChanged) {
+        return;
+    }
+
+    m_source = source;
+    resetNodes();
+}
+
+void cwRHIPointCloud::resetNodes()
+{
+    releaseStreamedResources();
+
+    m_nodes.clear();
+    if (m_source.manifest) {
+        m_nodes.resize(m_source.manifest->nodes.size());
+    }
+}
+
+void cwRHIPointCloud::releaseNode(int index)
+{
+    NodeRecord& node = m_nodes[index];
+
+    // Buffers are deleted here, from synchronize() and from streamResources()
+    // — every one of them runs before gather() builds this frame's drawables,
+    // so no drawable ever names a buffer that has been freed.
+    delete node.buffer;
+    node.buffer = nullptr;
+
+    if (node.constantSlot >= 0) {
+        m_freeSlots.append(node.constantSlot);
+        node.constantSlot = -1;
+    }
+
+    m_gpuBytes.setBytes(m_gpuBytes.bytes() - node.bytes.size());
+    m_mirrorBytes.setBytes(m_mirrorBytes.bytes() - node.bytes.size());
+    node.bytes = QByteArray();
+
+    node.state = NodeState::Absent;
+    node.exportRequested = false;
+}
+
+bool cwRHIPointCloud::isRequested(int index) const
+{
+    return index >= 0 && index < m_nodes.size()
+           && m_nodes.at(index).state == NodeState::Requested;
+}
+
+void cwRHIPointCloud::requestNode(int index, quint64 priority)
+{
+    m_streamer.request(quint32(index), nodeSource(index), 0, priority);
+    m_nodes[index].state = NodeState::Requested;
+    if (!m_requested.contains(index)) {
+        m_requested.append(index);
+    }
+}
+
+cwRHIPointCloud::cwPointOctreeNodeSource cwRHIPointCloud::nodeSource(int index) const
+{
+    cwPointOctreeNodeSource source;
+    source.cacheRootPath = m_source.cacheRootPath();
+    // nodeName() memoizes a parent table; only the render thread ever asks a
+    // published manifest for a name, so that memo has one writer.
+    source.key = cw::octree::nodeKey(m_source.lazPath, m_source.fingerprint,
+                                     m_source.manifest->nodeName(index));
+    source.byteSize = m_source.manifest->nodes.at(index).byteSize;
+    return source;
+}
+
+cw::octree::SelectionInput cwRHIPointCloud::selectionInput(const RenderData& renderData,
+                                                           const cwFrustum* frustum) const
+{
+    cw::octree::SelectionInput input;
+    input.manifest = m_source.manifest.get();
+    input.frustum = frustum;
+    input.viewProjection = renderData.viewProjectionMatrix;
+    input.absP11 = std::abs(double(renderData.projectionMatrix(1, 1)));
+    input.viewportHeightPx = renderData.viewportSize.height();
+    input.screenSpaceErrorPx = renderData.budgets.screenSpaceErrorPx;
+    input.sseInflation = m_sseInflation;
+    return input;
 }
 
 void cwRHIPointCloud::updateResources(const ResourceUpdateData& data)
 {
-    const bool geometryChanged = m_geometry.isChanged();
-    const bool renderStateChanged = m_renderState.isChanged();
-    if (!geometryChanged && !renderStateChanged) {
-        return;
-    }
-
-    const auto& geometryState = m_geometry.value();
-    const cwGeometry& geometry = geometryState.geometry;
-    const auto bufferViews = geometry.vertexBuffers();
-
-    if (geometry.vertexCount() == 0 || bufferViews.isEmpty()) {
-        m_geometry.resetChanged();
-        m_renderState.resetChanged();
+    if (!m_renderState.isChanged() && m_perCloudUBO) {
         return;
     }
 
     auto* rhi = data.renderData.cb->rhi();
     QRhiResourceUpdateBatch* batch = data.resourceUpdateBatch;
-
-    // Vertex buffers are (re)built and uploaded only when the geometry
-    // tracker changed — i.e. setGeometry()/clear() ran. A uniform-only
-    // change (world radius / point size) dirties m_renderState alone, so the
-    // multi-GB vertex buffer is never re-staged for it. That separation is
-    // the whole point of tracking geometry apart from render state: re-
-    // staging on every uniform tweak was an unbounded leak across an
-    // offline render sweep.
-    if (geometryChanged) {
-        // Build the input layout from the geometry the first time we see a
-        // non-empty geometry. The geometry's attribute set is treated as
-        // immutable for the lifetime of this RHI object.
-        if (!m_layoutBuilt) {
-            m_inputLayout = buildRhiInputLayout(geometry);
-            m_layoutBuilt = true;
-        }
-
-        // Allocate one QRhiBuffer per cwGeometry vertex buffer. Interleaved
-        // geometry has 1 buffer (current LAZ case); Separated would have N.
-        if (m_vertexBuffers.size() != bufferViews.size()) {
-            for (QRhiBuffer* buffer : m_vertexBuffers) {
-                delete buffer;
-            }
-            m_vertexBuffers.assign(bufferViews.size(), nullptr);
-            m_vertexBufferCapacities.assign(bufferViews.size(), 0);
-        }
-
-        // Immutable buffers must be recreated on size change. We're here
-        // only because the geometry changed, so the upload is unconditional.
-        // A QRhiBuffer size is a quint32, so anything past 4 GiB (~358 M
-        // interleaved points) is truncated to a whole-vertex multiple.
-        qint64 uploadedVertexCount = geometry.vertexCount();
-        for (qsizetype i = 0; i < bufferViews.size(); ++i) {
-            const QByteArray* bufferData = bufferViews.at(i).data;
-            const int stride = bufferViews.at(i).stride;
-            const qint64 byteSize = bufferData->size();
-            const qint64 uploadBytes = cw::clampedVertexBytes(byteSize, stride);
-            const bool clamped = uploadBytes < byteSize;
-
-            if (clamped) {
-                const qint64 keptVertexCount = cw::clampedVertexCount(byteSize, stride);
-                qWarning() << "Point cloud vertex buffer" << i
-                           << "exceeds the" << cw::kMaxRhiBufferBytes
-                           << "byte QRhiBuffer limit; drawing" << keptVertexCount
-                           << "of" << geometry.vertexCount() << "points";
-                uploadedVertexCount = std::min(uploadedVertexCount, keptVertexCount);
-            }
-
-            if (!m_vertexBuffers[i] || m_vertexBufferCapacities[i] != uploadBytes) {
-                delete m_vertexBuffers[i];
-                m_vertexBuffers[i] = rhi->newBuffer(QRhiBuffer::Immutable,
-                                                    QRhiBuffer::VertexBuffer,
-                                                    quint32(uploadBytes));
-                m_vertexBuffers[i]->create();
-                m_vertexBufferCapacities[i] = qsizetype(uploadBytes);
-            }
-            if (clamped) {
-                // Only the clamped range fits, so upload it explicitly.
-                batch->uploadStaticBuffer(m_vertexBuffers[i], 0, quint32(uploadBytes),
-                                          bufferData->constData());
-            } else {
-                // By-value QByteArray: a refcount bump instead of a deep copy.
-                batch->uploadStaticBuffer(m_vertexBuffers[i], *bufferData);
-            }
-        }
-
-        qint64 vertexBufferBytes = 0;
-        for (const qsizetype capacity : std::as_const(m_vertexBufferCapacities)) {
-            vertexBufferBytes += capacity;
-        }
-        m_vertexBufferBytes.setBytes(vertexBufferBytes);
-
-        m_uploadedVertexCount = uploadedVertexCount;
-    }
 
     // Per-cloud uniform — world-space sprite radius in meters. A fixed default
     // (set on cwRenderPointCloud::RenderState) produces consistent sprite sizes
@@ -171,8 +221,7 @@ void cwRHIPointCloud::updateResources(const ResourceUpdateData& data)
     // was unreliable because mean-spacing estimates vary with LAZ density /
     // sampling. The live radius is overridden via cwLazLayersSceneNode::
     // setWorldRadius (P+wheel gesture in the 3D view, and sink_repatcher
-    // --point-radius for offline renders). Tracked in render state, so a change
-    // re-uploads only this small UBO — never the vertex buffer.
+    // --point-radius for offline renders).
     //
     // Steady state is ONE slot (slot 0 = the live radius). Per-job appearance
     // overrides acquire transient slots that grow the buffer on demand
@@ -181,11 +230,10 @@ void cwRHIPointCloud::updateResources(const ResourceUpdateData& data)
     // writes slot 0; a later live-radius change re-writes only slot 0.
     if (!m_perCloudUBO) {
         resizeAppearanceSlots(rhi, batch, 1);
-    } else if (renderStateChanged) {
+    } else {
         writeAppearanceSlot(batch, kLiveAppearanceSlot, m_renderState.value().worldRadius);
     }
 
-    m_geometry.resetChanged();
     m_renderState.resetChanged();
 }
 
@@ -237,15 +285,266 @@ void cwRHIPointCloud::resizeAppearanceSlots(QRhi* rhi, QRhiResourceUpdateBatch* 
     writeAppearanceSlot(batch, kLiveAppearanceSlot, m_renderState.value().worldRadius);
 }
 
+bool cwRHIPointCloud::streamResources(ResourceUpdateData& data, qint64& remainingUploadBytes)
+{
+    m_streamer.setMaxPendingCpuBytes(data.renderData.budgets.cpuBudgetBytes);
+
+    if (m_source.isNull()) {
+        return false;
+    }
+
+    auto* rhi = data.renderData.cb->rhi();
+    if (!rhi || !m_nodeConstants) {
+        return m_streamer.hasWork();
+    }
+
+    // Only while nothing is waiting on the upload budget. A payload the streamer
+    // has handed over is off its CPU cap and counts against no ledger until it
+    // is uploaded, so draining faster than the budget uploads would let the
+    // queue grow to the whole cut. Held back, the streamer keeps them inside
+    // setMaxPendingCpuBytes and m_readyQueue never holds more than one batch.
+    if (m_readyQueue.isEmpty()) {
+        const QVector<NodeStreamer::Result> ready = m_streamer.takeReady();
+        for (const NodeStreamer::Result& result : ready) {
+            const int index = int(result.itemId);
+            if (!isRequested(index)) {
+                // The cut moved on while the load ran: the payload dies with
+                // the local vector.
+                continue;
+            }
+
+            if (!result.error.isEmpty()) {
+                qWarning() << "Point octree node" << m_source.manifest->nodeName(index)
+                           << "of" << m_source.lazPath << "failed to load:" << result.error;
+                m_nodes[index].state = NodeState::Failed;
+                m_nodes[index].exportRequested = false;
+                continue;
+            }
+
+            m_readyQueue.append(result);
+        }
+    }
+
+    bool uploadedThisFrame = false;
+    QVector<NodeStreamer::Result> deferred;
+    for (const NodeStreamer::Result& result : std::as_const(m_readyQueue)) {
+        const int index = int(result.itemId);
+        if (!isRequested(index)) {
+            continue;
+        }
+
+        if (!cw::residency::takeFromBudget(remainingUploadBytes, result.payload.size(),
+                                           uploadedThisFrame)) {
+            // The streamer already handed this over, so it waits here for the
+            // next frame rather than being asked for a second time.
+            deferred.append(result);
+            continue;
+        }
+
+        if (uploadNode(rhi, data.resourceUpdateBatch, index, result.payload)) {
+            uploadedThisFrame = true;
+        }
+    }
+    m_readyQueue = deferred;
+
+    enforceGpuBudget(data.renderData.budgets);
+
+    return !m_readyQueue.isEmpty() || m_streamer.hasWork();
+}
+
+bool cwRHIPointCloud::uploadNode(QRhi* rhi, QRhiResourceUpdateBatch* batch, int index,
+                                 const QByteArray& bytes)
+{
+    const int slot = takeConstantSlot(bytes.size());
+    if (slot < 0) {
+        // Nothing could be freed for it; it goes back to being asked for.
+        m_nodes[index].state = NodeState::Absent;
+        m_nodes[index].exportRequested = false;
+        return false;
+    }
+
+    // A node holds at most kLeafMaxPoints or kSampleGridResolution^3 points at
+    // kBytesPerPoint each, both far under cw::kMaxRhiBufferBytes.
+    auto* buffer = rhi->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer,
+                                  quint32(bytes.size()));
+    buffer->create();
+    // By-value QByteArray: a refcount bump instead of a deep copy.
+    batch->uploadStaticBuffer(buffer, bytes);
+
+    const QBox3D bounds = m_source.manifest->nodeBounds(index);
+    const QVector3D minimum = bounds.minimum();
+    const float quantizationStep =
+        float(double(bounds.maximum().x() - minimum.x()) / double(cw::octree::kQuantMax));
+    const std::array<float, kNodeConstantsFloats> constants {
+        minimum.x(), minimum.y(), minimum.z(), quantizationStep
+    };
+    batch->updateDynamicBuffer(m_nodeConstants, quint32(slot) * kNodeConstantsBytes,
+                               kNodeConstantsBytes, constants.data());
+
+    NodeRecord& node = m_nodes[index];
+    node.buffer = buffer;
+    node.bytes = bytes;
+    node.constantSlot = slot;
+    node.state = NodeState::Resident;
+    node.exportRequested = false;
+
+    m_gpuBytes.setBytes(m_gpuBytes.bytes() + bytes.size());
+    m_mirrorBytes.setBytes(m_mirrorBytes.bytes() + bytes.size());
+
+    return true;
+}
+
+int cwRHIPointCloud::takeConstantSlot(qint64 incomingBytes)
+{
+    if (m_freeSlots.isEmpty()) {
+        const QVector<int> plan =
+            cw::octree::planNodeEvictions(residencyStats(), incomingBytes);
+        for (const int index : plan) {
+            releaseNode(index);
+        }
+    }
+
+    if (m_freeSlots.isEmpty()) {
+        return -1;
+    }
+
+    const int slot = m_freeSlots.last();
+    m_freeSlots.removeLast();
+    return slot;
+}
+
+QVector<cw::octree::NodeResidency> cwRHIPointCloud::residencyStats() const
+{
+    const quint64 frame = m_frame ? m_frame->frameCounter() : 0;
+
+    QVector<cw::octree::NodeResidency> stats;
+    stats.reserve(m_nodes.size());
+    for (int i = 0; i < m_nodes.size(); i++) {
+        const NodeRecord& node = m_nodes.at(i);
+
+        cw::octree::NodeResidency residency;
+        residency.resident = node.state == NodeState::Resident;
+        // streamResources runs before gather, so the counter still sits on the
+        // frame the cut was last stamped with.
+        residency.selectedThisFrame = node.lastDesiredFrame == frame;
+        residency.lastDesiredFrame = node.lastDesiredFrame;
+        residency.bytes = node.bytes.size();
+        residency.pinned = i == kRootIndex;
+        stats.append(residency);
+    }
+    return stats;
+}
+
+void cwRHIPointCloud::enforceGpuBudget(const cwRenderBudgets& budgets)
+{
+    const auto* ledger = cwRenderMemoryLedger::instance();
+    const qint64 overshoot = ledger->totalBytes(cwRenderMemoryLedger::Residency::Gpu)
+                             - budgets.gpuBudgetBytes;
+
+    qint64 reclaimed = 0;
+    if (overshoot > 0) {
+        const QVector<cw::octree::NodeResidency> stats = residencyStats();
+        for (const int index : cw::octree::planNodeEvictions(stats, overshoot)) {
+            // Once the nodes the cut dropped run out, the planner offers the
+            // ones it still wants. Taking those would only re-request and
+            // re-upload them next frame, so they stay and the cut gets coarser
+            // instead.
+            if (stats.at(index).selectedThisFrame) {
+                continue;
+            }
+
+            reclaimed += stats.at(index).bytes;
+            releaseNode(index);
+        }
+    }
+
+    const qint64 total = ledger->totalBytes(cwRenderMemoryLedger::Residency::Gpu);
+
+    cw::octree::InflationInput inflation;
+    inflation.current = m_sseInflation;
+    // Still over budget with every unselected node already gone: the view wants
+    // more than it is allowed, so the only way down is a coarser cut.
+    inflation.overBudgetWithNothingEvictable = overshoot > 0 && reclaimed < overshoot;
+    inflation.underBudgetByMargin =
+        double(total) < double(budgets.gpuBudgetBytes) * (1.0 - cw::octree::kSseRelaxMargin);
+    m_sseInflation = cw::octree::nextSseInflation(inflation);
+}
+
+bool cwRHIPointCloud::residencyReady(const RenderData& jobRenderData)
+{
+    if (m_source.isNull()) {
+        return true;
+    }
+
+    const cwFrustum frustum =
+        cwFrustum::fromViewProjection(jobRenderData.viewProjectionMatrix);
+    const QVector<cw::octree::SelectedNode> selected =
+        cw::octree::selectNodes(selectionInput(jobRenderData, &frustum));
+
+    bool ready = true;
+    for (const cw::octree::SelectedNode& node : selected) {
+        if (node.node < 0 || node.node >= m_nodes.size()) {
+            continue;
+        }
+
+        switch (m_nodes.at(node.node).state) {
+        case NodeState::Resident:
+            break;
+        case NodeState::Failed:
+            // It will never land, so waiting on it would only burn the job's
+            // frame budget until the gate gives up.
+            break;
+        case NodeState::Absent:
+            // Every node the job wants is asked for, even once one has reported
+            // the job unready, so the whole cut is in flight by the next frame.
+            requestNode(node.node, cw::octree::kExportPriority);
+            m_nodes[node.node].exportRequested = true;
+            ready = false;
+            break;
+        case NodeState::Requested:
+            // The live cut may have started this one; the job still needs it,
+            // so the live cut may no longer take it away.
+            m_nodes[node.node].exportRequested = true;
+            ready = false;
+            break;
+        }
+    }
+
+    return ready;
+}
+
+void cwRHIPointCloud::releaseStreamedResources()
+{
+    // Per node rather than cancelAll(): that one waits for the disk reads in
+    // flight, and the render thread is the wrong place to wait. The streamer
+    // bumps each node's generation, so a load already in flight lands on nothing.
+    for (const int index : std::as_const(m_requested)) {
+        m_streamer.cancel(quint32(index));
+        if (m_nodes.at(index).state == NodeState::Requested) {
+            m_nodes[index].state = NodeState::Absent;
+        }
+        m_nodes[index].exportRequested = false;
+    }
+    m_requested.clear();
+    m_readyQueue.clear();
+
+    for (int i = 0; i < m_nodes.size(); i++) {
+        if (m_nodes.at(i).state == NodeState::Resident) {
+            releaseNode(i);
+        }
+    }
+
+    // The view that left is gone; whatever brings it back starts from the root.
+    m_sseInflation = 1.0;
+}
+
 bool cwRHIPointCloud::gather(const GatherContext& context, QVector<PipelineBatch>& batches)
 {
     if (context.renderPass != RenderPass::PointCloud) {
         return false;
     }
 
-    const auto& value = m_geometry.value();
-    const qsizetype vertexCount = value.geometry.vertexCount();
-    if (vertexCount == 0) {
+    if (m_source.isNull()) {
         return false;
     }
 
@@ -255,7 +554,92 @@ bool cwRHIPointCloud::gather(const GatherContext& context, QVector<PipelineBatch
     }
 
     auto* pipeline = m_pipelineRecord ? m_pipelineRecord->pipeline : nullptr;
-    if (!pipeline || m_vertexBuffers.isEmpty() || !m_srb) {
+    if (!pipeline || !m_srb || !m_nodeConstants) {
+        return false;
+    }
+
+    m_selected = cw::octree::selectNodes(selectionInput(renderData, context.frustum));
+
+    const quint64 frame = m_frame->frameCounter();
+
+    // binding 1 = per-cloud appearance UBO (dynamic offset). The job picks the
+    // appearance slot; resolve it to this cloud's byte offset. Clamp to the slots
+    // actually allocated so an out-of-range slot falls back to the live appearance
+    // (slot 0) rather than reading past the buffer. std::max guards the upper bound
+    // so the clamp range never inverts even if capacity were 0 (clamp UB otherwise).
+    const int maxAppearanceSlot = std::max(0, appearanceSlotCapacity() - 1);
+    const int appearanceSlot = std::clamp(context.appearanceSlot, 0, maxAppearanceSlot);
+    const quint32 appearanceOffset = quint32(appearanceSlot) * m_perCloudStride;
+
+    QVector<Drawable> drawables;
+    drawables.reserve(m_selected.size());
+
+    for (const cw::octree::SelectedNode& selected : std::as_const(m_selected)) {
+        if (selected.node < 0 || selected.node >= m_nodes.size()) {
+            continue;
+        }
+
+        NodeRecord& node = m_nodes[selected.node];
+        node.lastDesiredFrame = frame;
+
+        switch (node.state) {
+        case NodeState::Resident: {
+            Drawable drawable;
+            drawable.type = Drawable::Type::NonIndexed;
+            drawable.vertexBindings = {
+                QRhiCommandBuffer::VertexInput(node.buffer, 0),
+                QRhiCommandBuffer::VertexInput(m_nodeConstants,
+                                               quint32(node.constantSlot) * kNodeConstantsBytes)
+            };
+            drawable.vertexCount = m_source.manifest->nodes.at(selected.node).pointCount;
+            drawable.instanceCount = 1;
+            drawable.bindings = m_srb;
+            drawable.globalCameraBinding = 0; // binding 0 = global camera UBO (dynamic offset)
+            drawable.appearanceBinding = 1;
+            drawable.appearanceUniformOffset = appearanceOffset;
+            drawables.append(drawable);
+            break;
+        }
+        case NodeState::Absent: {
+            // The root always loads first; everything else queues behind the
+            // coarsest thing still missing. kPriorityScale keeps sub-pixel
+            // differences in spacing apart in the integer priority.
+            const quint64 priority = selected.node == kRootIndex
+                ? cw::octree::kRootPriority
+                : quint64(selected.projectedSpacingPx * cw::octree::kPriorityScale);
+            requestNode(selected.node, priority);
+            break;
+        }
+        case NodeState::Requested:
+        case NodeState::Failed:
+            break;
+        }
+    }
+
+    // Nodes asked for by an earlier cut that this one dropped. A pass over the
+    // handful of open requests, not over the whole node table.
+    for (int i = m_requested.size() - 1; i >= 0; i--) {
+        const int index = m_requested.at(i);
+        if (m_nodes.at(index).state != NodeState::Requested) {
+            m_requested.removeAt(i);
+            continue;
+        }
+
+        if (m_nodes.at(index).exportRequested) {
+            // An offscreen job is waiting on it. Cancelling would throw away a
+            // load in flight and the job would ask for it again next frame,
+            // which on a slow disk is a wait that never ends.
+            continue;
+        }
+
+        if (m_nodes.at(index).lastDesiredFrame != frame) {
+            m_streamer.cancel(quint32(index));
+            m_nodes[index].state = NodeState::Absent;
+            m_requested.removeAt(i);
+        }
+    }
+
+    if (drawables.isEmpty()) {
         return false;
     }
 
@@ -264,49 +648,32 @@ bool cwRHIPointCloud::gather(const GatherContext& context, QVector<PipelineBatch
     state.sortKey = cwRHIObject::makeSortKey(context.objectOrder, pipeline);
 
     auto& batch = acquirePipelineBatch(batches, state);
-    cwRHIObject::Drawable drawable;
-    drawable.type = cwRHIObject::Drawable::Type::NonIndexed;
-    for (QRhiBuffer* buffer : m_vertexBuffers) {
-        drawable.vertexBindings.append(QRhiCommandBuffer::VertexInput(buffer, 0));
-    }
-    // Draw only what the vertex buffers hold; an oversized cloud was truncated.
-    drawable.vertexCount = quint32(m_uploadedVertexCount);
-    drawable.bindings = m_srb;
-    drawable.globalCameraBinding = 0; // binding 0 = global camera UBO (dynamic offset)
-
-    // binding 1 = per-cloud appearance UBO (dynamic offset). The job picks the
-    // appearance slot; resolve it to this cloud's byte offset. Clamp to the slots
-    // actually allocated so an out-of-range slot falls back to the live appearance
-    // (slot 0) rather than reading past the buffer. std::max guards the upper bound
-    // so the clamp range never inverts even if capacity were 0 (clamp UB otherwise).
-    drawable.appearanceBinding = 1;
-    const int maxAppearanceSlot = std::max(0, appearanceSlotCapacity() - 1);
-    const int appearanceSlot = std::clamp(context.appearanceSlot, 0, maxAppearanceSlot);
-    drawable.appearanceUniformOffset = quint32(appearanceSlot) * m_perCloudStride;
-
-    batch.drawables.append(drawable);
+    batch.drawables.append(drawables);
     return true;
 }
 
 bool cwRHIPointCloud::usesPointCloudPass() const
 {
-    // Reports geometry only; the caller (cwRhiFrameRenderer::anyCloudVisible)
-    // ANDs in this object's snapshot visibility.
-    return m_geometry.value().geometry.vertexCount() > 0;
+    // A cloud with a manifest always draws its root, so the EDL pass has to run
+    // from the frame the source arrives — not from the frame a node lands, or
+    // the root would never be composited. The caller
+    // (cwRhiFrameRenderer::anyCloudVisible) ANDs in this object's snapshot
+    // visibility.
+    return !m_source.isNull();
 }
 
 std::optional<QBox3D> cwRHIPointCloud::worldBounds() const
 {
-    const auto& geometryState = m_geometry.value();
-    if (geometryState.geometry.vertexCount() == 0) {
+    if (m_source.isNull()) {
         return std::nullopt;
     }
 
     // Each point draws as a sprite of worldRadius meters around its position,
-    // so the drawn cloud reaches that far past the vertex bounds.
+    // so the drawn cloud reaches that far past the root cube.
     const float worldRadius = m_renderState.value().worldRadius;
     const QVector3D padding(worldRadius, worldRadius, worldRadius);
-    return QBox3D(geometryState.bboxMin - padding, geometryState.bboxMax + padding);
+    const QBox3D root = m_source.manifest->nodeBounds(kRootIndex);
+    return QBox3D(root.minimum() - padding, root.maximum() + padding);
 }
 
 bool cwRHIPointCloud::ensurePipeline(const RenderData& data)
@@ -315,19 +682,15 @@ bool cwRHIPointCloud::ensurePipeline(const RenderData& data)
         return false;
     }
 
-    // m_inputLayout is built from the geometry in the first non-empty
-    // updateResources call — until then, the pipeline can't be created.
-    if (!m_layoutBuilt) {
-        return false;
-    }
-
     if (!data.renderer) {
         return false;
     }
 
-    QRhi* rhi = data.renderer->rhi();
-    auto* target = data.renderer->renderTarget();
-    if (!rhi || !target) {
+    // The frame's command buffer, not the renderer's QQuickRhiItem: a pass
+    // routed into the EDL offscreen draws through the same QRhi, and an
+    // offscreen job has no item to ask.
+    QRhi* rhi = data.cb ? data.cb->rhi() : nullptr;
+    if (!rhi || !data.renderPassDescriptor) {
         return false;
     }
 
@@ -408,7 +771,7 @@ bool cwRHIPointCloud::ensureShaderResources(QRhi* rhi, cwRhiItemRenderer* render
         }
     }
 
-    if (!rhi) {
+    if (!rhi || !m_perCloudUBO) {
         return false;
     }
 
@@ -448,4 +811,19 @@ cwRhiPipelineKey cwRHIPointCloud::buildPipelineKey(QRhiRenderPassDescriptor* ren
     key.hasPerDraw = 1;
     key.topology = static_cast<quint8>(QRhiGraphicsPipeline::Points);
     return key;
+}
+
+Monad::Result<QByteArray> cwRHIPointCloud::loadNode(const cwPointOctreeNodeSource& source,
+                                                   int /*level*/)
+{
+    const cwDiskCacher cacher{QDir(source.cacheRootPath)};
+    const QByteArray bytes = cacher.entry(source.key);
+
+    if (bytes.size() != source.byteSize) {
+        return Monad::Result<QByteArray>(
+            QStringLiteral("read %1 bytes where the manifest says %2")
+                .arg(bytes.size()).arg(source.byteSize));
+    }
+
+    return bytes;
 }

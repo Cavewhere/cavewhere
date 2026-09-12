@@ -83,7 +83,7 @@ void cwRhiViewer::itemChange(ItemChange change, const ItemChangeData& value)
         // the time the job runs, and then the job does nothing.
         auto handle = m_rendererHandle;
         renderWindow->scheduleRenderJob(QRunnable::create([handle]() {
-                                            handle->releaseStreamedTextures();
+                                            handle->releaseStreamedResources();
                                         }),
                                         QQuickWindow::BeforeSynchronizingStage);
         // Nothing else is going to draw the frame that runs the job — this item

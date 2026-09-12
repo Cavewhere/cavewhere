@@ -304,10 +304,10 @@ void cwRhiFrameRenderer::renderLiveFrame(QRhiCommandBuffer *cb, cwRhiItemRendere
               kLiveCameraOffset, clearColor);
 }
 
-void cwRhiFrameRenderer::releaseStreamedTextures()
+void cwRhiFrameRenderer::releaseStreamedResources()
 {
     for(auto object : std::as_const(m_rhiObjects)) {
-        object->releaseStreamedTextures();
+        object->releaseStreamedResources();
     }
 
     m_hasPendingStreamingWork = false;

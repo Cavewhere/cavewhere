@@ -46,7 +46,7 @@ public:
      * has stopped drawing; the next frame after it is shown again rebinds the
      * loading texture and re-requests the pinned base.
      */
-    void releaseStreamedTextures() override;
+    void releaseStreamedResources() override;
     bool gather(const GatherContext& context, QVector<PipelineBatch>& batches) override;
     void purgePipelinesFor(QRhiRenderPassDescriptor* descriptor) override;
     std::optional<QBox3D> worldBounds() const override;

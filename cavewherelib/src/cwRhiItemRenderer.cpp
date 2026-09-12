@@ -26,13 +26,13 @@ void cwRhiRendererHandle::setViewVisible(bool visible)
     m_viewVisible = visible;
 }
 
-void cwRhiRendererHandle::releaseStreamedTextures()
+void cwRhiRendererHandle::releaseStreamedResources()
 {
     QMutexLocker locker(&m_mutex);
     if(m_viewVisible || m_renderer == nullptr) {
         return;
     }
-    m_renderer->releaseStreamedTextures();
+    m_renderer->releaseStreamedResources();
 }
 
 cwRhiItemRenderer::cwRhiItemRenderer() :

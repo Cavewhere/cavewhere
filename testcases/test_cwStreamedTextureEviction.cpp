@@ -3,7 +3,7 @@
 // view whose QQuickRhiItem is hidden gets no frames, never demotes, and keeps its
 // streamed textures resident against the process-wide budget forever. Hiding it
 // now releases those textures outright (cwRhiViewer schedules a render job that
-// reaches cwRhiTexturedItems::releaseStreamedTextures); showing it again
+// reaches cwRhiTexturedItems::releaseStreamedResources); showing it again
 // re-streams them from the warm disk cache.
 
 //Catch includes
@@ -307,7 +307,7 @@ TEST_CASE("Hiding a view releases its streamed textures and showing it re-stream
     REQUIRE(residentBytes >= chainBytes);
 
     // The hide: what cwRhiViewer's render job reaches on the render thread.
-    fixture.renderer().releaseStreamedTextures();
+    fixture.renderer().releaseStreamedResources();
 
     CHECK(CwRhiTexturedItemsTestAccess::residentTopLevel(fixture.backend(), itemId)
           == CwRhiTexturedItemsTestAccess::noResidentLevel());
@@ -353,7 +353,7 @@ TEST_CASE("Releasing streamed textures while a load is in flight leaves the item
     REQUIRE(CwRhiTexturedItemsTestAccess::requestedTopLevel(fixture.backend(), itemId)
             != CwRhiTexturedItemsTestAccess::noResidentLevel());
 
-    fixture.renderer().releaseStreamedTextures();
+    fixture.renderer().releaseStreamedResources();
 
     CHECK(CwRhiTexturedItemsTestAccess::requestedTopLevel(fixture.backend(), itemId)
           == CwRhiTexturedItemsTestAccess::noResidentLevel());

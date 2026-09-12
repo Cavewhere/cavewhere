@@ -130,9 +130,9 @@ void cwRhiScene::syncRenderObject(cwRenderObject* object, cwRhiItemRenderer* ren
     }
 }
 
-void cwRhiScene::releaseStreamedTextures()
+void cwRhiScene::releaseStreamedResources()
 {
-    m_frame.releaseStreamedTextures();
+    m_frame.releaseStreamedResources();
 }
 
 void cwRhiScene::render(QRhiCommandBuffer *cb, cwRhiItemRenderer *renderer)

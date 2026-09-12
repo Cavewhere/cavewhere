@@ -7,7 +7,14 @@
 
 #version 440 core
 
-layout(location = 0) in vec3 vVertex;
+// One octree node's points, quantized to uint16 per axis inside the node's
+// cube (cw::octree::quantize). w is reserved.
+layout(location = 0) in uvec4 qpos;
+
+// Per instance, one per node: the node cube's min corner and the world size of
+// one quantization step (nodeSize / cw::octree::kQuantMax). The whole node
+// draws as a single instance, so every point of it dequantizes with these.
+layout(location = 1) in vec4 nodeOriginScale;
 
 layout(std140, binding = 0) uniform GlobalBlock {
     mat4 viewProjectionMatrix;
@@ -35,6 +42,8 @@ out gl_PerVertex {
 
 void main(void)
 {
+    vec3 vVertex = nodeOriginScale.xyz + vec3(qpos.xyz) * nodeOriginScale.w;
+
     gl_Position = viewProjectionMatrix * vec4(vVertex, 1.0);
 
     // Perspective-correct screen size of a fixed world-space radius: a sphere

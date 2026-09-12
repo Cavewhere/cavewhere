@@ -475,7 +475,7 @@ void cwRhiTexturedItems::enforceGpuBudget(const cwRenderBudgets& budgets)
     }
 }
 
-void cwRhiTexturedItems::releaseStreamedTextures()
+void cwRhiTexturedItems::releaseStreamedResources()
 {
     for (auto it = m_items.constBegin(); it != m_items.constEnd(); ++it) {
         Item* item = it.value();
