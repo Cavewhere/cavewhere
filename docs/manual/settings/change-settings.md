@@ -39,7 +39,7 @@ Three things hold across the tabs, and the shot above shows all 3:
   itself. Close the page when you are finished.
 - **Restore Defaults resets that tab**, and grays out once the tab already sits
   at its defaults, so the button doubles as a report of whether you changed
-  anything. Git and Units have none; Sketch has one that never grays.
+  anything. Git and Units have none.
 - **The small "?" buttons open help in place**, the same text summarized here.
 
 Two tabs are covered elsewhere in this manual, because they belong to a task you
@@ -49,9 +49,6 @@ meet before you ever open Settings:
   [Set Up Your Identity](../getting-started/set-up-your-identity.md).
 - **Warping** tunes how sketches morph onto the survey. See
   [Tune the Warping Settings](../scraps/warping-settings.md).
-
-**Sketch** tunes thumbnail regeneration for the sketch prototype, so this page
-leaves it alone.
 
 ## Cap the worker threads (Jobs)
 

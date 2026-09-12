@@ -38,19 +38,23 @@ Item {
 
         function test_menuItemsExist() {
             const filesItem = findChild(buttonId, "filesMenuItem")
-            const sketchItem = findChild(buttonId, "sketchMenuItem")
             verify(filesItem !== null, "filesMenuItem should exist")
-            verify(sketchItem !== null, "sketchMenuItem should exist")
             compare(filesItem.text, "Notes or 3D Model")
-            compare(sketchItem.text, "Sketch")
         }
 
-        function test_sketchMenuItemEmitsSignal() {
+        // Sketch is hidden from the menu for this release (#587); re-enable
+        // this test and the sketch assertions above with the menu item.
+        function test_sketchMenuItemHidden() {
             const sketchItem = findChild(buttonId, "sketchMenuItem")
-            sketchItem.triggered()
-            compare(sketchSpy.count, 1, "sketchRequested should fire once")
-            compare(filesSpy.count, 0, "filesRequested should not fire")
+            verify(sketchItem === null, "sketchMenuItem should be hidden")
         }
+
+        // function test_sketchMenuItemEmitsSignal() {
+        //     const sketchItem = findChild(buttonId, "sketchMenuItem")
+        //     sketchItem.triggered()
+        //     compare(sketchSpy.count, 1, "sketchRequested should fire once")
+        //     compare(filesSpy.count, 0, "filesRequested should not fire")
+        // }
 
         function test_filesMenuItemOpensDialog() {
             const filesItem = findChild(buttonId, "filesMenuItem")

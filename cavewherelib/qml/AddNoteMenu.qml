@@ -33,16 +33,17 @@ QQ.Item {
             onTriggered: filesDialogId.open()
         }
 
-        QC.MenuItem {
-            objectName: "sketchMenuItem"
-            text: "Sketch"
-            onTriggered: {
-                if (rootId.notesModel !== null) {
-                    rootId.notesModel.addSketch(Sketch.Plan)
-                }
-                rootId.sketchRequested()
-            }
-        }
+        // Sketch is still in development; hidden for this release (#587).
+        // QC.MenuItem {
+        //     objectName: "sketchMenuItem"
+        //     text: "Sketch"
+        //     onTriggered: {
+        //         if (rootId.notesModel !== null) {
+        //             rootId.notesModel.addSketch(Sketch.Plan)
+        //         }
+        //         rootId.sketchRequested()
+        //     }
+        // }
     }
 
     NotesFileDialog {
