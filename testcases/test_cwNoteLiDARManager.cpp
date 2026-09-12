@@ -699,9 +699,10 @@ TEST_CASE("A LiDAR note deleted mid-run never reaches the render items", "[cwNot
 
 TEST_CASE("A restarted LiDAR batch delivers only the new run's results", "[cwNoteLiDARManager]")
 {
-    // Restarting swaps in a fresh watcher, so the abandoned run's per-note
-    // deliveries never fire. If a stale result landed after the new run's, the
-    // note would be left showing geometry built from the superseded transform.
+    // Restarting bumps the manager's run generation, so the abandoned run's
+    // per-note deliveries are dropped when they land. If a stale result landed
+    // after the new run's, the note would be left showing geometry built from
+    // the superseded transform.
     cwJobSettings::initialize();
 
     auto root = std::make_unique<cwRootData>();

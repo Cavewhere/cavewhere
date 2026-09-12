@@ -13,12 +13,9 @@
 using namespace Monad;
 
 
-QFuture<Monad::Result<QVector<cwRenderTexturedItems::Item> > > cwTriangulateLiDARTask::triangulate(const QList<cwTriangulateLiDARInData> &liDARs)
+QList<QFuture<Monad::Result<QVector<cwRenderTexturedItems::Item> > > > cwTriangulateLiDARTask::triangulate(const QList<cwTriangulateLiDARInData> &liDARs)
 {
-
-    // qDebug() << "I get here!";
-
-    return cwConcurrent::mapped(liDARs, [](const cwTriangulateLiDARInData& data) {
+    const auto triangulateOne = [](const cwTriangulateLiDARInData& data) {
         if(data.stationLookup().positions().size() == 0) {
             return Monad::Result<QVector<cwRenderTexturedItems::Item> >("Station Lookup not set");
         }
@@ -67,8 +64,16 @@ QFuture<Monad::Result<QVector<cwRenderTexturedItems::Item> > > cwTriangulateLiDA
         }
 
         return Monad::Result<QVector<cwRenderTexturedItems::Item> >(renderItems);
+    };
 
-    });
+    QList<QFuture<Monad::Result<QVector<cwRenderTexturedItems::Item> > > > futures;
+    futures.reserve(liDARs.size());
+    for(const cwTriangulateLiDARInData& liDAR : liDARs) {
+        futures.append(cwConcurrent::run([data = liDAR, triangulateOne]() {
+            return triangulateOne(data);
+        }));
+    }
+    return futures;
 }
 
 QVector<cwRenderTexturedItems::Item> cwTriangulateLiDARTask::reserveRenderItems(const QVector<cw::gltf::MeshCPU> &meshes)

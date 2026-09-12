@@ -149,10 +149,9 @@ cwNoteLiDARManager::~cwNoteLiDARManager()
     //Cancel without waiting: the batch triangulates cwTriangulateLiDARInData
     //value copies (note stations, model matrix, station lookup, network, glTF
     //path), so a worker that outlives this manager touches nothing that died
-    //with it. The result continuation is bound with context(this) and is
-    //dropped here. This line finishes the outer future; the cancel the worker
-    //itself sees comes from ~Restarter, which cancels the inner future
-    //synchronously as m_restarter is destroyed.
+    //with it. Every per-note continuation is bound with context(this) and is
+    //dropped here, as is the combined completion; the workers themselves run
+    //to completion and their results go nowhere.
     m_restarter.future().cancel();
 }
 
@@ -638,54 +637,45 @@ QFuture<void> cwNoteLiDARManager::runBatch()
 
     // Wrap in restarter so subsequent calls coalesce
     m_restarter.restart([this, notes, inputs]() {
-        auto future = cwTriangulateLiDARTask::triangulate(inputs);
+        m_runGeneration++;
+        const quint64 generation = m_runGeneration;
 
-        // Replacing the watcher destroys the previous run's, so a restarted
-        // batch delivers only its own results.
-        m_deliveredNotes.clear();
-        m_batchWatcher = std::make_unique<QFutureWatcher<LiDARNoteResult>>();
+        const auto futures = cwTriangulateLiDARTask::triangulate(inputs);
+        Q_ASSERT(futures.size() == notes.size());
 
-        QFutureWatcher<LiDARNoteResult>* watcher = m_batchWatcher.get();
-        connect(watcher, &QFutureWatcher<LiDARNoteResult>::resultReadyAt,
-                this, [this, notes, watcher](int index) {
-                    m_deliveredNotes.insert(index);
-                    deliverNote(notes.at(index), watcher->resultAt(index), index);
+        for (int i = 0; i < futures.size(); i++) {
+            //Deliver this note the moment it's triangulated, rather than
+            //waiting on the whole batch. A restart cancels the combine, leaving
+            //these futures running, so the generation check drops their results.
+            AsyncFuture::observe(futures.at(i))
+                .context(this, [this, note = notes.at(i), i, generation, future = futures.at(i)]() {
+                    if (generation != m_runGeneration) {
+                        return;
+                    }
+
+                    if (future.resultCount() == 1) {
+                        deliverNote(note, future.result(), i);
+                    }
                 });
-        watcher->setFuture(future);
+        }
 
-        return AsyncFuture::observe(future)
-            .context(this,
-                     [this, notes, future, watcher]() {
-                         Q_ASSERT(notes.size() == future.resultCount());
+        auto combine = AsyncFuture::combine() << futures;
+        return combine.context(this, [this, notes]() {
+            // Remove processed from dirty, clear deleted set entries
+            for (cwNoteLiDAR* n : notes) {
+                m_dirtyNotes.remove(n);
+            }
+            for (cwNoteLiDAR* d : std::as_const(m_deletedNotes)) {
+                m_dirtyNotes.remove(d);
+            }
+            m_deletedNotes.clear();
 
-                         //Deliver whatever resultReadyAt hasn't reported yet. A
-                         //superseded run has already had its watcher replaced,
-                         //and its results are stale.
-                         if(m_batchWatcher.get() == watcher) {
-                             for(int i = 0; i < future.resultCount(); i++) {
-                                 if(!m_deliveredNotes.contains(i)) {
-                                     deliverNote(notes.at(i), future.resultAt(i), i);
-                                 }
-                             }
-                             m_deliveredNotes.clear();
-                             m_batchWatcher.reset();
-                         }
-
-                         // Remove processed from dirty, clear deleted set entries
-                         for (cwNoteLiDAR* n : notes) {
-                             m_dirtyNotes.remove(n);
-                         }
-                         for (cwNoteLiDAR* d : std::as_const(m_deletedNotes)) {
-                             m_dirtyNotes.remove(d);
-                         }
-                         m_deletedNotes.clear();
-
-                         // Batch done: leave Working (updateState reflects the
-                         // notes just removed from m_dirtyNotes — Clean, or Dirty
-                         // if an edit arrived mid-batch).
-                         finishBatch();
-                         emit liDARNotesUpdated(notes);
-                     }).future();
+            // Batch done: leave Working (updateState reflects the
+            // notes just removed from m_dirtyNotes — Clean, or Dirty
+            // if an edit arrived mid-batch).
+            finishBatch();
+            emit liDARNotesUpdated(notes);
+        }).future();
     });
 
     return batch;

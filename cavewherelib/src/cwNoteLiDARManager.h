@@ -18,10 +18,6 @@
 #include <QQmlEngine>
 #include <QImage>
 #include <QMetaObject>
-#include <QFutureWatcher>
-
-//Std includes
-#include <memory>
 
 // Fwd decls
 class cwProject;
@@ -189,11 +185,9 @@ private:
     bool m_workPending = false;
     QHash<cwNoteLiDAR*, QVector<uint32_t>> m_noteToRender;
 
-    // Watches the running batch so each note's result is delivered the moment
-    // it's ready. m_deliveredNotes holds the indices already pushed, so the
-    // completion handler delivers the rest exactly once.
-    std::unique_ptr<QFutureWatcher<LiDARNoteResult>> m_batchWatcher;
-    QSet<int> m_deliveredNotes;
+    // Bumped for every dispatched batch, so a superseded run's results are
+    // dropped instead of delivered.
+    quint64 m_runGeneration = 0;
     cwKeywordItemRegistry<cwNoteLiDAR*> m_keywordRegistry;
 
     QPointer<cwRenderTexturedItems> m_render;
