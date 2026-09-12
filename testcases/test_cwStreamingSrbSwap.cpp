@@ -190,7 +190,7 @@ TEST_CASE("A streamed texture swap rebuilds the shader resource bindings when th
 
     cwRenderTexturedItems::Item item;
     item.geometry = cwTestGeometry::texturedQuad(kQuadHalfExtent);
-    item.streamedTexture = source;
+    item.texture = source;
     const uint32_t itemId = render.addItem(item);
 
     // The render thread. cwRhiItemRenderer owns the cwRhiScene whose frame

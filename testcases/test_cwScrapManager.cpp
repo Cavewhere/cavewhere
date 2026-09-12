@@ -67,7 +67,7 @@ namespace {
     {
         int count = 0;
         for(uint32_t id = 1; id <= kMaxScannedRenderId; id++) {
-            if(renderItems->hasItem(id) && !renderItems->item(id).streamedTexture.isNull()) {
+            if(renderItems->hasItem(id) && !renderItems->item(id).texture.streamed().isNull()) {
                 count++;
             }
         }

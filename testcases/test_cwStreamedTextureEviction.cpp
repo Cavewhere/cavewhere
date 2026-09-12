@@ -157,7 +157,7 @@ namespace {
 
             cwRenderTexturedItems::Item item;
             item.geometry = cwTestGeometry::texturedQuad(kQuadHalfExtent);
-            item.streamedTexture = m_source;
+            item.texture = m_source;
             m_itemId = m_render.addItem(item);
 
             m_backend = new cwRhiTexturedItems;

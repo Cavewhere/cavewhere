@@ -9,6 +9,7 @@
 #include "cwRenderTexturedItems.h"
 #include "cwGeometry.h"
 #include "cwStreamedTexture.h"
+#include "cwItemTexture.h"
 
 namespace {
 
@@ -78,7 +79,7 @@ TEST_CASE("cwRenderTexturedItems storage flags control CPU data retention", "[cw
         REQUIRE_FALSE(stored.storeTexture);
         REQUIRE(stored.geometry.vertexCount() == 0);
         REQUIRE(stored.geometry.indices().isEmpty());
-        REQUIRE(stored.texture.isNull());
+        REQUIRE(stored.texture.image().isNull());
 
         cwGeometry updatedGeometry = makeGeometry(4, 1.0f);
         render.updateGeometry(id, updatedGeometry);
@@ -88,7 +89,7 @@ TEST_CASE("cwRenderTexturedItems storage flags control CPU data retention", "[cw
 
         render.updateTexture(id, updatedImage);
         stored = render.item(id);
-        REQUIRE(stored.texture.isNull());
+        REQUIRE(stored.texture.image().isNull());
     }
 
     SECTION("opt-in flags retain geometry and texture data")
@@ -107,8 +108,8 @@ TEST_CASE("cwRenderTexturedItems storage flags control CPU data retention", "[cw
         REQUIRE(stored.storeTexture);
         REQUIRE(stored.geometry.vertexCount() == item.geometry.vertexCount());
         REQUIRE(stored.geometry.indices() == item.geometry.indices());
-        REQUIRE_FALSE(stored.texture.isNull());
-        REQUIRE(stored.texture.pixelColor(0, 0) == initialImage.pixelColor(0, 0));
+        REQUIRE_FALSE(stored.texture.image().isNull());
+        REQUIRE(stored.texture.image().pixelColor(0, 0) == initialImage.pixelColor(0, 0));
 
         cwGeometry updatedGeometry = makeGeometry(4, 10.0f);
         render.updateGeometry(id, updatedGeometry);
@@ -121,8 +122,52 @@ TEST_CASE("cwRenderTexturedItems storage flags control CPU data retention", "[cw
 
         render.updateTexture(id, updatedImage);
         stored = render.item(id);
-        REQUIRE_FALSE(stored.texture.isNull());
-        REQUIRE(stored.texture.pixelColor(0, 0) == updatedImage.pixelColor(0, 0));
+        REQUIRE_FALSE(stored.texture.image().isNull());
+        REQUIRE(stored.texture.image().pixelColor(0, 0) == updatedImage.pixelColor(0, 0));
+    }
+}
+
+TEST_CASE("cwItemTexture holds exactly one representation", "[cwRenderTexturedItems]")
+{
+    SECTION("a default texture is empty")
+    {
+        const cwItemTexture texture;
+        CHECK(texture.isEmpty());
+        CHECK(texture.image().isNull());
+        CHECK(texture.streamed().isNull());
+    }
+
+    SECTION("a null image is empty")
+    {
+        const cwItemTexture texture = QImage();
+        CHECK(texture.isEmpty());
+        CHECK_FALSE(texture.isImage());
+    }
+
+    SECTION("a null descriptor is empty")
+    {
+        const cwItemTexture texture = cwStreamedTexture();
+        CHECK(texture.isEmpty());
+        CHECK_FALSE(texture.isStreamed());
+    }
+
+    SECTION("pixels hide the descriptor")
+    {
+        const QImage image = makeImage(Qt::red);
+        const cwItemTexture texture = image;
+        CHECK(texture.isImage());
+        CHECK(texture.image().pixelColor(0, 0) == image.pixelColor(0, 0));
+        CHECK(texture.streamed().isNull());
+    }
+
+    SECTION("a descriptor hides the pixels")
+    {
+        const cwStreamedTexture streamed =
+            makeStreamedTexture(QStringLiteral("scrap-1"), QSize(2048, 2048));
+        const cwItemTexture texture = streamed;
+        CHECK(texture.isStreamed());
+        CHECK(texture.streamed() == streamed);
+        CHECK(texture.image().isNull());
     }
 }
 
@@ -140,29 +185,29 @@ TEST_CASE("cwRenderTexturedItems carries a streamed source instead of pixels",
     {
         cwRenderTexturedItems::Item item;
         item.geometry = makeGeometry(3, 0.0f);
-        item.streamedTexture = firstStreamed;
+        item.texture = firstStreamed;
 
         const uint32_t id = render.addItem(item);
         const auto stored = render.item(id);
         // The descriptor is kept whatever storeTexture says — it is a handful of
         // strings, and updateStreamedTexture compares against it.
         REQUIRE_FALSE(stored.storeTexture);
-        CHECK(stored.streamedTexture == firstStreamed);
-        CHECK(stored.texture.isNull());
+        CHECK(stored.texture.streamed() == firstStreamed);
+        CHECK(stored.texture.image().isNull());
     }
 
-    SECTION("a streamed source wins when an item is added with both")
+    SECTION("a descriptor assigned over an image replaces it")
     {
         cwRenderTexturedItems::Item item;
         item.geometry = makeGeometry(3, 0.0f);
         item.texture = image;
-        item.streamedTexture = firstStreamed;
+        item.texture = firstStreamed;
         item.storeTexture = true;
 
         const uint32_t id = render.addItem(item);
         const auto stored = render.item(id);
-        CHECK(stored.streamedTexture == firstStreamed);
-        CHECK(stored.texture.isNull());
+        CHECK(stored.texture.streamed() == firstStreamed);
+        CHECK(stored.texture.image().isNull());
     }
 
     SECTION("each representation clears the other")
@@ -173,22 +218,22 @@ TEST_CASE("cwRenderTexturedItems carries a streamed source instead of pixels",
         item.storeTexture = true;
 
         const uint32_t id = render.addItem(item);
-        REQUIRE_FALSE(render.item(id).texture.isNull());
+        REQUIRE_FALSE(render.item(id).texture.image().isNull());
 
         render.updateStreamedTexture(id, firstStreamed);
         auto stored = render.item(id);
-        CHECK(stored.streamedTexture == firstStreamed);
-        CHECK(stored.texture.isNull());
+        CHECK(stored.texture.streamed() == firstStreamed);
+        CHECK(stored.texture.image().isNull());
 
         render.updateTexture(id, image);
         stored = render.item(id);
-        CHECK(stored.streamedTexture.isNull());
-        CHECK_FALSE(stored.texture.isNull());
+        CHECK(stored.texture.streamed().isNull());
+        CHECK_FALSE(stored.texture.image().isNull());
 
         render.updateStreamedTexture(id, secondStreamed);
         stored = render.item(id);
-        CHECK(stored.streamedTexture == secondStreamed);
-        CHECK(stored.texture.isNull());
+        CHECK(stored.texture.streamed() == secondStreamed);
+        CHECK(stored.texture.image().isNull());
     }
 
     SECTION("repeated streamed updates coalesce with the last one winning")
@@ -200,7 +245,7 @@ TEST_CASE("cwRenderTexturedItems carries a streamed source instead of pixels",
         render.updateStreamedTexture(id, firstStreamed);
         render.updateStreamedTexture(id, secondStreamed);
 
-        CHECK(render.item(id).streamedTexture == secondStreamed);
+        CHECK(render.item(id).texture.streamed() == secondStreamed);
     }
 
     SECTION("updateItem routes the streamed representation")
@@ -213,12 +258,11 @@ TEST_CASE("cwRenderTexturedItems carries a streamed source instead of pixels",
         const uint32_t id = render.addItem(item);
 
         cwRenderTexturedItems::Item updated = item;
-        updated.texture = image;
-        updated.streamedTexture = firstStreamed;
+        updated.texture = firstStreamed;
         render.updateItem(id, updated);
 
         const auto stored = render.item(id);
-        CHECK(stored.streamedTexture == firstStreamed);
-        CHECK(stored.texture.isNull());
+        CHECK(stored.texture.streamed() == firstStreamed);
+        CHECK(stored.texture.image().isNull());
     }
 }

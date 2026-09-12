@@ -244,10 +244,10 @@ TEST_CASE("Cropping a scrap caches a compressed texture", "[ScrapCompressedTextu
         };
         items.updateStreamedTexture(id, streamed);
 
-        const cwStreamedTexture stored = items.item(id).streamedTexture;
+        const cwStreamedTexture stored = items.item(id).texture.streamed();
         CHECK_FALSE(stored.isNull());
         CHECK(stored == streamed);
-        CHECK(items.item(id).texture.isNull());
+        CHECK(items.item(id).texture.image().isNull());
     }
 }
 
@@ -260,8 +260,8 @@ namespace {
     {
         QList<cwStreamedTexture> textures;
         for(uint32_t id = 1; id <= kMaxScannedRenderItemId; id++) {
-            if(items->hasItem(id) && !items->item(id).streamedTexture.isNull()) {
-                textures.append(items->item(id).streamedTexture);
+            if(items->hasItem(id) && !items->item(id).texture.streamed().isNull()) {
+                textures.append(items->item(id).texture.streamed());
             }
         }
         return textures;
@@ -327,34 +327,24 @@ TEST_CASE("A crop's descriptor streams and a failed encode keeps the image",
     CHECK(result.croppedSize == QSize(kSourceWidth, kSourceHeight));
 
     cwTriangulatedData data;
-    data.setCompressedTextureKey(result.compressedKey);
-    data.setCroppedImageSize(result.croppedSize);
+    data.setTexture(cwStreamedTexture {
+        dataRootDir.absolutePath(),
+        result.compressedKey,
+        result.croppedSize
+    });
 
-    //The descriptor cwScrapManager builds from the triangulated data
-    const auto descriptor = [&dataRootDir](const cwTriangulatedData& data) {
-        return cwStreamedTexture {
-            dataRootDir.absolutePath(),
-            data.compressedTextureKey(),
-            data.croppedImageSize()
-        };
-    };
-
-    const cwStreamedTexture streamed = descriptor(data);
+    //The descriptor cwScrapManager reads off the triangulated data
+    const cwStreamedTexture streamed = data.texture().streamed();
     REQUIRE_FALSE(streamed.isNull());
     CHECK(streamed.key.id == result.compressedKey.id);
     CHECK(streamed.size == result.croppedSize);
 
-    SECTION("a failed encode leaves a null descriptor, so the image is sent") {
+    SECTION("a failed encode carries the image instead, so the image is sent") {
         //Without a compressed key the triangulation keeps the decoded crop,
         //and that image is what the renderer gets
-        cwTextureUploadTask::UploadResult uploaded;
-        uploaded.image = gradientImage();
-
         cwTriangulatedData failedEncode;
-        failedEncode.setCroppedImageSize(result.croppedSize);
-        failedEncode.setCroppedImageData(uploaded);
-        REQUIRE(descriptor(failedEncode).isNull());
-        REQUIRE_FALSE(failedEncode.croppedImageData().isNull());
+        failedEncode.setTexture(gradientImage());
+        REQUIRE(failedEncode.texture().isImage());
 
         cwRenderTexturedItems items;
 
@@ -362,9 +352,9 @@ TEST_CASE("A crop's descriptor streams and a failed encode keeps the image",
         item.storeTexture = true;
         const uint32_t id = items.addItem(item);
 
-        items.updateTexture(id, failedEncode.croppedImageData().image);
+        items.updateTexture(id, failedEncode.texture().image());
 
-        CHECK(items.item(id).streamedTexture.isNull());
-        CHECK(items.item(id).texture.size() == QSize(kSourceWidth, kSourceHeight));
+        CHECK(items.item(id).texture.streamed().isNull());
+        CHECK(items.item(id).texture.image().size() == QSize(kSourceWidth, kSourceHeight));
     }
 }

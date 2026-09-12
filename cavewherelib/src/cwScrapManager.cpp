@@ -1701,17 +1701,13 @@ void cwScrapManager::deliverScrap(cwScrap* scrap, const cwTriangulatedData& data
     m_renderScraps->updateGeometry(id, triangleData.scrapGeometry());
 
     //The render thread streams the levels it needs off the cached KTX2, so
-    //nothing is decoded here. A null descriptor means the encode failed,
-    //and the QImage crop is the only texture the scrap has.
-    const cwStreamedTexture streamed {
-        Project != nullptr ? Project->dataRootDir().absolutePath() : QString(),
-        triangleData.compressedTextureKey(),
-        triangleData.croppedImageSize()
-    };
-    if(streamed.isNull()) {
-        m_renderScraps->updateTexture(id, triangleData.croppedImageData().image);
+    //nothing is decoded here. The triangulation falls back to the decoded crop
+    //when the encode failed, and that QImage is then the scrap's only texture.
+    const cwItemTexture texture = triangleData.texture();
+    if(texture.isStreamed()) {
+        m_renderScraps->updateStreamedTexture(id, texture.streamed());
     } else {
-        m_renderScraps->updateStreamedTexture(id, streamed);
+        m_renderScraps->updateTexture(id, texture.image());
     }
 }
 

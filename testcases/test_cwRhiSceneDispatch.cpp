@@ -291,7 +291,7 @@ TEST_CASE("a streamed item measures its texel density when it reaches the render
 
     cwRenderTexturedItems::Item item;
     item.geometry = unitQuad();
-    item.streamedTexture = streamedSource(QStringLiteral("scrap-1"));
+    item.texture = streamedSource(QStringLiteral("scrap-1"));
     const uint32_t id = render.addItem(item);
 
     cwRhiTexturedItems* backend = syncedBackend(rhiScene, scene, render);
@@ -303,7 +303,7 @@ TEST_CASE("a streamed item measures its texel density when it reaches the render
     CHECK_THAT(CwRhiTexturedItemsTestAccess::uvPerMeter(*backend, id),
                Catch::Matchers::WithinAbs(kQuadUvPerMeter, 1e-6));
     CHECK(CwRhiTexturedItemsTestAccess::boundsValid(*backend, id));
-    CHECK(CwRhiTexturedItemsTestAccess::streamSource(*backend, id) == item.streamedTexture);
+    CHECK(CwRhiTexturedItemsTestAccess::streamSource(*backend, id) == item.texture.streamed());
     // Nothing is resident yet, and the streamed path leaves the legacy
     // whole-texture upload alone.
     CHECK(CwRhiTexturedItemsTestAccess::residentTopLevel(*backend, id)
@@ -329,7 +329,7 @@ TEST_CASE("re-sending a streamed descriptor keeps residency, changing it resets 
 
     cwRenderTexturedItems::Item item;
     item.geometry = unitQuad();
-    item.streamedTexture = first;
+    item.texture = first;
     const uint32_t id = render.addItem(item);
 
     cwRhiTexturedItems* backend = syncedBackend(rhiScene, scene, render);
@@ -377,7 +377,7 @@ TEST_CASE("a re-publish spelling the data root differently keeps residency",
 
     cwRenderTexturedItems::Item item;
     item.geometry = unitQuad();
-    item.streamedTexture = first;
+    item.texture = first;
     const uint32_t id = render.addItem(item);
 
     cwRhiTexturedItems* backend = syncedBackend(rhiScene, scene, render);
@@ -416,7 +416,7 @@ TEST_CASE("selection asks for the pinned base before anything is resident",
 
     cwRenderTexturedItems::Item item;
     item.geometry = unitQuad();
-    item.streamedTexture = streamedSource(QStringLiteral("scrap-1"));
+    item.texture = streamedSource(QStringLiteral("scrap-1"));
     const uint32_t id = render.addItem(item);
 
     cwRhiTexturedItems* backend = syncedBackend(rhiScene, scene, render);
@@ -440,7 +440,7 @@ TEST_CASE("selection asks for the pinned base before anything is resident",
 
     CwRhiTexturedItemsTestAccess::selectStreamLevel(*backend, id, context);
 
-    const int base = cw::residency::pinnedBaseLevel(item.streamedTexture.size);
+    const int base = cw::residency::pinnedBaseLevel(item.texture.streamed().size);
     CHECK(CwRhiTexturedItemsTestAccess::requestedTopLevel(*backend, id) == base);
     CHECK(CwRhiTexturedItemsTestAccess::hasStreamingWork(*backend));
 
@@ -509,7 +509,7 @@ TEST_CASE("a load for a replaced descriptor never lands on the item",
 
     cwRenderTexturedItems::Item item;
     item.geometry = unitQuad();
-    item.streamedTexture = streamedSource(QStringLiteral("scrap-1"));
+    item.texture = streamedSource(QStringLiteral("scrap-1"));
     const uint32_t id = render.addItem(item);
 
     cwRhiTexturedItems* backend = syncedBackend(rhiScene, scene, render);
@@ -564,11 +564,11 @@ TEST_CASE("the GPU budget demotes the least recently gathered items first",
     cwRenderTexturedItems::Item item;
     item.geometry = unitQuad();
 
-    item.streamedTexture = streamedSource(QStringLiteral("oldest"));
+    item.texture = streamedSource(QStringLiteral("oldest"));
     const uint32_t oldest = render.addItem(item);
-    item.streamedTexture = streamedSource(QStringLiteral("middle"));
+    item.texture = streamedSource(QStringLiteral("middle"));
     const uint32_t middle = render.addItem(item);
-    item.streamedTexture = streamedSource(QStringLiteral("newest"));
+    item.texture = streamedSource(QStringLiteral("newest"));
     const uint32_t newest = render.addItem(item);
 
     cwRhiTexturedItems* backend = syncedBackend(rhiScene, scene, render);
@@ -637,7 +637,7 @@ TEST_CASE("a promotion supersedes a demotion in flight", "[TexturedItemsStreamin
 
     cwRenderTexturedItems::Item item;
     item.geometry = unitQuad();
-    item.streamedTexture = streamedSource(QStringLiteral("scrap-1"));
+    item.texture = streamedSource(QStringLiteral("scrap-1"));
     const uint32_t id = render.addItem(item);
 
     cwRhiTexturedItems* backend = syncedBackend(rhiScene, scene, render);
@@ -694,7 +694,7 @@ TEST_CASE("a camera back on the resident level cancels the demotion instead of r
 
     cwRenderTexturedItems::Item item;
     item.geometry = unitQuad();
-    item.streamedTexture = streamedSource(QStringLiteral("scrap-1"));
+    item.texture = streamedSource(QStringLiteral("scrap-1"));
     const uint32_t id = render.addItem(item);
 
     cwRhiTexturedItems* backend = syncedBackend(rhiScene, scene, render);
@@ -750,7 +750,7 @@ TEST_CASE("an item the camera keeps wanting finer is left alone frame after fram
 
     cwRenderTexturedItems::Item item;
     item.geometry = unitQuad();
-    item.streamedTexture = streamedSource(QStringLiteral("scrap-1"));
+    item.texture = streamedSource(QStringLiteral("scrap-1"));
     const uint32_t id = render.addItem(item);
 
     cwRhiTexturedItems* backend = syncedBackend(rhiScene, scene, render);
@@ -812,7 +812,7 @@ TEST_CASE("a fleet already at its pinned base warns once, not every frame",
 
     cwRenderTexturedItems::Item item;
     item.geometry = unitQuad();
-    item.streamedTexture = streamedSource(QStringLiteral("scrap-1"));
+    item.texture = streamedSource(QStringLiteral("scrap-1"));
     const uint32_t id = render.addItem(item);
 
     cwRhiTexturedItems* backend = syncedBackend(rhiScene, scene, render);
@@ -870,7 +870,7 @@ TEST_CASE("an offscreen job waits while its camera wants more detail than is res
 
     cwRenderTexturedItems::Item item;
     item.geometry = unitQuad();
-    item.streamedTexture = streamedSource(QStringLiteral("scrap-1"));
+    item.texture = streamedSource(QStringLiteral("scrap-1"));
     const uint32_t id = render.addItem(item);
     REQUIRE(waitForItemVisible(scene, render.renderObjectId(), id));
 
@@ -916,7 +916,7 @@ TEST_CASE("an item outside the job's frustum never holds the job back",
 
     cwRenderTexturedItems::Item item;
     item.geometry = unitQuad();
-    item.streamedTexture = streamedSource(QStringLiteral("scrap-1"));
+    item.texture = streamedSource(QStringLiteral("scrap-1"));
     item.modelMatrix = offscreenPose;
     const uint32_t id = render.addItem(item);
     REQUIRE(waitForItemVisible(scene, render.renderObjectId(), id));
@@ -948,7 +948,7 @@ TEST_CASE("a bigger export asks for a finer level than a small one",
 
         cwRenderTexturedItems::Item item;
         item.geometry = unitQuad();
-        item.streamedTexture = streamedSource(QStringLiteral("scrap-1"));
+        item.texture = streamedSource(QStringLiteral("scrap-1"));
         const uint32_t id = render.addItem(item);
         REQUIRE(waitForItemVisible(scene, render.renderObjectId(), id));
 

@@ -119,8 +119,8 @@ void cwRhiTexturedItems::synchronize(const SynchronizeData& data)
             item->material = payload.material;
             item->geometry = payload.geometry;
             item->geometryNeedsUpdate = !item->geometry.indices().isEmpty();
-            item->image = payload.texture;
-            item->streamSource = payload.streamedTexture;
+            item->image = payload.texture.image();
+            item->streamSource = payload.texture.streamed();
             item->textureNeedsUpdate = !item->image.isNull();
             item->uniformBlock = payload.uniformBlock;
             item->uniformNeedsUpdate = true;
@@ -154,12 +154,13 @@ void cwRhiTexturedItems::synchronize(const SynchronizeData& data)
                 item->updateBoundsFromGeometry();
             }
             if (state.textureDirty) {
-                item->image = payload.texture;
+                const cwStreamedTexture streamSource = payload.texture.streamed();
+                item->image = payload.texture.image();
                 // A streamed source uploads through streamResources instead, and
                 // the item keeps drawing what it has until the first level lands.
-                item->textureNeedsUpdate = payload.streamedTexture.isNull();
-                if (!(item->streamSource == payload.streamedTexture)) {
-                    item->streamSource = payload.streamedTexture;
+                item->textureNeedsUpdate = !payload.texture.isStreamed();
+                if (!(item->streamSource == streamSource)) {
+                    item->streamSource = streamSource;
                     m_streamer.cancel(id);
                     item->resetResidency();
                 }

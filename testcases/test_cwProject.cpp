@@ -20,6 +20,7 @@ using namespace Catch;
 #include "cwNote.h"
 #include "cwSaveLoad.h"
 #include "cwTeam.h"
+#include "cwTextureUploadTask.h"
 #include "cwNoteLiDAR.h"
 #include "cwError.h"
 #include "cwErrorListModel.h"

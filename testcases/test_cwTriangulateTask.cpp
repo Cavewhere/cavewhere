@@ -205,23 +205,20 @@ TEST_CASE("A compressed crop skips the decode and still reaches the renderer",
 
     const cwTriangulatedData data = triangulateImageAtPath(imagePath);
     REQUIRE_FALSE(data.isNull());
-    REQUIRE_FALSE(data.compressedTextureKey().id.isEmpty());
+    REQUIRE(data.texture().isStreamed());
 
     //The gate: the render thread streams the KTX2 entry, so the PNG crop is
     //never decoded and no RGBA8 pixels ride along
-    CHECK(data.croppedImageData().image.isNull());
+    CHECK(data.texture().image().isNull());
 
     //The tracked image still holds the PNG cache entry open
     REQUIRE_FALSE(data.croppedImagePtr().isNull());
     CHECK(QFileInfo::exists(data.croppedImage().path()));
 
     const QDir dataRootDir = triangulateTaskDataRootDir();
-    const cwStreamedTexture streamed {
-        dataRootDir.absolutePath(),
-        data.compressedTextureKey(),
-        data.croppedImageSize()
-    };
+    const cwStreamedTexture streamed = data.texture().streamed();
     REQUIRE_FALSE(streamed.isNull());
+    CHECK(streamed.dataRootPath() == dataRootDir.absolutePath());
 
     cwDiskCacher cacher(dataRootDir);
     CHECK(cacher.hasEntry(streamed.key));

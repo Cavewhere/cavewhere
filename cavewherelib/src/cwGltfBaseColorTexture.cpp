@@ -64,10 +64,10 @@ void cwGltfBaseColorTexture::setOn(cwRenderTexturedItems::Item& item,
 {
     const cwStreamedTexture streamed = streamedSource(scene, material.baseColorTextureIndex);
 
-    //Only one of the two travels to the render thread, and the descriptor path
-    //never decodes: baseColorImage() runs only when there is no entry to stream.
-    item.streamedTexture = streamed;
-    item.texture = streamed.isNull() ? cw::gltf::baseColorImage(scene, material) : QImage();
+    //The descriptor path never decodes: baseColorImage() runs only when there
+    //is no entry to stream.
+    item.texture = streamed.isNull() ? cwItemTexture(cw::gltf::baseColorImage(scene, material))
+                                     : cwItemTexture(streamed);
 }
 
 cwStreamedTexture cwGltfBaseColorTexture::streamedSource(const cw::gltf::SceneCPU& scene,

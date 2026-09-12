@@ -354,10 +354,10 @@ TEST_CASE("glTF base color textures reach the renderer as streamed descriptors",
 
         cwRenderTexturedItems::Item first;
         baseColorTexture.setOn(first, scene, material);
-        REQUIRE_FALSE(first.streamedTexture.isNull());
-        CHECK(first.streamedTexture.dataRootPath() == dataRootDir.absolutePath());
-        CHECK(first.streamedTexture.size == QSize(kCompressedTextureSize, kCompressedTextureSize));
-        CHECK(first.texture.isNull());
+        REQUIRE_FALSE(first.texture.streamed().isNull());
+        CHECK(first.texture.streamed().dataRootPath() == dataRootDir.absolutePath());
+        CHECK(first.texture.streamed().size == QSize(kCompressedTextureSize, kCompressedTextureSize));
+        CHECK(first.texture.image().isNull());
 
         const cwDiskCacher cacher(dataRootDir);
         const cwDiskCacher::Key key = textureKey(gltfPath, 0);
@@ -367,14 +367,14 @@ TEST_CASE("glTF base color textures reach the renderer as streamed descriptors",
 
         //The descriptor's size is the encoded header's, and it must agree with
         //the level 0 the render side will load
-        CHECK(streamedLevelZeroSize(first.streamedTexture) == first.streamedTexture.size);
+        CHECK(streamedLevelZeroSize(first.texture.streamed()) == first.texture.streamed().size);
     }
 
     SECTION("a warm cache re-encodes nothing and repeats the descriptor") {
         const cwGltfBaseColorTexture cold(dataRootDir.path(), gltfPath);
         cwRenderTexturedItems::Item first;
         cold.setOn(first, scene, material);
-        REQUIRE_FALSE(first.streamedTexture.isNull());
+        REQUIRE_FALSE(first.texture.streamed().isNull());
 
         const cwDiskCacher cacher(dataRootDir);
         const QString cachePath = cacher.filePath(textureKey(gltfPath, 0));
@@ -388,8 +388,8 @@ TEST_CASE("glTF base color textures reach the renderer as streamed descriptors",
         cwRenderTexturedItems::Item second;
         warm.setOn(second, scene, material);
 
-        CHECK(second.streamedTexture == first.streamedTexture);
-        CHECK(second.texture.isNull());
+        CHECK(second.texture.streamed() == first.texture.streamed());
+        CHECK(second.texture.image().isNull());
         CHECK(QFileInfo(cachePath).lastModified() == firstWrite);
         CHECK(QFileInfo(cachePath).size() == firstSize);
     }
@@ -398,16 +398,16 @@ TEST_CASE("glTF base color textures reach the renderer as streamed descriptors",
         const cwGltfBaseColorTexture original(dataRootDir.path(), gltfPath);
         cwRenderTexturedItems::Item first;
         original.setOn(first, scene, material);
-        REQUIRE_FALSE(first.streamedTexture.isNull());
+        REQUIRE_FALSE(first.texture.streamed().isNull());
 
         REQUIRE_FALSE(writeGltfFile(dataRootDir, QByteArray("different-glb-bytes")).isEmpty());
 
         const cwGltfBaseColorTexture edited(dataRootDir.path(), gltfPath);
         cwRenderTexturedItems::Item second;
         edited.setOn(second, scene, material);
-        REQUIRE_FALSE(second.streamedTexture.isNull());
-        CHECK(second.streamedTexture.key.checksum != first.streamedTexture.key.checksum);
-        CHECK(streamedLevelZeroSize(second.streamedTexture) == second.streamedTexture.size);
+        REQUIRE_FALSE(second.texture.streamed().isNull());
+        CHECK(second.texture.streamed().key.checksum != first.texture.streamed().key.checksum);
+        CHECK(streamedLevelZeroSize(second.texture.streamed()) == second.texture.streamed().size);
     }
 
     SECTION("a project without a data root keeps the decoded image") {
@@ -415,8 +415,8 @@ TEST_CASE("glTF base color textures reach the renderer as streamed descriptors",
         cwRenderTexturedItems::Item item;
         baseColorTexture.setOn(item, scene, material);
 
-        CHECK(item.streamedTexture.isNull());
-        CHECK_FALSE(item.texture.isNull());
+        CHECK(item.texture.streamed().isNull());
+        CHECK_FALSE(item.texture.image().isNull());
     }
 
     SECTION("bytes no decoder can read fall back to the image and are tried once") {
@@ -432,8 +432,8 @@ TEST_CASE("glTF base color textures reach the renderer as streamed descriptors",
 
         cwRenderTexturedItems::Item first;
         baseColorTexture.setOn(first, corruptScene, material);
-        CHECK(first.streamedTexture.isNull());
-        CHECK(first.texture.isNull());
+        CHECK(first.texture.streamed().isNull());
+        CHECK(first.texture.image().isNull());
 
         const cwDiskCacher cacher(dataRootDir);
         CHECK_FALSE(QFileInfo::exists(cacher.filePath(textureKey(gltfPath, 0))));
@@ -441,7 +441,7 @@ TEST_CASE("glTF base color textures reach the renderer as streamed descriptors",
         //The memoized failure is what keeps the second geometry from retrying
         cwRenderTexturedItems::Item second;
         baseColorTexture.setOn(second, corruptScene, material);
-        CHECK(second.streamedTexture.isNull());
+        CHECK(second.texture.streamed().isNull());
         CHECK_FALSE(QFileInfo::exists(cacher.filePath(textureKey(gltfPath, 0))));
     }
 }
@@ -469,7 +469,7 @@ TEST_CASE("glTF base color textures read the cache once per task run", "[Gltf][c
 
     cwRenderTexturedItems::Item first;
     baseColorTexture.setOn(first, scene, firstMaterial);
-    REQUIRE_FALSE(first.streamedTexture.isNull());
+    REQUIRE_FALSE(first.texture.streamed().isNull());
 
     SECTION("a second mesh on the same texture skips the cache file entirely") {
         const QString cachePath = cacher.filePath(textureKey(gltfPath, 0));
@@ -479,8 +479,8 @@ TEST_CASE("glTF base color textures read the cache once per task run", "[Gltf][c
         cwRenderTexturedItems::Item second;
         baseColorTexture.setOn(second, scene, firstMaterial);
 
-        CHECK(second.streamedTexture == first.streamedTexture);
-        CHECK(second.texture.isNull());
+        CHECK(second.texture.streamed() == first.texture.streamed());
+        CHECK(second.texture.image().isNull());
 
         //A re-read would have found the damaged entry and rewritten it.
         CHECK(QFileInfo(cachePath).size() == damagedSize);
@@ -490,8 +490,8 @@ TEST_CASE("glTF base color textures read the cache once per task run", "[Gltf][c
         cwRenderTexturedItems::Item second;
         baseColorTexture.setOn(second, scene, secondMaterial);
 
-        REQUIRE_FALSE(second.streamedTexture.isNull());
-        CHECK(second.streamedTexture.size
+        REQUIRE_FALSE(second.texture.streamed().isNull());
+        CHECK(second.texture.streamed().size
               == QSize(kSecondCompressedTextureSize, kSecondCompressedTextureSize));
         CHECK(QFileInfo(cacher.filePath(textureKey(gltfPath, 1))).exists());
     }
@@ -515,7 +515,7 @@ TEST_CASE("Scrap and glTF cache keys share the encode generation", "[Gltf][cwGlt
 
     cwRenderTexturedItems::Item item;
     baseColorTexture.setOn(item, sceneWithBaseColor(compressibleImage()), material);
-    REQUIRE_FALSE(item.streamedTexture.isNull());
+    REQUIRE_FALSE(item.texture.streamed().isNull());
 
     const QString notePath = dataRootDir.filePath(QStringLiteral("note.png"));
     REQUIRE(compressibleImage().save(notePath));
@@ -536,6 +536,6 @@ TEST_CASE("Scrap and glTF cache keys share the encode generation", "[Gltf][cwGlt
     REQUIRE_FALSE(crop.compressedKey.id.isEmpty());
 
     const QString suffix = cw::ktx2::cacheKeyId(QString());
-    CHECK(item.streamedTexture.key.id.contains(suffix));
+    CHECK(item.texture.streamed().key.id.contains(suffix));
     CHECK(crop.compressedKey.id.contains(suffix));
 }
