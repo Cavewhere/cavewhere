@@ -5,6 +5,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 
 #include "cwRHIObject.h"
 #include "cwOffscreenRenderJob.h"
@@ -28,6 +29,7 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QElapsedTimer>
+#include <QBox3D>
 #include <QMatrix4x4>
 #include <QSize>
 #include <QString>
@@ -298,8 +300,8 @@ TEST_CASE("a streamed item measures its texel density when it reaches the render
     REQUIRE(backend != nullptr);
     REQUIRE(CwRhiTexturedItemsTestAccess::hasItem(*backend, id));
 
-    // Density is measured in updateBoundsFromGeometry, the one moment the
-    // geometry is on the render thread.
+    // Density is measured in setLocalBounds, the one moment the geometry is on
+    // the render thread.
     CHECK_THAT(CwRhiTexturedItemsTestAccess::uvPerMeter(*backend, id),
                Catch::Matchers::WithinAbs(kQuadUvPerMeter, 1e-6));
     CHECK(CwRhiTexturedItemsTestAccess::boundsValid(*backend, id));
@@ -309,6 +311,67 @@ TEST_CASE("a streamed item measures its texel density when it reaches the render
     CHECK(CwRhiTexturedItemsTestAccess::residentTopLevel(*backend, id)
           == CwRhiTexturedItemsTestAccess::noResidentLevel());
     CHECK_FALSE(CwRhiTexturedItemsTestAccess::textureNeedsUpdate(*backend, id));
+
+    render.removeItem(id);
+    CwRhiSceneTestAccess::synchroize(rhiScene, &scene);
+}
+
+TEST_CASE("an item's world bounds come from the box the GUI thread measured",
+          "[TexturedItemsStreaming]")
+{
+    cwScene scene;
+    cwRhiScene rhiScene;
+
+    cwRenderTexturedItems render;
+    render.setScene(&scene);
+    render.setParent(nullptr);
+
+    constexpr float kTranslation = 10.0f;
+    constexpr float kScale = 2.0f;
+
+    cwRenderTexturedItems::Item item;
+    item.geometry = unitQuad();
+    item.modelMatrix.translate(kTranslation, 0.0f, 0.0f);
+    item.modelMatrix.scale(kScale);
+    const uint32_t id = render.addItem(item);
+
+    cwRhiTexturedItems* backend = syncedBackend(rhiScene, scene, render);
+    REQUIRE(backend != nullptr);
+    REQUIRE(CwRhiTexturedItemsTestAccess::hasItem(*backend, id));
+    CHECK(CwRhiTexturedItemsTestAccess::boundsValid(*backend, id));
+
+    const std::optional<QBox3D> united = backend->worldBounds();
+    REQUIRE(united.has_value());
+    const float half = kQuadHalfExtent * kScale;
+    CHECK(united->minimum() == QVector3D(kTranslation - half, -half, 0.0f));
+    CHECK(united->maximum() == QVector3D(kTranslation + half, half, 0.0f));
+
+    render.removeItem(id);
+    CwRhiSceneTestAccess::synchroize(rhiScene, &scene);
+}
+
+TEST_CASE("an item whose geometry carries no positions reports no world bounds",
+          "[TexturedItemsStreaming]")
+{
+    cwScene scene;
+    cwRhiScene rhiScene;
+
+    cwRenderTexturedItems render;
+    render.setScene(&scene);
+    render.setParent(nullptr);
+
+    // No vertices at all, so the GUI thread has no box to hand over and the
+    // item draws rather than risking a wrong cull.
+    cwRenderTexturedItems::Item item;
+    item.geometry = cwGeometry(cwRenderTexturedItems::geometryLayout());
+    const uint32_t id = render.addItem(item);
+
+    cwRhiTexturedItems* backend = syncedBackend(rhiScene, scene, render);
+    REQUIRE(backend != nullptr);
+    REQUIRE(CwRhiTexturedItemsTestAccess::hasItem(*backend, id));
+
+    CHECK_FALSE(CwRhiTexturedItemsTestAccess::boundsValid(*backend, id));
+    CHECK_FALSE(backend->worldBounds().has_value());
 
     render.removeItem(id);
     CwRhiSceneTestAccess::synchroize(rhiScene, &scene);

@@ -2,6 +2,7 @@
 
 #include <QColor>
 #include <QImage>
+#include <QBox3D>
 #include <QVector2D>
 #include <QVector3D>
 #include <QVector>
@@ -124,6 +125,76 @@ TEST_CASE("cwRenderTexturedItems storage flags control CPU data retention", "[cw
         stored = render.item(id);
         REQUIRE_FALSE(stored.texture.image().isNull());
         REQUIRE(stored.texture.image().pixelColor(0, 0) == updatedImage.pixelColor(0, 0));
+    }
+}
+
+TEST_CASE("cwRenderTexturedItems measures an item's local bounds when it is added",
+          "[cwRenderTexturedItems]")
+{
+    cwRenderTexturedItems render;
+
+    SECTION("an item that brings no box gets the geometry's own")
+    {
+        cwRenderTexturedItems::Item item;
+        item.geometry = makeGeometry(4, 0.0f);
+        REQUIRE_FALSE(item.localBounds.has_value());
+
+        const uint32_t id = render.addItem(item);
+
+        const auto stored = render.item(id);
+        REQUIRE(stored.localBounds.has_value());
+        //makeGeometry lays vertex i at (offset + i, offset, i)
+        CHECK(stored.localBounds->minimum() == QVector3D(0.0f, 0.0f, 0.0f));
+        CHECK(stored.localBounds->maximum() == QVector3D(3.0f, 0.0f, 3.0f));
+    }
+
+    SECTION("a box the producer already measured is kept as it is")
+    {
+        const QBox3D measured(QVector3D(-5.0f, -6.0f, -7.0f), QVector3D(8.0f, 9.0f, 10.0f));
+
+        cwRenderTexturedItems::Item item;
+        item.geometry = makeGeometry(4, 0.0f);
+        item.localBounds = measured;
+
+        const uint32_t id = render.addItem(item);
+
+        const auto stored = render.item(id);
+        REQUIRE(stored.localBounds.has_value());
+        CHECK(stored.localBounds->minimum() == measured.minimum());
+        CHECK(stored.localBounds->maximum() == measured.maximum());
+    }
+
+    SECTION("geometry with no vertices has no box")
+    {
+        cwRenderTexturedItems::Item item;
+        item.geometry = makeGeometry(0, 0.0f);
+
+        const uint32_t id = render.addItem(item);
+
+        CHECK_FALSE(render.item(id).localBounds.has_value());
+    }
+
+    SECTION("new geometry is measured again, so the box tracks what is drawn")
+    {
+        const QBox3D measured(QVector3D(-5.0f, -6.0f, -7.0f), QVector3D(8.0f, 9.0f, 10.0f));
+
+        cwRenderTexturedItems::Item item;
+        item.geometry = makeGeometry(4, 0.0f);
+        item.localBounds = measured;
+
+        const uint32_t id = render.addItem(item);
+        REQUIRE(render.item(id).localBounds == measured);
+
+        render.updateGeometry(id, makeGeometry(4, 7.0f));
+
+        const auto stored = render.item(id);
+        REQUIRE(stored.localBounds.has_value());
+        CHECK(stored.localBounds->minimum() == QVector3D(7.0f, 7.0f, 0.0f));
+        CHECK(stored.localBounds->maximum() == QVector3D(10.0f, 7.0f, 3.0f));
+
+        render.updateGeometry(id, makeGeometry(0, 0.0f));
+
+        CHECK_FALSE(render.item(id).localBounds.has_value());
     }
 }
 

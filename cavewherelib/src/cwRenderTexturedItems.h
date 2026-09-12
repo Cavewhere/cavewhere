@@ -11,6 +11,8 @@
 #include <QByteArray>
 #include <QtGui/qimage.h>
 #include <QMatrix4x4>
+#include <QBox3D>
+#include <optional>
 
 class CAVEWHERE_LIB_EXPORT cwRenderTexturedItems : public cwRenderObject
 {
@@ -29,6 +31,10 @@ public:
         cwRenderMaterialState material;
         QByteArray uniformBlock;
         QMatrix4x4 modelMatrix;
+        // The bounds of geometry's positions in the item's local space, or
+        // nullopt when they are unknown. A producer that already has the mesh on
+        // a worker thread fills this in there; addItem computes it otherwise.
+        std::optional<QBox3D> localBounds;
         bool visible = true;
         bool storeGeometry = false; // Keep CPU-side geometry when tests need it
         bool storeTexture = false;  // Keep CPU-side texture when tests need it
@@ -76,6 +82,10 @@ private:
         cwRenderMaterialState material;
         QByteArray uniformBlock;
         QMatrix4x4 modelMatrix;
+        // The bounds of geometry's positions in the item's local space, or
+        // nullopt when the geometry has none. Measured on the GUI thread so the
+        // render thread never walks the vertices at the sync barrier.
+        std::optional<QBox3D> localBounds;
     };
 
     // Which field a caller-facing edit touches; addCommand() folds it into the

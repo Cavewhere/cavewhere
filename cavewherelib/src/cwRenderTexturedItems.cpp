@@ -1,4 +1,5 @@
 #include "cwRenderTexturedItems.h"
+#include "cwGeometryBounds.h"
 #include "cwGeometryItersecter.h"
 #include "cwPickingLog.h"
 #include "cwRhiTexturedItems.h"
@@ -157,6 +158,7 @@ void cwRenderTexturedItems::addCommand(CommandType type, uint32_t id, const Item
     switch (type) {
     case CommandType::UpdateGeometry:
         state.payload.geometry = payload.geometry;
+        state.payload.localBounds = payload.localBounds;
         state.geometryDirty = true;
         break;
     case CommandType::UpdateTexture:
@@ -192,10 +194,17 @@ uint32_t cwRenderTexturedItems::addItem(const Item& item)
     payload.material = item.material;
     payload.uniformBlock = item.uniformBlock;
     payload.modelMatrix = item.modelMatrix;
+    // Measured here, on the GUI thread that already walks the mesh for
+    // registerPickable, so the render thread never walks it at the sync barrier.
+    // From payload.geometry, the layout-converted copy, so the box and the
+    // uploaded vertices always agree.
+    payload.localBounds = item.localBounds ? item.localBounds
+                                           : cw::geometry::positionBounds(payload.geometry);
 
     addCommand(CommandType::Add, id, payload);
 
     Item storedItem = item;
+    storedItem.localBounds = payload.localBounds;
     if (!storedItem.storeGeometry) {
         storedItem.geometry = cwGeometry();
     }
@@ -257,9 +266,11 @@ void cwRenderTexturedItems::updateGeometry(uint32_t id, const cwGeometry& geomet
 
     ItemPayload payload;
     payload.geometry = handleGeometryError(geometryForRender(geometry));
+    payload.localBounds = cw::geometry::positionBounds(payload.geometry);
     addCommand(CommandType::UpdateGeometry, id, payload);
 
     const QMatrix4x4 modelMatrix = entry->modelMatrix;
+    entry->localBounds = payload.localBounds;
     if (entry->storeGeometry) {
         entry->geometry = payload.geometry;
     } else {

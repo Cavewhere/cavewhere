@@ -1,4 +1,5 @@
 //Our includes
+#include "cwGeometryBounds.h"
 #include "cwRenderGLTF.h"
 #include "cwRestarterTracking.h"
 #include "cwRhiTexturedItems.h"
@@ -62,6 +63,9 @@ void cwRenderGLTF::setGLTFFilePath(const QString &filePath)
 
                         //Add the render item
                         auto& item = load.items.emplaceBack(std::move(geometry));
+                        //Measured on this worker thread, so the render thread
+                        //never walks the vertices again at the sync barrier
+                        item.localBounds = cw::geometry::positionBounds(item.geometry);
                         baseColorTexture.setOn(item, data, mesh.material);
                     }
                 }

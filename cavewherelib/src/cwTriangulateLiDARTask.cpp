@@ -1,5 +1,6 @@
 #include "cwTriangulateLiDARTask.h"
 #include "cwConcurrent.h"
+#include "cwGeometryBounds.h"
 #include "cwGltfBaseColorTexture.h"
 #include "cwGltfLoader.h"
 #include "cwTriangulateStation.h"
@@ -54,8 +55,13 @@ QFuture<Monad::Result<QVector<cwRenderTexturedItems::Item> > > cwTriangulateLiDA
             for(auto& geometry : mesh.geometries) {
                 morphPositions(geometry);
 
+                //Measured on this worker thread, so the render thread never
+                //walks the vertices again at the sync barrier
+                const auto localBounds = cw::geometry::positionBounds(geometry);
+
                 //Add the render item
                 auto& item = renderItems.emplaceBack(std::move(geometry));
+                item.localBounds = localBounds;
                 baseColorTexture.setOn(item, gltf, mesh.material);
             }
         }
