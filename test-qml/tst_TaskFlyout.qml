@@ -28,7 +28,9 @@ QQ.Item {
         when: windowShown
 
         function addTask(name, progress, steps) {
-            testModelId.append({nameRole: name, progressRole: progress, numberOfStepsRole: steps})
+            testModelId.append({nameRole: name, progressRole: progress, numberOfStepsRole: steps,
+                                detailNameRole: "", detailProgressRole: 0, detailTotalRole: 0,
+                                treeBackedRole: false})
         }
 
         function init() {

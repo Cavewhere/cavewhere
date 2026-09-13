@@ -4,6 +4,7 @@
 
 //Our includes
 #include "cwFutureManagerModel.h"
+#include "cwProgressNode.h"
 #include "SpyChecker.h"
 
 //Qt includes
@@ -517,5 +518,198 @@ TEST_CASE("cwFutureManagerModel aggregates progress across its jobs", "[cwFuture
         REQUIRE(settle([&]() { return dataChangedSpy.size() > 0; }));
 
         CHECK(progressChangedSpy.size() == 0);
+    }
+}
+
+namespace {
+    //Margin on top of the age threshold, so a test never races the clock
+    constexpr int kAgeMarginMs = 60;
+    //Long enough for several detail polls to run without anything changing
+    constexpr int kQuietMs = 300;
+
+    //Keeps the event loop turning for a while, so timers and posted callouts
+    //all get their chance
+    void spin(int milliseconds)
+    {
+        QElapsedTimer timer;
+        timer.start();
+
+        settle([milliseconds, &timer]() { return timer.elapsed() >= milliseconds; });
+    }
+
+    //Lets a node grow old enough to be worth naming on the detail line
+    void spinPastDetailAge()
+    {
+        spin(cwFutureManagerModel::kDetailMinAgeMs + kAgeMarginMs);
+    }
+
+    QList<int> rolesOf(const QList<QVariant>& arguments)
+    {
+        return arguments.at(2).value<QList<int>>();
+    }
+
+    bool isDetailChange(const QList<QVariant>& arguments)
+    {
+        return rolesOf(arguments).contains(cwFutureManagerModel::DetailNameRole);
+    }
+
+    int detailChangeCount(const cwSignalSpy& spy)
+    {
+        int count = 0;
+        for(const auto& arguments : spy) {
+            if(isDetailChange(arguments)) {
+                count++;
+            }
+        }
+        return count;
+    }
+}
+
+TEST_CASE("cwFutureManagerModel names the detail line of a progress tree", "[cwFutureManagerModel]") {
+
+    SECTION("a job with no tree keeps its detail roles empty and stays quiet") {
+        cwFutureManagerModel model;
+        TestJob job(&model, "Plain", 1, 10);
+
+        cwSignalSpy dataChangedSpy(&model, &cwFutureManagerModel::dataChanged);
+
+        const QModelIndex index = model.index(0);
+        CHECK(index.data(cwFutureManagerModel::DetailNameRole).toString().isEmpty());
+        CHECK(index.data(cwFutureManagerModel::DetailProgressRole).toLongLong() == 0);
+        CHECK(index.data(cwFutureManagerModel::DetailTotalRole).toLongLong() == 0);
+        CHECK(index.data(cwFutureManagerModel::TreeBackedRole).toBool() == false);
+
+        spin(kQuietMs);
+
+        CHECK(detailChangeCount(dataChangedSpy) == 0);
+    }
+
+    SECTION("detailFor picks the leaf that has been running longest") {
+        auto root = cwProgressNode::createRoot("Run");
+
+        QString name;
+        qint64 done = 0;
+        qint64 total = 0;
+
+        SECTION("a tree with nothing in it has no detail") {
+            CHECK(cwFutureManagerModel::detailFor(root, name, done, total) == false);
+            CHECK(name.isEmpty());
+        }
+
+        SECTION("a leaf too young to name yields no detail") {
+            auto leaf = root->addChild("Morphing");
+            leaf->setTotal(100);
+            leaf->report(10);
+
+            CHECK(cwFutureManagerModel::detailFor(root, name, done, total) == false);
+        }
+
+        SECTION("a leaf that has lived long enough names itself and its counts") {
+            auto leaf = root->addChild("Morphing");
+            leaf->setTotal(100);
+            leaf->report(10);
+
+            spinPastDetailAge();
+
+            REQUIRE(cwFutureManagerModel::detailFor(root, name, done, total));
+            CHECK(name.toStdString() == std::string("Morphing"));
+            CHECK(done == 10);
+            CHECK(total == 100);
+        }
+
+        SECTION("an opaque leaf reports no counts") {
+            auto leaf = root->addChild("Compressing texture");
+
+            spinPastDetailAge();
+
+            REQUIRE(cwFutureManagerModel::detailFor(root, name, done, total));
+            CHECK(name.toStdString() == std::string("Compressing texture"));
+            CHECK(done == 0);
+            CHECK(total == 0);
+        }
+
+        SECTION("the older of two leaves holds the line until it finishes") {
+            auto older = root->addChild("Older");
+            older->setTotal(10);
+
+            spin(kAgeMarginMs);
+
+            auto younger = root->addChild("Younger");
+            younger->setTotal(10);
+
+            spinPastDetailAge();
+
+            REQUIRE(cwFutureManagerModel::detailFor(root, name, done, total));
+            CHECK(name.toStdString() == std::string("Older"));
+
+            //The younger leaf working is no reason to take the line away
+            younger->report(5);
+            REQUIRE(cwFutureManagerModel::detailFor(root, name, done, total));
+            CHECK(name.toStdString() == std::string("Older"));
+
+            older->finish();
+            REQUIRE(cwFutureManagerModel::detailFor(root, name, done, total));
+            CHECK(name.toStdString() == std::string("Younger"));
+            CHECK(done == 5);
+            CHECK(total == 10);
+        }
+
+        SECTION("a leaf deeper in the tree can hold the line") {
+            auto parent = root->addChild("Note");
+            auto leaf = parent->addChild("Parsing");
+
+            spinPastDetailAge();
+
+            REQUIRE(cwFutureManagerModel::detailFor(root, name, done, total));
+            CHECK(name.toStdString() == std::string("Parsing"));
+        }
+
+        root->cancel();
+    }
+
+    SECTION("polling publishes the detail roles, and only when they change") {
+        cwFutureManagerModel model;
+
+        auto root = cwProgressNode::createRoot("Run");
+        model.addJob(cwFuture(root->future(), "Run", root));
+        REQUIRE(model.rowCount() == 1);
+
+        cwSignalSpy dataChangedSpy(&model, &cwFutureManagerModel::dataChanged);
+
+        //The row says it has a tree from the moment it appears, so its caption
+        //can read as a percent before any leaf is old enough to be named
+        CHECK(model.index(0).data(cwFutureManagerModel::TreeBackedRole).toBool());
+
+        auto leaf = root->addChild("Morphing");
+        leaf->setTotal(100);
+        leaf->report(10);
+
+        REQUIRE(settle([&]() { return detailChangeCount(dataChangedSpy) > 0; }));
+
+        const QModelIndex index = model.index(0);
+        CHECK(index.data(cwFutureManagerModel::DetailNameRole).toString().toStdString()
+              == std::string("Morphing"));
+        CHECK(index.data(cwFutureManagerModel::DetailProgressRole).toLongLong() == 10);
+        CHECK(index.data(cwFutureManagerModel::DetailTotalRole).toLongLong() == 100);
+
+        //Exactly the three detail roles: the row's own bar rides the promise
+        for(const auto& arguments : dataChangedSpy) {
+            if(isDetailChange(arguments)) {
+                const QList<int> roles = rolesOf(arguments);
+                CHECK(roles == QList<int>({cwFutureManagerModel::DetailNameRole,
+                                           cwFutureManagerModel::DetailProgressRole,
+                                           cwFutureManagerModel::DetailTotalRole}));
+            }
+        }
+
+        const int settledChanges = detailChangeCount(dataChangedSpy);
+        spin(kQuietMs);
+        CHECK(detailChangeCount(dataChangedSpy) == settledChanges);
+
+        leaf->report(20);
+        REQUIRE(settle([&]() { return detailChangeCount(dataChangedSpy) > settledChanges; }));
+        CHECK(index.data(cwFutureManagerModel::DetailProgressRole).toLongLong() == 20);
+
+        root->cancel();
     }
 }

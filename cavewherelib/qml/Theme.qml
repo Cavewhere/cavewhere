@@ -168,6 +168,9 @@ QtObject {
     readonly property int taskFlyoutMaxListHeight: 220
     // Long enough for the pointer to cross the gap from the sidebar to the card.
     readonly property int taskFlyoutHoverCloseDelay: 300
+    // A hairline: the detail line under a task row is a secondary signal, so it
+    // reads as a thinner mark than the row's own bar.
+    readonly property int taskDetailBarHeight: 4
 
     // Icon sizes
     readonly property int iconSizeButton: 16
