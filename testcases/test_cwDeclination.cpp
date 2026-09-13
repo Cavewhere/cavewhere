@@ -17,6 +17,7 @@
 //Qt includes
 #include <QDateTime>
 #include <QTimeZone>
+#include <QtConcurrent>
 #include <QtMath>
 
 using Catch::Matchers::WithinAbs;
@@ -87,4 +88,52 @@ TEST_CASE("cwDeclination: unknown source CS returns transform error", "[cwDeclin
                                           makeDate(2024, 1, 1));
     CHECK(result.hasError());
     CHECK(result.errorMessage().contains("transform", Qt::CaseInsensitive));
+}
+
+TEST_CASE("cwDeclination: concurrent computes match single threaded values", "[cwDeclination]")
+{
+    constexpr int kThreadCount = 8;
+    constexpr int kIterations = 400;
+    constexpr double kTolerance = 1e-9;
+
+    const QDateTime date = makeDate(2024, 3, 21);
+
+    //Distinct locations so a shared scratch array between threads produces a
+    //wrong answer instead of coincidentally matching
+    QList<cwGeoPoint> locations;
+    QList<double> expected;
+    for (int i = 0; i < kThreadCount; i++) {
+        locations.append(cwGeoPoint(-120.0 + i * 15.0, -60.0 + i * 15.0, i * 250.0));
+
+        auto result = cwDeclination::compute(locations.at(i), Wgs84, date);
+        REQUIRE_FALSE(result.hasError());
+        expected.append(result.value());
+    }
+
+    //A dedicated pool guarantees all the workers run at once, even on a
+    //machine whose global pool is smaller than kThreadCount
+    QThreadPool pool;
+    pool.setMaxThreadCount(kThreadCount);
+
+    QList<QFuture<int>> futures;
+    for (int i = 0; i < kThreadCount; i++) {
+        futures.append(QtConcurrent::run(&pool, [&, i]()
+        {
+            int badResults = 0;
+            for (int iteration = 0; iteration < kIterations; iteration++) {
+                auto result = cwDeclination::compute(locations.at(i), Wgs84, date);
+                if (result.hasError() || qAbs(result.value() - expected.at(i)) > kTolerance) {
+                    badResults++;
+                }
+            }
+            return badResults;
+        }));
+    }
+
+    int badResults = 0;
+    for (auto& future : futures) {
+        badResults += future.result();
+    }
+
+    CHECK(badResults == 0);
 }
