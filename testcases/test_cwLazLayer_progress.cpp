@@ -101,6 +101,46 @@ TEST_CASE("cwLazLayer: the octree build is registered as a named job",
     REQUIRE(layer.loadStatus() == cwLazLayer::LoadStatus::Loaded);
 }
 
+TEST_CASE("cwLazLayer: a reload asked for as the build registers still loads",
+          "[cwLazLayer]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    QVector<QVector3D> points;
+    for (int i = 0; i < 200; ++i) {
+        points.append(QVector3D(float(i), float(i) * 0.5f, float(i) * 0.25f));
+    }
+    const QString path = tempLazPath(tempDir, QStringLiteral("reload-in-window"));
+    REQUIRE(writeSyntheticLazFile(path, points));
+
+    cwFutureManagerModel manager;
+    cwFutureManagerToken token(&manager);
+
+    cwLazLayer layer;
+    layer.setFutureManagerToken(token);
+    layer.setCacheRootPath(tempDir.path());
+
+    // The job row is inserted from inside the restart that is queueing the
+    // build, so a reload asked for here lands in the one window where the run
+    // has a future but has not started against it yet — where an out-of-band
+    // cancel used to strand the layer at Loading forever.
+    int reloads = 0;
+    QObject::connect(&manager, &QAbstractItemModel::rowsInserted, &layer,
+                     [&layer, &reloads]() {
+                         if (reloads == 0) {
+                             ++reloads;
+                             layer.reload();
+                         }
+                     });
+
+    layer.setSourcePath(path);
+
+    REQUIRE(waitForLazLayerLoaded(&layer));
+    CHECK(reloads == 1);
+    CHECK(layer.loadStatus() == cwLazLayer::LoadStatus::Loaded);
+    CHECK(layer.pointCount() == points.size());
+}
+
 TEST_CASE("cwLazLayer: a second layer on a built file publishes without a job",
           "[cwLazLayer]") {
     QTemporaryDir tempDir;

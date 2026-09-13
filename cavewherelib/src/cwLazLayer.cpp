@@ -352,12 +352,14 @@ void cwLazLayer::startBuild(const QString& frameCS)
     m_buildCacheRootPath = request.cacheRootPath;
     const quint64 generation = m_reloadGeneration;
 
-    // A build left over from an earlier reload() is now building against a
-    // frame or a CS this layer has moved on from, and the probe below is
-    // asynchronous, so it would have a whole probe's worth of time to publish
-    // Loaded first. Cancelling here settles it: the Restarter pushes the outer
-    // cancel down to the worker, and a canceled outer future never delivers.
-    m_loadRestarter.future().cancel();
+    // A build left over from an earlier reload() is building against a frame or
+    // a CS this layer has moved on from, and it is m_buildGeneration that keeps
+    // its result from publishing. Cancelling the restarter's future from here
+    // would be the wrong tool: Restarter queues the first start of a burst on
+    // the event loop, so an out-of-band cancel that lands in that window
+    // settles the outer future the queued run is about to be tracked by, and
+    // that run then delivers nothing — the layer would sit at Loading forever.
+    // The stale run is cancelled by the restart() below instead.
 
     // The probe reads one manifest and then stats one cache entry per node, so
     // a big octree is thousands of file hits — never on the GUI thread. It is
