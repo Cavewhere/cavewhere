@@ -8,14 +8,17 @@
 //Our includes
 #include "cwPointOctreePickSet.h"
 #include "cwPointOctree.h"
+#include "cwProfileLog.h"
 #include "cwRaySphere.h"
 
 //Qt includes
+#include <QElapsedTimer>
 #include <QMutexLocker>
 #include <QtEndian>
 
 //Std includes
 #include <algorithm>
+#include <optional>
 #include <utility>
 
 namespace {
@@ -25,12 +28,17 @@ namespace {
     constexpr int kCornerMaskY = 2;
     constexpr int kCornerMaskZ = 4;
 
-    //! True when the ray reaches @a box at or past its origin.
-    bool rayReachesBox(const QBox3D& box, const QRay3D& ray)
+    //! Where the ray enters @a box, when it reaches it at or past its origin.
+    //! cw.profile.pick compares that depth against the hit the query settled on.
+    std::optional<float> rayEntryDepth(const QBox3D& box, const QRay3D& ray)
     {
         float minimumT = 0.0f;
         float maximumT = 0.0f;
-        return box.intersection(ray, &minimumT, &maximumT) && maximumT >= 0.0f;
+        if (!box.intersection(ray, &minimumT, &maximumT) || maximumT < 0.0f) {
+            return std::nullopt;
+        }
+
+        return minimumT;
     }
 
     QBox3D inflated(const QBox3D& box, float pad)
@@ -94,6 +102,34 @@ namespace {
         QVector3D m_origin;
         float m_scale;
     };
+
+    //! One cw.profile.pick line. @a entryDepths holds the ray-entry depth of
+    //! every node the query scanned, so "prunable" is the count a near-to-far
+    //! order with a best-depth cut-off could have skipped.
+    void logPickQuery(QLatin1StringView kind, qsizetype snapshotNodes,
+                      const QList<float>& entryDepths, qint64 pointsScanned,
+                      const QElapsedTimer& timer,
+                      const std::optional<cwPickProvider::PointHit>& best)
+    {
+        int prunable = 0;
+        if (best.has_value()) {
+            for (const float depth : entryDepths) {
+                if (double(depth) > best->rayDepth) {
+                    prunable++;
+                }
+            }
+        }
+
+        qCDebug(lcProfilePick).noquote()
+            << QStringLiteral("pick kind=%1 nodes=%2 passing=%3 points=%4 us=%5 hit=%6 prunable=%7")
+                   .arg(kind)
+                   .arg(snapshotNodes)
+                   .arg(entryDepths.size())
+                   .arg(pointsScanned)
+                   .arg(cw::profile::elapsedUs(timer))
+                   .arg(best.has_value() ? 1 : 0)
+                   .arg(prunable);
+    }
 }
 
 void cwPointOctreePickSet::publish(QVector<Node> nodes, const QBox3D& rootBounds,
@@ -135,14 +171,29 @@ cwPointOctreePickSet::exactHit(const QRay3D& ray) const
 
     const float radius = taken->pickRadius;
 
+    const bool profiling = lcProfilePick().isDebugEnabled();
+    QElapsedTimer timer;
+    QList<float> entryDepths;
+    qint64 pointsScanned = 0;
+    if (profiling) {
+        timer.start();
+    }
+
     std::optional<PointHit> best;
     for (const Node& node : taken->nodes) {
-        if (!rayReachesBox(inflated(node.bounds, radius), ray)) {
+        const std::optional<float> entryDepth =
+            rayEntryDepth(inflated(node.bounds, radius), ray);
+        if (!entryDepth.has_value()) {
             continue;
         }
 
         const NodePoints points(node);
         const qsizetype count = points.count();
+        if (profiling) {
+            entryDepths.append(entryDepth.value());
+            pointsScanned += count;
+        }
+
         for (qsizetype i = 0; i < count; i++) {
             const QVector3D center = points.at(i);
             const cw::RaySphereHit sphere =
@@ -163,6 +214,11 @@ cwPointOctreePickSet::exactHit(const QRay3D& ray) const
         }
     }
 
+    if (profiling) {
+        logPickQuery(QLatin1StringView("exactHit"), taken->nodes.size(), entryDepths,
+                     pointsScanned, timer, best);
+    }
+
     return best;
 }
 
@@ -175,15 +231,29 @@ cwPointOctreePickSet::nearestPoint(const QRay3D& ray,
         return std::nullopt;
     }
 
+    const bool profiling = lcProfilePick().isDebugEnabled();
+    QElapsedTimer timer;
+    QList<float> entryDepths;
+    qint64 pointsScanned = 0;
+    if (profiling) {
+        timer.start();
+    }
+
     std::optional<PointHit> best;
     for (const Node& node : taken->nodes) {
-        if (!rayReachesBox(inflated(node.bounds, tolerancePad(ray, node.bounds, tolerance)),
-                           ray)) {
+        const std::optional<float> entryDepth = rayEntryDepth(
+            inflated(node.bounds, tolerancePad(ray, node.bounds, tolerance)), ray);
+        if (!entryDepth.has_value()) {
             continue;
         }
 
         const NodePoints points(node);
         const qsizetype count = points.count();
+        if (profiling) {
+            entryDepths.append(entryDepth.value());
+            pointsScanned += count;
+        }
+
         for (qsizetype i = 0; i < count; i++) {
             const QVector3D point = points.at(i);
             const double rayDepth = ray.projectedDistance(point);
@@ -204,6 +274,11 @@ cwPointOctreePickSet::nearestPoint(const QRay3D& ray,
 
             best = PointHit{point, rayDepth};
         }
+    }
+
+    if (profiling) {
+        logPickQuery(QLatin1StringView("nearestPoint"), taken->nodes.size(), entryDepths,
+                     pointsScanned, timer, best);
     }
 
     return best;

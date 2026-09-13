@@ -35,6 +35,8 @@
 #include "cwTask.h"
 #include "cwSettings.h"
 #include "cwFontSettings.h"
+#include "cwProfileLog.h"
+#include "cwRenderingSettings.h"
 
 //QuickQanave includes
 #include <QuickQanava>
@@ -54,28 +56,67 @@
 #define CAVEWHERE_VERSION "Sauce-Release"
 #endif
 
+// Installed by --profile-log, which needs the cw.profile.* lines on stderr: a
+// bundled app's stderr is a pipe, and QT_FORCE_STDERR_LOGGING alone does not
+// reach it. Writing straight to the stream rather than through qDebug() keeps a
+// message from re-entering the handler that is printing it.
 void customMessageHandler(QtMsgType type, const QMessageLogContext &context, const QString &msg) {
-    switch (type) {
-    case QtWarningMsg:
-        qDebug() << "QWarning triggered: " << msg;
-        if (msg.contains("No module named \"cavewherelib\" found")) {
-            // Breakpoint here for the debugger
-            qDebug() << "Breaking on QWarning...";
+    const QByteArray line = qFormatLogMessage(type, context, msg).toLocal8Bit();
+    fputs(line.constData(), stderr);
+    fputc('\n', stderr);
+    fflush(stderr);
+
+    if (type == QtWarningMsg && msg.contains("No module named \"cavewherelib\" found")) {
+        // Breakpoint here for the debugger
 #ifdef Q_OS_WIN
-            __debugbreak(); // Windows
+        __debugbreak(); // Windows
 #else
-            __builtin_trap(); // macOS/Linux
+        __builtin_trap(); // macOS/Linux
 #endif
-        }
-        break;
-    case QtCriticalMsg:
-    case QtFatalMsg:
-        // Handle other types of messages if necessary
-        break;
-    default:
-        break;
     }
 }
+
+namespace {
+
+// The point cloud profiling harness (see the plan's §2.1). Every
+// cwRenderingSettings setter persists through QSettings, so an override lives
+// for this process only: the stored values are read here and written back when
+// the app quits.
+void applyProfileOverrides(QCoreApplication& app, const QCommandLineParser& parser,
+                           const QCommandLineOption& gpuBudgetMbOption,
+                           const QCommandLineOption& screenSpaceErrorPxOption)
+{
+    if (!parser.isSet(gpuBudgetMbOption) && !parser.isSet(screenSpaceErrorPxOption)) {
+        return;
+    }
+
+    auto* settings = cwRenderingSettings::instance();
+    const int storedGpuBudgetMb = settings->gpuMemoryBudgetMb();
+    const double storedScreenSpaceErrorPx = settings->screenSpaceErrorPx();
+
+    QObject::connect(&app, &QCoreApplication::aboutToQuit, settings,
+                     [settings, storedGpuBudgetMb, storedScreenSpaceErrorPx]() {
+                         settings->setGpuMemoryBudgetMb(storedGpuBudgetMb);
+                         settings->setScreenSpaceErrorPx(storedScreenSpaceErrorPx);
+                     });
+
+    if (parser.isSet(gpuBudgetMbOption)) {
+        settings->setGpuMemoryBudgetMb(parser.value(gpuBudgetMbOption).toInt());
+    }
+    if (parser.isSet(screenSpaceErrorPxOption)) {
+        settings->setScreenSpaceErrorPx(parser.value(screenSpaceErrorPxOption).toDouble());
+    }
+}
+
+void enableProfileLogging()
+{
+    qInstallMessageHandler(customMessageHandler);
+    QLoggingCategory::setFilterRules(QStringLiteral("cw.profile.render.debug=true\n"
+                                                    "cw.profile.pick.debug=true\n"
+                                                    "cw.profile.load.debug=true"));
+}
+
+} // namespace
 
 void handleCommandline(QCoreApplication& a, cwRootData* rootData) {
     // Command-line argument parser
@@ -89,11 +130,33 @@ void handleCommandline(QCoreApplication& a, cwRootData* rootData) {
                                   "pageurl");
     parser.addOption(pageOption);
 
+    // The point cloud profiling harness. Kept in one block so it stays apart
+    // from the options around it.
+    QCommandLineOption profileGpuBudgetOption("profile-gpu-budget-mb",
+                                              "Override the GPU memory budget for this run only.",
+                                              "megabytes");
+    QCommandLineOption profileSseOption("profile-sse-px",
+                                        "Override the screen space error for this run only.",
+                                        "pixels");
+    QCommandLineOption profileLogOption("profile-log",
+                                        "Write the cw.profile.* lines to stderr.");
+    parser.addOption(profileGpuBudgetOption);
+    parser.addOption(profileSseOption);
+    parser.addOption(profileLogOption);
+
     // Adding optional filename argument
     parser.addPositionalArgument("filename", "The optional file to open.");
 
     // Parse the command-line arguments
     parser.process(a);
+
+    if (parser.isSet(profileLogOption)) {
+        enableProfileLogging();
+    }
+
+    // Before the project loads, so the first frame it draws already renders
+    // under the overrides.
+    applyProfileOverrides(a, parser, profileGpuBudgetOption, profileSseOption);
 
     // Check if --page was provided
     QString pageUrl;

@@ -15,6 +15,7 @@
 #include <QDir>
 #include <QElapsedTimer>
 #include <QMatrix4x4>
+#include <QSet>
 #include <QSize>
 #include <QTemporaryDir>
 #include <QThread>
@@ -37,6 +38,7 @@
 #include "cwDiskCacher.h"
 #include "cwPointOctree.h"
 #include "cwPointOctreeManifest.h"
+#include "cwProfileLog.h"
 #include "cwPointOctreeSampler.h"
 #include "cwPointOctreeSelection.h"
 #include "cwPointOctreeSource.h"
@@ -56,6 +58,7 @@
 #include "cwSceneUpdate.h"
 
 #include "CwRhiPointCloudTestAccess.h"
+#include "ProfileLogCapture.h"
 
 using Access = CwRhiPointCloudTestAccess;
 using NodeState = CwRhiPointCloudTestAccess::NodeState;
@@ -1390,4 +1393,115 @@ TEST_CASE("Releasing a view's streamed resources empties what picks see",
 
     // The cloud is still there to frame, it just has nothing resident.
     CHECK(intersecter->visibleBoundingBox() == fixture.manifest().nodeBounds(kRootIndex));
+}
+
+TEST_CASE("The render profile category reports one line per block of frames",
+          "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    PointCloudFixture fixture(rhi.get(), QStringLiteral("profile-render"));
+    fixture.setOrthoHeight(kCloseOrthoHeight);
+    fixture.renderUntilQuiet();
+
+    const QString renderPrefix = QStringLiteral("render");
+
+    {
+        // The category's declared level is the default, and the default has to
+        // stay silent: no rule at all here.
+        const ProfileLogCapture capture{QString()};
+        CHECK_FALSE(lcProfileRender().isDebugEnabled());
+
+        for (int frame = 0; frame < cw::profile::kProfileBlockFrames; frame++) {
+            fixture.renderFrame();
+        }
+
+        CHECK(ProfileLogCapture::linesStartingWith(renderPrefix).isEmpty());
+    }
+
+    const ProfileLogCapture capture(QStringLiteral("cw.profile.render.debug=true"));
+
+    // One frame short of the block: still nothing to say.
+    for (int frame = 0; frame < cw::profile::kProfileBlockFrames - 1; frame++) {
+        fixture.renderFrame();
+    }
+    CHECK(ProfileLogCapture::linesStartingWith(renderPrefix).isEmpty());
+
+    fixture.renderFrame();
+
+    const QStringList lines = ProfileLogCapture::linesStartingWith(renderPrefix);
+    REQUIRE(lines.size() == 1);
+
+    const QString line = lines.first();
+
+    // The runner reads the line by key, so every key is part of the contract.
+    const QStringList expectedKeys = {
+        QStringLiteral("frames"), QStringLiteral("streamFrames"),
+        QStringLiteral("gatherMeanUs"), QStringLiteral("gatherMaxUs"),
+        QStringLiteral("selectNodesMeanUs"), QStringLiteral("selectNodesMaxUs"),
+        QStringLiteral("requestLoopMeanUs"), QStringLiteral("requestLoopMaxUs"),
+        QStringLiteral("cancelLoopMeanUs"), QStringLiteral("cancelLoopMaxUs"),
+        QStringLiteral("streamMeanUs"), QStringLiteral("streamMaxUs"),
+        QStringLiteral("publishPickMeanUs"), QStringLiteral("publishPickMaxUs"),
+        QStringLiteral("publishStatsMeanUs"), QStringLiteral("publishStatsMaxUs"),
+        QStringLiteral("enforceBudgetMeanUs"), QStringLiteral("enforceBudgetMaxUs"),
+        QStringLiteral("cutMed"), QStringLiteral("cutMax"), QStringLiteral("resident"),
+        QStringLiteral("requests"), QStringLiteral("cancels"), QStringLiteral("uploads"),
+        QStringLiteral("evictions"), QStringLiteral("pendingLoads"),
+        QStringLiteral("sse"), QStringLiteral("gpuMb"), QStringLiteral("budgetMb"),
+        QStringLiteral("pointsMed"), QStringLiteral("pointsMax"),
+        QStringLiteral("slotEvictUs"), QStringLiteral("residencyStatsUs")
+    };
+
+    // "render frame=N key=value ..." in this order, one space between pairs.
+    const QStringList pairs = line.split(QLatin1Char(' '));
+    REQUIRE(pairs.size() == expectedKeys.size() + 2);
+    CHECK(pairs.at(0) == QStringLiteral("render"));
+    CHECK(pairs.at(1).startsWith(QStringLiteral("frame=")));
+    for (int i = 0; i < expectedKeys.size(); i++) {
+        CHECK(pairs.at(i + 2).startsWith(expectedKeys.at(i) + QLatin1Char('=')));
+    }
+
+    CHECK(line.contains(QStringLiteral(" frames=%1 streamFrames=%1 ")
+                            .arg(cw::profile::kProfileBlockFrames)));
+
+    // The counters the block reports are the streamer's own state, not numbers
+    // the line re-derives.
+    const QString resident = QStringLiteral(" resident=%1 ")
+                                 .arg(Access::residentCount(fixture.backend()));
+    CHECK(line.contains(resident));
+}
+
+TEST_CASE("The load profile category reports one line per node load",
+          "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    const ProfileLogCapture capture(QStringLiteral("cw.profile.load.debug=true"));
+
+    PointCloudFixture fixture(rhi.get(), QStringLiteral("profile-load"));
+    fixture.setOrthoHeight(kCloseOrthoHeight);
+    fixture.renderUntilQuiet();
+
+    const QStringList lines = ProfileLogCapture::linesStartingWith(QStringLiteral("load"));
+    REQUIRE_FALSE(lines.isEmpty());
+
+    // Every load reports the bytes it read, and those are the bytes the
+    // manifest says the node holds.
+    QSet<qint64> manifestBytes;
+    for (int i = 0; i < fixture.manifest().nodes.size(); i++) {
+        manifestBytes.insert(fixture.manifest().nodes.at(i).byteSize);
+    }
+
+    for (const QString& line : lines) {
+        const QStringList pairs = line.split(QLatin1Char(' '));
+        REQUIRE(pairs.size() == 3);
+        CHECK(pairs.at(1).startsWith(QStringLiteral("us=")));
+        REQUIRE(pairs.at(2).startsWith(QStringLiteral("bytes=")));
+
+        bool read = false;
+        const qint64 bytes = pairs.at(2).mid(QStringLiteral("bytes=").size()).toLongLong(&read);
+        CHECK(read);
+        CHECK(manifestBytes.contains(bytes));
+    }
 }

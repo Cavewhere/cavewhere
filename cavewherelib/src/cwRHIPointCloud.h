@@ -21,6 +21,7 @@
 #include "cwTileStreamer.h"
 
 // Std includes
+#include <algorithm>
 #include <memory>
 
 // Qt includes
@@ -169,6 +170,71 @@ private:
     QVector<cw::octree::NodeResidency> residencyStats() const;
     void enforceGpuBudget(const cwRenderBudgets& budgets);
 
+    // What one cw.profile.render line summarizes: kProfileBlockFrames frames of
+    // render-thread timings and counters. Filled only while the category is on.
+    struct ProfileBlock {
+        // One timed span across the block: enough for its mean and its worst frame.
+        struct Span {
+            qint64 totalUs = 0;
+            qint64 maxUs = 0;
+
+            void add(qint64 microseconds)
+            {
+                totalUs += microseconds;
+                maxUs = std::max(maxUs, microseconds);
+            }
+
+            double meanUs(int frames) const
+            {
+                return frames > 0 ? double(totalUs) / double(frames) : 0.0;
+            }
+        };
+
+        // gather() and streamResources() run once a frame each, but either can
+        // return early, so each side counts its own frames and each mean is
+        // divided by the count that belongs to it.
+        int frames = 0;
+        int streamFrames = 0;
+
+        Span gather;
+        Span selectNodes;
+        Span requestLoop;
+        Span cancelLoop;
+        Span stream;
+        Span publishPick;
+        Span publishStats;
+        Span enforceBudget;
+
+        // Block totals rather than per-frame spans: both run many times a frame.
+        qint64 slotEvictUs = 0;
+        qint64 residencyStatsUs = 0;
+
+        // One entry per frame, for the block's median cut size.
+        QVector<int> cutSizes;
+
+        int requests = 0;
+        int cancels = 0;
+        int uploads = 0;
+        int evictions = 0;
+
+        // State the block reports as it stood on its last frame.
+        int residentNodes = 0;
+        int pendingLoads = 0;
+        double sseInflation = 1.0;
+        qint64 gpuBytes = 0;
+        qint64 gpuBudgetBytes = 0;
+
+        // Points in the cut. P2 counts them; until then the line reports zero.
+        qint64 pointsMedian = 0;
+        qint64 pointsMax = 0;
+    };
+
+    //! Writes the block as one cw.profile.render line and starts the next one.
+    void flushProfileBlock();
+
+    //! Flushes once either side of the frame has filled the block.
+    void maybeFlushProfileBlock();
+
     // cwAppearanceSlotted: grow m_perCloudUBO to @a slotCount slots, deferring
     // deletion of the prior buffer + SRB (m_retiredBuffers/m_retiredSrbs, flushed
     // next updateResources) so draws already recorded this frame keep valid
@@ -242,6 +308,12 @@ private:
 
     // This frame's cut, from gather()'s selectNodes().
     QVector<cw::octree::SelectedNode> m_selected;
+
+    // cw.profile.render, read once per gather() and once per streamResources()
+    // and consulted by the helpers they call, so a disabled category costs one
+    // branch. The block is mutable because the const helpers time themselves.
+    bool m_profileEnabled = false;
+    mutable ProfileBlock m_profile;
 
     cwTracked<cwRenderPointCloud::RenderState> m_renderState;
 };

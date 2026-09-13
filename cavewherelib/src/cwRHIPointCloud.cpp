@@ -11,6 +11,7 @@
 #include "cwFrustum.h"
 #include "cwPointCloudAppearance.h"
 #include "cwPointOctree.h"
+#include "cwProfileLog.h"
 #include "cwRenderFrameStats.h"
 #include "cwRenderMaterialState.h"
 #include "cwRenderPointCloud.h"
@@ -22,6 +23,7 @@
 // Qt includes
 #include <QDebug>
 #include <QDir>
+#include <QElapsedTimer>
 
 // Std includes
 #include <algorithm>
@@ -50,6 +52,9 @@ namespace {
     //One instance per node, so the constants advance once per draw
     constexpr quint32 kInstanceStepRate = 1;
     constexpr int kRootIndex = 0;
+    constexpr qint64 kBytesPerMegabyte = 1024 * 1024;
+
+    using cw::profile::elapsedUs;
 }
 
 cwRHIPointCloud::cwRHIPointCloud(std::shared_ptr<cwPointOctreePickSet> pickSet) :
@@ -194,6 +199,10 @@ void cwRHIPointCloud::requestNode(int index, quint64 priority)
     if (!m_requested.contains(index)) {
         m_requested.append(index);
     }
+
+    if (m_profileEnabled) {
+        m_profile.requests++;
+    }
 }
 
 cwRHIPointCloud::cwPointOctreeNodeSource cwRHIPointCloud::nodeSource(int index) const
@@ -303,6 +312,12 @@ void cwRHIPointCloud::resizeAppearanceSlots(QRhi* rhi, QRhiResourceUpdateBatch* 
 
 bool cwRHIPointCloud::streamResources(ResourceUpdateData& data, qint64& remainingUploadBytes)
 {
+    m_profileEnabled = lcProfileRender().isDebugEnabled();
+    QElapsedTimer streamTimer;
+    if (m_profileEnabled) {
+        streamTimer.start();
+    }
+
     m_streamer.setMaxPendingCpuBytes(data.renderData.budgets.cpuBudgetBytes);
 
     if (m_source.isNull()) {
@@ -363,10 +378,30 @@ bool cwRHIPointCloud::streamResources(ResourceUpdateData& data, qint64& remainin
     }
     m_readyQueue = deferred;
 
+    QElapsedTimer partTimer;
+    if (m_profileEnabled) {
+        partTimer.start();
+    }
     enforceGpuBudget(data.renderData.budgets);
+    if (m_profileEnabled) {
+        m_profile.enforceBudget.add(elapsedUs(partTimer));
+        m_profile.gpuBudgetBytes = data.renderData.budgets.gpuBudgetBytes;
+        partTimer.restart();
+    }
 
     publishPickSet();
+    if (m_profileEnabled) {
+        m_profile.publishPick.add(elapsedUs(partTimer));
+        partTimer.restart();
+    }
+
     publishPointCloudStats();
+    if (m_profileEnabled) {
+        m_profile.publishStats.add(elapsedUs(partTimer));
+        m_profile.stream.add(elapsedUs(streamTimer));
+        m_profile.streamFrames++;
+        maybeFlushProfileBlock();
+    }
 
     return !m_readyQueue.isEmpty() || m_streamer.hasWork();
 }
@@ -385,6 +420,12 @@ void cwRHIPointCloud::publishPointCloudStats() const
     counts.selectedNodes = int(m_selected.size());
     counts.nodeLoadsInFlight = m_streamer.pending().loads + int(m_readyQueue.size());
     counts.sseInflation = m_sseInflation;
+
+    if (m_profileEnabled) {
+        m_profile.residentNodes = counts.residentNodes;
+        m_profile.pendingLoads = counts.nodeLoadsInFlight;
+        m_profile.sseInflation = counts.sseInflation;
+    }
 
     cwRenderFrameStats::instance()->publishPointCloud(counts);
 }
@@ -429,16 +470,30 @@ bool cwRHIPointCloud::uploadNode(QRhi* rhi, QRhiResourceUpdateBatch* batch, int 
     m_mirrorBytes.setBytes(m_mirrorBytes.bytes() + bytes.size());
 
     m_residencyChanged = true;
+
+    if (m_profileEnabled) {
+        m_profile.uploads++;
+    }
     return true;
 }
 
 int cwRHIPointCloud::takeConstantSlot(qint64 incomingBytes)
 {
     if (m_freeSlots.isEmpty()) {
+        QElapsedTimer evictTimer;
+        if (m_profileEnabled) {
+            evictTimer.start();
+        }
+
         const QVector<int> plan =
             cw::octree::planNodeEvictions(residencyStats(), incomingBytes);
         for (const int index : plan) {
             releaseNode(index);
+        }
+
+        if (m_profileEnabled) {
+            m_profile.slotEvictUs += elapsedUs(evictTimer);
+            m_profile.evictions += int(plan.size());
         }
     }
 
@@ -482,6 +537,11 @@ void cwRHIPointCloud::publishPickSet()
 
 QVector<cw::octree::NodeResidency> cwRHIPointCloud::residencyStats() const
 {
+    QElapsedTimer timer;
+    if (m_profileEnabled) {
+        timer.start();
+    }
+
     const quint64 frame = m_frame ? m_frame->frameCounter() : 0;
 
     QVector<cw::octree::NodeResidency> stats;
@@ -498,6 +558,10 @@ QVector<cw::octree::NodeResidency> cwRHIPointCloud::residencyStats() const
         residency.bytes = node.bytes.size();
         residency.pinned = i == kRootIndex;
         stats.append(residency);
+    }
+
+    if (m_profileEnabled) {
+        m_profile.residencyStatsUs += elapsedUs(timer);
     }
     return stats;
 }
@@ -522,6 +586,10 @@ void cwRHIPointCloud::enforceGpuBudget(const cwRenderBudgets& budgets)
 
             reclaimed += stats.at(index).bytes;
             releaseNode(index);
+
+            if (m_profileEnabled) {
+                m_profile.evictions++;
+            }
         }
     }
 
@@ -535,6 +603,84 @@ void cwRHIPointCloud::enforceGpuBudget(const cwRenderBudgets& budgets)
     inflation.underBudgetByMargin =
         double(total) < double(budgets.gpuBudgetBytes) * (1.0 - cw::octree::kSseRelaxMargin);
     m_sseInflation = cw::octree::nextSseInflation(inflation);
+
+    if (m_profileEnabled) {
+        m_profile.gpuBytes = total;
+    }
+}
+
+void cwRHIPointCloud::flushProfileBlock()
+{
+    constexpr int kMeanDigits = 1;
+    constexpr int kInflationDigits = 3;
+    constexpr int kMegabyteDigits = 1;
+
+    const int frames = m_profile.frames;
+    const int streamFrames = m_profile.streamFrames;
+
+    QVector<int>& cutSizes = m_profile.cutSizes;
+    std::sort(cutSizes.begin(), cutSizes.end());
+    const int cutMedian = cutSizes.isEmpty() ? 0 : cutSizes.at(cutSizes.size() / 2);
+    const int cutMax = cutSizes.isEmpty() ? 0 : cutSizes.last();
+
+    const auto span = [](QLatin1StringView name, const ProfileBlock::Span& timed,
+                        int spanFrames) {
+        return QStringLiteral(" %1MeanUs=%2 %1MaxUs=%3")
+            .arg(name)
+            .arg(timed.meanUs(spanFrames), 0, 'f', kMeanDigits)
+            .arg(timed.maxUs);
+    };
+
+    const auto megabytes = [](qint64 bytes) {
+        return QString::number(double(bytes) / double(kBytesPerMegabyte), 'f', kMegabyteDigits);
+    };
+
+    QString line = QStringLiteral("render frame=%1 frames=%2 streamFrames=%3")
+                       .arg(m_frame ? m_frame->frameCounter() : 0)
+                       .arg(frames)
+                       .arg(streamFrames);
+    line += span(QLatin1StringView("gather"), m_profile.gather, frames);
+    line += span(QLatin1StringView("selectNodes"), m_profile.selectNodes, frames);
+    line += span(QLatin1StringView("requestLoop"), m_profile.requestLoop, frames);
+    line += span(QLatin1StringView("cancelLoop"), m_profile.cancelLoop, frames);
+    line += span(QLatin1StringView("stream"), m_profile.stream, streamFrames);
+    line += span(QLatin1StringView("publishPick"), m_profile.publishPick, streamFrames);
+    line += span(QLatin1StringView("publishStats"), m_profile.publishStats, streamFrames);
+    line += span(QLatin1StringView("enforceBudget"), m_profile.enforceBudget, streamFrames);
+    line += QStringLiteral(" cutMed=%1 cutMax=%2 resident=%3")
+                .arg(cutMedian).arg(cutMax).arg(m_profile.residentNodes);
+    line += QStringLiteral(" requests=%1 cancels=%2 uploads=%3 evictions=%4 pendingLoads=%5")
+                .arg(m_profile.requests)
+                .arg(m_profile.cancels)
+                .arg(m_profile.uploads)
+                .arg(m_profile.evictions)
+                .arg(m_profile.pendingLoads);
+    line += QStringLiteral(" sse=%1 gpuMb=%2 budgetMb=%3")
+                .arg(m_profile.sseInflation, 0, 'f', kInflationDigits)
+                .arg(megabytes(m_profile.gpuBytes))
+                .arg(megabytes(m_profile.gpuBudgetBytes));
+    line += QStringLiteral(" pointsMed=%1 pointsMax=%2 slotEvictUs=%3 residencyStatsUs=%4")
+                .arg(m_profile.pointsMedian)
+                .arg(m_profile.pointsMax)
+                .arg(m_profile.slotEvictUs)
+                .arg(m_profile.residencyStatsUs);
+
+    qCDebug(lcProfileRender).noquote() << line;
+
+    m_profile = ProfileBlock{};
+}
+
+void cwRHIPointCloud::maybeFlushProfileBlock()
+{
+    // gather() closes the block, so both sides of the frame are in it. The
+    // second test is for a gather that keeps returning early: the stream side
+    // still reports rather than piling one block on the next.
+    const bool blockFull = m_profile.frames >= cw::profile::kProfileBlockFrames
+                           || m_profile.streamFrames - m_profile.frames
+                                  >= cw::profile::kProfileBlockFrames;
+    if (blockFull) {
+        flushProfileBlock();
+    }
 }
 
 bool cwRHIPointCloud::residencyReady(const RenderData& jobRenderData)
@@ -632,7 +778,21 @@ bool cwRHIPointCloud::gather(const GatherContext& context, QVector<PipelineBatch
         return false;
     }
 
+    m_profileEnabled = lcProfileRender().isDebugEnabled();
+    QElapsedTimer gatherTimer;
+    QElapsedTimer partTimer;
+    if (m_profileEnabled) {
+        gatherTimer.start();
+        partTimer.start();
+    }
+
     m_selected = cw::octree::selectNodes(selectionInput(renderData, context.frustum));
+
+    if (m_profileEnabled) {
+        m_profile.selectNodes.add(elapsedUs(partTimer));
+        m_profile.cutSizes.append(int(m_selected.size()));
+        partTimer.restart();
+    }
 
     const quint64 frame = m_frame->frameCounter();
 
@@ -690,6 +850,11 @@ bool cwRHIPointCloud::gather(const GatherContext& context, QVector<PipelineBatch
         }
     }
 
+    if (m_profileEnabled) {
+        m_profile.requestLoop.add(elapsedUs(partTimer));
+        partTimer.restart();
+    }
+
     // Nodes asked for by an earlier cut that this one dropped. A pass over the
     // handful of open requests, not over the whole node table.
     for (int i = m_requested.size() - 1; i >= 0; i--) {
@@ -710,20 +875,34 @@ bool cwRHIPointCloud::gather(const GatherContext& context, QVector<PipelineBatch
             m_streamer.cancel(quint32(index));
             m_nodes[index].state = NodeState::Absent;
             m_requested.removeAt(i);
+
+            if (m_profileEnabled) {
+                m_profile.cancels++;
+            }
         }
     }
 
-    if (drawables.isEmpty()) {
-        return false;
+    if (m_profileEnabled) {
+        m_profile.cancelLoop.add(elapsedUs(partTimer));
     }
 
-    cwRHIObject::PipelineState state;
-    state.pipeline = pipeline;
-    state.sortKey = cwRHIObject::makeSortKey(context.objectOrder, pipeline);
+    const bool hasDrawables = !drawables.isEmpty();
+    if (hasDrawables) {
+        cwRHIObject::PipelineState state;
+        state.pipeline = pipeline;
+        state.sortKey = cwRHIObject::makeSortKey(context.objectOrder, pipeline);
 
-    auto& batch = acquirePipelineBatch(batches, state);
-    batch.drawables.append(drawables);
-    return true;
+        auto& batch = acquirePipelineBatch(batches, state);
+        batch.drawables.append(drawables);
+    }
+
+    if (m_profileEnabled) {
+        m_profile.gather.add(elapsedUs(gatherTimer));
+        m_profile.frames++;
+        maybeFlushProfileBlock();
+    }
+
+    return hasDrawables;
 }
 
 bool cwRHIPointCloud::usesPointCloudPass() const
@@ -890,8 +1069,20 @@ cwRhiPipelineKey cwRHIPointCloud::buildPipelineKey(QRhiRenderPassDescriptor* ren
 Monad::Result<QByteArray> cwRHIPointCloud::loadNode(const cwPointOctreeNodeSource& source,
                                                    int /*level*/)
 {
+    const bool profiling = lcProfileLoad().isDebugEnabled();
+    QElapsedTimer timer;
+    if (profiling) {
+        timer.start();
+    }
+
     const cwDiskCacher cacher{QDir(source.cacheRootPath)};
     const QByteArray bytes = cacher.entry(source.key);
+
+    if (profiling) {
+        qCDebug(lcProfileLoad).noquote()
+            << QStringLiteral("load us=%1 bytes=%2")
+                   .arg(elapsedUs(timer)).arg(bytes.size());
+    }
 
     if (bytes.size() != source.byteSize) {
         return Monad::Result<QByteArray>(

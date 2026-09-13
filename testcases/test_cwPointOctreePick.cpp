@@ -10,6 +10,7 @@
 #include <QBox3D>
 #include <QMatrix4x4>
 #include <QRay3D>
+#include <QStringList>
 #include <QVector3D>
 
 //Std includes
@@ -21,10 +22,12 @@
 #include "cwPickQuery.h"
 #include "cwPointOctree.h"
 #include "cwPointOctreePickSet.h"
+#include "cwProfileLog.h"
 #include "cwRayHit.h"
 #include "cwRenderObject.h"
 #include "cwScene.h"
 #include "cwSceneVisibility.h"
+#include "ProfileLogCapture.h"
 
 using namespace Catch;
 
@@ -374,4 +377,89 @@ TEST_CASE("cwGeometryItersecter picks through a registered provider",
         REQUIRE(anchored.has_value());
         checkPointsEqual(anchored.value(), point);
     }
+}
+
+TEST_CASE("The pick profile category reports one line per query", "[PointOctreePick]")
+{
+    TwoNodes nodes;
+
+    const ProfileLogCapture capture(QStringLiteral("cw.profile.pick.debug=true"));
+
+    const auto hit = nodes.set.exactHit(rayDown(nodes.pointA.x(), nodes.pointA.y()));
+    REQUIRE(hit.has_value());
+
+    QStringList lines = ProfileLogCapture::linesStartingWith(QStringLiteral("pick"));
+    REQUIRE(lines.size() == 1);
+
+    QString line = lines.first();
+
+    // The runner reads the line by key, in this order.
+    const QStringList pairs = line.split(QLatin1Char(' '));
+    const QStringList expectedKeys = {
+        QStringLiteral("kind"), QStringLiteral("nodes"), QStringLiteral("passing"),
+        QStringLiteral("points"), QStringLiteral("us"), QStringLiteral("hit"),
+        QStringLiteral("prunable")
+    };
+    REQUIRE(pairs.size() == expectedKeys.size() + 1);
+    CHECK(pairs.at(0) == QStringLiteral("pick"));
+    for (int i = 0; i < expectedKeys.size(); i++) {
+        CHECK(pairs.at(i + 1).startsWith(expectedKeys.at(i) + QLatin1Char('=')));
+    }
+
+    CHECK(line.contains(QStringLiteral("kind=exactHit")));
+    CHECK(line.contains(QStringLiteral("hit=1")));
+
+    // Node A holds one point, and only node A's box is on the ray, so the query
+    // scanned exactly that point.
+    CHECK(line.contains(QStringLiteral("nodes=2")));
+    CHECK(line.contains(QStringLiteral("passing=1")));
+    CHECK(line.contains(QStringLiteral("points=1")));
+
+    // A ray through the gap between the two nodes reaches neither.
+    CHECK_FALSE(nodes.set.exactHit(rayDown(15.0f, 5.0f)).has_value());
+
+    lines = ProfileLogCapture::linesStartingWith(QStringLiteral("pick"));
+    REQUIRE(lines.size() == 2);
+    line = lines.at(1);
+    CHECK(line.contains(QStringLiteral("hit=0")));
+    CHECK(line.contains(QStringLiteral("passing=0")));
+    CHECK(line.contains(QStringLiteral("points=0")));
+    CHECK(line.contains(QStringLiteral("prunable=0")));
+
+    const auto nearest = nodes.set.nearestPoint(rayDown(nodes.pointB.x(), nodes.pointB.y()),
+                                                toleranceOf(kPickRadius));
+    REQUIRE(nearest.has_value());
+
+    lines = ProfileLogCapture::linesStartingWith(QStringLiteral("pick"));
+    REQUIRE(lines.size() == 3);
+    CHECK(lines.at(2).contains(QStringLiteral("kind=nearestPoint")));
+    CHECK(lines.at(2).contains(QStringLiteral("hit=1")));
+}
+
+TEST_CASE("The pick profile line counts the nodes a depth cut-off could skip",
+          "[PointOctreePick]")
+{
+    // Two nodes stacked along the ray, each with a point at its center. The
+    // near point wins, and the far node is one a near-to-far order with a
+    // best-depth cut-off would never have opened.
+    const QBox3D nearBounds = cubeAt(QVector3D(0.0f, 0.0f, 10.0f), kNodeSize);
+    const QBox3D farBounds = cubeAt(QVector3D(0.0f, 0.0f, -10.0f), kNodeSize);
+    const QVector3D nearPoint(5.0f, 5.0f, 15.0f);
+    const QVector3D farPoint(5.0f, 5.0f, -5.0f);
+
+    cwPointOctreePickSet set;
+    set.publish({makeNode(nearBounds, {nearPoint}), makeNode(farBounds, {farPoint})},
+                QBox3D(farBounds.minimum(), nearBounds.maximum()), kPickRadius);
+
+    const ProfileLogCapture capture(QStringLiteral("cw.profile.pick.debug=true"));
+
+    const auto hit = set.exactHit(rayDown(nearPoint.x(), nearPoint.y()));
+    REQUIRE(hit.has_value());
+    checkPointsEqual(hit->world, nearPoint);
+
+    const QStringList lines = ProfileLogCapture::linesStartingWith(QStringLiteral("pick"));
+    REQUIRE(lines.size() == 1);
+    CHECK(lines.first().contains(QStringLiteral("passing=2")));
+    CHECK(lines.first().contains(QStringLiteral("points=2")));
+    CHECK(lines.first().contains(QStringLiteral("prunable=1")));
 }
