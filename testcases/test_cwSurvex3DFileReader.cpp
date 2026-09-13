@@ -11,6 +11,7 @@
 //Qt includes
 #include <QFileInfo>
 #include <QTemporaryDir>
+#include <QDir>
 
 TEST_CASE("cwSurvex3DFileReader should return empty lookup for missing file", "[cwSurvex3DFileReader]") {
     cwSurvex3DFileReader reader;
@@ -167,6 +168,46 @@ TEST_CASE("cavern survives a fatal error inside an included file and reports the
     // A stale chain names the previous run's files in the include tree.
     CHECK_FALSE(nextRun.errorMessage().contains(QStringLiteral("too_many_errors")));
     CHECK(nextRun.errorMessage().count(QStringLiteral("In file included from")) == 1);
+}
+
+TEST_CASE("cavern closes the enclosing include files a fatal error skips past",
+          "[cwSurvex3DFileReader]") {
+    // Regression: data_file() keeps the enclosing file's handle in a
+    // stack-local, so a fatal two includes deep longjmps past both fclose()
+    // calls, burning two descriptors per run.
+    const QString driver = testcasesDatasetSourcePath(
+        QStringLiteral("test_cwSurvex3DFileReader/fd_leak_parent.svx"));
+    REQUIRE(QFile::exists(driver));
+
+    QTemporaryDir workDir;
+    REQUIRE(workDir.isValid());
+
+    const auto openDescriptorCount = []() {
+        return QDir(QStringLiteral("/dev/fd")).entryList(QDir::AllEntries | QDir::NoDotAndDotDot).size();
+    };
+
+    const auto runOnce = [&](int run) {
+        auto cavernResult = cwCavernRunner::run(
+            driver, workDir.filePath(QStringLiteral("fd_leak_%1.3d").arg(run)));
+        CHECK(cavernResult.hasError());
+        CHECK(cavernResult.errorMessage().contains(QStringLiteral("Too many errors"),
+                                                   Qt::CaseInsensitive));
+    };
+
+    // The first run settles any one-time allocations, so the baseline is a
+    // steady state.
+    runOnce(0);
+    const int baselineDescriptors = openDescriptorCount();
+
+    constexpr int kFatalRunCount = 5;
+    for (int run = 1; run <= kFatalRunCount; ++run) {
+        runOnce(run);
+    }
+
+    // Other threads in the process open and close descriptors of their own, so
+    // allow a little drift: the leak this guards against burned two per run.
+    constexpr int kDescriptorDrift = 1;
+    CHECK(openDescriptorCount() <= baselineDescriptors + kDescriptorDrift);
 }
 
 TEST_CASE("cavern survives a fatal error inside *begin without a double free",
