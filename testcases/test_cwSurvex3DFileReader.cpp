@@ -747,3 +747,32 @@ TEST_CASE("cavern recovers in the including file from an error after an *include
     CHECK(log.contains(QStringLiteral("Survey contains 5 survey stations")));
     CHECK(log.contains(QStringLiteral("joined by 3 shots")));
 }
+
+TEST_CASE("cavern picks the same label separator for a Walls empty name on every run",
+          "[cwSurvex3DFileReader][Walls]") {
+    // Regression: the flag that claims ' ' for the Walls empty name lived in a
+    // process-lifetime static, so run 2 could pick the space as the .3d separator.
+    const QString driver = testcasesDatasetSourcePath(
+        QStringLiteral("test_cwSurvex3DFileReader/walls_empty_name_driver.svx"));
+    REQUIRE(QFile::exists(driver));
+
+    QTemporaryDir workDir;
+    REQUIRE(workDir.isValid());
+
+    cwSurvex3DFileReader reader;
+
+    auto firstRun = cwCavernRunner::run(driver,
+                                        workDir.filePath(QStringLiteral("empty_name_run1.3d")));
+    REQUIRE_FALSE(firstRun.hasError());
+    cwStationPositionLookup firstLookup =
+        reader.readStationPositions(firstRun.value().output3dPath);
+
+    auto secondRun = cwCavernRunner::run(driver,
+                                         workDir.filePath(QStringLiteral("empty_name_run2.3d")));
+    REQUIRE_FALSE(secondRun.hasError());
+    cwStationPositionLookup secondLookup =
+        reader.readStationPositions(secondRun.value().output3dPath);
+
+    CHECK(secondLookup.positions().keys() == firstLookup.positions().keys());
+    CHECK(secondLookup.hasPosition(QStringLiteral("pfx.empty name")));
+}

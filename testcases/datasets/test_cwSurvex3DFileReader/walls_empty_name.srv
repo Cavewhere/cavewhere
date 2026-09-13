@@ -1,0 +1,6 @@
+; Walls .srv whose leg names a station with an explicit prefix and an empty
+; name.  cavern substitutes the reserved name "empty name" (with a space) and
+; marks ' ' as a name character so it can't be picked as the .3d label
+; separator.
+#Fix A1 0 0 0
+A1	PFX:	10.0	0	0
