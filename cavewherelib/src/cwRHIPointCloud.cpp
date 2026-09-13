@@ -665,7 +665,7 @@ void cwRHIPointCloud::flushProfileBlock()
                 .arg(m_profile.slotEvictUs)
                 .arg(m_profile.residencyStatsUs);
 
-    qCDebug(lcProfileRender).noquote() << line;
+    cw::profile::write(lcProfileRender(), line);
 
     m_profile = ProfileBlock{};
 }
@@ -1079,9 +1079,9 @@ Monad::Result<QByteArray> cwRHIPointCloud::loadNode(const cwPointOctreeNodeSourc
     const QByteArray bytes = cacher.entry(source.key);
 
     if (profiling) {
-        qCDebug(lcProfileLoad).noquote()
-            << QStringLiteral("load us=%1 bytes=%2")
-                   .arg(elapsedUs(timer)).arg(bytes.size());
+        cw::profile::write(lcProfileLoad(), QStringLiteral("load us=%1 bytes=%2")
+                                               .arg(elapsedUs(timer))
+                                               .arg(bytes.size()));
     }
 
     if (bytes.size() != source.byteSize) {

@@ -120,15 +120,16 @@ namespace {
             }
         }
 
-        qCDebug(lcProfilePick).noquote()
-            << QStringLiteral("pick kind=%1 nodes=%2 passing=%3 points=%4 us=%5 hit=%6 prunable=%7")
-                   .arg(kind)
-                   .arg(snapshotNodes)
-                   .arg(entryDepths.size())
-                   .arg(pointsScanned)
-                   .arg(cw::profile::elapsedUs(timer))
-                   .arg(best.has_value() ? 1 : 0)
-                   .arg(prunable);
+        cw::profile::write(
+            lcProfilePick(),
+            QStringLiteral("pick kind=%1 nodes=%2 passing=%3 points=%4 us=%5 hit=%6 prunable=%7")
+                .arg(kind)
+                .arg(snapshotNodes)
+                .arg(entryDepths.size())
+                .arg(pointsScanned)
+                .arg(cw::profile::elapsedUs(timer))
+                .arg(best.has_value() ? 1 : 0)
+                .arg(prunable));
     }
 }
 

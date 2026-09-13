@@ -83,9 +83,22 @@ def parse_log(path):
             for pair in fields.split(" "):
                 key, _, value = pair.partition("=")
                 if value:
-                    record[key] = to_number(value)
+                    record[key] = to_value(value)
             lines[kind].append(record)
     return lines
+
+
+def to_value(text):
+    """A field's value: a number where it is one, the text itself otherwise
+    (kind=exactHit has to survive as a name)."""
+    try:
+        return int(text)
+    except ValueError:
+        pass
+    try:
+        return float(text)
+    except ValueError:
+        return text
 
 
 def to_number(text):

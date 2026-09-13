@@ -24,6 +24,12 @@ namespace cw::profile {
     //! Frames one cw.profile.render line summarizes.
     constexpr int kProfileBlockFrames = 120;
 
+    //! Writes @a line on @a category at debug level, when the category is on.
+    //! The Release build compiles cavewherelib with QT_NO_DEBUG_OUTPUT, which
+    //! turns qCDebug into a no-op, and Release is the build the numbers come
+    //! from, so the line goes through QMessageLogger itself.
+    void write(const QLoggingCategory& category, const QString& line);
+
     //! Microseconds on @a timer, the unit every cw.profile line reports.
     inline qint64 elapsedUs(const QElapsedTimer& timer)
     {
