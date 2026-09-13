@@ -1,0 +1,4 @@
+; Fixes a different station at the origin with no coordinates. Run B of the
+; pair - it must solve without inheriting run A's memory.
+*fix c
+c d 10.00 000 0

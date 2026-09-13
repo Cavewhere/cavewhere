@@ -466,3 +466,37 @@ TEST_CASE("cavern clears Walls project macros a fatal error leaves swapped aside
     CHECK_FALSE(macroRun.errorMessage().contains(QStringLiteral("WPJPFX"),
                                                  Qt::CaseInsensitive));
 }
+
+TEST_CASE("cavern forgets a fix with no coordinates between runs",
+          "[cwSurvex3DFileReader]") {
+    // Regression: cmd_fix remembers the first station fixed without
+    // coordinates in function statics that live for the whole process, so a
+    // second run fixing a different station at the origin reported
+    // "Already had FIX command with no coordinates" and cited the first run's
+    // file. Every re-solve of a project using the fix-at-origin convenience
+    // failed after the first.
+    const QString firstFile = testcasesDatasetSourcePath(
+        QStringLiteral("test_cwSurvex3DFileReader/fix_no_coords_a.svx"));
+    const QString secondFile = testcasesDatasetSourcePath(
+        QStringLiteral("test_cwSurvex3DFileReader/fix_no_coords_c.svx"));
+    REQUIRE(QFile::exists(firstFile));
+    REQUIRE(QFile::exists(secondFile));
+
+    QTemporaryDir workDir;
+    REQUIRE(workDir.isValid());
+
+    auto firstRun = cwCavernRunner::run(firstFile,
+                                        workDir.filePath(QStringLiteral("fix_run1.3d")));
+    REQUIRE_FALSE(firstRun.hasError());
+
+    auto secondRun = cwCavernRunner::run(secondFile,
+                                         workDir.filePath(QStringLiteral("fix_run2.3d")));
+    REQUIRE_FALSE(secondRun.hasError());
+    REQUIRE(QFileInfo(secondRun.value().output3dPath).exists());
+
+    cwSurvex3DFileReader reader;
+    cwStationPositionLookup lookup = reader.readStationPositions(secondRun.value().output3dPath);
+    CHECK(lookup.positions().size() == 2);
+    CHECK(lookup.hasPosition(QStringLiteral("c")));
+    CHECK(lookup.hasPosition(QStringLiteral("d")));
+}
