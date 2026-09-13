@@ -712,3 +712,38 @@ TEST_CASE("cavern keeps its message state to one copy across runs",
     SKIP("Live heap bytes are read from the Address Sanitizer allocator");
 #endif
 }
+
+TEST_CASE("cavern recovers in the including file from an error after an *include",
+          "[cwSurvex3DFileReader]") {
+    // Regression: data_file() aims jbSkipLine at its own frame and leaves it
+    // there when it returns, so after an *include the including file's next
+    // recoverable error longjmps into the child's dead frame and resumes on
+    // stack memory the parser has since reused. The driver's bad compass
+    // reading sits below the *include, with a good leg under it, so recovery
+    // has to land in the driver and carry on.
+    const QString driver = testcasesDatasetSourcePath(
+        QStringLiteral("test_cwSurvex3DFileReader/include_then_error_driver.svx"));
+    REQUIRE(QFile::exists(driver));
+
+    QTemporaryDir workDir;
+    REQUIRE(workDir.isValid());
+
+    auto cavernResult = cwCavernRunner::run(
+        driver, workDir.filePath(QStringLiteral("include_then_error.3d")));
+
+    // cavern deletes its output when a run reports errors, so the log is what
+    // says how the parser recovered.
+    REQUIRE(cavernResult.hasError());
+    const QString log = cavernResult.errorMessage();
+    INFO(log.toStdString());
+
+    // The one error is the bad compass reading, reported against the driver.
+    CHECK(log.contains(QStringLiteral("include_then_error_driver.svx")));
+    CHECK(log.contains(QStringLiteral("bogus")));
+    CHECK(log.contains(QStringLiteral("1 error")));
+
+    // The run reaches the end of the driver: the two stations of the include
+    // plus the driver's own three, joined by three legs.
+    CHECK(log.contains(QStringLiteral("Survey contains 5 survey stations")));
+    CHECK(log.contains(QStringLiteral("joined by 3 shots")));
+}

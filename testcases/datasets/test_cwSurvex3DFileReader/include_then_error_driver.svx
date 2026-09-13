@@ -1,0 +1,9 @@
+; Regression driver: the recoverable error below the *include must be caught by
+; this file's own error recovery, and parsing must carry on to the leg under it.
+*include "include_then_error_child.svx"
+
+*fix 1 0 0 0
+*data normal from to tape compass clino
+1 2 10 0 0
+2 3 10 bogus 0
+2 4 10 90 0
