@@ -945,6 +945,19 @@ name away, and the only alternative (the exporter rewriting a <code>.mak</code> 
 per-<code>.dat</code> <code>*begin</code> wrappers, <code>compass.rst:58-88</code>) drops the
 <code>.mak</code>'s own datum/UTM lines and still gives nothing for a multi-survey
 <code>.dat</code>.</p>
+<div class="warning">
+  <strong>Superseded in part (2026-09-12, OMEGA2 crash investigation).</strong> The
+  <code>.mak</code> bullet above no longer holds: <code>data_file_compass_mak()</code> now
+  reads each <code>#FILE.DAT</code> into its own survey named after the DAT's leafname
+  (<code>cave0.blowing3.1</code>), honors a link station without <code>[f]</code> as an
+  equate with the same-named station in an earlier DAT, and warns instead of erroring for a
+  DAT which is absent. A real Compass project numbers each cave's stations from 1, so the
+  flat namespace fixed one station "1" once per DAT and cavern withheld every output file —
+  the user's OMEGA2 project loaded as nothing. Each DAT is therefore a naming level now, so
+  the open question the P3.15 design closed reopens: should the scanner emit one block per
+  <code>#FILE.DAT</code> so each DAT becomes its own Scope trip? Today it emits none and the
+  whole-cave window owns every station, which keeps the lineplot correct.
+</div>
 <ul class="filelist">
   <li><code>cavewherelib/src/cwExternalCenterlineScanner.h</code> &mdash;
       <code>ScanResult</code> gains <code>int rootStationCount</code> (unique station names

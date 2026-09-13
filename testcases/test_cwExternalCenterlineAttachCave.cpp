@@ -724,11 +724,13 @@ TEST_CASE("closing the project keeps the cave's remembered source",
 TEST_CASE("A Compass cave draws through its one whole-cave window",
           "[Attach][Cave][Geometry]")
 {
-    // cavern throws a Compass "SURVEY NAME:" away, so every station of a .mak
-    // lands flat in the cave's own namespace with no level below it. The cave
-    // gets exactly one window, carrying no prefix, and it owns all five
-    // stations: before P3.16 the attach made one prefixed trip per survey, each
-    // listing nothing, and the lineplot stayed blank.
+    // cavern throws a Compass "SURVEY NAME:" away and names each station under
+    // the survey it makes for the .DAT file it came from, so the cave itself is
+    // the only level the .mak spells. The cave gets exactly one window,
+    // carrying no prefix, and it owns every station of both files - the two
+    // A2s (one per file, tied by the link station the .mak lists) included:
+    // before P3.16 the attach made one prefixed trip per survey, each listing
+    // nothing, and the lineplot stayed blank.
     auto fixture = makeProjectWithFreshCave(QStringLiteral("cave-compass-window"));
     cwCave* cave = freshCaveOf(fixture.get());
 
@@ -740,7 +742,7 @@ TEST_CASE("A Compass cave draws through its one whole-cave window",
     CHECK(window->stationPrefix().isEmpty());
     CHECK(window->scopePrefix().isEmpty());
     CHECK(window->name() == QStringLiteral("compass_multi"));
-    CHECK(window->knownStations().size() == 5);
+    CHECK(window->knownStations().size() == 6);
 
     const cwLinePlotGeometry::Result geometry = geometryOf(fixture.get());
     // Four shots, each its own pair of vertices.

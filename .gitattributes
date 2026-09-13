@@ -3,3 +3,6 @@
 
 # Compass fixture with doubled CR line ends; git must keep the bytes as they are
 testcases/datasets/test_cwSurvex3DFileReader/compass_crcrlf/* -text
+
+# Compass fixtures whose CRLF line ends and DOS EOF byte must survive checkout
+testcases/datasets/test_cwSurvex3DFileReader/compass_mak/* -text

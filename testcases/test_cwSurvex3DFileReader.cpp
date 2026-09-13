@@ -224,14 +224,115 @@ TEST_CASE("cavern reads a Compass DAT whose lines end in CR CR LF",
     constexpr int kStationCount = 6;
     CHECK(parsed.network.stations().size() == kStationCount);
     for (int i = 1; i <= kStationCount; ++i) {
-        CHECK(parsed.lookup.hasPosition(QStringLiteral("cave0.A%1").arg(i)));
+        CHECK(parsed.lookup.hasPosition(QStringLiteral("cave0.crcrlf.A%1").arg(i)));
     }
 
     // Five 10 ft legs due east from A1, which the .MAK fixes at the origin.
-    const QVector3D a1 = parsed.lookup.position(QStringLiteral("cave0.A1"));
-    const QVector3D a6 = parsed.lookup.position(QStringLiteral("cave0.A6"));
+    const QVector3D a1 = parsed.lookup.position(QStringLiteral("cave0.crcrlf.A1"));
+    const QVector3D a6 = parsed.lookup.position(QStringLiteral("cave0.crcrlf.A6"));
     CHECK(a1.x() == Catch::Approx(0.0).margin(0.01));
     CHECK(a6.x() == Catch::Approx(15.24).margin(0.01));
     CHECK(a6.y() == Catch::Approx(0.0).margin(0.01));
     CHECK(a6.z() == Catch::Approx(0.0).margin(0.01));
+}
+
+TEST_CASE("cavern reads each DAT of a Compass MAK into its own survey",
+          "[cwSurvex3DFileReader]") {
+    // Regression: every DAT of a project was read into one namespace, so a
+    // project which numbers each cave's stations from 1 - as Compass projects
+    // do - fixed one station "1" several times over and cavern refused to
+    // write any output.
+    const QString driver = testcasesDatasetSourcePath(
+        QStringLiteral("test_cwSurvex3DFileReader/compass_mak_scopes_driver.svx"));
+    REQUIRE(QFile::exists(driver));
+
+    QTemporaryDir workDir;
+    REQUIRE(workDir.isValid());
+    const QString output3dPath = workDir.filePath(QStringLiteral("compass_mak_scopes.3d"));
+
+    auto cavernResult = cwCavernRunner::run(driver, output3dPath);
+    REQUIRE_FALSE(cavernResult.hasError());
+    CHECK(cavernResult.value().warningCount == 0);
+    CHECK_FALSE(cavernResult.value().logText.contains(QStringLiteral("error:")));
+    REQUIRE(QFileInfo(cavernResult.value().output3dPath).exists());
+
+    cwSurvex3DFileReader reader;
+    auto parsed = reader.readNetworkAndLookup(cavernResult.value().output3dPath);
+
+    // A.DAT and B.DAT both start at a station called "1", and the .MAK fixes
+    // each of them where that file's own link station says.
+    CHECK(parsed.network.stations().size() == 8);
+    const QVector3D a1 = parsed.lookup.position(QStringLiteral("cave0.a.1"));
+    CHECK(a1.x() == Catch::Approx(0.0).margin(0.01));
+    CHECK(a1.y() == Catch::Approx(0.0).margin(0.01));
+    CHECK(a1.z() == Catch::Approx(0.0).margin(0.01));
+
+    const QVector3D b1 = parsed.lookup.position(QStringLiteral("cave0.b.1"));
+    CHECK(b1.x() == Catch::Approx(30.48).margin(0.01));
+    CHECK(b1.y() == Catch::Approx(60.96).margin(0.01));
+    CHECK(b1.z() == Catch::Approx(-15.24).margin(0.01));
+
+    // Two 10 ft legs east in each file, from that file's own station "1".
+    CHECK(parsed.lookup.position(QStringLiteral("cave0.a.A3")).x()
+          == Catch::Approx(6.10).margin(0.01));
+    CHECK(parsed.lookup.position(QStringLiteral("cave0.b.B3")).x()
+          == Catch::Approx(36.58).margin(0.01));
+
+    // C.DAT lists B3 as a link station, which ties it to B.DAT's B3 - so
+    // C.DAT's 10 ft leg north starts there rather than in mid air.
+    const QVector3D cb3 = parsed.lookup.position(QStringLiteral("cave0.c.B3"));
+    const QVector3D bb3 = parsed.lookup.position(QStringLiteral("cave0.b.B3"));
+    CHECK(cb3.x() == Catch::Approx(bb3.x()).margin(0.01));
+    CHECK(cb3.y() == Catch::Approx(bb3.y()).margin(0.01));
+    CHECK(cb3.z() == Catch::Approx(bb3.z()).margin(0.01));
+
+    const QVector3D c2 = parsed.lookup.position(QStringLiteral("cave0.c.C2"));
+    CHECK(c2.x() == Catch::Approx(36.58).margin(0.01));
+    CHECK(c2.y() == Catch::Approx(64.01).margin(0.01));
+    CHECK(c2.z() == Catch::Approx(-15.24).margin(0.01));
+}
+
+TEST_CASE("cavern warns about a Compass MAK naming a DAT which is absent",
+          "[cwSurvex3DFileReader]") {
+    // Regression: a .MAK listing a DAT that isn't on disk made cavern withhold
+    // every output file, so an otherwise readable project loaded as nothing.
+    const QString driver = testcasesDatasetSourcePath(
+        QStringLiteral("test_cwSurvex3DFileReader/compass_mak_missing_driver.svx"));
+    REQUIRE(QFile::exists(driver));
+
+    QTemporaryDir workDir;
+    REQUIRE(workDir.isValid());
+    const QString output3dPath = workDir.filePath(QStringLiteral("compass_mak_missing.3d"));
+
+    auto cavernResult = cwCavernRunner::run(driver, output3dPath);
+    REQUIRE_FALSE(cavernResult.hasError());
+    CHECK(cavernResult.value().warningCount == 1);
+    CHECK(cavernResult.value().logText.contains(QStringLiteral("NOSUCH.DAT")));
+    REQUIRE(QFileInfo(cavernResult.value().output3dPath).exists());
+
+    cwSurvex3DFileReader reader;
+    auto parsed = reader.readNetworkAndLookup(cavernResult.value().output3dPath);
+
+    // The DAT which is present still contributes all of its stations.
+    CHECK(parsed.network.stations().size() == 3);
+    CHECK(parsed.lookup.hasPosition(QStringLiteral("cave0.a.1")));
+    CHECK(parsed.lookup.position(QStringLiteral("cave0.a.A3")).x()
+          == Catch::Approx(6.10).margin(0.01));
+}
+
+TEST_CASE("cavern rejects two Compass MAK fixed points for one station",
+          "[cwSurvex3DFileReader]") {
+    // Guard for the case above: contradictory fixed points within one DAT's
+    // link station list are still an error, since nothing can place the file.
+    const QString driver = testcasesDatasetSourcePath(
+        QStringLiteral("test_cwSurvex3DFileReader/compass_mak_refix_driver.svx"));
+    REQUIRE(QFile::exists(driver));
+
+    QTemporaryDir workDir;
+    REQUIRE(workDir.isValid());
+    const QString output3dPath = workDir.filePath(QStringLiteral("compass_mak_refix.3d"));
+
+    auto cavernResult = cwCavernRunner::run(driver, output3dPath);
+    REQUIRE(cavernResult.hasError());
+    CHECK_FALSE(QFileInfo(output3dPath).exists());
 }
