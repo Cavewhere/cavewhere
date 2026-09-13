@@ -2,59 +2,931 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>External File Integration — Phase 6</title>
+<title>External File Integration — Phase 6: Region sources and mixed caves</title>
 <style>
-  body { font-family: -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif; color: #1c1c1c; background: #fff; line-height: 1.5; max-width: 920px; margin: 2.5rem auto; padding: 0 1.5rem 4rem; }
-  h1 { font-size: 1.85rem; border-bottom: 2px solid #2451a4; padding-bottom: 0.35rem; }
-  h2 { font-size: 1.4rem; margin-top: 2rem; border-bottom: 1px solid #d8d8d8; padding-bottom: 0.25rem; color: #2451a4; }
-  code { background: #f4f4f6; padding: 0.08rem 0.32rem; border-radius: 3px; font-size: 0.92em; }
-  .meta { color: #5a5a5a; font-size: 0.92em; }
-  .note { background: #fff7d6; border: 1px solid #e0c346; padding: 0.5rem 0.9rem; border-radius: 4px; margin: 0.8rem 0; }
-  a { color: #2451a4; }
+  body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; font-size: 15px;
+         line-height: 1.5; color: #222; max-width: 980px; margin: 24px auto; padding: 0 16px; }
+  h1 { font-size: 26px; } h2 { font-size: 21px; margin-top: 36px; border-bottom: 2px solid #ddd;
+       padding-bottom: 4px; } h3 { font-size: 17px; margin-top: 24px; } h4 { font-size: 15px; }
+  code { font-family: "Courier Prime", "Courier New", monospace; font-size: 13px;
+         background: #f4f4f4; padding: 1px 4px; border-radius: 3px; }
+  pre { background: #f4f4f4; padding: 10px; border-radius: 5px; overflow-x: auto; }
+  pre code { background: none; padding: 0; }
+  table { border-collapse: collapse; margin: 12px 0; }
+  th, td { border: 1px solid #ccc; padding: 5px 10px; text-align: left; vertical-align: top; }
+  th { background: #eee; }
+  .note { background: #eef6fd; border-left: 4px solid #5b9bd5; padding: 10px 14px; margin: 14px 0; }
+  .decision { background: #f0f9f0; border-left: 4px solid #6aa84f; padding: 10px 14px; margin: 14px 0; }
+  .warning { background: #fdf3e7; border-left: 4px solid #e69138; padding: 10px 14px; margin: 14px 0; }
+  .commit { border: 1px solid #ccc; border-radius: 6px; padding: 4px 18px 14px; margin: 22px 0; }
+  .commit h3 { margin-top: 14px; }
+  .gate { background: #f8f4fc; border-left: 4px solid #8e7cc3; padding: 8px 14px; margin: 10px 0;
+          font-size: 14px; }
+  .meta { color: #555; }
+  .filelist { font-size: 13px; }
 </style>
 </head>
 <body>
 
-<h1>External File Integration — Phase 6: Region-level attach (post-v1)</h1>
+<h1>External File Integration — Phase 6: Region sources and mixed caves</h1>
+
+<div class="warning">
+  <strong>Superseded by <a href="SURVEY_TREE_PLAN.html">SURVEY_TREE_PLAN.html</a> on 2026-09-13.</strong>
+  The flat "one cave per unit" model, the Source column, the ≡ sources menu, and the Attach-as
+  choice are replaced by the survey node tree. The pieces that survive (units.json station
+  sets, membership windows, the per-format scanner tree, the fixtures, cavern-page rows) are
+  reassigned to that plan's W7.
+</div>
 
 <p class="meta">
-  Part of the External File Integration plan. Read
-  <a href="EXTERNAL_FILE_INTEGRATION_PLAN.html">the master plan</a>
-  first &mdash; this file assumes its architecture, data model, scanner,
-  copy workflow, driver shape, consumer-side pipeline, and UX model are
-  the source of truth for cross-cutting decisions.
+  Full plan, written 2026-09-13 (supersedes the stub). Part of the External File
+  Integration plan — <a href="EXTERNAL_FILE_INTEGRATION_PLAN.html">the master plan</a>
+  holds the architecture and state model; its §9 Phase 6 block now points here. The
+  proposed UX is the clickable
+  <a href="EXTERNAL_FILE_PHASE6_UX_INTERACTIVE.html">Phase 6 interactive prototype</a>,
+  built on the real OMEGA2 Compass project. Phase 3's as-shipped surface is in
+  <a href="EXTERNAL_FILE_PHASE3.html">the Phase 3 plan</a>.
 </p>
 
 <div class="note">
-  <strong>Status: stub (deferred post-v1).</strong> Phase 6's
-  preserved-from-earlier-phases summary and what-it-adds list currently
-  live in
-  <a href="EXTERNAL_FILE_INTEGRATION_PLAN.html#p6">&sect;9 Phase 6 of the
-  master plan</a>. Phase 6 is intentionally not detailed beyond that
-  &mdash; the high-UX-risk pieces (Structure view, scope mapping, bulk
-  note import) need real-user feedback from Phases 2&ndash;5 before
-  they're worth designing.
+  <strong>How to execute this plan.</strong> Each commit below (P6.1 … P6.11) is one run of
+  the 5-stage workflow pipeline (plan → implement → simplify → code-review → fix+commit),
+  strictly in order — later commits assume earlier ones are in the tree. Every factual
+  claim about existing code carries a <code>file:line</code> reference measured at
+  <code>externalFiles</code> HEAD <code>5c880921</code> (survex submodule
+  <code>e01617c2</code>); re-verify line numbers before editing, trust the identifiers.
+  Paths: <code>src/</code> = <code>cavewherelib/src/</code>, <code>qml/</code> =
+  <code>cavewherelib/qml/</code>.
 </div>
 
-<h2>What this file will contain (when Phase 6 gets planned)</h2>
+<h2 id="goal">1. Goal and scope</h2>
 
+<p><strong>Goal:</strong> a user attaches a native survey <em>project</em> (Compass
+<code>.mak</code>, Walls <code>.wpj</code>, Survex master file) once, sees it as the caves
+and trips the native format already defines, carpets on those trips, and adds native
+CaveWhere trips (digital survey, new leads) or trip-level attachments beside them in the
+same cave. Nothing is imported; cavern solves the author's files unchanged.</p>
+
+<h3>Why this phase exists (the audit that triggered it, 2026-09-13)</h3>
 <ul>
-  <li>Region-level attach entry point on DataMainPage ("More options &rarr; Attach region-level centerline&hellip;").</li>
-  <li>Structure view &mdash; tree of the resolved <code>*begin</code> hierarchy with map-to-cave/trip actions per node. Currently the highest-UX-risk piece of the whole feature.</li>
-  <li><code>stationPrefix</code> on cwCave (Phase 3 only added it to cwTrip).</li>
-  <li>Bulk note-folder import for the "I have folders of survey-day notes" workflow.</li>
-  <li>Conflict UX &mdash; region-level attach disables per-cave attach controls; loading older projects with both warns and uses region-level as the source of truth.</li>
-  <li>Region-level equates UI (Phase 4's editor extended to region scope).</li>
-  <li>Per-commit test gates and fixture files.</li>
+  <li>A cave-level attach is defined as "a cave with zero native trips"
+      (<code>src/cwSurvexExporterCaveTask.cpp:146-153</code> skips the trip loop for an
+      attached cave; <code>src/cwExternalCenterlineAttach.cpp:676-679</code> refuses a cave
+      that has trips). A user cannot bolt a native trip onto an attached cave.</li>
+  <li>Scope trips are station-name-prefix windows. cavern discards the Compass survey name
+      (<code>survex/src/datain.c:881-886</code>), and the scanner emits no Compass blocks
+      (<code>src/cwExternalCenterlineScanner.cpp:812-848</code>), so a Compass attach gets one
+      whole-cave trip while the importer gives one trip per survey
+      (<code>src/cwCompassImporter.cpp:267-286</code>).</li>
+  <li>A project file that covers many caves lands in one cave; the multi-cave heuristic
+      (<code>qml/AddCaveSurveyFileDialog.qml:191-219</code>) can only warn.</li>
+  <li>The survex port now gives each <code>.mak</code> <code>#FILE</code> its own survey
+      level named by the lower-cased file stem (<code>survex/src/datain.c:1052-1070</code>,
+      commit 805dc4f2), so per-<code>.dat</code> scopes exist in the <code>.3d</code>. The
+      "cavern flattens Compass" fact in Phase 3 §P3.15 is stale.</li>
 </ul>
 
-<h2>Key cross-references to the master plan</h2>
-
+<h3>Ships in Phase 6</h3>
 <ul>
-  <li><a href="EXTERNAL_FILE_INTEGRATION_PLAN.html#p6">&sect;9 Phase 6</a> &mdash; preserved-from-earlier and what-it-adds lists.</li>
-  <li><a href="EXTERNAL_FILE_INTEGRATION_PLAN.html#data-model">&sect;3.1.2 &mdash; When to use which state</a> &mdash; the Case-1 row covers region-level attach.</li>
-  <li><a href="EXTERNAL_FILE_INTEGRATION_PLAN.html#deferred">&sect;12 &mdash; Deferred</a> &mdash; rationale for deferring region-level to post-v1.</li>
-  <li><code>plans/EXTERNAL_CENTERLINE_UX_PROTOTYPE.html</code> &mdash; the case-1 walkthrough, Structure view wireframe, and bulk-import dialog the master plan defers to.</li>
+  <li><strong>Region sources.</strong> <code>cwCavingRegion</code> owns a list of external
+      sources. Each source is one include block in the driver and derives one cave per
+      top-level unit of its format (§3.3).</li>
+  <li><strong>Mixed caves.</strong> Any externally backed cave (derived or cave-level)
+      accepts native trips and trip-level attachments. Driver: source include first, then
+      native and attached trips as their own blocks, then equates (§3.1).</li>
+  <li><strong>Unit trips.</strong> A second Scope-trip kind whose window is the station set
+      of one native survey unit (Compass survey, Walls <code>.srv</code>) recorded by the
+      scanner, instead of a name prefix (§3.4). Survex blocks keep prefix windows.</li>
+  <li><strong>UI:</strong> Source column on the cave list; project preview and "Attach N
+      caves" in the existing Add Cave dialog; source card on a derived cave's page with
+      Reload / Replace / Detach source; Add Trip enabled on externally backed caves; fix
+      station editor hidden there; region rows on the cavern page (§3.5).</li>
+  <li>Multiple sources per region, from the first commit (§3.2).</li>
+</ul>
+
+<h3>Non-goals (deferred)</h3>
+<ul>
+  <li>A Structure view with manual node-to-cave mapping. The cave split is a per-format
+      rule (§3.3); a mapping UI can replace the rule later without a model change.</li>
+  <li>Converting a native cave to external, or an external cave to native.</li>
+  <li>Per-survey trips inside a Survex block that shares station names across blocks
+      (prefix windows already cover Survex).</li>
+  <li>Bulk note-folder import (master plan §9 Phase 6 item) — unchanged, still deferred.</li>
+  <li>Compass export of a mixed cave. The export gate stays closed for any external
+      owner (<code>src/cwSurveyExportManager.cpp:361-381</code>).</li>
+</ul>
+
+<h2 id="audit">2. Current-state audit — what already exists</h2>
+
+<p>Implement agents: do not rebuild any of this.</p>
+<table>
+<tr><th>Already shipped</th><th>Where</th></tr>
+<tr><td>Cave-level and trip-level attachment state, persistence, save triggers</td>
+  <td><code>src/cwCave.h:58,79-80,192,230</code>; <code>src/cwTrip.h:71-76</code>;
+      <code>src/cavewhere.proto:83-87,128,150,154</code>;
+      <code>src/cwSaveLoad.cpp:1935-1938,1974-1981,3007-3009,3056-3062,4254,4322-4323</code></td></tr>
+<tr><td>Owner abstraction in attach (cave or trip), shared <code>attachOwner</code> pipeline,
+      Scope-trip reconcile, detach cascade</td>
+  <td><code>src/cwExternalCenterlineAttach.cpp:101-190</code> (<code>OwnerTarget</code>),
+      <code>:387</code>, <code>:215-337</code> (<code>reconcileScopeTrips</code>),
+      <code>:575-601</code> (<code>detachOwner</code>)</td></tr>
+<tr><td>Manager: owner enumeration by kind string, attachment dirs, verbs, source-change
+      fingerprints and sweep, attached-centerlines model</td>
+  <td><code>src/cwExternalCenterlineManager.cpp:559-605</code> (<code>"Cave"</code>/
+      <code>"Trip"</code>), <code>.h:284,141-295</code>; <code>.cpp:809-972</code>;
+      <code>src/cwAttachedCenterlinesModel.h:42-67</code></td></tr>
+<tr><td>Scanner block tree, root counts and dates, Walls prefix blocks, <code>.mak</code>
+      dependency walk, Compass root-station harvest</td>
+  <td><code>src/cwExternalCenterlineScanner.h:81-91,192-261</code>;
+      <code>.cpp:542-560,812-848,849-943,958-993,1600-1609</code></td></tr>
+<tr><td>Per-owner station harvest applied to trips through
+      <code>cwTrip::setExternalStations</code></td>
+  <td><code>src/cwExternalStationHarvest.h:65</code>;
+      <code>src/cwExternalCenterlineManager.cpp:788-806</code></td></tr>
+<tr><td>Driver: cave block, external include, trip loop with trip-level includes, cave
+      equates; region loop and region equates with fully qualified operands</td>
+  <td><code>src/cwSurvexExporterCaveTask.cpp:101-223,242-330,357</code>;
+      <code>src/cwSurvexExporterRegion.cpp:52,83-91,97,130-132</code></td></tr>
+<tr><td>Naming and labels: sanitized identifiers, sibling-unique labels, cave label ↔ id</td>
+  <td><code>src/cwCavernNaming.h:47-64</code>; <code>src/cwScopeLabels.h:39-56</code></td></tr>
+<tr><td>Solved-station assignment by scope prefix (model, task, geometry), case-insensitive,
+      inner-sibling claims, whole-cave window</td>
+  <td><code>src/cwTrip.cpp:43-92,297-355,682-724</code>;
+      <code>src/cwLinePlotTask.cpp:53-91,395-447,588-632</code>;
+      <code>src/cwLinePlotGeometry.cpp:66-106,150-193</code></td></tr>
+<tr><td>Equates: cave and region models, tie verb, floating detection, tie-in banner and
+      suggester, <code>knownStations</code> union</td>
+  <td><code>src/cwEquate.h:30-54</code>; <code>src/cwEquateModel.h:32-55</code>;
+      <code>src/cwCavingRegion.h:51,106</code>; <code>src/cwTieSuggestionModel.h:52,93</code>;
+      <code>qml/FloatingSurveyBanner.qml</code>; <code>src/cwTrip.cpp:726</code></td></tr>
+<tr><td>UI: cave list delegate and Add Cave menu, cave attach dialog with block preview and
+      heuristic, cave summary card, scope header, cavern attached list, source-change
+      banner</td>
+  <td><code>qml/DataMainPage.qml:33-37,254-259,287-388</code>;
+      <code>qml/AddCaveSurveyFileDialog.qml:148-219</code>;
+      <code>qml/ExternalCenterlineCaveSummary.qml</code>,
+      <code>qml/ExternalCenterlineAttachedHeader.qml:111-207</code>;
+      <code>qml/ExternalCenterlineScopeHeader.qml:58-133</code>;
+      <code>qml/CavernOutputPage.qml:73-127</code>; <code>qml/ExternalSourceChangeBanner.qml</code></td></tr>
+<tr><td>Unique names: <code>cwCavingRegion::uniqueCaveName</code>,
+      <code>cwCave::uniqueTripName</code></td>
+  <td><code>src/cwCavingRegion.cpp:310</code>; <code>src/cwCave.cpp:163</code></td></tr>
+<tr><td>survex port: per-<code>.dat</code> survey level, link-station equates, absent
+      <code>.dat</code> is a warning</td>
+  <td><code>survex/src/datain.c:1052-1070,1097,1189-1190,1280-1298</code></td></tr>
+</table>
+
+<p><strong>What is missing (the work of this phase):</strong> <code>cwCavingRegion</code>
+has no external state at all (<code>src/cwCavingRegion.h:46-51</code>); the
+<code>CavingRegion</code> and <code>Project</code> messages carry no sources
+(<code>src/cavewhere.proto:54-64</code>); a cave has no source or unit identity; the
+scanner records station <em>counts</em> per block, never station <em>sets</em>, and no
+Compass or Walls survey units; the driver has no region-source block and no way to name a
+derived cave's source scope; <code>cwScopeLabels</code> maps one label per cave, so
+<code>omega2.blowing3.*</code> cannot be assigned to the Blowing cave; the attach guard and
+the cave exporter both encode "attached means no trips"; no verb attaches at region scope;
+the dialog, cave list, and cave page have no source concept.</p>
+
+<h2 id="decisions">3. Settled design decisions (conversation of 2026-09-13)</h2>
+
+<h3>3.1 Mixed caves</h3>
+<div class="decision">
+  <p>The invariant changes from "an attached cave has no native trips" to "an externally
+  backed cave owns at most one source include plus any number of native trips and
+  trip-level attachments."</p>
+  <ul>
+    <li><strong>Driver</strong> (<code>writeCave</code>): <code>*begin cave</code>, the
+        cave-level include when present, then the ordinary trip loop (native blocks and
+        trip-level includes, unchanged), then <code>*end</code>. The
+        <code>return</code> at <code>src/cwSurvexExporterCaveTask.cpp:153</code> goes away;
+        the data gate at <code>:108</code> stays skipped for externally backed caves
+        (their trips may all be windows).</li>
+    <li><strong>Equates</strong> of a cave that has a region-derived source scope are
+        emitted at region level with fully qualified operands (through
+        <code>writeRegionEquates</code>, <code>src/cwSurvexExporterRegion.cpp:83-91</code>),
+        because Survex resolves an operand inside <code>*begin cave</code> relative to that
+        block and the derived scope <code>omega2.blowing3</code> lives outside it. A
+        cave-level attach's equates keep emitting inside the block as today.</li>
+    <li><strong>Fix stations</strong> of an externally backed cave are not emitted and the
+        fix editor is hidden on its page. The source carries its own <code>*cs</code> and
+        fixes; native trips get position through the equate.</li>
+    <li><strong>Attach guard</strong> stays "fresh caves only" for the cave-level verb
+        (<code>src/cwExternalCenterlineAttach.cpp:676-679</code>). Bolting on always means
+        attach first, then add trips. Trip-level attach on an externally backed cave is
+        allowed and gains a test.</li>
+    <li><strong>Floating and tie-in</strong> need no change: a native trip inside a mixed
+        cave shows the floating banner, and the suggester lists the cave's solved external
+        stations, since <code>knownStations()</code> unions chunks, harvest, and solve.</li>
+    <li><strong>Detach</strong> removes Scope trips and the copied files; native trips and
+        trip-level attachments survive (<code>removeEmptyScopeTrips</code>,
+        <code>src/cwExternalCenterlineAttach.cpp:350-357</code>, already removes only
+        chunk-less trips — a trip-level attached trip has no chunks either, so the
+        predicate becomes "chunk-less and not itself attached").</li>
+  </ul>
+</div>
+
+<h3>3.2 Region sources are a list</h3>
+<div class="decision">
+  <ul>
+    <li><code>cwCavingRegion</code> owns <code>QList&lt;cwExternalSource&gt;</code>. A source
+        has an id (<code>QUuid</code>), an entry file (project-relative, like
+        <code>ExternalCenterline.entry_file</code>), and a display label (the entry file's
+        base name; the driver label is its sanitized, sibling-unique form).</li>
+    <li>Each source is one driver block emitted before the caves:
+        <code>*begin &lt;srclabel&gt;</code> / <code>*include</code> / <code>*end</code>.
+        Two sources are two blocks; the source label keeps them apart even when both hold a
+        <code>molly.dat</code>.</li>
+    <li>Cross-source ties are region equates (<code>cwCavingRegion::tieStations</code>,
+        <code>src/cwCavingRegion.h:106</code>), already emitted with qualified operands.</li>
+    <li>Each source's <code>*cs</code> and fixes scope to its own block, the same way a
+        cave-level attach beside native caves works today. Different datums are cavern's
+        job; P6.3 carries a fixture proving two sources with different <code>*cs</code>
+        solve together.</li>
+    <li>A cave-level attach on a fresh cave and trip-level attaches remain allowed beside
+        region sources. Three ownership levels, one rule each: a region source derives
+        caves, a cave source defines one cave, a trip source defines one trip. The master
+        plan's "region-level attach disables per-cave attach" is withdrawn.</li>
+  </ul>
+</div>
+
+<h3>3.3 Derivation rule: unit → cave, unit → trip, per format</h3>
+<p>Only Compass has an unambiguous cave unit. A Walls <code>.wpj</code> always wraps
+everything in one root book, and its top-level books are as often sections, fixed-point
+folders, or drawing sources as they are caves (<code>dewalls/test/Kaua North Maze.wpj</code>:
+root book = the cave; children "SVG Sources", "Fixed Points", "North Maze Surveys"). A
+Survex master that only includes files may be one cave split into area files or a region
+of caves. So the dialog asks, with the scan's structure shown, and the answer is stored
+on the source.</p>
+<table>
+<tr><th>Format</th><th>Cave split (the dialog's "Attach as")</th><th>Cave unit</th><th>Trip unit</th><th>Station name in the .3d</th></tr>
+<tr><td>Compass <code>.mak</code></td><td>Always one cave per <code>.dat</code>; no choice
+      offered.</td>
+  <td>each <code>#FILE</code> <code>.dat</code> that exists and has shots (an absent file is
+      a cavern warning and yields no cave)</td>
+  <td>each <code>SURVEY NAME</code> in the <code>.dat</code></td>
+  <td><code>&lt;src&gt;.&lt;datstem lower-cased&gt;.&lt;name&gt;</code> — the survex port's
+      naming (<code>survex/src/datain.c:1052-1070</code>)</td></tr>
+<tr><td>Walls <code>.wpj</code></td><td>Choice: <strong>one cave</strong> (default) or
+      <strong>one cave per top-level book</strong>. One cave is a cave-level attach, not a
+      region source.</td>
+  <td>per-book mode: each child book of the root that has shots; a <code>.srv</code>
+      directly under the root with shots is its own cave</td>
+  <td>each <code>.SURVEY</code> entry whose file is an <code>.srv</code> with shots, at any
+      depth under the cave unit (<code>.svg</code>, <code>.txt</code>, and shot-less
+      fixed-point files are skipped)</td>
+  <td><code>&lt;src&gt;.&lt;prefix…&gt;.&lt;name&gt;</code> — only <code>#PREFIX</code> /
+      <code>prefix=</code> make levels, so books and caves never appear in the name; both
+      cave and trip windows are station sets (§3.4)</td></tr>
+<tr><td>Survex <code>.svx</code></td><td>Choice: <strong>one cave</strong> or <strong>one
+      cave per top-level block</strong>. Default from the shipped heuristic
+      (<code>qml/AddCaveSurveyFileDialog.qml:195-196</code>: ≥ 2 top-level blocks and no own
+      shots → per block, else one cave). One cave is the Phase 3 cave-level attach.</td>
+  <td>per-block mode: each top-level block with stations</td>
+  <td>each block with own stations under the cave unit (Phase 3 rule), plus the cave
+      unit's own root stations as its root window</td>
+  <td><code>&lt;src&gt;.&lt;block…&gt;.&lt;name&gt;</code>; windows are station sets for a
+      derived cave, prefixes for a cave-level attach (unchanged Phase 3 path)</td></tr>
+</table>
+<div class="decision">
+  <p>A single <code>.dat</code>, a single <code>.srv</code>, a <code>.wpj</code> attached as
+  one cave, or a one-cave <code>.svx</code> is a <strong>cave-level</strong> attach (one
+  cave, no region source). New there: a Compass <code>.dat</code> gets one unit trip per
+  survey and a Walls <code>.wpj</code> gets one unit trip per <code>.srv</code>, replacing
+  the whole-cave window for those two formats. Station names in a cave-level attach are
+  relative to the cave's own label.</p>
+  <p>Derived cave names: the cave unit's name with the extension dropped and title-cased
+  (<code>BLOWING3.DAT</code> → <code>Blowing3</code>; a Walls book keeps its title;
+  a Survex block keeps its name), passed through <code>uniqueCaveName</code>. Derived trip
+  names: the Compass survey name, the Walls <code>.SURVEY</code> title, or the Survex block
+  name, through <code>uniqueTripName</code>. Both editable afterward; identity is the
+  unit path, never the display name.</p>
+  <p>Deeper cuts (a second-level book, a nested block) are out of scope; the Structure
+  view is where that would live, and the source stores the chosen split so a mapping UI
+  can replace it without a model change.</p>
+</div>
+
+<h3>3.4 Unit trips: windows by station set</h3>
+<div class="decision">
+  <ul>
+    <li>A unit trip carries <code>sourceUnit</code> (the unit path relative to its cave's
+        source scope, e.g. <code>OF50-87</code> for a Compass survey or
+        <code>UPPER/LEAD.SRV</code> for a Walls file) and owns exactly the stations the
+        scanner recorded for that unit. A station in two surveys belongs to both trips —
+        the same rule native trips already live by.</li>
+    <li>The station sets are <strong>not</strong> stored in the protobuf. The scanner
+        writes one manifest per source, <code>units.json</code>, into the attachment
+        directory beside the copied files (attach, replace, and reload rewrite it), mapping
+        <code>unit path → sorted station list</code> (names canonicalized as
+        <code>cwExternalStationHarvest</code> does, relative to the cave unit). The manager
+        reads it on load and after every reload and pushes each trip's set through the
+        existing <code>cwTrip::setExternalStations</code> channel
+        (<code>src/cwExternalCenterlineManager.cpp:788-806</code>). The project copy is the
+        source of truth, and git tracks the manifest with the files.</li>
+    <li><code>solvedStations()</code> for a unit trip: the cave's position lookup entries
+        whose key is <code>&lt;cave source scope&gt;.&lt;name&gt;</code> for each name in the
+        set (case-insensitive, like the prefix path). No sibling-claim logic — sets do not
+        nest.</li>
+    <li>Line-plot geometry (<code>src/cwLinePlotGeometry.cpp:181-193</code>) gets the
+        per-trip sets in its thread-safe snapshot and emits a unit trip's legs by
+        membership of both endpoints.</li>
+    <li><strong>Derived caves are windows too.</strong> A derived cave's stations are its
+        source scope plus the union of its unit sets from the manifest. Walls needs this
+        (book ≠ prefix); Compass and Survex use the same path so there is one mechanism.
+        A station whose name appears in two caves' sets (a Walls station shared across
+        books) is assigned to the first cave in source order; a leg belongs to the cave
+        that owns its from-station.</li>
+    <li>Prefix windows stay only for the cave-level Survex attach (Phase 3, unchanged).
+        A trip has either a <code>stationPrefix</code> or a <code>sourceUnit</code>, never
+        both; <code>isScoped()</code> is true for either.</li>
+  </ul>
+</div>
+
+<h3>3.5 UI surface (the whole of it)</h3>
+<div class="decision">
+  <ul>
+    <li><strong>Add Cave ▾ → "Add cave from survey file…"</strong> is the only entry point,
+        unchanged. A <code>.mak</code> shows "Caves CaveWhere will create — one per .dat
+        file". A <code>.wpj</code> or a multi-block <code>.svx</code> shows an
+        <strong>Attach as</strong> choice, "one cave" or "one cave per top-level
+        book/block", with the preview switching between the trip list and the cave list
+        (§3.3 defaults). The button reads <strong>Attach</strong> or <strong>Attach N
+        caves</strong>. The multi-cave heuristic panel and its alternate-target list are
+        removed; the case now has a real choice.</li>
+    <li><strong>Cave list Source column</strong> on DataMainPage: a chip with the source
+        label for derived and cave-level attached caves, a muted "native" chip otherwise.
+        Clicking a chip filters the list to that source; clicking the header groups by
+        source. No region-level page or panel.</li>
+    <li><strong>Source verbs live in a hamburger menu on DataMainPage</strong>, beside the
+        Add Cave button: ≡ → "Survey sources" → one submenu per region source with
+        <strong>Reload</strong>, <strong>Replace…</strong>, <strong>Detach…</strong>. The
+        detach confirm (the §3.5 cascade text) opens inline on DataMainPage. A source with
+        a source-change pending shows a dot on the menu item.</li>
+    <li><strong>CavePage source card</strong> for a derived cave is read-only: file name,
+        format, "shared with N other caves", provenance, "this cave is
+        <code>BLOWING3.DAT</code> in the project", solve status, and a "Manage sources on
+        All Caves" link. No Reload, Replace, or Detach on a page that shows one of many
+        caves the source backs. A cave-level attach keeps today's card and verbs.</li>
+    <li><strong>Trip table</strong> of an externally backed cave: 📎 unit and prefix trips
+        with an em-dash declination, then native and trip-level rows. The Add Trip split
+        button is enabled with both verbs. Native trips sort after Scope trips.</li>
+    <li><strong>Fix station editor</strong> hidden on externally backed caves with the
+        line "Fixed positions come from the cave's survey file."</li>
+    <li><strong>Cavern page</strong> attached list: one row per source at every level;
+        a region source row names its derived caves.</li>
+    <li><strong>Detach source confirm</strong> lists: Scope-trip count removed with their
+        notes and scraps, caves removed (those holding nothing else), caves kept as native
+        (with their native-trip and trip-level counts), copied files deleted.</li>
+    <li>Source-change banner and Update/Reload rows: a region source is one more owner
+        kind in the existing status model; its row says "(N caves)".</li>
+  </ul>
+</div>
+
+<h3>3.6 Naming and scope assignment in the .3d</h3>
+<div class="decision">
+  <p>A derived cave has two scopes in the solved network: its own block label
+  (<code>blowing.</code>, for native trips and trip-level includes) and its source scope
+  (<code>omega2.</code> plus membership). <code>cwScopeLabels</code> gains
+  <code>sourceLabels()</code>, and <code>cwLinePlotTask::indexStations</code>
+  (<code>src/cwLinePlotTask.cpp:395-447</code>) assigns a station under a source label to
+  the first derived cave, in source order, whose manifest set contains the remainder
+  (upper-cased, like the existing lookups), before falling back to the cave-label head.
+  <code>updateCaveNetworks</code> strips whichever scope matched. The survex port keeps
+  '.' as the separator for Compass-only runs by the existing normalization in
+  <code>cwSurvex3DFileReader</code>.</p>
+</div>
+
+<h2 id="model">4. Data model and persistence</h2>
+
+<pre><code>// src/cwExternalSource.h (new, value type like cwExternalCenterline)
+class cwExternalSource {
+    QUuid   id;          // owner id for the manager, attachment dir key
+    QString entryFile;   // project-relative, same convention as cwExternalCenterline
+    QString label;       // display label; driver label = cwCavernNaming::sanitizeToCavernIdentifier + sibling-unique
+    CaveSplit split;     // PerFile (Compass), PerTopLevelBook (Walls), PerTopLevelBlock (Survex) — the dialog's answer, replayed on reload
+};
+
+// cwCavingRegion (src/cwCavingRegion.h)
+Q_PROPERTY(cwExternalSourceModel* externalSources READ externalSources CONSTANT)   // list model over QList&lt;cwExternalSource&gt;
+QString uniqueSourceLabel(const QString&amp; base) const;                          // sibling-unique, like uniqueCaveName
+signals: externalSourcesChanged();
+
+// cwCave (src/cwCave.h) — derived-cave identity; both empty for native and cave-level attached caves
+Q_PROPERTY(QUuid   sourceId  READ sourceId  WRITE setSourceId  NOTIFY sourceChanged)
+Q_PROPERTY(QString sourceUnit READ sourceUnit WRITE setSourceUnit NOTIFY sourceChanged)   // "blowing3", "UPPER" (book), "sanwangdong" (block)
+bool externallyBacked() const;   // !externalCenterline.isEmpty() || !sourceId.isNull()
+QString sourceScope() const;     // "&lt;srclabel&gt;.&lt;unit&gt;." for derived; "&lt;caveLabel&gt;." for cave-level; "" for native
+
+// cwTrip (src/cwTrip.h) — unit window; mutually exclusive with stationPrefix
+Q_PROPERTY(QString sourceUnit READ sourceUnit WRITE setSourceUnit NOTIFY scopeChanged)
+bool isScoped() const;           // gains "|| !m_sourceUnit.isEmpty()"
+bool windowsWholeCave() const;   // unchanged predicate; a unit trip is never the whole-cave window
+
+// src/cavewhere.proto
+message ExternalSource { optional string id = 1; optional string entry_file = 2; optional string label = 3; optional int32 cave_split = 4; }
+message Project      { ... repeated ExternalSource external_sources = 6; }     // beside Project.equates = 5 (region-level state lives on Project in the directory format, cavewhere.proto:54)
+message Cave         { ... optional string source_id = 14; optional string source_unit = 15; }
+message Trip         { ... optional string source_unit = 12; }
+
+// attachment dir for a region source: cwSaveLoad::externalCenterlineDir(const cwExternalSource&amp;) → &lt;project&gt;/external-sources/&lt;label&gt;/
+// manifest: &lt;attachmentDir&gt;/units.json  { "units": { "&lt;caveUnit&gt;": { "&lt;tripUnit&gt;": ["OF1","OF2",...], ... } } }
+</code></pre>
+
+<div class="warning">
+  <strong>Load order.</strong> Derived caves and unit trips must find their source on load:
+  <code>Project.external_sources</code> is read before caves (the save-load already reads
+  <code>Project.equates</code> before resolving cave handles — same place). A cave whose
+  <code>source_id</code> names no source loads as a native cave with a warning in the
+  load report; its Scope trips become empty windows the reconcile removes on the next
+  reload.
+</div>
+
+<h2 id="driver">5. Driver shape</h2>
+
+<pre><code>; region export (cwSurvexExporterRegion::exportRegion)
+*begin omega2 ; OMEGA2.MAK                     ← one block per region source, before the caves
+*include "…/external-sources/omega2/OMEGA2.MAK"
+*end omega2
+
+*begin blowing ; Blowing (derived: omega2.blowing3)   ← derived cave block: no include, no fixes
+  *begin digital_survey_2026_09_14              ← native trip, ordinary TripExporter output
+    …
+  *end digital_survey_2026_09_14
+  *begin lead_survey_2024                       ← trip-level attach, unchanged
+  *include "…/lead-2024.srv"
+  *end lead_survey_2024
+*end blowing                                    ← no *equate inside: see §3.1
+
+*begin side_cave ; Side Cave (cave-level attach, mixed)
+*include "…/side-cave.svx"
+  *begin new_lead                               ← native trip beside the include
+    …
+  *end new_lead
+  *equate new_lead.1 entrance.A4                ← cave-level equate stays inside the block
+*end side_cave
+
+; region equates (writeRegionEquates), fully qualified
+*equate blowing.digital_survey_2026_09_14.1 omega2.blowing3.OF87    ← derived cave's own equate
+*equate blowing.digital_survey_2026_09_14.4 omega2.molly.MHa1       ← cross-cave tie
+</code></pre>
+
+<p>Equate operands for a derived cave's source stations are composed as
+<code>sourceScope() + name</code>; <code>equateOperand</code>
+(<code>src/cwSurvexExporterCaveTask.cpp:50</code>) gains that branch. The C1 spike showed
+cross-scope <code>*equate</code> needs no <code>*export</code>.</p>
+
+<h2 id="questions">6. Open questions — v1 answers</h2>
+<table>
+<tr><th>#</th><th>Question</th><th>v1 answer</th></tr>
+<tr><td>Q1</td><td>Does the Source chip carry enough when a derived cave is renamed?</td>
+  <td>Yes (settled 2026-09-13). The chip shows the source label; the cave page's card
+      names the unit.</td></tr>
+<tr><td>Q2</td><td>Where do Reload, Replace, Detach source live?</td>
+  <td>In the DataMainPage hamburger menu, per source (settled 2026-09-13). A derived
+      cave's page has none of them: Replace or Detach from one cave's page would silently
+      act on every cave the file backs.</td></tr>
+<tr><td>Q3</td><td>Derived cave display name</td>
+  <td>The <code>.dat</code> stem title-cased (settled 2026-09-13); Walls book title and
+      Survex block name as written.</td></tr>
+<tr><td>Q4</td><td>A lone <code>.dat</code> / <code>.wpj</code> as one cave / one-cave
+      <code>.svx</code> picked in the dialog</td>
+  <td>Cave-level attach, as Phase 3 (settled 2026-09-13), with unit trips for Compass and
+      Walls.</td></tr>
+<tr><td>Q9</td><td>How does a Walls or Survex project decide between one cave and many?</td>
+  <td>The user does, in the dialog's Attach-as choice, with §3.3 defaults. Structure alone
+      cannot tell (Kaua North Maze). The answer is stored on the source and replayed on
+      reload.</td></tr>
+<tr><td>Q10</td><td>Walls <code>.SURVEY</code> entries that are not surveys (<code>.svg</code>,
+      <code>.txt</code>, fixed-point-only <code>.srv</code>)</td>
+  <td>Skipped for trip and cave derivation; still copied as dependencies where the
+      scanner already does so.</td></tr>
+<tr><td>Q5</td><td>A <code>.mak</code> with exactly one existing <code>.dat</code></td>
+  <td>Still a region source with one derived cave. The rule is by format, not by count, so
+      adding a second <code>.dat</code> later just derives a cave on reload.</td></tr>
+<tr><td>Q6</td><td>Reload finds a unit gone (survey renamed, <code>.dat</code> removed)</td>
+  <td>Same as Phase 3 Q5: a unit trip holding no chunks is removed; one holding chunks is
+      kept with an empty window. A derived cave whose unit is gone is removed when it
+      holds nothing else, kept as native otherwise. A new unit derives a new cave or trip.</td></tr>
+<tr><td>Q7</td><td>Two sources both derive a cave named "Molly"</td>
+  <td><code>uniqueCaveName</code> makes the second "Molly 2"; scopes differ by source label
+      regardless.</td></tr>
+<tr><td>Q8</td><td>Loading a project saved before P6.7 with a Compass cave-level attach</td>
+  <td>Its whole-cave window trip stays until the next reload, which replaces it with unit
+      trips (the reconcile removes a chunk-less orphan). Same behavior P3.16 shipped for
+      the survey-named empty trips.</td></tr>
+</table>
+
+<h2 id="commits">7. Commit sequence</h2>
+
+<p>Eleven commits. Model and driver first, verbs next, UI last, so every UI commit lands on
+a tested C++ surface.</p>
+
+<!-- ================================================================ -->
+<div class="commit">
+<h3>P6.1 — Region source model, cave and trip source identity, persistence</h3>
+<ul class="filelist">
+  <li><code>src/cwExternalSource.h/.cpp</code> (new), <code>src/cwExternalSourceModel.h/.cpp</code>
+      (new list model; roles id, entryFile, label, derivedCaveCount).</li>
+  <li><code>src/cwCavingRegion.h/.cpp</code> — <code>externalSources()</code>,
+      <code>addExternalSource / removeExternalSource / externalSource(id)</code>,
+      <code>uniqueSourceLabel</code>, <code>cavesForSource(id)</code>, signal.</li>
+  <li><code>src/cwCave.h/.cpp</code> — <code>sourceId</code>, <code>sourceUnit</code>,
+      <code>externallyBacked()</code>, <code>sourceScope()</code> (needs the region's source
+      label: computed through <code>parentRegion()</code> and cached like
+      <code>tripScopeLabels</code>). <code>cwTrip::externallyBacked()</code>
+      (<code>src/cwTrip.cpp:337-341</code>) switches to <code>cave-&gt;externallyBacked()</code>.</li>
+  <li><code>src/cwTrip.h/.cpp</code> — <code>sourceUnit</code> with the three pulses the
+      prefix setter emits (<code>src/cwTrip.cpp:268-277</code>); <code>isScoped()</code>.</li>
+  <li><code>src/cavewhere.proto</code>, <code>src/cwSaveLoad.cpp</code> — fields per §4;
+      save triggers on <code>sourceChanged</code>/<code>externalSourcesChanged</code> next
+      to <code>:4254</code> and <code>:4322</code>; <code>externalCenterlineDir(const
+      cwExternalSource&amp;)</code> beside <code>:4965-4978</code>.</li>
+  <li><code>testcases/test_cwExternalSourceModel.cpp</code> (new): add/remove/unique label,
+      <code>cavesForSource</code>; <code>test_cwExternalCenterlineSaveLoad.cpp</code>:
+      round-trip of two sources, a derived cave, a unit trip, and the missing-source load
+      warning.</li>
+</ul>
+<div class="gate"><strong>Gate:</strong> <code>cavewhere-test "[ExternalSource]"</code>,
+<code>"[SaveLoad]"</code>, <code>"[cwTrip]"</code>.</div>
+</div>
+
+<!-- ================================================================ -->
+<div class="commit">
+<h3>P6.2 — Scanner: survey units with station sets, project detection, manifest</h3>
+<ul class="filelist">
+  <li><code>src/cwExternalCenterlineScanner.h/.cpp</code> — new
+      <code>cwScanUnit { QString cavePath; QString tripPath; QStringList stations; QDate date; }</code>
+      and <code>ScanResult::units</code>, <code>ScanResult::caveUnits</code> (ordered list of
+      <code>{path, displayName, unitCount, stationCount}</code>), and
+      <code>ScanResult::canSplit</code> (Walls: root has ≥ 1 child book or top-level
+      <code>.srv</code> with shots; Survex: ≥ 2 top-level blocks with stations) and
+      <code>ScanResult::splitSuggested</code> (Compass: always; Survex: the shipped
+      heuristic; Walls: never). Cave units are computed for both split modes so the dialog
+      can switch without rescanning. Compass: split each <code>.dat</code> on form feed,
+      take <code>SURVEY NAME</code> and <code>SURVEY DATE</code>, collect from/to tokens
+      after the <code>FROM</code> header (extend <code>collectCompassStations</code>,
+      <code>:812-848</code>); <code>.mak</code> cave units in <code>#FILE</code> order,
+      skipping absent files with a warning. Walls: walk <code>.BOOK</code> /
+      <code>.SURVEY</code> / <code>.ENDBOOK</code> nesting (root book is the project), cave
+      unit per child book of the root with shots, trip unit per <code>.srv</code>
+      <code>.SURVEY</code> entry with shots at any depth, station names carrying any
+      <code>#PREFIX</code> in effect; skip non-<code>.srv</code> entries and shot-less
+      files. Survex: cave units = depth-0 blocks with stations; block units record their
+      station names now, not only counts.</li>
+  <li><code>src/cwExternalUnitManifest.h/.cpp</code> (new): write/read
+      <code>units.json</code> (§4); canonicalize names the way
+      <code>cwExternalStationHarvest</code> does.</li>
+  <li><code>src/cwExternalCenterlineScanPreview.h/.cpp</code> — expose
+      <code>canSplit</code>, <code>splitSuggested</code>, <code>splitUnitNoun</code>
+      (".dat file" / "top-level book" / "top-level block"), <code>caveUnits</code> (a small
+      list model with name, unit, tripCount, stationCount, missing flag) and
+      <code>tripUnits</code> for the one-cave preview.</li>
+  <li><code>testcases/test_cwExternalCenterlineScanner.cpp</code> — units on
+      <code>compass_project/PROJECT.MAK</code> (3 caves, per-survey sets, a shared station in
+      two surveys present in both, the absent <code>.dat</code> warning), on
+      <code>survex_master/master.svx</code> (<code>canSplit</code> and
+      <code>splitSuggested</code> true, 3 cave units), on <code>survex_blocks.svx</code>
+      (<code>canSplit</code> true, <code>splitSuggested</code> false);
+      <code>compass_simple.dat</code> gets 2 trip units and <code>canSplit</code> false;
+      <code>walls_project/KAUA.WPJ</code> has <code>canSplit</code> true,
+      <code>splitSuggested</code> false, per-book mode yields one cave (the fixed-point
+      book has no shots, the drawing book no <code>.srv</code>), one-cave mode yields
+      trips at every depth; <code>walls_two_caves/TWO.WPJ</code> per book yields two.
+      <code>test_cwExternalUnitManifest.cpp</code> (new): round-trip.</li>
+</ul>
+<div class="gate"><strong>Gate:</strong> <code>cavewhere-test "[Scanner]"</code>,
+<code>"[ScanPreview]"</code>.</div>
+</div>
+
+<!-- ================================================================ -->
+<div class="commit">
+<h3>P6.3 — Driver: region source blocks, source scopes, line-plot assignment</h3>
+<ul class="filelist">
+  <li><code>src/cwSurvexExporterRegion.cpp</code> — emit one block per source before the
+      cave loop (<code>:130-132</code>), through <code>writeExternalInclude</code> with the
+      source's attachment dir (<code>ExportOptions</code> gains
+      <code>sourceAttachmentDirs</code>, like <code>caveAttachmentDirs</code>). Region
+      equates: operands for derived-cave source stations use <code>sourceScope()</code>.</li>
+  <li><code>src/cwSurvexExporterCaveTask.cpp</code> — derived cave: no include, no
+      fixes, trip loop as normal; its equates routed to the region writer (§3.1).</li>
+  <li><code>src/cwScopeLabels.h/.cpp</code> — <code>sourceLabels()</code>;
+      <code>forRegion</code> assigns source labels sibling-unique alongside cave labels.</li>
+  <li><code>src/cwLinePlotTask.cpp</code> — the task snapshot carries each derived cave's
+      manifest set; <code>indexStations</code> (<code>:395-447</code>) assigns by source
+      label + membership (§3.6) before the cave-label head; <code>updateCaveNetworks</code>
+      (<code>:588-632</code>) strips the matched scope. <code>cwLinePlotGeometry::generate</code>
+      (<code>:181-193</code>) treats a derived cave as a membership window.</li>
+  <li><code>src/cwSurveyExportManager.cpp</code> — gate also closes on any region source
+      (<code>:361-381</code>).</li>
+  <li>Tests: <code>test_cwSurvexExporterRegion.cpp</code> (driver text for two sources +
+      a derived cave with a native trip + a region equate), <code>test_cwScopeLabels.cpp</code>,
+      <code>test_cwLinePlotTask_AttachInclude.cpp</code> (solve <code>compass_project</code>
+      as a region source through the model: derived caves get their stations, positions are
+      finite, the two-source different-<code>*cs</code> fixture solves).</li>
+</ul>
+<div class="gate"><strong>Gate:</strong> <code>cavewhere-test "[Exporter]"</code>,
+<code>"[ScopeLabels]"</code>, <code>"[LinePlot]"</code>.</div>
+</div>
+
+<!-- ================================================================ -->
+<div class="commit">
+<h3>P6.4 — Mixed caves: include plus trips, fixes suppressed, trip-level attach beside a cave source</h3>
+<ul class="filelist">
+  <li><code>src/cwSurvexExporterCaveTask.cpp:146-153</code> — drop the early return; emit
+      the trip loop after the include; skip <code>writeFixStations</code> for externally
+      backed caves. Cave-level equates still inside the block.</li>
+  <li><code>src/cwExternalCenterlineAttach.cpp:350-357</code> — <code>removeEmptyScopeTrips</code>
+      keeps attached trips.</li>
+  <li><code>src/cwCave.cpp</code> — <code>addTrip</code> on an externally backed cave is
+      allowed (it is today; this commit adds the test that it stays so).</li>
+  <li>Tests: <code>test_cwExternalCenterlineAttachCave.cpp</code> — attach
+      <code>survex_blocks.svx</code> at cave level, add a native trip with one chunk whose
+      first station is tied to a block station via the cave equate model, solve: the native
+      stations get positions, the floating model reports none floating after the tie, the
+      driver text has include then block then equate; attach <code>compass_solvable.dat</code>
+      at trip level inside that cave; detach the cave keeps the native trip and the
+      trip-level attached trip.</li>
+</ul>
+<div class="gate"><strong>Gate:</strong> <code>cavewhere-test "[Attach]"</code>,
+<code>"[Exporter]"</code>, <code>"[FloatingSurvey]"</code>.</div>
+</div>
+
+<!-- ================================================================ -->
+<div class="commit">
+<h3>P6.5 — Unit trips: membership windows through the model, task, and geometry</h3>
+<ul class="filelist">
+  <li><code>src/cwTrip.cpp:682-724</code> — <code>solvedStations()</code> unit branch (§3.4);
+      <code>knownStations()</code> (<code>:726</code>) unchanged in shape (the external
+      stations are the manifest set now).</li>
+  <li><code>src/cwExternalCenterlineManager.cpp:788-806</code> — <code>applyHarvestToTrips</code>
+      becomes <code>applyUnitsToTrips</code>: a unit trip gets its manifest set, a prefix
+      or whole-cave trip keeps the harvest path. Called on load, attach, replace, reload.</li>
+  <li><code>src/cwLinePlotTask.cpp:53-91</code> and <code>src/cwLinePlotGeometry.cpp</code>
+      — the snapshot carries per-trip <code>QSet&lt;QString&gt;</code> (upper-cased, scope
+      applied); geometry emits a leg into a unit trip when both endpoints are members.</li>
+  <li><code>src/cwFindFloatingSurveys.cpp:249</code> — unit trips are never floating (they
+      are windows), same as prefix trips.</li>
+  <li>Tests: <code>test_cwTrip.cpp</code> (unit window over a fake position lookup, shared
+      station in two trips), <code>test_cwLinePlotManager_AttachedCenterlines.cpp</code>
+      (Compass cave-level attach: per-survey trips draw their legs, a shared station's leg
+      appears in both), <code>test_cwExternalStationHarvestWiring.cpp</code> (manifest sets
+      reach trips on load).</li>
+</ul>
+<div class="gate"><strong>Gate:</strong> <code>cavewhere-test "[cwTrip]"</code>,
+<code>"[LinePlot]"</code>, <code>"[Harvest]"</code>.</div>
+</div>
+
+<!-- ================================================================ -->
+<div class="commit">
+<h3>P6.6 — Region attach, detach, replace, reload; manager owner kind "Region"</h3>
+<ul class="filelist">
+  <li><code>src/cwExternalCenterlineAttach.h/.cpp</code> — <code>OwnerTarget::forSource</code>;
+      <code>attach(cwCavingRegion*, entryFile, CaveSplit)</code>: refuses an entry whose scan
+      has <code>canSplit == false</code> ("this file is one cave — attach it as a cave"),
+      stores the split on the source, copies with the existing
+      pipeline into the source dir, writes the manifest, adds the source, then
+      <code>reconcileDerivedCaves(region, source, scan)</code>: one cave per
+      <code>caveUnits</code> entry (name §3.3, <code>sourceId</code>, <code>sourceUnit</code>),
+      then per cave <code>reconcileScopeTrips</code> extended for unit trips (creates
+      <code>sourceUnit</code> trips in unit order, seeds dates), removes chunk-less orphan
+      trips and empty orphan caves, keeps caves with native content (they lose
+      <code>sourceId</code> and become native). <code>AttachReport</code> gains
+      <code>createdCaves</code>. <code>detach(source)</code>: the §3.5 cascade.
+      <code>replace</code> and <code>reloadFromSource</code> for a source = re-copy, re-scan,
+      re-manifest, reconcile.</li>
+  <li><code>src/cwExternalCenterlineManager.h/.cpp</code> — owner kind
+      <code>"Region"</code> in <code>collectOwnerSnapshots</code> (<code>:559-605</code>),
+      source attachment dirs, verbs <code>attachSource / detachSource / replaceSource /
+      reloadSource</code>, fingerprints keyed by source id; <code>cwAttachedCenterlinesModel</code>
+      row gains <code>derivedCaveNames</code>; <code>cwExternalSourceStatusModel</code> rows
+      for sources carry the cave count. <code>cwRootData</code> exposes the verbs.</li>
+  <li>Tests: <code>test_cwExternalCenterlineAttachRegion.cpp</code> (new): attach
+      <code>compass_project/PROJECT.MAK</code> → 3 caves, trips per survey, chips' data
+      (<code>sourceId</code>), solve positions; refuse a one-cave file; attach a second
+      source (<code>survex_master/master.svx</code>, per block) → 3 more caves with distinct
+      labels; <code>walls_project/KAUA.WPJ</code> per book → one derived cave whose stations
+      are assigned by membership (no prefix shares the book name);
+      reload after the fixture copy gains a <code>.dat</code> (written to a
+      <code>QTemporaryDir</code>) → new cave; detach with one derived cave holding a native
+      trip → that cave survives native, others gone, dir gone; source-change status for a
+      region source.</li>
+</ul>
+<div class="gate"><strong>Gate:</strong> <code>cavewhere-test "[Attach]"</code>,
+<code>"[Manager]"</code>, <code>"[SourceStatus]"</code>.</div>
+</div>
+
+<!-- ================================================================ -->
+<div class="commit">
+<h3>P6.7 — Cave-level attach derives unit trips for Compass and Walls</h3>
+<ul class="filelist">
+  <li><code>src/cwExternalCenterlineAttach.cpp:215-337</code> — for a cave-level scan with
+      trip units (Compass <code>.dat</code>, Walls), create unit trips instead of the
+      whole-cave window; Survex keeps blocks + root window. Manifest written for cave-level
+      owners too (<code>&lt;cave attachment dir&gt;/units.json</code>).</li>
+  <li>Tests: <code>test_cwExternalCenterlineAttachCave.cpp</code> — <code>compass_simple.dat</code>
+      → trips A and B with their station sets, no whole-cave trip; <code>walls_prefixed.wpj</code>
+      → one trip per <code>.srv</code>; reload of a project saved with the old whole-cave
+      trip replaces it (Q8). Update the P3.16 assertions that expected one whole-file trip
+      for Compass and Walls.</li>
+</ul>
+<div class="gate"><strong>Gate:</strong> <code>cavewhere-test "[Attach]"</code>,
+<code>"[LinePlot]"</code>.</div>
+</div>
+
+<!-- ================================================================ -->
+<div class="commit">
+<h3>P6.8 — Add Cave dialog: Attach-as choice, cave preview, "Attach N caves", heuristic removed</h3>
+<ul class="filelist">
+  <li><code>qml/AddCaveSurveyFileDialog.qml</code> — when <code>pickerId.canSplit</code>: an
+      "Attach as" row of two radio buttons, "One cave" and "One cave per &lt;.dat file |
+      top-level book | top-level block&gt;", preselected from <code>splitSuggested</code>
+      (Compass shows the row locked to per-file). Per-cave mode: title "Caves CaveWhere
+      will create", a list over <code>caveUnits</code> (name, unit, "N trips · M
+      stations", "file missing — skipped"), footer "Attaches at the region. The N caves
+      share this one source.", button "Attach N caves", and on accept the region verb (the
+      cave created up front by <code>addCaveFromSurveyFileWithDialog</code>,
+      <code>qml/DataMainPage.qml:33-37</code>, is removed, as Cancel already removes it).
+      One-cave mode: the Phase 3 layout with the trip list showing unit trips for
+      Compass/Walls. Delete <code>multiCaveHeuristicPanel</code> (<code>:191-219</code>).</li>
+  <li><code>test-qml/tst_AddCaveFromSurveyFile.qml</code> — the Kaua fixture defaults to
+      one cave and flipping shows one derived cave; the Survex master defaults to per
+      block; accept creates the caves and no leftover empty cave; a single
+      <code>.dat</code> shows survey trips and no Attach-as row. Remove the heuristic tests.</li>
+</ul>
+<div class="gate"><strong>Gate:</strong> <code>cavewhere-qml-test --platform offscreen -input
+test-qml/tst_AddCaveFromSurveyFile.qml</code>.</div>
+</div>
+
+<!-- ================================================================ -->
+<div class="commit">
+<h3>P6.9 — Cave list Source column with chip filter and grouping; source hamburger menu</h3>
+<ul class="filelist">
+  <li><code>qml/DataMainPage.qml:254-259</code> — a ≡ button after the Add Cave split
+      button opening <code>qml/SurveySourcesMenu.qml</code> (new): "Survey sources" with one
+      submenu per region source (label, "N caves", change-pending dot) holding Reload,
+      Replace… (Phase 2 replace dialog bound to the source), Detach… (inline
+      <code>RemoveAskBox</code> on DataMainPage with the §3.5 cascade text from
+      <code>cavesForSource</code> and trip counts). Empty state: "No survey sources
+      attached at the region."</li>
+  <li><code>qml/DataMainPage.qml:296-378</code> — the delegate's <code>QQ.Flow</code> gains a
+      <code>SourceChip</code> (new <code>qml/SourceChip.qml</code>: label from the cave's
+      source or cave-level file base name, "native" muted variant); a header row above the
+      <code>ListView</code> (<code>:287</code>) with a "Source" label that toggles grouping.
+      Filtering and grouping live in a small C++ proxy,
+      <code>src/cwCaveListSortFilterModel</code> (source filter id, group-by-source flag,
+      group header rows), so the QML stays a delegate. Chip click sets the filter; a
+      "Showing only … — show all" row clears it.</li>
+  <li><code>test-qml/tst_DataMainPageExternal.qml</code> — chip text per cave kind, filter
+      on click, group toggle order; hamburger lists the source, Detach… shows the cascade
+      text and removes the derived caves; <code>testcases/test_cwCaveListSortFilterModel.cpp</code>
+      (new).</li>
+</ul>
+<div class="gate"><strong>Gate:</strong> <code>cavewhere-test "[CaveList]"</code>;
+<code>cavewhere-qml-test … -input test-qml/tst_DataMainPageExternal.qml</code>.</div>
+</div>
+
+<!-- ================================================================ -->
+<div class="commit">
+<h3>P6.10 — Cave page: read-only source card, Add Trip enabled, fix editor hidden; cavern page rows</h3>
+<ul class="filelist">
+  <li><code>qml/ExternalSourceCaveCard.qml</code> (new), mounted from
+      <code>qml/CavePage.qml:249</code> when <code>cave.sourceId</code> is set (the Phase 3
+      <code>ExternalCenterlineCaveSummary</code> stays for cave-level). Contents per §3.5,
+      no verbs; the "Manage sources on All Caves" link navigates to DataMainPage.</li>
+  <li><code>qml/CavePage.qml</code> — Add Trip split button enabled for externally backed
+      caves (both menu verbs); fix-station editor replaced by the one-line note when
+      <code>cave.externallyBacked</code>. Trip table sort: Scope rows first.</li>
+  <li><code>qml/CavernOutputPage.qml:84-127</code> — region source rows with the derived
+      cave names line.</li>
+  <li><code>qml/ExternalSourceChangeList.qml</code> — "(N caves)" suffix for region rows.</li>
+  <li><code>test-qml/tst_CavePageExternalCave.qml</code> — card contents for a derived
+      cave and the absence of Reload/Replace/Detach there, Add Trip enabled and creates a
+      native trip, fix editor hidden; <code>tst_CavernOutputPageExternal.qml</code> —
+      region row.</li>
+</ul>
+<div class="gate"><strong>Gate:</strong> the two QML files above.</div>
+</div>
+
+<!-- ================================================================ -->
+<div class="commit">
+<h3>P6.11 — Docs and loose ends</h3>
+<ul class="filelist">
+  <li><code>plans/EXTERNAL_FILE_PHASE3.html</code> §P3.15: mark the "cavern flattens
+      Compass" fact superseded, pointing here; §3.3 attach guard note gains the mixed-cave
+      sentence. Master plan §9 Phase 6 block → "shipped, see plan"; §6 "native + external
+      are not mixed inside the same cave body" withdrawn; the "region-level attach disables
+      per-cave attach" line withdrawn.</li>
+  <li><code>src/cwSurvexExporterCaveTask.cpp:146-153</code> comment rewritten to the new
+      invariant.</li>
+  <li>Full C++ and QML suites, run once by the orchestrator.</li>
+</ul>
+<div class="gate"><strong>Gate:</strong> both full suites green.</div>
+</div>
+
+<h2 id="testing">8. Build and test invocations (for every pipeline stage)</h2>
+
+<pre><code># Build (this exact binary + preset; binaries land in ./build/Qt_6_11_1_for_macOS-Debug/)
+/Users/cave/Qt/Tools/CMake/CMake.app/Contents/bin/cmake --build build/Qt_6_11_1_for_macOS-Debug --target cavewhere-test cavewhere-qml-test
+
+# C++ (narrow tags while iterating; ASAN prefix + teed log with $$ are mandatory)
+ASAN_OPTIONS=detect_container_overflow=0 ./build/Qt_6_11_1_for_macOS-Debug/cavewhere-test "[Attach]" 2>&1 | tee /tmp/cavewhere-p6-$$.log
+
+# One QML file
+ASAN_OPTIONS=detect_container_overflow=0 ./build/Qt_6_11_1_for_macOS-Debug/cavewhere-qml-test --platform offscreen -input test-qml/tst_AddCaveFromSurveyFile.qml 2>&1 | tee /tmp/cavewhere-p6-qml-$$.log
+
+# Full suites — run ONCE, after P6.11, by the orchestrator (not inside a workflow stage)
+ASAN_OPTIONS=detect_container_overflow=0 ./build/Qt_6_11_1_for_macOS-Debug/cavewhere-test "~[cwRemoteCredentialStore]" 2>&1 | tee /tmp/cavewhere-full-$$.log
+ASAN_OPTIONS=detect_container_overflow=0 ./build/Qt_6_11_1_for_macOS-Debug/cavewhere-qml-test --platform offscreen 2>&1 | tee /tmp/cavewhere-qml-full-$$.log
+</code></pre>
+
+<p>Cross-cutting rules (master §10.1 + session constraints): tests run <strong>foreground</strong>
+inside workflow stages; one test binary of this checkout at a time; never rebuild while a
+test runs; <code>QTemporaryDir</code>/PID in every temp path; in-process cavern is
+serialized by <code>cwCavernRunner</code>'s mutex; QML waits use
+<code>tryVerify</code>/<code>tryCompare</code>; new <code>tst_*.qml</code> and
+<code>testcases/*.cpp</code> files need no CMake edit. Existing suites stay green at every
+commit. Commits: short imperative subjects, body = what/why + commands run, no Claude
+mentions. The survex submodule is untouched by this phase.</p>
+
+<h2 id="fixtures">9. Fixture files</h2>
+<table>
+<tr><th>Fixture (under <code>testcases/datasets/external-centerlines/</code>)</th><th>Shape</th><th>Used by</th></tr>
+<tr><td><code>compass_project/PROJECT.MAK</code> + <code>ALPHA.DAT</code>,
+        <code>BRAVO.DAT</code>, <code>CHARLIE.DAT</code></td>
+  <td>Cavern-valid mini OMEGA2: a UTM <code>@</code> line and <code>$</code> zone; three
+      <code>#FILE</code> entries plus a fourth naming an absent <code>DELTA.DAT</code>;
+      ALPHA has 2 surveys sharing station <code>A5</code>, BRAVO 1 survey linked to
+      ALPHA's <code>A5</code> through a link station, CHARLIE 1 survey with its own fix;
+      decimal-feet tape; hand-computable per-cave station counts.</td>
+  <td>P6.2, P6.3, P6.5, P6.6, P6.8</td></tr>
+<tr><td><code>walls_project/KAUA.WPJ</code> + <code>NOTES.TXT</code>, <code>FIX.SRV</code>,
+        <code>SURVEYS/D01.SRV</code>, <code>SURVEYS/D02.SRV</code>, <code>SURVEYS/N01.SRV</code></td>
+  <td>Cut-down Kaua shape: root book is the cave; child books "Drawings" (a
+      <code>.txt</code> entry only), "Fixed Points" (<code>FIX.SRV</code>, <code>#FIX</code>
+      lines only), "Surveys" with a nested year book holding three <code>.srv</code> files
+      tied through shared stations, one with <code>#PREFIX N</code>; solvable.</td>
+  <td>P6.2, P6.6, P6.7, P6.8</td></tr>
+<tr><td><code>walls_two_caves/TWO.WPJ</code> + <code>EAST/E1.SRV</code>,
+        <code>WEST/W1.SRV</code>, <code>WEST/W2.SRV</code></td>
+  <td>Root book with two child books that are caves, each with shots; W1 and W2 share a
+      station; solvable. Per-book mode yields two derived caves.</td>
+  <td>P6.2, P6.6</td></tr>
+<tr><td><code>survex_two_cs/master.svx</code> + <code>utm.svx</code>, <code>latlong.svx</code></td>
+  <td>Two blocks each with its own <code>*cs</code> and a <code>*fix</code>; cavern solves
+      them into one output cs.</td>
+  <td>P6.3 (two sources with different datums: attach both files as separate region
+      sources)</td></tr>
+<tr><td>Existing: <code>survex_master/</code>, <code>survex_blocks.svx</code>,
+        <code>compass_simple.dat</code>, <code>compass_solvable.dat</code>,
+        <code>walls_prefixed/</code></td>
+  <td>Survex project detection and derived caves; mixed-cave tests; unit trips at cave
+      level.</td>
+  <td>P6.2, P6.4, P6.6, P6.7</td></tr>
+<tr><td><em>(written at test runtime)</em> copy of <code>compass_project</code> plus a new
+        <code>ECHO.DAT</code> in a <code>QTemporaryDir</code></td>
+  <td>Reload derives a new cave.</td>
+  <td>P6.6</td></tr>
+</table>
+
+<h2 id="qml-tests">10. QML test files</h2>
+<ul>
+  <li><code>tst_AddCaveFromSurveyFile.qml</code> — extended (P6.8).</li>
+  <li><code>tst_DataMainPageExternal.qml</code> — extended (P6.9).</li>
+  <li><code>tst_CavePageExternalCave.qml</code>, <code>tst_CavernOutputPageExternal.qml</code>
+      — extended (P6.10).</li>
+</ul>
+<p>All extend <code>ExternalCenterlineTestCase.qml</code>; add a
+<code>makeSavedRegionAttach(projectBaseName, fixture)</code> helper there in P6.8.</p>
+
+<h2 id="accept">11. Phase acceptance criteria</h2>
+<ul>
+  <li>Add Cave ▾ → Add cave from survey file… → <code>OMEGA2.MAK</code>: the dialog lists
+      18 caves (one per existing <code>.dat</code>, the absent one marked), the button reads
+      "Attach 18 caves", and after attach the cave list shows 18 📎 caves each with an
+      <code>OMEGA2.MAK</code> chip. Clicking a chip filters to them; the header groups.</li>
+  <li>Open Blowing: the source card names the file and "shared with 17 other caves"; the
+      trip table shows one 📎 trip per survey (116) with dates; the lineplot draws each
+      trip's legs; Length and Depth read positive values.</li>
+  <li>Add Trip on Blowing creates a native trip; entering shots shows the floating banner;
+      Tie in… offers Blowing's source stations; after the tie the trip solves in place and
+      the banner clears. Add trip from survey file… on Blowing attaches a
+      <code>.srv</code> beside the source.</li>
+  <li>Attach a second project (<code>survex_master</code>-style) — its caves appear with
+      their own chip; a region equate between a station of each source solves.</li>
+  <li>Edit a <code>.dat</code> on disk: the source-change banner names the source with
+      "(18 caves)"; Update reloads all of them; a <code>.dat</code> added to the
+      <code>.mak</code> becomes a new cave.</li>
+  <li>Blowing's page shows the source card without Reload, Replace, or Detach. ≡ on All
+      Caves → Survey sources → OMEGA2.MAK → Detach…: the confirm lists the 17 caves
+      removed, Blowing kept as native with its trips, and the copied files; afterward the
+      list shows Blowing as native and the project solves cleanly.</li>
+  <li>A single <code>.dat</code> attached through the same dialog gives one cave with one
+      trip per survey, and a one-cave <code>.svx</code> behaves as in Phase 3.</li>
+  <li>Attach the Kaua North Maze <code>.wpj</code>: the dialog defaults to one cave and
+      lists one trip per survey day; flipping to per-book previews a single derived cave.
+      Attach a two-cave <code>.wpj</code> per book: two caves, each drawing only its own
+      book's legs.</li>
+  <li>Export menu stays disabled while any region source, cave-level, or Scope entity
+      exists.</li>
 </ul>
 
 </body>

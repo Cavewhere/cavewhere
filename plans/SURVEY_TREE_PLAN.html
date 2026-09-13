@@ -1,0 +1,1204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Survey Tree — Region → node… → trip: implementation plan</title>
+<style>
+  body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; font-size: 15px;
+         line-height: 1.5; color: #222; max-width: 1080px; margin: 24px auto; padding: 0 16px; }
+  h1 { font-size: 26px; } h2 { font-size: 21px; margin-top: 36px; border-bottom: 2px solid #ddd;
+       padding-bottom: 4px; } h3 { font-size: 17px; margin-top: 24px; } h4 { font-size: 15px; }
+  code { font-family: "Courier Prime", "Courier New", monospace; font-size: 13px;
+         background: #f4f4f4; padding: 1px 4px; border-radius: 3px; }
+  pre { background: #f4f4f4; padding: 10px; border-radius: 5px; overflow-x: auto; }
+  pre code { background: none; padding: 0; }
+  table { border-collapse: collapse; margin: 12px 0; }
+  th, td { border: 1px solid #ccc; padding: 5px 10px; text-align: left; vertical-align: top; }
+  th { background: #eee; }
+  .note { background: #eef6fd; border-left: 4px solid #5b9bd5; padding: 10px 14px; margin: 14px 0; }
+  .decision { background: #f0f9f0; border-left: 4px solid #6aa84f; padding: 10px 14px; margin: 14px 0; }
+  .warning { background: #fdf3e7; border-left: 4px solid #e69138; padding: 10px 14px; margin: 14px 0; }
+  .commit { border: 1px solid #ccc; border-radius: 6px; padding: 4px 18px 14px; margin: 22px 0; }
+  .commit h4 { margin-top: 14px; }
+  .workflow { border: 2px solid #8e7cc3; border-radius: 8px; padding: 6px 20px 16px; margin: 30px 0; }
+  .gate { background: #f8f4fc; border-left: 4px solid #8e7cc3; padding: 8px 14px; margin: 10px 0;
+          font-size: 14px; }
+  .meta { color: #555; }
+  .filelist { font-size: 13px; }
+  .small { font-size: 13px; }
+  .size { display: inline-block; font-size: 12px; font-weight: 700; padding: 0 6px; border-radius: 3px;
+          background: #e8e8e8; margin-left: 6px; }
+</style>
+</head>
+<body>
+
+<h1>Survey Tree — Region → node… → trip: implementation plan</h1>
+
+<p class="meta">
+  Written 2026-09-13 against <code>externalFiles</code> HEAD <code>a7b7716a</code>.
+  Supersedes <a href="EXTERNAL_FILE_PHASE6.html">EXTERNAL_FILE_PHASE6.html</a> (the flat
+  "region sources" plan) and its
+  <a href="EXTERNAL_FILE_PHASE6_UX_INTERACTIVE.html">prototype</a>. The approved UX is
+  <a href="SURVEY_TREE_UX_INTERACTIVE.html">SURVEY_TREE_UX_INTERACTIVE.html</a> (Design
+  notes lane, "Settled with the owner" block). Design inputs: the survey-node-tree
+  exploration (<code>trip-leaf-tree-exploration.md</code>, §A–§F) and the earlier
+  flat-cave exploration (<code>tree-hierarchy-exploration.md</code>, whose per-format
+  scanner facts §2 and hard problems §5 still hold).
+  Paths: <code>src/</code> = <code>cavewherelib/src/</code>, <code>qml/</code> =
+  <code>cavewherelib/qml/</code>, <code>tests/</code> = <code>testcases/</code>.
+</p>
+
+<div class="note">
+  <strong>How to execute this plan.</strong> The change is organized as eight
+  <strong>workflows</strong> (W1 … W8). A workflow is the unit the owner reviews: after
+  each one the source is read, the UX is played with by hand (§10 says what to click and
+  what to expect), both suites are green, and every existing project still loads and
+  round-trips. Inside a workflow, each commit (<code>C<i>n</i>.<i>m</i></code>) is one run
+  of the 5-stage pipeline (plan → implement → test → review → fix+commit). Commits inside a
+  workflow are sequential unless the workflow's sizing table marks them parallel-safe
+  (disjoint files; run in separate worktrees, rebase before the second lands). Every
+  factual claim about existing code carries a <code>file:line</code> measured at
+  <code>a7b7716a</code>; re-verify line numbers before editing, trust the identifiers.
+</div>
+
+<h2 id="goal">1. Goal and scope</h2>
+
+<p><strong>Goal:</strong> the survey model becomes a tree — <code>cwCavingRegion</code>
+owns a root node, every inner node is one class (<code>cwSurveyNode</code>) with a kind,
+and every leaf is a <code>cwTrip</code>. A native project reads exactly as today
+(Region → Cave → Trip); a user can add Folders and Sections; an attached Compass
+<code>.mak</code>, Walls <code>.wpj</code>, or Survex master appears as one sourced root
+row whose subtree mirrors the file's own structure; native trips can be added under any
+node, sourced ones included. The Data page is a tree table. Solve state is one region-wide
+lookup with per-node views. Names are unique per sibling set.</p>
+
+<h4>Ships in this plan</h4>
+<ul>
+  <li><code>cwSurveyNode</code> with kinds Cave, Folder, CompassProject, CompassFile,
+      WallsBook, SurvexFile, SurvexBlock; <code>cwCave</code> retired through a shim (W1 → W8).</li>
+  <li>Nested directory persistence (<code>nodes/</code> beside <code>trips/</code>), proto
+      fields, loaded-path index by node path, node Move as a save op, sync handlers at
+      depth N, conditional file-version bump (W3).</li>
+  <li>Driver: one <code>*begin</code> per native node, one <code>*include</code> per
+      sourced root, one global equate list emitted fully qualified at region scope; line
+      plot assigns stations by walking the label path (W4).</li>
+  <li>Tree Data page (W2), Folders/Sections and node pages with variable-depth links (W5).</li>
+  <li>Solve-state relocation: one region lookup + scoped views, region-wide connectivity (W6).</li>
+  <li>Sourced subtrees: scanner node tree + <code>units.json</code> station sets, attach
+      under any node, reconcile by <code>source_path</code>, exclusions (hide/Restore),
+      Reload/Replace on the root, delete cascades, dialog tree preview (W7).</li>
+  <li>Importers build the same node tree as attach; shim deletion; docs (W8).</li>
+</ul>
+
+<h4>Non-goals (deferred)</h4>
+<ul>
+  <li>A persisted <code>order</code> field or drag-to-reorder (settled: order stays derived).</li>
+  <li>Renaming a sourced (derived) node; converting a sourced subtree to native.</li>
+  <li>Compass export of a mixed node; the export gate stays closed for any external owner
+      (<code>src/cwSurveyExportManager.cpp:355-380</code>).</li>
+  <li>Struck-through hidden rows in the tree (prototype open question 1; v1 is the root
+      page's "N hidden · Restore…" line, §13).</li>
+  <li>Bulk note-folder import; the LFS policy patterns beyond confirming they match at any
+      depth (§6.9).</li>
+</ul>
+
+<h2 id="audit">2. Current-state audit (verified at a7b7716a)</h2>
+
+<p>Implement agents: <strong>do not rebuild any of this.</strong> The tree is a
+generalization of mechanisms that exist at depth one.</p>
+
+<table>
+<tr><th>Fact</th><th>Where</th><th>What the tree does with it</th></tr>
+<tr><td>Cave list model: <code>cwCavingRegion</code> is a <code>QAbstractListModel</code> over
+  <code>QList&lt;cwCave*&gt; m_caves</code>; insert/remove undo commands; <code>uniqueCaveName</code>
+  region-wide; <code>scopeLabelsChanged</code> and <code>ownersDeleted</code> relays</td>
+  <td><code>src/cwCavingRegion.h:47,117-142,159-186,191,223-257</code>;
+      <code>src/cwCavingRegion.cpp:187-310,517-541,582-641</code></td>
+  <td>Region owns a root node; <code>caves()</code> forwards to the root's children (W1)</td></tr>
+<tr><td><code>cwCave</code>: <code>QML_NAMED_ELEMENT(Cave)</code>; trips list model; name/id/length/depth/errorModel/fixStations/gridConvergence/externalCenterline/equates/keywordModel;
+  <code>uniqueTripName</code>; <code>tripScopeLabels</code> cache; <code>parentRegion()</code> via <code>dynamic_cast</code>;
+  per-cave <code>stationPositionLookup</code>/<code>network</code></td>
+  <td><code>src/cwCave.h:49-60,117-146,157-202,226-237,256-300</code>;
+      <code>src/cwCave.cpp:163,314-368</code></td>
+  <td>Body moves to <code>cwSurveyNode</code>; <code>cwCave</code> becomes an empty subclass (W1); solve state moves to the region (W6)</td></tr>
+<tr><td>Cave→trip signal chain: name→labels, positions→<code>solvedStationsChanged</code>, harvest, externally-backed; <code>UniqueConnection</code> because undo re-inserts the same trip</td>
+  <td><code>src/cwCave.cpp:314-357</code></td>
+  <td>Becomes node→trip at every depth plus node→child relays (W1, C1.1)</td></tr>
+<tr><td><code>cwTrip::parentCave()</code> Q_PROPERTY + <code>parentCaveChanged</code>; sibling scope prefixes read <code>parentCave()->trips()</code>; whole-cave window policy</td>
+  <td><code>src/cwTrip.h:68,206-207,313</code>; <code>src/cwTrip.cpp:43-92</code></td>
+  <td><code>parentNode()</code> + <code>parentCave()</code> shim (W1)</td></tr>
+<tr><td>Data structs: <code>cwCaveData{name,trips,…,fixStations,externalCenterline,equates}</code>; <code>cwCavingRegionData{caves,…,equates}</code></td>
+  <td><code>src/cwCaveData.h:16-27</code>; <code>src/cwCavingRegionData.h:12-19</code></td>
+  <td>Gain <code>nodes</code>, <code>kind</code>, <code>readOnly</code>, <code>sourceId</code>, <code>sourcePath</code> (W3)</td></tr>
+<tr><td>Load: recursive <code>*.cwcave</code> scan under the data root sorted by absolute path; per cave a recursive <code>&lt;caveDir&gt;/trips</code> scan for <code>*.cwtrip</code></td>
+  <td><code>src/cwSaveLoad.cpp:2746-2765,2807-2824</code></td>
+  <td>The scan already finds nested descriptors; the loader gains parent linkage by directory nesting (W3)</td></tr>
+<tr><td>Version gate on load: <code>fileVersion &gt; cwRegionIOTask::protoVersion()</code> warns and continues; <code>protoVersion()</code> = 9; <code>cwProject::saveWillCauseDataLoss</code> refuses saves of a newer file</td>
+  <td><code>src/cwSaveLoad.cpp:2712-2722</code>; <code>src/cwRegionIOTask.cpp:54-59</code>; <code>src/cwProject.cpp:431,685-700</code>; <code>src/cwProject.h:74-76,355-356</code></td>
+  <td>The forward-compat mechanism; stamp 10 when a project first needs the tree format (W3, §6.8)</td></tr>
+<tr><td>Writer: name-keyed dirs, <code>dirPrivate(cave)</code> = <code>&lt;dataRoot&gt;/&lt;name&gt;</code>, <code>dirPrivate(trip)</code> = <code>&lt;caveDir&gt;/trips/&lt;name&gt;</code>, attachment dir <code>&lt;ownerDir&gt;/external-centerline</code></td>
+  <td><code>src/cwSaveLoad.cpp:4762-4795,4944-4978</code></td>
+  <td><code>dirPrivate(node)</code> recurses through <code>nodes/</code> (W3)</td></tr>
+<tr><td>Per-object state <code>{currentPath, loadedPath}</code> keyed by <code>QObject*</code>; loaded-path index rebuilt from <code>{caveName, tripName}</code> pairs; <code>resetObjectStates</code> rebuilds all paths from the tree model; stale loaded paths are deleted after a rename</td>
+  <td><code>src/cwSaveLoadPrivate.h:193-231</code>; <code>src/cwSaveLoadPrivate.cpp:990-1010,1080-1093,1112-1148,1225-1262</code></td>
+  <td>Index by node path (W3, C3.1); Move op reuses the subtree rebuild (C3.3)</td></tr>
+<tr><td>Rename = Directory Move + File Move + re-save; job compression rules (drop redundant writes, writes superseded by Remove, collapse sequential Moves); trip <code>parentCaveChanged</code> deliberately unwired</td>
+  <td><code>src/cwSaveLoadPrivate.h:57-84,628-640,678-706</code>; <code>src/cwSaveLoad.cpp:4383-4388</code></td>
+  <td>Node Move is a first-class op (C3.3)</td></tr>
+<tr><td>Sync: caves matched by id; orphan-dir cleanup assumes <code>&lt;dataRoot&gt;/&lt;caveDir&gt;</code>; trip paths synthesized from the first <code>trips</code> segment; resolver composes <code>&lt;dataRoot&gt;/&lt;cave&gt;/trips/&lt;trip&gt;/notes</code> and walks <code>region->caves()</code> four times</td>
+  <td><code>src/cwCaveSyncMergeHandler.cpp:123-129,242-276</code>; <code>src/cwTripSyncMergeHandler.cpp:110-134,156-166</code>; <code>src/cwSyncPathResolver.cpp:27-40,67,369,424,489</code></td>
+  <td>Node-path rewrite (C3.2)</td></tr>
+<tr><td>Proto: <code>Project</code> holds region equates (field 5); <code>Cave</code> fields 1-13 (last: <code>equates = 13</code>); <code>Trip</code> fields 1-11 (last: <code>station_prefix = 11</code>); <code>StationHandle{scope, container_uuid, tail}</code></td>
+  <td><code>src/cavewhere.proto:43-56,92-100,106-137,139-157</code></td>
+  <td>§5 diff</td></tr>
+<tr><td>Line-plot task: <code>splitLookupByCave</code> parses the scope head only and routes by <code>ScopeLabels.caveId(label)</code>; per-cave results keyed by cave id; external cave lookups; 8 region→caves loops</td>
+  <td><code>src/cwLinePlotTask.cpp:114,220,369,413-450,494,527-541,641,682</code></td>
+  <td>Walk the label path segment by segment (C4.2); per-node copies (W4) then one region lookup (W6)</td></tr>
+<tr><td>Line-plot manager: connects caves, fix stations, per-cave and region equates; publishes per-cave lookups and networks; stale flags per cave</td>
+  <td><code>src/cwLinePlotManager.cpp:59,191-207,278,404-431,498,664-700,730</code></td>
+  <td>W4 (per node), W6 (region publish)</td></tr>
+<tr><td>Geometry: per-cave length/depth, per-trip scope prefixes, whole-cave window</td>
+  <td><code>src/cwLinePlotGeometry.cpp:155-230</code></td>
+  <td>Per-node fold (C4.2)</td></tr>
+<tr><td>Labels: <code>cwScopeLabels</code> = cave labels, ids by label, trip labels per cave, <code>forCave</code>; <code>cwCavernNaming::scopeLabels</code> takes any sibling list; <code>scopeHeadOf</code></td>
+  <td><code>src/cwScopeLabels.h:29-63</code>; <code>src/cwScopeLabels.cpp:25-50</code>; <code>src/cwCavernNaming.h:47-60</code>; <code>src/cwCavernNaming.cpp:59-84</code></td>
+  <td>One label map per node id plus trip labels; prefix = joined path (C4.1)</td></tr>
+<tr><td>Driver: cave block, cave-level include short-circuit, trip loop with trip-level includes, cave equates with <code>equateOperand</code>; region loop + <code>qualifiedOperand</code> + <code>writeRegionEquates</code></td>
+  <td><code>src/cwSurvexExporterCaveTask.cpp:50-80,100-230</code>; <code>src/cwSurvexExporterRegion.cpp:52-91,125-140</code></td>
+  <td><code>writeNode</code> recursive; one <code>operand()</code> (C4.1)</td></tr>
+<tr><td>Equates: within-cave list on the cave, cross-cave on the region; <code>tieStations</code> picks the home by container; cave-level emission inside the block</td>
+  <td><code>src/cwCavingRegion.cpp:433-470</code>; <code>src/cwCavingRegion.h:82-84,106</code></td>
+  <td>One global list; cave lists migrate on load (C4.3)</td></tr>
+<tr><td>Unconnected-chunk validation message names "the cave network"; floating banner says "the rest of the cave"</td>
+  <td><code>src/cwLinePlotTask.cpp:362-374</code>; <code>qml/FloatingSurveyBanner.qml:38-50</code>; <code>src/cwFindUnconnectedSurveyChunks.cpp:71-75</code> (builds a <code>cwCave</code> from data)</td>
+  <td>Region-wide connectivity + new wording (C6.2)</td></tr>
+<tr><td>Scanner: <code>cwScanBlock{path, stationCount, depth, date}</code>, <code>ScanResult{dependencies, blocks, rootStationCount, entryHasOwnShots}</code>; no Compass survey or Walls book nodes; no station sets</td>
+  <td><code>src/cwExternalCenterlineScanner.h:75-100,192-270</code></td>
+  <td><code>cwScanNode</code> tree + station sets (C7.1)</td></tr>
+<tr><td>Attach: <code>OwnerTarget</code> (trip or cave), <code>attachOwner</code>, <code>reconcileScopeTrips</code> (persisted records reconciled on reload), <code>removeEmptyScopeTrips</code>, <code>detachOwner</code>; cave attach refuses a cave with trips</td>
+  <td><code>src/cwExternalCenterlineAttach.cpp:101-190,215-337,350-357,387,550,575-601,649-682</code></td>
+  <td>Owner = node; reconcile a subtree by <code>source_path</code> (C7.2)</td></tr>
+<tr><td>Manager: owner kinds <code>"Cave"</code>/<code>"Trip"</code> in snapshots; fingerprints; watch set; attachment dirs; verbs on <code>cwRootData</code></td>
+  <td><code>src/cwExternalCenterlineManager.cpp:44,227-229,555-600</code>; <code>src/cwRootData.h:165-180</code></td>
+  <td>Owner kind = node kind name (C7.2)</td></tr>
+<tr><td>Region tree model: fixed <code>RegionType/CaveType/TripType/…</code>; <code>all&lt;T&gt;()</code> walker used by save/load; index/parent/rowCount hand-coded per level</td>
+  <td><code>src/cwRegionTreeModel.h:52-63,119-150</code>; <code>src/cwRegionTreeModel.cpp:55-200,372-403,617-830,984-1146</code></td>
+  <td>Node rows recurse (C1.3)</td></tr>
+<tr><td>Links: <code>Data/Cave=X/Trip=Y</code>; dynamic pages at depth ≥ 2; page name builders in QML</td>
+  <td><code>src/cwLinkGenerator.cpp:46-69</code>; <code>src/cwPageSelectionModel.cpp:340-360</code>; <code>qml/DataMainPage.qml:25</code>; <code>qml/CavePage.qml:25</code></td>
+  <td><code>Data/Node=A/Node=B/Trip=T</code> (C5.3)</td></tr>
+<tr><td>Data page: <code>ListView</code> over <code>RootData.region</code>, <code>required property Cave caveObjectRole</code>, Add Cave split button + menu, <code>DataRightClickMouseMenu</code> (Remove only), <code>ExternalSolveBadge</code>; no <code>TreeView</code> anywhere in <code>qml/</code></td>
+  <td><code>qml/DataMainPage.qml:25-53,254-266,287-339</code>; <code>qml/DataRightClickMouseMenu.qml:4-44</code>; <code>qml/AddAndSearchBar.qml:11-16</code></td>
+  <td>Tree table (W2)</td></tr>
+<tr><td>Cave page: <code>property Cave currentCave</code>, Add Trip split button, fix-station subpage, <code>ExternalCenterlineCaveSummary</code>; <code>cwCavePageModel</code> over one cave's trips</td>
+  <td><code>qml/CavePage.qml:22-66,116,187-264</code>; <code>src/cwCavePageModel.h:10-30</code></td>
+  <td>Node page (C5.2)</td></tr>
+<tr><td>QML pages typed <code>property Cave</code></td>
+  <td><code>qml/FixStationPage.qml</code>, <code>AddCaveSurveyFileDialog.qml</code>, <code>DataMainPage.qml</code>, <code>CavePage.qml</code>, <code>ExternalCenterlineScopeHeader.qml</code>, <code>ExternalCenterlineCaveSummary.qml</code>, <code>CaveLeadPage.qml</code></td>
+  <td>Retyped <code>SurveyNode</code> as each is touched; the rest in C8.2</td></tr>
+<tr><td>Importers build <code>cwCave</code> lists: Walls (books → caves), Survex, Compass, CSV; import manager adds them to the region</td>
+  <td><code>src/cwWallsImportData.cpp:17-88</code>; <code>src/cwSurvexGlobalData.cpp:42-116</code>; <code>src/cwCompassImporter.cpp:71-158</code>; <code>src/cwCSVImporterTask.cpp:54</code>; <code>src/cwSurveyImportManager.cpp:188-190</code>; <code>src/cwImportTreeDataDialog.cpp:300</code></td>
+  <td>Build nodes 1:1 with the file's tree (C8.1)</td></tr>
+<tr><td>Usage counts: 116 <code>src/</code> files name <code>cwCave</code>; 27 test files construct one</td>
+  <td><code>grep -rl cwCave src/ | wc -l</code></td>
+  <td>The shim keeps them compiling until C8.2</td></tr>
+<tr><td>Existing fixtures: <code>external-centerlines/{survex_master, survex_blocks.svx, compass_*.dat, compass_multi.mak, walls_prefixed, walls_book_prefix, updir_project, …}</code>; sync tests build two clones in <code>QTemporaryDir</code> at runtime</td>
+  <td><code>tests/datasets/external-centerlines/</code>; <code>tests/test_cwCaveAndTripRenameConflict.cpp:41-60</code></td>
+  <td>§11</td></tr>
+</table>
+
+<h2 id="settled">3. Settled decisions (binding; do not reopen)</h2>
+
+<div class="decision">
+<ol>
+  <li><strong>Node tree.</strong> Region → node … → <code>cwTrip</code> leaves. One node class with a kind; <code>cwCave</code> retires into it gradually (empty subclass shim during migration, deleted at the end). Native and sourced nodes are the same class; sourced nodes carry <code>read_only</code> + <code>source_id</code> + <code>source_path</code>. Native mode still looks like Region → Cave → Trip.</li>
+  <li><strong>Native labels: exactly two</strong>, "Cave" and "Folder". Label comes from position: Add Cave / Add Folder / Attach at the top level and inside a Folder; inside a Cave (or a Section, or a sourced node) the verbs are Add Trip / Add Section (creates a Folder) / Attach. A Cave is never offered inside a Cave. Relabel via the kind chip (Cave/Folder), which changes label and icon only. The backend never branches on the label; behavior keys off <code>isReadOnly</code>/<code>isSourced</code> and structural facts.</li>
+  <li><strong>Data page is a tree table</strong>: Name, Kind, Trips, Length, Depth, Last survey, ⋯. Kind column always shown. Trip rows are in the tree. Everything starts collapsed except sourced roots, which are expanded one level on every load. Filter box auto-expands to matches; expand/collapse all; breadcrumb; keyboard (arrows, Enter, Space, Home/End, Shift+F10 context menu).</li>
+  <li><strong>A source root is a row</strong>, never transparent. Kind chips: Compass project, Compass file, Walls book, Survex file, Survex block. The region's direct children may be any kind. Non-survey Walls books (SVG Sources, Fixed Points) appear gray.</li>
+  <li><strong>One "Add ▾" split button everywhere</strong> with "Attach survey file…" inside it; Attach places under the node it was opened on (region root from the Data page); the dialog shows the scanned tree preview.</li>
+  <li><strong>No Detach verb, no Delete buttons.</strong> Deletion is right-click context menu only (Open / Rename (native) / Delete…). Deleting a sourced root removes the whole subtree including native trips under it (confirm with counts; the copied file is removed). Deleting a derived sub-node or derived trip <em>hides</em> it; the exclusion is persisted per source, survives Reload, and the root's page shows "N hidden" with Restore….</li>
+  <li><strong>Reload / Replace</strong> live on the sourced root (row ⋯ menu + source card on its page).</li>
+  <li><strong>Solve state = one region-wide station lookup / network</strong> with per-node scoped views; per-cave copies retired. Unconnected-chunk wording: "This chunk isn't connected to any survey."</li>
+  <li><strong>Names unique per sibling set only</strong>; region-wide uniqueness goes away; cavern needs only sibling-unique labels (<code>cwCavernNaming::scopeLabels</code> is already per sibling set).</li>
+  <li><strong>No <code>order</code> field</strong>; order stays derived (alphabetical for native nodes; scan order inside a sourced subtree).</li>
+  <li><strong>Old builds:</strong> the existing file-version gate (<code>saveWillCauseDataLoss</code>/<code>canSaveDirectly</code>) is the forward-compat mechanism; bump the proto version when the first nested node is written.</li>
+  <li><strong>Persistence:</strong> nested directories mirroring the tree; child nodes under <code>&lt;nodeDir&gt;/nodes/&lt;name&gt;/</code> beside <code>trips/</code>; keep the <code>Cave</code> message and <code>.cwcave</code> extension; optional fields <code>kind</code>, <code>read_only</code>, <code>source_id</code>, <code>source_path</code> (absent = today); <code>Project</code> gains <code>repeated ExternalSource</code> with per-source exclusions; derived nodes/trips are ordinary records reconciled against the scan by <code>source_path</code> on reload; a native trip under a derived node has no <code>source_path</code> and reconcile never touches it. Node move is a first-class save op that keeps the same <code>QObject*</code>.</li>
+  <li><strong>Equates:</strong> one global list on the region (operands are handles: container uuid + tail), emitted at region scope fully qualified; LCA placement is optional tidiness, never a rule. Cave-held equates migrate into the global list on load.</li>
+  <li><strong>Importers</strong> (Walls/Survex/Compass import) build the same node tree as attach.</li>
+  <li><strong>Mixed nodes:</strong> native trips (incl. a future digital-survey trip) may be added under any node incl. sourced ones. Trip-level attachment stays as it is. Unit trips inside a sourced subtree use station-set membership windows from <code>units.json</code> (Compass survey names and Walls books get no cavern naming level; Survex blocks and Compass <code>.dat</code> files do, so prefix windows and membership compose). Equate operands into a sourced subtree use cavern-relative names from the manifest.</li>
+</ol>
+</div>
+
+<h3>3.1 Consequences the settled rules force (derived, listed so nobody re-derives them differently)</h3>
+<table>
+<tr><th>Consequence</th><th>Follows from</th></tr>
+<tr><td>Fix stations, the error model, keywords, equate operands, and length/depth exist on <strong>every native node</strong>, Folder included; the node page shows the fix-station row on every native node. Hiding it on a Folder would make the kind chip change more than label and icon.</td><td>#2 (chip changes label and icon only; backend never branches on the label)</td></tr>
+<tr><td>A native trip under a Folder that is <em>inside</em> a Cave is normal (Add Section). A native trip under a top-level Folder is unreachable through the UI (no Add Trip there) but must load and solve if a file has one: the backend treats every native node alike.</td><td>#2, #15</td></tr>
+<tr><td>A node's driver label is unique among its siblings; its qualified prefix is the joined label path. Two "Entrance" caves in different folders are <code>north.entrance</code> and <code>south.entrance</code>.</td><td>#9, §7</td></tr>
+<tr><td>Native trips anywhere under a sourced root are emitted inside the root's block beside the <code>*include</code>, so their labels are unique across <em>all native trips in that subtree</em> (a derived node is not a <code>*begin</code>).</td><td>#15, §7.2</td></tr>
+<tr><td>A sourced node is never renamed in v1 (the context menu offers Rename on native nodes only); its display name is the scan's.</td><td>#6 (context menu contents)</td></tr>
+<tr><td>"Connected" means connected to any survey in the project: <code>cwFindUnconnectedSurveyChunks</code> runs over the region's network, and the tie suggester's known stations are region-wide.</td><td>#8</td></tr>
+<tr><td>Deleting a sourced root is not undoable (copied files are removed, as detach is today); deleting a native node/trip and moving a node are undoable.</td><td>#6, #12</td></tr>
+</table>
+
+<h2 id="api">4. Node class API sketch</h2>
+
+<pre><code>// src/cwSurveyNode.h (new in C1.1)
+class CAVEWHERE_LIB_EXPORT cwSurveyNode : public QAbstractListModel {   // rows = direct trips, as cwCave today (cwCave.h:137-141)
+    Q_OBJECT
+    QML_NAMED_ELEMENT(SurveyNode)
+    Q_PROPERTY(QString name READ name WRITE setName NOTIFY nameChanged)
+    Q_PROPERTY(QUuid id READ id NOTIFY idChanged FINAL)
+    Q_PROPERTY(Kind kind READ kind WRITE setKind NOTIFY kindChanged)          // display + reconcile only
+    Q_PROPERTY(bool isReadOnly READ isReadOnly NOTIFY sourceChanged)
+    Q_PROPERTY(bool isSourced READ isSourced NOTIFY sourceChanged)            // !sourceId.isNull()
+    Q_PROPERTY(bool isSourceRoot READ isSourceRoot NOTIFY sourceChanged)      // isSourced && sourcePath.isEmpty()
+    Q_PROPERTY(QUuid sourceId READ sourceId NOTIFY sourceChanged)
+    Q_PROPERTY(QString sourcePath READ sourcePath NOTIFY sourceChanged)
+    Q_PROPERTY(cwSurveyNode* parentNode READ parentNode NOTIFY parentNodeChanged)
+    Q_PROPERTY(int childNodeCount READ childNodeCount NOTIFY childNodeCountChanged)
+    Q_PROPERTY(int tripCount READ tripCount NOTIFY tripCountChanged)
+    // carried over from cwCave.h:53-60 unchanged: length, depth, errorModel, fixStations,
+    // gridConvergence, externalCenterline, keywordModel. `equates` leaves in C4.3.
+public:
+    enum class Kind { Cave, Folder, CompassProject, CompassFile, WallsBook, SurvexFile, SurvexBlock };
+    Q_ENUM(Kind)
+
+    // tree
+    cwSurveyNode* parentNode() const;                 // nullptr only for the region's root node
+    cwCavingRegion* region() const;                   // walks up; replaces cwCave::parentRegion() (cwCave.cpp:359)
+    bool isRoot() const;                              // the unnamed, unsaved region root
+    QList&lt;cwSurveyNode*&gt; childNodes() const; cwSurveyNode* childNode(int) const; int childNodeCount() const;
+    QList&lt;cwTrip*&gt; trips() const; cwTrip* trip(int) const; int tripCount() const;     // direct, today's cwCave API
+    Q_INVOKABLE void addNode(cwSurveyNode* node, Kind kind = Kind::Cave);   // appends, sibling-unique name, undoable
+    void insertNode(int row, cwSurveyNode*); Q_INVOKABLE void removeNode(int row);
+    Q_INVOKABLE void addTrip(cwTrip* = nullptr); void insertTrip(int, cwTrip*); Q_INVOKABLE void removeTrip(int);
+    // recursive helpers — the aggregator surface (§8)
+    QList&lt;cwTrip*&gt; allTrips() const;                 // pre-order, document order
+    QList&lt;cwSurveyNode*&gt; allNodes() const;           // pre-order, self excluded
+    template&lt;class F&gt; void walk(F&amp;&amp; f) const;       // f(const cwSurveyNode*) pre-order, self included
+    QStringList path() const;                        // ancestor names root-excluded — the persistence key
+    QList&lt;QUuid&gt; pathIds() const;
+    cwSurveyNode* sourceRoot() const;                // nearest ancestor-or-self with isSourceRoot(); nullptr for native
+    cwSurveyNode* lowestCommonAncestor(const cwSurveyNode*) const;
+    Q_INVOKABLE QString uniqueChildName(const QString&amp; proposed) const;    // sibling nodes (cwSanitizedNameSet, replaces uniqueCaveName)
+    Q_INVOKABLE QString uniqueTripName(const QString&amp; proposed) const;     // unchanged (cwCave.cpp:163)
+    // solve views (C6.1): read-through to the region's single lookup
+    cwStationPositionLookup scopedPositions() const; cwSurveyNetwork scopedNetwork() const;
+signals:
+    void beginInsertNodes(int,int); void insertedNodes(int,int); void beginRemoveNodes(int,int); void removedNodes(int,int);
+    void nodeMoved(cwSurveyNode* node, cwSurveyNode* from, cwSurveyNode* to);
+    void beginInsertTrips(int,int); void insertedTrips(int,int); void beginRemoveTrips(int,int); void removedTrips(int,int);   // as cwCave.h:158-162
+    void parentNodeChanged(); void kindChanged(); void sourceChanged();
+    void tripScopeLabelsChanged(); void childScopeLabelsChanged();      // per sibling set at this node (cwCave.h:172 generalized)
+    void subtreeChanged();          // any structural change at or below this node; relayed upward once per level
+    void tripsDeleted(const QList&lt;QUuid&gt;&amp;); void nodesDeleted(const QList&lt;QUuid&gt;&amp;);   // feed cwCavingRegion::ownersDeleted
+};
+
+// src/cwCave.h during migration (C1.1 → deleted in C8.2)
+class cwCave : public cwSurveyNode { Q_OBJECT QML_NAMED_ELEMENT(Cave) public: using cwSurveyNode::cwSurveyNode; };
+// src/cwTrip.h
+cwSurveyNode* parentNode() const;  void setParentNode(cwSurveyNode*);  signal parentNodeChanged();
+cwCave* parentCave() const { return qobject_cast&lt;cwCave*&gt;(parentNode()); }   // shim; every node is a cwCave until C8.2
+// src/cwCavingRegion.h
+cwSurveyNode* rootNode() const;           // unnamed, unsaved; its descriptor is the .cwproj
+QList&lt;cwCave*&gt; caves() const;             // shim = rootNode()->childNodes() cast; rows of the region list model stay the root's children
+Q_INVOKABLE cwSurveyNode* addNode(cwSurveyNode* parent, cwSurveyNode::Kind kind);
+Q_INVOKABLE void moveNode(cwSurveyNode* node, cwSurveyNode* newParent, int row);   // undoable MoveNodeCommand (C3.3)
+cwStationPositionLookup stationPositions() const; cwSurveyNetwork network() const;   // the one lookup (C6.1)
+</code></pre>
+
+<table>
+<tr><th>Decision</th><th>Choice</th><th>Why</th></tr>
+<tr><td>Name</td><td><code>cwSurveyNode</code>, QML <code>SurveyNode</code></td><td>"Node" is what the UX calls it; "Survey" scopes it away from scene/render nodes.</td></tr>
+<tr><td><code>cwCave</code> shim form</td><td>Empty subclass with only <code>QML_NAMED_ELEMENT(Cave)</code>. Every construction site (loader, importers, <code>addCave</code>, tests) keeps constructing <code>cwCave</code> until C8.2, so <code>qobject_cast&lt;cwCave*&gt;</code> and <code>cwRegionTreeModel::cave()</code> stay valid for every node, Folders included.</td><td>A <code>using</code> alias cannot carry a second QML name and would break the 7 QML pages typed <code>property Cave</code>; a subclass keeps 116 files compiling and lets pages migrate one at a time.</td></tr>
+<tr><td>Region: root node or owner of a root</td><td>Owner of a root node (<code>rootNode()</code>), unnamed and unsaved</td><td>Insert/remove/move have one owner type; <code>walk</code> needs no region special case; the region keeps its own state (geo reference, layers, unit system, equates, <code>ownersDeleted</code>: <code>cwCavingRegion.h:46-51,186</code>). The region stays the <code>QAbstractListModel</code> over the root's children so <code>DataMainPage</code> (<code>:289</code>) keeps binding to it until W2 replaces the view.</td></tr>
+<tr><td>Two child lists, not one</td><td><code>childNodes()</code> and <code>trips()</code></td><td>Nodes and trips have different pages and types; a mixed list forces every consumer to type-switch. The tree model already models typed rows under a parent (<code>cwRegionTreeModel.h:52-63</code>).</td></tr>
+<tr><td>Solve view during W4–W5</td><td><code>parentNode()->stationPositionLookup()</code> works at every depth because C4.2 gives every node its own subtree slice (the depth-one mechanism generalized). No <code>caveNode()</code> helper is needed; <code>sourceRoot()</code> is the only "nearest ancestor of a kind" walk, and it keys off <code>isSourceRoot()</code>, never the label.</td><td>§10 ordering rationale.</td></tr>
+<tr><td><code>QAbstractItemModel</code> exposure</td><td><code>cwRegionTreeModel</code> gains recursive <code>NodeType</code> rows (C1.3) and remains the one tree model over the whole region (save/load's <code>all&lt;T&gt;()</code>, keyword model). <code>cwSurveyTreeModel</code> (C2.1) is a flattening proxy over it for the Data page.</td><td>§9.1.</td></tr>
+<tr><td>Signal chain</td><td>Node→trip connections stay exactly as <code>cwCave::connectTrip</code> (<code>cwCave.cpp:314-339</code>); node→child-node adds relays for <code>subtreeChanged</code>, <code>externalCenterlineChanged</code> (externally-backed propagates down), <code>childScopeLabelsChanged</code>, <code>tripsDeleted</code>/<code>nodesDeleted</code>. Each relay is one hop; a node never re-emits a signal it received from a child back down (memory <code>project_equate_h4_known_stations</code>: the harvest relay double-fired when it did).</td><td></td></tr>
+</table>
+
+<h2 id="data">5. Data model and proto diff</h2>
+
+<pre><code>// src/cavewhere.proto — additions only; every field optional, absent = today's meaning
+enum SurveyNodeKind { NODE_CAVE = 0; NODE_FOLDER = 1; NODE_COMPASS_PROJECT = 2; NODE_COMPASS_FILE = 3;
+                      NODE_WALLS_BOOK = 4; NODE_SURVEX_FILE = 5; NODE_SURVEX_BLOCK = 6; }
+
+message Cave {                       // message name and .cwcave extension kept (forward compat, §6.8)
+    …existing 1-13 unchanged (cavewhere.proto:106-137); `equates = 13` still read, no longer written after C4.3…
+    optional SurveyNodeKind kind = 14;   // absent = NODE_CAVE
+    optional bool read_only = 15;        // absent = false
+    optional string source_id = 16;      // ExternalSource.id that owns this node; absent = native
+    optional string source_path = 17;    // node path inside the source ("BLOWING3.DAT", "North Maze Surveys/Dec 2001 Surveys"); "" on the source root
+}
+message Trip {
+    …existing 1-11 unchanged (cavewhere.proto:139-157)…
+    optional string source_path = 12;    // derived trip's unit path ("BLOWING3.DAT/OF50-87", "SURVEYS/D01.SRV", "doghill.big-passage"); absent = native
+}
+message ExternalSource {
+    optional string id = 1;              // == Cave.source_id of the root and of every derived node
+    optional string root_node_id = 2;    // Cave.id of the root node (the entry file stays on that node's external_centerline = 12)
+    repeated string excluded_source_paths = 3;   // hidden derived nodes/trips, by source_path; survives Reload
+}
+message Project {
+    …existing 1-5…
+    repeated ExternalSource external_sources = 6;
+}
+</code></pre>
+
+<table>
+<tr><th>Struct</th><th>Today</th><th>After C3.1</th></tr>
+<tr><td><code>cwCaveData</code> (<code>src/cwCaveData.h:16-27</code>)</td><td>name, trips, stationPositionModel, id, units, fixStations, externalCenterline, equates</td><td>+ <code>QList&lt;cwCaveData&gt; nodes</code>, <code>cwSurveyNode::Kind kind</code>, <code>bool readOnly</code>, <code>QUuid sourceId</code>, <code>QString sourcePath</code>. Renamed <code>cwSurveyNodeData</code> in C8.2 (a rename earlier would touch every line-plot file twice).</td></tr>
+<tr><td><code>cwTripData</code></td><td>…, stationPrefix</td><td>+ <code>QString sourcePath</code></td></tr>
+<tr><td><code>cwCavingRegionData</code> (<code>src/cwCavingRegionData.h:12-19</code>)</td><td>caves, …, equates</td><td><code>caves</code> keeps its name until C8.2 and holds the root's direct children (each with <code>nodes</code>); + <code>QList&lt;cwExternalSourceData&gt; externalSources</code></td></tr>
+<tr><td><code>cwExternalSourceData</code> (new, C7.2)</td><td>—</td><td>id, rootNodeId, excludedSourcePaths</td></tr>
+</table>
+
+<h2 id="persistence">6. Persistence</h2>
+
+<h3>6.1 Layout</h3>
+<pre><code>&lt;dataRoot&gt;/
+  Fisher Ridge/                         ← native node at depth 1: today's layout, byte-identical
+    Fisher Ridge.cwcave                 ← Cave message; kind absent (= Cave)
+    trips/Entrance survey/Entrance survey.cwtrip
+    trips/Entrance survey/notes/…
+    external-centerline/…               ← a cave-level attachment, as today
+  Kentucky field seasons/               ← kind = NODE_FOLDER
+    Kentucky field seasons.cwcave
+    nodes/                              ← child nodes (new). `nodes/` is a sibling of `trips/`, so a node and a trip may share a name
+      Side Cave/
+        Side Cave.cwcave
+        nodes/Upper level/Upper level.cwcave        ← a Section (Folder inside a Cave)
+        nodes/Upper level/trips/Dome climb/Dome climb.cwtrip
+        trips/Entrance survey/Entrance survey.cwtrip
+  OMEGA2/                               ← kind = NODE_COMPASS_PROJECT, read_only, source_id = S, source_path = ""
+    OMEGA2.cwcave
+    external-centerline/OMEGA2.MAK, BLOWING3.DAT, …, units.json     ← the copied source + manifest, at the subtree root
+    nodes/Blowing3/Blowing3.cwcave      ← kind = NODE_COMPASS_FILE, source_id = S, source_path = "BLOWING3.DAT"
+    nodes/Blowing3/trips/OF50-87/OF50-87.cwtrip                   ← derived, source_path = "BLOWING3.DAT/OF50-87"
+    nodes/Blowing3/trips/Digital survey 2026-09-14/…              ← native trip under a derived node: no source_path
+</code></pre>
+
+<h3>6.2 Load algorithm (C3.1, replaces the append loop at <code>cwSaveLoad.cpp:2766-2830</code>)</h3>
+<ol>
+  <li>Scan <code>*.cwcave</code> recursively as today (<code>:2751-2760</code>), but prune
+      <code>trips/</code>, <code>notes/</code>, and <code>external-centerline/</code> subtrees from the
+      node scan (a copied Compass project has hundreds of files; today's scan enters them all).</li>
+  <li>Sort by absolute path (<code>:2765</code>). A parent's directory is a prefix of its
+      children's, so parents come first.</li>
+  <li>Keep <code>QHash&lt;QString dirPath, cwCaveData*&gt; nodeByDir</code>. For each descriptor at
+      directory <code>D</code>: walk <code>D</code>'s parents upward until a directory in
+      <code>nodeByDir</code> (→ that node's <code>nodes</code> list) or the data root (→
+      <code>region.caves</code>). Any other placement (a descriptor directly under
+      <code>trips/</code>, or two descriptors in one directory) is a load error naming the
+      path; the descriptor is skipped, never guessed.</li>
+  <li>Per node, the trip scan is unchanged (<code>:2807-2824</code>, <code>&lt;nodeDir&gt;/trips</code>,
+      recursive — it never enters <code>nodes/</code> because that is a sibling directory).</li>
+  <li>Orphan trip directories (a <code>.cwtrip</code> whose nearest descriptor ancestor is
+      not its <code>trips/</code> parent — the add/move race in §6.10) attach to that nearest
+      node and are reported in the load report.</li>
+  <li>The resulting <code>cwCaveData</code> tree is set on live nodes by
+      <code>cwSurveyNode::setData</code> recursively (children before signals, as
+      <code>cwCave::setData</code> does for trips).</li>
+</ol>
+<p>Existing projects: every descriptor sits at depth one, <code>kind</code> is absent, no
+<code>nodes/</code> exists → Region → Cave → Trip with zero visible change and no rewrite.</p>
+
+<h3>6.3 Writer (C3.1)</h3>
+<pre><code>QDir cwSaveLoad::dirPrivate(const cwSurveyNode* node) const
+{   // replaces cwSaveLoad.cpp:4771-4777
+    const cwSurveyNode* parent = node->parentNode();
+    if (parent == nullptr) return QDir();                                   // not in a region
+    if (parent->isRoot()) return QDir(dataRootDir().absoluteFilePath(sanitizeFileName(node->name())));
+    return QDir(dirPrivate(parent).absoluteFilePath(QStringLiteral("nodes/") + sanitizeFileName(node->name())));
+}
+// tripDirHelper / noteDirHelper / externalCenterlineDirHelper unchanged (cwSaveLoad.cpp:4949-4962)
+// saveAll (cwSaveLoad.cpp:2695-2703) becomes a pre-order walk: save(node); saveTrips(nodeDir, node); recurse children.</code></pre>
+
+<h3>6.4 Loaded-path index and state seeding (C3.1)</h3>
+<p><code>LoadedPathIndex</code> (<code>cwSaveLoadPrivate.h:222-231</code>) changes from
+<code>caveNameById</code> + <code>{caveName, tripName}</code> parts to <code>nodePathById:
+QHash&lt;QUuid, QStringList&gt;</code> (names root-excluded) and <code>{QStringList nodePath,
+tripName}</code> for trips/notes/lidar/sketches. One helper composes the directory:
+<code>relativeNodeDir(nodePath)</code> = <code>s(p0)/nodes/s(p1)/…/nodes/s(pn)</code>.
+<code>seedObjectStatesFromLoadedData</code> (<code>cwSaveLoadPrivate.cpp:1112-1148</code>) and
+<code>resetObjectStates</code> (<code>:1080-1093</code>) walk
+<code>m_regionTreeModel->all&lt;cwSurveyNode*&gt;</code> (recursive after C1.3).</p>
+
+<h3>6.5 Node Move as a save op (C3.3)</h3>
+<ul>
+  <li><code>cwCavingRegion::moveNode(node, newParent, row)</code> pushes <code>MoveNodeCommand</code>
+      (undo = move back). The node's <code>QObject*</code> and its descendants' identities are
+      unchanged, so <code>m_objectStates</code> stays keyed correctly.</li>
+  <li>Save side: <code>connectNode</code> wires <code>parentNodeChanged</code> (the omission at
+      <code>cwSaveLoad.cpp:4387</code> is filled) to <code>d->moveDirectory(this, node)</code>: one
+      <code>Job{node, Directory, Move}</code> from the node's old dir to
+      <code>dirPrivate(node)</code>, then <code>rebuildObjectStatesUnder(node)</code> — the subtree
+      form of <code>resetObjectStates</code>: every descendant's <code>currentPath</code> is recomputed,
+      <code>loadedPath</code> is cleared (the old directory no longer exists after the Move, so the
+      stale-cleanup pass at <code>:1225-1262</code> has nothing to delete).</li>
+  <li>Queue rules (<code>cwSaveLoadPrivate.h:628-640</code>): a pending <code>WriteFile</code> for a
+      descendant enqueued <em>before</em> the Move must land at the new path. Two acceptable
+      implementations; the implement stage picks one and tests it: (a) <code>WriteFile</code>
+      resolves its target from <code>stateFor(object).currentPath</code> at execution time, or
+      (b) the Move re-targets every pending job whose path is under the old directory. Rule 3
+      (collapse sequential Moves) must apply to the node's Directory Move like a rename's.</li>
+  <li>Never emit Remove + Insert for a move: that would delete the directory, including
+      <code>external-centerline/</code> and every note image, before re-writing descriptors.</li>
+</ul>
+
+<h3>6.6 Sync handlers at depth N (C3.2)</h3>
+<table>
+<tr><th>Today</th><th>After</th></tr>
+<tr><td><code>cwCaveSyncMergeHandler</code>: matches caves by id (<code>:123-129</code>); orphan cleanup collects <code>dirName</code> of each changed <code>.cwcave</code> and removes <code>&lt;dataRoot&gt;/&lt;caveDir&gt;</code> when the name is not a winner (<code>:242-276</code>)</td>
+  <td><code>cwSurveyNodeSyncMergeHandler</code>: matches nodes by id over <code>rootNode()->allNodes()</code>; winners keyed by the <strong>full relative node directory</strong> (<code>relativeNodeDir(path)</code>); the orphan target is the changed descriptor's <em>own</em> directory (<code>QFileInfo(path).dir()</code>), never an ancestor — removing a parent would take siblings with it.</td></tr>
+<tr><td><code>cwTripSyncMergeHandler::synthesizeTripPathWithCaveDir</code>: takes the first <code>trips</code> segment (<code>:110-134</code>) and composes <code>&lt;dataRoot&gt;/&lt;cave&gt;/trips/&lt;trip&gt;/&lt;file&gt;</code></td>
+  <td>The descriptor is always <code>…/trips/&lt;tripDir&gt;/&lt;file&gt;</code>, so the node directory is everything before the segment at <code>size()-3</code>; compose with <code>relativeNodeDir(node->path())</code>. (A node sanitized to "trips" already fools <code>indexOf</code> today; the last-segment rule closes that.)</td></tr>
+<tr><td><code>cwSyncPathResolver::relativeNotesDirPath(repoRoot, dataRootName, caveName, tripName)</code> (<code>:27-40</code>); four <code>region->caves()</code> walks (<code>:67,369,424,489</code>)</td>
+  <td>Takes <code>QStringList nodePath</code>; walks <code>rootNode()->allTrips()</code>.</td></tr>
+<tr><td><code>cwCavingRegionSyncMergeHandler</code> (<code>.cwproj</code> only, <code>:75-93</code>)</td><td>Unchanged; gains the <code>external_sources</code> merge in C7.2 (union of exclusions).</td></tr>
+</table>
+<p>Fixtures re-run at depth two: rename/rename on a nested node (both peers rename
+<code>Kentucky field seasons/nodes/Side Cave</code>), an ancestor rename concurrent with a
+descendant trip edit (git merges as rename+modify per file), and a peer moves a node while
+the local side adds a trip under its old path (§6.10 orphan rule).</p>
+
+<h3>6.7 Exclusions (C7.2)</h3>
+<p>Deleting a derived node or trip removes the live object and its records (directory Remove
+job, as any delete) and appends its <code>source_path</code> (for a node: its own path, which
+covers its derived descendants) to the owning <code>ExternalSource.excluded_source_paths</code>.
+Reconcile skips any scan node/unit whose path, or an ancestor's path, is excluded. Restore…
+clears the list and reconciles again, which recreates the records from the scan. A native
+trip under a hidden derived node is removed with it (the confirm counts it); undo is not
+offered for that delete.</p>
+
+<h3>6.8 Version bump (C3.1)</h3>
+<p><code>cwRegionIOTask::protoVersion()</code> becomes 10, and <code>toVersion</code> maps it to
+the release that ships W3. The stamp sites (<code>cwSaveLoad.cpp:1837,1892,1922,1953,2425-2514</code>)
+call a new <code>cwSaveLoad::stampVersion(region)</code> that writes <strong>10 when the
+project needs the tree format</strong> — any node at depth ≥ 2, any non-default
+<code>kind</code>/<code>read_only</code>/<code>source_id</code>, or any
+<code>external_sources</code> — and <strong>9 otherwise</strong>. So a flat project saved by the
+new build still opens silently in the old build, and the old build's gate fires exactly when
+hierarchy exists: it warns on load (<code>cwSaveLoad.cpp:2712-2722</code>, showing every nested
+node as a flat cave, which the recursive scan finds) and refuses to save
+(<code>cwProject.cpp:685</code>, <code>:431</code>). The refusal is what prevents the old-app
+duplicate-at-depth-one hazard. A project that had a folder and lost it keeps some files at 10
+until they are re-saved; the old build warns spuriously in that window. Open question §13 Q3
+records the simpler alternative (unconditional 10).</p>
+
+<h3>6.9 LFS</h3>
+<p>The policy (<code>cwSaveLoad.cpp:367-460</code>) is path-pattern based; C3.1 adds a test that
+a note image under <code>nodes/…/nodes/…/trips/…/notes/</code> is classified exactly like one at
+depth one (suffix/glob matching, not depth-indexed).</p>
+
+<h3>6.10 What can go wrong (the review checklist for W3)</h3>
+<table>
+<tr><th>Hazard</th><th>Guard</th></tr>
+<tr><td>Stale-path cleanup (<code>cwSaveLoadPrivate.cpp:1225-1262</code>) deletes directories. After an ancestor rename, a descendant whose <code>loadedPath</code> is under the old ancestor name and whose <code>currentPath</code> folds the new name is a cleanup target whose old directory was already carried by the ancestor's Directory Move → <code>exists()</code> is false → skipped. If the Move has not executed yet when cleanup runs, the old directory still exists and would be deleted with its contents.</td><td>Cleanup runs after the queue drains (verify ordering in <code>execFileSystemJobs</code>); test: rename a depth-1 node holding a depth-2 child with notes, assert the images survive.</td></tr>
+<tr><td>Orphan cleanup in sync removing a parent directory.</td><td>§6.6 rule; test with a rename/rename conflict on a depth-2 node whose sibling has notes.</td></tr>
+<tr><td>Name collisions: two derived nodes under one parent sanitize to one directory name ("Big Cave" / "Big-Cave").</td><td><code>uniqueChildName</code> uses <code>cwSanitizedNameSet</code> per node (as <code>uniqueCaveName</code> does region-wide today, <code>cwCavingRegion.cpp:310</code>); reconcile passes scan names through it.</td></tr>
+<tr><td>Peer moved a node while I added a trip under the old path.</td><td>§6.2 step 5: attach to the nearest descriptor ancestor, report; never drop a <code>.cwtrip</code>.</td></tr>
+<tr><td>The recursive node scan enters a copied Compass project's hundreds of files.</td><td>§6.2 step 1 pruning; test with <code>compass_project</code> attached that the scan visits no file under <code>external-centerline/</code>.</td></tr>
+<tr><td>A bundled <code>.cw</code> (zip) or legacy <code>.cw</code> (SQLite → <code>saveAllFromV6</code>, <code>cwSaveLoad.cpp:2529</code>) round trip.</td><td>Format-transparent; <code>saveAllFromV6</code> writes depth one, a valid tree. Tests re-run <code>test_cwProject</code>'s v7/v8 fixtures unchanged.</td></tr>
+</table>
+
+<h2 id="driver">7. Driver and naming</h2>
+
+<h3>7.1 One <code>*begin</code> per native node (C4.1)</h3>
+<pre><code>; region export (cwSurvexExporterRegion::exportRegion) — pre-order walk from the root, writeNode(node):
+*begin kentucky_field_seasons ; Kentucky field seasons        ← Folder: a block like any other
+  *begin side_cave ; Side Cave
+    *fix …                                                     ← the node's own fix stations (cwSurvexExporterCaveTask.cpp:160-161 today)
+    *begin upper_level ; Upper level                           ← Section
+      *begin dome_climb … *end dome_climb                      ← trip-level attach keeps its wrapper (:187-206)
+      …native trip shots inline, as today…
+    *end upper_level
+    …Side Cave's own trips…
+  *end side_cave
+*end kentucky_field_seasons
+*begin omega2 ; OMEGA2 (Compass project)                       ← sourced root: one *include, children are NOT blocks (§7.2)
+*include "…/OMEGA2/external-centerline/OMEGA2.MAK"
+  *begin digital_survey_2026_09_14 … *end digital_survey_2026_09_14   ← native trip under Blowing3, emitted in the root's block
+*end omega2
+; global equates (writeRegionEquates), fully qualified, after every block is closed
+*equate kentucky_field_seasons.side_cave.upper_level.dome_climb.1  omega2.blowing3.OF87
+</code></pre>
+<ul>
+  <li><code>cwScopeLabels</code> (<code>src/cwScopeLabels.h:29-63</code>) becomes: <code>QHash&lt;QUuid, QString&gt; m_nodeLabels</code> (sibling-unique per parent, via <code>cwCavernNaming::scopeLabels</code> per sibling list), <code>QHash&lt;QUuid, QString&gt; m_tripLabels</code> (unique among a node's trips; among all native trips of a sourced subtree), <code>QString prefix(nodeId)</code> = joined ancestor labels + "." (replaces <code>cavePrefix</code>), <code>QUuid nodeId(const QStringList&amp; labelPath)</code>, and the decode walk <code>Resolution resolve(const QString&amp; scopedName) const</code> → <code>{nodeId, remainder}</code> by consuming <code>scopeHeadOf</code> (<code>cwCavernNaming.h:60</code>) segment by segment while a child of the current node wears the segment (case-insensitive, as <code>cwLinePlotTask.cpp:441</code> already matches). <code>forCave</code> (<code>:41-47</code>) becomes <code>forNode</code> for the standalone exporter.</li>
+  <li><code>equateOperand</code> (<code>cwSurvexExporterCaveTask.cpp:50-80</code>) and <code>qualifiedOperand</code> (<code>cwSurvexExporterRegion.cpp:52-79</code>) collapse into one <code>operand(handle, labels, region)</code>: NativeCave scope → <code>prefix(container)</code> + tail; Trip scope → <code>prefix(parentNode)</code> + trip label + "." + tail for a native trip, and <code>prefix(sourceRoot)</code> + manifest cavern-relative name for a derived trip (§7.2). The excluded-owner check (<code>:55-64</code>) stays.</li>
+  <li>Every equate is emitted at region scope (settled #13). The within-block emission (<code>cwSurvexExporterCaveTask.cpp:218-224</code>) is deleted in C4.3 together with the cave equate model.</li>
+  <li>The empty-block guard (<code>:104-113</code>, "No survey data" fatal) becomes per node: a node whose subtree has no shots, no include, and no fix emits nothing (a Folder that only groups empty caves).</li>
+</ul>
+
+<h3>7.2 Sourced subtrees: cavern's naming levels vs. the node path (C7.3)</h3>
+<table>
+<tr><th>Node path (tree)</th><th><code>.3d</code> label</th><th>Level cavern drops</th></tr>
+<tr><td><code>omega2 / Blowing3 / OF50-87 / OF87</code></td><td><code>omega2.blowing3.OF87</code></td><td>Compass survey name (<code>survex/src/datain.c:881-886</code>)</td></tr>
+<tr><td><code>kaua / North Maze Surveys / Dec 2001 Surveys / N Surveys / N1.SRV / N.5</code></td><td><code>kaua.N.5</code></td><td>Walls books and file (<code>datain.c:3744-3760</code>; only <code>#PREFIX</code> makes a level)</td></tr>
+<tr><td><code>master / alpha / alpha-1 / A1</code></td><td><code>master.alpha.alpha-1.A1</code></td><td>none</td></tr>
+</table>
+<p>So the driver rule "one <code>*begin</code> per node" applies to <strong>native nodes only</strong>;
+a sourced subtree is one <code>*include</code> at its root and no node below it is a
+<code>*begin</code>. Station assignment inside a sourced subtree composes two windows in
+<code>splitLookupByNode</code> (C4.2 shape, C7.3 content): (1) walk the label path through the
+native tree to the sourced root; (2) below the root, continue consuming label segments only
+through nodes that carry a cavern level (<code>units.json</code> marks a node
+<code>cavernLabel</code>: the <code>.dat</code> stem for a Compass file, the block name for a
+Survex block, nothing for a Walls book or Compass survey); (3) inside the deepest matched
+node, assign by membership of the remainder in a descendant unit's station set (manifest);
+(4) otherwise the station belongs to the matched node itself (the root window, as P3.16).
+<code>units.json</code> records, per unit, its <strong>cavern-relative station names</strong>
+including <code>#PREFIX</code> and <code>.dat</code>-stem segments, so an equate operand into
+the subtree is <code>&lt;root prefix&gt; + cavernRelative(tail)</code> and cavern never invents a
+station (<code>cwSurvexExporterCaveTask.cpp:55-64</code>).</p>
+
+<h3>7.3 Where decode and encode must agree</h3>
+<p>Three readers consume the labels the exporter writes: <code>splitLookupByNode</code>
+(<code>cwLinePlotTask.cpp:413-450</code>), the geometry pass (<code>cwLinePlotGeometry.cpp:160-230</code>),
+and <code>cwTrip::scopePrefix</code> (<code>cwTrip.cpp:43-52</code>). All three take the same
+<code>cwScopeLabels</code> instance built from one <code>cwCavingRegionData</code> snapshot, as today;
+C4.1's test suite round-trips a depth-3 tree with colliding sanitized names through export →
+<code>resolve()</code> and asserts every station lands on its node.</p>
+
+<h2 id="aggregators">8. Aggregator migration table (all 49 sites from the exploration §C)</h2>
+
+<p class="small">Bucket: <strong>root</strong> = must see the whole region; <strong>subtree</strong> = <code>node->allTrips()</code>/<code>walk</code> with unchanged meaning; <strong>trip</strong> = never needed the cave; <strong>policy</strong> = the tree changes the right answer. "Shim OK" means the row keeps compiling through the <code>cwCave</code>/<code>parentCave()</code> shim and is only rewritten in the listed commit.</p>
+
+<table class="small">
+<tr><th>#</th><th>Consumer</th><th>Where</th><th>Bucket</th><th>Change</th><th>Commit</th></tr>
+<tr><td>1</td><td>Line-plot task: per-cave lookups, labels, results by cave id, <code>splitLookupByCave</code></td><td><code>src/cwLinePlotTask.cpp:114,220,369,413-450,494,527-541,641,682</code></td><td>policy</td><td>Results keyed by node id; label-path walk; per-node subtree slices (W4) then one lookup + views (W6)</td><td>C4.2, C6.1</td></tr>
+<tr><td>2</td><td>Line-plot manager: connect caves/fixes/equates, publish per-cave lookups, stale flags</td><td><code>src/cwLinePlotManager.cpp:59,191-207,278,404-431,498,664-700,730</code></td><td>root + policy</td><td>Walk <code>allNodes()</code>; subscribe to <code>subtreeChanged</code>; publish once (W6)</td><td>C4.2, C4.3, C6.1</td></tr>
+<tr><td>3</td><td>Geometry: per-cave length/depth, trip scope prefixes</td><td><code>src/cwLinePlotGeometry.cpp:155-230</code></td><td>subtree</td><td>Per-node fold over the node's own trips + children</td><td>C4.2</td></tr>
+<tr><td>4</td><td>Line-plot label view</td><td><code>src/cwLinePlotLabelView.cpp:39,53</code></td><td>subtree</td><td><code>rootNode()->allTrips()</code></td><td>C4.4</td></tr>
+<tr><td>5</td><td>Floating-survey model</td><td><code>src/cwFloatingSurveyModel.cpp:186</code></td><td>subtree</td><td><code>allTrips()</code></td><td>C4.4</td></tr>
+<tr><td>6</td><td>Survey-chunk signaler (connections to every cave/trip)</td><td><code>src/cwSurveyChunkSignaler.cpp:52,78,104-176</code></td><td>subtree</td><td><code>walk</code> + <code>insertedNodes</code>/<code>insertedTrips</code> at every level</td><td>C4.4</td></tr>
+<tr><td>7</td><td>Find unconnected chunks (builds a <code>cwCave</code> from data)</td><td><code>src/cwFindUnconnectedSurveyChunks.cpp:71-130</code></td><td>policy</td><td>Runs over the region's network; "connected to any survey"</td><td>C6.2</td></tr>
+<tr><td>8</td><td>Used-station task manager</td><td><code>src/cwUsedStationTaskManager.cpp:38-64</code></td><td>subtree</td><td>Shim OK; node-typed in C8.2</td><td>C8.2</td></tr>
+<tr><td>9</td><td>Scrap manager: region walk, per-cave network for triangulation</td><td><code>src/cwScrapManager.cpp:153,317-318,428-429,1091-1105,1215-1217</code></td><td>root + policy</td><td>Walk <code>allTrips()</code> (C4.4); <code>network()</code> → region network (C6.1)</td><td>C4.4, C6.1</td></tr>
+<tr><td>10</td><td>Scrap: parent cave for positions/transforms</td><td><code>src/cwScrap.cpp:526,645,687,843,962,1039</code></td><td>policy</td><td>Shim OK through W5; region lookup in C6.1</td><td>C6.1</td></tr>
+<tr><td>11</td><td>Note / NoteLiDAR / note models: <code>parentCave()</code> relays</td><td><code>src/cwNote.cpp:452</code>; <code>src/cwNoteLiDAR.cpp:174-176,283</code>; <code>src/cwSurveyNoteModelBase.cpp:191-198</code></td><td>trip</td><td>Rename to <code>parentNode()</code></td><td>C8.2</td></tr>
+<tr><td>12</td><td>NoteLiDAR manager: region walk; populated cave lookup</td><td><code>src/cwNoteLiDARManager.cpp:386,536,576-578,755</code></td><td>root + policy</td><td><code>allTrips()</code> (C4.4); region lookup (C6.1)</td><td>C4.4, C6.1</td></tr>
+<tr><td>13</td><td>Sketch manager</td><td><code>src/cwSketchManager.cpp:480</code></td><td>subtree</td><td><code>allTrips()</code></td><td>C4.4</td></tr>
+<tr><td>14</td><td>Lead model (leads of one cave)</td><td><code>src/cwLeadModel.cpp:400,422</code></td><td>subtree</td><td>Membership = "note's trip is under this node" (<code>allTrips().contains</code>)</td><td>C4.4</td></tr>
+<tr><td>15</td><td>Tie-suggestion model (connected cave, known stations)</td><td><code>src/cwTieSuggestionModel.cpp:151,191,210</code></td><td>policy</td><td>Known stations region-wide</td><td>C6.2</td></tr>
+<tr><td>16</td><td>Trip: sibling scope prefixes, whole-cave window</td><td><code>src/cwTrip.cpp:43-92</code></td><td>policy</td><td>Siblings = <code>parentNode()->trips()</code> (C1.1, mechanical); whole-node window keys off <code>isSourceRoot()</code> (C7.3)</td><td>C1.1, C7.3</td></tr>
+<tr><td>17</td><td>Survey export manager: targets, gate</td><td><code>src/cwSurveyExportManager.cpp:245,321-333,355-380</code></td><td>subtree</td><td>Targets = nodes; gate walks <code>allNodes()</code>/<code>allTrips()</code></td><td>C4.4</td></tr>
+<tr><td>18</td><td>Compass exporter cave task</td><td><code>src/cwCompassExporterCaveTask.cpp:84</code></td><td>subtree</td><td>Exports a node's <code>allTrips()</code> (Compass is flat)</td><td>C4.4</td></tr>
+<tr><td>19</td><td>Chipdata exporter</td><td><code>src/cwChipdataExporterCaveTask.cpp:70</code></td><td>subtree</td><td>Same</td><td>C4.4</td></tr>
+<tr><td>20</td><td>Survex exporter region: cave loop, region equates</td><td><code>src/cwSurvexExporterRegion.cpp:52-91,125-140</code></td><td>policy</td><td><code>writeNode</code> walk; one <code>operand()</code></td><td>C4.1</td></tr>
+<tr><td>21</td><td>Survex exporter cave task: block, trip loop, cave equates</td><td><code>src/cwSurvexExporterCaveTask.cpp:100-230</code></td><td>policy</td><td>Recursive; cave equates deleted</td><td>C4.1, C4.3</td></tr>
+<tr><td>22</td><td>Scope labels / cavern naming</td><td><code>src/cwScopeLabels.cpp:25-50</code>; <code>src/cwCavernNaming.cpp:59-84</code></td><td>policy</td><td>Per sibling set at every depth; <code>resolve()</code></td><td>C4.1</td></tr>
+<tr><td>23</td><td>Importers build <code>cwCave</code>s</td><td><code>src/cwWallsImportData.cpp:17-88</code>; <code>src/cwSurvexGlobalData.cpp:42-116</code>; <code>src/cwCompassImporter.cpp:71-158</code>; <code>src/cwCSVImporterTask.cpp:54</code>; <code>src/cwSurveyImportManager.cpp:188-190</code>; <code>src/cwImportTreeDataDialog.cpp:300</code></td><td>subtree</td><td>Build nodes 1:1 with the file's tree</td><td>C8.1</td></tr>
+<tr><td>24</td><td>Region tree model (fixed depth types)</td><td><code>src/cwRegionTreeModel.cpp:55-200,372-403,617-830,984-1146</code></td><td>policy</td><td>Recursive node rows</td><td>C1.3</td></tr>
+<tr><td>25</td><td>Cave page model</td><td><code>src/cwCavePageModel.h:10-30</code></td><td>subtree</td><td>Node page model: child-node rows + direct trips</td><td>C5.2</td></tr>
+<tr><td>26</td><td>Link generator / page selection</td><td><code>src/cwLinkGenerator.cpp:46-69</code>; <code>src/cwPageSelectionModel.cpp:340-360</code>; <code>qml/DataMainPage.qml:25</code>; <code>qml/CavePage.qml:25</code></td><td>policy</td><td><code>Data/Node=A/Node=B/Trip=T</code>, variable depth</td><td>C5.3</td></tr>
+<tr><td>27</td><td>Undo: insert/remove cave/trip, name commands</td><td><code>src/cwCavingRegion.h:223-257</code>; <code>src/cwCave.h:256-300</code>; <code>src/cwCave.cpp:444-470</code></td><td>subtree</td><td>Node commands with a parent; <code>MoveNodeCommand</code></td><td>C1.2, C3.3</td></tr>
+<tr><td>28</td><td>Save/load: save-all, scan, connect triggers, dir helpers</td><td><code>src/cwSaveLoad.cpp:2695-2703,2746-2830,4236-4262,4383-4388,4762-4795,4944-4978</code></td><td>policy</td><td>§6</td><td>C3.1, C3.3</td></tr>
+<tr><td>29</td><td>Save/load private: index, seeding, reset</td><td><code>src/cwSaveLoadPrivate.cpp:990-1010,1080-1093,1112-1148</code></td><td>policy</td><td>§6.4</td><td>C3.1</td></tr>
+<tr><td>30</td><td>Sync path resolver</td><td><code>src/cwSyncPathResolver.cpp:27-40,67,369,424,489</code></td><td>policy</td><td>§6.6</td><td>C3.2</td></tr>
+<tr><td>31</td><td>Cave sync merge handler</td><td><code>src/cwCaveSyncMergeHandler.cpp:123-129,242-276</code></td><td>policy</td><td>§6.6</td><td>C3.2</td></tr>
+<tr><td>32</td><td>Trip sync merge handler</td><td><code>src/cwTripSyncMergeHandler.cpp:110-134,156-166</code></td><td>policy</td><td>§6.6</td><td>C3.2</td></tr>
+<tr><td>33</td><td>Region merge plan/applier (name only)</td><td><code>src/cwCavingRegionMergeApplier.cpp:13-14</code></td><td>root</td><td>Unchanged; + <code>external_sources</code> union</td><td>C7.2</td></tr>
+<tr><td>34</td><td>Cave merge plan builder (trips by id)</td><td><code>src/cwCaveMergePlanBuilder.cpp:16</code></td><td>subtree</td><td>+ child nodes by id; new proto fields merged as scalars</td><td>C3.2</td></tr>
+<tr><td>35</td><td>External-centerline manager: owners by kind string, harvest, watch set</td><td><code>src/cwExternalCenterlineManager.cpp:44,227-229,555-600,794,1248,1264</code></td><td>policy</td><td>Owner = any node or trip; kind string = <code>Kind</code> name; walk <code>allNodes()</code></td><td>C7.2</td></tr>
+<tr><td>36</td><td>External-centerline attach: owner target, reconcile, detach</td><td><code>src/cwExternalCenterlineAttach.cpp:101-190,215-337,350-357,550,575-601,649-682</code></td><td>policy</td><td>Owner = node; subtree reconcile by <code>source_path</code>; delete cascade replaces detach</td><td>C7.2</td></tr>
+<tr><td>37</td><td>Survey data artifact (experimental)</td><td><code>src/cwSurveyDataArtifact.cpp:128-131</code></td><td>subtree</td><td><code>allTrips()</code>; do not couple further</td><td>C4.4</td></tr>
+<tr><td>38</td><td>Capture leads / capture viewport</td><td><code>src/cwCaptureLeads.cpp:238</code>; <code>src/cwCaptureViewport.cpp:556</code></td><td>subtree</td><td><code>allTrips()</code></td><td>C4.4</td></tr>
+<tr><td>39</td><td>Image cleanup task</td><td><code>src/cwImageCleanupTask.cpp:106</code></td><td>subtree</td><td><code>allTrips()</code></td><td>C4.4</td></tr>
+<tr><td>40</td><td>Project: emptiness via cave count</td><td><code>src/cwProject.cpp</code> (<code>caveCount</code> reader)</td><td>root</td><td><code>rootNode()->childNodeCount()</code></td><td>C1.2</td></tr>
+<tr><td>41</td><td>Scrap station view, survey chunk view (cave error model)</td><td><code>src/cwScrapStationView.cpp:168</code>; <code>src/cwSurveyChunkView.cpp:554-555</code></td><td>policy</td><td><code>parentNode()->errorModel()</code> (every node has one)</td><td>C8.2</td></tr>
+<tr><td>42</td><td>Survey chunk <code>parentCave()</code></td><td><code>src/cwSurveyChunk.cpp:119-120</code></td><td>trip</td><td>Rename</td><td>C8.2</td></tr>
+<tr><td>43</td><td>Trip calibration <code>parentCave()</code> (units)</td><td><code>src/cwTripCalibration.cpp</code> (1 site)</td><td>trip</td><td>Rename</td><td>C8.2</td></tr>
+<tr><td>44</td><td>Keyword item model over tree-model items</td><td><code>src/cwKeywordItemModel.cpp:31-65,134-247</code></td><td>subtree</td><td>Hierarchy = node path once #24 recurses</td><td>C1.3</td></tr>
+<tr><td>45</td><td>Cave <code>parentRegion()</code> via <code>dynamic_cast(parent())</code></td><td><code>src/cwCave.cpp:359-362</code></td><td>policy</td><td><code>region()</code> walks up</td><td>C1.1</td></tr>
+<tr><td>46</td><td>Cave↔trip signal chain</td><td><code>src/cwCave.cpp:314-357</code></td><td>policy</td><td>Node→trip at every level + node→child relays (§4)</td><td>C1.1</td></tr>
+<tr><td>47</td><td>Region↔cave signal chain</td><td><code>src/cwCavingRegion.cpp:501-541</code>; <code>src/cwCavingRegion.h:173,186</code></td><td>policy</td><td>Region↔root node; relays per level</td><td>C1.2</td></tr>
+<tr><td>48</td><td>QML pages bound to <code>Cave</code></td><td><code>qml/CavePage.qml:22</code>, <code>FixStationPage.qml</code>, <code>CaveLeadPage.qml</code>, <code>DataMainPage.qml:299</code>, <code>AddCaveSurveyFileDialog.qml</code>, <code>ExternalCenterlineCaveSummary.qml</code>, <code>ExternalCenterlineScopeHeader.qml</code></td><td>policy</td><td>Retyped <code>SurveyNode</code> as touched (C2.2, C5.2, C7.4); remainder C8.2</td><td>C2.2, C5.2, C7.4, C8.2</td></tr>
+<tr><td>49</td><td>Tests constructing <code>cwCave</code> (27 files; 90 name it)</td><td><code>tests/</code></td><td>subtree</td><td>Compile under the shim; new node tests in <code>test_cwSurveyNode.cpp</code>; sweep in C8.2</td><td>C8.2</td></tr>
+</table>
+
+<h2 id="ui">9. UI: prototype pages and verbs → QML</h2>
+
+<h3>9.1 Tree view: flattened row model, not <code>QC.TreeView</code></h3>
+<div class="decision">
+<p><strong>Decision:</strong> the Data page binds a <code>ListView</code> to
+<code>cwSurveyTreeModel</code>, a C++ <code>QAbstractListModel</code> of the <em>visible</em> rows
+(a flattening proxy over <code>cwRegionTreeModel</code> restricted to node and trip rows), with
+roles <code>object, rowType, depth, expanded, hasChildren, kind, kindLabel, isSourced, isReadOnly,
+isSourceRoot, tripCount, length, depthValue, lastSurvey, muted</code> and invokables
+<code>setExpanded(row, bool)</code>, <code>expandAll()</code>, <code>collapseAll()</code>,
+<code>setFilter(text)</code>, <code>rowFor(QObject*)</code>, <code>expandTo(QObject*)</code>.</p>
+<p>Why: (1) nothing in <code>qml/</code> uses <code>TreeView</code> today, while every list page,
+keyboard handler, and delegate pattern is <code>ListView</code>-shaped; (2) the settled behaviors
+— filter auto-expands to matches, sourced roots open one level on every load, native rows
+collapsed, muted trip rows, "N hidden" counts — are row-visibility rules that are one C++
+function and one Catch2 test each, and a <code>TreeView</code> would need the same rules re-expressed
+as <code>expandToIndex</code> plumbing over a filter proxy that also hides the tree model's note/scrap
+rows; (3) <code>cwKeywordItemModel</code> already consumes <code>cwRegionTreeModel</code> the same way, so
+the proxy is an existing pattern. Cost: the model must map source insert/remove/move signals to
+visible-row changes; that is bounded and tested in C2.1.</p>
+</div>
+
+<h3>9.2 Mapping</h3>
+<table class="small">
+<tr><th>Prototype element</th><th>QML / C++</th><th>Commit</th></tr>
+<tr><td>Data page tree table (Name, Kind, Trips, Length, Depth, Last survey, ⋯), carets, muted trip rows, selection</td><td><code>qml/DataMainPage.qml</code> replaces the <code>ListView</code> at <code>:287-339</code> with <code>SurveyTreeView.qml</code> (new: header row + <code>ListView</code> over <code>cwSurveyTreeModel</code>, <code>SurveyTreeRow.qml</code> delegate); <code>ExternalSolveBadge</code> and <code>ErrorIconBar</code> kept per row</td><td>C2.2</td></tr>
+<tr><td>Kind chip (native picker Cave/Folder; sourced chip + 🔒 with tooltip)</td><td><code>KindChip.qml</code> (new); picker is a <code>QC.Menu</code> setting <code>node.kind</code></td><td>C2.2 (chip), C5.1 (picker)</td></tr>
+<tr><td>Filter box, Expand all, Collapse all</td><td>Toolbar row in <code>SurveyTreeView.qml</code>; model invokables</td><td>C2.2</td></tr>
+<tr><td>Keyboard: ↑↓ → ← Enter Space Home End Shift+F10</td><td><code>Keys.onPressed</code> in <code>SurveyTreeView.qml</code> → model/selection; context menu opens at the selected row</td><td>C2.2</td></tr>
+<tr><td>Right-click context menu: Open / Rename (native) / Delete…</td><td><code>DataRightClickMouseMenu.qml</code> (<code>:30-44</code>, Remove only today) gains Open and Rename (native) and becomes <code>SurveyItemContextMenu.qml</code> used by the tree and the node page; Delete… goes through <code>RemoveAskBox</code> with the counted message</td><td>C2.2, C5.1</td></tr>
+<tr><td>One "Add ▾" split button: Add Cave / Add Folder / Attach survey file… (top level, Folder) or Add Trip / Add Section / Attach survey file… (inside a Cave/Section/sourced node)</td><td><code>AddAndSearchBar.qml</code> + <code>SplitButton.qml</code> unchanged; <code>AddVerbsMenu.qml</code> (new) builds the verbs from <code>node.takesCaves</code> (C++: <code>cwSurveyNode::takesCaves()</code> = root or a Folder with no Cave/sourced ancestor — structural, matching the prototype's <code>takesCaves</code>)</td><td>C2.2 (Add Cave + Attach), C5.1 (Folder/Section/Trip)</td></tr>
+<tr><td>Row ⋯ menu: Open, Add verbs, Rename (native), Reload/Replace (source root)</td><td><code>SurveyTreeRow.qml</code> → <code>QC.Menu</code> composed of <code>AddVerbsMenu</code> items</td><td>C2.2, C7.4</td></tr>
+<tr><td>Node page: breadcrumb, header (icon, name, chip, Rename), stats (Trips, Length, Depth, Last survey, Fix stations, Leads), child-node section, trip table, Add ▾</td><td><code>qml/CavePage.qml</code> → <code>NodePage.qml</code> (<code>property SurveyNode currentNode</code>); child nodes = a second <code>ListView</code> section above the trip table, bound to <code>cwNodePageModel</code> (renamed <code>cwCavePageModel</code>) rows of type node/trip; fix-station subpage as today (<code>:116</code>)</td><td>C5.2</td></tr>
+<tr><td>Breadcrumb "All caves › A › B", links <code>Data/Node=A/Node=B/Trip=T</code></td><td><code>cwLinkGenerator::nodeLink/tripLink</code>; <code>cwPageSelectionModel</code> already resolves dynamic pages at depth ≥ 2 (<code>:340-360</code>); <code>NodePage.qml</code> registers child node pages and trip pages through the existing <code>Instantiator</code> pattern (<code>CavePage.qml:103</code>); <code>LinkBar.qml</code> renders the crumbs</td><td>C5.3</td></tr>
+<tr><td>Attach dialog: entry file picker, summary, "Place under", scanned tree preview, Attach</td><td><code>AddCaveSurveyFileDialog.qml</code> → <code>AttachSurveyFileDialog.qml</code>; preview = depth-indented <code>ListView</code> over <code>cwScanTreeModel</code> (the pattern at <code>:148-176</code> already indents by depth); target node property</td><td>C7.4</td></tr>
+<tr><td>Source root page: Survey source card (file, format, provenance, units, stations, solve status), Reload, Replace…, "N hidden · Restore…"</td><td><code>ExternalCenterlineCaveSummary.qml</code> → <code>SourceRootCard.qml</code>; derived sub-node card ("this node is X in the project", Open root)</td><td>C7.4</td></tr>
+<tr><td>Gray non-survey Walls books</td><td><code>cwSurveyTreeModel</code> role <code>hasSurveyContent</code> (subtree has a station-bearing unit) → muted row</td><td>C7.4</td></tr>
+<tr><td>Trip page derived/floating banners</td><td>Unchanged (<code>ExternalCenterlineScopeHeader</code>, <code>FloatingSurveyBanner</code>); wording change in C6.2</td><td>C6.2</td></tr>
+<tr><td>Cavern page attached list rows for source roots; source-change banner rows</td><td><code>CavernOutputPage.qml:73-127</code>, <code>ExternalSourceChangeList.qml</code></td><td>C7.4</td></tr>
+</table>
+
+<h2 id="workflows">10. Workflows</h2>
+
+<h3>10.0 Ordering rationale</h3>
+<p>The exploration's order (F.3) was: node class → persistence → aggregator sweep → solve
+relocation + driver → native groups in the UI → sourced subtrees → shim deletion. Two changes:</p>
+<ul>
+  <li><strong>The tree Data page ships second (W2), before persistence.</strong> Over
+      depth-one data it is a tree of caves with expandable trip rows, a Kind column reading
+      "Cave", the filter, keyboard navigation, and the context menu. That is the first
+      user-visible artifact and needs only the node class; the owner can play with the
+      tree's feel and the row model gets real use before Folders exist. Nothing it shows is
+      thrown away later.</li>
+  <li><strong>The solve relocation moves after Folders (W6 after W5).</strong> The
+      question asked whether a <code>caveNode()</code> shim lets Folders ship before the
+      relocation. The answer is yes, and the shim is smaller than proposed: C4.2
+      generalizes today's per-cave copy to a per-node subtree slice at every depth (the
+      driver already emits one <code>*begin</code> per native node after C4.1, so every node
+      is a cavern scope and gets its own slice), and <code>parentNode()->stationPositionLookup()</code>
+      answers correctly for a trip under a Section. No "nearest Cave-kind ancestor" walk
+      exists anywhere, so the backend never branches on the label. What Folders <em>cannot</em>
+      skip is the driver at depth N (W4): two "Entrance" caves in different folders are
+      sibling-unique but region-colliding, and the flat driver would merge them. So W4 is a
+      prerequisite of W5, and W6 (one lookup + views) is an invisible refactor that lands
+      before sources (W7) so the sourced-subtree assignment code is written once against
+      the final shape.</li>
+</ul>
+
+<table>
+<tr><th>Workflow</th><th>Visible?</th><th>Depends on</th><th>Commits</th><th>Agents (5 per commit)</th></tr>
+<tr><td>W1 Node class at depth one</td><td>No</td><td>—</td><td>3</td><td>15</td></tr>
+<tr><td>W2 Tree Data page over depth-one data</td><td><strong>Yes</strong></td><td>W1</td><td>2</td><td>10</td></tr>
+<tr><td>W3 Persistence at depth N</td><td>No (round-trips)</td><td>W1</td><td>3</td><td>15</td></tr>
+<tr><td>W4 Driver, labels, line plot at depth N</td><td>No (export/solve of flat projects unchanged)</td><td>W3</td><td>4</td><td>20</td></tr>
+<tr><td>W5 Folders, Sections, node pages, links</td><td><strong>Yes</strong></td><td>W2, W4</td><td>3</td><td>15</td></tr>
+<tr><td>W6 Solve-state relocation</td><td>No (one wording change)</td><td>W4</td><td>2</td><td>10</td></tr>
+<tr><td>W7 Sourced subtrees</td><td><strong>Yes</strong></td><td>W5, W6</td><td>4</td><td>20</td></tr>
+<tr><td>W8 Importers, shim deletion, docs</td><td>Small (import shape)</td><td>W7</td><td>3</td><td>15</td></tr>
+</table>
+<p class="small">W2 and W3 touch disjoint files and may run in parallel worktrees after W1. W6 may run in parallel with W5. Everything else is sequential.</p>
+
+<!-- ================================================================ W1 -->
+<div class="workflow">
+<h3 id="w1">W1 — Node class at depth one</h3>
+<p><strong>Goal:</strong> <code>cwSurveyNode</code> exists with the full tree API; <code>cwCave</code> is an empty subclass; <code>cwCavingRegion</code> owns a root node; the region tree model recurses. No file format change; no visible change.</p>
+<p><strong>Scope in:</strong> §4 API, undo commands as node commands, signal relays, tree model recursion, keyword hierarchy. <strong>Out:</strong> any writer of a depth-2 node (the UI cannot create one; the loader never sees one).</p>
+
+<div class="commit">
+<h4>C1.1 — <code>cwSurveyNode</code> + <code>cwCave</code> shim + <code>cwTrip::parentNode()</code> <span class="size">L</span></h4>
+<ul class="filelist">
+  <li><code>src/cwSurveyNode.h/.cpp</code> (new): the body of <code>cwCave</code> (<code>cwCave.h:49-300</code>, <code>cwCave.cpp</code>) moved up, plus kind/readOnly/sourceId/sourcePath (plain members, explicit setters, <code>NOTIFY</code>), <code>childNodes</code> list with insert/remove/undo (mirror <code>InsertRemoveTrip</code>, <code>cwCave.h:267-300</code>), <code>allTrips/allNodes/walk/path/pathIds/sourceRoot/lowestCommonAncestor/uniqueChildName/takesCaves</code>, <code>subtreeChanged</code> relay, node→child relays (§4).</li>
+  <li><code>src/cwCave.h/.cpp</code>: reduced to the subclass shim; <code>QML_NAMED_ELEMENT(Cave)</code> stays.</li>
+  <li><code>src/cwTrip.h/.cpp</code>: <code>parentNode()</code> Q_PROPERTY + <code>parentNodeChanged</code>; <code>parentCave()</code> shim; <code>siblingScopePrefixesOf</code> (<code>cwTrip.cpp:66-80</code>) reads <code>parentNode()->trips()</code>.</li>
+  <li>CMake: add the new sources to <code>cavewherelib</code> (<code>qt_add_qml_module</code> picks up the new QML type).</li>
+  <li><code>tests/test_cwSurveyNode.cpp</code> (new, <code>[SurveyNode]</code>): child insert/remove/undo with <code>SignalSpyChecker</code>; <code>path()</code>; <code>allTrips()</code> order; <code>uniqueChildName</code> sibling-only ("A › B" and "C › B" coexist); relays fire once per level for a depth-3 tree (the double-fire regression); <code>sourceRoot()</code> null for native.</li>
+</ul>
+<div class="gate"><strong>Gate:</strong> <code>cavewhere-test "[SurveyNode]"</code>, <code>"[cwCave]"</code>, <code>"[cwTrip]"</code>.</div>
+</div>
+
+<div class="commit">
+<h4>C1.2 — Region owns a root node; cave verbs forward <span class="size">M</span></h4>
+<ul class="filelist">
+  <li><code>src/cwCavingRegion.h/.cpp</code>: <code>m_caves</code> → <code>m_root</code> (<code>cwSurveyNode</code>, <code>isRoot()</code>); <code>caves()/cave(i)/caveCount/addCave/insertCave/removeCave(s)</code> forward; <code>InsertRemoveCave</code> commands (<code>:223-257</code>) become the node's own commands; region relays <code>beginInsertCaves…</code> from the root's node signals so the list model rows stay correct; <code>uniqueCaveName</code> forwards to <code>m_root->uniqueChildName</code>; <code>scopeLabelsChanged</code>/<code>ownersDeleted</code> relay from the root (<code>:517-541</code>); <code>caveFor(handle)</code> (<code>:433-448</code>) searches <code>allNodes()</code>; <code>addNode(parent, kind)</code>, <code>moveNode</code> declared (Move lands in C3.3).</li>
+  <li><code>src/cwProject.cpp</code> emptiness reader → root child count.</li>
+  <li><code>tests/test_cwCavingRegion.cpp</code>, <code>test_cwCaveNameUndo.cpp</code>: extended for the root; a node inserted under a depth-1 node in memory is reachable through <code>allNodes()</code> and unreachable through <code>caves()</code>.</li>
+</ul>
+<div class="gate"><strong>Gate:</strong> <code>cavewhere-test "[cwCavingRegion]"</code>, <code>"[SurveyNode]"</code>, <code>"[Equate]"</code>.</div>
+</div>
+
+<div class="commit">
+<h4>C1.3 — <code>cwRegionTreeModel</code> recursive node rows; keyword hierarchy by path <span class="size">M</span></h4>
+<ul class="filelist">
+  <li><code>src/cwRegionTreeModel.h/.cpp</code>: <code>CaveType</code> → <code>NodeType</code> (alias kept until C8.2); a node row's children = child-node rows then trip rows; <code>index/parent/rowCount/data</code> (<code>:372-403,617-830</code>) recurse through a small <code>NodeIndexData</code>; <code>addCaveConnections</code>/<code>addTripConnections</code> (<code>:984-1146</code>) become <code>addNodeConnections(node, recursive)</code>; <code>all&lt;T&gt;()</code> (<code>.h:119-150</code>) already recurses over rows; <code>index(cwSurveyNode*)</code>.</li>
+  <li><code>src/cwKeywordItemModel.cpp:31-65,134-247</code>: hierarchy text = node path.</li>
+  <li><code>tests/test_cwRegionTreeModel.cpp</code>, <code>test_cwKeywordItemModel.cpp</code>: a depth-3 in-memory tree yields the expected indexes, parents, and insert/remove signals (<code>QAbstractItemModelTester</code>).</li>
+</ul>
+<div class="gate"><strong>Gate:</strong> <code>cavewhere-test "[RegionTreeModel]"</code>, <code>"[KeywordItemModel]"</code>, <code>"[cwSaveLoad]"</code> (uses <code>all&lt;&gt;</code>).</div>
+</div>
+
+<h4>What to review in the source</h4>
+<ul>
+  <li>The node→trip connections are exactly the five at <code>cwCave.cpp:314-339</code> with <code>UniqueConnection</code>; the node→child relays are one hop each and none feeds a child's signal back down.</li>
+  <li>Undo commands re-insert the same <code>QObject*</code> (<code>cwCave.cpp:319</code> comment); <code>tripsDeleted</code>/<code>nodesDeleted</code> fire only on the real delete path (<code>cwCave.h:246</code> distinction).</li>
+  <li><code>cwCave</code> is empty; nothing in <code>cwSurveyNode</code> branches on <code>Kind</code>.</li>
+  <li>The region list model's row signals still pair correctly (begin/end) when relayed.</li>
+</ul>
+<h4>What to play with in the UX</h4>
+<p>No visible change. Open a native project, a project with a cave-level attach (<code>survex_blocks.svx</code> through Add Cave → from survey file), and a project with a trip-level attach; add/remove/rename caves and trips, undo each; save, reopen: identical.</p>
+<h4>Exit criteria</h4>
+<ul><li>Both full suites green.</li><li>No file under <code>plans/</code> or the data format changed.</li><li><code>grep -rn "Kind::" src/</code> shows the enum only in display code and the setters.</li></ul>
+<h4>Risks</h4>
+<p>Signal-chain double fires at depth (mitigated by the C1.1 relay test); the tree model recursion breaking save/load's <code>all&lt;&gt;</code> ordering (gate runs <code>[cwSaveLoad]</code>).</p>
+<p class="small">Sizing: L + M + M; 15 agents; sequential.</p>
+</div>
+
+<!-- ================================================================ W2 -->
+<div class="workflow">
+<h3 id="w2">W2 — Tree Data page over depth-one data</h3>
+<p><strong>Goal:</strong> the Data page is the settled tree table. With today's data it shows caves as collapsible rows with trip leaves, Kind = "Cave" everywhere, filter, expand/collapse all, keyboard navigation, right-click Open/Rename/Delete…, row ⋯ menu (Open, Add Trip, Rename), and "Add ▾" = Add Cave with "Attach survey file…" inside it (routing to the existing cave-level attach dialog for now).</p>
+<p><strong>Scope out:</strong> Add Folder/Add Section (W5), sourced kinds (W7), node pages (W5).</p>
+
+<div class="commit">
+<h4>C2.1 — <code>cwSurveyTreeModel</code> (flattened visible rows) <span class="size">L</span></h4>
+<ul class="filelist">
+  <li><code>src/cwSurveyTreeModel.h/.cpp</code> (new, QML <code>SurveyTreeModel</code>): §9.1 roles and invokables; expanded set keyed by <code>QUuid</code>; default expansion rule (native collapsed; <code>isSourceRoot</code> expanded one level, applied on <code>setRegion</code> and on every load); filter = case-insensitive substring on names, a row is visible when it or a descendant matches, matching ancestors are force-expanded while the filter is non-empty; length/depth/trip count/last survey folds over <code>allTrips()</code> (a Folder's are the same folds; the view mutes them); source-model insert/remove/move → visible-row insert/remove.</li>
+  <li><code>tests/test_cwSurveyTreeModel.cpp</code> (new, <code>[SurveyTreeModel]</code>): depth-3 in-memory tree; expand/collapse row counts; filter auto-expand and restore; inserts under a collapsed parent add no rows; <code>QAbstractItemModelTester</code>.</li>
+</ul>
+<div class="gate"><strong>Gate:</strong> <code>cavewhere-test "[SurveyTreeModel]"</code>.</div>
+</div>
+
+<div class="commit">
+<h4>C2.2 — <code>DataMainPage</code> tree table, context menu, keyboard, Add ▾ <span class="size">L</span></h4>
+<ul class="filelist">
+  <li><code>qml/SurveyTreeView.qml</code>, <code>qml/SurveyTreeRow.qml</code>, <code>qml/KindChip.qml</code>, <code>qml/AddVerbsMenu.qml</code> (new); <code>qml/DataMainPage.qml:254-339</code> rewired; <code>qml/DataRightClickMouseMenu.qml</code> → <code>SurveyItemContextMenu.qml</code> (Open / Rename (native) / Delete…); Theme tokens only.</li>
+  <li>Row click on a trip opens the trip page through <code>cwLinkGenerator::tripLink</code> (unchanged link shape at depth one).</li>
+  <li><code>test-qml/tst_DataMainPageTree.qml</code> (new): rows for two caves, expand shows trips, filter expands, keyboard ↓/→/Enter opens a trip, Shift+F10 opens the context menu, Delete… removes through <code>RemoveAskBox</code>; <code>tst_DataMainPageExternal.qml</code>, <code>tst_DataMainPage_globalCS.qml</code>, <code>tst_DelegateLinkNavigation.qml</code> updated for the new delegate ids.</li>
+</ul>
+<div class="gate"><strong>Gate:</strong> the four QML files above; <code>cavewhere-qml-test</code> full run (many tests click the cave list).</div>
+</div>
+
+<h4>What to review in the source</h4>
+<ul><li>Visible-row bookkeeping on source inserts/removes (off-by-one under a collapsed parent).</li><li>Keyboard handler: ← on a collapsed row selects the parent; Space toggles; focus stays in the tree after a menu closes.</li><li>Delete goes only through the context menu; no Delete button exists.</li></ul>
+<h4>What to play with in the UX</h4>
+<ol>
+  <li>Open a native project: the cave list reads as today plus a caret per row and a Kind column reading "Cave". Nothing is expanded.</li>
+  <li>Expand a cave; click a trip row → trip page; Back → the tree keeps its expansion.</li>
+  <li>Type in the filter: only matching caves/trips remain, ancestors auto-expanded; clear it: previous expansion restored.</li>
+  <li>Keyboard: click the tree, ↓ ↓ → Enter opens; Shift+F10 shows Open/Rename/Delete…; Delete… asks with the count.</li>
+  <li>Add ▾ → Attach survey file… behaves as the old "Add cave from survey file…"; the attached cave shows the 📎 badge on its row.</li>
+</ol>
+<h4>Exit criteria</h4>
+<ul><li>Both suites green.</li><li>Every existing QML test that clicked the old cave delegate passes against the tree.</li><li>Screenshots of a native-only project and of a project with a cave-level attach attached to the commit.</li></ul>
+<h4>Risks</h4>
+<p>QML tests that reach into the old delegate by <code>objectName</code>; keyboard focus interplay with <code>LinkBar</code>. Run the QML suite in full at the gate.</p>
+<p class="small">Sizing: L + L; 10 agents; sequential (C2.2 binds C2.1's roles).</p>
+</div>
+
+<!-- ================================================================ W3 -->
+<div class="workflow">
+<h3 id="w3">W3 — Persistence at depth N</h3>
+<p><strong>Goal:</strong> nested nodes save, load, sync, and move. No UI writes a nested node yet; tests do.</p>
+
+<div class="commit">
+<h4>C3.1 — Proto fields, tree loader, recursive writer, node-path index, version stamp <span class="size">L</span></h4>
+<ul class="filelist">
+  <li><code>src/cavewhere.proto</code>: §5 <code>Cave</code> 14-17, <code>Trip</code> 12, <code>SurveyNodeKind</code>.</li>
+  <li><code>src/cwCaveData.h</code>, <code>src/cwTripData.h</code>, <code>src/cwCavingRegionData.h</code>: §5 fields; <code>cwSurveyNode::setData/data</code> recursive.</li>
+  <li><code>src/cwSaveLoad.cpp</code>: §6.2 loader (<code>:2746-2830</code>), §6.3 writer (<code>:2695-2703</code>, <code>:4771-4777</code>), proto ↔ data for the new fields (beside <code>:1935-1938</code>, <code>:3007-3009</code>), <code>connectNode</code> save triggers for <code>kindChanged</code>/<code>sourceChanged</code> (beside <code>:4254</code>), §6.8 <code>stampVersion</code>; <code>src/cwRegionIOTask.cpp:54-59</code> → 10 with the version string.</li>
+  <li><code>src/cwSaveLoadPrivate.h/.cpp</code>: §6.4 index and seeding.</li>
+  <li><code>tests/test_cwSaveLoad_NodeTree.cpp</code> (new, <code>[cwSaveLoad][NodeTree]</code>): build Folder › Cave › Section › trip (+ notes) in memory, save to a <code>QTemporaryDir</code>, assert the exact directory layout of §6.1, reload, compare data; <strong>flat regression</strong>: save a depth-1 project, reload, save again → byte-identical tree (every file, including that the version stamp stays 9); a depth-2 project stamps 10; the pruning rule (a file planted under <code>trips/</code> and <code>external-centerline/</code> is never read as a node); a misplaced descriptor is a reported error; LFS classification at depth 3 (§6.9). <code>tests/datasets/survey-tree/depth2/</code> (checked in, saved by this test once): load compatibility fixture for every later commit.</li>
+</ul>
+<div class="gate"><strong>Gate:</strong> <code>cavewhere-test "[cwSaveLoad]"</code>, <code>"[RegionIOTask]"</code>, <code>"[Project]"</code>; the <code>test_cwProject</code> v7/v8/legacy fixtures.</div>
+</div>
+
+<div class="commit">
+<h4>C3.2 — Sync handlers and resolver at depth N; merge plan builders <span class="size">L</span></h4>
+<ul class="filelist">
+  <li><code>src/cwCaveSyncMergeHandler.*</code> → <code>src/cwSurveyNodeSyncMergeHandler.*</code>; <code>src/cwTripSyncMergeHandler.cpp:110-134</code>; <code>src/cwSyncPathResolver.cpp:27-40,67,369,424,489</code>; <code>src/cwCaveMergePlanBuilder.cpp:16</code> (child nodes by id, new scalars); handler registration site.</li>
+  <li><code>tests/test_cwSurveyNodeSyncMergeHandler.cpp</code> (new; the depth-one cases moved from the cave handler's tests), <code>tests/test_cwCaveAndTripRenameConflict.cpp</code> extended with the three §6.6 depth-2 scenarios (two clones in <code>QTemporaryDir</code>, as <code>:41-60</code> does); assert siblings' notes survive orphan cleanup.</li>
+</ul>
+<div class="gate"><strong>Gate:</strong> <code>cavewhere-test "[Sync]"</code>, <code>"[MergePlan]"</code>, <code>"[cwSaveLoad]"</code>.</div>
+</div>
+
+<div class="commit">
+<h4>C3.3 — Node Move as a save op + <code>MoveNodeCommand</code> <span class="size">M</span></h4>
+<ul class="filelist">
+  <li><code>src/cwCavingRegion.cpp</code>: <code>moveNode</code> + command (keeps the object; emits <code>nodeMoved</code>, <code>parentNodeChanged</code>, row signals on both parents); <code>src/cwRegionTreeModel</code> handles the move as remove+insert of rows (the objects are unchanged).</li>
+  <li><code>src/cwSaveLoad.cpp:4383-4388</code> wires <code>parentNodeChanged</code>; <code>src/cwSaveLoadPrivate.*</code>: <code>moveDirectory</code> + <code>rebuildObjectStatesUnder</code> (§6.5); queue rule for pending writes under a moved directory.</li>
+  <li><code>tests/test_cwSaveLoad_MoveNode.cpp</code> (new): move a node with trips, notes (image files), and an attachment dir between parents; assert one directory move, every file present at the new path, nothing left at the old, undo moves it back; a write enqueued before the move lands at the new path; <code>test_cwSaveLoadJobCompression.cpp</code> gains the Move-under-Move case.</li>
+</ul>
+<div class="gate"><strong>Gate:</strong> <code>cavewhere-test "[cwSaveLoad]"</code>, <code>"[JobCompression]"</code>, <code>"[cwCavingRegion]"</code>.</div>
+</div>
+
+<h4>What to review in the source</h4>
+<ul>
+  <li>§6.10 line by line: stale-path cleanup ordering, orphan cleanup targets the descriptor's own directory, scan pruning, orphan-trip rule.</li>
+  <li>The loader never guesses a parent; misplacements are errors.</li>
+  <li><code>stampVersion</code> predicate and the old-build behavior it implies (§6.8).</li>
+  <li>The Move op is one Directory Move; no Remove/Insert pair anywhere on that path; pending <code>WriteFile</code> jobs cannot resurrect the old directory.</li>
+  <li><code>synthesizeTripPath</code> uses the segment at <code>size()-3</code>.</li>
+</ul>
+<h4>What to play with in the UX</h4>
+<p>No visible change. Round-trip these and diff the directories before/after (<code>diff -r</code>): a native project, a project with a cave-level attach, a project with a trip-level attach, the Git-backed project the owner syncs between two clones (rename a cave on one side, edit a trip on the other, sync both ways). Open <code>tests/datasets/survey-tree/depth2/</code> in the app: it shows "Kentucky field seasons" as a top-level row whose page (still <code>CavePage</code>) lists no trips — expected until W5.</p>
+<h4>Exit criteria</h4>
+<ul><li>Both suites green.</li><li>Flat projects round-trip byte-identical with version 9 stamps; the depth-2 fixture round-trips byte-identical with version 10 stamps.</li><li>Sync depth-2 scenarios pass on both merge directions.</li></ul>
+<h4>Risks</h4>
+<p>This workflow is the one that can delete data (cleanup passes). Review time here is worth more than anywhere else in the plan.</p>
+<p class="small">Sizing: L + L + M; 15 agents; C3.2 may run in a parallel worktree with C3.1 only if it stubs <code>relativeNodeDir</code>; recommended sequential.</p>
+</div>
+
+<!-- ================================================================ W4 -->
+<div class="workflow">
+<h3 id="w4">W4 — Driver, labels, and line plot at depth N</h3>
+<p><strong>Goal:</strong> an in-memory or loaded nested tree exports as nested <code>*begin</code> blocks, solves, and every station lands on its node; equates are one global list. Flat projects produce byte-identical <code>.svx</code> output.</p>
+
+<div class="commit">
+<h4>C4.1 — <code>cwScopeLabels</code> per sibling set at every depth; <code>writeNode</code>; one <code>operand()</code> <span class="size">L</span></h4>
+<ul class="filelist">
+  <li><code>src/cwScopeLabels.h/.cpp</code> (§7.1); <code>src/cwSurvexExporterRegion.cpp:52-140</code>; <code>src/cwSurvexExporterCaveTask.cpp:50-230</code> (<code>writeCave</code> → <code>writeNode</code>, recursive; the cave-level include branch stays for a sourced root); <code>src/cwTrip.cpp:43-52</code> <code>scopePrefix</code> reads the node's trip labels.</li>
+  <li><code>tests/test_cwScopeLabels.cpp</code> (depth-3, colliding sanitized names at two levels, <code>resolve()</code> round trip), <code>tests/test_cwSurvexExporterRegion_NodeTree.cpp</code> (new: exact driver text for the §7.1 tree), <code>tests/test_cwEquateEmission.cpp</code> (qualified operands at region scope for native-node and trip handles). Flat-project export text unchanged: assert against the existing expected outputs.</li>
+</ul>
+<div class="gate"><strong>Gate:</strong> <code>cavewhere-test "[ScopeLabels]"</code>, <code>"[Exporter]"</code>, <code>"[Equate]"</code>, <code>"[CavernNaming]"</code>.</div>
+</div>
+
+<div class="commit">
+<h4>C4.2 — Line plot: label-path walk, per-node results, geometry folds <span class="size">L</span></h4>
+<ul class="filelist">
+  <li><code>src/cwLinePlotTask.cpp:413-450</code> → <code>splitLookupByNode</code> using <code>cwScopeLabels::resolve</code>; a station lands in the deepest matched node's slice <em>and</em> in every ancestor's slice (a node's slice is its subtree — the depth-one behavior, where a cave's lookup holds all its trips' stations); results keyed by node id (<code>:220,494,527-541,641,682</code> loops over <code>allNodes()</code>); <code>src/cwLinePlotGeometry.cpp:155-230</code> per-node length/depth folds; <code>src/cwLinePlotManager.cpp:59,278,404-431,498,664-700</code> over <code>allNodes()</code>, subscribes to the root's <code>subtreeChanged</code> for re-solve triggers, connects each node's fix stations.</li>
+  <li><code>tests/test_cwLinePlotTask_NodeTree.cpp</code> (new): the §7.1 tree with a shot in every node solves; each node's lookup holds exactly its subtree's stations; Folder length = sum of its caves; <code>test_cwLinePlotGeometry.cpp</code>, <code>test_cwLinePlotManager.cpp</code> re-run unchanged for flat data.</li>
+</ul>
+<div class="gate"><strong>Gate:</strong> <code>cavewhere-test "[LinePlot]"</code>, <code>"[LinePlotTask]"</code>, <code>"[LinePlotManager]"</code>.</div>
+</div>
+
+<div class="commit">
+<h4>C4.3 — One global equate list; cave equates migrate on load <span class="size">M</span></h4>
+<ul class="filelist">
+  <li><code>src/cwCavingRegion.cpp:433-470</code> <code>tieStations</code> always appends to the region model (validation stays); <code>cwSurveyNode::equates()</code> removed with its Q_PROPERTY (<code>cwCave.h:59,84,232</code>) and save trigger (<code>cwSaveLoad.cpp:4261</code>); loader appends <code>Cave.equates</code> (field 13) to the region list, writer stops writing field 13; <code>src/cwLinePlotManager.cpp:191-207</code> connects one model; <code>src/cwSurvexExporterCaveTask.cpp:218-224</code> deleted.</li>
+  <li>QML: <code>cwCave.equates</code> readers (grep <code>equates</code> in <code>qml/</code>) bind to <code>RootData.region.equates</code>.</li>
+  <li><code>tests/test_cwEquateMigration.cpp</code> (new): a saved project with a within-cave equate loads into the region list, re-saves without field 13, and the driver text is identical except the equate line moved to region scope with qualified operands; <code>test_cwEquate.cpp</code>, <code>test_cwFloatingSurveyStatus.cpp</code> updated.</li>
+</ul>
+<div class="gate"><strong>Gate:</strong> <code>cavewhere-test "[Equate]"</code>, <code>"[Floating]"</code>, <code>"[cwSaveLoad]"</code>, <code>"[Exporter]"</code>.</div>
+</div>
+
+<div class="commit">
+<h4>C4.4 — Any-subtree aggregator sweep <span class="size">M</span></h4>
+<ul class="filelist">
+  <li>Rows 4, 5, 6, 9 (walk only), 12 (walk only), 13, 14, 17, 18, 19, 37, 38, 39 of §8: <code>for (cave) for (trip)</code> → <code>rootNode()->allTrips()</code> / <code>walk</code>; <code>cwSurveyChunkSignaler</code> connects <code>insertedNodes</code> at every level.</li>
+  <li>Tests: the existing suites for each file, plus one depth-2 case each in <code>test_cwFloatingSurveyModel.cpp</code>, <code>test_cwLinePlotLabelView.cpp</code>, <code>SurveyChunkSignaler</code> tests, and the lead model.</li>
+</ul>
+<div class="gate"><strong>Gate:</strong> <code>cavewhere-test "~[cwRemoteCredentialStore]"</code> (this commit touches many subsystems; run the full C++ suite here).</div>
+</div>
+
+<h4>What to review in the source</h4>
+<ul><li>The encode/decode pair: <code>writeNode</code> labels ↔ <code>resolve()</code>; one <code>cwScopeLabels</code> instance per snapshot.</li><li><code>operand()</code> drops excluded owners exactly as <code>:55-64</code> did.</li><li>Subtree-slice semantics in <code>splitLookupByNode</code> (a station in a Section is also in its Cave's slice).</li><li>Migration writes nothing until the user saves; reading field 13 stays forever.</li></ul>
+<h4>What to play with in the UX</h4>
+<p>No visible change on flat projects: export a native project to Survex before and after, diff the <code>.svx</code>. Tie two caves through the tie-in suggester and re-solve. Open the depth-2 fixture: the line plot draws every trip, including the Section's.</p>
+<h4>Exit criteria</h4>
+<ul><li>Both suites green; full C++ suite at C4.4.</li><li><code>.svx</code> export of flat projects byte-identical (except equates from cave scope now at region scope, qualified).</li></ul>
+<h4>Risks</h4>
+<p>Case handling in <code>resolve()</code> (<code>cwLinePlotTask.cpp:438-441</code> comment); the pre-existing latent region-equate export bug noted in memory <code>project_equate_naming_spike</code> surfaces here — fix it in C4.1 rather than around it.</p>
+<p class="small">Sizing: L + L + M + M; 20 agents; C4.1 ∥ C4.4 in worktrees is safe (disjoint files); C4.2 after C4.1; C4.3 after C4.2.</p>
+</div>
+
+<!-- ================================================================ W5 -->
+<div class="workflow">
+<h3 id="w5">W5 — Folders, Sections, node pages, links</h3>
+<p><strong>Goal:</strong> the first user-created hierarchy. Add Folder at the top level and inside a Folder; Add Section inside a Cave; the kind chip picker; node pages with a child-node section; variable-depth links and breadcrumbs; delete with counts; undo.</p>
+<p><strong>Scope out:</strong> drag-to-move in the tree (the Move op exists; a "Move to…" verb is a follow-up if the owner wants it before sources).</p>
+
+<div class="commit">
+<h4>C5.1 — Add Folder / Add Section / kind chip picker / delete counts <span class="size">M</span></h4>
+<ul class="filelist">
+  <li><code>qml/AddVerbsMenu.qml</code>: the position rule (<code>node.takesCaves</code>); "Add Section" creates a Folder named "New Section" through <code>region.addNode(parent, Folder)</code>; <code>qml/KindChip.qml</code> picker on native nodes (tree row and page header) sets <code>kind</code>; Folder rows carry the folder icon and muted folds; <code>SurveyItemContextMenu</code> Delete… message with node/trip counts ("Delete X and its N trips? Git history is the way back.").</li>
+  <li><code>src/cwSurveyNode.cpp</code>: <code>takesCaves()</code>; <code>addNode</code> names "New Cave"/"New Folder" sibling-unique.</li>
+  <li><code>test-qml/tst_DataMainPageTree.qml</code>: Add Folder at top level → Folder row with Add Cave/Add Folder in its menu; inside a Cave the menu shows Add Trip/Add Section; a Cave is never offered inside a Cave; relabel changes chip and icon only (the node's trips and length stay).</li>
+</ul>
+<div class="gate"><strong>Gate:</strong> <code>tst_DataMainPageTree.qml</code>; <code>cavewhere-test "[SurveyNode]"</code>.</div>
+</div>
+
+<div class="commit">
+<h4>C5.2 — Node page (<code>CavePage</code> → <code>NodePage</code>) with a child-node section <span class="size">L</span></h4>
+<ul class="filelist">
+  <li><code>qml/CavePage.qml</code> → <code>qml/NodePage.qml</code> (<code>property SurveyNode currentNode</code>); header per prototype (icon, name, chip/picker, Rename); stats row (Trips, Length, Depth, Last survey, Fix stations, Leads); child-node section above the trip table, hidden when empty, rows with the same ⋯/context menus; Add ▾ by position; fix-station subpage and <code>ExternalCenterlineCaveSummary</code> mount unchanged (the latter until C7.4).</li>
+  <li><code>src/cwCavePageModel</code> → <code>cwNodePageModel</code> (node rows + trip rows; keeps the trip length/used-station tasks).</li>
+  <li><code>qml/FixStationPage.qml</code>, <code>qml/CaveLeadPage.qml</code> retyped <code>SurveyNode</code>.</li>
+  <li><code>test-qml/tst_NodePage.qml</code> (new) + the existing <code>tst_CavePage*.qml</code> re-pointed: child section shows a Section and opens it; Add Section from the page; fix-station row on a Folder node (§3.1).</li>
+</ul>
+<div class="gate"><strong>Gate:</strong> <code>tst_NodePage.qml</code>, <code>tst_CavePage.qml</code>, <code>tst_CavePage_Selection.qml</code>, <code>tst_ResponsiveCavePage.qml</code>, <code>tst_CavePageExternalCave.qml</code>; <code>cavewhere-test "[CavePageModel]"</code>.</div>
+</div>
+
+<div class="commit">
+<h4>C5.3 — Links and breadcrumbs at variable depth <span class="size">M</span></h4>
+<ul class="filelist">
+  <li><code>src/cwLinkGenerator.cpp:46-69</code>: <code>nodeLink(node)</code> = <code>Data/Node=A/Node=B</code> (path), <code>tripLink</code> = <code>nodeLink(parent) + /Trip=T</code>; <code>caveLink</code> shim forwards; <code>src/cwPageSelectionModel.cpp:340-360</code> comment and the deep-link handler (<code>test_cwDeepLinkHandler.cpp</code>) accept any depth; <code>NodePage.qml</code> registers child node pages with the <code>Instantiator</code> pattern (<code>CavePage.qml:103</code>) recursively; <code>LinkBar</code> crumbs "All caves › A › B".</li>
+  <li>Compatibility: an old <code>Data/Cave=X/Trip=Y</code> link resolves (<code>Cave=</code> accepted as <code>Node=</code> at depth one) so shared deep links keep working.</li>
+  <li><code>tests/test_cwPageSelectionModel.cpp</code>, <code>test_cwDeepLinkHandler.cpp</code>; <code>test-qml/tst_DelegateLinkNavigation.qml</code>: navigate Data → Folder → Cave → Section → trip and back through every crumb.</li>
+</ul>
+<div class="gate"><strong>Gate:</strong> <code>cavewhere-test "[PageSelection]"</code>, <code>"[DeepLink]"</code>; <code>tst_DelegateLinkNavigation.qml</code>, <code>tst_DeepLinkConfirmDialog.qml</code>.</div>
+</div>
+
+<h4>What to review in the source</h4>
+<ul><li><code>takesCaves()</code> is structural (root, or Folder with no Cave/sourced ancestor); nothing else reads <code>Kind</code>.</li><li>Page registration at depth N does not leak <code>cwPage</code> objects on navigation (the <code>clearChildren</code> path at <code>cwPageSelectionModel.cpp:355-360</code>).</li><li>Old link shape still resolves.</li></ul>
+<h4>What to play with in the UX</h4>
+<ol>
+  <li>Data page → Add ▾ → Add Folder → "Kentucky field seasons"; ⋯ on it → Add Cave → "Side Cave"; open Side Cave → Add ▾ → Add Section → "Upper level"; open it → Add Trip; enter a few shots tied to the cave's other trip.</li>
+  <li>Breadcrumb reads All caves › Kentucky field seasons › Side Cave › Upper level › Trip; every crumb navigates.</li>
+  <li>Click the Kind chip on "Side Cave" → Folder: the icon changes, its trips, length, and fix-station row stay; back to Cave.</li>
+  <li>Right-click "Upper level" → Delete…: the confirm counts one trip; undo restores it.</li>
+  <li>Save; reopen: the tree is identical and the line plot draws the Section's shots. Export to Survex: the <code>.svx</code> nests <code>kentucky_field_seasons / side_cave / upper_level</code>.</li>
+  <li>Open the same project in the previous build: it loads with the version warning showing every node as a flat cave and refuses to save.</li>
+</ol>
+<h4>Exit criteria</h4>
+<ul><li>Both suites green.</li><li>The manual script above works end to end; screenshots attached.</li><li>The depth-2 fixture and the owner's flat projects still round-trip byte-identical.</li></ul>
+<h4>Risks</h4>
+<p>Page depth and QML page registration; the responsive CavePage layouts (<code>tst_ResponsiveCavePage.qml</code>) with a second section.</p>
+<p class="small">Sizing: M + L + M; 15 agents; C5.1 ∥ C5.3 safe; C5.2 after C5.1.</p>
+</div>
+
+<!-- ================================================================ W6 -->
+<div class="workflow">
+<h3 id="w6">W6 — Solve-state relocation</h3>
+<p><strong>Goal:</strong> one region-wide station lookup and network; per-node copies retired; scoped views; connectivity is region-wide. One visible change: the unconnected-chunk wording.</p>
+
+<div class="commit">
+<h4>C6.1 — Region lookup + scoped views; per-node copies deleted <span class="size">L</span></h4>
+<ul class="filelist">
+  <li><code>src/cwCavingRegion.h/.cpp</code>: <code>stationPositions()</code>, <code>network()</code>, <code>positionsChanged()</code>, <code>networkChanged()</code>, stale flag; <code>src/cwSurveyNode</code>: <code>scopedPositions()</code>/<code>scopedNetwork()</code> = the region's filtered by <code>cwScopeLabels::prefix(this)</code> (computed on demand, cached until <code>positionsChanged</code>); <code>setStationPositionLookup/setSurveyNetwork/stationPositionPositionChanged</code> removed from the node; <code>cwCaveData::stationPositionModel</code> (<code>cwCaveData.h:19</code>, already marked TODO) removed.</li>
+  <li><code>src/cwLinePlotManager.cpp:664-700,730</code> publishes once; <code>src/cwLinePlotTask.cpp</code> result carries one lookup + per-node length/depth only (the C4.2 slices go away); the node→trip <code>solvedStationsChanged</code> relay (<code>cwCave.cpp:327-328</code>) is driven by the region's <code>positionsChanged</code> through the node.</li>
+  <li>Readers (§8 rows 1, 2, 9, 10, 12): <code>parentNode()->stationPositionLookup()</code> → <code>region()->stationPositions()</code> or <code>parentNode()->scopedPositions()</code> where the caller wants the node's names unprefixed (scrap transforms, note station lookups); <code>cwTrip::solvedStations</code> (<code>cwTrip.cpp:682-724</code>) reads the region lookup with its full prefix.</li>
+  <li>Tests: <code>test_cwLinePlotTask_NodeTree.cpp</code> re-targeted; <code>test_cwScrapManager</code>/<code>test_cwNoteLiDARManager</code> suites; a scoped view test (a node's view holds exactly its subtree, names stripped of the node prefix).</li>
+</ul>
+<div class="gate"><strong>Gate:</strong> <code>cavewhere-test "~[cwRemoteCredentialStore]"</code> (18 readers; full C++ suite).</div>
+</div>
+
+<div class="commit">
+<h4>C6.2 — Region-wide connectivity, wording, tie suggester <span class="size">M</span></h4>
+<ul class="filelist">
+  <li><code>src/cwFindUnconnectedSurveyChunks.cpp:71-130</code>: takes the region data and the fix/sourced anchors; "connected" = reachable from any fixed or sourced station, or from any chunk that is; <code>src/cwLinePlotTask.cpp:362-374</code> message → "Cannot solve: %1 survey leg(s) aren't connected to any survey (%2). …"; <code>qml/FloatingSurveyBanner.qml:38-50</code> → "This chunk isn't connected to any survey."; <code>src/cwTieSuggestionModel.cpp:151,191,210</code> known stations from the region.</li>
+  <li><code>tests/FindUnconnectedSurveyChunksTaskTest.cpp</code>, <code>test_cwFindFloatingSurveys.cpp</code>, <code>test_cwFloatingSurveyStatus.cpp</code>; <code>test-qml/tst_ExternalCenterlinePanelComponents.qml</code> for the banner text.</li>
+</ul>
+<div class="gate"><strong>Gate:</strong> <code>cavewhere-test "[Unconnected]"</code>, <code>"[Floating]"</code>, <code>"[TieSuggestion]"</code>; the banner QML test.</div>
+</div>
+
+<h4>What to review in the source</h4>
+<ul><li>No <code>setStationPositionLookup</code> remains on nodes; the node's view is derived, never stored.</li><li>Thread safety: readers on worker threads take the region lookup by value (implicitly shared) — <code>.at()</code>/const access only (CLAUDE.md).</li><li>The <code>solvedStationsChanged</code> pulse still fires once per solve per trip.</li></ul>
+<h4>What to play with in the UX</h4>
+<p>Native project: carpet a scrap, move a station, re-solve — the scrap morphs as before. Enter a chunk with an unattached station name: the banner reads "This chunk isn't connected to any survey." Tie it in through the suggester. Open the depth-2 fixture and the Phase 3 attach fixtures (<code>survex_blocks.svx</code> cave-level, <code>compass_simple.dat</code>): line plot, lengths, and scope-trip station lists unchanged.</p>
+<h4>Exit criteria</h4>
+<ul><li>Both suites green (full C++ at C6.1).</li><li><code>grep -rn "stationPositionLookup()" src/</code> finds region and scoped-view accessors only.</li></ul>
+<h4>Risks</h4>
+<p>The largest reader sweep in the plan; scrap/note morphing regressions are visual — the review stage should run the app on the <code>test_cwScrapManager</code> fixtures.</p>
+<p class="small">Sizing: L + M; 10 agents; sequential. W6 may run in a worktree parallel to W5.</p>
+</div>
+
+<!-- ================================================================ W7 -->
+<div class="workflow">
+<h3 id="w7">W7 — Sourced subtrees (absorbs Phase 6)</h3>
+<p><strong>Goal:</strong> attach a Compass <code>.mak</code>, Walls <code>.wpj</code>, or Survex master under any node; the scan's tree becomes a read-only subtree of the same node class; derived trips use manifest station sets; native trips can be added anywhere under it; Reload/Replace on the root; delete cascades; hide/Restore; the dialog previews the tree.</p>
+<p><strong>Reused from Phase 6 (with the reshaping the exploration §E lists):</strong> <code>units.json</code> manifest with station sets (P6.2), region source list (P6.1, now <code>ExternalSource</code> + root node), membership windows through model/task/geometry (P6.5), scanner tree per format (<code>tree-hierarchy-exploration.md</code> §2), fixtures (P6 §9), cavern-page rows (P6.10). <strong>Dropped:</strong> the Attach-as radio, <code>CaveSplit</code>, the Source chip column, the ≡ sources menu, "Manage sources" link, per-cave Detach.</p>
+
+<div class="commit">
+<h4>C7.1 — Scanner node tree with kinds, station sets, dates; <code>units.json</code>; scan tree model <span class="size">L</span></h4>
+<ul class="filelist">
+  <li><code>src/cwExternalCenterlineScanner.h/.cpp</code>: <code>cwScanNode { QString sourcePath; QString displayName; cwSurveyNode::Kind kind; QString cavernLabel; QList&lt;cwScanUnit&gt; units; QList&lt;cwScanNode&gt; children; bool hasSurveyContent; bool missing; QDate date; }</code>, <code>cwScanUnit { QString sourcePath; QString displayName; QStringList stations /*cavern-relative*/; QDate date; }</code>; <code>ScanResult::tree</code>. Compass: <code>.mak</code> → CompassProject root, one CompassFile per <code>#FILE</code> (title-cased stem; absent file → <code>missing</code>), one unit per <code>SURVEY NAME</code> section (form-feed split; extend <code>collectCompassStations</code>, <code>:812-848</code>); a lone <code>.dat</code> → CompassFile root. Walls: root book → WallsBook root; nested books → WallsBook nodes; each <code>.srv</code> with shots → a unit under its book, names carrying the <code>#PREFIX</code> in effect; books with no station-bearing descendant → <code>hasSurveyContent = false</code>. Survex: entry file → SurvexFile root; blocks → SurvexBlock nodes (files transparent); a block with own shots also has a unit; root shots → the root's unit. <code>blocks</code> stays for the Phase 3 cave-level path until C7.3 retargets it.</li>
+  <li><code>src/cwExternalUnitManifest.h/.cpp</code> (new): write/read <code>units.json</code> (tree + per-unit station lists, canonicalized as <code>cwExternalStationHarvest</code> does).</li>
+  <li><code>src/cwScanTreeModel.h/.cpp</code> (new, <code>QAbstractListModel</code> of depth-indented preview rows; dialog only).</li>
+  <li>Fixtures (§11): <code>compass_project/</code>, <code>walls_project/</code> (Kaua cut-down), <code>walls_two_caves/</code>, <code>survex_two_cs/</code>.</li>
+  <li><code>tests/test_cwExternalCenterlineScanner.cpp</code>: per-format trees (node counts, kinds, unit sets, the shared-station-in-two-surveys case, the absent <code>.dat</code>, gray books, Walls prefix names); <code>tests/test_cwExternalUnitManifest.cpp</code> (new): round trip.</li>
+</ul>
+<div class="gate"><strong>Gate:</strong> <code>cavewhere-test "[Scanner]"</code>, <code>"[Manifest]"</code>, <code>"[ScanPreview]"</code>.</div>
+</div>
+
+<div class="commit">
+<h4>C7.2 — <code>ExternalSource</code> model + persistence; attach builds the subtree; reconcile by <code>source_path</code>; exclusions; Reload/Replace; delete cascade <span class="size">L</span></h4>
+<ul class="filelist">
+  <li><code>src/cwExternalSource.h/.cpp</code>, <code>src/cwExternalSourceModel.h/.cpp</code> (new; rows id, root node, excluded paths); <code>cwCavingRegion::externalSources()</code>; proto §5 <code>ExternalSource</code>/<code>Project.external_sources</code>; save trigger; <code>cwCavingRegionSyncMergeHandler</code> unions exclusions.</li>
+  <li><code>src/cwExternalCenterlineAttach.cpp</code>: <code>OwnerTarget::forNode</code>; <code>attach(cwSurveyNode* target, entryFile)</code> creates the root node under <code>target</code> (kind from the scan, <code>read_only</code>, <code>source_id</code>, <code>external_centerline</code> on the root; attachment dir = <code>externalCenterlineDir(root)</code>, so the Phase 2/3 copy pipeline and GC apply unchanged), then <code>reconcileSubtree(root, scan, exclusions)</code>: nodes by <code>source_path</code> (create/keep/remove-if-no-native-content), units → derived trips (<code>source_path</code>, dates seeded as P3.14), natives untouched, hidden paths skipped, names through <code>uniqueChildName</code>/<code>uniqueTripName</code>; <code>replace</code>/<code>reloadFromSource</code> for a root = re-copy, re-scan, re-manifest, reconcile; <code>deleteSourceRoot(root)</code> = remove the node (cascade through the ordinary node delete) + attachment dir + <code>ExternalSource</code> entry; <code>hideDerived(nodeOrTrip)</code> = delete + append exclusion; <code>restoreHidden(root)</code>. The cave-level attach guard (<code>:675-682</code>) is retired: a lone <code>.dat</code>/<code>.srv</code>/<code>.svx</code> attaches as a one-node subtree (a CompassFile/SurvexFile root with units), which is the Phase 3 cave-level attach expressed as a sourced node.</li>
+  <li><code>src/cwExternalCenterlineManager.cpp:44,227-229,555-600</code>: owners = every node with an attachment + every attached trip; kind string = <code>Kind</code> name; verbs on <code>cwRootData</code> (<code>:165-180</code>) take <code>cwSurveyNode*</code>; fingerprints per root; the source-change banner treats a root as an owner ("(N nodes)").</li>
+  <li><code>tests/test_cwExternalCenterlineAttachSubtree.cpp</code> (new): attach <code>compass_project/PROJECT.MAK</code> at the root → CompassProject root, 3 CompassFile nodes (+1 missing skipped), units as trips; attach under a Folder; add a native trip under a derived node, reload keeps it; a copied fixture gains <code>ECHO.DAT</code> (written to a <code>QTemporaryDir</code>) → new node on reload; hide a node → gone, exclusion saved, reload keeps it hidden, restore brings it back; delete the root → subtree, native trip, dir, and source entry gone; <code>walls_project/KAUA.WPJ</code> → root book with nested books and gray non-survey books; <code>survex_master/master.svx</code> → SurvexFile root with 3 block nodes; a lone <code>.dat</code> → one node with survey trips (replaces the P3.16 whole-file expectation); <code>test_cwExternalCenterlineSaveLoad.cpp</code>: round trip of a sourced subtree with exclusions (fixture <code>survey-tree/sourced_excluded/</code>).</li>
+</ul>
+<div class="gate"><strong>Gate:</strong> <code>cavewhere-test "[Attach]"</code>, <code>"[ExternalSource]"</code>, <code>"[Manager]"</code>, <code>"[SourceStatus]"</code>, <code>"[cwSaveLoad]"</code>.</div>
+</div>
+
+<div class="commit">
+<h4>C7.3 — Driver and line plot for sourced subtrees: root include, native trips inside, membership windows <span class="size">L</span></h4>
+<ul class="filelist">
+  <li><code>src/cwSurvexExporterCaveTask.cpp</code> <code>writeNode</code>: an <code>isSourceRoot</code> node emits <code>*begin label</code>, the include, every native trip in its subtree (labels unique across that set), <code>*end</code>; fixes suppressed; no <code>*begin</code> for derived nodes. <code>cwScopeLabels</code> assigns trip labels for a sourced subtree as one sibling set.</li>
+  <li><code>src/cwLinePlotTask.cpp</code> <code>splitLookupByNode</code> §7.2 steps 2-4 (manifest <code>cavernLabel</code> levels, then membership); <code>src/cwTrip.cpp:682-724</code> <code>solvedStations</code>/<code>knownStations</code> unit branch (set membership, no sibling-claim logic); <code>windowsWholeCave</code> → <code>windowsWholeNode</code> keyed off <code>isSourceRoot()</code>; <code>src/cwLinePlotGeometry.cpp</code> emits a unit trip's legs by two-endpoint membership; <code>src/cwExternalCenterlineManager.cpp:788-806</code> pushes manifest sets through <code>setExternalStations</code>; <code>operand()</code> for a derived-trip handle = root prefix + cavern-relative name; <code>cwFindFloatingSurveys</code>: derived trips are never floating.</li>
+  <li><code>tests/test_cwLinePlotTask_AttachInclude.cpp</code>, <code>test_cwLinePlotManager_AttachedCenterlines.cpp</code>: <code>compass_project</code> solves, every derived trip gets its stations, a shared station's leg appears in both trips, a native trip under Blowing tied through the region equate model solves in place; <code>walls_project</code> books assign by membership; <code>survex_two_cs</code> as two roots solves; driver text asserted for a mixed root.</li>
+</ul>
+<div class="gate"><strong>Gate:</strong> <code>cavewhere-test "[LinePlot]"</code>, <code>"[Exporter]"</code>, <code>"[cwTrip]"</code>, <code>"[Harvest]"</code>, <code>"[Floating]"</code>.</div>
+</div>
+
+<div class="commit">
+<h4>C7.4 — UI: attach dialog tree preview, sourced rows and pages, hidden/Restore, cavern page <span class="size">L</span></h4>
+<ul class="filelist">
+  <li><code>qml/AddCaveSurveyFileDialog.qml</code> → <code>AttachSurveyFileDialog.qml</code>: picker, summary line, "Place under" (target node path), tree preview over <code>cwScanTreeModel</code> (gray for <code>!hasSurveyContent</code>/missing), Attach; opened from every Add ▾ with its node; the up-front cave creation (<code>DataMainPage.qml:33-37</code>) is gone.</li>
+  <li><code>qml/SurveyTreeRow.qml</code>/<code>KindChip.qml</code>: sourced chips (blue) + 🔒 tooltip naming the file; gray rows; ⋯ menu with Reload/Replace on roots; context menu Delete… messages per prototype <code>removeNode</code>/<code>removeTrip</code> (root: counts + "The copied X is removed from the project."; derived: "Hides … stays hidden across Reload; Restore… on X brings it back."); no Rename on sourced nodes.</li>
+  <li><code>qml/NodePage.qml</code>: <code>SourceRootCard.qml</code> (new; file, format, provenance, units, stations, solve status, Reload, Replace…, "N hidden: a, b · Restore…" line) and the derived-node card; fix-station row hidden on sourced nodes ("Fixed positions come from the survey file"); Add ▾ = Add Trip / Add Section / Attach on sourced nodes.</li>
+  <li><code>qml/CavernOutputPage.qml:73-127</code>, <code>ExternalSourceChangeList.qml</code>, <code>ExternalSolveBadge.qml</code>: root rows.</li>
+  <li><code>test-qml/tst_AttachSurveyFileDialog.qml</code> (renamed from <code>tst_AddCaveFromSurveyFile.qml</code>), <code>tst_SourceRootPage.qml</code> (new), <code>tst_DataMainPageTree.qml</code> (sourced rows expanded one level on load; gray books), <code>tst_CavePageExternalCave.qml</code>, <code>tst_CavernOutputPageExternal.qml</code>, <code>tst_ExternalSourceChangeBanner.qml</code> updated.</li>
+</ul>
+<div class="gate"><strong>Gate:</strong> the QML files above; <code>cavewhere-qml-test</code> full run.</div>
+</div>
+
+<h4>What to review in the source</h4>
+<ul><li>Reconcile never touches a record without <code>source_path</code>; a node with native content survives a vanished unit and turns native (<code>source_id</code> cleared) instead of being deleted.</li><li>Exclusions are matched by exact path and by ancestor path; Replace carries them over (§13 Q2).</li><li>Delete root removes the attachment dir through the existing GC path, never a hand-rolled <code>rm -r</code>.</li><li>The label-set rule for native trips under a root; <code>operand()</code>'s manifest branch.</li><li>Attach guard removal: nothing else depended on "attached cave has no trips" (<code>cwTrip.cpp:55-63</code> policy comment is rewritten).</li></ul>
+<h4>What to play with in the UX</h4>
+<ol>
+  <li>Add ▾ → Attach survey file… → the OMEGA2 <code>.mak</code>: the dialog previews 18 file nodes with survey counts and one missing file, "Place under: Region root"; Attach. The tree shows one "OMEGA2 · Compass project" row expanded one level. Open Blowing3: 116 derived trips with dates; line plot draws them; Length/Depth positive.</li>
+  <li>Blowing3 → Add ▾ → Add Trip; enter shots; the banner says it isn't connected to any survey; Tie in… offers OMEGA2 stations; after the tie it solves in place.</li>
+  <li>Right-click a derived trip → Delete…: it disappears; OMEGA2's page says "1 trip from this file hidden · Restore…"; Reload keeps it hidden; Restore brings it back.</li>
+  <li>Attach the Kaua <code>.wpj</code> under a Folder: nested books at the <code>.wpj</code>'s depth, "SVG Sources" and "Fixed Points" gray; attach <code>master.svx</code> at the root: SurvexFile root with three block nodes.</li>
+  <li>Edit a <code>.dat</code> on disk: the source-change banner names OMEGA2 with its node count; Update reloads; a <code>.dat</code> added to the <code>.mak</code> becomes a new node.</li>
+  <li>Right-click OMEGA2 → Delete…: the confirm counts files, derived trips, and the native trip; afterward the row, the copied files, and the source are gone and the project solves.</li>
+  <li>Reopen a project saved before W7 with a cave-level attach (<code>survex_blocks.svx</code>): it loads as a sourced root of kind SurvexFile with the same Scope trips (their records are reconciled by prefix path once, then by <code>source_path</code>).</li>
+</ol>
+<h4>Exit criteria</h4>
+<ul><li>Both suites green (full QML at C7.4).</li><li>All §11 sourced fixtures round-trip; the exclusions fixture survives Reload.</li><li>Export menu stays disabled while any sourced node or attached trip exists.</li></ul>
+<h4>Risks</h4>
+<p>Compass survey sharing stations across trips (both trips draw the shared leg — intended); Walls stations shared across books (first in source order wins, as Phase 6 §3.4); the pre-W7 cave-level attach migration path must be tested against a real saved project from the owner.</p>
+<p class="small">Sizing: L + L + L + L; 20 agents; C7.1 ∥ C7.2 (C7.2 stubs the scan tree) is possible but discouraged; C7.3 after both; C7.4 last.</p>
+</div>
+
+<!-- ================================================================ W8 -->
+<div class="workflow">
+<h3 id="w8">W8 — Importers, shim deletion, docs</h3>
+
+<div class="commit">
+<h4>C8.1 — Importers build the node tree 1:1 <span class="size">M</span></h4>
+<ul class="filelist">
+  <li><code>src/cwWallsImportData.cpp:17-88</code> (books → Folder nodes, <code>.srv</code> → trips), <code>src/cwSurvexGlobalData.cpp:42-116</code> (blocks → nodes; a block with shots gets a trip), <code>src/cwCompassImporter.cpp:71-158</code> (<code>.mak</code> → Folder, <code>.dat</code> → Cave, surveys → trips), <code>src/cwCSVImporterTask.cpp:54</code> (one Cave, unchanged); <code>src/cwSurveyImportManager.cpp:188-190</code>, <code>src/cwImportTreeDataDialog.cpp:300</code> add nodes under the chosen target (default: root). Imported nodes are native (editable), which is the difference from attach.</li>
+  <li>Tests: the importer suites gain tree-shape assertions on the <code>tests/datasets/{compass,survex,walls}</code> fixtures.</li>
+</ul>
+<div class="gate"><strong>Gate:</strong> <code>cavewhere-test "[Importer]"</code>, <code>"[Walls]"</code>, <code>"[Survex]"</code>, <code>"[Compass]"</code>.</div>
+</div>
+
+<div class="commit">
+<h4>C8.2 — Delete the shim <span class="size">L</span></h4>
+<ul class="filelist">
+  <li>Remove <code>cwCave</code>, <code>cwTrip::parentCave()</code>/<code>parentCaveChanged</code>, <code>cwCavingRegion::caves()/cave(i)/addCave/…/uniqueCaveName</code> and the <code>InsertRemoveCave</code> relays, <code>cwRegionTreeModel::CaveType</code>/<code>cave()</code>, <code>cwLinkGenerator::caveLink</code>; rename <code>cwCaveData</code> → <code>cwSurveyNodeData</code>, <code>cwCavingRegionData::caves</code> → <code>nodes</code>; QML <code>Cave</code> type removed, remaining pages (<code>ExternalCenterlineScopeHeader.qml</code>, <code>ExternalCenterlineCaveSummary.qml</code> if still present) retyped; the 27 constructing tests and 90 naming tests swept; <code>cwCavePageModel</code> aliases gone.</li>
+  <li>Mechanical; the review stage checks that no behavior changed (the suites are the proof).</li>
+</ul>
+<div class="gate"><strong>Gate:</strong> both full suites.</div>
+</div>
+
+<div class="commit">
+<h4>C8.3 — Docs and loose ends <span class="size">S</span></h4>
+<ul class="filelist">
+  <li><code>CLAUDE.md</code> data-model line: "cwCavingRegion → cwSurveyNode (tree; kinds Cave/Folder/sourced) → cwTrip …"; <code>plans/EXTERNAL_FILE_INTEGRATION_PLAN.html</code> §9 Phase 6 block → "superseded by SURVEY_TREE_PLAN.html"; <code>plans/EXTERNAL_FILE_PHASE3.html</code> §3.3 attach guard note → withdrawn; this plan's §2 marked as-shipped.</li>
+</ul>
+<div class="gate"><strong>Gate:</strong> none (docs).</div>
+</div>
+
+<h4>What to review / play with</h4>
+<p>Import the <code>tests/datasets/walls</code> and <code>survex</code> fixtures: the resulting tree matches the file's nesting and is fully editable. Everything from W2–W7's manual scripts once more on the final build.</p>
+<h4>Exit criteria</h4>
+<ul><li><code>grep -rn "cwCave\b\|parentCave" src/ qml/ testcases/</code> is empty.</li><li>Both suites green; §14 acceptance criteria all pass.</li></ul>
+<p class="small">Sizing: M + L + S; 15 agents; sequential.</p>
+</div>
+
+<h2 id="tests">11. Tests and fixtures</h2>
+
+<h3>11.1 Fixtures</h3>
+<table class="small">
+<tr><th>Fixture</th><th>Shape</th><th>Used by</th></tr>
+<tr><td><code>tests/datasets/survey-tree/depth2/</code> (new, a saved <code>.cwproj</code> directory project)</td><td>Top-level "Fisher Ridge" cave (two trips, one with a note image); Folder "Kentucky field seasons" › Cave "Side Cave" › Section "Upper level" › trip; a second top-level "Side Cave" (sibling-unique names); one region equate. Version 10 stamps.</td><td>C3.1 (round trip, byte-identical), every later commit (load compatibility)</td></tr>
+<tr><td><code>tests/datasets/survey-tree/sourced_excluded/</code> (new)</td><td>A saved project with <code>compass_project</code> attached as a root under a Folder, one native trip under a derived node, and one excluded unit + one excluded node in <code>external_sources</code>.</td><td>C7.2, C7.4</td></tr>
+<tr><td>Runtime (QTemporaryDir): two-clone git repos</td><td>Depth-2 rename/rename; ancestor rename + descendant edit; peer move + local add (§6.6). Built the way <code>test_cwCaveAndTripRenameConflict.cpp:41-60</code> builds its clones.</td><td>C3.2</td></tr>
+<tr><td>Runtime: node with notes, attachment dir, and a pending write, moved</td><td>§6.5</td><td>C3.3</td></tr>
+<tr><td><code>external-centerlines/compass_project/PROJECT.MAK</code> + <code>ALPHA.DAT</code>, <code>BRAVO.DAT</code>, <code>CHARLIE.DAT</code> (new, from Phase 6 §9)</td><td>Cavern-valid mini OMEGA2: UTM <code>@</code> line, three <code>#FILE</code>s plus an absent <code>DELTA.DAT</code>; ALPHA has 2 surveys sharing A5; BRAVO linked through a link station; CHARLIE with its own fix; decimal-feet tape; hand-computable counts.</td><td>C7.1–C7.4</td></tr>
+<tr><td><code>external-centerlines/walls_project/KAUA.WPJ</code> + <code>NOTES.TXT</code>, <code>FIX.SRV</code>, <code>SURVEYS/D01.SRV</code>, <code>D02.SRV</code>, <code>N01.SRV</code> (new)</td><td>Cut-down Kaua: root book; child books "Drawings" (a <code>.txt</code> only), "Fixed Points" (<code>#FIX</code> only), "Surveys" with a nested year book holding three <code>.srv</code> tied through shared stations, one with <code>#PREFIX N</code>; solvable.</td><td>C7.1–C7.4</td></tr>
+<tr><td><code>external-centerlines/walls_two_caves/TWO.WPJ</code> + <code>EAST/E1.SRV</code>, <code>WEST/W1.SRV</code>, <code>W2.SRV</code> (new)</td><td>Root book with two child books, each with shots; W1/W2 share a station; solvable.</td><td>C7.1, C7.3</td></tr>
+<tr><td><code>external-centerlines/survex_two_cs/master.svx</code> + <code>utm.svx</code>, <code>latlong.svx</code> (new)</td><td>Two blocks each with its own <code>*cs</code> and <code>*fix</code>; cavern solves into one output cs. Attached as two roots.</td><td>C7.3</td></tr>
+<tr><td>Runtime: copy of <code>compass_project</code> plus <code>ECHO.DAT</code></td><td>Reload derives a new node.</td><td>C7.2</td></tr>
+<tr><td>Existing: <code>survex_master/</code>, <code>survex_blocks.svx</code>, <code>compass_simple.dat</code>, <code>compass_solvable.dat</code>, <code>compass_multi.mak</code>, <code>walls_prefixed/</code>, <code>walls_book_prefix/</code>, <code>survex_root_and_block.svx</code>, <code>updir_project/</code></td><td>Survex tree, lone-file roots, prefix windows, whole-node window, common-ancestor copy.</td><td>C7.1–C7.3 (assertions re-targeted from "cave" to "root node")</td></tr>
+<tr><td>Existing: <code>tests/datasets/test_cwProject/{v7.cw, v8.cwproj, Phake Cave…}</code>, <code>network.cw</code>, <code>test_cwScrapManager/*.cw</code></td><td>Legacy and bundled formats; scrap morphing.</td><td>C3.1, C6.1</td></tr>
+</table>
+
+<h3>11.2 New and renamed test files</h3>
+<table class="small">
+<tr><th>File</th><th>Tag</th><th>Commit</th></tr>
+<tr><td><code>tests/test_cwSurveyNode.cpp</code></td><td><code>[SurveyNode]</code></td><td>C1.1</td></tr>
+<tr><td><code>tests/test_cwSurveyTreeModel.cpp</code></td><td><code>[SurveyTreeModel]</code></td><td>C2.1</td></tr>
+<tr><td><code>tests/test_cwSaveLoad_NodeTree.cpp</code>, <code>test_cwSaveLoad_MoveNode.cpp</code></td><td><code>[cwSaveLoad][NodeTree]</code></td><td>C3.1, C3.3</td></tr>
+<tr><td><code>tests/test_cwSurveyNodeSyncMergeHandler.cpp</code> (from <code>test_cwCaveSyncMergeHandler</code> cases)</td><td><code>[Sync]</code></td><td>C3.2</td></tr>
+<tr><td><code>tests/test_cwSurvexExporterRegion_NodeTree.cpp</code>, <code>test_cwLinePlotTask_NodeTree.cpp</code>, <code>test_cwEquateMigration.cpp</code></td><td><code>[Exporter]</code>, <code>[LinePlot]</code>, <code>[Equate]</code></td><td>C4.1–C4.3</td></tr>
+<tr><td><code>tests/test_cwExternalUnitManifest.cpp</code>, <code>test_cwExternalCenterlineAttachSubtree.cpp</code>, <code>test_cwExternalSourceModel.cpp</code></td><td><code>[Manifest]</code>, <code>[Attach]</code>, <code>[ExternalSource]</code></td><td>C7.1, C7.2</td></tr>
+<tr><td><code>test-qml/tst_DataMainPageTree.qml</code>, <code>tst_NodePage.qml</code>, <code>tst_SourceRootPage.qml</code>, <code>tst_AttachSurveyFileDialog.qml</code> (renamed)</td><td>—</td><td>C2.2, C5.2, C7.4</td></tr>
+</table>
+<p class="small">All QML tests extend <code>ExternalCenterlineTestCase.qml</code> where they attach; add <code>makeSavedTreeProject()</code> (loads <code>survey-tree/depth2</code> into a temp copy) there in C5.2. Tests must run as concurrent processes: <code>QTemporaryDir</code> or the PID in every path (CLAUDE.md). Collapse note overlays before clicking note images.</p>
+
+<h2 id="build">12. Build and test invocations (every pipeline stage)</h2>
+
+<pre><code># Build (this exact binary + preset; the directory name says 6_11_1 but its cache points at Qt 6.11.2 — do not rename it)
+/Users/cave/Qt/Tools/CMake/CMake.app/Contents/bin/cmake --build build/Qt_6_11_1_for_macOS-Debug --target cavewhere-test cavewhere-qml-test
+
+# C++ (narrow tags while iterating; ASAN prefix + teed log with $$ are mandatory)
+ASAN_OPTIONS=detect_container_overflow=0 ./build/Qt_6_11_1_for_macOS-Debug/cavewhere-test "[SurveyNode]" 2>&1 | tee /tmp/cavewhere-tree-$$.log
+
+# One QML file
+ASAN_OPTIONS=detect_container_overflow=0 ./build/Qt_6_11_1_for_macOS-Debug/cavewhere-qml-test --platform offscreen -input test-qml/tst_DataMainPageTree.qml 2>&1 | tee /tmp/cavewhere-tree-qml-$$.log
+
+# Full suites — at the end of every workflow (and at the commits whose gate says so)
+ASAN_OPTIONS=detect_container_overflow=0 ./build/Qt_6_11_1_for_macOS-Debug/cavewhere-test "~[cwRemoteCredentialStore]" 2>&1 | tee /tmp/cavewhere-full-$$.log
+ASAN_OPTIONS=detect_container_overflow=0 ./build/Qt_6_11_1_for_macOS-Debug/cavewhere-qml-test --platform offscreen 2>&1 | tee /tmp/cavewhere-qml-full-$$.log
+
+# Run the app for the manual scripts in §10
+./build/Qt_6_11_1_for_macOS-Debug/CaveWhere
+</code></pre>
+<p class="small">Cross-cutting rules: tests run foreground inside workflow stages; one test binary of
+this checkout at a time; never rebuild while a test runs; a stalled run is usually the 1.8 GB
+LAZ test or machine load (check <code>uptime</code> before believing a hang); the cwLeadView
+ScrapSync QML failure is a known flake — re-run in isolation before blaming the change;
+random SEGVs that truncate a full C++ run can be qtkeychain's dangling block, not the change.
+Commits: short imperative subjects, body = what/why + commands run; screenshots for QML
+changes; never commit or push without the owner asking.</p>
+
+<h2 id="questions">13. Open questions (still open) — v1 answers</h2>
+<table>
+<tr><th>#</th><th>Question</th><th>v1 answer</th></tr>
+<tr><td>Q1</td><td>Hidden derived items: only the root page's "N hidden · Restore…" line, or also a grayed struck-through row in the tree that can be un-hidden in place? (prototype open question 1)</td><td>Root page line only. A struck-through row is a follow-up once the owner has used the line.</td></tr>
+<tr><td>Q2</td><td>Replace… with a file whose units have different source paths: do exclusions carry over? (prototype open question 2)</td><td>Carry by exact <code>source_path</code>; exclusions matching nothing in the new scan are dropped and the attach report lists them ("2 hidden items no longer exist in the new file").</td></tr>
+<tr><td>Q3</td><td>Version stamp: conditional 9/10 (§6.8) or unconditional 10 from C3.1?</td><td>Conditional. Flat projects keep opening silently in the previous build, which matters for synced repos with mixed builds. Cost: one predicate and the spurious-warning window noted in §6.8.</td></tr>
+<tr><td>Q4</td><td>Fix stations and grid convergence on a Folder page.</td><td>Shown on every native node (§3.1). Nothing forces the label to mean anything.</td></tr>
+<tr><td>Q5</td><td>A "Move to…" verb (drag or menu) in the tree before W7?</td><td>Not in v1; the Move op exists (C3.3) and is tested; the verb is one QML commit when wanted.</td></tr>
+<tr><td>Q6</td><td>Rename of a sourced node.</td><td>Not offered (prototype menus). A follow-up can add a user display name stored on the record, distinct from the scan identity.</td></tr>
+<tr><td>Q7</td><td>Native-trip labels under a sourced root: one sibling set across the subtree, or a <code>*begin</code> per derived node that holds native trips?</td><td>One set across the subtree (§3.1). It keeps "a derived node is never a block" true and the decode simple.</td></tr>
+<tr><td>Q8</td><td>An orphan <code>.cwtrip</code> directory whose parent has no descriptor (sync race).</td><td>Attach to the nearest descriptor ancestor and report (§6.2 step 5).</td></tr>
+<tr><td>Q9</td><td>Should <code>cwCavingRegion</code> stop being a <code>QAbstractListModel</code> once the Data page is a tree (W2)?</td><td>Keep it through W8; delete with the shim in C8.2 if no QML binds it by then (<code>Instantiator</code>s and the cavern page still might).</td></tr>
+</table>
+
+<h2 id="accept">14. Acceptance criteria for the whole change</h2>
+<ul>
+  <li>Every project the owner has (flat native, cave-level attach, trip-level attach, Git-synced, bundled <code>.cw</code>, legacy <code>.cw</code>) opens, round-trips byte-identical (flat: version 9), solves, and exports the same <code>.svx</code> as before, with equates at region scope.</li>
+  <li>Data page: the settled tree table with Kind always shown, trip leaves, filter auto-expand, expand/collapse all, keyboard navigation incl. Shift+F10, context-menu-only delete, one Add ▾ everywhere with Attach inside it.</li>
+  <li>Folder › Cave › Section › trip can be built through the UI, saved, reopened, synced between two clones, moved (through the API), exported with nested blocks, and deleted with counted confirms and undo.</li>
+  <li>Names are unique per sibling set: two "Entrance survey" trips under different caves and a "Side Cave" folder beside a "Side Cave" cave coexist and solve.</li>
+  <li>Solve state is one region lookup; scraps, notes, LiDAR, and leads read through views; "This chunk isn't connected to any survey" is the floating wording.</li>
+  <li>OMEGA2 <code>.mak</code> attached at the root is one row expanded one level on load, with 18 file nodes and one trip per survey; a native trip under Blowing3 ties in and solves; Reload/Replace live on the root; deleting a derived trip hides it (persisted, survives Reload, Restore… on the root page); deleting the root removes the subtree, native trips included, and the copied files.</li>
+  <li>Kaua <code>.wpj</code> attached under a Folder shows the <code>.wpj</code>'s nesting with gray non-survey books; <code>master.svx</code> shows a Survex file root with block nodes; two roots with different <code>*cs</code> solve together.</li>
+  <li>A project saved by this build with hierarchy opens in the previous build with the version warning (every node visible as a flat cave) and cannot be saved there.</li>
+  <li>Importing Walls/Survex/Compass files yields the same tree shape attach would, editable.</li>
+  <li><code>cwCave</code> and <code>parentCave()</code> no longer exist; both suites green.</li>
+</ul>
+
+<h2 id="sizing">15. Sizing summary</h2>
+<table class="small">
+<tr><th>Workflow</th><th>Commits (size)</th><th>Agents</th><th>Parallel-safe pairs</th><th>Must precede</th></tr>
+<tr><td>W1</td><td>C1.1 L, C1.2 M, C1.3 M</td><td>15</td><td>—</td><td>everything</td></tr>
+<tr><td>W2</td><td>C2.1 L, C2.2 L</td><td>10</td><td>W2 ∥ W3</td><td>W5</td></tr>
+<tr><td>W3</td><td>C3.1 L, C3.2 L, C3.3 M</td><td>15</td><td>—</td><td>W4</td></tr>
+<tr><td>W4</td><td>C4.1 L, C4.2 L, C4.3 M, C4.4 M</td><td>20</td><td>C4.1 ∥ C4.4</td><td>W5, W6</td></tr>
+<tr><td>W5</td><td>C5.1 M, C5.2 L, C5.3 M</td><td>15</td><td>C5.1 ∥ C5.3; W5 ∥ W6</td><td>W7</td></tr>
+<tr><td>W6</td><td>C6.1 L, C6.2 M</td><td>10</td><td>—</td><td>W7</td></tr>
+<tr><td>W7</td><td>C7.1 L, C7.2 L, C7.3 L, C7.4 L</td><td>20</td><td>(C7.1 ∥ C7.2 discouraged)</td><td>W8</td></tr>
+<tr><td>W8</td><td>C8.1 M, C8.2 L, C8.3 S</td><td>15</td><td>—</td><td>—</td></tr>
+<tr><td><strong>Total</strong></td><td>24 commits: 14 L, 9 M, 1 S</td><td>120</td><td></td><td></td></tr>
+</table>
+<p class="small">"Agents" counts one agent per pipeline stage per commit (plan / implement / test / review / fix). A parallel-safe pair runs in two worktrees off the same base; the second lands after a rebase and a re-run of its gate.</p>
+
+</body>
+</html>

@@ -1,0 +1,1195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Survey Tree — Main Data Page Interactive UX Prototype</title>
+<style>
+  :root {
+    --background: #f2f2f2;
+    --surface: #ffffff;
+    --surface-muted: #f6f6f6;
+    --text: #1a1a1a;
+    --text-secondary: #33363a;
+    --text-subtle: #616469;
+    --text-link: #1d4d77;
+    --accent: #2f6fb0;
+    --success: #4caf50;
+    --warning: #FF9C14;
+    --danger: #FF6736;
+    --info: #85c1f4;
+    --highlight: #a5cdff;
+    --border: #d3d3d3;
+    --chrome: #e8e8e8;
+    --shadow: rgba(0,0,0,.25);
+    --chip: #e3ecf7;
+    --chip-text: #1d4d77;
+  }
+  [data-theme="dark"] {
+    --background: #14171c;
+    --surface: #1f232a;
+    --surface-muted: #292d35;
+    --text: #e8ebf0;
+    --text-secondary: #cdd2db;
+    --text-subtle: #9fa6b1;
+    --text-link: #85c1f4;
+    --accent: #6aa5dd;
+    --success: #76e596;
+    --warning: #6b643e;
+    --danger: #6f312e;
+    --info: #1f3f61;
+    --highlight: #314f78;
+    --border: #4a4f58;
+    --chrome: #262b33;
+    --shadow: rgba(0,0,0,.6);
+    --chip: #2a3b50;
+    --chip-text: #9cc7f2;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; font-size: 14px;
+    background: var(--background); color: var(--text); padding: 24px; line-height: 1.45; }
+  h1 { font-size: 24px; margin-bottom: 4px; }
+  .doc-sub { color: var(--text-subtle); margin-bottom: 16px; max-width: 900px; }
+  code { font-family: "Courier Prime", "Courier New", monospace; font-size: 12px; }
+
+  .tabs { display: flex; gap: 4px; margin: 18px 0 0; }
+  .tabs button { font-size: 14px; padding: 8px 18px; border: 1px solid var(--border);
+    border-bottom: none; border-radius: 6px 6px 0 0; background: var(--chrome);
+    color: var(--text); cursor: pointer; }
+  .tabs button.active { background: var(--surface); font-weight: 700; }
+  .tab-body { border: 1px solid var(--border); background: var(--surface);
+    border-radius: 0 6px 6px 6px; padding: 18px; }
+  .lane { display: none; } .lane.active { display: block; }
+  .theme-toggle { float: right; font-size: 12px; padding: 4px 10px; border: 1px solid var(--border);
+    border-radius: 4px; background: var(--chrome); color: var(--text); cursor: pointer; }
+  .badge-proposed { display: inline-block; font-size: 11px; font-weight: 700;
+    padding: 2px 8px; border-radius: 10px; vertical-align: middle; margin-left: 8px; color: #fff; background: var(--warning); }
+
+  .appwin { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; max-width: 1100px;
+    background: var(--background); box-shadow: 0 4px 18px var(--shadow); margin-top: 14px; position: relative; }
+  .titlebar { background: var(--chrome); padding: 6px 12px; font-size: 12px; color: var(--text-subtle);
+    border-bottom: 1px solid var(--border); display: flex; gap: 6px; align-items: center; }
+  .dots span { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; }
+  .dots .r { background: #ff5f57; } .dots .y { background: #febc2e; } .dots .g { background: #28c840; }
+  .winbody { padding: 0; min-height: 560px; position: relative; }
+  .page { padding: 12px; }
+  .page-nav { display: flex; gap: 6px; margin-bottom: 10px; font-size: 12px; flex-wrap: wrap; align-items: center; }
+  .page-nav a { color: var(--text-link); cursor: pointer; text-decoration: none; }
+  .page-nav a:hover { text-decoration: underline; }
+  .page-nav .here { color: var(--text-subtle); }
+  .page-nav .sep { color: var(--text-subtle); }
+
+  .btn { font-size: 13px; padding: 5px 12px; border: 1px solid var(--border); border-radius: 4px;
+    background: var(--surface); color: var(--text); cursor: pointer; }
+  .btn:hover:enabled { background: var(--chrome); }
+  .btn:disabled { opacity: .45; cursor: default; }
+  .btn.small { font-size: 12px; padding: 3px 9px; }
+  .btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .split { display: inline-flex; }
+  .split .btn.main { border-radius: 4px 0 0 4px; }
+  .split .btn.chev { border-radius: 0 4px 4px 0; border-left: none; padding: 5px 7px; }
+  .btn.icon { padding: 1px 7px; font-size: 13px; line-height: 1.3; border-color: transparent; background: transparent; }
+  .btn.icon:hover { border-color: var(--border); background: var(--chrome); }
+  .menu { position: absolute; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 4px; box-shadow: 0 3px 10px var(--shadow); z-index: 60; min-width: 200px;
+    padding: 4px 0; font-size: 13px; text-align: left; }
+  .menu div { padding: 6px 14px; cursor: pointer; white-space: nowrap; }
+  .menu div:hover { background: var(--chrome); }
+  .menu div.disabled { color: var(--text-subtle); cursor: default; }
+  .menu div.disabled:hover { background: transparent; }
+  .menu div.head { font-weight: 700; cursor: default; font-size: 12px; color: var(--text-subtle); }
+  .menu div.head:hover { background: transparent; }
+  .menu hr { border: none; border-top: 1px solid var(--border); margin: 4px 0; }
+  .field { font-size: 13px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 4px;
+    background: var(--surface); color: var(--text); }
+  .scrim { position: absolute; inset: 0; background: rgba(0,0,0,.35); z-index: 50;
+    display: flex; align-items: center; justify-content: center; }
+  .dialog { background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    box-shadow: 0 8px 30px var(--shadow); width: 680px; max-width: 94%; padding: 16px;
+    max-height: 94%; overflow: auto; }
+  .dialog h3 { font-size: 16px; margin-bottom: 12px; }
+  .hint { color: var(--text-subtle); font-size: 12px; }
+  .secondary { color: var(--text-secondary); font-size: 13px; }
+  .dlg-actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 14px; align-items: center; }
+  .dlg-actions .spacer { flex: 1; }
+  .busyrow { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 13px; }
+  .spinner { width: 18px; height: 18px; border: 3px solid var(--border); border-top-color: var(--accent);
+    border-radius: 50%; animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .toolbar { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+  .toolbar .spacer { flex: 1; }
+  .toolbar .search { width: 220px; }
+  .cavecard { border: 1px solid var(--border); border-radius: 6px; padding: 10px; margin: 10px 0;
+    background: var(--surface); font-size: 13px; }
+  .cavecard .t { font-weight: 700; margin-bottom: 4px; }
+  .triptable { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .triptable th, .triptable td { border-bottom: 1px solid var(--border); text-align: left; padding: 4px 8px; }
+  .triptable th { background: var(--chrome); font-size: 12px; }
+  .triptable td.num, .triptable th.num { text-align: right; white-space: nowrap; }
+  .triptable .prefix { color: var(--text-subtle); font-family: "Courier Prime", monospace; font-size: 12px; }
+  .chip { display: inline-block; background: var(--chip); color: var(--chip-text); border-radius: 10px;
+    padding: 1px 8px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+  .chip.native { background: var(--chrome); color: var(--text-subtle); font-weight: 400; }
+  .chip.prov { background: transparent; border: 1px solid var(--border); color: var(--text-subtle); font-weight: 400; cursor: pointer; }
+  .chip.prov:hover { background: var(--chrome); }
+  .chip.trip { background: transparent; color: var(--text-subtle); font-weight: 400; }
+  .chip.kindpick { cursor: pointer; }
+  .chip.kindpick:hover { background: var(--border); }
+  .kicon { width: 14px; height: 14px; vertical-align: -2px; margin-right: 4px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linejoin: round; }
+  .tree tr.row.folder td.num { color: var(--text-subtle); }
+  .lock { font-size: 11px; color: var(--text-subtle); margin-left: 4px; cursor: help; }
+  a.link { color: var(--text-link); cursor: pointer; text-decoration: none; }
+  a.link:hover { text-decoration: underline; }
+
+  /* tree */
+  .treewrap { outline: none; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); }
+  .treewrap:focus { border-color: var(--accent); }
+  .tree { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .tree th { background: var(--chrome); font-size: 12px; text-align: left; padding: 5px 8px;
+    border-bottom: 1px solid var(--border); position: sticky; top: 0; }
+  .tree td { padding: 3px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  .tree tr.row { cursor: default; }
+  .tree tr.row:hover { background: var(--surface-muted); }
+  .tree tr.row.selected { background: var(--highlight); }
+  .tree tr.row.gray td { color: var(--text-subtle); }
+  .tree tr.row.gray a.link { color: var(--text-subtle); }
+  .tree td.name { display: flex; align-items: center; gap: 4px; border-bottom: none; }
+  .tree .caret { display: inline-block; width: 16px; text-align: center; color: var(--text-subtle);
+    cursor: pointer; user-select: none; font-size: 11px; }
+  .tree .caret.leaf { visibility: hidden; }
+  .tree td.num, .tree th.num { text-align: right; }
+  .tree td.menucell { position: relative; text-align: right; width: 34px; }
+  .tree td.menucell .btn.icon { visibility: hidden; }
+  .tree tr.row:hover td.menucell .btn.icon, .tree tr.row.selected td.menucell .btn.icon { visibility: visible; }
+  .tree tr.empty td { color: var(--text-subtle); font-style: italic; text-align: center; padding: 18px; }
+  .tree .missing { color: var(--danger); font-size: 11px; }
+  [data-theme="dark"] .tree .missing { color: #f47067; }
+
+  .header-filerow { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+  .header-filerow .fname { font-weight: 700; }
+  .header-filerow .fmt { color: var(--text-secondary); font-size: 13px; }
+  .header-filerow .spacer { flex: 1; }
+  .provenance { font-size: 12px; color: var(--text-subtle); white-space: nowrap; overflow: hidden;
+    text-overflow: ellipsis; }
+  .node-header { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
+  .node-header h2 { font-size: 20px; font-weight: 700; }
+  .stats { display: flex; gap: 18px; font-size: 13px; color: var(--text-secondary); margin: 4px 0 10px; flex-wrap: wrap; }
+  .stats b { color: var(--text); }
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; vertical-align: middle; }
+  .dot.ok { background: var(--success); } .dot.warn { background: var(--warning); }
+  .askbox { border: 1px solid var(--border); border-radius: 6px; background: var(--surface);
+    box-shadow: 0 3px 10px var(--shadow); padding: 10px 12px; font-size: 13px; max-width: 560px; margin: 8px 0; }
+  .askbox .t { font-weight: 700; margin-bottom: 4px; }
+  .askbox ul { margin: 4px 0 0 18px; }
+  .askbox .actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 8px; }
+  .blocktree { font-family: "Courier Prime", monospace; font-size: 12px; border: 1px solid var(--border);
+    border-radius: 4px; padding: 8px; margin-top: 6px; background: var(--background);
+    max-height: 240px; overflow: auto; white-space: pre; }
+  .blocktree .cnt { color: var(--text-subtle); }
+  .blocktree .nd { font-weight: 700; }
+  .blocktree .gray { color: var(--text-subtle); }
+
+  .trip-layout { display: flex; min-height: 380px; }
+  .trip-panel { width: 480px; max-width: 60%; border-right: 1px solid var(--border); padding: 8px;
+    overflow-y: auto; background: var(--surface); }
+  .trip-right { flex: 1; display: flex; align-items: center; justify-content: center;
+    color: var(--text-subtle); font-size: 13px; background: var(--background); }
+  .chunk { border: 1px solid var(--border); border-radius: 4px; margin-top: 8px; font-size: 13px; }
+  .chunk .row { display: grid; grid-template-columns: 90px 90px 70px 70px 70px; gap: 4px; padding: 3px 8px;
+    border-bottom: 1px solid var(--border); }
+  .chunk .row:last-child { border-bottom: none; }
+  .chunk .row.h { background: var(--chrome); font-weight: 700; font-size: 12px; }
+  .chunk .st { font-family: "Courier Prime", monospace; }
+  .roline { background: var(--info); border-radius: 5px; padding: 8px; margin-bottom: 8px; font-size: 13px; }
+  [data-theme="light"] .roline { color: #102b45; }
+
+  .simbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; border: 1px dashed var(--border);
+    border-radius: 6px; padding: 8px 12px; margin-top: 12px; font-size: 12px; color: var(--text-subtle);
+    max-width: 1100px; }
+  .simbar label { display: flex; gap: 4px; align-items: center; cursor: pointer; }
+  .simbar b { color: var(--text); }
+  .simbar .group { display: flex; gap: 8px; align-items: center; border-right: 1px solid var(--border); padding-right: 12px; }
+  .simbar .group:last-child { border-right: none; }
+  .notes { max-width: 960px; font-size: 13px; }
+  .notes h3 { font-size: 15px; margin: 14px 0 4px; }
+  .notes li { margin: 3px 0 3px 18px; }
+  .notes .q { font-weight: 700; }
+  .notes table { border-collapse: collapse; margin: 8px 0; }
+  .notes th, .notes td { border: 1px solid var(--border); padding: 4px 10px; text-align: left; vertical-align: top; }
+  .notes th { background: var(--chrome); }
+  kbd { font-family: inherit; font-size: 11px; border: 1px solid var(--border); border-bottom-width: 2px;
+    border-radius: 3px; padding: 0 5px; background: var(--chrome); }
+</style>
+</head>
+<body data-theme="light">
+
+<button class="theme-toggle" onclick="toggleTheme()">Toggle dark mode</button>
+<h1>Survey Tree — the main Data page as a tree view</h1>
+<p class="doc-sub">
+  Companion to the survey-node-tree exploration (Region → node… → trip, one node class with a kind,
+  every leaf a trip). Successor to <code>EXTERNAL_FILE_PHASE6_UX_INTERACTIVE.html</code>, whose flat
+  cave list with a Source column this replaces. Same theme, same demo data (the real OMEGA2 Compass
+  project, the dewalls Kaua North Maze Walls project, the survex_master test set). Everything with a
+  button is clickable; the tree takes the keyboard. Marked <span class="badge-proposed">PROPOSED</span>
+  throughout, since the tree itself is the proposal.
+</p>
+
+<div class="tabs">
+  <button id="tabbtn-app" class="active" onclick="showLane('app')">Data page as a tree <span class="badge-proposed">PROPOSED</span></button>
+  <button id="tabbtn-notes" onclick="showLane('notes')">Design notes</button>
+</div>
+
+<div class="tab-body">
+<div class="lane active" id="lane-app">
+
+  <div class="simbar">
+    <div class="group"><b>Scenario:</b>
+      <label><input type="radio" name="scn" value="native" checked onchange="setScenario(this.value)"> Native only</label>
+      <label><input type="radio" name="scn" value="omega" onchange="setScenario(this.value)"> + OMEGA2.MAK</label>
+      <label><input type="radio" name="scn" value="kaua" onchange="setScenario(this.value)"> + Kaua .wpj</label>
+      <label><input type="radio" name="scn" value="survex" onchange="setScenario(this.value)"> + master.svx</label>
+      <label><input type="radio" name="scn" value="all" onchange="setScenario(this.value)"> Everything, mixed</label>
+    </div>
+    <div class="group"><b>Source roots:</b>
+      <label><input type="radio" name="rootmode" value="row" checked onchange="setRootMode(this.value)"> as rows</label>
+      <label><input type="radio" name="rootmode" value="promote" onchange="setRootMode(this.value)"> promote children to the top level</label>
+    </div>
+    <div class="group">
+      <label><input type="checkbox" id="showdates" checked onchange="renderTree()"> Last-survey column</label>
+      <button class="btn small" onclick="resetDemo()">Reset demo</button>
+    </div>
+  </div>
+
+  <div class="appwin">
+    <div class="titlebar"><span class="dots"><span class="r"></span><span class="y"></span><span class="g"></span></span>
+      CaveWhere — Omega.cwproj — <span id="pagename">Data</span></div>
+    <div class="winbody" id="winbody">
+
+      <!-- ======== DATA MAIN PAGE: TREE ======== -->
+      <div class="page" id="datapage">
+        <div class="page-nav"><span class="here">Omega</span><span class="sep">›</span><span class="here">All caves</span>
+          <span class="hint" style="margin-left:8px">(the region; today's page header with units, coordinate system, layers stays above this)</span></div>
+        <div class="toolbar">
+          <span class="split" style="position:relative">
+            <button class="btn main" onclick="addCave()">＋ Add Cave</button>
+            <button class="btn chev" title="More ways to add" onclick="toggleMenu('addmenu', event)">▾</button>
+            <div class="menu" id="addmenu" style="display:none; top:30px; left:0; min-width:240px">
+              <div onclick="closeMenus(); addCave()">Add Cave</div>
+              <div onclick="closeMenus(); addFolder()">Add Folder</div>
+              <hr>
+              <div onclick="closeMenus(); openDialog(null)">Attach survey file…</div>
+            </div>
+          </span>
+          <span style="position:relative" id="hamburgerhost">
+            <button class="btn" title="Survey sources" onclick="toggleMenu('hamburger', event)">≡</button>
+            <div class="menu" id="hamburger" style="display:none; top:30px; left:0; min-width:300px"></div>
+          </span>
+          <span class="spacer"></span>
+          <input class="field search" id="filter" placeholder="Filter by name…" oninput="renderTree()">
+          <button class="btn small" onclick="expandAll()" title="Expand every node">Expand all</button>
+          <button class="btn small" onclick="collapseAll()" title="Collapse every node">Collapse all</button>
+        </div>
+        <div class="treewrap" id="treewrap" tabindex="0" onkeydown="treeKey(event)">
+          <table class="tree" id="tree"></table>
+        </div>
+        <p class="hint" style="margin-top:6px" id="treehint"></p>
+      </div>
+
+      <!-- ======== NODE PAGE ======== -->
+      <div class="page" id="nodepage" style="display:none"></div>
+
+      <!-- ======== TRIP PAGE ======== -->
+      <div class="page" id="trippage" style="display:none"></div>
+
+      <!-- ======== ATTACH DIALOG ======== -->
+      <div class="scrim" id="dialog" style="display:none">
+        <div class="dialog">
+          <h3>Attach survey file</h3>
+          <div>Pick the entry file:</div>
+          <div style="display:flex; gap:6px; margin:4px 0">
+            <input class="field" id="path" style="flex:1" placeholder="/path/to/project.mak" readonly>
+            <span style="position:relative">
+              <button class="btn" onclick="toggleMenu('browsemenu', event)">Browse…</button>
+              <div class="menu" id="browsemenu" style="display:none; top:30px; right:0; min-width:440px">
+                <div onclick="pick('omega')">📄 …/compass/OMEGA2/OMEGA2.MAK — Compass project, 18 files</div>
+                <div onclick="pick('kaua')">📄 …/walls/Kaua North Maze.wpj — Walls project, 12 books</div>
+                <div onclick="pick('survex')">📄 …/survex/master.svx — Survex master, 3 included files</div>
+              </div>
+            </span>
+          </div>
+          <div class="hint" id="fmthint">Survex (.svx), Compass (.dat, .mak), or Walls (.wpj, .srv).</div>
+          <div class="secondary" id="summary" style="display:none"></div>
+
+          <div id="placerow" style="display:none; margin-top:10px">
+            <span style="font-weight:700">Place under</span> <span id="placeunder" class="secondary"></span>
+            <div class="hint">The target is wherever Add ▾ was opened: the region root on the Data page, the node on a node page.
+              The Phase 6 "Attach as one cave / one per unit" radio is gone: the scanned tree is attached as-is.</div>
+          </div>
+
+          <div id="preview" style="display:none">
+            <div style="font-weight:700; margin-top:10px" id="preview-title"></div>
+            <div class="hint" id="preview-hint"></div>
+            <div class="blocktree" id="previewtree"></div>
+          </div>
+
+          <div class="busyrow" id="busy" style="display:none"><span class="spinner"></span>Copying and scanning…</div>
+          <div class="dlg-actions">
+            <span class="hint" id="attach-note"></span>
+            <span class="spacer"></span>
+            <button class="btn" onclick="closeDialog()">Cancel</button>
+            <button class="btn primary" id="attachbtn" disabled onclick="doAttach()">Attach</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="simbar">
+    <b>Try:</b> start on "Native only" and expand a cave. Switch to "+ OMEGA2.MAK" and compare the two
+    source-root modes. Open OMEGA2 → Blowing3, Add ▾ → Add Trip. Right-click a derived node → Delete…, then look at the source root's page for the "hidden" hint. Right-column ⋯ opens the Add/Reload/Replace menu; delete is right-click only (or <kbd>Shift+F10</kbd> / the context-menu key on the selected row).
+    Keyboard: <kbd>↑</kbd><kbd>↓</kbd> move, <kbd>→</kbd> expand, <kbd>←</kbd> collapse or go to parent,
+    <kbd>Enter</kbd> open, <kbd>Home</kbd>/<kbd>End</kbd>. Click inside the tree first to focus it.
+  </div>
+</div>
+
+<!-- ================= NOTES LANE ================= -->
+<div class="lane notes" id="lane-notes">
+  <h3>Settled with the owner (2026-09-13)</h3>
+  <li><span class="q">A source root is a row.</span> OMEGA2 is one top-level node whose page lists its 18 files. The "promote" mode stays in the sim bar for comparison only.</li>
+  <li><span class="q">The region's direct children can be any kind.</span> A Compass project, a Walls book, a Survex file, a Cave, or a Folder can all sit at the top level.</li>
+  <li><span class="q">Native nodes have exactly two labels: Cave and Folder.</span> One node class; the label is display only and the backend never branches on it. Position picks the label and the verbs, and the user is never asked: at the region top level and inside a Folder, Add ▾ is <b>Add Cave</b> (caret: Add Folder, Attach survey file…); inside a Cave, and inside a Folder that sits inside a Cave, Add ▾ is <b>Add Trip</b> (caret: Add Section, Attach survey file…). "Add Section" creates a Folder node; it is only the in-cave wording, and the chip says Folder everywhere. A Cave is never offered inside a Cave. To relabel, click the Kind chip on a native node (tree row or page header) and pick Cave or Folder; only the label and icon change. Sourced chips are not interactive. Cave rows carry a cave icon, Folder rows a folder icon, and a Folder's aggregated Trips/Length/Depth render muted.</li>
+  <li><span class="q">There is no Detach verb.</span> Users delete nodes. Deleting a sourced root removes the whole subtree, native trips included, and the copied file; the confirm says so with counts. Deleting a sourced child or a derived trip <i>hides</i> it from the project, and the exclusion is project state that survives Reload; the root's page shows "N hidden · Restore…" so the consequence is visible.</li>
+  <li><span class="q">Solve state is one region-wide lookup.</span> "Connected" means connected to any survey in the project, so the floating-trip line reads "This chunk isn't connected to any survey."</li>
+  <li><span class="q">The Kind column is always shown.</span> It is never auto-hidden, even when every row is a native Cave.</li>
+  <li><span class="q">Trip rows stay in the tree.</span> Trips are the leaves of the main tree (muted rows, one click to open); the node page keeps its trip table as well.</li>
+  <li><span class="q">A sourced root starts expanded one level on every load.</span> Native caves and folders start collapsed, so a native-only project still reads as today's list; a project with sources opens showing each source's first level.</li>
+  <li><span class="q">Names are unique per sibling set, like a file system.</span> A › B and C › B are both fine. The mixed scenario has "Entrance survey" under three caves and a "Side Cave" folder (inside the "Kentucky field seasons" folder) beside the top-level "Side Cave" cave. Only siblings get disambiguated ("New Cave 2").</li>
+
+  <h3>Decisions this prototype makes (all PROPOSED, all cheap to flip)</h3>
+  <li><span class="q">The region is the invisible root.</span> Top-level rows are the region's direct children. There is no "Region" row to collapse; the breadcrumb and the project header above the tree already stand for it.</li>
+  <li><span class="q">Native nodes start collapsed; sourced roots start open one level (settled).</span> A native-only project renders as exactly today's cave list plus a caret per row. Expanding native caves by default would show every trip of every cave on open, which today's page never does.</li>
+  <li><span class="q">Trip rows are muted (settled that they stay).</span> A trip row has no kind chip (a gray "trip" tag), no trip count, and opens the trip page on Enter. That keeps the leaf level visually lighter than the node level.</li>
+  <li><span class="q">Kind chip + lock.</span> One chip per node row carries the kind ("Cave", "Compass file", "Walls book"…). Native kinds use the muted chip; sourced kinds use the blue chip and a 🔒 whose tooltip names the owning file. In promote mode a second, outlined provenance chip names the source and opens its page.</li>
+  <li><span class="q">Columns.</span> Name, Kind, Trips, Length, Depth, Last survey. Today's list renders a cave as "<i>Name</i> is <i>L</i> long and <i>D</i> deep" in a Flow; the tree needs aligned columns, so that sentence becomes two numeric columns. Trips and Last survey are new and cheap (they are folds over <code>allTrips()</code>).</li>
+  <li><span class="q">One Add ▾ split button, everywhere.</span> On the Data page its main action is Add Cave and the caret offers Add Cave / Add Folder / Attach survey file…. On a node page the main action and caret follow position (see the settled rule above) with "Place under" fixed to that node. Row ⋯ menus mirror the node's Add ▾ plus Open, Rename (native), and Reload/Replace (sourced root).</li>
+  <li><span class="q">Delete is right-click only, as in the current app.</span> No Delete button or ⋯ item anywhere; the right-click context menu on a tree row (and on a child-node or trip row of a node page) holds Open, Rename (native only), and Delete…, matching today's <code>DataRightClickMouseMenu</code>. <kbd>Shift+F10</kbd> or the context-menu key opens it on the selected tree row.</li>
+  <li><span class="q">Add Trip on a sourced node adds a native trip beside the derived ones.</span> Deleting that node later hides it and its native trip together (the confirm counts both).</li>
+  <li><span class="q">The ≡ sources menu is shown only in promote mode.</span> When roots are rows, the row and its page hold the verbs and the menu would be a third copy.</li>
+  <li><span class="q">Non-survey Walls books stay in the tree, gray.</span> "SVG Sources" and "Fixed Points" hold no shots. Hiding them would make the tree differ from the .wpj the user knows; graying them says "nothing to survey here" without lying about the file.</li>
+
+  <h3>Tree vs. list for the native-only case</h3>
+  <table>
+    <tr><th>Question</th><th>Flat list (today)</th><th>Tree (this prototype)</th></tr>
+    <tr><td>What a two-cave project looks like</td><td>Two rows</td><td>Two rows with carets. Same height, same click target on the name.</td></tr>
+    <tr><td>Getting to a trip</td><td>Click cave, then trip: two pages</td><td>Expand, click trip: one page. Or the cave page, as before.</td></tr>
+    <tr><td>Where "Add Trip" lives</td><td>Cave page only</td><td>Cave page, plus the row menu. The page stays the primary place.</td></tr>
+    <tr><td>Cost of the tree</td><td>—</td><td>One caret column, one Kind column (always shown; for native-only it reads "Cave" all the way down and doubles as the Cave/Folder picker).</td></tr>
+    <tr><td>Risk</td><td>—</td><td>A user who expands everything on a 40-trip cave gets a long page; Collapse all and the filter box are the escape hatches.</td></tr>
+  </table>
+  <p>Verdict: the tree does not hurt the simple case as long as native nodes start collapsed. The only visible
+    delta on a native project is the caret and the always-shown Kind column.</p>
+
+  <h3>Source root as a row vs. transparent (open question 2)</h3>
+  <table>
+    <tr><th></th><th>Root as a row (recommended)</th><th>Promote children to the top level</th></tr>
+    <tr><td>OMEGA2 in the list</td><td>One row "OMEGA2 · Compass project", expandable to 18 file nodes</td><td>18 rows, each with a "Compass file" chip and an "OMEGA2.MAK" provenance chip</td></tr>
+    <tr><td>Where Reload / Replace live</td><td>On the row and on the root's page</td><td>In the ≡ menu (there is no row); the source page is reachable only through the chip or the menu</td></tr>
+    <tr><td>Kaua .wpj</td><td>One row for the root book; the .wpj's own nesting below it</td><td>"SVG Sources", "Fixed Points", "North Maze Surveys" become top-level rows beside real caves</td></tr>
+    <tr><td>Two sources with a same-named unit</td><td>No collision: each is under its root</td><td>Two "Rocky" rows told apart only by the provenance chip</td></tr>
+    <tr><td>Region's direct children</td><td>Can be any kind (a Compass project is a top-level node)</td><td>Also any kind, but the roots are hidden nodes with no row, which is a new concept</td></tr>
+    <tr><td>Reads as a cave list</td><td>Less: a project row is a container, and the count column says "18 files"</td><td>More: it is the Phase 6 picture, every .dat a cave-like row</td></tr>
+  </table>
+  <p>Settled: <b>root as a row</b>. It has a home for every verb, no hidden nodes, and the breadcrumb
+    matches the tree. The toggle stays in the sim bar so the comparison is still visible.</p>
+
+  <h3>Open UX questions for the owner</h3>
+  <li>Hidden derived items: is "N hidden · Restore…" on the root's page enough, or should a hidden node stay in the tree as a grayed, struck-through row that can be un-hidden in place?</li>
+  <li>When Replace… swaps in a file whose units have different source paths, do the exclusions carry over by name, or are they dropped with a notice?</li>
+</div>
+
+</div><!-- /tab-body -->
+
+<script>
+'use strict';
+const el = id => document.getElementById(id);
+const show = id => el(id).style.display = '';
+const hide = id => el(id).style.display = 'none';
+
+function toggleTheme() {
+  const b = document.body;
+  b.dataset.theme = b.dataset.theme === 'dark' ? 'light' : 'dark';
+}
+function showLane(name) {
+  for (const l of ['app','notes']) {
+    el('lane-' + l).classList.toggle('active', l === name);
+    el('tabbtn-' + l).classList.toggle('active', l === name);
+  }
+}
+function toggleMenu(id, e) {
+  const m = el(id);
+  const open = m.style.display === 'none';
+  closeMenus();
+  m.style.display = open ? 'block' : 'none';
+  e.stopPropagation();
+}
+function closeMenus() {
+  for (const m of document.querySelectorAll('.menu')) { if (m.classList.contains('ctx')) m.remove(); else m.style.display = 'none'; }
+}
+document.addEventListener('click', closeMenus);
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMenus(); });
+
+/* ---------- real demo data ---------- */
+const OMEGA_DATS = [
+  ['Blowing',  'BLOWING3.DAT', 116, 2913, '18,204 m'],
+  ['Hairy',    'HAIRY.DAT',     13,  611,  '4,120 m'],
+  ['Molly',    'MOLLY.DAT',      3,  118,    '702 m'],
+  ['Parsons',  'PARSONS.DAT',    2,   41,    '318 m'],
+  ['Ridge',    'RIDGECAV.DAT',   1,   40,    '256 m'],
+  ['Spiderweb','SPIDERWE.DAT',   6,  204,  '1,440 m'],
+  ['Overland', 'OVERLAND.DAT',   1,   22,    '910 m'],
+  ['Cracknsp', 'CRACKNSP.DAT',   2,   31,    '190 m'],
+  ['Rocky',    'ROCKY.DAT',      6,  480,  '3,010 m'],
+  ['Solomon',  'Solomon.DAT',    0,    0,      '—'],
+  ['Franklin', 'FRANKLIN.DAT',   2,   64,    '402 m'],
+  ['Rockysrf', 'ROCKYSRF.DAT',   3,   90,    '640 m'],
+  ['Horsesho', 'HORSESHO.DAT',   1,   38,    '210 m'],
+  ['Bucket',   'Bucket.DAT',     2,   55,    '330 m'],
+  ['5_shot',   '5_SHOT.DAT',     1,    6,     '40 m'],
+  ['Powriv',   'PowRiv.DAT',     1,   26,    '180 m'],
+  ['Bloomer',  'Bloomer.DAT',    2,   61,    '390 m'],
+  ['Pmrathol', 'PMRATHOL.DAT',   1,   15,    '110 m'],
+];
+const BLOWING_SURVEYS = [
+  ['OF50-87', 'Old Fart survey', '2007-09-13', 38],
+  ['LF350-423', 'Upstream Gale Force', '2007-09-11', 74],
+  ['trip1', '', '1994-11-26', 21],
+  ['trip2', '', '1995-04-15', 33],
+];
+// Kaua North Maze.wpj, cut from 12 books to the representative 9 (real names, real depth).
+const KAUA = {
+  name: 'Actun Kaua - North Maze', nonSurvey: ['SVGINFO.TXT — SVG Map Info - Please Read First!', 'NOTES — Flags and Notes'],
+  children: [
+    { name: 'SVG Sources', kind: 'wallsFolder', files: ['KAUA-NM_w2d_mrg.svg'] },
+    { name: 'Fixed Points', kind: 'wallsFolder', files: ['ENT-ZERO.SRV (fixed reference at station 5, no shots)', 'WARPTEST.SRV (2nd fix, no shots)'] },
+    { name: 'North Maze Surveys', kind: 'wallsBook', children: [
+      { name: 'Dec30-Jan11 2003 Surveys', kind: 'wallsBook', trips: [
+        ['Jan 09 D-Survey', 'DSURV09.SRV', '2003-01-09', 61], ['Jan 08 D-Survey', 'DSURV08.SRV', '2003-01-08', 48],
+        ['Jan 07 D-Survey', 'DSURV07.SRV', '2003-01-07', 55], ['Jan 05 D-Survey', 'DSURV05.SRV', '2003-01-05', 39],
+        ['Jan 04 D-Survey', 'DSURV04.SRV', '2003-01-04', 44], ['Jan 02 D-Survey', 'DSURV02.SRV', '2003-01-02', 52],
+        ['Jan 01 D-Survey', 'DSURV01.SRV', '2003-01-01', 31], ['Dec 31 D-Survey', 'DSURV31.SRV', '2002-12-31', 36],
+        ['Dec 30 D-Survey', 'D-SURVEY.SRV', '2002-12-30', 28] ] },
+      { name: 'Dec 2001 Surveys', kind: 'wallsBook',
+        trips: [['Floated Shots for SVG Export', 'NM-FLOAT.SRV', '2001-12-30', 6]],
+        children: [
+          { name: 'N Surveys', kind: 'wallsBook', prefix: 'N', trips: [
+            ['Jan 10 2002 N Survey', '020110N.SRV', '2002-01-10', 41], ['Jan 9 2002 N Survey', '020109N.SRV', '2002-01-09', 37],
+            ['Jan 8 2002 N Survey', '020108-N.SRV', '2002-01-08', 52], ['Jan 6 2002 N Survey', '020105-N.SRV', '2002-01-06', 29],
+            ['Jan 3 2002 N Survey', '020103N.SRV', '2002-01-03', 33], ['Jan 2, 2002 Survey', '020102N.SRV', '2002-01-02', 47],
+            ['Jan 1 2002 N Survey', '020101N.SRV', '2002-01-01', 40], ['Dec 30 2001 N Survey', '011230-N.SRV', '2001-12-30', 22] ] },
+          { name: 'F Surveys', kind: 'wallsBook', prefix: 'F', trips: [
+            ['Jan 10 2002 F-Survey', '020110-F.SRV', '2002-01-10', 35], ['Jan 8 2002 F-Survey', '020108-F.SRV', '2002-01-08', 44],
+            ['Jan 7 2002 F-Survey', '020107-F.SRV', '2002-01-07', 38], ['Jan 06 2002 F-Survey', '020106F.SRV', '2002-01-06', 27],
+            ['Jan 02 2002 F-Survey', '020102F.SRV', '2002-01-02', 51], ['Jan 01 2002 F-Survey', '020101F.SRV', '2002-01-01', 30],
+            ['Dec 30 2001 F-Survey', '011230F.SRV', '2001-12-30', 24], ['Dec 29 Survey', '01-12-29.SRV', '2001-12-29', 19],
+            ['Dec 26 Survey', '01-12-26.SRV', '2001-12-26', 26] ] } ] },
+      { name: 'Left Wall Passage', kind: 'wallsBook', trips: [
+        ['Left Wall (19 July 75)', 'LW750719.SRV', '1975-07-19', 22], ['Left Wall (20 July 75)', 'LW750720.SRV', '1975-07-20', 18] ] },
+    ] },
+  ],
+};
+// testcases/datasets/external-centerlines/survex_master: a master of three *include lines.
+const SURVEX = [
+  ['alpha',   'alpha.svx',   2, 10, '2024-05-01'],
+  ['bravo',   'bravo.svx',   3, 14, '2024-05-02'],
+  ['charlie', 'charlie.svx', 4, 16, '2024-05-03'],
+];
+
+const KINDS = {
+  cave:           { label: 'Cave',            native: true },
+  folder:         { label: 'Folder',          native: true },
+  compassProject: { label: 'Compass project' },
+  compassFile:    { label: 'Compass file' },
+  wallsBook:      { label: 'Walls book' },
+  wallsFolder:    { label: 'Walls book' },
+  survexFile:     { label: 'Survex file' },
+  survexBlock:    { label: 'Survex block' },
+};
+const kAverageLegMeters = 6.3;
+const kDepthPerLength = 0.018;
+
+/* ---------- model ---------- */
+let nextId = 1;
+function node(name, kind, opts) {
+  return Object.assign({ id: 'n' + (nextId++), name, kind, children: [], trips: [], parent: null,
+                         sourced: false, root: false, source: null, unit: '', nonSurvey: false, missing: false, hidden: [] }, opts || {});
+}
+function trip(name, date, stations, len, opts) {
+  return Object.assign({ id: 't' + (nextId++), name, date, stations, len, derived: false, unit: '', parent: null }, opts || {});
+}
+function addChild(parent, child) { child.parent = parent; parent.children.push(child); return child; }
+function addTrip(parent, t) { t.parent = parent; parent.trips.push(t); return t; }
+function allTrips(n) { let out = n.trips.slice(); for (const c of n.children) out = out.concat(allTrips(c)); return out; }
+function allNodes(n) { let out = []; for (const c of n.children) { out.push(c); out = out.concat(allNodes(c)); } return out; }
+function nodeLength(n) { return allTrips(n).reduce((s, t) => s + t.len, 0); }
+function nodeDepth(n) { return Math.max(n.depth || 0, ...n.children.map(nodeDepth)); }
+function lastSurvey(n) { return allTrips(n).map(t => t.date).sort().pop() || ''; }
+function pathOf(n) { const p = []; for (let x = n; x && x.kind !== 'region'; x = x.parent) p.unshift(x); return p; }
+function sourceRootOf(n) { for (let x = n; x; x = x.parent) if (x.root) return x; return null; }
+function isSourcedRow(n) { return n.sourced; }
+function fmtLen(m) { return m > 0 ? m.toLocaleString('en-US') + ' m' : '—'; }
+function parseLen(s) { const v = parseInt(s.replace(/,/g, ''), 10); return isNaN(v) ? 0 : v; }
+function titleCase(stem) { return stem.charAt(0).toUpperCase() + stem.slice(1).toLowerCase(); }
+function seeded(seed) { let s = seed; return () => { s = (s * 1103515245 + 12345) & 0x7fffffff; return s / 0x7fffffff; }; }
+function hashOf(s) { let h = 7; for (const ch of s) h = (h * 31 + ch.charCodeAt(0)) & 0xffff; return h; }
+function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+
+/* ---------- builders ---------- */
+function buildNativeCave(name, depth, trips) {
+  const c = node(name, 'cave', { depth });
+  for (const [tn, date, stations] of trips) addTrip(c, trip(tn, date, stations, Math.round(stations * kAverageLegMeters)));
+  return c;
+}
+function buildOmega() {
+  const root = node('OMEGA2', 'compassProject', { sourced: true, root: true, source: {
+    file: 'OMEGA2.MAK', fmt: 'Compass project', from: '/Users/friend/compass/OMEGA2/OMEGA2.MAK',
+    stations: 6985, units: '18 .dat files · 163 surveys', status: 'warn', warnings: 5 } });
+  for (const [, dat, n, stations, lenStr] of OMEGA_DATS) {
+    const stem = dat.replace(/\.dat$/i, '');
+    const total = parseLen(lenStr);
+    const f = addChild(root, node(titleCase(stem), 'compassFile', { sourced: true, unit: dat, missing: n === 0,
+      depth: Math.round(total * kDepthPerLength) }));
+    const rnd = seeded(hashOf(dat));
+    const real = stem.toUpperCase() === 'BLOWING3' ? BLOWING_SURVEYS : [];
+    for (const [tn, comment, date, st] of real)
+      addTrip(f, trip(tn, date, st, Math.round(st * kAverageLegMeters), { derived: true, unit: 'survey ' + tn, comment }));
+    const codes = ['OF', 'LF', 'GF', 'SW', 'CS', 'MH', 'RH', 'UP'];
+    for (let i = real.length; i < n; i++) {
+      const year = 1994 + Math.floor(rnd() * 16), month = 1 + Math.floor(rnd() * 12), day = 1 + Math.floor(rnd() * 28);
+      const date = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      const st = Math.max(4, Math.round(stations / n * (0.6 + rnd() * 0.8)));
+      const a = 1 + Math.floor(rnd() * 400), tn = `${codes[i % codes.length]}${a}-${a + st}`;
+      addTrip(f, trip(tn, date, st, Math.round(total / n), { derived: true, unit: 'survey ' + tn }));
+    }
+  }
+  return root;
+}
+function buildKaua() {
+  const root = node(KAUA.name, 'wallsBook', { sourced: true, root: true, nonSurveyEntries: KAUA.nonSurvey, source: {
+    file: 'Kaua North Maze.wpj', fmt: 'Walls project', from: '/Users/friend/walls/Kaua North Maze.wpj',
+    stations: 1910, units: '12 books · 36 .srv files', status: 'ok', warnings: 0 } });
+  const build = (parent, spec) => {
+    const n = addChild(parent, node(spec.name, spec.kind, { sourced: true, unit: spec.name, nonSurvey: spec.kind === 'wallsFolder',
+      files: spec.files || [], prefix: spec.prefix || '' }));
+    for (const [tn, srv, date, st] of (spec.trips || []))
+      addTrip(n, trip(tn, date, st, Math.round(st * kAverageLegMeters), { derived: true, unit: srv + (spec.prefix ? ' · #PREFIX ' + spec.prefix : '') }));
+    for (const c of (spec.children || [])) build(n, c);
+    n.depth = Math.round(nodeLength(n) * kDepthPerLength * 0.4);
+    return n;
+  };
+  for (const c of KAUA.children) build(root, c);
+  return root;
+}
+function buildSurvex() {
+  const root = node('master', 'survexFile', { sourced: true, root: true, source: {
+    file: 'master.svx', fmt: 'Survex', from: '/Users/friend/survex/survex_master/master.svx',
+    stations: 9, units: '3 included files · 3 blocks', status: 'ok', warnings: 0 } });
+  for (const [blk, file, st, len, date] of SURVEX) {
+    const b = addChild(root, node(blk, 'survexBlock', { sourced: true, unit: file + ' · *begin ' + blk, depth: 0 }));
+    addTrip(b, trip(blk, date, st, len, { derived: true, unit: '*begin ' + blk }));
+  }
+  return root;
+}
+function buildRegion(scenario) {
+  const region = node('Omega', 'region');
+  const natives = () => {
+    addChild(region, buildNativeCave('Wulong North', 412, [
+      ['Entrance survey', '2024-03-02', 48], ['Main stream 1', '2024-03-03', 71], ['Main stream 2', '2024-03-04', 66], ['Upper level', '2024-08-19', 39]]));
+    addChild(region, buildNativeCave('Side Cave', 61, [['Entrance survey', '2023-11-12', 27], ['Side Cave dig', '2024-02-01', 9]]));
+    addChild(region, buildNativeCave('Sinkhole Spring', 18, [['Spring resurvey', '2022-06-30', 14]]));
+  };
+  if (scenario === 'native') natives();
+  if (scenario === 'omega') { natives(); addChild(region, buildOmega()); }
+  if (scenario === 'kaua') { natives(); addChild(region, buildKaua()); }
+  if (scenario === 'survex') { natives(); addChild(region, buildSurvex()); }
+  if (scenario === 'all') {
+    natives();
+    const omega = addChild(region, buildOmega());
+    const blowing = omega.children.find(c => c.name === 'Blowing3');
+    addTrip(blowing, trip('Digital survey 2026-09-14', '2026-09-14', 4, 36, { native: true }));
+    addChild(region, buildKaua());
+    addChild(region, buildSurvex());
+    const grp = addChild(region, node('Kentucky field seasons', 'folder'));
+    addChild(grp, buildNativeCave('Fisher Ridge', 120, [['Entrance survey', '2025-05-10', 55]]));
+    addChild(grp, buildNativeCave('Roppel', 98, [['Roppel 2025-05', '2025-05-11', 42]]));
+    addChild(grp, node('Side Cave', 'folder'));
+  }
+  return region;
+}
+
+/* ---------- state ---------- */
+const state = { scenario: 'native', rootMode: 'row', trees: {}, expanded: {}, selectedId: null, page: 'datapage', pageNode: null };
+function current() { return state.trees[state.scenario]; }
+function expandedSet() { return state.expanded[state.scenario]; }
+function ensureScenario(s) {
+  if (!state.trees[s]) {
+    const region = buildRegion(s);
+    state.trees[s] = region;
+    // On every load a sourced root starts expanded one level; native caves and folders start collapsed.
+    state.expanded[s] = new Set(region.children.filter(c => c.root).map(c => c.id));
+  }
+}
+function setScenario(s) {
+  state.scenario = s; ensureScenario(s); state.selectedId = null;
+  el('filter').value = '';
+  gotoData();
+}
+function setRootMode(m) { state.rootMode = m; renderTree(); }
+function resetDemo() {
+  state.trees = {}; state.expanded = {}; state.selectedId = null;
+  el('filter').value = '';
+  ensureScenario(state.scenario); gotoData();
+}
+function isExpanded(n) { return expandedSet().has(n.id); }
+function setExpanded(n, on) { if (on) expandedSet().add(n.id); else expandedSet().delete(n.id); }
+function expandAll() { for (const n of allNodes(current())) setExpanded(n, true); renderTree(); }
+function collapseAll() { expandedSet().clear(); renderTree(); }
+
+/* ---------- tree rendering ---------- */
+function findById(id) {
+  if (!id) return null;
+  for (const n of allNodes(current())) { if (n.id === id) return n; for (const t of n.trips) if (t.id === id) return t; }
+  return null;
+}
+function filterText() { return el('filter').value.trim().toLowerCase(); }
+function matches(name) { const f = filterText(); return !f || name.toLowerCase().includes(f); }
+function subtreeMatches(n) {
+  if (matches(n.name)) return true;
+  if (n.trips.some(t => matches(t.name))) return true;
+  return n.children.some(subtreeMatches);
+}
+function topLevel() {
+  const out = [];
+  for (const c of current().children) {
+    if (state.rootMode === 'promote' && c.root) for (const g of c.children) out.push({ n: g, prov: c });
+    else out.push({ n: c, prov: null });
+  }
+  return out;
+}
+function visibleRows() {
+  const rows = [], filtering = !!filterText();
+  const walk = (n, depth, prov) => {
+    if (filtering && !subtreeMatches(n)) return;
+    rows.push({ type: 'node', item: n, depth, prov });
+    const descendantMatches = n.children.some(subtreeMatches) || n.trips.some(t => matches(t.name));
+    const open = isExpanded(n) || (filtering && descendantMatches);
+    if (!open) return;
+    for (const c of n.children) walk(c, depth + 1, null);
+    for (const t of n.trips) if (!filtering || matches(t.name)) rows.push({ type: 'trip', item: t, depth: depth + 1, prov: null });
+  };
+  for (const { n, prov } of topLevel()) walk(n, 0, prov);
+  return rows;
+}
+const ICONS = {
+  cave: '<svg class="kicon" viewBox="0 0 16 16"><path d="M1.5 14V8.5A6.5 6.5 0 0 1 14.5 8.5V14H10.5V10.5a2.5 2.5 0 0 0-5 0V14Z"/></svg>',
+  folder: '<svg class="kicon" viewBox="0 0 16 16"><path d="M1.5 3.5h4l1.5 1.5h7.5v8h-13Z"/></svg>',
+};
+function kindIcon(n) { return n.sourced ? '' : (ICONS[n.kind] || ''); }
+// Native nodes have exactly two labels, Cave and Folder; the chip is a picker between them and nothing else changes.
+function kindChip(n) {
+  const k = KINDS[n.kind];
+  if (!n.sourced) return `<span class="chip native kindpick" title="Change label" onclick="kindMenu(event, '${n.id}')">${k.label} ▾</span>`;
+  const lock = `<span class="lock" title="Read-only: owned by ${esc(sourceRootOf(n).source.file)}. Native trips can still be added here.">🔒</span>`;
+  return `<span class="chip">${k.label}</span>${lock}`;
+}
+function kindMenu(e, id) {
+  e.stopPropagation(); e.preventDefault();
+  const n = findById(id);
+  closeMenus();
+  const host = el('winbody'), hr = host.getBoundingClientRect();
+  const m = document.createElement('div'); m.className = 'menu ctx'; m.style.minWidth = '120px';
+  m.style.left = (e.clientX - hr.left) + 'px'; m.style.top = (e.clientY - hr.top) + 'px';
+  m.onclick = (ev) => ev.stopPropagation();
+  for (const kind of ['cave', 'folder']) menuItem(m, (n.kind === kind ? '✓ ' : '\u2003') + KINDS[kind].label, () => { n.kind = kind; refresh(); });
+  host.appendChild(m);
+}
+// Position picks the verbs: outside a Cave a node takes caves and folders; inside a Cave it takes trips and sections.
+function withinCave(n) { for (let x = n; x && x.kind !== 'region'; x = x.parent) if (x.kind === 'cave' || x.sourced) return true; return false; }
+function takesCaves(n) { return n.kind === 'region' || (n.kind === 'folder' && !withinCave(n)); }
+function renderTree() {
+  const t = el('tree');
+  const showDates = el('showdates').checked;
+  const cols = 6 + (showDates ? 1 : 0);
+  t.innerHTML = `<tr><th style="width:40%">Name</th><th>Kind</th><th class="num">Trips</th><th class="num">Length</th><th class="num">Depth</th>` +
+    (showDates ? '<th>Last survey</th>' : '') + '<th></th></tr>';
+  const rows = visibleRows();
+  if (rows.length === 0) {
+    const r = t.insertRow(); r.className = 'empty'; const c = r.insertCell(); c.colSpan = cols;
+    c.textContent = filterText() ? 'Nothing matches the filter.' : 'No caves yet. Add Cave creates a native cave; Attach survey file… adds a source as a subtree.';
+  }
+  for (const row of rows) {
+    const r = t.insertRow();
+    r.className = 'row' + (row.item.id === state.selectedId ? ' selected' : '');
+    r.dataset.id = row.item.id;
+    r.onclick = () => { state.selectedId = row.item.id; renderTree(); };
+    r.ondblclick = () => openItem(row.item);
+    r.oncontextmenu = (e) => { e.preventDefault(); state.selectedId = row.item.id; renderTree(); openContextMenu(row.item, e.clientX, e.clientY); };
+    const name = r.insertCell(); name.className = 'name';
+    name.style.paddingLeft = (8 + row.depth * 20) + 'px';
+    if (row.type === 'node') {
+      const n = row.item;
+      if (n.nonSurvey || n.missing) r.classList.add('gray');
+      const hasKids = n.children.length + n.trips.length > 0;
+      const caret = document.createElement('span');
+      caret.className = 'caret' + (hasKids ? '' : ' leaf');
+      caret.textContent = isExpanded(n) ? '▼' : '▶';
+      caret.title = isExpanded(n) ? 'Collapse' : 'Expand';
+      caret.onclick = (e) => { e.stopPropagation(); setExpanded(n, !isExpanded(n)); state.selectedId = n.id; renderTree(); };
+      name.appendChild(caret);
+      if (n.kind === 'folder') r.classList.add('folder');
+      const a = document.createElement('a'); a.className = 'link';
+      a.innerHTML = kindIcon(n) + (n.sourced ? '📎 ' : '') + esc(n.name);
+      a.onclick = (e) => { e.stopPropagation(); openNode(n); };
+      name.appendChild(a);
+      if (n.missing) { const m = document.createElement('span'); m.className = 'missing'; m.textContent = 'file missing — skipped'; name.appendChild(m); }
+      if (n.nonSurvey) { const m = document.createElement('span'); m.className = 'hint'; m.textContent = `no surveys (${n.files.length} file${n.files.length === 1 ? '' : 's'})`; name.appendChild(m); }
+      if (n.trips.some(x => x.native) && n.sourced) { const m = document.createElement('span'); m.className = 'hint'; m.textContent = '· holds native trips'; name.appendChild(m); }
+      const kind = r.insertCell();
+      kind.innerHTML = kindChip(n);
+      if (row.prov) {
+        const p = document.createElement('span'); p.className = 'chip prov'; p.style.marginLeft = '6px';
+        p.textContent = row.prov.source.file; p.title = 'Open the source ' + row.prov.source.file;
+        p.onclick = (e) => { e.stopPropagation(); openNode(row.prov); };
+        kind.appendChild(p);
+      }
+      const trips = allTrips(n).length;
+      const tc = r.insertCell(); tc.className = 'num';
+      tc.textContent = n.children.length && n.root ? `${n.children.length} ${n.kind === 'compassProject' ? 'files' : n.kind === 'survexFile' ? 'blocks' : 'books'} · ${trips}` : (trips || (n.nonSurvey ? '—' : '0'));
+      const lc = r.insertCell(); lc.className = 'num'; lc.textContent = fmtLen(nodeLength(n));
+      const dc = r.insertCell(); dc.className = 'num'; dc.textContent = fmtLen(nodeDepth(n));
+      if (showDates) r.insertCell().textContent = lastSurvey(n);
+    } else {
+      const tr = row.item;
+      const caret = document.createElement('span'); caret.className = 'caret leaf'; caret.textContent = '▶';
+      name.appendChild(caret);
+      const a = document.createElement('a'); a.className = 'link';
+      a.textContent = (tr.derived ? '📎 ' : '') + tr.name;
+      a.onclick = (e) => { e.stopPropagation(); openTrip(tr); };
+      name.appendChild(a);
+      if (tr.comment) { const m = document.createElement('span'); m.className = 'hint'; m.textContent = '— ' + tr.comment; name.appendChild(m); }
+      const kind = r.insertCell();
+      kind.innerHTML = tr.derived ? `<span class="chip trip">trip · ${esc(tr.unit)}</span>` : '<span class="chip trip">trip · native</span>';
+      const tc = r.insertCell(); tc.className = 'num'; tc.textContent = tr.stations + ' st';
+      const lc = r.insertCell(); lc.className = 'num'; lc.textContent = fmtLen(tr.len);
+      r.insertCell();
+      if (showDates) r.insertCell().textContent = tr.date;
+    }
+    const mc = r.insertCell(); mc.className = 'menucell';
+    const b = document.createElement('button'); b.className = 'btn icon'; b.textContent = '⋯'; b.title = 'Row actions';
+    b.onclick = (e) => { e.stopPropagation(); state.selectedId = row.item.id; openRowMenu(row, mc, e); };
+    mc.appendChild(b);
+  }
+  renderHamburger();
+  el('hamburgerhost').style.display = state.rootMode === 'promote' ? '' : 'none';
+  const roots = current().children.filter(c => c.root).length;
+  el('treehint').textContent = roots === 0
+    ? 'Native project: every top-level node is a Cave with trips below it. This is today\'s cave list with a caret per row.'
+    : state.rootMode === 'row'
+      ? `${roots} source root${roots === 1 ? '' : 's'} shown as rows. Reload and Replace live on the row (⋯) and on the root's page; Delete is in the right-click menu of any row.`
+      : `${roots} source root${roots === 1 ? '' : 's'} hidden; their children are promoted to the top level with an outlined provenance chip. Source verbs live in the ≡ menu.`;
+}
+
+/* ---------- row menus ---------- */
+function menuItem(m, label, fn, disabled) {
+  const d = document.createElement('div'); d.textContent = label;
+  if (disabled) d.className = 'disabled';
+  else d.onclick = (e) => { e.stopPropagation(); closeMenus(); fn(); };
+  m.appendChild(d); return d;
+}
+function menuHead(m, text) { const d = document.createElement('div'); d.className = 'head'; d.textContent = text; m.appendChild(d); }
+function openRowMenu(row, cell, e) {
+  closeMenus();
+  const m = document.createElement('div'); m.className = 'menu'; m.style.right = '4px'; m.style.top = '24px';
+  m.onclick = (ev) => ev.stopPropagation();
+  if (row.type === 'trip') {
+    const tr = row.item;
+    menuItem(m, 'Open', () => openTrip(tr));
+    if (tr.derived) menuHead(m, 'Derived from ' + sourceRootOf(tr.parent).source.file + ' — shots are read-only');
+  } else {
+    const n = row.item;
+    menuItem(m, 'Open', () => openNode(n));
+    addVerbs(m, n);
+    if (!n.sourced) menuItem(m, 'Rename…', () => renameNode(n));
+    if (n.root) {
+      m.appendChild(document.createElement('hr'));
+      menuHead(m, n.source.file);
+      menuItem(m, 'Reload', () => reloadSource(n));
+      menuItem(m, 'Replace…', () => replaceSource(n));
+    } else if (n.sourced) {
+      menuHead(m, 'Owned by ' + sourceRootOf(n).source.file + ' — name and derived children come from the file');
+      if (state.rootMode === 'promote' && row.prov) menuItem(m, 'Open source ' + row.prov.source.file, () => openNode(row.prov));
+    }
+  }
+  cell.appendChild(m);
+  e.stopPropagation();
+}
+// The Add ▾ verbs for one node follow its position; "Add Section" creates a Folder, it is only the in-cave wording.
+function addVerbs(m, n) {
+  if (takesCaves(n)) {
+    menuItem(m, 'Add Cave', () => addCaveUnder(n));
+    menuItem(m, 'Add Folder', () => addFolderUnder(n));
+  } else {
+    menuItem(m, 'Add Trip', () => addNativeTrip(n));
+    menuItem(m, 'Add Section', () => addFolderUnder(n, 'New Section'));
+  }
+  menuItem(m, 'Attach survey file…', () => openDialog(n));
+}
+function renderHamburger() {
+  const m = el('hamburger'); m.innerHTML = '';
+  menuHead(m, 'Survey sources');
+  const roots = current().children.filter(c => c.root);
+  if (roots.length === 0) menuItem(m, 'No survey sources attached.', null, true);
+  for (const r of roots) {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex; gap:8px; align-items:center';
+    row.innerHTML = `<a class="link" style="flex:1">📎 ${esc(r.source.file)} <span class="hint">(${r.children.length} nodes)</span></a>`;
+    row.querySelector('a').onclick = (e) => { e.stopPropagation(); closeMenus(); openNode(r); };
+    for (const [label, fn] of [['Reload', () => reloadSource(r)], ['Replace…', () => replaceSource(r)]]) {
+      const b = document.createElement('button'); b.className = 'btn small'; b.textContent = label;
+      b.onclick = (e) => { e.stopPropagation(); closeMenus(); fn(); };
+      row.appendChild(b);
+    }
+    row.onclick = (e) => e.stopPropagation();
+    m.appendChild(row);
+  }
+}
+
+/* ---------- keyboard ---------- */
+function treeKey(e) {
+  const rows = visibleRows();
+  if (rows.length === 0) return;
+  let idx = rows.findIndex(r => r.item.id === state.selectedId);
+  const select = (i) => { state.selectedId = rows[Math.max(0, Math.min(rows.length - 1, i))].item.id; renderTree(); scrollSelected(); };
+  switch (e.key) {
+    case 'ArrowDown': select(idx + 1); break;
+    case 'ArrowUp': select(idx < 0 ? 0 : idx - 1); break;
+    case 'Home': select(0); break;
+    case 'End': select(rows.length - 1); break;
+    case 'ArrowRight': {
+      if (idx < 0) { select(0); break; }
+      const r = rows[idx];
+      if (r.type === 'node' && !isExpanded(r.item) && (r.item.children.length || r.item.trips.length)) { setExpanded(r.item, true); renderTree(); }
+      else select(idx + 1);
+      break;
+    }
+    case 'ArrowLeft': {
+      if (idx < 0) break;
+      const r = rows[idx];
+      if (r.type === 'node' && isExpanded(r.item)) { setExpanded(r.item, false); renderTree(); }
+      else {
+        const parent = r.item.parent;
+        if (parent && rows.some(x => x.item.id === parent.id)) { state.selectedId = parent.id; renderTree(); scrollSelected(); }
+      }
+      break;
+    }
+    case 'Enter': if (idx >= 0) openItem(rows[idx].item); break;
+    case 'ContextMenu': case 'F10': {
+      if (e.key === 'F10' && !e.shiftKey) return;
+      if (idx < 0) break;
+      const tr = el('tree').querySelector('tr.selected');
+      const rect = tr.getBoundingClientRect();
+      openContextMenu(rows[idx].item, rect.left + 40, rect.bottom);
+      break;
+    }
+    case ' ': if (idx >= 0 && rows[idx].type === 'node') { setExpanded(rows[idx].item, !isExpanded(rows[idx].item)); renderTree(); } break;
+    default: return;
+  }
+  e.preventDefault();
+}
+// Delete lives only here, as in the current app's right-click DataRightClickMouseMenu.
+function openContextMenu(item, clientX, clientY) {
+  closeMenus();
+  const host = el('winbody'), hr = host.getBoundingClientRect();
+  const m = document.createElement('div'); m.className = 'menu ctx';
+  m.style.left = (clientX - hr.left) + 'px'; m.style.top = (clientY - hr.top) + 'px';
+  m.onclick = (ev) => ev.stopPropagation();
+  const isNode = !!item.kind;
+  menuItem(m, 'Open', () => openItem(item));
+  if (isNode && !item.sourced) menuItem(m, 'Rename…', () => renameNode(item));
+  if (isNode && item.sourced && !item.root) menuHead(m, 'Owned by ' + sourceRootOf(item).source.file);
+  if (!isNode && item.derived) menuHead(m, 'Derived from ' + sourceRootOf(item.parent).source.file);
+  m.appendChild(document.createElement('hr'));
+  menuItem(m, 'Delete…', () => isNode ? removeNode(item) : removeTrip(item));
+  host.appendChild(m);
+}
+function rowContext(e, id) { e.preventDefault(); e.stopPropagation(); openContextMenu(findById(id), e.clientX, e.clientY); }
+function scrollSelected() {
+  const r = el('tree').querySelector('tr.selected');
+  if (r) r.scrollIntoView({ block: 'nearest' });
+}
+
+/* ---------- pages ---------- */
+function showPage(id, title) {
+  for (const p of ['datapage', 'nodepage', 'trippage']) hide(p);
+  show(id); el('pagename').textContent = title; state.page = id;
+}
+function gotoData() { showPage('datapage', 'Data'); renderTree(); }
+function openItem(item) { if (item.kind) openNode(item); else openTrip(item); }
+function crumbs(item) {
+  const parts = [`<a onclick="gotoData()">All caves</a>`];
+  const nodes = item.kind ? pathOf(item) : pathOf(item.parent);
+  for (const n of nodes) {
+    const hidden = state.rootMode === 'promote' && n.root;
+    const last = n === nodes[nodes.length - 1] && item.kind;
+    parts.push(last ? `<span class="here">${esc(n.name)}</span>`
+                    : `<a onclick="openNodeById('${n.id}')" ${hidden ? 'title="Source root (hidden as a row in promote mode)" style="opacity:.7"' : ''}>${esc(n.name)}</a>`);
+  }
+  if (!item.kind) parts.push(`<span class="here">${esc(item.name)}</span>`);
+  return `<div class="page-nav">${parts.join('<span class="sep">›</span>')}</div>`;
+}
+function openNodeById(id) { openNode(findById(id)); }
+function openNode(n) {
+  state.pageNode = n;
+  showPage('nodepage', KINDS[n.kind].label + ': ' + n.name);
+  const root = sourceRootOf(n);
+  const trips = allTrips(n);
+  let h = crumbs(n);
+  h += `<div class="node-header"><h2>${kindIcon(n)}${n.sourced ? '📎 ' : ''}${esc(n.name)}</h2>${kindChip(n)}`;
+  if (!n.sourced) h += `<button class="btn small" onclick="renameNode(state.pageNode)">Rename…</button>`;
+  h += `<span style="flex:1"></span>`;
+  if (n.root) h += `<button class="btn small" onclick="reloadSource(state.pageNode)">Reload</button>
+                    <button class="btn small" onclick="replaceSource(state.pageNode)">Replace…</button>`;
+  h += `</div>`;
+  h += `<div class="stats"><span>Trips <b>${trips.length}</b></span><span>Length <b>${fmtLen(nodeLength(n))}</b></span><span>Depth <b>${fmtLen(nodeDepth(n))}</b></span><span>Last survey <b>${lastSurvey(n) || '—'}</b></span>` +
+       (n.kind === 'cave' && !n.sourced ? '<span>Fix stations <b>1</b></span><span>Leads <b>3</b></span>' : '') + '</div>';
+  if (n.sourced) {
+    const s = root.source;
+    h += `<div class="cavecard"><div class="t">Survey source</div>
+      <div class="header-filerow"><span class="fname">${esc(s.file)}</span><span class="fmt">${esc(s.fmt)}</span>` +
+      (n.root ? '' : `<span class="secondary">· this node is <code>${esc(n.unit)}</code> in the project</span>`) +
+      `<span class="spacer"></span>` + (n.root ? '' : `<a class="link" onclick="openNodeById('${root.id}')">Open ${esc(s.file)}</a>`) + `</div>
+      <div class="provenance">Copied from: ${esc(s.from)}</div>
+      <div class="secondary" style="margin-top:4px">${esc(s.units)} · ${s.stations.toLocaleString('en-US')} stations in source</div>
+      <div class="solve-status" style="margin-top:6px"><span class="dot ${s.status}"></span> Solved${s.warnings ? ' · ' + s.warnings + ' warnings' : ''}</div>` +
+      (n.root ? `<div class="hint" style="margin-top:4px">Reload and Replace act on this whole subtree; that is why they live here and on this row, never on a child node. Right-click → Delete removes the subtree, native trips included.</div>` + hiddenLine(n)
+              : `<div class="hint" style="margin-top:4px">The name and derived children come from the file. Native trips can be added below; right-click → Delete hides this node from the project.</div>`) +
+      (n.nonSurvey ? `<div class="secondary" style="margin-top:6px">Files in this book (no shots): ${n.files.map(esc).join(', ')}</div>` : '') +
+      (n.nonSurveyEntries && n.nonSurveyEntries.length ? `<div class="secondary" style="margin-top:6px">Non-survey entries at this level: ${n.nonSurveyEntries.map(esc).join('; ')}</div>` : '') +
+      `</div>`;
+  }
+  if (n.children.length) {
+    h += `<div class="cavecard"><div class="t">${n.root ? 'Contents' : 'Child nodes'} (${n.children.length})</div><table class="triptable">
+      <tr><th>Name</th><th>Kind</th><th class="num">Trips</th><th class="num">Length</th><th class="num">Depth</th><th>Last survey</th></tr>`;
+    for (const c of n.children) {
+      const ct = allTrips(c).length;
+      h += `<tr oncontextmenu="rowContext(event, '${c.id}')"${c.nonSurvey || c.missing ? ' style="color:var(--text-subtle)"' : ''}><td><a class="link" onclick="openNodeById('${c.id}')">${kindIcon(c)}${c.sourced ? '📎 ' : ''}${esc(c.name)}</a>` +
+        (c.missing ? ' <span class="missing">file missing — skipped</span>' : '') +
+        (c.nonSurvey ? ` <span class="hint">no surveys</span>` : '') +
+        `</td><td>${kindChip(c)}</td><td class="num">${c.nonSurvey ? '—' : ct}</td><td class="num">${fmtLen(nodeLength(c))}</td><td class="num">${fmtLen(nodeDepth(c))}</td><td>${lastSurvey(c)}</td></tr>`;
+    }
+    h += `</table></div>`;
+  }
+  const folderEmpty = n.kind === 'folder' && n.trips.length === 0;
+  h += `<div class="cavecard">` + (folderEmpty ? '' : `<div class="t">Trips${n.children.length ? ' at this level' : ''} (${n.trips.length})</div>`);
+  if (folderEmpty) {
+    h += n.children.length ? '' : `<div class="secondary">A folder organizes caves or sections and holds no survey data of its own. Add a cave or a section to start.</div>`;
+  } else if (n.trips.length) {
+    h += `<table class="triptable"><tr><th>Name</th><th>Date</th><th class="num">Stations</th><th class="num">Length</th><th>Unit in source</th><th>Decl</th></tr>`;
+    const derived = n.trips.filter(t => t.derived), native = n.trips.filter(t => !t.derived);
+    const shown = derived.slice(0, 12);
+    for (const t of shown.concat(native)) {
+      h += `<tr oncontextmenu="rowContext(event, '${t.id}')"><td><a class="link" onclick="openTripById('${t.id}')">${t.derived ? '📎 ' : ''}${esc(t.name)}</a>${t.comment ? ' <span class="hint">— ' + esc(t.comment) + '</span>' : ''}</td>` +
+        `<td>${t.date}</td><td class="num">${t.stations}</td><td class="num">${fmtLen(t.len)}</td><td class="prefix">${t.derived ? esc(t.unit) : 'native'}</td><td>${t.derived ? '—' : '2.1°'}</td></tr>`;
+      if (t === shown[shown.length - 1] && derived.length > shown.length)
+        h += `<tr><td colspan="6"><span class="hint">… ${derived.length - shown.length} more derived trips</span></td></tr>`;
+    }
+    h += `</table>`;
+  } else {
+    h += `<div class="hint">No trips yet — add one here, or use the menu beside this button to add one from a survey file.</div>`;
+  }
+  const primary = takesCaves(n) ? ['＋ Add Cave', 'addCaveUnder'] : ['＋ Add Trip', 'addNativeTrip'];
+  h += `<div style="margin-top:8px; position:relative"><span class="split" style="position:relative">
+        <button class="btn main small" onclick="${primary[1]}(state.pageNode)">${primary[0]}</button>
+        <button class="btn chev small" onclick="toggleMenu('nodeaddmenu', event)">▾</button>
+        <div class="menu" id="nodeaddmenu" style="display:none; top:26px; left:0; min-width:240px"></div></span>
+        <span class="hint" style="margin-left:8px">Add ▾ follows position: ${takesCaves(n) ? 'outside a Cave it offers Add Cave / Add Folder' : 'inside a Cave it offers Add Trip / Add Section'} / Attach survey file…</span></div></div>`;
+  if (n.kind === 'cave' && !n.sourced)
+    h += `<div class="hint">Fix stations, leads, grid convergence, and the rest of today's cave page stay as they are on a native Cave node.</div>`;
+  el('nodepage').innerHTML = h;
+  const am = el('nodeaddmenu'); am.onclick = (e) => e.stopPropagation(); addVerbs(am, n);
+}
+function hiddenLine(root) {
+  if (!root.hidden.length) return '';
+  const nodes = root.hidden.filter(h => h.item.kind).length, trips = root.hidden.length - nodes;
+  const what = [nodes ? `${nodes} node${nodes === 1 ? '' : 's'}` : '', trips ? `${trips} trip${trips === 1 ? '' : 's'}` : ''].filter(Boolean).join(' and ');
+  return `<div class="secondary" style="margin-top:6px">${what} from this file hidden in this project: ${root.hidden.map(h => '<code>' + esc(h.item.name) + '</code>').join(', ')}
+    · <a class="link" onclick="restoreHidden('${root.id}')">Restore…</a>
+    <span class="hint">(exclusions are project state and survive Reload)</span></div>`;
+}
+function restoreHidden(id) {
+  const root = findById(id);
+  if (!confirm(`Restore ${root.hidden.length} hidden item${root.hidden.length === 1 ? '' : 's'} from ${root.source.file}?`)) return;
+  for (const h of root.hidden) { if (h.item.kind) addChild(h.parent, h.item); else addTrip(h.parent, h.item); }
+  root.hidden = [];
+  openNode(root);
+}
+function openTripById(id) { openTrip(findById(id)); }
+function openTrip(t) {
+  showPage('trippage', 'Trip: ' + t.name);
+  const root = t.derived ? sourceRootOf(t.parent) : null;
+  let h = crumbs(t);
+  h += `<div class="trip-layout"><div class="trip-panel">`;
+  if (t.derived) {
+    h += `<div class="roline">📎 <b>Derived trip.</b> A window into <code>${esc(t.unit)}</code> of ${esc(root.source.file)}. Shots are read-only; notes, scraps, and leads can be attached as on any trip.</div>`;
+  }
+  if (t.native) h += `<div class="roline" style="background:var(--warning)"><b>This trip is floating.</b> This chunk isn't connected to any survey. <button class="btn small" onclick="alert('Shipped C6 tie-in suggester; the known stations come from the one region-wide solve, so any station in the project is a candidate.')">Tie in…</button></div>`;
+  h += `<div style="font-weight:700">${esc(t.name)}</div><div class="hint">${t.date} · ${t.stations} stations · ${fmtLen(t.len)}</div>`;
+  h += `<div class="chunk"><div class="row h"><span>From</span><span>To</span><span>Dist</span><span>Az</span><span>Inc</span></div>`;
+  const rnd = seeded(hashOf(t.name));
+  const st = (i) => t.derived ? `${t.name.replace(/[^A-Za-z]/g, '').slice(0, 2).toUpperCase() || 'S'}${i}` : String(i);
+  for (let i = 1; i <= Math.min(4, Math.max(1, t.stations - 1)); i++)
+    h += `<div class="row"><span class="st">${st(i)}</span><span class="st">${st(i + 1)}</span><span>${(4 + rnd() * 14).toFixed(1)}</span><span>${Math.round(rnd() * 360)}</span><span>${Math.round(rnd() * 30 - 15)}</span></div>`;
+  h += `</div><div class="hint" style="margin-top:8px">Trip page otherwise unchanged from Phase 6: floating banner and tie-in suggester for a native trip under a sourced node.</div>`;
+  h += `</div><div class="trip-right">notes / carpet area (unchanged)</div></div>`;
+  el('trippage').innerHTML = h;
+}
+
+/* ---------- verbs ---------- */
+function refresh() { if (state.page === 'datapage') renderTree(); else if (state.page === 'nodepage' && state.pageNode) openNode(state.pageNode); }
+function addCave() {
+  const c = addChild(current(), node(uniqueName(current(), 'New Cave'), 'cave', { depth: 0 }));
+  state.selectedId = c.id; renderTree(); scrollSelected();
+}
+function addFolder() { addFolderUnder(current()); }
+function addCaveUnder(parent) {
+  const c = addChild(parent, node(uniqueName(parent, 'New Cave'), 'cave', { depth: 0 }));
+  if (parent !== current()) setExpanded(parent, true);
+  state.selectedId = c.id; refresh(); scrollSelected();
+}
+function addFolderUnder(parent, base) {
+  const g = addChild(parent, node(uniqueName(parent, base || 'New Folder'), 'folder'));
+  if (parent !== current()) setExpanded(parent, true);
+  state.selectedId = g.id; refresh(); scrollSelected();
+}
+function uniqueName(parent, base) {
+  let name = base, i = 2;
+  while (parent.children.some(c => c.name === name)) name = `${base} ${i++}`;
+  return name;
+}
+function addNativeTrip(n) {
+  const base = n.trips.some(t => t.name === 'Digital survey 2026-09-14') ? 'New trip' : 'Digital survey 2026-09-14';
+  let name = base, i = 2;
+  while (n.trips.some(t => t.name === name)) name = `${base} ${i++}`;
+  const t = addTrip(n, trip(name, '2026-09-14', 4, 36, { native: true }));
+  setExpanded(n, true);
+  state.selectedId = t.id;
+  if (state.page === 'datapage') { renderTree(); scrollSelected(); } else openTrip(t);
+}
+function renameNode(n) {
+  const name = prompt('Rename ' + n.name, n.name);
+  if (name && name.trim()) { n.name = name.trim(); refresh(); }
+}
+function plural(n, word) { return `${n} ${word}${n === 1 ? '' : 's'}`; }
+function removeNode(n) {
+  const trips = allTrips(n), derived = trips.filter(t => t.derived).length, native = trips.length - derived;
+  let msg;
+  if (n.root) {
+    const unit = n.kind === 'compassProject' ? 'file' : n.kind === 'survexFile' ? 'block' : 'book';
+    msg = `Delete ${n.name}? Removes ${plural(allNodes(n).length, unit)}, ${plural(derived, 'derived trip')}${native ? ' and ' + plural(native, 'native trip') : ''}. ` +
+          `The copied ${n.source.file} is removed from the project.`;
+  } else if (n.sourced) {
+    msg = `Delete ${n.name}? Hides this ${KINDS[n.kind].label.toLowerCase()} and its ${plural(derived, 'derived trip')}${native ? ' and ' + plural(native, 'native trip') : ''} from the project. ` +
+          `It stays hidden across Reload; Restore… on ${sourceRootOf(n).source.file} brings it back.`;
+  } else {
+    msg = `Delete ${n.name}${trips.length ? ' and its ' + plural(trips.length, 'trip') : ''}? Git history is the way back.`;
+  }
+  if (!confirm(msg)) return;
+  n.parent.children = n.parent.children.filter(c => c !== n);
+  if (n.sourced && !n.root) sourceRootOf(n).hidden.push({ item: n, parent: n.parent });
+  state.selectedId = null;
+  if (state.page === 'nodepage') gotoData(); else refresh();
+}
+function removeTrip(t) {
+  const msg = t.derived
+    ? `Delete trip ${t.name}? Hides it from the project; it stays hidden across Reload of ${sourceRootOf(t.parent).source.file}.`
+    : `Delete trip ${t.name}? Git history is the way back.`;
+  if (!confirm(msg)) return;
+  t.parent.trips = t.parent.trips.filter(x => x !== t);
+  if (t.derived) sourceRootOf(t.parent).hidden.push({ item: t, parent: t.parent });
+  state.selectedId = null; refresh();
+}
+function reloadSource(n) {
+  alert(`Reload ${n.source.file}: re-copies the files, re-scans, reconciles this subtree by source path (new units become nodes or trips, vanished ones are removed unless they hold native content), re-solves. Native trips untouched. ${n.hidden.length ? n.hidden.length + ' hidden item(s) stay hidden.' : 'Deleted derived nodes would stay hidden.'}`);
+}
+function replaceSource(n) {
+  alert(`Replace ${n.source.file}: pick another file of the same format; the subtree is reconciled by source path the same way Reload does. Native trips stay where their node survives.`);
+}
+/* ---------- attach dialog ---------- */
+const dlg = { pick: null, built: null, target: null };
+const PICKS = {
+  omega: { path: '/Users/friend/compass/OMEGA2/OMEGA2.MAK',
+    summary: '✓ Compass project — 18 files, 163 surveys, 6,985 stations · 1 file listed in the project is missing (Solomon.DAT)',
+    title: 'Subtree CaveWhere will create', hint: 'One node per .dat (title-cased stem), one trip per survey. Windows into the file, never copies.',
+    build: buildOmega },
+  kaua: { path: '/Users/friend/walls/Kaua North Maze.wpj',
+    summary: '✓ Walls project — root book "Actun Kaua - North Maze", 12 books, 36 survey files, 2 fixed-point files, 2 non-survey files',
+    title: 'Subtree CaveWhere will create', hint: 'One node per book, at the depth the .wpj has; one trip per .srv with shots. Books without surveys stay in the tree, grayed.',
+    build: buildKaua },
+  survex: { path: '/Users/friend/survex/survex_master/master.svx',
+    summary: '✓ Survex — master of 3 *include lines, 3 top-level blocks, 9 stations · the entry file has no shots of its own',
+    title: 'Subtree CaveWhere will create', hint: 'One node per block; a block with its own shots also gets a trip.',
+    build: buildSurvex },
+};
+function openDialog(target) {
+  dlg.target = target || current();
+  el('path').value = ''; hide('summary'); hide('preview'); hide('placerow'); show('fmthint');
+  el('attachbtn').disabled = true; el('attachbtn').textContent = 'Attach'; el('attach-note').textContent = '';
+  dlg.pick = null; dlg.built = null;
+  show('dialog');
+}
+function closeDialog() { hide('dialog'); hide('busy'); }
+function pick(kind) {
+  closeMenus(); dlg.pick = kind;
+  const p = PICKS[kind];
+  el('path').value = p.path; hide('fmthint');
+  show('summary'); el('summary').textContent = p.summary;
+  el('placeunder').textContent = dlg.target === current() ? 'Region root (top level)' : pathOf(dlg.target).map(x => x.name).join(' › ') + ` (${KINDS[dlg.target.kind].label})`;
+  show('placerow');
+  dlg.built = p.build();
+  const lines = [];
+  const walk = (n, d) => {
+    const pad = '  '.repeat(d);
+    const cnt = n.nonSurvey ? 'no surveys' : n.missing ? 'file missing — skipped' : `${allTrips(n).length} trips · ${allTrips(n).reduce((s, t) => s + t.stations, 0)} stations`;
+    lines.push(`${pad}<span class="nd${n.nonSurvey || n.missing ? ' gray' : ''}">📎 ${esc(n.name)}</span> <span class="cnt">${KINDS[n.kind].label} · ${cnt}</span>`);
+    for (const c of n.children) walk(c, d + 1);
+    const shown = n.trips.slice(0, 3);
+    for (const t of shown) lines.push(`${pad}  📎 ${esc(t.name)} <span class="cnt">${esc(t.unit)} · ${t.stations} stations</span>`);
+    if (n.trips.length > shown.length) lines.push(`${pad}  <span class="cnt">… ${n.trips.length - shown.length} more trips</span>`);
+  };
+  walk(dlg.built, 0);
+  show('preview'); el('preview-title').textContent = p.title; el('preview-hint').textContent = p.hint;
+  el('previewtree').innerHTML = lines.join('\n');
+  el('attachbtn').disabled = false;
+  el('attachbtn').textContent = `Attach ${dlg.built.name}`;
+  el('attach-note').textContent = `${allNodes(dlg.built).length + 1} nodes · ${allTrips(dlg.built).length} trips`;
+}
+function doAttach() {
+  el('attachbtn').disabled = true; show('busy');
+  setTimeout(() => {
+    hide('busy'); closeDialog();
+    const target = dlg.target;
+    const root = dlg.built;
+    addChild(target, root);
+    if (target !== current()) setExpanded(target, true);
+    setExpanded(root, true);
+    state.selectedId = root.id;
+    if (state.page === 'nodepage' && target !== current()) openNode(target); else { gotoData(); scrollSelected(); }
+  }, 700);
+}
+
+/* ---------- boot ---------- */
+ensureScenario('native');
+gotoData();
+</script>
+</body>
+</html>
