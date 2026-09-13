@@ -346,7 +346,7 @@ TEST_CASE("cavern survives a fatal error inside a Walls file with a pushed optio
     // file's #Prefix, so the clean .srv's stations came out as STALE.A1 /
     // STALE.A2.
     const QString fatalFile = testcasesDatasetSourcePath(
-        QStringLiteral("test_cwSurvex3DFileReader/walls_stale_options.srv"));
+        QStringLiteral("test_cwSurvex3DFileReader/walls_stale_state.srv"));
     const QString cleanFile = testcasesDatasetSourcePath(
         QStringLiteral("test_cwSurvex3DFileReader/walls_clean.srv"));
     REQUIRE(QFile::exists(fatalFile));
@@ -372,4 +372,97 @@ TEST_CASE("cavern survives a fatal error inside a Walls file with a pushed optio
     CHECK(lookup.positions().size() == 2);
     CHECK(lookup.hasPosition(QStringLiteral("A1")));
     CHECK(lookup.hasPosition(QStringLiteral("A2")));
+}
+
+TEST_CASE("cavern clears Walls macros a fatal error leaves defined",
+          "[cwSurvex3DFileReader][Walls][Attach]") {
+    // Regression: datain.c clears the .srv macro table only at the end of
+    // data_file_walls_srv(), so a fatal error longjmps past it and leaves the
+    // macros defined. The next run then resolved $(loc) from the dead run,
+    // silently prefixing its stations instead of reporting the macro as
+    // undefined.
+    const QString fatalFile = testcasesDatasetSourcePath(
+        QStringLiteral("test_cwSurvex3DFileReader/walls_stale_state.srv"));
+    const QString macroUserFile = testcasesDatasetSourcePath(
+        QStringLiteral("test_cwSurvex3DFileReader/walls_use_macro.srv"));
+    REQUIRE(QFile::exists(fatalFile));
+    REQUIRE(QFile::exists(macroUserFile));
+
+    QTemporaryDir workDir;
+    REQUIRE(workDir.isValid());
+
+    auto fatalRun = cwCavernRunner::run(fatalFile,
+                                        workDir.filePath(QStringLiteral("walls_macro_run1.3d")));
+    CHECK(fatalRun.hasError());
+    CHECK(fatalRun.errorMessage().contains(QStringLiteral("Too many errors"),
+                                           Qt::CaseInsensitive));
+
+    auto macroRun = cwCavernRunner::run(macroUserFile,
+                                        workDir.filePath(QStringLiteral("walls_macro_run2.3d")));
+    CHECK(macroRun.hasError());
+    CHECK(macroRun.errorMessage().contains(QStringLiteral("not defined"),
+                                           Qt::CaseInsensitive));
+    CHECK_FALSE(macroRun.errorMessage().contains(QStringLiteral("SRVPFX"),
+                                                 Qt::CaseInsensitive));
+}
+
+TEST_CASE("cavern clears Walls project macros between runs",
+          "[cwSurvex3DFileReader][Walls][Attach]") {
+    // Regression: datain.c kept a second macro table for .wpj-level macros
+    // that nothing ever cleared, so a later standalone .srv resolved $(loc)
+    // from the earlier project and prefixed its stations with WPJPFX instead
+    // of reporting the macro as undefined.
+    const QString projectFile = testcasesDatasetSourcePath(
+        QStringLiteral("test_cwSurvex3DFileReader/walls_wpj_macro.wpj"));
+    const QString macroUserFile = testcasesDatasetSourcePath(
+        QStringLiteral("test_cwSurvex3DFileReader/walls_use_macro.srv"));
+    REQUIRE(QFile::exists(projectFile));
+    REQUIRE(QFile::exists(macroUserFile));
+
+    QTemporaryDir workDir;
+    REQUIRE(workDir.isValid());
+
+    auto projectRun = cwCavernRunner::run(projectFile,
+                                          workDir.filePath(QStringLiteral("walls_wpj_run1.3d")));
+    CHECK_FALSE(projectRun.hasError());
+
+    auto macroRun = cwCavernRunner::run(macroUserFile,
+                                        workDir.filePath(QStringLiteral("walls_wpj_run2.3d")));
+    CHECK(macroRun.hasError());
+    CHECK(macroRun.errorMessage().contains(QStringLiteral("not defined"),
+                                           Qt::CaseInsensitive));
+    CHECK_FALSE(macroRun.errorMessage().contains(QStringLiteral("WPJPFX"),
+                                                 Qt::CaseInsensitive));
+}
+
+TEST_CASE("cavern clears Walls project macros a fatal error leaves swapped aside",
+          "[cwSurvex3DFileReader][Walls][Attach]") {
+    // Regression: while a .wpj reads a member .srv the project macro table is
+    // swapped aside, and a fatal error in that member longjmps past the swap
+    // back. The next run then resolved $(loc) from the swapped-aside table,
+    // prefixing its stations with WPJPFX instead of reporting the macro as
+    // undefined.
+    const QString projectFile = testcasesDatasetSourcePath(
+        QStringLiteral("test_cwSurvex3DFileReader/walls_wpj_fatal.wpj"));
+    const QString macroUserFile = testcasesDatasetSourcePath(
+        QStringLiteral("test_cwSurvex3DFileReader/walls_use_macro.srv"));
+    REQUIRE(QFile::exists(projectFile));
+    REQUIRE(QFile::exists(macroUserFile));
+
+    QTemporaryDir workDir;
+    REQUIRE(workDir.isValid());
+
+    auto fatalRun = cwCavernRunner::run(projectFile,
+                                        workDir.filePath(QStringLiteral("walls_wpj_fatal_run1.3d")));
+    CHECK(fatalRun.hasError());
+    CHECK(fatalRun.errorMessage().contains(QStringLiteral("Too many errors"),
+                                           Qt::CaseInsensitive));
+
+    auto macroRun = cwCavernRunner::run(macroUserFile,
+                                        workDir.filePath(QStringLiteral("walls_wpj_fatal_run2.3d")));
+    CHECK(macroRun.hasError());
+    CHECK(macroRun.errorMessage().contains(QStringLiteral("not defined"),
+                                           Qt::CaseInsensitive));
+    CHECK_FALSE(macroRun.errorMessage().contains(QStringLiteral("WPJPFX"),
+                                                 Qt::CaseInsensitive));
 }

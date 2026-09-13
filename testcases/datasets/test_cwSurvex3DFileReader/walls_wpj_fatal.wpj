@@ -1,0 +1,12 @@
+;WALLS Project File
+; Regression fixture: a Walls project that defines a macro at project level
+; and includes a survey that dies on cavern's error limit, so the run
+; longjmps out with the project macro table swapped aside.
+.BOOK	Fatal Macro Regression
+.NAME	WPJFATAL
+.OPTIONS	$loc=WPJPFX
+.STATUS	1092115
+.SURVEY	Member survey that fails
+.NAME	WALLS_FATAL_MEMBER
+.STATUS	24
+.ENDBOOK

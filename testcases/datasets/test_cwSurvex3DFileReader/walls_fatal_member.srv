@@ -1,0 +1,60 @@
+; Regression fixture: a Walls .srv with no macros of its own that passes
+; cavern's error limit, so a project including it dies by longjmp while the
+; project macro table is swapped aside.
+#Units Meters
+#Fix M1 0 0 0
+m1 n1 10.0 0 0 trailing junk 1
+m2 n2 10.0 0 0 trailing junk 2
+m3 n3 10.0 0 0 trailing junk 3
+m4 n4 10.0 0 0 trailing junk 4
+m5 n5 10.0 0 0 trailing junk 5
+m6 n6 10.0 0 0 trailing junk 6
+m7 n7 10.0 0 0 trailing junk 7
+m8 n8 10.0 0 0 trailing junk 8
+m9 n9 10.0 0 0 trailing junk 9
+m10 n10 10.0 0 0 trailing junk 10
+m11 n11 10.0 0 0 trailing junk 11
+m12 n12 10.0 0 0 trailing junk 12
+m13 n13 10.0 0 0 trailing junk 13
+m14 n14 10.0 0 0 trailing junk 14
+m15 n15 10.0 0 0 trailing junk 15
+m16 n16 10.0 0 0 trailing junk 16
+m17 n17 10.0 0 0 trailing junk 17
+m18 n18 10.0 0 0 trailing junk 18
+m19 n19 10.0 0 0 trailing junk 19
+m20 n20 10.0 0 0 trailing junk 20
+m21 n21 10.0 0 0 trailing junk 21
+m22 n22 10.0 0 0 trailing junk 22
+m23 n23 10.0 0 0 trailing junk 23
+m24 n24 10.0 0 0 trailing junk 24
+m25 n25 10.0 0 0 trailing junk 25
+m26 n26 10.0 0 0 trailing junk 26
+m27 n27 10.0 0 0 trailing junk 27
+m28 n28 10.0 0 0 trailing junk 28
+m29 n29 10.0 0 0 trailing junk 29
+m30 n30 10.0 0 0 trailing junk 30
+m31 n31 10.0 0 0 trailing junk 31
+m32 n32 10.0 0 0 trailing junk 32
+m33 n33 10.0 0 0 trailing junk 33
+m34 n34 10.0 0 0 trailing junk 34
+m35 n35 10.0 0 0 trailing junk 35
+m36 n36 10.0 0 0 trailing junk 36
+m37 n37 10.0 0 0 trailing junk 37
+m38 n38 10.0 0 0 trailing junk 38
+m39 n39 10.0 0 0 trailing junk 39
+m40 n40 10.0 0 0 trailing junk 40
+m41 n41 10.0 0 0 trailing junk 41
+m42 n42 10.0 0 0 trailing junk 42
+m43 n43 10.0 0 0 trailing junk 43
+m44 n44 10.0 0 0 trailing junk 44
+m45 n45 10.0 0 0 trailing junk 45
+m46 n46 10.0 0 0 trailing junk 46
+m47 n47 10.0 0 0 trailing junk 47
+m48 n48 10.0 0 0 trailing junk 48
+m49 n49 10.0 0 0 trailing junk 49
+m50 n50 10.0 0 0 trailing junk 50
+m51 n51 10.0 0 0 trailing junk 51
+m52 n52 10.0 0 0 trailing junk 52
+m53 n53 10.0 0 0 trailing junk 53
+m54 n54 10.0 0 0 trailing junk 54
+m55 n55 10.0 0 0 trailing junk 55

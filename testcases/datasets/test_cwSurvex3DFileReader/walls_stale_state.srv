@@ -1,8 +1,9 @@
-; Regression fixture: a Walls .srv that sets a #Prefix and then passes
-; cavern's error limit, so the run dies by longjmp with the Walls options
-; stack still pushed.
+; Regression fixture: a Walls .srv that sets a #Prefix and a macro and then
+; passes cavern's error limit, so the run dies by longjmp with the Walls
+; options stack still pushed and the .srv macro table still populated.
 #Units Meters
 #Prefix STALE
+#Units $loc=SRVPFX
 #Fix WA 0 0 0
 e1 f1 10.0 0 0 trailing junk 1
 e2 f2 10.0 0 0 trailing junk 2

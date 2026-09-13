@@ -1,0 +1,12 @@
+;WALLS Project File
+; Regression fixture: a Walls project that defines a macro at project level.
+; The project macro table is only ever populated, never cleared, so a later
+; run in the same process could still resolve $(loc) from here.
+.BOOK	Macro Table Regression
+.NAME	WPJMACRO
+.OPTIONS	$loc=WPJPFX
+.STATUS	1092115
+.SURVEY	Clean member survey
+.NAME	WALLS_CLEAN
+.STATUS	24
+.ENDBOOK

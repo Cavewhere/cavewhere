@@ -1,0 +1,6 @@
+; Uses a macro this file never defines, so cavern must report it as
+; undefined no matter what an earlier run left in the macro tables.
+#Units Meters
+#Prefix $(loc)
+#Fix B1 0 0 0
+B1	B2	10.0	0	0
