@@ -9,11 +9,11 @@
 #include <QMutex>
 #include <QMutexLocker>
 #include <QRandomGenerator>
-#include <QSemaphore>
 #include <QSize>
 #include <QString>
 #include <QStringList>
 #include <QThread>
+#include <QWaitCondition>
 
 //Std includes
 #include <limits>
@@ -42,7 +42,9 @@ namespace {
     struct LoaderState
     {
         QMutex mutex;
-        QSemaphore gate;
+        QWaitCondition gateChanged;
+        // How many loads, counted in the order the loader was entered, may run
+        int releasedCalls = 0;
         bool gated = false;
         QStringList calledSourceIds;
         QString errorMessage;
@@ -55,6 +57,19 @@ namespace {
         {
             QMutexLocker locker(&mutex);
             return static_cast<int>(calledSourceIds.size());
+        }
+
+        // Let the next count loads finish, oldest call first. Ordered rather
+        // than a semaphore: with two loads waiting, a semaphore hands its
+        // permit to whichever thread the scheduler picks, so a test that says
+        // "let the stale one finish" sometimes finished the superseding one.
+        void releaseCalls(int count = 1)
+        {
+            {
+                QMutexLocker locker(&mutex);
+                releasedCalls += count;
+            }
+            gateChanged.wakeAll();
         }
 
         int finishedCount()
@@ -75,15 +90,20 @@ namespace {
         return [state](const cwStreamedTexture& source,
                        QRhiTexture::Format target,
                        int firstLevel) -> Monad::Result<cwCompressedTexture> {
+            int ticket = 0;
             {
                 QMutexLocker locker(&state->mutex);
+                ticket = static_cast<int>(state->calledSourceIds.size());
                 state->calledSourceIds.append(source.key.id);
                 ++state->concurrent;
                 state->maxConcurrent = std::max(state->maxConcurrent, state->concurrent);
             }
 
             if (state->gated) {
-                state->gate.acquire();
+                QMutexLocker locker(&state->mutex);
+                while (state->releasedCalls <= ticket) {
+                    state->gateChanged.wait(&state->mutex);
+                }
             }
 
             if (state->sleepMs > 0) {
@@ -125,7 +145,7 @@ namespace {
 
         ~GateOpener()
         {
-            state->gate.release(kTeardownPermits);
+            state->releaseCalls(kTeardownPermits);
         }
     };
 
@@ -216,7 +236,7 @@ TEST_CASE("cwTextureStreamer ignores a repeat of what it is already doing", "[Te
     streamer.request(kItemId, source, kTargetFormat, kTopLevel, kPriority);
     CHECK(state->callCount() == 1);
 
-    state->gate.release();
+    state->releaseCalls();
     REQUIRE(waitFor([&]() { return state->finishedCount() == 1; }));
     QThread::msleep(kQuietPeriodMs);
 
@@ -298,7 +318,7 @@ TEST_CASE("cwTextureStreamer dedups a repeat whose data root is spelled differen
     streamer.request(kItemId, respelled, kTargetFormat, kTopLevel, kPriority);
     CHECK(state->callCount() == 1);
 
-    state->gate.release();
+    state->releaseCalls();
     const auto results = drain(streamer, 1);
     REQUIRE(results.size() == 1);
     CHECK(results.at(0).generation == 1);
@@ -323,7 +343,7 @@ TEST_CASE("cwTextureStreamer supersedes a request for a different level", "[Text
     streamer.request(kItemId, source, kTargetFormat, kFinalLevel, kPriority);
     REQUIRE(waitFor([&]() { return state->callCount() == 2; }));
 
-    state->gate.release(2);
+    state->releaseCalls(2);
 
     const auto results = drain(streamer, 1);
     REQUIRE(waitFor([&]() { return !streamer.hasWork(); }));
@@ -355,14 +375,14 @@ TEST_CASE("cwTextureStreamer keeps the superseding load while the stale one fini
     REQUIRE(waitFor([&]() { return state->callCount() == 2; }));
 
     //Let only the stale load finish — the superseding one is still in flight
-    state->gate.release();
+    state->releaseCalls();
     REQUIRE(waitFor([&]() { return state->finishedCount() == 1; }));
     QThread::msleep(kQuietPeriodMs);
 
     CHECK(streamer.hasWork());
     CHECK(streamer.takeReady().isEmpty());
 
-    state->gate.release();
+    state->releaseCalls();
 
     const auto results = drain(streamer, 1);
     REQUIRE(waitFor([&]() { return !streamer.hasWork(); }));
@@ -426,7 +446,7 @@ TEST_CASE("cwTextureStreamer reloads a canceled item asked for again", "[Texture
     streamer.request(kItemId, source, kTargetFormat, kTopLevel, kPriority);
     REQUIRE(waitFor([&]() { return state->callCount() == 2; }));
 
-    state->gate.release(2);
+    state->releaseCalls(2);
 
     const auto results = drain(streamer, 1);
     REQUIRE(waitFor([&]() { return !streamer.hasWork(); }));
@@ -474,7 +494,7 @@ TEST_CASE("cwTextureStreamer runs queued requests highest priority first", "[Tex
 
     //One release and one drain per load: the first, the pinned one, and the rest
     for (int i = 0; i < kQueuedCount + 2; i++) {
-        state->gate.release();
+        state->releaseCalls();
         REQUIRE(drain(streamer, 1).size() == 1);
     }
 
@@ -528,7 +548,7 @@ TEST_CASE("cwTextureStreamer forgets canceled items", "[TextureStreamer]") {
     REQUIRE(waitFor([&]() { return state->callCount() == 2; }));
 
     streamer.cancel(kCanceledItemId);
-    state->gate.release(2);
+    state->releaseCalls(2);
 
     const auto results = drain(streamer, 1);
     REQUIRE(waitFor([&]() { return !streamer.hasWork(); }));
