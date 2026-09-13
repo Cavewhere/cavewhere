@@ -26,6 +26,7 @@
 #endif
 #ifdef CW_ADDRESS_SANITIZER
 extern "C" void __sanitizer_purge_allocator(void);
+extern "C" size_t __sanitizer_get_current_allocated_bytes(void);
 #endif
 
 namespace {
@@ -36,6 +37,24 @@ namespace {
 #ifdef CW_ADDRESS_SANITIZER
         __sanitizer_purge_allocator();
 #endif
+    }
+
+    /// Runs solve() a few times to warm caches, then reports how much measure()
+    /// grows over measuredRuns further runs.
+    template <typename Solve, typename Measure>
+    qint64 growthOverRuns(int warmUpRuns, int measuredRuns, Solve solve, Measure measure)
+    {
+        for (int i = 0; i < warmUpRuns; ++i) {
+            solve();
+        }
+
+        const qint64 baselineBytes = measure();
+
+        for (int i = 0; i < measuredRuns; ++i) {
+            solve();
+        }
+
+        return measure() - baselineBytes;
     }
 }
 
@@ -636,23 +655,60 @@ TEST_CASE("cavern frees the survey graph between runs",
         releaseFreedMemory();
     };
 
-    for (int i = 0; i < kWarmUpRuns; ++i) {
-        solve();
-    }
-
-    const qint64 baselineBytes = peakResidentBytes();
-
-    for (int i = 0; i < kMeasuredRuns; ++i) {
-        solve();
-    }
-
-    const qint64 growthBytes = peakResidentBytes() - baselineBytes;
-    INFO("baseline peak RSS: " << baselineBytes
-         << " bytes, growth over " << kMeasuredRuns << " runs: "
-         << growthBytes << " bytes");
+    const qint64 growthBytes = growthOverRuns(kWarmUpRuns, kMeasuredRuns, solve, peakResidentBytes);
+    INFO("peak RSS growth over " << kMeasuredRuns << " runs: " << growthBytes << " bytes");
 
     // Measured: ~6MB of growth while leaking, 32KB once cleanup frees the graph.
     constexpr qint64 kAllowedGrowthBytes = 4 * 1024 * 1024;
     CHECK(growthBytes < kAllowedGrowthBytes);
+#endif
+}
+
+TEST_CASE("cavern keeps its message state to one copy across runs",
+          "[cwSurvex3DFileReader]") {
+#ifdef CW_ADDRESS_SANITIZER
+    // msg_init() runs once per cavern_run() and used to strdup the program
+    // name, the message-file search path and the stripped language tag afresh
+    // every time, dropping the previous copies. Live heap bytes are the
+    // observable: they must hold steady once the caches are warm.
+    constexpr int kWarmUpRuns = 3;
+    constexpr int kMeasuredRuns = 50;
+
+    QTemporaryDir workDir;
+    REQUIRE(workDir.isValid());
+
+    const QString driverPath = workDir.filePath(QStringLiteral("msg_state.svx"));
+    {
+        QFile driver(driverPath);
+        REQUIRE(driver.open(QIODevice::WriteOnly | QIODevice::Text));
+        QTextStream out(&driver);
+        out << "*fix a 0 0 0\n";
+        out << "*data normal from to tape compass clino\n";
+        out << "a b 10.0 0 0\n";
+    }
+
+    const QString output3dPath = workDir.filePath(QStringLiteral("msg_state.3d"));
+    const auto solve = [&]() {
+        auto result = cwCavernRunner::run(driverPath, output3dPath);
+        REQUIRE_FALSE(result.hasError());
+        releaseFreedMemory();
+    };
+
+    const auto liveHeapBytes = []() {
+        return static_cast<qint64>(__sanitizer_get_current_allocated_bytes());
+    };
+
+    const qint64 growthBytes = growthOverRuns(kWarmUpRuns, kMeasuredRuns, solve, liveHeapBytes);
+    INFO("live heap growth over " << kMeasuredRuns << " runs: " << growthBytes << " bytes");
+
+    // Measured over 50 runs: 10700 bytes of growth while msg_init() re-copies
+    // its strings (214 per run), 5750 bytes once it keeps the copies it
+    // already made (115 per run, from elsewhere in the process). The budget
+    // sits between the two so unrelated drift in that remainder has room.
+    constexpr qint64 kAllowedGrowthBytesPerRun = 170;
+    constexpr qint64 kAllowedGrowthBytes = kAllowedGrowthBytesPerRun * kMeasuredRuns;
+    CHECK(growthBytes < kAllowedGrowthBytes);
+#else
+    SKIP("Live heap bytes are read from the Address Sanitizer allocator");
 #endif
 }
