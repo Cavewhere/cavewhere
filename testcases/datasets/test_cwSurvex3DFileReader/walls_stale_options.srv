@@ -1,0 +1,61 @@
+; Regression fixture: a Walls .srv that sets a #Prefix and then passes
+; cavern's error limit, so the run dies by longjmp with the Walls options
+; stack still pushed.
+#Units Meters
+#Prefix STALE
+#Fix WA 0 0 0
+e1 f1 10.0 0 0 trailing junk 1
+e2 f2 10.0 0 0 trailing junk 2
+e3 f3 10.0 0 0 trailing junk 3
+e4 f4 10.0 0 0 trailing junk 4
+e5 f5 10.0 0 0 trailing junk 5
+e6 f6 10.0 0 0 trailing junk 6
+e7 f7 10.0 0 0 trailing junk 7
+e8 f8 10.0 0 0 trailing junk 8
+e9 f9 10.0 0 0 trailing junk 9
+e10 f10 10.0 0 0 trailing junk 10
+e11 f11 10.0 0 0 trailing junk 11
+e12 f12 10.0 0 0 trailing junk 12
+e13 f13 10.0 0 0 trailing junk 13
+e14 f14 10.0 0 0 trailing junk 14
+e15 f15 10.0 0 0 trailing junk 15
+e16 f16 10.0 0 0 trailing junk 16
+e17 f17 10.0 0 0 trailing junk 17
+e18 f18 10.0 0 0 trailing junk 18
+e19 f19 10.0 0 0 trailing junk 19
+e20 f20 10.0 0 0 trailing junk 20
+e21 f21 10.0 0 0 trailing junk 21
+e22 f22 10.0 0 0 trailing junk 22
+e23 f23 10.0 0 0 trailing junk 23
+e24 f24 10.0 0 0 trailing junk 24
+e25 f25 10.0 0 0 trailing junk 25
+e26 f26 10.0 0 0 trailing junk 26
+e27 f27 10.0 0 0 trailing junk 27
+e28 f28 10.0 0 0 trailing junk 28
+e29 f29 10.0 0 0 trailing junk 29
+e30 f30 10.0 0 0 trailing junk 30
+e31 f31 10.0 0 0 trailing junk 31
+e32 f32 10.0 0 0 trailing junk 32
+e33 f33 10.0 0 0 trailing junk 33
+e34 f34 10.0 0 0 trailing junk 34
+e35 f35 10.0 0 0 trailing junk 35
+e36 f36 10.0 0 0 trailing junk 36
+e37 f37 10.0 0 0 trailing junk 37
+e38 f38 10.0 0 0 trailing junk 38
+e39 f39 10.0 0 0 trailing junk 39
+e40 f40 10.0 0 0 trailing junk 40
+e41 f41 10.0 0 0 trailing junk 41
+e42 f42 10.0 0 0 trailing junk 42
+e43 f43 10.0 0 0 trailing junk 43
+e44 f44 10.0 0 0 trailing junk 44
+e45 f45 10.0 0 0 trailing junk 45
+e46 f46 10.0 0 0 trailing junk 46
+e47 f47 10.0 0 0 trailing junk 47
+e48 f48 10.0 0 0 trailing junk 48
+e49 f49 10.0 0 0 trailing junk 49
+e50 f50 10.0 0 0 trailing junk 50
+e51 f51 10.0 0 0 trailing junk 51
+e52 f52 10.0 0 0 trailing junk 52
+e53 f53 10.0 0 0 trailing junk 53
+e54 f54 10.0 0 0 trailing junk 54
+e55 f55 10.0 0 0 trailing junk 55

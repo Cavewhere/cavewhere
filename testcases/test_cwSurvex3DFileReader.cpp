@@ -336,3 +336,40 @@ TEST_CASE("cavern rejects two Compass MAK fixed points for one station",
     REQUIRE(cavernResult.hasError());
     CHECK_FALSE(QFileInfo(output3dPath).exists());
 }
+
+TEST_CASE("cavern survives a fatal error inside a Walls file with a pushed options level",
+          "[cwSurvex3DFileReader][Walls][Attach]") {
+    // Regression: a fatal error inside a Walls .srv longjmps past
+    // pop_walls_options(), leaving datain.c's static options stack pushed. The
+    // next run then read a non-empty stack as "nested", skipped its own
+    // settings level, and inherited the dead run's options - here the previous
+    // file's #Prefix, so the clean .srv's stations came out as STALE.A1 /
+    // STALE.A2.
+    const QString fatalFile = testcasesDatasetSourcePath(
+        QStringLiteral("test_cwSurvex3DFileReader/walls_stale_options.srv"));
+    const QString cleanFile = testcasesDatasetSourcePath(
+        QStringLiteral("test_cwSurvex3DFileReader/walls_clean.srv"));
+    REQUIRE(QFile::exists(fatalFile));
+    REQUIRE(QFile::exists(cleanFile));
+
+    QTemporaryDir workDir;
+    REQUIRE(workDir.isValid());
+
+    auto fatalRun = cwCavernRunner::run(fatalFile,
+                                        workDir.filePath(QStringLiteral("walls_run1.3d")));
+    CHECK(fatalRun.hasError());
+    CHECK(fatalRun.errorMessage().contains(QStringLiteral("Too many errors"),
+                                           Qt::CaseInsensitive));
+
+    auto cleanRun = cwCavernRunner::run(cleanFile,
+                                        workDir.filePath(QStringLiteral("walls_run2.3d")));
+    REQUIRE_FALSE(cleanRun.hasError());
+    REQUIRE(QFileInfo(cleanRun.value().output3dPath).exists());
+
+    // The clean .srv names no prefix, so its two stations stand alone.
+    cwSurvex3DFileReader reader;
+    cwStationPositionLookup lookup = reader.readStationPositions(cleanRun.value().output3dPath);
+    CHECK(lookup.positions().size() == 2);
+    CHECK(lookup.hasPosition(QStringLiteral("A1")));
+    CHECK(lookup.hasPosition(QStringLiteral("A2")));
+}
