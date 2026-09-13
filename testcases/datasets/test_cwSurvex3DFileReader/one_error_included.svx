@@ -1,0 +1,4 @@
+*fix 1 0 0 0
+*data normal from to tape compass clino
+1 2 10 0 0
+*bogus

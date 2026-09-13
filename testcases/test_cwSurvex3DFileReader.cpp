@@ -138,6 +138,37 @@ TEST_CASE("cwSurvex3DFileReader should build a survey network from .3d file", "[
     CHECK(neighbors26e.contains("26c"));
 }
 
+TEST_CASE("cavern survives a fatal error inside an included file and reports the next run's include chain",
+          "[cwSurvex3DFileReader]") {
+    // Regression: a fatal error inside an *include longjmps out of data_file()
+    // leaving the parser's include chain pointing at unwound stack frames, so
+    // the next run in the same process crashed in report_parent() while
+    // formatting its first diagnostic.
+    const QString fatalDriver = testcasesDatasetSourcePath(
+        QStringLiteral("test_cwSurvex3DFileReader/fatal_in_include_driver.svx"));
+    const QString oneErrorDriver = testcasesDatasetSourcePath(
+        QStringLiteral("test_cwSurvex3DFileReader/one_error_driver.svx"));
+    REQUIRE(QFile::exists(fatalDriver));
+    REQUIRE(QFile::exists(oneErrorDriver));
+
+    QTemporaryDir workDir;
+    REQUIRE(workDir.isValid());
+
+    auto fatalRun = cwCavernRunner::run(fatalDriver,
+                                        workDir.filePath(QStringLiteral("run1.3d")));
+    CHECK(fatalRun.hasError());
+    CHECK(fatalRun.errorMessage().contains(QStringLiteral("Too many errors"),
+                                           Qt::CaseInsensitive));
+
+    auto nextRun = cwCavernRunner::run(oneErrorDriver,
+                                       workDir.filePath(QStringLiteral("run2.3d")));
+    CHECK(nextRun.hasError());
+    CHECK(nextRun.errorMessage().contains(QStringLiteral("one_error_included.svx")));
+    // A stale chain names the previous run's files in the include tree.
+    CHECK_FALSE(nextRun.errorMessage().contains(QStringLiteral("too_many_errors")));
+    CHECK(nextRun.errorMessage().count(QStringLiteral("In file included from")) == 1);
+}
+
 TEST_CASE("cavern survives a fatal error inside *begin without a double free",
           "[cwSurvex3DFileReader]") {
     // Regression: a fatal error inside *begin longjmps out of the run with the
