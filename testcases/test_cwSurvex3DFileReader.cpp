@@ -541,3 +541,27 @@ TEST_CASE("cavern forgets a fix with no coordinates between runs",
     CHECK(lookup.hasPosition(QStringLiteral("c")));
     CHECK(lookup.hasPosition(QStringLiteral("d")));
 }
+
+TEST_CASE("cavern reports the same deprecation warnings on every run",
+          "[cwSurvex3DFileReader]") {
+    // Each deprecation warning is capped at five hits per run, so the caps must
+    // reset between runs for the same file to report the same count every time.
+    const QString survexFile = testcasesDatasetSourcePath(
+        QStringLiteral("test_cwSurvex3DFileReader/deprecation_warnings.svx"));
+    REQUIRE(QFile::exists(survexFile));
+
+    QTemporaryDir workDir;
+    REQUIRE(workDir.isValid());
+
+    auto firstRun = cwCavernRunner::run(survexFile,
+                                        workDir.filePath(QStringLiteral("depr_run1.3d")));
+    REQUIRE_FALSE(firstRun.hasError());
+    CHECK(firstRun.value().warningCount > 0);
+    CHECK(firstRun.value().logText.contains(QStringLiteral("deprecated")));
+
+    auto secondRun = cwCavernRunner::run(survexFile,
+                                         workDir.filePath(QStringLiteral("depr_run2.3d")));
+    REQUIRE_FALSE(secondRun.hasError());
+    CHECK(secondRun.value().warningCount == firstRun.value().warningCount);
+    CHECK(secondRun.value().logText.contains(QStringLiteral("deprecated")));
+}
