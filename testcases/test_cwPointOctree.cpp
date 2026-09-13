@@ -6,6 +6,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QSet>
 #include <QTemporaryDir>
 #include <QVector3D>
 #include <QtEndian>
@@ -28,6 +29,24 @@ namespace {
                                 static_cast<float>(kNodeSize),
                                 static_cast<float>(kNodeSize)));
     }
+
+    //A repeatable pseudo-random sequence, so a failure is reproducible
+    class RandomSequence
+    {
+    public:
+        explicit RandomSequence(quint32 seed) : m_state(seed) {}
+
+        quint32 next()
+        {
+            constexpr quint32 kMultiplier = 1664525u;
+            constexpr quint32 kIncrement = 1013904223u;
+            m_state = m_state * kMultiplier + kIncrement;
+            return m_state;
+        }
+
+    private:
+        quint32 m_state;
+    };
 
     //The little-endian uint16 of one axis (0 = x, 3 = reserved) of one point
     quint16 readAxis(const QByteArray& bytes, int point, int axis)
@@ -174,6 +193,9 @@ TEST_CASE("A degenerate axis quantizes to zero", "[PointOctree]") {
 
 TEST_CASE("quantizeAll writes little-endian uint16 quads", "[PointOctree]") {
     const QBox3D node = unitNode();
+
+    //The middle point sorts between the two corners, so the payload's order is
+    //minimum corner, middle, maximum corner
     const QVector<QVector3D> points {
         node.minimum(),
         node.maximum(),
@@ -188,18 +210,91 @@ TEST_CASE("quantizeAll writes little-endian uint16 quads", "[PointOctree]") {
         CHECK(bytes.at(i) == '\0');
     }
 
-    //Point 1 is the maximum corner: 0xFF 0xFF per axis, reserved stays zero
-    CHECK(static_cast<quint8>(bytes.at(cw::octree::kBytesPerPoint)) == 0xFF);
-    CHECK(static_cast<quint8>(bytes.at(cw::octree::kBytesPerPoint + 1)) == 0xFF);
-    CHECK(readAxis(bytes, 1, 0) == cw::octree::kQuantMax);
-    CHECK(readAxis(bytes, 1, 1) == cw::octree::kQuantMax);
+    //Point 1 is the middle of x, the minimum of y, the maximum of z
+    CHECK(readAxis(bytes, 1, 0) == (cw::octree::kQuantMax + 1) / 2);
+    CHECK(readAxis(bytes, 1, 1) == 0);
     CHECK(readAxis(bytes, 1, 2) == cw::octree::kQuantMax);
-    CHECK(readAxis(bytes, 1, 3) == 0);
 
-    //Point 2 is the middle of x, the minimum of y, the maximum of z
-    CHECK(readAxis(bytes, 2, 0) == (cw::octree::kQuantMax + 1) / 2);
-    CHECK(readAxis(bytes, 2, 1) == 0);
+    //Point 2 is the maximum corner: 0xFF 0xFF per axis, reserved stays zero
+    const qsizetype lastPoint = 2 * cw::octree::kBytesPerPoint;
+    CHECK(static_cast<quint8>(bytes.at(lastPoint)) == 0xFF);
+    CHECK(static_cast<quint8>(bytes.at(lastPoint + 1)) == 0xFF);
+    CHECK(readAxis(bytes, 2, 0) == cw::octree::kQuantMax);
+    CHECK(readAxis(bytes, 2, 1) == cw::octree::kQuantMax);
     CHECK(readAxis(bytes, 2, 2) == cw::octree::kQuantMax);
+    CHECK(readAxis(bytes, 2, 3) == 0);
+}
+
+TEST_CASE("Morton keys interleave the quantized axes", "[PointOctree]") {
+    using cw::octree::mortonKey;
+    using cw::octree::QuantizedPoint;
+
+    //x at bit 3i, y at 3i + 1, z at 3i + 2
+    CHECK(mortonKey(QuantizedPoint {0, 0, 0}) == 0);
+    CHECK(mortonKey(QuantizedPoint {1, 0, 0}) == 1);
+    CHECK(mortonKey(QuantizedPoint {0, 1, 0}) == 2);
+    CHECK(mortonKey(QuantizedPoint {0, 0, 1}) == 4);
+    CHECK(mortonKey(QuantizedPoint {1, 1, 1}) == 7);
+
+    CHECK(mortonKey(QuantizedPoint {0, 0, 0}) < mortonKey(QuantizedPoint {1, 0, 0}));
+    CHECK(mortonKey(QuantizedPoint {1, 0, 0}) < mortonKey(QuantizedPoint {0, 1, 0}));
+    CHECK(mortonKey(QuantizedPoint {0, 1, 0}) < mortonKey(QuantizedPoint {0, 0, 1}));
+    CHECK(mortonKey(QuantizedPoint {0, 0, 1}) < mortonKey(QuantizedPoint {1, 1, 1}));
+
+    //Every bit of every axis reaches the key, and only the low 48 bits are used
+    const quint64 full = mortonKey(QuantizedPoint {cw::octree::kQuantMax,
+                                                   cw::octree::kQuantMax,
+                                                   cw::octree::kQuantMax});
+    CHECK(full == (quint64(1) << (3 * cw::octree::kMortonBitsPerAxis)) - 1);
+    CHECK(mortonKey(QuantizedPoint {cw::octree::kQuantMax, 0, 0})
+          + mortonKey(QuantizedPoint {0, cw::octree::kQuantMax, 0})
+          + mortonKey(QuantizedPoint {0, 0, cw::octree::kQuantMax}) == full);
+
+    //Injective: no two distinct points share a key
+    QSet<quint64> keys;
+    constexpr int kRandomPoints = 4000;
+    RandomSequence random {12345u};
+    const auto nextAxis = [&random]() { return quint16(random.next() >> 16); };
+
+    for(int i = 0; i < kRandomPoints; i++) {
+        const QuantizedPoint point {nextAxis(), nextAxis(), nextAxis()};
+        const quint64 key = mortonKey(point);
+        CHECK_FALSE(keys.contains(key));
+        keys.insert(key);
+    }
+}
+
+TEST_CASE("quantizeAll writes its points in Morton order", "[PointOctree]") {
+    const QBox3D node = unitNode();
+
+    QVector<QVector3D> points;
+    constexpr int kRandomPoints = 3000;
+    constexpr quint32 kFractionBits = 24;
+    RandomSequence random {98765u};
+    const auto nextAxis = [&random]() {
+        return float(double(random.next() >> 8) / double(1u << kFractionBits) * kNodeSize);
+    };
+
+    points.reserve(kRandomPoints);
+    for(int i = 0; i < kRandomPoints; i++) {
+        points.append(QVector3D(nextAxis(), nextAxis(), nextAxis()));
+    }
+
+    const QByteArray bytes = cw::octree::quantizeAll(points, node);
+    REQUIRE(bytes.size() == points.size() * cw::octree::kBytesPerPoint);
+
+    quint64 previous = 0;
+    for(int i = 0; i < points.size(); i++) {
+        const cw::octree::QuantizedPoint written {
+            readAxis(bytes, i, 0), readAxis(bytes, i, 1), readAxis(bytes, i, 2), 0
+        };
+        const quint64 key = cw::octree::mortonKey(written);
+        CHECK(key >= previous);
+        previous = key;
+    }
+
+    //Deterministic: the same input gives the same bytes every time
+    CHECK(cw::octree::quantizeAll(points, node) == bytes);
 }
 
 TEST_CASE("Octant paths name nodes", "[PointOctree]") {

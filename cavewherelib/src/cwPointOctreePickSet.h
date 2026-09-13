@@ -15,11 +15,13 @@
 #include <QVector>
 
 //Std includes
+#include <array>
 #include <memory>
 
 //Our includes
 #include "CaveWhereLibExport.h"
 #include "cwPickProvider.h"
+#include "cwPointOctreePickIndex.h"
 
 //! What a streamed point cloud is picked against: the octree nodes resident on
 //! the GPU right now.
@@ -46,11 +48,13 @@ class CAVEWHERE_LIB_EXPORT cwPointOctreePickSet : public cwPickProvider
 {
 public:
     //! One resident node: its world bounds, which are also the cube the
-    //! payload is quantized into, and that payload (cw::octree::kBytesPerPoint
-    //! per point).
+    //! payload is quantized into, that payload (cw::octree::kBytesPerPoint per
+    //! point), and the leaf and group boxes a pick descends before it reads
+    //! points. An empty index means the whole node is scanned.
     struct Node {
         QBox3D bounds;
         QByteArray bytes;
+        cwPointOctreePickIndex index;
     };
 
     //! Replaces what picks see. @a pickRadius is the world-space sphere radius
@@ -63,8 +67,23 @@ public:
                                          const cwPickTolerance& tolerance) const override;
 
 private:
+    //! One node's world bounds, packed apart from its Node record.
+    /*!
+        A query slab-tests every node in the snapshot and then reads the bytes
+        of the handful it reaches, so the node loop walks bounds and nothing
+        else. Striding the Node records for them touches more than twice the
+        cache lines this array does, and a pick arrives with cold caches
+        because the render thread has been streaming between picks.
+    */
+    struct NodeBounds {
+        std::array<float, cw::octree::kAxisCount> minimum {0.0f, 0.0f, 0.0f};
+        std::array<float, cw::octree::kAxisCount> maximum {0.0f, 0.0f, 0.0f};
+    };
+
     struct Snapshot {
         QVector<Node> nodes;
+        //! nodes.at(i)'s bounds, in the same order
+        QVector<NodeBounds> bounds;
         QBox3D rootBounds;
         float pickRadius = 0.0f;
     };

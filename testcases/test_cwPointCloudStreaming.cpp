@@ -17,6 +17,8 @@
 #include <QMatrix4x4>
 #include <QSet>
 #include <QSize>
+#include <QString>
+#include <QStringList>
 #include <QTemporaryDir>
 #include <QThread>
 #include <QVector3D>
@@ -64,6 +66,19 @@ using Access = CwRhiPointCloudTestAccess;
 using NodeState = CwRhiPointCloudTestAccess::NodeState;
 
 namespace {
+
+    //! The value of @a key in one profile line, or -1 where the line has none
+    qint64 fieldOf(const QString& line, const QString& key)
+    {
+        const QString prefix = key + QLatin1Char('=');
+        const QStringList fields = line.split(QLatin1Char(' '));
+        for (const QString& field : fields) {
+            if (field.startsWith(prefix)) {
+                return field.mid(prefix.size()).toLongLong();
+            }
+        }
+        return -1;
+    }
 
     constexpr int kRootIndex = 0;
     constexpr int kTargetDimension = 256;
@@ -771,7 +786,7 @@ TEST_CASE("A GPU budget under the resident total evicts the coldest node and nev
         Access::setLastDesiredFrame(fixture.mutableBackend(), resident.at(i), frame - 1);
     }
 
-    const qint64 coldestBytes = Access::mirrorBytes(fixture.backend(), resident.at(0));
+    const qint64 coldestBytes = Access::nodeBytes(fixture.backend(), resident.at(0)).size();
     cwRenderBudgets budgets = fixture.budgets();
     budgets.gpuBudgetBytes = totalGpuBytes() - 1;
     fixture.setBudgets(budgets);
@@ -1051,16 +1066,20 @@ TEST_CASE("The CPU ledger holds exactly the resident nodes' pick mirrors",
     REQUIRE_FALSE(Access::hasStreamingWork(fixture.backend()));
 
     qint64 mirrored = 0;
+    qint64 uploaded = 0;
     for (int i = 0; i < Access::nodeCount(fixture.backend()); i++) {
         if (Access::nodeState(fixture.backend(), i) == NodeState::Resident) {
             mirrored += Access::mirrorBytes(fixture.backend(), i);
+            uploaded += Access::nodeBytes(fixture.backend(), i).size();
         }
     }
 
-    // The mirror is an implicit share of the very bytes that were uploaded, so
-    // the two ledgers agree once nothing is in flight.
+    // The mirror is an implicit share of the very bytes that were uploaded plus
+    // the pick index built over them, so the CPU ledger runs ahead of the GPU
+    // one by exactly the indexes.
+    REQUIRE(mirrored > uploaded);
     CHECK(fixture.cpuBytes() == mirrored);
-    CHECK(fixture.gpuBytes() == mirrored);
+    CHECK(fixture.gpuBytes() == uploaded);
 }
 
 TEST_CASE("A budget below the cut coarsens it rather than evicting what it draws",
@@ -1281,8 +1300,33 @@ TEST_CASE("A streamed point cloud is picked through the nodes it has resident",
 
     cwCamera closeCamera;
     fixture.configurePickCamera(closeCamera, kCloseOrthoHeight);
-    const cwScenePick::Result refined = cwScenePick::snappedPoint(
-        closeCamera.project(aimedAt), closeCamera, *intersecter, kLinePixelRadius);
+
+    // The same pick again, this time reading what the query wrote: the nodes
+    // reached the pick set with their indexes, so the query descended group
+    // and leaf boxes instead of reading every resident point. Without the
+    // index the line would say groups=0 leaves=0 and scan the lot.
+    qint64 residentPoints = 0;
+    for (int index = 0; index < Access::nodeCount(fixture.backend()); index++) {
+        if (Access::nodeState(fixture.backend(), index) == NodeState::Resident) {
+            residentPoints +=
+                Access::nodeBytes(fixture.backend(), index).size() / cw::octree::kBytesPerPoint;
+        }
+    }
+    REQUIRE(residentPoints > 0);
+
+    cwScenePick::Result refined;
+    {
+        const ProfileLogCapture capture(QStringLiteral("cw.profile.pick.debug=true"));
+        refined = cwScenePick::snappedPoint(
+            closeCamera.project(aimedAt), closeCamera, *intersecter, kLinePixelRadius);
+
+        const QStringList picks =
+            ProfileLogCapture::linesStartingWith(QStringLiteral("pick kind=exactHit"));
+        REQUIRE_FALSE(picks.isEmpty());
+        CHECK(fieldOf(picks.constFirst(), QStringLiteral("groups")) > 0);
+        CHECK(fieldOf(picks.constFirst(), QStringLiteral("leaves")) > 0);
+        CHECK(fieldOf(picks.constFirst(), QStringLiteral("points")) < residentPoints);
+    }
     CHECK(refined.hit);
 
     // Evict the children: a GPU budget of nothing takes every node the current

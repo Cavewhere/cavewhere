@@ -20,7 +20,7 @@
 namespace cw::octree {
 
     //Bumping this invalidates every cached manifest and node at once
-    constexpr int kFormatGeneration = 1;
+    constexpr int kFormatGeneration = 2;
 
     //Points per node edge; spacing = nodeSize / kSampleGridResolution
     constexpr int kSampleGridResolution = 128;
@@ -37,6 +37,9 @@ namespace cw::octree {
 
     //uint16 x, y, z, reserved
     constexpr int kBytesPerPoint = 8;
+
+    //Every quantized bit of every axis interleaves into a 48 bit Morton key
+    constexpr int kMortonBitsPerAxis = 16;
 
     //Head and tail of the source file sampled by sourceFingerprint()
     constexpr qint64 kFingerprintWindowBytes = 4 * 1024 * 1024;
@@ -59,8 +62,18 @@ namespace cw::octree {
     CAVEWHERE_LIB_EXPORT QVector3D dequantize(const QuantizedPoint& point, const QBox3D& nodeBounds);
 
     /**
+     * The Morton (Z-order) key of a quantized point: bit i of x lands at bit
+     * 3i, y at 3i + 1, and z at 3i + 2, so the key spans the low 48 bits.
+     * Sorting by it lays points out so any run of consecutive points is
+     * spatially compact, which is what cwPointOctreePickIndex indexes.
+     */
+    CAVEWHERE_LIB_EXPORT quint64 mortonKey(const QuantizedPoint& point);
+
+    /**
      * Quantizes every point into the on-disk node payload: little-endian
      * uint16 x, y, z, reserved per point, so size() == points.size() * kBytesPerPoint.
+     * The points are written in Morton order (see mortonKey), stably, so the
+     * payload is deterministic and a pick can index it by spatial locality.
      */
     CAVEWHERE_LIB_EXPORT QByteArray quantizeAll(const QVector<QVector3D>& points, const QBox3D& nodeBounds);
 

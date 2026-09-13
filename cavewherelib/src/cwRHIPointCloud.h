@@ -11,6 +11,7 @@
 // Our includes
 #include "cwAppearanceSlotted.h"
 #include "cwDiskCacher.h"
+#include "cwPointOctreePickIndex.h"
 #include "cwPointOctreePickSet.h"
 #include "cwPointOctreeSelection.h"
 #include "cwPointOctreeSource.h"
@@ -91,6 +92,11 @@ private:
         // without going back to disk. Released with the node.
         QByteArray bytes;
 
+        // The leaf and group boxes over those bytes, built on the worker that
+        // loaded them so a pick descends instead of scanning. Released with the
+        // node, and counted with it in the CPU ledger.
+        cwPointOctreePickIndex index;
+
         int constantSlot = -1;
         quint64 lastDesiredFrame = 0;
 
@@ -118,12 +124,13 @@ private:
         }
     };
 
-    using NodeStreamer = cwTileStreamer<cwPointOctreeNodeSource, QByteArray>;
+    using NodeStreamer = cwTileStreamer<cwPointOctreeNodeSource, cwPointOctreeNodePayload>;
 
     // The streamer's loader, on a cwConcurrent worker. Static and capturing
     // nothing: everything it touches travels on the source, and cwDiskCacher
     // is thread-safe.
-    static Monad::Result<QByteArray> loadNode(const cwPointOctreeNodeSource& source, int level);
+    static Monad::Result<cwPointOctreeNodePayload> loadNode(const cwPointOctreeNodeSource& source,
+                                                            int level);
 
     void initializeResources(const ResourceUpdateData& data);
     bool ensurePipeline(const RenderData& data);
@@ -154,7 +161,7 @@ private:
     // and marks it resident. False when no constants slot could be freed for
     // it, which leaves the node Absent to be asked for again.
     bool uploadNode(QRhi* rhi, QRhiResourceUpdateBatch* batch, int index,
-                    const QByteArray& bytes);
+                    const cwPointOctreeNodePayload& payload);
 
     // A free constants slot, evicting resident nodes worth @a incomingBytes to
     // make one when the stack is empty. -1 when nothing could be freed.

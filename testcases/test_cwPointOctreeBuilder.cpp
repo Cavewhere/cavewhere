@@ -406,6 +406,100 @@ TEST_CASE("cwPointOctreeBuilder: a small chunk target builds the same octree thr
     REQUIRE(cwPointOctreeBuilder::cachedManifest(request).has_value());
 }
 
+TEST_CASE("cwPointOctreeBuilder: every cached node is written in Morton order",
+          "[PointOctree][PointOctreeBuilder]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString path = tempLazPath(tempDir, QStringLiteral("octree-morton"));
+    REQUIRE(writeSyntheticLazFile(path, passagePoints(kPassagePointCount)));
+
+    const cwPointOctreeBuilder::Request request {
+        .path = path,
+        .cacheRootPath = tempDir.path(),
+        .chunkTargetPoints = kTwoLevelChunkTarget
+    };
+
+    const cwPointOctreeBuilder::Result result =
+        waitForBuild(cwPointOctreeBuilder::build(request));
+    REQUIRE_FALSE(result.hasError());
+
+    const cwPointOctreeManifest manifest = result.value();
+    REQUIRE(manifest.nodes.size() > 1);
+
+    //The generation is part of every id, so an older cache is never read back
+    REQUIRE(manifestKey(path, manifest.fingerprint).id.contains(QStringLiteral("octree2")));
+
+    const cwDiskCacher cacher {QDir(request.cacheRootPath)};
+    for(int i = 0; i < manifest.nodes.size(); i++) {
+        const QByteArray payload =
+            cacher.entry(nodeKey(path, manifest.fingerprint, manifest.nodeName(i)));
+        REQUIRE(payload.size() == manifest.nodes.at(i).byteSize);
+
+        quint64 previous = 0;
+        const qsizetype count = payload.size() / kBytesPerPoint;
+        for(qsizetype point = 0; point < count; point++) {
+            const char* axes = payload.constData() + point * kBytesPerPoint;
+            constexpr int kAxisBytes = int(sizeof(quint16));
+            const QuantizedPoint quantized {
+                qFromLittleEndian<quint16>(axes),
+                qFromLittleEndian<quint16>(axes + kAxisBytes),
+                qFromLittleEndian<quint16>(axes + 2 * kAxisBytes),
+                0
+            };
+
+            const quint64 key = mortonKey(quantized);
+            REQUIRE(key >= previous);
+            previous = key;
+        }
+    }
+}
+
+TEST_CASE("cwPointOctreeBuilder: a cache from an older format generation rebuilds",
+          "[PointOctree][PointOctreeBuilder]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString path = tempLazPath(tempDir, QStringLiteral("octree-generation"));
+    REQUIRE(writeSyntheticLazFile(path, passagePoints(kLockedCachePointCount)));
+
+    const cwPointOctreeBuilder::Request request {
+        .path = path,
+        .cacheRootPath = tempDir.path()
+    };
+
+    const cwPointOctreeBuilder::Result result =
+        waitForBuild(cwPointOctreeBuilder::build(request));
+    REQUIRE_FALSE(result.hasError());
+    REQUIRE(cwPointOctreeBuilder::cachedManifest(request).has_value());
+
+    const cwPointOctreeManifest manifest = result.value();
+    cwDiskCacher cacher {QDir(request.cacheRootPath)};
+
+    //Move the whole cache back a generation: the same bytes under the ids the
+    //previous format wrote them with
+    const QString current = QStringLiteral("-octree")
+                            + QString::number(kFormatGeneration)
+                            + QStringLiteral("-");
+    const QString previous = QStringLiteral("-octree")
+                             + QString::number(kFormatGeneration - 1)
+                             + QStringLiteral("-");
+
+    const auto moveBack = [&](const cwDiskCacher::Key& key) {
+        cwDiskCacher::Key older = key;
+        older.id = QString(key.id).replace(current, previous);
+        cacher.insert(older, cacher.entry(key));
+        REQUIRE(QFile::remove(cacher.filePath(key)));
+    };
+
+    for(int i = 0; i < manifest.nodes.size(); i++) {
+        moveBack(nodeKey(path, manifest.fingerprint, manifest.nodeName(i)));
+    }
+    moveBack(manifestKey(path, manifest.fingerprint));
+
+    REQUIRE_FALSE(cwPointOctreeBuilder::cachedManifest(request).has_value());
+}
+
 TEST_CASE("cwPointOctreeBuilder: a missing node makes the cached manifest a rebuild",
           "[PointOctree][PointOctreeBuilder]") {
     QTemporaryDir tempDir;

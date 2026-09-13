@@ -10,7 +10,9 @@
 
 //Std includes
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <utility>
 
 namespace {
     //The uint16 x, y, z, reserved of one on-disk point
@@ -32,6 +34,41 @@ namespace {
         const double size = maximum - minimum;
         return static_cast<float>(minimum + size * value / cw::octree::kQuantMax);
     }
+
+    //! Spreads the low cw::octree::kMortonBitsPerAxis bits of @a value so bit i
+    //! lands at bit 3i, leaving the other two thirds of the key for the other
+    //! axes.
+    /*!
+        Five doublings of the gap between bits, each masking off the copies that
+        landed where they do not belong. These are the standard Morton spread
+        constants for a 21 bit axis, which covers our 16, and the whole thing
+        unrolls to about a dozen instructions — the build quantizes hundreds of
+        millions of points, so a per-bit loop here shows up in the wall clock.
+    */
+    quint64 spreadForMorton(quint16 value)
+    {
+        constexpr std::array<int, 5> kSpreadShifts {32, 16, 8, 4, 2};
+        constexpr std::array<quint64, 5> kSpreadMasks {
+            0x001f00000000ffffULL,
+            0x001f0000ff0000ffULL,
+            0x100f00f00f00f00fULL,
+            0x10c30c30c30c30c3ULL,
+            0x1249249249249249ULL
+        };
+        static_assert(cw::octree::kMortonBitsPerAxis <= 21,
+                      "The spread constants below carry 21 bits per axis.");
+
+        quint64 spread = value;
+        for(size_t step = 0; step < kSpreadShifts.size(); step++) {
+            spread = (spread | (spread << kSpreadShifts[step])) & kSpreadMasks[step];
+        }
+        return spread;
+    }
+
+    struct KeyedPoint {
+        quint64 key = 0;
+        cw::octree::QuantizedPoint point;
+    };
 
     cwDiskCacher::Key cacheKey(const QString& lazPath, const QString& fingerprint, const QString& suffix)
     {
@@ -72,14 +109,37 @@ QVector3D dequantize(const QuantizedPoint& point, const QBox3D& nodeBounds)
                      dequantizeAxis(point.z, minimum.z(), maximum.z()));
 }
 
+quint64 mortonKey(const QuantizedPoint& point)
+{
+    return spreadForMorton(point.x)
+           | (spreadForMorton(point.y) << 1)
+           | (spreadForMorton(point.z) << 2);
+}
+
 QByteArray quantizeAll(const QVector<QVector3D>& points, const QBox3D& nodeBounds)
 {
+    //The key travels with its point so the sort compares a field rather than
+    //re-deriving the interleave on every comparison
+    QVector<KeyedPoint> quantized;
+    quantized.reserve(points.size());
+    for(const QVector3D& point : points) {
+        const QuantizedPoint value = quantize(point, nodeBounds);
+        quantized.append(KeyedPoint {mortonKey(value), value});
+    }
+
+    //Stable, so points that share a cell keep their input order and the payload
+    //is the same bytes every build
+    std::stable_sort(quantized.begin(), quantized.end(),
+                     [](const KeyedPoint& left, const KeyedPoint& right) {
+                         return left.key < right.key;
+                     });
+
     QByteArray bytes(points.size() * kBytesPerPoint, Qt::Uninitialized);
 
     char* writePoint = bytes.data();
-    for(const QVector3D& point : points) {
-        const QuantizedPoint quantized = quantize(point, nodeBounds);
-        const quint16 axes[kAxesPerPoint] = {quantized.x, quantized.y, quantized.z, quantized.reserved};
+    for(const KeyedPoint& keyed : std::as_const(quantized)) {
+        const QuantizedPoint& point = keyed.point;
+        const quint16 axes[kAxesPerPoint] = {point.x, point.y, point.z, point.reserved};
         qToLittleEndian<quint16>(axes, kAxesPerPoint, writePoint);
         writePoint += kBytesPerPoint;
     }

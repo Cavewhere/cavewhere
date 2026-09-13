@@ -64,7 +64,7 @@ struct CwRhiPointCloudTestAccess {
     static qint64 readyQueueBytes(const cwRHIPointCloud& cloud) {
         qint64 bytes = 0;
         for (const auto& result : cloud.m_readyQueue) {
-            bytes += result.payload.size();
+            bytes += result.payload.bytes.size();
         }
         return bytes;
     }
@@ -103,12 +103,14 @@ struct CwRhiPointCloudTestAccess {
     }
 
     // The pick mirror the node kept of what it uploaded (Q4 reads it for
-    // picking), so a test can check the ledger against what is actually held.
+    // picking) plus the pick index built over it, so a test can check the CPU
+    // ledger against what is actually held.
     static qint64 mirrorBytes(const cwRHIPointCloud& cloud, int index) {
         if (index < 0 || index >= cloud.m_nodes.size()) {
             return 0;
         }
-        return cloud.m_nodes.at(index).bytes.size();
+        const auto& node = cloud.m_nodes.at(index);
+        return node.bytes.size() + node.index.byteSize();
     }
 };
 

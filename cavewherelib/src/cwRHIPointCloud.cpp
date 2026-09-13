@@ -59,7 +59,10 @@ namespace {
 
 cwRHIPointCloud::cwRHIPointCloud(std::shared_ptr<cwPointOctreePickSet> pickSet) :
     m_streamer(&cwRHIPointCloud::loadNode,
-               [](const cwPointOctreeNodeSource& source, int) { return source.byteSize; },
+               [](const cwPointOctreeNodeSource& source, int) {
+                   return source.byteSize
+                          + cwPointOctreePickIndex::estimatedBytes(source.byteSize);
+               },
                cwRenderMemoryLedger::Category::PointCloudGeometry),
     m_pickSet(std::move(pickSet))
 {
@@ -178,8 +181,9 @@ void cwRHIPointCloud::releaseNode(int index)
     }
 
     m_gpuBytes.setBytes(m_gpuBytes.bytes() - node.bytes.size());
-    m_mirrorBytes.setBytes(m_mirrorBytes.bytes() - node.bytes.size());
+    m_mirrorBytes.setBytes(m_mirrorBytes.bytes() - node.bytes.size() - node.index.byteSize());
     node.bytes = QByteArray();
+    node.index = cwPointOctreePickIndex();
 
     node.state = NodeState::Absent;
     node.exportRequested = false;
@@ -364,7 +368,7 @@ bool cwRHIPointCloud::streamResources(ResourceUpdateData& data, qint64& remainin
             continue;
         }
 
-        if (!cw::residency::takeFromBudget(remainingUploadBytes, result.payload.size(),
+        if (!cw::residency::takeFromBudget(remainingUploadBytes, result.payload.bytes.size(),
                                            uploadedThisFrame)) {
             // The streamer already handed this over, so it waits here for the
             // next frame rather than being asked for a second time.
@@ -431,8 +435,9 @@ void cwRHIPointCloud::publishPointCloudStats() const
 }
 
 bool cwRHIPointCloud::uploadNode(QRhi* rhi, QRhiResourceUpdateBatch* batch, int index,
-                                 const QByteArray& bytes)
+                                 const cwPointOctreeNodePayload& payload)
 {
+    const QByteArray& bytes = payload.bytes;
     const int slot = takeConstantSlot(bytes.size());
     if (slot < 0) {
         // Nothing could be freed for it; it goes back to being asked for.
@@ -462,12 +467,13 @@ bool cwRHIPointCloud::uploadNode(QRhi* rhi, QRhiResourceUpdateBatch* batch, int 
     NodeRecord& node = m_nodes[index];
     node.buffer = buffer;
     node.bytes = bytes;
+    node.index = payload.index;
     node.constantSlot = slot;
     node.state = NodeState::Resident;
     node.exportRequested = false;
 
     m_gpuBytes.setBytes(m_gpuBytes.bytes() + bytes.size());
-    m_mirrorBytes.setBytes(m_mirrorBytes.bytes() + bytes.size());
+    m_mirrorBytes.setBytes(m_mirrorBytes.bytes() + bytes.size() + payload.index.byteSize());
 
     m_residencyChanged = true;
 
@@ -527,8 +533,10 @@ void cwRHIPointCloud::publishPickSet()
                 continue;
             }
 
-            // The very bytes the node uploaded — an implicit share, not a copy.
-            nodes.append({m_source.manifest->nodeBounds(i), m_nodes.at(i).bytes});
+            // The very bytes the node uploaded, and the index built over them —
+            // implicit shares, not copies.
+            nodes.append({m_source.manifest->nodeBounds(i), m_nodes.at(i).bytes,
+                          m_nodes.at(i).index});
         }
     }
 
@@ -1066,8 +1074,8 @@ cwRhiPipelineKey cwRHIPointCloud::buildPipelineKey(QRhiRenderPassDescriptor* ren
     return key;
 }
 
-Monad::Result<QByteArray> cwRHIPointCloud::loadNode(const cwPointOctreeNodeSource& source,
-                                                   int /*level*/)
+Monad::Result<cwPointOctreeNodePayload> cwRHIPointCloud::loadNode(
+    const cwPointOctreeNodeSource& source, int /*level*/)
 {
     const bool profiling = lcProfileLoad().isDebugEnabled();
     QElapsedTimer timer;
@@ -1085,10 +1093,12 @@ Monad::Result<QByteArray> cwRHIPointCloud::loadNode(const cwPointOctreeNodeSourc
     }
 
     if (bytes.size() != source.byteSize) {
-        return Monad::Result<QByteArray>(
+        return Monad::Result<cwPointOctreeNodePayload>(
             QStringLiteral("read %1 bytes where the manifest says %2")
                 .arg(bytes.size()).arg(source.byteSize));
     }
 
-    return bytes;
+    // The index costs one pass over bytes this worker just read, so the render
+    // thread never pays for it and a pick never rebuilds it.
+    return cwPointOctreeNodePayload {bytes, cwPointOctreePickIndex::build(bytes)};
 }

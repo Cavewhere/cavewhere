@@ -12,15 +12,21 @@
 #include <QRay3D>
 #include <QStringList>
 #include <QVector3D>
+#include <QtEndian>
 
 //Std includes
+#include <array>
+#include <cmath>
 #include <memory>
+#include <optional>
+#include <utility>
 
 //Our includes
 #include "TestGeometryBuilders.h"
 #include "cwGeometryItersecter.h"
 #include "cwPickQuery.h"
 #include "cwPointOctree.h"
+#include "cwPointOctreePickIndex.h"
 #include "cwPointOctreePickSet.h"
 #include "cwProfileLog.h"
 #include "cwRayHit.h"
@@ -36,11 +42,13 @@ namespace {
     constexpr double kPointTolerance = 1e-3;
 
     //! A pick set node holding @a points, quantized into @a bounds exactly the
-    //! way cw::octree::quantizeAll writes a node's payload to disk.
+    //! way cw::octree::quantizeAll writes a node's payload to disk, and indexed
+    //! the way cwRHIPointCloud::loadNode indexes it.
     cwPointOctreePickSet::Node makeNode(const QBox3D& bounds,
                                         const QVector<QVector3D>& points)
     {
-        return {bounds, cw::octree::quantizeAll(points, bounds)};
+        const QByteArray bytes = cw::octree::quantizeAll(points, bounds);
+        return {bounds, bytes, cwPointOctreePickIndex::build(bytes)};
     }
 
     QBox3D cubeAt(const QVector3D& minimum, float size)
@@ -79,6 +87,132 @@ namespace {
                         QBox3D(boundsA.minimum(), boundsB.maximum()), kPickRadius);
         }
     };
+
+    // --- A brute-force pick, written here so the indexed one has something
+    // independent to agree with. It walks every point of every node, in the
+    // order they were published, with the same acceptance rules.
+
+    using cw::octree::kAxisCount;
+
+    //! The world points of one node, dequantized straight out of its payload
+    QVector<QVector3D> nodeWorldPoints(const cwPointOctreePickSet::Node& node)
+    {
+        const QVector3D origin = node.bounds.minimum();
+        const double scale = (node.bounds.maximum().x() - origin.x())
+                             / double(cw::octree::kQuantMax);
+
+        QVector<QVector3D> points;
+        const qsizetype count = node.bytes.size() / cw::octree::kBytesPerPoint;
+        points.reserve(count);
+
+        for (qsizetype i = 0; i < count; i++) {
+            constexpr int kAxisBytes = int(sizeof(quint16));
+            const char* axes = node.bytes.constData() + i * cw::octree::kBytesPerPoint;
+            quint16 quantized[kAxisCount] = {0, 0, 0};
+            for (int axis = 0; axis < kAxisCount; axis++) {
+                quantized[axis] = qFromLittleEndian<quint16>(axes + axis * kAxisBytes);
+            }
+
+            points.append(QVector3D(origin.x() + float(double(quantized[0]) * scale),
+                                    origin.y() + float(double(quantized[1]) * scale),
+                                    origin.z() + float(double(quantized[2]) * scale)));
+        }
+
+        return points;
+    }
+
+    struct RaySphere {
+        bool hit = false;
+        double tNear = 0.0;
+        double dSq = 0.0;
+    };
+
+    //! Ray against a sphere of @a radius around @a center, in double
+    RaySphere raySphere(const QRay3D& ray, const QVector3D& center, double radius)
+    {
+        const QVector3D origin = ray.origin();
+        const QVector3D direction = ray.direction();
+        const double dDotD = double(direction.x()) * double(direction.x())
+                             + double(direction.y()) * double(direction.y())
+                             + double(direction.z()) * double(direction.z());
+        if (dDotD <= 0.0) {
+            return RaySphere();
+        }
+
+        const double toCenterX = double(center.x()) - double(origin.x());
+        const double toCenterY = double(center.y()) - double(origin.y());
+        const double toCenterZ = double(center.z()) - double(origin.z());
+        const double tCenter = (toCenterX * double(direction.x())
+                                + toCenterY * double(direction.y())
+                                + toCenterZ * double(direction.z())) / dDotD;
+
+        const double perpX = toCenterX - tCenter * double(direction.x());
+        const double perpY = toCenterY - tCenter * double(direction.y());
+        const double perpZ = toCenterZ - tCenter * double(direction.z());
+        const double dSq = perpX * perpX + perpY * perpY + perpZ * perpZ;
+        const double radiusSquared = radius * radius;
+
+        if (dSq > radiusSquared) {
+            return RaySphere {false, 0.0, dSq};
+        }
+        return RaySphere {true, tCenter - std::sqrt((radiusSquared - dSq) / dDotD), dSq};
+    }
+
+    //! What exactHit has to return: the accepted point of least sphere entry
+    std::optional<QVector3D> bruteExactHit(const QVector<cwPointOctreePickSet::Node>& nodes,
+                                           const QRay3D& ray, double radius)
+    {
+        std::optional<QVector3D> best;
+        double bestDepth = 0.0;
+
+        for (const cwPointOctreePickSet::Node& node : nodes) {
+            for (const QVector3D& point : nodeWorldPoints(node)) {
+                const RaySphere sphere = raySphere(ray, point, radius);
+                if (!sphere.hit || sphere.tNear <= 0.0) {
+                    continue;
+                }
+                if (best.has_value() && sphere.tNear >= bestDepth) {
+                    continue;
+                }
+
+                best = point;
+                bestDepth = sphere.tNear;
+            }
+        }
+
+        return best;
+    }
+
+    //! What nearestPoint has to return: the accepted point of least ray depth
+    std::optional<QVector3D> bruteNearestPoint(const QVector<cwPointOctreePickSet::Node>& nodes,
+                                               const QRay3D& ray,
+                                               const cwPickTolerance& tolerance)
+    {
+        std::optional<QVector3D> best;
+        double bestDepth = 0.0;
+
+        for (const cwPointOctreePickSet::Node& node : nodes) {
+            for (const QVector3D& point : nodeWorldPoints(node)) {
+                const double rayDepth = ray.projectedDistance(point);
+                if (rayDepth <= 0.0) {
+                    continue;
+                }
+                if (best.has_value() && rayDepth >= bestDepth) {
+                    continue;
+                }
+
+                const double radius = tolerance.radiusAt(rayDepth);
+                if (raySphere(ray, point, 0.0).dSq > radius * radius) {
+                    continue;
+                }
+
+                best = point;
+                bestDepth = rayDepth;
+            }
+        }
+
+        return best;
+    }
 
     void checkPointsEqual(const QVector3D& found, const QVector3D& expected)
     {
@@ -397,8 +531,8 @@ TEST_CASE("The pick profile category reports one line per query", "[PointOctreeP
     const QStringList pairs = line.split(QLatin1Char(' '));
     const QStringList expectedKeys = {
         QStringLiteral("kind"), QStringLiteral("nodes"), QStringLiteral("passing"),
-        QStringLiteral("points"), QStringLiteral("us"), QStringLiteral("hit"),
-        QStringLiteral("prunable")
+        QStringLiteral("groups"), QStringLiteral("leaves"), QStringLiteral("points"),
+        QStringLiteral("us"), QStringLiteral("hit"), QStringLiteral("prunable")
     };
     REQUIRE(pairs.size() == expectedKeys.size() + 1);
     CHECK(pairs.at(0) == QStringLiteral("pick"));
@@ -410,9 +544,11 @@ TEST_CASE("The pick profile category reports one line per query", "[PointOctreeP
     CHECK(line.contains(QStringLiteral("hit=1")));
 
     // Node A holds one point, and only node A's box is on the ray, so the query
-    // scanned exactly that point.
+    // descended that node's single group and leaf and scanned exactly that point.
     CHECK(line.contains(QStringLiteral("nodes=2")));
     CHECK(line.contains(QStringLiteral("passing=1")));
+    CHECK(line.contains(QStringLiteral("groups=1")));
+    CHECK(line.contains(QStringLiteral("leaves=1")));
     CHECK(line.contains(QStringLiteral("points=1")));
 
     // A ray through the gap between the two nodes reaches neither.
@@ -423,6 +559,8 @@ TEST_CASE("The pick profile category reports one line per query", "[PointOctreeP
     line = lines.at(1);
     CHECK(line.contains(QStringLiteral("hit=0")));
     CHECK(line.contains(QStringLiteral("passing=0")));
+    CHECK(line.contains(QStringLiteral("groups=0")));
+    CHECK(line.contains(QStringLiteral("leaves=0")));
     CHECK(line.contains(QStringLiteral("points=0")));
     CHECK(line.contains(QStringLiteral("prunable=0")));
 
@@ -436,12 +574,11 @@ TEST_CASE("The pick profile category reports one line per query", "[PointOctreeP
     CHECK(lines.at(2).contains(QStringLiteral("hit=1")));
 }
 
-TEST_CASE("The pick profile line counts the nodes a depth cut-off could skip",
-          "[PointOctreePick]")
+TEST_CASE("A node behind the hit is never opened", "[PointOctreePick]")
 {
     // Two nodes stacked along the ray, each with a point at its center. The
-    // near point wins, and the far node is one a near-to-far order with a
-    // best-depth cut-off would never have opened.
+    // near point wins, and the far node starts deeper than that hit, so the
+    // near-to-far walk stops before it.
     const QBox3D nearBounds = cubeAt(QVector3D(0.0f, 0.0f, 10.0f), kNodeSize);
     const QBox3D farBounds = cubeAt(QVector3D(0.0f, 0.0f, -10.0f), kNodeSize);
     const QVector3D nearPoint(5.0f, 5.0f, 15.0f);
@@ -459,7 +596,162 @@ TEST_CASE("The pick profile line counts the nodes a depth cut-off could skip",
 
     const QStringList lines = ProfileLogCapture::linesStartingWith(QStringLiteral("pick"));
     REQUIRE(lines.size() == 1);
-    CHECK(lines.first().contains(QStringLiteral("passing=2")));
-    CHECK(lines.first().contains(QStringLiteral("points=2")));
-    CHECK(lines.first().contains(QStringLiteral("prunable=1")));
+    CHECK(lines.first().contains(QStringLiteral("passing=1")));
+    CHECK(lines.first().contains(QStringLiteral("points=1")));
+    CHECK(lines.first().contains(QStringLiteral("prunable=0")));
+}
+
+TEST_CASE("An indexed node answers the same picks a full scan would",
+          "[PointOctreePick]")
+{
+    // A node of 5 000 points, indexed the way the streamer's loader indexes it.
+    // Every ray's answer has to match a brute-force walk of the same bytes.
+    constexpr int kPointCount = 5000;
+    constexpr int kRayCount = 20;
+    constexpr float kCloudSize = 50.0f;
+    constexpr double kTolerance = 1.5;
+
+    quint32 random = 777u;
+    constexpr quint32 kMultiplier = 1664525u;
+    constexpr quint32 kIncrement = 1013904223u;
+    constexpr quint32 kFractionBits = 24;
+    const auto nextFraction = [&random]() {
+        random = random * kMultiplier + kIncrement;
+        return float(double(random >> 8) / double(1u << kFractionBits));
+    };
+
+    //! A fraction over [-1, 1], so a direction reaches every octant
+    const auto nextSigned = [&nextFraction]() {
+        return 2.0f * nextFraction() - 1.0f;
+    };
+
+    QVector<QVector3D> points;
+    points.reserve(kPointCount);
+    for (int i = 0; i < kPointCount; i++) {
+        points.append(QVector3D(nextFraction() * kCloudSize,
+                                nextFraction() * kCloudSize,
+                                nextFraction() * kCloudSize));
+    }
+
+    const QBox3D bounds = cubeAt(QVector3D(0.0f, 0.0f, 0.0f), kCloudSize);
+    const QVector<cwPointOctreePickSet::Node> nodes {makeNode(bounds, points)};
+    REQUIRE_FALSE(nodes.constFirst().index.isEmpty());
+
+    cwPointOctreePickSet set;
+    set.publish(nodes, bounds, kPickRadius);
+
+    // Rays straight down through the cloud, then oblique ones from every
+    // direction: an axis-aligned ray leaves two thirds of the slab test at
+    // "is the origin between the faces", so only the oblique half exercises
+    // the per-axis inverse direction, the near/far swap on a negative
+    // component, and exactHit's radius-to-ray-units depth bias. Every third
+    // oblique direction is three times unit length, which the bias divides by.
+    QVector<QRay3D> rays;
+    rays.reserve(2 * kRayCount);
+    for (int i = 0; i < kRayCount; i++) {
+        rays.append(rayDown(nextFraction() * kCloudSize, nextFraction() * kCloudSize));
+    }
+
+    constexpr float kRayStandoff = 120.0f;
+    constexpr float kLongDirectionScale = 3.0f;
+    for (int i = 0; i < kRayCount; i++) {
+        const QVector3D target(nextFraction() * kCloudSize,
+                               nextFraction() * kCloudSize,
+                               nextFraction() * kCloudSize);
+        const QVector3D away = QVector3D(nextSigned(), nextSigned(), nextSigned()).normalized();
+        const QVector3D origin = target + away * kRayStandoff;
+        const QVector3D direction = (i % 3 == 0)
+                                        ? (target - origin) * kLongDirectionScale
+                                        : (target - origin).normalized();
+        rays.append(QRay3D(origin, direction));
+    }
+
+    // The loop is only worth its name if the directions really do span the
+    // octants, so the signs are counted rather than assumed.
+    std::array<int, kAxisCount> negativeDirections {0, 0, 0};
+    std::array<int, kAxisCount> positiveDirections {0, 0, 0};
+    for (const QRay3D& ray : std::as_const(rays)) {
+        const QVector3D direction = ray.direction();
+        const float components[kAxisCount] = {direction.x(), direction.y(), direction.z()};
+        for (int axis = 0; axis < kAxisCount; axis++) {
+            if (components[axis] < 0.0f) {
+                negativeDirections[axis]++;
+            } else if (components[axis] > 0.0f) {
+                positiveDirections[axis]++;
+            }
+        }
+    }
+    for (int axis = 0; axis < kAxisCount; axis++) {
+        CHECK(negativeDirections.at(axis) > 0);
+        CHECK(positiveDirections.at(axis) > 0);
+    }
+
+    for (const QRay3D& ray : std::as_const(rays)) {
+        const std::optional<QVector3D> expectedExact =
+            bruteExactHit(nodes, ray, double(kPickRadius));
+        const auto exact = set.exactHit(ray);
+        REQUIRE(exact.has_value() == expectedExact.has_value());
+        if (expectedExact.has_value()) {
+            checkPointsEqual(exact->world, expectedExact.value());
+        }
+
+        const cwPickTolerance tolerance = toleranceOf(kTolerance);
+        const std::optional<QVector3D> expectedNearest =
+            bruteNearestPoint(nodes, ray, tolerance);
+        const auto nearest = set.nearestPoint(ray, tolerance);
+        REQUIRE(nearest.has_value() == expectedNearest.has_value());
+        if (expectedNearest.has_value()) {
+            checkPointsEqual(nearest->world, expectedNearest.value());
+        }
+    }
+}
+
+TEST_CASE("A node published with no index is scanned whole", "[PointOctreePick]")
+{
+    // The pick set is total: a Node whose index was never built still answers,
+    // by walking every point it holds. Nothing publishes one today, so this is
+    // what keeps that path honest.
+    const QBox3D bounds = cubeAt(QVector3D(0.0f, 0.0f, 0.0f), kNodeSize);
+    const QVector<QVector3D> points {
+        QVector3D(5.0f, 5.0f, 1.0f), QVector3D(5.0f, 5.0f, 5.0f), QVector3D(1.0f, 1.0f, 5.0f)
+    };
+
+    const cwPointOctreePickSet::Node indexed = makeNode(bounds, points);
+    REQUIRE_FALSE(indexed.index.isEmpty());
+
+    cwPointOctreePickSet unindexedSet;
+    unindexedSet.publish({cwPointOctreePickSet::Node {bounds, indexed.bytes, {}}},
+                         bounds, kPickRadius);
+
+    cwPointOctreePickSet indexedSet;
+    indexedSet.publish({indexed}, bounds, kPickRadius);
+
+    const QRay3D ray = rayDown(5.0f, 5.0f);
+    const cwPickTolerance tolerance = toleranceOf(kPickRadius);
+
+    const ProfileLogCapture capture(QStringLiteral("cw.profile.pick.debug=true"));
+
+    const auto unindexedExact = unindexedSet.exactHit(ray);
+    const auto indexedExact = indexedSet.exactHit(ray);
+    REQUIRE(unindexedExact.has_value());
+    REQUIRE(indexedExact.has_value());
+    checkPointsEqual(unindexedExact->world, indexedExact->world);
+
+    const auto unindexedNearest = unindexedSet.nearestPoint(ray, tolerance);
+    const auto indexedNearest = indexedSet.nearestPoint(ray, tolerance);
+    REQUIRE(unindexedNearest.has_value());
+    REQUIRE(indexedNearest.has_value());
+    checkPointsEqual(unindexedNearest->world, indexedNearest->world);
+
+    const QStringList lines = ProfileLogCapture::linesStartingWith(QStringLiteral("pick"));
+    REQUIRE(lines.size() == 4);
+
+    // No boxes to descend, so every point of the node is read.
+    CHECK(lines.at(0).contains(QStringLiteral("groups=0")));
+    CHECK(lines.at(0).contains(QStringLiteral("leaves=0")));
+    CHECK(lines.at(0).contains(QStringLiteral("points=3")));
+
+    // The indexed node reaches the same answer through its one group and leaf.
+    CHECK(lines.at(1).contains(QStringLiteral("groups=1")));
+    CHECK(lines.at(1).contains(QStringLiteral("leaves=1")));
 }
