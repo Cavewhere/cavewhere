@@ -195,3 +195,43 @@ TEST_CASE("cavern survives a fatal error inside *begin without a double free",
                                                    Qt::CaseInsensitive));
     }
 }
+
+TEST_CASE("cavern reads a Compass DAT whose lines end in CR CR LF",
+          "[cwSurvex3DFileReader]") {
+    // Regression: survex's line-end normalizer treated the second CR of a
+    // "\r\r\n" line end as the start of a new line, so the fixed-layout Compass
+    // DAT reader saw a phantom blank line between every real one and reported
+    // "Expecting SURVEY" / "End of line not blank" for the whole file.
+    const QString driver = testcasesDatasetSourcePath(
+        QStringLiteral("test_cwSurvex3DFileReader/compass_crcrlf_driver.svx"));
+    REQUIRE(QFile::exists(driver));
+
+    QTemporaryDir workDir;
+    REQUIRE(workDir.isValid());
+    const QString output3dPath = workDir.filePath(QStringLiteral("compass_crcrlf.3d"));
+
+    auto cavernResult = cwCavernRunner::run(driver, output3dPath);
+    REQUIRE_FALSE(cavernResult.hasError());
+    CHECK(cavernResult.value().warningCount == 0);
+    CHECK_FALSE(cavernResult.value().logText.contains(QStringLiteral("error:")));
+    REQUIRE(QFileInfo(cavernResult.value().output3dPath).exists());
+
+    // Assert on the solved survey so a change that silently drops the file's
+    // legs still fails.
+    cwSurvex3DFileReader reader;
+    auto parsed = reader.readNetworkAndLookup(cavernResult.value().output3dPath);
+
+    constexpr int kStationCount = 6;
+    CHECK(parsed.network.stations().size() == kStationCount);
+    for (int i = 1; i <= kStationCount; ++i) {
+        CHECK(parsed.lookup.hasPosition(QStringLiteral("cave0.A%1").arg(i)));
+    }
+
+    // Five 10 ft legs due east from A1, which the .MAK fixes at the origin.
+    const QVector3D a1 = parsed.lookup.position(QStringLiteral("cave0.A1"));
+    const QVector3D a6 = parsed.lookup.position(QStringLiteral("cave0.A6"));
+    CHECK(a1.x() == Catch::Approx(0.0).margin(0.01));
+    CHECK(a6.x() == Catch::Approx(15.24).margin(0.01));
+    CHECK(a6.y() == Catch::Approx(0.0).margin(0.01));
+    CHECK(a6.z() == Catch::Approx(0.0).margin(0.01));
+}

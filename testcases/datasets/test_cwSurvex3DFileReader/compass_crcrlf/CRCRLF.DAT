@@ -1,0 +1,16 @@
+CRCRLF CAVE
+SURVEY NAME: A
+SURVEY DATE: 1 1 2000  COMMENT:doubled CR line ends
+SURVEY TEAM:
+nobody
+DECLINATION: 0.00  FORMAT: DDDDLUDRADLN  CORRECTIONS: 0.00 0.00 0.00
+
+FROM TO LENGTH BEARING INC LEFT UP DOWN RIGHT
+
+     A1           A2                10.00       90.00        0.00        0.00        0.00        0.00        0.00
+     A2           A3                10.00       90.00        0.00        0.00        0.00        0.00        0.00
+     A3           A4                10.00       90.00        0.00        0.00        0.00        0.00        0.00
+     A4           A5                10.00       90.00        0.00        0.00        0.00        0.00        0.00
+     A5           A6                10.00       90.00        0.00        0.00        0.00        0.00        0.00
+
+
