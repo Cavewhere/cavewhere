@@ -137,3 +137,30 @@ TEST_CASE("cwSurvex3DFileReader should build a survey network from .3d file", "[
     CHECK(neighbors26e.size() == 1);
     CHECK(neighbors26e.contains("26c"));
 }
+
+TEST_CASE("cavern survives a fatal error inside *begin without a double free",
+          "[cwSurvex3DFileReader]") {
+    // Regression: a fatal error inside *begin longjmps out of the run with the
+    // settings node still pushed, and teardown then double-freed the settings
+    // a child shares with its parent (see cavern_free_settings_chain).
+    // The fixture wraps enough malformed lines in *begin to pass cavern's
+    // error limit, so "Too many errors - giving up" fires while pushed.
+    const QString survexDataFile =
+        testcasesDatasetSourcePath(QStringLiteral("test_cwSurvex3DFileReader/too_many_errors.svx"));
+    REQUIRE(QFile::exists(survexDataFile));
+
+    QTemporaryDir workDir;
+    REQUIRE(workDir.isValid());
+
+    // Run twice: the second run exercises cavern_prepare_state() on a chain
+    // that the first run's aborted teardown already cleaned up.
+    for (int run = 0; run < 2; ++run) {
+        const QString output3dPath =
+            workDir.filePath(QStringLiteral("too_many_errors_%1.3d").arg(run));
+        auto cavernResult = cwCavernRunner::run(survexDataFile, output3dPath);
+
+        CHECK(cavernResult.hasError());
+        CHECK(cavernResult.errorMessage().contains(QStringLiteral("Too many errors"),
+                                                   Qt::CaseInsensitive));
+    }
+}
