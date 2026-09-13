@@ -32,6 +32,21 @@ namespace {
     //minutes. A real scrap never needs anywhere near this many points, so we
     //clamp the per-axis point count and log when the clamp trips.
     constexpr int kMaxGridPointsPerAxis = 2048;
+
+    //What one scrap's node hangs off itself: cropping, the texture encode and
+    //the triangulation
+    constexpr int kScrapSteps = 3;
+
+    //The two halves of triangulating one scrap: the mesh and the morph
+    constexpr int kTriangulateSteps = 2;
+
+    //What the "Building mesh" leaf counts: grid, polygon, quads, triangles,
+    //texture coordinates
+    constexpr int kMeshSteps = 5;
+
+    //How often the morph loop reports; every point would lock the tree far
+    //more often than a bar can show
+    constexpr int kMorphProgressStride = 256;
 }
 
 void cwTriangulateTask::setScrapData(QList<cwTriangulateInData> scraps) {
@@ -48,6 +63,11 @@ void cwTriangulateTask::setFormatType(cwTextureUploadTask::Format format)
     Format = format;
 }
 
+void cwTriangulateTask::setProgressRoot(cwProgressNodePtr root)
+{
+    m_progressRoot = std::move(root);
+}
+
 QList<QFuture<cwTriangulatedData>> cwTriangulateTask::triangulate() const
 {
     Q_ASSERT(!Scraps.isEmpty());
@@ -55,32 +75,39 @@ QList<QFuture<cwTriangulatedData>> cwTriangulateTask::triangulate() const
     cwTextureUploadTask::Format format = Format;
 
     auto triangulateScrap
-        = [this, format](const cwTriangulateInData& scrap)->QFuture<cwTriangulatedData>
+        = [this, format](const cwTriangulateInData& scrap,
+                         const cwProgressNodePtr& scrapNode)->QFuture<cwTriangulatedData>
     {
 
-        auto cropFuture = cropScrap(scrap, DataRootDir, format);
+        auto cropFuture = cropScrap(scrap, DataRootDir, format, scrapNode);
         auto dataRootDir = DataRootDir;
 
         return AsyncFuture::observe(cropFuture)
             //DONT use "this" in .subscribe lambda capture, this object will be destroyed before the lambda is called
             //USING this will cause UB!
-            .subscribe([dataRootDir, cropFuture, scrap]()
+            .subscribe([dataRootDir, cropFuture, scrap, scrapNode]()
                      {
                          const auto croppedResult = cropFuture.result();
 
                          if(!croppedResult.image) {
                              qDebug() << "Problem cropping image, does it not exist";
+                             if(scrapNode) {
+                                 scrapNode->finish();
+                             }
                              return QtFuture::makeReadyValueFuture(cwTriangulatedData());
                          }
 
                          //The render thread streams the KTX2 entry, so decoding
                          //the PNG crop here would only throw the pixels away
                          if(!croppedResult.compressedKey.id.isEmpty()) {
-                             return cwConcurrent::run([scrap, cropFuture]()
+                             return cwConcurrent::run([scrap, cropFuture, scrapNode]()
                                                       {
+                                                          //The scope hands the scrap's node back when the geometry is done
+                                                          cwProgressScope scope(scrapNode);
                                                           return triangulateGeometry(scrap,
                                                                                      cropFuture.result(),
-                                                                                     cwTextureUploadTask::UploadResult());
+                                                                                     cwTextureUploadTask::UploadResult(),
+                                                                                     scrapNode);
                                                       });
                          }
 
@@ -92,27 +119,44 @@ QList<QFuture<cwTriangulatedData>> cwTriangulateTask::triangulate() const
 
                          return AsyncFuture::observe(uploadFuture)
                              .subscribe(
-                                 [scrap, cropFuture, uploadFuture]() {
+                                 [scrap, cropFuture, uploadFuture, scrapNode]() {
 
-                                     return cwConcurrent::run([scrap, cropFuture, uploadFuture]()
+                                     return cwConcurrent::run([scrap, cropFuture, uploadFuture, scrapNode]()
                                                               {
+                                                                  cwProgressScope scope(scrapNode);
                                                                   return triangulateGeometry(scrap,
                                                                                              cropFuture.result(),
-                                                                                             uploadFuture.result());
+                                                                                             uploadFuture.result(),
+                                                                                             scrapNode);
                                                               });
                                  }).future();
 
                      }).future();
     };
 
-    return cw::transform(Scraps, triangulateScrap);
+    QList<QFuture<cwTriangulatedData>> futures;
+    futures.reserve(Scraps.size());
+
+    for(int i = 0; i < Scraps.size(); i++) {
+        cwProgressNodePtr scrapNode;
+        if(m_progressRoot) {
+            scrapNode = m_progressRoot->addChild(QStringLiteral("Scrap %1").arg(i + 1));
+            scrapNode->expectChildren(kScrapSteps);
+        }
+
+        futures.append(triangulateScrap(Scraps.at(i), scrapNode));
+    }
+
+    return futures;
 }
 
 QFuture<cwCropImageTask::Result> cwTriangulateTask::cropScrap(const cwTriangulateInData &scrap,
                                                               const QDir& dataRootDir,
-                                                              cwTextureUploadTask::Format format)
+                                                              cwTextureUploadTask::Format format,
+                                                              const cwProgressNodePtr& scrapNode)
 {
     cwCropImageTask cropTask;
+    cropTask.setProgressParent(scrapNode);
     cropTask.setDataRootDir(dataRootDir);
     cropTask.setFormatType(format);
     cropTask.setOriginal(scrap.noteImage());
@@ -125,21 +169,32 @@ QFuture<cwCropImageTask::Result> cwTriangulateTask::cropScrap(const cwTriangulat
 
 cwTriangulatedData cwTriangulateTask::triangulateGeometry(const cwTriangulateInData &scrap,
                                                           const cwCropImageTask::Result& croppedResult,
-                                                          const cwTextureUploadTask::UploadResult& imageData)
+                                                          const cwTextureUploadTask::UploadResult& imageData,
+                                                          const cwProgressNodePtr& scrapNode)
 {
+    cwProgressScope triangulating(scrapNode, QStringLiteral("Triangulating"));
+    triangulating.expectChildren(kTriangulateSteps);
+
+    cwProgressScope mesh(triangulating, QStringLiteral("Building mesh"));
+    mesh.setTotal(kMeshSteps);
+
     QRectF bounds = scrap.outline().boundingRect();
 
     //Create the regualar mesh that covers the croppedImage
     PointGrid pointGrid = createPointGrid(bounds, scrap);
+    mesh.advance();
 
     //Find all the points in the regualar mesh that are in the scrap's polygon
     QSet<int> gridPointsInScrap = pointsInPolygon(pointGrid, scrap.outline());
+    mesh.advance();
 
     //Creates list of quads that are on the edges or in the scrap
     QuadDatabase quads = createQuads(pointGrid, scrap.outline());
+    mesh.advance();
 
     //Triangulate the quads (this will update the outputs data)
     ScrapGeomtery scrapGeometry = createTriangles(pointGrid, gridPointsInScrap, quads, scrap);
+    mesh.advance();
 
     //Create the matrix that converts the normalized note coords to normalized scrap coords
     QMatrix4x4 toLocal = mapToScrapCoordinates(bounds);
@@ -149,6 +204,8 @@ cwTriangulatedData cwTriangulateTask::triangulateGeometry(const cwTriangulateInD
 
     //Create the texture coordinates
     QVector<QVector2D> texCoords = mapTexCoordinates(localNotePoints);
+    mesh.advance();
+    mesh.finish();
 
     const QSize noteImageSize = scrap.noteImage().originalSize();
     const QSizeF cropSizeInNoteUnits(noteImageSize.width() * bounds.width(),
@@ -158,9 +215,11 @@ cwTriangulatedData cwTriangulateTask::triangulateGeometry(const cwTriangulateInD
     QVector<QVector3D> points = morphPoints(scrapGeometry.points,
                                             scrap,
                                             toLocal,
-                                            cropSizeInNoteUnits);
+                                            cropSizeInNoteUnits,
+                                            triangulating);
 
-    //Morph the lead points for the scrap
+    //Morph the lead points for the scrap. A handful of points next to the
+    //hundreds of thousands above, so it stays off the tree.
     QVector<QVector3D> leadPoints = morphPoints(leadPositionToVector3D(scrap.leads()),
                                                 scrap,
                                                 toLocal,
@@ -731,7 +790,8 @@ QVector<QVector2D> cwTriangulateTask::mapTexCoordinates(const QVector<QVector3D>
 QVector<QVector3D> cwTriangulateTask::morphPoints(const QVector<QVector3D>& notePoints,
                                                   const cwTriangulateInData& scrapData,
                                                   const QMatrix4x4& toLocal,
-                                                  const QSizeF& cropSizeInNoteUnits) {
+                                                  const QSizeF& cropSizeInNoteUnits,
+                                                  const cwProgressScope& parent) {
 
 
     /**
@@ -1010,10 +1070,16 @@ QVector<QVector3D> cwTriangulateTask::morphPoints(const QVector<QVector3D>& note
 
     QList<cwTriangulateStation> stations = sortScrapStations();
 
+    cwProgressScope morphing(parent, QStringLiteral("Morphing"));
+    morphing.setTotal(notePoints.size());
+
     QVector<QVector3D> points;
     points.reserve(notePoints.size());
     points.resize(notePoints.size());
     for(int i = 0; i < notePoints.size(); i++) {
+        if(i % kMorphProgressStride == 0) {
+            morphing.report(i);
+        }
 
         //Find the stations we want to use the morph the current note point
         QList<cwTriangulateStation> stationsUsedToMorph = findStationsToUseForMorphing(stations, notePoints[i]);

@@ -47,6 +47,7 @@ class cwSketchManager;
 #include "cwTriangulatedData.h"
 #include "cwImageProvider.h"
 #include "cwFutureManagerToken.h"
+#include "cwProgressNode.h"
 #include "cwGlobals.h"
 #include "asyncfuture.h"
 #include "cwTriangulateWarping.h"
@@ -116,7 +117,8 @@ public:
 
     QList<cwScrap*> dirtyScraps() const;
 
-    QList<TriangulatedScrapResult> triangulateScraps(const QList<cwScrap*>& scraps) const;
+    QList<TriangulatedScrapResult> triangulateScraps(const QList<cwScrap*>& scraps,
+                                                     const cwProgressNodePtr& progressRoot = {}) const;
 
     cwTriangulateWarping* warpingSettings() const { return m_warpingSettings; }
 
@@ -178,6 +180,10 @@ private:
     //The task that'll be run
     cwProject* Project;
     AsyncFuture::Restarter<void> TriangulateRestarter;
+
+    //The run's progress tree, and the job the task list watches. The run grows
+    //it as it works, so nothing here declares how many steps a scrap takes.
+    cwProgressNodePtr m_progressRoot;
 //    QFuture<void> TriangulateFuture;
     cwFutureManagerToken FutureManagerToken;
 

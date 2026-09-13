@@ -271,6 +271,11 @@ cwProgressScope::cwProgressScope(const cwProgressScope& parent, const QString& n
 {
 }
 
+cwProgressScope::cwProgressScope(const cwProgressNodePtr& parent, const QString& name) :
+    m_node(parent ? parent->addChild(name) : cwProgressNodePtr())
+{
+}
+
 cwProgressScope::cwProgressScope(cwProgressScope&& other) noexcept :
     m_node(std::move(other.m_node))
 {

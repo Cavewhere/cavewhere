@@ -28,6 +28,9 @@ namespace {
     //Keeps scrap textures below the smallest common driver texture limit
     constexpr int kMaxCropPixelDimension = 4096;
 
+    //What the "Cropping" leaf counts: decode, copy/scale, hash, PNG insert
+    constexpr int kCropSteps = 4;
+
     /**
      * Marks the compressed scrap entries in the disk cache. The trailing number
      * is the encode's generation: bump it whenever the encoded bytes change for
@@ -68,7 +71,8 @@ namespace {
                                                const QImage& croppedImage,
                                                const QString& pathToImage,
                                                const QString& keyPrefix,
-                                               quint64 parentHash)
+                                               quint64 parentHash,
+                                               const cwProgressNodePtr& progressParent)
     {
         const cwDiskCacher::Key key = cwImageProvider::imageCacheKey(
             pathToImage,
@@ -79,6 +83,10 @@ namespace {
         if(!cacher.entry(key).isEmpty()) {
             return key;
         }
+
+        //Only a miss has anything to compress, so a hit grows no node at all.
+        //The encode can't say how far along it is, so the node stays opaque.
+        const cwProgressScope compressing(progressParent, QStringLiteral("Compressing texture"));
 
         //Scrap texcoords use the OpenGL bottom-left origin, so the compressed
         //texture must carry the same flip cwOpenGLUtils::toGLTexture() gives the
@@ -125,11 +133,17 @@ void cwCropImageTask::setDataRootDir(const QDir& dataRootDir)
     DataRootDir = dataRootDir;
 }
 
+void cwCropImageTask::setProgressParent(cwProgressNodePtr parent)
+{
+    m_progressParent = std::move(parent);
+}
+
 QFuture<cwCropImageTask::Result> cwCropImageTask::crop()
 {
     auto originalImage = Original;
     auto cropRect = CropRect;
     auto dataRootDir = DataRootDir;
+    auto progressParent = m_progressParent;
 
     struct Image {
         cwDiskCacher::Key key;
@@ -138,7 +152,10 @@ QFuture<cwCropImageTask::Result> cwCropImageTask::crop()
         int dotsPerMeter;
     };
 
-    auto cropImage = [dataRootDir, originalImage, cropRect]()->Image {
+    auto cropImage = [dataRootDir, originalImage, cropRect, progressParent]()->Image {
+            cwProgressScope cropping(progressParent, QStringLiteral("Cropping"));
+            cropping.setTotal(kCropSteps);
+
             const QString originalPath = originalImage.path();
             cwImageProvider provider;
             provider.setDataRootDir(dataRootDir);
@@ -147,6 +164,7 @@ QFuture<cwCropImageTask::Result> cwCropImageTask::crop()
             QSize imageSize;
             QImage image = provider.requestImage(requestPath, &imageSize, QSize());
             image.setColorSpace(QColorSpace());
+            cropping.advance();
             QRect cropArea = nearestDXT1Rect(mapNormalizedToIndex(cropRect,
                                                                   image.size()));
 
@@ -168,18 +186,29 @@ QFuture<cwCropImageTask::Result> cwCropImageTask::crop()
                                 + QString::number(kMaxCropPixelDimension);
                 }
 
+                cropping.advance();
+
                 const quint64 parentHash = cwImageProvider::imageHash(image);
+                cropping.advance();
+
                 const QString keyPrefix = cropKeyPrefix(cropArea, keySuffix);
 
                 const auto key = cwImageProvider::addToImageCache(
                     dataRootDir.path(),
                     croppedImage,
                     cwImageProvider::imageCacheKey(originalPath, keyPrefix, parentHash));
+                cropping.advance();
+
+                //The crop is done here, so the encode below owns the detail
+                //line instead of hiding behind a finished-looking "Cropping"
+                cropping.finish();
+
                 const auto compressedKey = addCompressedCropToCache(dataRootDir,
                                                                     croppedImage,
                                                                     originalPath,
                                                                     keyPrefix,
-                                                                    parentHash);
+                                                                    parentHash,
+                                                                    progressParent);
                 return Image({key, compressedKey, croppedImage, dotsPerMeter});
             }
 

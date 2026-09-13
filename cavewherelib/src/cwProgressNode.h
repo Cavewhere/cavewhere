@@ -126,6 +126,7 @@ public:
     cwProgressScope() = default;
     explicit cwProgressScope(cwProgressNodePtr node);
     cwProgressScope(const cwProgressScope& parent, const QString& name);
+    cwProgressScope(const cwProgressNodePtr& parent, const QString& name);
     cwProgressScope(cwProgressScope&& other) noexcept;
     cwProgressScope& operator=(cwProgressScope&& other) noexcept;
     ~cwProgressScope();

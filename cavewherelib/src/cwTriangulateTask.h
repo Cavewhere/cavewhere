@@ -19,6 +19,7 @@
 #include "cwTriangulateLiDARInData.h"
 #include "cwTriangulateWarpingData.h"
 #include "cwCropImageTask.h"
+#include "cwProgressNode.h"
 
 //Qt include
 #include <QPolygonF>
@@ -57,6 +58,10 @@ public:
     void setScrapData(QList<cwTriangulateInData> scraps);
     void setDataRootDir(const QDir& dataRootDir);
     void setFormatType(cwTextureUploadTask::Format format);
+
+    //The run's progress tree. Each scrap grows a node under it while it works;
+    //a null root leaves the task untracked.
+    void setProgressRoot(cwProgressNodePtr root);
 
     //Outputs of the task
     QList<QFuture<cwTriangulatedData> > triangulate() const;
@@ -257,6 +262,7 @@ private:
     //Inputs
     QList<cwTriangulateInData> Scraps;
     cwTextureUploadTask::Format Format;
+    cwProgressNodePtr m_progressRoot;
 
     //Outputs
     QList<cwTriangulatedData> TriangulatedScraps;
@@ -264,11 +270,13 @@ private:
 
     static QFuture<cwCropImageTask::Result> cropScrap(const cwTriangulateInData& scrap,
                                                       const QDir& dataRootDir,
-                                                      cwTextureUploadTask::Format format);
+                                                      cwTextureUploadTask::Format format,
+                                                      const cwProgressNodePtr& scrapNode);
 
     static cwTriangulatedData triangulateGeometry(const cwTriangulateInData& scrap,
                                                   const cwCropImageTask::Result& croppedResult,
-                                                  const cwTextureUploadTask::UploadResult &imageData);
+                                                  const cwTextureUploadTask::UploadResult &imageData,
+                                                  const cwProgressNodePtr& scrapNode = {});
 
     static PointGrid createPointGrid(QRectF bounds, const cwTriangulateInData& scrapData);
     static QSet<int> pointsInPolygon(const PointGrid& grid, const QPolygonF& polygon);
@@ -292,7 +300,8 @@ private:
     static QVector<QVector3D> morphPoints(const QVector<QVector3D> &notePoints,
                                           const cwTriangulateInData &scrapData,
                                           const QMatrix4x4& toLocal,
-                                          const QSizeF& cropSizeInNoteUnits);
+                                          const QSizeF& cropSizeInNoteUnits,
+                                          const cwProgressScope& parent = {});
     static QList<cwTriangulateStation> stationsVisibleToPoint(const QVector3D& point,
                                                               const QList<cwTriangulateStation>& stations,
                                                               const QPolygonF& scrapOutline);
