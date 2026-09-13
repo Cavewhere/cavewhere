@@ -17,8 +17,25 @@
 #include <QFileInfo>
 #include <QImageReader>
 
+// Std
+#include <algorithm>
+
 // Local helpers kept in the same namespace
 namespace cw::gltf {
+
+namespace {
+    //What "Loading glTF" hangs off itself: the parse, the mesh walk and the
+    //texture decode
+    constexpr int kLoadSteps = 3;
+
+    //How many meshes the texture loop below has anything to do for
+    qsizetype texturedMeshCount(const QVector<MeshCPU>& meshes)
+    {
+        return std::count_if(meshes.cbegin(), meshes.cend(), [](const MeshCPU& mesh) {
+            return mesh.material.baseColorTextureIndex >= 0;
+        });
+    }
+}
 
 // ---------- Helpers: attribute/index plumbing ----------
 
@@ -472,8 +489,12 @@ SceneCPU Loader::loadGltf(const QString &filePath)
     return loadGltf(filePath, LoadOptions{});
 }
 
-SceneCPU Loader::loadGltf(const QString &filePath, const LoadOptions& options)
+SceneCPU Loader::loadGltf(const QString &filePath, const LoadOptions& options,
+                          const cwProgressScope& parent)
 {
+    cwProgressScope loading(parent, QStringLiteral("Loading glTF"));
+    loading.expectChildren(kLoadSteps);
+
     tinygltf::TinyGLTF loader;
     loader.SetImageLoader(&storeEncodedImageData, nullptr);
 
@@ -484,11 +505,18 @@ SceneCPU Loader::loadGltf(const QString &filePath, const LoadOptions& options)
     SceneCPU scene;
 
     bool ok = false;
-    if (filePath.endsWith(".glb", Qt::CaseInsensitive)) {
-        ok = loader.LoadBinaryFromFile(&model, &error, &warning, filePath.toStdString());
-    } else {
-        ok = loader.LoadASCIIFromFile(&model, &error, &warning, filePath.toStdString());
+    {
+        //tinygltf reads the whole file in one call and says nothing on the way,
+        //so the parse stays an opaque leaf
+        cwProgressScope parsing(loading, QStringLiteral("Parsing"));
+
+        if (filePath.endsWith(".glb", Qt::CaseInsensitive)) {
+            ok = loader.LoadBinaryFromFile(&model, &error, &warning, filePath.toStdString());
+        } else {
+            ok = loader.LoadASCIIFromFile(&model, &error, &warning, filePath.toStdString());
+        }
     }
+
     if (!ok) {
         return scene;
     }
@@ -501,19 +529,31 @@ SceneCPU Loader::loadGltf(const QString &filePath, const LoadOptions& options)
         roots = QVector<int>(scene.nodes.begin(), scene.nodes.end());
     }
 
-    for (int n : std::as_const(roots)) {
-        gatherMeshesRecursive(model, n, QMatrix4x4(), scene.meshes, options.requestedLayout);
+    {
+        cwProgressScope collecting(loading, QStringLiteral("Collecting meshes"));
+        collecting.setTotal(roots.size());
+
+        for (int n : std::as_const(roots)) {
+            gatherMeshesRecursive(model, n, QMatrix4x4(), scene.meshes, options.requestedLayout);
+            collecting.advance();
+        }
     }
 
     // CPU: collect textures actually referenced by materials (here we provision array sized to textures count)
     scene.textures.resize(static_cast<int>(model.textures.size()));
 
-    // Load only the textures we actually need (baseColor here; extend as desired)
-    for (const MeshCPU& mesh : std::as_const(scene.meshes)) {
-        if (mesh.material.baseColorTextureIndex >= 0) {
-            const int ti = mesh.material.baseColorTextureIndex;
-            if (scene.textures.at(ti).encodedPixels.isEmpty()) {
-                scene.textures[ti] = loadTextureCPU(model, ti, /*isSRGB*/ true);
+    {
+        cwProgressScope decoding(loading, QStringLiteral("Decoding textures"));
+        decoding.setTotal(texturedMeshCount(scene.meshes));
+
+        // Load only the textures we actually need (baseColor here; extend as desired)
+        for (const MeshCPU& mesh : std::as_const(scene.meshes)) {
+            if (mesh.material.baseColorTextureIndex >= 0) {
+                const int ti = mesh.material.baseColorTextureIndex;
+                if (scene.textures.at(ti).encodedPixels.isEmpty()) {
+                    scene.textures[ti] = loadTextureCPU(model, ti, /*isSRGB*/ true);
+                }
+                decoding.advance();
             }
         }
     }

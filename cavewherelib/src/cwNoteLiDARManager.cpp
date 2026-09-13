@@ -7,7 +7,7 @@
 
 // This header
 #include "cwNoteLiDARManager.h"
-#include "cwRestarterTracking.h"
+#include "cwProgressNode.h"
 
 // Qt
 #include <QAbstractItemModel>
@@ -50,6 +50,9 @@
 using NotePtrList = QList<cwNoteLiDAR*>;
 
 namespace {
+
+//What the task list calls a LiDAR run
+const QString kLiDARJobName = QStringLiteral("Triangulating LiDAR notes");
 
 cwDiskCacher::Key iconCacheKey(const cwProject* project, const cwNoteLiDAR* note)
 {
@@ -138,7 +141,6 @@ cwNoteLiDARManager::cwNoteLiDARManager(QObject* parent) :
     m_restarter(this),
     m_connectionRegistry(this)
 {
-    cwTrackRestarter(m_futureManagerToken, m_restarter, QStringLiteral("Triangulating LiDAR notes"));
 }
 
 cwNoteLiDARManager::~cwNoteLiDARManager()
@@ -154,6 +156,11 @@ cwNoteLiDARManager::~cwNoteLiDARManager()
     //itself sees comes from ~Restarter, which cancels the inner future
     //synchronously as m_restarter is destroyed.
     m_restarter.future().cancel();
+
+    //The row would otherwise outlive the run that feeds it
+    if (m_progressRoot) {
+        m_progressRoot->cancel();
+    }
 }
 
 void cwNoteLiDARManager::setProject(cwProject* project)
@@ -638,7 +645,23 @@ QFuture<void> cwNoteLiDARManager::runBatch()
 
     // Wrap in restarter so subsequent calls coalesce
     m_restarter.restart([this, notes, inputs]() {
-        auto future = cwTriangulateLiDARTask::triangulate(inputs);
+        //One tree, and one row, per run. A restart abandons the previous run's
+        //row rather than letting it hang around unfed.
+        if (m_progressRoot) {
+            m_progressRoot->cancel();
+        }
+
+        //The loop knows its count, so hint it. Nothing below here declares
+        //anything.
+        const cwProgressNodePtr progressRoot = cwProgressNode::createRoot(kLiDARJobName);
+        progressRoot->expectChildren(notes.size());
+        m_progressRoot = progressRoot;
+
+        if (m_futureManagerToken.isValid()) {
+            m_futureManagerToken.addJob(cwFuture(progressRoot->future(), kLiDARJobName, progressRoot));
+        }
+
+        auto future = cwTriangulateLiDARTask::triangulate(inputs, progressRoot);
 
         // Replacing the watcher destroys the previous run's, so a restarted
         // batch delivers only its own results.
@@ -655,7 +678,7 @@ QFuture<void> cwNoteLiDARManager::runBatch()
 
         return AsyncFuture::observe(future)
             .context(this,
-                     [this, notes, future, watcher]() {
+                     [this, notes, future, watcher, progressRoot]() {
                          Q_ASSERT(notes.size() == future.resultCount());
 
                          //Deliver whatever resultReadyAt hasn't reported yet. A
@@ -684,6 +707,12 @@ QFuture<void> cwNoteLiDARManager::runBatch()
                          // notes just removed from m_dirtyNotes — Clean, or Dirty
                          // if an edit arrived mid-batch).
                          finishBatch();
+
+                         progressRoot->finish();
+                         if (m_progressRoot == progressRoot) {
+                             m_progressRoot.reset();
+                         }
+
                          emit liDARNotesUpdated(notes);
                      }).future();
     });

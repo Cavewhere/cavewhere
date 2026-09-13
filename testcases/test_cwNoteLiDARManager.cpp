@@ -925,3 +925,280 @@ TEST_CASE("Deleting the last dirty LiDAR note announces the pipeline is clean",
     CHECK_FALSE(coordinator->needsUpdate());
     CHECK(aggregateSpy.count() == 1);
 }
+
+namespace {
+    //What one "Triangulating LiDAR notes" row said while it was alive, read
+    //through the roles a person sees in the task list.
+    struct LiDARRunObservation {
+        QList<int> progress;
+        QList<int> steps;
+        QSet<QString> detailNames;
+
+        int distinctProgressCount() const { return QSet<int>(progress.begin(), progress.end()).size(); }
+    };
+
+    //Records every LiDAR run the model announces, one entry per row. Nothing
+    //test-only lives on the manager: this is the same data the task list draws.
+    class LiDARRunRecorder
+    {
+    public:
+        LiDARRunRecorder(cwFutureManagerModel* model) :
+            m_model(model)
+        {
+            QObject::connect(model, &QAbstractItemModel::rowsInserted, &m_context,
+                             [this](const QModelIndex&, int first, int last)
+            {
+                for(int row = first; row <= last; row++) {
+                    if(isLiDARRow(row)) {
+                        m_open.append({QPersistentModelIndex(m_model->index(row)),
+                                       LiDARRunObservation()});
+                    }
+                }
+            });
+
+            QObject::connect(model, &QAbstractItemModel::dataChanged, &m_context,
+                             [this](const QModelIndex& topLeft,
+                                    const QModelIndex& bottomRight,
+                                    const QList<int>&)
+            {
+                for(int row = topLeft.row(); row <= bottomRight.row(); row++) {
+                    sample(row);
+                }
+            });
+
+            QObject::connect(model, &QAbstractItemModel::rowsAboutToBeRemoved, &m_context,
+                             [this](const QModelIndex&, int first, int last)
+            {
+                for(int row = first; row <= last; row++) {
+                    //The last thing the row says before it goes
+                    sample(row);
+                    close(m_model->index(row));
+                }
+            });
+        }
+
+        const QList<LiDARRunObservation>& runs() const { return m_runs; }
+
+        //The run that had the most to say — the cold one, when a test does a
+        //cold run and a warm one.
+        LiDARRunObservation richestRun() const
+        {
+            LiDARRunObservation richest;
+            for(const auto& run : m_runs) {
+                if(run.progress.size() > richest.progress.size()) {
+                    richest = run;
+                }
+            }
+            return richest;
+        }
+
+    private:
+        bool isLiDARRow(int row) const
+        {
+            return m_model->data(m_model->index(row), cwFutureManagerModel::NameRole).toString()
+                   == QStringLiteral("Triangulating LiDAR notes");
+        }
+
+        LiDARRunObservation* openRun(const QModelIndex& modelIndex)
+        {
+            for(auto& entry : m_open) {
+                if(entry.first == modelIndex) {
+                    return &entry.second;
+                }
+            }
+            return nullptr;
+        }
+
+        void sample(int row)
+        {
+            const QModelIndex modelIndex = m_model->index(row);
+            LiDARRunObservation* run = openRun(modelIndex);
+            if(run == nullptr) {
+                return;
+            }
+
+            run->progress.append(m_model->data(modelIndex, cwFutureManagerModel::ProgressRole).toInt());
+            run->steps.append(m_model->data(modelIndex, cwFutureManagerModel::NumberOfStepRole).toInt());
+
+            const QString detail = m_model->data(modelIndex, cwFutureManagerModel::DetailNameRole).toString();
+            if(!detail.isEmpty()) {
+                run->detailNames.insert(detail);
+            }
+        }
+
+        void close(const QModelIndex& modelIndex)
+        {
+            for(int i = 0; i < m_open.size(); i++) {
+                if(m_open.at(i).first == modelIndex) {
+                    m_runs.append(m_open.at(i).second);
+                    m_open.removeAt(i);
+                    return;
+                }
+            }
+        }
+
+        cwFutureManagerModel* m_model;
+        QList<QPair<QPersistentModelIndex, LiDARRunObservation>> m_open;
+        QList<LiDARRunObservation> m_runs;
+
+        //Owns the model connections: they go when the recorder does
+        QObject m_context;
+    };
+
+    //Pumps the event loop until the pipeline is done and its row has gone. The
+    //detail line is polled on a timer, so a run has to be watched, never waited
+    //out in a nested loop.
+    void pumpUntilLiDARSettles(cwRootData* rootData, cwNoteLiDARManager* manager)
+    {
+        constexpr int kRunTimeoutMs = 120000;
+        constexpr int kPollWaitMs = 2;
+
+        QElapsedTimer timer;
+        timer.start();
+        while(timer.elapsed() < kRunTimeoutMs
+              && (manager->updateState() != cwUpdatable::State::Clean
+                  || rootData->futureManagerModel()->rowCount() > 0)) {
+            QCoreApplication::processEvents(QEventLoop::AllEvents | QEventLoop::WaitForMoreEvents,
+                                            kPollWaitMs);
+        }
+    }
+
+    //A loaded project with one freshly copied scan on its only LiDAR note: what
+    //both runs below start from. The copy keeps the texture cache cold, so the
+    //first run of a test is the one that compresses.
+    class LiDARProject
+    {
+    public:
+        LiDARProject()
+        {
+            cwJobSettings::initialize();
+            REQUIRE(cwJobSettings::instance()->automaticUpdate());
+
+            m_rootData = std::make_unique<cwRootData>();
+
+            m_helper.loadProjectFromZip(m_rootData->project(),
+                                        testcasesDatasetPath("lidarProjects/jaws of the beast.zip"));
+            m_rootData->project()->waitLoadToFinish();
+            m_rootData->futureManagerModel()->waitForFinished();
+            m_rootData->linePlotManager()->waitToFinish();
+
+            m_cave = m_rootData->region()->cave(0);
+            REQUIRE(m_cave != nullptr);
+            auto* trip = m_cave->trip(0);
+            REQUIRE(trip != nullptr);
+            auto* lidarModel = trip->notesLiDAR();
+            REQUIRE(lidarModel != nullptr);
+
+            const QString lidarFile =
+                m_helper.copyToTempDir(testcasesDatasetPath("lidarProjects/9_15_2025 3.glb"));
+            REQUIRE_FALSE(lidarFile.isEmpty());
+
+            lidarModel->addFromFiles({ QUrl::fromLocalFile(lidarFile) });
+            m_rootData->futureManagerModel()->waitForFinished();
+            REQUIRE(lidarModel->rowCount() == 1);
+
+            m_note = qobject_cast<cwNoteLiDAR*>(
+                lidarModel->data(lidarModel->index(0, 0), cwSurveyNoteModelBase::NoteObjectRole).value<QObject*>());
+            REQUIRE(m_note != nullptr);
+            REQUIRE(manager() != nullptr);
+        }
+
+        cwCave* cave() const { return m_cave; }
+        cwNoteLiDAR* note() const { return m_note; }
+        cwNoteLiDARManager* manager() const { return m_rootData->noteLiDARManager(); }
+        cwFutureManagerModel* futureManagerModel() const { return m_rootData->futureManagerModel(); }
+
+        void pumpUntilSettled() const { pumpUntilLiDARSettles(m_rootData.get(), manager()); }
+
+    private:
+        //The project's temp folder outlives the data that reads from it
+        TestHelper m_helper;
+        std::unique_ptr<cwRootData> m_rootData;
+        cwCave* m_cave = nullptr;
+        cwNoteLiDAR* m_note = nullptr;
+    };
+}
+
+TEST_CASE("A LiDAR run's progress moves in steps finer than one per note",
+          "[cwNoteLiDARManager][Issue671]")
+{
+    // The row for a LiDAR run used to hold still until the run was over, which
+    // is worst for the single-note case the bar spends seconds on. The run now
+    // grows a progress tree as it works, so the bar moves through the load, the
+    // checksum, the morph and the textures of each note.
+    LiDARProject project;
+    LiDARRunRecorder recorder(project.futureManagerModel());
+
+    const struct { const char* name; QVector3D notePosition; } inputs[] = {
+        {"6", QVector3D(0.19147f, -0.720703f, -2.15723f)},
+        {"7", QVector3D(3.51028f, -0.0917969f, 5.39945f)},
+        {"5", QVector3D(-3.48475f, -1.92188f, -3.38263f)}
+    };
+
+    for (const auto& input : inputs) {
+        cwNoteLiDARStation station;
+        station.setName(QString::fromUtf8(input.name));
+        station.setPositionOnNote(input.notePosition);
+        project.note()->addStation(station);
+    }
+
+    project.pumpUntilSettled();
+
+    REQUIRE_FALSE(recorder.runs().isEmpty());
+
+    for(const auto& run : recorder.runs()) {
+        INFO("Progress: " << run.progress.size() << " observations");
+        REQUIRE_FALSE(run.steps.isEmpty());
+
+        // The range is fixed for the life of the row: the bar's denominator
+        // never moves under it.
+        const int steps = run.steps.first();
+        CHECK(steps > 0);
+        CHECK(std::count(run.steps.begin(), run.steps.end(), steps) == run.steps.size());
+
+        // Monotone: the bar stalls when an unhinted parent grows, it never
+        // steps backward.
+        CHECK(std::is_sorted(run.progress.begin(), run.progress.end()));
+    }
+
+    const LiDARRunObservation coldRun = recorder.richestRun();
+
+    // Reaches full: the last thing the row said before it went was its maximum.
+    CHECK(coldRun.progress.last() == coldRun.steps.last());
+
+    // One note, and the bar still moved several times through it.
+    CHECK(coldRun.distinctProgressCount() >= 3);
+
+    // ...and the row named the step it was on. The texture encode is the only
+    // step of this scan that outlives the age filter, which is the filter doing
+    // its job: the load, the checksum and the morph are each over in tens of
+    // milliseconds and never reach the screen.
+    CHECK(coldRun.detailNames.contains(QStringLiteral("Compressing texture")));
+}
+
+TEST_CASE("A LiDAR rerun off a warm texture cache still reaches full",
+          "[cwNoteLiDARManager][Issue671]")
+{
+    // The encode is the longest step of a cold run and the one the cache skips.
+    // A rerun that finds the scan's texture already compressed grows no
+    // "Compressing texture" node at all - no caller declared that step, so
+    // nothing has to be kept in sync with the cache.
+    LiDARProject project;
+
+    cwNoteLiDARStation station;
+    station.setName(QStringLiteral("6"));
+    station.setPositionOnNote(QVector3D(0.19147f, -0.720703f, -2.15723f));
+    project.note()->addStation(station);
+
+    project.pumpUntilSettled();
+
+    LiDARRunRecorder recorder(project.futureManagerModel());
+    project.manager()->updateLiDARForCave(project.cave());
+    project.pumpUntilSettled();
+
+    REQUIRE_FALSE(recorder.runs().isEmpty());
+
+    const LiDARRunObservation warmRun = recorder.richestRun();
+    CHECK(warmRun.progress.last() == warmRun.steps.last());
+    CHECK_FALSE(warmRun.detailNames.contains(QStringLiteral("Compressing texture")));
+}
