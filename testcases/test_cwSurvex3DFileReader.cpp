@@ -12,6 +12,32 @@
 #include <QFileInfo>
 #include <QTemporaryDir>
 #include <QDir>
+#include <QTextStream>
+
+//Std includes
+#ifndef Q_OS_WIN
+#include <sys/resource.h>
+#endif
+
+#if defined(__has_feature)
+#  if __has_feature(address_sanitizer)
+#    define CW_ADDRESS_SANITIZER 1
+#  endif
+#endif
+#ifdef CW_ADDRESS_SANITIZER
+extern "C" void __sanitizer_purge_allocator(void);
+#endif
+
+namespace {
+    /// Hand freed memory back so that peak RSS reflects leaks rather than
+    /// Address Sanitizer's quarantine, which parks every freed block.
+    void releaseFreedMemory()
+    {
+#ifdef CW_ADDRESS_SANITIZER
+        __sanitizer_purge_allocator();
+#endif
+    }
+}
 
 TEST_CASE("cwSurvex3DFileReader should return empty lookup for missing file", "[cwSurvex3DFileReader]") {
     cwSurvex3DFileReader reader;
@@ -564,4 +590,69 @@ TEST_CASE("cavern reports the same deprecation warnings on every run",
     REQUIRE_FALSE(secondRun.hasError());
     CHECK(secondRun.value().warningCount == firstRun.value().warningCount);
     CHECK(secondRun.value().logText.contains(QStringLiteral("deprecated")));
+}
+
+TEST_CASE("cavern frees the survey graph between runs",
+          "[cwSurvex3DFileReader]") {
+#ifdef Q_OS_WIN
+    SKIP("Peak resident set size is read with getrusage, which Windows lacks");
+#else
+    // cavern_cleanup_state() used to drop the survey graph on the floor, so
+    // every run leaked one. Peak resident set size is the observable.
+    constexpr int kStationCount = 4000;
+    constexpr int kWarmUpRuns = 3;
+    constexpr int kMeasuredRuns = 20;
+
+    QTemporaryDir workDir;
+    REQUIRE(workDir.isValid());
+
+    const QString driverPath = workDir.filePath(QStringLiteral("graph_leak.svx"));
+    {
+        QFile driver(driverPath);
+        REQUIRE(driver.open(QIODevice::WriteOnly | QIODevice::Text));
+        QTextStream out(&driver);
+        out << "*fix 0 0 0 0\n";
+        out << "*data normal from to tape compass clino\n";
+        for (int i = 0; i < kStationCount; ++i) {
+            out << i << ' ' << (i + 1) << " 10.0 " << (i % 360) << " 0\n";
+        }
+    }
+
+    const auto peakResidentBytes = []() -> qint64 {
+        rusage usage;
+        getrusage(RUSAGE_SELF, &usage);
+#ifdef Q_OS_MACOS
+        return static_cast<qint64>(usage.ru_maxrss);
+#else
+        return static_cast<qint64>(usage.ru_maxrss) * 1024;
+#endif
+    };
+
+    // Re-solving writes over the same .3d, as a project re-solve does.
+    const QString output3dPath = workDir.filePath(QStringLiteral("graph_leak.3d"));
+    const auto solve = [&]() {
+        auto result = cwCavernRunner::run(driverPath, output3dPath);
+        REQUIRE_FALSE(result.hasError());
+        releaseFreedMemory();
+    };
+
+    for (int i = 0; i < kWarmUpRuns; ++i) {
+        solve();
+    }
+
+    const qint64 baselineBytes = peakResidentBytes();
+
+    for (int i = 0; i < kMeasuredRuns; ++i) {
+        solve();
+    }
+
+    const qint64 growthBytes = peakResidentBytes() - baselineBytes;
+    INFO("baseline peak RSS: " << baselineBytes
+         << " bytes, growth over " << kMeasuredRuns << " runs: "
+         << growthBytes << " bytes");
+
+    // Measured: ~6MB of growth while leaking, 32KB once cleanup frees the graph.
+    constexpr qint64 kAllowedGrowthBytes = 4 * 1024 * 1024;
+    CHECK(growthBytes < kAllowedGrowthBytes);
+#endif
 }
