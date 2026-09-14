@@ -127,6 +127,13 @@ struct CwRhiPointCloudTestAccess {
         return cloud.m_nodes.at(index).exportRequested;
     }
 
+    // Set when residency or the cut moved, and cleared by the publish that
+    // follows in the next frame's streamResources, so a test can pin that a
+    // frame which changed nothing republishes nothing.
+    static bool residencyChanged(const cwRHIPointCloud& cloud) {
+        return cloud.m_residencyChanged;
+    }
+
     static bool hasStreamingWork(const cwRHIPointCloud& cloud) {
         return !cloud.m_readyQueue.isEmpty() || cloud.m_streamer.hasWork();
     }

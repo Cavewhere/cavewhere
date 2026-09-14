@@ -58,6 +58,7 @@
 #include "cwScene.h"
 #include "cwScenePick.h"
 #include "cwSceneUpdate.h"
+#include "cwSceneVisibility.h"
 
 #include "CwRhiPointCloudTestAccess.h"
 #include "ProfileLogCapture.h"
@@ -109,6 +110,9 @@ namespace {
     constexpr double kChurnFarAlong = 0.75;
     //Room for one sprite's width when checking where the drawn points landed
     constexpr double kSpriteMarginPx = 4.0;
+
+    //Far enough to the side that the frame's frustum misses the root cube
+    constexpr float kLookAwayDistance = 5000.0f;
 
     constexpr float kOrthoNear = 1.0f;
     constexpr float kOrthoFar = 4000.0f;
@@ -451,6 +455,19 @@ namespace {
         //! Moves what renderFrame() looks at, so two cameras can hold
         //! different parts of the cloud
         void setViewOffset(const QVector3D& offset) { m_viewOffset = offset; }
+
+        //! Points renderFrame()'s camera far enough off the cloud that the
+        //! frame's frustum misses its world bounds, the way a pan off screen does
+        void lookAway() { setViewOffset(QVector3D(kLookAwayDistance, 0.0f, 0.0f)); }
+
+        //! Takes the cloud out of the frame's visibility snapshot, the way a
+        //! LAZ layer toggled off does
+        void setCloudVisible(bool visible)
+        {
+            cwSceneVisibility* visibility = m_scene.visibility();
+            visibility->setObjectVisible(m_render.renderObjectId(), visible);
+            frameRenderer()->setVisibilitySnapshot(visibility->snapshot());
+        }
 
         void setBudgets(const cwRenderBudgets& budgets)
         {
@@ -2172,4 +2189,235 @@ TEST_CASE("The load profile category reports one line per node load",
         CHECK(read);
         CHECK(manifestBytes.contains(bytes));
     }
+}
+
+TEST_CASE("A cloud that leaves the view drops its cut and settles its loads",
+          "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    PointCloudFixture fixture(rhi.get(), QStringLiteral("culled-settles"));
+
+    // A CPU cap of one byte lets a single load through at a time, so the rest
+    // of the close cut is still queued when the cloud leaves the view.
+    cwRenderBudgets budgets = fixture.budgets();
+    budgets.cpuBudgetBytes = 1;
+    fixture.setBudgets(budgets);
+
+    //The far cut is the root alone, so the root is all the cloud holds
+    fixture.setOrthoHeight(kFarOrthoHeight);
+    fixture.renderUntilQuiet();
+    REQUIRE(Access::residentCount(fixture.backend()) == 1);
+    REQUIRE(Access::nodeState(fixture.backend(), kRootIndex) == NodeState::Resident);
+
+    //One frame of the close cut, which asks for a great many more nodes
+    fixture.setOrthoHeight(kCloseOrthoHeight);
+    fixture.renderFrame();
+    REQUIRE(fixture.streamingWork());
+
+    SECTION("panned off screen") {
+        fixture.lookAway();
+    }
+
+    SECTION("hidden") {
+        fixture.setCloudVisible(false);
+    }
+
+    //The first frame off screen still publishes the cut the last drawn frame
+    //asked for — the nodes that would otherwise stream in behind it
+    fixture.renderFrame();
+    const int lastDrawnCut = cwRenderFrameStats::instance()->pointCloud().selectedNodes;
+    REQUIRE(lastDrawnCut > 1);
+
+    fixture.renderUntilQuiet();
+
+    //The cut nothing draws any more, and the loads it asked for, are both gone
+    const cwRenderFrameStats::PointCloud stats =
+        cwRenderFrameStats::instance()->pointCloud();
+    CHECK(stats.selectedNodes == 0);
+    CHECK(stats.nodeLoadsInFlight == 0);
+    CHECK(Access::selectedPoints(fixture.backend()) == 0);
+
+    //Only what was already in hand landed: the root, plus at most the one load
+    //the CPU cap let through. The cut the cloud left behind never streamed in.
+    constexpr int kLoadsInFlightUnderCap = 1;
+    const int settled = Access::residentCount(fixture.backend());
+    CHECK(settled <= 1 + kLoadsInFlightUnderCap);
+    CHECK(settled < lastDrawnCut);
+    CHECK(stats.residentNodes == settled);
+
+    //Eviction is untouched, so the root the cloud already held stays, and
+    //nothing more arrives frame after frame
+    CHECK(Access::nodeState(fixture.backend(), kRootIndex) == NodeState::Resident);
+
+    constexpr int kSettledFrames = 20;
+    for (int i = 0; i < kSettledFrames; i++) {
+        fixture.renderFrame();
+    }
+    CHECK(Access::residentCount(fixture.backend()) == settled);
+    CHECK_FALSE(fixture.streamingWork());
+}
+
+TEST_CASE("An export's loads survive the frames the cloud is out of the live view",
+          "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    PointCloudFixture fixture(rhi.get(), QStringLiteral("culled-export"));
+
+    //The live view sits far back, where its cut is the root alone, while the
+    //job wants the close cut
+    fixture.setOrthoHeight(kFarOrthoHeight);
+    fixture.renderUntilQuiet();
+
+    const cwRHIObject::RenderData job = fixture.jobRenderData(kCloseOrthoHeight);
+    REQUIRE_FALSE(fixture.mutableBackend().residencyReady(job));
+
+    //What the job asked for, flagged for it, asked for exactly once
+    QVector<int> exportNodes;
+    for (int i = 0; i < Access::nodeCount(fixture.backend()); i++) {
+        if (Access::exportRequested(fixture.backend(), i)) {
+            exportNodes.append(i);
+        }
+    }
+    REQUIRE(exportNodes.size() > 1);
+
+    //...and now the live view pans off the cloud entirely, so every frame from
+    //here on runs gatherCulled rather than gather. The job says nothing more.
+    fixture.lookAway();
+
+    constexpr int kCulledFrames = 5;
+    for (int i = 0; i < kCulledFrames; i++) {
+        fixture.renderFrame();
+    }
+
+    //The cut the live view dropped took none of the job's loads with it: each
+    //one is still in flight, or has already landed
+    for (const int index : std::as_const(exportNodes)) {
+        const NodeState state = Access::nodeState(fixture.backend(), index);
+        CHECK(state != NodeState::Absent);
+        if (state == NodeState::Requested) {
+            CHECK(Access::exportRequested(fixture.backend(), index));
+        }
+    }
+
+    //And the job still finishes, off screen the whole way
+    QElapsedTimer timer;
+    timer.start();
+    bool ready = false;
+    while (!ready && timer.elapsed() < kWaitTimeoutMs) {
+        fixture.renderFrame();
+        QThread::msleep(kFramePauseMs);
+        ready = fixture.mutableBackend().residencyReady(job);
+    }
+
+    CHECK(ready);
+    CHECK(Access::residentCount(fixture.backend()) > 1);
+
+    //Once the job's cut has landed, nothing is left flagged for it
+    for (int i = 0; i < Access::nodeCount(fixture.backend()); i++) {
+        CHECK_FALSE(Access::exportRequested(fixture.backend(), i));
+    }
+}
+
+TEST_CASE("An offscreen job's own culled tiles leave the live view's cut alone",
+          "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    PointCloudFixture fixture(rhi.get(), QStringLiteral("culled-offscreen-job"));
+
+    //One live frame of the close cut, with the loads it asked for in flight
+    cwRenderBudgets budgets = fixture.budgets();
+    budgets.cpuBudgetBytes = 1;
+    fixture.setBudgets(budgets);
+
+    fixture.setOrthoHeight(kCloseOrthoHeight);
+    fixture.renderFrame();
+
+    const qint64 livePoints = Access::selectedPoints(fixture.backend());
+    REQUIRE(livePoints > 0);
+
+    QVector<int> liveRequests;
+    for (int i = 0; i < Access::nodeCount(fixture.backend()); i++) {
+        if (Access::nodeState(fixture.backend(), i) == NodeState::Requested) {
+            liveRequests.append(i);
+        }
+    }
+    REQUIRE_FALSE(liveRequests.isEmpty());
+
+    //A tile of a tiled capture whose camera misses the cloud. The live view has
+    //not moved, so what it asked for is still what it wants.
+    cwSceneGatherOptions offscreenJob;
+    offscreenJob.liveFrame = false;
+
+    fixture.lookAway();
+    fixture.renderFrame(offscreenJob);
+
+    CHECK(Access::selectedPoints(fixture.backend()) == livePoints);
+    for (const int index : std::as_const(liveRequests)) {
+        //Still in flight, or landed while the tile rendered — never canceled
+        CHECK(Access::nodeState(fixture.backend(), index) != NodeState::Absent);
+        CHECK_FALSE(Access::exportRequested(fixture.backend(), index));
+    }
+}
+
+TEST_CASE("A culled cloud republishes its residency once and then stands still",
+          "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    PointCloudFixture fixture(rhi.get(), QStringLiteral("culled-republish"));
+    fixture.setOrthoHeight(kCloseOrthoHeight);
+    fixture.renderUntilQuiet();
+
+    REQUIRE(Access::residentCount(fixture.backend()) > 1);
+    REQUIRE(Access::selectedPoints(fixture.backend()) > 0);
+
+    //The frame the cloud leaves the view drops a cut, so the pick set has
+    //something new to hear about
+    fixture.lookAway();
+    fixture.renderFrame();
+    CHECK(Access::residencyChanged(fixture.backend()));
+
+    //Every frame after it changes nothing, so nothing is republished
+    constexpr int kStillFrames = 5;
+    for (int i = 0; i < kStillFrames; i++) {
+        fixture.renderFrame();
+        CHECK_FALSE(Access::residencyChanged(fixture.backend()));
+    }
+}
+
+TEST_CASE("A culled cloud keeps its nodes until the budget takes them",
+          "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    PointCloudFixture fixture(rhi.get(), QStringLiteral("culled-eviction"));
+    fixture.setOrthoHeight(kCloseOrthoHeight);
+    fixture.renderUntilQuiet();
+
+    const int drawnResidency = Access::residentCount(fixture.backend());
+    REQUIRE(drawnResidency > 2);
+
+    //Off screen under a budget that still fits: eviction has no reason to run
+    fixture.lookAway();
+    fixture.renderUntilQuiet();
+    const int culledResidency = Access::residentCount(fixture.backend());
+    CHECK(culledResidency >= drawnResidency);
+
+    //The same cloud, still off screen, under a budget it no longer fits: the
+    //nodes go the ordinary way, down to the pinned root
+    const qint64 outsideBytes = totalGpuBytes() - fixture.gpuBytes();
+    cwRenderBudgets budgets = fixture.budgets();
+    budgets.gpuBudgetBytes = outsideBytes + fixture.gpuBytes() / 2;
+    fixture.setBudgets(budgets);
+
+    constexpr int kEvictionFrames = 10;
+    for (int i = 0; i < kEvictionFrames; i++) {
+        fixture.renderFrame();
+    }
+
+    CHECK(Access::residentCount(fixture.backend()) < culledResidency);
+    CHECK(Access::nodeState(fixture.backend(), kRootIndex) == NodeState::Resident);
 }

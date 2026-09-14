@@ -730,6 +730,18 @@ void cwRHIPointCloud::enforceGpuBudget(const cwRenderBudgets& budgets)
     const qint64 availableBytes = std::max<qint64>(
         0, budgets.gpuBudgetBytes - (total - cloudGeometryBytes) - others.bytes);
 
+    if (m_profileEnabled) {
+        m_profile.gpuBytes = total;
+    }
+
+    // A cloud drawing nothing has no cut to measure. The governor holds where
+    // the last drawn frame left it rather than relaxing on the bytes of a cut
+    // nobody selected, which would hand the view back the whole unrelaxed cut
+    // in the first frame the cloud returns.
+    if (m_selected.nodes.isEmpty()) {
+        return;
+    }
+
     cw::octree::InflationInput inflation;
     inflation.current = m_sseInflation;
     inflation.desiredBytes = m_selected.bytes;
@@ -742,10 +754,6 @@ void cwRHIPointCloud::enforceGpuBudget(const cwRenderBudgets& budgets)
 
     //What the next probe measures its relaxations against
     m_availableBytes = availableBytes;
-
-    if (m_profileEnabled) {
-        m_profile.gpuBytes = total;
-    }
 }
 
 void cwRHIPointCloud::flushProfileBlock()
@@ -990,6 +998,67 @@ void cwRHIPointCloud::probeRelaxedCut(const cw::octree::SelectionInput& input)
     }
 }
 
+int cwRHIPointCloud::cancelRequestsNotDesiredThisFrame(quint64 frame)
+{
+    // Nodes asked for by an earlier cut that this one dropped. A pass over the
+    // handful of open requests, not over the whole node table.
+    int canceled = 0;
+    for (int i = m_requested.size() - 1; i >= 0; i--) {
+        const int index = m_requested.at(i);
+        if (m_nodes.at(index).state != NodeState::Requested) {
+            m_requested.removeAt(i);
+            continue;
+        }
+
+        if (m_nodes.at(index).exportRequested) {
+            // An offscreen job is waiting on it. Canceling would throw away a
+            // load in flight and the job would ask for it again next frame,
+            // which on a slow disk is a wait that never ends.
+            continue;
+        }
+
+        if (m_nodes.at(index).lastDesiredFrame != frame) {
+            m_streamer.cancel(quint32(index));
+            m_nodes[index].state = NodeState::Absent;
+            m_requested.removeAt(i);
+            canceled++;
+
+            if (m_profileEnabled) {
+                m_profile.cancels++;
+            }
+        }
+    }
+
+    return canceled;
+}
+
+void cwRHIPointCloud::gatherCulled(const GatherContext& context)
+{
+    // The cut and the requests belong to the view the user is watching, the
+    // same way gather() only lets the live frame touch them. An export job
+    // renders one camera of its own out of band, and a tile of it that misses
+    // this cloud says nothing about what the live view still wants.
+    if (!context.liveFrame || m_source.isNull()) {
+        return;
+    }
+
+    // Nothing draws this cloud, so its last cut is stale: publishPointCloudStats
+    // would keep reporting a cut no one can see.
+    const cw::octree::Selection previousSelection = m_selected;
+    m_selected = cw::octree::Selection{};
+
+    // gather() never ran, so no node carries this frame's stamp: every node the
+    // dropped cut held just went cold, and every open request that no export is
+    // waiting on is one this frame does not want.
+    const quint64 frame = currentFrame();
+    recordColdNodes(previousSelection, frame);
+    const int canceled = cancelRequestsNotDesiredThisFrame(frame);
+
+    if (!previousSelection.nodes.isEmpty() || canceled > 0) {
+        m_residencyChanged = true;
+    }
+}
+
 bool cwRHIPointCloud::gather(const GatherContext& context, QVector<PipelineBatch>& batches)
 {
     if (context.renderPass != RenderPass::PointCloud) {
@@ -1137,32 +1206,7 @@ bool cwRHIPointCloud::gather(const GatherContext& context, QVector<PipelineBatch
         partTimer.restart();
     }
 
-    // Nodes asked for by an earlier cut that this one dropped. A pass over the
-    // handful of open requests, not over the whole node table.
-    for (int i = m_requested.size() - 1; i >= 0; i--) {
-        const int index = m_requested.at(i);
-        if (m_nodes.at(index).state != NodeState::Requested) {
-            m_requested.removeAt(i);
-            continue;
-        }
-
-        if (m_nodes.at(index).exportRequested) {
-            // An offscreen job is waiting on it. Cancelling would throw away a
-            // load in flight and the job would ask for it again next frame,
-            // which on a slow disk is a wait that never ends.
-            continue;
-        }
-
-        if (m_nodes.at(index).lastDesiredFrame != frame) {
-            m_streamer.cancel(quint32(index));
-            m_nodes[index].state = NodeState::Absent;
-            m_requested.removeAt(i);
-
-            if (m_profileEnabled) {
-                m_profile.cancels++;
-            }
-        }
-    }
+    cancelRequestsNotDesiredThisFrame(frame);
 
     if (m_profileEnabled) {
         m_profile.cancelLoop.add(elapsedUs(partTimer));

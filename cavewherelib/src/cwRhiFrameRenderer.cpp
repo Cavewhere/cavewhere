@@ -616,13 +616,33 @@ void cwRhiFrameRenderer::gatherScene(std::array<QVector<cwRHIObject::PipelineBat
     cwRenderFrameStats::Culling cullingStats;
 
     quint32 objectOrder = 0;
+
+    // An object that draws nothing this frame settles here instead of
+    // gathering: once for the whole object rather than once per pass, handed
+    // the first pass's render data, which stands in for the frame because every
+    // pass shares this job's camera.
+    constexpr auto kCulledPass = cwRHIObject::RenderPass::Background;
+    const auto settleCulled = [&](cwRHIObject* object) {
+        clearPointCloudDemand(object);
+        object->gatherCulled(cwRHIObject::GatherContext {
+            &perPassRenderData[static_cast<int>(kCulledPass)],
+            kCulledPass,
+            objectOrder,
+            &m_visibility,
+            &frustum,
+            &cullingStats,
+            options.appearanceSlotForObject.value(object, 0),
+            options.liveFrame
+        });
+    };
+
     for (auto object : std::as_const(m_rhiObjects)) {
         // Snapshot gate ANDed with the per-job overlay. Objects carry their own
         // ids now, so the overlay is tested directly — no id→pointer resolve
         // pass; contains() on the live frame's empty set is a cheap no-op.
         const cwRenderObjectId id = object->renderObjectId();
         if (!m_visibility.objectVisible(id) || options.hiddenObjectIds.contains(id)) {
-            clearPointCloudDemand(object);
+            settleCulled(object);
             ++objectOrder;
             continue;
         }
@@ -634,7 +654,7 @@ void cwRhiFrameRenderer::gatherScene(std::array<QVector<cwRHIObject::PipelineBat
         const std::optional<QBox3D> bounds = object->worldBounds();
         if (bounds.has_value() && !frustum.intersects(bounds.value())) {
             ++cullingStats.objectsCulled;
-            clearPointCloudDemand(object);
+            settleCulled(object);
             ++objectOrder;
             continue;
         }

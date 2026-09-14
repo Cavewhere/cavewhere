@@ -269,6 +269,15 @@ public:
         return false;
     };
 
+    // Called instead of gather() on a frame this object draws nothing, because
+    // the visibility snapshot or a job's hiddenObjectIds hides it or the
+    // frustum misses it entirely. Runs once per object rather than once per
+    // pass, and carries the first pass's render data. An object that streams
+    // settles here: it drops the cut nothing is drawing and cancels the loads
+    // that cut asked for. What it already holds stays resident until the budget
+    // takes it, exactly as it would for an object still on screen.
+    virtual void gatherCulled(const GatherContext&) {}
+
     // Stable identity of the front-end cwRenderObject this backend object mirrors,
     // stamped by cwRhiFrameRenderer::registerRenderObject. Objects use it to read
     // their own entries from the frame's visibility snapshot

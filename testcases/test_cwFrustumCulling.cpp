@@ -46,10 +46,38 @@ public:
         return false;
     }
 
+    // The context is copied apart rather than kept: gatherScene's frustum and
+    // culling tally live on its own stack, so only what they said survives the
+    // call.
+    void gatherCulled(const GatherContext& context) override
+    {
+        ++gatherCulledCount;
+        culledPass = context.renderPass;
+        culledObjectOrder = context.objectOrder;
+        culledLiveFrame = context.liveFrame;
+        culledAppearanceSlot = context.appearanceSlot;
+        culledViewProjection =
+            context.renderData ? context.renderData->viewProjectionMatrix : QMatrix4x4();
+        culledHasRenderData = context.renderData != nullptr;
+        culledHasVisibility = context.visibility != nullptr;
+        culledHasFrustum = context.frustum != nullptr;
+        culledHasCullingStats = context.cullingStats != nullptr;
+    }
+
     std::optional<QBox3D> worldBounds() const override { return bounds; }
 
     std::optional<QBox3D> bounds;
     int gatherCount = 0;
+    int gatherCulledCount = 0;
+    RenderPass culledPass = RenderPass::Overlay;
+    quint32 culledObjectOrder = 0;
+    bool culledLiveFrame = false;
+    int culledAppearanceSlot = -1;
+    QMatrix4x4 culledViewProjection;
+    bool culledHasRenderData = false;
+    bool culledHasVisibility = false;
+    bool culledHasFrustum = false;
+    bool culledHasCullingStats = false;
     quint32 lastObjectOrder = 0;
     const cwFrustum* lastFrustum = nullptr;
     const cwRenderFrameStats::Culling* lastCullingStats = nullptr;
@@ -87,6 +115,9 @@ QBox3D boxAt(const QVector3D& center)
     return QBox3D(center - half, center + half);
 }
 
+// Frames gathered when checking that a call happens once per frame.
+constexpr int kSettleFrames = 3;
+
 // Gathers one frame with the camera at the origin, into throwaway batches.
 void gatherOnce(cwRhiFrameRenderer& frame)
 {
@@ -107,6 +138,7 @@ TEST_CASE("gatherScene gathers an object whose world box is inside the frustum",
     gatherOnce(frame);
 
     REQUIRE(object->gatherCount > 0);
+    REQUIRE(object->gatherCulledCount == 0);
 }
 
 TEST_CASE("gatherScene skips an object whose world box is outside the frustum",
@@ -269,4 +301,99 @@ TEST_CASE("gatherScene leaves the published counts alone for an offscreen job",
     REQUIRE(object->gatherCount > 1);
     REQUIRE(cwRenderFrameStats::instance()->revision() == liveRevision);
     REQUIRE(cwRenderFrameStats::instance()->culling() == liveCounts);
+}
+
+TEST_CASE("gatherScene tells a frustum-culled object once a frame that it drew nothing",
+          "[FrustumCulling]")
+{
+    cwRhiFrameRenderer frame;
+    auto* object = new CountingObject;
+    object->bounds = boxAt(QVector3D(0.0f, 0.0f, kBehindCameraZ));
+    frame.registerRenderObject(cwRenderObjectId{1}, object);
+
+    for (int i = 0; i < kSettleFrames; i++) {
+        gatherOnce(frame);
+    }
+
+    REQUIRE(object->gatherCount == 0);
+    //Once per frame, not once per pass: an object that draws nothing settles once
+    REQUIRE(object->gatherCulledCount == kSettleFrames);
+}
+
+TEST_CASE("gatherScene tells a hidden object once a frame that it drew nothing",
+          "[FrustumCulling]")
+{
+    cwRhiFrameRenderer frame;
+    auto* object = new CountingObject;
+    object->bounds = boxAt(QVector3D(0.0f, 0.0f, kInFrustumZ));
+    frame.registerRenderObject(cwRenderObjectId{1}, object);
+
+    cwSceneVisibility visibility;
+    visibility.setObjectVisible(cwRenderObjectId{1}, false);
+    frame.setVisibilitySnapshot(visibility.snapshot());
+
+    for (int i = 0; i < kSettleFrames; i++) {
+        gatherOnce(frame);
+    }
+
+    REQUIRE(object->gatherCount == 0);
+    REQUIRE(object->gatherCulledCount == kSettleFrames);
+}
+
+TEST_CASE("An object hidden by a job's overlay settles for that job",
+          "[FrustumCulling]")
+{
+    cwRhiFrameRenderer frame;
+    auto* object = new CountingObject;
+    object->bounds = boxAt(QVector3D(0.0f, 0.0f, kInFrustumZ));
+    frame.registerRenderObject(cwRenderObjectId{1}, object);
+
+    cwSceneGatherOptions hideObject;
+    hideObject.hiddenObjectIds.insert(cwRenderObjectId{1});
+
+    std::array<QVector<cwRHIObject::PipelineBatch>, cwRhiFrameRenderer::kPassCount> passBatches;
+    frame.gatherScene(passBatches, perPassDataWithCamera(), hideObject);
+
+    REQUIRE(object->gatherCount == 0);
+    REQUIRE(object->gatherCulledCount == 1);
+}
+
+TEST_CASE("gatherScene hands a culled object the frame it drew nothing in",
+          "[FrustumCulling]")
+{
+    cwRhiFrameRenderer frame;
+    auto* object = new CountingObject;
+    object->bounds = boxAt(QVector3D(0.0f, 0.0f, kBehindCameraZ));
+    frame.registerRenderObject(cwRenderObjectId{1}, object);
+
+    cwSceneVisibility visibility;
+    visibility.setObjectVisible(cwRenderObjectId{1}, true);
+    frame.setVisibilitySnapshot(visibility.snapshot());
+
+    cwSceneGatherOptions options;
+
+    SECTION("the live frame") {
+        //options as they come
+    }
+
+    SECTION("an offscreen job") {
+        options.liveFrame = false;
+    }
+
+    std::array<QVector<cwRHIObject::PipelineBatch>, cwRhiFrameRenderer::kPassCount> passBatches;
+    frame.gatherScene(passBatches, perPassDataWithCamera(), options);
+
+    REQUIRE(object->gatherCulledCount == 1);
+    CHECK(object->culledLiveFrame == options.liveFrame);
+
+    //The first pass's render data stands in for the frame: every pass shares
+    //this job's camera, which is all an object that draws nothing can read
+    CHECK(object->culledHasRenderData);
+    CHECK(object->culledPass == cwRHIObject::RenderPass::Background);
+    CHECK(object->culledViewProjection == viewProjectionLookingDownNegativeZ());
+    CHECK(object->culledObjectOrder == 0);
+    CHECK(object->culledHasVisibility);
+    CHECK(object->culledHasFrustum);
+    CHECK(object->culledHasCullingStats);
+    CHECK(object->culledAppearanceSlot == 0);
 }

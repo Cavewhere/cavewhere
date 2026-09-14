@@ -63,6 +63,11 @@ public:
     bool residencyReady(const RenderData& jobRenderData) override;
     void releaseStreamedResources() override;
     bool gather(const GatherContext& context, QVector<PipelineBatch>& batches) override;
+
+    // Drops the cut nothing draws any more and cancels the loads it asked for,
+    // so a cloud that leaves the live view settles instead of streaming in
+    // nodes no one will see. An offscreen job's culled tiles leave it alone.
+    void gatherCulled(const GatherContext& context) override;
     bool usesPointCloudPass() const override;
 
     // The octree's root cube, inflated by the sprite radius. The manifest's
@@ -207,6 +212,11 @@ private:
     //! Publishes this frame's node residency, cut size, and SSE inflation for
     //! the HUD, and only when one of them moved
     void publishPointCloudStats();
+
+    // Cancels every open request that @a frame's cut did not ask for, and
+    // returns how many were canceled. A request an offscreen job flagged for
+    // export survives.
+    int cancelRequestsNotDesiredThisFrame(quint64 frame);
 
     // Every kSseRelaxProbeFrames frames while inflated, re-selects @a input one
     // step finer and records what that cut would cost, which is the only
