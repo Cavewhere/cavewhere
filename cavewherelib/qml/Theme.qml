@@ -136,6 +136,26 @@ QtObject {
     // roughly the same words per line instead of wrapping sooner.
     readonly property int helpBoxMaxWidth: Math.round(350 * fontScale)
 
+    // Survey tree (the Data page's tree table). The column widths are the
+    // fixed cells; the Name column takes whatever width is left over.
+    readonly property int treeIndent: Math.round(16 * fontScale)
+    readonly property int treeCaretWidth: Math.round(16 * fontScale)
+    readonly property int treeRowHeight: Math.round(26 * fontScale)
+    readonly property int treeNameColumnMinimumWidth: Math.round(180 * fontScale)
+    readonly property int treeKindColumnWidth: Math.round(80 * fontScale)
+    readonly property int treeCountColumnWidth: Math.round(55 * fontScale)
+    readonly property int treeStatColumnWidth: Math.round(120 * fontScale)
+    readonly property int treeDateColumnWidth: Math.round(110 * fontScale)
+    readonly property int treeActionsColumnWidth: Math.round(30 * fontScale)
+
+    // Chips (the Kind chip on a tree row)
+    readonly property int chipRadius: Math.round(3 * fontScale)
+    readonly property int chipPadding: Math.round(6 * fontScale)
+    readonly property color chipBackground: surfaceRaised
+    readonly property color chipText: textSubtle
+    readonly property color chipSourcedBackground: info
+    readonly property color chipSourcedText: textSecondary
+
     // Timing
     // Hover time, in milliseconds, before a tooltip appears.
     readonly property int toolTipDelay: 500

@@ -273,109 +273,19 @@ StandardPage {
             currentRegion: RootData.region
             importVisible: true
             page: pageId.PageView.page
-            currentCave: {
-                let currentItem = caveListId.currentItem as CaveDelegate
-                if(currentItem) {
-                    return currentItem.caveObjectRole
-                } else {
-                    return null;
-                }
-            }
+            //A trip row is current as often as a cave row, and the export
+            //verbs take a cave, so a trip leaves the buttons with none.
+            currentCave: caveTreeId.currentObject as Cave
         }
     }
 
-    QQ.ListView {
-        id: caveListId
-        model: RootData.region
+    SurveyTreeView {
+        id: caveTreeId
+
+        removeAskBox: removeChallengeId
 
         Layout.fillWidth: true
         Layout.fillHeight: true
-        clip: true
-
-        component CaveDelegate: QQ.Item {
-            id: delegateId
-            objectName: "caveDelegate" + index
-
-            required property Cave caveObjectRole;
-            required property int index
-
-            implicitHeight: flowId.implicitHeight + Theme.delegatePadding
-            width: QQ.ListView.view ? QQ.ListView.view.width : 0
-
-            TableRowBackground {
-                isSelected: caveListId.currentIndex == delegateId.index
-                rowIndex: delegateId.index
-                anchors.fill: parent
-            }
-
-            QQ.MouseArea {
-                anchors.fill: parent
-                acceptedButtons: Qt.LeftButton
-
-                onClicked: {
-                    caveListId.currentIndex = delegateId.index
-                }
-            }
-
-            QQ.Flow {
-                id: flowId
-                width: parent.width
-                spacing: 4
-                anchors.verticalCenter: parent.verticalCenter
-
-                ErrorIconBar {
-                    errorModel: delegateId.caveObjectRole.errorModel
-                }
-
-                ExternalSolveBadge {
-                    owner: delegateId.caveObjectRole
-                    externallyBacked: delegateId.caveObjectRole
-                                      ? !delegateId.caveObjectRole.externalCenterline.isEmpty
-                                      : false
-                }
-
-                LinkText {
-                    objectName: "caveLink"
-                    text: delegateId.caveObjectRole.name
-                    onClicked: {
-                        RootData.pageSelectionModel.gotoPageByName(pageId.PageView.page,
-                                                                   pageId.cavePageName(delegateId.caveObjectRole));
-                    }
-                }
-
-                QC.Label {
-                    text: "is"
-                }
-
-                SelectableCaveStat {
-                    objectName: "length"
-                    unitValue: delegateId.caveObjectRole.length
-                }
-
-                QC.Label {
-                    text: "long and"
-                }
-
-                SelectableCaveStat {
-                    objectName: "depth"
-                    unitValue: delegateId.caveObjectRole.depth
-                    depth: true
-                }
-
-                QC.Label {
-                    text: "deep"
-                }
-            }
-
-            DataRightClickMouseMenu {
-                anchors.fill: parent
-                removeChallenge: removeChallengeId
-                name: delegateId.caveObjectRole.name
-                row: delegateId.index
-            }
-        }
-
-        delegate: CaveDelegate {}
     }
 
     QC.Menu {
@@ -473,7 +383,7 @@ StandardPage {
                 spacing: Theme.sectionSpacing
 
                 LayoutItemProxy { target: actionBar }
-                LayoutItemProxy { target: caveListId }
+                LayoutItemProxy { target: caveTreeId }
             }
         }
     }
@@ -497,7 +407,7 @@ StandardPage {
             LayoutItemProxy { target: titleRow }
             LayoutItemProxy { target: regionInfoBox }
             LayoutItemProxy { target: actionBar }
-            LayoutItemProxy { target: caveListId }
+            LayoutItemProxy { target: caveTreeId }
         }
     }
 

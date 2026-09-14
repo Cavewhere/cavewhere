@@ -243,6 +243,9 @@ Qt::ItemFlags cwSurveyTreeModel::flags(const QModelIndex& index) const
 QHash<int, QByteArray> cwSurveyTreeModel::roleNames() const
 {
     return {
+        //Qt::DisplayRole is named as well as numbered: HorizontalHeaderView
+        //looks the column titles up by the role name "display".
+        {Qt::DisplayRole, "display"},
         {ObjectRole, "object"},
         {RowTypeRole, "rowType"},
         {KindRole, "kind"},

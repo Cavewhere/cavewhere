@@ -114,11 +114,11 @@ MainWindowTest {
 
             let caveLength = null
             tryVerify(() => {
-                          caveLength = ObjectFinder.findObjectByChain(mainWindow, "rootId->dataMainPage->caveDelegate0->length->value")
+                          caveLength = ObjectFinder.findObjectByChain(mainWindow, "rootId->dataMainPage->caveLength0->value")
                           return caveLength !== null
                       })
             tryCompare(caveLength, "text", "55.6")
-            let caveDepth = ObjectFinder.findObjectByChain(mainWindow, "rootId->dataMainPage->caveDelegate0->depth->value");
+            let caveDepth = ObjectFinder.findObjectByChain(mainWindow, "rootId->dataMainPage->caveDepth0->value");
             tryCompare(caveDepth, "text", "19.54")
         }
 
