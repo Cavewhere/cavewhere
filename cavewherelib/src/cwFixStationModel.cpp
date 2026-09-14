@@ -25,10 +25,6 @@ namespace {
 //! pasted from that popup then read identically.
 constexpr int kPickedDegreeDecimals = 8;
 
-//! Decimals a picked elevation is written to. A fix's coordinate is stored in
-//! meters, so this is the millimeter every other surface reads meters to.
-constexpr int kPickedElevationDecimals = cwUnits::lengthDecimals(cwUnits::Meters);
-
 //! A row created through the UI, which always starts on a coordinate system.
 //! Without one there is no axis order, so a fix's numbers can't be said to mean
 //! anything (#625) — a new row picks the system that needs no further choice
@@ -340,7 +336,8 @@ QString cwFixStationModel::setCoordinateText(int row,
 bool cwFixStationModel::setPickedPoint(const QString& fixId,
                                        const QVector3D& scenePoint,
                                        const QString& frameCS,
-                                       const QString& datum)
+                                       const QString& datum,
+                                       cwUnits::UnitSystem units)
 {
     //The fix can go away while the user is off in the 3D view — the row
     //removed, the cave closed. Then there is nothing to write.
@@ -358,11 +355,15 @@ bool cwFixStationModel::setPickedPoint(const QString& fixId,
     //PROJ is normalized for visualization in cwCoordinateTransform, so the
     //result reads x = longitude, y = latitude.
     const QLocale locale = QLocale::c();
+    //A transformed point is in meters; the row spells the unit the project
+    //reads, the same way a typed elevation is stored.
+    const cwUnits::LengthUnit pickedUnit = cwCoordinateText::elevationUnit(units);
+    const double elevation = cwUnits::convert(placed->z, cwUnits::Meters, pickedUnit);
     const QString coordinate = QStringLiteral("%1, %2, %3%4")
         .arg(locale.toString(placed->y, 'f', kPickedDegreeDecimals),
              locale.toString(placed->x, 'f', kPickedDegreeDecimals),
-             locale.toString(placed->z, 'f', kPickedElevationDecimals),
-             cwUnits::unitName(cwUnits::Meters));
+             locale.toString(elevation, 'f', cwUnits::lengthDecimals(pickedUnit)),
+             cwUnits::unitName(pickedUnit));
 
     //Copied rather than referenced — see setCoordinateText().
     const cwFixStation before = m_fixStations.at(row);

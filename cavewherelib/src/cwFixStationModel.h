@@ -133,6 +133,10 @@ public:
     //! \a fixId is spelled as a string because that is what QML can hold onto
     //! across the trip to the view and back; QUuid is not a QML value type.
     //!
+    //! \a units is the project's unit system, and decides the unit the
+    //! elevation is written in and suffixed with — a pick in an imperial
+    //! project reads back in feet, the way a typed one does.
+    //!
     //! Everything this moves lands in a single dataChanged(): two setData()
     //! calls would re-solve the line plot twice, and the first would leave the
     //! row momentarily saying something untrue — a coordinate read under the
@@ -140,7 +144,8 @@ public:
     Q_INVOKABLE bool setPickedPoint(const QString& fixId,
                                     const QVector3D& scenePoint,
                                     const QString& frameCS,
-                                    const QString& datum);
+                                    const QString& datum,
+                                    cwUnits::UnitSystem units);
 
     void appendFixStation(const cwFixStation& fix);
     void setFixStations(const QList<cwFixStation>& fixes);

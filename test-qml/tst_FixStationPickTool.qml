@@ -42,6 +42,7 @@ MainWindowTest {
         }
 
         function cleanup() {
+            RootData.region.unitSystem = Units.Metric
             rootId.width = defaultWindowWidth
             FixStationPick.cancel()
             RootData.pageSelectionModel.currentPageAddress = "View"
@@ -214,6 +215,25 @@ MainWindowTest {
             tryVerify(() => RootData.pageView.currentPageItem !== null
                             && RootData.pageView.currentPageItem.objectName === "fixStationPage",
                       5000, "the pick should return to the page it was started from")
+        }
+
+        function test_aPickWritesTheElevationInTheProjectsUnit() {
+            RootData.region.unitSystem = Units.Imperial
+
+            const cave = gotoFixStations()
+            const model = cave.fixStations
+            const tool = startPick(1)
+
+            tool.commitPick(Qt.vector3d(0, 0, 300))
+
+            const row = model.index(1)
+            const text = model.data(row, FixStationModel.CoordinateTextRole)
+            verify(/, 984\.25ft$/.test(text),
+                   "an imperial project writes the picked elevation in feet: " + text)
+
+            // The suffix is what the fix reads the elevation by, so every
+            // surface asking for meters still gets the 300 that was picked.
+            fuzzyCompare(model.data(row, FixStationModel.ElevationRole), 300.0, 1e-2)
         }
 
         function test_escapeCancelsThePick() {
