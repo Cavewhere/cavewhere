@@ -224,7 +224,7 @@ public:
     QList< cwStation > uniqueStations() const;
 
     //Network operations
-    int numberOfStations() const;
+    Q_INVOKABLE int numberOfStations() const;
     bool hasStation(QString stationName) const;
     QSet<cwStation> neighboringStations(QString stationName) const;
 
