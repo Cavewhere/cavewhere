@@ -219,6 +219,15 @@ namespace {
         qint64 pointCount = 0;
     };
 
+    qint64 pointsIn(const QVector<ChunkPart>& parts)
+    {
+        qint64 points = 0;
+        for(const ChunkPart& part : parts) {
+            points += part.pointCount;
+        }
+        return points;
+    }
+
     //A contiguous span of the file's points, decoded by one worker
     struct DecodeRange {
         qint64 startIndex = 0;
@@ -675,6 +684,200 @@ namespace {
         return result;
     }
 
+    struct SplitResult {
+        int errorCode = Monad::ResultBase::NoError;
+        QString errorMessage;
+        qint64 cellsSplit = 0;
+    };
+
+    /**
+     * Splits one cell a level deeper: its parts are read once, in range order,
+     * into one part file per occupied child, so a child holds its points in
+     * the order one reader would have read them. The parts it read are gone
+     * when it returns, and the cell is replaced in @a parts by its children.
+     */
+    SplitResult splitCell(quint64 key,
+                          QHash<quint64, QVector<ChunkPart>>& parts,
+                          const RootCube& root,
+                          const QDir& tempDir)
+    {
+        //QVector3D is three contiguous floats, the layout pass A wrote, so a
+        //batch reads straight into the vector rather than through a second copy
+        static_assert(sizeof(QVector3D) == kTempBytesPerPoint);
+
+        SplitResult result;
+
+        const Cell cell = cellFromKey(key);
+        const int childLevel = cell.level + 1;
+        const double childEdge = std::ldexp(root.size, -childLevel);
+        const double inverseChildEdge = childEdge > 0.0 ? 1.0 / childEdge : 0.0;
+        const quint32 childGrid = quint32(1) << childLevel;
+
+        std::array<ChunkBuffer, kChildCount> children;
+        for(int octant = 0; octant < kChildCount; octant++) {
+            children[octant].path = tempDir.filePath(
+                QStringLiteral("chunk-%1-split.bin").arg(cellKey(childCell(cell, octant))));
+        }
+
+        qint64 bufferedBytes = 0;
+
+        const auto flushAll = [&]() {
+            for(ChunkBuffer& child : children) {
+                if(child.buffer.isEmpty()) {
+                    continue;
+                }
+
+                QFile file(child.path);
+                if(!file.open(QIODevice::WriteOnly | QIODevice::Append)
+                   || file.write(child.buffer) != child.buffer.size()) {
+                    return false;
+                }
+
+                child.buffer.clear();
+            }
+
+            bufferedBytes = 0;
+            return true;
+        };
+
+        const auto writeFailure = [&]() {
+            SplitResult failed;
+            failed.errorCode = cwPointOctreeBuilder::TempDirFailed;
+            failed.errorMessage =
+                QStringLiteral("Could not write the octree chunk files in %1.").arg(tempDir.path());
+            return failed;
+        };
+
+        const auto appendPoint = [&](const QVector3D& point) {
+            std::array<quint32, kAxisCount> coordinate = {};
+            for(int axis = 0; axis < kAxisCount; axis++) {
+                const double offset = double(point[axis]) - double(root.minimum[axis]);
+                coordinate[axis] =
+                    quint32(std::clamp(offset * inverseChildEdge, 0.0, double(childGrid - 1)));
+            }
+
+            //The octant the point's own cell at childLevel sits in, so the
+            //child it lands in is the one pass A would have written it to
+            const Cell pointCell {childLevel, coordinate[0], coordinate[1], coordinate[2]};
+            ChunkBuffer& child = children[octantInParent(pointCell)];
+
+            child.buffer.append(reinterpret_cast<const char*>(&point), kTempBytesPerPoint);
+            child.pointCount++;
+            bufferedBytes += kTempBytesPerPoint;
+        };
+
+        const QVector<ChunkPart> sourceParts = parts.value(key);
+        QVector<QVector3D> batch(kPointChunkSize);
+
+        for(const ChunkPart& part : sourceParts) {
+            QFile file(part.path);
+            if(!file.open(QIODevice::ReadOnly)) {
+                result.errorCode = cwPointOctreeBuilder::TempDirFailed;
+                result.errorMessage =
+                    QStringLiteral("Could not read the octree chunk file %1.").arg(part.path);
+                return result;
+            }
+
+            for(qint64 remaining = part.pointCount; remaining > 0; ) {
+                const qsizetype count = qsizetype(std::min<qint64>(remaining, kPointChunkSize));
+                const qint64 wanted = count * kTempBytesPerPoint;
+
+                if(file.read(reinterpret_cast<char*>(batch.data()), wanted) != wanted) {
+                    result.errorCode = cwPointOctreeBuilder::ReadFailed;
+                    result.errorMessage =
+                        QStringLiteral("Could not read the octree chunk file %1.").arg(part.path);
+                    return result;
+                }
+
+                remaining -= count;
+
+                for(qsizetype i = 0; i < count; i++) {
+                    appendPoint(batch.at(i));
+                }
+
+                if(bufferedBytes >= kDecodeWorkerBufferBytes && !flushAll()) {
+                    return writeFailure();
+                }
+            }
+        }
+
+        if(!flushAll()) {
+            return writeFailure();
+        }
+
+        for(const ChunkPart& part : sourceParts) {
+            if(!QFile::remove(part.path)) {
+                result.errorCode = cwPointOctreeBuilder::TempDirFailed;
+                result.errorMessage =
+                    QStringLiteral("Could not remove the octree chunk file %1.").arg(part.path);
+                return result;
+            }
+        }
+
+        parts.remove(key);
+
+        for(int octant = 0; octant < kChildCount; octant++) {
+            const ChunkBuffer& child = children.at(octant);
+            if(child.pointCount == 0) {
+                continue;
+            }
+
+            parts.insert(cellKey(childCell(cell, octant)),
+                         QVector<ChunkPart> {ChunkPart {child.path, child.pointCount}});
+        }
+
+        result.cellsSplit = 1;
+        return result;
+    }
+
+    /**
+     * Splits every cell holding more than @a maxPoints, a level at a time,
+     * until no cell is over the cap or the cells that are sit at
+     * kMaxChunkDepth. The cap reads point counts alone, so the shape it gives
+     * an input never depends on how pass A was scheduled.
+     */
+    SplitResult splitOversizedCells(QHash<quint64, QVector<ChunkPart>>& parts,
+                                    qint64 maxPoints,
+                                    const RootCube& root,
+                                    const QDir& tempDir,
+                                    const Promise& promise)
+    {
+        SplitResult result;
+        if(maxPoints <= 0) {
+            return result;
+        }
+
+        for(;;) {
+            QVector<quint64> oversized;
+            for(auto it = parts.constBegin(); it != parts.constEnd(); ++it) {
+                if(cellFromKey(it.key()).level < kMaxChunkDepth
+                   && pointsIn(it.value()) > maxPoints) {
+                    oversized.append(it.key());
+                }
+            }
+
+            if(oversized.isEmpty()) {
+                return result;
+            }
+
+            for(quint64 key : std::as_const(oversized)) {
+                if(promise.isCanceled()) {
+                    result.errorCode = cwPointOctreeBuilder::Cancelled;
+                    return result;
+                }
+
+                const SplitResult cellResult = splitCell(key, parts, root, tempDir);
+                if(cellResult.errorCode != Monad::ResultBase::NoError) {
+                    result.errorCode = cellResult.errorCode;
+                    result.errorMessage = cellResult.errorMessage;
+                    return result;
+                }
+
+                result.cellsSplit += cellResult.cellsSplit;
+            }
+        }
+    }
+
     struct SubtreeRecord {
         Cell cell;
         quint32 pointCount = 0;
@@ -1038,7 +1241,9 @@ QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request&
 
             const int depth = chunkDepthFor(npoints, request.chunkTargetPoints);
 
-            //The occupied chunk count is a Pass A answer, so the estimate uses every cell at depth
+            //The occupied chunk count is a Pass A answer, so the estimate uses
+            //every cell at depth. It is a floor: the chunk cap can push chunks
+            //a level or more deeper, and the reporter clamps what runs past it.
             qint64 nodeCountEstimate = kChildCount;
             for(int level = 0; level < depth; level++) {
                 nodeCountEstimate *= kChildCount;
@@ -1049,6 +1254,9 @@ QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request&
                 progress.dismiss();
                 promise.addResult(Result(message, code));
             };
+
+            const QString cancelledMessage =
+                QStringLiteral("The octree build of %1 was cancelled.").arg(request.path);
 
             QTemporaryDir tempDir(QDir::temp().filePath(
                 QStringLiteral("cwPointOctree-%1-XXXXXX").arg(QCoreApplication::applicationPid())));
@@ -1110,16 +1318,33 @@ QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request&
                                    .arg(secondsSince(passTimer)));
             passTimer.restart();
 
+            //A cell over the cap is a pass B task no budget can admit beside
+            //another, so it becomes eight cells a level deeper
+            const qint64 chunkMaxPoints = request.chunkMaxPoints > 0
+                                              ? request.chunkMaxPoints
+                                              : kChunkMaxPointsMultiple * request.chunkTargetPoints;
+
+            const SplitResult split =
+                splitOversizedCells(passA.parts, chunkMaxPoints, root, tempPath, promise);
+
+            if(split.errorCode != Monad::ResultBase::NoError) {
+                fail(split.errorCode == Cancelled ? cancelledMessage : split.errorMessage,
+                     split.errorCode);
+                return;
+            }
+
+            cw::profile::write(lcProfileLoad(),
+                               QStringLiteral("build split cells=%1 maxPoints=%2 seconds=%3")
+                                   .arg(split.cellsSplit)
+                                   .arg(chunkMaxPoints)
+                                   .arg(secondsSince(passTimer)));
+            passTimer.restart();
+
             QVector<ChunkTask> tasks;
             tasks.reserve(passA.parts.size());
 
             for(auto it = passA.parts.constBegin(); it != passA.parts.constEnd(); ++it) {
-                qint64 points = 0;
-                for(const ChunkPart& part : it.value()) {
-                    points += part.pointCount;
-                }
-
-                tasks.append(ChunkTask {cellFromKey(it.key()), it.value(), points});
+                tasks.append(ChunkTask {cellFromKey(it.key()), it.value(), pointsIn(it.value())});
             }
             passA.parts.clear();
 
@@ -1132,6 +1357,13 @@ QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request&
                 }
                 return cellKey(left.cell) < cellKey(right.cell);
             });
+
+            //A split cell's chunks sit deeper than an unsplit one's, so pass C
+            //starts at the deepest chunk level rather than at the chunk depth
+            int deepestChunkLevel = 0;
+            for(const ChunkTask& task : std::as_const(tasks)) {
+                deepestChunkLevel = std::max(deepestChunkLevel, task.cell.level);
+            }
 
             std::atomic<bool> cancelFlag {false};
             std::atomic<qint64> chunkPointsDone {0};
@@ -1162,9 +1394,6 @@ QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request&
                                    .arg(secondsSince(passTimer)));
             passTimer.restart();
 
-            const QString cancelledMessage =
-                QStringLiteral("The octree build of %1 was cancelled.").arg(request.path);
-
             if(passB.errorCode != Monad::ResultBase::NoError) {
                 fail(passB.errorCode == Cancelled ? cancelledMessage : passB.errorMessage,
                      passB.errorCode);
@@ -1178,15 +1407,28 @@ QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request&
             QHash<quint64, qsizetype> chunkIndexByCell;
             chunkIndexByCell.reserve(tasks.size());
 
+            for(qsizetype i = 0; i < tasks.size(); i++) {
+                chunkIndexByCell.insert(cellKey(tasks.at(i).cell), i);
+            }
+
+            //A chunk root joins pass C at the level its own cell sits at. A
+            //split cell's children are disjoint from every unsplit cell, so a
+            //chunk root never lands on a parent the sampler already made.
+            const auto insertChunkRootsAt = [&](int chunkLevel, QHash<quint64, LevelNode>& into) {
+                for(qsizetype i = 0; i < tasks.size(); i++) {
+                    const Cell& cell = tasks.at(i).cell;
+                    if(cell.level != chunkLevel) {
+                        continue;
+                    }
+
+                    into.insert(cellKey(cell),
+                                LevelNode {cell, std::move(chunkResults[i]->rootPoints)});
+                }
+            };
+
             QHash<quint64, LevelNode> level;
             level.reserve(tasks.size());
-
-            for(qsizetype i = 0; i < tasks.size(); i++) {
-                const quint64 key = cellKey(tasks.at(i).cell);
-                chunkIndexByCell.insert(key, i);
-                level.insert(key,
-                             LevelNode {tasks.at(i).cell, std::move(chunkResults[i]->rootPoints)});
-            }
+            insertChunkRootsAt(deepestChunkLevel, level);
 
             //Pass C: every node the sampler pulls from is final only once its parent has sampled it
             QHash<quint64, quint32> topPointCounts;
@@ -1210,7 +1452,7 @@ QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request&
                 return true;
             };
 
-            for(int parentLevel = depth - 1; parentLevel >= 0; parentLevel--) {
+            for(int parentLevel = deepestChunkLevel - 1; parentLevel >= 0; parentLevel--) {
                 QHash<quint64, QVector<quint64>> childrenByParent;
                 for(auto it = level.constBegin(); it != level.constEnd(); ++it) {
                     childrenByParent[cellKey(parentOf(it->cell))].append(it.key());
@@ -1262,6 +1504,7 @@ QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request&
                     }
                 }
 
+                insertChunkRootsAt(parentLevel, parents);
                 level = std::move(parents);
             }
 
@@ -1284,7 +1527,7 @@ QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request&
                 const int index = manifest.nodes.size();
                 manifest.nodes.append(manifestNode(cell, topPointCounts.value(cellKey(cell), 0)));
 
-                if(cell.level == depth && chunkIndexByCell.contains(cellKey(cell))) {
+                if(chunkIndexByCell.contains(cellKey(cell))) {
                     const QVector<SubtreeRecord>& records =
                         chunkResults.at(chunkIndexByCell.value(cellKey(cell)))->nodes;
 

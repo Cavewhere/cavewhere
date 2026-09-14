@@ -48,6 +48,7 @@ namespace {
 
     //Small enough that 300 k points chunk at depth 2, so pass C has real work
     constexpr qint64 kTwoLevelChunkTarget = 10000;
+    constexpr int kTwoLevelChunkDepth = 2;
 
     constexpr double kTubeLength = 120.0;
     constexpr double kTubeRadius = 3.0;
@@ -114,6 +115,54 @@ namespace {
     //reads the temp bytes at the moment the manifest appears rather than
     //hunting a gap, so it can be gentle on the build's own workers.
     constexpr int kTempPollMs = 5;
+
+    //A target the tube's cells fill with about 18 000 points, which one subtree
+    //node holds on its own, so a cap under that is a level the octree of this
+    //fixture would not otherwise have
+    constexpr qint64 kSplitChunkTarget = 500;
+    constexpr int kSplitChunkDepth = 4;
+
+    //Under half of what a cell at kSplitChunkDepth holds, so every oversized
+    //cell splits once and its children are under the cap
+    constexpr qint64 kSplitChunkMaxPoints = 8000;
+
+    //A cap no cell of the fixture reaches, whatever the chunk depth
+    constexpr qint64 kUncappedChunkMaxPoints = kPassagePointCount;
+    constexpr qint64 kRoomyChunkMaxPoints = 2 * kPassagePointCount;
+
+    //A target whose own default cap, kChunkMaxPointsMultiple x the target, is
+    //the whole cloud, so an unset cap splits nothing
+    constexpr qint64 kUnsplitChunkTarget = 75000;
+    constexpr int kUnsplitChunkDepth = 1;
+
+    //Request::chunkMaxPoints asking for kChunkMaxPointsMultiple x the target,
+    //which any value at or under zero does
+    constexpr qint64 kAskForTheDefaultCap = 0;
+    constexpr qint64 kNegativeChunkMaxPoints = -1;
+
+    //Small enough that the children of a split at kTwoLevelChunkTarget are over
+    //the cap as well, so the split keeps coming back to them until the cells it
+    //would split next sit at kMaxChunkDepth
+    constexpr qint64 kManyRoundChunkMaxPoints = 5000;
+    constexpr int kManyRoundExtraLevels = 2;
+
+    //Temp scratch a split build may hold, as a multiple of the 12 bytes a point
+    //takes there. A split that kept the cell it read beside the children it
+    //wrote would hold two copies of the cloud, and a second round three.
+    constexpr qint64 kTempBytesPerPoint = 12;
+    constexpr double kSplitTempBytesAllowance = 1.5;
+
+    //Request::decodeWorkerCount asking for the worker count the builder picks
+    constexpr int kAutomaticWorkerCount = 0;
+
+    //Splits every cell every round, so a build at kTwoLevelChunkTarget rewrites
+    //the whole cloud once per level down to kMaxChunkDepth: a split step long
+    //enough to cancel inside of
+    constexpr qint64 kSplitEveryCellPoints = 1;
+
+    //A grid sample holds at most one point per cell of the sample grid
+    constexpr qint64 kRootSampleCeiling =
+        qint64(kSampleGridResolution) * kSampleGridResolution * kSampleGridResolution;
 
     //A chunk target of one point drives the depth to kMaxChunkDepth, where the
     //8^5 cells leave kMaxChunkFiles room for only two ranges
@@ -320,12 +369,20 @@ namespace {
         const cwDiskCacher rightCacher {QDir(rightRequest.cacheRootPath)};
 
         for(int i = 0; i < left.nodes.size(); i++) {
-            const QByteArray leftPayload =
-                leftCacher.entry(nodeKey(leftRequest.path, left.fingerprint, left.nodeName(i)));
-            const QByteArray rightPayload =
-                rightCacher.entry(nodeKey(rightRequest.path, right.fingerprint, right.nodeName(i)));
+            const cwDiskCacher::Key leftKey =
+                nodeKey(leftRequest.path, left.fingerprint, left.nodeName(i));
+            const cwDiskCacher::Key rightKey =
+                nodeKey(rightRequest.path, right.fingerprint, right.nodeName(i));
 
-            REQUIRE_FALSE(leftPayload.isEmpty());
+            //A node a parent's sample drained holds no points, so the entry
+            //being there on both sides is what says each payload was read
+            //rather than missed
+            REQUIRE(leftCacher.hasEntry(leftKey));
+            REQUIRE(rightCacher.hasEntry(rightKey));
+
+            const QByteArray leftPayload = leftCacher.entry(leftKey);
+            const QByteArray rightPayload = rightCacher.entry(rightKey);
+
             if(leftPayload != rightPayload) {
                 FAIL("Node " << left.nodeName(i).toStdString()
                              << " differs between the two worker counts");
@@ -505,6 +562,71 @@ namespace {
         future.waitForFinished();
         REQUIRE(future.resultCount() == 1);
         return future.result();
+    }
+
+    int nodesAtLevel(const cwPointOctreeManifest& manifest, int level)
+    {
+        int count = 0;
+        for(const cwPointOctreeNode& node : manifest.nodes) {
+            if(node.level == level) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    int deepestLevel(const cwPointOctreeManifest& manifest)
+    {
+        int deepest = 0;
+        for(const cwPointOctreeNode& node : manifest.nodes) {
+            deepest = std::max(deepest, node.level);
+        }
+        return deepest;
+    }
+
+    struct CappedBuild {
+        cwPointOctreeBuilder::Request request;
+        cwPointOctreeManifest manifest;
+        qint64 cellsSplit = 0;
+        qint64 maxPoints = 0;
+        qint64 inFlightPeakBytes = 0;
+    };
+
+    //Builds the fixture under a chunk cap, with what the build log says the
+    //split step did
+    CappedBuild buildWithChunkCap(const QString& path,
+                                  const QString& cacheRootPath,
+                                  qint64 chunkTargetPoints,
+                                  qint64 chunkMaxPoints,
+                                  int decodeWorkerCount)
+    {
+        REQUIRE(QDir().mkpath(cacheRootPath));
+
+        const cwPointOctreeBuilder::Request request {
+            .path = path,
+            .cacheRootPath = cacheRootPath,
+            .chunkTargetPoints = chunkTargetPoints,
+            .chunkMaxPoints = chunkMaxPoints,
+            .decodeWorkerCount = decodeWorkerCount
+        };
+
+        BuildLog log;
+
+        const cwPointOctreeBuilder::Result result =
+            waitForBuild(cwPointOctreeBuilder::build(request));
+        REQUIRE_FALSE(result.hasError());
+
+        const QStringList split = log.linesStartingWith(QStringLiteral("build split"));
+        REQUIRE(split.size() == 1);
+
+        const QStringList passB = log.linesStartingWith(QStringLiteral("build passB"));
+        REQUIRE(passB.size() == 1);
+
+        return CappedBuild {request,
+                            result.value(),
+                            buildLogField(split.constFirst(), QStringLiteral("cells")),
+                            buildLogField(split.constFirst(), QStringLiteral("maxPoints")),
+                            buildLogField(passB.constFirst(), QStringLiteral("inFlightPeakBytes"))};
     }
 
     //Every invariant the on-disk octree has to hold, whatever the chunk depth
@@ -1528,4 +1650,257 @@ TEST_CASE("cwPointOctreeBuilder: the temp chunks are gone before the manifest is
     //A build whose chunks were never seen says nothing about when they went
     REQUIRE(sawChunks);
     REQUIRE(bytesWhenManifestAppeared == 0);
+}
+
+
+TEST_CASE("cwPointOctreeBuilder: a cell over the chunk cap splits a level deeper",
+          "[PointOctree][PointOctreeBuilder]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString path = tempLazPath(tempDir, QStringLiteral("octree-chunk-cap"));
+    REQUIRE(writeSyntheticLazFile(path, passagePoints(kPassagePointCount)));
+
+    const QVector<QVector3D> sourcePoints = readPoints(path);
+
+    REQUIRE(cwPointOctreeBuilder::chunkDepthFor(kPassagePointCount, kSplitChunkTarget)
+            == kSplitChunkDepth);
+
+    const auto buildWith = [&](qint64 maxPoints, int workers, const QString& tag) {
+        const CappedBuild build = buildWithChunkCap(path,
+                                                    tempDir.filePath(QStringLiteral("cache-%1").arg(tag)),
+                                                    kSplitChunkTarget,
+                                                    maxPoints,
+                                                    workers);
+        REQUIRE(build.maxPoints == maxPoints);
+        return build;
+    };
+
+    const CappedBuild uncapped = buildWith(kUncappedChunkMaxPoints, 1, QStringLiteral("uncapped"));
+    REQUIRE(uncapped.cellsSplit == 0);
+
+    const CappedBuild capped = buildWith(kSplitChunkMaxPoints, 1, QStringLiteral("capped"));
+    REQUIRE(capped.cellsSplit > 0);
+
+    verifyOctree(capped.manifest, capped.request, sourcePoints);
+
+    //The cap splits cells that one subtree node held, so the octree gains the
+    //level the split put those chunks at
+    REQUIRE(deepestLevel(capped.manifest) == deepestLevel(uncapped.manifest) + 1);
+
+    //The root holds one point per occupied cell of its own sample grid, and the
+    //split moves no point into another of those cells
+    const qint64 rootPoints = qint64(capped.manifest.nodes.constFirst().pointCount);
+    REQUIRE(rootPoints > 0);
+    REQUIRE(rootPoints <= kRootSampleCeiling);
+    REQUIRE(rootPoints == qint64(uncapped.manifest.nodes.constFirst().pointCount));
+
+    //The cap is there to hold pass B down: smaller chunks put fewer bytes in
+    //flight at the peak, whatever the budget admits
+    REQUIRE(capped.inFlightPeakBytes < uncapped.inFlightPeakBytes);
+
+    //The cap reads point counts alone, so pass A's schedule cannot move it
+    const CappedBuild parallel =
+        buildWith(kSplitChunkMaxPoints, kEvenWorkerCount, QStringLiteral("capped-parallel"));
+    REQUIRE(parallel.cellsSplit == capped.cellsSplit);
+
+    requireSameCache(capped.request, capped.manifest, parallel.request, parallel.manifest);
+}
+
+TEST_CASE("cwPointOctreeBuilder: a cap no cell reaches builds what an unset cap does",
+          "[PointOctree][PointOctreeBuilder]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString path = tempLazPath(tempDir, QStringLiteral("octree-roomy-cap"));
+    REQUIRE(writeSyntheticLazFile(path, passagePoints(kPassagePointCount)));
+
+    const QVector<QVector3D> sourcePoints = readPoints(path);
+
+    REQUIRE(cwPointOctreeBuilder::chunkDepthFor(kPassagePointCount, kUnsplitChunkTarget)
+            == kUnsplitChunkDepth);
+
+    const auto buildWith = [&](qint64 maxPoints, const QString& tag) {
+        const CappedBuild build = buildWithChunkCap(path,
+                                                    tempDir.filePath(QStringLiteral("cache-%1").arg(tag)),
+                                                    kUnsplitChunkTarget,
+                                                    maxPoints,
+                                                    kAutomaticWorkerCount);
+        REQUIRE(build.cellsSplit == 0);
+        return build;
+    };
+
+    //The default cap is the whole cloud at this target, so neither build splits
+    const CappedBuild unset = buildWith(kAskForTheDefaultCap, QStringLiteral("unset"));
+    REQUIRE(unset.maxPoints == kChunkMaxPointsMultiple * kUnsplitChunkTarget);
+    verifyOctree(unset.manifest, unset.request, sourcePoints);
+
+    const CappedBuild roomy = buildWith(kRoomyChunkMaxPoints, QStringLiteral("roomy"));
+    REQUIRE(roomy.maxPoints == kRoomyChunkMaxPoints);
+    requireSameCache(unset.request, unset.manifest, roomy.request, roomy.manifest);
+
+    //A cap below zero asks for the default too, rather than for a cap of its own
+    const CappedBuild negative = buildWith(kNegativeChunkMaxPoints, QStringLiteral("negative"));
+    REQUIRE(negative.maxPoints == unset.maxPoints);
+    requireSameCache(unset.request, unset.manifest, negative.request, negative.manifest);
+}
+
+TEST_CASE("cwPointOctreeBuilder: a cancel in the split step leaves no manifest and no temp directory",
+          "[PointOctree][PointOctreeBuilder]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString path = tempLazPath(tempDir, QStringLiteral("octree-split-cancel"));
+    REQUIRE(writeSyntheticLazFile(path, passagePoints(kPassagePointCount)));
+
+    const cwPointOctreeBuilder::Request request {
+        .path = path,
+        .cacheRootPath = tempDir.path(),
+        .chunkTargetPoints = kTwoLevelChunkTarget,
+        .chunkMaxPoints = kSplitEveryCellPoints,
+        .decodeWorkerCount = kEvenWorkerCount
+    };
+
+    BuildLog log;
+
+    QFuture<cwPointOctreeBuilder::Result> future = cwPointOctreeBuilder::build(request);
+
+    //Pass A writes its line as the split starts and the split writes its own
+    //only once it is through, so a cancel between the two lands in the split
+    while(!future.isFinished() && !log.hasLineContaining(QStringLiteral("build passA"))) {
+        QThread::msleep(kCancelPollMs);
+    }
+
+    future.cancel();
+    future.waitForFinished();
+
+    //A build that split everything before the cancel reached it proves nothing
+    //about cancelling the split, so say so
+    REQUIRE(log.hasLineContaining(QStringLiteral("build passA")));
+    REQUIRE_FALSE(log.hasLineContaining(QStringLiteral("build split")));
+
+    //QPromise drops a result added after the cancel, so a delivered one is the only one to check
+    const QList<cwPointOctreeBuilder::Result> results = future.results();
+    if(!results.isEmpty()) {
+        REQUIRE(results.constFirst().errorCode() == cwPointOctreeBuilder::Cancelled);
+    }
+
+    REQUIRE_FALSE(cwPointOctreeBuilder::cachedManifest(request).has_value());
+    REQUIRE(octreeTempDirCount() == 0);
+}
+
+TEST_CASE("cwPointOctreeBuilder: a cell still over the cap after a split splits again",
+          "[PointOctree][PointOctreeBuilder]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString path = tempLazPath(tempDir, QStringLiteral("octree-many-round-cap"));
+    REQUIRE(writeSyntheticLazFile(path, passagePoints(kPassagePointCount)));
+
+    const QVector<QVector3D> sourcePoints = readPoints(path);
+
+    const auto buildWith = [&](qint64 maxPoints, int workers, const QString& tag) {
+        return buildWithChunkCap(path,
+                                 tempDir.filePath(QStringLiteral("cache-%1").arg(tag)),
+                                 kTwoLevelChunkTarget,
+                                 maxPoints,
+                                 workers);
+    };
+
+    REQUIRE(cwPointOctreeBuilder::chunkDepthFor(kPassagePointCount, kTwoLevelChunkTarget)
+            == kTwoLevelChunkDepth);
+
+    const CappedBuild uncapped = buildWith(kUncappedChunkMaxPoints, 1, QStringLiteral("uncapped"));
+    REQUIRE(uncapped.cellsSplit == 0);
+
+    const CappedBuild capped = buildWith(kManyRoundChunkMaxPoints, 1, QStringLiteral("capped"));
+
+    verifyOctree(capped.manifest, capped.request, sourcePoints);
+
+    //One round splits cells of the chunk depth alone, and the uncapped octree
+    //names every cell of that depth the cloud fills, so more splits than there
+    //are of those is the split step coming back to the children it made
+    REQUIRE(capped.cellsSplit > nodesAtLevel(uncapped.manifest, kTwoLevelChunkDepth));
+
+    //Each round puts its chunks a level deeper, so the octree carries the
+    //levels the rounds added
+    REQUIRE(deepestLevel(capped.manifest)
+            >= deepestLevel(uncapped.manifest) + kManyRoundExtraLevels);
+
+    //Pass C now walks chunk roots at several levels, and it walks them the same
+    //way however many workers pass A ran on
+    const CappedBuild parallel =
+        buildWith(kManyRoundChunkMaxPoints, kEvenWorkerCount, QStringLiteral("capped-parallel"));
+    REQUIRE(parallel.cellsSplit == capped.cellsSplit);
+
+    requireSameCache(capped.request, capped.manifest, parallel.request, parallel.manifest);
+}
+
+TEST_CASE("cwPointOctreeBuilder: a split holds one copy of the cloud in temp",
+          "[PointOctree][PointOctreeBuilder]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString path = tempLazPath(tempDir, QStringLiteral("octree-split-temp"));
+    REQUIRE(writeSyntheticLazFile(path, passagePoints(kPassagePointCount)));
+
+    const cwPointOctreeBuilder::Request request {
+        .path = path,
+        .cacheRootPath = tempDir.path(),
+        .chunkTargetPoints = kTwoLevelChunkTarget,
+        .chunkMaxPoints = kManyRoundChunkMaxPoints,
+        .decodeWorkerCount = kEvenWorkerCount
+    };
+
+    REQUIRE(octreeTempBytes() == 0);
+
+    BuildLog log;
+
+    QFuture<cwPointOctreeBuilder::Result> future = cwPointOctreeBuilder::build(request);
+
+    qint64 peakTempBytes = 0;
+    while(!future.isFinished()) {
+        peakTempBytes = std::max(peakTempBytes, octreeTempBytes());
+        QThread::msleep(kTempPollMs);
+    }
+
+    future.waitForFinished();
+    REQUIRE(future.resultCount() == 1);
+    REQUIRE_FALSE(future.result().hasError());
+
+    const QStringList split = log.linesStartingWith(QStringLiteral("build split"));
+    REQUIRE(split.size() == 1);
+    REQUIRE(buildLogField(split.constFirst(), QStringLiteral("cells")) > 0);
+
+    //The parts a split read are gone by the time it returns, so the temp
+    //directory never holds the cell beside the children made out of it
+    const qint64 cloudBytes = kTempBytesPerPoint * kPassagePointCount;
+    REQUIRE(peakTempBytes > 0);
+    REQUIRE(double(peakTempBytes) <= kSplitTempBytesAllowance * double(cloudBytes));
+}
+
+TEST_CASE("cwPointOctreeBuilder: a cell at the deepest chunk level is left whole",
+          "[PointOctree][PointOctreeBuilder]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString path = tempLazPath(tempDir, QStringLiteral("octree-deep-cap"));
+    REQUIRE(writeSyntheticLazFile(path, passagePoints(kDeepChunkPointCount)));
+
+    const QVector<QVector3D> sourcePoints = readPoints(path);
+
+    REQUIRE(cwPointOctreeBuilder::chunkDepthFor(kDeepChunkPointCount, kDeepestChunkTarget)
+            == kMaxChunkDepth);
+
+    //Every cell is over a cap of one point, and every cell is as deep as a
+    //chunk goes, so the build finishes with the cells pass A made
+    const CappedBuild deepest = buildWithChunkCap(path,
+                                                  tempDir.filePath(QStringLiteral("cache-deepest")),
+                                                  kDeepestChunkTarget,
+                                                  kSplitEveryCellPoints,
+                                                  kEvenWorkerCount);
+
+    REQUIRE(deepest.cellsSplit == 0);
+    verifyOctree(deepest.manifest, deepest.request, sourcePoints);
+    REQUIRE(deepestLevel(deepest.manifest) >= kMaxChunkDepth);
 }

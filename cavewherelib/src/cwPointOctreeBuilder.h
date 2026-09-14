@@ -24,6 +24,10 @@ namespace cw::octree {
     //At most 8^5 chunk cells
     constexpr int kMaxChunkDepth = 5;
 
+    //The multiple of the chunk target a cell may hold before it is split, so
+    //the cap follows whatever target the request asks for
+    constexpr qint64 kChunkMaxPointsMultiple = 4;
+
     //Absorbs reprojection curvature before the measured-bounds retry
     constexpr double kRootPaddingFraction = 0.01;
 
@@ -53,6 +57,12 @@ public:
 
         //!< Points per chunk file, which sets the chunk depth
         qint64 chunkTargetPoints = cw::octree::kChunkTargetPoints;
+
+        //!< Points a chunk cell may hold before it is split a level deeper.
+        //!< 0 or less asks for kChunkMaxPointsMultiple x chunkTargetPoints. A
+        //!< cell over the cap is split until it is under it or it sits at
+        //!< kMaxChunkDepth, so an uneven cloud's chunks end up at mixed levels.
+        qint64 chunkMaxPoints = 0;
 
         //!< Workers pass A decodes with, 0 = one per kMinPointsPerDecodeWorker
         //!< points. Either way the count is held to the pool, and a file whose
