@@ -27,6 +27,11 @@ struct CwRenderPointCloudTestAccess {
     static void clearSourceChanged(cwRenderPointCloud& c) {
         c.m_source.resetChanged();
     }
+    // Mimics the RHI back-end consuming a render-state publish —
+    // updateResources resets the tracker after re-writing the uniform.
+    static void clearRenderStateChanged(cwRenderPointCloud& c) {
+        c.m_renderState.resetChanged();
+    }
 };
 
 namespace {
@@ -73,10 +78,11 @@ TEST_CASE("cwRenderPointCloud: setOctree publishes the manifest's numbers",
     REQUIRE_FALSE(cloud.octree().isNull());
 }
 
-TEST_CASE("cwRenderPointCloud: clear drops the octree but keeps pointSize",
+TEST_CASE("cwRenderPointCloud: clear drops the octree but keeps the sprite knobs",
           "[cwRenderPointCloud]") {
     cwRenderPointCloud cloud;
-    cloud.setPointSize(5.5f);
+    cloud.setWorldRadius(5.5f);
+    cloud.setSpacingCoverage(1.5f);
 
     cloud.setOctree(makeSource(QStringLiteral("fingerprint")));
     REQUIRE(cloud.pointCount() == 3);
@@ -84,7 +90,28 @@ TEST_CASE("cwRenderPointCloud: clear drops the octree but keeps pointSize",
     cloud.clear();
     REQUIRE(cloud.pointCount() == 0);
     REQUIRE(cloud.octree().isNull());
-    REQUIRE(cloud.pointSize() == 5.5f);
+    REQUIRE(cloud.worldRadius() == 5.5f);
+    REQUIRE(cloud.spacingCoverage() == 1.5f);
+}
+
+TEST_CASE("cwRenderPointCloud: spacing coverage starts at the default and follows its setter",
+          "[cwRenderPointCloud]") {
+    using Access = CwRenderPointCloudTestAccess;
+
+    cwRenderPointCloud cloud;
+    REQUIRE(cloud.spacingCoverage() == cw::pointcloud::kDefaultSpacingCoverage);
+    REQUIRE(cloud.worldRadius() == cw::pointcloud::kDefaultWorldRadius);
+    REQUIRE_FALSE(Access::renderStateChanged(cloud));
+
+    // Zero is a real setting: it turns the per-node floor off and leaves the
+    // tuned world radius as the only sprite size.
+    cloud.setSpacingCoverage(0.0f);
+    CHECK(cloud.spacingCoverage() == 0.0f);
+    CHECK(Access::renderStateChanged(cloud));
+
+    Access::clearRenderStateChanged(cloud);
+    cloud.setSpacingCoverage(0.0f);
+    CHECK_FALSE(Access::renderStateChanged(cloud));
 }
 
 TEST_CASE("cwRenderPointCloud: createRHIObject returns cwRHIPointCloud",
@@ -109,7 +136,7 @@ TEST_CASE("cwRenderPointCloud: a uniform-only change does not dirty the source t
     // The RHI back-end (cwRHIPointCloud::synchronize) throws away its whole
     // node table — every resident buffer with it — when the source tracker
     // reports a change. The source and the cheap render knobs (world radius,
-    // point size) are tracked separately for exactly this reason: a
+    // spacing coverage) are tracked separately for exactly this reason: a
     // uniform-only setter must NOT mark the source dirty, or every P+wheel
     // tick would drop the cloud's residency and re-stream it from the root.
     using Access = CwRenderPointCloudTestAccess;
@@ -130,8 +157,8 @@ TEST_CASE("cwRenderPointCloud: a uniform-only change does not dirty the source t
     REQUIRE_FALSE(Access::sourceChanged(cloud));
     REQUIRE(Access::renderStateChanged(cloud));
 
-    // Same for point size.
-    cloud.setPointSize(cloud.pointSize() + 1.0f);
+    // Same for spacing coverage.
+    cloud.setSpacingCoverage(cloud.spacingCoverage() + 1.0f);
     REQUIRE_FALSE(Access::sourceChanged(cloud));
 }
 

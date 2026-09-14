@@ -22,6 +22,23 @@
 // Std includes
 #include <memory>
 
+namespace cw::pointcloud {
+    //! World-space sprite radius in meters, the floor every sprite draws at.
+    //!
+    //! The shader scales by the physical viewport height alone, so this is a
+    //! true world radius on every display density. It reads as twice the old
+    //! default because the old one was doubled again by devicePixelRatio.
+    constexpr float kDefaultWorldRadius = 2.58f;
+
+    //! Sprite radius as a fraction of the drawn node's sample spacing.
+    //!
+    //! Grid sampling leaves at most one point per occupied cell of side
+    //! `spacing`, and gl_PointSize is a side length, so 0.75 narrows the gap a
+    //! coarse cut shows to a quarter of a spacing while overdrawing modestly
+    //! where a parent sits in a refined region.
+    constexpr float kDefaultSpacingCoverage = 0.75f;
+}
+
 class cwRenderPointCloud : public cwRenderObject
 {
     Q_OBJECT
@@ -80,11 +97,11 @@ public:
     qint64 pointCount() const;
     QVector3D bboxMin() const;
     QVector3D bboxMax() const;
-    float pointSize() const;
-    void setPointSize(float pointSize);
     float meanSpacingXY() const;
     float worldRadius() const;
     void setWorldRadius(float worldRadius);
+    float spacingCoverage() const;
+    void setSpacingCoverage(float spacingCoverage);
 
 protected:
     cwRHIObject* createRHIObject() override;
@@ -94,18 +111,21 @@ private:
     // data. A change here re-uploads the UBO but leaves the node buffers
     // untouched. Real field compare so a no-op set is a no-op.
     struct RenderState {
-        float pointSize = 2.0f;
-
         // World-space sprite radius in meters. A fixed default produces
         // consistent sprite sizes across clouds; tuned at runtime by P+wheel
         // in the 3D view (clamped on the scene-node) and by sink_repatcher
         // --point-radius for offline renders. This is appearance slot 0 — the
         // live view and a plain capture both render with it.
-        float worldRadius = 1.29f;
+        float worldRadius = cw::pointcloud::kDefaultWorldRadius;
+
+        // Sprite radius as a fraction of the drawn node's sample spacing. The
+        // shader takes the larger of this and worldRadius, so it only adds
+        // size where the cut is coarse.
+        float spacingCoverage = cw::pointcloud::kDefaultSpacingCoverage;
 
         bool operator!=(const RenderState& other) const {
-            return pointSize != other.pointSize
-                || worldRadius != other.worldRadius;
+            return worldRadius != other.worldRadius
+                || spacingCoverage != other.spacingCoverage;
         }
     };
 
@@ -124,14 +144,14 @@ inline const cwPointOctreeSource& cwRenderPointCloud::octree() const
     return m_source.value();
 }
 
-inline float cwRenderPointCloud::pointSize() const
-{
-    return m_renderState.value().pointSize;
-}
-
 inline float cwRenderPointCloud::worldRadius() const
 {
     return m_renderState.value().worldRadius;
+}
+
+inline float cwRenderPointCloud::spacingCoverage() const
+{
+    return m_renderState.value().spacingCoverage;
 }
 
 #endif // CWRENDERPOINTCLOUD_H

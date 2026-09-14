@@ -32,6 +32,12 @@ namespace {
     constexpr float kMinWorldRadius = 0.01f;
     constexpr float kMaxWorldRadius = 50.0f;
 
+    // Spacing-coverage bounds. Zero turns the per-node floor off entirely and
+    // leaves worldRadius alone; above about one sprite per cell the sprites of
+    // a coarse node overlap so far that the surface reads as a blur.
+    constexpr float kMinSpacingCoverage = 0.0f;
+    constexpr float kMaxSpacingCoverage = 4.0f;
+
 QString shortId(const cwLazLayer* layer) {
     return layer == nullptr
         ? QStringLiteral("(null)")
@@ -261,6 +267,7 @@ void cwLazLayersSceneNode::materialize(cwLazLayer* layer)
 
     auto* renderObject = new cwRenderPointCloud();
     renderObject->setWorldRadius(m_worldRadius);
+    renderObject->setSpacingCoverage(m_spacingCoverage);
     renderObject->setScene(m_scene);
     m_pointClouds.insert(layer->id(), renderObject);
 
@@ -391,4 +398,21 @@ void cwLazLayersSceneNode::setWorldRadius(float worldRadius)
     }
 
     emit worldRadiusChanged(clamped);
+}
+
+void cwLazLayersSceneNode::setSpacingCoverage(float spacingCoverage)
+{
+    const float clamped = std::clamp(spacingCoverage, kMinSpacingCoverage, kMaxSpacingCoverage);
+    if (qFuzzyCompare(m_spacingCoverage, clamped)) {
+        return;
+    }
+    m_spacingCoverage = clamped;
+
+    for (const auto& renderObject : std::as_const(m_pointClouds)) {
+        if (renderObject) {
+            renderObject->setSpacingCoverage(clamped);
+        }
+    }
+
+    emit spacingCoverageChanged(clamped);
 }

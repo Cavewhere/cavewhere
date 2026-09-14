@@ -19,11 +19,11 @@
 //Our includes
 #include "cwGlobals.h"
 #include "cwKeywordItemRegistry.h"
+#include "cwRenderPointCloud.h"
 
 class cwKeywordItemModel;
 class cwLazLayer;
 class cwLazLayerModel;
-class cwRenderPointCloud;
 class cwScene;
 
 /**
@@ -42,6 +42,7 @@ class CAVEWHERE_LIB_EXPORT cwLazLayersSceneNode : public QObject
     QML_UNCREATABLE("Access via RegionSceneManager.lazLayersSceneNode")
 
     Q_PROPERTY(float worldRadius READ worldRadius WRITE setWorldRadius NOTIFY worldRadiusChanged)
+    Q_PROPERTY(float spacingCoverage READ spacingCoverage WRITE setSpacingCoverage NOTIFY spacingCoverageChanged)
 
 public:
     explicit cwLazLayersSceneNode(QObject* parent = nullptr);
@@ -59,6 +60,7 @@ public:
     cwRenderPointCloud* pointCloudForLayer(cwLazLayer* layer) const;
 
     float worldRadius() const { return m_worldRadius; }
+    float spacingCoverage() const { return m_spacingCoverage; }
 
     /// Subset of the bound model's layers whose render object is currently
     /// visible (keyword-filter pipeline gates this). Returns layers in the
@@ -67,9 +69,11 @@ public:
 
 public slots:
     void setWorldRadius(float worldRadius);
+    void setSpacingCoverage(float spacingCoverage);
 
 signals:
     void worldRadiusChanged(float worldRadius);
+    void spacingCoverageChanged(float spacingCoverage);
 
 private slots:
     /// Resolves the originating cwLazLayer through QObject::sender() so the
@@ -105,7 +109,11 @@ private:
     // sink_repatcher --point-radius. Kept here (rather than only on
     // cwRenderPointCloud) so the value survives layers added later in the
     // session.
-    float m_worldRadius = 1.29f;
+    float m_worldRadius = cw::pointcloud::kDefaultWorldRadius;
+
+    // Fanned out to every owned cwRenderPointCloud exactly as m_worldRadius is,
+    // so it too survives layers added later in the session.
+    float m_spacingCoverage = cw::pointcloud::kDefaultSpacingCoverage;
 };
 
 #endif // CWLAZLAYERSSCENENODE_H

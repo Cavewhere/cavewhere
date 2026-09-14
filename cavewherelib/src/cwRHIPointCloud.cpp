@@ -60,6 +60,7 @@ namespace {
     //One instance per node, so the constants advance once per draw
     constexpr quint32 kInstanceStepRate = 1;
     constexpr int kRootIndex = 0;
+    constexpr int kRootLevel = 0;
     constexpr qint64 kBytesPerMegabyte = 1024 * 1024;
 
     using cw::profile::elapsedUs;
@@ -268,8 +269,9 @@ void cwRHIPointCloud::updateResources(const ResourceUpdateData& data)
     auto* rhi = data.renderData.cb->rhi();
     QRhiResourceUpdateBatch* batch = data.resourceUpdateBatch;
 
-    // Per-cloud uniform — world-space sprite radius in meters. A fixed default
-    // (set on cwRenderPointCloud::RenderState) produces consistent sprite sizes
+    // Per-cloud uniform — world-space sprite radius in meters, plus the sprite
+    // radius as a fraction of the drawn node's sample spacing. Fixed defaults
+    // (set on cwRenderPointCloud::RenderState) produce consistent sprite sizes
     // across every loaded cloud; the earlier meanSpacingXY * 0.5 auto-derivation
     // was unreliable because mean-spacing estimates vary with LAZ density /
     // sampling. The live radius is overridden via cwLazLayersSceneNode::
@@ -284,16 +286,17 @@ void cwRHIPointCloud::updateResources(const ResourceUpdateData& data)
     if (!m_perCloudUBO) {
         resizeAppearanceSlots(rhi, batch, 1);
     } else {
-        writeAppearanceSlot(batch, kLiveAppearanceSlot, m_renderState.value().worldRadius);
+        const cwRenderPointCloud::RenderState& live = m_renderState.value();
+        writeAppearanceSlot(batch, kLiveAppearanceSlot, live.worldRadius, live.spacingCoverage);
     }
 
     m_renderState.resetChanged();
 }
 
 void cwRHIPointCloud::writeAppearanceSlot(QRhiResourceUpdateBatch* batch, int slot,
-                                          float worldRadius)
+                                          float worldRadius, float spacingCoverage)
 {
-    const PerCloudUniform uniform{ worldRadius, {0.0f, 0.0f, 0.0f} };
+    const PerCloudUniform uniform{ worldRadius, spacingCoverage, {0.0f, 0.0f} };
     batch->updateDynamicBuffer(m_perCloudUBO, slot * m_perCloudStride,
                                sizeof(PerCloudUniform), &uniform);
 }
@@ -301,14 +304,16 @@ void cwRHIPointCloud::writeAppearanceSlot(QRhiResourceUpdateBatch* batch, int sl
 void cwRHIPointCloud::uploadAppearance(QRhiResourceUpdateBatch* batch, int slot,
                                        const cwAppearanceOverride& override)
 {
-    // Unpack the cloud's own appearance schema. A missing payload (or one that
-    // omits the radius) renders at the live radius, so an override that only
-    // tweaks a future field still draws at the right size.
+    // Unpack the cloud's own appearance schema. Every field falls back on its
+    // own, so a missing payload — or one that overrides only a sibling field —
+    // still draws the rest at the live values.
     const auto* appearance = override.payload<cwPointCloudAppearance>();
-    const float radius = (appearance && appearance->worldRadius.has_value())
-        ? appearance->worldRadius.value()
-        : m_renderState.value().worldRadius;
-    writeAppearanceSlot(batch, slot, radius);
+    const cwPointCloudAppearance requested = appearance ? *appearance
+                                                        : cwPointCloudAppearance();
+    const cwRenderPointCloud::RenderState& live = m_renderState.value();
+    writeAppearanceSlot(batch, slot,
+                        requested.worldRadius.value_or(live.worldRadius),
+                        requested.spacingCoverage.value_or(live.spacingCoverage));
 }
 
 void cwRHIPointCloud::resizeAppearanceSlots(QRhi* rhi, QRhiResourceUpdateBatch* batch,
@@ -335,7 +340,8 @@ void cwRHIPointCloud::resizeAppearanceSlots(QRhi* rhi, QRhiResourceUpdateBatch* 
     // Carry the live appearance into the fresh buffer's slot 0 so a non-overriding
     // draw (the live view, or an offscreen job with no override for this cloud)
     // reads the right radius from it.
-    writeAppearanceSlot(batch, kLiveAppearanceSlot, m_renderState.value().worldRadius);
+    const cwRenderPointCloud::RenderState& live = m_renderState.value();
+    writeAppearanceSlot(batch, kLiveAppearanceSlot, live.worldRadius, live.spacingCoverage);
 }
 
 bool cwRHIPointCloud::streamResources(ResourceUpdateData& data, qint64& remainingUploadBytes)
@@ -1247,11 +1253,14 @@ std::optional<QBox3D> cwRHIPointCloud::worldBounds() const
         return std::nullopt;
     }
 
-    // Each point draws as a sprite of worldRadius meters around its position,
-    // so the drawn cloud reaches that far past the root cube.
-    const float worldRadius = m_renderState.value().worldRadius;
-    const QVector3D padding(worldRadius, worldRadius, worldRadius);
+    // A point draws as a sprite of worldRadius meters, or of spacingCoverage of
+    // its node's sample spacing where that is larger. The root has the coarsest
+    // spacing in the tree, so its sprites reach the furthest past the cube.
+    const cwRenderPointCloud::RenderState& state = m_renderState.value();
     const QBox3D root = m_source.manifest->nodeBounds(kRootIndex);
+    const float rootSpacing = float(m_source.manifest->spacing(kRootLevel));
+    const float radius = std::max(state.worldRadius, state.spacingCoverage * rootSpacing);
+    const QVector3D padding(radius, radius, radius);
     return QBox3D(root.minimum() - padding, root.maximum() + padding);
 }
 

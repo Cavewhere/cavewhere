@@ -21,6 +21,10 @@ struct cwPointCloudAppearance {
     // Absent = render at the cloud's live world radius (slot 0). Present =
     // override the world-space sprite radius for this job only.
     std::optional<float> worldRadius;
+
+    // Absent = render at the cloud's live spacing coverage (slot 0). Present =
+    // override the per-node spacing floor for this job only.
+    std::optional<float> spacingCoverage;
 };
 
 #endif // CWPOINTCLOUDAPPEARANCE_H

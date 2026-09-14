@@ -307,15 +307,17 @@ private:
     void resizeAppearanceSlots(QRhi* rhi, QRhiResourceUpdateBatch* batch,
                                int slotCount) override;
 
-    // Write one PerCloudUniform (just @a worldRadius today) into @a slot.
-    void writeAppearanceSlot(QRhiResourceUpdateBatch* batch, int slot, float worldRadius);
+    // Write one PerCloudUniform into @a slot.
+    void writeAppearanceSlot(QRhiResourceUpdateBatch* batch, int slot, float worldRadius,
+                             float spacingCoverage);
 
-    // std140 rounds a uniform block to a multiple of 16 bytes; pad three
-    // floats so the C++ struct matches the shader-side block size. Mirrors
-    // the PerCloudBlock declaration in PointCloud.vert.
+    // std140 rounds a uniform block to a multiple of 16 bytes; pad two floats
+    // so the C++ struct matches the shader-side block size. Mirrors the
+    // PerCloudBlock declaration in PointCloud.vert.
     struct PerCloudUniform {
         float worldRadius = 0.0f;
-        float pad[3] = {0.0f, 0.0f, 0.0f};
+        float spacingCoverage = 0.0f;
+        float pad[2] = {0.0f, 0.0f};
     };
 
     bool m_resourcesInitialized = false;
@@ -324,7 +326,8 @@ private:
     // binding 1 the shared per-instance constants. Built once in initialize().
     QRhiVertexInputLayout m_inputLayout;
 
-    // Per-cloud uniform block (binding 1): world-space sprite radius in meters,
+    // Per-cloud uniform block (binding 1): world-space sprite radius in meters
+    // and the sprite radius as a fraction of the drawn node's sample spacing,
     // one aligned slot per appearance slot, bound with a dynamic offset so an
     // offscreen job can render the cloud at an overridden radius without disturbing
     // the live view (slot 0). Steady state is ONE slot (the live radius); the pool

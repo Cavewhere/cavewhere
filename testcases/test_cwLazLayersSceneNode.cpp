@@ -442,3 +442,58 @@ TEST_CASE("scene node keeps the render cloud in step with a restarted build",
     REQUIRE(renderCloud != nullptr);
     REQUIRE(renderCloud->octree() == layer->octree());
 }
+
+TEST_CASE("scene node fans the spacing coverage out to clouds it already has and to later ones",
+          "[cwLazLayersSceneNode]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    cwScene scene;
+    cwKeywordItemModel keywordItems;
+    cwLazLayerModel model;
+
+    cwLazLayersSceneNode node;
+    node.setScene(&scene);
+    node.setKeywordItemModel(&keywordItems);
+    node.setLazLayerModel(&model);
+
+    REQUIRE(node.spacingCoverage() == cw::pointcloud::kDefaultSpacingCoverage);
+
+    const QDir gisLayersDir = prepareGisLayersDir(tempDir);
+    cwLazLayer* first = addLazViaRescan(model, gisLayersDir, QStringLiteral("coverage-first"));
+    REQUIRE(first != nullptr);
+
+    cwRenderPointCloud* firstCloud = node.pointCloudForLayer(first);
+    REQUIRE(firstCloud != nullptr);
+    REQUIRE(firstCloud->spacingCoverage() == cw::pointcloud::kDefaultSpacingCoverage);
+
+    QSignalSpy coverageSpy(&node, &cwLazLayersSceneNode::spacingCoverageChanged);
+
+    constexpr float kTunedCoverage = 1.5f;
+    node.setSpacingCoverage(kTunedCoverage);
+    CHECK(node.spacingCoverage() == kTunedCoverage);
+    CHECK(coverageSpy.count() == 1);
+    CHECK(firstCloud->spacingCoverage() == kTunedCoverage);
+
+    // A layer that arrives afterward has to come up at the tuned coverage, or
+    // the cloud the user is looking at and the one that just loaded would
+    // draw sprites of different sizes.
+    cwLazLayer* second = addLazViaRescan(model, gisLayersDir, QStringLiteral("coverage-second"));
+    REQUIRE(second != nullptr);
+
+    cwRenderPointCloud* secondCloud = node.pointCloudForLayer(second);
+    REQUIRE(secondCloud != nullptr);
+    CHECK(secondCloud->spacingCoverage() == kTunedCoverage);
+
+    // Out-of-range requests clamp instead of letting a sprite swallow the
+    // cloud or go negative.
+    constexpr float kAboveMaxCoverage = 100.0f;
+    node.setSpacingCoverage(kAboveMaxCoverage);
+    CHECK(node.spacingCoverage() < kAboveMaxCoverage);
+    CHECK(firstCloud->spacingCoverage() == node.spacingCoverage());
+
+    node.setSpacingCoverage(-1.0f);
+    CHECK(node.spacingCoverage() == 0.0f);
+    CHECK(secondCloud->spacingCoverage() == 0.0f);
+}

@@ -103,6 +103,38 @@ namespace {
         return manifest;
     }
 
+    //The deepest level the sprite-spacing check walks
+    constexpr int kSpineMaxLevel = 5;
+
+    //A single chain of nodes, one per level 0..kSpineMaxLevel, each the first
+    //octant of the one above it
+    cwPointOctreeManifest spineManifest()
+    {
+        cwPointOctreeManifest manifest;
+        manifest.rootMin = QVector3D(-8.0f, -4.0f, 2.0f);
+        manifest.rootSize = kNodeSize;
+        manifest.pointCount = kSpineMaxLevel + 1;
+        manifest.bboxMin = manifest.rootMin;
+        manifest.bboxMax = manifest.rootMin + QVector3D(static_cast<float>(kNodeSize),
+                                                        static_cast<float>(kNodeSize),
+                                                        static_cast<float>(kNodeSize));
+        manifest.meanSpacingXY = 0.125f;
+        manifest.fingerprint = QStringLiteral("spine");
+
+        for(int level = 0; level <= kSpineMaxLevel; level++) {
+            cwPointOctreeNode node;
+            node.level = level;
+            node.pointCount = 1;
+            node.byteSize = cw::octree::kBytesPerPoint;
+            if(level < kSpineMaxLevel) {
+                node.children[0] = level + 1;
+            }
+            manifest.nodes.append(node);
+        }
+
+        return manifest;
+    }
+
     CavewhereProto::PointOctreeManifest parseManifest(const QByteArray& bytes)
     {
         CavewhereProto::PointOctreeManifest proto;
@@ -332,6 +364,35 @@ TEST_CASE("The manifest derives node bounds and spacing", "[PointOctree]") {
         CHECK(manifest.nodeName(1) == QStringLiteral("r3"));
         CHECK(manifest.nodeName(2) == QStringLiteral("r5"));
         CHECK(manifest.nodeName(3) == QStringLiteral("r37"));
+    }
+}
+
+TEST_CASE("A node's spacing is its quantization step scaled the way the sprite shader scales it",
+          "[PointOctree]") {
+    // PointCloud.vert has no level and no manifest: it sizes a sprite from the
+    // per-instance nodeOriginScale.w, which cwRHIPointCloud writes as
+    // nodeSize / kQuantMax, multiplied by kSpacingPerQuantStep (kQuantMax /
+    // kSampleGridResolution). That product has to be the node's sample
+    // spacing, or every sprite in a coarse cut is the wrong size.
+    const cwPointOctreeManifest manifest = spineManifest();
+    REQUIRE(manifest.isValid());
+
+    constexpr double kSpacingPerQuantStep =
+        double(cw::octree::kQuantMax) / cw::octree::kSampleGridResolution;
+    static_assert(cw::octree::kQuantMax == 65535 && cw::octree::kSampleGridResolution == 128,
+                  "PointCloud.vert spells kSpacingPerQuantStep as the literal 65535.0 / 128.0, "
+                  "so changing either constant means changing the shader too");
+
+    for(int level = 0; level <= kSpineMaxLevel; level++) {
+        //The spine puts the node of each level at the index of that level
+        const double quantizationStep =
+            double(manifest.nodeBounds(level).size().x()) / cw::octree::kQuantMax;
+        const double shaderSpacing = quantizationStep * kSpacingPerQuantStep;
+        const double expected = manifest.spacing(level);
+
+        CHECK(manifest.nodes.at(level).level == level);
+        CHECK_THAT(shaderSpacing,
+                   Catch::Matchers::WithinRel(expected, 1e-6));
     }
 }
 

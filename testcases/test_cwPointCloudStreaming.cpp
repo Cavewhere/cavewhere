@@ -82,6 +82,7 @@ namespace {
     }
 
     constexpr int kRootIndex = 0;
+    constexpr int kRootLevel = 0;
     constexpr int kTargetDimension = 256;
     constexpr int kWaitTimeoutMs = 30000;
     constexpr int kFramePauseMs = 2;
@@ -110,6 +111,17 @@ namespace {
     constexpr double kChurnFarAlong = 0.75;
     //Room for one sprite's width when checking where the drawn points landed
     constexpr double kSpriteMarginPx = 4.0;
+
+    //Zoomed in enough that the root's sample spacing is several pixels wide,
+    //which is where a sprite narrower than the spacing shows holes. The cut is
+    //held at the root by raising the screen-space error to its ceiling.
+    constexpr float kCoarseOrthoHeight = 48.0f;
+    //Small enough that every sprite falls to the shader's one-pixel floor
+    constexpr float kTinyWorldRadius = 0.01f;
+    //The widest run of unlit pixels a covered surface may show
+    constexpr int kMaxUnlitRunPx = 2;
+    //A sprite sized off the spacing has to light far more than a 1 px one
+    constexpr int kCoveredLitMultiple = 3;
 
     //Far enough to the side that the frame's frustum misses the root cube
     constexpr float kLookAwayDistance = 5000.0f;
@@ -601,12 +613,11 @@ namespace {
             return bounds;
         }
 
-        //! The pixels of the last frame that are not the clear color, in the
-        //! [-1, 1] square of the target, x and y folded to their magnitudes so
-        //! the check does not depend on which way the backend flips y.
-        QVector<QPointF> litPixelsInNdc() const
+        //! The pixels of the last frame that are not the clear color, in target
+        //! pixel coordinates
+        QVector<QPoint> litPixels() const
         {
-            QVector<QPointF> lit;
+            QVector<QPoint> lit;
             if (m_colorSize.isEmpty()) {
                 return lit;
             }
@@ -616,18 +627,32 @@ namespace {
             for (int y = 0; y < m_colorSize.height(); y++) {
                 for (int x = 0; x < m_colorSize.width(); x++) {
                     const int offset = (y * m_colorSize.width() + x) * kChannelsPerPixel;
-                    const bool black = pixels[offset] == 0 && pixels[offset + 1] == 0
-                                       && pixels[offset + 2] == 0;
-                    if (black) {
-                        continue;
+                    const bool drawn = pixels[offset] != 0 || pixels[offset + 1] != 0
+                                       || pixels[offset + 2] != 0;
+                    if (drawn) {
+                        lit.append(QPoint(x, y));
                     }
-
-                    lit.append(QPointF(
-                        std::abs((x + 0.5) / m_colorSize.width() * 2.0 - 1.0),
-                        std::abs((y + 0.5) / m_colorSize.height() * 2.0 - 1.0)));
                 }
             }
             return lit;
+        }
+
+        QSize colorSize() const { return m_colorSize; }
+
+        //! The pixels of the last frame that are not the clear color, in the
+        //! [-1, 1] square of the target, x and y folded to their magnitudes so
+        //! the check does not depend on which way the backend flips y.
+        QVector<QPointF> litPixelsInNdc() const
+        {
+            QVector<QPointF> ndc;
+            const QVector<QPoint> lit = litPixels();
+            ndc.reserve(lit.size());
+            for (const QPoint& pixel : lit) {
+                ndc.append(QPointF(
+                    std::abs((pixel.x() + 0.5) / m_colorSize.width() * 2.0 - 1.0),
+                    std::abs((pixel.y() + 0.5) / m_colorSize.height() * 2.0 - 1.0)));
+            }
+            return ndc;
         }
 
         //! Frames until nothing is queued, in flight or waiting to be uploaded
@@ -698,6 +723,26 @@ namespace {
         qint64 m_gpuBaseline = 0;
         qint64 m_cpuBaseline = 0;
     };
+
+    //! The longest run of unlit pixels between the first and last lit pixel of
+    //! @a row, or -1 where the row has nothing lit on it. litPixels() walks
+    //! rows in order, so a row's columns arrive ascending.
+    int longestUnlitRun(const QVector<QPoint>& lit, int row)
+    {
+        int previousColumn = -1;
+        int longest = -1;
+        for (const QPoint& pixel : lit) {
+            if (pixel.y() != row) {
+                continue;
+            }
+
+            longest = previousColumn < 0
+                ? 0
+                : std::max(longest, pixel.x() - previousColumn - 1);
+            previousColumn = pixel.x();
+        }
+        return longest;
+    }
 
     //! Every point the cloud has resident, dequantized out of the very mirrors
     //! the pick set was published — the points a pick can reach.
@@ -1868,6 +1913,86 @@ TEST_CASE("The drawn points land inside the cloud the manifest describes",
     CHECK(drawn.y() <= bounds.y() + margin);
 }
 
+TEST_CASE("Sprites grow to the drawn node's spacing so a coarse cut reads as a surface",
+          "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    PointCloudFixture fixture(rhi.get(), QStringLiteral("spacing-coverage"));
+    fixture.setReadbackEnabled(true);
+    fixture.setOrthoHeight(kCoarseOrthoHeight);
+
+    // Hold the cut at the root while the camera is close enough for the root's
+    // sample spacing to be several pixels wide — the shape the governor's
+    // screen-space-error inflation puts on screen, and where a sprite that
+    // knows only a fixed world radius leaves the surface full of holes.
+    cwRenderBudgets budgets = fixture.budgets();
+    budgets.screenSpaceErrorPx = cw::budgets::kMaxScreenSpaceErrorPx;
+    fixture.setBudgets(budgets);
+
+    // At this radius every sprite falls to the one-pixel floor, so the spacing
+    // coverage is the only thing that can make one bigger.
+    fixture.render().setWorldRadius(kTinyWorldRadius);
+    fixture.render().setSpacingCoverage(0.0f);
+    fixture.synchronize();
+    fixture.renderUntilResident(kRootIndex);
+    fixture.renderFrame();
+    REQUIRE(fixture.drawableCount() == 1);
+
+    const qsizetype bare = fixture.litPixels().size();
+    REQUIRE(bare > 0);
+
+    // Every sprite is at the shader's one-pixel floor here, so the root cannot
+    // light more pixels than it has points — points that share a pixel, and
+    // points the ortho frame leaves off the target, only light fewer.
+    const qint64 rootPoints = fixture.manifest().nodes.at(kRootIndex).pointCount;
+    CHECK(bare <= rootPoints);
+
+    fixture.render().setSpacingCoverage(cw::pointcloud::kDefaultSpacingCoverage);
+    fixture.synchronize();
+    fixture.renderFrame();
+    REQUIRE(fixture.drawableCount() == 1);
+
+    const QVector<QPoint> covered = fixture.litPixels();
+    CHECK(covered.size() >= kCoveredLitMultiple * bare);
+
+    // The camera looks at the cloud's center, so the center row of the target
+    // crosses the passage. gl_PointSize is a side length, so a sprite spans
+    // kDefaultSpacingCoverage of a spacing and the remaining quarter of each
+    // spacing stays unlit — narrowed from the whole spacing, which is what
+    // kMaxUnlitRunPx bounds.
+    const int centerRow = fixture.colorSize().height() / 2;
+    const int run = longestUnlitRun(covered, centerRow);
+    INFO("longest unlit run on the center row: " << run);
+    CHECK(run >= 0);
+    CHECK(run <= kMaxUnlitRunPx);
+}
+
+TEST_CASE("The tuned world radius wins wherever it is the larger of the two",
+          "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    PointCloudFixture fixture(rhi.get(), QStringLiteral("spacing-floor-loses"));
+    fixture.setReadbackEnabled(true);
+    fixture.setOrthoHeight(kCloseOrthoHeight);
+
+    fixture.render().setSpacingCoverage(0.0f);
+    fixture.synchronize();
+    fixture.renderUntilQuiet();
+
+    const qsizetype bare = fixture.litPixels().size();
+    REQUIRE(bare > 0);
+
+    // Every node in this refined cut has a spacing well under the default
+    // world radius, so turning the coverage on changes nothing that is drawn.
+    fixture.render().setSpacingCoverage(cw::pointcloud::kDefaultSpacingCoverage);
+    fixture.synchronize();
+    fixture.renderFrame();
+
+    CHECK(fixture.litPixels().size() == bare);
+}
+
 TEST_CASE("The cloud's world bounds are the root cube padded by the sprite radius",
           "[PointCloudStreaming]")
 {
@@ -1879,11 +2004,36 @@ TEST_CASE("The cloud's world bounds are the root cube padded by the sprite radiu
     REQUIRE(bounds.has_value());
 
     const QBox3D root = fixture.manifest().nodeBounds(kRootIndex);
-    const float radius = fixture.render().worldRadius();
+    // The root's sprites are the widest the cloud draws: the shader takes the
+    // larger of the tuned world radius and the node's spacing floor, and the
+    // root has the coarsest spacing in the tree.
+    const float radius =
+        std::max(fixture.render().worldRadius(),
+                 fixture.render().spacingCoverage()
+                     * float(fixture.manifest().spacing(kRootLevel)));
     const QVector3D padding(radius, radius, radius);
 
     CHECK(bounds->minimum() == root.minimum() - padding);
     CHECK(bounds->maximum() == root.maximum() + padding);
+
+    // With the tuned radius below the root's spacing floor the other half of
+    // the max() is what pads the box.
+    fixture.render().setWorldRadius(kTinyWorldRadius);
+    fixture.synchronize();
+
+    const float spacingRadius = fixture.render().spacingCoverage()
+                                * float(fixture.manifest().spacing(kRootLevel));
+    REQUIRE(spacingRadius > kTinyWorldRadius);
+
+    const std::optional<QBox3D> spacingBounds = fixture.backend().worldBounds();
+    REQUIRE(spacingBounds.has_value());
+
+    const QVector3D spacingPadding(spacingRadius, spacingRadius, spacingRadius);
+    CHECK(spacingBounds->minimum() == root.minimum() - spacingPadding);
+    CHECK(spacingBounds->maximum() == root.maximum() + spacingPadding);
+
+    fixture.render().setWorldRadius(cw::pointcloud::kDefaultWorldRadius);
+    fixture.synchronize();
 
     // Cleared, the cloud has nothing to draw and nothing to composite.
     fixture.render().clear();
