@@ -4,6 +4,8 @@
 
 //Qt includes
 #include <QSignalSpy>
+#include <QAbstractItemModelTester>
+#include <QUndoStack>
 
 //Our includes
 #include "cwRegionTreeModel.h"
@@ -15,6 +17,7 @@
 #include "cwSurveyNoteModel.h"
 #include "cwCavingRegion.h"
 #include "cwNoteLiDAR.h"
+#include "cwSurveyNode.h"
 
 TEST_CASE("cwRegionTreeModel all function should work correctly", "[cwRegionTreeModel]") {
 
@@ -359,4 +362,179 @@ TEST_CASE("cwRegionTreeModel::parent correctness across all levels", "[cwRegionT
             }
         }
     }
+}
+
+TEST_CASE("cwRegionTreeModel lists a node's child nodes before its trips",
+          "[cwRegionTreeModel]") {
+    // A depth-3 tree: Fisher Ridge > Upper Level > Crawl, with a trip at every
+    // level. The tree is built before the cave joins the region, so the model
+    // hears about the whole subtree through one insert.
+    cwCavingRegion region;
+
+    cwCave* cave = new cwCave();
+    cave->setName(QStringLiteral("Fisher Ridge"));
+
+    cwTrip* caveTrip = new cwTrip();
+    caveTrip->setName(QStringLiteral("Entrance Series"));
+    cave->addTrip(caveTrip);
+
+    cwCave* folder = new cwCave();
+    folder->setName(QStringLiteral("Upper Level"));
+    cave->addNode(folder);
+
+    cwTrip* folderTrip = new cwTrip();
+    folderTrip->setName(QStringLiteral("Topo 1"));
+    folder->addTrip(folderTrip);
+
+    cwCave* section = new cwCave();
+    section->setName(QStringLiteral("Crawl"));
+    folder->addNode(section);
+
+    cwTrip* sectionTrip = new cwTrip();
+    sectionTrip->setName(QStringLiteral("Topo 2"));
+    section->addTrip(sectionTrip);
+
+    region.addCave(cave);
+
+    cwRegionTreeModel model;
+    model.setCavingRegion(&region);
+
+    //Validates index(), parent(), rowCount() and data() over the whole tree
+    QAbstractItemModelTester tester(&model, QAbstractItemModelTester::FailureReportingMode::Fatal);
+
+    SECTION("rows and parents follow the tree") {
+        REQUIRE(model.rowCount(QModelIndex()) == 1);
+
+        const QModelIndex caveIndex = model.index(0, 0, QModelIndex());
+        REQUIRE(caveIndex.isValid());
+        CHECK(model.data(caveIndex, cwRegionTreeModel::TypeRole).toInt() == cwRegionTreeModel::NodeType);
+        CHECK(model.node(caveIndex) == cave);
+        CHECK(model.cave(caveIndex) == cave);
+        CHECK(model.index(cave) == caveIndex);
+        CHECK(model.parent(caveIndex) == QModelIndex());
+
+        //One child node, then one trip
+        REQUIRE(model.rowCount(caveIndex) == 2);
+
+        const QModelIndex folderIndex = model.index(0, 0, caveIndex);
+        CHECK(model.node(folderIndex) == folder);
+        CHECK(model.index(folder) == folderIndex);
+        CHECK(model.parent(folderIndex) == caveIndex);
+
+        const QModelIndex caveTripIndex = model.index(1, 0, caveIndex);
+        CHECK(model.trip(caveTripIndex) == caveTrip);
+        CHECK(model.index(caveTrip) == caveTripIndex);
+        CHECK(model.parent(caveTripIndex) == caveIndex);
+
+        REQUIRE(model.rowCount(folderIndex) == 2);
+        const QModelIndex sectionIndex = model.index(0, 0, folderIndex);
+        CHECK(model.node(sectionIndex) == section);
+        CHECK(model.parent(sectionIndex) == folderIndex);
+        CHECK(model.trip(model.index(1, 0, folderIndex)) == folderTrip);
+
+        REQUIRE(model.rowCount(sectionIndex) == 1);
+        const QModelIndex sectionTripIndex = model.index(0, 0, sectionIndex);
+        CHECK(model.trip(sectionTripIndex) == sectionTrip);
+        CHECK(model.index(sectionTrip) == sectionTripIndex);
+        CHECK(model.parent(sectionTripIndex) == sectionIndex);
+
+        //The region's root owns no row of its own
+        CHECK(model.index(region.rootNode()) == QModelIndex());
+    }
+
+    SECTION("all<>() walks the rows in the tree's document order") {
+        const QList<cwTrip*> trips = model.all<cwTrip*>(QModelIndex(), &cwRegionTreeModel::trip);
+        CHECK(trips == region.rootNode()->allTrips());
+        CHECK(trips == QList<cwTrip*>({sectionTrip, folderTrip, caveTrip}));
+
+        const QList<cwCave*> nodes = model.all<cwCave*>(QModelIndex(), &cwRegionTreeModel::cave);
+        CHECK(nodes == QList<cwCave*>({cave, folder, section}));
+    }
+
+    SECTION("a node and a trip added to a deep node become rows") {
+        const QModelIndex sectionIndex = model.index(section);
+        REQUIRE(sectionIndex.isValid());
+
+        QSignalSpy aboutToInsert(&model, &QAbstractItemModel::rowsAboutToBeInserted);
+        QSignalSpy inserted(&model, &QAbstractItemModel::rowsInserted);
+
+        cwCave* deepNode = new cwCave();
+        deepNode->setName(QStringLiteral("Sump"));
+        section->addNode(deepNode);
+
+        REQUIRE(aboutToInsert.count() == 1);
+        REQUIRE(inserted.count() == 1);
+        CHECK(aboutToInsert.at(0).at(0).value<QModelIndex>() == sectionIndex);
+        CHECK(inserted.at(0).at(1).toInt() == 0); //Child nodes come first
+
+        REQUIRE(model.rowCount(sectionIndex) == 2);
+        CHECK(model.node(model.index(0, 0, sectionIndex)) == deepNode);
+        CHECK(model.trip(model.index(1, 0, sectionIndex)) == sectionTrip);
+        CHECK(model.index(sectionTrip) == model.index(1, 0, sectionIndex));
+
+        cwTrip* deepTrip = new cwTrip();
+        deepTrip->setName(QStringLiteral("Topo 3"));
+        section->addTrip(deepTrip);
+
+        REQUIRE(inserted.count() == 2);
+        CHECK(inserted.at(1).at(0).value<QModelIndex>() == sectionIndex);
+        CHECK(inserted.at(1).at(1).toInt() == 2); //After the child node and the first trip
+        CHECK(model.trip(model.index(2, 0, sectionIndex)) == deepTrip);
+    }
+}
+
+TEST_CASE("cwRegionTreeModel removes a nested node's rows and brings them back on undo",
+          "[cwRegionTreeModel]") {
+    cwCavingRegion region;
+    QUndoStack undoStack;
+    region.setUndoStack(&undoStack);
+
+    cwCave* cave = new cwCave();
+    cave->setName(QStringLiteral("Fisher Ridge"));
+    region.addCave(cave);
+
+    cwCave* folder = new cwCave();
+    folder->setName(QStringLiteral("Upper Level"));
+    cave->addNode(folder);
+
+    cwTrip* folderTrip = new cwTrip();
+    folderTrip->setName(QStringLiteral("Topo 1"));
+    folder->addTrip(folderTrip);
+
+    cwRegionTreeModel model;
+    model.setCavingRegion(&region);
+
+    const QModelIndex caveIndex = model.index(cave);
+    REQUIRE(model.rowCount(caveIndex) == 1);
+    REQUIRE(model.rowCount(model.index(folder)) == 1);
+
+    QSignalSpy aboutToRemove(&model, &QAbstractItemModel::rowsAboutToBeRemoved);
+    QSignalSpy removed(&model, &QAbstractItemModel::rowsRemoved);
+    QSignalSpy aboutToInsert(&model, &QAbstractItemModel::rowsAboutToBeInserted);
+    QSignalSpy inserted(&model, &QAbstractItemModel::rowsInserted);
+
+    cave->removeNode(0);
+
+    //The trip row goes out before the node row that holds it
+    REQUIRE(aboutToRemove.count() == 2);
+    CHECK(removed.count() == aboutToRemove.count());
+    CHECK(aboutToRemove.at(1).at(0).value<QModelIndex>() == caveIndex);
+    CHECK(model.rowCount(caveIndex) == 0);
+
+    //A node kept for undo still points at the parent it came from, but neither
+    //it nor the trips under it owns a row any more
+    CHECK(model.index(folder) == QModelIndex());
+    CHECK(model.index(folderTrip) == QModelIndex());
+
+    undoStack.undo();
+
+    REQUIRE(aboutToInsert.count() == 2);
+    CHECK(inserted.count() == aboutToInsert.count());
+    REQUIRE(model.rowCount(caveIndex) == 1);
+
+    //Undo re-inserts the same objects, so the indexes resolve again
+    const QModelIndex folderIndex = model.index(0, 0, caveIndex);
+    CHECK(model.node(folderIndex) == folder);
+    CHECK(model.rowCount(folderIndex) == 1);
+    CHECK(model.trip(model.index(0, 0, folderIndex)) == folderTrip);
 }

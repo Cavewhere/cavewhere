@@ -12,6 +12,7 @@
 class cwCavingRegion;
 class cwTrip;
 class cwCave;
+class cwSurveyNode;
 class cwNote;
 class cwScrap;
 class cwNoteLiDAR;
@@ -43,15 +44,18 @@ class CAVEWHERE_LIB_EXPORT cwRegionTreeModel : public QAbstractItemModel
     QML_NAMED_ELEMENT(RegionTreeModel)
 
 public:
+    //! Numbered from Qt::UserRole so they cannot be read as Qt::DisplayRole or
+    //! Qt::DecorationRole, which a view asks every model for.
     enum RoleItem {
-        TypeRole, //Returns an ItemType
+        TypeRole = Qt::UserRole + 1, //Returns an ItemType
         ObjectRole, //For exctracting the object
     };
     Q_ENUM(RoleItem)
 
     enum ItemType {
         RegionType,
-        CaveType,
+        NodeType,
+        CaveType = NodeType, //!< Deprecated spelling of NodeType, kept until cwCave retires
         TripType,
         NoteType,
         ScrapType,
@@ -78,7 +82,7 @@ public:
     cwCavingRegion* cavingRegion() const;
 
     Q_INVOKABLE QModelIndex index ( int row, int column, const QModelIndex & parent ) const;
-    QModelIndex index (cwCave* cave) const;
+    QModelIndex index (cwSurveyNode* node) const;
     QModelIndex index (cwTrip* trip) const;
     QModelIndex index (cwNote* note) const;
     QModelIndex index (cwScrap* scrap) const;
@@ -94,6 +98,7 @@ public:
     Q_INVOKABLE QVariant data ( const QModelIndex & index, int role) const;
 
     Q_INVOKABLE cwTrip* trip(const QModelIndex& index) const;
+    Q_INVOKABLE cwSurveyNode* node(const QModelIndex& index) const;
     Q_INVOKABLE cwCave* cave(const QModelIndex& index) const;
     Q_INVOKABLE cwNote* note(const QModelIndex& index) const;
     Q_INVOKABLE cwScrap* scrap(const QModelIndex& index) const;
@@ -108,6 +113,7 @@ public:
     Q_INVOKABLE bool isScrap(const QModelIndex& index) const;
     Q_INVOKABLE bool isNote(const QModelIndex& index) const;
     Q_INVOKABLE bool isTrip(const QModelIndex& index) const;
+    Q_INVOKABLE bool isNode(const QModelIndex& index) const;
     Q_INVOKABLE bool isCave(const QModelIndex& index) const;
     Q_INVOKABLE bool isRegion(const QModelIndex& index) const;
     Q_INVOKABLE bool isNotes(const QModelIndex& index) const { return index.data(TypeRole).toInt() == NotesType; }
@@ -159,16 +165,6 @@ signals:
 public slots:
 
 private slots:
-    void beginInsertCaves(QModelIndex parent, int begin, int end);
-    void insertedCaves(QModelIndex parent, int begin, int end);
-    void beginRemoveCaves(QModelIndex parent, int begin, int end);
-    void removedCaves(QModelIndex parent, int begin, int end);
-
-    void beginInsertTrips(QModelIndex parent, int begin, int end);
-    void insertedTrips(QModelIndex parent, int begin, int end);
-    void beginRemoveTrips(QModelIndex parent, int begin, int end);
-    void removedTrips(QModelIndex parent, int begin, int end);
-
     void beginInsertNotes(QModelIndex parent, int begin, int end);
     void insertedNotes(QModelIndex parent, int begin, int end);
     void beginRemoveNotes(QModelIndex parent, int begin, int end);
@@ -186,22 +182,57 @@ private:
     //For debugging connections, this will no-op in release mode
     cwUniqueConnectionChecker m_connectionChecker;
 
-    void addCaveConnections(int beginIndex, int endIndex, bool recusive = true);
-    void removeCaveConnections(int beginIndex, int endIndex);
+    //! The node an index stands for: the region's root for the invalid index,
+    //! the node itself for a node row, nullptr for every other row.
+    cwSurveyNode* nodeForIndex(const QModelIndex& index) const;
 
-    void addTripConnections(cwCave* parentCave, int beginIndex, int endIndex, bool recursive = true);
-    void removeTripConnections(cwCave* parentCave, int beginIndex, int endIndex);
+    //! True when node hangs off this model's region root, so it owns a row here.
+    bool isInTree(const cwSurveyNode* node) const;
+
+    //! A node's row under its parent. Child nodes come first, so this is just
+    //! the node's place in its parent's child list.
+    int rowOf(cwSurveyNode* node) const;
+
+    //! A trip's row under its node, which the node's children are counted ahead of.
+    int rowOf(cwTrip* trip) const;
+
+    //! The row a node's first trip takes, its child-node rows coming ahead of it.
+    int firstTripRow(const cwSurveyNode* node) const;
+
+    void addNodeConnections(cwSurveyNode* node, bool recursive);
+    void removeNodeConnections(cwSurveyNode* parentNode, int beginIndex, int endIndex);
+
+    //! Unwires a node, its descendants, their trips and their notes in one walk
+    void removeSubtreeConnections(cwSurveyNode* node);
+
+    void addTripConnections(cwSurveyNode* parentNode, int beginIndex, int endIndex, bool recursive = true);
+    void removeTripConnections(cwSurveyNode* parentNode, int beginIndex, int endIndex);
 
     void addNoteConnections(cwTrip* parentTrip, int beginIndex, int endIndex);
     void removeNoteConnections(cwTrip* parentTrip, int beginIndex, int endIndex);
 
-    void beginRemoveTrips(cwCave* parentCave, int begin, int end);
+    void beginInsertNodes(cwSurveyNode* parentNode, int begin, int end);
+    void insertedNodes(cwSurveyNode* parentNode, int begin, int end);
+    void beginRemoveNodes(cwSurveyNode* parentNode, int begin, int end);
+
+    void beginInsertTrips(cwSurveyNode* parentNode, int begin, int end);
+    void insertedTrips(cwSurveyNode* parentNode, int begin, int end);
+    void beginRemoveTrips(cwSurveyNode* parentNode, int begin, int end);
+
     void beginRemoveNotes(cwTrip* parentTrip, int begin, int end);
     void beginRemoveScraps(cwNote* parentNote, int  begin, int end);
 
-    void insertedTrips(cwCave* parentCave, int begin, int end);
     void insertedNotes(cwTrip* parentTrip, int begin, int end);
     void insertedScraps(cwNote* parentNote, int begin, int end);
+
+    //! Announce the child nodes and trips a freshly inserted node already holds
+    //! as inserted rows, so a listener discovers rows that were in place before
+    //! the connection was made.
+    void insertedExistingChildren(cwSurveyNode* node);
+
+    //! The mirror of insertedExistingChildren for removal: take the node's own
+    //! child rows out, deepest first.
+    void removeChildRows(cwSurveyNode* node);
 
     template <typename ReturnType, typename GetFunc>
     ReturnType get(const QModelIndex& rowIndex, GetFunc func) const {
@@ -219,10 +250,20 @@ inline bool cwRegionTreeModel::isTrip(const QModelIndex &index) const {
 }
 
 /**
+  \brief Checks if index is a survey node, returns true if it is, false if it isn't
+  */
+inline bool cwRegionTreeModel::isNode(const QModelIndex &index) const {
+    return index.data(TypeRole).toInt() == NodeType;
+}
+
+/**
   \brief Checks if index is a cave, returns true if it is, false if it isn't
+
+  Every node is a cwCave until the shim retires, but a node that is not one
+  answers false here, so isCave() and cave() keep giving the same answer.
   */
 inline bool cwRegionTreeModel::isCave(const QModelIndex &index) const {
-    return index.data(TypeRole).toInt() == CaveType;
+    return cave(index) != nullptr;
 }
 
 /**

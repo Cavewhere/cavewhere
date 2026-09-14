@@ -9,6 +9,7 @@
 #include "cwRegionTreeModel.h"
 #include "cwCavingRegion.h"
 #include "cwCave.h"
+#include "cwSurveyNode.h"
 #include "cwTrip.h"
 #include "cwScrap.h"
 #include "cwSurveyNoteModel.h"
@@ -47,153 +48,112 @@ cwCavingRegion *cwRegionTreeModel::cavingRegion() const {
 }
 
 /**
- * @brief cwRegionTreeModel::beginInsertCaves
- * @param parent
- * @param begin
- * @param end
+ * @brief cwRegionTreeModel::beginInsertNodes
+ *
+ * Child nodes of \a parentNode are about to appear at rows \a begin to \a end.
+ * A node lists its child-node rows before its trip rows, so a child node's row
+ * in this model is its row in the parent's child list.
  */
-void cwRegionTreeModel::beginInsertCaves(QModelIndex parent, int begin, int end)
+void cwRegionTreeModel::beginInsertNodes(cwSurveyNode* parentNode, int begin, int end)
 {
-    Q_UNUSED(parent);
     Q_ASSERT(begin <= end);
-    beginInsertRows(QModelIndex(), begin, end);
+    beginInsertRows(index(parentNode), begin, end);
 }
 
 /**
- * @brief cwRegionTreeModel::insertedCaves
- * @param parent
- * @param begin
- * @param end
+ * @brief cwRegionTreeModel::insertedNodes
  */
-void cwRegionTreeModel::insertedCaves(QModelIndex parent, int begin, int end)
+void cwRegionTreeModel::insertedNodes(cwSurveyNode* parentNode, int begin, int end)
 {
-    Q_UNUSED(parent);
-    Q_ASSERT(parent == QModelIndex());
     Q_ASSERT(begin <= end);
 
-    addCaveConnections(begin, end, false /* recusive */);
+    for(int i = begin; i <= end; i++) {
+        addNodeConnections(parentNode->childNode(i), false);
+    }
+
     endInsertRows();
 
     for(int i = begin; i <= end; i++) {
-        cwCave* cave = Region->cave(i);
-        if(cave->tripCount() > 0) {
-            QModelIndex parentCaveIndex = index(cave);
-            beginInsertRows(parentCaveIndex, 0, cave->tripCount() - 1);
-            insertedTrips(cave, 0, cave->tripCount() - 1);
-        }
+        insertedExistingChildren(parentNode->childNode(i));
     }
 }
 
+/**
+ * @brief cwRegionTreeModel::insertedExistingChildren
+ *
+ * A node usually arrives with children already in it — a cave loaded from disk
+ * brings its trips, and a whole subtree moves in one insert. Those rows never
+ * emit an insert of their own, so this announces them: cwScrapManager and
+ * cwSketchManager discover a loaded project's scraps and sketches through these
+ * inserts alone.
+ *
+ * Qt's own contract says a parent row carries its subtree in with it, so these
+ * announcements come after the children are already reachable and leave
+ * rowCount() unchanged across the begin/end pair. QAbstractItemModelTester
+ * therefore rejects this path, and the tests put a tester over a tree the model
+ * already holds rather than over a subtree joining it. removeChildRows() is the
+ * mirror image. Retiring both is what makes the model tester-clean, and that
+ * belongs with whatever gives those managers another way to discover rows.
+ */
+void cwRegionTreeModel::insertedExistingChildren(cwSurveyNode* node)
+{
+    const QModelIndex nodeIndex = index(node);
+
+    if(node->childNodeCount() > 0) {
+        beginInsertRows(nodeIndex, 0, node->childNodeCount() - 1);
+        insertedNodes(node, 0, node->childNodeCount() - 1);
+    }
+
+    if(node->tripCount() > 0) {
+        const int firstRow = firstTripRow(node);
+        beginInsertRows(nodeIndex, firstRow, firstRow + node->tripCount() - 1);
+        insertedTrips(node, 0, node->tripCount() - 1);
+    }
+}
 
 /**
- * @brief cwRegionTreeModel::beginRemoveCaves
- * @param parent
- * @param begin
- * @param end
+ * @brief cwRegionTreeModel::beginRemoveNodes
  */
-void cwRegionTreeModel::beginRemoveCaves(QModelIndex parent, int begin, int end)
-{;
-    Q_UNUSED(parent);
+void cwRegionTreeModel::beginRemoveNodes(cwSurveyNode* parentNode, int begin, int end)
+{
     Q_ASSERT(begin <= end);
-    Q_ASSERT(parent == QModelIndex());
 
     for(int i = begin; i <= end; i++) {
-        cwCave* cave = index(i, 0, QModelIndex()).data(ObjectRole).value<cwCave*>();
-        if(cave->hasTrips()) {
-            beginRemoveTrips(cave, 0, cave->trips().size() - 1);
-            endRemoveRows(); //beginRemoveTrips() starts the endRemoveRows
-        }
+        removeChildRows(parentNode->childNode(i));
     }
 
-    removeCaveConnections(begin, end);
-    beginRemoveRows(QModelIndex(), begin, end);
+    removeNodeConnections(parentNode, begin, end);
+    beginRemoveRows(index(parentNode), begin, end);
 }
 
 /**
- * @brief cwRegionTreeModel::removedCaves
- * @param parent
- * @param begin
- * @param end
+ * @brief cwRegionTreeModel::removeChildRows
+ *
+ * Takes out the rows \a node holds, deepest first, so a subtree leaves the model
+ * from the bottom up. The mirror of insertedExistingChildren(), and it announces
+ * rows the data keeps for the same reason.
  */
-void cwRegionTreeModel::removedCaves(QModelIndex parent, int begin, int end)
+void cwRegionTreeModel::removeChildRows(cwSurveyNode* node)
 {
-    Q_ASSERT(parent == QModelIndex());
-    Q_UNUSED(parent);
-    Q_UNUSED(begin);
-    Q_UNUSED(end);
-    endRemoveRows();
+    if(node->childNodeCount() > 0) {
+        beginRemoveNodes(node, 0, node->childNodeCount() - 1);
+        endRemoveRows(); //beginRemoveNodes() starts the endRemoveRows
+    }
+
+    if(node->tripCount() > 0) {
+        beginRemoveTrips(node, 0, node->tripCount() - 1);
+        endRemoveRows(); //beginRemoveTrips() starts the endRemoveRows
+    }
 }
 
 /**
  * @brief cwRegionTreeModel::beginInsertTrips
- * @param parent
- * @param begin
- * @param end
  */
-void cwRegionTreeModel::beginInsertTrips(QModelIndex parent, int begin, int end)
+void cwRegionTreeModel::beginInsertTrips(cwSurveyNode* parentNode, int begin, int end)
 {
-    Q_ASSERT(parent == QModelIndex());
-    Q_UNUSED(parent);
     Q_ASSERT(begin <= end);
-
-    Q_ASSERT(qobject_cast<cwCave*>(sender()) != nullptr);
-    cwCave* parentCave = static_cast<cwCave*>(sender());
-
-    QModelIndex parentIndex = index(parentCave);
-
-    beginInsertRows(parentIndex, begin, end);
-}
-
-/**
- * @brief cwRegionTreeModel::insertedTrips
- * @param parent
- * @param begin
- * @param end
- */
-void cwRegionTreeModel::insertedTrips(QModelIndex parent, int begin, int end)
-{
-    Q_ASSERT(parent == QModelIndex());
-    Q_UNUSED(parent);
-    Q_ASSERT(begin <= end);
-
-    Q_ASSERT(qobject_cast<cwCave*>(sender()) != nullptr);
-    cwCave* parentCave = static_cast<cwCave*>(sender());
-
-    insertedTrips(parentCave, begin, end);
-}
-
-/**
- * @brief cwRegionTreeModel::beginRemoveTrips
- * @param parent
- * @param begin
- * @param end
- */
-void cwRegionTreeModel::beginRemoveTrips(QModelIndex parent, int begin, int end)
-{
-    Q_ASSERT(parent == QModelIndex());
-    Q_UNUSED(parent);
-    Q_ASSERT(begin <= end);
-
-    Q_ASSERT(qobject_cast<cwCave*>(sender()) != nullptr);
-    cwCave* parentCave = static_cast<cwCave*>(sender());
-
-    beginRemoveTrips(parentCave, begin, end);
-}
-
-/**
- * @brief cwRegionTreeModel::removedTrips
- * @param parent
- * @param begin
- * @param end
- */
-void cwRegionTreeModel::removedTrips(QModelIndex parent, int begin, int end)
-{
-    Q_ASSERT(parent == QModelIndex());
-    Q_ASSERT(qobject_cast<cwCave*>(sender()) != nullptr);
-    Q_UNUSED(parent);
-    Q_UNUSED(begin);
-    Q_UNUSED(end);
-    endRemoveRows();
+    const int firstRow = firstTripRow(parentNode);
+    beginInsertRows(index(parentNode), begin + firstRow, end + firstRow);
 }
 
 /**
@@ -335,30 +295,24 @@ void cwRegionTreeModel::removedScraps(int begin, int end)
  * @param region
  */
 void cwRegionTreeModel::setCavingRegion(cwCavingRegion* region) {
-    //Remove all the connections
-    if(rowCount() > 0) {
-        removeCaveConnections(0, rowCount() - 1);
+    //Drop every connection the old region's tree holds. Row removal takes the
+    //deeper rows out first and so unwires a level at a time, but swapping the
+    //region skips that walk, and a still-wired trip left behind would resolve
+    //its index against the new region's root.
+    if(!Region.isNull()) {
+        removeSubtreeConnections(Region->rootNode());
+        disconnect(Region, nullptr, this, nullptr);
     }
 
     //Reset the model
     beginResetModel();
-    if(region == nullptr && Region != nullptr) {
-        disconnect(Region, nullptr, this, nullptr);
-    }
 
     Region = region;
 
-    if(Region) {
-        connect(Region, SIGNAL(rowsAboutToBeInserted(QModelIndex,int,int)), SLOT(beginInsertCaves(QModelIndex,int,int)));
-        connect(Region, SIGNAL(rowsInserted(QModelIndex,int,int)), SLOT(insertedCaves(QModelIndex,int,int)));
-        connect(Region, SIGNAL(rowsAboutToBeRemoved(QModelIndex,int,int)), SLOT(beginRemoveCaves(QModelIndex,int,int)));
-        connect(Region, SIGNAL(rowsRemoved(QModelIndex,int,int)), SLOT(removedCaves(QModelIndex,int,int)));
-    }
-
     endResetModel();
 
-    if(rowCount() > 0) {
-        addCaveConnections(0, rowCount() - 1);
+    if(!Region.isNull()) {
+        addNodeConnections(Region->rootNode(), true);
     }
 }
 
@@ -374,32 +328,21 @@ QModelIndex cwRegionTreeModel::index ( int row, int column, const QModelIndex & 
     if(Region.isNull()) { return QModelIndex(); }
     if(row < 0) { return QModelIndex(); }
 
+    //Under a node come its child-node rows, then its trip rows
+    if(cwSurveyNode* parentNode = nodeForIndex(parent)) {
+        if(row < parentNode->childNodeCount()) {
+            return createIndex(row, column, parentNode->childNode(row));
+        }
+
+        const int tripRow = row - firstTripRow(parentNode);
+        if(tripRow < parentNode->tripCount()) {
+            return createIndex(row, column, parentNode->trip(tripRow));
+        }
+
+        return QModelIndex();
+    }
+
     switch(parent.data(TypeRole).toInt()) {
-    case RegionType: {
-        if(!parent.isValid()) {
-            //Try to get a cave
-            if(row >= Region->caveCount()) {
-                return QModelIndex();
-            }
-            return createIndex(row, column, Region->cave(row));
-        }
-        Q_ASSERT(false);
-        break;
-    }
-
-    case CaveType: {
-        cwCave* parentCave = qobject_cast<cwCave*>((QObject*)parent.internalPointer());
-        if(parentCave != nullptr) {
-            if(row >= parentCave->tripCount()) {
-                return QModelIndex();
-            }
-
-            return createIndex(row, column, parentCave->trip(row));
-        }
-        Q_ASSERT(false);
-        break;
-    }
-
     case TripType: {
         cwTrip* parentTrip = qobject_cast<cwTrip*>((QObject*)parent.internalPointer());
         if(parentTrip != nullptr) {
@@ -472,34 +415,98 @@ QModelIndex cwRegionTreeModel::index ( int row, int column, const QModelIndex & 
 }
 
 /**
-  \brief Gets the cave index of the model
+  \brief Gets the node index of the model
 
-  If the cave doesn't exist in the model this return QModelIndex()
+  The region's root node owns no row of its own — its children are the top-level
+  rows — so the root, and any node outside this model's region, return
+  QModelIndex().
   */
-QModelIndex cwRegionTreeModel::index (cwCave* cave) const {
-    if(Region == nullptr) { return QModelIndex(); }
-    if(cave == nullptr) { return QModelIndex(); }
-    int caveIndex = Region->indexOf(cave);
-    if(caveIndex < 0) { QModelIndex(); }
-    return index(caveIndex, 0, QModelIndex());
+QModelIndex cwRegionTreeModel::index (cwSurveyNode* node) const {
+    if(node == nullptr) { return QModelIndex(); }
+    if(node->isRoot()) { return QModelIndex(); }
+    if(!isInTree(node)) { return QModelIndex(); }
+
+    const int row = rowOf(node);
+    if(row < 0) { return QModelIndex(); }
+
+    return createIndex(row, 0, node);
 }
 
 /**
-  \brief Gets the cave index of the model
+  \brief Gets the trip index of the model
 
-  If the cave doesn't exist in the model this return QModelIndex()
+  If the trip doesn't exist in the model this return QModelIndex()
   */
 QModelIndex cwRegionTreeModel::index (cwTrip* trip) const {
-    cwCave* parentCave = trip->parentCave();
-    if(parentCave == nullptr) { return QModelIndex(); }
-    int tripIndex = parentCave->indexOf(trip);
+    if(trip == nullptr) { return QModelIndex(); }
+    if(!isInTree(trip->parentNode())) { return QModelIndex(); }
 
-    QModelIndex parentIndex = index(parentCave);
-    if(!parentIndex.isValid()) { return QModelIndex(); }
+    const int row = rowOf(trip);
+    if(row < 0) { return QModelIndex(); }
 
-    if(tripIndex < 0) { return QModelIndex(); }
+    return createIndex(row, 0, trip);
+}
 
-    return index(tripIndex, 0, parentIndex);
+/**
+  \brief The node an index stands for, the region's root for the invalid index
+
+  Every other row answers nullptr.
+  */
+cwSurveyNode* cwRegionTreeModel::nodeForIndex(const QModelIndex& index) const
+{
+    if(Region.isNull()) { return nullptr; }
+    if(!index.isValid()) { return Region->rootNode(); }
+    return qobject_cast<cwSurveyNode*>(static_cast<QObject*>(index.internalPointer()));
+}
+
+/**
+  \brief Checks that \a node hangs off this model's region root
+  */
+bool cwRegionTreeModel::isInTree(const cwSurveyNode* node) const
+{
+    if(Region.isNull() || node == nullptr) { return false; }
+
+    const cwSurveyNode* root = Region->rootNode();
+    for(const cwSurveyNode* current = node; current != nullptr; current = current->parentNode()) {
+        if(current == root) { return true; }
+
+        //A removed node keeps pointing at the parent it came from so undo can
+        //put it back. Only a node its parent still lists owns a row here.
+        if(!current->isListedByParent()) { return false; }
+    }
+    return false;
+}
+
+/**
+  \brief The row \a node takes under its parent
+  */
+int cwRegionTreeModel::rowOf(cwSurveyNode* node) const
+{
+    cwSurveyNode* parentNode = node->parentNode();
+    if(parentNode == nullptr) { return -1; }
+    return parentNode->indexOfNode(node);
+}
+
+/**
+  \brief The row \a trip takes under its node, the child nodes counted ahead of it
+  */
+int cwRegionTreeModel::rowOf(cwTrip* trip) const
+{
+    cwSurveyNode* parentNode = trip->parentNode();
+    if(parentNode == nullptr) { return -1; }
+
+    const int tripIndex = parentNode->indexOf(trip);
+    if(tripIndex < 0) { return -1; }
+
+    return firstTripRow(parentNode) + tripIndex;
+}
+
+/**
+  \brief The row \a node's first trip takes, which its child-node rows come ahead of
+  */
+int cwRegionTreeModel::firstTripRow(const cwSurveyNode* node) const
+{
+    return node->childNodeCount();
 }
 
 template<typename NoteModel, typename Note>
@@ -619,18 +626,22 @@ QModelIndex cwRegionTreeModel::parent ( const QModelIndex & index ) const {
     switch(index.data(TypeRole).toInt()) {
     case RegionType:
         return QModelIndex();
-    case CaveType:
-        return QModelIndex();
+
+    case NodeType: {
+        cwSurveyNode* node = nodeForIndex(index);
+        if(node != nullptr) {
+            return this->index(node->parentNode());
+        }
+
+        Q_ASSERT(false);
+        break;
+    }
 
     case TripType: {
 
         cwTrip* trip = qobject_cast<cwTrip*>(static_cast<QObject*>(index.internalPointer()));
         if(trip != nullptr) {
-            cwCave* parentCave = trip->parentCave();
-            int row = Region->indexOf(parentCave);
-            Q_ASSERT(row >= 0); //This should always return with a valid index
-
-            return createIndex(row, 0, parentCave);
+            return this->index(trip->parentNode());
         }
 
         Q_ASSERT(false);
@@ -692,8 +703,7 @@ QModelIndex cwRegionTreeModel::parent ( const QModelIndex & index ) const {
         cwSurveyNoteModel* notes = qobject_cast<cwSurveyNoteModel*>(static_cast<QObject*>(index.internalPointer()));
         if(notes != nullptr) {
             auto parentTrip = notes->parentTrip();
-            int row = parentTrip->parentCave()->indexOf(parentTrip);
-            return createIndex(row, 0, parentTrip);
+            return createIndex(rowOf(parentTrip), 0, parentTrip);
         }
 
         Q_ASSERT(false);
@@ -705,8 +715,7 @@ QModelIndex cwRegionTreeModel::parent ( const QModelIndex & index ) const {
         cwSurveyNoteLiDARModel* notes = qobject_cast<cwSurveyNoteLiDARModel*>(static_cast<QObject*>(index.internalPointer()));
         if(notes != nullptr) {
             auto parentTrip = notes->parentTrip();
-            int row = parentTrip->parentCave()->indexOf(parentTrip);
-            return createIndex(row, 0, parentTrip);
+            return createIndex(rowOf(parentTrip), 0, parentTrip);
         }
 
         Q_ASSERT(false);
@@ -717,8 +726,7 @@ QModelIndex cwRegionTreeModel::parent ( const QModelIndex & index ) const {
         cwSurveyNoteSketchModel* sketchModel = qobject_cast<cwSurveyNoteSketchModel*>(static_cast<QObject*>(index.internalPointer()));
         if(sketchModel != nullptr) {
             auto parentTrip = sketchModel->parentTrip();
-            int row = parentTrip->parentCave()->indexOf(parentTrip);
-            return createIndex(row, 0, parentTrip);
+            return createIndex(rowOf(parentTrip), 0, parentTrip);
         }
 
         Q_ASSERT(false);
@@ -753,26 +761,12 @@ QModelIndex cwRegionTreeModel::parent ( const QModelIndex & index ) const {
 int cwRegionTreeModel::rowCount ( const QModelIndex & parent ) const {
     if(Region == nullptr) { return 0; }
 
-    if(!parent.isValid()) {
-        return Region->caveCount();
+    //A node's rows are its child nodes followed by its trips
+    if(cwSurveyNode* node = nodeForIndex(parent)) {
+        return node->childNodeCount() + node->tripCount();
     }
 
     switch(parent.data(TypeRole).toInt()) {
-    case RegionType: {
-        Q_ASSERT(false);
-        break;
-    }
-
-    case CaveType: {
-        cwCave* parentCave = qobject_cast<cwCave*>((QObject*)parent.internalPointer());
-        if(parentCave != nullptr) {
-            return parentCave->tripCount();
-        }
-        Q_ASSERT(false);
-        break;
-
-    }
-
     case TripType:
         return static_cast<int>(TripRows::NumberOfRows);
 
@@ -835,13 +829,13 @@ QVariant cwRegionTreeModel::data ( const QModelIndex & index, int role ) const {
         return QVariant();
     }
 
-    cwCave* currentCave = qobject_cast<cwCave*>(static_cast<QObject*>(index.internalPointer()));
-    if(currentCave != nullptr) {
+    cwSurveyNode* currentNode = qobject_cast<cwSurveyNode*>(static_cast<QObject*>(index.internalPointer()));
+    if(currentNode != nullptr) {
         switch(role) {
         case ObjectRole:
-            return QVariant::fromValue(currentCave);
+            return QVariant::fromValue(currentNode);
         case TypeRole:
-            return CaveType;
+            return NodeType;
         default:
             return QVariant();
         }
@@ -937,10 +931,21 @@ cwTrip* cwRegionTreeModel::trip(const QModelIndex& index) const {
 }
 
 /**
-  \brief Gets the cave at inde
+  \brief Gets the survey node at index
+
+  If index isn't a node, then this returns null
+  */
+cwSurveyNode* cwRegionTreeModel::node(const QModelIndex& index) const {
+    return indexToObject<cwSurveyNode>(this, index);
+}
+
+/**
+  \brief Gets the cave at index
+
+  Every node is a cwCave until the shim retires, so this is the node at index.
   */
 cwCave* cwRegionTreeModel::cave(const QModelIndex& index) const {
-    return indexToObject<cwCave>(this, index);
+    return qobject_cast<cwCave*>(node(index));
 }
 
 cwNote *cwRegionTreeModel::note(const QModelIndex &index) const
@@ -979,48 +984,112 @@ QObject *cwRegionTreeModel::object(const QModelIndex &index) const
 }
 
 /**
-  \brief Adds all the connection for a cave
+  \brief Wires \a node's own row signals, and its whole subtree when recursive
+
+  A node reports two row groups of its own — its child nodes and its trips — so
+  the same eight connections serve every level of the tree, the region's root
+  node included.
   */
-void cwRegionTreeModel::addCaveConnections(int beginIndex, int endIndex, bool recusive) {
-    for(int i = beginIndex; i <= endIndex; i++) {
-        cwCave* cave = Region->cave(i);
+void cwRegionTreeModel::addNodeConnections(cwSurveyNode* node, bool recursive) {
+    if(node == nullptr) { return; }
 
-        if(!m_connectionChecker.add(cave)) {
-            continue;
-        }
+    if(!m_connectionChecker.add(node)) {
+        return;
+    }
 
-        connect(cave, SIGNAL(rowsAboutToBeInserted(QModelIndex,int,int)),
-                this, SLOT(beginInsertTrips(QModelIndex,int,int)), Qt::UniqueConnection);
-        connect(cave, SIGNAL(rowsInserted(QModelIndex,int,int)),
-                this, SLOT(insertedTrips(QModelIndex,int,int)), Qt::UniqueConnection);
-        connect(cave, SIGNAL(rowsAboutToBeRemoved(QModelIndex,int,int)),
-                this, SLOT(beginRemoveTrips(QModelIndex,int,int)), Qt::UniqueConnection);
-        connect(cave, SIGNAL(rowsRemoved(QModelIndex,int,int)),
-                this, SLOT(removedTrips(QModelIndex,int,int)), Qt::UniqueConnection);
+    if(node->isRoot()) {
+        //The region is the list model over the root's children, and it relays
+        //the root's node-row signals to its own rows signals. This model takes
+        //the root's rows from the region so that it keeps announcing them ahead
+        //of the page system and the QML views: those subscribe to the region
+        //after this model does, and one of them re-reads a whole cave when it
+        //appears. Announcing the cave's rows after that read would show its
+        //notes to a listener that already has them.
+        connect(Region, &QAbstractItemModel::rowsAboutToBeInserted,
+                this, [this, node](const QModelIndex&, int begin, int end) { beginInsertNodes(node, begin, end); });
+        connect(Region, &QAbstractItemModel::rowsInserted,
+                this, [this, node](const QModelIndex&, int begin, int end) { insertedNodes(node, begin, end); });
+        connect(Region, &QAbstractItemModel::rowsAboutToBeRemoved,
+                this, [this, node](const QModelIndex&, int begin, int end) { beginRemoveNodes(node, begin, end); });
+        connect(Region, &QAbstractItemModel::rowsRemoved,
+                this, [this] { endRemoveRows(); });
+    } else {
+        connect(node, &cwSurveyNode::beginInsertNodes,
+                this, [this, node](int begin, int end) { beginInsertNodes(node, begin, end); });
+        connect(node, &cwSurveyNode::insertedNodes,
+                this, [this, node](int begin, int end) { insertedNodes(node, begin, end); });
+        connect(node, &cwSurveyNode::beginRemoveNodes,
+                this, [this, node](int begin, int end) { beginRemoveNodes(node, begin, end); });
+        connect(node, &cwSurveyNode::removedNodes,
+                this, [this] { endRemoveRows(); });
+    }
 
-        if(recusive) {
-            addTripConnections(cave, 0, cave->tripCount() - 1);
+    connect(node, &cwSurveyNode::beginInsertTrips,
+            this, [this, node](int begin, int end) { beginInsertTrips(node, begin, end); });
+    connect(node, &cwSurveyNode::insertedTrips,
+            this, [this, node](int begin, int end) { insertedTrips(node, begin, end); });
+    connect(node, &cwSurveyNode::beginRemoveTrips,
+            this, [this, node](int begin, int end) { beginRemoveTrips(node, begin, end); });
+    connect(node, &cwSurveyNode::removedTrips,
+            this, [this] { endRemoveRows(); });
+
+    if(recursive) {
+        addTripConnections(node, 0, node->tripCount() - 1);
+
+        const QList<cwSurveyNode*> children = node->childNodes();
+        for(cwSurveyNode* child : children) {
+            addNodeConnections(child, true);
         }
     }
 }
 
 /**
-  \brief Removes all the connection for a cave
+  \brief Removes the connections for the child nodes between beginIndex and endIndex
+
+  The children's own rows are taken out by beginRemoveNodes() before this runs,
+  so this drops one level only.
   */
-void cwRegionTreeModel::removeCaveConnections(int beginIndex, int endIndex) {
+void cwRegionTreeModel::removeNodeConnections(cwSurveyNode* parentNode, int beginIndex, int endIndex) {
     for(int i = beginIndex; i <= endIndex; i++) {
-        cwCave* cave = Region->cave(i);
-        m_connectionChecker.remove(cave);
-        disconnect(cave, 0, this, 0); //disconnect signals and slots to this object
+        cwSurveyNode* node = parentNode->childNode(i);
+        m_connectionChecker.remove(node);
+        disconnect(node, nullptr, this, nullptr); //disconnect signals and slots to this object
     }
+}
+
+/**
+  \brief Drops the connections \a node and everything under it hold to this model
+  */
+void cwRegionTreeModel::removeSubtreeConnections(cwSurveyNode* node) {
+    if(node == nullptr) { return; }
+
+    const QList<cwSurveyNode*> children = node->childNodes();
+    for(cwSurveyNode* child : children) {
+        removeSubtreeConnections(child);
+    }
+
+    for(int i = 0; i < node->tripCount(); i++) {
+        cwTrip* trip = node->trip(i);
+        const int noteCount = trip->notes()->notes().size();
+        if(noteCount > 0) {
+            removeNoteConnections(trip, 0, noteCount - 1);
+        }
+    }
+
+    if(node->tripCount() > 0) {
+        removeTripConnections(node, 0, node->tripCount() - 1);
+    }
+
+    m_connectionChecker.remove(node);
+    disconnect(node, nullptr, this, nullptr);
 }
 
 /**
   \brief Adds connection for the trips between beginIndex and endIndex
   */
-void cwRegionTreeModel::addTripConnections(cwCave* parentCave, int beginIndex, int endIndex, bool recursive) {
+void cwRegionTreeModel::addTripConnections(cwSurveyNode* parentNode, int beginIndex, int endIndex, bool recursive) {
     for(int i = beginIndex; i <= endIndex; i++) {
-        cwTrip* currentTrip = parentCave->trip(i);
+        cwTrip* currentTrip = parentNode->trip(i);
 
         if(!m_connectionChecker.add(currentTrip)) {
             continue;
@@ -1124,9 +1193,9 @@ void cwRegionTreeModel::addTripConnections(cwCave* parentCave, int beginIndex, i
 /**
   \brief Removes the connections for a trips between beginIndex and endIndex
   */
-void cwRegionTreeModel::removeTripConnections(cwCave* parentCave, int beginIndex, int endIndex) {
+void cwRegionTreeModel::removeTripConnections(cwSurveyNode* parentNode, int beginIndex, int endIndex) {
     for(int i = beginIndex; i <= endIndex; i++) {
-        cwTrip* trip = parentCave->trip(i);
+        cwTrip* trip = parentNode->trip(i);
 
         m_connectionChecker.remove(trip);
 
@@ -1182,25 +1251,26 @@ void cwRegionTreeModel::removeNoteConnections(cwTrip *parentTrip, int beginIndex
 
 /**
  * @brief cwRegionTreeModel::beginRemoveTrips
- * @param parentCave
+ * @param parentNode
  * @param begin
  * @param end
  */
-void cwRegionTreeModel::beginRemoveTrips(cwCave *parentCave, int begin, int end)
+void cwRegionTreeModel::beginRemoveTrips(cwSurveyNode *parentNode, int begin, int end)
 {
     Q_ASSERT(begin <= end);
-    QModelIndex parentIndex = index(parentCave);
 
     for(int i = begin; i <= end; i++) {
-        cwTrip* trip = index(i, 0, parentIndex).data(ObjectRole).value<cwTrip*>();
+        cwTrip* trip = parentNode->trip(i);
         if(trip->notes()->rowCount() > 0) {
             beginRemoveNotes(trip, 0, trip->notes()->rowCount() - 1);
-            endRemoveRows(); //beginRemoveTrips() starts the endRemoveRows
+            endRemoveRows(); //beginRemoveNotes() starts the endRemoveRows
         }
     }
 
-    removeTripConnections(parentCave, begin, end);
-    beginRemoveRows(parentIndex, begin, end);
+    removeTripConnections(parentNode, begin, end);
+
+    const int firstRow = firstTripRow(parentNode);
+    beginRemoveRows(index(parentNode), begin + firstRow, end + firstRow);
 }
 
 /**
@@ -1242,18 +1312,18 @@ void cwRegionTreeModel::beginRemoveScraps(cwNote *parentNote, int begin, int end
 
 /**
  * @brief cwRegionTreeModel::insertedTrips
- * @param parentCave
+ * @param parentNode
  * @param begin
  * @param end
  */
-void cwRegionTreeModel::insertedTrips(cwCave *parentCave, int begin, int end)
+void cwRegionTreeModel::insertedTrips(cwSurveyNode *parentNode, int begin, int end)
 {
     Q_ASSERT(begin <= end);
-    addTripConnections(parentCave, begin, end, false);
+    addTripConnections(parentNode, begin, end, false);
     endInsertRows();
 
     for(int i = begin; i <= end; i++) {
-        cwTrip* trip = parentCave->trip(i);
+        cwTrip* trip = parentNode->trip(i);
         int lastIndex = trip->notes()->rowCount() - 1;
         if(lastIndex >= 0) {
             QModelIndex parenIndex = index(trip->notes());

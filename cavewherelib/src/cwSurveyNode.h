@@ -205,6 +205,11 @@ public:
     int childNodeCount() const;
     Q_INVOKABLE int indexOfNode(cwSurveyNode* node) const;
 
+    //! True while a parent holds this node among its children. A removed node
+    //! keeps its parent pointer so undo can put it back, so this, and not
+    //! parentNode(), is what says the node currently hangs in the tree.
+    bool isListedByParent() const;
+
     Q_INVOKABLE void addNode(cwSurveyNode* node);
     void addNodes(const QList<cwSurveyNode*>& nodes);
     void insertNode(int row, cwSurveyNode* node);
@@ -408,6 +413,7 @@ private:
 
     cwKeywordModel* m_keywordModel = nullptr;
     void updateKeywords();
+    void updateSubtreeKeywords();
 
     QPointer<cwSurveyNode> m_parentNode;
     const bool m_isRoot;
@@ -606,6 +612,12 @@ inline int cwSurveyNode::childNodeCount() const {
 
 inline int cwSurveyNode::indexOfNode(cwSurveyNode* node) const {
     return m_childNodes.indexOf(node);
+}
+
+inline bool cwSurveyNode::isListedByParent() const {
+    cwSurveyNode* parent = m_parentNode;
+    return parent != nullptr
+            && parent->indexOfNode(const_cast<cwSurveyNode*>(this)) >= 0;
 }
 
 /**

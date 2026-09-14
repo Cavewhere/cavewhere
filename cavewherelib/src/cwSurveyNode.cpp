@@ -27,6 +27,13 @@
 //Std includes
 #include <algorithm>
 
+namespace {
+    //! Joins a node's path names into the one hierarchy string the keyword
+    //! search groups by. A node directly under the region has only its own name
+    //! in its path, so the separator shows up once a project has folders.
+    constexpr auto kNodePathSeparator = QLatin1StringView(" / ");
+}
+
 cwSurveyNode::cwSurveyNode(QObject* parent) :
     cwSurveyNode(false, parent)
 {
@@ -150,10 +157,35 @@ void cwSurveyNode::updateKeywords()
         return;
     }
 
-    if(!m_name.isEmpty()) {
-        m_keywordModel->replace({cwKeywordModel::CaveKey, m_name});
+    //The hierarchy the keyword search shows is where the node sits, not just
+    //what it is called: two "Entrance" caves in different folders are
+    //"North / Entrance" and "South / Entrance".
+    const QStringList names = path();
+
+    //An unnamed node has no place to show, the way an unnamed cave had no name
+    //to show, and an unnamed ancestor would leave a dangling separator behind.
+    const bool everyNameFilled = !names.isEmpty()
+            && std::none_of(names.begin(), names.end(),
+                            [](const QString& name) { return name.isEmpty(); });
+
+    if(everyNameFilled) {
+        m_keywordModel->replace({cwKeywordModel::CaveKey, names.join(kNodePathSeparator)});
     } else {
         m_keywordModel->removeAll(cwKeywordModel::CaveKey);
+    }
+}
+
+/**
+  \brief Refreshes the hierarchy keyword of this node and everything under it
+
+  A rename or a move changes the path of every descendant, and only this node
+  can see that happen.
+  */
+void cwSurveyNode::updateSubtreeKeywords()
+{
+    updateKeywords();
+    for(cwSurveyNode* child : std::as_const(m_childNodes)) {
+        child->updateSubtreeKeywords();
     }
 }
 
@@ -784,7 +816,7 @@ void cwSurveyNode::NameCommand::redo() {
     cwSurveyNode* node = NodePtr;
     rename(oldName, newName);
     node->m_name = newName;
-    node->updateKeywords();
+    node->updateSubtreeKeywords();
     emit node->nameChanged();
 }
 
@@ -793,7 +825,7 @@ void cwSurveyNode::NameCommand::undo() {
     cwSurveyNode* node = NodePtr;
     rename(newName, oldName);
     node->m_name = oldName;
-    node->updateKeywords();
+    node->updateSubtreeKeywords();
     emit node->nameChanged();
 }
 
@@ -948,7 +980,11 @@ cwSurveyNode::InsertRemoveNode::InsertRemoveNode(cwSurveyNode* parentNode,
 cwSurveyNode::InsertRemoveNode::~InsertRemoveNode() {
     if(OwnsNodes) {
         for(auto node : std::as_const(Nodes)) {
-            if(!node.isNull()) {
+            //A moved node is removed from its old parent and inserted under its
+            //new one by two separate commands, so this command can still hold a
+            //node that is alive in the tree. A parent that lists the node owns
+            //it; only a node no parent lists is this command's to delete.
+            if(!node.isNull() && !node->isListedByParent()) {
                 node->deleteLater();
             }
         }
@@ -978,6 +1014,9 @@ void cwSurveyNode::InsertRemoveNode::insertNodes() {
         //stack to a cave it takes on.
         node->setUndoStack(parent->undoStack());
         parent->connectNode(node);
+
+        //The whole subtree sits at a new path now, so its hierarchy keywords do too.
+        node->updateSubtreeKeywords();
 
         //The subtree may have landed in a different region, whose coordinate
         //system is what a fix station with no input CS of its own falls back to.

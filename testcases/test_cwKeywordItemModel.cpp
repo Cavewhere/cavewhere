@@ -11,6 +11,9 @@
 #include "cwKeywordItem.h"
 #include "cwKeywordModel.h"
 #include "cwRootData.h"
+#include "cwCave.h"
+#include "cwCavingRegion.h"
+#include "cwSurveyNode.h"
 #include "cwLinePlotManager.h"
 
 //Std includes
@@ -22,6 +25,7 @@
 #include <QSignalSpy>
 #include <QMetaObject>
 #include <QCoreApplication>
+#include <QUndoStack>
 
 // using namespace Qt3DCore;
 
@@ -406,4 +410,73 @@ TEST_CASE("Extented cwKeywordModels should work correctly with cwKeywordItemMode
 
     REQUIRE(keywords.size() == 1);
     CHECK(keywords.first() == cwKeyword("sauce", "dude"));
+}
+
+TEST_CASE("A node's hierarchy keyword is its path through the tree",
+          "[cwKeywordItemModel]") {
+    // The keyword search groups by where a node sits, not just by what it is
+    // called, so two nodes of the same name in different parents stay apart.
+    auto hierarchyOf = [](cwSurveyNode* node) {
+        const QVector<cwKeyword> keywords = node->keywordModel()->keywords();
+        for(const cwKeyword& keyword : keywords) {
+            if(keyword.key() == cwKeywordModel::CaveKey) {
+                return keyword.value();
+            }
+        }
+        return QString();
+    };
+
+    cwCavingRegion region;
+    QUndoStack undoStack;
+    region.setUndoStack(&undoStack);
+
+    cwCave* cave = new cwCave();
+    cave->setName(QStringLiteral("Fisher Ridge"));
+    region.addCave(cave);
+
+    //A cave directly under the region reads exactly as it did before nodes
+    CHECK(hierarchyOf(cave) == QStringLiteral("Fisher Ridge"));
+
+    cwCave* folder = new cwCave();
+    folder->setName(QStringLiteral("Upper Level"));
+    cave->addNode(folder);
+
+    cwCave* section = new cwCave();
+    section->setName(QStringLiteral("Crawl"));
+    folder->addNode(section);
+
+    CHECK(hierarchyOf(folder) == QStringLiteral("Fisher Ridge / Upper Level"));
+    CHECK(hierarchyOf(section) == QStringLiteral("Fisher Ridge / Upper Level / Crawl"));
+
+    //The same value read the way the search reads it, through the item model
+    cwKeywordItemModel itemModel;
+    cwKeywordItem* item = new cwKeywordItem();
+    item->keywordModel()->addExtension(section->keywordModel());
+    item->setObject(section);
+    itemModel.addItem(item);
+
+    REQUIRE(itemModel.rowCount() == 1);
+    const QVector<cwKeyword> itemKeywords = itemModel.index(0, 0, QModelIndex())
+            .data(cwKeywordItemModel::KeywordsRole).value<QVector<cwKeyword>>();
+    CHECK(itemKeywords.contains(cwKeyword(cwKeywordModel::CaveKey,
+                                          QStringLiteral("Fisher Ridge / Upper Level / Crawl"))));
+
+    SECTION("renaming an ancestor moves the whole subtree") {
+        cave->setName(QStringLiteral("Fisher Ridge Cave"));
+
+        CHECK(hierarchyOf(cave) == QStringLiteral("Fisher Ridge Cave"));
+        CHECK(hierarchyOf(folder) == QStringLiteral("Fisher Ridge Cave / Upper Level"));
+        CHECK(hierarchyOf(section) == QStringLiteral("Fisher Ridge Cave / Upper Level / Crawl"));
+    }
+
+    SECTION("moving a subtree moves its paths") {
+        cwCave* other = new cwCave();
+        other->setName(QStringLiteral("Mammoth"));
+        region.addCave(other);
+
+        other->addNode(folder);
+
+        CHECK(hierarchyOf(folder) == QStringLiteral("Mammoth / Upper Level"));
+        CHECK(hierarchyOf(section) == QStringLiteral("Mammoth / Upper Level / Crawl"));
+    }
 }
