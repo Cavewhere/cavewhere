@@ -30,12 +30,16 @@ namespace cw::pointcloud {
     //! default because the old one was doubled again by devicePixelRatio.
     constexpr float kDefaultWorldRadius = 2.58f;
 
-    //! Sprite radius as a fraction of the drawn node's sample spacing.
+    //! Sprite radius as a fraction of the finest sample spacing on screen.
     //!
     //! Grid sampling leaves at most one point per occupied cell of side
     //! `spacing`, and gl_PointSize is a side length, so 0.75 narrows the gap a
-    //! coarse cut shows to a quarter of a spacing while overdrawing modestly
-    //! where a parent sits in a refined region.
+    //! coarse cut shows to a quarter of a spacing. The spacing is the cut's,
+    //! never the individual node's: the cut is additive, so a refined region
+    //! draws its coarse ancestors too, and sizing those off their own spacing
+    //! would blow them up into oversized blobs. One radius per cloud keeps
+    //! every level on screen the same size, and the floor lifts only while the
+    //! whole cut is coarse.
     constexpr float kDefaultSpacingCoverage = 0.75f;
 }
 
@@ -118,9 +122,9 @@ private:
         // live view and a plain capture both render with it.
         float worldRadius = cw::pointcloud::kDefaultWorldRadius;
 
-        // Sprite radius as a fraction of the drawn node's sample spacing. The
-        // shader takes the larger of this and worldRadius, so it only adds
-        // size where the cut is coarse.
+        // Sprite radius as a fraction of the finest sample spacing in the cut
+        // on screen. cwRHIPointCloud takes the larger of that and worldRadius,
+        // so it only adds size while the cut is coarse.
         float spacingCoverage = cw::pointcloud::kDefaultSpacingCoverage;
 
         bool operator!=(const RenderState& other) const {

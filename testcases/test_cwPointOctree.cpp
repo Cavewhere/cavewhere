@@ -367,32 +367,20 @@ TEST_CASE("The manifest derives node bounds and spacing", "[PointOctree]") {
     }
 }
 
-TEST_CASE("A node's spacing is its quantization step scaled the way the sprite shader scales it",
-          "[PointOctree]") {
-    // PointCloud.vert has no level and no manifest: it sizes a sprite from the
-    // per-instance nodeOriginScale.w, which cwRHIPointCloud writes as
-    // nodeSize / kQuantMax, multiplied by kSpacingPerQuantStep (kQuantMax /
-    // kSampleGridResolution). That product has to be the node's sample
-    // spacing, or every sprite in a coarse cut is the wrong size.
+TEST_CASE("A node's spacing is its own cube divided by the sample grid", "[PointOctree]") {
+    // spacing(level) is derived from the level alone — it is what selectCut
+    // projects to the screen and what cwRHIPointCloud floors a sprite at — so
+    // it has to agree with the grid the sampler laid over each node's cube.
     const cwPointOctreeManifest manifest = spineManifest();
     REQUIRE(manifest.isValid());
 
-    constexpr double kSpacingPerQuantStep =
-        double(cw::octree::kQuantMax) / cw::octree::kSampleGridResolution;
-    static_assert(cw::octree::kQuantMax == 65535 && cw::octree::kSampleGridResolution == 128,
-                  "PointCloud.vert spells kSpacingPerQuantStep as the literal 65535.0 / 128.0, "
-                  "so changing either constant means changing the shader too");
-
     for(int level = 0; level <= kSpineMaxLevel; level++) {
         //The spine puts the node of each level at the index of that level
-        const double quantizationStep =
-            double(manifest.nodeBounds(level).size().x()) / cw::octree::kQuantMax;
-        const double shaderSpacing = quantizationStep * kSpacingPerQuantStep;
-        const double expected = manifest.spacing(level);
+        const double fromCube = double(manifest.nodeBounds(level).size().x())
+                                / cw::octree::kSampleGridResolution;
 
         CHECK(manifest.nodes.at(level).level == level);
-        CHECK_THAT(shaderSpacing,
-                   Catch::Matchers::WithinRel(expected, 1e-6));
+        CHECK_THAT(fromCube, Catch::Matchers::WithinRel(manifest.spacing(level), 1e-6));
     }
 }
 

@@ -63,6 +63,9 @@ namespace {
     constexpr int kRootLevel = 0;
     constexpr qint64 kBytesPerMegabyte = 1024 * 1024;
 
+    //A frame that drew nothing, so it says nothing about the spacing on screen
+    constexpr int kNoDrawnLevel = -1;
+
     using cw::profile::elapsedUs;
 }
 
@@ -168,6 +171,10 @@ void cwRHIPointCloud::resetNodes(const cwPointOctreeSource& source)
     m_residentIndices.clear();
     m_residentCount = 0;
     m_coldNodes.clear();
+    // The first frame draws the root alone, so the cloud starts at the root's
+    // spacing rather than at a floor of nothing.
+    m_cutSpacing = m_source.manifest ? m_source.manifest->spacing(kRootLevel) : 0.0;
+    m_liveAppearanceStale = true;
     if (m_source.manifest) {
         m_nodes.resize(m_source.manifest->nodes.size());
     }
@@ -262,18 +269,18 @@ cw::octree::SelectionInput cwRHIPointCloud::selectionInput(const RenderData& ren
 
 void cwRHIPointCloud::updateResources(const ResourceUpdateData& data)
 {
-    if (!m_renderState.isChanged() && m_perCloudUBO) {
+    if (!m_renderState.isChanged() && !m_liveAppearanceStale && m_perCloudUBO) {
         return;
     }
 
     auto* rhi = data.renderData.cb->rhi();
     QRhiResourceUpdateBatch* batch = data.resourceUpdateBatch;
 
-    // Per-cloud uniform — world-space sprite radius in meters, plus the sprite
-    // radius as a fraction of the drawn node's sample spacing. Fixed defaults
-    // (set on cwRenderPointCloud::RenderState) produce consistent sprite sizes
-    // across every loaded cloud; the earlier meanSpacingXY * 0.5 auto-derivation
-    // was unreliable because mean-spacing estimates vary with LAZ density /
+    // Per-cloud uniform — the world-space sprite radius in meters, folded
+    // against the spacing of the cut on screen. Fixed defaults (set on
+    // cwRenderPointCloud::RenderState) produce consistent sprite sizes across
+    // every loaded cloud; the earlier meanSpacingXY * 0.5 auto-derivation was
+    // unreliable because mean-spacing estimates vary with LAZ density /
     // sampling. The live radius is overridden via cwLazLayersSceneNode::
     // setWorldRadius (P+wheel gesture in the 3D view, and sink_repatcher
     // --point-radius for offline renders).
@@ -286,8 +293,7 @@ void cwRHIPointCloud::updateResources(const ResourceUpdateData& data)
     if (!m_perCloudUBO) {
         resizeAppearanceSlots(rhi, batch, 1);
     } else {
-        const cwRenderPointCloud::RenderState& live = m_renderState.value();
-        writeAppearanceSlot(batch, kLiveAppearanceSlot, live.worldRadius, live.spacingCoverage);
+        writeLiveAppearanceSlot(batch);
     }
 
     m_renderState.resetChanged();
@@ -296,9 +302,22 @@ void cwRHIPointCloud::updateResources(const ResourceUpdateData& data)
 void cwRHIPointCloud::writeAppearanceSlot(QRhiResourceUpdateBatch* batch, int slot,
                                           float worldRadius, float spacingCoverage)
 {
-    const PerCloudUniform uniform{ worldRadius, spacingCoverage, {0.0f, 0.0f} };
+    const PerCloudUniform uniform{ effectiveWorldRadius(worldRadius, spacingCoverage),
+                                   {0.0f, 0.0f, 0.0f} };
     batch->updateDynamicBuffer(m_perCloudUBO, slot * m_perCloudStride,
                                sizeof(PerCloudUniform), &uniform);
+}
+
+void cwRHIPointCloud::writeLiveAppearanceSlot(QRhiResourceUpdateBatch* batch)
+{
+    const cwRenderPointCloud::RenderState& live = m_renderState.value();
+    writeAppearanceSlot(batch, kLiveAppearanceSlot, live.worldRadius, live.spacingCoverage);
+    m_liveAppearanceStale = false;
+}
+
+float cwRHIPointCloud::effectiveWorldRadius(float worldRadius, float spacingCoverage) const
+{
+    return std::max(worldRadius, spacingCoverage * float(m_cutSpacing));
 }
 
 void cwRHIPointCloud::uploadAppearance(QRhiResourceUpdateBatch* batch, int slot,
@@ -340,8 +359,7 @@ void cwRHIPointCloud::resizeAppearanceSlots(QRhi* rhi, QRhiResourceUpdateBatch* 
     // Carry the live appearance into the fresh buffer's slot 0 so a non-overriding
     // draw (the live view, or an offscreen job with no override for this cloud)
     // reads the right radius from it.
-    const cwRenderPointCloud::RenderState& live = m_renderState.value();
-    writeAppearanceSlot(batch, kLiveAppearanceSlot, live.worldRadius, live.spacingCoverage);
+    writeLiveAppearanceSlot(batch);
 }
 
 bool cwRHIPointCloud::streamResources(ResourceUpdateData& data, qint64& remainingUploadBytes)
@@ -361,6 +379,13 @@ bool cwRHIPointCloud::streamResources(ResourceUpdateData& data, qint64& remainin
     auto* rhi = data.renderData.cb->rhi();
     if (!rhi || !m_nodeConstants) {
         return m_streamer.hasWork();
+    }
+
+    // updateResources() runs only on the frames the render object changed, so
+    // this is where a cut that refined or coarsened on its own reaches the
+    // shader — one write per level change, none on the frames between.
+    if (m_liveAppearanceStale && m_perCloudUBO) {
+        writeLiveAppearanceSlot(data.resourceUpdateBatch);
     }
 
     QElapsedTimer uploadTimer;
@@ -1161,6 +1186,8 @@ bool cwRHIPointCloud::gather(const GatherContext& context, QVector<PipelineBatch
     QVector<Drawable> drawables;
     drawables.reserve(m_selected.nodes.size());
 
+    int finestDrawnLevel = kNoDrawnLevel;
+
     for (const cw::octree::SelectedNode& selected : std::as_const(m_selected.nodes)) {
         if (selected.node < 0 || selected.node >= m_nodes.size()) {
             continue;
@@ -1171,6 +1198,9 @@ bool cwRHIPointCloud::gather(const GatherContext& context, QVector<PipelineBatch
 
         switch (node.state) {
         case NodeState::Resident: {
+            const cwPointOctreeNode& drawn = m_source.manifest->nodes.at(selected.node);
+            finestDrawnLevel = std::max(finestDrawnLevel, drawn.level);
+
             Drawable drawable;
             drawable.type = Drawable::Type::NonIndexed;
             drawable.vertexBindings = {
@@ -1178,7 +1208,7 @@ bool cwRHIPointCloud::gather(const GatherContext& context, QVector<PipelineBatch
                 QRhiCommandBuffer::VertexInput(m_nodeConstants,
                                                quint32(node.constantSlot) * kNodeConstantsBytes)
             };
-            drawable.vertexCount = m_source.manifest->nodes.at(selected.node).pointCount;
+            drawable.vertexCount = drawn.pointCount;
             drawable.instanceCount = 1;
             drawable.bindings = m_srb;
             drawable.globalCameraBinding = 0; // binding 0 = global camera UBO (dynamic offset)
@@ -1200,6 +1230,21 @@ bool cwRHIPointCloud::gather(const GatherContext& context, QVector<PipelineBatch
         case NodeState::Requested:
         case NodeState::Failed:
             break;
+        }
+    }
+
+    // Sprites are sized off the finest spacing on screen, never off each node's
+    // own: the cut is additive, so a refined region draws its coarse ancestors
+    // too. Taking it from what is drawn rather than from what the cut asked for
+    // holds the floor up while the children are still streaming, which is the
+    // case the floor exists for. An export job renders its own camera, so it
+    // leaves the live view's radius where the live frame put it. The rewrite
+    // waits for the next frame's resource pass: one write per level change.
+    if (context.liveFrame && finestDrawnLevel != kNoDrawnLevel) {
+        const double drawnSpacing = m_source.manifest->spacing(finestDrawnLevel);
+        if (drawnSpacing != m_cutSpacing) {
+            m_cutSpacing = drawnSpacing;
+            m_liveAppearanceStale = true;
         }
     }
 
@@ -1255,8 +1300,9 @@ std::optional<QBox3D> cwRHIPointCloud::worldBounds() const
     }
 
     // A point draws as a sprite of worldRadius meters, or of spacingCoverage of
-    // its node's sample spacing where that is larger. The root has the coarsest
-    // spacing in the tree, so its sprites reach the furthest past the cube.
+    // the drawn cut's spacing where that is larger (effectiveWorldRadius folds
+    // the two). The root is the coarsest cut there is, so padding by its spacing
+    // covers every cut the cloud can draw.
     const cwRenderPointCloud::RenderState& state = m_renderState.value();
     const QBox3D root = m_source.manifest->nodeBounds(kRootIndex);
     const float rootSpacing = float(m_source.manifest->spacing(kRootLevel));

@@ -81,6 +81,47 @@ struct CwRhiPointCloudTestAccess {
         return cloud.m_selected.pointCapped;
     }
 
+    // The sample spacing of the finest level the last live frame drew, which is
+    // the spacing every sprite of the cloud is sized against.
+    static double cutSpacing(const cwRHIPointCloud& cloud) {
+        return cloud.m_cutSpacing;
+    }
+
+    // The levels the last cut asked for, so a test can say what the camera
+    // wants — which is the finer of the two while children are still streaming.
+    static QVector<int> selectedLevels(const cwRHIPointCloud& cloud) {
+        QVector<int> levels;
+        if (!cloud.m_source.manifest) {
+            return levels;
+        }
+
+        const QVector<cwPointOctreeNode>& nodes = cloud.m_source.manifest->nodes;
+        for (const cw::octree::SelectedNode& selected : cloud.m_selected.nodes) {
+            if (selected.node >= 0 && selected.node < nodes.size()) {
+                levels.append(nodes.at(selected.node).level);
+            }
+        }
+        return levels;
+    }
+
+    // The levels of the nodes the cloud has resident out of the last cut — what
+    // a frame actually drew.
+    static QVector<int> drawnLevels(const cwRHIPointCloud& cloud) {
+        QVector<int> levels;
+        if (!cloud.m_source.manifest) {
+            return levels;
+        }
+
+        const QVector<cwPointOctreeNode>& nodes = cloud.m_source.manifest->nodes;
+        for (const cw::octree::SelectedNode& selected : cloud.m_selected.nodes) {
+            if (selected.node >= 0 && selected.node < nodes.size()
+                && cloud.m_nodes.at(selected.node).state == NodeState::Resident) {
+                levels.append(nodes.at(selected.node).level);
+            }
+        }
+        return levels;
+    }
+
     // The relax probe's state, so a test can pin how often it runs and that an
     // export job leaves it where the live frame put it.
     static int relaxProbeFrame(const cwRHIPointCloud& cloud) {

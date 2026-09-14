@@ -32,9 +32,9 @@ namespace {
     constexpr float kMinWorldRadius = 0.01f;
     constexpr float kMaxWorldRadius = 50.0f;
 
-    // Spacing-coverage bounds. Zero turns the per-node floor off entirely and
+    // Spacing-coverage bounds. Zero turns the spacing floor off entirely and
     // leaves worldRadius alone; above about one sprite per cell the sprites of
-    // a coarse node overlap so far that the surface reads as a blur.
+    // a coarse cut overlap so far that the surface reads as a blur.
     constexpr float kMinSpacingCoverage = 0.0f;
     constexpr float kMaxSpacingCoverage = 4.0f;
 
