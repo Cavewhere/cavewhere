@@ -16,11 +16,57 @@
 #include "cwPointOctreeManifest.h"
 
 #include "LazFixtureHelper.h"
+#include "ProfileLogCapture.h"
 
 namespace {
 QString octreeJobName(const QString& lazPath)
 {
     return QStringLiteral("Building point cloud octree: %1").arg(QFileInfo(lazPath).baseName());
+}
+
+// The build memory budget the profiling runner asks the layer for, and what a
+// megabyte of it is worth
+constexpr const char* kBuildMemoryBudgetVariable = "CW_BUILD_MEMORY_BUDGET_MB";
+constexpr int kOverrideBudgetMegabytes = 64;
+constexpr qint64 kBytesPerMebibyte = 1024 * 1024;
+
+// Sets the override for as long as it lives, so a failing check still leaves
+// the environment the way the rest of the suite found it.
+class BuildBudgetOverride
+{
+public:
+    explicit BuildBudgetOverride(int megabytes)
+    {
+        qputenv(kBuildMemoryBudgetVariable, QByteArray::number(megabytes));
+    }
+
+    ~BuildBudgetOverride()
+    {
+        qunsetenv(kBuildMemoryBudgetVariable);
+    }
+
+    BuildBudgetOverride(const BuildBudgetOverride&) = delete;
+    BuildBudgetOverride& operator=(const BuildBudgetOverride&) = delete;
+};
+
+// True where the build the layer ran logged @a budgetBytes as its pass B budget
+bool builtWithBudget(const QString& lazPath, QTemporaryDir& cacheDir, qint64 budgetBytes)
+{
+    const ProfileLogCapture capture(QStringLiteral("cw.profile.load.debug=true"));
+
+    cwLazLayer layer;
+    layer.setCacheRootPath(cacheDir.path());
+    layer.setSourcePath(lazPath);
+
+    REQUIRE(waitForLazLayerLoaded(&layer));
+    REQUIRE(layer.loadStatus() == cwLazLayer::LoadStatus::Loaded);
+
+    const QStringList passB =
+        ProfileLogCapture::linesStartingWith(QStringLiteral("build passB"));
+    REQUIRE(passB.size() == 1);
+
+    //The trailing space keeps a longer number from matching this one's start
+    return passB.constFirst().contains(QStringLiteral("budgetBytes=%1 ").arg(budgetBytes));
 }
 }
 
@@ -412,4 +458,34 @@ TEST_CASE("cwLazLayer: missing file transitions to Error", "[cwLazLayer]") {
     REQUIRE(layer.loadStatus() == cwLazLayer::LoadStatus::Error);
     REQUIRE(!layer.errorMessage().isEmpty());
     REQUIRE(layer.pointCount() == 0);
+}
+
+TEST_CASE("cwLazLayer: CW_BUILD_MEMORY_BUDGET_MB is the build's memory budget",
+          "[cwLazLayer]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    QVector<QVector3D> points;
+    for (int i = 0; i < 200; ++i) {
+        points.append(QVector3D(float(i), float(i) * 0.5f, float(i) * 0.25f));
+    }
+    const QString path = tempLazPath(tempDir, QStringLiteral("build-budget"));
+    REQUIRE(writeSyntheticLazFile(path, points));
+
+    SECTION("unset, the builder's own default") {
+        QTemporaryDir cacheDir;
+        REQUIRE(cacheDir.isValid());
+
+        REQUIRE(builtWithBudget(path, cacheDir, cw::octree::kDefaultBuildMemoryBudgetBytes));
+    }
+
+    SECTION("set, the megabytes it names") {
+        QTemporaryDir cacheDir;
+        REQUIRE(cacheDir.isValid());
+
+        const BuildBudgetOverride override(kOverrideBudgetMegabytes);
+
+        REQUIRE(builtWithBudget(path, cacheDir,
+                                qint64(kOverrideBudgetMegabytes) * kBytesPerMebibyte));
+    }
 }

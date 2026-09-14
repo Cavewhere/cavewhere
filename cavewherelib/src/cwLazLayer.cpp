@@ -25,9 +25,20 @@ Q_LOGGING_CATEGORY(lcLazLayer, "cw.laz.layer")
 namespace {
 constexpr const char* kLazLayerType = "LAZ Layer";
 
+// The profiling runner's only way into the octree build's memory budget
+constexpr const char* kBuildMemoryBudgetVariable = "CW_BUILD_MEMORY_BUDGET_MB";
+constexpr qint64 kBytesPerMebibyte = 1024 * 1024;
+
 cwGeoPoint midpoint(const cwGeoPoint& a, const cwGeoPoint& b)
 {
     return cwGeoPoint((a.x + b.x) * 0.5, (a.y + b.y) * 0.5, (a.z + b.z) * 0.5);
+}
+
+qint64 buildMemoryBudgetBytes()
+{
+    const int megabytes = qEnvironmentVariableIntValue(kBuildMemoryBudgetVariable);
+    return megabytes > 0 ? qint64(megabytes) * kBytesPerMebibyte
+                         : cw::octree::kDefaultBuildMemoryBudgetBytes;
 }
 }
 
@@ -347,7 +358,8 @@ void cwLazLayer::startBuild(const QString& frameCS)
         .frameCS = frameCS,
         .cacheRootPath = m_cacheRootPath.isEmpty()
                 ? QFileInfo(m_sourcePath).absolutePath()
-                : m_cacheRootPath
+                : m_cacheRootPath,
+        .memoryBudgetBytes = buildMemoryBudgetBytes()
     };
     m_buildCacheRootPath = request.cacheRootPath;
     const quint64 generation = m_reloadGeneration;

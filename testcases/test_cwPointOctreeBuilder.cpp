@@ -6,6 +6,7 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QHash>
 #include <QLoggingCategory>
 #include <QMutex>
@@ -93,6 +94,27 @@ namespace {
     constexpr int kRangesPerWorker = 4;
     constexpr int kAutomaticWorkerFixtureCount = 2 * kPointsPerAutomaticWorker;
 
+    //A target this small spreads the fixture over the depth 3 grid, so pass B
+    //has more chunks than the admission test's budget lets run together
+    constexpr qint64 kManyChunkTarget = 1000;
+    constexpr int kFewestAdmissionChunks = 8;
+
+    //Smaller than any chunk's working set, so a chunk starts only where the
+    //rule that one always runs admits it: one at a time
+    constexpr qint64 kOneChunkAtATimeBudget = 1;
+
+    //Chunks a budget holds together, as multiples of the largest chunk's own
+    //working set, so every chunk of the run fits beside others
+    constexpr qint64 kAdmittedChunksTogether = 3;
+
+    //Request::memoryBudgetBytes asking for kDefaultBuildMemoryBudgetBytes
+    constexpr qint64 kAskForTheDefaultBudget = 0;
+
+    //How often the temp directory is looked at while a build runs. The poll
+    //reads the temp bytes at the moment the manifest appears rather than
+    //hunting a gap, so it can be gentle on the build's own workers.
+    constexpr int kTempPollMs = 5;
+
     //A chunk target of one point drives the depth to kMaxChunkDepth, where the
     //8^5 cells leave kMaxChunkFiles room for only two ranges
     constexpr qint64 kDeepestChunkTarget = 1;
@@ -128,6 +150,41 @@ namespace {
         const QStringList pattern {QStringLiteral("cwPointOctree-%1-*")
                                        .arg(QCoreApplication::applicationPid())};
         return int(QDir::temp().entryList(pattern, QDir::Dirs | QDir::NoDotAndDotDot).size());
+    }
+
+    //The value of key=value in a build log line
+    qint64 buildLogField(const QString& line, const QString& key)
+    {
+        const QString token = key + QStringLiteral("=");
+        const qsizetype start = line.indexOf(token);
+        REQUIRE(start >= 0);
+
+        const qsizetype valueStart = start + token.size();
+        qsizetype end = line.indexOf(QLatin1Char(' '), valueStart);
+        if(end < 0) {
+            end = line.size();
+        }
+
+        bool ok = false;
+        const qint64 value = QStringView(line).mid(valueStart, end - valueStart).toLongLong(&ok);
+        REQUIRE(ok);
+        return value;
+    }
+
+    //The bytes the builder's temp directories of this process hold right now
+    qint64 octreeTempBytes()
+    {
+        const QStringList pattern {QStringLiteral("cwPointOctree-%1-*")
+                                       .arg(QCoreApplication::applicationPid())};
+
+        qint64 bytes = 0;
+        for(const QString& name : QDir::temp().entryList(pattern, QDir::Dirs | QDir::NoDotAndDotDot)) {
+            const QDir directory(QDir::temp().filePath(name));
+            for(const QFileInfo& info : directory.entryInfoList(QDir::Files)) {
+                bytes += info.size();
+            }
+        }
+        return bytes;
     }
 
     //Cancels the build once its progress passes fraction of the bar. Returns
@@ -1237,4 +1294,238 @@ TEST_CASE("cwPointOctreeBuilder: the chunk file cap bounds the decode ranges",
     REQUIRE(passA.size() == 1);
     REQUIRE(passA.constFirst().contains(QStringLiteral("workers=%1").arg(workers)));
     REQUIRE(passA.constFirst().contains(QStringLiteral("ranges=%1").arg(ranges)));
+}
+
+TEST_CASE("cwPointOctreeBuilder: a budget of one chunk at a time builds the same octree",
+          "[PointOctree][PointOctreeBuilder]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString path = tempLazPath(tempDir, QStringLiteral("octree-admission"));
+    REQUIRE(writeSyntheticLazFile(path, passagePoints(kPassagePointCount)));
+
+    struct AdmittedBuild {
+        cwPointOctreeBuilder::Request request;
+        cwPointOctreeManifest manifest;
+        qint64 peakBytes = 0;
+    };
+
+    const auto buildWith = [&](qint64 budgetBytes, const QString& tag) {
+        const QString cacheRoot = tempDir.filePath(QStringLiteral("cache-%1").arg(tag));
+        REQUIRE(QDir().mkpath(cacheRoot));
+
+        const cwPointOctreeBuilder::Request request {
+            .path = path,
+            .cacheRootPath = cacheRoot,
+            .chunkTargetPoints = kManyChunkTarget,
+            .decodeWorkerCount = kEvenWorkerCount,
+            .memoryBudgetBytes = budgetBytes
+        };
+
+        BuildLog log;
+
+        const cwPointOctreeBuilder::Result result =
+            waitForBuild(cwPointOctreeBuilder::build(request));
+        REQUIRE_FALSE(result.hasError());
+
+        const QStringList passB = log.linesStartingWith(QStringLiteral("build passB"));
+        REQUIRE(passB.size() == 1);
+        REQUIRE(buildLogField(passB.constFirst(), QStringLiteral("budgetBytes")) == budgetBytes);
+        REQUIRE(buildLogField(passB.constFirst(), QStringLiteral("chunks"))
+                >= kFewestAdmissionChunks);
+
+        return AdmittedBuild {
+            request,
+            result.value(),
+            buildLogField(passB.constFirst(), QStringLiteral("inFlightPeakBytes"))
+        };
+    };
+
+    const AdmittedBuild unbounded = buildWith(cw::octree::kDefaultBuildMemoryBudgetBytes,
+                                              QStringLiteral("unbounded"));
+    verifyOctree(unbounded.manifest, unbounded.request, readPoints(path));
+
+    const AdmittedBuild admitted = buildWith(kOneChunkAtATimeBudget, QStringLiteral("admitted"));
+
+    //Every chunk is bigger than this budget, so a peak past it is the rule that
+    //one chunk always runs: without it the build would admit nothing at all
+    REQUIRE(admitted.peakBytes > kOneChunkAtATimeBudget);
+
+    //One chunk at a time peaks at the largest chunk, not at every chunk
+    //together, which a pool of one thread would reach anyway
+    if(cwTask::threadPool()->maxThreadCount() > 1) {
+        REQUIRE(admitted.peakBytes < unbounded.peakBytes);
+    }
+
+    requireSameCache(unbounded.request, unbounded.manifest,
+                     admitted.request, admitted.manifest);
+
+    //A budget several chunks fit in holds them to it: the peak of a build where
+    //the largest chunk fits on its own never passes the budget
+    const qint64 severalChunkBudget = kAdmittedChunksTogether * admitted.peakBytes;
+    const AdmittedBuild several = buildWith(severalChunkBudget, QStringLiteral("several"));
+
+    REQUIRE(several.peakBytes >= admitted.peakBytes);
+    REQUIRE(several.peakBytes <= severalChunkBudget);
+
+    requireSameCache(unbounded.request, unbounded.manifest,
+                     several.request, several.manifest);
+}
+
+TEST_CASE("cwPointOctreeBuilder: a request with no memory budget builds under the default",
+          "[PointOctree][PointOctreeBuilder]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString path = tempLazPath(tempDir, QStringLiteral("octree-default-budget"));
+    REQUIRE(writeSyntheticLazFile(path, passagePoints(kPassagePointCount)));
+
+    const cwPointOctreeBuilder::Request request {
+        .path = path,
+        .cacheRootPath = tempDir.path(),
+        .memoryBudgetBytes = kAskForTheDefaultBudget
+    };
+
+    BuildLog log;
+
+    const cwPointOctreeBuilder::Result result =
+        waitForBuild(cwPointOctreeBuilder::build(request));
+    REQUIRE_FALSE(result.hasError());
+
+    const QStringList passB = log.linesStartingWith(QStringLiteral("build passB"));
+    REQUIRE(passB.size() == 1);
+    REQUIRE(buildLogField(passB.constFirst(), QStringLiteral("budgetBytes"))
+            == cw::octree::kDefaultBuildMemoryBudgetBytes);
+}
+
+TEST_CASE("cwPointOctreeBuilder: a chunk that fails reports its own error, not the cancel it triggers",
+          "[PointOctree][PointOctreeBuilder]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString path = tempLazPath(tempDir, QStringLiteral("octree-chunk-error"));
+    REQUIRE(writeSyntheticLazFile(path, passagePoints(kPassagePointCount)));
+
+    const QString cacheRoot = tempDir.filePath(QStringLiteral("read-only-cache"));
+    REQUIRE(QDir().mkpath(cacheRoot));
+
+    //Many chunks, so the chunk that fails first stops siblings that are still
+    //running: they come back Cancelled and the failure still has to win
+    const cwPointOctreeBuilder::Request request {
+        .path = path,
+        .cacheRootPath = cacheRoot,
+        .chunkTargetPoints = kManyChunkTarget,
+        .decodeWorkerCount = kEvenWorkerCount
+    };
+
+    REQUIRE(QFile::setPermissions(cacheRoot, QFileDevice::ReadOwner | QFileDevice::ExeOwner));
+
+    //Running as a user who writes anywhere (root in some containers) has nothing to prove
+    QFile probe(QDir(cacheRoot).filePath(QStringLiteral("probe")));
+    const bool cacheIsWritable = probe.open(QIODevice::WriteOnly);
+    probe.close();
+
+    if(!cacheIsWritable) {
+        const cwPointOctreeBuilder::Result result =
+            waitForBuild(cwPointOctreeBuilder::build(request));
+        REQUIRE(result.errorCode() == cwPointOctreeBuilder::CacheWriteFailed);
+    }
+
+    REQUIRE(QFile::setPermissions(cacheRoot,
+                                  QFileDevice::ReadOwner | QFileDevice::WriteOwner
+                                      | QFileDevice::ExeOwner));
+
+    REQUIRE(octreeTempDirCount() == 0);
+}
+
+TEST_CASE("cwPointOctreeBuilder: a cancel under admission leaves no manifest and no temp directory",
+          "[PointOctree][PointOctreeBuilder]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString path = tempLazPath(tempDir, QStringLiteral("octree-admission-cancel"));
+    REQUIRE(writeSyntheticLazFile(path, passagePoints(kPassagePointCount)));
+
+    const cwPointOctreeBuilder::Request request {
+        .path = path,
+        .cacheRootPath = tempDir.path(),
+        .chunkTargetPoints = kManyChunkTarget,
+        .decodeWorkerCount = kEvenWorkerCount,
+        .memoryBudgetBytes = kOneChunkAtATimeBudget
+    };
+
+    QFuture<cwPointOctreeBuilder::Result> future = cwPointOctreeBuilder::build(request);
+    const bool cancelled = cancelAtProgress(future, kPassBProgressFraction);
+    future.waitForFinished();
+
+    //A build that beat the cancel proves nothing about cancelling, so say so
+    REQUIRE(cancelled);
+
+    //QPromise drops a result added after the cancel, so a delivered one is the only one to check
+    const QList<cwPointOctreeBuilder::Result> results = future.results();
+    if(!results.isEmpty()) {
+        REQUIRE(results.constFirst().errorCode() == cwPointOctreeBuilder::Cancelled);
+    }
+
+    REQUIRE_FALSE(cwPointOctreeBuilder::cachedManifest(request).has_value());
+    REQUIRE(octreeTempDirCount() == 0);
+}
+
+TEST_CASE("cwPointOctreeBuilder: the temp chunks are gone before the manifest is written",
+          "[PointOctree][PointOctreeBuilder]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString path = tempLazPath(tempDir, QStringLiteral("octree-temp-decline"));
+    REQUIRE(writeSyntheticLazFile(path, passagePoints(kPassagePointCount)));
+
+    const cwPointOctreeBuilder::Request request {
+        .path = path,
+        .cacheRootPath = tempDir.path(),
+        .chunkTargetPoints = kManyChunkTarget,
+        .decodeWorkerCount = kEvenWorkerCount,
+        .memoryBudgetBytes = kOneChunkAtATimeBudget
+    };
+
+    REQUIRE(octreeTempBytes() == 0);
+
+    const cwDiskCacher cacher {QDir(request.cacheRootPath)};
+    const cwDiskCacher::Key manifestEntry =
+        manifestKey(request.path, cwPointOctreeBuilder::fingerprintFor(request));
+
+    QFuture<cwPointOctreeBuilder::Result> future = cwPointOctreeBuilder::build(request);
+
+    bool sawChunks = false;
+
+    //Read after the manifest is seen, so a poll can only ever be too late: a
+    //build that kept its chunk files until the temp directory went away would
+    //still be holding them here
+    qint64 bytesWhenManifestAppeared = -1;
+
+    while(!future.isFinished()) {
+        if(cacher.hasEntry(manifestEntry)) {
+            bytesWhenManifestAppeared = octreeTempBytes();
+            break;
+        }
+
+        if(octreeTempBytes() > 0) {
+            sawChunks = true;
+        }
+
+        QThread::msleep(kTempPollMs);
+    }
+
+    future.waitForFinished();
+    REQUIRE(future.resultCount() == 1);
+    REQUIRE_FALSE(future.result().hasError());
+
+    //A build that finished between two polls left its temp directory behind it,
+    //which says the same thing the reading above does
+    if(bytesWhenManifestAppeared < 0) {
+        bytesWhenManifestAppeared = octreeTempBytes();
+    }
+
+    //A build whose chunks were never seen says nothing about when they went
+    REQUIRE(sawChunks);
+    REQUIRE(bytesWhenManifestAppeared == 0);
 }

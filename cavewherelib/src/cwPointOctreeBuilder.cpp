@@ -67,6 +67,12 @@ namespace {
     //worker let the map balance the tail
     constexpr int kDecodeRangesPerWorker = 4;
 
+    //What one point of a chunk costs pass B while its chunk runs: the chunk's
+    //own 12 bytes and eleven more copies of it, which is what the sampler's
+    //partitions, subtree nodes and scratch measured against the big cloud
+    //(§2.11's calibration: 12.7 M points held 1.76 GB on their own)
+    constexpr qint64 kPassBWorkingSetBytesPerPoint = 144;
+
     //The root cube of a cloud with no extent, so quantization still has a range
     constexpr double kMinimumRootSize = 1.0;
 
@@ -782,6 +788,152 @@ namespace {
         return result;
     }
 
+    struct PassBResult {
+        int errorCode = Monad::ResultBase::NoError;
+        QString errorMessage;
+
+        //One entry a task, in task order; nullopt where the task never ran
+        QVector<std::optional<ChunkResult>> chunks;
+
+        qint64 peakBytes = 0;
+    };
+
+    /**
+     * Pass B: the chunks run under a memory budget rather than all at once.
+     * The tasks are admitted biggest first, a task starts only while its
+     * working set still fits beside the ones already running, and the biggest
+     * chunk of all runs on its own however small the budget is.
+     */
+    PassBResult runPassB(const QVector<ChunkTask>& tasks,
+                         const ChunkContext& context,
+                         qint64 budgetBytes,
+                         Promise& promise,
+                         Reporter& progress,
+                         qint64 progressBase)
+    {
+        PassBResult result;
+        if(tasks.isEmpty()) {
+            return result;
+        }
+
+        result.chunks.resize(tasks.size());
+
+        struct RunningChunk {
+            qsizetype taskIndex = 0;
+            qint64 bytes = 0;
+            QFuture<ChunkResult> future;
+        };
+
+        QThreadPool* pool = cwTask::threadPool();
+
+        //The orchestrator polls rather than works, so it gives its slot up to
+        //the chunks it runs, as pass A's map does
+        pool->releaseThread();
+
+        //Read after the release, so the slot the orchestrator gave up is one a
+        //chunk may run in, as it was under the map
+        const qsizetype maxRunning = std::max(qsizetype(1), qsizetype(pool->maxThreadCount()));
+
+        QList<RunningChunk> running;
+        qint64 inFlightBytes = 0;
+        qsizetype nextTask = 0;
+        bool admitting = true;
+
+        //A canceled or failed pass admits nothing more, so what is running is
+        //all that is left of it
+        while((admitting && nextTask < tasks.size()) || !running.isEmpty()) {
+            //The started chunks poll the shared flag per node, and the ones
+            //still waiting are never admitted
+            if(admitting && promise.isCanceled()) {
+                admitting = false;
+                context.cancel->store(true, std::memory_order_relaxed);
+            }
+
+            while(admitting && nextTask < tasks.size() && running.size() < maxRunning) {
+                const ChunkTask& task = tasks.at(nextTask);
+                const qint64 bytes = task.pointCount * kPassBWorkingSetBytesPerPoint;
+
+                //The first chunk of a round runs whatever it costs, so a chunk
+                //bigger than the whole budget still gets built, on its own
+                if(!running.isEmpty() && inFlightBytes + bytes > budgetBytes) {
+                    break;
+                }
+
+                running.append(RunningChunk {
+                    nextTask,
+                    bytes,
+                    cwConcurrent::run([task, context]() { return buildChunk(task, context); })});
+
+                inFlightBytes += bytes;
+                result.peakBytes = std::max(result.peakBytes, inFlightBytes);
+                nextTask++;
+            }
+
+            bool reaped = false;
+            for(qsizetype i = running.size() - 1; i >= 0; i--) {
+                if(!running.at(i).future.isFinished()) {
+                    continue;
+                }
+
+                reaped = true;
+                RunningChunk finished = running.takeAt(i);
+                inFlightBytes -= finished.bytes;
+
+                ChunkResult chunk = finished.future.takeResult();
+
+                //A chunk that failed is the build's answer, so the running
+                //chunks stop at their next node and no more are admitted
+                if(chunk.errorCode != Monad::ResultBase::NoError) {
+                    admitting = false;
+                    context.cancel->store(true, std::memory_order_relaxed);
+                }
+
+                result.chunks[finished.taskIndex] = std::move(chunk);
+            }
+
+            progress.report(progressBase + context.pointsDone->load(std::memory_order_relaxed));
+
+            //A slot a chunk just freed is filled on the next turn rather than
+            //after a sleep, so the pool waits only while every chunk still runs
+            if(!reaped && !running.isEmpty()) {
+                QThread::msleep(kMapPollMs);
+            }
+        }
+
+        pool->reserveThread();
+
+        //The chunk that failed is the build's answer, whichever came first in
+        //task order. Its siblings stop at their next node and report Cancelled,
+        //as do the tasks admission never reached, so both stand behind it.
+        bool everyChunkRan = true;
+        bool anyChunkCanceled = false;
+        for(const std::optional<ChunkResult>& chunk : std::as_const(result.chunks)) {
+            if(!chunk.has_value()) {
+                everyChunkRan = false;
+                continue;
+            }
+
+            if(chunk->errorCode == Monad::ResultBase::NoError) {
+                continue;
+            }
+
+            if(chunk->errorCode == cwPointOctreeBuilder::Cancelled) {
+                anyChunkCanceled = true;
+                continue;
+            }
+
+            result.errorCode = chunk->errorCode;
+            result.errorMessage = chunk->errorMessage;
+            return result;
+        }
+
+        if(anyChunkCanceled || !everyChunkRan) {
+            result.errorCode = cwPointOctreeBuilder::Cancelled;
+        }
+
+        return result;
+    }
+
     struct LevelNode {
         Cell cell;
         QVector<QVector3D> points;
@@ -961,8 +1113,6 @@ QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request&
             QVector<ChunkTask> tasks;
             tasks.reserve(passA.parts.size());
 
-            //Pass B puts every chunk in flight at once, so its peak is all of them
-            qint64 chunkBytesInFlight = 0;
             for(auto it = passA.parts.constBegin(); it != passA.parts.constEnd(); ++it) {
                 qint64 points = 0;
                 for(const ChunkPart& part : it.value()) {
@@ -970,9 +1120,18 @@ QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request&
                 }
 
                 tasks.append(ChunkTask {cellFromKey(it.key()), it.value(), points});
-                chunkBytesInFlight += points * kTempBytesPerPoint;
             }
             passA.parts.clear();
+
+            //Biggest first, so the chunk the budget has the most trouble with
+            //runs while the fewest others are beside it. The cell key breaks
+            //ties, so the order is the input's whatever the hash hands back.
+            std::sort(tasks.begin(), tasks.end(), [](const ChunkTask& left, const ChunkTask& right) {
+                if(left.pointCount != right.pointCount) {
+                    return left.pointCount > right.pointCount;
+                }
+                return cellKey(left.cell) < cellKey(right.cell);
+            });
 
             std::atomic<bool> cancelFlag {false};
             std::atomic<qint64> chunkPointsDone {0};
@@ -987,41 +1146,32 @@ QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request&
                 .pointsDone = &chunkPointsDone
             };
 
-            QList<ChunkResult> chunkResults;
-            if(tasks.size() == 1) {
-                cancelFlag.store(promise.isCanceled(), std::memory_order_relaxed);
-                chunkResults.append(buildChunk(tasks.constFirst(), context));
-                progress.report(passA.pointCount + chunkPointsDone.load(std::memory_order_relaxed));
-            } else if(!tasks.isEmpty()) {
-                const auto worker = [context](const ChunkTask& task) { return buildChunk(task, context); };
+            const qint64 memoryBudgetBytes = request.memoryBudgetBytes > 0
+                                                 ? request.memoryBudgetBytes
+                                                 : kDefaultBuildMemoryBudgetBytes;
 
-                QFuture<ChunkResult> mapFuture = cwConcurrent::mapped(tasks, worker);
-                chunkResults = awaitMapped(mapFuture, promise, progress, cancelFlag,
-                                           chunkPointsDone, passA.pointCount);
-            }
+            PassBResult passB = runPassB(tasks, context, memoryBudgetBytes,
+                                         promise, progress, passA.pointCount);
 
             cw::profile::write(lcProfileLoad(),
-                               QStringLiteral("build passB chunks=%1 inFlightPeakBytes=%2 seconds=%3")
+                               QStringLiteral("build passB chunks=%1 budgetBytes=%2 "
+                                              "inFlightPeakBytes=%3 seconds=%4")
                                    .arg(tasks.size())
-                                   .arg(chunkBytesInFlight)
+                                   .arg(memoryBudgetBytes)
+                                   .arg(passB.peakBytes)
                                    .arg(secondsSince(passTimer)));
             passTimer.restart();
 
             const QString cancelledMessage =
                 QStringLiteral("The octree build of %1 was cancelled.").arg(request.path);
 
-            if(chunkResults.size() != tasks.size()) {
-                fail(cancelledMessage, Cancelled);
+            if(passB.errorCode != Monad::ResultBase::NoError) {
+                fail(passB.errorCode == Cancelled ? cancelledMessage : passB.errorMessage,
+                     passB.errorCode);
                 return;
             }
 
-            for(const ChunkResult& chunkResult : std::as_const(chunkResults)) {
-                if(chunkResult.errorCode != Monad::ResultBase::NoError) {
-                    fail(chunkResult.errorCode == Cancelled ? cancelledMessage : chunkResult.errorMessage,
-                         chunkResult.errorCode);
-                    return;
-                }
-            }
+            QVector<std::optional<ChunkResult>> chunkResults = std::move(passB.chunks);
 
             cwDiskCacher cacher {QDir(request.cacheRootPath)};
 
@@ -1034,7 +1184,8 @@ QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request&
             for(qsizetype i = 0; i < tasks.size(); i++) {
                 const quint64 key = cellKey(tasks.at(i).cell);
                 chunkIndexByCell.insert(key, i);
-                level.insert(key, LevelNode {tasks.at(i).cell, chunkResults.at(i).rootPoints});
+                level.insert(key,
+                             LevelNode {tasks.at(i).cell, std::move(chunkResults[i]->rootPoints)});
             }
 
             //Pass C: every node the sampler pulls from is final only once its parent has sampled it
@@ -1076,28 +1227,38 @@ QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request&
                 QHash<quint64, LevelNode> parents;
                 parents.reserve(childrenByParent.size());
 
+                //One parent group at a time: its children leave the level,
+                //feed the sample, are written, and are freed before the next
+                //group is read, so a level and its parents never coexist whole
                 for(auto it = childrenByParent.constBegin(); it != childrenByParent.constEnd(); ++it) {
                     const Cell parentCell = cellFromKey(it.key());
 
-                    QVector<QVector<QVector3D>*> sources;
-                    sources.reserve(it->size());
+                    QVector<LevelNode> children;
+                    children.reserve(it->size());
                     for(quint64 childKey : std::as_const(it.value())) {
-                        sources.append(&level.find(childKey)->points);
+                        const auto found = level.find(childKey);
+                        children.append(LevelNode {found->cell, std::move(found->points)});
+                    }
+
+                    QVector<QVector<QVector3D>*> sources;
+                    sources.reserve(children.size());
+                    for(LevelNode& child : children) {
+                        sources.append(&child.points);
                     }
 
                     parents.insert(it.key(),
                                    LevelNode {parentCell,
                                               sampleUp(cellBounds(parentCell, root.minimum, root.size), sources)});
-                }
 
-                for(auto it = level.constBegin(); it != level.constEnd(); ++it) {
-                    if(promise.isCanceled()) {
-                        fail(cancelledMessage, Cancelled);
-                        return;
-                    }
+                    for(const LevelNode& child : std::as_const(children)) {
+                        if(promise.isCanceled()) {
+                            fail(cancelledMessage, Cancelled);
+                            return;
+                        }
 
-                    if(!writeTopNode(it.value())) {
-                        return;
+                        if(!writeTopNode(child)) {
+                            return;
+                        }
                     }
                 }
 
@@ -1125,7 +1286,7 @@ QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request&
 
                 if(cell.level == depth && chunkIndexByCell.contains(cellKey(cell))) {
                     const QVector<SubtreeRecord>& records =
-                        chunkResults.at(chunkIndexByCell.value(cellKey(cell))).nodes;
+                        chunkResults.at(chunkIndexByCell.value(cellKey(cell)))->nodes;
 
                     for(qsizetype i = 1; i < records.size(); i++) {
                         const SubtreeRecord& record = records.at(i);

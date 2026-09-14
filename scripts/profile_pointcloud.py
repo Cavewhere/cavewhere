@@ -28,6 +28,10 @@ import time
 
 DEFAULTS_DOMAIN = "com.cavewhere.CaveWhere"
 
+# --build-budget-mb reaches the octree builder through the environment: the
+# build runs before any window is up, so no --profile-* option can carry it.
+BUILD_BUDGET_VARIABLE = "CW_BUILD_MEMORY_BUDGET_MB"
+
 # Read before a run and restored after it, whatever the app did to them.
 PREFERENCE_KEYS = [
     "rendering.gpuMemoryBudgetMb",
@@ -320,11 +324,15 @@ def application_path(build):
     return os.path.join(build, "CaveWhere.app", "Contents", "MacOS", "CaveWhere")
 
 
-def launch_environment(debug):
+def launch_environment(arguments):
+    """The app's environment: the message pattern, ASan where the build needs
+    it, and the octree build's memory budget."""
     environment = dict(os.environ)
     environment["QT_MESSAGE_PATTERN"] = MESSAGE_PATTERN
-    if debug:
+    if arguments.debug:
         environment["ASAN_OPTIONS"] = "detect_container_overflow=0"
+    if arguments.build_budget_mb is not None:
+        environment[BUILD_BUDGET_VARIABLE] = str(arguments.build_budget_mb)
     return environment
 
 
@@ -368,7 +376,7 @@ def replay(arguments):
     started = time.monotonic()
     with open(prefix + ".log", "w") as log:
         process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT,
-                                   env=launch_environment(arguments.debug))
+                                   env=launch_environment(arguments))
         traces = trace_while_running(process, prefix)
         process.wait()
     wait_for_traces(traces)
@@ -443,7 +451,10 @@ def build_only(arguments):
 
     CaveWhere is launched directly rather than under `/usr/bin/time -l`: a
     wrapper's pid is what the traces would follow, and terminating the wrapper
-    leaves the app running with the whole build's memory still held.
+    leaves the app running with the whole build's memory still held. Peak RSS
+    comes instead from the builder's own `build total peakRssBytes=` line (the
+    task_info reading `time -l` prints as maximum resident set size) and from
+    this runner's `ps` sampling below.
     """
     prefix = arguments.out
     project = arguments.build_only
@@ -457,7 +468,7 @@ def build_only(arguments):
     peak_rss_bytes = 0
     with open(prefix + ".log", "w") as log:
         process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT,
-                                   env=launch_environment(arguments.debug))
+                                   env=launch_environment(arguments))
         traces = trace_while_running(process, prefix)
 
         manifest = None
@@ -474,8 +485,11 @@ def build_only(arguments):
     wait_for_traces(traces)
 
     lines = parse_log(prefix + ".log")
+    caption = os.path.basename(project)
+    if arguments.build_budget_mb is not None:
+        caption += " at a {} MB build budget".format(arguments.build_budget_mb)
     print("## Octree build — {} ({})\n".format(
-        os.path.basename(project), "manifest written" if manifest else "no manifest"))
+        caption, "manifest written" if manifest else "no manifest"))
     for line in lines["build"]:
         print("    " + line)
 
@@ -512,6 +526,9 @@ def main():
                         help="replay speed, 1.0 keeps the recorded timing")
     parser.add_argument("--debug", action="store_true",
                         help="the Debug build needs ASAN_OPTIONS")
+    parser.add_argument("--build-budget-mb", type=int,
+                        help="CW_BUILD_MEMORY_BUDGET_MB, the memory the octree "
+                             "build's chunks may hold together")
     parser.add_argument("--build-only", metavar="PROJECT",
                         help="open PROJECT with its octree cache deleted and "
                              "report the build instead of replaying")

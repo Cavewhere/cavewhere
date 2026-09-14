@@ -26,6 +26,10 @@ namespace cw::octree {
 
     //Absorbs reprojection curvature before the measured-bounds retry
     constexpr double kRootPaddingFraction = 0.01;
+
+    //The working set pass B's chunks may hold together before a chunk waits
+    //for a running one to finish
+    constexpr qint64 kDefaultBuildMemoryBudgetBytes = 1536LL * 1024 * 1024;
 }
 
 /**
@@ -54,6 +58,10 @@ public:
         //!< points. Either way the count is held to the pool, and a file whose
         //!< seek decodes from the start decodes on one worker whatever this asks.
         int decodeWorkerCount = 0;
+
+        //!< The working set pass B's chunks may hold together, 0 = the
+        //!< default. A chunk bigger than the whole budget runs on its own.
+        qint64 memoryBudgetBytes = cw::octree::kDefaultBuildMemoryBudgetBytes;
     };
 
     //Stable codes so a test asserts the failure kind, not the message wording
