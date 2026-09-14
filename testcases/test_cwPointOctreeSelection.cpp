@@ -139,9 +139,12 @@ namespace {
         return QSet<int>(indices.begin(), indices.end());
     }
 
-    NodeResidency residentNode(bool selectedThisFrame, quint64 lastDesiredFrame, qint64 bytes)
+    //! A resident entry for node @a index, which is what the plan names
+    NodeResidency residentNode(int index, bool selectedThisFrame, quint64 lastDesiredFrame,
+                               qint64 bytes)
     {
         NodeResidency node;
+        node.node = index;
         node.resident = true;
         node.selectedThisFrame = selectedThisFrame;
         node.lastDesiredFrame = lastDesiredFrame;
@@ -414,27 +417,27 @@ TEST_CASE("cw::octree::planNodeEvictions: releases the least wanted nodes first"
 {
     SECTION("nodes the cut dropped go before the ones it kept") {
         QVector<NodeResidency> nodes;
-        nodes.append(residentNode(true, 3, kNodeBytes));
-        nodes.append(residentNode(false, 9, kNodeBytes));
+        nodes.append(residentNode(0, true, 3, kNodeBytes));
+        nodes.append(residentNode(1, false, 9, kNodeBytes));
 
         REQUIRE(planNodeEvictions(nodes, kNodeBytes) == QVector<int>({1}));
     }
 
     SECTION("the oldest node goes first") {
         QVector<NodeResidency> nodes;
-        nodes.append(residentNode(false, 9, kNodeBytes));
-        nodes.append(residentNode(false, 4, kNodeBytes));
-        nodes.append(residentNode(false, 7, kNodeBytes));
+        nodes.append(residentNode(0, false, 9, kNodeBytes));
+        nodes.append(residentNode(1, false, 4, kNodeBytes));
+        nodes.append(residentNode(2, false, 7, kNodeBytes));
 
         REQUIRE(planNodeEvictions(nodes, 3 * kNodeBytes) == QVector<int>({1, 2, 0}));
     }
 
     SECTION("a pinned node is skipped while its younger sibling is chosen") {
         QVector<NodeResidency> nodes;
-        NodeResidency root = residentNode(false, 0, kNodeBytes);
+        NodeResidency root = residentNode(0, false, 0, kNodeBytes);
         root.pinned = true;
         nodes.append(root);
-        nodes.append(residentNode(false, 5, kNodeBytes));
+        nodes.append(residentNode(1, false, 5, kNodeBytes));
 
         REQUIRE(planNodeEvictions(nodes, kNodeBytes) == QVector<int>({1}));
 
@@ -444,7 +447,7 @@ TEST_CASE("cw::octree::planNodeEvictions: releases the least wanted nodes first"
 
     SECTION("a resident node that holds no bytes is never chosen") {
         QVector<NodeResidency> nodes;
-        nodes.append(residentNode(false, 1, 0));
+        nodes.append(residentNode(0, false, 1, 0));
 
         REQUIRE(planNodeEvictions(nodes, kNodeBytes).isEmpty());
     }
@@ -452,6 +455,7 @@ TEST_CASE("cw::octree::planNodeEvictions: releases the least wanted nodes first"
     SECTION("a node that is not resident is never chosen") {
         QVector<NodeResidency> nodes;
         NodeResidency pending;
+        pending.node = 0;
         pending.bytes = kNodeBytes;
         nodes.append(pending);
 
@@ -461,7 +465,7 @@ TEST_CASE("cw::octree::planNodeEvictions: releases the least wanted nodes first"
     SECTION("the plan stops as soon as the overshoot is covered") {
         QVector<NodeResidency> nodes;
         for(int i = 0; i < 4; i++) {
-            nodes.append(residentNode(false, quint64(i), kNodeBytes));
+            nodes.append(residentNode(i, false, quint64(i), kNodeBytes));
         }
 
         REQUIRE(planNodeEvictions(nodes, kNodeBytes + 1) == QVector<int>({0, 1}));
@@ -469,17 +473,34 @@ TEST_CASE("cw::octree::planNodeEvictions: releases the least wanted nodes first"
 
     SECTION("the plan comes back partial when the resident set cannot cover the overshoot") {
         QVector<NodeResidency> nodes;
-        nodes.append(residentNode(false, 1, kNodeBytes));
-        nodes.append(residentNode(true, 2, kNodeBytes));
+        nodes.append(residentNode(0, false, 1, kNodeBytes));
+        nodes.append(residentNode(1, true, 2, kNodeBytes));
 
         REQUIRE(planNodeEvictions(nodes, 10 * kNodeBytes) == QVector<int>({0, 1}));
     }
 
     SECTION("nothing is planned when the budget has room") {
         QVector<NodeResidency> nodes;
-        nodes.append(residentNode(false, 1, kNodeBytes));
+        nodes.append(residentNode(0, false, 1, kNodeBytes));
 
         REQUIRE(planNodeEvictions(nodes, 0).isEmpty());
+    }
+
+    SECTION("a sparse list plans the node indices it carries, coldest first") {
+        // Residency is tracked as a list of the resident nodes alone, so what
+        // the plan names is NodeResidency::node, never a place in the list.
+        QVector<NodeResidency> nodes;
+        NodeResidency root = residentNode(0, true, 12, kNodeBytes);
+        root.pinned = true;
+        nodes.append(root);
+        nodes.append(residentNode(7, false, 9, kNodeBytes));
+        nodes.append(residentNode(42, false, 4, kNodeBytes));
+        nodes.append(residentNode(3, false, 7, kNodeBytes));
+
+        REQUIRE(planNodeEvictions(nodes, 3 * kNodeBytes) == QVector<int>({42, 3, 7}));
+
+        // The root is pinned however deep the overshoot goes.
+        REQUIRE(planNodeEvictions(nodes, 100 * kNodeBytes) == QVector<int>({42, 3, 7}));
     }
 }
 

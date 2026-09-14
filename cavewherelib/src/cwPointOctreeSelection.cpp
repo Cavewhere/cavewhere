@@ -132,12 +132,12 @@ QVector<int> planNodeEvictions(const QVector<NodeResidency>& nodes, qint64 overs
         if(leftNode.lastDesiredFrame != rightNode.lastDesiredFrame) {
             return leftNode.lastDesiredFrame < rightNode.lastDesiredFrame;
         }
-        return left < right;
+        return leftNode.node < rightNode.node;
     });
 
     qint64 reclaimed = 0;
     for(int index : candidates) {
-        plan.append(index);
+        plan.append(nodes.at(index).node);
         reclaimed += nodes.at(index).bytes;
         if(reclaimed >= overshootBytes) {
             break;

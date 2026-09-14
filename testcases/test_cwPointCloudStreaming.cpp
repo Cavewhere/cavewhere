@@ -1334,6 +1334,193 @@ TEST_CASE("A streamed frame publishes the cut and its residency to the render st
     CHECK(coarsened.residentNodes == 1);
 }
 
+TEST_CASE("Residency is tracked as it moves, and a settled frame publishes nothing",
+          "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    PointCloudFixture fixture(rhi.get(), QStringLiteral("residency-bookkeeping"));
+    fixture.setOrthoHeight(kCloseOrthoHeight);
+    fixture.renderUntilQuiet();
+
+    // Every Resident node is in the tracked list exactly once, and no other node
+    // is. The walk over every index is what the tracked list stands in for, so
+    // the test does the walk the render thread no longer does.
+    const auto trackedResidency = [&fixture]() {
+        QVector<int> walked;
+        for (int i = 0; i < Access::nodeCount(fixture.backend()); i++) {
+            if (Access::nodeState(fixture.backend(), i) == NodeState::Resident) {
+                walked.append(i);
+            }
+        }
+
+        QVector<int> tracked = Access::residentIndices(fixture.backend());
+        std::sort(tracked.begin(), tracked.end());
+
+        CHECK(tracked == walked);
+        CHECK(Access::residentCount(fixture.backend()) == int(walked.size()));
+        return int(walked.size());
+    };
+
+    REQUIRE(trackedResidency() > 2);
+
+    cwRenderFrameStats* frameStats = cwRenderFrameStats::instance();
+    constexpr int kSettledFrames = 60;
+
+    // A settled cloud draws the same cut out of the same nodes every frame. The
+    // live frame still publishes its culling tally; the point cloud, whose
+    // numbers have not moved, publishes nothing.
+    const quint64 liveRevision = frameStats->revision();
+    for (int i = 0; i < kSettledFrames; i++) {
+        fixture.renderFrame();
+    }
+    CHECK(frameStats->revision() - liveRevision == quint64(kSettledFrames));
+    CHECK(trackedResidency() > 2);
+
+    // The same frames with nothing else publishing: the stats stand completely
+    // still, which is what the HUD watches.
+    cwSceneGatherOptions offscreenJob;
+    offscreenJob.liveFrame = false;
+
+    const quint64 quietRevision = frameStats->revision();
+    for (int i = 0; i < kSettledFrames; i++) {
+        fixture.renderFrame(offscreenJob);
+    }
+    CHECK(frameStats->revision() == quietRevision);
+
+    // Release empties the tracking with the nodes...
+    fixture.mutableBackend().releaseStreamedResources();
+    CHECK(Access::residentIndices(fixture.backend()).isEmpty());
+    CHECK(trackedResidency() == 0);
+
+    // ...and streaming the same cut back in rebuilds it.
+    fixture.renderUntilQuiet();
+    CHECK(trackedResidency() > 2);
+}
+
+TEST_CASE("A constants slot comes off the cold queue rather than a walk of the table",
+          "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    // Two windows a third of the passage apart, as in the churn test above:
+    // each cut is its own handful of nodes, so holding both costs more slots
+    // than holding either.
+    const auto stretchOffset = [](const PointCloudFixture& cloud, double along) {
+        return QVector3D(float(along * kTubeLength),
+                         float(kTubeBend * along * along),
+                         0.0f) - cloud.center();
+    };
+
+    // What each window draws and what holding both costs, measured with the
+    // app's pool depth, so the capped cloud below can be given more slots than
+    // either cut needs and fewer than both windows together.
+    int largestCut = 0;
+    int bothWindows = 0;
+    {
+        PointCloudFixture probe(rhi.get(), QStringLiteral("cold-queue-probe"));
+        probe.setOrthoHeight(kChurnOrthoHeight);
+
+        probe.setViewOffset(stretchOffset(probe, kChurnNearAlong));
+        probe.renderUntilQuiet();
+        largestCut = probe.drawableCount();
+
+        probe.setViewOffset(stretchOffset(probe, kChurnFarAlong));
+        probe.renderUntilQuiet();
+        largestCut = std::max(largestCut, probe.drawableCount());
+        bothWindows = Access::residentCount(probe.backend());
+    }
+
+    // One slot over the larger cut: every frame can draw what it asks for, and
+    // the camera coming back to a window it left has to evict for the slots.
+    const int slotCount = largestCut + 1;
+    REQUIRE(largestCut > 1);
+    REQUIRE(bothWindows > slotCount);
+
+    PointCloudFixture fixture(rhi.get(), QStringLiteral("cold-queue"));
+    Access::setMaxResidentNodes(fixture.mutableBackend(), slotCount);
+    fixture.setOrthoHeight(kChurnOrthoHeight);
+
+    const QVector3D nearEnd = stretchOffset(fixture, kChurnNearAlong);
+    const QVector3D farEnd = stretchOffset(fixture, kChurnFarAlong);
+
+    // Every Resident node is in the tracked list exactly once, and no other node
+    // is — the walk over every index the render thread no longer does, done
+    // here instead. Every slot is either free or held by one of them.
+    const auto checkTracking = [&fixture]() {
+        QVector<int> walked;
+        for (int i = 0; i < Access::nodeCount(fixture.backend()); i++) {
+            if (Access::nodeState(fixture.backend(), i) == NodeState::Resident) {
+                walked.append(i);
+            }
+        }
+
+        QVector<int> tracked = Access::residentIndices(fixture.backend());
+        std::sort(tracked.begin(), tracked.end());
+
+        CHECK(tracked == walked);
+        CHECK(Access::residentCount(fixture.backend()) == int(walked.size()));
+        CHECK(Access::residentCount(fixture.backend())
+                  + Access::freeSlotCount(fixture.backend())
+              == Access::maxResidentNodes(fixture.backend()));
+    };
+
+    const ProfileLogCapture capture(QStringLiteral("cw.profile.render.debug=true"));
+    const QString renderPrefix = QStringLiteral("render");
+
+    // The camera alternates between the two windows, so the nodes of the window
+    // it left go cold and the nodes of the one it returns to have to come back.
+    const auto alternate = [&fixture, &nearEnd, &farEnd]() {
+        for (int frame = 0; frame < cw::profile::kProfileBlockFrames; frame++) {
+            fixture.setViewOffset(frame % 2 == 0 ? nearEnd : farEnd);
+            fixture.renderFrame();
+        }
+    };
+
+    alternate();
+    checkTracking();
+
+    QStringList lines = ProfileLogCapture::linesStartingWith(renderPrefix);
+    REQUIRE_FALSE(lines.isEmpty());
+
+    // Slots ran out and the uploads evicted for them — and it cost no walk of
+    // residency at all. The byte budget is untouched here, so enforceGpuBudget
+    // never runs and residencyStats is the slow branch that used to serve every
+    // one of these evictions.
+    const QString churned = lines.last();
+    CHECK(fieldOf(churned, QStringLiteral("evictions")) > 0);
+    CHECK(fieldOf(churned, QStringLiteral("slotEvictUs")) > 0);
+    CHECK(fieldOf(churned, QStringLiteral("residencyStatsUs")) == 0);
+    CHECK(fieldOf(churned, QStringLiteral("uploads")) > 0);
+
+    CHECK(Access::residentCount(fixture.backend()) <= slotCount);
+    CHECK(Access::nodeState(fixture.backend(), kRootIndex) == NodeState::Resident);
+    CHECK(fixture.drawableCount() > 0);
+
+    // Entries a node's return to the cut left behind are swept, so a long
+    // session's queue stays proportional to residency rather than to the frames
+    // that have run.
+    constexpr int kColdQueueCeiling = 2048;
+    constexpr int kChurnBlocks = 4;
+    for (int block = 0; block < kChurnBlocks; block++) {
+        alternate();
+        CHECK(Access::coldNodeCount(fixture.backend()) < kColdQueueCeiling);
+    }
+    checkTracking();
+
+    // Half the settled bytes on top of the shallow pool, so enforceGpuBudget
+    // releases nodes out of the middle of the tracked list as well: that is the
+    // swap-remove's back-pointer, which nothing else here would notice.
+    const qint64 cloudBytes = fixture.gpuBytes();
+    cwRenderBudgets budgets = fixture.budgets();
+    budgets.gpuBudgetBytes = totalGpuBytes() - cloudBytes + cloudBytes / 2;
+    fixture.setBudgets(budgets);
+
+    alternate();
+    checkTracking();
+    CHECK(Access::nodeState(fixture.backend(), kRootIndex) == NodeState::Resident);
+}
+
 TEST_CASE("A node whose payload does not match the manifest fails and the rest still draw",
           "[PointCloudStreaming]")
 {
@@ -1478,6 +1665,12 @@ TEST_CASE("Re-publishing the same octree keeps residency and a new fingerprint d
     CHECK(Access::nodeState(fixture.backend(), kRootIndex) == NodeState::Absent);
     CHECK(Access::bufferPointer(fixture.backend(), kRootIndex) == nullptr);
     CHECK(fixture.gpuBytes() == 0);
+
+    // The node table went with it, so the residency tracking beside it has to
+    // be empty too, or the next upload would write past the list it indexes.
+    CHECK(Access::residentCount(fixture.backend()) == 0);
+    CHECK(Access::residentIndices(fixture.backend()).isEmpty());
+    CHECK(Access::coldNodeCount(fixture.backend()) == 0);
 }
 
 TEST_CASE("The CPU ledger holds exactly the resident nodes' pick mirrors",
@@ -1914,6 +2107,7 @@ TEST_CASE("The render profile category reports one line per block of frames",
         QStringLiteral("requestLoopMeanUs"), QStringLiteral("requestLoopMaxUs"),
         QStringLiteral("cancelLoopMeanUs"), QStringLiteral("cancelLoopMaxUs"),
         QStringLiteral("streamMeanUs"), QStringLiteral("streamMaxUs"),
+        QStringLiteral("uploadMeanUs"), QStringLiteral("uploadMaxUs"),
         QStringLiteral("publishPickMeanUs"), QStringLiteral("publishPickMaxUs"),
         QStringLiteral("publishStatsMeanUs"), QStringLiteral("publishStatsMaxUs"),
         QStringLiteral("enforceBudgetMeanUs"), QStringLiteral("enforceBudgetMaxUs"),
@@ -1922,7 +2116,9 @@ TEST_CASE("The render profile category reports one line per block of frames",
         QStringLiteral("evictions"), QStringLiteral("pendingLoads"),
         QStringLiteral("sse"), QStringLiteral("gpuMb"), QStringLiteral("budgetMb"),
         QStringLiteral("pointsMed"), QStringLiteral("pointsMax"),
-        QStringLiteral("slotEvictUs"), QStringLiteral("residencyStatsUs")
+        QStringLiteral("slotEvictUs"), QStringLiteral("residencyStatsUs"),
+        QStringLiteral("frameMsMed"), QStringLiteral("frameMsP95"),
+        QStringLiteral("frameMsMax")
     };
 
     // "render frame=N key=value ..." in this order, one space between pairs.

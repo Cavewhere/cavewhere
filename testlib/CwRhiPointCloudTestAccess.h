@@ -30,14 +30,38 @@ struct CwRhiPointCloudTestAccess {
         return int(cloud.m_nodes.size());
     }
 
+    // The count the render thread keeps as residency moves, rather than a walk
+    // of the table, which is what makes it worth checking against one.
     static int residentCount(const cwRHIPointCloud& cloud) {
-        int count = 0;
-        for (const auto& node : cloud.m_nodes) {
-            if (node.state == NodeState::Resident) {
-                count++;
-            }
-        }
-        return count;
+        return cloud.m_residentCount;
+    }
+
+    // The resident list itself, so a test can hold it against the node states.
+    static QVector<int> residentIndices(const cwRHIPointCloud& cloud) {
+        return cloud.m_residentIndices;
+    }
+
+    // Builds the constants pool with @a slotCount rather than the app's 32 768.
+    // Call it before the first frame: initializeResources reads it once. A pool
+    // shallower than the cut is what puts an upload on the eviction fallback,
+    // which is otherwise out of reach on anything but a hundred-thousand-node
+    // cloud.
+    static void setMaxResidentNodes(cwRHIPointCloud& cloud, int slotCount) {
+        cloud.m_maxResidentNodes = slotCount;
+    }
+
+    static int maxResidentNodes(const cwRHIPointCloud& cloud) {
+        return cloud.m_maxResidentNodes;
+    }
+
+    static int freeSlotCount(const cwRHIPointCloud& cloud) {
+        return int(cloud.m_freeSlots.size());
+    }
+
+    // Entries in the cold queue an upload draws its constants slot from, so a
+    // test can pin that the stale ones are swept rather than piling up.
+    static int coldNodeCount(const cwRHIPointCloud& cloud) {
+        return int(cloud.m_coldNodes.size());
     }
 
     static double sseInflation(const cwRHIPointCloud& cloud) {

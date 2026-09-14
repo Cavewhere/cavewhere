@@ -110,6 +110,10 @@ namespace cw::octree {
     //What the planner knows about one resident node
     struct CAVEWHERE_LIB_EXPORT NodeResidency
     {
+        //Where the node sits in the caller's node table, which is what the plan
+        //names. The list itself holds only the resident nodes, so its own order
+        //says nothing about the tree.
+        int node = -1;
         bool resident = false;
         bool selectedThisFrame = false;
         quint64 lastDesiredFrame = 0;
@@ -118,7 +122,8 @@ namespace cw::octree {
     };
 
     /**
-     * Indices of the resident nodes to release until overshootBytes is covered.
+     * NodeResidency::node of each resident node to release until overshootBytes
+     * is covered.
      *
      * Nodes the cut dropped go first, oldest lastDesiredFrame first, then the
      * selected ones in the same order; a pinned node is never chosen. The plan

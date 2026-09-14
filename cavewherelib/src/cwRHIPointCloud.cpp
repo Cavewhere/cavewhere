@@ -37,14 +37,22 @@ namespace {
     constexpr int kNodeConstantsFloats = 4;
     constexpr quint32 kNodeConstantsBytes = kNodeConstantsFloats * sizeof(float);
 
-    // Slots in the shared per-instance constants buffer, at 16 bytes each. A
-    // view selects at most cw::octree::kMaxDesiredNodes nodes per frame, so at
-    // least half the slots are unselected in any frame and an incoming node can
-    // always find one to take.
-    constexpr int kMaxResidentNodes = 8192;
+    // Slots in the shared per-instance constants buffer, at 16 bytes each (512 KB
+    // in all). A view selects at most cw::octree::kMaxDesiredNodes nodes per
+    // frame, so at least half the slots are unselected in any frame and an
+    // incoming node can always find one to take. Deep enough that the byte budget
+    // binds first at every budget the settings allow; the eviction fallback below
+    // is what a cloud of tiny nodes still leans on.
+    constexpr int kMaxResidentNodes = 32768;
     static_assert(kMaxResidentNodes >= 2 * cw::octree::kMaxDesiredNodes,
                   "An upload must be able to evict an unselected node for its "
                   "constants slot, which needs more slots than one frame's cut.");
+
+    // How far the cold queue may outgrow residency before the stale entries a
+    // node's return to the cut left behind are swept out. Compaction is linear
+    // and pays for itself over the pushes that triggered it.
+    constexpr int kColdQueueSlackFactor = 4;
+    constexpr int kColdQueueSlackMinimum = 1024;
 
     constexpr int kPointsBinding = 0;
     constexpr int kNodeConstantsBinding = 1;
@@ -64,7 +72,8 @@ cwRHIPointCloud::cwRHIPointCloud(std::shared_ptr<cwPointOctreePickSet> pickSet) 
                           + cwPointOctreePickIndex::estimatedBytes(source.byteSize);
                },
                cwRenderMemoryLedger::Category::PointCloudGeometry),
-    m_pickSet(std::move(pickSet))
+    m_pickSet(std::move(pickSet)),
+    m_maxResidentNodes(kMaxResidentNodes)
 {
 }
 
@@ -104,12 +113,12 @@ void cwRHIPointCloud::initializeResources(const ResourceUpdateData& data)
     auto* rhi = data.renderData.cb->rhi();
 
     m_nodeConstants = rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::VertexBuffer,
-                                     kNodeConstantsBytes * quint32(kMaxResidentNodes));
+                                     kNodeConstantsBytes * quint32(m_maxResidentNodes));
     m_nodeConstants->create();
 
     // Popped from the back, so the first node takes slot 0.
-    m_freeSlots.reserve(kMaxResidentNodes);
-    for (int slot = kMaxResidentNodes - 1; slot >= 0; slot--) {
+    m_freeSlots.reserve(m_maxResidentNodes);
+    for (int slot = m_maxResidentNodes - 1; slot >= 0; slot--) {
         m_freeSlots.append(slot);
     }
 
@@ -155,6 +164,9 @@ void cwRHIPointCloud::resetNodes(const cwPointOctreeSource& source)
     m_source = source;
 
     m_nodes.clear();
+    m_residentIndices.clear();
+    m_residentCount = 0;
+    m_coldNodes.clear();
     if (m_source.manifest) {
         m_nodes.resize(m_source.manifest->nodes.size());
     }
@@ -178,6 +190,18 @@ void cwRHIPointCloud::releaseNode(int index)
     if (node.constantSlot >= 0) {
         m_freeSlots.append(node.constantSlot);
         node.constantSlot = -1;
+    }
+
+    // Swap-remove out of the resident list: the node at the back takes this
+    // node's place and is told where it moved to.
+    if (node.residentPosition >= 0) {
+        const int position = node.residentPosition;
+        const int moved = m_residentIndices.last();
+        m_residentIndices[position] = moved;
+        m_nodes[moved].residentPosition = position;
+        m_residentIndices.removeLast();
+        node.residentPosition = -1;
+        m_residentCount = int(m_residentIndices.size());
     }
 
     m_gpuBytes.setBytes(m_gpuBytes.bytes() - node.bytes.size());
@@ -333,6 +357,11 @@ bool cwRHIPointCloud::streamResources(ResourceUpdateData& data, qint64& remainin
         return m_streamer.hasWork();
     }
 
+    QElapsedTimer uploadTimer;
+    if (m_profileEnabled) {
+        uploadTimer.start();
+    }
+
     // Only while nothing is waiting on the upload budget. A payload the streamer
     // has handed over is off its CPU cap and counts against no ledger until it
     // is uploaded, so draining faster than the budget uploads would let the
@@ -384,6 +413,7 @@ bool cwRHIPointCloud::streamResources(ResourceUpdateData& data, qint64& remainin
 
     QElapsedTimer partTimer;
     if (m_profileEnabled) {
+        m_profile.upload.add(elapsedUs(uploadTimer));
         partTimer.start();
     }
     enforceGpuBudget(data.renderData.budgets);
@@ -410,15 +440,10 @@ bool cwRHIPointCloud::streamResources(ResourceUpdateData& data, qint64& remainin
     return !m_readyQueue.isEmpty() || m_streamer.hasWork();
 }
 
-void cwRHIPointCloud::publishPointCloudStats() const
+void cwRHIPointCloud::publishPointCloudStats()
 {
     cwRenderFrameStats::PointCloud counts;
-
-    for (const NodeRecord& node : m_nodes) {
-        if (node.state == NodeState::Resident) {
-            ++counts.residentNodes;
-        }
-    }
+    counts.residentNodes = m_residentCount;
 
     // streamResources runs before gather, so this is the cut the last frame drew.
     counts.selectedNodes = int(m_selected.nodes.size());
@@ -432,6 +457,14 @@ void cwRHIPointCloud::publishPointCloudStats() const
         m_profile.sseInflation = counts.sseInflation;
     }
 
+    // The HUD watches the stats' revision, so a settled cloud republishing the
+    // same numbers would wake it 60 times a second for nothing.
+    if (m_statsPublished && counts == m_publishedStats) {
+        return;
+    }
+    m_publishedStats = counts;
+    m_statsPublished = true;
+
     cwRenderFrameStats::instance()->publishPointCloud(counts);
 }
 
@@ -439,7 +472,7 @@ bool cwRHIPointCloud::uploadNode(QRhi* rhi, QRhiResourceUpdateBatch* batch, int 
                                  const cwPointOctreeNodePayload& payload)
 {
     const QByteArray& bytes = payload.bytes;
-    const int slot = takeConstantSlot(bytes.size());
+    const int slot = takeConstantSlot();
     if (slot < 0) {
         // Nothing could be freed for it; it goes back to being asked for.
         m_nodes[index].state = NodeState::Absent;
@@ -472,6 +505,16 @@ bool cwRHIPointCloud::uploadNode(QRhi* rhi, QRhiResourceUpdateBatch* batch, int 
     node.constantSlot = slot;
     node.state = NodeState::Resident;
     node.exportRequested = false;
+    node.residentPosition = int(m_residentIndices.size());
+    m_residentIndices.append(index);
+    m_residentCount = int(m_residentIndices.size());
+
+    // A node that landed after the cut moved past it is already evictable, and
+    // nothing else will offer it: gather only records the nodes the previous cut
+    // held.
+    if (node.lastDesiredFrame != currentFrame()) {
+        recordColdNode(index, node.lastDesiredFrame);
+    }
 
     m_gpuBytes.setBytes(m_gpuBytes.bytes() + bytes.size());
     m_mirrorBytes.setBytes(m_mirrorBytes.bytes() + bytes.size() + payload.index.byteSize());
@@ -484,7 +527,78 @@ bool cwRHIPointCloud::uploadNode(QRhi* rhi, QRhiResourceUpdateBatch* batch, int 
     return true;
 }
 
-int cwRHIPointCloud::takeConstantSlot(qint64 incomingBytes)
+void cwRHIPointCloud::recordColdNode(int index, quint64 frame)
+{
+    // The root is pinned: it is in every cut, so it never goes cold.
+    if (index == kRootIndex) {
+        return;
+    }
+
+    // Departures arrive newest-stamp last, which is what keeps the front the
+    // coldest. A node that landed after its cut had already moved on is the
+    // exception: it goes to the cold end when it is colder than the front, and
+    // otherwise lands out of order, which costs eviction order, never
+    // correctness — every entry in the queue is evictable.
+    if (!m_coldNodes.empty() && frame < m_coldNodes.front().frame) {
+        m_coldNodes.push_front({frame, index});
+    } else {
+        m_coldNodes.push_back({frame, index});
+    }
+}
+
+void cwRHIPointCloud::recordColdNodes(const cw::octree::Selection& previous, quint64 frame)
+{
+    for (const cw::octree::SelectedNode& selected : previous.nodes) {
+        if (selected.node < 0 || selected.node >= m_nodes.size()) {
+            continue;
+        }
+
+        const NodeRecord& node = m_nodes.at(selected.node);
+        if (node.state != NodeState::Resident || node.lastDesiredFrame == frame) {
+            continue;
+        }
+
+        recordColdNode(selected.node, node.lastDesiredFrame);
+    }
+
+    const int slack = std::max(kColdQueueSlackMinimum,
+                               kColdQueueSlackFactor * m_residentCount);
+    if (int(m_coldNodes.size()) > slack) {
+        compactColdNodes();
+    }
+}
+
+bool cwRHIPointCloud::coldEntryStale(const ColdEntry& entry) const
+{
+    const NodeRecord& node = m_nodes.at(entry.node);
+    return node.state != NodeState::Resident || node.lastDesiredFrame != entry.frame;
+}
+
+void cwRHIPointCloud::compactColdNodes()
+{
+    const auto stale = [this](const ColdEntry& entry) { return coldEntryStale(entry); };
+    m_coldNodes.erase(std::remove_if(m_coldNodes.begin(), m_coldNodes.end(), stale),
+                      m_coldNodes.end());
+}
+
+bool cwRHIPointCloud::evictColdestNode()
+{
+    while (!m_coldNodes.empty()) {
+        const ColdEntry entry = m_coldNodes.front();
+        m_coldNodes.pop_front();
+
+        if (coldEntryStale(entry)) {
+            continue;
+        }
+
+        releaseNode(entry.node);
+        return true;
+    }
+
+    return false;
+}
+
+int cwRHIPointCloud::takeConstantSlot()
 {
     if (m_freeSlots.isEmpty()) {
         QElapsedTimer evictTimer;
@@ -492,15 +606,13 @@ int cwRHIPointCloud::takeConstantSlot(qint64 incomingBytes)
             evictTimer.start();
         }
 
-        const QVector<int> plan =
-            cw::octree::planNodeEvictions(residencyStats(), incomingBytes);
-        for (const int index : plan) {
-            releaseNode(index);
-        }
+        const bool evicted = evictColdestNode();
 
         if (m_profileEnabled) {
             m_profile.slotEvictUs += elapsedUs(evictTimer);
-            m_profile.evictions += int(plan.size());
+            if (evicted) {
+                m_profile.evictions++;
+            }
         }
     }
 
@@ -529,15 +641,12 @@ void cwRHIPointCloud::publishPickSet()
         pickRadius = m_source.manifest->meanSpacingXY
                      * cwRenderPointCloud::PointPickRadiusScale;
 
-        for (int i = 0; i < m_nodes.size(); i++) {
-            if (m_nodes.at(i).state != NodeState::Resident) {
-                continue;
-            }
-
+        nodes.reserve(m_residentIndices.size());
+        for (const int index : std::as_const(m_residentIndices)) {
             // The very bytes the node uploaded, and the index built over them —
             // implicit shares, not copies.
-            nodes.append({m_source.manifest->nodeBounds(i), m_nodes.at(i).bytes,
-                          m_nodes.at(i).index});
+            nodes.append({m_source.manifest->nodeBounds(index), m_nodes.at(index).bytes,
+                          m_nodes.at(index).index});
         }
     }
 
@@ -551,21 +660,22 @@ QVector<cw::octree::NodeResidency> cwRHIPointCloud::residencyStats() const
         timer.start();
     }
 
-    const quint64 frame = m_frame ? m_frame->frameCounter() : 0;
+    const quint64 frame = currentFrame();
 
+    // The resident nodes alone: on a big cloud that is a few thousand entries
+    // against a manifest of a hundred thousand.
     QVector<cw::octree::NodeResidency> stats;
-    stats.reserve(m_nodes.size());
-    for (int i = 0; i < m_nodes.size(); i++) {
-        const NodeRecord& node = m_nodes.at(i);
+    stats.reserve(m_residentIndices.size());
+    for (const int index : m_residentIndices) {
+        const NodeRecord& node = m_nodes.at(index);
 
         cw::octree::NodeResidency residency;
-        residency.resident = node.state == NodeState::Resident;
-        // streamResources runs before gather, so the counter still sits on the
-        // frame the cut was last stamped with.
+        residency.node = index;
+        residency.resident = true;
         residency.selectedThisFrame = node.lastDesiredFrame == frame;
         residency.lastDesiredFrame = node.lastDesiredFrame;
         residency.bytes = node.bytes.size();
-        residency.pinned = i == kRootIndex;
+        residency.pinned = index == kRootIndex;
         stats.append(residency);
     }
 
@@ -575,6 +685,11 @@ QVector<cw::octree::NodeResidency> cwRHIPointCloud::residencyStats() const
     return stats;
 }
 
+quint64 cwRHIPointCloud::currentFrame() const
+{
+    return m_frame ? m_frame->frameCounter() : 0;
+}
+
 void cwRHIPointCloud::enforceGpuBudget(const cwRenderBudgets& budgets)
 {
     const auto* ledger = cwRenderMemoryLedger::instance();
@@ -582,13 +697,14 @@ void cwRHIPointCloud::enforceGpuBudget(const cwRenderBudgets& budgets)
                              - budgets.gpuBudgetBytes;
 
     if (overshoot > 0) {
+        const quint64 frame = currentFrame();
         const QVector<cw::octree::NodeResidency> stats = residencyStats();
         for (const int index : cw::octree::planNodeEvictions(stats, overshoot)) {
             // Once the nodes the cut dropped run out, the planner offers the
             // ones it still wants. Taking those would only re-request and
             // re-upload them next frame, so they stay and the cut gets coarser
             // instead.
-            if (stats.at(index).selectedThisFrame) {
+            if (m_nodes.at(index).lastDesiredFrame == frame) {
                 continue;
             }
 
@@ -660,12 +776,32 @@ void cwRHIPointCloud::flushProfileBlock()
             .arg(timed.maxUs);
     };
 
+    QVector<qint64>& frameUs = m_profile.frameUs;
+    std::sort(frameUs.begin(), frameUs.end());
+    const auto at = [&frameUs](double fraction) {
+        if (frameUs.isEmpty()) {
+            return qint64(0);
+        }
+        const qsizetype index = qsizetype(fraction * double(frameUs.size() - 1) + 0.5);
+        return frameUs.at(std::clamp(index, qsizetype(0), frameUs.size() - 1));
+    };
+    constexpr double kMedianFraction = 0.5;
+    constexpr double k95thFraction = 0.95;
+    const qint64 frameMedianUs = at(kMedianFraction);
+    const qint64 frame95Us = at(k95thFraction);
+    const qint64 frameMaxUs = frameUs.isEmpty() ? 0 : frameUs.last();
+
+    constexpr double kMicrosecondsPerMillisecond = 1000.0;
+    const auto milliseconds = [](qint64 microseconds) {
+        return double(microseconds) / kMicrosecondsPerMillisecond;
+    };
+
     const auto megabytes = [](qint64 bytes) {
         return QString::number(double(bytes) / double(kBytesPerMegabyte), 'f', kMegabyteDigits);
     };
 
     QString line = QStringLiteral("render frame=%1 frames=%2 streamFrames=%3")
-                       .arg(m_frame ? m_frame->frameCounter() : 0)
+                       .arg(currentFrame())
                        .arg(frames)
                        .arg(streamFrames);
     line += span(QLatin1StringView("gather"), m_profile.gather, frames);
@@ -673,6 +809,7 @@ void cwRHIPointCloud::flushProfileBlock()
     line += span(QLatin1StringView("requestLoop"), m_profile.requestLoop, frames);
     line += span(QLatin1StringView("cancelLoop"), m_profile.cancelLoop, frames);
     line += span(QLatin1StringView("stream"), m_profile.stream, streamFrames);
+    line += span(QLatin1StringView("upload"), m_profile.upload, streamFrames);
     line += span(QLatin1StringView("publishPick"), m_profile.publishPick, streamFrames);
     line += span(QLatin1StringView("publishStats"), m_profile.publishStats, streamFrames);
     line += span(QLatin1StringView("enforceBudget"), m_profile.enforceBudget, streamFrames);
@@ -693,6 +830,10 @@ void cwRHIPointCloud::flushProfileBlock()
                 .arg(pointsMax)
                 .arg(m_profile.slotEvictUs)
                 .arg(m_profile.residencyStatsUs);
+    line += QStringLiteral(" frameMsMed=%1 frameMsP95=%2 frameMsMax=%3")
+                .arg(milliseconds(frameMedianUs), 0, 'f', kMeanDigits)
+                .arg(milliseconds(frame95Us), 0, 'f', kMeanDigits)
+                .arg(milliseconds(frameMaxUs), 0, 'f', kMeanDigits);
 
     cw::profile::write(lcProfileRender(), line);
 
@@ -770,11 +911,12 @@ void cwRHIPointCloud::releaseStreamedResources()
     m_requested.clear();
     m_readyQueue.clear();
 
-    for (int i = 0; i < m_nodes.size(); i++) {
-        if (m_nodes.at(i).state == NodeState::Resident) {
-            releaseNode(i);
-        }
+    // releaseNode swap-removes out of the back, so taking the back each time
+    // walks the list once and leaves it empty.
+    while (!m_residentIndices.isEmpty()) {
+        releaseNode(m_residentIndices.last());
     }
+    m_coldNodes.clear();
 
     // The set holds an implicit share of every mirror it was published, so it
     // has to let go here too, or a hidden view's bytes would outlive the nodes.
@@ -884,6 +1026,21 @@ bool cwRHIPointCloud::gather(const GatherContext& context, QVector<PipelineBatch
     if (m_profileEnabled) {
         gatherTimer.start();
         partTimer.start();
+
+        // The whole frame, as the render thread lives it: one live gather to
+        // the next. An offscreen job renders its own camera out of band and
+        // says nothing about the view's frame rate.
+        if (context.liveFrame) {
+            if (m_frameIntervalTimer.isValid()) {
+                m_profile.frameUs.append(elapsedUs(m_frameIntervalTimer));
+            }
+            m_frameIntervalTimer.restart();
+        }
+    } else {
+        // The next frame after the category comes on has no predecessor to
+        // measure against, so it starts a fresh interval rather than reporting
+        // however long the category was off.
+        m_frameIntervalTimer.invalidate();
     }
 
     cw::octree::SelectionInput input = selectionInput(renderData, context.frustum);
@@ -897,6 +1054,9 @@ bool cwRHIPointCloud::gather(const GatherContext& context, QVector<PipelineBatch
         input.maxPoints = m_frame->pointBudgetShare(this, renderData.budgets.pointBudget);
     }
 
+    // The cut this frame replaces, which is where the nodes going cold are
+    // found. The node list is implicitly shared, so this costs a refcount.
+    const cw::octree::Selection previousSelection = m_selected;
     m_selected = cw::octree::selectCut(input);
 
     if (context.liveFrame) {
@@ -966,6 +1126,11 @@ bool cwRHIPointCloud::gather(const GatherContext& context, QVector<PipelineBatch
             break;
         }
     }
+
+    // Every node this frame's cut holds now carries this frame's stamp, so the
+    // ones the previous cut held that still carry an older one are exactly the
+    // ones that just went cold.
+    recordColdNodes(previousSelection, frame);
 
     if (m_profileEnabled) {
         m_profile.requestLoop.add(elapsedUs(partTimer));

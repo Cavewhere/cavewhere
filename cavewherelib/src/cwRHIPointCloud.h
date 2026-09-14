@@ -16,6 +16,7 @@
 #include "cwPointOctreeSelection.h"
 #include "cwPointOctreeSource.h"
 #include "cwRHIObject.h"
+#include "cwRenderFrameStats.h"
 #include "cwRenderMemoryLedger.h"
 #include "cwRenderPointCloud.h"
 #include "cwRhiFrameRenderer.h"
@@ -23,10 +24,12 @@
 
 // Std includes
 #include <algorithm>
+#include <deque>
 #include <memory>
 
 // Qt includes
 #include <QByteArray>
+#include <QElapsedTimer>
 #include <QMatrix4x4>
 #include <QVector>
 #include <QVector3D>
@@ -100,11 +103,21 @@ private:
         int constantSlot = -1;
         quint64 lastDesiredFrame = 0;
 
+        // Where the node sits in m_residentIndices, so releasing it is a
+        // swap-remove instead of a search. -1 while the node is not resident.
+        int residentPosition = -1;
+
         // An offscreen job asked for this node through residencyReady(). The
         // live cut cancels the requests it no longer wants, and an export whose
         // camera differs from the live one would lose every load it started;
         // this flag exempts it until the node lands, fails, or is released.
         bool exportRequested = false;
+    };
+
+    // One resident node that has left the cut, as of the frame it left in.
+    struct ColdEntry {
+        quint64 frame = 0;
+        int node = -1;
     };
 
     // What the streamer loads for one node. The cache root travels with it so
@@ -163,16 +176,37 @@ private:
     bool uploadNode(QRhi* rhi, QRhiResourceUpdateBatch* batch, int index,
                     const cwPointOctreeNodePayload& payload);
 
-    // A free constants slot, evicting resident nodes worth @a incomingBytes to
-    // make one when the stack is empty. -1 when nothing could be freed.
-    int takeConstantSlot(qint64 incomingBytes);
+    // A free constants slot, evicting the coldest resident node outside the cut
+    // to make one when the stack is empty. -1 when nothing could be freed.
+    int takeConstantSlot();
+
+    // Records every node the previous cut held that this frame's cut dropped,
+    // keyed by the frame it was last wanted in, which is what evictColdestNode
+    // draws on.
+    void recordColdNodes(const cw::octree::Selection& previous, quint64 frame);
+
+    // Remembers @a index as evictable as of @a frame. The root is pinned and
+    // never recorded.
+    void recordColdNode(int index, quint64 frame);
+
+    // True once @a entry's node has come back into the cut or been released, so
+    // the entry says nothing about it any more.
+    bool coldEntryStale(const ColdEntry& entry) const;
+
+    // Drops the stale entries, so the queue stays proportional to residency.
+    void compactColdNodes();
+
+    // Releases the coldest resident node outside the cut, freeing its constants
+    // slot. False when the queue holds nothing still evictable.
+    bool evictColdestNode();
 
     // Hands the pick set the nodes that are resident now. Called once per frame
     // at most, from the places residency changes.
     void publishPickSet();
 
-    //! Publishes this frame's node residency, cut size, and SSE inflation for the HUD
-    void publishPointCloudStats() const;
+    //! Publishes this frame's node residency, cut size, and SSE inflation for
+    //! the HUD, and only when one of them moved
+    void publishPointCloudStats();
 
     // Every kSseRelaxProbeFrames frames while inflated, re-selects @a input one
     // step finer and records what that cut would cost, which is the only
@@ -181,6 +215,10 @@ private:
 
     QVector<cw::octree::NodeResidency> residencyStats() const;
     void enforceGpuBudget(const cwRenderBudgets& budgets);
+
+    // The frame the cut was last stamped with. streamResources runs before
+    // gather, so it still names that frame for everything before the next cut.
+    quint64 currentFrame() const;
 
     // What one cw.profile.render line summarizes: kProfileBlockFrames frames of
     // render-thread timings and counters. Filled only while the category is on.
@@ -213,6 +251,7 @@ private:
         Span requestLoop;
         Span cancelLoop;
         Span stream;
+        Span upload;
         Span publishPick;
         Span publishStats;
         Span enforceBudget;
@@ -223,6 +262,11 @@ private:
 
         // One entry per frame, for the block's median cut size.
         QVector<int> cutSizes;
+
+        // Wall microseconds between consecutive live gathers, one entry per
+        // frame, for the block's median and 95th-percentile frame time. The
+        // first frame of a block has no predecessor and adds nothing.
+        QVector<qint64> frameUs;
 
         int requests = 0;
         int cancels = 0;
@@ -293,6 +337,27 @@ private:
     // Parallel to m_source.manifest->nodes.
     QVector<NodeRecord> m_nodes;
 
+    // Every node in NodeState::Resident, exactly once and in no order, so the
+    // residency walks read this instead of the whole table — on a big cloud, two
+    // orders of magnitude shorter. NodeRecord::residentPosition points back, so
+    // releasing a node is a swap-remove. m_residentCount is its size, kept beside
+    // it so the per-frame stats need no walk at all.
+    QVector<int> m_residentIndices;
+    int m_residentCount = 0;
+
+    // The resident nodes outside the current cut, coldest first: every node
+    // leaving one frame's cut carries that frame's stamp, so pushing at the back
+    // keeps the queue sorted. Entries are invalidated lazily, against the node
+    // itself, rather than by searching the queue.
+    std::deque<ColdEntry> m_coldNodes;
+
+    // What the last publishPointCloudStats() sent, so a frame that moved nothing
+    // leaves the HUD's revision standing still. m_statsPublished is false until
+    // the first publish, so a cloud that opens on the default numbers still
+    // states them rather than leaving another cloud's on the singleton.
+    cwRenderFrameStats::PointCloud m_publishedStats;
+    bool m_statsPublished = false;
+
     // Indices of the nodes in NodeState::Requested, so cancelling the ones the
     // cut dropped is a pass over a handful of entries, not the whole table.
     QVector<int> m_requested;
@@ -307,6 +372,11 @@ private:
     // each, bound per instance at the drawing node's slot offset.
     QRhiBuffer* m_nodeConstants = nullptr;
     QVector<int> m_freeSlots;
+
+    // Slots the constants buffer is built with, kMaxResidentNodes in the app.
+    // A shallower pool is what makes the eviction fallback reachable, which is
+    // how a test exercises it without a cloud of a hundred thousand nodes.
+    int m_maxResidentNodes;
 
     // This view's screen-space-error multiplier: raised while the cut it wants
     // outruns this view's share of the GPU budget or the point budget, lowered
@@ -339,6 +409,9 @@ private:
     // branch. The block is mutable because the const helpers time themselves.
     bool m_profileEnabled = false;
     mutable ProfileBlock m_profile;
+
+    // Started on each live gather, so the next one reads the frame's period.
+    QElapsedTimer m_frameIntervalTimer;
 
     cwTracked<cwRenderPointCloud::RenderState> m_renderState;
 };
