@@ -43,6 +43,8 @@ class CAVEWHERE_LIB_EXPORT cwRenderingStatsModel : public QAbstractListModel
     Q_PROPERTY(int residentNodes READ residentNodes NOTIFY pointCloudChanged)
     Q_PROPERTY(int selectedNodes READ selectedNodes NOTIFY pointCloudChanged)
     Q_PROPERTY(int nodeLoadsInFlight READ nodeLoadsInFlight NOTIFY pointCloudChanged)
+    Q_PROPERTY(qint64 selectedPoints READ selectedPoints NOTIFY pointCloudChanged)
+    Q_PROPERTY(QString selectedPointsText READ selectedPointsText NOTIFY pointCloudChanged)
     Q_PROPERTY(double sseInflation READ sseInflation NOTIFY pointCloudChanged)
 
 public:
@@ -83,6 +85,8 @@ public:
     int residentNodes() const { return m_pointCloud.residentNodes; }
     int selectedNodes() const { return m_pointCloud.selectedNodes; }
     int nodeLoadsInFlight() const { return m_pointCloud.nodeLoadsInFlight; }
+    qint64 selectedPoints() const { return m_pointCloud.selectedPoints; }
+    QString selectedPointsText() const { return formattedMillions(m_pointCloud.selectedPoints); }
     double sseInflation() const { return m_pointCloud.sseInflation; }
 
     //! Re-reads the ledger now, for the HUD's refresh affordance
@@ -90,6 +94,9 @@ public:
 
     //! Bytes as B/KB/MB/GB, base 1024, one decimal above a kilobyte
     static QString formattedBytes(qint64 bytes);
+
+    //! A count in millions with one decimal, e.g. "17.2 M"
+    static QString formattedMillions(qint64 count);
 
 signals:
     void totalsChanged();

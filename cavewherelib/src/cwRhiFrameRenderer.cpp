@@ -179,7 +179,50 @@ void cwRhiFrameRenderer::destroyRhiObject(cwRHIObject* rhiObject)
     m_rhiObjects.removeOne(rhiObject);
     m_rhiObjectsToInitilize.removeOne(rhiObject);
     m_rhiNeedResourceUpdate.removeOne(rhiObject);
+    m_pointCloudDemand.remove(rhiObject);
     delete rhiObject;
+}
+
+void cwRhiFrameRenderer::setPointCloudDemand(const cwRHIObject* object,
+                                             const cwRHIObject::PointCloudDemand& demand)
+{
+    m_pointCloudDemand[object] = demand;
+}
+
+void cwRhiFrameRenderer::clearPointCloudDemand(const cwRHIObject* object)
+{
+    m_pointCloudDemand.remove(object);
+}
+
+qint64 cwRhiFrameRenderer::pointBudgetShare(const cwRHIObject* object, qint64 pointBudget) const
+{
+    const int knownClouds =
+        int(m_pointCloudDemand.size()) + (m_pointCloudDemand.contains(object) ? 0 : 1);
+    const qint64 evenShare = pointBudget / std::max(1, knownClouds);
+
+    qint64 claimed = 0;
+    for (auto it = m_pointCloudDemand.constBegin(); it != m_pointCloudDemand.constEnd(); ++it) {
+        if (it.key() == object) {
+            continue;
+        }
+        claimed += std::min(it.value().points, evenShare);
+    }
+
+    return std::max<qint64>(0, pointBudget - claimed);
+}
+
+cwRHIObject::PointCloudDemand
+cwRhiFrameRenderer::pointCloudDemandExcluding(const cwRHIObject* object) const
+{
+    cwRHIObject::PointCloudDemand total;
+    for (auto it = m_pointCloudDemand.constBegin(); it != m_pointCloudDemand.constEnd(); ++it) {
+        if (it.key() == object) {
+            continue;
+        }
+        total.points += it.value().points;
+        total.bytes += it.value().bytes;
+    }
+    return total;
 }
 
 void cwRhiFrameRenderer::renderLiveFrame(QRhiCommandBuffer *cb, cwRhiItemRenderer *renderer)
@@ -579,6 +622,7 @@ void cwRhiFrameRenderer::gatherScene(std::array<QVector<cwRHIObject::PipelineBat
         // pass; contains() on the live frame's empty set is a cheap no-op.
         const cwRenderObjectId id = object->renderObjectId();
         if (!m_visibility.objectVisible(id) || options.hiddenObjectIds.contains(id)) {
+            clearPointCloudDemand(object);
             ++objectOrder;
             continue;
         }
@@ -590,6 +634,7 @@ void cwRhiFrameRenderer::gatherScene(std::array<QVector<cwRHIObject::PipelineBat
         const std::optional<QBox3D> bounds = object->worldBounds();
         if (bounds.has_value() && !frustum.intersects(bounds.value())) {
             ++cullingStats.objectsCulled;
+            clearPointCloudDemand(object);
             ++objectOrder;
             continue;
         }
@@ -602,7 +647,8 @@ void cwRhiFrameRenderer::gatherScene(std::array<QVector<cwRHIObject::PipelineBat
                 &m_visibility,
                 &frustum,
                 &cullingStats,
-                options.appearanceSlotForObject.value(object, 0)
+                options.appearanceSlotForObject.value(object, 0),
+                options.liveFrame
             };
             object->gather(context, batches);
         }

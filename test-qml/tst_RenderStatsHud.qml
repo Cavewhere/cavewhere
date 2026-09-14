@@ -99,6 +99,12 @@ QQ.Item {
                     + " / " + statsModelId.selectedNodes
                     + " nodes · " + statsModelId.nodeLoadsInFlight + " loading")
 
+            let points = ObjectFinder.findObjectByChain(rootId, "rootId->hud->renderStatsHudPointCloudPoints")
+            verify(points !== null, "renderStatsHudPointCloudPoints not found")
+            compare(points.text,
+                    " · points " + statsModelId.selectedPointsText
+                    + " / " + rootId.renderingSettings.pointBudgetMillions + " M")
+
             // The multiplier is a budget-pressure signal, so it stays off the
             // row until a view actually coarsens its cut. Nothing in QML can
             // raise the inflation — the C++ [PointCloudStreaming] stats case
@@ -113,6 +119,25 @@ QQ.Item {
         // The HUD reads the byte budget off the settings object instead of doing
         // its own megabyte math, so overBudget follows the same comparison the
         // render thread makes.
+        // The budget half of the points reading is bound to the setting, so a
+        // user who raises the point budget sees the row follow.
+        function test_pointRowFollowsThePointBudgetSetting() {
+            rootId.renderingSettings.showRenderStatsHud = true
+            tryCompare(hudId, "visible", true)
+
+            let points = ObjectFinder.findObjectByChain(rootId, "rootId->hud->renderStatsHudPointCloudPoints")
+            verify(points !== null, "renderStatsHudPointCloudPoints not found")
+
+            rootId.renderingSettings.pointBudgetMillions = 64
+            tryCompare(points, "text",
+                       " · points " + statsModelId.selectedPointsText + " / 64 M")
+
+            rootId.renderingSettings.resetToDefaults()
+            tryCompare(points, "text",
+                       " · points " + statsModelId.selectedPointsText + " / "
+                       + rootId.renderingSettings.pointBudgetMillions + " M")
+        }
+
         function test_overBudgetFollowsTheSettingsByteBudget() {
             rootId.renderingSettings.showRenderStatsHud = true
             tryCompare(hudId, "visible", true)

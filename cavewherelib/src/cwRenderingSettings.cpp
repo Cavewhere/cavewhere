@@ -17,6 +17,7 @@ QString gpuMemoryBudgetMbKey() { return QStringLiteral("rendering/gpuMemoryBudge
 QString cpuCacheBudgetMbKey() { return QStringLiteral("rendering/cpuCacheBudgetMb"); }
 QString uploadBudgetMbPerFrameKey() { return QStringLiteral("rendering/uploadBudgetMbPerFrame"); }
 QString screenSpaceErrorPxKey() { return QStringLiteral("rendering/screenSpaceErrorPx"); }
+QString pointBudgetMillionsKey() { return QStringLiteral("rendering/pointBudgetMillions"); }
 
 // 4x MSAA is the historical default and a good quality/cost balance. Snapped to
 // the device's supported set if 4 happens to be unavailable.
@@ -42,6 +43,13 @@ int clampUploadBudgetMbPerFrame(int megabytes)
     return std::clamp(megabytes,
                       cw::budgets::kMinUploadBudgetMbPerFrame,
                       cw::budgets::kMaxUploadBudgetMbPerFrame);
+}
+
+int clampPointBudgetMillions(int millions)
+{
+    return std::clamp(millions,
+                      cw::budgets::kMinPointBudgetMillions,
+                      cw::budgets::kMaxPointBudgetMillions);
 }
 
 double clampScreenSpaceErrorPx(double pixels)
@@ -89,6 +97,8 @@ cwRenderingSettings::cwRenderingSettings(QObject* parent) :
                 settings.value(uploadBudgetMbPerFrameKey(), cw::budgets::kDefaultUploadBudgetMbPerFrame).toInt());
     m_screenSpaceErrorPx = clampScreenSpaceErrorPx(
                 settings.value(screenSpaceErrorPxKey(), cw::budgets::kDefaultScreenSpaceErrorPx).toDouble());
+    m_pointBudgetMillions = clampPointBudgetMillions(
+                settings.value(pointBudgetMillionsKey(), cw::budgets::kDefaultPointBudgetMillions).toInt());
 }
 
 int cwRenderingSettings::clampToSupported(int samples) const
@@ -112,6 +122,7 @@ void cwRenderingSettings::resetToDefaults()
     setCpuCacheBudgetMb(cw::budgets::kDefaultCpuBudgetMb);
     setUploadBudgetMbPerFrame(cw::budgets::kDefaultUploadBudgetMbPerFrame);
     setScreenSpaceErrorPx(cw::budgets::kDefaultScreenSpaceErrorPx);
+    setPointBudgetMillions(cw::budgets::kDefaultPointBudgetMillions);
 }
 
 bool cwRenderingSettings::isAtDefaults() const
@@ -121,7 +132,8 @@ bool cwRenderingSettings::isAtDefaults() const
             && m_gpuMemoryBudgetMb == cw::budgets::kDefaultGpuBudgetMb
             && m_cpuCacheBudgetMb == cw::budgets::kDefaultCpuBudgetMb
             && m_uploadBudgetMbPerFrame == cw::budgets::kDefaultUploadBudgetMbPerFrame
-            && qFuzzyCompare(m_screenSpaceErrorPx, cw::budgets::kDefaultScreenSpaceErrorPx);
+            && qFuzzyCompare(m_screenSpaceErrorPx, cw::budgets::kDefaultScreenSpaceErrorPx)
+            && m_pointBudgetMillions == cw::budgets::kDefaultPointBudgetMillions;
 }
 
 cwRenderBudgets cwRenderingSettings::budgets() const
@@ -131,6 +143,7 @@ cwRenderBudgets cwRenderingSettings::budgets() const
     budgets.cpuBudgetBytes = qint64(m_cpuCacheBudgetMb) * cw::budgets::kBytesPerMegabyte;
     budgets.uploadBudgetBytesPerFrame = qint64(m_uploadBudgetMbPerFrame) * cw::budgets::kBytesPerMegabyte;
     budgets.screenSpaceErrorPx = m_screenSpaceErrorPx;
+    budgets.pointBudget = qint64(m_pointBudgetMillions) * cw::budgets::kPointsPerMillion;
     return budgets;
 }
 
@@ -164,6 +177,16 @@ void cwRenderingSettings::setScreenSpaceErrorPx(double pixels)
 {
     if (setPersisted(m_screenSpaceErrorPx, clampScreenSpaceErrorPx(pixels), screenSpaceErrorPxKey())) {
         emit screenSpaceErrorPxChanged();
+        emit isAtDefaultsChanged();
+    }
+}
+
+void cwRenderingSettings::setPointBudgetMillions(int millions)
+{
+    if (setPersisted(m_pointBudgetMillions,
+                     clampPointBudgetMillions(millions),
+                     pointBudgetMillionsKey())) {
+        emit pointBudgetMillionsChanged();
         emit isAtDefaultsChanged();
     }
 }

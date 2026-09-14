@@ -240,6 +240,24 @@ public:
     void destroyRenderObject(cwRenderObjectId id);
     void markForResourceUpdate(cwRHIObject* rhiObject) { m_rhiNeedResourceUpdate.append(rhiObject); }
 
+    // The frame's point cloud demand table: what each cloud's last cut asked of
+    // the shared point and byte budgets. Objects gather sequentially on one
+    // thread, so a cloud reads the others' entries as of the previous frame and
+    // sizes its own share against them. Entries go away with the object.
+    // an object that stops gathering — culled, hidden, or without a pipeline —
+    // gives its share back through clearPointCloudDemand rather than holding it
+    // until it is destroyed.
+    void setPointCloudDemand(const cwRHIObject* object,
+                             const cwRHIObject::PointCloudDemand& demand);
+    void clearPointCloudDemand(const cwRHIObject* object);
+    cwRHIObject::PointCloudDemand pointCloudDemandExcluding(const cwRHIObject* object) const;
+
+    // What @a object's cut may draw of @a pointBudget: the whole budget less
+    // what the other clouds want, each of them held to an even share so a cloud
+    // that gathers first cannot starve the ones after it. One cloud keeps the
+    // whole budget.
+    qint64 pointBudgetShare(const cwRHIObject* object, qint64 pointBudget) const;
+
     // The live render objects, in gather order. The offscreen renderer iterates these
     // for per-frame appearance-slot recycling and id resolution.
     const QList<cwRHIObject*>& renderObjects() const { return m_rhiObjects; }
@@ -396,6 +414,9 @@ private:
     //cwRenderObject::renderObjectId() (stable, never reused) rather than the raw
     //pointer, whose address can be recycled by the allocator (issue #512).
     QHash<cwRenderObjectId, cwRHIObject*> m_rhiObjectLookup;
+
+    //Point clouds only; see setPointCloudDemand
+    QHash<const cwRHIObject*, cwRHIObject::PointCloudDemand> m_pointCloudDemand;
 
     cwSceneUpdate::Flag m_updateFlags = cwSceneUpdate::Flag::None;
     cwVisibilitySnapshot m_visibility;

@@ -29,6 +29,14 @@ namespace cw::budgets {
     constexpr int kMinUploadBudgetMbPerFrame = 1;
     constexpr int kMaxUploadBudgetMbPerFrame = 256;
 
+    // Points every point cloud in one view may draw together in a frame. Frame
+    // time on a point cloud follows the points drawn, and nothing else here is
+    // expressed in that unit: 16 M held 60 fps on the profiling Mac.
+    constexpr int kDefaultPointBudgetMillions = 16;
+    constexpr int kMinPointBudgetMillions = 1;
+    constexpr int kMaxPointBudgetMillions = 512;
+    constexpr qint64 kPointsPerMillion = 1000000;
+
     constexpr double kDefaultScreenSpaceErrorPx = 1.5;
     constexpr double kMinScreenSpaceErrorPx = 0.5;
     constexpr double kMaxScreenSpaceErrorPx = 8.0;
@@ -36,6 +44,7 @@ namespace cw::budgets {
     constexpr qint64 kDefaultGpuBudgetBytes = kDefaultGpuBudgetMb * kBytesPerMegabyte;
     constexpr qint64 kDefaultCpuBudgetBytes = kDefaultCpuBudgetMb * kBytesPerMegabyte;
     constexpr qint64 kDefaultUploadBudgetBytesPerFrame = kDefaultUploadBudgetMbPerFrame * kBytesPerMegabyte;
+    constexpr qint64 kDefaultPointBudgetPoints = kDefaultPointBudgetMillions * kPointsPerMillion;
 }
 
 /**
@@ -48,6 +57,9 @@ struct cwRenderBudgets {
     qint64 cpuBudgetBytes = cw::budgets::kDefaultCpuBudgetBytes;
     qint64 uploadBudgetBytesPerFrame = cw::budgets::kDefaultUploadBudgetBytesPerFrame;
     double screenSpaceErrorPx = cw::budgets::kDefaultScreenSpaceErrorPx;
+
+    //! Points per frame across every cloud in the view
+    qint64 pointBudget = cw::budgets::kDefaultPointBudgetPoints;
 };
 
 #endif // CWRENDERBUDGETS_H

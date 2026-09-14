@@ -11,9 +11,9 @@ The app is launched with --profile-log and the --profile-* overrides, its stderr
 goes to <prefix>.log, `sample` and `top` traces are taken while it runs, and the
 log is parsed into the render, picking and eviction tables.
 
-The overrides persist through QSettings, so the two (three, once a point budget
-exists) preferences are read with `defaults read` before the launch and written
-back with `defaults write` however the run ends.
+The overrides persist through QSettings, so the three preferences are read with
+`defaults read` before the launch and written back with `defaults write` however
+the run ends.
 
 Python 3 standard library only.
 """
@@ -358,6 +358,8 @@ def replay(arguments):
         command += ["--profile-gpu-budget-mb", str(arguments.gpu_budget_mb)]
     if arguments.sse_px is not None:
         command += ["--profile-sse-px", str(arguments.sse_px)]
+    if arguments.point_budget is not None:
+        command += ["--profile-point-budget-millions", str(arguments.point_budget)]
 
     started = time.monotonic()
     with open(prefix + ".log", "w") as log:
@@ -374,6 +376,8 @@ def replay(arguments):
         caption += " at {} MB".format(arguments.gpu_budget_mb)
     if arguments.sse_px is not None:
         caption += ", sse {}".format(arguments.sse_px)
+    if arguments.point_budget is not None:
+        caption += ", {} M points".format(arguments.point_budget)
 
     print("## Render thread — {} ({:.1f} s)\n".format(caption, wall))
     print(render_table(lines["render"], parse_top(prefix + "-top.txt"), caption))
@@ -459,6 +463,8 @@ def main():
     parser.add_argument("--gpu-budget-mb", type=int,
                         help="--profile-gpu-budget-mb override")
     parser.add_argument("--sse-px", type=float, help="--profile-sse-px override")
+    parser.add_argument("--point-budget", type=int,
+                        help="--profile-point-budget-millions override")
     parser.add_argument("--speed", type=float, default=1.0,
                         help="replay speed, 1.0 keeps the recorded timing")
     parser.add_argument("--debug", action="store_true",

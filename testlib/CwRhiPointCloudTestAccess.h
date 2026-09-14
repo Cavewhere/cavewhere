@@ -44,6 +44,29 @@ struct CwRhiPointCloudTestAccess {
         return cloud.m_sseInflation;
     }
 
+    // What the last cut would cost to draw, which is what the governor reads.
+    static qint64 selectedPoints(const cwRHIPointCloud& cloud) {
+        return cloud.m_selected.points;
+    }
+
+    static qint64 selectedBytes(const cwRHIPointCloud& cloud) {
+        return cloud.m_selected.bytes;
+    }
+
+    static bool pointCapped(const cwRHIPointCloud& cloud) {
+        return cloud.m_selected.pointCapped;
+    }
+
+    // The relax probe's state, so a test can pin how often it runs and that an
+    // export job leaves it where the live frame put it.
+    static int relaxProbeFrame(const cwRHIPointCloud& cloud) {
+        return cloud.m_relaxProbeFrame;
+    }
+
+    static qint64 desiredBytesRelaxed(const cwRHIPointCloud& cloud) {
+        return cloud.m_desiredBytesRelaxed;
+    }
+
     // Pretends the node was last wanted in @a frame, so a test can order the
     // eviction planner's candidates without running frames.
     static void setLastDesiredFrame(cwRHIPointCloud& cloud, int index, quint64 frame) {

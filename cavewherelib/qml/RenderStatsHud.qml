@@ -22,6 +22,7 @@ QQ.Rectangle {
     readonly property int separatorHeight: 1
     readonly property int inflationDecimals: 2
     readonly property int gpuMemoryBudgetMb: RootData.settings.renderingSettings.gpuMemoryBudgetMb
+    readonly property int pointBudgetMillions: RootData.settings.renderingSettings.pointBudgetMillions
     readonly property bool overBudget: statsModelId.totalGpuBytes > RootData.settings.renderingSettings.gpuBudgetBytes
 
     visible: RootData.settings.renderingSettings.showRenderStatsHud
@@ -159,6 +160,15 @@ QQ.Rectangle {
                     .arg(statsModelId.residentNodes)
                     .arg(statsModelId.selectedNodes)
                     .arg(statsModelId.nodeLoadsInFlight)
+                color: Theme.text
+                font.pixelSize: Theme.fontSizeCaption
+            }
+
+            QC.Label {
+                objectName: "renderStatsHudPointCloudPoints"
+                text: qsTr(" · points %1 / %2 M")
+                    .arg(statsModelId.selectedPointsText)
+                    .arg(hudRootId.pointBudgetMillions)
                 color: Theme.text
                 font.pixelSize: Theme.fontSizeCaption
             }

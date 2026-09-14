@@ -54,6 +54,8 @@ public:
         int residentNodes = 0;
         //! Octree nodes the last cut asked to draw
         int selectedNodes = 0;
+        //! Points those nodes hold, the count the point budget bounds
+        qint64 selectedPoints = 0;
         //! Node loads queued, running, or waiting to be uploaded
         int nodeLoadsInFlight = 0;
         //! Screen-space-error multiplier the view raised to fit the GPU budget

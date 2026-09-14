@@ -150,6 +150,36 @@ namespace {
     }
 
     constexpr qint64 kNodeBytes = 100;
+
+    //Points a node of each level holds in buildManifestWithPoints()
+    constexpr quint32 kPointsPerNode = 1000;
+
+    //! buildManifest() with a point count and byte size on every node
+    cwPointOctreeManifest buildManifestWithPoints()
+    {
+        cwPointOctreeManifest manifest = buildManifest();
+        for(cwPointOctreeNode& node : manifest.nodes) {
+            node.pointCount = kPointsPerNode;
+            node.byteSize = qint64(kPointsPerNode) * cw::octree::kBytesPerPoint;
+        }
+        return manifest;
+    }
+
+    //! Every node between @a index and the root, root last
+    QVector<int> ancestorsOf(const cwPointOctreeManifest& manifest, int index)
+    {
+        QVector<int> ancestors;
+        for(int parent = 0; parent < manifest.nodes.size(); parent++) {
+            for(int child : manifest.nodes.at(parent).children) {
+                if(child == index) {
+                    ancestors.append(parent);
+                    ancestors.append(ancestorsOf(manifest, parent));
+                    return ancestors;
+                }
+            }
+        }
+        return ancestors;
+    }
 }
 
 TEST_CASE("cw::octree::selectNodes: an orthographic camera cuts the tree at the screen space error",
@@ -453,41 +483,170 @@ TEST_CASE("cw::octree::planNodeEvictions: releases the least wanted nodes first"
     }
 }
 
-TEST_CASE("cw::octree::nextSseInflation: steps the threshold up under pressure and back down",
+TEST_CASE("cw::octree::selectCut: the point budget caps the cut at the coarsest nodes",
           "[PointOctree][PointOctreeSelection]")
 {
-    SECTION("up a step when nothing is evictable") {
-        const InflationInput input {1.0, true, false};
+    const cwPointOctreeManifest manifest = buildManifestWithPoints();
+    const SelectionInput input = orthoInput(manifest);
+
+    const Selection full = selectCut(input);
+    REQUIRE(full.nodes.size() == manifest.nodes.size());
+    REQUIRE(full.points > 0);
+    REQUIRE_FALSE(full.pointCapped);
+
+    SECTION("an unlimited budget selects what selectNodes does and reports no cap") {
+        CHECK(nodeIndices(full.nodes) == nodeIndices(selectNodes(input)));
+        CHECK(full.pointCapped == false);
+
+        qint64 points = 0;
+        qint64 bytes = 0;
+        for(const SelectedNode& node : full.nodes) {
+            points += manifest.nodes.at(node.node).pointCount;
+            bytes += manifest.nodes.at(node.node).byteSize;
+        }
+        CHECK(full.points == points);
+        CHECK(full.bytes == bytes);
+    }
+
+    SECTION("a budget under the full cut stops the walk with every ancestor in place") {
+        SelectionInput capped = input;
+        capped.maxPoints = full.points / 2;
+
+        const Selection selection = selectCut(capped);
+        CHECK(selection.points <= capped.maxPoints);
+        CHECK(selection.points > 0);
+        CHECK(selection.pointCapped);
+        CHECK(selection.nodes.size() < full.nodes.size());
+        CHECK(selection.nodes.first().node == 0);
+
+        const QSet<int> selected = nodeSet(selection.nodes);
+        for(int index : selected) {
+            for(int ancestor : ancestorsOf(manifest, index)) {
+                CHECK(selected.contains(ancestor));
+            }
+        }
+    }
+
+    SECTION("a budget under the root's own count leaves the root alone") {
+        SelectionInput capped = input;
+        capped.maxPoints = qint64(manifest.nodes.at(0).pointCount) - 1;
+
+        const Selection selection = selectCut(capped);
+        REQUIRE(selection.nodes.size() == 1);
+        CHECK(selection.nodes.first().node == 0);
+        CHECK(selection.points == manifest.nodes.at(0).pointCount);
+        CHECK(selection.pointCapped);
+    }
+}
+
+TEST_CASE("cw::octree::nextSseInflation: follows what the cut costs against what it may spend",
+          "[PointOctree][PointOctreeSelection]")
+{
+    constexpr qint64 kAvailableBytes = 1000;
+    constexpr qint64 kFittingBytes = 500;
+
+    SECTION("up a step when the cut wants more bytes than it may spend") {
+        InflationInput input;
+        input.desiredBytes = kAvailableBytes + 1;
+        input.availableBytes = kAvailableBytes;
         REQUIRE(nextSseInflation(input) == Catch::Approx(kSseInflationStep));
     }
 
-    SECTION("capped at the maximum") {
-        const InflationInput input {kMaxSseInflation, true, false};
-        REQUIRE(nextSseInflation(input) == Catch::Approx(kMaxSseInflation));
-    }
-
-    SECTION("down a step once the budget has room") {
-        const InflationInput input {kSseInflationStep * kSseInflationStep, false, true};
+    SECTION("up a step on a point-capped cut whose bytes fit") {
+        InflationInput input;
+        input.desiredBytes = kFittingBytes;
+        input.availableBytes = kAvailableBytes;
+        input.pointCapped = true;
         REQUIRE(nextSseInflation(input) == Catch::Approx(kSseInflationStep));
     }
 
-    SECTION("floored at one") {
-        const InflationInput input {1.0, false, true};
+    SECTION("held while the cut fits and nothing was probed") {
+        InflationInput input;
+        input.current = kSseInflationStep;
+        input.desiredBytes = kFittingBytes;
+        input.availableBytes = kAvailableBytes;
+        REQUIRE(nextSseInflation(input) == Catch::Approx(kSseInflationStep));
+    }
+
+    SECTION("down a step once the probed cut fits with the relax margin to spare") {
+        InflationInput input;
+        input.current = kSseInflationStep * kSseInflationStep;
+        input.desiredBytes = kFittingBytes;
+        input.desiredBytesRelaxed = kFittingBytes;
+        input.availableBytes = kAvailableBytes;
+        REQUIRE(nextSseInflation(input) == Catch::Approx(kSseInflationStep));
+    }
+
+    SECTION("held while the probed cut only just fits") {
+        InflationInput input;
+        input.current = kSseInflationStep;
+        input.desiredBytes = kFittingBytes;
+        input.desiredBytesRelaxed = kAvailableBytes;
+        input.availableBytes = kAvailableBytes;
+        REQUIRE(nextSseInflation(input) == Catch::Approx(kSseInflationStep));
+    }
+
+    SECTION("held while the probed cut would hit the point budget") {
+        InflationInput input;
+        input.current = kSseInflationStep;
+        input.desiredBytes = kFittingBytes;
+        input.desiredBytesRelaxed = kFittingBytes;
+        input.pointCappedRelaxed = true;
+        input.availableBytes = kAvailableBytes;
+        REQUIRE(nextSseInflation(input) == Catch::Approx(kSseInflationStep));
+    }
+
+    SECTION("a probe that walked down several steps takes them all at once") {
+        constexpr int kSteps = 3;
+        InflationInput input;
+        input.current = std::pow(kSseInflationStep, kSteps + 1);
+        input.desiredBytes = kFittingBytes;
+        input.desiredBytesRelaxed = kFittingBytes;
+        input.availableBytes = kAvailableBytes;
+        input.relaxedSteps = kSteps;
+        REQUIRE(nextSseInflation(input) == Catch::Approx(kSseInflationStep));
+    }
+
+    SECTION("several steps are still floored at one") {
+        constexpr int kMoreStepsThanTaken = 6;
+        InflationInput input;
+        input.current = kSseInflationStep * kSseInflationStep;
+        input.desiredBytes = kFittingBytes;
+        input.desiredBytesRelaxed = kFittingBytes;
+        input.availableBytes = kAvailableBytes;
+        input.relaxedSteps = kMoreStepsThanTaken;
         REQUIRE(nextSseInflation(input) == Catch::Approx(1.0));
     }
 
-    SECTION("unchanged while the budget is comfortable") {
-        const InflationInput input {2.0, false, false};
-        REQUIRE(nextSseInflation(input) == Catch::Approx(2.0));
+    SECTION("floored at one when asked to relax below it") {
+        InflationInput input;
+        input.desiredBytes = kFittingBytes;
+        input.desiredBytesRelaxed = kFittingBytes;
+        input.availableBytes = kAvailableBytes;
+        REQUIRE(nextSseInflation(input) == Catch::Approx(1.0));
+    }
+
+    SECTION("capped at the maximum") {
+        InflationInput input;
+        input.current = kMaxSseInflation;
+        input.desiredBytes = kAvailableBytes + 1;
+        input.availableBytes = kAvailableBytes;
+        REQUIRE(nextSseInflation(input) == Catch::Approx(kMaxSseInflation));
     }
 
     SECTION("an inflation below one comes back at one") {
-        const InflationInput input {0.5, false, false};
+        InflationInput input;
+        input.current = 0.5;
+        input.desiredBytes = kFittingBytes;
+        input.availableBytes = kAvailableBytes;
         REQUIRE(nextSseInflation(input) == Catch::Approx(1.0));
     }
 
     SECTION("an inflation above the cap comes back at the cap") {
-        const InflationInput input {2.0 * kMaxSseInflation, false, false};
+        InflationInput input;
+        input.current = 2.0 * kMaxSseInflation;
+        input.desiredBytes = kFittingBytes;
+        input.availableBytes = kAvailableBytes;
         REQUIRE(nextSseInflation(input) == Catch::Approx(kMaxSseInflation));
     }
 }

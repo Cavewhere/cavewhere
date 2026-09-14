@@ -17,6 +17,7 @@ namespace {
 
 constexpr int kPollIntervalMilliseconds = 500;
 constexpr qint64 kBytesPerKilobyte = 1024;
+constexpr double kCountPerMillion = 1000000.0;
 constexpr int kDecimalPlaces = 1;
 
 using Category = cwRenderMemoryLedger::Category;
@@ -171,6 +172,11 @@ void cwRenderingStatsModel::refresh()
             emit pointCloudChanged();
         }
     }
+}
+
+QString cwRenderingStatsModel::formattedMillions(qint64 count)
+{
+    return tr("%1 M").arg(QString::number(double(count) / kCountPerMillion, 'f', kDecimalPlaces));
 }
 
 QString cwRenderingStatsModel::formattedBytes(qint64 bytes)

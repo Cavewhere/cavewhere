@@ -421,7 +421,8 @@ void cwRHIPointCloud::publishPointCloudStats() const
     }
 
     // streamResources runs before gather, so this is the cut the last frame drew.
-    counts.selectedNodes = int(m_selected.size());
+    counts.selectedNodes = int(m_selected.nodes.size());
+    counts.selectedPoints = m_selected.points;
     counts.nodeLoadsInFlight = m_streamer.pending().loads + int(m_readyQueue.size());
     counts.sseInflation = m_sseInflation;
 
@@ -580,7 +581,6 @@ void cwRHIPointCloud::enforceGpuBudget(const cwRenderBudgets& budgets)
     const qint64 overshoot = ledger->totalBytes(cwRenderMemoryLedger::Residency::Gpu)
                              - budgets.gpuBudgetBytes;
 
-    qint64 reclaimed = 0;
     if (overshoot > 0) {
         const QVector<cw::octree::NodeResidency> stats = residencyStats();
         for (const int index : cw::octree::planNodeEvictions(stats, overshoot)) {
@@ -592,7 +592,6 @@ void cwRHIPointCloud::enforceGpuBudget(const cwRenderBudgets& budgets)
                 continue;
             }
 
-            reclaimed += stats.at(index).bytes;
             releaseNode(index);
 
             if (m_profileEnabled) {
@@ -603,14 +602,30 @@ void cwRHIPointCloud::enforceGpuBudget(const cwRenderBudgets& budgets)
 
     const qint64 total = ledger->totalBytes(cwRenderMemoryLedger::Residency::Gpu);
 
+    // What is left for this cloud: everything that is not point cloud geometry
+    // comes off the top by what it holds, and the other clouds by what their
+    // cuts want. Their residency is no guide — LRU keeps it at the budget
+    // whatever they are drawing.
+    const PointCloudDemand others =
+        m_frame ? m_frame->pointCloudDemandExcluding(this) : PointCloudDemand{};
+    const qint64 cloudGeometryBytes =
+        ledger->bytes(cwRenderMemoryLedger::Category::PointCloudGeometry,
+                      cwRenderMemoryLedger::Residency::Gpu);
+    const qint64 availableBytes = std::max<qint64>(
+        0, budgets.gpuBudgetBytes - (total - cloudGeometryBytes) - others.bytes);
+
     cw::octree::InflationInput inflation;
     inflation.current = m_sseInflation;
-    // Still over budget with every unselected node already gone: the view wants
-    // more than it is allowed, so the only way down is a coarser cut.
-    inflation.overBudgetWithNothingEvictable = overshoot > 0 && reclaimed < overshoot;
-    inflation.underBudgetByMargin =
-        double(total) < double(budgets.gpuBudgetBytes) * (1.0 - cw::octree::kSseRelaxMargin);
+    inflation.desiredBytes = m_selected.bytes;
+    inflation.desiredBytesRelaxed = m_desiredBytesRelaxed;
+    inflation.availableBytes = availableBytes;
+    inflation.pointCapped = m_selected.pointCapped;
+    inflation.pointCappedRelaxed = m_pointCappedRelaxed;
+    inflation.relaxedSteps = m_relaxedSteps;
     m_sseInflation = cw::octree::nextSseInflation(inflation);
+
+    //What the next probe measures its relaxations against
+    m_availableBytes = availableBytes;
 
     if (m_profileEnabled) {
         m_profile.gpuBytes = total;
@@ -630,6 +645,12 @@ void cwRHIPointCloud::flushProfileBlock()
     std::sort(cutSizes.begin(), cutSizes.end());
     const int cutMedian = cutSizes.isEmpty() ? 0 : cutSizes.at(cutSizes.size() / 2);
     const int cutMax = cutSizes.isEmpty() ? 0 : cutSizes.last();
+
+    QVector<qint64>& pointCounts = m_profile.pointCounts;
+    std::sort(pointCounts.begin(), pointCounts.end());
+    const qint64 pointsMedian =
+        pointCounts.isEmpty() ? 0 : pointCounts.at(pointCounts.size() / 2);
+    const qint64 pointsMax = pointCounts.isEmpty() ? 0 : pointCounts.last();
 
     const auto span = [](QLatin1StringView name, const ProfileBlock::Span& timed,
                         int spanFrames) {
@@ -668,8 +689,8 @@ void cwRHIPointCloud::flushProfileBlock()
                 .arg(megabytes(m_profile.gpuBytes))
                 .arg(megabytes(m_profile.gpuBudgetBytes));
     line += QStringLiteral(" pointsMed=%1 pointsMax=%2 slotEvictUs=%3 residencyStatsUs=%4")
-                .arg(m_profile.pointsMedian)
-                .arg(m_profile.pointsMax)
+                .arg(pointsMedian)
+                .arg(pointsMax)
                 .arg(m_profile.slotEvictUs)
                 .arg(m_profile.residencyStatsUs);
 
@@ -760,10 +781,71 @@ void cwRHIPointCloud::releaseStreamedResources()
     publishPickSet();
 
     // The view that left is gone; whatever brings it back starts from the root.
-    m_selected.clear();
+    m_selected = cw::octree::Selection{};
     m_sseInflation = 1.0;
+    m_desiredBytesRelaxed = -1;
+    m_pointCappedRelaxed = false;
+    m_relaxedSteps = 1;
+    m_relaxProbeFrame = 0;
+    m_availableBytes = 0;
+    if (m_frame) {
+        m_frame->clearPointCloudDemand(this);
+    }
 
     publishPointCloudStats();
+}
+
+void cwRHIPointCloud::probeRelaxedCut(const cw::octree::SelectionInput& input)
+{
+    m_desiredBytesRelaxed = -1;
+    m_pointCappedRelaxed = false;
+    m_relaxedSteps = 1;
+
+    if (m_sseInflation <= 1.0) {
+        m_relaxProbeFrame = 0;
+        return;
+    }
+
+    m_relaxProbeFrame++;
+    if (m_relaxProbeFrame < cw::octree::kSseRelaxProbeFrames) {
+        return;
+    }
+    m_relaxProbeFrame = 0;
+
+    // The step down is only taken on evidence: the cut one step finer, selected
+    // for real rather than estimated, and only on a probe frame because
+    // selection is not free. A probe keeps going while the finer cut still fits
+    // the share this cloud had last frame, so a deep inflation comes back in one
+    // probe rather than one probe per step. nextSseInflation() checks the
+    // deepest level again against this frame's share before taking it.
+    cw::octree::SelectionInput relaxed = input;
+    double level = m_sseInflation;
+    int steps = 0;
+
+    while (level > 1.0) {
+        level = std::max(1.0, level / cw::octree::kSseInflationStep);
+        relaxed.sseInflation = level;
+
+        const cw::octree::Selection probe = cw::octree::selectCut(relaxed);
+        steps++;
+
+        const bool fits = !probe.pointCapped
+                          && double(probe.bytes)
+                                 < double(m_availableBytes) * (1.0 - cw::octree::kSseRelaxMargin);
+
+        if (!fits) {
+            //The first level probed is the one the governor rules on when none fit
+            if (steps == 1) {
+                m_desiredBytesRelaxed = probe.bytes;
+                m_pointCappedRelaxed = probe.pointCapped;
+            }
+            return;
+        }
+
+        m_desiredBytesRelaxed = probe.bytes;
+        m_pointCappedRelaxed = false;
+        m_relaxedSteps = steps;
+    }
 }
 
 bool cwRHIPointCloud::gather(const GatherContext& context, QVector<PipelineBatch>& batches)
@@ -772,18 +854,28 @@ bool cwRHIPointCloud::gather(const GatherContext& context, QVector<PipelineBatch
         return false;
     }
 
-    if (m_source.isNull()) {
+    // A cloud that draws nothing this frame gives its share of the view's
+    // budgets back at once, so the clouds that do draw get the whole of it.
+    const auto standDown = [this]()
+    {
+        if (m_frame) {
+            m_frame->clearPointCloudDemand(this);
+        }
         return false;
+    };
+
+    if (m_source.isNull()) {
+        return standDown();
     }
 
     const RenderData& renderData = *context.renderData;
     if (!ensurePipeline(renderData)) {
-        return false;
+        return standDown();
     }
 
     auto* pipeline = m_pipelineRecord ? m_pipelineRecord->pipeline : nullptr;
     if (!pipeline || !m_srb || !m_nodeConstants) {
-        return false;
+        return standDown();
     }
 
     m_profileEnabled = lcProfileRender().isDebugEnabled();
@@ -794,11 +886,28 @@ bool cwRHIPointCloud::gather(const GatherContext& context, QVector<PipelineBatch
         partTimer.start();
     }
 
-    m_selected = cw::octree::selectNodes(selectionInput(renderData, context.frustum));
+    cw::octree::SelectionInput input = selectionInput(renderData, context.frustum);
+
+    // The point budget and the relax probe belong to the view the user is
+    // watching. An export job renders its own camera once, at the detail it
+    // asked for, and leaves the live frame's governor alone.
+    if (context.liveFrame) {
+        // The point budget is the whole view's, so this cloud may only ask for
+        // its share of what the other clouds' cuts left of it.
+        input.maxPoints = m_frame->pointBudgetShare(this, renderData.budgets.pointBudget);
+    }
+
+    m_selected = cw::octree::selectCut(input);
+
+    if (context.liveFrame) {
+        probeRelaxedCut(input);
+        m_frame->setPointCloudDemand(this, {m_selected.points, m_selected.bytes});
+    }
 
     if (m_profileEnabled) {
         m_profile.selectNodes.add(elapsedUs(partTimer));
-        m_profile.cutSizes.append(int(m_selected.size()));
+        m_profile.cutSizes.append(int(m_selected.nodes.size()));
+        m_profile.pointCounts.append(m_selected.points);
         partTimer.restart();
     }
 
@@ -814,9 +923,9 @@ bool cwRHIPointCloud::gather(const GatherContext& context, QVector<PipelineBatch
     const quint32 appearanceOffset = quint32(appearanceSlot) * m_perCloudStride;
 
     QVector<Drawable> drawables;
-    drawables.reserve(m_selected.size());
+    drawables.reserve(m_selected.nodes.size());
 
-    for (const cw::octree::SelectedNode& selected : std::as_const(m_selected)) {
+    for (const cw::octree::SelectedNode& selected : std::as_const(m_selected.nodes)) {
         if (selected.node < 0 || selected.node >= m_nodes.size()) {
             continue;
         }

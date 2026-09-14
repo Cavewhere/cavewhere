@@ -103,6 +103,10 @@ namespace {
     constexpr float kFarOrthoHeight = 400.0f;
     //...and this one makes it project well over, so the cut refines
     constexpr float kCloseOrthoHeight = 16.0f;
+    //Small enough that the camera holds one stretch of the passage at a time
+    constexpr float kChurnOrthoHeight = 20.0f;
+    constexpr double kChurnNearAlong = 0.25;
+    constexpr double kChurnFarAlong = 0.75;
     //Room for one sprite's width when checking where the drawn points landed
     constexpr double kSpriteMarginPx = 4.0;
 
@@ -299,6 +303,28 @@ namespace {
             cwRenderMemoryLedger::Category::PointCloudGeometry, residency);
     }
 
+    // Bytes on the ledger in some other category for as long as it is alive —
+    // a note's texture, as far as the point clouds' budget share is concerned.
+    class LedgerHold {
+    public:
+        LedgerHold(cwRenderMemoryLedger::Category category,
+                   cwRenderMemoryLedger::Residency residency, qint64 bytes) :
+            m_category(category), m_residency(residency), m_bytes(bytes)
+        {
+            cwRenderMemoryLedger::instance()->adjust(m_category, m_residency, m_bytes);
+        }
+
+        ~LedgerHold()
+        {
+            cwRenderMemoryLedger::instance()->adjust(m_category, m_residency, -m_bytes);
+        }
+
+    private:
+        const cwRenderMemoryLedger::Category m_category;
+        const cwRenderMemoryLedger::Residency m_residency;
+        const qint64 m_bytes;
+    };
+
     qint64 totalGpuBytes()
     {
         return cwRenderMemoryLedger::instance()->totalBytes(
@@ -358,8 +384,28 @@ namespace {
         ~PointCloudFixture()
         {
             frameRenderer()->evictPipelinesFor(m_live.renderPassDescriptor.get());
+            if (m_secondRender) {
+                frameRenderer()->destroyRenderObject(m_secondRender->renderObjectId());
+            }
             frameRenderer()->destroyRenderObject(m_render.renderObjectId());
         }
+
+        //! A second cloud over the same cache in the same scene, so the two
+        //! share the frame's point and byte budgets
+        void addSecondCloud()
+        {
+            m_secondRender = std::make_unique<RenderCloud>();
+            m_secondRender->setScene(&m_scene);
+            m_secondRender->setOctree(m_cache.source);
+            m_secondBackend = static_cast<cwRHIPointCloud*>(m_secondRender->createRHIObject());
+            frameRenderer()->registerRenderObject(m_secondRender->renderObjectId(),
+                                                  m_secondBackend);
+            m_secondBackend->synchronize({m_secondRender.get(), &m_renderer});
+        }
+
+        const cwRHIPointCloud& secondBackend() const { return *m_secondBackend; }
+
+        cwRenderObjectId secondObjectId() const { return m_secondRender->renderObjectId(); }
 
         cwRhiItemRenderer& renderer() { return m_renderer; }
         cwRhiFrameRenderer* frameRenderer() const { return m_renderer.frameRenderer(); }
@@ -402,6 +448,10 @@ namespace {
 
         void setOrthoHeight(float height) { m_orthoHeight = height; }
 
+        //! Moves what renderFrame() looks at, so two cameras can hold
+        //! different parts of the cloud
+        void setViewOffset(const QVector3D& offset) { m_viewOffset = offset; }
+
         void setBudgets(const cwRenderBudgets& budgets)
         {
             frameRenderer()->setBudgets(budgets);
@@ -425,8 +475,9 @@ namespace {
         }
 
         //! One frame in renderLiveFrame's order: updateResources (first frame
-        //! only), streamResources, gatherScene, drawScene
-        void renderFrame()
+        //! only), streamResources, gatherScene, drawScene. @a options is what an
+        //! offscreen export job would pass — the live frame's defaults otherwise.
+        void renderFrame(const cwSceneGatherOptions& options = {})
         {
             QRhiCommandBuffer* cb = nullptr;
             REQUIRE(m_rhi->beginOffscreenFrame(&cb) == QRhi::FrameOpSuccess);
@@ -446,7 +497,7 @@ namespace {
             const cwRhiFrameRenderer::ClipSpaceCamera camera =
                 frameRenderer()->stampCamera(batch, m_rhi, renderData, kLiveCameraSlot,
                                              m_live.target.get(), orthoProjection(m_orthoHeight),
-                                             viewAt(m_cache.center), 1.0f, size);
+                                             viewAt(m_cache.center + m_viewOffset), 1.0f, size);
 
             const cwRHIObject::PerPassRenderData perPassRenderData =
                 frameRenderer()->buildPerPassRenderData(renderData);
@@ -463,9 +514,18 @@ namespace {
             qint64 remainingUploadBytes = renderData.budgets.uploadBudgetBytesPerFrame;
             m_backend->streamResources(resourceUpdateData, remainingUploadBytes);
 
+            if (m_secondBackend) {
+                if (!m_secondInitialized) {
+                    m_secondBackend->initialize(resourceUpdateData);
+                    m_secondInitialized = true;
+                }
+                m_secondBackend->updateResources(resourceUpdateData);
+                m_secondBackend->streamResources(resourceUpdateData, remainingUploadBytes);
+            }
+
             std::array<QVector<cwRHIObject::PipelineBatch>,
                        cwRhiFrameRenderer::kPassCount> passBatches;
-            frameRenderer()->gatherScene(passBatches, perPassRenderData);
+            frameRenderer()->gatherScene(passBatches, perPassRenderData, options);
 
             m_drawableCount = 0;
             for (const auto& batches : passBatches) {
@@ -559,7 +619,7 @@ namespace {
             QElapsedTimer timer;
             timer.start();
             renderFrame();
-            while (Access::hasStreamingWork(*m_backend) && timer.elapsed() < kWaitTimeoutMs) {
+            while (streamingWork() && timer.elapsed() < kWaitTimeoutMs) {
                 QThread::msleep(kFramePauseMs);
                 renderFrame();
             }
@@ -580,6 +640,25 @@ namespace {
             }
         }
 
+        //! True while either cloud still has something in flight
+        bool streamingWork() const
+        {
+            return Access::hasStreamingWork(*m_backend)
+                   || (m_secondBackend && Access::hasStreamingWork(*m_secondBackend));
+        }
+
+        //! The nodes the primary cloud holds right now
+        QSet<int> residentNodes() const
+        {
+            QSet<int> resident;
+            for (int i = 0; i < Access::nodeCount(*m_backend); i++) {
+                if (Access::nodeState(*m_backend, i) == NodeState::Resident) {
+                    resident.insert(i);
+                }
+            }
+            return resident;
+        }
+
     private:
         QRhi* const m_rhi;
         QTemporaryDir m_cacheDirectory;
@@ -589,9 +668,13 @@ namespace {
         RenderCloud m_render;
         mutable cwRhiItemRenderer m_renderer;
         cwRHIPointCloud* m_backend = nullptr;
+        std::unique_ptr<RenderCloud> m_secondRender;
+        cwRHIPointCloud* m_secondBackend = nullptr;
+        bool m_secondInitialized = false;
         bool m_backendInitialized = false;
         int m_drawableCount = 0;
         float m_orthoHeight = kFarOrthoHeight;
+        QVector3D m_viewOffset;
         bool m_readbackEnabled = false;
         QByteArray m_colorPixels;
         QSize m_colorSize;
@@ -639,6 +722,18 @@ namespace {
         SKIP("A real QRhi backend is required to watch GPU buffer lifetimes; "
              "this test runs on Metal");
         return {};
+    }
+
+    // Renders until a view inflated to @a inflation has stepped all the way back
+    // to 1, giving it the probe frames the governor needs for every step.
+    void renderUntilRelaxed(PointCloudFixture& fixture, double inflation)
+    {
+        const int steps = int(std::ceil(std::log(inflation)
+                                        / std::log(cw::octree::kSseInflationStep)));
+        const int mostFrames = 2 * cw::octree::kSseRelaxProbeFrames * std::max(1, steps);
+        for (int i = 0; i < mostFrames && Access::sseInflation(fixture.backend()) > 1.0; i++) {
+            fixture.renderFrame();
+        }
     }
 
 } // namespace
@@ -801,7 +896,7 @@ TEST_CASE("A GPU budget under the resident total evicts the coldest node and nev
     CHECK(fixture.gpuBytes() == before - coldestBytes);
 }
 
-TEST_CASE("A budget nothing can satisfy coarsens the cut, and room to spare relaxes it",
+TEST_CASE("A cut the budget share cannot hold coarsens, and a probe relaxes it again",
           "[PointCloudStreaming]")
 {
     const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
@@ -810,33 +905,365 @@ TEST_CASE("A budget nothing can satisfy coarsens the cut, and room to spare rela
     fixture.setOrthoHeight(kCloseOrthoHeight);
     fixture.renderUntilQuiet();
 
-    const int residentAtRest = Access::residentCount(fixture.backend());
-    REQUIRE(residentAtRest > 2);
+    REQUIRE(Access::residentCount(fixture.backend()) > 2);
     REQUIRE(Access::sseInflation(fixture.backend()) == 1.0);
 
-    // A budget the root alone cannot fit, with the camera pulled back so the
-    // cut stops asking for children: everything evictable goes, and the view is
-    // still over budget with nothing left to give.
+    // A budget share nothing fits in: the cut's bytes are over it however much
+    // residency is given back, so the only way down is a coarser cut.
     cwRenderBudgets budgets = fixture.budgets();
     budgets.gpuBudgetBytes = 1;
     fixture.setBudgets(budgets);
     fixture.setOrthoHeight(kFarOrthoHeight);
 
-    fixture.renderFrame();
-    fixture.renderFrame();
+    constexpr int kInflatingFrames = 2;
+    for (int i = 0; i < kInflatingFrames; i++) {
+        fixture.renderFrame();
+    }
 
     CHECK(Access::residentCount(fixture.backend()) == 1);
     CHECK(Access::nodeState(fixture.backend(), kRootIndex) == NodeState::Resident);
-    CHECK(Access::sseInflation(fixture.backend()) > 1.0);
 
-    // Room to spare again: the cut is allowed to get finer, one step per frame.
     const double coarsened = Access::sseInflation(fixture.backend());
+    CHECK(coarsened > 1.0);
+
+    // Room to spare again. The step down waits for a probe frame, which
+    // re-selects the cut one step finer and finds it fits.
     budgets.gpuBudgetBytes = cw::budgets::kDefaultGpuBudgetBytes;
     fixture.setBudgets(budgets);
 
-    fixture.renderFrame();
+    renderUntilRelaxed(fixture, coarsened);
 
-    CHECK(Access::sseInflation(fixture.backend()) < coarsened);
+    CHECK(Access::sseInflation(fixture.backend()) == 1.0);
+}
+
+TEST_CASE("Residency churning at the budget leaves the cut alone", "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    PointCloudFixture fixture(rhi.get(), QStringLiteral("churn-no-inflation"));
+
+    // Two windows a third of the passage apart. Each cut is a handful of nodes
+    // over its own stretch, so holding both costs more than either.
+    const auto stretchOffset = [&fixture](double along) {
+        return QVector3D(float(along * kTubeLength),
+                         float(kTubeBend * along * along),
+                         0.0f) - fixture.center();
+    };
+    const QVector3D nearEnd = stretchOffset(kChurnNearAlong);
+    const QVector3D farEnd = stretchOffset(kChurnFarAlong);
+
+    fixture.setOrthoHeight(kChurnOrthoHeight);
+    fixture.setViewOffset(nearEnd);
+    fixture.renderUntilQuiet();
+    const qint64 nearCutBytes = Access::selectedBytes(fixture.backend());
+
+    fixture.setViewOffset(farEnd);
+    fixture.renderUntilQuiet();
+    const qint64 farCutBytes = Access::selectedBytes(fixture.backend());
+
+    const qint64 bothBytes = fixture.gpuBytes();
+    const qint64 largestCutBytes = std::max(nearCutBytes, farCutBytes);
+    REQUIRE(largestCutBytes > 0);
+    REQUIRE(bothBytes > largestCutBytes);
+
+    // A share that holds the larger cut with room over, but not both stretches
+    // at once: LRU gives back what the camera left behind, frame after frame.
+    const qint64 share = largestCutBytes + (bothBytes - largestCutBytes) / 2;
+    const qint64 outsideBytes = totalGpuBytes() - fixture.gpuBytes();
+    cwRenderBudgets budgets = fixture.budgets();
+    budgets.gpuBudgetBytes = outsideBytes + share;
+    fixture.setBudgets(budgets);
+
+    constexpr int kAlternatingFrames = 200;
+    int nodesLeftResidency = 0;
+    for (int i = 0; i < kAlternatingFrames; i++) {
+        const QSet<int> before = fixture.residentNodes();
+        fixture.setViewOffset(i % 2 == 0 ? nearEnd : farEnd);
+        fixture.renderFrame();
+        nodesLeftResidency += int((before - fixture.residentNodes()).size());
+
+        REQUIRE(Access::sseInflation(fixture.backend()) == 1.0);
+    }
+
+    CHECK(nodesLeftResidency > 0);
+}
+
+TEST_CASE("A camera at rest gives nothing back once the cloud has settled",
+          "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    PointCloudFixture fixture(rhi.get(), QStringLiteral("static-no-eviction"));
+    fixture.setOrthoHeight(kCloseOrthoHeight);
+    fixture.renderUntilQuiet();
+
+    const QSet<int> settled = fixture.residentNodes();
+    const qint64 settledBytes = fixture.gpuBytes();
+    REQUIRE(settled.size() > 2);
+
+    constexpr int kRestingFrames = 120;
+    for (int i = 0; i < kRestingFrames; i++) {
+        fixture.renderFrame();
+        REQUIRE(fixture.residentNodes() == settled);
+        REQUIRE(fixture.gpuBytes() == settledBytes);
+    }
+
+    CHECK(Access::sseInflation(fixture.backend()) == 1.0);
+}
+
+TEST_CASE("The point budget caps what a frame draws from the first frame on",
+          "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    PointCloudFixture fixture(rhi.get(), QStringLiteral("point-budget"));
+    fixture.setOrthoHeight(kCloseOrthoHeight);
+    fixture.renderUntilQuiet();
+
+    const qint64 uncappedPoints = Access::selectedPoints(fixture.backend());
+    const qint64 rootPoints = fixture.manifest().nodes.at(kRootIndex).pointCount;
+    REQUIRE(uncappedPoints > 3 * rootPoints);
+    REQUIRE(Access::sseInflation(fixture.backend()) == 1.0);
+
+    constexpr qint64 kBudgetShare = 3;
+    cwRenderBudgets budgets = fixture.budgets();
+    budgets.pointBudget = uncappedPoints / kBudgetShare;
+    fixture.setBudgets(budgets);
+
+    constexpr int kFramesToInflate = 6;
+    bool inflated = false;
+    for (int i = 0; i < kFramesToInflate; i++) {
+        fixture.renderFrame();
+        REQUIRE(Access::selectedPoints(fixture.backend()) <= budgets.pointBudget);
+        inflated = inflated || Access::sseInflation(fixture.backend()) > 1.0;
+    }
+    CHECK(inflated);
+
+    // The cap holds every frame from the first; the inflation that follows
+    // makes the whole cut coarse rather than cutting it off part way, and stops
+    // as soon as the coarser cut fits on its own.
+    constexpr int kFramesToSettle = 60;
+    for (int i = 0; i < kFramesToSettle && Access::pointCapped(fixture.backend()); i++) {
+        fixture.renderFrame();
+        REQUIRE(Access::selectedPoints(fixture.backend()) <= budgets.pointBudget);
+    }
+    REQUIRE_FALSE(Access::pointCapped(fixture.backend()));
+
+    constexpr int kHoldingFrames = 3 * cw::octree::kSseRelaxProbeFrames;
+    const double held = Access::sseInflation(fixture.backend());
+    for (int i = 0; i < kHoldingFrames; i++) {
+        fixture.renderFrame();
+        REQUIRE(Access::selectedPoints(fixture.backend()) <= budgets.pointBudget);
+    }
+    CHECK(Access::sseInflation(fixture.backend()) == held);
+
+    // Handing the points back relaxes the cut again.
+    budgets.pointBudget = cw::budgets::kDefaultPointBudgetPoints;
+    fixture.setBudgets(budgets);
+
+    renderUntilRelaxed(fixture, held);
+    CHECK(Access::sseInflation(fixture.backend()) == 1.0);
+}
+
+TEST_CASE("Two clouds in one view share the byte and point budgets",
+          "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    PointCloudFixture fixture(rhi.get(), QStringLiteral("two-clouds"));
+    fixture.addSecondCloud();
+    fixture.setOrthoHeight(kCloseOrthoHeight);
+    fixture.renderUntilQuiet();
+
+    const qint64 cutBytes = Access::selectedBytes(fixture.backend());
+    const qint64 cutPoints = Access::selectedPoints(fixture.backend());
+    REQUIRE(cutBytes > 0);
+    REQUIRE(Access::selectedBytes(fixture.secondBackend()) == cutBytes);
+    REQUIRE(Access::sseInflation(fixture.backend()) == 1.0);
+    REQUIRE(Access::sseInflation(fixture.secondBackend()) == 1.0);
+
+    const qint64 outsideBytes = totalGpuBytes() - fixture.gpuBytes();
+    cwRenderBudgets budgets = fixture.budgets();
+
+    //Room for one cut and half of the other, so the two together do not fit
+    constexpr double kOneCutAndAHalf = 1.5;
+
+    SECTION("a share that fits one cut but not both coarsens both") {
+        budgets.gpuBudgetBytes = outsideBytes + qint64(cutBytes * kOneCutAndAHalf);
+        fixture.setBudgets(budgets);
+
+        fixture.renderFrame();
+        fixture.renderFrame();
+
+        CHECK(Access::sseInflation(fixture.backend()) > 1.0);
+        CHECK(Access::sseInflation(fixture.secondBackend()) > 1.0);
+    }
+
+    SECTION("a textured item's bytes come off both clouds' shares") {
+        //Room for both cuts and half a cut over, so neither cloud coarsens
+        constexpr double kBothCutsAndAHalf = 2.5;
+        budgets.gpuBudgetBytes = outsideBytes + qint64(cutBytes * kBothCutsAndAHalf);
+        fixture.setBudgets(budgets);
+
+        fixture.renderFrame();
+        fixture.renderFrame();
+
+        REQUIRE(Access::sseInflation(fixture.backend()) == 1.0);
+        REQUIRE(Access::sseInflation(fixture.secondBackend()) == 1.0);
+
+        //The same budget, with a note's texture holding the difference
+        const LedgerHold texture(cwRenderMemoryLedger::Category::TexturedItemTexture,
+                                 cwRenderMemoryLedger::Residency::Gpu,
+                                 cutBytes);
+
+        fixture.renderFrame();
+        fixture.renderFrame();
+
+        CHECK(Access::sseInflation(fixture.backend()) > 1.0);
+        CHECK(Access::sseInflation(fixture.secondBackend()) > 1.0);
+    }
+
+    SECTION("the point budget is the two clouds' total, not each cloud's own") {
+        budgets.pointBudget = qint64(cutPoints * kOneCutAndAHalf);
+        fixture.setBudgets(budgets);
+
+        const qint64 rootPoints = fixture.manifest().nodes.at(kRootIndex).pointCount;
+        constexpr int kFramesToShare = 40;
+        for (int i = 0; i < kFramesToShare; i++) {
+            fixture.renderFrame();
+        }
+
+        const qint64 first = Access::selectedPoints(fixture.backend());
+        const qint64 second = Access::selectedPoints(fixture.secondBackend());
+
+        //Every cloud draws its root whatever the budget says
+        CHECK(first + second <= budgets.pointBudget + 2 * rootPoints);
+
+        //Neither cloud gives way entirely: each keeps at least its even share,
+        //so the one that gathers second is not starved down to its root and
+        //coarsened forever.
+        CHECK(first < cutPoints);
+        CHECK(second < cutPoints);
+        CHECK(first > rootPoints);
+        CHECK(second > rootPoints);
+        CHECK(Access::sseInflation(fixture.backend()) < cw::octree::kMaxSseInflation);
+        CHECK(Access::sseInflation(fixture.secondBackend()) < cw::octree::kMaxSseInflation);
+    }
+
+    SECTION("a cloud that stops gathering hands its share back") {
+        budgets.pointBudget = qint64(cutPoints * kOneCutAndAHalf);
+        fixture.setBudgets(budgets);
+
+        constexpr int kFramesToShare = 40;
+        for (int i = 0; i < kFramesToShare; i++) {
+            fixture.renderFrame();
+        }
+
+        const qint64 shared = Access::selectedPoints(fixture.backend());
+        REQUIRE(shared < cutPoints);
+
+        //The second cloud is hidden for this job, so gatherScene skips it and
+        //its entry leaves the table rather than holding points it never draws.
+        cwSceneGatherOptions hideSecond;
+        hideSecond.hiddenObjectIds.insert(fixture.secondObjectId());
+
+        constexpr int kFramesAlone = 40;
+        for (int i = 0; i < kFramesAlone; i++) {
+            fixture.renderFrame(hideSecond);
+        }
+
+        CHECK(Access::selectedPoints(fixture.backend()) > shared);
+    }
+}
+
+TEST_CASE("An export job draws its own cut and leaves the live governor alone",
+          "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    PointCloudFixture fixture(rhi.get(), QStringLiteral("export-point-budget"));
+    fixture.setOrthoHeight(kCloseOrthoHeight);
+    fixture.renderUntilQuiet();
+
+    const qint64 uncappedPoints = Access::selectedPoints(fixture.backend());
+    const qint64 rootPoints = fixture.manifest().nodes.at(kRootIndex).pointCount;
+    REQUIRE(uncappedPoints > 3 * rootPoints);
+    REQUIRE(Access::sseInflation(fixture.backend()) == 1.0);
+
+    //A budget the live view cannot draw its cut under
+    cwRenderBudgets budgets = fixture.budgets();
+    budgets.pointBudget = rootPoints * 2;
+    fixture.setBudgets(budgets);
+
+    cwSceneGatherOptions exportJob;
+    exportJob.liveFrame = false;
+
+    fixture.renderFrame(exportJob);
+
+    // The export renders once, at the detail its camera asked for: the per-frame
+    // point budget is the live view's, and so is the relax probe.
+    CHECK_FALSE(Access::pointCapped(fixture.backend()));
+    CHECK(Access::selectedPoints(fixture.backend()) == uncappedPoints);
+    CHECK(Access::sseInflation(fixture.backend()) == 1.0);
+    CHECK(Access::relaxProbeFrame(fixture.backend()) == 0);
+    CHECK(Access::desiredBytesRelaxed(fixture.backend()) == -1);
+
+    //The live frame is still governed
+    fixture.renderFrame();
+    CHECK(Access::selectedPoints(fixture.backend()) <= budgets.pointBudget);
+    CHECK(Access::pointCapped(fixture.backend()));
+}
+
+TEST_CASE("The relaxed cut is probed on probe frames, not every frame",
+          "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    PointCloudFixture fixture(rhi.get(), QStringLiteral("relax-probe-cadence"));
+    fixture.setOrthoHeight(kCloseOrthoHeight);
+    fixture.renderUntilQuiet();
+
+    const qint64 cutBytes = Access::selectedBytes(fixture.backend());
+    REQUIRE(cutBytes > 0);
+    REQUIRE(Access::sseInflation(fixture.backend()) == 1.0);
+
+    //A share the cut cannot hold, so the governor inflates
+    const qint64 outsideBytes = totalGpuBytes() - fixture.gpuBytes();
+    cwRenderBudgets budgets = fixture.budgets();
+    budgets.gpuBudgetBytes = outsideBytes + cutBytes / 2;
+    fixture.setBudgets(budgets);
+
+    constexpr int kFramesToInflate = 4;
+    int inflatedFrames = 0;
+    for (int i = 0; i < kFramesToInflate; i++) {
+        fixture.renderFrame();
+        if (Access::sseInflation(fixture.backend()) > 1.0) {
+            inflatedFrames++;
+        }
+    }
+    const double inflated = Access::sseInflation(fixture.backend());
+    REQUIRE(inflated > 1.0);
+
+    //Room to spare again: the step down waits for a probe frame
+    budgets.gpuBudgetBytes = outsideBytes + 4 * cutBytes;
+    fixture.setBudgets(budgets);
+
+    constexpr int kFrameCeiling = 4 * cw::octree::kSseRelaxProbeFrames;
+    for (int i = 0;
+         i < kFrameCeiling && Access::sseInflation(fixture.backend()) >= inflated;
+         i++) {
+        fixture.renderFrame();
+        inflatedFrames++;
+    }
+
+    CHECK(Access::sseInflation(fixture.backend()) < inflated);
+
+    //The probe runs once every kSseRelaxProbeFrames frames the view spends inflated
+    CHECK(inflatedFrames >= cw::octree::kSseRelaxProbeFrames);
+
+    // One probe walks down as many steps as fit, so a deep inflation comes back
+    // in one probe rather than one probe per step.
+    CHECK(Access::sseInflation(fixture.backend()) == 1.0);
 }
 
 TEST_CASE("A streamed frame publishes the cut and its residency to the render stats",
@@ -1082,7 +1509,7 @@ TEST_CASE("The CPU ledger holds exactly the resident nodes' pick mirrors",
     CHECK(fixture.gpuBytes() == uploaded);
 }
 
-TEST_CASE("A budget below the cut coarsens it rather than evicting what it draws",
+TEST_CASE("A cut bigger than the budget share coarsens rather than evicting what it draws",
           "[PointCloudStreaming]")
 {
     const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
@@ -1096,8 +1523,9 @@ TEST_CASE("A budget below the cut coarsens it rather than evicting what it draws
     REQUIRE(Access::sseInflation(fixture.backend()) == 1.0);
 
     // The camera stays put, so everything resident is something this frame's
-    // cut wants. Evicting one of those would only re-request and re-upload it
-    // next frame — the same node read off disk every frame forever.
+    // cut wants and the cut's bytes are over the share by construction.
+    // Evicting a selected node would only re-request and re-upload it next
+    // frame — the same node read off disk every frame forever.
     cwRenderBudgets budgets = fixture.budgets();
     budgets.gpuBudgetBytes = totalGpuBytes() - 1;
     fixture.setBudgets(budgets);

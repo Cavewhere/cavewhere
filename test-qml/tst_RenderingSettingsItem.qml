@@ -71,6 +71,7 @@ MainWindowTest {
             compare(findSpinBox("gpuMemoryBudgetSpinBox").value, settings.gpuMemoryBudgetMb)
             compare(findSpinBox("cpuCacheBudgetSpinBox").value, settings.cpuCacheBudgetMb)
             compare(findSpinBox("uploadBudgetSpinBox").value, settings.uploadBudgetMbPerFrame)
+            compare(findSpinBox("pointBudgetSpinBox").value, settings.pointBudgetMillions)
             compare(findSpinBox("screenSpaceErrorSpinBox").value,
                     Math.round(settings.screenSpaceErrorPx * screenSpaceErrorScale))
         }
@@ -90,6 +91,10 @@ MainWindowTest {
             compare(upload.from, settings.minimumUploadBudgetMbPerFrame)
             compare(upload.to, settings.maximumUploadBudgetMbPerFrame)
 
+            let points = findSpinBox("pointBudgetSpinBox")
+            compare(points.from, settings.minimumPointBudgetMillions)
+            compare(points.to, settings.maximumPointBudgetMillions)
+
             let error = findSpinBox("screenSpaceErrorSpinBox")
             compare(error.from,
                     Math.round(settings.minimumScreenSpaceErrorPx * screenSpaceErrorScale))
@@ -100,20 +105,24 @@ MainWindowTest {
         function test_budgetSpinBoxesTrackExternalChanges() {
             let cpu = findSpinBox("cpuCacheBudgetSpinBox")
             let upload = findSpinBox("uploadBudgetSpinBox")
+            let points = findSpinBox("pointBudgetSpinBox")
             let error = findSpinBox("screenSpaceErrorSpinBox")
 
             settings.cpuCacheBudgetMb = 1024
             settings.uploadBudgetMbPerFrame = 16
+            settings.pointBudgetMillions = 64
             settings.screenSpaceErrorPx = 3.5
 
             tryCompare(cpu, "value", 1024)
             tryCompare(upload, "value", 16)
+            tryCompare(points, "value", 64)
             tryCompare(error, "value", 35)
 
             settings.resetToDefaults()
 
             tryCompare(cpu, "value", settings.cpuCacheBudgetMb)
             tryCompare(upload, "value", settings.uploadBudgetMbPerFrame)
+            tryCompare(points, "value", settings.pointBudgetMillions)
             tryCompare(error, "value",
                        Math.round(settings.screenSpaceErrorPx * screenSpaceErrorScale))
         }
@@ -121,6 +130,7 @@ MainWindowTest {
         function test_editingTheBudgetSpinBoxesWritesTheSettings() {
             let cpu = findSpinBox("cpuCacheBudgetSpinBox")
             let upload = findSpinBox("uploadBudgetSpinBox")
+            let points = findSpinBox("pointBudgetSpinBox")
             let error = findSpinBox("screenSpaceErrorSpinBox")
 
             //What a SpinBox does when the user spins or edits it
@@ -128,11 +138,14 @@ MainWindowTest {
             cpu.valueModified()
             upload.value = 32
             upload.valueModified()
+            points.value = 24
+            points.valueModified()
             error.value = 25
             error.valueModified()
 
             tryCompare(settings, "cpuCacheBudgetMb", 2048)
             tryCompare(settings, "uploadBudgetMbPerFrame", 32)
+            tryCompare(settings, "pointBudgetMillions", 24)
             tryCompare(settings, "screenSpaceErrorPx", 2.5)
         }
     }

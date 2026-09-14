@@ -208,6 +208,45 @@ ColumnLayout {
                 Layout.fillWidth: true
                 text: "How many megabytes of texture may be copied to the GPU in a single frame. A larger budget sharpens notes sooner after a camera move; a smaller one keeps those frames smoother."
             }
+
+            RowLayout {
+                InformationButton {
+                    showItemOnClick: pointBudgetHelpId
+                }
+
+                QC.Label {
+                    text: "Points per frame (millions)"
+                }
+
+                QC.SpinBox {
+                    id: pointBudgetSpinBoxId
+                    objectName: "pointBudgetSpinBox"
+
+                    from: itemId.renderingSettings.minimumPointBudgetMillions
+                    to: itemId.renderingSettings.maximumPointBudgetMillions
+                    editable: true
+
+                    function syncToSettings() {
+                        value = itemId.renderingSettings.pointBudgetMillions;
+                    }
+
+                    QQ.Component.onCompleted: syncToSettings()
+                    onValueModified: {
+                        itemId.renderingSettings.pointBudgetMillions = value
+                    }
+
+                    QQ.Connections {
+                        target: itemId.renderingSettings
+                        function onPointBudgetMillionsChanged() { pointBudgetSpinBoxId.syncToSettings() }
+                    }
+                }
+            }
+
+            HelpArea {
+                id: pointBudgetHelpId
+                Layout.fillWidth: true
+                text: "How many million point cloud points a single frame may draw. Frame time follows this count closely, so a smaller budget keeps the view smooth while spinning and zooming; a larger one shows more detail at once."
+            }
         }
     }
 

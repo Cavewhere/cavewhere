@@ -172,12 +172,15 @@ TEST_CASE("cwRenderingSettings budget knobs round-trip, clamp, persist, and emit
     uploadSpy.setObjectName("uploadBudgetMbPerFrameSpy");
     cwSignalSpy errorSpy(settings, &cwRenderingSettings::screenSpaceErrorPxChanged);
     errorSpy.setObjectName("screenSpaceErrorPxSpy");
+    cwSignalSpy pointSpy(settings, &cwRenderingSettings::pointBudgetMillionsChanged);
+    pointSpy.setObjectName("pointBudgetMillionsSpy");
 
     SpyChecker checker = {
         {&gpuSpy, 0},
         {&cpuSpy, 0},
         {&uploadSpy, 0},
         {&errorSpy, 0},
+        {&pointSpy, 0},
     };
 
     QSettings diskSettings;
@@ -187,6 +190,7 @@ TEST_CASE("cwRenderingSettings budget knobs round-trip, clamp, persist, and emit
         CHECK(settings->cpuCacheBudgetMb() == 512);
         CHECK(settings->uploadBudgetMbPerFrame() == 8);
         CHECK(settings->screenSpaceErrorPx() == Catch::Approx(1.5));
+        CHECK(settings->pointBudgetMillions() == 16);
         CHECK(settings->isAtDefaults());
     }
 
@@ -199,17 +203,21 @@ TEST_CASE("cwRenderingSettings budget knobs round-trip, clamp, persist, and emit
         checker[&uploadSpy]++;
         settings->setScreenSpaceErrorPx(2.5);
         checker[&errorSpy]++;
+        settings->setPointBudgetMillions(32);
+        checker[&pointSpy]++;
         checker.checkSpies();
 
         CHECK(settings->gpuMemoryBudgetMb() == 2048);
         CHECK(settings->cpuCacheBudgetMb() == 1024);
         CHECK(settings->uploadBudgetMbPerFrame() == 16);
         CHECK(settings->screenSpaceErrorPx() == Catch::Approx(2.5));
+        CHECK(settings->pointBudgetMillions() == 32);
 
         CHECK(diskSettings.value(QStringLiteral("rendering/gpuMemoryBudgetMb")).toInt() == 2048);
         CHECK(diskSettings.value(QStringLiteral("rendering/cpuCacheBudgetMb")).toInt() == 1024);
         CHECK(diskSettings.value(QStringLiteral("rendering/uploadBudgetMbPerFrame")).toInt() == 16);
         CHECK(diskSettings.value(QStringLiteral("rendering/screenSpaceErrorPx")).toDouble() == Catch::Approx(2.5));
+        CHECK(diskSettings.value(QStringLiteral("rendering/pointBudgetMillions")).toInt() == 32);
 
         CHECK_FALSE(settings->isAtDefaults());
     }
@@ -226,6 +234,9 @@ TEST_CASE("cwRenderingSettings budget knobs round-trip, clamp, persist, and emit
 
         settings->setScreenSpaceErrorPx(0.0);
         CHECK(settings->screenSpaceErrorPx() == Catch::Approx(0.5));
+
+        settings->setPointBudgetMillions(0);
+        CHECK(settings->pointBudgetMillions() == 1);
     }
 
     SECTION("values above the maximum clamp down") {
@@ -240,6 +251,9 @@ TEST_CASE("cwRenderingSettings budget knobs round-trip, clamp, persist, and emit
 
         settings->setScreenSpaceErrorPx(100.0);
         CHECK(settings->screenSpaceErrorPx() == Catch::Approx(8.0));
+
+        settings->setPointBudgetMillions(100000);
+        CHECK(settings->pointBudgetMillions() == 512);
     }
 
     SECTION("the exposed limits match the values the setters clamp to") {
@@ -251,6 +265,8 @@ TEST_CASE("cwRenderingSettings budget knobs round-trip, clamp, persist, and emit
         CHECK(cwRenderingSettings::maximumUploadBudgetMbPerFrame() == 256);
         CHECK(cwRenderingSettings::minimumScreenSpaceErrorPx() == Catch::Approx(0.5));
         CHECK(cwRenderingSettings::maximumScreenSpaceErrorPx() == Catch::Approx(8.0));
+        CHECK(cwRenderingSettings::minimumPointBudgetMillions() == 1);
+        CHECK(cwRenderingSettings::maximumPointBudgetMillions() == 512);
     }
 
     SECTION("budgets() converts the megabyte knobs to bytes") {
@@ -258,6 +274,7 @@ TEST_CASE("cwRenderingSettings budget knobs round-trip, clamp, persist, and emit
         settings->setCpuCacheBudgetMb(1024);
         settings->setUploadBudgetMbPerFrame(16);
         settings->setScreenSpaceErrorPx(2.5);
+        settings->setPointBudgetMillions(32);
 
         CHECK(settings->gpuBudgetBytes() == qint64(2048) * cw::budgets::kBytesPerMegabyte);
 
@@ -266,6 +283,7 @@ TEST_CASE("cwRenderingSettings budget knobs round-trip, clamp, persist, and emit
         CHECK(budgets.cpuBudgetBytes == qint64(1024) * cw::budgets::kBytesPerMegabyte);
         CHECK(budgets.uploadBudgetBytesPerFrame == qint64(16) * cw::budgets::kBytesPerMegabyte);
         CHECK(budgets.screenSpaceErrorPx == Catch::Approx(2.5));
+        CHECK(budgets.pointBudget == qint64(32) * cw::budgets::kPointsPerMillion);
     }
 
     SECTION("the default budgets match a default-constructed cwRenderBudgets") {
@@ -277,6 +295,7 @@ TEST_CASE("cwRenderingSettings budget knobs round-trip, clamp, persist, and emit
         CHECK(budgets.cpuBudgetBytes == defaults.cpuBudgetBytes);
         CHECK(budgets.uploadBudgetBytesPerFrame == defaults.uploadBudgetBytesPerFrame);
         CHECK(budgets.screenSpaceErrorPx == Catch::Approx(defaults.screenSpaceErrorPx));
+        CHECK(budgets.pointBudget == defaults.pointBudget);
     }
 
     SECTION("setting the current value is a no-op and emits nothing") {
@@ -284,6 +303,7 @@ TEST_CASE("cwRenderingSettings budget knobs round-trip, clamp, persist, and emit
         settings->setCpuCacheBudgetMb(settings->cpuCacheBudgetMb());
         settings->setUploadBudgetMbPerFrame(settings->uploadBudgetMbPerFrame());
         settings->setScreenSpaceErrorPx(settings->screenSpaceErrorPx());
+        settings->setPointBudgetMillions(settings->pointBudgetMillions());
         checker.checkSpies();
     }
 
@@ -310,6 +330,7 @@ TEST_CASE("cwRenderingSettings budget knobs round-trip, clamp, persist, and emit
         CHECK(settings->cpuCacheBudgetMb() == 512);
         CHECK(settings->uploadBudgetMbPerFrame() == 8);
         CHECK(settings->screenSpaceErrorPx() == Catch::Approx(1.5));
+        CHECK(settings->pointBudgetMillions() == 16);
         CHECK(settings->isAtDefaults());
     }
 

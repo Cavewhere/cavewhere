@@ -38,9 +38,11 @@ constexpr cwRenderFrameStats::Streaming kStreamingCounts {
     .readyCpuBytes = kOneAndAHalfMegabytes,
     .demotionsInFlight = 2
 };
+constexpr qint64 kMillion = 1000000;
 constexpr cwRenderFrameStats::PointCloud kPointCloudCounts {
     .residentNodes = 41,
     .selectedNodes = 57,
+    .selectedPoints = 17200000,
     .nodeLoadsInFlight = 6,
     .sseInflation = 1.25
 };
@@ -80,6 +82,14 @@ qint64 rowCpuBytes(const cwRenderingStatsModel& model, int row)
 }
 
 } // namespace
+
+TEST_CASE("cwRenderingStatsModel: formattedMillions reads a point count in millions",
+          "[RenderingStatsModel]") {
+    CHECK(cwRenderingStatsModel::formattedMillions(0) == QStringLiteral("0.0 M"));
+    CHECK(cwRenderingStatsModel::formattedMillions(kPointCloudCounts.selectedPoints)
+          == QStringLiteral("17.2 M"));
+    CHECK(cwRenderingStatsModel::formattedMillions(16 * kMillion) == QStringLiteral("16.0 M"));
+}
 
 TEST_CASE("cwRenderingStatsModel: formattedBytes covers the unit boundaries",
           "[RenderingStatsModel]") {
@@ -239,6 +249,9 @@ TEST_CASE("cwRenderingStatsModel: refresh reads the published point cloud counts
     CHECK(model.residentNodes() == kPointCloudCounts.residentNodes);
     CHECK(model.selectedNodes() == kPointCloudCounts.selectedNodes);
     CHECK(model.nodeLoadsInFlight() == kPointCloudCounts.nodeLoadsInFlight);
+    CHECK(model.selectedPoints() == kPointCloudCounts.selectedPoints);
+    CHECK(model.selectedPointsText()
+          == cwRenderingStatsModel::formattedMillions(kPointCloudCounts.selectedPoints));
     CHECK(model.sseInflation() == kPointCloudCounts.sseInflation);
     CHECK(pointCloudSpy.count() == 1);
 
@@ -257,6 +270,7 @@ TEST_CASE("cwRenderingStatsModel: refresh reads the published point cloud counts
     CHECK(model.residentNodes() == 0);
     CHECK(model.selectedNodes() == 0);
     CHECK(model.nodeLoadsInFlight() == 0);
+    CHECK(model.selectedPoints() == 0);
     CHECK(model.sseInflation() == 1.0);
     CHECK(pointCloudSpy.count() == 2);
 }

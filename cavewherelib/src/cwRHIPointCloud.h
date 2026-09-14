@@ -174,6 +174,11 @@ private:
     //! Publishes this frame's node residency, cut size, and SSE inflation for the HUD
     void publishPointCloudStats() const;
 
+    // Every kSseRelaxProbeFrames frames while inflated, re-selects @a input one
+    // step finer and records what that cut would cost, which is the only
+    // evidence nextSseInflation() steps down on.
+    void probeRelaxedCut(const cw::octree::SelectionInput& input);
+
     QVector<cw::octree::NodeResidency> residencyStats() const;
     void enforceGpuBudget(const cwRenderBudgets& budgets);
 
@@ -231,9 +236,8 @@ private:
         qint64 gpuBytes = 0;
         qint64 gpuBudgetBytes = 0;
 
-        // Points in the cut. P2 counts them; until then the line reports zero.
-        qint64 pointsMedian = 0;
-        qint64 pointsMax = 0;
+        // Points in the cut, one entry per frame, for the block's median and max.
+        QVector<qint64> pointCounts;
     };
 
     //! Writes the block as one cw.profile.render line and starts the next one.
@@ -305,16 +309,30 @@ private:
     QVector<int> m_freeSlots;
 
     // This view's screen-space-error multiplier: raised while the cut it wants
-    // outruns the GPU budget, lowered once the ledger has room to spare.
+    // outruns this view's share of the GPU budget or the point budget, lowered
+    // once a probed cut one step finer fits again.
     double m_sseInflation = 1.0;
+
+    // The probe behind the step down: the bytes of the cut one step finer and
+    // whether the point budget capped it, refreshed every
+    // kSseRelaxProbeFrames frames while inflated. -1 means not probed.
+    qint64 m_desiredBytesRelaxed = -1;
+    bool m_pointCappedRelaxed = false;
+    int m_relaxedSteps = 1;
+    int m_relaxProbeFrame = 0;
+
+    // This cloud's share of the GPU byte budget as of the last enforceGpuBudget,
+    // which is what the next probe measures its relaxations against.
+    qint64 m_availableBytes = 0;
 
     cwLedgeredBytes m_gpuBytes {cwRenderMemoryLedger::Category::PointCloudGeometry,
                                 cwRenderMemoryLedger::Residency::Gpu};
     cwLedgeredBytes m_mirrorBytes {cwRenderMemoryLedger::Category::PointCloudGeometry,
                                    cwRenderMemoryLedger::Residency::Cpu};
 
-    // This frame's cut, from gather()'s selectNodes().
-    QVector<cw::octree::SelectedNode> m_selected;
+    // This frame's cut, from gather()'s selectCut(): its nodes, and what
+    // drawing it would cost in points and bytes.
+    cw::octree::Selection m_selected;
 
     // cw.profile.render, read once per gather() and once per streamResources()
     // and consulted by the helpers they call, so a disabled category costs one

@@ -8,6 +8,7 @@
 
 //Std includes
 #include <algorithm>
+#include <cmath>
 #include <queue>
 #include <vector>
 
@@ -31,19 +32,27 @@ namespace {
     };
 }
 
-QVector<SelectedNode> selectNodes(const SelectionInput& input)
+Selection selectCut(const SelectionInput& input)
 {
-    QVector<SelectedNode> selected;
+    Selection selection;
 
     const cwPointOctreeManifest* manifest = input.manifest;
     if(manifest == nullptr || manifest->nodes.isEmpty() || input.maxNodes <= 0) {
-        return selected;
+        return selection;
     }
+
+    const auto take = [manifest, &selection](const SelectedNode& node)
+    {
+        const cwPointOctreeNode& entry = manifest->nodes.at(node.node);
+        selection.nodes.append(node);
+        selection.points += entry.pointCount;
+        selection.bytes += entry.byteSize;
+    };
 
     //Without a camera the root is all this view can honestly ask for
     if(input.absP11 <= 0.0 || input.viewportHeightPx <= 0) {
-        selected.append({kRootIndex, 0.0});
-        return selected;
+        take({kRootIndex, 0.0});
+        return selection;
     }
 
     const auto projectedSpacing = [manifest, &input](int index)
@@ -60,7 +69,7 @@ QVector<SelectedNode> selectNodes(const SelectionInput& input)
     std::priority_queue<SelectedNode, std::vector<SelectedNode>, CoarsestFirst> heap;
     heap.push({kRootIndex, projectedSpacing(kRootIndex)});
 
-    while(!heap.empty() && selected.size() < input.maxNodes) {
+    while(!heap.empty() && selection.nodes.size() < input.maxNodes) {
         const SelectedNode current = heap.top();
         heap.pop();
 
@@ -69,7 +78,16 @@ QVector<SelectedNode> selectNodes(const SelectionInput& input)
             continue;
         }
 
-        selected.append(current);
+        //The root goes in whatever it costs, so a view always has something to
+        //draw; from the second node on the point budget is a hard cap, and the
+        //coarsest-first order makes the cut a prefix of the one asked for.
+        if(!selection.nodes.isEmpty()
+           && selection.points + manifest->nodes.at(current.node).pointCount > input.maxPoints) {
+            selection.pointCapped = true;
+            break;
+        }
+
+        take(current);
 
         if(current.projectedSpacingPx > refineThreshold) {
             for(int child : manifest->nodes.at(current.node).children) {
@@ -80,7 +98,12 @@ QVector<SelectedNode> selectNodes(const SelectionInput& input)
         }
     }
 
-    return selected;
+    return selection;
+}
+
+QVector<SelectedNode> selectNodes(const SelectionInput& input)
+{
+    return selectCut(input).nodes;
 }
 
 QVector<int> planNodeEvictions(const QVector<NodeResidency>& nodes, qint64 overshootBytes)
@@ -128,12 +151,19 @@ double nextSseInflation(const InflationInput& input)
 {
     const double current = std::clamp(input.current, 1.0, kMaxSseInflation);
 
-    if(input.overBudgetWithNothingEvictable) {
+    //The cut costs more than this view is allowed, in bytes or in points
+    if(input.desiredBytes > input.availableBytes || input.pointCapped) {
         return std::min(current * kSseInflationStep, kMaxSseInflation);
     }
 
-    if(input.underBudgetByMargin) {
-        return std::max(current / kSseInflationStep, 1.0);
+    //A cut one step finer was probed and fits with room to spare
+    if(current > 1.0
+       && input.desiredBytesRelaxed >= 0
+       && !input.pointCappedRelaxed
+       && double(input.desiredBytesRelaxed)
+              < double(input.availableBytes) * (1.0 - kSseRelaxMargin)) {
+        const double steps = std::max(1, input.relaxedSteps);
+        return std::max(current / std::pow(kSseInflationStep, steps), 1.0);
     }
 
     return current;

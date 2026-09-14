@@ -84,20 +84,25 @@ namespace {
 // the app quits.
 void applyProfileOverrides(QCoreApplication& app, const QCommandLineParser& parser,
                            const QCommandLineOption& gpuBudgetMbOption,
-                           const QCommandLineOption& screenSpaceErrorPxOption)
+                           const QCommandLineOption& screenSpaceErrorPxOption,
+                           const QCommandLineOption& pointBudgetMillionsOption)
 {
-    if (!parser.isSet(gpuBudgetMbOption) && !parser.isSet(screenSpaceErrorPxOption)) {
+    if (!parser.isSet(gpuBudgetMbOption) && !parser.isSet(screenSpaceErrorPxOption)
+        && !parser.isSet(pointBudgetMillionsOption)) {
         return;
     }
 
     auto* settings = cwRenderingSettings::instance();
     const int storedGpuBudgetMb = settings->gpuMemoryBudgetMb();
     const double storedScreenSpaceErrorPx = settings->screenSpaceErrorPx();
+    const int storedPointBudgetMillions = settings->pointBudgetMillions();
 
     QObject::connect(&app, &QCoreApplication::aboutToQuit, settings,
-                     [settings, storedGpuBudgetMb, storedScreenSpaceErrorPx]() {
+                     [settings, storedGpuBudgetMb, storedScreenSpaceErrorPx,
+                      storedPointBudgetMillions]() {
                          settings->setGpuMemoryBudgetMb(storedGpuBudgetMb);
                          settings->setScreenSpaceErrorPx(storedScreenSpaceErrorPx);
+                         settings->setPointBudgetMillions(storedPointBudgetMillions);
                      });
 
     if (parser.isSet(gpuBudgetMbOption)) {
@@ -105,6 +110,9 @@ void applyProfileOverrides(QCoreApplication& app, const QCommandLineParser& pars
     }
     if (parser.isSet(screenSpaceErrorPxOption)) {
         settings->setScreenSpaceErrorPx(parser.value(screenSpaceErrorPxOption).toDouble());
+    }
+    if (parser.isSet(pointBudgetMillionsOption)) {
+        settings->setPointBudgetMillions(parser.value(pointBudgetMillionsOption).toInt());
     }
 }
 
@@ -138,10 +146,14 @@ void handleCommandline(QCoreApplication& a, cwRootData* rootData) {
     QCommandLineOption profileSseOption("profile-sse-px",
                                         "Override the screen space error for this run only.",
                                         "pixels");
+    QCommandLineOption profilePointBudgetOption("profile-point-budget-millions",
+                                                "Override the points drawn per frame for this run only.",
+                                                "millions");
     QCommandLineOption profileLogOption("profile-log",
                                         "Write the cw.profile.* lines to stderr.");
     parser.addOption(profileGpuBudgetOption);
     parser.addOption(profileSseOption);
+    parser.addOption(profilePointBudgetOption);
     parser.addOption(profileLogOption);
 
     // Adding optional filename argument
@@ -156,7 +168,8 @@ void handleCommandline(QCoreApplication& a, cwRootData* rootData) {
 
     // Before the project loads, so the first frame it draws already renders
     // under the overrides.
-    applyProfileOverrides(a, parser, profileGpuBudgetOption, profileSseOption);
+    applyProfileOverrides(a, parser, profileGpuBudgetOption, profileSseOption,
+                          profilePointBudgetOption);
 
     // Check if --page was provided
     QString pageUrl;

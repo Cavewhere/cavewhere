@@ -28,8 +28,13 @@ namespace cw::octree {
     constexpr double kSseInflationStep = 1.25;
     constexpr double kMaxSseInflation = 16.0;
 
-    //How far under the budget the ledger must sit before inflation steps back down
+    //How far under the budget share the relaxed cut must fit before inflation steps back down
     constexpr double kSseRelaxMargin = 0.10;
+
+    //How often a view inflated above 1 re-selects the cut one step finer to see
+    //whether it fits again. Selection is cheap but not free, so this is a probe
+    //rather than a per-frame answer.
+    constexpr int kSseRelaxProbeFrames = 10;
 
     //Live priority = projectedSpacingPx * kPriorityScale
     constexpr quint64 kPriorityScale = 1024;
@@ -57,6 +62,11 @@ namespace cw::octree {
         double screenSpaceErrorPx = 1.5;
         double sseInflation = 1.0;
         int maxNodes = kMaxDesiredNodes;
+
+        //Points this view may draw. The cut stops refining once the next node
+        //would push it past this, which bounds frame time in the unit frame
+        //time follows.
+        qint64 maxPoints = std::numeric_limits<qint64>::max();
     };
 
     //One node of the cut, with the on-screen spacing of its points that put it there
@@ -64,6 +74,17 @@ namespace cw::octree {
     {
         int node = -1;
         double projectedSpacingPx = 0.0;
+    };
+
+    //! One cut through the tree, with what drawing it costs
+    struct CAVEWHERE_LIB_EXPORT Selection
+    {
+        QVector<SelectedNode> nodes;
+        qint64 points = 0;
+        qint64 bytes = 0;
+
+        //! maxPoints stopped the walk, so the cut is coarser than the camera asked for
+        bool pointCapped = false;
     };
 
     /**
@@ -75,7 +96,15 @@ namespace cw::octree {
      * takes its whole subtree with it. An unknown camera (absP11 or
      * viewportHeightPx of zero) selects the root alone, so a view that has not
      * been rendered yet still holds the cloud's presence.
+     *
+     * The root is always taken, even when it alone holds more points than
+     * maxPoints; the cap applies from the second node on. The cut stays valid
+     * either way, because the tree is additive: every selected node's ancestors
+     * are selected too, so stopping early only leaves the rest coarser.
      */
+    CAVEWHERE_LIB_EXPORT Selection selectCut(const SelectionInput& input);
+
+    //! selectCut()'s nodes alone, for the callers that need nothing else
     CAVEWHERE_LIB_EXPORT QVector<SelectedNode> selectNodes(const SelectionInput& input);
 
     //What the planner knows about one resident node
@@ -100,18 +129,29 @@ namespace cw::octree {
     CAVEWHERE_LIB_EXPORT QVector<int> planNodeEvictions(const QVector<NodeResidency>& nodes,
                                                         qint64 overshootBytes);
 
-    //What the budget did to this view since the last frame
+    /**
+     * What this view's cut costs against what it is allowed, which is what the
+     * inflation follows — residency says nothing about it, because LRU keeps
+     * residency at the budget whatever the cut asks for.
+     */
     struct CAVEWHERE_LIB_EXPORT InflationInput
     {
         double current = 1.0;
-        bool overBudgetWithNothingEvictable = false;
-        bool underBudgetByMargin = false;
+        qint64 desiredBytes = 0;            //!< Bytes of the cut at current
+        qint64 desiredBytesRelaxed = -1;    //!< Bytes of the cut one step finer, -1 when not probed
+        qint64 availableBytes = 0;          //!< The budget share left for this view
+        bool pointCapped = false;           //!< The cut at current hit the point budget
+        bool pointCappedRelaxed = false;    //!< The probed cut hit it too
+
+        //! Steps between current and the probed cut, so one probe can undo several
+        int relaxedSteps = 1;
     };
 
     /**
      * The view's next screen-space-error multiplier: a step coarser while the
-     * budget is over and nothing is evictable, a step finer once the ledger has
-     * room to spare, and unchanged otherwise. Stays within [1, kMaxSseInflation].
+     * cut costs more than the view is allowed, relaxedSteps steps finer once the
+     * probed cut fits with kSseRelaxMargin to spare, and unchanged otherwise.
+     * Stays within [1, kMaxSseInflation].
      */
     CAVEWHERE_LIB_EXPORT double nextSseInflation(const InflationInput& input);
 }
