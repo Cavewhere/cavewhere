@@ -315,7 +315,7 @@ cwStationPositionLookup stationPositions() const; cwSurveyNetwork network() cons
 <tr><td>Region: root node or owner of a root</td><td>Owner of a root node (<code>rootNode()</code>), unnamed and unsaved</td><td>Insert/remove/move have one owner type; <code>walk</code> needs no region special case; the region keeps its own state (geo reference, layers, unit system, equates, <code>ownersDeleted</code>: <code>cwCavingRegion.h:46-51,186</code>). The region stays the <code>QAbstractListModel</code> over the root's children so <code>DataMainPage</code> (<code>:289</code>) keeps binding to it until W2 replaces the view.</td></tr>
 <tr><td>Two child lists, not one</td><td><code>childNodes()</code> and <code>trips()</code></td><td>Nodes and trips have different pages and types; a mixed list forces every consumer to type-switch. The tree model already models typed rows under a parent (<code>cwRegionTreeModel.h:52-63</code>).</td></tr>
 <tr><td>Solve view during W4–W5</td><td><code>parentNode()->stationPositionLookup()</code> works at every depth because C4.2 gives every node its own subtree slice (the depth-one mechanism generalized). No <code>caveNode()</code> helper is needed; <code>sourceRoot()</code> is the only "nearest ancestor of a kind" walk, and it keys off <code>isSourceRoot()</code>, never the label.</td><td>§10 ordering rationale.</td></tr>
-<tr><td><code>QAbstractItemModel</code> exposure</td><td><code>cwRegionTreeModel</code> gains recursive <code>NodeType</code> rows (C1.3) and remains the one tree model over the whole region (save/load's <code>all&lt;T&gt;()</code>, keyword model). <code>cwSurveyTreeModel</code> (C2.1) is a flattening proxy over it for the Data page.</td><td>§9.1.</td></tr>
+<tr><td><code>QAbstractItemModel</code> exposure</td><td><code>cwRegionTreeModel</code> gains recursive <code>NodeType</code> rows (C1.3) and remains the one tree model over the whole region (save/load's <code>all&lt;T&gt;()</code>, keyword model). <code>cwSurveyTreeModel</code> (C2.1) is the flattened row model for the Data page, built over the same <code>cwSurveyNode</code> row signals this model reads below the root, not over this model (§9.1).</td><td>§9.1.</td></tr>
 <tr><td>Signal chain</td><td>Node→trip connections stay exactly as <code>cwCave::connectTrip</code> (<code>cwCave.cpp:314-339</code>); node→child-node adds relays for <code>subtreeChanged</code>, <code>externalCenterlineChanged</code> (externally-backed propagates down), <code>childScopeLabelsChanged</code>, <code>tripsDeleted</code>/<code>nodesDeleted</code>. Each relay is one hop; a node never re-emits a signal it received from a child back down (memory <code>project_equate_h4_known_stations</code>: the harvest relay double-fired when it did).</td><td></td></tr>
 </table>
 
@@ -625,7 +625,8 @@ C4.1's test suite round-trips a depth-3 tree with colliding sanitized names thro
 <div class="decision">
 <p><strong>Decision:</strong> the Data page binds a <code>ListView</code> to
 <code>cwSurveyTreeModel</code>, a C++ <code>QAbstractListModel</code> of the <em>visible</em> rows
-(a flattening proxy over <code>cwRegionTreeModel</code> restricted to node and trip rows), with
+(a flattened row model of node and trip rows, fed by <code>cwCavingRegion::rootNode()</code> and the
+<code>cwSurveyNode</code> row signals — the same source <code>cwRegionTreeModel</code> reads below the root), with
 roles <code>object, rowType, depth, expanded, hasChildren, kind, kindLabel, isSourced, isReadOnly,
 isSourceRoot, tripCount, length, depthValue, lastSurvey, muted</code> and invokables
 <code>setExpanded(row, bool)</code>, <code>expandAll()</code>, <code>collapseAll()</code>,
@@ -636,9 +637,17 @@ keyboard handler, and delegate pattern is <code>ListView</code>-shaped; (2) the 
 collapsed, muted trip rows, "N hidden" counts — are row-visibility rules that are one C++
 function and one Catch2 test each, and a <code>TreeView</code> would need the same rules re-expressed
 as <code>expandToIndex</code> plumbing over a filter proxy that also hides the tree model's note/scrap
-rows; (3) <code>cwKeywordItemModel</code> already consumes <code>cwRegionTreeModel</code> the same way, so
-the proxy is an existing pattern. Cost: the model must map source insert/remove/move signals to
-visible-row changes; that is bounded and tested in C2.1.</p>
+rows; (3) the source is the node tree, not <code>cwRegionTreeModel</code>: a <code>cwSurveyNode</code>
+insert carries its whole subtree in one <code>beginInsertNodes</code>/<code>insertedNodes</code> pair, which is
+the contract Qt's own proxies assume of a parent row, whereas <code>cwRegionTreeModel</code> announces a
+fresh node's existing children after the fact (<code>insertedExistingChildren</code>, the W1 deferred
+ordering that <code>QAbstractItemModelTester</code> rejects), emits no <code>dataChanged</code> for a name,
+date, length, or depth, and hangs three note-container rows under every trip. A proxy over it would
+filter those rows, build around the ordering, and still hold a connection per object for every value
+column. Cost: one connection set per node and per trip (the shape of
+<code>cwRegionTreeModel::addNodeConnections</code>/<code>addTripConnections</code> and of
+<code>cwKeywordItemModel</code>), mapping insert/remove signals to visible-row changes; bounded and tested
+in C2.1.</p>
 </div>
 
 <h3>9.2 Mapping</h3>
@@ -649,7 +658,7 @@ visible-row changes; that is bounded and tested in C2.1.</p>
 <tr><td>Filter box, Expand all, Collapse all</td><td>Toolbar row in <code>SurveyTreeView.qml</code>; model invokables</td><td>C2.2</td></tr>
 <tr><td>Keyboard: ↑↓ → ← Enter Space Home End Shift+F10</td><td><code>Keys.onPressed</code> in <code>SurveyTreeView.qml</code> → model/selection; context menu opens at the selected row</td><td>C2.2</td></tr>
 <tr><td>Right-click context menu: Open / Rename (native) / Delete…</td><td><code>DataRightClickMouseMenu.qml</code> (<code>:30-44</code>, Remove only today) gains Open and Rename (native) and becomes <code>SurveyItemContextMenu.qml</code> used by the tree and the node page; Delete… goes through <code>RemoveAskBox</code> with the counted message</td><td>C2.2, C5.1</td></tr>
-<tr><td>One "Add ▾" split button: Add Cave / Add Folder / Attach survey file… (top level, Folder) or Add Trip / Add Section / Attach survey file… (inside a Cave/Section/sourced node)</td><td><code>AddAndSearchBar.qml</code> + <code>SplitButton.qml</code> unchanged; <code>AddVerbsMenu.qml</code> (new) builds the verbs from <code>node.takesCaves</code> (C++: <code>cwSurveyNode::takesCaves()</code> = root or a Folder with no Cave/sourced ancestor — structural, matching the prototype's <code>takesCaves</code>)</td><td>C2.2 (Add Cave + Attach), C5.1 (Folder/Section/Trip)</td></tr>
+<tr><td>One "Add ▾" split button: Add Cave / Add Folder / Attach survey file… (top level, Folder) or Add Trip / Add Section / Attach survey file… (inside a Cave/Section/sourced node)</td><td><code>AddAndSearchBar.qml</code> + <code>SplitButton.qml</code> unchanged; in C2.3 the Data page menu holds exactly Add Cave and Attach survey file…, the existing <code>addCaveMenu</code> with the item retitled; <code>AddVerbsMenu.qml</code> (new in C5.1) builds the verbs from <code>node.takesCaves</code> (C++: <code>cwSurveyNode::takesCaves()</code>, added in C5.1 — W1 shipped without it — = root or a Folder with no Cave/sourced ancestor — structural, matching the prototype's <code>takesCaves</code>)</td><td>C2.3 (Add Cave + Attach), C5.1 (Folder/Section/Trip)</td></tr>
 <tr><td>Row ⋯ menu: Open, Add verbs, Rename (native), Reload/Replace (source root)</td><td><code>SurveyTreeRow.qml</code> → <code>QC.Menu</code> composed of <code>AddVerbsMenu</code> items</td><td>C2.2, C7.4</td></tr>
 <tr><td>Node page: breadcrumb, header (icon, name, chip, Rename), stats (Trips, Length, Depth, Last survey, Fix stations, Leads), child-node section, trip table, Add ▾</td><td><code>qml/CavePage.qml</code> → <code>NodePage.qml</code> (<code>property SurveyNode currentNode</code>); child nodes = a second <code>ListView</code> section above the trip table, bound to <code>cwNodePageModel</code> (renamed <code>cwCavePageModel</code>) rows of type node/trip; fix-station subpage as today (<code>:116</code>)</td><td>C5.2</td></tr>
 <tr><td>Breadcrumb "All caves › A › B", links <code>Data/Node=A/Node=B/Trip=T</code></td><td><code>cwLinkGenerator::nodeLink/tripLink</code>; <code>cwPageSelectionModel</code> already resolves dynamic pages at depth ≥ 2 (<code>:340-360</code>); <code>NodePage.qml</code> registers child node pages and trip pages through the existing <code>Instantiator</code> pattern (<code>CavePage.qml:103</code>); <code>LinkBar.qml</code> renders the crumbs</td><td>C5.3</td></tr>
@@ -690,7 +699,7 @@ relocation + driver → native groups in the UI → sourced subtrees → shim de
 <table>
 <tr><th>Workflow</th><th>Visible?</th><th>Depends on</th><th>Commits</th><th>Agents (5 per commit)</th></tr>
 <tr><td>W1 Node class at depth one</td><td>No</td><td>—</td><td>3</td><td>15</td></tr>
-<tr><td>W2 Tree Data page over depth-one data</td><td><strong>Yes</strong></td><td>W1</td><td>2</td><td>10</td></tr>
+<tr><td>W2 Tree Data page over depth-one data</td><td><strong>Yes</strong></td><td>W1</td><td>3</td><td>15</td></tr>
 <tr><td>W3 Persistence at depth N</td><td>No (round-trips)</td><td>W1</td><td>3</td><td>15</td></tr>
 <tr><td>W4 Driver, labels, line plot at depth N</td><td>No (export/solve of flat projects unchanged)</td><td>W3</td><td>4</td><td>20</td></tr>
 <tr><td>W5 Folders, Sections, node pages, links</td><td><strong>Yes</strong></td><td>W2, W4</td><td>3</td><td>15</td></tr>
@@ -760,40 +769,65 @@ relocation + driver → native groups in the UI → sourced subtrees → shim de
 <p><strong>Goal:</strong> the Data page is the settled tree table. With today's data it shows caves as collapsible rows with trip leaves, Kind = "Cave" everywhere, filter, expand/collapse all, keyboard navigation, right-click Open/Rename/Delete…, row ⋯ menu (Open, Add Trip, Rename), and "Add ▾" = Add Cave with "Attach survey file…" inside it (routing to the existing cave-level attach dialog for now).</p>
 <p><strong>Scope out:</strong> Add Folder/Add Section (W5), sourced kinds (W7), node pages (W5).</p>
 
+<div class="decision">
+<p><strong>W1 landed (2026-09-14, branch <code>externalFiles</code>):</strong> <code>6a685bb7</code> (cwSurveyNode + cwCave shim + cwTrip::parentNode), <code>a267a87b</code> (region owns a root node; <code>region.addNode(parent, kind)</code>), <code>1cd4e6ff</code> (cwRegionTreeModel recursion; keyword path), <code>eeb24434</code> (cwTrip::numberOfStations Q_INVOKABLE). Real paths are <code>cavewherelib/src/</code>, <code>cavewherelib/qml/</code>, <code>testcases/</code>, <code>test-qml/</code> where this document writes <code>src/</code>, <code>qml/</code>, <code>tests/</code>. API facts C2.1 builds on:</p>
+<ul>
+  <li>Every §9.1 role has a source: <code>kind</code>/<code>kindChanged</code>; <code>isSourced</code>/<code>isReadOnly</code>/<code>isSourceRoot</code>/<code>sourceChanged</code>; <code>childNodeCount</code>/<code>tripCount</code> with their NOTIFYs; <code>subtreeChanged</code> (relayed one hop per level, emitted after every trip or node insert/remove funnel); <code>allTrips()</code>/<code>allNodes()</code>/<code>walk()</code>/<code>path()</code>; <code>parentNode()</code> on node and trip; <code>cwLength* length()/depth()</code> with <code>cwUnitValue::valueChanged</code>; <code>cwTrip::dateChanged</code>/<code>nameChanged</code>. No node signal relays a descendant trip's name or date, so the model holds a connection per trip for those, as it does for a node's <code>nameChanged</code>.</li>
+  <li>The root node emits the same <code>beginInsertNodes</code>/<code>insertedNodes</code>/<code>beginRemoveNodes</code>/<code>removedNodes</code> pairs as any node (the region's list model is a relay of them), so one subscription shape serves every depth. The region connects to the root first, so the page <code>Instantiator</code> on <code>RootData.region</code> has registered a cave's page before the tree announces the row.</li>
+  <li>A load is <code>clearCaves()</code> followed by one batched <code>addCaves()</code> insert, so "expanded one level on every load" is the per-insert rule: a node inserted with <code>isSourceRoot()</code> true starts expanded. Nothing sets <code>sourceId</code>/<code>sourcePath</code>/<code>readOnly</code> in production yet (a cave-level attach sets <code>externalCenterline</code>), so <code>isSourceRoot()</code> is false for every node until W7: the rule is implemented and tested in memory here and exercised by real data in W7.</li>
+  <li><code>cwLinePlotManager</code> writes <code>length()</code>/<code>depth()</code> on the region's direct children only (C4.2 gives every node its own), and a trip carries no length, so those two columns read the node's own <code>cwLength</code>; only trip count and last survey fold over <code>allTrips()</code>.</li>
+  <li><code>cwSurveyNode::takesCaves()</code> is absent (C5.1). <code>region.addNode(parent, kind)</code> exists but W2 creates no depth-2 node, so W3's persistence gap does not touch W2.</li>
+  <li>Both source trees are globbed with <code>CONFIGURE_DEPENDS</code> (<code>cavewherelib/CMakeLists.txt:261</code>, <code>CMakeLists.txt:277</code>): the untracked draft <code>cwSurveyTreeModel.h/.cpp</code> and <code>testcases/test_cwSurveyTreeModel.cpp</code> from the aborted run, and <code>testcases/test_tmp_omega2.cpp</code>, compile into the next build. C2.1 overwrites the three drafts; the owner removes <code>test_tmp_omega2.cpp</code>.</li>
+</ul>
+</div>
+
 <div class="commit">
 <h4>C2.1 — <code>cwSurveyTreeModel</code> (flattened visible rows) <span class="size">L</span></h4>
 <ul class="filelist">
-  <li><code>src/cwSurveyTreeModel.h/.cpp</code> (new, QML <code>SurveyTreeModel</code>): §9.1 roles and invokables; expanded set keyed by <code>QUuid</code>; default expansion rule (native collapsed; <code>isSourceRoot</code> expanded one level, applied on <code>setRegion</code> and on every load); filter = case-insensitive substring on names, a row is visible when it or a descendant matches, matching ancestors are force-expanded while the filter is non-empty; length/depth/trip count/last survey folds over <code>allTrips()</code> (a Folder's are the same folds; the view mutes them); source-model insert/remove/move → visible-row insert/remove.</li>
-  <li><code>tests/test_cwSurveyTreeModel.cpp</code> (new, <code>[SurveyTreeModel]</code>): depth-3 in-memory tree; expand/collapse row counts; filter auto-expand and restore; inserts under a collapsed parent add no rows; <code>QAbstractItemModelTester</code>.</li>
+  <li><code>cavewherelib/src/cwSurveyTreeModel.h/.cpp</code> (new, QML <code>SurveyTreeModel</code>, a <code>QAbstractListModel</code> with a <code>region</code> property bound to <code>RootData.region</code>): §9.1 roles and invokables; rows follow each node's own row order (child nodes, then trips — the loader already lists caves alphabetically); expanded set keyed by node <code>QUuid</code>; default expansion rule (native collapsed; a node inserted with <code>isSourceRoot()</code> true is expanded one level, which covers <code>setRegion</code> and every load); filter = case-insensitive substring on names, a row is visible when it or a descendant matches, matching ancestors are force-expanded while the filter is non-empty and the prior expansion set comes back when it clears; trip count and last survey fold over <code>allTrips()</code>, length/depth read the node's <code>cwLength</code> (a Folder's are the same reads; the view mutes them); node/trip insert and remove → visible-row insert/remove, with <code>dataChanged</code> on the row and its ancestors for a name, date, count, or length change.</li>
+  <li><code>testcases/test_cwSurveyTreeModel.cpp</code> (new, <code>[SurveyTreeModel]</code>): depth-3 in-memory tree; expand/collapse row counts; filter auto-expand and restore; inserts under a collapsed parent add no rows; a node inserted with a source id and empty source path starts expanded; a trip rename and a date change reach <code>dataChanged</code> on the trip row and its ancestors; <code>QAbstractItemModelTester</code>.</li>
 </ul>
 <div class="gate"><strong>Gate:</strong> <code>cavewhere-test "[SurveyTreeModel]"</code>.</div>
 </div>
 
 <div class="commit">
-<h4>C2.2 — <code>DataMainPage</code> tree table, context menu, keyboard, Add ▾ <span class="size">L</span></h4>
+<h4>C2.2 — <code>DataMainPage</code> tree table, row click, existing tests <span class="size">L</span></h4>
 <ul class="filelist">
-  <li><code>qml/SurveyTreeView.qml</code>, <code>qml/SurveyTreeRow.qml</code>, <code>qml/KindChip.qml</code>, <code>qml/AddVerbsMenu.qml</code> (new); <code>qml/DataMainPage.qml:254-339</code> rewired; <code>qml/DataRightClickMouseMenu.qml</code> → <code>SurveyItemContextMenu.qml</code> (Open / Rename (native) / Delete…); Theme tokens only.</li>
-  <li>Row click on a trip opens the trip page through <code>cwLinkGenerator::tripLink</code> (unchanged link shape at depth one).</li>
-  <li><code>test-qml/tst_DataMainPageTree.qml</code> (new): rows for two caves, expand shows trips, filter expands, keyboard ↓/→/Enter opens a trip, Shift+F10 opens the context menu, Delete… removes through <code>RemoveAskBox</code>; <code>tst_DataMainPageExternal.qml</code>, <code>tst_DataMainPage_globalCS.qml</code>, <code>tst_DelegateLinkNavigation.qml</code> updated for the new delegate ids.</li>
+  <li><code>cavewherelib/qml/SurveyTreeView.qml</code> (header row + <code>ListView</code> over <code>SurveyTreeModel</code>, selection), <code>SurveyTreeRow.qml</code> (caret, name as <code>DoubleClickTextInput</code>, <code>KindChip</code>, Trips/Length/Depth/Last survey cells, <code>ErrorIconBar</code>, <code>ExternalSolveBadge</code>), <code>KindChip.qml</code> (new); <code>DataMainPage.qml:287-379</code> (the cave <code>ListView</code>) replaced; the <code>Instantiator</code> at <code>:511</code> stays on <code>RootData.region</code> (§13 Q9); <code>ExportImportButtons.currentCave</code> (<code>:276-283</code>) reads the tree's selected node instead of <code>caveListId.currentItem</code>; Theme tokens only.</li>
+  <li>A cave row's name opens the cave page as today (<code>cavePageName</code>); a trip row opens the trip page by setting <code>RootData.pageSelectionModel.currentPageAddress</code> to <code>LinkGenerator.tripLink(trip)</code>, which walks the parent pages so the cave page's trip <code>Instantiator</code> has registered it (unchanged link shape at depth one).</li>
+  <li>Existing tests re-pointed at the new row ids: <code>tst_DelegateLinkNavigation.qml</code> and <code>tst_Leads.qml</code> (<code>caveDelegate0-&gt;caveLink</code>), <code>tst_ImportCSVData.qml:117-122</code> (<code>caveDelegate0-&gt;length-&gt;value</code> / <code>depth-&gt;value</code> — keep <code>SelectableCaveStat</code> in the row cells so the "55.6"/"19.54" texts hold), <code>tst_ExternalSolveBadge.qml:39</code> (<code>caveDelegate&lt;i&gt;-&gt;externalSolveBadge</code>). <code>tst_DataMainPageExternal.qml</code> and <code>tst_DataMainPage_globalCS.qml</code> touch only the region header and need no change; <code>tst_ManualScreenshots.qml</code> finds the add button by its "Add Cave" text.</li>
+  <li><code>test-qml/tst_DataMainPageTree.qml</code> (new, first half): rows for two caves, nothing expanded on load, expand shows trip rows, a trip row click lands on <code>tripPage</code>, Back keeps the expansion.</li>
 </ul>
-<div class="gate"><strong>Gate:</strong> the four QML files above; <code>cavewhere-qml-test</code> full run (many tests click the cave list).</div>
+<div class="gate"><strong>Gate:</strong> the five QML tests above; <code>cavewhere-qml-test</code> full run (many tests click the cave list).</div>
+</div>
+
+<div class="commit">
+<h4>C2.3 — Filter, expand/collapse all, keyboard, context menu, row ⋯, Add ▾ <span class="size">M</span></h4>
+<ul class="filelist">
+  <li><code>SurveyTreeView.qml</code>: toolbar (filter box, Expand all, Collapse all) over the model invokables; <code>Keys.onPressed</code> per the prototype (↑ ↓ → ← Enter Space Home End, Shift+F10 opens the context menu at the selected row).</li>
+  <li><code>DataRightClickMouseMenu.qml</code> → <code>SurveyItemContextMenu.qml</code>: Open / Rename (native node; calls the row name's <code>openEditor()</code>, the inline affordance <code>CavePage.qml:144</code> and the region name already use) / Delete…; Delete… goes through <code>RemoveAskBox</code> with its <code>message</code> override, "Remove &lt;b&gt;name&lt;/b&gt; and its N trips?" from <code>node.tripCount</code> (a bare "Remove name?" for a trip row), and removes through <code>parentNode.removeNode(indexOfNode(node))</code> / <code>parentNode.removeTrip(indexOf(trip))</code>.</li>
+  <li>Row ⋯ menu on a node row: Open, Add Trip (<code>node.addTrip()</code> then the trip link), Rename. "Add ▾": main action Add Cave as today; the chevron menu keeps <code>objectName</code> <code>addCaveMenu</code> with its one item retitled "Attach survey file…" and routed to <code>addCaveFromSurveyFileWithDialog()</code>, so <code>tst_AddCaveFromSurveyFile.qml:50-64</code> (one item, <code>addExternalCaveMenuItem</code>) needs only its text check, if any, updated.</li>
+  <li><code>tst_DataMainPageTree.qml</code> (second half): filter narrows and auto-expands, clearing it restores; ↓ → Enter opens a trip; Shift+F10 opens the menu; Rename edits inline; Delete… asks with the count and removes.</li>
+  <li>Screenshots (native-only project; a project with a cave-level attach) attached to the commit.</li>
+</ul>
+<div class="gate"><strong>Gate:</strong> <code>tst_DataMainPageTree.qml</code>, <code>tst_AddCaveFromSurveyFile.qml</code>; <code>cavewhere-qml-test</code> full run; <code>cavewhere-test</code> full run.</div>
 </div>
 
 <h4>What to review in the source</h4>
-<ul><li>Visible-row bookkeeping on source inserts/removes (off-by-one under a collapsed parent).</li><li>Keyboard handler: ← on a collapsed row selects the parent; Space toggles; focus stays in the tree after a menu closes.</li><li>Delete goes only through the context menu; no Delete button exists.</li></ul>
+<ul><li>Visible-row bookkeeping on source inserts/removes (off-by-one under a collapsed parent); the model reads <code>cwSurveyNode</code> only, never <code>cwRegionTreeModel</code>.</li><li>Keyboard handler: ← on a collapsed row selects the parent; Space toggles; focus stays in the tree after a menu closes.</li><li>Delete goes only through the context menu; no Delete button exists.</li></ul>
 <h4>What to play with in the UX</h4>
 <ol>
   <li>Open a native project: the cave list reads as today plus a caret per row and a Kind column reading "Cave". Nothing is expanded.</li>
   <li>Expand a cave; click a trip row → trip page; Back → the tree keeps its expansion.</li>
   <li>Type in the filter: only matching caves/trips remain, ancestors auto-expanded; clear it: previous expansion restored.</li>
   <li>Keyboard: click the tree, ↓ ↓ → Enter opens; Shift+F10 shows Open/Rename/Delete…; Delete… asks with the count.</li>
-  <li>Add ▾ → Attach survey file… behaves as the old "Add cave from survey file…"; the attached cave shows the 📎 badge on its row.</li>
+  <li>Add ▾ → Attach survey file… behaves as the old "Add cave from survey file…"; the attached cave shows the 📎 badge on its row (the <code>ExternalSolveBadge</code> reading <code>externalCenterline</code>, as today; the row's kind chip still reads "Cave", because <code>isSourceRoot</code> stays false until W7).</li>
 </ol>
 <h4>Exit criteria</h4>
 <ul><li>Both suites green.</li><li>Every existing QML test that clicked the old cave delegate passes against the tree.</li><li>Screenshots of a native-only project and of a project with a cave-level attach attached to the commit.</li></ul>
 <h4>Risks</h4>
-<p>QML tests that reach into the old delegate by <code>objectName</code>; keyboard focus interplay with <code>LinkBar</code>. Run the QML suite in full at the gate.</p>
-<p class="small">Sizing: L + L; 10 agents; sequential (C2.2 binds C2.1's roles).</p>
+<p>QML tests that reach into the old delegate by <code>objectName</code> (five files, listed in C2.2); keyboard focus interplay with <code>LinkBar</code>. Run the QML suite in full at the gate.</p>
+<p class="small">Sizing: L + L + M; 15 agents; sequential (C2.2 binds C2.1's roles; C2.3 builds on C2.2's rows).</p>
 </div>
 
 <!-- ================================================================ W3 -->
@@ -1127,7 +1161,7 @@ relocation + driver → native groups in the UI → sourced subtrees → shim de
 <tr><td><code>tests/test_cwSurveyNodeSyncMergeHandler.cpp</code> (from <code>test_cwCaveSyncMergeHandler</code> cases)</td><td><code>[Sync]</code></td><td>C3.2</td></tr>
 <tr><td><code>tests/test_cwSurvexExporterRegion_NodeTree.cpp</code>, <code>test_cwLinePlotTask_NodeTree.cpp</code>, <code>test_cwEquateMigration.cpp</code></td><td><code>[Exporter]</code>, <code>[LinePlot]</code>, <code>[Equate]</code></td><td>C4.1–C4.3</td></tr>
 <tr><td><code>tests/test_cwExternalUnitManifest.cpp</code>, <code>test_cwExternalCenterlineAttachSubtree.cpp</code>, <code>test_cwExternalSourceModel.cpp</code></td><td><code>[Manifest]</code>, <code>[Attach]</code>, <code>[ExternalSource]</code></td><td>C7.1, C7.2</td></tr>
-<tr><td><code>test-qml/tst_DataMainPageTree.qml</code>, <code>tst_NodePage.qml</code>, <code>tst_SourceRootPage.qml</code>, <code>tst_AttachSurveyFileDialog.qml</code> (renamed)</td><td>—</td><td>C2.2, C5.2, C7.4</td></tr>
+<tr><td><code>test-qml/tst_DataMainPageTree.qml</code>, <code>tst_NodePage.qml</code>, <code>tst_SourceRootPage.qml</code>, <code>tst_AttachSurveyFileDialog.qml</code> (renamed)</td><td>—</td><td>C2.2–C2.3, C5.2, C7.4</td></tr>
 </table>
 <p class="small">All QML tests extend <code>ExternalCenterlineTestCase.qml</code> where they attach; add <code>makeSavedTreeProject()</code> (loads <code>survey-tree/depth2</code> into a temp copy) there in C5.2. Tests must run as concurrent processes: <code>QTemporaryDir</code> or the PID in every path (CLAUDE.md). Collapse note overlays before clicking note images.</p>
 
@@ -1189,14 +1223,14 @@ changes; never commit or push without the owner asking.</p>
 <table class="small">
 <tr><th>Workflow</th><th>Commits (size)</th><th>Agents</th><th>Parallel-safe pairs</th><th>Must precede</th></tr>
 <tr><td>W1</td><td>C1.1 L, C1.2 M, C1.3 M</td><td>15</td><td>—</td><td>everything</td></tr>
-<tr><td>W2</td><td>C2.1 L, C2.2 L</td><td>10</td><td>W2 ∥ W3</td><td>W5</td></tr>
+<tr><td>W2</td><td>C2.1 L, C2.2 L, C2.3 M</td><td>15</td><td>W2 ∥ W3</td><td>W5</td></tr>
 <tr><td>W3</td><td>C3.1 L, C3.2 L, C3.3 M</td><td>15</td><td>—</td><td>W4</td></tr>
 <tr><td>W4</td><td>C4.1 L, C4.2 L, C4.3 M, C4.4 M</td><td>20</td><td>C4.1 ∥ C4.4</td><td>W5, W6</td></tr>
 <tr><td>W5</td><td>C5.1 M, C5.2 L, C5.3 M</td><td>15</td><td>C5.1 ∥ C5.3; W5 ∥ W6</td><td>W7</td></tr>
 <tr><td>W6</td><td>C6.1 L, C6.2 M</td><td>10</td><td>—</td><td>W7</td></tr>
 <tr><td>W7</td><td>C7.1 L, C7.2 L, C7.3 L, C7.4 L</td><td>20</td><td>(C7.1 ∥ C7.2 discouraged)</td><td>W8</td></tr>
 <tr><td>W8</td><td>C8.1 M, C8.2 L, C8.3 S</td><td>15</td><td>—</td><td>—</td></tr>
-<tr><td><strong>Total</strong></td><td>24 commits: 14 L, 9 M, 1 S</td><td>120</td><td></td><td></td></tr>
+<tr><td><strong>Total</strong></td><td>25 commits: 14 L, 10 M, 1 S</td><td>125</td><td></td><td></td></tr>
 </table>
 <p class="small">"Agents" counts one agent per pipeline stage per commit (plan / implement / test / review / fix). A parallel-safe pair runs in two worktrees off the same base; the second lands after a rebase and a re-run of its gate.</p>
 
