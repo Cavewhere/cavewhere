@@ -294,7 +294,7 @@ StandardPage {
 
         QC.MenuItem {
             objectName: "addExternalCaveMenuItem"
-            text: qsTr("Add cave from survey file…")
+            text: qsTr("Attach survey file…")
             onTriggered: pageId.addCaveFromSurveyFileWithDialog()
         }
     }
@@ -411,11 +411,10 @@ StandardPage {
         }
     }
 
+    //The tree's rows are what this prompt asks about, and the tree knows how a
+    //node and a trip are each removed, so it answers the prompt itself.
     RemoveAskBox {
         id: removeChallengeId
-        onRemove: {
-            RootData.region.removeCave(indexToRemove);
-        }
     }
 
     Instantiator {

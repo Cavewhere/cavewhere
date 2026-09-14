@@ -55,8 +55,16 @@ QQ.Item {
     //until TreeView hands it a new row.
     property bool pooled: false
 
+    //True while this row's name is being edited. Only the Name cell reads it;
+    //a rename asked for from another cell is routed to the Name cell first.
+    property bool renaming: false
+
     readonly property bool isNode: rowId.rowType === SurveyTreeModel.Node
     readonly property SurveyNode node: rowId.object as SurveyNode
+
+    //A sourced node's name belongs to its file, and a trip is renamed on its
+    //own page, so only a native node offers Rename.
+    readonly property bool canRename: rowId.isNode && !rowId.isSourced
 
     objectName: {
         if(rowId.pooled) {
@@ -86,14 +94,57 @@ QQ.Item {
     implicitHeight: Theme.treeRowHeight
 
     //The page the row stands for: a node's cave page, a trip's trip page.
-    //Both go through the page address so the parent pages are walked and
-    //registered on the way.
+    //The view opens it, so a row opened by a click, by the menu and by Enter
+    //all take the same path.
     function open() {
-        const link = rowId.isNode
-                   ? rowId.treeView.linkGenerator.caveLink(rowId.object)
-                   : rowId.treeView.linkGenerator.tripLink(rowId.object);
-        if(link !== "") {
-            RootData.pageSelectionModel.currentPageAddress = link;
+        rowId.treeView.surveyTree.openObject(rowId.object);
+    }
+
+    //Adds a native trip to this node and opens it, as the cave page's Add Trip
+    //does. The new trip is the node's last one.
+    function addTrip() {
+        if(rowId.node === null) {
+            return;
+        }
+
+        rowId.node.addTrip();
+        const trip = rowId.node.trip(rowId.node.tripCount - 1);
+        rowId.treeView.surveyTree.expandTo(trip);
+        rowId.treeView.surveyTree.openObject(trip);
+    }
+
+    //The cell of this row that carries the tree's caret, the name, the name
+    //editor and the row's one context menu. Every other cell hands those to it.
+    function nameCell() : QQ.Item {
+        return rowId.column === SurveyTreeModel.Name
+             ? rowId
+             : rowId.treeView.itemAtCell(Qt.point(SurveyTreeModel.Name, rowId.row));
+    }
+
+    //Opens the name editor, wherever on the row the rename was asked for.
+    function startRename() {
+        const cell = rowId.nameCell();
+        if(cell !== null) {
+            cell.renaming = true;
+        }
+    }
+
+    //Shows the row's context menu at \a x, \a y in this cell's coordinates.
+    function showContextMenu(x: real, y: real) {
+        const cell = rowId.nameCell();
+        if(cell === null) {
+            return;
+        }
+
+        const position = rowId.mapToItem(cell, x, y);
+        cell.popupContextMenu(position.x, position.y);
+    }
+
+    //Pops this cell's own menu. Only the Name cell carries one.
+    function popupContextMenu(x: real, y: real) {
+        const menu = contextMenuLoaderId.item as SurveyItemContextMenu;
+        if(menu !== null) {
+            menu.showMenu(x, y);
         }
     }
 
@@ -103,7 +154,10 @@ QQ.Item {
         rowId.treeView.toggleExpanded(rowId.row);
     }
 
-    QQ.TableView.onPooled: rowId.pooled = true
+    QQ.TableView.onPooled: {
+        rowId.pooled = true;
+        rowId.renaming = false;
+    }
     QQ.TableView.onReused: rowId.pooled = false
 
     TableRowBackground {
@@ -134,23 +188,37 @@ QQ.Item {
                 return statCellComponent;
             case SurveyTreeModel.LastSurvey:
                 return lastSurveyCellComponent;
+            case SurveyTreeModel.Actions:
+                return actionsCellComponent;
             default:
-                //The Actions column holds the row's ⋯ menu, which lands with
-                //the context menus.
                 return null;
             }
         }
     }
 
-    //Remove lives here until the survey-tree context menu replaces it. Every
-    //cell carries it, so a right-click anywhere on the row offers it; only a
-    //top-level node has a region row to remove.
-    DataRightClickMouseMenu {
-        anchors.fill: parent
-        enabled: rowId.isNode && rowId.depth === 0
-        removeChallenge: rowId.treeView.removeAskBox
-        name: rowId.name
-        row: rowId.node !== null ? RootData.region.indexOf(rowId.node) : -1
+    //A right-click or a long press anywhere on the row asks for the row's
+    //menu, wherever on the row the pointer is.
+    QQ.TapHandler {
+        acceptedButtons: Qt.RightButton
+        acceptedDevices: QQ.PointerDevice.Mouse | QQ.PointerDevice.TouchPad
+
+        onTapped: (eventPoint) => rowId.showContextMenu(eventPoint.position.x,
+                                                        eventPoint.position.y)
+    }
+
+    // Touch-only so mouse left-clicks pass through to the name link below.
+    QQ.TapHandler {
+        acceptedDevices: QQ.PointerDevice.TouchScreen
+
+        onLongPressed: rowId.showContextMenu(point.position.x, point.position.y)
+    }
+
+    //The row's one menu, carried by the cell the tree's name lives in.
+    QQ.Loader {
+        id: contextMenuLoaderId
+
+        active: rowId.column === SurveyTreeModel.Name
+        sourceComponent: contextMenuComponent
     }
 
     //The Name cell of both a node and a trip: a node carries the caret and the
@@ -204,10 +272,24 @@ QQ.Item {
                     text: rowId.name
                     color: rowId.isNode ? Theme.textLink : Theme.textSubtle
                     elide: QQ.Text.ElideRight
+                    visible: !rowId.renaming
 
                     Layout.fillWidth: true
 
                     onClicked: rowId.open()
+                }
+
+                //The name is a link first, and CoreClickTextInput opens its
+                //editor on its own tap, so the field exists only while the
+                //row is being renamed and hands the name back on commit.
+                QQ.Loader {
+                    id: renameLoaderId
+
+                    active: rowId.renaming
+                    sourceComponent: renameFieldComponent
+
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
                 }
             }
         }
@@ -261,6 +343,105 @@ QQ.Item {
                   ? ""
                   : Qt.formatDate(rowId.lastSurvey, Qt.ISODate)
             color: rowId.muted ? Theme.textSubtle : Theme.text
+        }
+    }
+
+    QQ.Component {
+        id: renameFieldComponent
+
+        CoreClickTextInput {
+            id: renameFieldId
+
+            text: rowId.name
+
+            //The field is laid out by the row before it can be edited, so the
+            //editor it opens over itself lands on the name it replaced.
+            QQ.Component.onCompleted: Qt.callLater(() => renameFieldId.openEditor())
+
+            //The editor closes on a commit and on a press somewhere else; both
+            //give the row's name back to the link. The close comes first and
+            //the committed name second, so the field gives up its place on the
+            //next turn of the loop rather than during the commit that is still
+            //running through it.
+            onIsEdittingChanged: {
+                if(!renameFieldId.isEditting) {
+                    Qt.callLater(() => rowId.renaming = false);
+                }
+            }
+
+            //setName refuses a name a sibling already carries, which is the
+            //same rule the cave page's title commits through.
+            onFinishedEditting: (newText) => {
+                if(rowId.object !== null) {
+                    rowId.object.name = newText;
+                }
+            }
+        }
+    }
+
+    QQ.Component {
+        id: contextMenuComponent
+
+        SurveyItemContextMenu {
+            parent: rowId
+            row: rowId
+            surveyTree: rowId.treeView.surveyTree
+        }
+    }
+
+    QQ.Component {
+        id: actionsCellComponent
+
+        QQ.Item {
+            ContextMenuButton {
+                objectName: "rowActionsButton"
+
+                anchors.centerIn: parent
+                iconSource: "qrc:/twbs-icons/icons/three-dots.svg"
+                menu: rowActionsMenuComponent
+            }
+        }
+    }
+
+    //The row's ⋯ menu: the verbs that add and open, never the one that
+    //removes — Delete… belongs to the right-click menu alone.
+    QQ.Component {
+        id: rowActionsMenuComponent
+
+        QC.Menu {
+            id: rowActionsMenuId
+            objectName: "rowActionsMenu"
+
+            QC.MenuItem {
+                objectName: "rowOpenMenuItem"
+                text: qsTr("Open")
+
+                onTriggered: rowId.open()
+            }
+
+            //Add Trip names the slot it goes in, since a pooled row that
+            //becomes a node row activates these two in binding order rather
+            //than in the order the menu reads them.
+            ConditionalMenuItem {
+                menu: rowActionsMenuId
+                insertIndex: 1
+                active: rowId.isNode
+                itemObjectName: "rowAddTripMenuItem"
+                text: qsTr("Add Trip")
+
+                onTriggered: rowId.addTrip()
+            }
+
+            ConditionalMenuItem {
+                menu: rowActionsMenuId
+                active: rowId.canRename
+                itemObjectName: "rowRenameMenuItem"
+                text: qsTr("Rename…")
+
+                onTriggered: rowId.startRename()
+            }
+
+            onClosed: rowId.treeView.surveyTree.focusTree()
         }
     }
 }

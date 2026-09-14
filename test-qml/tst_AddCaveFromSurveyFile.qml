@@ -95,7 +95,7 @@ MainWindowTest {
             const dataPage = gotoDataMainPage()
 
             const item = openAddCaveMenu(dataPage)
-            compare(item.text, qsTr("Add cave from survey file…"))
+            compare(item.text, qsTr("Attach survey file…"))
         }
 
         function test_happyPathCreatesNamedCaveWithScopeTrips() {

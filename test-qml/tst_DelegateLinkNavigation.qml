@@ -4,8 +4,9 @@ import cavewherelib
 import cw.TestLib
 import QmlTestRecorder
 
-// Regression test: TapHandlers in DataRightClickMouseMenu must not consume the
-// left-click events the underlying LinkText needs to fire its navigation.
+// Regression test: the survey tree row's context-menu TapHandlers must not
+// consume the left-click events the underlying LinkText needs to fire its
+// navigation.
 MainWindowTest {
     id: rootId
 
