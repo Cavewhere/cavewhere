@@ -65,6 +65,16 @@ struct LazFileContents {
 LazFileContents readLazFile(const QString& path);
 
 /**
+ * How a fixture's points are compressed on disk. LASwriteOpener picks by
+ * extension and offers no compressor of its own, so anything but the default
+ * goes through LASwriterLAS directly.
+ */
+enum class LazCompression {
+    ByExtension,  //!< .laz chunked, .las uncompressed
+    PointWise     //!< LASZIP_COMPRESSOR_POINTWISE: a seek decodes from the start
+};
+
+/**
  * Test helper: writes a small synthetic point cloud to a .laz file.
  *
  * Path must end in .laz or .las — LASlib picks compression by extension. All
@@ -76,7 +86,8 @@ LazFileContents readLazFile(const QString& path);
  */
 bool writeSyntheticLazFile(const QString& outPath,
                            const QVector<QVector3D>& points,
-                           const QString& wktCS = QString());
+                           const QString& wktCS = QString(),
+                           LazCompression compression = LazCompression::ByExtension);
 
 /**
  * Build a PID-tagged .laz path inside @a dir. Including

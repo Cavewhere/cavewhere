@@ -1,19 +1,25 @@
 //Catch includes
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 //Qt includes
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
 #include <QHash>
+#include <QLoggingCategory>
+#include <QMutex>
 #include <QSignalSpy>
 #include <QTemporaryDir>
+#include <QThreadPool>
 #include <QThread>
 #include <QVector>
 #include <QVector3D>
 #include <QtEndian>
 
 //Std includes
+#include <atomic>
+#include <algorithm>
 #include <cmath>
 #include <limits>
 #include <utility>
@@ -27,6 +33,7 @@
 #include "cwPointOctree.h"
 #include "cwPointOctreeBuilder.h"
 #include "cwPointOctreeManifest.h"
+#include "cwTask.h"
 
 #include "LazFixtureHelper.h"
 
@@ -75,6 +82,200 @@ namespace {
     constexpr int kCellBits = 21;
     constexpr qint64 kCellMask = (qint64(1) << kCellBits) - 1;
 
+    //Enough workers to split the fixture several ways, and a count that gives
+    //ranges of uneven length so a part boundary lands inside a cell
+    constexpr int kEvenWorkerCount = 4;
+    constexpr int kUnevenWorkerCount = 7;
+
+    //kMinPointsPerDecodeWorker and kDecodeRangesPerWorker in the builder: what
+    //an automatic worker count and its range count are made of
+    constexpr int kPointsPerAutomaticWorker = 262144;
+    constexpr int kRangesPerWorker = 4;
+    constexpr int kAutomaticWorkerFixtureCount = 2 * kPointsPerAutomaticWorker;
+
+    //A chunk target of one point drives the depth to kMaxChunkDepth, where the
+    //8^5 cells leave kMaxChunkFiles room for only two ranges
+    constexpr qint64 kDeepestChunkTarget = 1;
+    constexpr int kCappedRangeCount = 2;
+    constexpr int kDeepChunkPointCount = 50000;
+
+    //A patch of degrees wide enough that reprojecting it bulges past the cube
+    //around its transformed corners: the frame's central meridian runs up the
+    //middle of the patch, so the middle of its south edge falls below every
+    //corner and the provisional root has to be measured again
+    constexpr double kPatchCenterLongitude = -84.0;
+    constexpr double kPatchCenterLatitude = 80.0;
+    constexpr double kPatchHalfLongitude = 15.0;
+    constexpr double kPatchHalfLatitude = 4.0;
+    constexpr double kPatchHeight = 10.0;
+    constexpr int kPatchCornerCount = 4;
+
+    const QString kGeographicSource =
+        QStringLiteral("+proj=longlat +datum=WGS84 +no_defs +type=crs");
+    const QString kPatchFrame = QStringLiteral(
+        "+proj=tmerc +lat_0=80 +lon_0=-84 +k=1 +x_0=0 +y_0=0 "
+        "+datum=WGS84 +units=m +no_defs +type=crs");
+
+    //Pass A owns the first half of the progress bar and pass B the second
+    constexpr double kPassAProgressFraction = 0.10;
+    constexpr double kPassBProgressFraction = 0.55;
+
+    constexpr int kCancelPollMs = 1;
+
+    //The temp directories this process's builds make, as the builder names them
+    int octreeTempDirCount()
+    {
+        const QStringList pattern {QStringLiteral("cwPointOctree-%1-*")
+                                       .arg(QCoreApplication::applicationPid())};
+        return int(QDir::temp().entryList(pattern, QDir::Dirs | QDir::NoDotAndDotDot).size());
+    }
+
+    //Cancels the build once its progress passes fraction of the bar. Returns
+    //false where the build finished first, so a cancel that tested nothing is
+    //loud rather than a silent pass.
+    bool cancelAtProgress(QFuture<cwPointOctreeBuilder::Result>& future, double fraction)
+    {
+        bool reached = false;
+        while(!future.isFinished()) {
+            const int maximum = future.progressMaximum();
+            if(maximum > 0 && future.progressValue() > int(double(maximum) * fraction)) {
+                reached = true;
+                break;
+            }
+            QThread::msleep(kCancelPollMs);
+        }
+
+        future.cancel();
+        return reached;
+    }
+
+    //The workers a request of this many gets: pass A holds the count to the
+    //pool, which keeps one slot for the orchestrator
+    int expectedWorkers(int requested)
+    {
+        return std::min(requested, std::max(1, cwTask::threadPool()->maxThreadCount() - 1));
+    }
+
+    QMutex& profileLogMutex()
+    {
+        static QMutex mutex;
+        return mutex;
+    }
+
+    QStringList& profileLogLines()
+    {
+        static QStringList lines;
+        return lines;
+    }
+
+    std::atomic<QtMessageHandler>& chainedMessageHandler()
+    {
+        static std::atomic<QtMessageHandler> handler {nullptr};
+        return handler;
+    }
+
+    void collectMessage(QtMsgType type, const QMessageLogContext& context, const QString& message)
+    {
+        {
+            QMutexLocker locker(&profileLogMutex());
+            profileLogLines().append(message);
+        }
+
+        //cw.profile.load is on only for this log, so its lines stay out of the
+        //test output; everything else goes on to the handler that was there
+        const bool isProfileLine =
+            context.category != nullptr
+            && QLatin1StringView(context.category) == QLatin1StringView("cw.profile.load");
+
+        QtMessageHandler chained = chainedMessageHandler().load(std::memory_order_relaxed);
+        if(!isProfileLine && chained != nullptr) {
+            chained(type, context, message);
+        }
+    }
+
+    //Turns cw.profile.load on and collects every message a build writes, from
+    //whatever thread writes it, then puts the rules and the handler back
+    class BuildLog
+    {
+    public:
+        BuildLog()
+        {
+            {
+                QMutexLocker locker(&profileLogMutex());
+                profileLogLines().clear();
+            }
+
+            QLoggingCategory::setFilterRules(QStringLiteral("cw.profile.load.debug=true"));
+            m_previous = qInstallMessageHandler(collectMessage);
+            chainedMessageHandler().store(m_previous, std::memory_order_relaxed);
+        }
+
+        ~BuildLog()
+        {
+            qInstallMessageHandler(m_previous);
+            chainedMessageHandler().store(nullptr, std::memory_order_relaxed);
+
+            //Empty rules are the manual rules the constructor replaced
+            QLoggingCategory::setFilterRules(QString());
+        }
+
+        BuildLog(const BuildLog&) = delete;
+        BuildLog& operator=(const BuildLog&) = delete;
+
+        bool hasLineContaining(const QString& text) const
+        {
+            QMutexLocker locker(&profileLogMutex());
+
+            for(const QString& line : std::as_const(profileLogLines())) {
+                if(line.contains(text)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        QStringList linesStartingWith(const QString& prefix) const
+        {
+            QMutexLocker locker(&profileLogMutex());
+
+            QStringList found;
+            for(const QString& line : std::as_const(profileLogLines())) {
+                if(line.startsWith(prefix)) {
+                    found.append(line);
+                }
+            }
+            return found;
+        }
+
+    private:
+        QtMessageHandler m_previous = nullptr;
+    };
+
+    //Two builds of the same file agree byte for byte: same manifest, same nodes
+    void requireSameCache(const cwPointOctreeBuilder::Request& leftRequest,
+                          const cwPointOctreeManifest& left,
+                          const cwPointOctreeBuilder::Request& rightRequest,
+                          const cwPointOctreeManifest& right)
+    {
+        REQUIRE(left.serialize() == right.serialize());
+
+        const cwDiskCacher leftCacher {QDir(leftRequest.cacheRootPath)};
+        const cwDiskCacher rightCacher {QDir(rightRequest.cacheRootPath)};
+
+        for(int i = 0; i < left.nodes.size(); i++) {
+            const QByteArray leftPayload =
+                leftCacher.entry(nodeKey(leftRequest.path, left.fingerprint, left.nodeName(i)));
+            const QByteArray rightPayload =
+                rightCacher.entry(nodeKey(rightRequest.path, right.fingerprint, right.nodeName(i)));
+
+            REQUIRE_FALSE(leftPayload.isEmpty());
+            if(leftPayload != rightPayload) {
+                FAIL("Node " << left.nodeName(i).toStdString()
+                             << " differs between the two worker counts");
+            }
+        }
+    }
+
     //A deterministic tube of points, the shape a survey passage scan has
     QVector<QVector3D> passagePoints(int count)
     {
@@ -96,6 +297,42 @@ namespace {
             points.append(QVector3D(float(along),
                                     float(centerY + radius * std::cos(angle)),
                                     float(radius * std::sin(angle))));
+        }
+
+        return points;
+    }
+
+    //Degrees over the patch, corners first so the header box is the patch itself
+    //and the point that escapes the provisional root is in the cloud
+    QVector<QVector3D> geographicPatchPoints(int count)
+    {
+        QVector<QVector3D> points;
+        points.reserve(count);
+
+        const double minimumLongitude = kPatchCenterLongitude - kPatchHalfLongitude;
+        const double minimumLatitude = kPatchCenterLatitude - kPatchHalfLatitude;
+
+        for(int corner = 0; corner < kPatchCornerCount; corner++) {
+            points.append(QVector3D(
+                float(minimumLongitude + ((corner & 1) ? 2.0 * kPatchHalfLongitude : 0.0)),
+                float(minimumLatitude + ((corner & 2) ? 2.0 * kPatchHalfLatitude : 0.0)),
+                0.0f));
+        }
+
+        //The middle of the south edge, on the frame's central meridian
+        points.append(QVector3D(float(kPatchCenterLongitude), float(minimumLatitude), 0.0f));
+
+        quint32 state = kSeed;
+        const auto nextUnit = [&state]() {
+            state = state * 1664525u + 1013904223u;
+            return double(state >> 8) / double(1 << 24);
+        };
+
+        while(points.size() < count) {
+            points.append(QVector3D(
+                float(minimumLongitude + nextUnit() * 2.0 * kPatchHalfLongitude),
+                float(minimumLatitude + nextUnit() * 2.0 * kPatchHalfLatitude),
+                float(nextUnit() * kPatchHeight)));
         }
 
         return points;
@@ -710,4 +947,294 @@ TEST_CASE("cwPointOctreeBuilder: the build shows up as a job and finishes its pr
     REQUIRE(future.progressMaximum() > 0);
     REQUIRE(future.progressValue() == future.progressMaximum());
     REQUIRE(manager.rowCount() == 0);
+}
+
+TEST_CASE("cwPointOctreeBuilder: the decode worker count never changes the bytes it writes",
+          "[PointOctree][PointOctreeBuilder]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString path = tempLazPath(tempDir, QStringLiteral("octree-workers"));
+    REQUIRE(writeSyntheticLazFile(path, passagePoints(kPassagePointCount)));
+
+    //One cell holding every part, then cells whose points straddle range bounds
+    const qint64 chunkTarget =
+        GENERATE(cw::octree::kChunkTargetPoints, kTwoLevelChunkTarget);
+
+    const auto buildWith = [&](int workers) {
+        const QString cacheRoot =
+            tempDir.filePath(QStringLiteral("cache-%1-%2").arg(chunkTarget).arg(workers));
+        REQUIRE(QDir().mkpath(cacheRoot));
+
+        const cwPointOctreeBuilder::Request request {
+            .path = path,
+            .cacheRootPath = cacheRoot,
+            .chunkTargetPoints = chunkTarget,
+            .decodeWorkerCount = workers
+        };
+
+        BuildLog log;
+
+        const cwPointOctreeBuilder::Result result =
+            waitForBuild(cwPointOctreeBuilder::build(request));
+        REQUIRE_FALSE(result.hasError());
+
+        //The request's worker count, held to the pool, is what pass A decoded with
+        const QStringList passA = log.linesStartingWith(QStringLiteral("build passA"));
+        REQUIRE(passA.size() == 1);
+        REQUIRE(passA.constFirst().contains(
+            QStringLiteral("workers=%1").arg(expectedWorkers(workers))));
+
+        return std::make_pair(request, result.value());
+    };
+
+    const auto single = buildWith(1);
+    verifyOctree(single.second, single.first, readPoints(path));
+
+    //Seven workers give ranges of uneven length, so a part boundary lands mid cell
+    for(int workers : {kEvenWorkerCount, kUnevenWorkerCount}) {
+        const auto many = buildWith(workers);
+        requireSameCache(single.first, single.second, many.first, many.second);
+    }
+}
+
+TEST_CASE("cwPointOctreeBuilder: a cancel in either pass leaves no manifest and no temp directory",
+          "[PointOctree][PointOctreeBuilder]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString path = tempLazPath(tempDir, QStringLiteral("octree-parallel-cancel"));
+    REQUIRE(writeSyntheticLazFile(path, passagePoints(kPassagePointCount)));
+
+    const cwPointOctreeBuilder::Request request {
+        .path = path,
+        .cacheRootPath = tempDir.path(),
+        .chunkTargetPoints = kTwoLevelChunkTarget,
+        .decodeWorkerCount = kEvenWorkerCount
+    };
+
+    //Pass A owns the first half of the bar, so these cancel in one pass each
+    const double fraction = GENERATE(kPassAProgressFraction, kPassBProgressFraction);
+
+    QFuture<cwPointOctreeBuilder::Result> future = cwPointOctreeBuilder::build(request);
+    const bool cancelled = cancelAtProgress(future, fraction);
+    future.waitForFinished();
+
+    //A build that beat the cancel proves nothing about cancelling, so say so
+    REQUIRE(cancelled);
+
+    //QPromise drops a result added after the cancel, so a delivered one is the only one to check
+    const QList<cwPointOctreeBuilder::Result> results = future.results();
+    if(!results.isEmpty()) {
+        REQUIRE(results.constFirst().errorCode() == cwPointOctreeBuilder::Cancelled);
+    }
+
+    REQUIRE_FALSE(cwPointOctreeBuilder::cachedManifest(request).has_value());
+    REQUIRE(octreeTempDirCount() == 0);
+}
+
+TEST_CASE("cwPointOctreeBuilder: a point wise compressed file decodes on one worker",
+          "[PointOctree][PointOctreeBuilder]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    //Seeking a point wise LAZ decodes from the start, so ranges would reread the cloud
+    const QString path = tempLazPath(tempDir, QStringLiteral("octree-pointwise"));
+    REQUIRE(writeSyntheticLazFile(path,
+                                  passagePoints(kLockedCachePointCount),
+                                  QString(),
+                                  LazCompression::PointWise));
+
+    const cwPointOctreeBuilder::Request request {
+        .path = path,
+        .cacheRootPath = tempDir.path(),
+        .decodeWorkerCount = kEvenWorkerCount
+    };
+
+    BuildLog log;
+
+    const cwPointOctreeBuilder::Result result =
+        waitForBuild(cwPointOctreeBuilder::build(request));
+    REQUIRE_FALSE(result.hasError());
+
+    verifyOctree(result.value(), request, readPoints(path));
+
+    const QStringList passA = log.linesStartingWith(QStringLiteral("build passA"));
+    REQUIRE(passA.size() == 1);
+    REQUIRE(passA.constFirst().contains(QStringLiteral("workers=1")));
+    REQUIRE(passA.constFirst().contains(QStringLiteral("ranges=1")));
+
+    //The other three lines of a build are there too, so a run reports every pass
+    REQUIRE(log.linesStartingWith(QStringLiteral("build passB")).size() == 1);
+    REQUIRE(log.linesStartingWith(QStringLiteral("build passC")).size() == 1);
+    REQUIRE(log.linesStartingWith(QStringLiteral("build total")).size() == 1);
+}
+
+TEST_CASE("cwPointOctreeBuilder: a parallel build removes its temp directory however it ends",
+          "[PointOctree][PointOctreeBuilder]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString path = tempLazPath(tempDir, QStringLiteral("octree-parallel-temp"));
+    REQUIRE(writeSyntheticLazFile(path, passagePoints(kPassagePointCount)));
+
+    const cwPointOctreeBuilder::Request request {
+        .path = path,
+        .cacheRootPath = tempDir.path(),
+        .chunkTargetPoints = kTwoLevelChunkTarget,
+        .decodeWorkerCount = kEvenWorkerCount
+    };
+
+    SECTION("a build that succeeds") {
+        const cwPointOctreeBuilder::Result result =
+            waitForBuild(cwPointOctreeBuilder::build(request));
+        REQUIRE_FALSE(result.hasError());
+    }
+
+    SECTION("a file it cannot open") {
+        cwPointOctreeBuilder::Request missing = request;
+        missing.path = tempDir.filePath(QStringLiteral("does-not-exist.laz"));
+
+        const cwPointOctreeBuilder::Result result =
+            waitForBuild(cwPointOctreeBuilder::build(missing));
+        REQUIRE(result.errorCode() == cwPointOctreeBuilder::OpenFailed);
+    }
+
+    SECTION("a cache it cannot write") {
+        const QString cacheRoot = tempDir.filePath(QStringLiteral("read-only-cache"));
+        REQUIRE(QDir().mkpath(cacheRoot));
+
+        cwPointOctreeBuilder::Request locked = request;
+        locked.cacheRootPath = cacheRoot;
+
+        REQUIRE(QFile::setPermissions(cacheRoot,
+                                      QFileDevice::ReadOwner | QFileDevice::ExeOwner));
+
+        //Running as a user who writes anywhere (root in some containers) has nothing to prove
+        QFile probe(QDir(cacheRoot).filePath(QStringLiteral("probe")));
+        const bool cacheIsWritable = probe.open(QIODevice::WriteOnly);
+        probe.close();
+
+        if(!cacheIsWritable) {
+            const cwPointOctreeBuilder::Result result =
+                waitForBuild(cwPointOctreeBuilder::build(locked));
+            REQUIRE(result.errorCode() == cwPointOctreeBuilder::CacheWriteFailed);
+        }
+
+        REQUIRE(QFile::setPermissions(cacheRoot,
+                                      QFileDevice::ReadOwner | QFileDevice::WriteOwner
+                                          | QFileDevice::ExeOwner));
+    }
+
+    SECTION("a build that is cancelled") {
+        QFuture<cwPointOctreeBuilder::Result> future = cwPointOctreeBuilder::build(request);
+        REQUIRE(cancelAtProgress(future, kPassAProgressFraction));
+        future.waitForFinished();
+    }
+
+    REQUIRE(octreeTempDirCount() == 0);
+}
+
+TEST_CASE("cwPointOctreeBuilder: a reprojection that escapes the provisional root chunks again",
+          "[PointOctree][PointOctreeBuilder]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString path = tempLazPath(tempDir, QStringLiteral("octree-escaped-root"));
+    REQUIRE(writeSyntheticLazFile(path, geographicPatchPoints(kPassagePointCount)));
+
+    const auto buildWith = [&](int workers) {
+        const QString cacheRoot = tempDir.filePath(QStringLiteral("cache-escaped-%1").arg(workers));
+        REQUIRE(QDir().mkpath(cacheRoot));
+
+        const cwPointOctreeBuilder::Request request {
+            .path = path,
+            .sourceCSOverride = kGeographicSource,
+            .frameCS = kPatchFrame,
+            .cacheRootPath = cacheRoot,
+            .chunkTargetPoints = kTwoLevelChunkTarget,
+            .decodeWorkerCount = workers
+        };
+
+        BuildLog log;
+
+        const cwPointOctreeBuilder::Result result =
+            waitForBuild(cwPointOctreeBuilder::build(request));
+        REQUIRE_FALSE(result.hasError());
+
+        //The retry is what the fixture is for: without it there is nothing here to test
+        REQUIRE(log.hasLineContaining(QStringLiteral("reprojection pushed points outside")));
+
+        //Every point is chunked once, so a part file the retry left behind shows up here
+        REQUIRE(result.value().pointCount == kPassagePointCount);
+
+        return std::make_pair(request, result.value());
+    };
+
+    const auto single = buildWith(1);
+    const auto many = buildWith(kEvenWorkerCount);
+    requireSameCache(single.first, single.second, many.first, many.second);
+}
+
+TEST_CASE("cwPointOctreeBuilder: the automatic worker count follows the point count",
+          "[PointOctree][PointOctreeBuilder]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString path = tempLazPath(tempDir, QStringLiteral("octree-auto-workers"));
+    REQUIRE(writeSyntheticLazFile(path, passagePoints(kAutomaticWorkerFixtureCount)));
+
+    //No decodeWorkerCount, so pass A picks the count itself
+    const cwPointOctreeBuilder::Request request {
+        .path = path,
+        .cacheRootPath = tempDir.path()
+    };
+
+    BuildLog log;
+
+    const cwPointOctreeBuilder::Result result =
+        waitForBuild(cwPointOctreeBuilder::build(request));
+    REQUIRE_FALSE(result.hasError());
+
+    const int workers = expectedWorkers(kAutomaticWorkerFixtureCount / kPointsPerAutomaticWorker);
+    const int ranges = workers > 1 ? kRangesPerWorker * workers : 1;
+
+    const QStringList passA = log.linesStartingWith(QStringLiteral("build passA"));
+    REQUIRE(passA.size() == 1);
+    REQUIRE(passA.constFirst().contains(QStringLiteral("workers=%1").arg(workers)));
+    REQUIRE(passA.constFirst().contains(QStringLiteral("ranges=%1").arg(ranges)));
+}
+
+TEST_CASE("cwPointOctreeBuilder: the chunk file cap bounds the decode ranges",
+          "[PointOctree][PointOctreeBuilder]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    //A cell per point asks for more cells than there are, so the depth clamps
+    REQUIRE(cwPointOctreeBuilder::chunkDepthFor(kDeepChunkPointCount, kDeepestChunkTarget)
+            == kMaxChunkDepth);
+
+    const QString path = tempLazPath(tempDir, QStringLiteral("octree-range-cap"));
+    REQUIRE(writeSyntheticLazFile(path, passagePoints(kDeepChunkPointCount)));
+
+    const cwPointOctreeBuilder::Request request {
+        .path = path,
+        .cacheRootPath = tempDir.path(),
+        .chunkTargetPoints = kDeepestChunkTarget,
+        .decodeWorkerCount = kEvenWorkerCount
+    };
+
+    BuildLog log;
+
+    const cwPointOctreeBuilder::Result result =
+        waitForBuild(cwPointOctreeBuilder::build(request));
+    REQUIRE_FALSE(result.hasError());
+
+    const int workers = expectedWorkers(kEvenWorkerCount);
+    const int ranges = workers > 1 ? kCappedRangeCount : 1;
+
+    const QStringList passA = log.linesStartingWith(QStringLiteral("build passA"));
+    REQUIRE(passA.size() == 1);
+    REQUIRE(passA.constFirst().contains(QStringLiteral("workers=%1").arg(workers)));
+    REQUIRE(passA.constFirst().contains(QStringLiteral("ranges=%1").arg(ranges)));
 }

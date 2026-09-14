@@ -30,6 +30,11 @@ namespace cw::profile {
     //! from, so the line goes through QMessageLogger itself.
     void write(const QLoggingCategory& category, const QString& line);
 
+    //! The process's peak resident set size in bytes, or 0 where the platform
+    //! reports none. The octree build's "build total" line and the profiling
+    //! runner's build mode read the same number from here.
+    qint64 peakResidentBytes();
+
     //! Microseconds on @a timer, the unit every cw.profile line reports.
     inline qint64 elapsedUs(const QElapsedTimer& timer)
     {

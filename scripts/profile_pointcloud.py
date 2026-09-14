@@ -20,7 +20,6 @@ Python 3 standard library only.
 
 import argparse
 import os
-import re
 import shutil
 import statistics
 import subprocess
@@ -66,8 +65,9 @@ def number(value):
 
 
 def parse_log(path):
-    """The profile lines of one run, grouped by kind."""
-    lines = {"render": [], "pick": [], "load": []}
+    """The profile lines of one run, grouped by kind. A build line names its
+    pass before its fields, so it is kept as written."""
+    lines = {"render": [], "pick": [], "load": [], "build": []}
     if not os.path.exists(path):
         return lines
 
@@ -77,6 +77,10 @@ def parse_log(path):
             rest = rest.strip()
             kind, _, fields = rest.partition(" ")
             if kind not in lines:
+                continue
+
+            if kind == "build":
+                lines[kind].append(rest)
                 continue
 
             record = {"t": to_number(seconds.strip())}
@@ -401,8 +405,46 @@ def has_manifest(cache):
     return None
 
 
+def resident_bytes(pid):
+    """The process's resident size right now, from `ps`, or 0 once it is gone."""
+    reading = subprocess.run(["ps", "-o", "rss=", "-p", str(pid)],
+                             capture_output=True, text=True)
+    text = reading.stdout.strip()
+    return int(text) * 1024 if text.isdigit() else 0
+
+
+def stop(process):
+    """Ask CaveWhere to quit, and make sure it is gone before returning."""
+    if process.poll() is not None:
+        return
+
+    process.terminate()
+    try:
+        process.wait(timeout=SHUTDOWN_TIMEOUT_SECONDS)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait()
+
+
+def survivors(launched_pid):
+    """Any CaveWhere still running once this run's app is gone.
+
+    The launched pid is dropped, so what is left was started by somebody else:
+    the check this script owns is that it leaves nothing of its own behind.
+    """
+    found = subprocess.run(["pgrep", "-f", "CaveWhere.app"],
+                           capture_output=True, text=True)
+    return [pid for pid in found.stdout.split()
+            if pid.isdigit() and int(pid) != launched_pid]
+
+
 def build_only(arguments):
-    """The first open of a project whose octree cache has been thrown away."""
+    """The first open of a project whose octree cache has been thrown away.
+
+    CaveWhere is launched directly rather than under `/usr/bin/time -l`: a
+    wrapper's pid is what the traces would follow, and terminating the wrapper
+    leaves the app running with the whole build's memory still held.
+    """
     prefix = arguments.out
     project = arguments.build_only
     cache = cache_directory(project)
@@ -410,9 +452,9 @@ def build_only(arguments):
     if os.path.isdir(cache):
         shutil.rmtree(cache)
 
-    command = ["/usr/bin/time", "-l", application_path(arguments.build),
-               "--profile-log", project]
+    command = [application_path(arguments.build), "--profile-log", project]
     started = time.monotonic()
+    peak_rss_bytes = 0
     with open(prefix + ".log", "w") as log:
         process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT,
                                    env=launch_environment(arguments.debug))
@@ -422,34 +464,35 @@ def build_only(arguments):
         while manifest is None and process.poll() is None:
             if time.monotonic() - started > BUILD_TIMEOUT_SECONDS:
                 break
+            peak_rss_bytes = max(peak_rss_bytes, resident_bytes(process.pid))
             manifest = has_manifest(cache)
             time.sleep(POLL_SECONDS)
 
         wall = time.monotonic() - started
-        process.terminate()
-        try:
-            process.wait(timeout=SHUTDOWN_TIMEOUT_SECONDS)
-        except subprocess.TimeoutExpired:
-            process.kill()
+        peak_rss_bytes = max(peak_rss_bytes, resident_bytes(process.pid))
+        stop(process)
     wait_for_traces(traces)
 
+    lines = parse_log(prefix + ".log")
     print("## Octree build — {} ({})\n".format(
         os.path.basename(project), "manifest written" if manifest else "no manifest"))
-    print(load_table(parse_log(prefix + ".log")["load"], os.path.basename(project),
-                     peak_rss_bytes=peak_rss(prefix + ".log"), wall_seconds=wall))
+    for line in lines["build"]:
+        print("    " + line)
 
+    # The app is stopped at the manifest, so a run can end with no load line at
+    # all: the runner's own wall and peak stand on their own here.
+    print("    runner wall={:.1f}s peakRssBytes={} ({:.2f} GB, sampled with ps)".format(
+        wall, peak_rss_bytes, peak_rss_bytes / (1024.0 ** 3)))
+    print("")
+    print(load_table(lines["load"], os.path.basename(project),
+                     peak_rss_bytes=peak_rss_bytes, wall_seconds=wall))
 
-def peak_rss(path):
-    """`/usr/bin/time -l` writes its summary into the same stream as the log."""
-    if not os.path.exists(path):
-        return None
-
-    with open(path, "r", errors="replace") as log:
-        for raw in log:
-            found = re.search(r"(\d+)\s+maximum resident set size", raw)
-            if found:
-                return int(found.group(1))
-    return None
+    print("CaveWhere pid {} exited with {}.".format(process.pid, process.returncode))
+    left = survivors(process.pid)
+    if left:
+        print("Another CaveWhere, which this run did not launch, is running as pid "
+              + ", ".join(left) + ".")
+    print("")
 
 
 def main():

@@ -17,6 +17,7 @@
 
 #include <LASlib/lasreader.hpp>
 #include <LASlib/laswriter.hpp>
+#include <LASlib/laswriter_las.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -75,7 +76,8 @@ void centerHeaderOffsets(LASheader* header, const PointRange& points, Getter get
 
 bool writeSyntheticLazFile(const QString& outPath,
                            const QVector<QVector3D>& points,
-                           const QString& wktCS)
+                           const QString& wktCS,
+                           LazCompression compression)
 {
     LASheader header;
     header.clean_las_header();
@@ -99,9 +101,23 @@ bool writeSyntheticLazFile(const QString& outPath,
                        header.point_data_record_length, &header);
 
     const QByteArray pathBytes = outPath.toUtf8();
-    LASwriteOpener opener;
-    opener.set_file_name(pathBytes.constData());
-    LASwriter* writer = opener.open(&header);
+
+    // LASwriteOpener has no compressor argument, so the point-wise fixture
+    // opens the LAS writer itself.
+    LASwriter* writer = nullptr;
+    if (compression == LazCompression::PointWise) {
+        auto* lasWriter = new LASwriterLAS();
+        if (lasWriter->open(pathBytes.constData(), &header, LASZIP_COMPRESSOR_POINTWISE)) {
+            writer = lasWriter;
+        } else {
+            delete lasWriter;
+        }
+    } else {
+        LASwriteOpener opener;
+        opener.set_file_name(pathBytes.constData());
+        writer = opener.open(&header);
+    }
+
     if (writer == nullptr) {
         return false;
     }

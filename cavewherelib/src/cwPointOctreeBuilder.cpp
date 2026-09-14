@@ -5,6 +5,7 @@
 #include <QCoreApplication>
 #include <QDebug>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QHash>
 #include <QPromise>
@@ -28,6 +29,7 @@
 #include "cwGeoPoint.h"
 #include "cwLazLoader.h"
 #include "cwPointOctreeSampler.h"
+#include "cwProfileLog.h"
 #include "cwProgressReporter.h"
 #include "cwTask.h"
 
@@ -52,8 +54,18 @@ namespace {
     //Native float32 x, y, z per point in a temp chunk file
     constexpr qsizetype kTempBytesPerPoint = kAxisCount * qsizetype(sizeof(float));
 
-    //Pass A holds at most this much unwritten chunk data before flushing every buffer
-    constexpr qint64 kMaxBufferedChunkBytes = 32 * 1024 * 1024;
+    //One decode worker holds at most this much unwritten chunk data before flushing its buffers
+    constexpr qint64 kDecodeWorkerBufferBytes = 8 * 1024 * 1024;
+
+    //Fewer points than this for a worker to decode means fewer workers
+    constexpr qint64 kMinPointsPerDecodeWorker = 262144;
+
+    //Every range writes its own part file per cell, so this caps the ranges
+    constexpr qint64 kMaxChunkFiles = 65536;
+
+    //Four of this machine's cores are efficiency cores, so several ranges a
+    //worker let the map balance the tail
+    constexpr int kDecodeRangesPerWorker = 4;
 
     //The root cube of a cloud with no extent, so quantization still has a range
     constexpr double kMinimumRootSize = 1.0;
@@ -62,6 +74,14 @@ namespace {
     constexpr double kMinimumSpacingExtent = 1e-3;
 
     constexpr int kMapPollMs = 30;
+
+    //A build log line's elapsed field, in seconds
+    QString secondsSince(const QElapsedTimer& timer)
+    {
+        constexpr double kMillisecondsPerSecond = 1000.0;
+        constexpr int kSecondsPrecision = 3;
+        return QString::number(double(timer.elapsed()) / kMillisecondsPerSecond, 'f', kSecondsPrecision);
+    }
 
     //A top cell packs into one key: level in the high bits, then x, y, z
     constexpr int kLevelShift = 60;
@@ -187,6 +207,45 @@ namespace {
         qint64 pointCount = 0;
     };
 
+    //One decode range's share of one cell, in a file the range alone writes
+    struct ChunkPart {
+        QString path;
+        qint64 pointCount = 0;
+    };
+
+    //A contiguous span of the file's points, decoded by one worker
+    struct DecodeRange {
+        qint64 startIndex = 0;
+        qint64 count = 0;
+        int rangeIndex = 0;
+    };
+
+    //Read-only, shared by value with every range's worker
+    struct DecodeContext {
+        QString path;
+        QString sourceCS;
+        QString frameCS;
+        RootCube root;
+        int depth = 0;
+        QString tempDirPath;
+        std::atomic<bool>* cancel = nullptr;
+        std::atomic<qint64>* pointsDone = nullptr;
+
+        //Set only where the build thread decodes the one range itself, so a
+        //lone range cancels and reports as the map's poll loop does for many
+        Promise* inlinePromise = nullptr;
+        Reporter* inlineProgress = nullptr;
+    };
+
+    struct DecodeResult {
+        int errorCode = Monad::ResultBase::NoError;
+        QString errorMessage;
+        qint64 pointCount = 0;
+        BoundsTracker bounds;
+        bool escapedRoot = false;
+        QHash<quint64, ChunkPart> parts;
+    };
+
     struct PassAResult {
         int errorCode = Monad::ResultBase::NoError;
         QString errorMessage;
@@ -194,43 +253,60 @@ namespace {
         QVector3D bboxMin;
         QVector3D bboxMax;
         bool escapedRoot = false;
-        QHash<quint64, ChunkBuffer> chunks;
+        int rangeCount = 0;
+
+        //Cell key to that cell's parts, in range order, which is file order
+        QHash<quint64, QVector<ChunkPart>> parts;
     };
 
     /**
-     * Pass A: streams the file once, transforms every point into the frame CS,
-     * and appends its native float32 xyz to the temp file of its cell at depth.
-     * The chunk files are read back by the same process, so native byte order
-     * never leaves this build.
+     * Pass A on one range: reads its span of the file once, transforms every
+     * point into the frame CS, and appends its native float32 xyz to the part
+     * file of its cell at depth. The part files are read back by the same
+     * process, so native byte order never leaves this build.
      */
-    PassAResult chunkPoints(const cwPointOctreeBuilder::Request& request,
-                            const QString& sourceCS,
-                            const RootCube& root,
-                            int depth,
-                            const QDir& tempDir,
-                            Promise& promise,
-                            Reporter& progress)
+    DecodeResult decodeRange(const DecodeRange& range, const DecodeContext& context)
     {
-        PassAResult result;
+        DecodeResult result;
+        if(range.count <= 0) {
+            return result;
+        }
 
-        const QByteArray pathBytes = request.path.toUtf8();
+        if(context.cancel->load(std::memory_order_relaxed)) {
+            result.errorCode = cwPointOctreeBuilder::Cancelled;
+            return result;
+        }
+
+        //LASreadOpener holds the reader's state, so every range opens its own
+        const QByteArray pathBytes = context.path.toUtf8();
         LASreadOpener opener;
         opener.set_file_name(pathBytes.constData(), FALSE);
         LASreader* reader = opener.open();
         if(reader == nullptr) {
             result.errorCode = cwPointOctreeBuilder::OpenFailed;
-            result.errorMessage = QStringLiteral("Could not open %1 for read.").arg(request.path);
+            result.errorMessage = QStringLiteral("Could not open %1 for read.").arg(context.path);
             return result;
         }
 
-        const cwCoordinateTransform transform(sourceCS, request.frameCS);
+        if(range.startIndex > 0 && !reader->seek(I64(range.startIndex))) {
+            reader->close();
+            delete reader;
+            result.errorCode = cwPointOctreeBuilder::ReadFailed;
+            result.errorMessage = QStringLiteral("Could not seek to point %1 of %2.")
+                                      .arg(range.startIndex)
+                                      .arg(context.path);
+            return result;
+        }
+
+        const cwCoordinateTransform transform(context.sourceCS, context.frameCS);
         const bool hasTransform = !transform.isIdentity();
 
-        const quint32 grid = quint32(1) << depth;
-        const double cellEdge = std::ldexp(root.size, -depth);
+        const QDir tempDir(context.tempDirPath);
+        const quint32 grid = quint32(1) << context.depth;
+        const double cellEdge = std::ldexp(context.root.size, -context.depth);
         const double inverseCellEdge = cellEdge > 0.0 ? 1.0 / cellEdge : 0.0;
 
-        BoundsTracker bounds;
+        QHash<quint64, ChunkBuffer> buffers;
         qint64 bufferedBytes = 0;
         bool writeFailed = false;
 
@@ -250,30 +326,32 @@ namespace {
         };
 
         const auto flushAll = [&]() {
-            for(ChunkBuffer& chunk : result.chunks) {
+            for(ChunkBuffer& chunk : buffers) {
                 flushChunk(chunk);
             }
             bufferedBytes = 0;
         };
 
         const auto appendPoint = [&](const QVector3D& point) {
-            bounds.add(point);
+            result.bounds.add(point);
 
             std::array<quint32, kAxisCount> coordinate = {};
             for(int axis = 0; axis < kAxisCount; axis++) {
-                const double offset = double(point[axis]) - double(root.minimum[axis]);
-                if(offset < 0.0 || offset > root.size) {
+                const double offset = double(point[axis]) - double(context.root.minimum[axis]);
+                if(offset < 0.0 || offset > context.root.size) {
                     result.escapedRoot = true;
                 }
                 coordinate[axis] = quint32(std::clamp(offset * inverseCellEdge, 0.0, double(grid - 1)));
             }
 
-            const quint64 key = cellKey(Cell {depth, coordinate[0], coordinate[1], coordinate[2]});
-            auto found = result.chunks.find(key);
-            if(found == result.chunks.end()) {
+            const quint64 key = cellKey(Cell {context.depth, coordinate[0], coordinate[1], coordinate[2]});
+            auto found = buffers.find(key);
+            if(found == buffers.end()) {
                 ChunkBuffer chunk;
-                chunk.path = tempDir.filePath(QStringLiteral("chunk-%1.bin").arg(key));
-                found = result.chunks.insert(key, chunk);
+                chunk.path = tempDir.filePath(QStringLiteral("chunk-%1-r%2.bin")
+                                                  .arg(key)
+                                                  .arg(range.rangeIndex));
+                found = buffers.insert(key, chunk);
             }
 
             const float xyz[kAxisCount] = {point.x(), point.y(), point.z()};
@@ -301,10 +379,25 @@ namespace {
             sourceChunk.clear();
         };
 
+        qint64 reported = 0;
+        const auto publishProgress = [&]() {
+            context.pointsDone->fetch_add(result.pointCount - reported, std::memory_order_relaxed);
+            reported = result.pointCount;
+
+            if(context.inlinePromise == nullptr) {
+                return;
+            }
+
+            if(context.inlinePromise->isCanceled()) {
+                context.cancel->store(true, std::memory_order_relaxed);
+            }
+            context.inlineProgress->report(context.pointsDone->load(std::memory_order_relaxed));
+        };
+
         bool cancelled = false;
         qsizetype sinceCheck = 0;
 
-        while(reader->read_point()) {
+        while(result.pointCount + sourceChunk.size() < range.count && reader->read_point()) {
             if(hasTransform) {
                 sourceChunk.append(cwGeoPoint(reader->point.get_x(),
                                               reader->point.get_y(),
@@ -323,7 +416,7 @@ namespace {
             flushPoints();
             sinceCheck = 0;
 
-            if(bufferedBytes >= kMaxBufferedChunkBytes) {
+            if(bufferedBytes >= kDecodeWorkerBufferBytes) {
                 flushAll();
             }
 
@@ -331,12 +424,12 @@ namespace {
                 break;
             }
 
-            if(promise.isCanceled()) {
+            publishProgress();
+
+            if(context.cancel->load(std::memory_order_relaxed)) {
                 cancelled = true;
                 break;
             }
-
-            progress.report(result.pointCount);
         }
 
         if(!cancelled && !writeFailed) {
@@ -355,7 +448,215 @@ namespace {
         if(writeFailed) {
             result.errorCode = cwPointOctreeBuilder::TempDirFailed;
             result.errorMessage = QStringLiteral("Could not write the octree chunk files in %1.")
-                                      .arg(tempDir.path());
+                                      .arg(context.tempDirPath);
+            return result;
+        }
+
+        publishProgress();
+
+        result.parts.reserve(buffers.size());
+        for(auto it = buffers.constBegin(); it != buffers.constEnd(); ++it) {
+            result.parts.insert(it.key(), ChunkPart {it->path, it->pointCount});
+        }
+
+        return result;
+    }
+
+    /**
+     * Runs a map of this pool's own tasks to completion, forwarding a cancel to
+     * it and reporting @a pointsDone above @a progressBase while it runs. Both
+     * passes map from a task on the pool they map onto, so both give up their
+     * slot for the duration or the pool cannot scale up to run the map.
+     */
+    template <typename T>
+    QList<T> awaitMapped(QFuture<T>& mapFuture,
+                         Promise& promise,
+                         Reporter& progress,
+                         std::atomic<bool>& cancel,
+                         const std::atomic<qint64>& pointsDone,
+                         qint64 progressBase)
+    {
+        QThreadPool* pool = cwTask::threadPool();
+        pool->releaseThread();
+
+        while(!mapFuture.isFinished()) {
+            if(promise.isCanceled() && !cancel.load(std::memory_order_relaxed)) {
+                cancel.store(true, std::memory_order_relaxed);
+                mapFuture.cancel();
+            }
+            progress.report(progressBase + pointsDone.load(std::memory_order_relaxed));
+            QThread::msleep(kMapPollMs);
+        }
+
+        pool->reserveThread();
+
+        mapFuture.waitForFinished();
+        return mapFuture.results();
+    }
+
+    //Contiguous ranges covering [0, npoints)
+    QVector<DecodeRange> buildRanges(qint64 npoints, int rangeCount)
+    {
+        QVector<DecodeRange> ranges;
+        if(npoints <= 0 || rangeCount <= 0) {
+            return ranges;
+        }
+
+        ranges.reserve(rangeCount);
+
+        const qint64 base = npoints / rangeCount;
+        const qint64 remainder = npoints % rangeCount;
+        qint64 start = 0;
+
+        for(int i = 0; i < rangeCount; i++) {
+            const qint64 count = base + (i < remainder ? 1 : 0);
+            ranges.append(DecodeRange {start, count, i});
+            start += count;
+        }
+
+        return ranges;
+    }
+
+    /**
+     * Seeking a point-wise compressed LAZ decodes every point before the one
+     * asked for, so ranges of such a file would each re-read the whole cloud.
+     * An uncompressed .las seeks with fseek and a chunked LAZ decodes at most
+     * one chunk, so both take as many workers as there is work for.
+     */
+    bool seeksCheaply(const LASheader& header)
+    {
+        if(header.laszip == nullptr || header.laszip->compressor == LASZIP_COMPRESSOR_NONE) {
+            return true;
+        }
+
+        return header.laszip->compressor != LASZIP_COMPRESSOR_POINTWISE
+               && header.laszip->chunk_size != std::numeric_limits<quint32>::max();
+    }
+
+    //Workers pass A decodes with: what the request asks for, else one per
+    //kMinPointsPerDecodeWorker points, both held to the pool, and one where
+    //seeking is expensive
+    int decodeWorkerCount(const cwPointOctreeBuilder::Request& request,
+                          qint64 npoints,
+                          bool cheapSeeks)
+    {
+        if(!cheapSeeks) {
+            return 1;
+        }
+
+        //One slot stays with the orchestrator, which polls while the ranges run
+        const qint64 byPool = std::max(1, cwTask::threadPool()->maxThreadCount() - 1);
+
+        if(request.decodeWorkerCount > 0) {
+            return int(std::min(qint64(request.decodeWorkerCount), byPool));
+        }
+
+        const qint64 byWork = std::max(qint64(1), npoints / kMinPointsPerDecodeWorker);
+        return int(std::min(byPool, byWork));
+    }
+
+    //Ranges pass A splits into: several per worker so the map balances the
+    //tail, capped so cells x ranges part files stay under kMaxChunkFiles
+    int decodeRangeCount(int workerCount, int depth)
+    {
+        if(workerCount <= 1) {
+            return 1;
+        }
+
+        qint64 cells = 1;
+        for(int level = 0; level < depth; level++) {
+            cells *= kChildCount;
+        }
+
+        const qint64 byFiles = std::max(qint64(1), kMaxChunkFiles / cells);
+        const qint64 byWorkers = qint64(kDecodeRangesPerWorker) * workerCount;
+        return int(std::max(qint64(1), std::min(byWorkers, byFiles)));
+    }
+
+    /**
+     * Pass A: every range decodes its own span into its own part files, and
+     * the results fold in range order, so a cell's points end up in the order
+     * one reader would have read them in.
+     */
+    PassAResult runPassA(const cwPointOctreeBuilder::Request& request,
+                         const QString& sourceCS,
+                         const RootCube& root,
+                         int depth,
+                         qint64 npoints,
+                         int workerCount,
+                         const QDir& tempDir,
+                         Promise& promise,
+                         Reporter& progress)
+    {
+        PassAResult result;
+
+        const QVector<DecodeRange> ranges = buildRanges(npoints, decodeRangeCount(workerCount, depth));
+        result.rangeCount = int(ranges.size());
+        if(ranges.isEmpty()) {
+            return result;
+        }
+
+        std::atomic<bool> cancel {promise.isCanceled()};
+        std::atomic<qint64> pointsDone {0};
+
+        DecodeContext context {
+            .path = request.path,
+            .sourceCS = sourceCS,
+            .frameCS = request.frameCS,
+            .root = root,
+            .depth = depth,
+            .tempDirPath = tempDir.path(),
+            .cancel = &cancel,
+            .pointsDone = &pointsDone
+        };
+
+        QList<DecodeResult> decoded;
+        if(ranges.size() == 1) {
+            context.inlinePromise = &promise;
+            context.inlineProgress = &progress;
+            decoded.append(decodeRange(ranges.constFirst(), context));
+        } else {
+            const auto worker = [context](const DecodeRange& range) {
+                return decodeRange(range, context);
+            };
+
+            QFuture<DecodeResult> mapFuture = cwConcurrent::mapped(ranges, worker);
+            decoded = awaitMapped(mapFuture, promise, progress, cancel, pointsDone, 0);
+        }
+
+        //A cancelled map stops pending ranges from starting, so a short result
+        //list is the cancel showing up as missing work
+        if(decoded.size() != ranges.size()) {
+            result.errorCode = cwPointOctreeBuilder::Cancelled;
+            return result;
+        }
+
+        BoundsTracker bounds;
+
+        for(const DecodeResult& decodedRange : std::as_const(decoded)) {
+            if(result.errorCode == Monad::ResultBase::NoError
+               && decodedRange.errorCode != Monad::ResultBase::NoError) {
+                result.errorCode = decodedRange.errorCode;
+                result.errorMessage = decodedRange.errorMessage;
+            }
+
+            result.pointCount += decodedRange.pointCount;
+            result.escapedRoot = result.escapedRoot || decodedRange.escapedRoot;
+
+            if(decodedRange.pointCount > 0) {
+                bounds.add(decodedRange.bounds.minimum);
+                bounds.add(decodedRange.bounds.maximum);
+            }
+
+            //This loop walks the ranges in order, so every cell's parts land in that order
+            for(auto it = decodedRange.parts.constBegin();
+                it != decodedRange.parts.constEnd();
+                ++it) {
+                result.parts[it.key()].append(it.value());
+            }
+        }
+
+        if(result.errorCode != Monad::ResultBase::NoError) {
             return result;
         }
 
@@ -376,8 +677,8 @@ namespace {
 
     struct ChunkTask {
         Cell cell;
-        QString path;
-        qint64 pointCount = 0;
+        QVector<ChunkPart> parts;   //!< in range order, so the cell reads in file order
+        qint64 pointCount = 0;      //!< the parts' points together
     };
 
     struct ChunkContext {
@@ -410,27 +711,37 @@ namespace {
             return result;
         }
 
-        QFile file(task.path);
-        if(!file.open(QIODevice::ReadOnly)) {
-            result.errorCode = cwPointOctreeBuilder::TempDirFailed;
-            result.errorMessage = QStringLiteral("Could not read the octree chunk file %1.").arg(task.path);
-            return result;
-        }
-
         //QVector3D is three contiguous floats, the layout pass A wrote, so the
-        //chunk reads straight into the vector rather than through a second copy
+        //parts read straight into the vector rather than through a second copy
         static_assert(sizeof(QVector3D) == kTempBytesPerPoint);
 
-        const qsizetype pointCount = file.size() / kTempBytesPerPoint;
-        const qint64 wanted = qint64(pointCount) * kTempBytesPerPoint;
+        QVector<QVector3D> points(qsizetype(task.pointCount));
+        char* cursor = reinterpret_cast<char*>(points.data());
 
-        QVector<QVector3D> points(pointCount);
-        if(file.read(reinterpret_cast<char*>(points.data()), wanted) != wanted) {
-            result.errorCode = cwPointOctreeBuilder::ReadFailed;
-            result.errorMessage = QStringLiteral("Could not read the octree chunk file %1.").arg(task.path);
-            return result;
+        //Range order is the order one reader would have read these points in
+        for(const ChunkPart& part : task.parts) {
+            QFile file(part.path);
+            if(!file.open(QIODevice::ReadOnly)) {
+                result.errorCode = cwPointOctreeBuilder::TempDirFailed;
+                result.errorMessage = QStringLiteral("Could not read the octree chunk file %1.")
+                                          .arg(part.path);
+                return result;
+            }
+
+            const qint64 wanted = part.pointCount * kTempBytesPerPoint;
+            if(file.read(cursor, wanted) != wanted) {
+                result.errorCode = cwPointOctreeBuilder::ReadFailed;
+                result.errorMessage = QStringLiteral("Could not read the octree chunk file %1.")
+                                          .arg(part.path);
+                return result;
+            }
+
+            file.close();
+            cursor += wanted;
+
+            //Temp scratch declines through pass B rather than peaking at the manifest
+            QFile::remove(part.path);
         }
-        file.close();
 
         QVector<SampledNode> subtree = buildSubtree(std::move(points),
                                                     task.cell,
@@ -562,6 +873,7 @@ QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request&
             const cwGeoPoint sourceMin(header.min_x, header.min_y, header.min_z);
             const cwGeoPoint sourceMax(header.max_x, header.max_y, header.max_z);
             const qint64 npoints = qint64(headerReader->npoints);
+            const bool cheapSeeks = seeksCheaply(header);
             headerReader->close();
             delete headerReader;
 
@@ -600,7 +912,16 @@ QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request&
                                             sourceMax,
                                             cwCoordinateTransform(sourceCS, request.frameCS));
 
-            PassAResult passA = chunkPoints(request, sourceCS, root, depth, tempPath, promise, progress);
+            const int workerCount = decodeWorkerCount(request, npoints, cheapSeeks);
+
+            QElapsedTimer buildTimer;
+            buildTimer.start();
+
+            QElapsedTimer passTimer;
+            passTimer.start();
+
+            PassAResult passA = runPassA(request, sourceCS, root, depth, npoints,
+                                         workerCount, tempPath, promise, progress);
 
             if(passA.errorCode == Monad::ResultBase::NoError
                && passA.escapedRoot
@@ -608,17 +929,20 @@ QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request&
                 qInfo() << "cwPointOctreeBuilder: reprojection pushed points outside the provisional root of"
                         << request.path << "- chunking again with the measured bounds";
 
-                //Pass A appends, so a surviving chunk file would be counted twice
-                for(const ChunkBuffer& chunk : std::as_const(passA.chunks)) {
-                    if(!QFile::remove(chunk.path)) {
-                        fail(QStringLiteral("Could not reset the octree chunk file %1.").arg(chunk.path),
-                             TempDirFailed);
-                        return;
+                //Pass A appends, so a surviving part file would be counted twice
+                for(const QVector<ChunkPart>& parts : std::as_const(passA.parts)) {
+                    for(const ChunkPart& part : parts) {
+                        if(!QFile::remove(part.path)) {
+                            fail(QStringLiteral("Could not reset the octree chunk file %1.").arg(part.path),
+                                 TempDirFailed);
+                            return;
+                        }
                     }
                 }
 
                 root = cubeAround(passA.bboxMin, passA.bboxMax);
-                passA = chunkPoints(request, sourceCS, root, depth, tempPath, promise, progress);
+                passA = runPassA(request, sourceCS, root, depth, npoints,
+                                 workerCount, tempPath, promise, progress);
             }
 
             if(passA.errorCode != Monad::ResultBase::NoError) {
@@ -626,12 +950,29 @@ QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request&
                 return;
             }
 
+            cw::profile::write(lcProfileLoad(),
+                               QStringLiteral("build passA points=%1 ranges=%2 workers=%3 seconds=%4")
+                                   .arg(passA.pointCount)
+                                   .arg(passA.rangeCount)
+                                   .arg(workerCount)
+                                   .arg(secondsSince(passTimer)));
+            passTimer.restart();
+
             QVector<ChunkTask> tasks;
-            tasks.reserve(passA.chunks.size());
-            for(auto it = passA.chunks.constBegin(); it != passA.chunks.constEnd(); ++it) {
-                tasks.append(ChunkTask {cellFromKey(it.key()), it->path, it->pointCount});
+            tasks.reserve(passA.parts.size());
+
+            //Pass B puts every chunk in flight at once, so its peak is all of them
+            qint64 chunkBytesInFlight = 0;
+            for(auto it = passA.parts.constBegin(); it != passA.parts.constEnd(); ++it) {
+                qint64 points = 0;
+                for(const ChunkPart& part : it.value()) {
+                    points += part.pointCount;
+                }
+
+                tasks.append(ChunkTask {cellFromKey(it.key()), it.value(), points});
+                chunkBytesInFlight += points * kTempBytesPerPoint;
             }
-            passA.chunks.clear();
+            passA.parts.clear();
 
             std::atomic<bool> cancelFlag {false};
             std::atomic<qint64> chunkPointsDone {0};
@@ -655,25 +996,16 @@ QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request&
                 const auto worker = [context](const ChunkTask& task) { return buildChunk(task, context); };
 
                 QFuture<ChunkResult> mapFuture = cwConcurrent::mapped(tasks, worker);
-
-                //This task waits on tasks from the same pool, so give up its slot until they're done
-                QThreadPool* pool = cwTask::threadPool();
-                pool->releaseThread();
-
-                while(!mapFuture.isFinished()) {
-                    if(promise.isCanceled() && !cancelFlag.load(std::memory_order_relaxed)) {
-                        cancelFlag.store(true, std::memory_order_relaxed);
-                        mapFuture.cancel();
-                    }
-                    progress.report(passA.pointCount + chunkPointsDone.load(std::memory_order_relaxed));
-                    QThread::msleep(kMapPollMs);
-                }
-
-                pool->reserveThread();
-
-                mapFuture.waitForFinished();
-                chunkResults = mapFuture.results();
+                chunkResults = awaitMapped(mapFuture, promise, progress, cancelFlag,
+                                           chunkPointsDone, passA.pointCount);
             }
+
+            cw::profile::write(lcProfileLoad(),
+                               QStringLiteral("build passB chunks=%1 inFlightPeakBytes=%2 seconds=%3")
+                                   .arg(tasks.size())
+                                   .arg(chunkBytesInFlight)
+                                   .arg(secondsSince(passTimer)));
+            passTimer.restart();
 
             const QString cancelledMessage =
                 QStringLiteral("The octree build of %1 was cancelled.").arg(request.path);
@@ -842,6 +1174,15 @@ QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request&
                      CacheWriteFailed);
                 return;
             }
+
+            cw::profile::write(lcProfileLoad(),
+                               QStringLiteral("build passC nodes=%1 seconds=%2")
+                                   .arg(manifest.nodes.size())
+                                   .arg(secondsSince(passTimer)));
+            cw::profile::write(lcProfileLoad(),
+                               QStringLiteral("build total seconds=%1 peakRssBytes=%2")
+                                   .arg(secondsSince(buildTimer))
+                                   .arg(cw::profile::peakResidentBytes()));
 
             promise.addResult(Result(manifest));
         });

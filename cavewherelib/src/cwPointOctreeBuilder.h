@@ -16,7 +16,9 @@
 
 namespace cw::octree {
 
-    //Points per chunk file, so one pass B worker holds about 24 MB
+    //The points per cell the chunk depth aims at, averaged over every cell of
+    //the depth. A flat tile fills only the cells its terrain crosses, so an
+    //occupied chunk holds several times this, at 12 bytes a point in pass B.
     constexpr qint64 kChunkTargetPoints = 2000000;
 
     //At most 8^5 chunk cells
@@ -47,6 +49,11 @@ public:
 
         //!< Points per chunk file, which sets the chunk depth
         qint64 chunkTargetPoints = cw::octree::kChunkTargetPoints;
+
+        //!< Workers pass A decodes with, 0 = one per kMinPointsPerDecodeWorker
+        //!< points. Either way the count is held to the pool, and a file whose
+        //!< seek decodes from the start decodes on one worker whatever this asks.
+        int decodeWorkerCount = 0;
     };
 
     //Stable codes so a test asserts the failure kind, not the message wording
