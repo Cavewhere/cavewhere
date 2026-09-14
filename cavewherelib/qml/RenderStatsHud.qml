@@ -173,6 +173,16 @@ QQ.Rectangle {
                 font.pixelSize: Theme.fontSizeCaption
             }
 
+            // The pick mirror is the CPU copy of every resident node, so at
+            // rest it matches the GPU figure.
+            QC.Label {
+                objectName: "renderStatsHudPointCloudMirrors"
+                text: qsTr(" · mirrors %1")
+                    .arg(statsModelId.pickMirrorText)
+                color: Theme.text
+                font.pixelSize: Theme.fontSizeCaption
+            }
+
             QC.Label {
                 objectName: "renderStatsHudPointCloudSse"
                 text: qsTr(" · SSE ×%1")

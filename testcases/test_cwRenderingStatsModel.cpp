@@ -21,6 +21,7 @@ constexpr qint64 kMegabyte = kKilobyte * kKilobyte;
 constexpr qint64 kGigabyte = kMegabyte * kKilobyte;
 constexpr qint64 kOneAndAHalfMegabytes = kMegabyte + kMegabyte / 2;
 constexpr qint64 kTwoGigabytes = 2 * kGigabyte;
+constexpr qint64 kThreeMegabytes = 3 * kMegabyte;
 constexpr int kCategoryCount = 5;
 constexpr int kPointCloudRow = 0;
 constexpr int kLinePlotRow = 3;
@@ -44,7 +45,8 @@ constexpr cwRenderFrameStats::PointCloud kPointCloudCounts {
     .selectedNodes = 57,
     .selectedPoints = 17200000,
     .nodeLoadsInFlight = 6,
-    .sseInflation = 1.25
+    .sseInflation = 1.25,
+    .pickMirrorBytes = kThreeMegabytes
 };
 
 // The ledger is process-wide, so every test works in deltas from what it finds
@@ -253,6 +255,9 @@ TEST_CASE("cwRenderingStatsModel: refresh reads the published point cloud counts
     CHECK(model.selectedPointsText()
           == cwRenderingStatsModel::formattedMillions(kPointCloudCounts.selectedPoints));
     CHECK(model.sseInflation() == kPointCloudCounts.sseInflation);
+    CHECK(model.pickMirrorBytes() == kPointCloudCounts.pickMirrorBytes);
+    CHECK(model.pickMirrorText()
+          == cwRenderingStatsModel::formattedBytes(kPointCloudCounts.pickMirrorBytes));
     CHECK(pointCloudSpy.count() == 1);
 
     //Publishing the point cloud alone leaves the other parts quiet
@@ -272,6 +277,7 @@ TEST_CASE("cwRenderingStatsModel: refresh reads the published point cloud counts
     CHECK(model.nodeLoadsInFlight() == 0);
     CHECK(model.selectedPoints() == 0);
     CHECK(model.sseInflation() == 1.0);
+    CHECK(model.pickMirrorBytes() == 0);
     CHECK(pointCloudSpy.count() == 2);
 }
 

@@ -46,6 +46,8 @@ class CAVEWHERE_LIB_EXPORT cwRenderingStatsModel : public QAbstractListModel
     Q_PROPERTY(qint64 selectedPoints READ selectedPoints NOTIFY pointCloudChanged)
     Q_PROPERTY(QString selectedPointsText READ selectedPointsText NOTIFY pointCloudChanged)
     Q_PROPERTY(double sseInflation READ sseInflation NOTIFY pointCloudChanged)
+    Q_PROPERTY(qint64 pickMirrorBytes READ pickMirrorBytes NOTIFY pointCloudChanged)
+    Q_PROPERTY(QString pickMirrorText READ pickMirrorText NOTIFY pointCloudChanged)
 
 public:
     enum Roles {
@@ -88,6 +90,8 @@ public:
     qint64 selectedPoints() const { return m_pointCloud.selectedPoints; }
     QString selectedPointsText() const { return formattedMillions(m_pointCloud.selectedPoints); }
     double sseInflation() const { return m_pointCloud.sseInflation; }
+    qint64 pickMirrorBytes() const { return m_pointCloud.pickMirrorBytes; }
+    QString pickMirrorText() const { return formattedBytes(m_pointCloud.pickMirrorBytes); }
 
     //! Re-reads the ledger now, for the HUD's refresh affordance
     Q_INVOKABLE void refresh();

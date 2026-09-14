@@ -105,6 +105,10 @@ QQ.Item {
                     " · points " + statsModelId.selectedPointsText
                     + " / " + rootId.renderingSettings.pointBudgetMillions + " M")
 
+            let mirrors = ObjectFinder.findObjectByChain(rootId, "rootId->hud->renderStatsHudPointCloudMirrors")
+            verify(mirrors !== null, "renderStatsHudPointCloudMirrors not found")
+            compare(mirrors.text, " · mirrors " + statsModelId.pickMirrorText)
+
             // The multiplier is a budget-pressure signal, so it stays off the
             // row until a view actually coarsens its cut. Nothing in QML can
             // raise the inflation — the C++ [PointCloudStreaming] stats case

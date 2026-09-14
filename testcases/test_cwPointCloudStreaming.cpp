@@ -1379,6 +1379,11 @@ TEST_CASE("A streamed frame publishes the cut and its residency to the render st
     CHECK(quiet.nodeLoadsInFlight == 0);
     CHECK(quiet.sseInflation == 1.0);
 
+    // The pick mirror holds a CPU copy of every resident node's payload plus
+    // the pick index derived from it, so it reads just above the GPU figure.
+    CHECK(quiet.pickMirrorBytes == fixture.cpuBytes());
+    CHECK(quiet.pickMirrorBytes > fixture.gpuBytes());
+
     // A budget the cloud cannot fit: the coarser cut the view falls back to is
     // what the HUD's multiplier reports.
     cwRenderBudgets budgets = fixture.budgets();

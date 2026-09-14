@@ -456,6 +456,7 @@ void cwRHIPointCloud::publishPointCloudStats()
     counts.selectedPoints = m_selected.points;
     counts.nodeLoadsInFlight = m_streamer.pending().loads + int(m_readyQueue.size());
     counts.sseInflation = m_sseInflation;
+    counts.pickMirrorBytes = m_mirrorBytes.bytes();
 
     if (m_profileEnabled) {
         m_profile.residentNodes = counts.residentNodes;

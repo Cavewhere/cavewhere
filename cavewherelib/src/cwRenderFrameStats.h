@@ -60,6 +60,8 @@ public:
         int nodeLoadsInFlight = 0;
         //! Screen-space-error multiplier the view raised to fit the GPU budget
         double sseInflation = 1.0;
+        //! CPU copy of every resident node's payload, kept alive for picking
+        qint64 pickMirrorBytes = 0;
 
         bool operator==(const PointCloud& other) const = default;
     };
