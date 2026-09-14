@@ -65,13 +65,13 @@ namespace {
     // deeper windows that own it.
     QStringList siblingScopePrefixesOf(const cwTrip* trip)
     {
-        const cwCave* cave = trip->parentCave();
-        if (cave == nullptr) {
+        const cwSurveyNode* node = trip->parentNode();
+        if (node == nullptr) {
             return QStringList();
         }
 
         QStringList prefixes;
-        const QList<cwTrip*> siblings = cave->trips();
+        const QList<cwTrip*> siblings = node->trips();
         for (const cwTrip* sibling : siblings) {
             if (sibling == trip || sibling->stationPrefix().isEmpty()) {
                 continue;
@@ -137,7 +137,7 @@ namespace {
 
 cwTrip::cwTrip(QObject *parent) :
     QObject(parent),
-    ParentCave(nullptr)
+    m_parentNode(nullptr)
 {
 //    DistanceUnit = cwUnits::Meters;
     Team = new cwTeam(this);
@@ -172,7 +172,7 @@ cwTrip::cwTrip(QObject *parent) :
 
 // void cwTrip::Copy(const cwTrip& object)
 // {
-//     ParentCave = nullptr;
+//     m_parentNode = nullptr;
 
 //     //Copy the name of the trip
 //     setName(object.Name);
@@ -249,7 +249,7 @@ void cwTrip::setName(QString name) {
 
 QString cwTrip::validateName(const QString& proposedName) const
 {
-    const auto* nameSet = parentCave() ? &parentCave()->tripNameSet() : nullptr;
+    const auto* nameSet = parentNode() ? &parentNode()->tripNameSet() : nullptr;
     return cwNameUtils::validateEntityName(Name, proposedName, nameSet,
                                            QStringLiteral("trip"));
 }
@@ -299,8 +299,8 @@ QString cwTrip::scopePrefix() const
     //A trip's label is only unique among the trips of its cave, so the cave owns
     //the assignment and this is a lookup in the map it keeps.
     const auto label = [this]() -> QString {
-        const cwCave* cave = parentCave();
-        if (cave == nullptr) {
+        const cwSurveyNode* node = parentNode();
+        if (node == nullptr) {
             //No cave means no sibling set, so this trip's own label is unique by
             //construction — it is what it would take on being added to a cave
             //with no name clash, and the only sensible answer for a trip being
@@ -314,7 +314,7 @@ QString cwTrip::scopePrefix() const
         //sibling may now hold, and the solved-* accessors would strip by it and
         //hand back that sibling's stations as this trip's. Answering "no scope"
         //resolves nothing rather than the wrong thing.
-        return cave->tripScopeLabels().value(id());
+        return node->tripScopeLabels().value(id());
     };
 
     return computeScopePrefix(!m_externalCenterline.isEmpty(), m_stationPrefix, label);
@@ -336,16 +336,18 @@ bool cwTrip::isScoped() const
 
 bool cwTrip::externallyBacked() const
 {
-    const cwCave* cave = parentCave();
-    return isScoped() || (cave != nullptr && !cave->externalCenterline().isEmpty());
+    const cwSurveyNode* node = parentNode();
+    return isScoped() || (node != nullptr && node->externallyBacked());
 }
 
 bool cwTrip::windowsWholeCave() const
 {
-    const cwCave* cave = parentCave();
+    //The node's OWN attachment, not externallyBacked(): the whole-cave window is
+    //about the node this trip hangs under having a file of its own.
+    const cwSurveyNode* node = parentNode();
     return computeWindowsWholeCave(!m_externalCenterline.isEmpty(),
                                    m_stationPrefix,
-                                   cave != nullptr && !cave->externalCenterline().isEmpty());
+                                   node != nullptr && !node->externalCenterline().isEmpty());
 }
 
 bool cwTrip::windowsWholeCave(const cwTripData& trip, const cwCaveData& cave)
@@ -611,12 +613,12 @@ QSet<cwStation> cwTrip::neighboringStations(QString stationName) const {
 }
 
 cwStationPositionLookup cwTrip::solvedStationPositions() const {
-    cwCave* cave = parentCave();
-    if(cave == nullptr) {
+    cwSurveyNode* node = parentNode();
+    if(node == nullptr) {
         return cwStationPositionLookup();
     }
 
-    cwStationPositionLookup lookup = cave->stationPositionLookup();
+    cwStationPositionLookup lookup = node->stationPositionLookup();
     const QString prefix = scopePrefix();
     if(prefix.isEmpty()) {
         //Native trip: the cave keys already speak this trip's namespace.
@@ -641,12 +643,12 @@ cwStationPositionLookup cwTrip::solvedStationPositions() const {
 }
 
 cwSurveyNetwork cwTrip::solvedNetwork() const {
-    cwCave* cave = parentCave();
-    if(cave == nullptr) {
+    cwSurveyNode* node = parentNode();
+    if(node == nullptr) {
         return cwSurveyNetwork();
     }
 
-    cwSurveyNetwork network = cave->network();
+    cwSurveyNetwork network = node->network();
     const QString prefix = scopePrefix();
     if(prefix.isEmpty()) {
         //Native trip: pass through, cross-trip junction neighbors intact.
@@ -681,12 +683,12 @@ cwSurveyNetwork cwTrip::solvedNetwork() const {
 
 QList<QPair<QString, QVector3D>> cwTrip::solvedStations() const {
     QList<QPair<QString, QVector3D>> solved;
-    cwCave* cave = parentCave();
-    if(cave == nullptr) {
+    cwSurveyNode* node = parentNode();
+    if(node == nullptr) {
         return solved;
     }
 
-    const cwStationPositionLookup lookup = cave->stationPositionLookup();
+    const cwStationPositionLookup lookup = node->stationPositionLookup();
     const QString prefix = scopePrefix();
     const bool wholeCaveWindow = windowsWholeCave();
 
@@ -778,9 +780,9 @@ cwStationHandle cwTrip::stationHandle(const QString& tail) const
     //Deliberately scopePrefix() and not isScoped(): the two disagree for a trip
     //its cave no longer lists, and solvedStations() above splits on the prefix.
     if(scopePrefix().isEmpty()) {
-        cwCave* cave = parentCave();
+        cwSurveyNode* node = parentNode();
         return cwStationHandle(cwStationHandle::NativeCave,
-                               cave != nullptr ? cave->id() : QUuid(),
+                               node != nullptr ? node->id() : QUuid(),
                                tail);
     }
     return cwStationHandle(cwStationHandle::Trip, id(), tail);
@@ -873,34 +875,45 @@ void cwTrip::setUndoStackForChildren() {
 }
 
 /**
-  \brief Set's the parent's cave
+  \brief Set's the node that holds this trip
   */
-void cwTrip::setParentCave(cwCave* parentCave) {
-    if(ParentCave != parentCave) {
-        if(ParentCave) {
-            KeywordModel->removeExtension(ParentCave->keywordModel());
+void cwTrip::setParentNode(cwSurveyNode* parentNode) {
+    if(m_parentNode != parentNode) {
+        if(m_parentNode) {
+            KeywordModel->removeExtension(m_parentNode->keywordModel());
         }
 
-        ParentCave = parentCave;
-        setParent(parentCave);
+        m_parentNode = parentNode;
+        setParent(parentNode);
 
-        if(ParentCave) {
-            KeywordModel->addExtension(ParentCave->keywordModel());
+        if(m_parentNode) {
+            KeywordModel->addExtension(m_parentNode->keywordModel());
         }
 
-        // Notes->setParentCave(ParentCave);
+        emit parentNodeChanged();
         emit parentCaveChanged();
 
-        //A cave-level attachment is a fact only the cave holds, so reparenting
+        //A node-level attachment is a fact only the node holds, so reparenting
         //can flip this trip's answer without any of its own fields moving.
         emit externallyBackedChanged();
     }
 }
 
+void cwTrip::setParentCave(cwCave* parentCave) {
+    setParentNode(parentCave);
+}
+
+/**
+  \brief Parent's cave
+  */
+cwCave* cwTrip::parentCave() const {
+    return qobject_cast<cwCave*>(m_parentNode.data());
+}
+
 cwUnits::UnitSystem cwTrip::unitSystem() const
 {
-    const cwCave* cave = parentCave();
-    return cave ? cave->unitSystem() : cwUnits::Metric;
+    const cwSurveyNode* node = parentNode();
+    return node ? node->unitSystem() : cwUnits::Metric;
 }
 
 void cwTrip::updateKeywordMetadata()
@@ -949,9 +962,9 @@ cwTrip::NameCommand::NameCommand(cwTrip* trip, QString name) {
 }
 
 void cwTrip::NameCommand::redo() {
-    if (auto* cave = Trip->parentCave()) {
-        if (cave->trips().contains(Trip)) {
-            cave->tripNameSet().rename(OldName, NewName);
+    if (auto* node = Trip->parentNode()) {
+        if (node->trips().contains(Trip)) {
+            node->tripNameSet().rename(OldName, NewName);
         }
     }
     Trip->Name = NewName;
@@ -963,9 +976,9 @@ void cwTrip::NameCommand::redo() {
 }
 
 void cwTrip::NameCommand::undo() {
-    if (auto* cave = Trip->parentCave()) {
-        if (cave->trips().contains(Trip)) {
-            cave->tripNameSet().rename(NewName, OldName);
+    if (auto* node = Trip->parentNode()) {
+        if (node->trips().contains(Trip)) {
+            node->tripNameSet().rename(NewName, OldName);
         }
     }
     Trip->Name = OldName;

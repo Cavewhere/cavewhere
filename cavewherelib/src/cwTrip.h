@@ -21,7 +21,8 @@
 // #include "cwTripCalibration.h"
 class cwTripCalibration;
 #include "cwUndoer.h"
-#include "cwCave.h"
+#include "cwSurveyNode.h"
+class cwCave;
 // #include "cwTeam.h"
 #include "cwSurveyChunk.h"
 class cwSurveyChunk;
@@ -65,6 +66,7 @@ class CAVEWHERE_LIB_EXPORT cwTrip : public QObject, public cwUndoer
     Q_PROPERTY(cwTeam* team READ team CONSTANT)
     Q_PROPERTY(int chunkCount READ chunkCount NOTIFY numberOfChunksChanged)
     Q_PROPERTY(cwTripCalibration* calibration READ calibrations CONSTANT)
+    Q_PROPERTY(cwSurveyNode* parentNode READ parentNode NOTIFY parentNodeChanged)
     Q_PROPERTY(cwCave* parentCave READ parentCave WRITE setParentCave NOTIFY parentCaveChanged)
     Q_PROPERTY(cwErrorModel* errorModel READ errorModel CONSTANT)
     Q_PROPERTY(cwKeywordModel* keywordModel READ keywordModel CONSTANT)
@@ -203,11 +205,19 @@ public:
     Q_INVOKABLE cwSurveyChunk* chunk(int i) const;
     QList<cwSurveyChunk*> chunks() const;
 
+    //! The survey node holding this trip — the trip's place in the tree, and the
+    //! sibling set its label is unique in.
+    cwSurveyNode* parentNode() const { return m_parentNode; }
+    void setParentNode(cwSurveyNode* parentNode);
+
+    //! parentNode() as a cwCave, for the QML pages and callers still typed that
+    //! way. Every node constructed today is a cwCave, so it answers for all of
+    //! them; it goes away with cwCave itself.
     void setParentCave(cwCave* parentCave);
     cwCave* parentCave() const;
 
-    //! The unit system in effect for this trip: its cave's, or Metric with no
-    //! cave yet. Delegates up to cwCave::unitSystem() — the project default.
+    //! The unit system in effect for this trip: its node's, or Metric with no
+    //! node yet. Delegates up to cwSurveyNode::unitSystem() — the project default.
     cwUnits::UnitSystem unitSystem() const;
 
     QList< cwStation > stations() const;
@@ -310,6 +320,7 @@ signals:
     // void calibrationChanged();
     // void notesChanged();
     void numberOfChunksChanged();
+    void parentNodeChanged();
     void parentCaveChanged();
     void externalCenterlineChanged();
     void stationPrefixChanged();
@@ -385,7 +396,7 @@ protected:
     QDateTime DateTime;
     cwTeam* Team;
     cwTripCalibration* Calibration;
-    QPointer<cwCave> ParentCave;
+    QPointer<cwSurveyNode> m_parentNode;
     cwSurveyNoteModel* Notes;
     cwSurveyNoteLiDARModel* NotesLidar;
     cwSurveyNoteSketchModel* NotesSketch;
@@ -466,14 +477,6 @@ inline QDateTime cwTrip::date() const {
 }
 
 /**
-  \brief Parent's cave
-  */
-inline cwCave* cwTrip::parentCave() const {
-    return ParentCave;
-}
-
-
-/**
   \brief Gets the survey team for the trip
   */
 inline cwTeam* cwTrip::team() const {
@@ -516,5 +519,10 @@ inline cwKeywordModel* cwTrip::keywordModel() const
 {
     return KeywordModel;
 }
+
+//cwCave completes the circular trio: a TU that reaches here through cwCave.h or
+//cwSurveyNode.h parses cwTrip's body while cwCave is still incomplete, which is
+//why parentCave() is out of line in cwTrip.cpp.
+#include "cwCave.h"
 
 #endif // CWSURVERYCHUNKGROUP_H
