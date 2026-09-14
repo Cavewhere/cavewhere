@@ -266,8 +266,10 @@ void cwSurveyExportManager::setCave(cwCave* cave) {
     if(Cave != cave) {
         Cave = cave;
         if(!Cave.isNull()) {
-            Q_ASSERT(qobject_cast<cwCavingRegion*>(Cave->parent()) != nullptr);
-            setCavingRegion(qobject_cast<cwCavingRegion*>(Cave->parent()));
+            //parentRegion() walks up the node tree, so it answers for a cave at
+            //any depth; the cave's QObject parent is the node above it.
+            Q_ASSERT(Cave->parentRegion() != nullptr);
+            setCavingRegion(Cave->parentRegion());
         }
         updateActions();
 

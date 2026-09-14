@@ -25,6 +25,15 @@ TEST_CASE("cwCave rename undo cannot produce two caves sharing a name", "[cwCave
     REQUIRE(alpha->name() == QStringLiteral("Alpha"));
     REQUIRE(beta->name() == QStringLiteral("Beta"));
 
+    //Names are unique per sibling set only, so a node one level down may take a
+    //top-level name. The rename walk below is what guards the root's own
+    //children: it only stays unique while the root's child name set is renamed
+    //along with each cave.
+    cwCave* section = new cwCave();
+    section->setName(QStringLiteral("Beta"));
+    alpha->addNode(section);
+    REQUIRE(section->name() == QStringLiteral("Beta"));
+
     //Only the two renames below may be undone - walking further would
     //undo the addCave commands and leave these pointers dangling.
     const int baseline = undoStack.index();

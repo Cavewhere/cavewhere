@@ -16,12 +16,12 @@
 #include "cwLazLayerModel.h"
 #include "cwProject.h"
 #include "cwData.h"
-#include "cwNameUtils.h"
 #include "cwTrip.h"
 
 //Qt includes
 #include <QThread>
 #include <QDebug>
+#include <QMetaEnum>
 
 //Std includes
 #include <algorithm>
@@ -42,6 +42,52 @@ cwCavingRegion::cwCavingRegion(QObject *parent) :
     });
     connect(m_geoReference, &cwGeoReference::globalCoordinateSystemChanged, this, [this] {
         m_lazLayers->setRegionGlobalCS(m_geoReference->globalCoordinateSystem());
+    });
+
+    //Built in the body rather than the init list: the node asks its parent
+    //region for the coordinate system as it constructs, and only here is this
+    //region a cwCavingRegion with m_geoReference in place.
+    m_root = new cwSurveyNode(cwSurveyNode::RootNodeTag{}, this);
+
+    //This model's rows ARE the root's child nodes, so every row signal is the
+    //root's, relayed one hop. Both halves of each pair come from the same funnel
+    //on a direct connection, which is what keeps begin/end paired.
+    connect(m_root, &cwSurveyNode::beginInsertNodes, this, [this](int begin, int end) {
+        emit beginInsertCaves(begin, end);
+        beginInsertRows(QModelIndex(), begin, end);
+    });
+    connect(m_root, &cwSurveyNode::insertedNodes, this, [this](int begin, int end) {
+        emit insertedCaves(begin, end);
+        endInsertRows();
+    });
+    connect(m_root, &cwSurveyNode::beginRemoveNodes, this, [this](int begin, int end) {
+        emit beginRemoveCaves(begin, end);
+        beginRemoveRows(QModelIndex(), begin, end);
+    });
+    connect(m_root, &cwSurveyNode::removedNodes, this, [this](int begin, int end) {
+        emit removedCaves(begin, end);
+        endRemoveRows();
+    });
+
+    connect(m_root, &cwSurveyNode::childNodeCountChanged,
+            this, &cwCavingRegion::caveCountChanged);
+    //Already the aggregate of every label move at or below the root, so the
+    //region subscribes once and to the root alone.
+    connect(m_root, &cwSurveyNode::scopeLabelsChanged,
+            this, &cwCavingRegion::scopeLabelsChanged);
+    connect(m_root, &cwSurveyNode::tripsDeleted,
+            this, &cwCavingRegion::ownersDeleted);
+    connect(m_root, &cwSurveyNode::nodesDeleted,
+            this, &cwCavingRegion::ownersDeleted);
+
+    //A fix station with no input CS of its own falls back to this region's, so a
+    //CS change moves the convergence readout of every node in the tree. A node
+    //this region no longer lists is simply absent from allNodes().
+    connect(m_geoReference, &cwGeoReference::globalCoordinateSystemChanged, this, [this] {
+        const QList<cwSurveyNode*> nodes = m_root->allNodes();
+        for(cwSurveyNode* node : nodes) {
+            node->recomputeGridConvergence();
+        }
     });
 }
 
@@ -101,7 +147,7 @@ QVariant cwCavingRegion::data(const QModelIndex &index, int role) const
 
     switch(role) {
     case CaveObjectRole:
-        return QVariant::fromValue(m_caves.at(index.row()));
+        return QVariant::fromValue(cave(index.row()));
     }
 
     return QVariant();
@@ -181,19 +227,72 @@ QModelIndex cwCavingRegion::index(int row, int column, const QModelIndex &parent
 // }
 
 
-/**
-  \brief Creates a new cave and adds it to the caving region
-  */
-void cwCavingRegion::addCaveHelper() {
-    QString newCaveName = QString("Cave %1").arg(caveCount() + 1);
-    beginUndoMacro(QString("Add %1").arg(newCaveName));
+int cwCavingRegion::caveCount() const {
+    return m_root->childNodeCount();
+}
 
-    cwCave* cave = new cwCave();
-    cave->setUndoStack(undoStack());
-    cave->setName(newCaveName);
-    addCave(cave);
+bool cwCavingRegion::hasCaves() const {
+    return caveCount() > 0;
+}
+
+/**
+  \brief Get's a cave at index
+  */
+cwCave* cwCavingRegion::cave(int index) const {
+    return qobject_cast<cwCave*>(m_root->childNode(index));
+}
+
+/**
+  \brief Gets all the caves in the region
+
+  Every node the loader, the importers and addCave() construct is a cwCave, so
+  the cast answers for every child the root holds.
+  */
+QList<cwCave*> cwCavingRegion::caves() const {
+    const QList<cwSurveyNode*> nodes = m_root->childNodes();
+    QList<cwCave*> caves;
+    caves.reserve(nodes.size());
+    for(cwSurveyNode* node : nodes) {
+        auto cave = qobject_cast<cwCave*>(node);
+        //The row indices of caves() and cave(i) have to line up, so a child that
+        //is not a cwCave is kept as a null row and caught here instead.
+        Q_ASSERT(cave != nullptr);
+        caves.append(cave);
+    }
+    return caves;
+}
+
+cwSurveyNode* cwCavingRegion::addNode(cwSurveyNode* parent, cwSurveyNode::Kind kind)
+{
+    cwSurveyNode* parentNode = parent == nullptr ? m_root : parent;
+    if(parentNode->parentRegion() != this) {
+        //A node from another tree is not this region's to add to.
+        return nullptr;
+    }
+
+    const char* const kindKey =
+        QMetaEnum::fromType<cwSurveyNode::Kind>().valueToKey(static_cast<int>(kind));
+    if(kindKey == nullptr) {
+        //QML hands enums over as plain ints, so kind may name no Kind at all.
+        return nullptr;
+    }
+
+    const QString kindName = QString::fromUtf8(kindKey);
+    const QString newNodeName = QStringLiteral("%1 %2")
+                                    .arg(kindName)
+                                    .arg(parentNode->childNodeCount() + 1);
+
+    beginUndoMacro(QStringLiteral("Add %1").arg(newNodeName));
+
+    auto node = new cwCave();
+    node->setKind(kind);
+    node->setUndoStack(undoStack());
+    node->setName(newNodeName);
+    parentNode->addNode(node);
 
     endUndoMacro();
+
+    return node;
 }
 
 /**
@@ -201,115 +300,49 @@ void cwCavingRegion::addCaveHelper() {
   */
 void cwCavingRegion::addCave(cwCave* cave) {
     if(cave == nullptr) {
-        addCaveHelper();
+        addNode(nullptr, cwSurveyNode::Kind::Cave);
         return;
-    };
-    insertCave(m_caves.size(), cave);
+    }
+    m_root->addNode(cave);
 }
 
 void cwCavingRegion::addCaves(QList<cwCave*> caves) {
-    // Use a temporary set for batch dedup without modifying m_caveNames
-    cwSanitizedNameSet batchSet = m_caveNames;
-    foreach(cwCave* cave, caves) {
-        unparentCave(cave);
-        cave->setUndoStack(undoStack());
-
-        // Auto-rename to avoid filesystem path collisions in .cwproj layout
-        const QString deduped = batchSet.deduplicateName(cave->name());
-        if (deduped != cave->name()) {
-            cave->setName(deduped);
-        }
-        batchSet.insert(cave->name());
-    }
-
-    //Run the insert cave command
-    if(!caves.isEmpty()) {
-        int firstIndex = m_caves.size();
-        pushUndo(new InsertCaveCommand(this, caves, firstIndex));
-    }
+    m_root->addNodes(QList<cwSurveyNode*>(caves.begin(), caves.end()));
 }
 
 /**
-  \brief Inserts a cave into the region at inedx
+  \brief Inserts a cave into the region at index
   */
 void cwCavingRegion::insertCave(int index, cwCave* cave) {
-    if(index < 0 || index > m_caves.size()) { return; }
-
-    unparentCave(cave);
-
-    // Auto-rename to avoid filesystem path collisions in .cwproj layout.
-    // The cave has no parent yet, so setName()'s guard won't fire.
-    const QString deduped = m_caveNames.deduplicateName(cave->name());
-    if (deduped != cave->name()) {
-        cave->setName(deduped);
-    }
-
-    //Run the insert cave command
-    pushUndo(new InsertCaveCommand(this, cave, index));
+    m_root->insertNode(index, cave);
 }
 
 /**
-  \brief Removes the cave at index
+  \brief Removes the cave at index, and says so through ownersDeleted()
   */
 void cwCavingRegion::removeCave(int index) {
-    if(index < 0 || index >= m_caves.size()) { return; }
-
-    //Deleting a cave deletes the cave itself and every trip in it, so the whole
-    //cascade of owner ids is read off the cave before the removal, which can
-    //destroy it outright.
-    const cwCave* cave = m_caves.at(index);
-    const QList<cwTrip*> trips = cave->trips();
-    QList<QUuid> removedOwnerIds;
-    removedOwnerIds.reserve(trips.size() + 1);
-    removedOwnerIds.append(cave->id());
-    for(const cwTrip* trip : trips) {
-        removedOwnerIds.append(trip->id());
-    }
-
-    removeCaves(index, index);
-
-    emit ownersDeleted(removedOwnerIds);
-}
-
-/**
-  \brief Remove all the caves between beginIndex and the endIndex
-
-  The caves will be delete at a later time
-  */
-void cwCavingRegion::removeCaves(int beginIndex, int endIndex) {
-    //Make sure the indexes are good
-    if(beginIndex < 0 || beginIndex >= m_caves.size() ||
-            endIndex < 0 || endIndex >= m_caves.size()) {
-        return;
-    }
-
-    //The beginIndex needs to be greater than the end index
-    if(beginIndex > endIndex) {
-        return;
-    }
-
-    pushUndo(new RemoveCaveCommand(this, beginIndex, endIndex));
+    //The root reads the whole subtree's owner ids before the removal and emits
+    //them as nodesDeleted, which this region relays as ownersDeleted.
+    m_root->removeNode(index);
 }
 
 /**
   \brief Removes all the caves from the region
   */
 void cwCavingRegion::clearCaves() {
-    if(!m_caves.isEmpty()) {
-        removeCaves(0, m_caves.size() - 1);
-    }
+    m_root->clearNodes();
 }
 
 /**
   \brief Get's the index of the cave
   */
 int cwCavingRegion::indexOf(cwCave* cave) {
-    return m_caves.indexOf(cave);
+    return m_root->indexOfNode(cave);
 }
 
 QString cwCavingRegion::uniqueCaveName(const QString& proposedName) const
 {
-    return m_caveNames.deduplicateName(cwNameUtils::sanitizeFileName(proposedName));
+    return m_root->uniqueChildName(proposedName);
 }
 
 cwProject *cwCavingRegion::parentProject() const
@@ -322,11 +355,12 @@ void cwCavingRegion::recomputeWorldOrigin()
     const QString globalCSTrimmed = m_geoReference->globalCoordinateSystem().trimmed();
 
     QList<cwGeoPoint> candidates;
-    for (cwCave* cave : m_caves) {
-        if (cave == nullptr || cave->fixStations() == nullptr) {
+    const QList<cwSurveyNode*> nodes = m_root->allNodes();
+    for (cwSurveyNode* node : nodes) {
+        if (node->fixStations() == nullptr) {
             continue;
         }
-        for (const cwFixStation& fix : cave->fixStations()->fixStations()) {
+        for (const cwFixStation& fix : node->fixStations()->fixStations()) {
             QString inputCS = fix.inputCS().trimmed();
             if (inputCS.isEmpty()) {
                 inputCS = globalCSTrimmed;
@@ -402,27 +436,24 @@ cwCave* cwCavingRegion::caveFor(const cwStationHandle& handle) const
         return nullptr;
     }
 
-    for (cwCave* cave : m_caves) {
-        if (cave == nullptr) {
-            continue;
-        }
-
+    const QList<cwSurveyNode*> nodes = m_root->allNodes();
+    for (cwSurveyNode* node : nodes) {
         switch (handle.scope()) {
         case cwStationHandle::NativeCave:
-            if (cave->id() == handle.containerId()) {
-                return cave;
+            if (node->id() == handle.containerId()) {
+                return qobject_cast<cwCave*>(node);
             }
             break;
         case cwStationHandle::Trip:
-            for (const cwTrip* trip : cave->trips()) {
+            for (const cwTrip* trip : node->trips()) {
                 if (trip != nullptr && trip->id() == handle.containerId()) {
-                    return cave;
+                    return qobject_cast<cwCave*>(node);
                 }
             }
             break;
         default:
             //An out-of-enum scope (a cast int pushed through qml) names no
-            //container any cave can resolve.
+            //container any node can resolve.
             return nullptr;
         }
     }
@@ -473,7 +504,7 @@ cwCavingRegionData cwCavingRegion::data() const
 {
     return {
         m_name.value(),
-        cwData::toDataList<cwCaveData>(m_caves),
+        cwData::toDataList<cwCaveData>(caves()),
         m_geoReference->globalCoordinateSystem(),
         m_geoReference->worldOrigin(),
         m_unitSystem,
@@ -487,217 +518,13 @@ cwCavingRegionData cwCavingRegion::data() const
   This will also set undo stack for the children as well
   */
 void cwCavingRegion::setUndoStackForChildren() {
-    setUndoStackForChildrenHelper(m_caves);
+    //Called from the cwUndoer base constructor before m_root exists; there the
+    //stack is already null, so setUndoStack() short-circuits and never gets here.
+    m_root->setUndoStack(undoStack());
 }
 
 
 const QHash<QUuid, QString>& cwCavingRegion::caveScopeLabels() const
 {
-    return m_caveScopeLabels.labels(m_caves);
-}
-
-void cwCavingRegion::invalidateCaveScopeLabels()
-{
-    //See cwCave::invalidateTripScopeLabels — insertCaves/removeCaves split the
-    //stale flag from the pulse; a rename does not need to.
-    m_caveScopeLabels.invalidate();
-    emit scopeLabelsChanged();
-}
-
-void cwCavingRegion::connectCave(cwCave* cave)
-{
-    // The cave's grid-convergence readout depends on the region's globalCS when
-    // a fix station omits its own inputCS. UniqueConnection keeps re-insert/undo
-    // paths from doubling up.
-    connect(geoReference(), &cwGeoReference::globalCoordinateSystemChanged,
-            cave, &cwCave::recomputeGridConvergence, Qt::UniqueConnection);
-
-    //A cave label is unique among the region's caves, so a rename here moves
-    //labels this region assigned.
-    connect(cave, &cwCave::nameChanged,
-            this, &cwCavingRegion::invalidateCaveScopeLabels, Qt::UniqueConnection);
-    //A trip label moving leaves the cave labels alone, but it still moves a
-    //qualified station name this region publishes, so it rides the same pulse.
-    connect(cave, &cwCave::tripScopeLabelsChanged,
-            this, &cwCavingRegion::scopeLabelsChanged, Qt::UniqueConnection);
-    //A trip deleted in one cave is news for consumers that watch the whole
-    //region, so it rides out through here as a deleted owner.
-    connect(cave, &cwCave::tripsDeleted,
-            this, &cwCavingRegion::ownersDeleted, Qt::UniqueConnection);
-}
-
-void cwCavingRegion::disconnectCave(cwCave* cave)
-{
-    disconnect(geoReference(), &cwGeoReference::globalCoordinateSystemChanged,
-               cave, &cwCave::recomputeGridConvergence);
-
-    //A cave this region no longer lists must not dirty its labels or pulse
-    //through it.
-    disconnect(cave, &cwCave::nameChanged,
-               this, &cwCavingRegion::invalidateCaveScopeLabels);
-    disconnect(cave, &cwCave::tripScopeLabelsChanged,
-               this, &cwCavingRegion::scopeLabelsChanged);
-    disconnect(cave, &cwCave::tripsDeleted,
-               this, &cwCavingRegion::ownersDeleted);
-}
-
-/**
-  \brief Unparents the cave
-  */
-void cwCavingRegion::unparentCave(cwCave* cave) {
-    //Reparent the trip, if already in another cave
-    cwCavingRegion* parentRegion = dynamic_cast<cwCavingRegion*>(((QObject*)cave)->parent());
-    if(parentRegion != nullptr) {
-        int index = parentRegion->m_caves.indexOf(cave);
-        //The cave is moving between regions, so its trips keep their ids and
-        //their attachments — the old region must stay quiet about them.
-        parentRegion->removeCaves(index, index);
-    }
-}
-
-cwCavingRegion::InsertRemoveCave::InsertRemoveCave(cwCavingRegion* region,
-                                                   int beginIndex, int endIndex) {
-    Region = region;
-    BeginIndex = beginIndex;
-    EndIndex = endIndex;
-    OwnsCaves = false;
-}
-
-/**
-  Delete all the caves if it owns them
-  */
-cwCavingRegion::InsertRemoveCave::~InsertRemoveCave() {
-    if(OwnsCaves) {
-        foreach(auto cave, Caves) {
-            if(cave) {
-                cave->deleteLater();
-            }
-        }
-    }
-}
-
-/**
-  \brief Insert the caves in this command into the region
-  */
-void cwCavingRegion::InsertRemoveCave::insertCaves() {
-   // if(Region.isNull()) { return; }
-    cwCavingRegion* regionPtr = Region; //.data();
-
-    emit regionPtr->beginInsertCaves(BeginIndex, EndIndex);
-    emit regionPtr->beginInsertRows(QModelIndex(), BeginIndex, EndIndex);
-    for(int i = 0; i < Caves.size(); i++) {
-        int index = BeginIndex + i;
-        cwCave* cave = Caves.at(i);
-        regionPtr->m_caves.insert(index, cave);
-        regionPtr->m_caveNames.insert(cave->name());
-        cave->setParent(regionPtr);
-        regionPtr->connectCave(cave);
-        cave->recomputeGridConvergence();
-    }
-
-    OwnsCaves = false;
-
-    //Stale before the first emit, pulsed after the last — see
-    //cwCave::InsertRemoveTrip::insertTrips for why the two are separated.
-    regionPtr->m_caveScopeLabels.invalidate();
-
-    emit regionPtr->insertedCaves(BeginIndex, EndIndex);
-    emit regionPtr->endInsertRows();
-    emit regionPtr->caveCountChanged();
-
-    emit regionPtr->scopeLabelsChanged();
-}
-
-/**
-  \brief Removes the caves in this command from the region
-  */
-void cwCavingRegion::InsertRemoveCave::removeCaves() {
-//    if(Region.isNull()) { return; }
-    cwCavingRegion* regionPtr = Region; //.data();
-
-    emit regionPtr->beginRemoveCaves(BeginIndex, EndIndex);
-    emit regionPtr->beginRemoveRows(QModelIndex(), BeginIndex, EndIndex);
-
-    for(int i = Caves.size() - 1; i >= 0; i--) {
-        int index = BeginIndex + i;
-        cwCave* cave = regionPtr->m_caves.at(index);
-        regionPtr->m_caveNames.remove(cave->name());
-        regionPtr->m_caves.removeAt(index);
-
-        //Do NOT uncomment, qml engine may garbage collect objects that aren't parented, and can cause double free problem
-        // Caves[i]->setParent(nullptr);
-
-        regionPtr->disconnectCave(cave);
-    }
-
-    OwnsCaves = true;
-
-    regionPtr->m_caveScopeLabels.invalidate();
-
-    emit regionPtr->removedCaves(BeginIndex, EndIndex);
-    emit regionPtr->endRemoveRows();
-    emit regionPtr->caveCountChanged();
-
-    emit regionPtr->scopeLabelsChanged();
-}
-
-
-cwCavingRegion::InsertCaveCommand::InsertCaveCommand(cwCavingRegion* parentRegion,
-                                                     QList<cwCave*> caves,
-                                                     int index) :
-    cwCavingRegion::InsertRemoveCave(parentRegion, index, index + caves.size() -1)
-{
-    Caves.reserve(caves.size());
-    for(auto cave : caves) {
-        Caves.append(cave);
-    }
-
-    if(caves.size() == 1) {
-        setText(QString("Add %1").arg(caves.first()->name()));
-    } else {
-        setText(QString("Add %1 caves").arg(caves.size()));
-    }
-}
-
-cwCavingRegion::InsertCaveCommand::InsertCaveCommand(cwCavingRegion* parentRegion,
-                                                     cwCave* cave,
-                                                     int index) :
-    cwCavingRegion::InsertRemoveCave(parentRegion, index, index)
-{
-    Caves.append(cave);
-    setText(QString("Add %1").arg(cave->name()));
-}
-
-void cwCavingRegion::InsertCaveCommand::redo() {
-    insertCaves();
-}
-
-void cwCavingRegion::InsertCaveCommand::undo() {
-    removeCaves();
-}
-
-cwCavingRegion::RemoveCaveCommand::RemoveCaveCommand(cwCavingRegion* region,
-                                                     int beginIndex,
-                                                     int endIndex) :
-    InsertRemoveCave(region, beginIndex, endIndex)
-{
-    for(int i = beginIndex; i <= endIndex; i++) {
-       Caves.append(region->m_caves.at(i));
-    }
-
-    QString commandText;
-    if(beginIndex != endIndex) {
-        commandText = QString("Remove %1 caves").arg(endIndex - beginIndex);
-    } else {
-        cwCave* cave = region->m_caves.at(beginIndex);
-        commandText = QString("Remove %1").arg(cave->name());
-    }
-}
-
-void cwCavingRegion::RemoveCaveCommand::redo() {
-    removeCaves();
-}
-
-void cwCavingRegion::RemoveCaveCommand::undo() {
-    insertCaves();
+    return m_root->childScopeLabels();
 }

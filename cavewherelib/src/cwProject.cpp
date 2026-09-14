@@ -1427,7 +1427,7 @@ bool cwProject::isNewEmptyProject() const
         return false;
     }
 
-    return Region->caveCount() == 0;
+    return Region->rootNode()->childNodeCount() == 0;
 }
 
 /**

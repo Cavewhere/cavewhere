@@ -21,8 +21,6 @@
 #include <QObjectBindableProperty>
 #include <QUuid>
 
-#include "cwSiblingLabelCache.h"
-
 //Our includes
 class cwCave;
 class cwProject;
@@ -30,7 +28,7 @@ class cwEquateModel;
 #include "cwCavingRegionData.h"
 #include "cwGeoReference.h"
 #include "cwLazLayerModel.h"
-#include "cwSanitizedNameSet.h"
+#include "cwSurveyNode.h"
 #include "cwUndoer.h"
 #include "cwGlobals.h"
 #include "cwGeoPoint.h"
@@ -113,10 +111,27 @@ public:
     cwUnits::UnitSystem unitSystem() const { return m_unitSystem; }
     void setUnitSystem(cwUnits::UnitSystem system);
 
+    //! The unnamed, never-saved node every cave hangs from. The region owns it
+    //! rather than being one, so insert, remove and move have a single owner
+    //! type at every depth; path() and the persistence key exclude it.
+    cwSurveyNode* rootNode() const { return m_root; }
+
+    //! The root's child nodes, which today are all caves. A node deeper in the
+    //! tree is reachable through rootNode()->allNodes() instead.
     bool hasCaves() const;
     Q_INVOKABLE int caveCount() const;
     Q_INVOKABLE cwCave* cave(int index) const;
     QList<cwCave*> caves() const;
+
+    //! Creates a node of \a kind under \a parent (the root when null), named
+    //! "<Kind> N" and deduplicated against its siblings, as one undo step.
+    //! Returns the new node, or nullptr when \a parent belongs to another region
+    //! or \a kind is outside cwSurveyNode::Kind.
+    //!
+    //! Only the root's own children are saved until W3 teaches the file format
+    //! about nodes: a node created under a cave lives in memory for the session
+    //! and is absent from the project the next time it is opened.
+    Q_INVOKABLE cwSurveyNode* addNode(cwSurveyNode* parent, cwSurveyNode::Kind kind);
 
     Q_INVOKABLE int rowCount(const QModelIndex &parent = QModelIndex()) const;
     Q_INVOKABLE QVariant data(const QModelIndex &index, int role) const;
@@ -127,24 +142,20 @@ public:
     Q_INVOKABLE void addCaves(QList<cwCave*> cave);
     void insertCave(int index, cwCave* cave);
     Q_INVOKABLE void removeCave(int index);
-    void removeCaves(int beginIndex, int endIndex);
     void clearCaves();
 
     Q_INVOKABLE int indexOf(cwCave* cave);
 
-    //! A sanitized, region-unique cave name derived from proposedName. Mirrors
-    //! cwCave::uniqueTripName: cwCave::setName silently rejects a collision or
-    //! an unsanitized name, so a name taken from an arbitrary filename has to
-    //! come through here first.
+    //! A sanitized cave name derived from proposedName, unique among the root's
+    //! children. Mirrors cwSurveyNode::uniqueTripName: setName() silently
+    //! rejects a collision or an unsanitized name, so a name taken from an
+    //! arbitrary filename has to come through here first.
     Q_INVOKABLE QString uniqueCaveName(const QString& proposedName) const;
 
-    cwSanitizedNameSet& caveNameSet() { return m_caveNames; }
-    const cwSanitizedNameSet& caveNameSet() const { return m_caveNames; }
-
     //! The cavern survey label each cave takes, keyed by cave id. Assigned
-    //! across the whole region (cwCavernNaming), so adding, removing, or
-    //! renaming any cave can move another cave's collision suffix. Cached; see
-    //! cwCave::tripScopeLabels() for the per-cave half.
+    //! across the root's whole child set (cwCavernNaming), so adding, removing,
+    //! or renaming any cave can move another cave's collision suffix. Cached;
+    //! see cwSurveyNode::tripScopeLabels() for the per-node trip half.
     const QHash<QUuid, QString>& caveScopeLabels() const;
 
     cwProject* parentProject() const;
@@ -181,21 +192,19 @@ signals:
     //! breadcrumb store) can forget all of them from this one pulse.
     //!
     //! Silent on every path that takes a cave or a trip off a list while its id
-    //! lives on: project close, load replacing the region, clearCaves(),
-    //! removeCaves(range), and a move to another cave or region.
+    //! lives on: project close, load replacing the region, clearCaves(), and a
+    //! move to another cave or region.
     void ownersDeleted(const QList<QUuid>& ownerIds);
 
 public slots:
 
 protected:
-    QList<cwCave*> m_caves;
-
     virtual void setUndoStackForChildren();
 
 private:
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(cwCavingRegion, QString, m_name, QString(), &cwCavingRegion::nameChanged);
 
-    cwSanitizedNameSet m_caveNames;
+    cwSurveyNode* m_root = nullptr;
 
     cwGeoReference* m_geoReference = nullptr;
 
@@ -207,82 +216,8 @@ private:
 
     // cwCavingRegion& copy(const cwCavingRegion& object);
 
-    void unparentCave(cwCave* cave);
-    void addCaveHelper();
-
-    cwSiblingLabelCache m_caveScopeLabels;
-    void invalidateCaveScopeLabels();
-
-    //! Wire a cave this region now lists, and unwire one it no longer does.
-    //! Called from InsertRemoveCave, the single funnel every insert and remove
-    //! passes through.
-    void connectCave(cwCave* cave);
-    void disconnectCave(cwCave* cave);
-
-    ////////////////////// Undo Redo commands ///////////////////////////////////
-    class InsertRemoveCave : public QUndoCommand {
-    public:
-        InsertRemoveCave(cwCavingRegion* region, int beginIndex, int endIndex);
-        ~InsertRemoveCave();
-
-    protected:
-        void insertCaves();
-        void removeCaves();
-
-        QList< QPointer<cwCave> > Caves;
-    private:
-        cwCavingRegion* Region;
-        int BeginIndex;
-        int EndIndex;
-        bool OwnsCaves; //!< If the undo command own the caves, ie, it'll delete them
-    };
-
-    class InsertCaveCommand : public InsertRemoveCave {
-
-    public:
-        InsertCaveCommand(cwCavingRegion* parentRegion, cwCave* cave, int index);
-        InsertCaveCommand(cwCavingRegion* parentRegion, QList<cwCave*> cave, int index);
-        virtual void redo();
-        virtual void undo();
-    };
-
-    class RemoveCaveCommand : public InsertRemoveCave {
-    public:
-        RemoveCaveCommand(cwCavingRegion* region, int beginIndex, int endIndex);
-        virtual void redo();
-        virtual void undo();
-    };
 };
 
 typedef QSharedPointer<cwCavingRegion> cwCavingRegionPtr;
-
-/**
-  \brief Get's the number of caves in the region
-  */
-inline int cwCavingRegion::caveCount() const {
-    return m_caves.count();
-}
-
-/**
-  \brief Returns true if the region has at least on cave, otherwise false
-  */
-inline bool cwCavingRegion::hasCaves() const {
-    return !m_caves.isEmpty();
-}
-
-/**
-  \brief Get's a cave at index
-  */
-inline cwCave* cwCavingRegion::cave(int index) const {
-    if(index < 0 || index >= m_caves.size()) { return nullptr; }
-    return m_caves[index];
-}
-
-/**
-  \brief Gets all the caves in the region
-  */
-inline QList<cwCave*> cwCavingRegion::caves() const {
-    return m_caves;
-}
 
 #endif // CWCAVINGREGION_H

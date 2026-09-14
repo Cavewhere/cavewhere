@@ -206,8 +206,10 @@ public:
     Q_INVOKABLE int indexOfNode(cwSurveyNode* node) const;
 
     Q_INVOKABLE void addNode(cwSurveyNode* node);
+    void addNodes(const QList<cwSurveyNode*>& nodes);
     void insertNode(int row, cwSurveyNode* node);
     Q_INVOKABLE void removeNode(int row);
+    Q_INVOKABLE void clearNodes();
 
     Q_INVOKABLE QString uniqueChildName(const QString& proposedName) const;
 
@@ -453,6 +455,10 @@ private:
     //! path, where the node's ids live on under their new parent.
     void removeNodeInternal(int row);
 
+    //! The shared front half of insertNode() and addNodes(): cycle refusal,
+    //! the move off the old parent, and the sibling-unique rename.
+    bool prepareChildForInsert(cwSurveyNode* node, cwSanitizedNameSet& siblingNames);
+
     void addTripNullHelper();
 
     virtual void setUndoStackForChildren();
@@ -523,6 +529,7 @@ private:
     class InsertNodeCommand : public InsertRemoveNode {
     public:
         InsertNodeCommand(cwSurveyNode* parentNode, cwSurveyNode* node, int index);
+        InsertNodeCommand(cwSurveyNode* parentNode, const QList<cwSurveyNode*>& nodes, int index);
         virtual void redo();
         virtual void undo();
     };

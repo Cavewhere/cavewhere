@@ -109,16 +109,15 @@ void cwSurveyNode::setName(QString name) {
 
 QString cwSurveyNode::validateName(const QString& proposedName) const
 {
-    //Names are unique per sibling set only, so the set to check is whichever
-    //holds this node: its parent node's children, or — at depth one, where the
-    //region still owns the caves — the region's cave names.
+    //Names are unique per sibling set only, so the set to check is the one
+    //holding this node: its parent's children. A node nothing lists — never
+    //inserted, or removed and kept for undo — has no sibling set, so its name is
+    //sanitized alone.
     const cwSanitizedNameSet* nameSet = nullptr;
     if(const cwSurveyNode* parent = parentNode()) {
         if(parent->m_childNodes.contains(const_cast<cwSurveyNode*>(this))) {
             nameSet = &parent->childNameSet();
         }
-    } else if(const cwCavingRegion* region = parentRegion()) {
-        nameSet = &region->caveNameSet();
     }
 
     //"cave" is what the user sees every node called today.
@@ -336,19 +335,48 @@ void cwSurveyNode::addNode(cwSurveyNode* node)
 }
 
 /**
-  \brief Inserts a child node at row
+  \brief Appends a batch of child nodes as ONE undo command
 
-  A node already held by another node moves here, keeping the same QObject.
+  The batch is deduplicated against the existing children and against itself, so
+  a load or an import that brings in N nodes at once costs one undo entry and one
+  row-signal pair rather than N of each.
   */
-void cwSurveyNode::insertNode(int row, cwSurveyNode* node)
+void cwSurveyNode::addNodes(const QList<cwSurveyNode*>& nodes)
 {
-    if(node == nullptr) { return; }
-    if(row < 0 || row > m_childNodes.size()) { return; }
+    QList<cwSurveyNode*> inserting;
+    inserting.reserve(nodes.size());
+
+    //One running copy dedupes the whole batch, including against the names the
+    //insert command has yet to write into m_childNames.
+    cwSanitizedNameSet siblingNames = m_childNames;
+
+    for(cwSurveyNode* node : nodes) {
+        if(prepareChildForInsert(node, siblingNames)) {
+            inserting.append(node);
+        }
+    }
+
+    if(!inserting.isEmpty()) {
+        pushUndo(new InsertNodeCommand(this, inserting, m_childNodes.size()));
+    }
+}
+
+/**
+  \brief Readies \a node to become a child of this node
+
+  Refuses a null node and one that would close a parent cycle, moves the node
+  off its old parent, and renames it to a name free in \a siblingNames, which
+  the deduplicated name is then added to. Returns true when the node is ready to
+  be handed to an InsertNodeCommand.
+  */
+bool cwSurveyNode::prepareChildForInsert(cwSurveyNode* node, cwSanitizedNameSet& siblingNames)
+{
+    if(node == nullptr) { return false; }
 
     //A node may not take on itself or one of its own ancestors: that closes a
     //parent cycle, and every upward walk (path(), parentRegion(),
     //externallyBacked()) would run forever. addNode() is callable from QML.
-    if(ancestorsOrSelf().contains(node)) { return; }
+    if(ancestorsOrSelf().contains(node)) { return false; }
 
     //Reparent the node, if already under another node
     if(cwSurveyNode* oldParent = node->parentNode()) {
@@ -362,10 +390,27 @@ void cwSurveyNode::insertNode(int row, cwSurveyNode* node)
 
     // Auto-rename to avoid filesystem path collisions in .cwproj layout. The
     // node is not in this list yet, so setName()'s guard won't fire.
-    const QString deduped = m_childNames.deduplicateName(node->name());
+    const QString deduped = siblingNames.deduplicateName(node->name());
     if(deduped != node->name()) {
         node->setName(deduped);
     }
+    siblingNames.insert(node->name());
+
+    return true;
+}
+
+/**
+  \brief Inserts a child node at row
+
+  A node already held by another node moves here, keeping the same QObject.
+  */
+void cwSurveyNode::insertNode(int row, cwSurveyNode* node)
+{
+    if(row < 0 || row > m_childNodes.size()) { return; }
+
+    //A throwaway copy: the insert command is what writes m_childNames.
+    cwSanitizedNameSet siblingNames = m_childNames;
+    if(!prepareChildForInsert(node, siblingNames)) { return; }
 
     pushUndo(new InsertNodeCommand(this, node, row));
 }
@@ -397,6 +442,19 @@ void cwSurveyNode::removeNodeInternal(int row)
 {
     if(row < 0 || row >= m_childNodes.size()) { return; }
     pushUndo(new RemoveNodeCommand(this, row, row));
+}
+
+/**
+  \brief Removes every child node, in one undo command
+
+  Silent on nodesDeleted(), as clearTrips() is on tripsDeleted(): this is the
+  project-close and load-replace path, where the ids live on.
+  */
+void cwSurveyNode::clearNodes()
+{
+    if(!m_childNodes.isEmpty()) {
+        pushUndo(new RemoveNodeCommand(this, 0, m_childNodes.size() - 1));
+    }
 }
 
 const QHash<QUuid, QString>& cwSurveyNode::tripScopeLabels() const
@@ -719,10 +777,6 @@ void cwSurveyNode::NameCommand::rename(const QString& from, const QString& to)
         if(parent->m_childNodes.contains(node)) {
             parent->childNameSet().rename(from, to);
         }
-    } else if(auto* region = node->parentRegion()) {
-        if(region->caves().contains(qobject_cast<cwCave*>(node))) {
-            region->caveNameSet().rename(from, to);
-        }
     }
 }
 
@@ -924,6 +978,15 @@ void cwSurveyNode::InsertRemoveNode::insertNodes() {
         //stack to a cave it takes on.
         node->setUndoStack(parent->undoStack());
         parent->connectNode(node);
+
+        //The subtree may have landed in a different region, whose coordinate
+        //system is what a fix station with no input CS of its own falls back to.
+        //The node is the object that knows its region moved.
+        node->recomputeGridConvergence();
+        const QList<cwSurveyNode*> descendants = node->allNodes();
+        for(cwSurveyNode* descendant : descendants) {
+            descendant->recomputeGridConvergence();
+        }
     }
 
     OwnsNodes = false;
@@ -971,12 +1034,27 @@ void cwSurveyNode::InsertRemoveNode::removeNodes() {
 }
 
 cwSurveyNode::InsertNodeCommand::InsertNodeCommand(cwSurveyNode* parentNode,
+                                                   const QList<cwSurveyNode*>& nodes,
+                                                   int index) :
+    cwSurveyNode::InsertRemoveNode(parentNode, index, index + nodes.size() - 1)
+{
+    Nodes.reserve(nodes.size());
+    for(cwSurveyNode* node : nodes) {
+        Nodes.append(node);
+    }
+
+    if(nodes.size() == 1) {
+        setText(QStringLiteral("Add %1").arg(nodes.first()->name()));
+    } else {
+        setText(QStringLiteral("Add %1 nodes").arg(nodes.size()));
+    }
+}
+
+cwSurveyNode::InsertNodeCommand::InsertNodeCommand(cwSurveyNode* parentNode,
                                                    cwSurveyNode* node,
                                                    int index) :
-    cwSurveyNode::InsertRemoveNode(parentNode, index, index)
+    cwSurveyNode::InsertNodeCommand(parentNode, QList<cwSurveyNode*>({node}), index)
 {
-    Nodes.append(node);
-    setText(QString("Add %1").arg(node->name()));
 }
 
 void cwSurveyNode::InsertNodeCommand::redo() {
