@@ -159,6 +159,7 @@ ColumnLayout {
     }
 
     //Opens every row of the tree, and every row those rows bring with them.
+    //A filter shows its matches by opening the rows that hold them.
     function expandAll() {
         treeViewId.expandRecursively();
         treeViewId.forceLayout();
@@ -245,8 +246,8 @@ ColumnLayout {
         return treeViewId.itemAtCell(Qt.point(SurveyTreeModel.Name, treeViewId.currentRow));
     }
 
-    //The keys TableView leaves to the tree: → ← Space, Enter, and the two ways
-    //to ask for the context menu. ↑ ↓ Home End stay TableView's own.
+    //The keys TableView leaves to the tree: → ← Space, Enter, F2, and the two
+    //ways to ask for the context menu. ↑ ↓ Home End stay TableView's own.
     function handleKey(event) {
         const row = treeViewId.currentRow;
         if(row < 0) {
@@ -281,6 +282,16 @@ ColumnLayout {
             surveyTreeId.openObject(surveyTreeId.objectAtRow(row));
             event.accepted = true;
             break;
+        case Qt.Key_F2: {
+            //The platform's rename key opens the current row's own name editor,
+            //which is where a name is edited: a click on the name opens the row.
+            const renameItem = surveyTreeId.currentRowItem();
+            if(renameItem !== null && renameItem.canRename) {
+                renameItem.startRename();
+            }
+            event.accepted = true;
+            break;
+        }
         case Qt.Key_Menu:
         case Qt.Key_F10: {
             if(event.key === Qt.Key_F10 && !(event.modifiers & Qt.ShiftModifier)) {
@@ -334,20 +345,6 @@ ColumnLayout {
         }
 
         QQ.Item { Layout.fillWidth: true }
-
-        QC.Button {
-            objectName: "expandAllButton"
-            text: qsTr("Expand all")
-
-            onClicked: surveyTreeId.expandAll()
-        }
-
-        QC.Button {
-            objectName: "collapseAllButton"
-            text: qsTr("Collapse all")
-
-            onClicked: surveyTreeId.collapseAll()
-        }
     }
 
     QC.HorizontalHeaderView {
@@ -396,11 +393,18 @@ ColumnLayout {
         property LinkGenerator linkGenerator: linkGeneratorId
         property QQ.Item surveyTree: surveyTreeId
 
-        //What the Name column gives up to the fixed columns beside it.
-        readonly property int fixedColumnsWidth: Theme.treeKindColumnWidth
-                                                 + 3 * Theme.treeCountColumnWidth
-                                                 + 2 * Theme.treeStatColumnWidth
-                                                 + Theme.treeDateColumnWidth
+        //What the Name column gives up to the fixed columns beside it, asked of
+        //the same provider that lays them out, so a column added here is added
+        //in one place.
+        readonly property int fixedColumnsWidth: {
+            let total = 0;
+            for(let column = 0; column < sourceModelId.columnCount(); column++) {
+                if(column !== SurveyTreeModel.Name) {
+                    total += treeViewId.columnWidthProvider(column);
+                }
+            }
+            return total;
+        }
 
         clip: true
         keyNavigationEnabled: true
@@ -437,8 +441,9 @@ ColumnLayout {
                 return Theme.treeKindColumnWidth;
             case SurveyTreeModel.Trips:
             case SurveyTreeModel.Stations:
-            case SurveyTreeModel.Decl:
                 return Theme.treeCountColumnWidth;
+            case SurveyTreeModel.Decl:
+                return Theme.treeDeclColumnWidth;
             case SurveyTreeModel.Length:
             case SurveyTreeModel.Depth:
                 return Theme.treeStatColumnWidth;

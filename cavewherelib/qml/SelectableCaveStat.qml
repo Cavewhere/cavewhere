@@ -40,6 +40,7 @@ RowLayout {
     }
 
     QC.Label {
+        objectName: "unit"
         text: rootId.unitValue !== null ? Units.lengthUnitName(rootId.displayUnit) : ""
     }
 }

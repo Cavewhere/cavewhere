@@ -25,10 +25,11 @@ import "Utils.js" as Utils
 // its length task added up, so `length` is typed loosely enough to hold both.
 //
 // The row's identity for tests rides on the cells that carry content:
-// caveDelegate<row>/tripDelegate<row> on the Name cell, caveLength<row> and
-// caveDepth<row> on the two stat cells. Per-cell delegates make the stats
-// siblings of the name rather than its children, which is why the stat cells
-// name themselves instead of being found under the row.
+// caveDelegate<row>/tripDelegate<row> on the Name cell and, with the same
+// cave/trip prefix, Kind, Stations, Length, Depth, Date and Decl on the cells
+// that carry those. Per-cell delegates make the stats siblings of the name
+// rather than its children, which is why the stat cells name themselves
+// instead of being found under the row.
 QQ.Item {
     id: rowId
 
@@ -68,6 +69,11 @@ QQ.Item {
 
     readonly property bool isNode: rowId.rowType === SurveyTreeModel.Node
     readonly property SurveyNode node: rowId.object as SurveyNode
+    readonly property Trip trip: rowId.object as Trip
+
+    //A trip row sits under the cave it belongs to, so its cells are drawn
+    //quieter than the cave's own.
+    readonly property QQ.color textColor: rowId.muted ? Theme.textSubtle : Theme.text
 
     //A sourced node's name belongs to its file, and a trip is renamed on its
     //own page, so only a native node offers Rename.
@@ -92,6 +98,12 @@ QQ.Item {
             return prefix + "Length" + rowId.row;
         case SurveyTreeModel.Depth:
             return prefix + "Depth" + rowId.row;
+        case SurveyTreeModel.Stations:
+            return prefix + "Stations" + rowId.row;
+        case SurveyTreeModel.Date:
+            return prefix + "Date" + rowId.row;
+        case SurveyTreeModel.Decl:
+            return prefix + "Decl" + rowId.row;
         default:
             return "";
         }
@@ -176,17 +188,16 @@ QQ.Item {
             case SurveyTreeModel.Kind:
                 return kindCellComponent;
             case SurveyTreeModel.Trips:
-                return tripCountCellComponent;
             case SurveyTreeModel.Stations:
-                return stationCountCellComponent;
+            case SurveyTreeModel.Date:
+                return textCellComponent;
             case SurveyTreeModel.Length:
                 return rowId.isNode ? statCellComponent : tripLengthCellComponent;
             case SurveyTreeModel.Depth:
                 return statCellComponent;
-            case SurveyTreeModel.Date:
-                return dateCellComponent;
             case SurveyTreeModel.Decl:
-                return declinationCellComponent;
+                //Only a trip carries a declination.
+                return rowId.isNode ? null : declinationCellComponent;
             default:
                 return null;
             }
@@ -309,70 +320,146 @@ QQ.Item {
         }
     }
 
-    QQ.Component {
-        id: tripCountCellComponent
-
-        QC.Label {
-            verticalAlignment: QQ.Text.AlignVCenter
-            text: rowId.isNode ? rowId.tripCount : ""
-            color: rowId.muted ? Theme.textSubtle : Theme.text
-        }
-    }
-
+    //A Loader stretches what it loads to the cell, and a stretched RowLayout
+    //would strand the unit at the far edge of a wide column, so every cell
+    //whose content is a row of labels sits in a filling Item and keeps the
+    //width its own content asks for.
     QQ.Component {
         id: statCellComponent
 
-        SelectableCaveStat {
-            readonly property bool isDepthCell: rowId.column === SurveyTreeModel.Depth
+        QQ.Item {
+            SelectableCaveStat {
+                readonly property bool isDepthCell: rowId.column === SurveyTreeModel.Depth
 
-            anchors.verticalCenter: parent.verticalCenter
-            unitValue: isDepthCell ? rowId.depthValue : (rowId.length as UnitValue)
-            depth: isDepthCell
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
+                unitValue: isDepthCell ? rowId.depthValue : (rowId.length as UnitValue)
+                depth: isDepthCell
+            }
         }
     }
 
+    //A trip's length is the number its length task added up, and it reads as
+    //one cell with the unit beside it — the shape SelectableCaveStat gives a
+    //node's solved length. The task reports in the unit the trip was surveyed
+    //in, so the cell converts to the unit the project displays: a cave and the
+    //trips under it then state the same kind of number in one column.
     QQ.Component {
         id: tripLengthCellComponent
 
-        QC.Label {
-            verticalAlignment: QQ.Text.AlignVCenter
-            text: Utils.fixed(rowId.length, 2)
-            color: rowId.muted ? Theme.textSubtle : Theme.text
+        QQ.Item {
+            id: tripLengthCellId
+
+            //A pooled cell is handed its new row's roles one at a time and
+            //before the Loader swaps in the component that row's kind asks
+            //for, so a node's cwLength can reach these bindings for one turn.
+            readonly property bool hasLength: rowId.trip !== null
+                                              && typeof rowId.length === "number"
+            readonly property real meters: tripLengthCellId.hasLength
+                ? Units.convertLength(rowId.length, rowId.trip.calibration.distanceUnit, Units.Meters)
+                : 0.0
+            readonly property int displayUnit: Units.lengthDisplayUnit(tripLengthCellId.meters,
+                                                                      ProjectUnits.unitSystem)
+
+            RowLayout {
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: Theme.delegatePadding
+
+                SelectableValue {
+                    objectName: "value"
+                    text: tripLengthCellId.hasLength
+                          ? Utils.fixed(Units.convertLength(tripLengthCellId.meters,
+                                                            Units.Meters,
+                                                            tripLengthCellId.displayUnit), 2)
+                          : ""
+                    color: rowId.textColor
+                    font.pixelSize: Theme.fontSizeUI
+                }
+
+                QC.Label {
+                    objectName: "unit"
+                    text: tripLengthCellId.hasLength
+                          ? Units.lengthUnitName(tripLengthCellId.displayUnit)
+                          : ""
+                    color: rowId.textColor
+                }
+            }
         }
     }
 
+    //The cells that are a line of text and nothing else. A trip belongs to one
+    //day and a node to as many as it holds trips, so only a trip row dates
+    //itself; only a node row counts trips, and both count stations.
     QQ.Component {
-        id: stationCountCellComponent
+        id: textCellComponent
 
         QC.Label {
+            objectName: "value"
+
             verticalAlignment: QQ.Text.AlignVCenter
-            text: rowId.stationCount > 0 ? rowId.stationCount : ""
-            color: rowId.muted ? Theme.textSubtle : Theme.text
+            color: rowId.textColor
+            text: {
+                switch(rowId.column) {
+                case SurveyTreeModel.Trips:
+                    return rowId.isNode ? rowId.tripCount : "";
+                case SurveyTreeModel.Stations:
+                    return rowId.stationCount;
+                case SurveyTreeModel.Date:
+                    return isNaN(rowId.dateValue.getTime())
+                         ? ""
+                         : Qt.formatDate(rowId.dateValue, Qt.ISODate);
+                default:
+                    return "";
+                }
+            }
         }
     }
 
-    QQ.Component {
-        id: dateCellComponent
-
-        QC.Label {
-            verticalAlignment: QQ.Text.AlignVCenter
-            text: isNaN(rowId.dateValue.getTime())
-                  ? ""
-                  : Qt.formatDate(rowId.dateValue, Qt.ISODate)
-            color: rowId.muted ? Theme.textSubtle : Theme.text
-        }
-    }
-
+    //Only a trip carries a declination, and it reads the way the cave page's
+    //trip table reads it: the angle, then whether it was picked automatically.
+    //An externally backed trip takes its declination from its file, where each
+    //block may set its own, so the row has no one angle to show.
     QQ.Component {
         id: declinationCellComponent
 
-        QC.Label {
-            verticalAlignment: QQ.Text.AlignVCenter
-            text: rowId.isNode
-                  ? ""
-                  : Utils.fixed(rowId.declination, 2) + "°"
-                    + (rowId.autoDeclination ? " auto" : "")
-            color: rowId.muted ? Theme.textSubtle : Theme.text
+        QQ.Item {
+            //A wide angle is held to the column's width so it elides instead
+            //of drawing past the cell, the way the cave page holds its own.
+            clip: true
+
+            RowLayout {
+                id: declRowId
+
+                readonly property bool externallyBacked: rowId.trip !== null
+                                                         && rowId.trip.externallyBacked
+
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: Theme.tightSpacing
+
+                QC.Label {
+                    objectName: "value"
+                    visible: !declRowId.externallyBacked
+                    text: Utils.fixed(rowId.declination, 2) + "°"
+                    color: rowId.textColor
+                }
+
+                QC.Label {
+                    objectName: "declinationMode"
+                    visible: !declRowId.externallyBacked
+                    text: rowId.autoDeclination ? qsTr("auto") : qsTr("manual")
+                    color: Theme.textSubtle
+                    font.pixelSize: Theme.fontSizeCaption
+                }
+
+                QC.Label {
+                    objectName: "declinationEmDash"
+                    visible: declRowId.externallyBacked
+                    text: "—"
+                    color: Theme.textSubtle
+                }
+            }
         }
     }
 

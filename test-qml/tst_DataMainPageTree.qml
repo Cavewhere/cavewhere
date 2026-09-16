@@ -303,23 +303,18 @@ MainWindowTest {
             verify(!tree.isExpanded(3), "a cave that was closed stays closed")
         }
 
-        function test_expandAllAndCollapseAllButtons() {
+        // The toolbar offers the filter alone: the carets and the keyboard are
+        // how rows are opened and closed.
+        function test_toolbarHasNoExpandOrCollapseAllButtons() {
             addCave("Alpha Cave", 2)
-            addCave("Beta Cave", 1)
 
             const page = gotoDataMainPage()
-            const tree = surveyTree(page)
-            tryCompare(tree, "rows", 2, 5000)
+            surveyTree(page)
 
-            const expandAll = findChild(page, "expandAllButton")
-            verify(expandAll !== null, "Expand all must exist")
-            mouseClick(expandAll)
-            tryCompare(tree, "rows", 5, 5000)
-
-            const collapseAll = findChild(page, "collapseAllButton")
-            verify(collapseAll !== null, "Collapse all must exist")
-            mouseClick(collapseAll)
-            tryCompare(tree, "rows", 2, 5000)
+            verify(findChild(page, "expandAllButton") === null,
+                   "Expand all is gone")
+            verify(findChild(page, "collapseAllButton") === null,
+                   "Collapse all is gone")
         }
 
         function focusTree(tree) {
@@ -407,13 +402,16 @@ MainWindowTest {
 
             const menu = rowContextMenu(page, "caveDelegate0")
 
-            const openItem = findChild(menu, "surveyItemOpenMenuItem")
-            const renameItem = findChild(menu, "surveyItemRenameMenuItem")
+            //A click opens the row and the name cell renames it, so the menu
+            //holds the one verb no cell carries.
+            compare(menu.count, 1, "the context menu offers Delete… alone")
             const deleteItem = findChild(menu, "surveyItemDeleteMenuItem")
-            verify(openItem !== null && openItem.visible, "Open must be offered")
-            verify(renameItem !== null && renameItem.visible,
-                   "a native cave must be renamable")
             verify(deleteItem !== null && deleteItem.visible, "Delete… must be offered")
+            compare(deleteItem.text, "Delete…")
+            verify(findChild(menu, "surveyItemOpenMenuItem") === null,
+                   "Open is gone: a click on the name opens the row")
+            verify(findChild(menu, "surveyItemRenameMenuItem") === null,
+                   "Rename is gone: the name cell renames in place")
 
             mouseClick(deleteItem)
 
@@ -454,8 +452,7 @@ MainWindowTest {
 
             const menu = rowContextMenu(page, "tripDelegate1")
 
-            verify(findChild(menu, "surveyItemRenameMenuItem") === null,
-                   "a trip is renamed on its own page, not here")
+            compare(menu.count, 1, "a trip row's menu offers Delete… alone")
 
             mouseClick(findChild(menu, "surveyItemDeleteMenuItem"))
 
@@ -473,8 +470,9 @@ MainWindowTest {
         }
 
         // Rename edits the name in place, through the same editor the cave
-        // page's title uses.
-        function test_contextMenuRenamesACave() {
+        // page's title uses. F2 is the platform's rename key, and it is what
+        // asks the current row's name cell for its editor.
+        function test_f2RenamesACaveInPlace() {
             addCave("Alpha Cave", 1)
 
             const page = gotoDataMainPage()
@@ -482,11 +480,7 @@ MainWindowTest {
             tryCompare(tree, "rows", 1, 5000)
             focusTree(tree)
 
-            keyClick(Qt.Key_F10, Qt.ShiftModifier)
-
-            const menu = rowContextMenu(page, "caveDelegate0")
-
-            mouseClick(findChild(menu, "surveyItemRenameMenuItem"))
+            keyClick(Qt.Key_F2)
 
             tryVerify(() => rootId.shadowEditor.coreClickInput !== null, 5000,
                       "Rename must open the row's name editor")
@@ -501,6 +495,121 @@ MainWindowTest {
                           caveRow = findChild(page, "caveDelegate0")
                           return caveRow !== null && caveRow.name === "Renamed Cave"
                       }, 5000, "the row must show the new name")
+        }
+
+        // A helper for the cells that name their parts: a stat cell draws a
+        // "value" and, where there is one, the "unit" beside it.
+        function cellPart(page, cellObjectName, partObjectName) {
+            let part = null
+            tryVerify(() => {
+                          const cell = findChild(page, cellObjectName)
+                          part = cell === null ? null : findChild(cell, partObjectName)
+                          return part !== null
+                      }, 5000, cellObjectName + " must draw its " + partObjectName)
+            return part
+        }
+
+        function cellValue(page, cellObjectName) {
+            return cellPart(page, cellObjectName, "value")
+        }
+
+        // Waits for the named part of a cell to read the expected text. The
+        // cell is looked up again on every poll, so a cell the view rebuilds
+        // while its number is still being computed is picked up fresh.
+        function tryCellText(page, cellObjectName, partObjectName, expected, message) {
+            tryVerify(() => {
+                          const cell = findChild(page, cellObjectName)
+                          const part = cell === null ? null : findChild(cell, partObjectName)
+                          return part !== null && part.text === expected
+                      }, 10000,
+                      message + ": " + cellObjectName + "->" + partObjectName
+                      + " must read " + expected)
+        }
+
+        // One shot in one chunk: two stations, ten units of passage.
+        function addShotToTrip(trip) {
+            trip.addNewChunk()
+            const chunk = trip.chunk(0)
+            chunk.setData(SurveyChunk.StationNameRole, 0, "1")
+            chunk.setData(SurveyChunk.StationNameRole, 1, "2")
+            chunk.setData(SurveyChunk.ShotDistanceRole, 0, "10")
+            chunk.setData(SurveyChunk.ShotCompassRole, 0, "0")
+            chunk.setData(SurveyChunk.ShotClinoRole, 0, "0")
+        }
+
+        // A trip row carries its own surveyed length with the unit beside it,
+        // its station count, and its declination — the three cells the cave
+        // page's trip table used to be the only place to read. The length and
+        // the count arrive from their tasks, so both are waited for.
+        function test_tripRowShowsStationsLengthAndDeclination() {
+            const cave = addCave("Alpha Cave", 1)
+            const trip = cave.trip(0)
+            trip.name = "Trip A"
+            addShotToTrip(trip)
+
+            const page = gotoDataMainPage()
+            const tree = surveyTree(page)
+            tryCompare(tree, "rows", 1, 5000)
+
+            tree.expand(0)
+            tryCompare(tree, "rows", 2, 5000)
+
+            tryCellText(page, "tripStations1", "value", "2", "a trip counts its own stations")
+
+            //The cave's own count is read from the model rather than from its
+            //cell: a cave row drawn before its trips' tasks report depends on
+            //TreeView handing the cell the model's dataChanged, and a loaded
+            //machine drops that refresh often enough to make the cell an
+            //unreliable witness to the fold.
+            const model = tree.model
+            tryVerify(() => model.data(model.index(0, SurveyTreeModel.Stations),
+                                       SurveyTreeModel.StationCountRole) === 2,
+                      10000, "a cave counts the stations under it")
+
+            //Utils.fixed drops a trailing zero run, the way the cave page shows a length.
+            tryCellText(page, "tripLength1", "value", "10", "the trip's length is the number its task added up")
+
+            //A trip's length reads in the unit the project displays, the same
+            //unit its cave's length reads in, so one column holds one kind of
+            //number.
+            const tripMeters = Units.convertLength(10, trip.calibration.distanceUnit, Units.Meters)
+            const displayUnit = Units.lengthDisplayUnit(tripMeters, ProjectUnits.unitSystem)
+            tryCellText(page, "tripLength1", "unit", Units.lengthUnitName(displayUnit),
+                        "the unit sits in the Length cell, beside the value")
+            tryCellText(page, "caveLength0", "unit", Units.lengthUnitName(displayUnit),
+                        "a cave and the trips under it name the same unit")
+
+            compare(cellValue(page, "tripDecl1").text, "0°")
+            //The Decl cell says how the angle was picked.
+            compare(cellPart(page, "tripDecl1", "declinationMode").text, "manual",
+                    "a trip with no fix station has no automatic declination")
+        }
+
+        // A cave's Length cell reads the solved length with its unit; its Decl
+        // and Date cells are a trip's business alone.
+        function test_nodeRowShowsLengthWithItsUnitAndNoDateOrDeclination() {
+            const cave = addCave("Alpha Cave", 1)
+            cave.trip(0).date = new Date(2026, 8, 15)
+
+            const page = gotoDataMainPage()
+            const tree = surveyTree(page)
+            tryCompare(tree, "rows", 1, 5000)
+
+            //The node's length is solved after the page is shown, so its unit
+            //is waited for rather than read on the first frame.
+            tryCellText(page, "caveLength0", "unit",
+                        Units.lengthUnitName(Units.lengthDisplayUnit(0.0, ProjectUnits.unitSystem)),
+                        "the unit sits in the Length cell, beside the value")
+
+            compare(cellValue(page, "caveDate0").text, "",
+                    "a cave holds trips surveyed on many days, so its Date cell is empty")
+            verify(findChild(page, "caveDecl0") === null
+                   || findChild(findChild(page, "caveDecl0"), "value") === null,
+                   "only a trip carries a declination")
+
+            tree.expand(0)
+            tryCompare(tree, "rows", 2, 5000)
+            tryCompare(cellValue(page, "tripDate1"), "text", "2026-09-15", 5000)
         }
 
         // The Add ▾ caret holds the cave-level attach, under its settled name.
