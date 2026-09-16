@@ -108,6 +108,11 @@ private:
         int constantSlot = -1;
         quint64 lastDesiredFrame = 0;
 
+        // The finest sample spacing drawn under this node, in meters — the
+        // world-space floor its sprites cover. Holds the value written into the
+        // node's constants slot, or the one queued for it in m_pendingFloors.
+        float floorSpacing = 0.0f;
+
         // Where the node sits in m_residentIndices, so releasing it is a
         // swap-remove instead of a search. -1 while the node is not resident.
         int residentPosition = -1;
@@ -320,23 +325,31 @@ private:
 
     // Mirrors the PerCloudBlock declaration in PointCloud.vert, which sizes
     // every sprite as
-    // max(spacingCoverage * drawnSpacing * pixelsPerMeter(w),
+    // max(spacingCoverage * nodeFloor.x * pixelsPerMeter(w),
     //     spacingCoverage * sseThresholdPx)
-    // pixels. The three live floats carry an explicit fourth so the struct is
-    // std140's 16 bytes, which is what the block rounds up to.
+    // pixels, the floor coming per instance. The two live floats carry two
+    // explicit pad floats so the struct is std140's 16 bytes, which is what the
+    // block rounds up to.
     struct PerCloudUniform {
         float spacingCoverage = 0.0f;
         float sseThresholdPx = 0.0f;
-        float drawnSpacing = 0.0f;
-        float padding = 0.0f;
+        float padding0 = 0.0f;
+        float padding1 = 0.0f;
     };
     static_assert(sizeof(PerCloudUniform) == 4 * sizeof(float),
                   "PerCloudBlock in PointCloud.vert rounds to std140's 16 "
                   "bytes; the C++ struct has to match it, padding included.");
 
     // The block the shader reads for @a spacingCoverage, carrying this frame's
-    // refine threshold and the last drawn spacing along with it.
+    // refine threshold along with it.
     PerCloudUniform appearanceUniform(float spacingCoverage) const;
+
+    // Writes every floor the last live gather queued, and empties the queue.
+    void flushNodeFloors(QRhiResourceUpdateBatch* batch);
+
+    // Takes each drawn node's floor from the finest level drawn under it and
+    // queues the ones that moved for the next resource pass.
+    void refreshNodeFloors(const QVector<int>& drawnNodes);
 
     bool m_resourcesInitialized = false;
 
@@ -399,8 +412,9 @@ private:
     // over, so they wait here rather than being asked for again.
     QVector<NodeStreamer::Result> m_readyQueue;
 
-    // {nodeMin.xyz, nodeSize / kQuantMax} per resident node, one 16 byte slot
-    // each, bound per instance at the drawing node's slot offset.
+    // {nodeMin.xyz, nodeSize / kQuantMax} and {floorSpacing, 0, 0, 0} per
+    // resident node, one 32 byte slot each, bound per instance at the drawing
+    // node's slot offset.
     QRhiBuffer* m_nodeConstants = nullptr;
     QVector<int> m_freeSlots;
 
@@ -440,17 +454,13 @@ private:
     // into a world spacing at each vertex's own depth. Render-thread only.
     float m_sseThresholdPx = float(cw::budgets::kDefaultScreenSpaceErrorPx);
 
-    // Sample spacing of the finest level the live frame drew. The threshold
-    // above describes the spacing a cut that keeps up has on screen; where the
-    // point cap or a node still streaming leaves the cloud coarser than that,
-    // this is the gap the sprites actually have to close, so it stands as a
-    // world-space floor under the threshold rule. Render-thread only: gather()
-    // takes it from the nodes it just drew. A frame that drew nothing leaves it
-    // standing.
-    double m_drawnSpacing = 0.0;
+    // Nodes whose floor moved on the last live gather, waiting for a resource
+    // pass to write it into their constants slot. The same one-frame lag the
+    // per-cloud floor had before it went per instance.
+    QVector<int> m_pendingFloors;
 
-    // m_sseThresholdPx or m_drawnSpacing moved, so slot 0 is behind the view;
-    // the next resource pass rewrites it.
+    // m_sseThresholdPx moved, so slot 0 is behind the view; the next resource
+    // pass rewrites it.
     bool m_liveAppearanceStale = false;
 
     // cw.profile.render, read once per gather() and once per streamResources()

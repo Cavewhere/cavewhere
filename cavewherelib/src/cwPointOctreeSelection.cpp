@@ -1,6 +1,9 @@
 // cwPointOctreeSelection.cpp
 #include "cwPointOctreeSelection.h"
 
+//Qt includes
+#include <QHash>
+
 //Our includes
 #include "cwFrustum.h"
 #include "cwPointOctreeManifest.h"
@@ -105,6 +108,39 @@ Selection selectCut(const SelectionInput& input)
 QVector<SelectedNode> selectNodes(const SelectionInput& input)
 {
     return selectCut(input).nodes;
+}
+
+QVector<int> finestDrawnLevels(const cwPointOctreeManifest& manifest,
+                               const QVector<int>& drawnNodes)
+{
+    QHash<int, int> finest;
+    finest.reserve(drawnNodes.size());
+    for(int node : drawnNodes) {
+        finest.insert(node, manifest.nodes.at(node).level);
+    }
+
+    //Every drawn node lifts its own level into the drawn ancestors above it, so
+    //each of them ends at the deepest level drawn anywhere under it.
+    const QVector<int>& parents = manifest.parents();
+    for(int node : drawnNodes) {
+        const int level = manifest.nodes.at(node).level;
+        for(int ancestor = parents.at(node); ancestor >= 0; ancestor = parents.at(ancestor)) {
+            auto entry = finest.find(ancestor);
+            if(entry != finest.end()) {
+                if(entry.value() >= level) {
+                    break;
+                }
+                entry.value() = level;
+            }
+        }
+    }
+
+    QVector<int> levels;
+    levels.reserve(drawnNodes.size());
+    for(int node : drawnNodes) {
+        levels.append(finest.value(node));
+    }
+    return levels;
 }
 
 QVector<int> planNodeEvictions(const QVector<NodeResidency>& nodes, qint64 overshootBytes)

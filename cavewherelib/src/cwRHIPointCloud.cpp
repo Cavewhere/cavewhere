@@ -33,11 +33,12 @@
 
 namespace {
 
-    // {nodeMin.x, nodeMin.y, nodeMin.z, nodeSize / kQuantMax} as four floats
-    constexpr int kNodeConstantsFloats = 4;
+    // {nodeMin.x, nodeMin.y, nodeMin.z, nodeSize / kQuantMax} then
+    // {floorSpacing, 0, 0, 0}, as two float4s
+    constexpr int kNodeConstantsFloats = 8;
     constexpr quint32 kNodeConstantsBytes = kNodeConstantsFloats * sizeof(float);
 
-    // Slots in the shared per-instance constants buffer, at 16 bytes each (512 KB
+    // Slots in the shared per-instance constants buffer, at 32 bytes each (1 MB
     // in all). A view selects at most cw::octree::kMaxDesiredNodes nodes per
     // frame, so at least half the slots are unselected in any frame and an
     // incoming node can always find one to take. Deep enough that the byte budget
@@ -63,8 +64,8 @@ namespace {
     constexpr int kRootLevel = 0;
     constexpr qint64 kBytesPerMegabyte = 1024 * 1024;
 
-    //A frame that drew nothing, so it says nothing about the spacing on screen
-    constexpr int kNoDrawnLevel = -1;
+    //Byte offset of nodeFloor inside a node's constants slot
+    constexpr quint32 kNodeFloorOffset = 4 * sizeof(float);
 
     using cw::profile::elapsedUs;
 }
@@ -135,7 +136,9 @@ void cwRHIPointCloud::initializeResources(const ResourceUpdateData& data)
     });
     m_inputLayout.setAttributes({
         { kPointsBinding, 0, QRhiVertexInputAttribute::UShort4, 0 },        // qpos
-        { kNodeConstantsBinding, 1, QRhiVertexInputAttribute::Float4, 0 }   // nodeOriginScale
+        { kNodeConstantsBinding, 1, QRhiVertexInputAttribute::Float4, 0 },  // nodeOriginScale
+        { kNodeConstantsBinding, 2, QRhiVertexInputAttribute::Float4,
+          kNodeFloorOffset }                                                // nodeFloor
     });
 }
 
@@ -171,9 +174,7 @@ void cwRHIPointCloud::resetNodes(const cwPointOctreeSource& source)
     m_residentIndices.clear();
     m_residentCount = 0;
     m_coldNodes.clear();
-    // The first frame draws the root alone, so the cloud starts at the root's
-    // spacing rather than at a floor of nothing.
-    m_drawnSpacing = m_source.manifest ? m_source.manifest->spacing(kRootLevel) : 0.0;
+    m_pendingFloors.clear();
     m_liveAppearanceStale = true;
     if (m_source.manifest) {
         m_nodes.resize(m_source.manifest->nodes.size());
@@ -219,6 +220,7 @@ void cwRHIPointCloud::releaseNode(int index)
 
     node.state = NodeState::Absent;
     node.exportRequested = false;
+    node.floorSpacing = 0.0f;
     m_residencyChanged = true;
 }
 
@@ -316,11 +318,38 @@ void cwRHIPointCloud::writeLiveAppearanceSlot(QRhiResourceUpdateBatch* batch)
     m_liveAppearanceStale = false;
 }
 
+void cwRHIPointCloud::flushNodeFloors(QRhiResourceUpdateBatch* batch)
+{
+    for (int index : std::as_const(m_pendingFloors)) {
+        const NodeRecord& node = m_nodes.at(index);
+        //A node released since the gather queued it has no slot to write to
+        if (node.constantSlot >= 0) {
+            batch->updateDynamicBuffer(m_nodeConstants,
+                                       quint32(node.constantSlot) * kNodeConstantsBytes
+                                           + kNodeFloorOffset,
+                                       sizeof(float), &node.floorSpacing);
+        }
+    }
+    m_pendingFloors.clear();
+}
+
+void cwRHIPointCloud::refreshNodeFloors(const QVector<int>& drawnNodes)
+{
+    const QVector<int> levels = cw::octree::finestDrawnLevels(*m_source.manifest, drawnNodes);
+    for (int i = 0; i < drawnNodes.size(); i++) {
+        NodeRecord& node = m_nodes[drawnNodes.at(i)];
+        const float floorSpacing = float(m_source.manifest->spacing(levels.at(i)));
+        if (floorSpacing != node.floorSpacing) {
+            node.floorSpacing = floorSpacing;
+            m_pendingFloors.append(drawnNodes.at(i));
+        }
+    }
+}
+
 cwRHIPointCloud::PerCloudUniform
 cwRHIPointCloud::appearanceUniform(float spacingCoverage) const
 {
-    return PerCloudUniform{spacingCoverage, m_sseThresholdPx,
-                           float(m_drawnSpacing), 0.0f};
+    return PerCloudUniform{spacingCoverage, m_sseThresholdPx, 0.0f, 0.0f};
 }
 
 void cwRHIPointCloud::refreshSseThreshold(const cwRenderBudgets& budgets)
@@ -476,11 +505,15 @@ bool cwRHIPointCloud::streamResources(ResourceUpdateData& data, qint64& remainin
 
     // updateResources() runs only on the frames the render object changed, so
     // this is where a refine threshold the view or the inflation governor moved
-    // on its own, and a spacing the last frame's cut drew, reach the shader —
-    // one write per change, none on the frames between.
+    // on its own reaches the shader — one write per change, none on the frames
+    // between.
     if (m_liveAppearanceStale && m_perCloudUBO) {
         writeLiveAppearanceSlot(data.resourceUpdateBatch);
     }
+
+    // And where the floors the last live gather queued reach their nodes'
+    // constants slots: one write per node per change.
+    flushNodeFloors(data.resourceUpdateBatch);
 
     publishPickSet();
     if (m_profileEnabled) {
@@ -552,13 +585,19 @@ bool cwRHIPointCloud::uploadNode(QRhi* rhi, QRhiResourceUpdateBatch* batch, int 
     const QVector3D minimum = bounds.minimum();
     const float quantizationStep =
         float(double(bounds.maximum().x() - minimum.x()) / double(cw::octree::kQuantMax));
+    // Until a live gather says what is drawn under it, a node stands for its
+    // own points alone, so its own sample spacing is the gap to close.
+    const float ownSpacing =
+        float(m_source.manifest->spacing(m_source.manifest->nodes.at(index).level));
     const std::array<float, kNodeConstantsFloats> constants {
-        minimum.x(), minimum.y(), minimum.z(), quantizationStep
+        minimum.x(), minimum.y(), minimum.z(), quantizationStep,
+        ownSpacing, 0.0f, 0.0f, 0.0f
     };
     batch->updateDynamicBuffer(m_nodeConstants, quint32(slot) * kNodeConstantsBytes,
                                kNodeConstantsBytes, constants.data());
 
     NodeRecord& node = m_nodes[index];
+    node.floorSpacing = ownSpacing;
     node.buffer = buffer;
     node.bytes = bytes;
     node.index = payload.index;
@@ -978,6 +1017,7 @@ void cwRHIPointCloud::releaseStreamedResources()
     }
     m_requested.clear();
     m_readyQueue.clear();
+    m_pendingFloors.clear();
 
     // releaseNode swap-removes out of the back, so taking the back each time
     // walks the list once and leaves it empty.
@@ -1214,7 +1254,9 @@ bool cwRHIPointCloud::gather(const GatherContext& context, QVector<PipelineBatch
     QVector<Drawable> drawables;
     drawables.reserve(m_selected.nodes.size());
 
-    int finestDrawnLevel = kNoDrawnLevel;
+    //The resident subset of the cut, which is what each node's floor is taken from
+    QVector<int> drawnNodes;
+    drawnNodes.reserve(m_selected.nodes.size());
 
     for (const cw::octree::SelectedNode& selected : std::as_const(m_selected.nodes)) {
         if (selected.node < 0 || selected.node >= m_nodes.size()) {
@@ -1227,7 +1269,7 @@ bool cwRHIPointCloud::gather(const GatherContext& context, QVector<PipelineBatch
         switch (node.state) {
         case NodeState::Resident: {
             const cwPointOctreeNode& drawn = m_source.manifest->nodes.at(selected.node);
-            finestDrawnLevel = std::max(finestDrawnLevel, drawn.level);
+            drawnNodes.append(selected.node);
 
             Drawable drawable;
             drawable.type = Drawable::Type::NonIndexed;
@@ -1261,22 +1303,16 @@ bool cwRHIPointCloud::gather(const GatherContext& context, QVector<PipelineBatch
         }
     }
 
-    // The world-space floor under the threshold rule, taken from the finest
-    // spacing on screen rather than from each node's own: the cut is additive,
-    // so a refined region draws its coarse ancestors too, and a per-node floor
-    // would blow those ancestors up to their own coarse spacing. Taking it from
-    // what is drawn rather than from what the cut asked for is what holds the
-    // surface together while the children stream, and where the point cap left
-    // the cut coarser than the threshold describes. An export job renders its
-    // own camera, so it leaves the live view's floor where the live frame put
-    // it. The rewrite waits for the next frame's resource pass: one write per
-    // level change.
-    if (context.liveFrame && finestDrawnLevel != kNoDrawnLevel) {
-        const double drawnSpacing = m_source.manifest->spacing(finestDrawnLevel);
-        if (drawnSpacing != m_drawnSpacing) {
-            m_drawnSpacing = drawnSpacing;
-            m_liveAppearanceStale = true;
-        }
+    // The world-space floor under the threshold rule, taken per node from the
+    // finest spacing drawn under it rather than from the node's own: the cut is
+    // additive, so a refined region draws its coarse ancestors too, and their
+    // own spacing would blow their sprites up past the region they sit in.
+    // Taking it from what is drawn is what holds the surface together while the
+    // children stream, and where the point cap left the cut coarser than the
+    // threshold describes. An export job renders its own camera, so it leaves
+    // the live view's floors where the live frame put them.
+    if (context.liveFrame && !drawnNodes.isEmpty()) {
+        refreshNodeFloors(drawnNodes);
     }
 
     // Every node this frame's cut holds now carries this frame's stamp, so the

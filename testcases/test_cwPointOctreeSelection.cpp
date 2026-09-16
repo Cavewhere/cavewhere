@@ -412,6 +412,35 @@ TEST_CASE("cw::octree::selectNodes: a perspective camera refines the near child 
     }
 }
 
+TEST_CASE("cw::octree::finestDrawnLevels: a node floors at the finest level drawn under it",
+          "[PointOctree][PointOctreeSelection]")
+{
+    //Grandchildren under octant 0 alone, so one branch refines two levels deep
+    const cwPointOctreeManifest manifest = buildManifest();
+    const int refinedChild = manifest.nodes.at(0).children.at(0);
+    const int grandchild = manifest.nodes.at(refinedChild).children.at(0);
+    const int coarseChild = manifest.nodes.at(0).children.at(1);
+
+    SECTION("the root alone floors at the root's level") {
+        REQUIRE(finestDrawnLevels(manifest, {0}) == QVector<int>({0}));
+    }
+
+    SECTION("an ancestor over a refined subtree floors at its finest descendant") {
+        const QVector<int> drawn {0, refinedChild, grandchild};
+        REQUIRE(finestDrawnLevels(manifest, drawn) == QVector<int>({2, 2, 2}));
+    }
+
+    SECTION("a leaf of the drawn cut floors at its own level") {
+        const QVector<int> drawn {0, refinedChild, grandchild, coarseChild};
+        REQUIRE(finestDrawnLevels(manifest, drawn) == QVector<int>({2, 2, 2, 1}));
+    }
+
+    SECTION("a child that is not drawn leaves its parent at its own level") {
+        const QVector<int> drawn {0, refinedChild};
+        REQUIRE(finestDrawnLevels(manifest, drawn) == QVector<int>({1, 1}));
+    }
+}
+
 TEST_CASE("cw::octree::planNodeEvictions: releases the least wanted nodes first",
           "[PointOctree][PointOctreeSelection]")
 {

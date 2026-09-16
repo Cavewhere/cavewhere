@@ -16,6 +16,12 @@ layout(location = 0) in uvec4 qpos;
 // draws as a single instance, so every point of it dequantizes with these.
 layout(location = 1) in vec4 nodeOriginScale;
 
+// Per instance, one per node: the finest sample spacing, in meters, drawn
+// anywhere inside this node's subtree, with yzw reserved. The cut is additive,
+// so a node draws its own points over whatever its refined descendants draw,
+// and this is the gap its sprites really have to close.
+layout(location = 2) in vec4 nodeFloor;
+
 layout(std140, binding = 0) uniform GlobalBlock {
     mat4 viewProjectionMatrix;
     mat4 viewMatrix;
@@ -29,16 +35,15 @@ layout(std140, binding = 0) uniform GlobalBlock {
 // 3D view): the fraction of its own cell a sprite covers. sseThresholdPx is
 // the projected spacing the octree cut refines to — the view's
 // screenSpaceErrorPx times this cloud's current inflation — which is what lets
-// each vertex work out the spacing around it from its own depth. drawnSpacing
-// is the finest sample spacing the last live frame actually drew, in meters,
-// which is what the sprites have to close when the cut is coarser than the
-// threshold asked for. Four floats is std140's 16 bytes exactly; the C++
-// PerCloudUniform matches it field for field, padding included.
+// each vertex work out the spacing around it from its own depth. The spacing
+// really drawn is per instance instead (nodeFloor). Two floats pad to std140's
+// 16 bytes; the C++ PerCloudUniform matches it field for field, padding
+// included.
 layout(std140, binding = 1) uniform PerCloudBlock {
     float spacingCoverage;
     float sseThresholdPx;
-    float drawnSpacing;
-    float padding;
+    float padding0;
+    float padding1;
 };
 
 const float maxPointSizePx = 64.0;
@@ -84,12 +89,13 @@ void main(void)
     // world radius competing with it.
     //
     // The threshold term describes the spacing a cut that keeps up has on
-    // screen. Where the point budget or a node still streaming holds the cloud
-    // coarser than that, drawnSpacing is the wider gap that is really there,
-    // so coverage of it becomes a world-space floor — one number for the whole
-    // cloud, because the cut is additive and a per-node floor would blow a
-    // refined region's ancestors up to their own coarse spacing.
-    float sizePx = max(spacingCoverage * drawnSpacing * pixelsPerMeter,
+    // screen. Where the point budget or a node still streaming holds this part
+    // of the cloud coarser than that, nodeFloor.x is the wider gap that is
+    // really there, so coverage of it becomes a world-space floor. It is the
+    // finest spacing drawn under this node rather than this node's own, so a
+    // refined region's ancestors keep the size of the region they sit in
+    // instead of blowing up to their own coarse spacing.
+    float sizePx = max(spacingCoverage * nodeFloor.x * pixelsPerMeter,
                        spacingCoverage * sseThresholdPx);
     // 1px floor: zoomed-out clouds were getting darker than zoomed-in ones
     // because a large min clamp made far points overdraw and stack EDL

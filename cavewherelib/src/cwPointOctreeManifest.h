@@ -62,9 +62,11 @@ public:
     QByteArray serialize() const;
     static std::optional<cwPointOctreeManifest> deserialize(const QByteArray& data);
 
-private:
+    //! Parent index per node, -1 for the root. Built on first use and cached,
+    //! so it belongs to the thread holding this manifest.
     const QVector<int>& parents() const;
 
+private:
     //Parent index per node, rebuilt when its size stops matching nodes
     mutable QVector<int> m_parents;
 };

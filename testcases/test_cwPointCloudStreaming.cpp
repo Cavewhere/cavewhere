@@ -926,11 +926,77 @@ namespace {
         return Access::liveAppearanceUniform(fixture.backend()).sseThresholdPx;
     }
 
-    //! The world spacing the cloud's sprites floor against, as the CPU hands it
-    //! to the shader.
-    double drawnSpacing(const PointCloudFixture& fixture)
+    //! The world spacing @a node's sprites floor against, as the CPU hands it
+    //! to the shader: the finest spacing the last live frame drew under it.
+    double nodeFloorSpacing(const PointCloudFixture& fixture, int node)
     {
-        return Access::liveAppearanceUniform(fixture.backend()).drawnSpacing;
+        return Access::nodeFloorSpacing(fixture.backend(), node);
+    }
+
+    //! The finest spacing the last live frame drew anywhere in the cloud. The
+    //! root is an ancestor of every drawn node, so its own floor is the whole
+    //! cloud's.
+    double drawnFloorSpacing(const PointCloudFixture& fixture)
+    {
+        return nodeFloorSpacing(fixture, kRootIndex);
+    }
+
+    //! The deepest level @a drawnNodes draws in @a node's subtree, @a node
+    //! itself included — the spacing its sprites have to close.
+    int finestDrawnLevelUnder(const cwPointOctreeManifest& manifest,
+                              const QVector<int>& drawnNodes,
+                              int node)
+    {
+        const QVector<int>& parents = manifest.parents();
+        int finest = manifest.nodes.at(node).level;
+        for (int under : drawnNodes) {
+            for (int ancestor = under; ancestor >= 0; ancestor = parents.at(ancestor)) {
+                if (ancestor == node) {
+                    finest = std::max(finest, manifest.nodes.at(under).level);
+                    break;
+                }
+            }
+        }
+        return finest;
+    }
+
+    //! A drawn node with nothing drawn under it while the frame draws something
+    //! finer elsewhere, or -1 when every drawn node sits at the finest level on
+    //! screen. It is the node the per-node floor exists for.
+    int starvedDrawnNode(const cwPointOctreeManifest& manifest, const QVector<int>& drawnNodes)
+    {
+        int finest = kRootLevel;
+        for (int node : drawnNodes) {
+            finest = std::max(finest, manifest.nodes.at(node).level);
+        }
+
+        for (int node : drawnNodes) {
+            const int level = manifest.nodes.at(node).level;
+            if (level < finest && finestDrawnLevelUnder(manifest, drawnNodes, node) == level) {
+                return node;
+            }
+        }
+        return -1;
+    }
+
+    //! Frames until the cloud draws a starved node, which it returns, or -1
+    //! when the timeout runs out first. Which node the streamer holds back is
+    //! down to how the frames and the decode threads interleave, so the frame
+    //! that shows one is waited for rather than counted to.
+    int renderUntilStarvedNode(PointCloudFixture& fixture)
+    {
+        QElapsedTimer timer;
+        timer.start();
+        for (;;) {
+            const int node = starvedDrawnNode(fixture.manifest(),
+                                              Access::drawnNodes(fixture.backend()));
+            if (node >= 0 || timer.elapsed() >= kWaitTimeoutMs) {
+                return node;
+            }
+
+            QThread::msleep(kFramePauseMs);
+            fixture.renderFrame();
+        }
     }
 
     //! The deepest level the cloud's last cut asked for.
@@ -1299,32 +1365,48 @@ namespace {
         return stats;
     }
 
-    //! The side, in target pixels, PointCloud.vert gives this cloud's sprites
-    //! right now — the very rule under test, read off the block the shader is
-    //! handed rather than guessed from the camera.
-    double liveSpriteSidePx(const PointCloudFixture& fixture, float orthoHeight)
+    //! The side, in target pixels, PointCloud.vert gives the sprites of a node
+    //! whose floor is @a floorSpacing — the very rule under test, read off the
+    //! block the shader is handed rather than guessed from the camera. Sizing
+    //! is per node, so a coarse node held back by the streamer draws wider
+    //! sprites than a refined one of the same cloud.
+    double nodeSpriteSidePx(const PointCloudFixture& fixture, float orthoHeight,
+                            double floorSpacing)
     {
         const CwRhiPointCloudTestAccess::PerCloudUniform uniform =
             Access::liveAppearanceUniform(fixture.backend());
         const double pixelsPerMeter = fixture.colorSize().height() / double(orthoHeight);
         const double coverage = double(uniform.spacingCoverage);
-        const double sizePx = std::max(coverage * double(uniform.drawnSpacing) * pixelsPerMeter,
+        const double sizePx = std::max(coverage * floorSpacing * pixelsPerMeter,
                                        coverage * double(uniform.sseThresholdPx));
         return std::clamp(sizePx, kMinSpritePx, kMaxSpritePx);
     }
 
-    //! How far a mask has to pull back from an edge before the half sprite that
-    //! spills over it stops reading as data: half a sprite, plus a pixel for
-    //! the rounding rasterization does.
-    int maskInsetPx(const PointCloudFixture& fixture, float orthoHeight)
+    //! The widest floor the last frame drew, which is the node with the least
+    //! under it — the largest sprite anywhere in the cloud.
+    double widestDrawnFloorSpacing(const PointCloudFixture& fixture)
     {
-        return int(std::ceil(liveSpriteSidePx(fixture, orthoHeight) * 0.5))
-               + kReferenceErosionSlackPx;
+        double widest = 0.0;
+        for (int node : Access::drawnNodes(fixture.backend())) {
+            widest = std::max(widest, double(nodeFloorSpacing(fixture, node)));
+        }
+        return widest;
     }
 
-    //! Sprite side over the on-screen gap of the finest level the last frame
-    //! drew: the geometric coverage the sizing rule reaches, on the CPU. One
-    //! means the sprites just meet.
+    //! How far a mask has to pull back from an edge before the half sprite that
+    //! spills over it stops reading as data: half of the cloud's largest
+    //! sprite, plus a pixel for the rounding rasterization does.
+    int maskInsetPx(const PointCloudFixture& fixture, float orthoHeight)
+    {
+        const double sidePx =
+            nodeSpriteSidePx(fixture, orthoHeight, widestDrawnFloorSpacing(fixture));
+        return int(std::ceil(sidePx * 0.5)) + kReferenceErosionSlackPx;
+    }
+
+    //! The finest subtree's sprite side over the on-screen gap of the finest
+    //! level the last frame drew: the geometric coverage the sizing rule
+    //! reaches there, on the CPU. One means the sprites just meet. Coarser
+    //! nodes sit at their own wider floor, so they cover their own gaps.
     double geometricCoverageRatio(const PointCloudFixture& fixture, float orthoHeight)
     {
         const double pixelsPerMeter = fixture.colorSize().height() / double(orthoHeight);
@@ -1333,7 +1415,7 @@ namespace {
         if (gapPx <= 0.0) {
             return 0.0;
         }
-        return liveSpriteSidePx(fixture, orthoHeight) / gapPx;
+        return nodeSpriteSidePx(fixture, orthoHeight, drawnFloorSpacing(fixture)) / gapPx;
     }
 
     //! The rectangle the cloud's data covers on the target, shrunk by @a
@@ -3019,7 +3101,27 @@ TEST_CASE("The floor holds to what is drawn while the children stream",
 
     const int drawn = finestDrawnLevel(fixture);
     REQUIRE(drawn < finestSelectedLevel(fixture));
-    CHECK(drawnSpacing(fixture) == float(fixture.manifest().spacing(drawn)));
+    // The root draws over everything finer the frame got to, so its own floor
+    // is the finest spacing on screen rather than the root's coarse spacing.
+    CHECK(drawnFloorSpacing(fixture) == float(fixture.manifest().spacing(drawn)));
+
+    // The floor is a per-node value, so the nodes the frame left coarse keep
+    // their own wide sprites while the refined subtrees shrink. One floor
+    // shared by the cloud would pass every check above it.
+    const int starved = renderUntilStarvedNode(fixture);
+    REQUIRE(starved >= 0);
+
+    const QVector<int> drawnNodes = Access::drawnNodes(fixture.backend());
+    const int finest = finestDrawnLevel(fixture);
+    for (int node : drawnNodes) {
+        const int level = finestDrawnLevelUnder(fixture.manifest(), drawnNodes, node);
+        CHECK(nodeFloorSpacing(fixture, node) == float(fixture.manifest().spacing(level)));
+    }
+
+    // The starved node has nothing drawn under it while another subtree has
+    // refined past it, so its floor stays wider than the finest spacing on
+    // screen — otherwise its cell draws holes until its children arrive.
+    CHECK(nodeFloorSpacing(fixture, starved) > float(fixture.manifest().spacing(finest)));
 }
 
 TEST_CASE("A frame that draws nothing keeps the sprite size it had",
@@ -3032,7 +3134,7 @@ TEST_CASE("A frame that draws nothing keeps the sprite size it had",
     fixture.synchronize();
     fixture.renderUntilQuiet();
 
-    const double refined = drawnSpacing(fixture);
+    const double refined = drawnFloorSpacing(fixture);
     REQUIRE(refined < fixture.manifest().spacing(kRootLevel));
 
     // Panned off screen the cloud draws nothing, which says nothing about how
@@ -3041,7 +3143,7 @@ TEST_CASE("A frame that draws nothing keeps the sprite size it had",
     fixture.renderFrame();
 
     REQUIRE(Access::selectedLevels(fixture.backend()).isEmpty());
-    CHECK(drawnSpacing(fixture) == refined);
+    CHECK(drawnFloorSpacing(fixture) == refined);
 }
 
 TEST_CASE("A cloud starts out at its root's spacing", "[PointCloudStreaming]")
@@ -3049,15 +3151,18 @@ TEST_CASE("A cloud starts out at its root's spacing", "[PointCloudStreaming]")
     const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
 
     PointCloudFixture fixture(rhi.get(), QStringLiteral("root-seed"));
+    fixture.setOrthoHeight(kFarOrthoHeight);
+    fixture.synchronize();
+    fixture.renderUntilResident(kRootIndex);
 
-    // Nothing has been drawn yet, so the very first frame draws the root at the
-    // root's own floor rather than at a floor of nothing.
-    CHECK(drawnSpacing(fixture) == float(fixture.manifest().spacing(kRootLevel)));
+    // The root is the only thing drawn, so it stands for its own points alone
+    // and floors at its own spacing rather than at a floor of nothing.
+    CHECK(drawnFloorSpacing(fixture) == float(fixture.manifest().spacing(kRootLevel)));
 
     fixture.render().setOctree(cwPointOctreeSource());
     fixture.synchronize();
 
-    CHECK(drawnSpacing(fixture) == 0.0);
+    CHECK(drawnFloorSpacing(fixture) == 0.0);
 }
 
 TEST_CASE("The per-cloud uniform carries the view's refine threshold",
@@ -3079,7 +3184,7 @@ TEST_CASE("The per-cloud uniform carries the view's refine threshold",
     // nothing here.
     CHECK(live.spacingCoverage == kWheelCoverage);
 
-    // The third value is what the shader turns back into a world spacing at
+    // The second value is what the shader turns back into a world spacing at
     // each vertex's depth: the view's screen-space error times this cloud's
     // inflation, which is the projected spacing the cut is refining to.
     CHECK(live.sseThresholdPx
@@ -3117,6 +3222,7 @@ TEST_CASE("An export job leaves the live sprite size alone", "[PointCloudStreami
 
     const Access::PerCloudUniform live =
         Access::liveAppearanceUniform(fixture.backend());
+    const double liveFloor = drawnFloorSpacing(fixture);
     const QVector<QPoint> before = fixture.litPixels();
     REQUIRE(!before.isEmpty());
 
@@ -3133,7 +3239,7 @@ TEST_CASE("An export job leaves the live sprite size alone", "[PointCloudStreami
         Access::liveAppearanceUniform(fixture.backend());
     CHECK(after.spacingCoverage == live.spacingCoverage);
     CHECK(after.sseThresholdPx == live.sseThresholdPx);
-    CHECK(after.drawnSpacing == live.drawnSpacing);
+    CHECK(drawnFloorSpacing(fixture) == liveFloor);
 
     fixture.setOrthoHeight(kCloseOrthoHeight);
     fixture.renderFrame();

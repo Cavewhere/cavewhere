@@ -117,6 +117,20 @@ namespace cw::octree {
     //! selectCut()'s nodes alone, for the callers that need nothing else
     CAVEWHERE_LIB_EXPORT QVector<SelectedNode> selectNodes(const SelectionInput& input);
 
+    /**
+     * The finest level drawn inside each of @a drawnNodes, one entry per input
+     * node and in the same order. Every index has to name a node of @a manifest.
+     *
+     * @a drawnNodes is the resident subset of one frame's cut — what the frame
+     * really draws, rather than what the cut asked for. The tree is additive,
+     * so a drawn node draws its own points over whatever its drawn descendants
+     * draw; the answer for it is the deepest level any of them sits at, and its
+     * own level when none of them is drawn. That is the spacing its sprites
+     * have to close, which is what the shader floors against.
+     */
+    CAVEWHERE_LIB_EXPORT QVector<int> finestDrawnLevels(const cwPointOctreeManifest& manifest,
+                                                        const QVector<int>& drawnNodes);
+
     //What the planner knows about one resident node
     struct CAVEWHERE_LIB_EXPORT NodeResidency
     {

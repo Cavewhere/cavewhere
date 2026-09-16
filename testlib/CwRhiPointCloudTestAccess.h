@@ -82,13 +82,23 @@ struct CwRhiPointCloudTestAccess {
         return cloud.m_selected.pointCapped;
     }
 
-    // The block PointCloud.vert reads for the live appearance: the coverage, the
-    // projected spacing the cut refines to, and the finest spacing the last live
-    // frame drew. It is what every sprite of the cloud is sized from, so a test
-    // can pin the CPU side of the sizing rule without a readback.
+    // The block PointCloud.vert reads for the live appearance: the coverage and
+    // the projected spacing the cut refines to. Together with each node's floor
+    // it is what every sprite of the cloud is sized from, so a test can pin the
+    // CPU side of the sizing rule without a readback.
     static PerCloudUniform liveAppearanceUniform(const cwRHIPointCloud& cloud) {
         const auto& live = cloud.m_renderState.value();
         return cloud.appearanceUniform(live.spacingCoverage);
+    }
+
+    // The world spacing @a index's sprites floor against — the finest spacing
+    // drawn under it, as the last live gather worked it out. 0 for a node that
+    // is not resident.
+    static float nodeFloorSpacing(const cwRHIPointCloud& cloud, int index) {
+        if (index < 0 || index >= cloud.m_nodes.size()) {
+            return 0.0f;
+        }
+        return cloud.m_nodes.at(index).floorSpacing;
     }
 
     // The levels the last cut asked for, so a test can say what the camera
@@ -106,6 +116,24 @@ struct CwRhiPointCloudTestAccess {
             }
         }
         return levels;
+    }
+
+    // The nodes the cloud has resident out of the last cut — what a frame
+    // actually drew, which is the set each node's floor is worked out over.
+    static QVector<int> drawnNodes(const cwRHIPointCloud& cloud) {
+        QVector<int> drawn;
+        if (!cloud.m_source.manifest) {
+            return drawn;
+        }
+
+        const QVector<cwPointOctreeNode>& nodes = cloud.m_source.manifest->nodes;
+        for (const cw::octree::SelectedNode& selected : cloud.m_selected.nodes) {
+            if (selected.node >= 0 && selected.node < nodes.size()
+                && cloud.m_nodes.at(selected.node).state == NodeState::Resident) {
+                drawn.append(selected.node);
+            }
+        }
+        return drawn;
     }
 
     // The levels of the nodes the cloud has resident out of the last cut — what
