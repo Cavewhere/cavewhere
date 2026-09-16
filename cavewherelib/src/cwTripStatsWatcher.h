@@ -26,8 +26,8 @@ class cwUsedStationTaskManager;
  * The two numbers a trip row shows come from two asynchronous tasks —
  * cwTripLengthTask and cwUsedStationTaskManager — that every model showing
  * trips would otherwise own a copy of. One watcher per trip owns both tasks and
- * announces each result with its own signal, so cwCavePageModel and
- * cwSurveyTreeModel read the same numbers from the same mechanism.
+ * announces each result with its own signal, so every model showing a trip row
+ * reads the same numbers from the same mechanism.
  *
  * The values are empty until the tasks report: a freshly built watcher reads
  * zero length and no stations, and lengthChanged()/usedStationsChanged() say

@@ -87,7 +87,7 @@ MainWindowTest {
 
             const cavePage = gotoCavePage(cave)
 
-            const nameLinks = collectByName(cavePage, "tripNameLink", [])
+            const nameLinks = collectByName(cavePage, "tripLink", [])
             compare(nameLinks.length, 3, "every trip has a name cell")
             for (let i = 0; i < nameLinks.length; i++) {
                 verify(nameLinks[i].text.indexOf("📎 ") === 0,
@@ -125,7 +125,7 @@ MainWindowTest {
 
             const cavePage = gotoCavePage(cave)
 
-            const nameLinks = collectByName(cavePage, "tripNameLink", [])
+            const nameLinks = collectByName(cavePage, "tripLink", [])
             compare(nameLinks.length, 2, "every trip has a name cell")
             for (let i = 0; i < nameLinks.length; i++) {
                 verify(nameLinks[i].text.indexOf("📎 ") === 0,
@@ -150,7 +150,7 @@ MainWindowTest {
             const cave = RootData.region.cave(0)
             const cavePage = gotoCavePage(cave)
 
-            const nameLinks = collectByName(cavePage, "tripNameLink", [])
+            const nameLinks = collectByName(cavePage, "tripLink", [])
             compare(nameLinks.length, 1, "the cave holds the one attached trip")
             verify(nameLinks[0].text.indexOf("📎 ") === 0,
                    "an Attached trip row is marked too: " + nameLinks[0].text)
@@ -168,7 +168,18 @@ MainWindowTest {
             const cave = attachedCave("cavepage-external-dates")
             const cavePage = gotoCavePage(cave)
 
-            const dateCells = collectByName(cavePage, "tripDateLabel", [])
+            //A trip row's Date cell names itself by its row, and draws the
+            //date as its "value".
+            const dateCells = []
+            for (let row = 0; row < 3; row++) {
+                let value = null
+                tryVerify(() => {
+                              const cell = findChild(cavePage, "tripDate" + row)
+                              value = cell === null ? null : findChild(cell, "value")
+                              return value !== null
+                          }, 5000, "trip row " + row + " must draw its date")
+                dateCells.push(value)
+            }
             compare(dateCells.length, 3, "every trip has a date cell")
 
             let seeded = 0

@@ -75,6 +75,12 @@ QQ.Item {
     //quieter than the cave's own.
     readonly property QQ.color textColor: rowId.muted ? Theme.textSubtle : Theme.text
 
+    //True while the row's survey data comes from an attached file: a node owns
+    //an external centerline, a trip is a window into one.
+    readonly property bool externallyBacked: rowId.isNode
+        ? (rowId.node !== null && !rowId.node.externalCenterline.isEmpty)
+        : (rowId.trip !== null && rowId.trip.externallyBacked)
+
     //A sourced node's name belongs to its file, and a trip is renamed on its
     //own page, so only a native node offers Rename.
     readonly property bool canRename: rowId.isNode && !rowId.isSourced
@@ -117,6 +123,14 @@ QQ.Item {
     //all take the same path.
     function open() {
         rowId.treeView.surveyTree.openObject(rowId.object);
+    }
+
+    //The name a cell inside this row answers to. A pooled delegate stays a
+    //child of the view while it holds the row it last drew, so its cells give
+    //up their names alongside the row's own: a chain or a count that looks for
+    //them then finds the rows the view is showing and no others.
+    function cellName(name: string) : string {
+        return rowId.pooled ? "" : name;
     }
 
     //The cell of this row that carries the tree's caret, the name, the name
@@ -262,22 +276,29 @@ QQ.Item {
                     }
                 }
 
-                //A row whose node has left the region draws one more frame,
-                //so the badges answer for a node that is already gone.
+                //A row whose object has left the region draws one more frame,
+                //so the badges answer for a node or a trip that is already gone.
                 ErrorIconBar {
-                    visible: rowId.isNode
-                    errorModel: rowId.node !== null ? rowId.node.errorModel : null
+                    errorModel: rowId.isNode
+                        ? (rowId.node !== null ? rowId.node.errorModel : null)
+                        : (rowId.trip !== null ? rowId.trip.errorModel : null)
                 }
 
                 ExternalSolveBadge {
-                    owner: rowId.node
-                    externallyBacked: rowId.node !== null
-                                      && !rowId.node.externalCenterline.isEmpty
+                    owner: rowId.object
+                    externallyBacked: rowId.externallyBacked
+                    //A node has no account of its own of a missing station.
+                    fallbackError: rowId.trip !== null
+                                   ? rowId.trip.externalStationsError
+                                   : ""
                 }
 
                 LinkText {
-                    objectName: rowId.isNode ? "caveLink" : "tripLink"
-                    text: rowId.name
+                    objectName: rowId.cellName(rowId.isNode ? "caveLink" : "tripLink")
+                    //The paperclip marks a trip that windows an attached file;
+                    //a node says so with its Kind chip instead.
+                    text: (rowId.externallyBacked && !rowId.isNode ? "📎 " : "")
+                          + rowId.name
                     color: rowId.isNode ? Theme.textLink : Theme.textSubtle
                     elide: QQ.Text.ElideRight
                     visible: !rowId.renaming
@@ -310,7 +331,7 @@ QQ.Item {
         //and keeps the pill size its own implicit size asks for.
         QQ.Item {
             KindChip {
-                objectName: "kindChip"
+                objectName: rowId.cellName("kindChip")
 
                 anchors.left: parent.left
                 anchors.verticalCenter: parent.verticalCenter
@@ -367,7 +388,7 @@ QQ.Item {
                 spacing: Theme.delegatePadding
 
                 SelectableValue {
-                    objectName: "value"
+                    objectName: rowId.cellName("value")
                     text: tripLengthCellId.hasLength
                           ? Utils.fixed(Units.convertLength(tripLengthCellId.meters,
                                                             Units.Meters,
@@ -378,7 +399,7 @@ QQ.Item {
                 }
 
                 QC.Label {
-                    objectName: "unit"
+                    objectName: rowId.cellName("unit")
                     text: tripLengthCellId.hasLength
                           ? Units.lengthUnitName(tripLengthCellId.displayUnit)
                           : ""
@@ -395,7 +416,7 @@ QQ.Item {
         id: textCellComponent
 
         QC.Label {
-            objectName: "value"
+            objectName: rowId.cellName("value")
 
             verticalAlignment: QQ.Text.AlignVCenter
             color: rowId.textColor
@@ -431,31 +452,28 @@ QQ.Item {
             RowLayout {
                 id: declRowId
 
-                readonly property bool externallyBacked: rowId.trip !== null
-                                                         && rowId.trip.externallyBacked
-
                 anchors.left: parent.left
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: Theme.tightSpacing
 
                 QC.Label {
-                    objectName: "value"
-                    visible: !declRowId.externallyBacked
+                    objectName: rowId.cellName("value")
+                    visible: !rowId.externallyBacked
                     text: Utils.fixed(rowId.declination, 2) + "°"
                     color: rowId.textColor
                 }
 
                 QC.Label {
-                    objectName: "declinationMode"
-                    visible: !declRowId.externallyBacked
+                    objectName: rowId.cellName("declinationMode")
+                    visible: !rowId.externallyBacked
                     text: rowId.autoDeclination ? qsTr("auto") : qsTr("manual")
                     color: Theme.textSubtle
                     font.pixelSize: Theme.fontSizeCaption
                 }
 
                 QC.Label {
-                    objectName: "declinationEmDash"
-                    visible: declRowId.externallyBacked
+                    objectName: rowId.cellName("declinationEmDash")
+                    visible: rowId.externallyBacked
                     text: "—"
                     color: Theme.textSubtle
                 }

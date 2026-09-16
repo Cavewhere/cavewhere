@@ -289,6 +289,7 @@ set(qml_singletons
     "qml/EditorComponents.qml"
     "qml/NoteToolMode.qml"
     "qml/ProjectUnits.qml"
+    "qml/RegionSurveyTree.qml"
 	"qml/Theme.qml"
     "qml/SelectableValueGroup.qml"
 )

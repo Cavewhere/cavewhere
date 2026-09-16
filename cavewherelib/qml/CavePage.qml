@@ -10,10 +10,8 @@
 import QtQuick as QQ
 import cavewherelib
 import QtQml
-import QtQml.Models as QQModels
 import QtQuick.Layouts
 import QtQuick.Controls as QC
-import "Utils.js" as Utils
 
 StandardPage {
     id: cavePageArea
@@ -121,16 +119,22 @@ StandardPage {
 
     readonly property bool isNarrow: width < Theme.breakpointPanelCollapse
 
-    // The narrow layout's Add Trip bar lives inside narrowListComponent,
+    // The narrow layout's Add Trip bar lives inside narrowColumnComponent,
     // whose ids aren't reachable from out here; it publishes itself on
     // completion so the one hint can point at whichever bar is showing.
     property QQ.Item narrowAddTripBar: null
 
-    // tripProxyModel.count rather than currentCave.rowCount(): rowCount()
-    // is a plain function, so a binding on it would never re-evaluate when
-    // a trip arrives. Nothing filters this proxy, so the counts match.
+    // currentCave.tripCount rather than currentCave.rowCount(): rowCount()
+    // is a plain function, so a binding on it would never re-evaluate when a
+    // trip arrives, while tripCount announces itself.
     readonly property bool hasNoTrips: cavePageArea.currentCave !== null
-                                       && tripProxyModel.count === 0
+                                       && cavePageArea.currentCave.tripCount === 0
+
+    // The tree shows a cave's trips, so it stays away while the page stands
+    // for no cave: a null rootNode is a whole-region tree, which is the Data
+    // page's reading of it and no cave page's.
+    readonly property bool showsTripTree: cavePageArea.currentCave !== null
+                                          && !cavePageArea.hasNoTrips
 
     // True while this cave's centerline comes from an attached survey
     // file. The trips such a cave holds are windows into that file, so
@@ -252,6 +256,28 @@ StandardPage {
         cave: cavePageArea.currentCave
     }
 
+    // The cave's trips, in the same tree the Data page shows, rooted at this
+    // cave: its trips are the view's own rows. One instance serves both
+    // layouts through the proxies below, so the narrow page shows the tree the
+    // wide page shows rather than a list of its own.
+    SurveyTreeView {
+        id: tripTreeId
+        objectName: "tripTree"
+
+        removeAskBox: removeChallengeId
+        rootNode: cavePageArea.currentCave
+        // The wide page scrolls as a whole, so the tree gives up its own
+        // scrolling there and takes the height every row needs. The narrow
+        // page hands it what is left of the window and lets it scroll.
+        scrollable: cavePageArea.isNarrow
+
+        // Set here rather than on the proxies: a LayoutItemProxy forwards its
+        // target's Layout properties, so one set of them serves both layouts.
+        Layout.fillWidth: true
+        Layout.fillHeight: cavePageArea.isNarrow
+        Layout.preferredHeight: cavePageArea.isNarrow ? -1 : tripTreeId.fullHeight
+    }
+
     QQ.Flow {
         id: actionBar
         spacing: Theme.actionBarSpacing
@@ -272,15 +298,9 @@ StandardPage {
             visible: RootData.desktopBuild && !cavePageArea.hasNoTrips
             currentRegion: RootData.region
             currentCave: cavePageArea.currentCave
-            currentTrip: {
-                if(cavePageArea.isNarrow) return null;
-                let wideItem = wideLoaderId.item
-                if(!wideItem) return null;
-                let tv = wideItem.tripTableView
-                if(!tv) return null;
-                let row = tv.currentItem as RowDelegate
-                return row ? row.tripObjectRole : null
-            }
+            // The tree's current row, which the export verbs take a trip
+            // from. A cave row leaves them without one.
+            currentTrip: tripTreeId.currentObject as Trip
         }
     }
 
@@ -357,23 +377,13 @@ StandardPage {
         }
     }
 
-    // An empty cave has nothing to tabulate, so the header row and its
-    // sort controls only get in the hint's way.
-    QQ.Loader {
-        id: wideLoaderId
-        active: !cavePageArea.isNarrow && !cavePageArea.hasNoTrips
-        visible: wideLoaderId.active
-        Layout.fillWidth: true
-        sourceComponent: wideTableComponent
-    }
-
     QQ.Loader {
         id: narrowLoaderId
         active: cavePageArea.isNarrow
         visible: cavePageArea.isNarrow
         Layout.fillWidth: true
         Layout.fillHeight: true
-        sourceComponent: narrowListComponent
+        sourceComponent: narrowColumnComponent
     }
 
     // --- Wide layout ---
@@ -446,12 +456,19 @@ StandardPage {
                     visible: cavePageArea.caveAttached && !cavePageArea.isNarrow
                 }
 
-                LayoutItemProxy { target: wideLoaderId }
+                // An empty cave has nothing to tabulate, so the tree stays
+                // out of the hint's way. Both proxies hidden hides the tree
+                // itself, which is how a proxied item is put away.
+                LayoutItemProxy {
+                    target: tripTreeId
+                    visible: !cavePageArea.isNarrow && cavePageArea.showsTripTree
+                }
             }
         }
     }
 
     // --- Narrow layout ---
+    // The column itself is narrowColumnComponent, below.
     QQ.Item {
         visible: cavePageArea.isNarrow
         anchors.fill: parent
@@ -460,614 +477,113 @@ StandardPage {
         LayoutItemProxy { target: narrowLoaderId; anchors.fill: parent }
     }
 
-    SortFilterProxyModel {
-        id: tripProxyModel
-        source: CavePageModel {
-            cave: cavePageArea.currentCave
-        }
-    }
-
-    QQModels.ItemSelectionModel {
-        id: selectionModelId
-        model: tripProxyModel
-    }
-
-    property alias selection: selectionModelId
-
-    function isRowSelected(row) {
-        return selectionModelId.selectedIndexes.some(i => i.row === row)
-    }
-
-    function tripForProxyRow(row) {
-        if (!cavePageArea.currentCave) {
-            return null
-        }
-        const sourceIndex = tripProxyModel.mapToSource(tripProxyModel.index(row, 0))
-        return cavePageArea.currentCave.trip(sourceIndex.row)
-    }
-
-    function tripForProxyIndex(proxyIndex) {
-        if (!cavePageArea.currentCave) {
-            return null
-        }
-        const sourceIndex = tripProxyModel.mapToSource(proxyIndex)
-        return cavePageArea.currentCave.trip(sourceIndex.row)
-    }
-
-    // The right-click menu's scope: when the clicked row is part of a
-    // multi-selection the action covers the whole selection; otherwise
-    // just that row. One pass over selectedIndexes builds both "row is
-    // in selection" and "selection's trips".
-    function getCalibrationsForRow(row) {
-        const indexes = selectionModelId.selectedIndexes
-        if (indexes.length > 1) {
-            let rowInSelection = false
-            const selectedCalibrations = []
-            for (let i = 0; i < indexes.length; ++i) {
-                if (indexes[i].row === row) {
-                    rowInSelection = true
-                }
-                const trip = tripForProxyIndex(indexes[i])
-                if (trip) {
-                    selectedCalibrations.push(trip.calibration)
-                }
-            }
-            if (rowInSelection) {
-                return selectedCalibrations
-            }
-        }
-        const trip = tripForProxyRow(row)
-        return trip ? [trip.calibration] : []
-    }
-
-    // selectionModelId.currentIndex is a QPersistentModelIndex, so it follows
-    // the row when earlier rows are inserted or removed.
-    function applySelectionClick(row, modifiers) {
-        if (row < 0 || row >= tripProxyModel.count) {
-            return
-        }
-
-        const idx = tripProxyModel.index(row, 0)
-        const isShift = (modifiers & Qt.ShiftModifier) !== 0
-        const isCtrl = (modifiers & (Qt.ControlModifier | Qt.MetaModifier)) !== 0
-        const anchor = selectionModelId.currentIndex
-
-        if (isShift && anchor.valid) {
-            const lo = Math.min(anchor.row, row)
-            const hi = Math.max(anchor.row, row)
-            selectionModelId.select(tripProxyModel.index(lo, 0),
-                                    QQModels.ItemSelectionModel.ClearAndSelect | QQModels.ItemSelectionModel.Rows)
-            for (let r = lo + 1; r <= hi; ++r) {
-                selectionModelId.select(tripProxyModel.index(r, 0),
-                                        QQModels.ItemSelectionModel.Select | QQModels.ItemSelectionModel.Rows)
-            }
-        } else if (isCtrl) {
-            selectionModelId.select(idx,
-                                    QQModels.ItemSelectionModel.Toggle | QQModels.ItemSelectionModel.Rows)
-        } else {
-            selectionModelId.setCurrentIndex(idx,
-                                             QQModels.ItemSelectionModel.ClearAndSelect | QQModels.ItemSelectionModel.Rows)
-        }
-    }
-
     LeadModel {
         id: leadModelId
         regionModel: RootData.regionTreeModel
         cave: cavePageArea.currentCave
     }
 
+    // The narrow column: the same tree the wide page shows, under the cave's
+    // stats — what the wide layout puts in two columns, stacked, with the tree
+    // scrolling itself rather than riding a page-wide Flickable.
     QQ.Component {
-        id: wideTableComponent
+        id: narrowColumnComponent
 
         ColumnLayout {
-            spacing: 0
+            spacing: Theme.sectionSpacing
 
-            property alias tripTableView: tableViewId
+            DoubleClickTextInput {
+                text: cavePageArea.currentCave ? cavePageArea.currentCave.name : ""
+                font.bold: true
+                font.pixelSize: Theme.fontSizeTitle
 
-                TableStaticColumnModel {
-                    id: columnModelId
-                    columns: [
-                        TableStaticColumn {
-                            id: nameColumn
-                            columnWidth: 200
-                            text: "Name"
-                            sortRole: CavePageModel.TripNameRole
-                        },
-                        TableStaticColumn {
-                            id: dateColumn
-                            columnWidth: 75
-                            text: "Date"
-                            sortRole: CavePageModel.TripDateRole
-                        },
-                        TableStaticColumn {
-                            id: stationsColumn
-                            columnWidth: 75
-                            text: "Stations"
-                            sortRole: CavePageModel.UsedStationsRole
-                        },
-                        TableStaticColumn {
-                            id: lengthColumn
-                            columnWidth: 50
-                            text: "Length"
-                            sortRole: CavePageModel.TripDistanceRole
-                        },
-                        TableStaticColumn {
-                            id: declColumn
-                            columnWidth: 95
-                            text: "Decl"
-                            sortRole: CavePageModel.DeclinationRole
-                        }
-                    ]
-                }
-
-                HorizontalHeaderStaticView {
-                    view: tableViewId
-                    Layout.fillWidth: true
-
-                    delegate: TableStaticHeaderColumn {
-                        objectName: "headerColumn-" + text
-                        model: tableViewId.model
-                    }
-                }
-
-                TableStaticView {
-                    id: tableViewId
-                    objectName: "tripTableView"
-                    model: tripProxyModel
-                    columnModel: columnModelId
-                    Layout.fillWidth: true
-                    // Render every row at full height; the page-level
-                    // Flickable handles scrolling, so we disable the
-                    // ListView's own flick interaction.
-                    Layout.preferredHeight: tableViewId.contentHeight
-                    interactive: false
-
-                    // Per-row MouseAreas grab row taps first; this only
-                    // fires for empty space below the last row.
-                    QQ.TapHandler {
-                        acceptedButtons: Qt.LeftButton
-                        onTapped: cavePageArea.selection.clear()
-                    }
-
-                    component RowDelegate : QQ.Item {
-                        id: rowDelegateId
-                        required property Trip tripObjectRole
-                        required property string tripNameRole
-                        required property date tripDateRole
-                        required property string usedStationsRole
-                        required property real tripDistanceRole
-                        required property real declinationRole
-                        required property bool autoDeclinationRole
-                        required property int index
-
-                        // The trip's survey data comes from the cave's
-                        // attached file rather than from chunks typed into
-                        // this project. Falsy while the delegate is being
-                        // torn down and its trip is already gone.
-                        readonly property bool externallyBacked:
-                            rowDelegateId.tripObjectRole
-                                ? rowDelegateId.tripObjectRole.externallyBacked : false
-
-                        implicitWidth: layoutId.width
-                        implicitHeight: layoutId.height
-
-                        CaveTripContextMenu {
-                            anchors.fill: parent
-                            removeChallenge: removeChallengeId
-                            row: rowDelegateId.index
-                            name: rowDelegateId.tripNameRole
-                            tripCalibrations: cavePageArea.getCalibrationsForRow(rowDelegateId.index)
-                        }
-
-                        TableRowBackground {
-                            isSelected: cavePageArea.isRowSelected(rowDelegateId.index)
-                            rowIndex: rowDelegateId.index
-                            anchors.fill: parent
-                        }
-
-                        QQ.MouseArea {
-                            anchors.fill: parent
-                            acceptedButtons: Qt.LeftButton
-
-                            onClicked: (mouse) => {
-                                tableViewId.currentIndex = rowDelegateId.index
-                                cavePageArea.applySelectionClick(rowDelegateId.index, mouse.modifiers)
-                            }
-                        }
-
-                        RowLayout {
-                            id: layoutId
-
-                            spacing: 0
-
-                            QQ.Item {
-                                implicitWidth: nameColumn.columnWidth
-                                implicitHeight: rowLayout.height
-                                clip: true
-
-                                RowLayout {
-                                    id: rowLayout
-                                    spacing: 1
-
-                                    ErrorIconBar {
-                                        errorModel: rowDelegateId.tripObjectRole.errorModel
+                onFinishedEditting: (newText) => {
+                                        cavePageArea.currentCave.name = newText
                                     }
-
-                                    ExternalSolveBadge {
-                                        owner: rowDelegateId.tripObjectRole
-                                        externallyBacked: rowDelegateId.externallyBacked
-                                        fallbackError: rowDelegateId.tripObjectRole
-                                                       ? rowDelegateId.tripObjectRole.externalStationsError
-                                                       : ""
-                                    }
-
-                                    LinkText {
-                                        objectName: "tripNameLink"
-                                        // The paperclip marks an externally
-                                        // backed trip.
-                                        text: (rowDelegateId.externallyBacked ? "📎 " : "")
-                                              + rowDelegateId.tripNameRole
-                                        elide: QQ.Text.ElideRight
-
-                                        onClicked: {
-                                            RootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page,
-                                                                                       tripPageName(rowDelegateId.tripObjectRole));
-                                        }
-                                    }
-                                }
-                            }
-
-                            QQ.Item {
-                                implicitWidth: dateColumn.columnWidth
-                                implicitHeight: dateId.implicitHeight
-                                clip: true
-                                QC.Label {
-                                    id: dateId
-                                    objectName: "tripDateLabel"
-                                    elide: QQ.Text.ElideRight
-                                    text: Qt.formatDateTime(rowDelegateId.tripDateRole, "yyyy-MM-dd")
-                                }
-                            }
-
-                            QQ.Item {
-                                implicitWidth: stationsColumn.columnWidth
-                                implicitHeight: usedStationsId.implicitHeight
-                                clip: true
-
-                                QC.Label {
-                                    id: usedStationsId
-                                    elide: QQ.Text.ElideRight
-                                    text: usedStationsRole
-                                }
-                            }
-
-                            QQ.Item {
-                                implicitWidth: lengthColumn.columnWidth
-                                implicitHeight: lengthId.implicitHeight
-                                clip: true
-
-                                QC.Label {
-                                    id: lengthId
-                                    elide: QQ.Text.ElideRight
-                                    text: {
-                                        var unit = ""
-                                        switch(rowDelegateId.tripObjectRole.calibration.distanceUnit) {
-                                        case Units.Meters:
-                                            unit = "m"
-                                            break;
-                                        case Units.Feet:
-                                            unit = "ft"
-                                            break;
-                                        }
-
-                                        return Utils.fixed(rowDelegateId.tripDistanceRole, 2) + " " + unit;
-                                    }
-                                }
-                            }
-
-                            QQ.Item {
-                                implicitWidth: declColumn.columnWidth
-                                implicitHeight: declRowId.implicitHeight
-                                clip: true
-
-                                RowLayout {
-                                    id: declRowId
-                                    spacing: 4
-
-                                    QC.Label {
-                                        elide: QQ.Text.ElideRight
-                                        visible: !rowDelegateId.externallyBacked
-                                        text: Utils.fixed(rowDelegateId.declinationRole, 2) + "°"
-                                    }
-
-                                    QC.Label {
-                                        elide: QQ.Text.ElideRight
-                                        visible: !rowDelegateId.externallyBacked
-                                        color: Theme.textSubtle
-                                        font.pixelSize: Theme.fontSizeCaption
-                                        text: rowDelegateId.autoDeclinationRole ? "auto" : "manual"
-                                    }
-
-                                    // The file carries the declination for an
-                                    // externally-backed trip, and each block
-                                    // can set its own, so the row has no one
-                                    // number to show.
-                                    QC.Label {
-                                        objectName: "declinationEmDash"
-                                        visible: rowDelegateId.externallyBacked
-                                        color: Theme.textSubtle
-                                        text: "—"
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    delegate: RowDelegate {}
-                }
-            }
-    }
-
-    QQ.Component {
-        id: narrowListComponent
-
-        QQ.ListView {
-            clip: true
-            model: tripProxyModel
-
-            QQ.TapHandler {
-                acceptedButtons: Qt.LeftButton
-                onTapped: cavePageArea.selection.clear()
             }
 
-            header: ColumnLayout {
-                width: parent ? parent.width : 0
-                spacing: Theme.sectionSpacing
+            QQ.Flow {
+                Layout.fillWidth: true
+                spacing: Theme.flowSpacing
 
-                DoubleClickTextInput {
-                    text: cavePageArea.currentCave ? cavePageArea.currentCave.name : ""
-                    font.bold: true
-                    font.pixelSize: Theme.fontSizeTitle
-
-                    onFinishedEditting: (newText) => {
-                                            cavePageArea.currentCave.name = newText
-                                        }
+                SelectableCaveStat {
+                    label: "Length:"
+                    unitValue: cavePageArea.currentCave ? cavePageArea.currentCave.length : null
                 }
 
-                QQ.Flow {
-                    Layout.fillWidth: true
-                    spacing: Theme.flowSpacing
+                QC.Label { text: "·"; color: Theme.textSubtle }
 
-                    SelectableCaveStat {
-                        label: "Length:"
-                        unitValue: cavePageArea.currentCave ? cavePageArea.currentCave.length : null
-                    }
-
-                    QC.Label { text: "·"; color: Theme.textSubtle }
-
-                    SelectableCaveStat {
-                        label: "Depth:"
-                        unitValue: cavePageArea.currentCave ? cavePageArea.currentCave.depth : null
-                        depth: true
-                    }
-
-                    QC.Label { text: "·"; color: Theme.textSubtle }
-
-                    RowLayout {
-                        spacing: Theme.delegatePadding
-
-                        QC.Label { text: "Leads:" }
-
-                        LinkText {
-                            text: leadModelId.rowCount()
-                            onClicked: {
-                                RootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page, "Leads");
-                            }
-                        }
-                    }
-
-                    QC.Label { text: "·"; color: Theme.textSubtle }
-
-                    RowLayout {
-                        spacing: Theme.delegatePadding
-
-                        QC.Label { text: "Fix stations:" }
-
-                        LinkText {
-                            text: cavePageArea.currentCave ? cavePageArea.currentCave.fixStations.count : 0
-                            onClicked: {
-                                RootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page, "Fix Stations");
-                            }
-                        }
-                    }
+                SelectableCaveStat {
+                    label: "Depth:"
+                    unitValue: cavePageArea.currentCave ? cavePageArea.currentCave.depth : null
+                    depth: true
                 }
 
-                QQ.Flow {
-                    Layout.fillWidth: true
-                    spacing: Theme.actionBarSpacing
+                QC.Label { text: "·"; color: Theme.textSubtle }
 
-                    AddAndSearchBar {
-                        id: addTripBarNarrowId
-                        objectName: "addTrip"
-                        addButtonText: "Add Trip"
-                        menu: addTripMenuId
-                        menuToolTip: qsTr("More ways to add a trip")
-                        onAdd: cavePageArea.addTripAndNavigate()
-
-                        QQ.Component.onCompleted: cavePageArea.narrowAddTripBar = addTripBarNarrowId
-                        QQ.Component.onDestruction: cavePageArea.narrowAddTripBar = null
-                    }
-
-                    // Nothing to sort on an empty cave - the narrow
-                    // counterpart of hiding the wide table's header.
-                    RowLayout {
-                        objectName: "narrowSortControls"
-                        spacing: Theme.delegatePadding
-                        visible: !cavePageArea.hasNoTrips
-
-                        QC.ComboBox {
-                            id: narrowSortComboId
-                            model: ["Name", "Date", "Stations", "Length"]
-
-                            property list<int> sortRoles: [
-                                CavePageModel.TripNameRole,
-                                CavePageModel.TripDateRole,
-                                CavePageModel.UsedStationsRole,
-                                CavePageModel.TripDistanceRole
-                            ]
-
-                            onActivated: {
-                                tripProxyModel.sortRole = sortRoles[currentIndex]
-                                tripProxyModel.sort(narrowSortOrderButtonId.ascending ? Qt.AscendingOrder : Qt.DescendingOrder)
-                            }
-                        }
-
-                        QC.RoundButton {
-                            id: narrowSortOrderButtonId
-                            property bool ascending: true
-
-                            implicitHeight: narrowSortComboId.height
-                            implicitWidth: implicitHeight
-
-                            icon.source: narrowSortOrderButtonId.ascending
-                                         ? "qrc:/twbs-icons/icons/sort-up.svg"
-                                         : "qrc:/twbs-icons/icons/sort-down.svg"
-                            icon.width: Theme.iconSizeButton
-                            icon.height: Theme.iconSizeButton
-                            icon.color: Theme.text
-
-                            onClicked: {
-                                ascending = !ascending
-                                tripProxyModel.sortRole = narrowSortComboId.sortRoles[narrowSortComboId.currentIndex]
-                                tripProxyModel.sort(ascending ? Qt.AscendingOrder : Qt.DescendingOrder)
-                            }
-                        }
-                    }
-                }
-
-                LayoutItemProxy {
-                    target: caveSummaryId
-                    visible: cavePageArea.caveAttached && cavePageArea.isNarrow
-                }
-            }
-
-            delegate: QQ.Item {
-                id: flowDelegateId
-                required property Trip tripObjectRole
-                required property string tripNameRole
-                required property date tripDateRole
-                required property string usedStationsRole
-                required property real tripDistanceRole
-                required property real declinationRole
-                required property bool autoDeclinationRole
-                required property int index
-
-                // Matches RowDelegate.externallyBacked, for the same rows.
-                readonly property bool externallyBacked:
-                    flowDelegateId.tripObjectRole
-                        ? flowDelegateId.tripObjectRole.externallyBacked : false
-
-                implicitHeight: flowId.implicitHeight + Theme.delegatePadding
-                width: QQ.ListView.view ? QQ.ListView.view.width : 0
-
-                TableRowBackground {
-                    isSelected: cavePageArea.isRowSelected(flowDelegateId.index)
-                    rowIndex: flowDelegateId.index
-                    anchors.fill: parent
-                }
-
-                QQ.MouseArea {
-                    anchors.fill: parent
-                    acceptedButtons: Qt.LeftButton
-                    onClicked: (mouse) => {
-                        QQ.ListView.view.currentIndex = flowDelegateId.index
-                        cavePageArea.applySelectionClick(flowDelegateId.index, mouse.modifiers)
-                    }
-                }
-
-                QQ.Flow {
-                    id: flowId
-                    width: parent.width
+                RowLayout {
                     spacing: Theme.delegatePadding
-                    anchors.verticalCenter: parent.verticalCenter
 
-                    ErrorIconBar {
-                        errorModel: flowDelegateId.tripObjectRole.errorModel
-                    }
-
-                    ExternalSolveBadge {
-                        owner: flowDelegateId.tripObjectRole
-                        externallyBacked: flowDelegateId.externallyBacked
-                        fallbackError: flowDelegateId.tripObjectRole
-                                       ? flowDelegateId.tripObjectRole.externalStationsError
-                                       : ""
-                    }
+                    QC.Label { text: "Leads:" }
 
                     LinkText {
-                        objectName: "narrowTripNameLink"
-                        text: (flowDelegateId.externallyBacked ? "📎 " : "")
-                              + flowDelegateId.tripNameRole
+                        text: leadModelId.rowCount()
                         onClicked: {
-                            RootData.pageSelectionModel.gotoPageByName(
-                                        cavePageArea.PageView.page,
-                                        cavePageArea.tripPageName(flowDelegateId.tripObjectRole))
+                            RootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page, "Leads");
                         }
-                    }
-
-                    QC.Label { text: "·"; color: Theme.textSubtle }
-                    QC.Label {
-                        objectName: "tripDateLabel"
-                        text: Qt.formatDateTime(flowDelegateId.tripDateRole, "yyyy-MM-dd")
-                    }
-                    QC.Label { text: "·"; color: Theme.textSubtle }
-                    QC.Label { text: flowDelegateId.usedStationsRole; color: Theme.textSubtle }
-                    QC.Label {
-                        text: {
-                            var unit = ""
-                            switch(flowDelegateId.tripObjectRole.calibration.distanceUnit) {
-                            case Units.Meters:
-                                unit = "m"
-                                break;
-                            case Units.Feet:
-                                unit = "ft"
-                                break;
-                            }
-                            return Utils.fixed(flowDelegateId.tripDistanceRole, 2) + " " + unit
-                        }
-                        color: Theme.textSubtle
-                    }
-
-                    QC.Label { text: "·"; color: Theme.textSubtle }
-
-                    QC.Label {
-                        objectName: "narrowDeclinationLabel"
-                        text: flowDelegateId.externallyBacked
-                              ? "—"
-                              : Utils.fixed(flowDelegateId.declinationRole, 2) + "° "
-                                + (flowDelegateId.autoDeclinationRole ? "auto" : "manual")
-                        color: Theme.textSubtle
                     }
                 }
 
-                CaveTripContextMenu {
-                    anchors.fill: parent
-                    removeChallenge: removeChallengeId
-                    row: flowDelegateId.index
-                    name: flowDelegateId.tripNameRole
-                    tripCalibrations: cavePageArea.getCalibrationsForRow(flowDelegateId.index)
+                QC.Label { text: "·"; color: Theme.textSubtle }
+
+                RowLayout {
+                    spacing: Theme.delegatePadding
+
+                    QC.Label { text: "Fix stations:" }
+
+                    LinkText {
+                        text: cavePageArea.currentCave ? cavePageArea.currentCave.fixStations.count : 0
+                        onClicked: {
+                            RootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page, "Fix Stations");
+                        }
+                    }
                 }
+            }
+
+            AddAndSearchBar {
+                id: addTripBarNarrowId
+                objectName: "addTrip"
+                addButtonText: "Add Trip"
+                menu: addTripMenuId
+                menuToolTip: qsTr("More ways to add a trip")
+                onAdd: cavePageArea.addTripAndNavigate()
+
+                QQ.Component.onCompleted: cavePageArea.narrowAddTripBar = addTripBarNarrowId
+                QQ.Component.onDestruction: cavePageArea.narrowAddTripBar = null
+            }
+
+            LayoutItemProxy {
+                target: caveSummaryId
+                visible: cavePageArea.caveAttached && cavePageArea.isNarrow
+            }
+
+            LayoutItemProxy {
+                target: tripTreeId
+                visible: cavePageArea.isNarrow && cavePageArea.showsTripTree
+            }
+
+            //Holds the tree up when an empty cave leaves it out, so the
+            //hint keeps the space it points into.
+            QQ.Item {
+                Layout.fillHeight: cavePageArea.hasNoTrips
             }
         }
     }
 
-
+    // The tree asks through this prompt and removes what it asked about, so
+    // the page only has to hand it over.
     RemoveAskBox {
         id: removeChallengeId
-        onRemove: {
-            let proxyIndex = tripProxyModel.index(indexToRemove, 0)
-            let sourceIndex = tripProxyModel.mapToSource(proxyIndex)
-            cavePageArea.currentCave.removeTrip(sourceIndex.row)
-        }
     }
 
     Instantiator {

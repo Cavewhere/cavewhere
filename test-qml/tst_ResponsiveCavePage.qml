@@ -51,29 +51,34 @@ MainWindowTest {
             verify(!page.isNarrow, "Should not be narrow at 800")
         }
 
-        function test_tripTableVisibleAtWide() {
+        // One tree serves both layouts, proxied into whichever one is
+        // showing, so it is the same item at either width.
+        function test_tripTreeVisibleAtWide() {
             rootId.width = 800
             waitForRendering(rootId)
 
-            let table = findChild(rootId, "tripTableView")
-            verify(table !== null, "tripTableView should exist at wide width")
-            verify(table.visible, "tripTableView should be visible at wide width")
+            let tree = findChild(rootId, "tripTree")
+            verify(tree !== null, "tripTree should exist at wide width")
+            tryVerify(() => tree.visible, 5000, "tripTree should be visible at wide width")
         }
 
-        function test_tripTableHiddenAtNarrow() {
+        function test_tripTreeVisibleAtNarrow() {
             rootId.width = 400
             waitForRendering(rootId)
 
-            let table = findChild(rootId, "tripTableView")
-            verify(table === null, "tripTableView should not exist at narrow width (Loader inactive)")
+            let tree = findChild(rootId, "tripTree")
+            verify(tree !== null, "tripTree should exist at narrow width")
+            tryVerify(() => tree.visible, 5000,
+                      "the narrow layout shows the same tree, not a list of its own")
         }
 
         function test_transitionWideToNarrow() {
             rootId.width = 800
             waitForRendering(rootId)
 
-            let table = findChild(rootId, "tripTableView")
-            verify(table !== null, "tripTableView should exist at wide")
+            let tree = findChild(rootId, "tripTree")
+            verify(tree !== null, "tripTree should exist at wide")
+            tryVerify(() => tree.visible, 5000)
 
             rootId.width = 400
             waitForRendering(rootId)
@@ -81,8 +86,9 @@ MainWindowTest {
             let page = findCavePage()
             verify(page.isNarrow, "Should be narrow at 400")
 
-            table = findChild(rootId, "tripTableView")
-            verify(table === null, "tripTableView should be gone at narrow")
+            compare(findChild(rootId, "tripTree"), tree,
+                    "the narrow layout proxies the same tree item")
+            tryVerify(() => tree.visible, 5000, "and keeps showing it")
         }
 
         function test_leadsLinkVisible() {

@@ -190,15 +190,19 @@ MainWindowTest {
             compare(hint.pointAtObject, cavePage.narrowAddTripBar,
                     "and points at the narrow bar, not the wide one")
 
-            let sortControls = findChild(cavePage, "narrowSortControls")
-            verify(sortControls !== null, "the narrow sort row must exist")
-            verify(!sortControls.visible, "nothing to sort on an empty cave")
-
             rootId.width = 1200
             tryVerify(() => !cavePage.isNarrow, 5000, "flips back to wide")
             tryVerify(() => hint.visible
                             && hint.pointAtObject !== cavePage.narrowAddTripBar,
                       5000, "the hint re-anchors to the wide bar")
+        }
+
+        // The tree of the cave page: the trips of `currentCave` are its rows,
+        // since the view is rooted at the cave itself.
+        function tripTree(cavePage) {
+            let tree = findChild(cavePage, "tripTree")
+            verify(tree !== null, "the cave page must show the survey tree")
+            return tree
         }
 
         // The hint stands alone on an empty cave: an empty table and an
@@ -211,15 +215,68 @@ MainWindowTest {
             verify(exportButtons !== null, "the export bar must exist")
             tryVerify(() => !exportButtons.visible, 5000,
                       "nothing to export from an empty cave")
-            verify(findChild(cavePage, "tripTableView") === null,
-                   "the trip table must not be loaded for an empty cave")
+
+            let tree = tripTree(cavePage)
+            tryVerify(() => !tree.visible, 5000,
+                      "the tree stays out of an empty cave's way")
 
             cave.addTrip()
 
-            tryVerify(() => findChild(cavePage, "tripTableView") !== null, 5000,
-                      "the first trip brings the table back")
+            tryVerify(() => tree.visible, 5000,
+                      "the first trip brings the tree back")
             tryVerify(() => exportButtons.visible, 5000,
                       "and makes export meaningful again")
+        }
+
+        // The cave page's tree is rooted at its own cave, so it shows that
+        // cave's trips as its rows and nothing of any other cave.
+        function test_treeShowsOnlyThisCavesTrips() {
+            let cave = setupCaveWithTrips()
+
+            RootData.region.addCave()
+            let otherCave = RootData.region.cave(1)
+            otherCave.name = "OtherCave"
+            otherCave.addTrip()
+            otherCave.trip(0).name = "Other-Trip"
+
+            let cavePage = RootData.pageView.currentPageItem
+            let tree = tripTree(cavePage)
+
+            tryCompare(tree, "rowCount", 3, 5000,
+                       "the cave's three trips are the tree's rows")
+
+            let names = []
+            for (let row = 0; row < tree.rowCount; row++) {
+                names.push(String(tree.objectAtRow(row).name))
+            }
+            names.sort()
+            compare(names, ["A-Trip", "B-Trip", "C-Trip"],
+                    "only this cave's trips have rows: [" + names + "]")
+
+            verify(findChild(cavePage, "caveDelegate0") === null,
+                   "the cave itself is the root, so it owns no row")
+        }
+
+        // A click on a trip row's name opens that trip's page, the way the
+        // trip table's name link did.
+        function test_clickingATripRowOpensTheTripPage() {
+            setupCaveWithTrips()
+
+            let cavePage = RootData.pageView.currentPageItem
+            let tree = tripTree(cavePage)
+            tryCompare(tree, "rowCount", 3, 5000)
+
+            let tripLink = null
+            tryVerify(() => {
+                          const row = findChild(cavePage, "tripDelegate0")
+                          tripLink = row === null ? null : findChild(row, "tripLink")
+                          return tripLink !== null && tripLink.text === "C-Trip"
+                      }, 5000, "the first trip row must show its name as a link")
+
+            mouseClick(tripLink)
+            tryVerify(() => RootData.pageView.currentPageItem !== null
+                            && RootData.pageView.currentPageItem.objectName === "tripPage",
+                      5000, "clicking a trip row must open the trip page")
         }
 
         // The file-backed path adds a trip the same way, so the help must
@@ -253,98 +310,48 @@ MainWindowTest {
             tryVerify(() => !help.visible, 5000, "a file-backed trip retires the help")
         }
 
-        // The sort arrow lived on the header delegate, so tearing the table
-        // down for an empty cave lost it while the proxy kept on sorting -
-        // the rows came back sorted with no column saying so.
-        function test_sortIndicatorSurvivesAnEmptyCave() {
+        // Remove left the table with the sorting: a trip is deleted through
+        // the tree's own context menu, which asks before it removes.
+        function test_deleteTripThroughTheTreeContextMenu() {
             let cave = setupCaveWithTrips()
             let cavePage = RootData.pageView.currentPageItem
+            let tree = tripTree(cavePage)
+            tryCompare(tree, "rowCount", 3, 5000)
 
-            let nameHeader = findChild(cavePage, "headerColumn-Name")
-            verify(nameHeader !== null, "the Name header must exist")
+            //The row is looked up until it stands for the trip this test is
+            //about: a delegate the view has yet to re-bind still draws the row
+            //it last held.
+            let row = null
+            tryVerify(() => {
+                          row = findChild(cavePage, "tripDelegate0")
+                          return row !== null && row.object === cave.trip(0)
+                      }, 5000, "the first trip must have a row")
+            row.showContextMenu(0, 0)
 
-            mouseClick(nameHeader)
-            tryVerify(() => nameHeader.sortMode
-                            !== TableStaticHeaderColumn.Sort.None,
-                      5000, "clicking the header sorts by name")
+            let menu = null
+            tryVerify(() => {
+                          menu = findChild(row, "surveyItemContextMenu")
+                          return menu !== null && menu.visible
+                      }, 5000, "the row must open its context menu")
 
-            let sortedRole = findChild(cavePage, "tripTableView").model.sortRole
+            mouseClick(findChild(menu, "surveyItemDeleteMenuItem"))
 
-            while (cave.rowCount() > 0) {
-                cave.removeTrip(0)
-            }
-            tryVerify(() => findChild(cavePage, "tripTableView") === null,
-                      5000, "the empty cave tears the table down")
+            let askBox = null
+            tryVerify(() => {
+                          askBox = findChild(cavePage, "removeChallange")
+                          return askBox !== null && askBox.visible
+                      }, 5000, "Delete… must ask first")
+            compare(askBox.message, "Remove <b>C-Trip</b>?")
 
-            cave.addTrip()
-            tryVerify(() => findChild(cavePage, "tripTableView") !== null,
-                      5000, "the table comes back with the first trip")
+            mouseClick(findChild(askBox, "removeButton"))
 
-            compare(findChild(cavePage, "tripTableView").model.sortRole,
-                    sortedRole, "the proxy is still sorting by that role")
-
-            let restored = findChild(cavePage, "headerColumn-Name")
-            verify(restored !== null, "the Name header comes back")
-            verify(restored.sortMode !== TableStaticHeaderColumn.Sort.None,
-                   "the header must still show which column is sorted")
-        }
-
-        // Reproduces issue #294: sorted proxy index was passed directly to
-        // cave.removeTrip() instead of mapping back to the source index.
-        function test_deleteTripAfterSortDeletesCorrectTrip() {
-            let cave = setupCaveWithTrips()
-
-            compare(cave.rowCount(), 3)
-            compare(cave.trip(0).name, "C-Trip")
-            compare(cave.trip(1).name, "A-Trip")
-            compare(cave.trip(2).name, "B-Trip")
-
-            let cavePage = RootData.pageView.currentPageItem
-            verify(cavePage !== null)
-
-            let tableView = findChild(cavePage, "tripTableView")
-            verify(tableView !== null, "Trip table must exist")
-
-            let sortModel = tableView.model
-            verify(sortModel !== null, "SortFilterProxyModel must exist")
-
-            sortModel.sortRole = CavePageModel.TripNameRole
-            sortModel.sort(Qt.AscendingOrder)
-            waitForRendering(rootId)
-
-            // Sorted: A-Trip(proxy 0), B-Trip(proxy 1), C-Trip(proxy 2)
-            compare(sortModel.count, 3)
-            let proxyIdx0 = sortModel.index(0, 0)
-            compare(sortModel.data(proxyIdx0, CavePageModel.TripNameRole), "A-Trip")
-
-            let sourceIdx = sortModel.mapToSource(proxyIdx0)
-            compare(sourceIdx.row, 1, "Proxy 0 (A-Trip) should map to source index 1")
-
-            let removeAskBox = findChild(cavePage, "removeChallange")
-            verify(removeAskBox !== null)
-
-            removeAskBox.indexToRemove = 0
-            removeAskBox.removeName = "A-Trip"
-            removeAskBox.show()
-            tryVerify(() => removeAskBox.visible)
-
-            let removeButton = findChild(removeAskBox, "removeButton")
-            mouseClick(removeButton)
-            tryVerify(() => !removeAskBox.visible)
-
-            compare(cave.rowCount(), 2, "Should have 2 trips after removal")
-
-            let remainingNames = []
+            tryCompare(cave, "tripCount", 2, 5000)
+            let remaining = []
             for (let i = 0; i < cave.rowCount(); i++) {
-                remainingNames.push(cave.trip(i).name)
+                remaining.push(cave.trip(i).name)
             }
-
-            verify(remainingNames.indexOf("A-Trip") === -1,
-                   "A-Trip should have been removed but remaining trips are: [" + remainingNames + "]")
-            verify(remainingNames.indexOf("C-Trip") !== -1,
-                   "C-Trip should still exist but remaining trips are: [" + remainingNames + "]")
-            verify(remainingNames.indexOf("B-Trip") !== -1,
-                   "B-Trip should still exist but remaining trips are: [" + remainingNames + "]")
+            compare(remaining.indexOf("C-Trip"), -1,
+                    "the asked-about trip is gone: [" + remaining + "]")
         }
     }
 }

@@ -44,12 +44,15 @@ MainWindowTest {
             return names
         }
 
-        function tripNamesFromTableView(tableView) {
+        // The cave page's tree is rooted at the cave, so its rows are that
+        // cave's trips and each row answers with the trip it stands for.
+        function tripNamesFromTree(tree) {
             let names = []
-            let model = tableView.model
-            for (let row = 0; row < model.count; ++row) {
-                let idx = model.index(row, 0)
-                names.push(String(model.data(idx, CavePageModel.TripNameRole)))
+            for (let row = 0; row < tree.rowCount; ++row) {
+                let trip = tree.objectAtRow(row)
+                if (trip !== null) {
+                    names.push(String(trip.name))
+                }
             }
             names.sort()
             return names
@@ -57,8 +60,8 @@ MainWindowTest {
 
         // Regression test for issue #429: when another user adds a trip and the
         // local user syncs while on the cave page, the new trip must appear in
-        // the cave-page trip ListView. The bug is that the tripTableView model
-        // does not refresh even though the underlying cave model has the trip.
+        // the cave page's rows. The bug was that the view's model did not
+        // refresh even though the underlying cave model had the trip.
         function test_addTripSyncAndCheckoutUpdatesCavePageList() {
             let context = loadFixtureAndOpenFirstTrip()
             let caveName = context.caveName
@@ -95,11 +98,11 @@ MainWindowTest {
             let snapshotUiState = function() {
                 let cavePage = RootData.pageView.currentPageItem
                 verify(cavePage !== null)
-                let tableView = findChild(cavePage, "tripTableView")
-                verify(tableView !== null)
+                let tree = findChild(cavePage, "tripTree")
+                verify(tree !== null)
                 return JSON.stringify({
-                    tripCount: tableView.model.count,
-                    tripNames: tripNamesFromTableView(tableView)
+                    tripCount: tree.rowCount,
+                    tripNames: tripNamesFromTree(tree)
                 })
             }
 

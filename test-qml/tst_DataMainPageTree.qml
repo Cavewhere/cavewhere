@@ -402,9 +402,9 @@ MainWindowTest {
 
             const menu = rowContextMenu(page, "caveDelegate0")
 
-            //A click opens the row and the name cell renames it, so the menu
-            //holds the one verb no cell carries.
-            compare(menu.count, 1, "the context menu offers Delete… alone")
+            //A click opens the row and the name cell renames it, so a cave's
+            //menu holds the one verb no cell carries.
+            compare(menu.count, 1, "a cave row's menu offers Delete… alone")
             const deleteItem = findChild(menu, "surveyItemDeleteMenuItem")
             verify(deleteItem !== null && deleteItem.visible, "Delete… must be offered")
             compare(deleteItem.text, "Delete…")
@@ -452,7 +452,12 @@ MainWindowTest {
 
             const menu = rowContextMenu(page, "tripDelegate1")
 
-            compare(menu.count, 1, "a trip row's menu offers Delete… alone")
+            //Only a trip carries a calibration, so only a trip's menu offers
+            //one — the cave page's trip table was the last place to set it.
+            compare(menu.count, 2, "a trip row's menu offers Delete… and Declination")
+            const submenu = menu.menuAt(1)
+            verify(submenu !== null, "the second entry is a submenu")
+            compare(submenu.objectName, "declinationSubmenu")
 
             mouseClick(findChild(menu, "surveyItemDeleteMenuItem"))
 

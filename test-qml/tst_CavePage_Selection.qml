@@ -1,8 +1,13 @@
 import QtQuick
+import QtQml.Models
 import QtTest
 import cavewherelib
 import cw.TestLib
 
+// The cave page's tree picks rows the way every TableView does — a click, a
+// ctrl-click, a shift-click — so what is tested here is what CaveWhere adds on
+// top: which trips a verb on a row acts on, and that the set follows the rows
+// as trips come and go.
 MainWindowTest {
     id: rootId
 
@@ -24,16 +29,7 @@ MainWindowTest {
 
         function init() {
             cave.clearTrips()
-            cavePage().selection.clear()
-        }
-
-        function setupCaveWithTrips() {
-            cave.addTrip(); cave.trip(0).name = "Trip-0"
-            cave.addTrip(); cave.trip(1).name = "Trip-1"
-            cave.addTrip(); cave.trip(2).name = "Trip-2"
-            cave.addTrip(); cave.trip(3).name = "Trip-3"
-            cave.addTrip(); cave.trip(4).name = "Trip-4"
-            return cave
+            tree().selectionModel.clearSelection()
         }
 
         function cavePage() {
@@ -42,133 +38,138 @@ MainWindowTest {
             return p
         }
 
-        function selectedRows() {
-            return cavePage().selection.selectedIndexes
-                .map(i => i.row)
-                .sort((a, b) => a - b)
+        // The tree is rooted at the cave, so every row of it is one of the
+        // cave's trips.
+        function tree() {
+            let treeView = findChild(cavePage(), "tripTree")
+            verify(treeView !== null, "the cave page must show the survey tree")
+            return treeView
         }
 
-        function click(row, modifiers) {
-            cavePage().applySelectionClick(row, modifiers)
+        function setupCaveWithTrips() {
+            for (let i = 0; i < 5; ++i) {
+                cave.addTrip()
+                cave.trip(i).name = "Trip-" + i
+            }
+            tryCompare(tree(), "rowCount", 5, 5000, "every trip takes a row")
+            return cave
         }
 
-        // ── Plain click replaces selection ───────────────────────────────────
+        function selectRows(rows) {
+            const treeView = tree()
+            treeView.selectionModel.clearSelection()
+            for (let i = 0; i < rows.length; ++i) {
+                treeView.selectionModel.select(treeView.indexAtRow(rows[i]),
+                                               ItemSelectionModel.Select
+                                               | ItemSelectionModel.Rows)
+            }
+        }
 
-        function test_plainClickReplacesSelection() {
+        function selectedTripNames() {
+            return tree().selectedTrips()
+                .map(trip => String(trip.name))
+                .sort()
+        }
+
+        // ── A row is picked whole, and each trip is counted once ─────────────
+
+        // A row is selected one cell at a time, so the same trip arrives once
+        // per column; the tree hands each of them back once.
+        function test_selectingRowsNamesEachTripOnce() {
             setupCaveWithTrips()
 
-            click(1, Qt.NoModifier)
-            compare(selectedRows(), [1])
-
-            click(3, Qt.NoModifier)
-            compare(selectedRows(), [3], "plain click on a new row replaces")
+            selectRows([1, 3])
+            compare(selectedTripNames(), ["Trip-1", "Trip-3"])
         }
 
-        // ── Ctrl/Cmd click toggles ───────────────────────────────────────────
+        // ── The scope of a row's verb ───────────────────────────────────────
 
-        function test_ctrlClickToggles() {
+        function test_aRowInsideTheSelectionCoversTheSelection() {
             setupCaveWithTrips()
+            const treeView = tree()
 
-            click(1, Qt.NoModifier)
-            click(3, Qt.ControlModifier)
-            compare(selectedRows(), [1, 3], "ctrl-click adds")
+            selectRows([1, 3, 4])
 
-            click(1, Qt.ControlModifier)
-            compare(selectedRows(), [3], "ctrl-click on a selected row removes it")
-
-            // Cmd on macOS shows up as MetaModifier in Qt — same semantics.
-            click(0, Qt.MetaModifier)
-            compare(selectedRows(), [0, 3])
+            const trips = treeView.tripsFor(treeView.objectAtRow(3))
+            compare(trips.length, 3, "row 3 is in a multi-selection")
+            verify(trips.indexOf(cave.trip(1)) >= 0)
+            verify(trips.indexOf(cave.trip(3)) >= 0)
+            verify(trips.indexOf(cave.trip(4)) >= 0)
         }
 
-        // ── Shift click extends from anchor ──────────────────────────────────
-
-        function test_shiftClickExtendsRange() {
+        function test_aRowOutsideTheSelectionCoversItself() {
             setupCaveWithTrips()
+            const treeView = tree()
 
-            click(1, Qt.NoModifier)
-            click(3, Qt.ShiftModifier)
-            compare(selectedRows(), [1, 2, 3], "shift extends forward")
+            selectRows([2])
 
-            // Anchor stays at row 1; shifting backward to 0 yields [0, 1].
-            click(0, Qt.ShiftModifier)
-            compare(selectedRows(), [0, 1], "shift extends backward from anchor")
+            const trips = treeView.tripsFor(treeView.objectAtRow(0))
+            compare(trips.length, 1, "a row nothing else is selected with stands alone")
+            compare(trips[0], cave.trip(0))
         }
 
-        // ── Shift without anchor behaves like a plain click ──────────────────
-
-        function test_shiftClickWithoutAnchorActsAsPlain() {
+        // A single selected row is no multi-selection, even when it is the row
+        // being asked about.
+        function test_aSingletonSelectionStaysSingleRow() {
             setupCaveWithTrips()
+            const treeView = tree()
 
-            // Fresh selection, no current index.
-            cavePage().selection.clear()
+            selectRows([2])
 
-            click(2, Qt.ShiftModifier)
-            compare(selectedRows(), [2], "shift without an anchor selects the single row")
+            const trips = treeView.tripsFor(treeView.objectAtRow(2))
+            compare(trips.length, 1)
+            compare(trips[0], cave.trip(2))
         }
 
-        // ── Clear empties the set ────────────────────────────────────────────
+        // ── The selection follows the rows ──────────────────────────────────
 
-        function test_clearEmptiesSelection() {
+        function test_clearingEmptiesTheSelection() {
             setupCaveWithTrips()
 
-            click(1, Qt.NoModifier)
-            click(3, Qt.ControlModifier)
-            compare(selectedRows().length, 2)
+            selectRows([1, 3])
+            compare(selectedTripNames().length, 2)
 
-            cavePage().selection.clear()
-            compare(selectedRows(), [], "clear empties the set")
-
-            // After a clear, plain click starts a fresh anchor.
-            click(4, Qt.NoModifier)
-            click(2, Qt.ShiftModifier)
-            compare(selectedRows(), [2, 3, 4])
+            tree().selectionModel.clearSelection()
+            compare(selectedTripNames(), [], "clear empties the set")
         }
 
-        // ── Selection follows row removal from the END ───────────────────────
-
-        function test_selectionDropsRowsRemovedFromEnd() {
+        function test_removedTripsDropOutOfTheSelection() {
             setupCaveWithTrips()
 
-            click(1, Qt.NoModifier)
-            click(4, Qt.ControlModifier)
-            compare(selectedRows(), [1, 4])
+            selectRows([1, 4])
+            compare(selectedTripNames(), ["Trip-1", "Trip-4"])
 
             cave.removeTrip(4)
-            cave.removeTrip(3)
-            compare(selectedRows(), [1],
-                    "rows that no longer exist must drop out of the selection")
+            tryCompare(tree(), "rowCount", 4, 5000)
+            compare(selectedTripNames(), ["Trip-1"],
+                    "a trip that no longer has a row leaves the selection")
         }
 
-        // ── Selection shifts with row removal from the MIDDLE ────────────────
-
-        function test_selectionFollowsRowRemovalFromMiddle() {
+        // Removing an earlier row shifts the rows under it; the selection is
+        // about trips, so the same trips stay in it.
+        function test_selectionKeepsItsTripsWhenAnEarlierRowGoes() {
             setupCaveWithTrips()
 
-            click(1, Qt.NoModifier)        // selects Trip-1 at row 1
-            click(4, Qt.ControlModifier)   // also selects Trip-4 at row 4
-            compare(selectedRows(), [1, 4])
+            selectRows([1, 4])
+            compare(selectedTripNames(), ["Trip-1", "Trip-4"])
 
-            cave.removeTrip(0)             // Trip-0 gone; rows shift up by 1.
-
-            // Trip-1 is now at row 0, Trip-4 is now at row 3.
-            compare(selectedRows(), [0, 3],
-                    "remaining selected rows must shift when an earlier row is removed")
+            cave.removeTrip(0)
+            tryCompare(tree(), "rowCount", 4, 5000)
+            compare(selectedTripNames(), ["Trip-1", "Trip-4"],
+                    "the rows moved up, the trips did not change")
         }
 
-        // ── Appending a trip leaves the selection alone ──────────────────────
-
-        function test_appendingRowDoesNotDisturbSelection() {
+        function test_addingATripLeavesTheSelectionAlone() {
             setupCaveWithTrips()
 
-            click(1, Qt.NoModifier)
-            click(3, Qt.ControlModifier)
-            const before = selectedRows()
+            selectRows([1, 3])
+            const before = selectedTripNames()
 
             cave.addTrip()
+            tryCompare(tree(), "rowCount", 6, 5000)
 
-            compare(selectedRows(), before,
-                    "appending a row must not change which rows are selected")
+            compare(selectedTripNames(), before,
+                    "a new row must not change which trips are selected")
         }
     }
 }
