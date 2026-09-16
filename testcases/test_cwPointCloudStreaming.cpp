@@ -1201,6 +1201,30 @@ namespace {
     constexpr double kDefaultCoverageMaxHoleFraction = 0.02;
     constexpr double kDefaultCoverageMaxHoleFractionJump = 0.02;
 
+    //! The density sweep's own fixture. The lit share of the footprint only
+    //! counts points while a point is one pixel and the gaps between points
+    //! are several, so this sweep asks for a coarse screen-space error — the
+    //! cut then holds points six to twelve pixels apart — and a coverage small
+    //! enough that a sprite clamps to the 1 px floor at every scale
+    //! (0.08 x 12 px < 1). At the default coverage the lit share reads the
+    //! sprite's reach instead: neighbors overlap by half a cell and close the
+    //! gaps a dropped level opens, leaving 1 - holeFraction rather than a
+    //! density. The heights start where the deepest level still projects wider
+    //! than the threshold, so the sweep crosses two transitions.
+    constexpr double kDensityScreenSpaceErrorPx = 6.0;
+    constexpr float kDensitySpacingCoverage = 0.08f;
+    constexpr float kDensitySweepLowHeight = 4.0f;
+    constexpr float kDensitySweepHighHeight = 20.0f;
+
+    //! How far the share of the footprint the plane lights may move between
+    //! neighboring scales on that fixture. A level leaving the cut quarters
+    //! the points per pixel, and with one pixel a point that step lands whole
+    //! in the lit share. Measured plus a tenth; continuous thinning spreads
+    //! the step over the scales between transitions and tightens this by an
+    //! order of magnitude. The steps inside a level measure 0.005, so there is
+    //! room for it to fall that far.
+    constexpr double kMaxLitFractionJump = 0.089;
+
     //! The same criteria on the tile, which is measured against a reference
     //! render rather than a rectangle and carries the residual the erosion
     //! leaves behind, so its baseline stands on its own. At the default
@@ -1363,6 +1387,26 @@ namespace {
 
         stats.fraction = double(holeCount) / double(maskCount);
         return stats;
+    }
+
+    //! The share of @a footprint that @a lit covers. Where the hole fraction
+    //! asks how much of the surface is missing, this is how much of it the
+    //! frame draws, so halving the density per axis is a step here even when
+    //! the sprites stay wide enough to close the holes on both sides of it.
+    double litFractionOf(const PixelMask& lit, const PixelMask& footprint)
+    {
+        const qsizetype footprintCount = footprint.count();
+        if (footprintCount <= 0) {
+            return 0.0;
+        }
+
+        qsizetype litCount = 0;
+        for (int y = 0; y < footprint.size.height(); y++) {
+            for (int x = 0; x < footprint.size.width(); x++) {
+                litCount += footprint.at(x, y) && lit.at(x, y) ? 1 : 0;
+            }
+        }
+        return double(litCount) / double(footprintCount);
     }
 
     //! The side, in target pixels, PointCloud.vert gives the sprites of a node
@@ -1586,6 +1630,8 @@ namespace {
         double holeFraction = 0.0;
         int holeCount = 0;
         int maxHoleSidePx = 0;
+        double litFraction = 0.0;
+        double litFractionJump = 0.0;
         double geometricCoverage = 0.0;
         double sseInflation = 1.0;
         bool pointCapped = false;
@@ -1610,8 +1656,9 @@ namespace {
         fixture.renderUntilQuiet();
 
         writeCsvLine(QStringLiteral("holeCsv,variant,height,frame,finestSelected,finestDrawn,"
-                                    "holeFraction,holeCount,maxHoleSide,geometricCoverage,"
-                                    "sseInflation,pointCapped,residentNodes"));
+                                    "holeFraction,holeCount,maxHoleSide,litFraction,"
+                                    "litFractionJump,geometricCoverage,sseInflation,"
+                                    "pointCapped,residentNodes"));
 
         QVector<SweepRecord> records;
         for (int step = 0; step < heights.size(); step++) {
@@ -1636,16 +1683,21 @@ namespace {
                 record.pointCapped = Access::pointCapped(fixture.backend());
                 record.residentNodes = Access::residentCount(fixture.backend());
 
-                const PixelMask mask =
-                    masks.isEmpty()
-                        ? footprintMask(fixture, height, maskInsetPx(fixture, height))
-                        : masks.at(step);
-                const HoleStats stats = holeStats(litMask(fixture), mask);
+                const PixelMask footprint =
+                    footprintMask(fixture, height, maskInsetPx(fixture, height));
+                const PixelMask mask = masks.isEmpty() ? footprint : masks.at(step);
+                const PixelMask lit = litMask(fixture);
+                const HoleStats stats = holeStats(lit, mask);
                 record.holeFraction = stats.fraction;
                 record.holeCount = stats.count;
                 record.maxHoleSidePx = stats.maxSidePx;
+                record.litFraction = litFractionOf(lit, footprint);
+                record.litFractionJump =
+                    records.isEmpty()
+                        ? 0.0
+                        : std::abs(record.litFraction - records.constLast().litFraction);
 
-                writeCsvLine(QStringLiteral("holeCsv,%1,%2,%3,%4,%5,%6,%7,%8,%9,%10,%11,%12")
+                writeCsvLine(QStringLiteral("holeCsv,%1,%2,%3,%4,%5,%6,%7,%8,%9,%10,%11,%12,%13,%14")
                            .arg(variant)
                            .arg(double(height), 0, 'f', 2)
                            .arg(record.frame)
@@ -1654,6 +1706,8 @@ namespace {
                            .arg(record.holeFraction, 0, 'f', 5)
                            .arg(record.holeCount)
                            .arg(record.maxHoleSidePx)
+                           .arg(record.litFraction, 0, 'f', 5)
+                           .arg(record.litFractionJump, 0, 'f', 5)
                            .arg(record.geometricCoverage, 0, 'f', 3)
                            .arg(record.sseInflation, 0, 'f', 3)
                            .arg(record.pointCapped ? 1 : 0)
@@ -1686,6 +1740,18 @@ namespace {
         for (int i = 1; i < records.size(); i++) {
             largest = std::max(largest, records.at(i).holeFraction
                                             - records.at(i - 1).holeFraction);
+        }
+        return largest;
+    }
+
+    //! The largest step in lit fraction between neighboring scales of
+    //! @a records: the density step a level transition leaves behind, and the
+    //! number continuous thinning is meant to flatten.
+    double largestLitFractionJump(const QVector<SweepRecord>& records)
+    {
+        double largest = 0.0;
+        for (const SweepRecord& record : records) {
+            largest = std::max(largest, record.litFractionJump);
         }
         return largest;
     }
@@ -3950,6 +4016,29 @@ TEST_CASE("Zooming out until quiet leaves the holes bounded",
              << " m, largest jump " << largestHoleFractionJump(records));
         CHECK(worst.holeFraction <= kDefaultCoverageMaxHoleFraction);
         CHECK(largestHoleFractionJump(records) <= kDefaultCoverageMaxHoleFractionJump);
+    }
+
+    SECTION("zooming out thins the cloud continuously") {
+        const QVector<float> heights = zoomOutHeights(kDensitySweepLowHeight,
+                                                      kDensitySweepHighHeight, kSweepStepFraction);
+
+        PointCloudFixture fixture(rhi.get(), planeCache(), kTargetDimension);
+        cwRenderBudgets budgets = fixture.budgets();
+        budgets.screenSpaceErrorPx = kDensityScreenSpaceErrorPx;
+        fixture.setBudgets(budgets);
+        fixture.render().setSpacingCoverage(kDensitySpacingCoverage);
+        fixture.synchronize();
+
+        const QVector<SweepRecord> records = sweep(fixture, QStringLiteral("quiet-plane-density"),
+                                                   heights, StepPolicy::Quiet, 1, {});
+
+        //One pixel a point over gaps of several, so the lit share of the
+        //footprint counts the points the frame drew. The plane fills the
+        //target at every height here, which holds the footprint still while
+        //the density moves.
+        const double largestJump = largestLitFractionJump(records);
+        INFO("largest lit fraction jump " << largestJump);
+        CHECK(largestJump <= kMaxLitFractionJump);
     }
 
     SECTION("a USGS tile measured against its own densest render") {
