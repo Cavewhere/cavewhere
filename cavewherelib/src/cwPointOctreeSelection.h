@@ -46,6 +46,16 @@ namespace cw::octree {
     constexpr quint64 kRootPriority = std::numeric_limits<quint64>::max();
 
     /**
+     * The projected spacing the cut refines to: a node refines while its points
+     * project farther apart than this. PointCloud.vert sizes its sprites
+     * against the same number, so the cut and the sprites follow one rule.
+     */
+    constexpr double refineThresholdPx(double screenSpaceErrorPx, double sseInflation)
+    {
+        return screenSpaceErrorPx * sseInflation;
+    }
+
+    /**
      * Everything selectNodes() needs to cut the tree for one view of one frame.
      *
      * A null frustum culls nothing, which is what a test without a camera

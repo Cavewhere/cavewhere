@@ -173,7 +173,7 @@ void cwRHIPointCloud::resetNodes(const cwPointOctreeSource& source)
     m_coldNodes.clear();
     // The first frame draws the root alone, so the cloud starts at the root's
     // spacing rather than at a floor of nothing.
-    m_cutSpacing = m_source.manifest ? m_source.manifest->spacing(kRootLevel) : 0.0;
+    m_drawnSpacing = m_source.manifest ? m_source.manifest->spacing(kRootLevel) : 0.0;
     m_liveAppearanceStale = true;
     if (m_source.manifest) {
         m_nodes.resize(m_source.manifest->nodes.size());
@@ -269,6 +269,8 @@ cw::octree::SelectionInput cwRHIPointCloud::selectionInput(const RenderData& ren
 
 void cwRHIPointCloud::updateResources(const ResourceUpdateData& data)
 {
+    refreshSseThreshold(data.renderData.budgets);
+
     if (!m_renderState.isChanged() && !m_liveAppearanceStale && m_perCloudUBO) {
         return;
     }
@@ -276,8 +278,9 @@ void cwRHIPointCloud::updateResources(const ResourceUpdateData& data)
     auto* rhi = data.renderData.cb->rhi();
     QRhiResourceUpdateBatch* batch = data.resourceUpdateBatch;
 
-    // Per-cloud uniform — the world-space sprite radius in meters, folded
-    // against the spacing of the cut on screen. Fixed defaults (set on
+    // Per-cloud uniform — the world-space sprite radius in meters, the
+    // fraction of its own cell a sprite covers, and the refine threshold the
+    // shader measures that fraction in. Fixed defaults (set on
     // cwRenderPointCloud::RenderState) produce consistent sprite sizes across
     // every loaded cloud; the earlier meanSpacingXY * 0.5 auto-derivation was
     // unreliable because mean-spacing estimates vary with LAZ density /
@@ -302,8 +305,7 @@ void cwRHIPointCloud::updateResources(const ResourceUpdateData& data)
 void cwRHIPointCloud::writeAppearanceSlot(QRhiResourceUpdateBatch* batch, int slot,
                                           float worldRadius, float spacingCoverage)
 {
-    const PerCloudUniform uniform{ effectiveWorldRadius(worldRadius, spacingCoverage),
-                                   {0.0f, 0.0f, 0.0f} };
+    const PerCloudUniform uniform = appearanceUniform(worldRadius, spacingCoverage);
     batch->updateDynamicBuffer(m_perCloudUBO, slot * m_perCloudStride,
                                sizeof(PerCloudUniform), &uniform);
 }
@@ -315,9 +317,28 @@ void cwRHIPointCloud::writeLiveAppearanceSlot(QRhiResourceUpdateBatch* batch)
     m_liveAppearanceStale = false;
 }
 
-float cwRHIPointCloud::effectiveWorldRadius(float worldRadius, float spacingCoverage) const
+cwRHIPointCloud::PerCloudUniform
+cwRHIPointCloud::appearanceUniform(float worldRadius, float spacingCoverage) const
 {
-    return std::max(worldRadius, spacingCoverage * float(m_cutSpacing));
+    return PerCloudUniform{worldRadius, spacingCoverage, m_sseThresholdPx,
+                           float(m_drawnSpacing)};
+}
+
+void cwRHIPointCloud::refreshSseThreshold(const cwRenderBudgets& budgets)
+{
+    // The same threshold selectCut() refines against, so the sprites cover the
+    // spacing the cut is aiming for: PointCloud.vert divides it back out by
+    // each vertex's own pixels-per-meter, which is how a far sprite grows to
+    // cover its own coarser cell while the near one stays where the wheel put
+    // it.
+    const float threshold = float(cw::octree::refineThresholdPx(budgets.screenSpaceErrorPx,
+                                                                m_sseInflation));
+    if (threshold == m_sseThresholdPx) {
+        return;
+    }
+
+    m_sseThresholdPx = threshold;
+    m_liveAppearanceStale = true;
 }
 
 void cwRHIPointCloud::uploadAppearance(QRhiResourceUpdateBatch* batch, int slot,
@@ -379,13 +400,6 @@ bool cwRHIPointCloud::streamResources(ResourceUpdateData& data, qint64& remainin
     auto* rhi = data.renderData.cb->rhi();
     if (!rhi || !m_nodeConstants) {
         return m_streamer.hasWork();
-    }
-
-    // updateResources() runs only on the frames the render object changed, so
-    // this is where a cut that refined or coarsened on its own reaches the
-    // shader — one write per level change, none on the frames between.
-    if (m_liveAppearanceStale && m_perCloudUBO) {
-        writeLiveAppearanceSlot(data.resourceUpdateBatch);
     }
 
     QElapsedTimer uploadTimer;
@@ -452,6 +466,22 @@ bool cwRHIPointCloud::streamResources(ResourceUpdateData& data, qint64& remainin
         m_profile.enforceBudget.add(elapsedUs(partTimer));
         m_profile.gpuBudgetBytes = data.renderData.budgets.gpuBudgetBytes;
         partTimer.restart();
+    }
+
+    // After enforceGpuBudget(), because that is what moves the inflation: the
+    // cut gather() picks a moment from now refines to this threshold, so
+    // reading it any earlier would size this frame's sprites against the
+    // previous frame's rule and flash fat sprites (or holes) on every step the
+    // governor takes. The batch is still submitted after gather(), so the write
+    // lands in time for this frame's draws.
+    refreshSseThreshold(data.renderData.budgets);
+
+    // updateResources() runs only on the frames the render object changed, so
+    // this is where a refine threshold the view or the inflation governor moved
+    // on its own, and a spacing the last frame's cut drew, reach the shader —
+    // one write per change, none on the frames between.
+    if (m_liveAppearanceStale && m_perCloudUBO) {
+        writeLiveAppearanceSlot(data.resourceUpdateBatch);
     }
 
     publishPickSet();
@@ -1233,17 +1263,20 @@ bool cwRHIPointCloud::gather(const GatherContext& context, QVector<PipelineBatch
         }
     }
 
-    // Sprites are sized off the finest spacing on screen, never off each node's
-    // own: the cut is additive, so a refined region draws its coarse ancestors
-    // too. Taking it from what is drawn rather than from what the cut asked for
-    // holds the floor up while the children are still streaming, which is the
-    // case the floor exists for. An export job renders its own camera, so it
-    // leaves the live view's radius where the live frame put it. The rewrite
-    // waits for the next frame's resource pass: one write per level change.
+    // The world-space floor under the threshold rule, taken from the finest
+    // spacing on screen rather than from each node's own: the cut is additive,
+    // so a refined region draws its coarse ancestors too, and a per-node floor
+    // would blow those ancestors up to their own coarse spacing. Taking it from
+    // what is drawn rather than from what the cut asked for is what holds the
+    // surface together while the children stream, and where the point cap left
+    // the cut coarser than the threshold describes. An export job renders its
+    // own camera, so it leaves the live view's floor where the live frame put
+    // it. The rewrite waits for the next frame's resource pass: one write per
+    // level change.
     if (context.liveFrame && finestDrawnLevel != kNoDrawnLevel) {
         const double drawnSpacing = m_source.manifest->spacing(finestDrawnLevel);
-        if (drawnSpacing != m_cutSpacing) {
-            m_cutSpacing = drawnSpacing;
+        if (drawnSpacing != m_drawnSpacing) {
+            m_drawnSpacing = drawnSpacing;
             m_liveAppearanceStale = true;
         }
     }
@@ -1300,9 +1333,10 @@ std::optional<QBox3D> cwRHIPointCloud::worldBounds() const
     }
 
     // A point draws as a sprite of worldRadius meters, or of spacingCoverage of
-    // the drawn cut's spacing where that is larger (effectiveWorldRadius folds
-    // the two). The root is the coarsest cut there is, so padding by its spacing
-    // covers every cut the cloud can draw.
+    // the spacing the cut refines to at its own depth where that is larger
+    // (PointCloud.vert takes the larger of the two). A cloud framed in the view
+    // is drawn no coarser than its root, so padding by the root's spacing
+    // covers every sprite a view that can see the cloud draws.
     const cwRenderPointCloud::RenderState& state = m_renderState.value();
     const QBox3D root = m_source.manifest->nodeBounds(kRootIndex);
     const float rootSpacing = float(m_source.manifest->spacing(kRootLevel));

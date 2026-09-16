@@ -835,31 +835,42 @@ namespace {
         return radius * kTargetDimension / double(orthoHeight);
     }
 
-    //! The largest a sprite of world radius @a radius may measure on screen.
-    double spriteSideUpperBoundPx(double radius, float orthoHeight)
+    //! The side, in target pixels, PointCloud.vert sizes a sprite to: the
+    //! larger of the tuned radius projected (@a radiusPx) and the coverage's
+    //! share of the spacing the cut refines to. That spacing projects to
+    //! @a thresholdPx pixels wherever the cut keeps up, so the second term is
+    //! already in pixels and needs no camera.
+    double spriteSidePx(double radiusPx, double spacingCoverage, double thresholdPx)
     {
-        return expectedSpriteSidePx(radius, orthoHeight) * kSpriteRasterFactor
-               + kSpriteTolerancePx;
+        return std::max(radiusPx, spacingCoverage * thresholdPx);
     }
 
-    //! The topmost lit row of @a lit, or -1 for a frame that lit nothing.
-    int topmostLitRow(const QVector<QPoint>& lit)
+    //! The largest a sprite of side @a sidePx may measure once rasterized.
+    double spriteSideUpperBoundPx(double sidePx)
     {
-        int topmost = -1;
-        for (const QPoint& pixel : lit) {
-            topmost = topmost < 0 ? pixel.y() : std::min(topmost, pixel.y());
-        }
-        return topmost;
+        return sidePx * kSpriteRasterFactor + kSpriteTolerancePx;
     }
 
-    //! The deepest level @a manifest holds a node at.
-    int deepestLevel(const cwPointOctreeManifest& manifest)
+    //! The largest the sprite spriteSidePx() describes may measure once
+    //! rasterized.
+    double spriteSideUpperBoundPx(double radiusPx, double spacingCoverage,
+                                  double thresholdPx)
     {
-        int deepest = kRootLevel;
-        for (const cwPointOctreeNode& node : manifest.nodes) {
-            deepest = std::max(deepest, node.level);
-        }
-        return deepest;
+        return spriteSideUpperBoundPx(spriteSidePx(radiusPx, spacingCoverage, thresholdPx));
+    }
+
+    //! The projected spacing the cloud's cut is refining to, as the CPU hands
+    //! it to the shader.
+    double refineThresholdPx(const PointCloudFixture& fixture)
+    {
+        return Access::liveAppearanceUniform(fixture.backend()).sseThresholdPx;
+    }
+
+    //! The world spacing the cloud's sprites floor against, as the CPU hands it
+    //! to the shader.
+    double drawnSpacing(const PointCloudFixture& fixture)
+    {
+        return Access::liveAppearanceUniform(fixture.backend()).drawnSpacing;
     }
 
     //! The deepest level the cloud's last cut asked for.
@@ -881,6 +892,16 @@ namespace {
             finest = std::max(finest, level);
         }
         return finest;
+    }
+
+    //! The topmost lit row of @a lit, or -1 for a frame that lit nothing.
+    int topmostLitRow(const QVector<QPoint>& lit)
+    {
+        int topmost = -1;
+        for (const QPoint& pixel : lit) {
+            topmost = topmost < 0 ? pixel.y() : std::min(topmost, pixel.y());
+        }
+        return topmost;
     }
 
     //! How many levels of the tree the cloud's last cut draws at once. The cut
@@ -2097,7 +2118,7 @@ TEST_CASE("The drawn points land inside the cloud the manifest describes",
     CHECK(drawn.y() <= bounds.y() + margin);
 }
 
-TEST_CASE("Sprites grow to the cut's spacing so a coarse cut reads as a surface",
+TEST_CASE("Sprites grow to the spacing the cut refines to so it reads as a surface",
           "[PointCloudStreaming]")
 {
     const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
@@ -2110,7 +2131,8 @@ TEST_CASE("Sprites grow to the cut's spacing so a coarse cut reads as a surface"
     // sample spacing to be several pixels wide — the shape the governor's
     // screen-space-error inflation puts on screen, and where a sprite that
     // knows only a fixed world radius leaves the surface full of holes. The
-    // root is the whole cut here, so its spacing is the cut's spacing.
+    // root is the whole cut here, and its spacing is what the raised threshold
+    // lets it stop at.
     cwRenderBudgets budgets = fixture.budgets();
     budgets.screenSpaceErrorPx = cw::budgets::kMaxScreenSpaceErrorPx;
     fixture.setBudgets(budgets);
@@ -2143,9 +2165,9 @@ TEST_CASE("Sprites grow to the cut's spacing so a coarse cut reads as a surface"
 
     // The camera looks at the cloud's center, so the center row of the target
     // crosses the passage. gl_PointSize is a side length, so a sprite spans
-    // kDefaultSpacingCoverage of the cut's spacing and the remaining quarter of
-    // each spacing stays unlit — narrowed from the whole spacing, which is what
-    // kMaxUnlitRunPx bounds.
+    // kDefaultSpacingCoverage of the spacing the cut refines to and the
+    // remaining quarter of each spacing stays unlit — narrowed from the whole
+    // spacing, which is what kMaxUnlitRunPx bounds.
     const int centerRow = fixture.colorSize().height() / 2;
     const int run = longestUnlitRun(covered, centerRow);
     INFO("longest unlit run on the center row: " << run);
@@ -2169,20 +2191,22 @@ TEST_CASE("The tuned world radius wins wherever it is the larger of the two",
     const qsizetype bare = fixture.litPixels().size();
     REQUIRE(bare > 0);
 
-    // Every level in this refined cut has a spacing well under the default
-    // world radius, so turning the coverage on changes nothing that is drawn.
+    // The spacing this cut refines to projects to a pixel and a half, well
+    // under the default world radius, so turning the coverage on changes
+    // nothing that is drawn.
     fixture.render().setSpacingCoverage(cw::pointcloud::kDefaultSpacingCoverage);
     fixture.synchronize();
     fixture.renderFrame();
 
     CHECK(fixture.litPixels().size() == bare);
 
-    // The coarsest cut there is — the root alone — has the largest spacing
-    // floor the cloud can ask for, and the default radius is above even that,
-    // so the fold still hands the shader the tuned radius.
-    REQUIRE(fixture.render().worldRadius()
+    // The widest the spacing rule can ask for is the coverage's share of the
+    // largest refine threshold there is, and at this camera the tuned radius
+    // projects wider than that, so the shader sizes off the radius even with
+    // the cut held as coarse as it goes.
+    REQUIRE(expectedSpriteSidePx(fixture.render().worldRadius(), kCoarseOrthoHeight)
             > cw::pointcloud::kDefaultSpacingCoverage
-                  * float(fixture.manifest().spacing(kRootLevel)));
+                  * cw::budgets::kMaxScreenSpaceErrorPx);
 
     cwRenderBudgets budgets = fixture.budgets();
     budgets.screenSpaceErrorPx = cw::budgets::kMaxScreenSpaceErrorPx;
@@ -2219,11 +2243,11 @@ TEST_CASE("The wheel radius changes every sprite", "[PointCloudStreaming]")
     // could not move.
     REQUIRE(selectedLevelCount(fixture) > 1);
 
-    // Both radii have to clear the cut's floor, or the floor — not the wheel —
-    // is what the sprites measure and the growth below says nothing.
-    REQUIRE(double(kWheelRadius)
-            > cw::pointcloud::kDefaultSpacingCoverage
-                  * fixture.manifest().spacing(finestDrawnLevel(fixture)));
+    // Both radii have to clear the spacing rule's floor, or that floor — not
+    // the wheel — is what the sprites measure and the growth below says
+    // nothing.
+    REQUIRE(expectedSpriteSidePx(kWheelRadius, kCloseOrthoHeight)
+            > cw::pointcloud::kDefaultSpacingCoverage * refineThresholdPx(fixture));
 
     const float radius = kWheelRadius;
     const float doubled = 2.0f * radius;
@@ -2247,7 +2271,8 @@ TEST_CASE("The wheel radius changes every sprite", "[PointCloudStreaming]")
     const double side = drawnSpriteSidePx(fixture, doubled,
                                           cw::pointcloud::kDefaultSpacingCoverage);
     INFO("sprite side at twice the tuned radius: " << side);
-    CHECK(side <= spriteSideUpperBoundPx(doubled, kCloseOrthoHeight));
+    CHECK(side <= spriteSideUpperBoundPx(
+              expectedSpriteSidePx(doubled, kCloseOrthoHeight)));
 }
 
 TEST_CASE("Every level on screen shares one sprite size", "[PointCloudStreaming]")
@@ -2260,47 +2285,45 @@ TEST_CASE("Every level on screen shares one sprite size", "[PointCloudStreaming]
     fixture.synchronize();
     fixture.renderUntilQuiet();
 
-    const int deepest = deepestLevel(fixture.manifest());
-    REQUIRE(deepest > kRootLevel);
-
-    // Under the floor of the finest level there is, so the coverage decides
-    // every sprite's size and the tuned radius decides none of it.
-    REQUIRE(double(kTinyWorldRadius)
-            < cw::pointcloud::kDefaultSpacingCoverage * fixture.manifest().spacing(deepest));
-
     // Several levels at once is the whole premise: the cut is additive, so the
-    // refined region carries its coarse ancestors onto the screen with it.
+    // refined region carries its coarse ancestors onto the screen with it. An
+    // orthographic camera puts every one of them at w = 1, so the spacing rule
+    // hands them all the same size and the ancestors cannot blob.
     REQUIRE(selectedLevelCount(fixture) > 1);
 
-    const double refinedSpacing = Access::cutSpacing(fixture.backend());
-    REQUIRE(refinedSpacing == fixture.manifest().spacing(finestSelectedLevel(fixture)));
+    const double refinedThreshold = refineThresholdPx(fixture);
+    const double tinyRadiusPx = expectedSpriteSidePx(kTinyWorldRadius, kCloseOrthoHeight);
+
+    // Under the spacing rule's floor, so the coverage decides every sprite's
+    // size and the tuned radius decides none of it.
+    REQUIRE(tinyRadiusPx < cw::pointcloud::kDefaultSpacingCoverage * refinedThreshold);
 
     const double refined = drawnSpriteSidePx(fixture, kTinyWorldRadius,
                                              cw::pointcloud::kDefaultSpacingCoverage);
     INFO("sprite side on the refined cut: " << refined);
     CHECK(refined <= spriteSideUpperBoundPx(
-              cw::pointcloud::kDefaultSpacingCoverage * refinedSpacing, kCloseOrthoHeight));
+              tinyRadiusPx, cw::pointcloud::kDefaultSpacingCoverage, refinedThreshold));
 
     // The same camera with the cut held coarse. Every level the cut holds is
     // still drawn, and the one bound that describes them all moves only because
-    // the cut's finest spacing moved.
+    // the spacing the cut refines to moved.
     cwRenderBudgets budgets = fixture.budgets();
     budgets.screenSpaceErrorPx = cw::budgets::kMaxScreenSpaceErrorPx;
     fixture.setBudgets(budgets);
     fixture.renderUntilQuiet();
 
-    const double coarseSpacing = Access::cutSpacing(fixture.backend());
-    REQUIRE(coarseSpacing > refinedSpacing);
-    REQUIRE(coarseSpacing == fixture.manifest().spacing(finestSelectedLevel(fixture)));
+    const double coarseThreshold = refineThresholdPx(fixture);
+    REQUIRE(coarseThreshold > refinedThreshold);
 
     const double coarse = drawnSpriteSidePx(fixture, kTinyWorldRadius,
                                             cw::pointcloud::kDefaultSpacingCoverage);
     INFO("sprite side on the coarse cut: " << coarse);
     CHECK(coarse <= spriteSideUpperBoundPx(
-              cw::pointcloud::kDefaultSpacingCoverage * coarseSpacing, kCloseOrthoHeight));
+              tinyRadiusPx, cw::pointcloud::kDefaultSpacingCoverage, coarseThreshold));
 }
 
-TEST_CASE("The floor rises only while the cut is coarse", "[PointCloudStreaming]")
+TEST_CASE("The spacing floor rises with the threshold the cut refines to",
+          "[PointCloudStreaming]")
 {
     const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
 
@@ -2314,32 +2337,37 @@ TEST_CASE("The floor rises only while the cut is coarse", "[PointCloudStreaming]
     fixture.synchronize();
     fixture.renderUntilQuiet();
 
-    const double coarseSpacing = Access::cutSpacing(fixture.backend());
-    const double coarseFloor = cw::pointcloud::kDefaultSpacingCoverage * coarseSpacing;
+    const double tinyRadiusPx = expectedSpriteSidePx(kTinyWorldRadius, kCloseOrthoHeight);
+    const double coarseThreshold = refineThresholdPx(fixture);
+    const double coarseFloor = spriteSidePx(tinyRadiusPx,
+                                            cw::pointcloud::kDefaultSpacingCoverage,
+                                            coarseThreshold);
     const double coarse = drawnSpriteSidePx(fixture, kTinyWorldRadius,
                                             cw::pointcloud::kDefaultSpacingCoverage);
-    INFO("sprite side while the cut is pinned coarse: " << coarse);
-    CHECK(coarse >= expectedSpriteSidePx(coarseFloor, kCloseOrthoHeight) - kSpriteTolerancePx);
-    CHECK(coarse <= spriteSideUpperBoundPx(coarseFloor, kCloseOrthoHeight));
+    INFO("sprite side while the cut is held coarse: " << coarse);
+    CHECK(coarse >= coarseFloor - kSpriteTolerancePx);
+    CHECK(coarse <= spriteSideUpperBoundPx(coarseFloor));
 
-    // Let the cut refine. The finest spacing on screen collapses and the floor
-    // goes with it, which is the whole point of taking it from the cut.
+    // Let the threshold fall back to its default. The cut refines, the spacing
+    // it aims for collapses, and every sprite goes with it — which is the whole
+    // point of sizing off the rule the cut is following.
     budgets.screenSpaceErrorPx = cw::budgets::kDefaultScreenSpaceErrorPx;
     fixture.setBudgets(budgets);
     fixture.renderUntilQuiet();
 
-    const double refinedSpacing = Access::cutSpacing(fixture.backend());
-    REQUIRE(refinedSpacing < coarseSpacing);
+    const double refinedThreshold = refineThresholdPx(fixture);
+    REQUIRE(refinedThreshold < coarseThreshold);
 
     const double refined = drawnSpriteSidePx(fixture, kTinyWorldRadius,
                                              cw::pointcloud::kDefaultSpacingCoverage);
-    INFO("sprite side once the cut refined: " << refined);
+    INFO("sprite side once the threshold fell back: " << refined);
     CHECK(refined < coarse);
     CHECK(refined <= spriteSideUpperBoundPx(
-              cw::pointcloud::kDefaultSpacingCoverage * refinedSpacing, kCloseOrthoHeight));
+              tinyRadiusPx, cw::pointcloud::kDefaultSpacingCoverage, refinedThreshold));
 }
 
-TEST_CASE("A cut that refines on its own reaches the shader", "[PointCloudStreaming]")
+TEST_CASE("A refine threshold the view moves reaches the shader",
+          "[PointCloudStreaming]")
 {
     const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
 
@@ -2347,8 +2375,8 @@ TEST_CASE("A cut that refines on its own reaches the shader", "[PointCloudStream
     fixture.setReadbackEnabled(true);
     fixture.setOrthoHeight(kCloseOrthoHeight);
 
-    // Under the coarse cut's floor, so the cut's spacing is what sizes every
-    // sprite and the tuned radius sizes none of it.
+    // Under the coarse threshold's floor, so the spacing rule is what sizes
+    // every sprite and the tuned radius sizes none of it.
     fixture.render().setWorldRadius(kTinyWorldRadius);
     fixture.render().setSpacingCoverage(cw::pointcloud::kDefaultSpacingCoverage);
 
@@ -2362,8 +2390,8 @@ TEST_CASE("A cut that refines on its own reaches the shader", "[PointCloudStream
     REQUIRE(!coarse.isEmpty());
 
     // Nothing about the render object changes from here, so production would
-    // run updateResources() on none of these frames: the cut refining is the
-    // only thing that can resize the sprites.
+    // run updateResources() on none of these frames: the threshold moving is
+    // the only thing that can resize the sprites.
     fixture.setResourceUpdateAfterSyncOnly(true);
     budgets.screenSpaceErrorPx = cw::budgets::kDefaultScreenSpaceErrorPx;
     fixture.setBudgets(budgets);
@@ -2372,9 +2400,9 @@ TEST_CASE("A cut that refines on its own reaches the shader", "[PointCloudStream
     const QVector<QPoint> refined = fixture.litPixels();
     CHECK(refined.size() != coarse.size());
 
-    // The same camera and the same cut, drawn once a change to the tuned radius
-    // and back has forced the slot to be rewritten. The sprites were already
-    // this size without it.
+    // The same camera and the same threshold, drawn once a change to the tuned
+    // radius and back has forced the slot to be rewritten. The sprites were
+    // already this size without it.
     fixture.render().setWorldRadius(kWheelRadius);
     fixture.synchronize();
     fixture.renderFrame();
@@ -2396,9 +2424,10 @@ TEST_CASE("The floor holds to what is drawn while the children stream",
     PointCloudFixture fixture(rhi.get(), QStringLiteral("streaming-floor"));
 
     // One node a frame, so the camera asks for the fine levels long before any
-    // of them is on screen. That window is what the floor exists for: the
-    // coarse ancestors are all there is to draw, and a floor taken from the cut
-    // the camera asked for would shrink out from under them and show holes.
+    // of them is on screen. That window is what the drawn floor exists for: the
+    // coarse ancestors are all there is to draw, and a floor taken only from
+    // the threshold the cut asked for would shrink out from under them and show
+    // holes.
     cwRenderBudgets budgets = fixture.budgets();
     budgets.uploadBudgetBytesPerFrame = kOneNodePerFrameUploadBytes;
     fixture.setBudgets(budgets);
@@ -2409,7 +2438,7 @@ TEST_CASE("The floor holds to what is drawn while the children stream",
 
     const int drawn = finestDrawnLevel(fixture);
     REQUIRE(drawn < finestSelectedLevel(fixture));
-    CHECK(Access::cutSpacing(fixture.backend()) == fixture.manifest().spacing(drawn));
+    CHECK(drawnSpacing(fixture) == float(fixture.manifest().spacing(drawn)));
 }
 
 TEST_CASE("A frame that draws nothing keeps the sprite size it had",
@@ -2422,16 +2451,16 @@ TEST_CASE("A frame that draws nothing keeps the sprite size it had",
     fixture.synchronize();
     fixture.renderUntilQuiet();
 
-    const double refined = Access::cutSpacing(fixture.backend());
+    const double refined = drawnSpacing(fixture);
     REQUIRE(refined < fixture.manifest().spacing(kRootLevel));
 
-    // Panned off screen the cloud selects nothing, which says nothing about how
+    // Panned off screen the cloud draws nothing, which says nothing about how
     // large its sprites should be — so the last thing it drew stands.
     fixture.lookAway();
     fixture.renderFrame();
 
     REQUIRE(Access::selectedLevels(fixture.backend()).isEmpty());
-    CHECK(Access::cutSpacing(fixture.backend()) == refined);
+    CHECK(drawnSpacing(fixture) == refined);
 }
 
 TEST_CASE("A cloud starts out at its root's spacing", "[PointCloudStreaming]")
@@ -2442,12 +2471,55 @@ TEST_CASE("A cloud starts out at its root's spacing", "[PointCloudStreaming]")
 
     // Nothing has been drawn yet, so the very first frame draws the root at the
     // root's own floor rather than at a floor of nothing.
-    CHECK(Access::cutSpacing(fixture.backend()) == fixture.manifest().spacing(kRootLevel));
+    CHECK(drawnSpacing(fixture) == float(fixture.manifest().spacing(kRootLevel)));
 
     fixture.render().setOctree(cwPointOctreeSource());
     fixture.synchronize();
 
-    CHECK(Access::cutSpacing(fixture.backend()) == 0.0);
+    CHECK(drawnSpacing(fixture) == 0.0);
+}
+
+TEST_CASE("The per-cloud uniform carries the view's refine threshold",
+          "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    PointCloudFixture fixture(rhi.get(), QStringLiteral("per-cloud-uniform"));
+    fixture.setOrthoHeight(kCloseOrthoHeight);
+    fixture.render().setWorldRadius(kWheelRadius);
+    fixture.render().setSpacingCoverage(cw::pointcloud::kDefaultSpacingCoverage);
+    fixture.synchronize();
+    fixture.renderUntilQuiet();
+
+    const Access::PerCloudUniform live =
+        Access::liveAppearanceUniform(fixture.backend());
+
+    // The radius and the coverage reach the shader as the render object holds
+    // them. Which of the two sizes a sprite is the shader's to decide, one
+    // vertex at a time, so the CPU folds nothing here.
+    CHECK(live.worldRadius == kWheelRadius);
+    CHECK(live.spacingCoverage == cw::pointcloud::kDefaultSpacingCoverage);
+
+    // The third value is what the shader turns back into a world spacing at
+    // each vertex's depth: the view's screen-space error times this cloud's
+    // inflation, which is the projected spacing the cut is refining to.
+    CHECK(live.sseThresholdPx
+          == float(fixture.budgets().screenSpaceErrorPx
+                   * Access::sseInflation(fixture.backend())));
+
+    // The view moving its screen-space error moves the cut and the sprites
+    // together, without the render object changing at all.
+    cwRenderBudgets budgets = fixture.budgets();
+    budgets.screenSpaceErrorPx = cw::budgets::kMaxScreenSpaceErrorPx;
+    fixture.setBudgets(budgets);
+    fixture.renderUntilQuiet();
+
+    const Access::PerCloudUniform coarse =
+        Access::liveAppearanceUniform(fixture.backend());
+    CHECK(coarse.sseThresholdPx > live.sseThresholdPx);
+    CHECK(coarse.sseThresholdPx
+          == float(cw::budgets::kMaxScreenSpaceErrorPx
+                   * Access::sseInflation(fixture.backend())));
 }
 
 TEST_CASE("An export job leaves the live sprite size alone", "[PointCloudStreaming]")
@@ -2465,7 +2537,8 @@ TEST_CASE("An export job leaves the live sprite size alone", "[PointCloudStreami
     fixture.synchronize();
     fixture.renderFrame();
 
-    const double live = Access::cutSpacing(fixture.backend());
+    const Access::PerCloudUniform live =
+        Access::liveAppearanceUniform(fixture.backend());
     const QVector<QPoint> before = fixture.litPixels();
     REQUIRE(!before.isEmpty());
 
@@ -2478,7 +2551,12 @@ TEST_CASE("An export job leaves the live sprite size alone", "[PointCloudStreami
     fixture.setOrthoHeight(kFarOrthoHeight);
     fixture.renderFrame(exportJob);
 
-    CHECK(Access::cutSpacing(fixture.backend()) == live);
+    const Access::PerCloudUniform after =
+        Access::liveAppearanceUniform(fixture.backend());
+    CHECK(after.worldRadius == live.worldRadius);
+    CHECK(after.spacingCoverage == live.spacingCoverage);
+    CHECK(after.sseThresholdPx == live.sseThresholdPx);
+    CHECK(after.drawnSpacing == live.drawnSpacing);
 
     fixture.setOrthoHeight(kCloseOrthoHeight);
     fixture.renderFrame();
@@ -2487,7 +2565,7 @@ TEST_CASE("An export job leaves the live sprite size alone", "[PointCloudStreami
     CHECK(topmostLitRow(fixture.litPixels()) == topmostLitRow(before));
 }
 
-TEST_CASE("An export job's requested coverage folds against the drawn cut",
+TEST_CASE("An export job's requested coverage reaches the shader",
           "[PointCloudStreaming]")
 {
     const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
@@ -2512,9 +2590,10 @@ TEST_CASE("An export job's requested coverage folds against the drawn cut",
     const qsizetype bare = fixture.litPixels().size();
     REQUIRE(bare > 0);
 
-    // The job asks for the same tiny radius with the coverage on. The fold is
-    // the cloud's, not the job's, so the job's radius comes out of the same
-    // expression the live one does.
+    // The job asks for the same tiny radius with the coverage on. The refine
+    // threshold the coverage is measured against is the cloud's, not the
+    // job's, so the job's sprites come out of the same expression the live
+    // ones do.
     cwPointCloudAppearance appearance;
     appearance.spacingCoverage = cw::pointcloud::kDefaultSpacingCoverage;
     fixture.setAppearanceOverride(appearance);
@@ -2545,17 +2624,18 @@ TEST_CASE("Perspective sprites share one size across levels too",
 
     REQUIRE(selectedLevelCount(fixture) > 1);
 
-    const double spacing = Access::cutSpacing(fixture.backend());
-    REQUIRE(double(kTinyWorldRadius) < cw::pointcloud::kDefaultSpacingCoverage * spacing);
+    const double threshold = refineThresholdPx(fixture);
+    const double floorPx = cw::pointcloud::kDefaultSpacingCoverage * threshold;
 
-    // The divide by w carries the same ratio a per-node floor would have shown
-    // here as it does in ortho, so the bound is the ortho one: the camera puts
-    // the same world height on screen at the cloud's distance.
+    // The rule's world spacing and the sprite it sizes both carry the same 1/w,
+    // so the two cancel: a sprite the spacing rule sizes measures the same
+    // number of pixels at every depth on screen, which is what makes a far tile
+    // cover its own coarser cell. The tuned radius is far under that floor
+    // here, so this is the only thing sizing anything.
     const double side = drawnSpriteSidePx(fixture, kTinyWorldRadius,
                                           cw::pointcloud::kDefaultSpacingCoverage);
     INFO("perspective sprite side: " << side);
-    CHECK(side <= spriteSideUpperBoundPx(
-              cw::pointcloud::kDefaultSpacingCoverage * spacing, kCloseOrthoHeight));
+    CHECK(side <= spriteSideUpperBoundPx(floorPx));
 }
 
 TEST_CASE("The cloud's world bounds are the root cube padded by the sprite radius",
@@ -2569,9 +2649,9 @@ TEST_CASE("The cloud's world bounds are the root cube padded by the sprite radiu
     REQUIRE(bounds.has_value());
 
     const QBox3D root = fixture.manifest().nodeBounds(kRootIndex);
-    // The root's sprites are the widest the cloud draws: cwRHIPointCloud folds
-    // the tuned world radius against the drawn cut's spacing floor, and the
-    // root alone is the coarsest cut there is.
+    // The root's sprites are the widest the cloud draws: a cloud framed in the
+    // view is drawn no coarser than its root, so the root's own spacing bounds
+    // every sprite the spacing rule can ask for.
     const float radius =
         std::max(fixture.render().worldRadius(),
                  fixture.render().spacingCoverage()
@@ -2582,7 +2662,7 @@ TEST_CASE("The cloud's world bounds are the root cube padded by the sprite radiu
     CHECK(bounds->maximum() == root.maximum() + padding);
 
     // With the tuned radius below the root's spacing floor the other half of
-    // the fold is what pads the box.
+    // the spacing is what pads the box.
     fixture.render().setWorldRadius(kTinyWorldRadius);
     fixture.synchronize();
 

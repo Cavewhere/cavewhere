@@ -23,7 +23,7 @@ struct cwPointCloudAppearance {
     std::optional<float> worldRadius;
 
     // Absent = render at the cloud's live spacing coverage (slot 0). Present =
-    // override the cut's spacing floor for this job only.
+    // override the spacing rule's share of a sprite for this job only.
     std::optional<float> spacingCoverage;
 };
 

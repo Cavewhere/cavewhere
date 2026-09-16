@@ -64,7 +64,8 @@ Selection selectCut(const SelectionInput& input)
                                         input.viewportHeightPx);
     };
 
-    const double refineThreshold = input.screenSpaceErrorPx * input.sseInflation;
+    const double refineThreshold = refineThresholdPx(input.screenSpaceErrorPx,
+                                                     input.sseInflation);
 
     std::priority_queue<SelectedNode, std::vector<SelectedNode>, CoarsestFirst> heap;
     heap.push({kRootIndex, projectedSpacing(kRootIndex)});

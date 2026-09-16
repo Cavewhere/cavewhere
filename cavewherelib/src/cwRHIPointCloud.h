@@ -307,31 +307,37 @@ private:
     void resizeAppearanceSlots(QRhi* rhi, QRhiResourceUpdateBatch* batch,
                                int slotCount) override;
 
-    // Write one PerCloudUniform into @a slot, folding @a worldRadius and
-    // @a spacingCoverage against the current cut's spacing.
+    // Write one PerCloudUniform into @a slot.
     void writeAppearanceSlot(QRhiResourceUpdateBatch* batch, int slot, float worldRadius,
                              float spacingCoverage);
 
     // Write the live render state into slot 0 and mark it current.
     void writeLiveAppearanceSlot(QRhiResourceUpdateBatch* batch);
 
-    // The radius every sprite of this cloud draws at: the tuned radius, or
-    // @a spacingCoverage of the finest spacing on screen where that is larger.
-    // One radius for the whole cloud, because the cut is additive — a refined
-    // region draws its ancestors too, and a per-node floor would size those
-    // ancestors off their own coarse spacing.
-    float effectiveWorldRadius(float worldRadius, float spacingCoverage) const;
+    // Take the refine threshold the shader sizes against from @a budgets and
+    // this cloud's inflation, marking the live slot behind when it moved.
+    void refreshSseThreshold(const cwRenderBudgets& budgets);
 
-    // std140 rounds a uniform block to a multiple of 16 bytes; pad three floats
-    // so the C++ struct matches the shader-side block size. Mirrors the
-    // PerCloudBlock declaration in PointCloud.vert.
+    // Mirrors the PerCloudBlock declaration in PointCloud.vert, which sizes
+    // every sprite as
+    // max(max(worldRadius, spacingCoverage * drawnSpacing) * pixelsPerMeter(w),
+    //     spacingCoverage * sseThresholdPx)
+    // pixels. Four floats is exactly std140's 16-byte rounding, so the block
+    // needs no padding.
     struct PerCloudUniform {
         float worldRadius = 0.0f;
-        float pad[3] = {0.0f, 0.0f, 0.0f};
+        float spacingCoverage = 0.0f;
+        float sseThresholdPx = 0.0f;
+        float drawnSpacing = 0.0f;
     };
     static_assert(sizeof(PerCloudUniform) == 4 * sizeof(float),
-                  "PerCloudBlock in PointCloud.vert is one float rounded up to "
+                  "PerCloudBlock in PointCloud.vert is four floats, which is "
                   "std140's 16 bytes; the C++ struct has to match it.");
+
+    // The block the shader reads for @a worldRadius and @a spacingCoverage,
+    // carrying this frame's refine threshold and the last drawn spacing along
+    // with them.
+    PerCloudUniform appearanceUniform(float worldRadius, float spacingCoverage) const;
 
     bool m_resourcesInitialized = false;
 
@@ -339,11 +345,11 @@ private:
     // binding 1 the shared per-instance constants. Built once in initialize().
     QRhiVertexInputLayout m_inputLayout;
 
-    // Per-cloud uniform block (binding 1): the folded world-space sprite radius
-    // in meters, one aligned slot per appearance slot, bound with a dynamic
-    // offset so an offscreen job can render the cloud at an overridden radius
-    // without disturbing the live view (slot 0). Steady state is ONE slot (the
-    // live radius); the pool
+    // Per-cloud uniform block (binding 1): the world-space sprite radius in
+    // meters plus the spacing rule the shader sizes against, one aligned slot
+    // per appearance slot, bound with a dynamic offset so an offscreen job can
+    // render the cloud at an overridden radius without disturbing the live view
+    // (slot 0). Steady state is ONE slot (the live radius); the pool
     // (cwAppearanceSlotted) grows it on demand to the concurrent-override high-water
     // mark, so an interactive session pays one slot per cloud, not kAppearanceSlotCount.
     // m_perCloudStride is the aligned byte size of one slot, also the dynamic-offset
@@ -430,14 +436,22 @@ private:
     // drawing it would cost in points and bytes.
     cw::octree::Selection m_selected;
 
-    // Sample spacing of the finest level the live frame drew, which is the
-    // smallest gap anything on screen has to close. Render-thread only:
-    // gather() takes it from the nodes it just drew and the appearance slots
-    // fold it into their radius. A frame that drew nothing leaves it standing.
-    double m_cutSpacing = 0.0;
+    // The projected spacing the cut refines to — the view's screenSpaceErrorPx
+    // times this cloud's inflation — which is what PointCloud.vert turns back
+    // into a world spacing at each vertex's own depth. Render-thread only.
+    float m_sseThresholdPx = float(cw::budgets::kDefaultScreenSpaceErrorPx);
 
-    // m_cutSpacing moved, so slot 0's folded radius is behind the cut; the next
-    // frame's resource pass rewrites it.
+    // Sample spacing of the finest level the live frame drew. The threshold
+    // above describes the spacing a cut that keeps up has on screen; where the
+    // point cap or a node still streaming leaves the cloud coarser than that,
+    // this is the gap the sprites actually have to close, so it stands as a
+    // world-space floor under the threshold rule. Render-thread only: gather()
+    // takes it from the nodes it just drew. A frame that drew nothing leaves it
+    // standing.
+    double m_drawnSpacing = 0.0;
+
+    // m_sseThresholdPx or m_drawnSpacing moved, so slot 0 is behind the view;
+    // the next resource pass rewrites it.
     bool m_liveAppearanceStale = false;
 
     // cw.profile.render, read once per gather() and once per streamResources()

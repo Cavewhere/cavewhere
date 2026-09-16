@@ -18,6 +18,7 @@
 // CwRhiTexturedItemsTestAccess.
 struct CwRhiPointCloudTestAccess {
     using NodeState = cwRHIPointCloud::NodeState;
+    using PerCloudUniform = cwRHIPointCloud::PerCloudUniform;
 
     static NodeState nodeState(const cwRHIPointCloud& cloud, int index) {
         if (index < 0 || index >= cloud.m_nodes.size()) {
@@ -81,10 +82,14 @@ struct CwRhiPointCloudTestAccess {
         return cloud.m_selected.pointCapped;
     }
 
-    // The sample spacing of the finest level the last live frame drew, which is
-    // the spacing every sprite of the cloud is sized against.
-    static double cutSpacing(const cwRHIPointCloud& cloud) {
-        return cloud.m_cutSpacing;
+    // The block PointCloud.vert reads for the live appearance: the tuned world
+    // radius, the coverage, the projected spacing the cut refines to, and the
+    // finest spacing the last live frame drew. It is
+    // what every sprite of the cloud is sized from, so a test can pin the CPU
+    // side of the sizing rule without a readback.
+    static PerCloudUniform liveAppearanceUniform(const cwRHIPointCloud& cloud) {
+        const auto& live = cloud.m_renderState.value();
+        return cloud.appearanceUniform(live.worldRadius, live.spacingCoverage);
     }
 
     // The levels the last cut asked for, so a test can say what the camera
