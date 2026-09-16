@@ -146,7 +146,6 @@ QtObject {
     readonly property int treeCountColumnWidth: Math.round(55 * fontScale)
     readonly property int treeStatColumnWidth: Math.round(120 * fontScale)
     readonly property int treeDateColumnWidth: Math.round(110 * fontScale)
-    readonly property int treeActionsColumnWidth: Math.round(30 * fontScale)
     readonly property int treeFilterWidth: Math.round(220 * fontScale)
 
     // Chips (the Kind chip on a tree row)

@@ -7,9 +7,7 @@
 
 #include "cwCave.h"
 #include "CaveWhereLibExport.h"
-class cwTrip;
-class cwTripLengthTask;
-class cwUsedStationTaskManager;
+class cwTripStatsWatcher;
 
 class CAVEWHERE_LIB_EXPORT cwCavePageModel : public QAbstractItemModel
 {
@@ -56,16 +54,10 @@ signals:
 private:
     QPointer<cwCave> m_cave;
 
-    struct TripData {
-        QPointer<cwTrip> trip;
-        cwTripLengthTask* lengthTask;
-        cwUsedStationTaskManager* usedStationsManager;
-
-        qreal length = 0.0;
-        QStringList usedStations;
-    };
-
-    QVector<TripData> m_tripDataList;
+    //! The length and used stations of each of the cave's trips, in row order.
+    //! Each watcher names the trip it belongs to, so the rows need no second
+    //! list of trips beside it.
+    QVector<cwTripStatsWatcher*> m_tripStats;
 };
 
 #endif // CWCAVEPAGEMODEL_H

@@ -136,7 +136,7 @@ MainWindowTest {
             const tree = surveyTree(page)
             tryCompare(tree, "rows", 1, 5000)
 
-            const titles = ["Name", "Kind", "Trips", "Length", "Depth", "Last survey", ""]
+            const titles = ["Name", "Kind", "Trips", "Stations", "Length", "Depth", "Date", "Decl"]
             for(let column = 0; column < titles.length; column++) {
                 let cell = null
                 tryVerify(() => {
@@ -501,46 +501,6 @@ MainWindowTest {
                           caveRow = findChild(page, "caveDelegate0")
                           return caveRow !== null && caveRow.name === "Renamed Cave"
                       }, 5000, "the row must show the new name")
-        }
-
-        // The row's ⋯ menu adds a trip to that row's node and opens it, the way
-        // the cave page's Add Trip does.
-        function test_rowMenuAddsATrip() {
-            const cave = addCave("Alpha Cave", 0)
-
-            const page = gotoDataMainPage()
-            const tree = surveyTree(page)
-            tryCompare(tree, "rows", 1, 5000)
-
-            let actionsButton = null
-            tryVerify(() => {
-                          actionsButton = findChild(page, "rowActionsButton")
-                          return actionsButton !== null
-                      }, 5000, "the row must show its ⋯ button")
-            mouseClick(actionsButton)
-
-            let menu = null
-            tryVerify(() => {
-                          menu = findChild(actionsButton, "rowActionsMenu")
-                          return menu !== null && menu.visible
-                      }, 5000, "the ⋯ button must open the row menu")
-
-            const addTripItem = findChild(menu, "rowAddTripMenuItem")
-            verify(addTripItem !== null && addTripItem.visible, "Add Trip must be offered")
-            mouseClick(addTripItem)
-
-            tryCompare(cave, "tripCount", 1, 5000)
-            tryVerify(() => RootData.pageView.currentPageItem !== null
-                            && RootData.pageView.currentPageItem.objectName === "tripPage",
-                      5000, "Add Trip must open the new trip")
-
-            RootData.pageSelectionModel.back()
-            tryVerify(() => RootData.pageView.currentPageItem !== null
-                            && RootData.pageView.currentPageItem.objectName === "dataMainPage",
-                      5000, "back must land on the Data page again")
-
-            const treeAgain = surveyTree(RootData.pageView.currentPageItem)
-            tryCompare(treeAgain, "rows", 2, 5000)
         }
 
         // The Add ▾ caret holds the cave-level attach, under its settled name.

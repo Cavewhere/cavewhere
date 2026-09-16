@@ -12,7 +12,7 @@ import QtQml.Models
 import cavewherelib
 
 // The survey tree on the Data page: every cave, the nodes under it, and each
-// node's trips as leaves, in one table of seven columns.
+// node's trips as leaves, in one table of eight columns.
 //
 // The rows come from cwSurveyTreeModel through cwSurveyTreeFilterModel, and
 // TreeView flattens the tree into view rows itself. Expansion is view state
@@ -398,10 +398,9 @@ ColumnLayout {
 
         //What the Name column gives up to the fixed columns beside it.
         readonly property int fixedColumnsWidth: Theme.treeKindColumnWidth
-                                                 + Theme.treeCountColumnWidth
+                                                 + 3 * Theme.treeCountColumnWidth
                                                  + 2 * Theme.treeStatColumnWidth
                                                  + Theme.treeDateColumnWidth
-                                                 + Theme.treeActionsColumnWidth
 
         clip: true
         keyNavigationEnabled: true
@@ -437,14 +436,14 @@ ColumnLayout {
             case SurveyTreeModel.Kind:
                 return Theme.treeKindColumnWidth;
             case SurveyTreeModel.Trips:
+            case SurveyTreeModel.Stations:
+            case SurveyTreeModel.Decl:
                 return Theme.treeCountColumnWidth;
             case SurveyTreeModel.Length:
             case SurveyTreeModel.Depth:
                 return Theme.treeStatColumnWidth;
-            case SurveyTreeModel.LastSurvey:
+            case SurveyTreeModel.Date:
                 return Theme.treeDateColumnWidth;
-            case SurveyTreeModel.Actions:
-                return Theme.treeActionsColumnWidth;
             default:
                 return Math.max(Theme.treeNameColumnMinimumWidth,
                                 treeViewId.width - treeViewId.fixedColumnsWidth);

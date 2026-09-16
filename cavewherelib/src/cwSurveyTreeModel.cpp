@@ -11,23 +11,24 @@
 #include "cwLength.h"
 #include "cwSurveyNode.h"
 #include "cwTrip.h"
+#include "cwTripCalibration.h"
+#include "cwTripStatsWatcher.h"
 #include "cwUnitValue.h"
 
 //Qt includes
 #include <QList>
 
 namespace {
-    constexpr int kColumnCount = cwSurveyTreeModel::Actions + 1;
+    constexpr int kColumnCount = cwSurveyTreeModel::Decl + 1;
 
     const QList<int> kNameRoles = {cwSurveyTreeModel::NameRole, Qt::DisplayRole};
     const QList<int> kKindRoles = {cwSurveyTreeModel::KindRole,
                                    cwSurveyTreeModel::KindLabelRole,
                                    cwSurveyTreeModel::MutedRole};
     const QList<int> kSourceRoles = {cwSurveyTreeModel::IsSourcedRole,
-                                     cwSurveyTreeModel::IsReadOnlyRole,
                                      cwSurveyTreeModel::IsSourceRootRole};
     const QList<int> kAggregateRoles = {cwSurveyTreeModel::TripCountRole,
-                                        cwSurveyTreeModel::LastSurveyRole};
+                                        cwSurveyTreeModel::StationCountRole};
 }
 
 cwSurveyTreeModel::cwSurveyTreeModel(QObject* parent) :
@@ -63,12 +64,16 @@ void cwSurveyTreeModel::setRegion(cwCavingRegion* region)
     beginResetModel();
     m_region = region;
     m_connected.clear();
+    qDeleteAll(m_tripStats);
+    m_tripStats.clear();
     endResetModel();
 
     if(m_region) {
         connect(m_region, &QObject::destroyed, this, [this]() {
             beginResetModel();
             m_connected.clear();
+            qDeleteAll(m_tripStats);
+            m_tripStats.clear();
             endResetModel();
         });
 
@@ -180,18 +185,34 @@ QVariant cwSurveyTreeModel::data(const QModelIndex& index, int role) const
         return node != nullptr ? kindLabel(node->kind()) : QString();
     case IsSourcedRole:
         return node != nullptr ? node->isSourced() : false;
-    case IsReadOnlyRole:
-        return node != nullptr ? node->isReadOnly() : false;
     case IsSourceRootRole:
         return node != nullptr ? node->isSourceRoot() : false;
     case TripCountRole:
         return node != nullptr ? subtreeTripCount(node) : 0;
+    case StationCountRole:
+        return node != nullptr ? subtreeStationCount(node) : tripStationCount(trip);
     case LengthRole:
-        return QVariant::fromValue(node != nullptr ? node->length() : nullptr);
+        //A node carries a solved cwLength object the cell reads unit and all; a
+        //trip has only the number its length task adds up, in the unit the
+        //trip's own calibration is surveyed in.
+        return node != nullptr
+                ? QVariant::fromValue(node->length())
+                : QVariant::fromValue(tripLength(trip));
     case DepthValueRole:
         return QVariant::fromValue(node != nullptr ? node->depth() : nullptr);
-    case LastSurveyRole:
-        return node != nullptr ? lastSurvey(node) : trip->date();
+    case DateRole:
+        //A node holds trips surveyed on many days, so only a trip row names a
+        //date.
+        return node != nullptr ? QDateTime() : trip->date();
+    case DeclinationRole:
+        //A node row states 0.0 rather than nothing, so the delegate's real
+        //property is always handed a number.
+        return node != nullptr ? 0.0 : trip->calibrations()->declination();
+    case AutoDeclinationRole:
+        return node != nullptr
+                ? false
+                : trip->calibrations()->autoDeclination()
+                      && trip->calibrations()->autoDeclinationAvailable();
     case MutedRole:
         //A trip reads as a leaf of the node above it, and a Folder's stats are
         //its children's rather than its own.
@@ -216,15 +237,16 @@ QVariant cwSurveyTreeModel::headerData(int section, Qt::Orientation orientation,
         return QStringLiteral("Kind");
     case Trips:
         return QStringLiteral("Trips");
+    case Stations:
+        return QStringLiteral("Stations");
     case Length:
         return QStringLiteral("Length");
     case Depth:
         return QStringLiteral("Depth");
-    case LastSurvey:
-        return QStringLiteral("Last survey");
-    case Actions:
-        //The row's ⋯ button names itself; a title over it would only add noise.
-        return QString();
+    case Date:
+        return QStringLiteral("Date");
+    case Decl:
+        return QStringLiteral("Decl");
     default:
         break;
     }
@@ -251,12 +273,17 @@ QHash<int, QByteArray> cwSurveyTreeModel::roleNames() const
         {KindRole, "kind"},
         {KindLabelRole, "kindLabel"},
         {IsSourcedRole, "isSourced"},
-        {IsReadOnlyRole, "isReadOnly"},
         {IsSourceRootRole, "isSourceRoot"},
         {TripCountRole, "tripCount"},
+        {StationCountRole, "stationCount"},
         {LengthRole, "length"},
+        //depthValue and dateValue carry the names their roles hold because
+        //"depth" and "date" are already taken in a delegate: one by TreeView's
+        //own depth property, the other by QML's date type.
         {DepthValueRole, "depthValue"},
-        {LastSurveyRole, "lastSurvey"},
+        {DateRole, "dateValue"},
+        {DeclinationRole, "declination"},
+        {AutoDeclinationRole, "autoDeclination"},
         {MutedRole, "muted"},
         {NameRole, "name"}
     };
@@ -376,6 +403,7 @@ bool cwSurveyTreeModel::trackObject(QObject* object)
 
     connect(object, &QObject::destroyed, this, [this](QObject* dead) {
         m_connected.remove(dead);
+        removeTripStats(dead);
     });
 
     return true;
@@ -416,13 +444,12 @@ void cwSurveyTreeModel::connectNode(cwSurveyNode* node)
     });
     connect(node, &cwSurveyNode::kindChanged, this, [this, node]() {
         //A Folder draws its aggregated stats muted, so MutedRole reaches the
-        //Trips, Length, Depth and Last survey cells as well as the Kind chip.
-        emitRowDataChanged(indexOfNode(node), Kind, LastSurvey, kKindRoles);
+        //Trips, Stations, Length and Depth cells as well as the Kind chip.
+        emitRowDataChanged(indexOfNode(node), Kind, Depth, kKindRoles);
     });
     connect(node, &cwSurveyNode::sourceChanged, this, [this, node]() {
-        //The Actions menu greys Rename for a read-only row, so it reads these
-        //roles too.
-        emitRowDataChanged(indexOfNode(node), Name, Actions, kSourceRoles);
+        //The Kind chip reads the source as well as the Name cell's badge.
+        emitRowDataChanged(indexOfNode(node), Name, Kind, kSourceRoles);
     });
     connect(node, &cwSurveyNode::childNodeCountChanged, this, [this, node]() {
         emitAggregateChanged(node);
@@ -451,7 +478,28 @@ void cwSurveyTreeModel::connectTrip(cwTrip* trip)
         emitRowDataChanged(indexOfTrip(trip), Name, Name, kNameRoles);
     });
     connect(trip, &cwTrip::dateChanged, this, [this, trip]() {
-        emitRowDataChanged(indexOfTrip(trip), LastSurvey, LastSurvey, {LastSurveyRole});
+        emitRowDataChanged(indexOfTrip(trip), Date, Date, {DateRole});
+    });
+
+    cwTripCalibration* calibration = trip->calibrations();
+    connect(calibration, &cwTripCalibration::declinationChanged, this, [this, trip]() {
+        emitRowDataChanged(indexOfTrip(trip), Decl, Decl, {DeclinationRole});
+    });
+
+    const auto emitAutoDeclinationChanged = [this, trip]() {
+        emitRowDataChanged(indexOfTrip(trip), Decl, Decl, {AutoDeclinationRole});
+    };
+    connect(calibration, &cwTripCalibration::autoDeclinationChanged, this, emitAutoDeclinationChanged);
+    connect(calibration, &cwTripCalibration::autoDeclinationAvailableChanged, this, emitAutoDeclinationChanged);
+
+    auto stats = new cwTripStatsWatcher(trip, this);
+    m_tripStats.insert(trip, stats);
+
+    connect(stats, &cwTripStatsWatcher::lengthChanged, this, [this, trip]() {
+        emitRowDataChanged(indexOfTrip(trip), Length, Length, {LengthRole});
+    });
+    connect(stats, &cwTripStatsWatcher::usedStationsChanged, this, [this, trip]() {
+        emitRowDataChanged(indexOfTrip(trip), Stations, Stations, {StationCountRole});
         emitAggregateChanged(trip->parentNode());
     });
 }
@@ -466,7 +514,7 @@ void cwSurveyTreeModel::disconnectSubtree(cwSurveyNode* node)
     }
 
     for(int i = 0; i < node->tripCount(); i++) {
-        disconnectObject(node->trip(i));
+        disconnectTrip(node->trip(i));
     }
 
     disconnect(node->length(), nullptr, this, nullptr);
@@ -474,11 +522,32 @@ void cwSurveyTreeModel::disconnectSubtree(cwSurveyNode* node)
     disconnectObject(node);
 }
 
+/**
+  \brief Unwires \a trip, its calibration and its statistics watcher
+  */
+void cwSurveyTreeModel::disconnectTrip(cwTrip* trip)
+{
+    if(trip == nullptr) { return; }
+
+    disconnect(trip->calibrations(), nullptr, this, nullptr);
+    removeTripStats(trip);
+    disconnectObject(trip);
+}
+
 void cwSurveyTreeModel::disconnectObject(QObject* object)
 {
     if(object == nullptr) { return; }
     m_connected.remove(object);
     disconnect(object, nullptr, this, nullptr);
+}
+
+void cwSurveyTreeModel::removeTripStats(QObject* object)
+{
+    cwTripStatsWatcher* stats = m_tripStats.take(object);
+    if(stats == nullptr) { return; }
+
+    stats->disconnect(this);
+    stats->deleteLater();
 }
 
 void cwSurveyTreeModel::beginInsertNodeRows(cwSurveyNode* parentNode, int begin, int end)
@@ -540,7 +609,7 @@ void cwSurveyTreeModel::beginRemoveTripRows(cwSurveyNode* parentNode, int begin,
     Q_ASSERT(begin <= end);
 
     for(int i = begin; i <= end; i++) {
-        disconnectObject(parentNode->trip(i));
+        disconnectTrip(parentNode->trip(i));
     }
 
     const int first = firstTripRow(parentNode);
@@ -560,7 +629,7 @@ void cwSurveyTreeModel::emitRowDataChanged(const QModelIndex& rowIndex,
 void cwSurveyTreeModel::emitAggregateChanged(cwSurveyNode* node)
 {
     for(cwSurveyNode* current = node; current != nullptr; current = current->parentNode()) {
-        emitRowDataChanged(indexOfNode(current), Trips, LastSurvey, kAggregateRoles);
+        emitRowDataChanged(indexOfNode(current), Trips, Stations, kAggregateRoles);
     }
 }
 
@@ -573,20 +642,29 @@ int cwSurveyTreeModel::subtreeTripCount(const cwSurveyNode* node)
     return count;
 }
 
-QDateTime cwSurveyTreeModel::lastSurvey(const cwSurveyNode* node)
+int cwSurveyTreeModel::subtreeStationCount(const cwSurveyNode* node) const
 {
-    QDateTime latest;
+    int count = 0;
 
     //A walk keeps a repaint free of the list allTrips() would build for every
     //visible row.
-    node->walk([&latest](const cwSurveyNode* current) {
+    node->walk([this, &count](const cwSurveyNode* current) {
         for(int i = 0; i < current->tripCount(); i++) {
-            const QDateTime date = current->trip(i)->date();
-            if(date.isValid() && (!latest.isValid() || date > latest)) {
-                latest = date;
-            }
+            count += tripStationCount(current->trip(i));
         }
     });
 
-    return latest;
+    return count;
+}
+
+int cwSurveyTreeModel::tripStationCount(cwTrip* trip) const
+{
+    const cwTripStatsWatcher* stats = m_tripStats.value(trip);
+    return stats != nullptr ? stats->stationCount() : 0;
+}
+
+double cwSurveyTreeModel::tripLength(cwTrip* trip) const
+{
+    const cwTripStatsWatcher* stats = m_tripStats.value(trip);
+    return stats != nullptr ? stats->length() : 0.0;
 }

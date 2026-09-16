@@ -6,6 +6,7 @@
 **************************************************************************/
 
 //Catch includes
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 //Qt includes
@@ -21,8 +22,10 @@
 #include "cwLength.h"
 #include "cwSurveyNode.h"
 #include "cwSurveyTreeFilterModel.h"
+#include "cwSurveyChunk.h"
 #include "cwSurveyTreeModel.h"
 #include "cwTrip.h"
+#include "cwTripCalibration.h"
 #include "cwUnits.h"
 
 namespace {
@@ -73,6 +76,36 @@ namespace {
 
     constexpr double kAlphaLength = 123.5;
     constexpr double kAlphaDepth = 42.0;
+
+    constexpr double kShotDistance = 10.0;
+    //The bearing and the inclination only have to be readable; the assertions
+    //ride on the distance and the station names.
+    constexpr double kShotCompass = 15.0;
+    constexpr double kShotClino = 0.0;
+    constexpr double kDeclination = 3.5;
+
+    //! Gives \a trip one shot from A1 to A2, so its length task and its
+    //! used-station task each have something to report.
+    void addShot(cwTrip* trip)
+    {
+        trip->addNewChunk();
+        cwSurveyChunk* chunk = trip->chunk(trip->chunkCount() - 1);
+        chunk->setData(cwSurveyChunk::StationNameRole, 0, QStringLiteral("A1"));
+        chunk->setData(cwSurveyChunk::StationNameRole, 1, QStringLiteral("A2"));
+        chunk->setData(cwSurveyChunk::ShotDistanceRole, 0, kShotDistance);
+        chunk->setData(cwSurveyChunk::ShotCompassRole, 0, kShotCompass);
+        chunk->setData(cwSurveyChunk::ShotClinoRole, 0, kShotClino);
+    }
+
+    //! Runs the event loop until \a predicate holds or \a spy stops hearing
+    //! anything, so a test waits on the tasks' own signals instead of a sleep.
+    template<typename Predicate>
+    bool waitFor(QSignalSpy& spy, Predicate predicate)
+    {
+        constexpr int kWaitMilliseconds = 2000;
+        while(!predicate() && spy.wait(kWaitMilliseconds)) {}
+        return predicate();
+    }
 }
 
 TEST_CASE("cwSurveyTreeModel is a tree of nodes and trips", "[SurveyTreeModel]") {
@@ -129,7 +162,7 @@ TEST_CASE("cwSurveyTreeModel is a tree of nodes and trips", "[SurveyTreeModel]")
     const QModelIndex betaIndex = model.indexOf(beta);
 
     SECTION("child-node rows come before trip rows at every level") {
-        CHECK(model.columnCount() == cwSurveyTreeModel::Actions + 1);
+        CHECK(model.columnCount() == cwSurveyTreeModel::Decl + 1);
 
         REQUIRE(model.rowCount() == 2);
         CHECK(model.index(0, cwSurveyTreeModel::Name) == alphaIndex);
@@ -170,10 +203,19 @@ TEST_CASE("cwSurveyTreeModel is a tree of nodes and trips", "[SurveyTreeModel]")
         CHECK(model.headerData(cwSurveyTreeModel::Name, Qt::Horizontal).toString() == QStringLiteral("Name"));
         CHECK(model.headerData(cwSurveyTreeModel::Kind, Qt::Horizontal).toString() == QStringLiteral("Kind"));
         CHECK(model.headerData(cwSurveyTreeModel::Trips, Qt::Horizontal).toString() == QStringLiteral("Trips"));
+        CHECK(model.headerData(cwSurveyTreeModel::Stations, Qt::Horizontal).toString() == QStringLiteral("Stations"));
         CHECK(model.headerData(cwSurveyTreeModel::Length, Qt::Horizontal).toString() == QStringLiteral("Length"));
         CHECK(model.headerData(cwSurveyTreeModel::Depth, Qt::Horizontal).toString() == QStringLiteral("Depth"));
-        CHECK(model.headerData(cwSurveyTreeModel::LastSurvey, Qt::Horizontal).toString() == QStringLiteral("Last survey"));
-        CHECK(model.headerData(cwSurveyTreeModel::Actions, Qt::Horizontal).toString().isEmpty());
+        CHECK(model.headerData(cwSurveyTreeModel::Date, Qt::Horizontal).toString() == QStringLiteral("Date"));
+        CHECK(model.headerData(cwSurveyTreeModel::Decl, Qt::Horizontal).toString() == QStringLiteral("Decl"));
+
+        //Every column the enum names has a title, and the enum names every
+        //column the model has
+        for(int column = cwSurveyTreeModel::Name; column <= cwSurveyTreeModel::Decl; column++) {
+            INFO("Column: " << column);
+            CHECK(model.headerData(column, Qt::Horizontal).toString().isEmpty() == false);
+        }
+        CHECK(model.headerData(cwSurveyTreeModel::Decl + 1, Qt::Horizontal).isValid() == false);
     }
 
     SECTION("a node row folds its subtree, a trip row stands for itself") {
@@ -181,13 +223,13 @@ TEST_CASE("cwSurveyTreeModel is a tree of nodes and trips", "[SurveyTreeModel]")
         CHECK(model.data(alphaIndex, cwSurveyTreeModel::KindLabelRole).toString() == QStringLiteral("Cave"));
         CHECK(model.data(alphaIndex, cwSurveyTreeModel::MutedRole).toBool() == false);
         CHECK(model.data(alphaIndex, cwSurveyTreeModel::TripCountRole).toInt() == 3);
-        CHECK(model.data(alphaIndex, cwSurveyTreeModel::LastSurveyRole).toDateTime()
-              == QDateTime(kTopo3Date, QTime()));
+
+        //A node holds trips from many days, so its Date cell names none
+        CHECK(model.data(alphaIndex, cwSurveyTreeModel::DateRole).toDateTime().isValid() == false);
         CHECK(model.data(alphaIndex, cwSurveyTreeModel::LengthRole).value<cwLength*>() == alpha->length());
         CHECK(model.data(alphaIndex, cwSurveyTreeModel::DepthValueRole).value<cwLength*>() == alpha->depth());
         CHECK(model.data(alphaIndex, cwSurveyTreeModel::ObjectRole).value<QObject*>() == alpha);
         CHECK(model.data(alphaIndex, cwSurveyTreeModel::IsSourcedRole).toBool() == false);
-        CHECK(model.data(alphaIndex, cwSurveyTreeModel::IsReadOnlyRole).toBool() == false);
         CHECK(model.data(alphaIndex, cwSurveyTreeModel::IsSourceRootRole).toBool() == false);
         CHECK(model.isSourceRootIndex(alphaIndex) == false);
 
@@ -202,18 +244,21 @@ TEST_CASE("cwSurveyTreeModel is a tree of nodes and trips", "[SurveyTreeModel]")
         CHECK(model.data(topo3Index, cwSurveyTreeModel::MutedRole).toBool());
         CHECK(model.data(topo3Index, cwSurveyTreeModel::TripCountRole).toInt() == 0);
         CHECK(model.data(topo3Index, cwSurveyTreeModel::KindLabelRole).toString().isEmpty());
+        //A trip has no cwLength object of its own: its Length cell is the number
+        //its length task adds up
         CHECK(model.data(topo3Index, cwSurveyTreeModel::LengthRole).value<cwLength*>() == nullptr);
+        CHECK(model.data(topo3Index, cwSurveyTreeModel::LengthRole).toDouble() == 0.0);
         CHECK(model.data(topo3Index, cwSurveyTreeModel::DepthValueRole).value<cwLength*>() == nullptr);
-        CHECK(model.data(topo3Index, cwSurveyTreeModel::LastSurveyRole).toDateTime()
+        CHECK(model.data(topo3Index, cwSurveyTreeModel::DateRole).toDateTime()
               == QDateTime(kTopo3Date, QTime()));
 
-        //A node with no trip has no last survey at all
         cwCave* empty = makeNode(QStringLiteral("Empty Cave"), cwSurveyNode::Kind::Cave);
         region.addCave(empty);
         const QModelIndex emptyIndex = model.indexOf(empty);
         REQUIRE(emptyIndex.isValid());
-        CHECK(model.data(emptyIndex, cwSurveyTreeModel::LastSurveyRole).toDateTime().isValid() == false);
+        CHECK(model.data(emptyIndex, cwSurveyTreeModel::DateRole).toDateTime().isValid() == false);
         CHECK(model.data(emptyIndex, cwSurveyTreeModel::TripCountRole).toInt() == 0);
+        CHECK(model.data(emptyIndex, cwSurveyTreeModel::StationCountRole).toInt() == 0);
     }
 
     SECTION("every Kind has its own label") {
@@ -313,6 +358,59 @@ TEST_CASE("cwSurveyTreeModel is a tree of nodes and trips", "[SurveyTreeModel]")
         CHECK(model.rowCount(alphaIndex) == 2);
     }
 
+    SECTION("a trip row carries its own length, station count and declination") {
+        const QModelIndex topo3Index = model.indexOf(topo3);
+        QSignalSpy dataChanged(&model, &QAbstractItemModel::dataChanged);
+
+        addShot(topo3);
+
+        //The length and the stations arrive from their tasks
+        REQUIRE(waitFor(dataChanged, [&]() {
+            return model.data(topo3Index, cwSurveyTreeModel::StationCountRole).toInt() == 2
+                    && model.data(topo3Index, cwSurveyTreeModel::LengthRole).toDouble() > 0.0;
+        }));
+
+        CHECK(model.data(topo3Index, cwSurveyTreeModel::LengthRole).toDouble()
+              == Catch::Approx(kShotDistance));
+        CHECK(sawChange(dataChanged, topo3Index, cwSurveyTreeModel::Length, cwSurveyTreeModel::LengthRole));
+        CHECK(sawChange(dataChanged, topo3Index, cwSurveyTreeModel::Stations, cwSurveyTreeModel::StationCountRole));
+
+        //A node row sums the stations of its subtree, and every ancestor hears it
+        CHECK(model.data(crawlIndex, cwSurveyTreeModel::StationCountRole).toInt() == 2);
+        CHECK(model.data(upperIndex, cwSurveyTreeModel::StationCountRole).toInt() == 2);
+        CHECK(model.data(alphaIndex, cwSurveyTreeModel::StationCountRole).toInt() == 2);
+        CHECK(model.data(betaIndex, cwSurveyTreeModel::StationCountRole).toInt() == 0);
+
+        CHECK(sawChange(dataChanged, crawlIndex, cwSurveyTreeModel::Stations, cwSurveyTreeModel::StationCountRole));
+        CHECK(sawChange(dataChanged, upperIndex, cwSurveyTreeModel::Stations, cwSurveyTreeModel::StationCountRole));
+        CHECK(sawChange(dataChanged, alphaIndex, cwSurveyTreeModel::Stations, cwSurveyTreeModel::StationCountRole));
+        CHECK(sawChange(dataChanged, betaIndex, cwSurveyTreeModel::Stations, cwSurveyTreeModel::StationCountRole) == false);
+
+        //A node row keeps the cwLength object its own solve fills in
+        CHECK(model.data(alphaIndex, cwSurveyTreeModel::LengthRole).value<cwLength*>() == alpha->length());
+
+        //A declination belongs to the trip's calibration. Auto is on by default
+        //and resolves to nothing without a fix station, which is the "manual"
+        //the cave page shows.
+        dataChanged.clear();
+        CHECK(model.data(topo3Index, cwSurveyTreeModel::AutoDeclinationRole).toBool() == false);
+
+        topo3->calibrations()->setAutoDeclination(false);
+        CHECK(sawChange(dataChanged, topo3Index, cwSurveyTreeModel::Decl, cwSurveyTreeModel::AutoDeclinationRole));
+
+        dataChanged.clear();
+        topo3->calibrations()->setDeclinationManual(kDeclination);
+        CHECK(model.data(topo3Index, cwSurveyTreeModel::DeclinationRole).toDouble()
+              == Catch::Approx(kDeclination));
+        CHECK(sawChange(dataChanged, topo3Index, cwSurveyTreeModel::Decl, cwSurveyTreeModel::DeclinationRole));
+
+        //A node row states zero and manual, so a delegate's typed cell always
+        //has a value to show
+        CHECK(model.data(alphaIndex, cwSurveyTreeModel::DeclinationRole).toDouble()
+              == Catch::Approx(0.0));
+        CHECK(model.data(alphaIndex, cwSurveyTreeModel::AutoDeclinationRole).toBool() == false);
+    }
+
     SECTION("a rename moves the Name cell of the row that owns the name") {
         QSignalSpy dataChanged(&model, &QAbstractItemModel::dataChanged);
 
@@ -328,23 +426,22 @@ TEST_CASE("cwSurveyTreeModel is a tree of nodes and trips", "[SurveyTreeModel]")
         CHECK(sawChange(dataChanged, alphaIndex, cwSurveyTreeModel::Name, cwSurveyTreeModel::NameRole));
     }
 
-    SECTION("a trip date reaches the trip row and every ancestor row") {
+    SECTION("a trip date moves the trip's own Date cell and no other row") {
         QSignalSpy dataChanged(&model, &QAbstractItemModel::dataChanged);
 
         const QModelIndex topo3Index = model.indexOf(topo3);
         const QDate newDate(2024, 4, 4);
         topo3->setDate(QDateTime(newDate, QTime()));
 
-        CHECK(sawChange(dataChanged, topo3Index, cwSurveyTreeModel::LastSurvey, cwSurveyTreeModel::LastSurveyRole));
-        CHECK(sawChange(dataChanged, crawlIndex, cwSurveyTreeModel::LastSurvey, cwSurveyTreeModel::LastSurveyRole));
-        CHECK(sawChange(dataChanged, upperIndex, cwSurveyTreeModel::LastSurvey, cwSurveyTreeModel::LastSurveyRole));
-        CHECK(sawChange(dataChanged, alphaIndex, cwSurveyTreeModel::LastSurvey, cwSurveyTreeModel::LastSurveyRole));
-
-        CHECK(model.data(alphaIndex, cwSurveyTreeModel::LastSurveyRole).toDateTime()
+        CHECK(sawChange(dataChanged, topo3Index, cwSurveyTreeModel::Date, cwSurveyTreeModel::DateRole));
+        CHECK(model.data(topo3Index, cwSurveyTreeModel::DateRole).toDateTime()
               == QDateTime(newDate, QTime()));
 
-        //Beta's row is a different branch and stays where it was
-        CHECK(sawChange(dataChanged, betaIndex, cwSurveyTreeModel::LastSurvey, cwSurveyTreeModel::LastSurveyRole) == false);
+        //A date folds nowhere, so no ancestor row hears it
+        CHECK(sawChange(dataChanged, crawlIndex, cwSurveyTreeModel::Date, cwSurveyTreeModel::DateRole) == false);
+        CHECK(sawChange(dataChanged, upperIndex, cwSurveyTreeModel::Date, cwSurveyTreeModel::DateRole) == false);
+        CHECK(sawChange(dataChanged, alphaIndex, cwSurveyTreeModel::Date, cwSurveyTreeModel::DateRole) == false);
+        CHECK(model.data(alphaIndex, cwSurveyTreeModel::DateRole).toDateTime().isValid() == false);
     }
 
     SECTION("kind, source, length and depth each move their own cell") {
@@ -357,17 +454,15 @@ TEST_CASE("cwSurveyTreeModel is a tree of nodes and trips", "[SurveyTreeModel]")
 
         //A Folder draws its stat cells muted, so those cells hear the change too
         CHECK(sawChange(dataChanged, betaIndex, cwSurveyTreeModel::Trips, cwSurveyTreeModel::MutedRole));
+        CHECK(sawChange(dataChanged, betaIndex, cwSurveyTreeModel::Stations, cwSurveyTreeModel::MutedRole));
         CHECK(sawChange(dataChanged, betaIndex, cwSurveyTreeModel::Length, cwSurveyTreeModel::MutedRole));
         CHECK(sawChange(dataChanged, betaIndex, cwSurveyTreeModel::Depth, cwSurveyTreeModel::MutedRole));
-        CHECK(sawChange(dataChanged, betaIndex, cwSurveyTreeModel::LastSurvey, cwSurveyTreeModel::MutedRole));
 
         dataChanged.clear();
         beta->setSourceId(QUuid::createUuid());
         CHECK(sawChange(dataChanged, betaIndex, cwSurveyTreeModel::Kind, cwSurveyTreeModel::IsSourceRootRole));
         CHECK(sawChange(dataChanged, betaIndex, cwSurveyTreeModel::Name, cwSurveyTreeModel::IsSourcedRole));
 
-        //The Actions menu greys Rename for a read-only row, so it hears it as well
-        CHECK(sawChange(dataChanged, betaIndex, cwSurveyTreeModel::Actions, cwSurveyTreeModel::IsReadOnlyRole));
         CHECK(model.data(betaIndex, cwSurveyTreeModel::IsSourcedRole).toBool());
         CHECK(model.data(betaIndex, cwSurveyTreeModel::IsSourceRootRole).toBool());
         CHECK(model.isSourceRootIndex(betaIndex));
@@ -444,7 +539,7 @@ TEST_CASE("cwSurveyTreeModel is a tree of nodes and trips", "[SurveyTreeModel]")
 
         CHECK(empty.region() == nullptr);
         CHECK(empty.rowCount() == 0);
-        CHECK(empty.columnCount() == cwSurveyTreeModel::Actions + 1);
+        CHECK(empty.columnCount() == cwSurveyTreeModel::Decl + 1);
         CHECK(empty.indexOf(alpha) == QModelIndex());
     }
 

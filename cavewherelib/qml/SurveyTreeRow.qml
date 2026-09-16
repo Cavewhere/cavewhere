@@ -10,6 +10,7 @@ import QtQuick.Controls as QC
 import QtQuick.Layouts
 import QtQml.Models
 import cavewherelib
+import "Utils.js" as Utils
 
 // One cell of the Data page's survey tree.
 //
@@ -19,6 +20,9 @@ import cavewherelib
 // cell carries the content of its own column and nothing else. The tree
 // itself (indent and caret) lives in the Name column, which is the column
 // TreeView marks with isTreeNode.
+//
+// A node row's Length cell reads a UnitValue and a trip row's the plain number
+// its length task added up, so `length` is typed loosely enough to hold both.
 //
 // The row's identity for tests rides on the cells that carry content:
 // caveDelegate<row>/tripDelegate<row> on the Name cell, caveLength<row> and
@@ -46,9 +50,12 @@ QQ.Item {
     required property string kindLabel
     required property bool isSourced
     required property int tripCount
-    required property UnitValue length
+    required property int stationCount
+    required property var length
     required property UnitValue depthValue
-    required property date lastSurvey
+    required property date dateValue
+    required property real declination
+    required property bool autoDeclination
     required property bool muted
 
     //A pooled delegate keeps the row it last drew, so it gives up its name
@@ -98,19 +105,6 @@ QQ.Item {
     //all take the same path.
     function open() {
         rowId.treeView.surveyTree.openObject(rowId.object);
-    }
-
-    //Adds a native trip to this node and opens it, as the cave page's Add Trip
-    //does. The new trip is the node's last one.
-    function addTrip() {
-        if(rowId.node === null) {
-            return;
-        }
-
-        rowId.node.addTrip();
-        const trip = rowId.node.trip(rowId.node.tripCount - 1);
-        rowId.treeView.surveyTree.expandTo(trip);
-        rowId.treeView.surveyTree.openObject(trip);
     }
 
     //The cell of this row that carries the tree's caret, the name, the name
@@ -183,13 +177,16 @@ QQ.Item {
                 return kindCellComponent;
             case SurveyTreeModel.Trips:
                 return tripCountCellComponent;
+            case SurveyTreeModel.Stations:
+                return stationCountCellComponent;
             case SurveyTreeModel.Length:
+                return rowId.isNode ? statCellComponent : tripLengthCellComponent;
             case SurveyTreeModel.Depth:
                 return statCellComponent;
-            case SurveyTreeModel.LastSurvey:
-                return lastSurveyCellComponent;
-            case SurveyTreeModel.Actions:
-                return actionsCellComponent;
+            case SurveyTreeModel.Date:
+                return dateCellComponent;
+            case SurveyTreeModel.Decl:
+                return declinationCellComponent;
             default:
                 return null;
             }
@@ -329,19 +326,52 @@ QQ.Item {
             readonly property bool isDepthCell: rowId.column === SurveyTreeModel.Depth
 
             anchors.verticalCenter: parent.verticalCenter
-            unitValue: isDepthCell ? rowId.depthValue : rowId.length
+            unitValue: isDepthCell ? rowId.depthValue : (rowId.length as UnitValue)
             depth: isDepthCell
         }
     }
 
     QQ.Component {
-        id: lastSurveyCellComponent
+        id: tripLengthCellComponent
 
         QC.Label {
             verticalAlignment: QQ.Text.AlignVCenter
-            text: isNaN(rowId.lastSurvey.getTime())
+            text: Utils.fixed(rowId.length, 2)
+            color: rowId.muted ? Theme.textSubtle : Theme.text
+        }
+    }
+
+    QQ.Component {
+        id: stationCountCellComponent
+
+        QC.Label {
+            verticalAlignment: QQ.Text.AlignVCenter
+            text: rowId.stationCount > 0 ? rowId.stationCount : ""
+            color: rowId.muted ? Theme.textSubtle : Theme.text
+        }
+    }
+
+    QQ.Component {
+        id: dateCellComponent
+
+        QC.Label {
+            verticalAlignment: QQ.Text.AlignVCenter
+            text: isNaN(rowId.dateValue.getTime())
                   ? ""
-                  : Qt.formatDate(rowId.lastSurvey, Qt.ISODate)
+                  : Qt.formatDate(rowId.dateValue, Qt.ISODate)
+            color: rowId.muted ? Theme.textSubtle : Theme.text
+        }
+    }
+
+    QQ.Component {
+        id: declinationCellComponent
+
+        QC.Label {
+            verticalAlignment: QQ.Text.AlignVCenter
+            text: rowId.isNode
+                  ? ""
+                  : Utils.fixed(rowId.declination, 2) + "°"
+                    + (rowId.autoDeclination ? " auto" : "")
             color: rowId.muted ? Theme.textSubtle : Theme.text
         }
     }
@@ -386,62 +416,6 @@ QQ.Item {
             parent: rowId
             row: rowId
             surveyTree: rowId.treeView.surveyTree
-        }
-    }
-
-    QQ.Component {
-        id: actionsCellComponent
-
-        QQ.Item {
-            ContextMenuButton {
-                objectName: "rowActionsButton"
-
-                anchors.centerIn: parent
-                iconSource: "qrc:/twbs-icons/icons/three-dots.svg"
-                menu: rowActionsMenuComponent
-            }
-        }
-    }
-
-    //The row's ⋯ menu: the verbs that add and open, never the one that
-    //removes — Delete… belongs to the right-click menu alone.
-    QQ.Component {
-        id: rowActionsMenuComponent
-
-        QC.Menu {
-            id: rowActionsMenuId
-            objectName: "rowActionsMenu"
-
-            QC.MenuItem {
-                objectName: "rowOpenMenuItem"
-                text: qsTr("Open")
-
-                onTriggered: rowId.open()
-            }
-
-            //Add Trip names the slot it goes in, since a pooled row that
-            //becomes a node row activates these two in binding order rather
-            //than in the order the menu reads them.
-            ConditionalMenuItem {
-                menu: rowActionsMenuId
-                insertIndex: 1
-                active: rowId.isNode
-                itemObjectName: "rowAddTripMenuItem"
-                text: qsTr("Add Trip")
-
-                onTriggered: rowId.addTrip()
-            }
-
-            ConditionalMenuItem {
-                menu: rowActionsMenuId
-                active: rowId.canRename
-                itemObjectName: "rowRenameMenuItem"
-                text: qsTr("Rename…")
-
-                onTriggered: rowId.startRename()
-            }
-
-            onClosed: rowId.treeView.surveyTree.focusTree()
         }
     }
 }

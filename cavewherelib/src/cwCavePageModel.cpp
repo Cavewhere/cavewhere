@@ -1,8 +1,7 @@
 #include "cwCavePageModel.h"
 #include "cwCave.h"
 #include "cwTrip.h"
-#include "cwTripLengthTask.h"
-#include "cwUsedStationTaskManager.h"
+#include "cwTripStatsWatcher.h"
 #include "cwErrorListModel.h"
 #include "cwTripCalibration.h"
 
@@ -29,44 +28,30 @@ void cwCavePageModel::setCave(cwCave* cave)
 
     beginResetModel();
 
-    auto destroyTripData = [this](const TripData& data) {
-        data.lengthTask->disconnect(this);
-        data.lengthTask->deleteLater();
-        data.usedStationsManager->disconnect(this);
-        data.usedStationsManager->deleteLater();
-        if(data.trip) {
-            data.trip->disconnect(this);
-            data.trip->errorModel()->disconnect(this);
-            data.trip->calibrations()->disconnect(this);
+    auto destroyTripStats = [this](cwTripStatsWatcher* stats) {
+        stats->disconnect(this);
+        stats->deleteLater();
+        if(cwTrip* trip = stats->trip()) {
+            trip->disconnect(this);
+            trip->errorModel()->disconnect(this);
+            trip->calibrations()->disconnect(this);
         }
     };
 
     // Disconnect previous tasks and clear data
-    for (const TripData &data : m_tripDataList) {
-        destroyTripData(data);
+    for (cwTripStatsWatcher* stats : std::as_const(m_tripStats)) {
+        destroyTripStats(stats);
     }
-    m_tripDataList.clear();
+    m_tripStats.clear();
 
     m_cave = cave;
 
     // Lambda to add a trip and connect necessary signals
     auto addTrip = [this](cwTrip* trip) {
-        TripData tripData;
-        tripData.trip = trip;
-
-        // Length task
-        cwTripLengthTask* lengthTask = new cwTripLengthTask(this);
-        tripData.lengthTask = lengthTask;
-
-        // Used stations manager
-        cwUsedStationTaskManager* usedStationsManager = new cwUsedStationTaskManager(this);
-        usedStationsManager->setAbbreviated(true);
-        usedStationsManager->setBold(false);
-        usedStationsManager->setOnlyLargestRange(true);
-        tripData.usedStationsManager = usedStationsManager;
-
-        // Add trip data to the list
-        m_tripDataList.append(tripData);
+        // The trip's length and used stations, the same mechanism the survey
+        // tree reads them through
+        cwTripStatsWatcher* stats = new cwTripStatsWatcher(trip, this);
+        m_tripStats.append(stats);
 
         // Lambda to get the current index of the trip
         auto tripIndex = [this, trip]()->int {
@@ -78,23 +63,19 @@ void cwCavePageModel::setCave(cwCave* cave)
         };
 
 
-        // Connect length task to update TripDistanceRole
-        connect(lengthTask, &cwTripLengthTask::finished, this, [this, tripIndex]() {
+        // Connect the watcher's length to update TripDistanceRole
+        connect(stats, &cwTripStatsWatcher::lengthChanged, this, [this, tripIndex]() {
             int row = tripIndex();
-            if (row >= 0 && row < m_tripDataList.size()) {
-                TripData &data = m_tripDataList[row];
-                data.length = data.lengthTask->length();
+            if (row >= 0 && row < m_tripStats.size()) {
                 QModelIndex idx = index(row);
                 emit dataChanged(idx, idx, {TripDistanceRole});
             }
         });
 
-        // Connect used stations manager to update UsedStationsRole
-        connect(usedStationsManager, &cwUsedStationTaskManager::usedStationsChanged, this, [this, tripIndex]() {
+        // Connect the watcher's used stations to update UsedStationsRole
+        connect(stats, &cwTripStatsWatcher::usedStationsChanged, this, [this, tripIndex]() {
             int row = tripIndex();
-            if (row >= 0 && row < m_tripDataList.size()) {
-                TripData &data = m_tripDataList[row];
-                data.usedStations = data.usedStationsManager->usedStations();
+            if (row >= 0 && row < m_tripStats.size()) {
                 QModelIndex idx = index(row);
                 emit dataChanged(idx, idx, {UsedStationsRole});
             }
@@ -136,14 +117,11 @@ void cwCavePageModel::setCave(cwCave* cave)
         });
         connect(calibration, &cwTripCalibration::autoDeclinationChanged, this, emitAutoDeclinationChanged);
         connect(calibration, &cwTripCalibration::autoDeclinationAvailableChanged, this, emitAutoDeclinationChanged);
-
-        lengthTask->setTrip(trip);
-        usedStationsManager->setTrip(trip);
     };
 
     if (m_cave) {
         const QList<cwTrip*> trips = m_cave->trips();
-        m_tripDataList.reserve(trips.size());
+        m_tripStats.reserve(trips.size());
 
         // Add each trip initially
         for (cwTrip* trip : trips) {
@@ -162,11 +140,11 @@ void cwCavePageModel::setCave(cwCave* cave)
         });
 
         // Connect to handle dynamically removing trips
-        connect(m_cave, &cwCave::beginRemoveTrips, this, [this, destroyTripData](int begin, int end) {
+        connect(m_cave, &cwCave::beginRemoveTrips, this, [this, destroyTripStats](int begin, int end) {
             beginRemoveRows(QModelIndex(), begin, end);
             for (int i = end; i >= begin; --i) {
-                destroyTripData(m_tripDataList[i]);
-                m_tripDataList.removeAt(i);
+                destroyTripStats(m_tripStats.at(i));
+                m_tripStats.removeAt(i);
             }
         });
         connect(m_cave, &cwCave::removedTrips, this, [this](int begin, int end) {
@@ -184,8 +162,8 @@ void cwCavePageModel::setCave(cwCave* cave)
 //Useful for testcases
 void cwCavePageModel::waitForFinished()
 {
-    for(const auto& tripData : m_tripDataList) {
-        tripData.usedStationsManager->waitForFinished();
+    for(cwTripStatsWatcher* stats : std::as_const(m_tripStats)) {
+        stats->waitForFinished();
     }
 }
 
@@ -227,11 +205,11 @@ QVariant cwCavePageModel::data(const QModelIndex &index, int role) const
         return QVariant();
 
     int row = index.row();
-    if (row < 0 || row >= m_tripDataList.size())
+    if (row < 0 || row >= m_tripStats.size())
         return QVariant();
 
-    const TripData &tripData = m_tripDataList.at(row);
-    cwTrip* trip = tripData.trip;
+    const cwTripStatsWatcher* stats = m_tripStats.at(row);
+    cwTrip* trip = stats->trip();
 
     switch (role) {
     case TripObjectRole:
@@ -256,9 +234,9 @@ QVariant cwCavePageModel::data(const QModelIndex &index, int role) const
     case TripDateRole:
         return trip->date();
     case UsedStationsRole:
-        return tripData.usedStations;
+        return stats->usedStations();
     case TripDistanceRole:
-        return tripData.length;
+        return stats->length();
     case DeclinationRole:
         return trip->calibrations()->declination();
     case AutoDeclinationRole:

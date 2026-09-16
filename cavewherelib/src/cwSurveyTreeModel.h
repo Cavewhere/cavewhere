@@ -14,6 +14,7 @@
 class cwCavingRegion;
 class cwLength;
 class cwTrip;
+class cwTripStatsWatcher;
 
 //Qt includes
 #include <QAbstractItemModel>
@@ -25,7 +26,7 @@ class cwTrip;
 
 /**
  * The survey tree as an item model: one row per cwSurveyNode and one row per
- * cwTrip, in seven columns. A node's rows are its child nodes first, then its
+ * cwTrip, in eight columns. A node's rows are its child nodes first, then its
  * own trips; a trip row is a leaf. The region's root node owns no row of its
  * own, so its children are the model's top-level rows.
  *
@@ -43,15 +44,17 @@ class CAVEWHERE_LIB_EXPORT cwSurveyTreeModel : public QAbstractItemModel
     Q_PROPERTY(cwCavingRegion* region READ region WRITE setRegion NOTIFY regionChanged)
 
 public:
-    //! The columns of the Data page's tree table. Actions holds the row's ⋯ menu.
+    //! The columns of the Data page's tree table. Stations, Length, Depth and
+    //! Trips fold over a node's subtree; Date and Decl belong to a trip row.
     enum Column {
         Name,
         Kind,
         Trips,
+        Stations,
         Length,
         Depth,
-        LastSurvey,
-        Actions
+        Date,
+        Decl
     };
     Q_ENUM(Column)
 
@@ -70,12 +73,14 @@ public:
         KindRole,
         KindLabelRole,
         IsSourcedRole,
-        IsReadOnlyRole,
         IsSourceRootRole,
         TripCountRole,
+        StationCountRole,
         LengthRole,
         DepthValueRole,
-        LastSurveyRole,
+        DateRole,
+        DeclinationRole,
+        AutoDeclinationRole,
         MutedRole,
         NameRole
     };
@@ -119,6 +124,10 @@ private:
     //! of the same object is refused and a deleted one is forgotten.
     QSet<QObject*> m_connected;
 
+    //! The length and used stations of each trip this model shows, keyed by the
+    //! trip, so a node row folds the counts its subtree's trips already hold.
+    QHash<QObject*, cwTripStatsWatcher*> m_tripStats;
+
     //! The node an index stands for: the region's root for the invalid index,
     //! the node itself for a node row, nullptr for a trip row.
     cwSurveyNode* nodeForIndex(const QModelIndex& index) const;
@@ -143,7 +152,11 @@ private:
     void connectNode(cwSurveyNode* node);
     void connectTrip(cwTrip* trip);
     void disconnectSubtree(cwSurveyNode* node);
+    void disconnectTrip(cwTrip* trip);
     void disconnectObject(QObject* object);
+
+    //! Drops the statistics watcher \a object owns, if it has one.
+    void removeTripStats(QObject* object);
 
     void beginInsertNodeRows(cwSurveyNode* parentNode, int begin, int end);
     void insertedNodeRows(cwSurveyNode* parentNode, int begin, int end);
@@ -159,15 +172,22 @@ private:
                             Column last,
                             const QList<int>& roles);
 
-    //! The trip count and last survey of \a node and of every node above it
-    //! moved, because those two fold over a whole subtree.
+    //! The trip and station counts of \a node and of every node above it moved,
+    //! because those two fold over a whole subtree.
     void emitAggregateChanged(cwSurveyNode* node);
 
     //! The number of trips over \a node's subtree, its own trips included.
     static int subtreeTripCount(const cwSurveyNode* node);
 
-    //! The latest date over \a node's subtree, invalid when it holds no trip.
-    static QDateTime lastSurvey(const cwSurveyNode* node);
+    //! The number of stations over \a node's subtree, zero for a trip whose
+    //! stations have yet to be counted.
+    int subtreeStationCount(const cwSurveyNode* node) const;
+
+    //! The number of stations \a trip names, zero until its watcher counts them.
+    int tripStationCount(cwTrip* trip) const;
+
+    //! \a trip's surveyed length, zero until its watcher adds it up.
+    double tripLength(cwTrip* trip) const;
 };
 
 #endif // CWSURVEYTREEMODEL_H

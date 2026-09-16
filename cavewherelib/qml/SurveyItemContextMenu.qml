@@ -12,11 +12,11 @@ import cavewherelib
 // The context menu of a survey-tree row: Open, Rename… (native nodes only)
 // and Delete….
 //
-// Delete lives here alone — no button and no ⋯ entry removes a row — so a
-// row's destructive verb always costs a deliberate right-click, a long press,
-// or Shift+F10 on the current row.
+// Delete lives here alone — no cell of the row carries a remove button — so
+// a row's destructive verb always costs a deliberate right-click, a long
+// press, or Shift+F10 on the current row.
 //
-// A row is seven cells, and a menu per cell would be seven menus saying the
+// A row is eight cells, and a menu per cell would be eight menus saying the
 // same thing, so the row holds one of these (in its Name cell) and every cell
 // pops it. The row carries out Open and Rename; Delete goes to the view,
 // which owns the prompt and knows how a node and a trip are each removed.
