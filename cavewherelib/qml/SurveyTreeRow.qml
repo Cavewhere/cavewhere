@@ -52,6 +52,7 @@ QQ.Item {
     required property bool isSourced
     required property int tripCount
     required property int stationCount
+    required property string usedStations
     required property var length
     required property UnitValue depthValue
     required property date dateValue
@@ -411,7 +412,9 @@ QQ.Item {
 
     //The cells that are a line of text and nothing else. A trip belongs to one
     //day and a node to as many as it holds trips, so only a trip row dates
-    //itself; only a node row counts trips, and both count stations.
+    //itself; only a node row counts trips. A trip names its own stations and a
+    //node counts the stations under it, because a subtree's names run far past
+    //one cell.
     QQ.Component {
         id: textCellComponent
 
@@ -419,13 +422,14 @@ QQ.Item {
             objectName: rowId.cellName("value")
 
             verticalAlignment: QQ.Text.AlignVCenter
+            elide: QQ.Text.ElideRight
             color: rowId.textColor
             text: {
                 switch(rowId.column) {
                 case SurveyTreeModel.Trips:
                     return rowId.isNode ? rowId.tripCount : "";
                 case SurveyTreeModel.Stations:
-                    return rowId.stationCount;
+                    return rowId.isNode ? rowId.stationCount : rowId.usedStations;
                 case SurveyTreeModel.Date:
                     return isNaN(rowId.dateValue.getTime())
                          ? ""

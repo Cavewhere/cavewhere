@@ -84,6 +84,10 @@ namespace {
     constexpr double kShotClino = 0.0;
     constexpr double kDeclination = 3.5;
 
+    //The abbreviated range the used-station task makes of the stations addShot()
+    //names: survey "A", stations 1 through 2.
+    const QString kShotStationRange = QStringLiteral("A 1-2");
+
     //! Gives \a trip one shot from A1 to A2, so its length task and its
     //! used-station task each have something to report.
     void addShot(cwTrip* trip)
@@ -409,6 +413,32 @@ TEST_CASE("cwSurveyTreeModel is a tree of nodes and trips", "[SurveyTreeModel]")
         CHECK(model.data(alphaIndex, cwSurveyTreeModel::DeclinationRole).toDouble()
               == Catch::Approx(0.0));
         CHECK(model.data(alphaIndex, cwSurveyTreeModel::AutoDeclinationRole).toBool() == false);
+    }
+
+    SECTION("a trip row names its stations while a node row counts them") {
+        const QModelIndex topo3Index = model.indexOf(topo3);
+        QSignalSpy dataChanged(&model, &QAbstractItemModel::dataChanged);
+
+        //A trip whose stations have yet to be counted names none
+        CHECK(model.data(topo3Index, cwSurveyTreeModel::UsedStationsRole).toString().isEmpty());
+
+        addShot(topo3);
+
+        REQUIRE(waitFor(dataChanged, [&]() {
+            return model.data(topo3Index, cwSurveyTreeModel::UsedStationsRole).toString()
+                    == kShotStationRange;
+        }));
+
+        CHECK(sawChange(dataChanged, topo3Index, cwSurveyTreeModel::Stations,
+                        cwSurveyTreeModel::UsedStationsRole));
+        CHECK(sawChange(dataChanged, topo3Index, cwSurveyTreeModel::Stations,
+                        cwSurveyTreeModel::StationCountRole));
+
+        //A node row holds far more names than a cell can carry, so it keeps the
+        //fold and names nothing
+        CHECK(model.data(crawlIndex, cwSurveyTreeModel::UsedStationsRole).toString().isEmpty());
+        CHECK(model.data(alphaIndex, cwSurveyTreeModel::UsedStationsRole).toString().isEmpty());
+        CHECK(model.data(alphaIndex, cwSurveyTreeModel::StationCountRole).toInt() == 2);
     }
 
     SECTION("a rename moves the Name cell of the row that owns the name") {

@@ -595,8 +595,9 @@ ColumnLayout {
             case SurveyTreeModel.Kind:
                 return Theme.treeKindColumnWidth;
             case SurveyTreeModel.Trips:
-            case SurveyTreeModel.Stations:
                 return Theme.treeCountColumnWidth;
+            case SurveyTreeModel.Stations:
+                return Theme.treeStationsColumnWidth;
             case SurveyTreeModel.Decl:
                 return Theme.treeDeclColumnWidth;
             case SurveyTreeModel.Length:

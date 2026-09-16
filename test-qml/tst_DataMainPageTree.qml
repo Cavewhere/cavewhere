@@ -559,7 +559,9 @@ MainWindowTest {
             tree.expand(0)
             tryCompare(tree, "rows", 2, 5000)
 
-            tryCellText(page, "tripStations1", "value", "2", "a trip counts its own stations")
+            //The trip names its stations the way the cave page's trip table
+            //named them: the abbreviated range of stations 1 and 2.
+            tryCellText(page, "tripStations1", "value", "1-2", "a trip names its own stations")
 
             //The cave's own count is read from the model rather than from its
             //cell: a cave row drawn before its trips' tasks report depends on
@@ -608,6 +610,8 @@ MainWindowTest {
 
             compare(cellValue(page, "caveDate0").text, "",
                     "a cave holds trips surveyed on many days, so its Date cell is empty")
+            compare(cellValue(page, "caveStations0").text, "0",
+                    "a cave counts the stations under it rather than naming them")
             verify(findChild(page, "caveDecl0") === null
                    || findChild(findChild(page, "caveDecl0"), "value") === null,
                    "only a trip carries a declination")

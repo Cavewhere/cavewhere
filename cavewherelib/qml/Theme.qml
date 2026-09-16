@@ -144,6 +144,9 @@ QtObject {
     readonly property int treeNameColumnMinimumWidth: Math.round(180 * fontScale)
     readonly property int treeKindColumnWidth: Math.round(80 * fontScale)
     readonly property int treeCountColumnWidth: Math.round(55 * fontScale)
+    //Wide enough for a station range ("A 1-24"), which is what a trip row's
+    //Stations cell names.
+    readonly property int treeStationsColumnWidth: Math.round(100 * fontScale)
     readonly property int treeStatColumnWidth: Math.round(120 * fontScale)
     readonly property int treeDateColumnWidth: Math.round(110 * fontScale)
     readonly property int treeDeclColumnWidth: Math.round(95 * fontScale)

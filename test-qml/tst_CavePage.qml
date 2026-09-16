@@ -257,6 +257,35 @@ MainWindowTest {
                    "the cave itself is the root, so it owns no row")
         }
 
+        // The Stations cell of a trip row names that trip's stations as the
+        // trip table named them — the abbreviated range the used-station task
+        // reports — and the names arrive from that task, so they are waited for.
+        // Only trip rows have a cell here: the cave itself is the tree's root,
+        // so the folded count belongs to the Data page's tree.
+        function test_tripRowNamesItsStations() {
+            let cave = setupCaveWithTrips()
+            let trip = cave.trip(0)
+            trip.addNewChunk()
+            let chunk = trip.chunk(0)
+            chunk.setData(SurveyChunk.StationNameRole, 0, "A1")
+            chunk.setData(SurveyChunk.StationNameRole, 1, "A2")
+            chunk.setData(SurveyChunk.ShotDistanceRole, 0, "10")
+            chunk.setData(SurveyChunk.ShotCompassRole, 0, "0")
+            chunk.setData(SurveyChunk.ShotClinoRole, 0, "0")
+
+            let cavePage = RootData.pageView.currentPageItem
+            let tree = tripTree(cavePage)
+            tryCompare(tree, "rowCount", 3, 5000)
+
+            // The cell is looked up again on every poll: a row the view
+            // rebuilds while the task is still counting is picked up fresh.
+            tryVerify(() => {
+                          const cell = findChild(cavePage, "tripStations0")
+                          const value = cell === null ? null : findChild(cell, "value")
+                          return value !== null && value.text === "A 1-2"
+                      }, 10000, "the trip row must name its stations")
+        }
+
         // A click on a trip row's name opens that trip's page, the way the
         // trip table's name link did.
         function test_clickingATripRowOpensTheTripPage() {

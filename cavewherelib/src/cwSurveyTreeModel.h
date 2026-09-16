@@ -76,6 +76,7 @@ public:
         IsSourceRootRole,
         TripCountRole,
         StationCountRole,
+        UsedStationsRole,
         LengthRole,
         DepthValueRole,
         DateRole,
@@ -185,6 +186,10 @@ private:
 
     //! The number of stations \a trip names, zero until its watcher counts them.
     int tripStationCount(cwTrip* trip) const;
+
+    //! \a trip's stations as one line of abbreviated ranges, empty until its
+    //! watcher names them.
+    QString tripUsedStations(cwTrip* trip) const;
 
     //! \a trip's surveyed length, zero until its watcher adds it up.
     double tripLength(cwTrip* trip) const;

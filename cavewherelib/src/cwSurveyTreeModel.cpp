@@ -191,6 +191,10 @@ QVariant cwSurveyTreeModel::data(const QModelIndex& index, int role) const
         return node != nullptr ? subtreeTripCount(node) : 0;
     case StationCountRole:
         return node != nullptr ? subtreeStationCount(node) : tripStationCount(trip);
+    case UsedStationsRole:
+        //A node holds the stations of every trip under it, far more than a cell
+        //can name, so only a trip row names its own.
+        return node != nullptr ? QString() : tripUsedStations(trip);
     case LengthRole:
         //A node carries a solved cwLength object the cell reads unit and all; a
         //trip has only the number its length task adds up, in the unit the
@@ -276,6 +280,7 @@ QHash<int, QByteArray> cwSurveyTreeModel::roleNames() const
         {IsSourceRootRole, "isSourceRoot"},
         {TripCountRole, "tripCount"},
         {StationCountRole, "stationCount"},
+        {UsedStationsRole, "usedStations"},
         {LengthRole, "length"},
         //depthValue and dateValue carry the names their roles hold because
         //"depth" and "date" are already taken in a delegate: one by TreeView's
@@ -499,7 +504,8 @@ void cwSurveyTreeModel::connectTrip(cwTrip* trip)
         emitRowDataChanged(indexOfTrip(trip), Length, Length, {LengthRole});
     });
     connect(stats, &cwTripStatsWatcher::usedStationsChanged, this, [this, trip]() {
-        emitRowDataChanged(indexOfTrip(trip), Stations, Stations, {StationCountRole});
+        emitRowDataChanged(indexOfTrip(trip), Stations, Stations,
+                           {StationCountRole, UsedStationsRole});
         emitAggregateChanged(trip->parentNode());
     });
 }
@@ -661,6 +667,15 @@ int cwSurveyTreeModel::tripStationCount(cwTrip* trip) const
 {
     const cwTripStatsWatcher* stats = m_tripStats.value(trip);
     return stats != nullptr ? stats->stationCount() : 0;
+}
+
+QString cwSurveyTreeModel::tripUsedStations(cwTrip* trip) const
+{
+    const cwTripStatsWatcher* stats = m_tripStats.value(trip);
+    //The ranges read as one line of text, the way the cave page's trip table
+    //drew them.
+    return stats != nullptr ? stats->usedStations().join(QStringLiteral(", "))
+                            : QString();
 }
 
 double cwSurveyTreeModel::tripLength(cwTrip* trip) const
