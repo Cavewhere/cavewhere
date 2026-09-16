@@ -470,7 +470,7 @@ TEST_CASE("scene node fans the spacing coverage out to clouds it already has and
 
     QSignalSpy coverageSpy(&node, &cwLazLayersSceneNode::spacingCoverageChanged);
 
-    constexpr float kTunedCoverage = 1.5f;
+    constexpr float kTunedCoverage = 3.0f;
     node.setSpacingCoverage(kTunedCoverage);
     CHECK(node.spacingCoverage() == kTunedCoverage);
     CHECK(coverageSpy.count() == 1);
@@ -486,14 +486,17 @@ TEST_CASE("scene node fans the spacing coverage out to clouds it already has and
     REQUIRE(secondCloud != nullptr);
     CHECK(secondCloud->spacingCoverage() == kTunedCoverage);
 
-    // Out-of-range requests clamp instead of letting a sprite swallow the
-    // cloud or go negative.
-    constexpr float kAboveMaxCoverage = 100.0f;
-    node.setSpacingCoverage(kAboveMaxCoverage);
-    CHECK(node.spacingCoverage() < kAboveMaxCoverage);
-    CHECK(firstCloud->spacingCoverage() == node.spacingCoverage());
+    // Out-of-range requests clamp to the [0.25, 8] range the P+wheel gesture
+    // spans, instead of letting a sprite swallow the cloud or shrink every
+    // point to the shader's 1px floor.
+    constexpr float kMinCoverage = 0.25f;
+    constexpr float kMaxCoverage = 8.0f;
+
+    node.setSpacingCoverage(100.0f);
+    CHECK(node.spacingCoverage() == kMaxCoverage);
+    CHECK(firstCloud->spacingCoverage() == kMaxCoverage);
 
     node.setSpacingCoverage(-1.0f);
-    CHECK(node.spacingCoverage() == 0.0f);
-    CHECK(secondCloud->spacingCoverage() == 0.0f);
+    CHECK(node.spacingCoverage() == kMinCoverage);
+    CHECK(secondCloud->spacingCoverage() == kMinCoverage);
 }

@@ -7,7 +7,7 @@ import QmlTestRecorder
 // Per-object appearance overrides carried ON the offscreen render job
 // (cwOffscreenRenderParameters::appearanceOverrides). A job attaches a
 // cwPointCloudAppearance for a cloud; the renderer acquires a transient appearance
-// slot, uploads the payload, and draws the cloud at an overridden world radius —
+// slot, uploads the payload, and draws the cloud at an overridden spacing coverage —
 // the live view is untouched, and two jobs overriding the same cloud in one batch
 // get distinct slots that don't collide.
 MainWindowTest {
@@ -58,7 +58,7 @@ MainWindowTest {
             }
 
             let sceneManager = RootData.regionSceneManager;
-            let liveRadius = sceneManager.lazLayersSceneNode.worldRadius;
+            let liveCoverage = sceneManager.lazLayersSceneNode.spacingCoverage;
 
             let livePath = OffscreenRenderTester.tempPngPath("appearance_live");
             let overridePath = OffscreenRenderTester.tempPngPath("appearance_override");
@@ -66,10 +66,10 @@ MainWindowTest {
             OffscreenRenderTester.removeFile(overridePath);
 
             let outputSize = Qt.size(400, 400);
-            // <= 0 = no override on the job (live radius); > 0 attaches the on-job payload.
+            // <= 0 = no override on the job (live coverage); > 0 attaches the on-job payload.
             OffscreenRenderTester.renderPointCloudFramed(regionViewer, sceneManager, livePath, outputSize, 0.0);
             OffscreenRenderTester.renderPointCloudFramed(regionViewer, sceneManager, overridePath, outputSize,
-                                                         liveRadius * 12.0);
+                                                         liveCoverage * 12.0);
 
             tryVerify(function() { return OffscreenRenderTester.fileExists(livePath); }, 10000,
                       "live point-cloud PNG was written");
@@ -80,9 +80,9 @@ MainWindowTest {
             let overrideOpaque = OffscreenRenderTester.opaqueFraction(overridePath);
 
             verify(liveOpaque > 0.005,
-                   "the cloud is clearly in frame at the live radius (opaque fraction " + liveOpaque + ")");
+                   "the cloud is clearly in frame at the live coverage (opaque fraction " + liveOpaque + ")");
             verify(overrideOpaque > liveOpaque * 1.25,
-                   "the on-job radius override draws substantially more cloud (override " + overrideOpaque
+                   "the on-job coverage override draws substantially more cloud (override " + overrideOpaque
                    + " vs live " + liveOpaque + ")");
 
             OffscreenRenderTester.removeFile(livePath);
@@ -97,7 +97,7 @@ MainWindowTest {
             }
 
             let sceneManager = RootData.regionSceneManager;
-            let liveRadius = sceneManager.lazLayersSceneNode.worldRadius;
+            let liveCoverage = sceneManager.lazLayersSceneNode.spacingCoverage;
 
             let smallPath = OffscreenRenderTester.tempPngPath("appearance_pair_small");
             let largePath = OffscreenRenderTester.tempPngPath("appearance_pair_large");
@@ -106,11 +106,11 @@ MainWindowTest {
 
             // Two jobs overriding the SAME cloud, issued together so they batch through
             // the atlas path with both override slots live at once. If their slots
-            // collided, both would read the same radius and draw the same coverage.
+            // collided, both would read the same coverage and draw the same footprint.
             let written = OffscreenRenderTester.renderPointCloudFramedPair(
                 regionViewer, sceneManager,
-                smallPath, liveRadius * 2.0,
-                largePath, liveRadius * 12.0,
+                smallPath, liveCoverage * 2.0,
+                largePath, liveCoverage * 12.0,
                 Qt.size(400, 400));
             compare(written, 2, "both batched override renders were written");
 
@@ -118,9 +118,9 @@ MainWindowTest {
             let largeOpaque = OffscreenRenderTester.opaqueFraction(largePath);
 
             verify(smallOpaque > 0.005,
-                   "the small-radius job drew the cloud (opaque fraction " + smallOpaque + ")");
+                   "the small-coverage job drew the cloud (opaque fraction " + smallOpaque + ")");
             verify(largeOpaque > smallOpaque * 1.25,
-                   "the large-radius job in the same batch drew more than the small-radius job, so their "
+                   "the large-coverage job in the same batch drew more than the small-coverage job, so their "
                    + "appearance slots did not collide (large " + largeOpaque + " vs small " + smallOpaque + ")");
 
             OffscreenRenderTester.removeFile(smallPath);

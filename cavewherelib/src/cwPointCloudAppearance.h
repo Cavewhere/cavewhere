@@ -13,17 +13,13 @@
 
 // Point-cloud appearance override, packed into a cwAppearanceOverride for an
 // offscreen render job. The point cloud owns this schema because its fields are
-// point-cloud-specific (a line plot has no world radius); the generic job API
-// carries it only as an opaque cwAppearanceOverride. lidarPrivate extends this
+// point-cloud-specific (a line plot has no spacing coverage); the generic job
+// API carries it only as an opaque cwAppearanceOverride. lidarPrivate extends this
 // struct (renderer-internal: monochrome, clip prism) without touching the shared
 // API — the same per-branch divergence the PerCloudUniform layout already has.
 struct cwPointCloudAppearance {
-    // Absent = render at the cloud's live world radius (slot 0). Present =
-    // override the world-space sprite radius for this job only.
-    std::optional<float> worldRadius;
-
     // Absent = render at the cloud's live spacing coverage (slot 0). Present =
-    // override the spacing rule's share of a sprite for this job only.
+    // override the sprite's share of its own cell for this job only.
     std::optional<float> spacingCoverage;
 };
 

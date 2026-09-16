@@ -25,21 +25,20 @@ layout(std140, binding = 0) uniform GlobalBlock {
 };
 
 // Per-cloud (binding 1): what every point of this cloud sizes itself from.
-// worldRadius is the tuned sprite radius in meters (hold P + mouse wheel in the
-// 3D view to tune it; sink_repatcher --point-radius sets it for offline
-// renders). spacingCoverage is the fraction of its own cell a sprite should
-// cover, and sseThresholdPx is the projected spacing the octree cut refines to
-// — the view's screenSpaceErrorPx times this cloud's current inflation — which
-// is what lets each vertex work out the spacing around it from its own depth.
-// drawnSpacing is the finest sample spacing the last live frame actually drew,
-// in meters, which is what the sprites have to close when the cut is coarser
-// than the threshold asked for. Four floats is std140's 16 bytes exactly; the
-// C++ PerCloudUniform matches it field for field.
+// spacingCoverage is the only knob a user turns (hold P + mouse wheel in the
+// 3D view): the fraction of its own cell a sprite covers. sseThresholdPx is
+// the projected spacing the octree cut refines to — the view's
+// screenSpaceErrorPx times this cloud's current inflation — which is what lets
+// each vertex work out the spacing around it from its own depth. drawnSpacing
+// is the finest sample spacing the last live frame actually drew, in meters,
+// which is what the sprites have to close when the cut is coarser than the
+// threshold asked for. Four floats is std140's 16 bytes exactly; the C++
+// PerCloudUniform matches it field for field, padding included.
 layout(std140, binding = 1) uniform PerCloudBlock {
-    float worldRadius;
     float spacingCoverage;
     float sseThresholdPx;
     float drawnSpacing;
+    float padding;
 };
 
 const float maxPointSizePx = 64.0;
@@ -79,19 +78,19 @@ void main(void)
     // coarser far from it, exactly how the drawn level steps out with distance
     // in perspective. Covering spacingCoverage of that gap is therefore a
     // constant pixel size, which is what lets a far tile drawn at a coarse
-    // level cover its own cell as well as a near tile covers its finer one,
-    // instead of one world radius covering the near cell and leaving the far
-    // one full of holes. In ortho w is 1 everywhere, so the tuned radius wins
-    // at every ordinary zoom.
+    // level cover its own cell as well as a near tile covers its finer one.
+    // Coverage is the whole rule: it is the one number that predicts whether
+    // the surface reads solid or shows holes, so there is no separate tuned
+    // world radius competing with it.
     //
     // The threshold term describes the spacing a cut that keeps up has on
     // screen. Where the point budget or a node still streaming holds the cloud
-    // coarser than that, drawnSpacing is the wider gap that is really there, so
-    // it joins the tuned radius as a world-space floor — one number for the
-    // whole cloud, because the cut is additive and a per-node floor would blow
-    // a refined region's ancestors up to their own coarse spacing.
-    float worldFloor = max(worldRadius, spacingCoverage * drawnSpacing);
-    float sizePx = max(worldFloor * pixelsPerMeter, spacingCoverage * sseThresholdPx);
+    // coarser than that, drawnSpacing is the wider gap that is really there,
+    // so coverage of it becomes a world-space floor — one number for the whole
+    // cloud, because the cut is additive and a per-node floor would blow a
+    // refined region's ancestors up to their own coarse spacing.
+    float sizePx = max(spacingCoverage * drawnSpacing * pixelsPerMeter,
+                       spacingCoverage * sseThresholdPx);
     // 1px floor: zoomed-out clouds were getting darker than zoomed-in ones
     // because a large min clamp made far points overdraw and stack EDL
     // darkening. Letting size shrink to a single pixel keeps overdraw flat

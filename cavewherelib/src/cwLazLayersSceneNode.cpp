@@ -25,18 +25,14 @@
 Q_LOGGING_CATEGORY(lcLazSceneNode, "cw.laz.scenenode")
 
 namespace {
-    // World-space sprite radius bounds in meters. Lower bound covers
-    // sub-decimeter sprites for high-density scans; upper bound prevents
-    // a runaway multiplicative P+wheel from turning the render into one
-    // fat blob. sink_repatcher --point-radius clamps to the same range.
-    constexpr float kMinWorldRadius = 0.01f;
-    constexpr float kMaxWorldRadius = 50.0f;
-
-    // Spacing-coverage bounds. Zero turns the spacing floor off entirely and
-    // leaves worldRadius alone; above about one sprite per cell the sprites of
-    // a coarse cut overlap so far that the surface reads as a blur.
-    constexpr float kMinSpacingCoverage = 0.0f;
-    constexpr float kMaxSpacingCoverage = 4.0f;
+    // Spacing-coverage bounds — the whole point-size range, since coverage is
+    // the only sizing knob. A quarter of a cell is the smallest size that
+    // still shows structure rather than dust; eight cells is well past the
+    // point where a coarse cut's sprites smear the surface into a blur, and it
+    // keeps a runaway multiplicative P+wheel from turning the render into one
+    // fat blob. Zero is excluded: it would size every sprite to the 1px floor.
+    constexpr float kMinSpacingCoverage = 0.25f;
+    constexpr float kMaxSpacingCoverage = 8.0f;
 
 QString shortId(const cwLazLayer* layer) {
     return layer == nullptr
@@ -266,7 +262,6 @@ void cwLazLayersSceneNode::materialize(cwLazLayer* layer)
     qCDebug(lcLazSceneNode) << "materialize:" << shortId(layer) << fileName(layer);
 
     auto* renderObject = new cwRenderPointCloud();
-    renderObject->setWorldRadius(m_worldRadius);
     renderObject->setSpacingCoverage(m_spacingCoverage);
     renderObject->setScene(m_scene);
     m_pointClouds.insert(layer->id(), renderObject);
@@ -381,23 +376,6 @@ void cwLazLayersSceneNode::removeKeywordItemForLayer(cwLazLayer* layer)
     }
     qCDebug(lcLazSceneNode) << "removeKeywordItemForLayer:" << shortId(layer);
     m_keywordRegistry.drop(layer->id());
-}
-
-void cwLazLayersSceneNode::setWorldRadius(float worldRadius)
-{
-    const float clamped = std::clamp(worldRadius, kMinWorldRadius, kMaxWorldRadius);
-    if (qFuzzyCompare(m_worldRadius, clamped)) {
-        return;
-    }
-    m_worldRadius = clamped;
-
-    for (const auto& renderObject : std::as_const(m_pointClouds)) {
-        if (renderObject) {
-            renderObject->setWorldRadius(clamped);
-        }
-    }
-
-    emit worldRadiusChanged(clamped);
 }
 
 void cwLazLayersSceneNode::setSpacingCoverage(float spacingCoverage)

@@ -308,7 +308,7 @@ private:
                                int slotCount) override;
 
     // Write one PerCloudUniform into @a slot.
-    void writeAppearanceSlot(QRhiResourceUpdateBatch* batch, int slot, float worldRadius,
+    void writeAppearanceSlot(QRhiResourceUpdateBatch* batch, int slot,
                              float spacingCoverage);
 
     // Write the live render state into slot 0 and mark it current.
@@ -320,24 +320,23 @@ private:
 
     // Mirrors the PerCloudBlock declaration in PointCloud.vert, which sizes
     // every sprite as
-    // max(max(worldRadius, spacingCoverage * drawnSpacing) * pixelsPerMeter(w),
+    // max(spacingCoverage * drawnSpacing * pixelsPerMeter(w),
     //     spacingCoverage * sseThresholdPx)
-    // pixels. Four floats is exactly std140's 16-byte rounding, so the block
-    // needs no padding.
+    // pixels. The three live floats carry an explicit fourth so the struct is
+    // std140's 16 bytes, which is what the block rounds up to.
     struct PerCloudUniform {
-        float worldRadius = 0.0f;
         float spacingCoverage = 0.0f;
         float sseThresholdPx = 0.0f;
         float drawnSpacing = 0.0f;
+        float padding = 0.0f;
     };
     static_assert(sizeof(PerCloudUniform) == 4 * sizeof(float),
-                  "PerCloudBlock in PointCloud.vert is four floats, which is "
-                  "std140's 16 bytes; the C++ struct has to match it.");
+                  "PerCloudBlock in PointCloud.vert rounds to std140's 16 "
+                  "bytes; the C++ struct has to match it, padding included.");
 
-    // The block the shader reads for @a worldRadius and @a spacingCoverage,
-    // carrying this frame's refine threshold and the last drawn spacing along
-    // with them.
-    PerCloudUniform appearanceUniform(float worldRadius, float spacingCoverage) const;
+    // The block the shader reads for @a spacingCoverage, carrying this frame's
+    // refine threshold and the last drawn spacing along with it.
+    PerCloudUniform appearanceUniform(float spacingCoverage) const;
 
     bool m_resourcesInitialized = false;
 
@@ -345,11 +344,11 @@ private:
     // binding 1 the shared per-instance constants. Built once in initialize().
     QRhiVertexInputLayout m_inputLayout;
 
-    // Per-cloud uniform block (binding 1): the world-space sprite radius in
-    // meters plus the spacing rule the shader sizes against, one aligned slot
-    // per appearance slot, bound with a dynamic offset so an offscreen job can
-    // render the cloud at an overridden radius without disturbing the live view
-    // (slot 0). Steady state is ONE slot (the live radius); the pool
+    // Per-cloud uniform block (binding 1): the spacing rule the shader sizes
+    // against, one aligned slot per appearance slot, bound with a dynamic
+    // offset so an offscreen job can render the cloud at an overridden
+    // coverage without disturbing the live view (slot 0). Steady state is ONE
+    // slot (the live coverage); the pool
     // (cwAppearanceSlotted) grows it on demand to the concurrent-override high-water
     // mark, so an interactive session pays one slot per cloud, not kAppearanceSlotCount.
     // m_perCloudStride is the aligned byte size of one slot, also the dynamic-offset

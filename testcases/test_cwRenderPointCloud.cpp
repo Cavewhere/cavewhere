@@ -78,11 +78,10 @@ TEST_CASE("cwRenderPointCloud: setOctree publishes the manifest's numbers",
     REQUIRE_FALSE(cloud.octree().isNull());
 }
 
-TEST_CASE("cwRenderPointCloud: clear drops the octree but keeps the sprite knobs",
+TEST_CASE("cwRenderPointCloud: clear drops the octree but keeps the sprite knob",
           "[cwRenderPointCloud]") {
     cwRenderPointCloud cloud;
-    cloud.setWorldRadius(5.5f);
-    cloud.setSpacingCoverage(1.5f);
+    cloud.setSpacingCoverage(2.5f);
 
     cloud.setOctree(makeSource(QStringLiteral("fingerprint")));
     REQUIRE(cloud.pointCount() == 3);
@@ -90,8 +89,7 @@ TEST_CASE("cwRenderPointCloud: clear drops the octree but keeps the sprite knobs
     cloud.clear();
     REQUIRE(cloud.pointCount() == 0);
     REQUIRE(cloud.octree().isNull());
-    REQUIRE(cloud.worldRadius() == 5.5f);
-    REQUIRE(cloud.spacingCoverage() == 1.5f);
+    REQUIRE(cloud.spacingCoverage() == 2.5f);
 }
 
 TEST_CASE("cwRenderPointCloud: spacing coverage starts at the default and follows its setter",
@@ -100,17 +98,14 @@ TEST_CASE("cwRenderPointCloud: spacing coverage starts at the default and follow
 
     cwRenderPointCloud cloud;
     REQUIRE(cloud.spacingCoverage() == cw::pointcloud::kDefaultSpacingCoverage);
-    REQUIRE(cloud.worldRadius() == cw::pointcloud::kDefaultWorldRadius);
     REQUIRE_FALSE(Access::renderStateChanged(cloud));
 
-    // Zero is a real setting: it turns the per-node floor off and leaves the
-    // tuned world radius as the only sprite size.
-    cloud.setSpacingCoverage(0.0f);
-    CHECK(cloud.spacingCoverage() == 0.0f);
+    cloud.setSpacingCoverage(0.5f);
+    CHECK(cloud.spacingCoverage() == 0.5f);
     CHECK(Access::renderStateChanged(cloud));
 
     Access::clearRenderStateChanged(cloud);
-    cloud.setSpacingCoverage(0.0f);
+    cloud.setSpacingCoverage(0.5f);
     CHECK_FALSE(Access::renderStateChanged(cloud));
 }
 
@@ -135,9 +130,9 @@ TEST_CASE("cwRenderPointCloud: a uniform-only change does not dirty the source t
     //
     // The RHI back-end (cwRHIPointCloud::synchronize) throws away its whole
     // node table — every resident buffer with it — when the source tracker
-    // reports a change. The source and the cheap render knobs (world radius,
-    // spacing coverage) are tracked separately for exactly this reason: a
-    // uniform-only setter must NOT mark the source dirty, or every P+wheel
+    // reports a change. The source and the cheap render knob (spacing
+    // coverage) are tracked separately for exactly this reason: a uniform-only
+    // setter must NOT mark the source dirty, or every P+wheel
     // tick would drop the cloud's residency and re-stream it from the root.
     using Access = CwRenderPointCloudTestAccess;
 
@@ -153,13 +148,9 @@ TEST_CASE("cwRenderPointCloud: a uniform-only change does not dirty the source t
 
     // A uniform-only change must leave the source tracker clean (no re-stream)
     // while marking render state dirty (cheap UBO update).
-    cloud.setWorldRadius(cloud.worldRadius() + 1.0f);
-    REQUIRE_FALSE(Access::sourceChanged(cloud));
-    REQUIRE(Access::renderStateChanged(cloud));
-
-    // Same for spacing coverage.
     cloud.setSpacingCoverage(cloud.spacingCoverage() + 1.0f);
     REQUIRE_FALSE(Access::sourceChanged(cloud));
+    REQUIRE(Access::renderStateChanged(cloud));
 }
 
 TEST_CASE("cwRenderPointCloud: re-publishing the same octree is a no-op",

@@ -41,7 +41,6 @@ class CAVEWHERE_LIB_EXPORT cwLazLayersSceneNode : public QObject
     QML_NAMED_ELEMENT(LazLayersSceneNode)
     QML_UNCREATABLE("Access via RegionSceneManager.lazLayersSceneNode")
 
-    Q_PROPERTY(float worldRadius READ worldRadius WRITE setWorldRadius NOTIFY worldRadiusChanged)
     Q_PROPERTY(float spacingCoverage READ spacingCoverage WRITE setSpacingCoverage NOTIFY spacingCoverageChanged)
 
 public:
@@ -59,7 +58,6 @@ public:
     /// Test accessor: render object backing @a layer, or nullptr.
     cwRenderPointCloud* pointCloudForLayer(cwLazLayer* layer) const;
 
-    float worldRadius() const { return m_worldRadius; }
     float spacingCoverage() const { return m_spacingCoverage; }
 
     /// Subset of the bound model's layers whose render object is currently
@@ -68,11 +66,9 @@ public:
     QList<cwLazLayer*> visibleLayers() const;
 
 public slots:
-    void setWorldRadius(float worldRadius);
     void setSpacingCoverage(float spacingCoverage);
 
 signals:
-    void worldRadiusChanged(float worldRadius);
     void spacingCoverageChanged(float spacingCoverage);
 
 private slots:
@@ -103,16 +99,11 @@ private:
     // the point clouds via setObject(), so they must die before the clouds do.
     cwKeywordItemRegistry<QUuid> m_keywordRegistry;
 
-    // Mirrors cwRenderPointCloud::RenderState::worldRadius default.
-    // setWorldRadius fans out to every owned cwRenderPointCloud, is bound to
-    // the P+wheel gesture in the 3D view, and is the entry point used by
-    // sink_repatcher --point-radius. Kept here (rather than only on
-    // cwRenderPointCloud) so the value survives layers added later in the
-    // session.
-    float m_worldRadius = cw::pointcloud::kDefaultWorldRadius;
-
-    // Fanned out to every owned cwRenderPointCloud exactly as m_worldRadius is,
-    // so it too survives layers added later in the session.
+    // Mirrors cwRenderPointCloud::RenderState::spacingCoverage default — the
+    // only point-size knob. setSpacingCoverage clamps it, fans it out to every
+    // owned cwRenderPointCloud, and is bound to the P+wheel gesture in the 3D
+    // view. Kept here (rather than only on cwRenderPointCloud) so the value
+    // survives layers added later in the session.
     float m_spacingCoverage = cw::pointcloud::kDefaultSpacingCoverage;
 };
 

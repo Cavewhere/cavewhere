@@ -40,8 +40,8 @@ void cwRenderPointCloud::setOctree(const cwPointOctreeSource& source)
 
 void cwRenderPointCloud::clear()
 {
-    // Render knobs (worldRadius / spacingCoverage) live in m_renderState and
-    // are intentionally left untouched — clearing only drops the octree.
+    // The render knob (spacingCoverage) lives in m_renderState and is
+    // intentionally left untouched — clearing only drops the octree.
     m_source.setValue(cwPointOctreeSource());
 
     // Empty the pick set here rather than waiting for the render thread's own
@@ -73,17 +73,6 @@ float cwRenderPointCloud::meanSpacingXY() const
 {
     const auto& manifest = m_source.value().manifest;
     return manifest ? manifest->meanSpacingXY : 0.0f;
-}
-
-void cwRenderPointCloud::setWorldRadius(float worldRadius)
-{
-    RenderState state = m_renderState.value();
-    if (qFuzzyCompare(state.worldRadius, worldRadius)) {
-        return;
-    }
-    state.worldRadius = worldRadius;
-    m_renderState.setValue(state);
-    update();
 }
 
 void cwRenderPointCloud::setSpacingCoverage(float spacingCoverage)

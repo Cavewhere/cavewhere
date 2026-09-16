@@ -23,20 +23,13 @@
 #include <memory>
 
 namespace cw::pointcloud {
-    //! World-space sprite radius in meters, the floor every sprite draws at.
-    //!
-    //! The shader scales by the physical viewport height alone, so this is a
-    //! true world radius on every display density. It reads as twice the old
-    //! default because the old one was doubled again by devicePixelRatio.
-    constexpr float kDefaultWorldRadius = 2.58f;
-
-    //! Sprite radius as a fraction of the sample spacing the cut refines to.
+    //! Sprite side as a fraction of the sample spacing the cut refines to.
     //!
     //! Grid sampling leaves at most one point per occupied cell of side
-    //! `spacing`, and gl_PointSize is a side length, so 0.75 narrows the gap a
-    //! coarse cut shows to a quarter of a spacing. PointCloud.vert works the
-    //! spacing out per vertex from the vertex's own clip depth and the view's
-    //! refine threshold, so a far tile drawn at a coarse level covers its own
+    //! `spacing`, and gl_PointSize is a side length, so 1.5 covers a cell and
+    //! half of each neighbor's. PointCloud.vert works the spacing out per
+    //! vertex from the vertex's own clip depth and the view's refine
+    //! threshold, so a far tile drawn at a coarse level covers its own
     //! cell just as a near tile covers its finer one. The cut is additive — a
     //! refined region draws its coarse ancestors too — and depth is what tells
     //! those ancestors apart: an ancestor point sitting among refined ones is
@@ -44,7 +37,13 @@ namespace cw::pointcloud {
     //! than its node's own coarse one. Where the point budget or a node still
     //! streaming holds the cloud coarser than the threshold describes, the
     //! coverage applies to the finest spacing actually drawn instead.
-    constexpr float kDefaultSpacingCoverage = 0.75f;
+    //!
+    //! This is the only point-size knob: coverage is what predicts whether the
+    //! surface reads solid or shows holes, so the shader has no separate tuned
+    //! world radius competing with it. Above 1 the sprites of neighboring
+    //! cells overlap, which is what closes the holes an irregular cloud leaves
+    //! at exactly one cell per sprite.
+    constexpr float kDefaultSpacingCoverage = 1.5f;
 }
 
 class cwRenderPointCloud : public cwRenderObject
@@ -62,8 +61,8 @@ public:
     //! case ray passes through a cell centre, s*sqrt(2)/2 from the nearest
     //! point, so anything smaller leaves a gap the ray slips through — and it
     //! then hits some unoccluded point far down the ray instead. The splats
-    //! are drawn from worldRadius and overlap into a solid-looking wall, so
-    //! that gap is invisible: the surface reads as watertight and picks
+    //! are drawn from the spacing rule and overlap into a solid-looking wall,
+    //! so that gap is invisible: the surface reads as watertight and picks
     //! through. Above the threshold the near wall yields an exact hit.
     //!
     //! Nothing catches a miss any more: the near-miss fallback that used to
@@ -72,12 +71,12 @@ public:
     //! cwLeadView::isOccluded). This constant is the only thing keeping a
     //! cloud pickable where it is drawn.
     //!
-    //! Deliberately NOT tied to worldRadius, which would match the drawn
-    //! footprint exactly but is tuned live (P + mouse wheel, see
+    //! Deliberately NOT tied to spacingCoverage, which describes the drawn
+    //! footprint but is tuned live (P + mouse wheel, see
     //! PointCloud.vert) while this is baked into the BVH box padding at
     //! addObject time — tracking it would rebuild the whole BVH per wheel
     //! tick. Staying above the threshold keeps picks watertight at every
-    //! worldRadius instead.
+    //! coverage instead.
     //! 1.0 rather than the bare 0.707 threshold: meanSpacingXY is a mean over
     //! an irregular cloud, so local spacing runs above it, and a wall met at a
     //! grazing angle stretches the effective gap further still. The margin
@@ -106,8 +105,6 @@ public:
     QVector3D bboxMin() const;
     QVector3D bboxMax() const;
     float meanSpacingXY() const;
-    float worldRadius() const;
-    void setWorldRadius(float worldRadius);
     float spacingCoverage() const;
     void setSpacingCoverage(float spacingCoverage);
 
@@ -119,22 +116,15 @@ private:
     // data. A change here re-uploads the UBO but leaves the node buffers
     // untouched. Real field compare so a no-op set is a no-op.
     struct RenderState {
-        // World-space sprite radius in meters. A fixed default produces
-        // consistent sprite sizes across clouds; tuned at runtime by P+wheel
-        // in the 3D view (clamped on the scene-node) and by sink_repatcher
-        // --point-radius for offline renders. This is appearance slot 0 — the
-        // live view and a plain capture both render with it.
-        float worldRadius = cw::pointcloud::kDefaultWorldRadius;
-
-        // Sprite radius as a fraction of the sample spacing the cut refines to
-        // at each vertex's depth. PointCloud.vert takes the larger of that and
-        // worldRadius, so it only adds size where the tuned radius leaves the
-        // cell it sits in uncovered.
+        // Sprite side as a fraction of the sample spacing the cut refines to
+        // at each vertex's depth — the whole sizing rule, and the only
+        // point-size knob. Tuned at runtime by P+wheel in the 3D view (clamped
+        // on the scene-node). This is appearance slot 0 — the live view and a
+        // plain capture both render with it.
         float spacingCoverage = cw::pointcloud::kDefaultSpacingCoverage;
 
         bool operator!=(const RenderState& other) const {
-            return worldRadius != other.worldRadius
-                || spacingCoverage != other.spacingCoverage;
+            return spacingCoverage != other.spacingCoverage;
         }
     };
 
@@ -151,11 +141,6 @@ private:
 inline const cwPointOctreeSource& cwRenderPointCloud::octree() const
 {
     return m_source.value();
-}
-
-inline float cwRenderPointCloud::worldRadius() const
-{
-    return m_renderState.value().worldRadius;
 }
 
 inline float cwRenderPointCloud::spacingCoverage() const

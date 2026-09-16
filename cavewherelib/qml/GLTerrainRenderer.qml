@@ -143,7 +143,7 @@ Item {
         camera: rendererId.camera
         scene: rendererId.scene
         gridPlane: RootData.regionSceneManager.gridPlane.plane
-        pointCloudWorldRadiusTarget: RootData.regionSceneManager.lazLayersSceneNode
+        pointCloudSizeTarget: RootData.regionSceneManager.lazLayersSceneNode
     }
 
     ProjectionTransition {
