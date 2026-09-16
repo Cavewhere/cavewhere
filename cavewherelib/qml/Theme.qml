@@ -151,6 +151,9 @@ QtObject {
     readonly property int treeDateColumnWidth: Math.round(110 * fontScale)
     readonly property int treeDeclColumnWidth: Math.round(95 * fontScale)
     readonly property int treeFilterWidth: Math.round(220 * fontScale)
+    //The arrow the header cell of the sorted column carries, sized to sit
+    //beside a fontSizeSmall title rather than to stand on its own.
+    readonly property int treeSortIndicatorSize: Math.round(10 * fontScale)
 
     // Chips (the Kind chip on a tree row)
     readonly property int chipRadius: Math.round(3 * fontScale)

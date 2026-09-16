@@ -22,6 +22,10 @@ import cavewherelib
 // open lives here: the helpers below translate between a view row
 // (expand/collapse/isExpanded) and a model index through
 // rowAtIndex/index and the proxy's mapToSource/mapFromSource.
+//
+// The rows stand in the order each node lists its children and trips in until
+// a header cell is clicked; the header is the one sort control, and the arrow
+// it carries says which column the rows are ordered by.
 ColumnLayout {
     id: surveyTreeId
 
@@ -52,6 +56,14 @@ ColumnLayout {
     //The rows the view draws right now, the rows under rootNode included only
     //while their node is open.
     readonly property int rowCount: treeViewId.rows
+
+    //The column the rows are ordered by, -1 while they stand in the order each
+    //node lists its children and trips in. The header is what moves it, and
+    //assigning -1 puts the rows back in their node's own order.
+    property alias sortColumn: filterModelId.sortColumn
+
+    //Which end of that column's values comes first, a Qt.SortOrder.
+    property alias sortOrder: filterModelId.sortOrder
 
     //The rows the user picked. A verb on a row acts on the selection when the
     //row is part of it, which is what tripsFor() decides.
@@ -350,6 +362,25 @@ ColumnLayout {
         }
     }
 
+    //Orders the rows by the column a header cell stands for: the first ask
+    //orders them by it, and asking again for the column they are already
+    //ordered by flips which end comes first. Each node's own order is the
+    //default rather than a state a click reaches, so no click clears the sort.
+    //
+    //The order is set ahead of the column so that flipping the order of the
+    //column in hand reorders the rows once: the column set that follows it
+    //finds the column it already has and does nothing.
+    function toggleSort(column: int) {
+        const ascending = !(filterModelId.sortColumn === column
+                            && filterModelId.sortOrder === Qt.AscendingOrder);
+
+        //What was open stays open: sorting announces a layout change, which
+        //moves the rows the view has and keeps their expansion.
+        filterModelId.sortOrder = ascending ? Qt.AscendingOrder : Qt.DescendingOrder;
+        filterModelId.sortColumn = column;
+        treeViewId.forceLayout();
+    }
+
     //True when the node at \a row has rows of its own to show.
     function rowHasChildren(row: int) : bool {
         const node = surveyTreeId.objectAtRow(row) as SurveyNode;
@@ -510,15 +541,44 @@ ColumnLayout {
             implicitHeight: headerLabelId.implicitHeight + 2 * Theme.delegatePadding
             color: Theme.surfaceMuted
 
-            QC.Label {
-                id: headerLabelId
-
+            RowLayout {
                 anchors.left: parent.left
+                anchors.right: parent.right
                 anchors.leftMargin: Theme.delegatePadding
+                anchors.rightMargin: Theme.delegatePadding
                 anchors.verticalCenter: parent.verticalCenter
-                text: headerCellId.display
-                color: Theme.textSubtle
-                font.pixelSize: Theme.fontSizeSmall
+
+                spacing: Theme.tightSpacing
+
+                QC.Label {
+                    id: headerLabelId
+
+                    text: headerCellId.display
+                    color: Theme.textSubtle
+                    font.pixelSize: Theme.fontSizeSmall
+                    elide: QQ.Text.ElideRight
+
+                    Layout.fillWidth: true
+                }
+
+                //The arrow stands on the one column the rows are ordered by,
+                //and points at the end of its values that comes first.
+                Icon {
+                    objectName: "surveyTreeSortIndicator" + headerCellId.column
+
+                    visible: filterModelId.sortColumn === headerCellId.column
+                    source: filterModelId.sortOrder === Qt.AscendingOrder
+                            ? "qrc:/twbs-icons/icons/sort-up.svg"
+                            : "qrc:/twbs-icons/icons/sort-down.svg"
+                    sourceSize: Qt.size(Theme.treeSortIndicatorSize, Theme.treeSortIndicatorSize)
+                    colorizationColor: Theme.textSubtle
+                }
+            }
+
+            //The header is the one sort control the tree has, in both the
+            //Data page's layout and the cave page's.
+            QQ.TapHandler {
+                onTapped: surveyTreeId.toggleSort(headerCellId.column)
             }
         }
     }

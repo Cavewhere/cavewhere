@@ -88,6 +88,11 @@ namespace {
     //names: survey "A", stations 1 through 2.
     const QString kShotStationRange = QStringLiteral("A 1-2");
 
+    //A length measured in feet whose number is ABOVE Alpha's and whose length
+    //is BELOW it, so a sort that compares the raw numbers orders it the other
+    //way round from a sort that compares lengths.
+    constexpr double kBetaLengthFeet = 400.0;
+
     //! Gives \a trip one shot from A1 to A2, so its length task and its
     //! used-station task each have something to report.
     void addShot(cwTrip* trip)
@@ -639,5 +644,174 @@ TEST_CASE("cwSurveyTreeModel is a tree of nodes and trips", "[SurveyTreeModel]")
 
         beta->setName(QStringLiteral("Gamma Cave"));
         CHECK(filter.rowCount() == 0);
+    }
+
+    SECTION("a column sort orders siblings by value and -1 puts back each node's own order") {
+        cwSurveyTreeFilterModel filter;
+        filter.setSourceModel(&model);
+        QAbstractItemModelTester filterTester(&filter, QAbstractItemModelTester::FailureReportingMode::Fatal);
+
+        const auto proxyOf = [&](QObject* object) {
+            return filter.mapFromSource(model.indexOf(object));
+        };
+        const auto nameAt = [&](const QModelIndex& parent, int row) {
+            return filter.data(filter.index(row, cwSurveyTreeModel::Name, parent),
+                               cwSurveyTreeModel::NameRole).toString();
+        };
+
+        QSignalSpy sortColumnChanged(&filter, &cwSurveyTreeFilterModel::sortColumnChanged);
+        QSignalSpy sortOrderChanged(&filter, &cwSurveyTreeFilterModel::sortOrderChanged);
+
+        //Until a column is picked the rows come in the order each node lists
+        //them in: the child node ahead of the trip
+        CHECK(filter.sortColumn() == -1);
+        CHECK(nameAt(QModelIndex(), 0) == QStringLiteral("Alpha Cave"));
+        CHECK(nameAt(proxyOf(alpha), 0) == QStringLiteral("Upper Level"));
+        CHECK(nameAt(proxyOf(alpha), 1) == QStringLiteral("Topo 1"));
+
+        filter.setSortColumn(cwSurveyTreeModel::Name);
+        CHECK(sortColumnChanged.count() == 1);
+        CHECK(filter.sortColumn() == cwSurveyTreeModel::Name);
+        CHECK(filter.sortOrder() == Qt::AscendingOrder);
+
+        //The tree keeps its shape: the same rows under the same parents
+        CHECK(filter.rowCount() == 2);
+        CHECK(filter.rowCount(proxyOf(alpha)) == 2);
+        CHECK(filter.rowCount(proxyOf(upperLevel)) == 2);
+        CHECK(filter.rowCount(proxyOf(crawlSection)) == 1);
+        CHECK(filter.parent(proxyOf(upperLevel)) == proxyOf(alpha));
+        CHECK(filter.parent(proxyOf(crawlSection)) == proxyOf(upperLevel));
+        CHECK(filter.parent(proxyOf(topo3)) == proxyOf(crawlSection));
+
+        //A node row and a trip row under one parent order together by name
+        CHECK(nameAt(proxyOf(alpha), 0) == QStringLiteral("Topo 1"));
+        CHECK(nameAt(proxyOf(alpha), 1) == QStringLiteral("Upper Level"));
+        CHECK(nameAt(QModelIndex(), 0) == QStringLiteral("Alpha Cave"));
+        CHECK(nameAt(QModelIndex(), 1) == QStringLiteral("Beta Cave"));
+
+        //The order flips without the column moving
+        filter.setSortOrder(Qt::DescendingOrder);
+        CHECK(sortOrderChanged.count() == 1);
+        CHECK(sortColumnChanged.count() == 1);
+        CHECK(nameAt(QModelIndex(), 0) == QStringLiteral("Beta Cave"));
+        CHECK(nameAt(proxyOf(alpha), 0) == QStringLiteral("Upper Level"));
+
+        //Setting what is already set reorders nothing and announces nothing
+        filter.setSortOrder(Qt::DescendingOrder);
+        filter.setSortColumn(cwSurveyTreeModel::Name);
+        CHECK(sortOrderChanged.count() == 1);
+        CHECK(sortColumnChanged.count() == 1);
+
+        //And -1 hands the rows back the way their node lists them
+        filter.setSortColumn(-1);
+        CHECK(sortColumnChanged.count() == 2);
+        //A node's own order reads one way round, so leaving the columns leaves
+        //the descending order with them
+        CHECK(filter.sortOrder() == Qt::AscendingOrder);
+        CHECK(sortOrderChanged.count() == 2);
+        CHECK(nameAt(QModelIndex(), 0) == QStringLiteral("Alpha Cave"));
+        CHECK(nameAt(proxyOf(alpha), 0) == QStringLiteral("Upper Level"));
+        CHECK(nameAt(proxyOf(alpha), 1) == QStringLiteral("Topo 1"));
+    }
+
+    SECTION("sorting by length compares one unit, and by date puts the dateless first") {
+        //The unit first: a node's cwLength converts its value when its unit
+        //moves, so setting the number afterwards is what states 400 feet
+        beta->length()->setUnit(cwUnits::Feet);
+        beta->length()->setValue(kBetaLengthFeet);
+
+        cwSurveyTreeFilterModel filter;
+        filter.setSourceModel(&model);
+        QAbstractItemModelTester filterTester(&filter, QAbstractItemModelTester::FailureReportingMode::Fatal);
+
+        const auto proxyOf = [&](QObject* object) {
+            return filter.mapFromSource(model.indexOf(object));
+        };
+        const auto nameAt = [&](const QModelIndex& parent, int row) {
+            return filter.data(filter.index(row, cwSurveyTreeModel::Name, parent),
+                               cwSurveyTreeModel::NameRole).toString();
+        };
+
+        //400 ft is the larger number and the shorter cave, so a sort that read
+        //the numbers as they stand would name Alpha first
+        REQUIRE(cwUnits::convert(kBetaLengthFeet, cwUnits::Feet, cwUnits::Meters) < kAlphaLength);
+        filter.setSortColumn(cwSurveyTreeModel::Length);
+        CHECK(nameAt(QModelIndex(), 0) == QStringLiteral("Beta Cave"));
+        CHECK(nameAt(QModelIndex(), 1) == QStringLiteral("Alpha Cave"));
+
+        //A trip has no depth of its own, so it sorts ahead of the node beside
+        //it: Alpha holds Upper Level, a node standing at 0, and Topo 1, a trip
+        filter.setSortColumn(cwSurveyTreeModel::Depth);
+        CHECK(nameAt(proxyOf(alpha), 0) == QStringLiteral("Topo 1"));
+        CHECK(nameAt(proxyOf(alpha), 1) == QStringLiteral("Upper Level"));
+        //And among the caves, the one at 0 comes before Alpha's kAlphaDepth
+        CHECK(nameAt(QModelIndex(), 0) == QStringLiteral("Beta Cave"));
+        CHECK(nameAt(QModelIndex(), 1) == QStringLiteral("Alpha Cave"));
+
+        //A node names no date, and no date comes first
+        filter.setSortColumn(cwSurveyTreeModel::Date);
+        CHECK(nameAt(proxyOf(alpha), 0) == QStringLiteral("Upper Level"));
+        CHECK(nameAt(proxyOf(alpha), 1) == QStringLiteral("Topo 1"));
+        CHECK(nameAt(proxyOf(upperLevel), 0) == QStringLiteral("Crawl Section"));
+
+        filter.setSortOrder(Qt::DescendingOrder);
+        CHECK(nameAt(proxyOf(alpha), 0) == QStringLiteral("Topo 1"));
+        CHECK(nameAt(proxyOf(alpha), 1) == QStringLiteral("Upper Level"));
+    }
+
+    SECTION("sorting by stations compares the counts a node folds") {
+        QSignalSpy dataChanged(&model, &QAbstractItemModel::dataChanged);
+        addShot(topo1);
+
+        REQUIRE(waitFor(dataChanged, [&]() {
+            return model.data(alphaIndex, cwSurveyTreeModel::StationCountRole).toInt() == 2;
+        }));
+
+        cwSurveyTreeFilterModel filter;
+        filter.setSourceModel(&model);
+        QAbstractItemModelTester filterTester(&filter, QAbstractItemModelTester::FailureReportingMode::Fatal);
+
+        const auto nameAt = [&](int row) {
+            return filter.data(filter.index(row, cwSurveyTreeModel::Name),
+                               cwSurveyTreeModel::NameRole).toString();
+        };
+
+        filter.setSortColumn(cwSurveyTreeModel::Stations);
+        CHECK(nameAt(0) == QStringLiteral("Beta Cave"));
+        CHECK(nameAt(1) == QStringLiteral("Alpha Cave"));
+
+        filter.setSortOrder(Qt::DescendingOrder);
+        CHECK(nameAt(0) == QStringLiteral("Alpha Cave"));
+    }
+
+    SECTION("a filter and a sort compose, and a rename moves a sorted row") {
+        cwSurveyTreeFilterModel filter;
+        filter.setSourceModel(&model);
+        QAbstractItemModelTester filterTester(&filter, QAbstractItemModelTester::FailureReportingMode::Fatal);
+
+        const auto nameAt = [&](const QModelIndex& parent, int row) {
+            return filter.data(filter.index(row, cwSurveyTreeModel::Name, parent),
+                               cwSurveyTreeModel::NameRole).toString();
+        };
+
+        filter.setSortColumn(cwSurveyTreeModel::Name);
+        filter.setFilterText(QStringLiteral("topo"));
+
+        //Only Alpha's branch survives the filter, and what survives is sorted
+        REQUIRE(filter.rowCount() == 1);
+        const QModelIndex alphaProxy = filter.index(0, cwSurveyTreeModel::Name);
+        CHECK(nameAt(QModelIndex(), 0) == QStringLiteral("Alpha Cave"));
+        REQUIRE(filter.rowCount(alphaProxy) == 2);
+        CHECK(nameAt(alphaProxy, 0) == QStringLiteral("Topo 1"));
+        CHECK(nameAt(alphaProxy, 1) == QStringLiteral("Upper Level"));
+
+        filter.setFilterText(QString());
+        REQUIRE(filter.rowCount() == 2);
+        CHECK(nameAt(QModelIndex(), 0) == QStringLiteral("Alpha Cave"));
+
+        //A renamed row lands where its new name belongs
+        alpha->setName(QStringLiteral("Zed Cave"));
+        CHECK(nameAt(QModelIndex(), 0) == QStringLiteral("Beta Cave"));
+        CHECK(nameAt(QModelIndex(), 1) == QStringLiteral("Zed Cave"));
     }
 }

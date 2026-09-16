@@ -16,6 +16,15 @@ MainWindowTest {
         }
 
         function cleanup() {
+            // A sort is view state on the cave page, and the page item is
+            // cached between tests, so a test that picked a sort — or failed
+            // part way through picking one — must not hand it to the next test.
+            let cavePage = RootData.pageView.currentPageItem
+            let tree = cavePage !== null ? findChild(cavePage, "tripTree") : null
+            if (tree) {
+                tree.sortColumn = -1
+            }
+
             RootData.project.newProject()
 
             // Tests that resize the window or scale the font must not leak
@@ -381,6 +390,151 @@ MainWindowTest {
             }
             compare(remaining.indexOf("C-Trip"), -1,
                     "the asked-about trip is gone: [" + remaining + "]")
+        }
+
+        // --- C2b.5: the header is the tree's sort control ---
+
+        function headerCell(cavePage, column) {
+            let cell = null
+            tryVerify(() => {
+                          cell = findChild(cavePage, "surveyTreeHeaderCell" + column)
+                          return cell !== null
+                      }, 5000, "header cell " + column + " must exist")
+            return cell
+        }
+
+        function treeRowNames(tree) {
+            let names = []
+            for (let row = 0; row < tree.rowCount; row++) {
+                names.push(String(tree.objectAtRow(row).name))
+            }
+            return names
+        }
+
+        // A click on the Name header orders the trips by name, and a second
+        // click on it turns the order around. A second cave stands above this
+        // one, so the sort moves the top-level row the tree is rooted at and
+        // the page has to keep showing its own cave's trips.
+        function test_headerClickSortsTheTripsAndFlipsOnTheSecondClick() {
+            let cave = setupCaveWithTrips()
+
+            //"AAA Cave" sorts ahead of "TestCave", so sorting by name moves
+            //this page's cave from the region's first row to its second
+            RootData.region.addCave()
+            RootData.region.cave(1).name = "AAA Cave"
+
+            let cavePage = RootData.pageView.currentPageItem
+            let tree = tripTree(cavePage)
+            tryCompare(tree, "rowCount", 3, 5000)
+
+            //The rows start in the cave's own order, which is what -1 means
+            tree.sortColumn = -1
+            tryVerify(() => treeRowNames(tree).join() === "C-Trip,A-Trip,B-Trip",
+                      5000, "the cave lists its trips the way they were added")
+
+            let nameHeader = headerCell(cavePage, SurveyTreeModel.Name)
+            mouseClick(nameHeader)
+
+            tryVerify(() => treeRowNames(tree).join() === "A-Trip,B-Trip,C-Trip",
+                      5000, "the Name header orders the trips by name")
+            compare(tree.sortColumn, SurveyTreeModel.Name)
+            compare(tree.sortOrder, Qt.AscendingOrder)
+            compare(tree.rowCount, 3,
+                    "and the tree stays rooted at this cave once the sort has "
+                    + "moved it below AAA Cave")
+
+            let indicator = findChild(cavePage, "surveyTreeSortIndicator" + SurveyTreeModel.Name)
+            verify(indicator !== null, "the sorted column shows an arrow")
+            tryVerify(() => indicator.visible, 5000, "the arrow stands on the sorted column")
+            verify(!findChild(cavePage, "surveyTreeSortIndicator" + SurveyTreeModel.Date).visible,
+                   "and on no other column")
+
+            mouseClick(nameHeader)
+            tryVerify(() => treeRowNames(tree).join() === "C-Trip,B-Trip,A-Trip",
+                      5000, "clicking the same header turns the order around")
+            compare(tree.sortOrder, Qt.DescendingOrder)
+            tryVerify(() => indicator.visible, 5000, "the arrow stays, pointing the other way")
+        }
+
+        // Reproduces issue #294 on the tree: the row a verb acts on is the row
+        // the view shows, so a sort must not send the verb to another trip.
+        function test_deleteTripAfterSortDeletesTheRightTrip() {
+            let cave = setupCaveWithTrips()
+            let cavePage = RootData.pageView.currentPageItem
+            let tree = tripTree(cavePage)
+            tryCompare(tree, "rowCount", 3, 5000)
+            tree.sortColumn = -1
+
+            mouseClick(headerCell(cavePage, SurveyTreeModel.Name))
+            tryVerify(() => treeRowNames(tree).join() === "A-Trip,B-Trip,C-Trip",
+                      5000, "sorted by name, A-Trip takes the first row")
+
+            //A-Trip is the cave's second trip, so a row index used as a trip
+            //index would delete C-Trip instead
+            let aTrip = cave.trip(1)
+            compare(aTrip.name, "A-Trip")
+
+            let row = null
+            tryVerify(() => {
+                          row = findChild(cavePage, "tripDelegate0")
+                          return row !== null && row.object === aTrip
+                      }, 5000, "the first row must stand for A-Trip")
+            row.showContextMenu(0, 0)
+
+            let menu = null
+            tryVerify(() => {
+                          menu = findChild(row, "surveyItemContextMenu")
+                          return menu !== null && menu.visible
+                      }, 5000, "the row must open its context menu")
+            mouseClick(findChild(menu, "surveyItemDeleteMenuItem"))
+
+            let askBox = null
+            tryVerify(() => {
+                          askBox = findChild(cavePage, "removeChallange")
+                          return askBox !== null && askBox.visible
+                      }, 5000, "Delete… must ask first")
+            compare(askBox.message, "Remove <b>A-Trip</b>?")
+
+            mouseClick(findChild(askBox, "removeButton"))
+
+            tryCompare(cave, "tripCount", 2, 5000)
+            let remaining = []
+            for (let i = 0; i < cave.rowCount(); i++) {
+                remaining.push(cave.trip(i).name)
+            }
+            compare(remaining.indexOf("A-Trip"), -1,
+                    "the sorted row's own trip is the one that went: [" + remaining + "]")
+            compare(remaining.length, 2)
+            verify(remaining.indexOf("C-Trip") >= 0, "C-Trip stays: [" + remaining + "]")
+        }
+
+        // Emptying the cave takes the rows away but not the sort: the column
+        // the header stands on is the tree's, not the rows'.
+        function test_sortIndicatorSurvivesAnEmptyCave() {
+            let cave = setupCaveWithTrips()
+            let cavePage = RootData.pageView.currentPageItem
+            let tree = tripTree(cavePage)
+            tryCompare(tree, "rowCount", 3, 5000)
+
+            mouseClick(headerCell(cavePage, SurveyTreeModel.Name))
+            tryCompare(tree, "sortColumn", SurveyTreeModel.Name, 5000)
+
+            while (cave.rowCount() > 0) {
+                cave.removeTrip(0)
+            }
+            tryVerify(() => !tree.visible, 5000, "an empty cave shows no tree")
+
+            cave.addTrip()
+            cave.trip(0).name = "D-Trip"
+            tryVerify(() => tree.visible, 5000, "the first trip brings the tree back")
+            tryCompare(tree, "rowCount", 1, 5000)
+
+            compare(tree.sortColumn, SurveyTreeModel.Name,
+                    "the tree still orders its rows by name")
+            let indicator = findChild(cavePage, "surveyTreeSortIndicator" + SurveyTreeModel.Name)
+            verify(indicator !== null, "the Name header comes back with its arrow")
+            tryVerify(() => indicator.visible, 5000,
+                      "and the arrow still says which column is sorted")
         }
     }
 }

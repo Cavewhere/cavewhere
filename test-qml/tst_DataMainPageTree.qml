@@ -68,6 +68,19 @@ MainWindowTest {
         }
 
         function cleanup() {
+            // A sort is view state on the cached page item, so a test that
+            // picked a sort — or failed part way through picking one — must not
+            // hand it to the next test. The tree carries no objectName, so it
+            // is reached through the filter field it owns.
+            const page = RootData.pageView.currentPageItem
+            let item = page !== null ? findChild(page, "surveyTreeFilter") : null
+            while (item !== null && item.sortColumn === undefined) {
+                item = item.parent
+            }
+            if (item !== null) {
+                item.sortColumn = -1
+            }
+
             rootId.closeAnyOpenEditor()
             smokeLoaderId.active = false
             RootData.pageSelectionModel.currentPageAddress = "View"
@@ -641,6 +654,93 @@ MainWindowTest {
             compare(item.objectName, "addExternalCaveMenuItem")
             compare(item.text, "Attach survey file…")
             menu.close()
+        }
+
+        // --- C2b.5: the header is the tree's sort control ---
+
+        function headerCell(page, column) {
+            let cell = null
+            tryVerify(() => {
+                          cell = findChild(page, "surveyTreeHeaderCell" + column)
+                          return cell !== null
+                      }, 5000, "header cell " + column + " must exist")
+            return cell
+        }
+
+        //The names of the view's rows in the order they stand in. surveyTree()
+        //hands back the TreeView itself, which reaches the SurveyTreeView
+        //around it the way its own delegates do.
+        function treeRowNames(tree) {
+            let names = []
+            for (let row = 0; row < tree.rows; row++) {
+                names.push(String(tree.surveyTree.objectAtRow(row).name))
+            }
+            return names
+        }
+
+        // A click on the Name header orders the caves by name, a second click
+        // turns the order around, and the arrow says which column is sorted.
+        function test_headerClickSortsTheRowsAndShowsTheIndicator() {
+            addCave("Beta Cave", 0)
+            addCave("Alpha Cave", 0)
+
+            const page = gotoDataMainPage()
+            const tree = surveyTree(page)
+            tryCompare(tree, "rows", 2, 5000)
+
+            //The rows start in each node's own order, which is what -1 means
+            tree.surveyTree.sortColumn = -1
+            tryVerify(() => treeRowNames(tree).join() === "Beta Cave,Alpha Cave",
+                      5000, "the region lists the caves the way they were added")
+
+            const nameHeader = headerCell(page, SurveyTreeModel.Name)
+            const indicator = findChild(page, "surveyTreeSortIndicator" + SurveyTreeModel.Name)
+            verify(indicator !== null, "every header cell carries an arrow")
+            verify(!indicator.visible, "which stays out of sight until its column sorts")
+
+            mouseClick(nameHeader)
+            tryVerify(() => treeRowNames(tree).join() === "Alpha Cave,Beta Cave",
+                      5000, "the Name header orders the caves by name")
+            compare(tree.surveyTree.sortColumn, SurveyTreeModel.Name)
+            compare(tree.surveyTree.sortOrder, Qt.AscendingOrder)
+            tryVerify(() => indicator.visible, 5000, "the arrow stands on the sorted column")
+            verify(!findChild(page, "surveyTreeSortIndicator" + SurveyTreeModel.Trips).visible,
+                   "and on no other column")
+
+            mouseClick(nameHeader)
+            tryVerify(() => treeRowNames(tree).join() === "Beta Cave,Alpha Cave",
+                      5000, "clicking the same header turns the order around")
+            compare(tree.surveyTree.sortOrder, Qt.DescendingOrder)
+            tryVerify(() => indicator.visible, 5000, "the arrow stays, pointing the other way")
+        }
+
+        // Sorting moves the rows around; the caves that were open stay open.
+        function test_expansionSurvivesASort() {
+            const beta = addCave("Beta Cave", 2)
+            beta.trip(0).name = "Trip A"
+            beta.trip(1).name = "Trip B"
+            addCave("Alpha Cave", 0)
+
+            const page = gotoDataMainPage()
+            const tree = surveyTree(page)
+            tryCompare(tree, "rows", 2, 5000)
+            //The page is cached between tests, so the rows start in the order
+            //each node lists them in
+            tree.surveyTree.sortColumn = -1
+
+            //Beta is the first row until the sort moves it
+            tree.expand(0)
+            tryCompare(tree, "rows", 4, 5000)
+            verify(tree.isExpanded(0), "Beta Cave is open")
+
+            mouseClick(headerCell(page, SurveyTreeModel.Name))
+            tryVerify(() => treeRowNames(tree)[0] === "Alpha Cave",
+                      5000, "sorting by name puts Alpha Cave first")
+
+            tryCompare(tree, "rows", 4, 5000)
+            verify(tree.isExpanded(1), "Beta Cave is still open where the sort put it")
+            compare(treeRowNames(tree), ["Alpha Cave", "Beta Cave", "Trip A", "Trip B"],
+                    "and its trips are still the rows under it")
         }
     }
 }
