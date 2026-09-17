@@ -54,6 +54,11 @@ class GitRepository;
 
 struct cwSaveLoadPrivate {
 
+    //! Hidden sibling of the data root holding the directories a delete took
+    //! away, so an undo can move them back. Named to match .cw_cache, and
+    //! excluded from git and from bundles the same way.
+    static constexpr QLatin1StringView kTrashDirName = QLatin1StringView(".cw_trash");
+
     struct Job {
         enum class Kind { File, Directory, };
         enum class Action { Move, Remove, EnsureDir, WriteFile, Copy, Custom };
@@ -230,6 +235,12 @@ struct cwSaveLoadPrivate {
     // resetObjectStates) keeps its existing connection instead of growing a
     // duplicate on the next insert.
     QSet<const QObject*> m_lifetimeWatched;
+
+    // The trash entry each removed object owns, .cw_trash/<id>, while its
+    // delete is still on the undo stack. The owner is what says whose entry
+    // it is: a note destroyed while it sits inside a trashed node's entry
+    // must leave that entry — the node's undo still needs it — alone.
+    QHash<const QObject*, QString> m_trashEntries;
 
     //For watching when object data has changed
     cwRegionTreeModel* m_regionTreeModel;
@@ -548,6 +559,62 @@ struct cwSaveLoadPrivate {
 
     void watchObjectLifetime(const QObject* object, cwSaveLoad* context);
 
+    //! Re-arms the destruction watch after rowsAboutToBeRemoved's
+    //! disconnect(object, nullptr, this, nullptr) has taken it down: that
+    //! disconnect names the cwSaveLoad context as the receiver, which is the
+    //! context watchObjectLifetime connects to, so a removed object would
+    //! otherwise die unheard — and its trashed directory would stay on disk.
+    void rewatchObjectLifetime(const QObject* object, cwSaveLoad* context);
+
+    //! \a context's trash directory, a hidden sibling of the data root.
+    static QString trashDir(const cwSaveLoad* context);
+
+    //! True when \a path names the trash directory or something inside it.
+    static bool isInsideTrash(const cwSaveLoad* context, const QString& path);
+
+    //! True when \a path carries the trash directory's name as a segment: the
+    //! cheap necessary condition isInsideTrash() asks before canonicalizing.
+    static bool namesTrashDir(const QString& path);
+
+    //! Queues the one Directory Move a delete costs, never a Remove: from
+    //! where \a object was saved to .cw_trash/<id>/<basename>, so an undo can
+    //! move the whole subtree — trips, note images and attachments included —
+    //! back out. \a object owns the entry, which is removed for good when it is
+    //! destroyed — when the undo command holding it leaves the stack.
+    //!
+    //! A file removal already queued for something inside that directory is
+    //! dropped when the delete itself is what takes it away, and re-aimed at
+    //! the trash when it belongs to an earlier, unrelated delete.
+    void moveDirectoryToTrash(cwSaveLoad* context, const QObject* object, const QUuid& id);
+
+    //! Carries \a object's directory out of the trash and back to where the
+    //! tree now puts it, through the same moveDirectory() a node that changed
+    //! parent goes through. Does nothing for an object outside the trash.
+    void restoreDirectoryFromTrash(cwSaveLoad* context, const QObject* object);
+
+    //! Queues the Directory Remove of \a absolutePath, a path inside the trash.
+    void queueTrashRemove(cwSaveLoad* context, const QString& absolutePath);
+
+    //! Queues the Directory Remove of the whole trash, for a project that is
+    //! being opened: a crash between a delete and a close leaves entries no
+    //! undo stack can reach any more.
+    void sweepTrash(cwSaveLoad* context);
+
+    //! Removes the trash right now, and forgets every object state that named
+    //! something inside it. For a project about to change root — Save As moves
+    //! or copies the root, and neither a copy nor the folder the user is handed
+    //! may carry what a delete took away. The undos still on the stack restore
+    //! their descriptors, and their payload stays behind.
+    void discardTrash(cwSaveLoad* context);
+
+    //! \a object, every object below it, and nothing else: what a delete of
+    //! \a object carries into the trash, and what an undo brings back.
+    static QSet<const QObject*> subtreeObjects(const QObject* object);
+
+    //! Re-points every object state at or under \a oldDir to sit under
+    //! \a newDir, keeping each basename — what a directory move does on disk.
+    void rebaseObjectStatesUnder(const QString& oldDir, const QString& newDir);
+
     // The nodes currently between cwSurveyNode::beginMoveNode and nodeMoved.
     // A move reaches the tree model as a row removal followed by a row
     // insertion, and a row removal is what makes cwSaveLoad delete a node's
@@ -562,14 +629,16 @@ struct cwSaveLoadPrivate {
     //! note's image file would go with it.
     bool isInsideMovingNode(const QObject* object) const;
 
-    //! Queues the one Directory Move a node's change of parent costs, from
-    //! where the node was saved to where its new parent puts it, plus the file
-    //! rename a name the new siblings already held forces.
+    //! Queues the one Directory Move \a object's change of place costs, from
+    //! where it was saved to where the tree now puts it, plus the file rename
+    //! a name its new siblings already held forces. The loaded paths below
+    //! \a object are dropped, whether it is a node or a trip.
     //!
-    //! Call it while cwSurveyNode::parentNodeChanged is being delivered: the
-    //! node already hangs under its new parent, so dirPrivate() answers the new
-    //! directory, while the object state still holds the old one.
-    void moveDirectory(cwSaveLoad* context, const cwCave* node);
+    //! Call it while the object already hangs in its new place — during
+    //! cwSurveyNode::parentNodeChanged, or during the row insertion an undone
+    //! delete makes — so dirPrivate() answers the new directory while the
+    //! object state still holds the old one.
+    void moveDirectory(cwSaveLoad* context, const QObject* object);
 
     //! Drops loadedPath for \a node and every node, trip, note, LiDAR note and
     //! sketch below it, because the Move carried that whole directory away and
@@ -582,6 +651,17 @@ struct cwSaveLoadPrivate {
     //! node the move just renamed, and the rename that follows would then find
     //! nothing to move.
     void dropLoadedPathsUnder(const cwSurveyNode* node);
+
+    //! Drops loadedPath for \a trip and the notes, LiDAR notes and sketches it
+    //! owns, for the same reason the node form does.
+    void dropLoadedPathsUnder(const cwTrip* trip);
+
+    //! Drops loadedPath for every object state naming \a directory or
+    //! something inside it, for a directory whose live objects can no longer
+    //! be walked — the subtree a delete carried into the trash. A loaded path
+    //! left there tells cleanupStaleLoadedPaths() to remove a directory the
+    //! move already emptied, and whatever the user has put back in its place.
+    void dropLoadedPathsUnderDir(const QString& directory);
 
     static LoadedPathIndex buildLoadedPathIndex(const cwCavingRegionData& loadedRegion);
 

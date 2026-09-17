@@ -143,7 +143,12 @@ void checkEveryFileVersion(const QDir& projectRootDir, int expectedVersion)
     while (it.hasNext()) {
         const QString path = it.next();
         const QFileInfo info(path);
-        if (projectRootDir.relativeFilePath(path).startsWith(QStringLiteral(".git"))
+        const QString relativePath = projectRootDir.relativeFilePath(path);
+        //The trash holds what a delete took away, waiting for an undo. Those
+        //descriptors carry the stamp they had when they left the project, and
+        //an undo restamps them on the way back in.
+        if (relativePath.startsWith(QStringLiteral(".git"))
+                || relativePath.startsWith(QStringLiteral(".cw_trash/"))
                 || !descriptorSuffixes.contains(info.suffix(), Qt::CaseInsensitive)) {
             continue;
         }

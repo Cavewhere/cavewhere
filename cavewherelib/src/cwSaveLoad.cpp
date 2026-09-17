@@ -514,7 +514,11 @@ LfsSnapshot captureLfsSnapshot(const QString& repoPath)
         const QString relativePath = QDir::fromNativeSeparators(repoDir.relativeFilePath(info.absoluteFilePath()));
         if (relativePath.isEmpty()
                 || relativePath == QStringLiteral(".git")
-                || relativePath.startsWith(QStringLiteral(".git/"))) {
+                || relativePath.startsWith(QStringLiteral(".git/"))
+                //What a delete carried into the trash is out of git's sight,
+                //so an LFS snapshot that counted it would report a hydration
+                //delta for files no commit can ever hold.
+                || relativePath.startsWith(QStringLiteral(".cw_trash/"))) {
             continue;
         }
 
@@ -965,6 +969,14 @@ void cwSaveLoad::repairNameCollisions(ProjectLoadData& loadData)
 // Reopen for remaining file-local helpers (git exclude patterns, etc.)
 namespace {
 
+//! Excludes the trash from git and from bundles, the way ".cw_cache/" is
+//! excluded: a directory a delete filled is never committed, synced or copied.
+const QString kTrashDirPattern = QStringLiteral(".cw_trash/");
+const QString kTrashDirEntry = QStringLiteral(".cw_trash");
+const QString kCacheDirPattern = QStringLiteral(".cw_cache/");
+const QString kCacheDirEntry = QStringLiteral(".cw_cache");
+const QString kDsStoreEntry = QStringLiteral(".DS_Store");
+
 QStringList readGitExcludePatterns(const QDir& repoDir)
 {
     const QDir gitDir = gitDirForRepository(repoDir);
@@ -1016,8 +1028,9 @@ void cwSaveLoad::ensureGitExcludeHasLocalEntries(const QDir& repoDir)
 
     const QStringList lines = QString::fromUtf8(existingContents).split('\n');
     const QList<QPair<QString, QStringList>> entries = {
-        {QStringLiteral(".cw_cache/"), {QStringLiteral(".cw_cache/"), QStringLiteral(".cw_cache")}},
-        {QStringLiteral(".DS_Store"), {QStringLiteral(".DS_Store")}}
+        {kCacheDirPattern, {kCacheDirPattern, kCacheDirEntry}},
+        {kTrashDirPattern, {kTrashDirPattern, kTrashDirEntry}},
+        {kDsStoreEntry, {kDsStoreEntry}}
     };
 
     QStringList missingEntries;
@@ -1247,6 +1260,13 @@ ResultBase cwSaveLoad::transferProjectTo(const QString& destinationFileUrl, Proj
     auto enableGuard = qScopeGuard([this]() { setSaveEnabled(true); });
 
     waitForFinished();
+
+    // A Move renames the whole root, hidden directories included, and a Copy
+    // is a copy: neither may carry what a delete took away into the folder the
+    // user is about to hand to someone. The undos still on the stack keep
+    // their descriptors and lose their payload, which is what a delete cost
+    // before the trash existed.
+    d->discardTrash(this);
 
     // Captured non-fatal warning from the transfer step (e.g. copy succeeded
     // but temp source cleanup failed on a cloud volume). Surfaced as the
@@ -1582,6 +1602,10 @@ QFuture<ResultBase> cwSaveLoad::loadImpl(const QString &filename)
                     //have the filename before the region model is set
                     setFileName(filename);
                     initializeRepositoryForCurrentFile();
+                    //A crash between a delete and a close leaves trash entries
+                    //no undo stack can reach any more, so opening a project
+                    //empties the trash.
+                    d->sweepTrash(this);
                     setTemporary(false);
 
                     setSaveEnabled(false);
@@ -2548,7 +2572,12 @@ QFuture<ResultBase> cwSaveLoad::saveBundledArchive(const QString& targetArchiveP
 
         const QString workingProjectFile = fileName();
         const QString projectRootPath = QFileInfo(workingProjectFile).absolutePath();
-        const QStringList excludePatterns = readGitExcludePatterns(QDir(projectRootPath));
+        QStringList excludePatterns = readGitExcludePatterns(QDir(projectRootPath));
+        if (!excludePatterns.contains(kTrashDirPattern)) {
+            //A bundle is a copy, and a copy carries none of what a delete took
+            //away — including for a project that has no git exclude file yet.
+            excludePatterns.append(kTrashDirPattern);
+        }
         auto packageFuture = QtConcurrent::run(&d->m_saveThreadPool, [projectRootPath, normalizedTargetPath, excludePatterns]() {
             return saveBundledArchiveAtomic(projectRootPath, normalizedTargetPath, excludePatterns);
         });
@@ -3822,6 +3851,11 @@ void cwSaveLoad::connectTreeModel()
             case cwRegionTreeModel::CaveType: {
                 auto cave = d->m_regionTreeModel->cave(index);
                 connectCave(cave);
+                //An undone delete re-announces the row, and the subtree it
+                //names is sitting in the trash: move it back before the
+                //descriptor write, which by itself would leave the note
+                //images and attachments behind.
+                d->restoreDirectoryFromTrash(this, cave);
                 save(cave);
                 nodeInserted = true;
                 break;
@@ -3829,6 +3863,7 @@ void cwSaveLoad::connectTreeModel()
             case cwRegionTreeModel::TripType: {
                 auto trip = d->m_regionTreeModel->trip(index);
                 connectTrip(trip);
+                d->restoreDirectoryFromTrash(this, trip);
                 save(trip);
                 break;
             }
@@ -3884,16 +3919,6 @@ void cwSaveLoad::connectTreeModel()
     connect(d->m_regionTreeModel, &cwRegionTreeModel::rowsAboutToBeRemoved,
             this, [this](const QModelIndex &parent, int first, int last) {
 
-        auto removeDirectory = [this](const QObject* object) {
-            d->addFileSystemJob(cwSaveLoadPrivate::Job
-                                {
-                                    object,
-                                    cwSaveLoadPrivate::Job::Kind::Directory,
-                                    cwSaveLoadPrivate::Job::Action::Remove
-                                },
-                                this);
-        };
-
         auto removeFile = [this](const QObject* object) {
             d->addFileSystemJob(cwSaveLoadPrivate::Job
                                 {
@@ -3932,13 +3957,12 @@ void cwSaveLoad::connectTreeModel()
             switch(index.data(cwRegionTreeModel::TypeRole).toInt()) {
             case cwRegionTreeModel::CaveType: {
                 auto cave = d->m_regionTreeModel->cave(index);
-                removeDirectory(cave);
+                d->moveDirectoryToTrash(this, cave, cave->id());
                 break;
             }
             case cwRegionTreeModel::TripType: {
                 auto trip = d->m_regionTreeModel->trip(index);
-                // auto tripDir = dir(trip);
-                removeDirectory(trip);
+                d->moveDirectoryToTrash(this, trip, trip->id());
                 break;
             }
             case cwRegionTreeModel::NoteType: {
@@ -3968,6 +3992,11 @@ void cwSaveLoad::connectTreeModel()
                 d->connectionChecker.remove(object);
             }
 
+            //That disconnect names this as the receiver, which is what the
+            //destruction watch connects to, so it takes the watch down with
+            //it. Without the watch back up, the object's death goes unheard
+            //and its trashed directory stays on disk for good.
+            d->rewatchObjectLifetime(object, this);
         }
 
         if (!d->suppressLocalMutationTracking) {
