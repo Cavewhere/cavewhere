@@ -950,7 +950,7 @@ TEST_CASE("cwSaveLoad stamps the tree version for each field that needs it",
     auto region = rootData->project()->cavingRegion();
 
     cwCave* cave = addNode(region, nullptr, cwSurveyNode::Kind::Cave, kFisherRidgeName);
-    addTrip(cave, kEntranceTripName, QStringLiteral("A"));
+    cwTrip* trip = addTrip(cave, kEntranceTripName, QStringLiteral("A"));
 
     QTemporaryDir tempDir;
     REQUIRE(tempDir.isValid());
@@ -980,6 +980,38 @@ TEST_CASE("cwSaveLoad stamps the tree version for each field that needs it",
         flushSaves(rootData.get());
         checkEveryFileVersion(projectRootDir, cwRegionIOTask::protoVersion());
     }
+
+    SECTION("a stored source path on its own")
+    {
+        //The save writes source_path whatever the stamp says, so a file that
+        //carries one is no longer something an older build can read back
+        //without losing it.
+        cave->setSourcePath(QStringLiteral("BLOWING3.DAT"));
+        flushSaves(rootData.get());
+        checkEveryFileVersion(projectRootDir, cwRegionIOTask::protoVersion());
+    }
+
+    SECTION("a trip's stored source path on its own")
+    {
+        trip->setSourcePath(QStringLiteral("BLOWING3.DAT"));
+        flushSaves(rootData.get());
+        checkEveryFileVersion(projectRootDir, cwRegionIOTask::protoVersion());
+    }
+
+    SECTION("a trip's stored source path going away again")
+    {
+        trip->setSourcePath(QStringLiteral("BLOWING3.DAT"));
+        flushSaves(rootData.get());
+        checkEveryFileVersion(projectRootDir, cwRegionIOTask::protoVersion());
+
+        //The stamp answers "can the previous build open this?", so losing the
+        //last field of the tree format puts the whole project back at the flat
+        //version.
+        trip->setSourcePath(QString());
+        flushSaves(rootData.get());
+        checkEveryFileVersion(projectRootDir, kFlatVersion);
+    }
+}
 
 TEST_CASE("cwSaveLoad reports what it cannot place and loads the rest of the tree",
           "[cwSaveLoad][NodeTree]")

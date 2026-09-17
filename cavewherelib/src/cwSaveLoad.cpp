@@ -4829,6 +4829,13 @@ void cwSaveLoad::connectTrip(cwTrip* trip)
     connect(trip, &cwTrip::dateChanged, this, saveTrip);
     connect(trip, &cwTrip::externalCenterlineChanged, this, saveTrip);
     connect(trip, &cwTrip::stationPrefixChanged, this, saveTrip);
+    //A trip's stored source path is part of what decides the project's file
+    //format, so it rewrites the whole project when it appears (§6.8).
+    const auto saveTripAndRestamp = [saveTrip, this]() {
+        saveTrip();
+        restampProjectIfVersionChanged();
+    };
+    connect(trip, &cwTrip::sourcePathChanged, this, saveTripAndRestamp);
     // connect(trip, &cwTrip::numberOfChunksChanged, this, saveTrip);
     connect(trip, &cwTrip::chunksAboutToBeRemoved, this, saveTrip);
     connect(trip, &cwTrip::chunksRemoved, this, saveTrip);
@@ -5216,16 +5223,32 @@ int cwSaveLoad::stampVersion(const cwCavingRegion* region)
         return kFlatProjectVersion;
     }
 
+    //Every field the writer can store for a node in the tree counts toward the
+    //stamp: a file that carries one is a file an older build would drop on its
+    //next save. Only a cwCave's trips reach disk, so the walk below asks this
+    //of the caves it visits and the root's own trips stay out of it.
+    const auto holdsTripSourcePath = [](const cwSurveyNode* node) {
+        const QList<cwTrip*> trips = node->trips();
+        for (const cwTrip* trip : trips) {
+            if (!trip->sourcePath().isEmpty()) {
+                return true;
+            }
+        }
+        return false;
+    };
+
     //Stops at the first node that needs the tree format: this runs once per
     //file a save writes, so it walks no more of the region than it has to. A
     //child of a node that is not the root is already at depth two.
-    const auto holdsHierarchy = [](const cwSurveyNode* node, auto&& self) -> bool {
+    const auto holdsHierarchy = [holdsTripSourcePath](const cwSurveyNode* node, auto&& self) -> bool {
         const QList<cwSurveyNode*> children = node->childNodes();
         for (const cwSurveyNode* child : children) {
             const bool needsTree = !node->isRoot()
                     || child->kind() != cwSurveyNode::Kind::Cave
                     || child->isReadOnly()
-                    || child->isSourced();
+                    || !child->sourceId().isNull()
+                    || !child->sourcePath().isEmpty()
+                    || holdsTripSourcePath(child);
             if (needsTree || self(child, self)) {
                 return true;
             }
