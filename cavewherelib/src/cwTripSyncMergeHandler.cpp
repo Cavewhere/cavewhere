@@ -175,17 +175,10 @@ cwReconcileMergeResult cwTripSyncMergeHandler::reconcile(const cwReconcileMergeC
 
     //Every loaded trip by id, with the node-name path it hangs under — the path that
     //composes its directory.
-    QHash<QUuid, const cwTripData*> loadedTripsById;
-    QHash<QUuid, QStringList> loadedNodePathByTripId;
-    walkCaveDataTree(context.loadData->region.caves,
-                     [&](const cwCaveData& nodeData, const QStringList& nodePath) {
-        for (const cwTripData& tripData : nodeData.trips) {
-            if (!tripData.id.isNull()) {
-                loadedTripsById.insert(tripData.id, &tripData);
-                loadedNodePathByTripId.insert(tripData.id, nodePath);
-            }
-        }
-    });
+    const cwSyncPathResolver::TripLoadedByIdIndex loadedTrips =
+        cwSyncPathResolver::buildLoadedTripsById(context.loadData->region);
+    const QHash<QUuid, const cwTripData*>& loadedTripsById = loadedTrips.tripDataById;
+    const QHash<QUuid, QStringList>& loadedNodePathByTripId = loadedTrips.nodePathByTripId;
 
     const QString dataRootName = context.dataRootName();
 

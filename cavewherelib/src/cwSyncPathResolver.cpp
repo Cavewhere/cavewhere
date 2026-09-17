@@ -423,6 +423,23 @@ TripLoadedIndex buildLoadedTripIndex(const QDir& repoRoot,
     return index;
 }
 
+TripLoadedByIdIndex buildLoadedTripsById(const cwCavingRegionData& regionData)
+{
+    //Trips hang off nodes at any depth, so this walks the whole tree: a flat pass over the
+    //root's children misses every nested node's trips.
+    TripLoadedByIdIndex index;
+    walkCaveDataTree(regionData.caves, [&](const cwCaveData& nodeData, const QStringList& nodePath) {
+        for (const cwTripData& tripData : nodeData.trips) {
+            if (!tripData.id.isNull()) {
+                index.tripDataById.insert(tripData.id, &tripData);
+                index.nodePathByTripId.insert(tripData.id, nodePath);
+            }
+        }
+    });
+
+    return index;
+}
+
 NoteCurrentIndex buildCurrentNoteIndex(const QDir& repoRoot,
                                        const QString& dataRootName,
                                        const cwSaveLoad* saveLoad,

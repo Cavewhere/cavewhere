@@ -13,6 +13,7 @@
 #include "cwSyncIdUtils.h"
 #include "cwSurveyNoteModel.h"
 #include "cwTrip.h"
+#include "cwTripData.h"
 #include "cwNoteStation.h"
 #include "cwLead.h"
 #include "GitRepository.h"
@@ -191,14 +192,8 @@ cwReconcileMergeResult cwNoteSyncMergeHandler::reconcile(const cwReconcileMergeC
                                                                           dataRootName,
                                                                           context.loadData->region);
 
-    QHash<QUuid, const cwTripData*> loadedTripsById;
-    for (const cwCaveData& caveData : context.loadData->region.caves) {
-        for (const cwTripData& tripData : caveData.trips) {
-            if (!tripData.id.isNull()) {
-                loadedTripsById.insert(tripData.id, &tripData);
-            }
-        }
-    }
+    const QHash<QUuid, const cwTripData*> loadedTripsById =
+        cwSyncPathResolver::buildLoadedTripsById(context.loadData->region).tripDataById;
 
     QList<NoteTripUpdate> noteTripUpdates;
     const QList<cwSyncPathResolver::TripChangeResolution> resolvedTripChanges =
@@ -391,6 +386,9 @@ cwReconcileMergeResult cwNoteSyncMergeHandler::reconcile(const cwReconcileMergeC
             objectPathReadySet.insert(update.trip);
         }
     }
+
+    //A merged descriptor lives only in the model until the reconcile save writes it out.
+    result.persistNoteDescriptors = result.modelMutated;
 
     result.objectsPathReady.reserve(objectPathReadySet.size());
     for (QObject* object : std::as_const(objectPathReadySet)) {

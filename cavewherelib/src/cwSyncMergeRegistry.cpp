@@ -59,6 +59,10 @@ cwReconcileMergeResult cwSyncMergeRegistry::reconcile(const cwReconcileMergeCont
         aggregateResult.modelMutated = aggregateResult.modelMutated || result.modelMutated;
         aggregateResult.pendingConflictCleanup =
             aggregateResult.pendingConflictCleanup || result.pendingConflictCleanup;
+        aggregateResult.persistNoteDescriptors =
+            aggregateResult.persistNoteDescriptors || result.persistNoteDescriptors;
+        aggregateResult.persistLiDARNoteDescriptors =
+            aggregateResult.persistLiDARNoteDescriptors || result.persistLiDARNoteDescriptors;
         aggregateResult.orphanDirectoriesToRemove.append(result.orphanDirectoriesToRemove);
         aggregateResult.diagnostics.append(result.diagnostics);
         appliedHandlers.append(result.handlerName);

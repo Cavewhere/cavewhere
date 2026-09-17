@@ -6233,11 +6233,8 @@ QFuture<Monad::Result<cwSaveLoad::ReconcileExternalResult>> cwSaveLoad::reconcil
 
             requiresPersistence = (mergeResult.modelMutated && !effectiveDiskAlreadySynchronized)
                     || mergeResult.pendingConflictCleanup;
-            if (mergeResult.handlerName == QStringLiteral("cwNoteSyncMergeHandler")) {
-                persistNoteDescriptors = mergeResult.modelMutated;
-            } else if (mergeResult.handlerName == QStringLiteral("cwNoteLiDARSyncMergeHandler")) {
-                persistLiDARNoteDescriptors = mergeResult.modelMutated;
-            }
+            persistNoteDescriptors = mergeResult.persistNoteDescriptors;
+            persistLiDARNoteDescriptors = mergeResult.persistLiDARNoteDescriptors;
             reconcileDiagnostic = QStringLiteral("reconcile handler %1 applied (%2)")
                     .arg(mergeResult.handlerName,
                          modelMutated

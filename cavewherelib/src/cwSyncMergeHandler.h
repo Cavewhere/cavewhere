@@ -55,6 +55,11 @@ struct cwReconcileMergeResult {
     // left on disk by a git merge and must be deleted. Forces a cleanup commit even when
     // diskAlreadySynchronized is true for all other handlers.
     bool pendingConflictCleanup = false;
+    // Set by a handler that merged note or LiDAR-note descriptors into the model, so the
+    // reconcile save writes those descriptors back out. Handlers report it here rather
+    // than cwSaveLoad matching handler names, which the registry joins into one string.
+    bool persistNoteDescriptors = false;
+    bool persistLiDARNoteDescriptors = false;
     // Directories (repository-root relative) a handler found orphaned by a merge and wants
     // removed. Handlers record them here instead of queuing the removal themselves, so a
     // later handler's RequiresFullReload discards them along with the rest of the result.

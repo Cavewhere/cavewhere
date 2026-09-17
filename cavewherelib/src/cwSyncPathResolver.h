@@ -25,6 +25,14 @@ struct TripLoadedIndex {
     QHash<QString, QUuid> tripIdsByDescriptorPath;
 };
 
+//! Every loaded trip by id, with the node-name path it hangs under. The pointers alias the
+//! loaded region's own nested lists, so they stay valid for as long as that region data
+//! does and only while nothing mutates it.
+struct TripLoadedByIdIndex {
+    QHash<QUuid, const cwTripData*> tripDataById;
+    QHash<QUuid, QStringList> nodePathByTripId;
+};
+
 struct NoteCurrentIndex {
     QHash<QUuid, cwTrip*> tripByNoteId;
     QHash<QUuid, cwNote*> noteById;
@@ -60,6 +68,7 @@ TripCurrentIndex buildCurrentTripIndex(const QDir& repoRoot,
 TripLoadedIndex buildLoadedTripIndex(const QDir& repoRoot,
                                      const QString& dataRootName,
                                      const cwCavingRegionData& regionData);
+TripLoadedByIdIndex buildLoadedTripsById(const cwCavingRegionData& regionData);
 
 NoteCurrentIndex buildCurrentNoteIndex(const QDir& repoRoot,
                                        const QString& dataRootName,
