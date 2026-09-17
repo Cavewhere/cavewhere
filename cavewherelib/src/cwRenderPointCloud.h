@@ -38,6 +38,12 @@ namespace cw::pointcloud {
     //! streaming holds the cloud coarser than the threshold describes, the
     //! coverage applies to the finest spacing actually drawn instead.
     //!
+    //! The density under a sprite is continuous: each node's points thin
+    //! against the same threshold (cw::clod), fading out over the octave that
+    //! leads to their level leaving the cut, so the points a sprite of this
+    //! coverage has to cover sit about one target spacing apart at every
+    //! scale.
+    //!
     //! This is the only point-size knob: coverage is what predicts whether the
     //! surface reads solid or shows holes, so the shader has no separate tuned
     //! world radius competing with it. Above 1 the sprites of neighboring

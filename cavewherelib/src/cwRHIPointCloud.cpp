@@ -349,7 +349,11 @@ void cwRHIPointCloud::refreshNodeFloors(const QVector<int>& drawnNodes)
 cwRHIPointCloud::PerCloudUniform
 cwRHIPointCloud::appearanceUniform(float spacingCoverage) const
 {
-    return PerCloudUniform{spacingCoverage, m_sseThresholdPx, 0.0f, 0.0f};
+    // The root has no coarser level to carry the surface once its own points
+    // thin away, so it is the widest gap cw::clod ever thins toward.
+    const float rootSpacing =
+        m_source.manifest ? float(m_source.manifest->spacing(kRootLevel)) : 0.0f;
+    return PerCloudUniform{spacingCoverage, m_sseThresholdPx, rootSpacing, 0.0f};
 }
 
 void cwRHIPointCloud::refreshSseThreshold(const cwRenderBudgets& budgets)

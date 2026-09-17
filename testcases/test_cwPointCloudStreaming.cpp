@@ -46,6 +46,7 @@
 #include "cwAppearanceOverride.h"
 #include "cwDiskCacher.h"
 #include "cwPointCloudAppearance.h"
+#include "cwPointCloudClod.h"
 #include "cwPointOctree.h"
 #include "cwPointOctreeManifest.h"
 #include "cwProfileLog.h"
@@ -458,8 +459,6 @@ namespace {
             m_live(makeRenderTarget(rhi, QSize(targetDimension, targetDimension)))
         {
             m_cache = cache;
-            REQUIRE(m_cache.source.manifest->nodes.size() > cw::octree::kChildCount);
-
             start();
         }
 
@@ -1194,12 +1193,13 @@ namespace {
     constexpr float kBareSpacingCoverage = 0.75f;
 
     //! The same plane at the default coverage, where sprites overlap their
-    //! neighbors by half a cell: 0.016 worst, a thirtieth of what the bare
+    //! neighbors by half a cell: 0.0156 worst, a thirtieth of what the bare
     //! coverage leaves, and the same number is the largest step-to-step jump
-    //! because the whole curve is flat until one level transition. Measured,
-    //! with room for the pixel rounding a different rasterizer would do.
+    //! because the whole curve is flat until the scale where the root is the
+    //! only level left. Measured, with room for the pixel rounding a different
+    //! rasterizer would do.
     constexpr double kDefaultCoverageMaxHoleFraction = 0.02;
-    constexpr double kDefaultCoverageMaxHoleFractionJump = 0.02;
+    constexpr double kDefaultCoverageMaxHoleFractionJump = 0.0172;
 
     //! The density sweep's own fixture. The lit share of the footprint only
     //! counts points while a point is one pixel and the gaps between points
@@ -1217,22 +1217,27 @@ namespace {
     constexpr float kDensitySweepHighHeight = 20.0f;
 
     //! How far the share of the footprint the plane lights may move between
-    //! neighboring scales on that fixture. A level leaving the cut quarters
-    //! the points per pixel, and with one pixel a point that step lands whole
-    //! in the lit share. Measured plus a tenth; continuous thinning spreads
-    //! the step over the scales between transitions and tightens this by an
-    //! order of magnitude. The steps inside a level measure 0.005, so there is
-    //! room for it to fall that far.
-    constexpr double kMaxLitFractionJump = 0.089;
+    //! neighboring scales on that fixture. A level leaving the cut used to
+    //! quarter the points per pixel in one step, which measured 0.089; the
+    //! shader now fades each level out over the octave that leads to its
+    //! departure, and what is left is the ordinary step-to-step drift inside a
+    //! level. Measured plus a tenth.
+    constexpr double kMaxLitFractionJump = 0.0046;
 
     //! The same criteria on the tile, which is measured against a reference
     //! render rather than a rectangle and carries the residual the erosion
-    //! leaves behind, so its baseline stands on its own. At the default
-    //! coverage the tile measures 0.00025 worst over a 1 px hole, so these are
-    //! the measured values with a few times their own size in slack.
-    constexpr double kTileMaxHoleFraction = 0.002;
-    constexpr int kTileMaxHoleSidePx = 4;
-    constexpr double kTileMaxHoleFractionJump = 0.002;
+    //! leaves behind, so its baseline stands on its own. Continuous thinning
+    //! moved these, and the move is the point of it: a cut between transitions
+    //! used to draw a whole level finer than the threshold asks for, and the
+    //! surplus was what held the tile at 0.00025 over a 1 px hole. Thinning
+    //! spends that surplus to make the density continuous, so the tile now
+    //! draws at the spacing the cut aims for and measures 0.0051 over holes of
+    //! one to six pixels — still half a percent of the footprint, and the
+    //! price of the density step falling by a factor of twenty. Measured, with
+    //! slack for the pixel rounding a different rasterizer would do.
+    constexpr double kTileMaxHoleFraction = 0.006;
+    constexpr int kTileMaxHoleSidePx = 6;
+    constexpr double kTileMaxHoleFractionJump = 0.0026;
 
     //! Where a failed case writes its frame, when it is set
     const char* const kFrameDumpEnvironmentVariable = "CAVEWHERE_HOLE_METRIC_DUMP_DIR";
@@ -1766,8 +1771,13 @@ namespace {
         };
         static OctreeCache cache = [] {
             REQUIRE(directory.isValid());
-            return buildOctreeCache(directory.path(), QStringLiteral("hole-metric-plane"),
-                                    planePoints(kPlaneSide, kPlaneStep));
+            OctreeCache built = buildOctreeCache(directory.path(),
+                                                 QStringLiteral("hole-metric-plane"),
+                                                 planePoints(kPlaneSide, kPlaneStep));
+            //The hole metric is a level transition's measure, so the sweep
+            //needs a tree with a transition in it
+            REQUIRE(built.source.manifest->nodes.size() > 1);
+            return built;
         }();
         return cache;
     }
@@ -1780,10 +1790,97 @@ namespace {
             SKIP("Set CAVEWHERE_HOLE_METRIC_LAZ to a USGS lidar tile to measure "
                  "holes on real data");
         }
+        REQUIRE(tile.cache.source.manifest->nodes.size() > 1);
         writeCsvLine(QStringLiteral("holeBuild,usgsTile,%1,%2")
                          .arg(tile.buildMilliseconds)
                          .arg(tile.cache.source.manifest->pointCount));
         return tile.cache;
+    }
+
+    //! The thinning fixture: a plane sampled at exactly the cell size of the
+    //! octree's second level, so the tree is a root and one refinement with
+    //! nothing below it. The deepest level draws whole however far the camera
+    //! pushes in, which is what gives the sweep a weight of 1 to measure
+    //! against.
+    constexpr double kThinningPlaneSide = 25.0;
+    constexpr double kThinningPlaneStep = 0.1;
+
+    //! The cut then holds points three to six pixels apart at every scale, so
+    //! a 1 px sprite lights a pixel of its own and the lit count is the drawn
+    //! count. A coverage this small keeps both sizing terms under the shader's
+    //! 1 px floor, so a lit pixel stays a point rather than a sprite's reach.
+    constexpr double kThinningScreenSpaceErrorPx = 6.0;
+    constexpr float kThinningSpacingCoverage = 0.08f;
+
+    //! The two scales the sweep reads, both of them an odd multiple of half the
+    //! point step, which puts the view's edge midway between two rows of
+    //! points: no sprite straddles it, so the count inside the viewport is the
+    //! same question on the GPU and on the CPU. The first puts the refined
+    //! level's weight near a half, the second past 1.
+    constexpr float kThinningHalfWeightHeight = 6.1f;
+    constexpr float kThinningFullWeightHeight = 4.1f;
+
+    //! Predicted and drawn are the same set, so the slack is for the
+    //! rasterizer's edges rather than for the rule
+    constexpr double kThinnedCountTolerance = 0.02;
+
+    //! The thinning octree, built once per process.
+    const OctreeCache& thinningCache()
+    {
+        static QTemporaryDir directory {
+            QDir::temp().filePath(QStringLiteral("cwClodThinning-%1-XXXXXX")
+                                      .arg(QCoreApplication::applicationPid()))
+        };
+        static OctreeCache cache = [] {
+            REQUIRE(directory.isValid());
+            return buildOctreeCache(directory.path(), QStringLiteral("clod-thinning"),
+                                    planePoints(kThinningPlaneSide, kThinningPlaneStep));
+        }();
+        return cache;
+    }
+
+    //! Every point of @a fixture's drawn nodes that cw::clod keeps at @a height
+    //! and the view holds, which is what the frame's lit pixels have to come
+    //! to. The points come out of the payloads the nodes were uploaded from,
+    //! so the prediction reads the same quantized coordinates the shader does.
+    int predictedDrawnCount(const PointCloudFixture& fixture, float height)
+    {
+        const cwPointOctreeManifest& manifest = fixture.manifest();
+        const double pixelsPerMeter = double(kTargetDimension) / double(height);
+        const double targetSpacing =
+            cw::clod::targetSpacing(kThinningScreenSpaceErrorPx, pixelsPerMeter,
+                                    manifest.spacing(kRootLevel));
+        const double halfExtent = double(height) * 0.5;
+
+        int count = 0;
+        for (int index : Access::drawnNodes(fixture.backend())) {
+            const QByteArray bytes = Access::nodeBytes(fixture.backend(), index);
+            const QBox3D bounds = manifest.nodeBounds(index);
+            const double nodeSpacing = manifest.spacing(manifest.nodes.at(index).level);
+
+            for (qsizetype offset = 0; offset + cw::octree::kBytesPerPoint <= bytes.size();
+                 offset += cw::octree::kBytesPerPoint) {
+                const char* axes = bytes.constData() + offset;
+                constexpr int kAxisBytes = int(sizeof(quint16));
+                const cw::octree::QuantizedPoint quantized{
+                    qFromLittleEndian<quint16>(axes),
+                    qFromLittleEndian<quint16>(axes + kAxisBytes),
+                    qFromLittleEndian<quint16>(axes + 2 * kAxisBytes),
+                    0};
+
+                if (!cw::clod::drawn(quantized, nodeSpacing, targetSpacing)) {
+                    continue;
+                }
+
+                const QVector3D onScreen =
+                    cw::octree::dequantize(quantized, bounds) - fixture.center();
+                if (std::abs(double(onScreen.x())) <= halfExtent
+                    && std::abs(double(onScreen.y())) <= halfExtent) {
+                    count++;
+                }
+            }
+        }
+        return count;
     }
 
     int largestHoleSidePx(const QVector<SweepRecord>& records)
@@ -3955,6 +4052,58 @@ TEST_CASE("A culled cloud keeps its nodes until the budget takes them",
     CHECK(Access::nodeState(fixture.backend(), kRootIndex) == NodeState::Resident);
 }
 
+
+TEST_CASE("The GPU thins the points the CPU predicts", "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    PointCloudFixture fixture(rhi.get(), thinningCache(), kTargetDimension);
+    cwRenderBudgets budgets = fixture.budgets();
+    budgets.screenSpaceErrorPx = kThinningScreenSpaceErrorPx;
+    fixture.setBudgets(budgets);
+    fixture.render().setSpacingCoverage(kThinningSpacingCoverage);
+    fixture.synchronize();
+    fixture.setReadbackEnabled(true);
+
+    const auto litCountAt = [&](float height) {
+        fixture.setOrthoHeight(height);
+        fixture.renderUntilQuiet();
+        fixture.renderFrame();
+        REQUIRE(Access::sseInflation(fixture.backend()) == 1.0);
+        return fixture.litPixels().size();
+    };
+
+    SECTION("half the refined level's weight draws half its points") {
+        const qsizetype lit = litCountAt(kThinningHalfWeightHeight);
+        const int predicted = predictedDrawnCount(fixture, kThinningHalfWeightHeight);
+        const int resident = int(residentPoints(fixture).size());
+
+        INFO("predicted " << predicted << " points at H = " << kThinningHalfWeightHeight
+             << " m, lit " << lit << " pixels, " << resident << " resident");
+        CHECK(predicted < resident);
+        CHECK(std::abs(double(lit) - double(predicted))
+              <= kThinnedCountTolerance * double(predicted));
+    }
+
+    SECTION("a full weight draws every point of the level") {
+        const qsizetype lit = litCountAt(kThinningFullWeightHeight);
+        const int predicted = predictedDrawnCount(fixture, kThinningFullWeightHeight);
+
+        //Nothing below the refined level to thin toward, so the whole of it
+        //draws: every drawn point the view holds is lit
+        const double nodeSpacing =
+            fixture.manifest().spacing(finestDrawnLevel(fixture));
+        const double pixelsPerMeter =
+            double(kTargetDimension) / double(kThinningFullWeightHeight);
+        CHECK(cw::clod::weight(nodeSpacing,
+                               kThinningScreenSpaceErrorPx / pixelsPerMeter) == 1.0);
+
+        INFO("predicted " << predicted << " points at H = " << kThinningFullWeightHeight
+             << " m, lit " << lit << " pixels");
+        CHECK(std::abs(double(lit) - double(predicted))
+              <= kThinnedCountTolerance * double(predicted));
+    }
+}
 
 TEST_CASE("Zooming out until quiet leaves the holes bounded",
           "[PointCloudStreaming][HoleMetric]")

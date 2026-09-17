@@ -327,14 +327,16 @@ private:
     // every sprite as
     // max(spacingCoverage * nodeFloor.x * pixelsPerMeter(w),
     //     spacingCoverage * sseThresholdPx)
-    // pixels, the floor coming per instance. The two live floats carry two
-    // explicit pad floats so the struct is std140's 16 bytes, which is what the
-    // block rounds up to.
+    // pixels, the floor coming per instance, and thins each node against the
+    // spacing the cut is aiming for, never wider than rootSpacing — the
+    // coarsest level the file has. The three live floats carry one explicit pad
+    // float so the struct is std140's 16 bytes, which is what the block rounds
+    // up to.
     struct PerCloudUniform {
         float spacingCoverage = 0.0f;
         float sseThresholdPx = 0.0f;
+        float rootSpacing = 0.0f;
         float padding0 = 0.0f;
-        float padding1 = 0.0f;
     };
     static_assert(sizeof(PerCloudUniform) == 4 * sizeof(float),
                   "PerCloudBlock in PointCloud.vert rounds to std140's 16 "

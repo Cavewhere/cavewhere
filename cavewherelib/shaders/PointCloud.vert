@@ -36,17 +36,79 @@ layout(std140, binding = 0) uniform GlobalBlock {
 // the projected spacing the octree cut refines to — the view's
 // screenSpaceErrorPx times this cloud's current inflation — which is what lets
 // each vertex work out the spacing around it from its own depth. The spacing
-// really drawn is per instance instead (nodeFloor). Two floats pad to std140's
-// 16 bytes; the C++ PerCloudUniform matches it field for field, padding
-// included.
+// really drawn is per instance instead (nodeFloor). rootSpacing is the sample
+// spacing of this cloud's root, the coarsest level it has: the thinning below
+// never aims for a gap wider than that, because past it there is no coarser
+// level left to carry the surface. One float pads to std140's 16 bytes; the
+// C++ PerCloudUniform matches it field for field, padding included.
 layout(std140, binding = 1) uniform PerCloudBlock {
     float spacingCoverage;
     float sseThresholdPx;
+    float rootSpacing;
     float padding0;
-    float padding1;
 };
 
 const float maxPointSizePx = 64.0;
+
+// The continuous level of detail rule, value for value cw::clod
+// (cwPointCloudClod.h) — change one and change the other, which is what the
+// [PointCloudClod] and thinning cases check.
+//
+// A node's weight falls from 1 to 0 over the octave between its own sample
+// spacing and twice it, and a point draws while its rank is under that weight,
+// so a level fades out over the scales that lead to its departure instead of
+// quartering the density the frame it leaves. The cut itself needs no change:
+// a node refines while its children's weight is above zero somewhere, so the
+// level that leaves the cut has already faded to nothing everywhere.
+//
+// The rank orders a node's points by the sub-octant of their parent cell, then
+// by the sub-octant of their grandparent cell, then by a hash of the 27 bits
+// below the cell — nine per axis, x lowest — so survivors stay spread over the
+// parent grid and the thinning shows no structure under EDL. Ranks depend on
+// the point alone, so the set drawn at one weight is a subset of the set drawn
+// at any larger one and zooming never flickers a point off and back on.
+const float kOctave = 2.0;
+const float kQuantMax = 65535.0;
+const float kSampleGridResolution = 128.0;
+const int kOctantCount = 8;
+const uint kQuantStepsPerCell = 512u;
+const uint kSubCellMask = kQuantStepsPerCell - 1u;
+const uint kSubCellBits = 9u;
+const float kRankSteps = float(kOctantCount * kOctantCount);
+const int kOctantOrder[8] = int[8](0, 4, 6, 2, 3, 7, 5, 1);
+
+//The integer mix, and the bits of it the hash keeps
+const uint kMixA = 0x27D4EB2Du;
+const uint kMixB = 0x165667B1u;
+const uint kShiftA = 15u;
+const uint kShiftB = 13u;
+const uint kKeptBits = 24u;
+const uint kDropBits = 32u - kKeptBits;
+const float kKeptScale = 1.0 / float(1u << kKeptBits);
+
+float subCellHash01(uvec3 quantized)
+{
+    uint hash = (quantized.x & kSubCellMask)
+              | ((quantized.y & kSubCellMask) << kSubCellBits)
+              | ((quantized.z & kSubCellMask) << (2u * kSubCellBits));
+    hash *= kMixA;
+    hash ^= hash >> kShiftA;
+    hash *= kMixB;
+    hash ^= hash >> kShiftB;
+    return float(hash >> kDropBits) * kKeptScale;
+}
+
+float pointRank(uvec3 quantized)
+{
+    uvec3 cell = quantized / kQuantStepsPerCell;
+    int parentOctant = int((cell.x & 1u) | ((cell.y & 1u) << 1) | ((cell.z & 1u) << 2));
+    int grandparentOctant = int(((cell.x >> 1) & 1u) | (((cell.y >> 1) & 1u) << 1)
+                                | (((cell.z >> 1) & 1u) << 2));
+
+    float steps = float(kOctantOrder[parentOctant] * kOctantCount
+                        + kOctantOrder[grandparentOctant]);
+    return (steps + subCellHash01(quantized)) / kRankSteps;
+}
 
 // Keeps the sizing finite for points that straddle or sit behind the eye,
 // matching cw::sse::kMinimumClipW so the shader and node selection floor w at
@@ -75,6 +137,20 @@ void main(void)
     // signed sizePx would always hit the lower clamp on those backends.
     float pixelsPerMeter = abs(projectionMatrix[1][1]) * viewportSize.y * 0.5
                          / max(gl_Position.w, minimumClipW);
+
+    // The spacing the cut is aiming for right here, in meters, and how much of
+    // this node's level still belongs at that spacing. A discarded point goes
+    // outside the clip volume, the cheapest discard a vertex shader has.
+    // cw::clod::targetSpacing is this line, root floor included.
+    float targetSpacing = min(sseThresholdPx / pixelsPerMeter, rootSpacing);
+    float nodeSpacing = nodeOriginScale.w * kQuantMax / kSampleGridResolution;
+    float weight = clamp(log2(kOctave * nodeSpacing / targetSpacing), 0.0, 1.0);
+
+    if (pointRank(qpos.xyz) >= weight) {
+        gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+        gl_PointSize = 1.0;
+        return;
+    }
 
     // Sized against the spacing the cut is aiming for right here: the octree
     // refines a node while its sample spacing projects wider than
