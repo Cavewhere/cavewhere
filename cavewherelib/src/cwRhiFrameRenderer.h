@@ -10,6 +10,7 @@ class QRhiCommandBuffer;
 #include "cwRHIObject.h"
 #include "cwRhiPipelineTypes.h"
 #include "cwEdlParametersData.h"
+#include "cwPointCloudForest.h"
 #include "cwRenderObjectId.h"
 #include "cwSceneVisibility.h"
 #include <QHash>
@@ -240,23 +241,12 @@ public:
     void destroyRenderObject(cwRenderObjectId id);
     void markForResourceUpdate(cwRHIObject* rhiObject) { m_rhiNeedResourceUpdate.append(rhiObject); }
 
-    // The frame's point cloud demand table: what each cloud's last cut asked of
-    // the shared point and byte budgets. Objects gather sequentially on one
-    // thread, so a cloud reads the others' entries as of the previous frame and
-    // sizes its own share against them. Entries go away with the object.
-    // an object that stops gathering — culled, hidden, or without a pipeline —
-    // gives its share back through clearPointCloudDemand rather than holding it
-    // until it is destroyed.
-    void setPointCloudDemand(const cwRHIObject* object,
-                             const cwRHIObject::PointCloudDemand& demand);
-    void clearPointCloudDemand(const cwRHIObject* object);
-    cwRHIObject::PointCloudDemand pointCloudDemandExcluding(const cwRHIObject* object) const;
-
-    // What @a object's cut may draw of @a pointBudget: the whole budget less
-    // what the other clouds want, each of them held to an even share so a cloud
-    // that gathers first cannot starve the ones after it. One cloud keeps the
-    // whole budget.
-    qint64 pointBudgetShare(const cwRHIObject* object, qint64 pointBudget) const;
+    // The one cut every point cloud of the live view draws from, and the
+    // governor that sizes it. Clouds register their trees with it as their
+    // sources change; the frame steps it once at the top of renderLiveFrame and
+    // selects once in gatherScene.
+    cwPointCloudForest& pointCloudForest() { return m_pointCloudForest; }
+    const cwPointCloudForest& pointCloudForest() const { return m_pointCloudForest; }
 
     // The live render objects, in gather order. The offscreen renderer iterates these
     // for per-frame appearance-slot recycling and id resolution.
@@ -415,8 +405,8 @@ private:
     //pointer, whose address can be recycled by the allocator (issue #512).
     QHash<cwRenderObjectId, cwRHIObject*> m_rhiObjectLookup;
 
-    //Point clouds only; see setPointCloudDemand
-    QHash<const cwRHIObject*, cwRHIObject::PointCloudDemand> m_pointCloudDemand;
+    //Point clouds only; see pointCloudForest()
+    cwPointCloudForest m_pointCloudForest;
 
     cwSceneUpdate::Flag m_updateFlags = cwSceneUpdate::Flag::None;
     cwVisibilitySnapshot m_visibility;

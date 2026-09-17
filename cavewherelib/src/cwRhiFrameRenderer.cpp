@@ -179,55 +179,18 @@ void cwRhiFrameRenderer::destroyRhiObject(cwRHIObject* rhiObject)
     m_rhiObjects.removeOne(rhiObject);
     m_rhiObjectsToInitilize.removeOne(rhiObject);
     m_rhiNeedResourceUpdate.removeOne(rhiObject);
-    m_pointCloudDemand.remove(rhiObject);
+    m_pointCloudForest.removeTree(rhiObject);
     delete rhiObject;
-}
-
-void cwRhiFrameRenderer::setPointCloudDemand(const cwRHIObject* object,
-                                             const cwRHIObject::PointCloudDemand& demand)
-{
-    m_pointCloudDemand[object] = demand;
-}
-
-void cwRhiFrameRenderer::clearPointCloudDemand(const cwRHIObject* object)
-{
-    m_pointCloudDemand.remove(object);
-}
-
-qint64 cwRhiFrameRenderer::pointBudgetShare(const cwRHIObject* object, qint64 pointBudget) const
-{
-    const int knownClouds =
-        int(m_pointCloudDemand.size()) + (m_pointCloudDemand.contains(object) ? 0 : 1);
-    const qint64 evenShare = pointBudget / std::max(1, knownClouds);
-
-    qint64 claimed = 0;
-    for (auto it = m_pointCloudDemand.constBegin(); it != m_pointCloudDemand.constEnd(); ++it) {
-        if (it.key() == object) {
-            continue;
-        }
-        claimed += std::min(it.value().points, evenShare);
-    }
-
-    return std::max<qint64>(0, pointBudget - claimed);
-}
-
-cwRHIObject::PointCloudDemand
-cwRhiFrameRenderer::pointCloudDemandExcluding(const cwRHIObject* object) const
-{
-    cwRHIObject::PointCloudDemand total;
-    for (auto it = m_pointCloudDemand.constBegin(); it != m_pointCloudDemand.constEnd(); ++it) {
-        if (it.key() == object) {
-            continue;
-        }
-        total.points += it.value().points;
-        total.bytes += it.value().bytes;
-    }
-    return total;
 }
 
 void cwRhiFrameRenderer::renderLiveFrame(QRhiCommandBuffer *cb, cwRhiItemRenderer *renderer)
 {
     auto rhi = cb->rhi();
+
+    // Before any cloud streams, so the threshold refreshSseThreshold() writes
+    // for the shader and the cut gatherScene() selects are one frame's
+    // inflation rather than two.
+    m_pointCloudForest.advance(m_budgets);
 
     // The renderer's render target is the authoritative source for viewport
     // pixel size — it accounts for devicePixelRatio, where cwCamera's
@@ -623,7 +586,6 @@ void cwRhiFrameRenderer::gatherScene(std::array<QVector<cwRHIObject::PipelineBat
     // pass shares this job's camera.
     constexpr auto kCulledPass = cwRHIObject::RenderPass::Background;
     const auto settleCulled = [&](cwRHIObject* object) {
-        clearPointCloudDemand(object);
         object->gatherCulled(cwRHIObject::GatherContext {
             &perPassRenderData[static_cast<int>(kCulledPass)],
             kCulledPass,
@@ -636,12 +598,31 @@ void cwRhiFrameRenderer::gatherScene(std::array<QVector<cwRHIObject::PipelineBat
         });
     };
 
-    for (auto object : std::as_const(m_rhiObjects)) {
-        // Snapshot gate ANDed with the per-job overlay. Objects carry their own
-        // ids now, so the overlay is tested directly — no id→pointer resolve
-        // pass; contains() on the live frame's empty set is a cheap no-op.
+    // Snapshot gate ANDed with the per-job overlay. Objects carry their own
+    // ids now, so the overlay is tested directly — no id→pointer resolve pass;
+    // contains() on the live frame's empty set is a cheap no-op.
+    const auto objectShown = [&](const cwRHIObject* object) {
         const cwRenderObjectId id = object->renderObjectId();
-        if (!m_visibility.objectVisible(id) || options.hiddenObjectIds.contains(id)) {
+        return m_visibility.objectVisible(id) && !options.hiddenObjectIds.contains(id);
+    };
+
+    const auto objectInFrustum = [&](const cwRHIObject* object) {
+        const std::optional<QBox3D> bounds = object->worldBounds();
+        return !bounds.has_value() || frustum.intersects(bounds.value());
+    };
+
+    // The forest cuts the trees of the clouds this job draws, so the gate it
+    // asks with is the loop's own: a cloud handed a slice it never draws, or
+    // drawing with a slice the cut left out, is the drift this shares away.
+    if (options.liveFrame) {
+        m_pointCloudForest.select(perPassRenderData[0], frustum,
+                                  [&](const cwRHIObject* object) {
+                                      return objectShown(object) && objectInFrustum(object);
+                                  });
+    }
+
+    for (auto object : std::as_const(m_rhiObjects)) {
+        if (!objectShown(object)) {
             settleCulled(object);
             ++objectOrder;
             continue;
@@ -651,8 +632,7 @@ void cwRhiFrameRenderer::gatherScene(std::array<QVector<cwRHIObject::PipelineBat
 
         // objectOrder still advances, as on the visibility path above, so draw
         // order stays stable as the camera moves.
-        const std::optional<QBox3D> bounds = object->worldBounds();
-        if (bounds.has_value() && !frustum.intersects(bounds.value())) {
+        if (!objectInFrustum(object)) {
             ++cullingStats.objectsCulled;
             settleCulled(object);
             ++objectOrder;

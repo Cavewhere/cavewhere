@@ -65,8 +65,10 @@ struct CwRhiPointCloudTestAccess {
         return int(cloud.m_coldNodes.size());
     }
 
+    // The governor is the frame's, shared by every cloud of the view, so this
+    // reaches it through the cloud the test already has in hand.
     static double sseInflation(const cwRHIPointCloud& cloud) {
-        return cloud.m_sseInflation;
+        return cloud.forest().sseInflation();
     }
 
     // What the last cut would cost to draw, which is what the governor reads.
@@ -157,11 +159,11 @@ struct CwRhiPointCloudTestAccess {
     // The relax probe's state, so a test can pin how often it runs and that an
     // export job leaves it where the live frame put it.
     static int relaxProbeFrame(const cwRHIPointCloud& cloud) {
-        return cloud.m_relaxProbeFrame;
+        return cloud.forest().relaxProbeFrame();
     }
 
     static qint64 desiredBytesRelaxed(const cwRHIPointCloud& cloud) {
-        return cloud.m_desiredBytesRelaxed;
+        return cloud.forest().desiredBytesRelaxed();
     }
 
     // Pretends the node was last wanted in @a frame, so a test can order the

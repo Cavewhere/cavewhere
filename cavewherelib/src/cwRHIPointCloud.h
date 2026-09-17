@@ -223,17 +223,17 @@ private:
     // export survives.
     int cancelRequestsNotDesiredThisFrame(quint64 frame);
 
-    // Every kSseRelaxProbeFrames frames while inflated, re-selects @a input one
-    // step finer and records what that cut would cost, which is the only
-    // evidence nextSseInflation() steps down on.
-    void probeRelaxedCut(const cw::octree::SelectionInput& input);
-
     QVector<cw::octree::NodeResidency> residencyStats() const;
     void enforceGpuBudget(const cwRenderBudgets& budgets);
 
     // The frame the cut was last stamped with. streamResources runs before
     // gather, so it still names that frame for everything before the next cut.
     quint64 currentFrame() const;
+
+    // The frame's forest: the cut every visible cloud shares and the governor
+    // that sizes it. An empty forest stands in for a cloud no frame renderer
+    // has taken yet, which reads as an uninflated view of nothing.
+    const cwPointCloudForest& forest() const;
 
     // What one cw.profile.render line summarizes: kProfileBlockFrames frames of
     // render-thread timings and counters. Filled only while the category is on.
@@ -425,34 +425,18 @@ private:
     // how a test exercises it without a cloud of a hundred thousand nodes.
     int m_maxResidentNodes;
 
-    // This view's screen-space-error multiplier: raised while the cut it wants
-    // outruns this view's share of the GPU budget or the point budget, lowered
-    // once a probed cut one step finer fits again.
-    double m_sseInflation = 1.0;
-
-    // The probe behind the step down: the bytes of the cut one step finer and
-    // whether the point budget capped it, refreshed every
-    // kSseRelaxProbeFrames frames while inflated. -1 means not probed.
-    qint64 m_desiredBytesRelaxed = -1;
-    bool m_pointCappedRelaxed = false;
-    int m_relaxedSteps = 1;
-    int m_relaxProbeFrame = 0;
-
-    // This cloud's share of the GPU byte budget as of the last enforceGpuBudget,
-    // which is what the next probe measures its relaxations against.
-    qint64 m_availableBytes = 0;
-
     cwLedgeredBytes m_gpuBytes {cwRenderMemoryLedger::Category::PointCloudGeometry,
                                 cwRenderMemoryLedger::Residency::Gpu};
     cwLedgeredBytes m_mirrorBytes {cwRenderMemoryLedger::Category::PointCloudGeometry,
                                    cwRenderMemoryLedger::Residency::Cpu};
 
-    // This frame's cut, from gather()'s selectCut(): its nodes, and what
-    // drawing it would cost in points and bytes.
+    // This frame's cut — the forest's slice for this cloud on a live frame, its
+    // own selectCut() on an export frame: its nodes, and what drawing it would
+    // cost in points and bytes.
     cw::octree::Selection m_selected;
 
     // The projected spacing the cut refines to — the view's screenSpaceErrorPx
-    // times this cloud's inflation — which is what PointCloud.vert turns back
+    // times the forest's inflation — which is what PointCloud.vert turns back
     // into a world spacing at each vertex's own depth. Render-thread only.
     float m_sseThresholdPx = float(cw::budgets::kDefaultScreenSpaceErrorPx);
 

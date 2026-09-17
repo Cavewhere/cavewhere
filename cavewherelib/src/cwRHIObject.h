@@ -120,16 +120,6 @@ public:
     static constexpr int kOffscreenBatchAppearanceSlots = 256;
     static constexpr int kAppearanceSlotCount = 1 + kOffscreenBatchAppearanceSlots;
 
-    // What one point cloud's cut asks of the frame's shared budgets. The frame
-    // renderer keeps one per cloud, reached through m_frame, so a cloud can
-    // subtract what the others want (cwRhiFrameRenderer::pointCloudDemandExcluding)
-    // instead of guessing from residency, which LRU pins at the budget whatever
-    // the cuts ask for.
-    struct PointCloudDemand {
-        qint64 points = 0;
-        qint64 bytes = 0;
-    };
-
     struct GatherContext {
         const RenderData* renderData;
         RenderPass renderPass;

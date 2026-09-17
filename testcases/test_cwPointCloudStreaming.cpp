@@ -49,6 +49,7 @@
 #include "cwLazLoader.h"
 #include "cwPointCloudAppearance.h"
 #include "cwPointCloudClod.h"
+#include "cwPointCloudForest.h"
 #include "cwPointOctree.h"
 #include "cwPointOctreeManifest.h"
 #include "cwProfileLog.h"
@@ -638,6 +639,13 @@ namespace {
 
             cwRHIObject::ResourceUpdateData resourceUpdateData{batch, renderData,
                                                                &perPassRenderData};
+
+            //renderLiveFrame steps the governor before any cloud streams, so
+            //the threshold the shader reads and the cut gatherScene selects are
+            //one frame's inflation
+            if (options.liveFrame) {
+                frameRenderer()->pointCloudForest().advance(budgets());
+            }
 
             if (!m_backendInitialized) {
                 m_backend->initialize(resourceUpdateData);
@@ -1863,10 +1871,10 @@ namespace {
     //! split line anywhere else measures terrain instead of a seam.
     constexpr float kMaxSplitLineOffsetMeters = 2.0f;
 
-    //! How many frames of the settle window the two governors may spend at
-    //! different inflations, with the camera already still. Six today, all of
-    //! them in the opening of the window.
-    constexpr int kMaxInflationTransientFrames = 6;
+    //! How many frames of the settle window the two clouds may spend at
+    //! different inflations, with the camera already still. One forest cut
+    //! governs both, so there is no transient left to spend.
+    constexpr int kMaxInflationTransientFrames = 0;
 
     //! Meters of slack on each rectangle's outer edges, so the two halves
     //! together hold every point of the tile
@@ -2659,7 +2667,7 @@ TEST_CASE("Two clouds in one view share the byte and point budgets",
         CHECK(Access::sseInflation(fixture.secondBackend()) > 1.0);
     }
 
-    SECTION("the point budget is the two clouds' total, not each cloud's own") {
+    SECTION("the point budget is the two clouds' total, and one cut spends it") {
         budgets.pointBudget = qint64(cutPoints * kOneCutAndAHalf);
         fixture.setBudgets(budgets);
 
@@ -2674,6 +2682,11 @@ TEST_CASE("Two clouds in one view share the byte and point budgets",
 
         //Every cloud draws its root whatever the budget says
         CHECK(first + second <= budgets.pointBudget + 2 * rootPoints);
+
+        //The two slices are the one forest cut, split by cloud, so what they
+        //draw together is what the frame selected
+        const cwPointCloudForest& forest = fixture.frameRenderer()->pointCloudForest();
+        CHECK(first + second == forest.points());
 
         //Neither cloud gives way entirely: each keeps at least its even share,
         //so the one that gathers second is not starved down to its root and
@@ -4709,9 +4722,8 @@ TEST_CASE("Zooming out under a one million point budget records the starved floo
     CHECK(worst.holeFraction >= 0.0);
 }
 
-// Passes today, so it is the regression guard: the two governors take six
-// frames to agree after the camera settles, and this pins both the length of
-// that transient and the agreement that follows it.
+// One forest cut governs both clouds, so they report one inflation on every
+// frame rather than converging on one, and this pins that they never part.
 TEST_CASE("Two layers sharing a budget settle at the same inflation",
           "[PointCloudStreaming][TileSeam]")
 {
@@ -4725,7 +4737,6 @@ TEST_CASE("Two layers sharing a budget settle at the same inflation",
     writeCsvLine(QStringLiteral("seamCsv,frame,westInflation,eastInflation,"
                                 "westThresholdPx,eastThresholdPx"));
 
-    constexpr int kSettledFrame = kSeamSettleFrames / 3;
     int disagreeingFrames = 0;
 
     for (int frame = 0; frame < kSeamSettleFrames; frame++) {
@@ -4749,23 +4760,25 @@ TEST_CASE("Two layers sharing a budget settle at the same inflation",
             disagreeingFrames++;
         }
 
-        if (frame >= kSettledFrame) {
-            INFO("frame " << frame << " west " << westInflation << " east " << eastInflation);
-            CHECK(westInflation == eastInflation);
-        }
+        //Every recorded frame, not only the settled ones: the two clouds read
+        //one governor, so the sprite size the shader asks for is the same on
+        //both sides of the split line from the first frame on
+        INFO("frame " << frame << " west " << westInflation << " east " << eastInflation);
+        CHECK(westInflation == eastInflation);
+        CHECK(westThreshold == eastThreshold);
     }
 
-    //The two governors disagree while they climb — the sprite size the shader
-    //asks for comes from each cloud's own inflation, so the seam is visible for
-    //exactly these frames. A longer transient is a regression.
-    INFO("the governors disagreed on " << disagreeingFrames << " frames of "
+    //The seam is visible for exactly the frames the two sides disagree on, and
+    //one cut leaves none of them.
+    INFO("the clouds disagreed on " << disagreeingFrames << " frames of "
          << kSeamSettleFrames);
     CHECK(disagreeingFrames <= kMaxInflationTransientFrames);
 }
 
-// Fails today: the two halves draw the seam at two densities, because the cut
-// and the sprite size on each side come from that cloud's own budget share and
-// its own inflation.
+// Fails today: the two halves draw the seam at two densities. One cut under one
+// cap governs both now, so what is left is the geometry — the halves' root
+// cubes are unrelated, so at the depth the cut stops their nodes are different
+// sizes. The shared lattice is what closes it.
 TEST_CASE("A split tile draws the seam at the same density as the union",
           "[PointCloudStreaming][TileSeam][!shouldfail]")
 {
@@ -4843,10 +4856,10 @@ TEST_CASE("A split tile draws the seam at the same density as the union",
     }
 }
 
-// Fails today when the two governors step out of phase: one side changes sprite
-// size on a frame the other holds, and the seam flickers.
+// One cut, one cap and one governor for both halves, so neither side changes
+// sprite size on a frame the other holds.
 TEST_CASE("A split tile holds its seam density frame to frame",
-          "[PointCloudStreaming][TileSeam][!shouldfail]")
+          "[PointCloudStreaming][TileSeam]")
 {
     const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
     const OctreeCache& tile = usgsTileCacheOrSkip();
