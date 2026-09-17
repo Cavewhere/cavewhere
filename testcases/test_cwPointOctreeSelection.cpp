@@ -13,6 +13,7 @@
 #include <QVector3D>
 
 //Std includes
+#include <algorithm>
 #include <cmath>
 
 //Our includes
@@ -123,6 +124,37 @@ namespace {
         return input;
     }
 
+    //! A perspective camera looking down -Z at the fixture's root cube
+    SelectionInput perspectiveInput(const cwPointOctreeManifest& manifest)
+    {
+        QMatrix4x4 projection;
+        projection.perspective(float(kPerspectiveFovDegrees),
+                               kPerspectiveAspect,
+                               kOrthoNear,
+                               kOrthoFar);
+
+        SelectionInput input;
+        input.manifest = &manifest;
+        input.viewProjection = projection * view();
+        input.absP11 = std::abs(double(projection(1, 1)));
+        input.viewportHeightPx = kViewportHeightPx;
+        return input;
+    }
+
+    //! The spacing @a manifest's node @a index projects to on screen
+    double projectedSpacingOf(const cwPointOctreeManifest& manifest,
+                              int index,
+                              const QMatrix4x4& viewProjection,
+                              double absP11,
+                              int viewportHeightPx)
+    {
+        return cw::sse::projectedPixels(manifest.spacing(manifest.nodes.at(index).level),
+                                        manifest.nodeBounds(index),
+                                        viewProjection,
+                                        absP11,
+                                        viewportHeightPx);
+    }
+
     QVector<int> nodeIndices(const QVector<SelectedNode>& selected)
     {
         QVector<int> indices;
@@ -166,6 +198,73 @@ namespace {
             node.byteSize = qint64(kPointsPerNode) * cw::octree::kBytesPerPoint;
         }
         return manifest;
+    }
+
+    //Puts a second tree of the same shape one root cube east of the first, so
+    //both project the same and the tie-break decides the order
+    constexpr float kSideBySideShift = float(kRootSize);
+
+    //Far enough behind the first tree that its root projects under the error
+    constexpr float kFarShift = -700.0f;
+
+    //! @a manifest with its root cube moved by @a shift
+    cwPointOctreeManifest shiftedManifest(const cwPointOctreeManifest& manifest,
+                                          const QVector3D& shift)
+    {
+        cwPointOctreeManifest shifted = manifest;
+        shifted.rootMin += shift;
+        return shifted;
+    }
+
+    //! The one tree forest selectCut() cuts, for the camera of @a input
+    ForestInput forestInput(const SelectionInput& input)
+    {
+        ForestInput forest;
+        forest.trees.append({input.manifest});
+        forest.frustum = input.frustum;
+        forest.viewProjection = input.viewProjection;
+        forest.absP11 = input.absP11;
+        forest.viewportHeightPx = input.viewportHeightPx;
+        forest.screenSpaceErrorPx = input.screenSpaceErrorPx;
+        forest.sseInflation = input.sseInflation;
+        forest.maxNodes = input.maxNodes;
+        forest.maxPoints = input.maxPoints;
+        return forest;
+    }
+
+    //! The forest of @a west and @a east under the orthographic camera
+    ForestInput sideBySideInput(const cwPointOctreeManifest& west,
+                                const cwPointOctreeManifest& east)
+    {
+        ForestInput forest = forestInput(orthoInput(west));
+        forest.trees.append({&east});
+        return forest;
+    }
+
+    //! Every cut takes its nodes coarsest first, so the spacings never climb
+    bool spacingsFallOff(const Selection& selection)
+    {
+        for(int i = 1; i < selection.nodes.size(); i++) {
+            if(selection.nodes.at(i).projectedSpacingPx
+               > selection.nodes.at(i - 1).projectedSpacingPx) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    //What two trees tying on every spacing may differ by once a shared cap binds
+    constexpr int kBalancedNodeSlack = 1;
+    constexpr int kBalancedLevelSlack = 1;
+
+    //! The deepest level @a selection reaches in @a manifest
+    int finestLevelOf(const cwPointOctreeManifest& manifest, const Selection& selection)
+    {
+        int finest = 0;
+        for(const SelectedNode& node : selection.nodes) {
+            finest = std::max(finest, manifest.nodes.at(node.node).level);
+        }
+        return finest;
     }
 
     //! Every node between @a index and the root, root last
@@ -375,25 +474,12 @@ TEST_CASE("cw::octree::selectNodes: a perspective camera refines the near child 
     const int farChild = manifest.nodes.at(0).children.at(0);
     const int nearChild = manifest.nodes.at(0).children.at(4);
 
-    QMatrix4x4 projection;
-    projection.perspective(float(kPerspectiveFovDegrees),
-                           kPerspectiveAspect,
-                           kOrthoNear,
-                           kOrthoFar);
-
-    SelectionInput input;
-    input.manifest = &manifest;
-    input.viewProjection = projection * view();
-    input.absP11 = std::abs(double(projection(1, 1)));
-    input.viewportHeightPx = kViewportHeightPx;
+    const SelectionInput input = perspectiveInput(manifest);
 
     const auto spacingOf = [&](int index)
     {
-        return cw::sse::projectedPixels(manifest.spacing(manifest.nodes.at(index).level),
-                                        manifest.nodeBounds(index),
-                                        input.viewProjection,
-                                        input.absP11,
-                                        input.viewportHeightPx);
+        return projectedSpacingOf(manifest, index, input.viewProjection, input.absP11,
+                                  input.viewportHeightPx);
     };
 
     REQUIRE(spacingOf(nearChild) > kDefaultSse);
@@ -698,5 +784,220 @@ TEST_CASE("cw::octree::nextSseInflation: follows what the cut costs against what
         input.desiredBytes = kFittingBytes;
         input.availableBytes = kAvailableBytes;
         REQUIRE(nextSseInflation(input) == Catch::Approx(kMaxSseInflation));
+    }
+}
+
+TEST_CASE("cw::octree::selectForest: a forest of one tree cuts what selectCut cuts",
+          "[PointOctree][PointOctreeSelection]")
+{
+    const cwPointOctreeManifest manifest = buildManifestWithPoints();
+
+    const auto sameCut = [](const SelectionInput& input)
+    {
+        const Selection cut = selectCut(input);
+        const ForestSelection forest = selectForest(forestInput(input));
+
+        REQUIRE(forest.trees.size() == 1);
+        const Selection& tree = forest.trees.at(0);
+
+        CHECK(nodeIndices(tree.nodes) == nodeIndices(cut.nodes));
+        CHECK(tree.points == cut.points);
+        CHECK(tree.bytes == cut.bytes);
+        CHECK(tree.pointCapped == cut.pointCapped);
+        CHECK(forest.points == cut.points);
+        CHECK(forest.bytes == cut.bytes);
+        CHECK(forest.pointCapped == cut.pointCapped);
+    };
+
+    SECTION("an orthographic camera") {
+        sameCut(orthoInput(manifest));
+    }
+
+    SECTION("a perspective camera") {
+        sameCut(perspectiveInput(manifest));
+    }
+
+    SECTION("a frustum that culls half the tree") {
+        const QMatrix4x4 viewProjection = orthoProjection(kHalfSpaceOffset, kOrthoExtent) * view();
+        const cwFrustum frustum = cwFrustum::fromViewProjection(viewProjection);
+
+        SelectionInput input = orthoInput(manifest);
+        input.viewProjection = viewProjection;
+        input.frustum = &frustum;
+
+        sameCut(input);
+    }
+
+    SECTION("a frustum that culls the root") {
+        const QMatrix4x4 viewProjection =
+            orthoProjection(2.0f * kOrthoExtent, 4.0f * kOrthoExtent) * view();
+        const cwFrustum frustum = cwFrustum::fromViewProjection(viewProjection);
+
+        SelectionInput input = orthoInput(manifest);
+        input.viewProjection = viewProjection;
+        input.frustum = &frustum;
+
+        sameCut(input);
+    }
+
+    SECTION("a point budget under the full cut") {
+        SelectionInput input = orthoInput(manifest);
+        input.maxPoints = selectCut(input).points / 2;
+
+        sameCut(input);
+    }
+}
+
+TEST_CASE("cw::octree::selectForest: two trees under one cap share it node for node",
+          "[PointOctree][PointOctreeSelection]")
+{
+    const cwPointOctreeManifest west = buildManifestWithPoints();
+    const cwPointOctreeManifest east = shiftedManifest(west, QVector3D(kSideBySideShift, 0.0f, 0.0f));
+
+    const qint64 treePoints = selectCut(orthoInput(west)).points;
+
+    ForestInput input = sideBySideInput(west, east);
+    input.maxPoints = treePoints + treePoints / 2;
+
+    const ForestSelection forest = selectForest(input);
+    REQUIRE(forest.trees.size() == 2);
+
+    const Selection& westCut = forest.trees.at(0);
+    const Selection& eastCut = forest.trees.at(1);
+
+    CHECK(forest.pointCapped);
+    CHECK(westCut.points + eastCut.points == forest.points);
+    CHECK(forest.points <= input.maxPoints);
+    CHECK(forest.points > treePoints);
+
+    //Both roots go in before the cap, and the cut climbs down both trees together
+    REQUIRE_FALSE(westCut.nodes.isEmpty());
+    REQUIRE_FALSE(eastCut.nodes.isEmpty());
+    CHECK(westCut.nodes.first().node == 0);
+    CHECK(eastCut.nodes.first().node == 0);
+    CHECK(spacingsFallOff(westCut));
+    CHECK(spacingsFallOff(eastCut));
+
+    //One ordered walk refines both trees alike, so the shorter cut is a prefix
+    //of the longer one rather than a coarser cut of its own
+    CHECK(eastCut.nodes.size() <= westCut.nodes.size());
+    CHECK(nodeIndices(westCut.nodes).mid(0, eastCut.nodes.size()) == nodeIndices(eastCut.nodes));
+
+    //The two trees tie on every spacing under this camera, so the cap has to be
+    //spent on them alternately: one node of slack, and one level of slack, is
+    //all the imbalance a seam can carry
+    CHECK(westCut.nodes.size() - eastCut.nodes.size() <= kBalancedNodeSlack);
+    CHECK(std::abs(finestLevelOf(west, westCut) - finestLevelOf(east, eastCut))
+          <= kBalancedLevelSlack);
+
+    //Both trees hold every level the cap reached, so neither side of the pair
+    //stops a level coarser than the other
+    for(int octant = 0; octant < kChildCount; octant++) {
+        CHECK(nodeSet(westCut.nodes).contains(west.nodes.at(0).children.at(octant)));
+        CHECK(nodeSet(eastCut.nodes).contains(east.nodes.at(0).children.at(octant)));
+    }
+}
+
+TEST_CASE("cw::octree::selectForest: a far tree holds its root while the near one refines",
+          "[PointOctree][PointOctreeSelection]")
+{
+    const cwPointOctreeManifest nearTree = buildManifestWithPoints();
+    const cwPointOctreeManifest farTree = shiftedManifest(nearTree, QVector3D(0.0f, 0.0f, kFarShift));
+
+    ForestInput input = forestInput(perspectiveInput(nearTree));
+    input.trees.append({&farTree});
+
+    REQUIRE(projectedSpacingOf(nearTree, 0, input.viewProjection, input.absP11,
+                               input.viewportHeightPx) > kDefaultSse);
+    REQUIRE(projectedSpacingOf(farTree, 0, input.viewProjection, input.absP11,
+                               input.viewportHeightPx) < kDefaultSse);
+
+    const ForestSelection forest = selectForest(input);
+    REQUIRE(forest.trees.size() == 2);
+
+    CHECK(forest.trees.at(0).nodes.size() > 1);
+    CHECK(nodeIndices(forest.trees.at(1).nodes) == QVector<int>({0}));
+    CHECK(forest.trees.at(1).points == farTree.nodes.at(0).pointCount);
+    CHECK_FALSE(forest.pointCapped);
+}
+
+TEST_CASE("cw::octree::selectForest: an empty tree keeps its place and leaves the others alone",
+          "[PointOctree][PointOctreeSelection]")
+{
+    const cwPointOctreeManifest west = buildManifestWithPoints();
+    const cwPointOctreeManifest east = shiftedManifest(west, QVector3D(kSideBySideShift, 0.0f, 0.0f));
+
+    const ForestSelection both = selectForest(sideBySideInput(west, east));
+
+    ForestInput input = sideBySideInput(west, east);
+    input.trees.insert(1, ForestTree());
+
+    const ForestSelection forest = selectForest(input);
+    REQUIRE(forest.trees.size() == 3);
+
+    CHECK(forest.trees.at(1).nodes.isEmpty());
+    CHECK(forest.trees.at(1).points == 0);
+    CHECK(nodeIndices(forest.trees.at(0).nodes) == nodeIndices(both.trees.at(0).nodes));
+    CHECK(nodeIndices(forest.trees.at(2).nodes) == nodeIndices(both.trees.at(1).nodes));
+    CHECK(forest.points == both.points);
+}
+
+TEST_CASE("cw::octree::selectForest: an unknown camera takes every root",
+          "[PointOctree][PointOctreeSelection]")
+{
+    const cwPointOctreeManifest west = buildManifestWithPoints();
+    const cwPointOctreeManifest east = shiftedManifest(west, QVector3D(kSideBySideShift, 0.0f, 0.0f));
+
+    ForestInput input = sideBySideInput(west, east);
+
+    SECTION("no projection scale") {
+        input.absP11 = 0.0;
+    }
+
+    SECTION("no viewport") {
+        input.viewportHeightPx = 0;
+    }
+
+    const ForestSelection forest = selectForest(input);
+    REQUIRE(forest.trees.size() == 2);
+    CHECK(nodeIndices(forest.trees.at(0).nodes) == QVector<int>({0}));
+    CHECK(nodeIndices(forest.trees.at(1).nodes) == QVector<int>({0}));
+    CHECK(forest.points == west.nodes.at(0).pointCount + east.nodes.at(0).pointCount);
+}
+
+TEST_CASE("cw::octree::selectForest: maxNodes counts across the whole forest",
+          "[PointOctree][PointOctreeSelection]")
+{
+    const cwPointOctreeManifest west = buildManifestWithPoints();
+    const cwPointOctreeManifest east = shiftedManifest(west, QVector3D(kSideBySideShift, 0.0f, 0.0f));
+
+    ForestInput input = sideBySideInput(west, east);
+
+    SECTION("a limit both trees fit under together") {
+        constexpr int kNodeLimit = 5;
+        input.maxNodes = kNodeLimit;
+
+        const ForestSelection forest = selectForest(input);
+        CHECK(forest.trees.at(0).nodes.size() + forest.trees.at(1).nodes.size() == kNodeLimit);
+        CHECK_FALSE(forest.trees.at(0).nodes.isEmpty());
+        CHECK_FALSE(forest.trees.at(1).nodes.isEmpty());
+    }
+
+    SECTION("a limit of one leaves the second tree out") {
+        input.maxNodes = 1;
+
+        const ForestSelection forest = selectForest(input);
+        CHECK(nodeIndices(forest.trees.at(0).nodes) == QVector<int>({0}));
+        CHECK(forest.trees.at(1).nodes.isEmpty());
+    }
+
+    SECTION("no nodes at all") {
+        input.maxNodes = 0;
+
+        const ForestSelection forest = selectForest(input);
+        REQUIRE(forest.trees.size() == 2);
+        CHECK(forest.trees.at(0).nodes.isEmpty());
+        CHECK(forest.trees.at(1).nodes.isEmpty());
+        CHECK(forest.points == 0);
     }
 }

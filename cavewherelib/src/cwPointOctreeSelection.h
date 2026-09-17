@@ -117,6 +117,55 @@ namespace cw::octree {
     //! selectCut()'s nodes alone, for the callers that need nothing else
     CAVEWHERE_LIB_EXPORT QVector<SelectedNode> selectNodes(const SelectionInput& input);
 
+    //! One tree of a forest cut: the manifest the walk refines through
+    struct CAVEWHERE_LIB_EXPORT ForestTree
+    {
+        const cwPointOctreeManifest* manifest = nullptr;
+    };
+
+    /**
+     * Everything selectForest() needs: the camera fields of SelectionInput,
+     * once, and the trees the cut spans. maxNodes and maxPoints hold across the
+     * whole forest, so the trees share one cap instead of each guessing at a
+     * share of it.
+     */
+    struct CAVEWHERE_LIB_EXPORT ForestInput
+    {
+        QVector<ForestTree> trees;
+        const cwFrustum* frustum = nullptr;
+        QMatrix4x4 viewProjection;
+        double absP11 = 0.0;            //|projectionMatrix()(1, 1)|
+        int viewportHeightPx = 0;       //Physical pixels
+        double screenSpaceErrorPx = 1.5;
+        double sseInflation = 1.0;
+        int maxNodes = kMaxDesiredNodes;
+        qint64 maxPoints = std::numeric_limits<qint64>::max();
+    };
+
+    //! One forest cut: a Selection per input tree, in input order, plus the totals
+    struct CAVEWHERE_LIB_EXPORT ForestSelection
+    {
+        QVector<Selection> trees;
+        qint64 points = 0;
+        qint64 bytes = 0;
+
+        //! maxPoints stopped the walk, so the cut is coarser than the camera asked for
+        bool pointCapped = false;
+    };
+
+    /**
+     * The one cut every tree of @a input shares this frame, coarsest-projecting
+     * node first across the whole forest.
+     *
+     * Every tree's root is taken before the point cap applies, so a view always
+     * has something to draw of every tree it can see. Nodes of different trees
+     * that project the same land at the same depth, which is what keeps the
+     * sprites one size across a file boundary. A tree with a null or empty
+     * manifest, and a tree whose root the frustum culls, comes back as an empty
+     * Selection.
+     */
+    CAVEWHERE_LIB_EXPORT ForestSelection selectForest(const ForestInput& input);
+
     /**
      * The finest level drawn inside each of @a drawnNodes, one entry per input
      * node and in the same order. Every index has to name a node of @a manifest.
